@@ -3,13 +3,13 @@ from __future__ import annotations
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-from aidoo_api.core.db import Base
-from aidoo_api.domains.auth.models import Workspace
-from aidoo_api.domains.search import indexing as search_indexing
-from aidoo_api.domains.search import outbox as search_outbox
-from aidoo_api.domains.search.indexing import process_search_index_job
-from aidoo_api.domains.search.models import SearchIndexJob
-from aidoo_api.domains.search.outbox import enqueue_search_index_job
+from ai_do_api.core.db import Base
+from ai_do_api.domains.auth.models import Workspace
+from ai_do_api.domains.search import indexing as search_indexing
+from ai_do_api.domains.search import outbox as search_outbox
+from ai_do_api.domains.search.indexing import process_search_index_job
+from ai_do_api.domains.search.models import SearchIndexJob
+from ai_do_api.domains.search.outbox import enqueue_search_index_job
 
 
 def _session() -> Session:

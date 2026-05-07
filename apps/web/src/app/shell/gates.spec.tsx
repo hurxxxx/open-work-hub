@@ -16,9 +16,9 @@ vi.mock('@/src/platform/auth/auth-provider', () => ({
 function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
   return {
     id: 'user-1',
-    email: 'user@aidoo.local',
-    full_name: 'Aidoo User',
-    display_name: 'Aidoo User',
+    email: 'user@ai-do.local',
+    full_name: 'AI-DO User',
+    display_name: 'AI-DO User',
     status: 'active',
     theme_preference: 'system',
     locale: 'ko-KR',
@@ -27,7 +27,7 @@ function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
       {
         id: 'workspace-hq',
         slug: 'hq',
-        name: 'Aidoo HQ',
+        name: 'AI-DO HQ',
         role: 'admin',
       },
     ],

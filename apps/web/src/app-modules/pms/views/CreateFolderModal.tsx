@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { FolderOpen } from 'lucide-react';
-import { Dialog, Button } from '@aidoo/ui';
+import { Dialog, Button } from '@ai-do/ui';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { createFolder, type PmsFolder } from '../api/pms-api';

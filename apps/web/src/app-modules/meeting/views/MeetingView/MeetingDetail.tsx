@@ -15,7 +15,7 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { Button, Dialog, useConfirm } from '@aidoo/ui';
+import { Button, Dialog, useConfirm } from '@ai-do/ui';
 import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';

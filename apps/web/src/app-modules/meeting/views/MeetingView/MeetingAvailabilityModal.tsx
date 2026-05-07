@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Dialog } from '@aidoo/ui';
+import { Dialog } from '@ai-do/ui';
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 

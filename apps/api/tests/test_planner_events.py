@@ -157,7 +157,7 @@ def test_planner_event_owner_only_access(client: TestClient) -> None:
     member = _create_user_with_workspaces(
         client,
         admin_token,
-        email="planner-member@aidoo.local",
+        email="planner-member@ai-do.local",
         full_name="Planner Member",
         workspace_keys=["planner"],
     )
@@ -196,7 +196,7 @@ def test_calendar_events_include_only_current_user_planner_events(client: TestCl
     member = _create_user_with_workspaces(
         client,
         admin_token,
-        email="planner-public@aidoo.local",
+        email="planner-public@ai-do.local",
         full_name="Planner Public",
         workspace_keys=["planner"],
     )
@@ -248,7 +248,7 @@ def test_meeting_availability_masks_private_events_and_shows_public_events(clien
     attendee = _create_user_with_workspaces(
         client,
         admin_token,
-        email="availability-user@aidoo.local",
+        email="availability-user@ai-do.local",
         full_name="Availability User",
         workspace_keys=["hq"],
     )
@@ -321,7 +321,7 @@ def test_meeting_availability_rejects_users_outside_workspace(client: TestClient
     outsider = _create_user_with_workspaces(
         client,
         admin_token,
-        email="availability-outsider@aidoo.local",
+        email="availability-outsider@ai-do.local",
         full_name="Availability Outsider",
         workspace_keys=[],
     )

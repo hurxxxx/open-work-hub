@@ -117,7 +117,7 @@ def test_viewer_cannot_modify_issue_comment_or_folder(client: TestClient) -> Non
     task_list = _create_task_list(client, admin_session["token"])
     issue = _create_issue(client, admin_session["token"], task_list["id"], title="Protected issue")
 
-    viewer = _create_user(client, admin_session["token"], email="viewer@aidoo.local", full_name="Viewer User")
+    viewer = _create_user(client, admin_session["token"], email="viewer@ai-do.local", full_name="Viewer User")
     _add_task_list_member(client, admin_session["token"], task_list["id"], viewer["user"]["id"], "viewer")
     viewer_token = _login(client, viewer["user"]["email"], viewer["temporary_password"])
 
@@ -195,7 +195,7 @@ def test_issue_assignees_reject_non_members(client: TestClient) -> None:
     admin_session = _bootstrap_admin_session(client)
     task_list = _create_task_list(client, admin_session["token"])
     issue = _create_issue(client, admin_session["token"], task_list["id"], title="Assignee guard")
-    outsider = _create_user(client, admin_session["token"], email="outsider@aidoo.local", full_name="Outsider User")
+    outsider = _create_user(client, admin_session["token"], email="outsider@ai-do.local", full_name="Outsider User")
 
     response = client.put(
         f"/api/v1/workspaces/hq/pms/issues/{issue['id']}/assignees",
@@ -402,7 +402,7 @@ def test_space_docs_collection_permissions_and_soft_delete(client: TestClient) -
         parent_id=first_page["id"],
     )
 
-    outsider = _create_user(client, admin_session["token"], email="space-outsider@aidoo.local", full_name="Space Outsider")
+    outsider = _create_user(client, admin_session["token"], email="space-outsider@ai-do.local", full_name="Space Outsider")
     outsider_token = _login(client, outsider["user"]["email"], outsider["temporary_password"])
 
     outsider_list_response = client.get(
@@ -428,7 +428,7 @@ def test_space_docs_collection_permissions_and_soft_delete(client: TestClient) -
     task_list_editor = _create_user(
         client,
         admin_session["token"],
-        email="space-editor@aidoo.local",
+        email="space-editor@ai-do.local",
         full_name="Task List Editor",
     )
     _add_task_list_member(client, admin_session["token"], task_list["id"], task_list_editor["user"]["id"], "member")
@@ -527,7 +527,7 @@ def test_task_list_member_api_grants_space_scope_for_task_list_resources(client:
     task_list_member = _create_user(
         client,
         admin_session["token"],
-        email="task-list-member@aidoo.local",
+        email="task-list-member@ai-do.local",
         full_name="Task List Member",
     )
     _add_task_list_member(client, admin_session["token"], task_list["id"], task_list_member["user"]["id"], "member")
@@ -595,7 +595,7 @@ def test_media_linking_follows_parent_resource_acl(client: TestClient) -> None:
     project_member = _create_user(
         client,
         admin_session["token"],
-        email="media-task-list-member@aidoo.local",
+        email="media-task-list-member@ai-do.local",
         full_name="Media Task List Member",
     )
     _add_task_list_member(client, admin_session["token"], task_list["id"], project_member["user"]["id"], "member")
@@ -636,7 +636,7 @@ def test_media_linking_follows_parent_resource_acl(client: TestClient) -> None:
     space_member = _create_user(
         client,
         admin_session["token"],
-        email="media-space-member@aidoo.local",
+        email="media-space-member@ai-do.local",
         full_name="Media Space Member",
     )
     _add_team_member(client, admin_session["token"], space_id, space_member["user"]["id"])
@@ -894,7 +894,7 @@ def test_space_member_can_reorder_task_list_without_owner_access(client: TestCli
         json={"name": "List Reorder B", "description": "", "team_id": space_id},
     ).json()
 
-    member = _create_user(client, admin["token"], email="list-reorder-member@aidoo.local", full_name="List Reorder Member")
+    member = _create_user(client, admin["token"], email="list-reorder-member@ai-do.local", full_name="List Reorder Member")
     _add_task_list_member(client, admin["token"], task_list_a["id"], member["user"]["id"], "member")
     member_token = _login(client, member["user"]["email"], member["temporary_password"])
 
@@ -924,7 +924,7 @@ def test_space_member_can_reorder_space_doc_without_manager_access(client: TestC
     doc_a = _create_space_doc(client, admin["token"], space_id, title="Alpha Doc")
     doc_b = _create_space_doc(client, admin["token"], space_id, title="Bravo Doc")
 
-    member = _create_user(client, admin["token"], email="doc-reorder-member@aidoo.local", full_name="Doc Reorder Member")
+    member = _create_user(client, admin["token"], email="doc-reorder-member@ai-do.local", full_name="Doc Reorder Member")
     _add_task_list_member(client, admin["token"], task_list["id"], member["user"]["id"], "member")
     member_token = _login(client, member["user"]["email"], member["temporary_password"])
 
@@ -1000,7 +1000,7 @@ def test_bulk_reorder_space_docs_allows_member_and_updates_order(client: TestCli
     doc_b = _create_space_doc(client, admin["token"], space_id, title="Bulk Doc B")
     doc_c = _create_space_doc(client, admin["token"], space_id, title="Bulk Doc C")
 
-    member = _create_user(client, admin["token"], email="bulk-doc-member@aidoo.local", full_name="Bulk Doc Member")
+    member = _create_user(client, admin["token"], email="bulk-doc-member@ai-do.local", full_name="Bulk Doc Member")
     _add_task_list_member(client, admin["token"], task_list["id"], member["user"]["id"], "member")
     member_token = _login(client, member["user"]["email"], member["temporary_password"])
 
@@ -1024,7 +1024,7 @@ def test_assigned_issues_returns_only_current_users_open_issues(client: TestClie
     admin = _bootstrap_admin_session(client)
     task_list = _create_task_list(client, admin["token"], key="ASGN", name="Assigned List")
 
-    teammate = _create_user(client, admin["token"], email="assigned-teammate@aidoo.local", full_name="Teammate")
+    teammate = _create_user(client, admin["token"], email="assigned-teammate@ai-do.local", full_name="Teammate")
     _add_task_list_member(client, admin["token"], task_list["id"], teammate["user"]["id"], "member")
 
     _create_issue(
@@ -1166,8 +1166,8 @@ def test_assigned_issues_handles_unknown_priority_from_existing_data(client: Tes
         assignee_id=admin["user"]["id"],
     )
 
-    from aidoo_api.core.db import get_session_factory
-    from aidoo_api.domains.pms.models import Issue
+    from ai_do_api.core.db import get_session_factory
+    from ai_do_api.domains.pms.models import Issue
 
     with get_session_factory()() as db:
         existing_issue = db.get(Issue, issue["id"])
@@ -1189,8 +1189,8 @@ def _bootstrap_admin_session(client: TestClient) -> dict:
     response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "AIDOO Admin",
-            "email": "admin@aidoo.local",
+            "full_name": "AI-DO Admin",
+            "email": "admin@ai-do.local",
             "password": "supersecret123",
         },
     )
@@ -1360,9 +1360,9 @@ def _grant_workspace_access(
 
 
 def _create_unlinked_media(uploaded_by_id: str) -> dict[str, str]:
-    from aidoo_api.core.db import get_session_factory
-    from aidoo_api.domains.media.models import MediaFile
-    from aidoo_api.domains.auth.security import new_id
+    from ai_do_api.core.db import get_session_factory
+    from ai_do_api.domains.media.models import MediaFile
+    from ai_do_api.domains.auth.security import new_id
 
     media_id = new_id()
     db = get_session_factory()()

@@ -5,7 +5,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from aidoo_api.core import asr
+from ai_do_api.core import asr
 
 
 def test_deepinfra_backend_posts_audio_and_parses_segments(

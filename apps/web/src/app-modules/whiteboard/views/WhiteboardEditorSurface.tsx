@@ -33,7 +33,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { Button, Dialog } from '@aidoo/ui';
+import { Button, Dialog } from '@ai-do/ui';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/src/lib/utils';

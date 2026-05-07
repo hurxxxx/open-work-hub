@@ -57,9 +57,9 @@ def test_get_returns_detail_with_turns_ordered(client: TestClient) -> None:
 
     # Append turns directly via the service layer to avoid coupling this
     # test to a chat stream integration that doesn't exist yet.
-    from aidoo_api.core.db import get_engine
-    from aidoo_api.domains.conversations import service
-    from aidoo_api.domains.conversations.models import Conversation
+    from ai_do_api.core.db import get_engine
+    from ai_do_api.domains.conversations import service
+    from ai_do_api.domains.conversations.models import Conversation
     from sqlalchemy.orm import Session
 
     with Session(get_engine()) as db:
@@ -179,7 +179,7 @@ def test_legacy_create_rejects_meeting_scope_for_non_participant(client: TestCli
     outsider = _create_user_with_workspaces(
         client,
         admin_token,
-        email="conversation-outsider@aidoo.local",
+        email="conversation-outsider@ai-do.local",
         full_name="Conversation Outsider",
         workspace_keys=[slug],
     )
@@ -277,8 +277,8 @@ def test_pagination_cursor_is_stable_on_ties(client: TestClient) -> None:
 
     from datetime import datetime, timezone
 
-    from aidoo_api.core.db import get_engine
-    from aidoo_api.domains.conversations.models import Conversation
+    from ai_do_api.core.db import get_engine
+    from ai_do_api.domains.conversations.models import Conversation
     from sqlalchemy.orm import Session
 
     created_ids: list[str] = []
@@ -332,9 +332,9 @@ def test_append_turn_unique_seq_prevents_duplicates(client: TestClient) -> None:
     from sqlalchemy.exc import IntegrityError
     from sqlalchemy.orm import Session
 
-    from aidoo_api.core.db import get_engine
-    from aidoo_api.domains.conversations import service
-    from aidoo_api.domains.conversations.models import (
+    from ai_do_api.core.db import get_engine
+    from ai_do_api.domains.conversations import service
+    from ai_do_api.domains.conversations.models import (
         Conversation,
         ConversationTurn,
     )

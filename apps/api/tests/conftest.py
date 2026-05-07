@@ -18,7 +18,7 @@ REDIS_IMAGE = "redis:7"
 MINIO_IMAGE = "minio/minio:latest"
 MINIO_ACCESS_KEY = "minioadmin"
 MINIO_SECRET_KEY = "minioadmin"
-TEST_POSTGRES_DSN = "postgresql+psycopg://aidoo_test:aidoo_test@127.0.0.1:5432/aidoo_test"
+TEST_POSTGRES_DSN = "postgresql+psycopg://ai_do_test:ai_do_test@127.0.0.1:5432/ai_do_test"
 TEST_LOCAL_LLM_MODEL = "local/current-moe-test-model"
 
 
@@ -35,11 +35,11 @@ def _find_free_port() -> int:
 
 
 def _docker_command() -> list[str]:
-    configured = os.getenv("AIDOO_TEST_DOCKER_COMMAND")
+    configured = os.getenv("AI_DO_TEST_DOCKER_COMMAND")
     if configured:
         return shlex.split(configured)
 
-    if os.getenv("AIDOO_ENV_PROFILE", "local").lower() == "vm":
+    if os.getenv("AI_DO_ENV_PROFILE", "local").lower() == "vm":
         direct = subprocess.run(
             ["docker", "version", "--format", "{{.Server.Version}}"],
             check=False,
@@ -62,10 +62,10 @@ def _docker_command() -> list[str]:
 
 
 def _docker_uses_host_network() -> bool:
-    configured = os.getenv("AIDOO_TEST_DOCKER_NETWORK")
+    configured = os.getenv("AI_DO_TEST_DOCKER_NETWORK")
     if configured:
         return configured.lower() == "host"
-    return os.getenv("AIDOO_ENV_PROFILE", "local").lower() == "vm"
+    return os.getenv("AI_DO_ENV_PROFILE", "local").lower() == "vm"
 
 
 def _docker_network_args() -> list[str]:
@@ -151,8 +151,8 @@ def _required_settings_env(monkeypatch: pytest.MonkeyPatch) -> None:
 def postgres_dsn() -> str:
     _ensure_docker_image(POSTGRES_IMAGE)
     port = _find_free_port()
-    container_name = f"aidoo-api-test-{uuid.uuid4().hex[:10]}"
-    dsn = f"postgresql+psycopg://aidoo_test:aidoo_test@127.0.0.1:{port}/aidoo_test"
+    container_name = f"ai-do-api-test-{uuid.uuid4().hex[:10]}"
+    dsn = f"postgresql+psycopg://ai_do_test:ai_do_test@127.0.0.1:{port}/ai_do_test"
 
     subprocess.run(
         [
@@ -164,11 +164,11 @@ def postgres_dsn() -> str:
             container_name,
             *_docker_network_args(),
             "-e",
-            "POSTGRES_USER=aidoo_test",
+            "POSTGRES_USER=ai_do_test",
             "-e",
-            "POSTGRES_PASSWORD=aidoo_test",
+            "POSTGRES_PASSWORD=ai_do_test",
             "-e",
-            "POSTGRES_DB=aidoo_test",
+            "POSTGRES_DB=ai_do_test",
             *_docker_publish_args(port, 5432),
             POSTGRES_IMAGE,
             *([] if not _docker_uses_host_network() else ["-c", f"port={port}"]),
@@ -187,7 +187,7 @@ def postgres_dsn() -> str:
 def redis_url() -> str:
     _ensure_docker_image(REDIS_IMAGE)
     port = _find_free_port()
-    container_name = f"aidoo-api-redis-test-{uuid.uuid4().hex[:10]}"
+    container_name = f"ai-do-api-redis-test-{uuid.uuid4().hex[:10]}"
     url = f"redis://127.0.0.1:{port}/0"
 
     subprocess.run(
@@ -218,7 +218,7 @@ def minio_endpoint() -> str:
     _ensure_docker_image(MINIO_IMAGE)
     port = _find_free_port()
     console_port = _find_free_port()
-    container_name = f"aidoo-api-minio-test-{uuid.uuid4().hex[:10]}"
+    container_name = f"ai-do-api-minio-test-{uuid.uuid4().hex[:10]}"
     endpoint = f"http://127.0.0.1:{port}"
 
     subprocess.run(
@@ -271,8 +271,8 @@ def _build_client(
     monkeypatch.setenv("DOOWON_MINIO_ENDPOINT", minio_endpoint)
     monkeypatch.setenv("DOOWON_MINIO_ACCESS_KEY", MINIO_ACCESS_KEY)
     monkeypatch.setenv("DOOWON_MINIO_SECRET_KEY", MINIO_SECRET_KEY)
-    monkeypatch.setenv("DOOWON_MINIO_BUCKET", f"aidoo-test-{uuid.uuid4().hex}")
-    monkeypatch.setenv("AIDOO_AI_MCP_BRIDGE_ENABLED", "1")
+    monkeypatch.setenv("DOOWON_MINIO_BUCKET", f"ai-do-test-{uuid.uuid4().hex}")
+    monkeypatch.setenv("AI_DO_AI_MCP_BRIDGE_ENABLED", "1")
     # Make tests independent of the developer's local `.env`: pin a dummy
     # external pool key so ``LlmPoolConfig.configured`` is True when a test
     # exercises the external pool via monkeypatched ``get_pool_client``.
@@ -281,21 +281,21 @@ def _build_client(
     # are still gated by pool configuration before they are invoked.
     monkeypatch.setenv("DOOWON_LLM_LOCAL_DEFAULT_MODEL", TEST_LOCAL_LLM_MODEL)
     monkeypatch.setenv("DOOWON_LLM_LOCAL_CANONICAL_MODEL", TEST_LOCAL_LLM_MODEL)
-    monkeypatch.setenv("AIDOO_RAG_ENABLED", "1")
+    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
 
-    from aidoo_api.core.db import Base, get_engine, get_session_factory
-    from aidoo_api.core.llm import (
+    from ai_do_api.core.db import Base, get_engine, get_session_factory
+    from ai_do_api.core.llm import (
         get_async_pool_client,
         get_pool_client,
     )
-    from aidoo_api.core.settings import get_settings
-    from aidoo_api.core.storage import get_minio_client
-    from aidoo_api.domains.ai.registry import reset_ai_capability_registry
-    from aidoo_api.domains.auth import models as auth_models  # noqa: F401
-    from aidoo_api.domains.meeting import models as meeting_models  # noqa: F401
-    from aidoo_api.domains.pms import models as pms_models  # noqa: F401
-    from aidoo_api.domains.rag.runtime import reset_rag_runtime_caches
-    from aidoo_api.domains.whiteboard import models as whiteboard_models  # noqa: F401
+    from ai_do_api.core.settings import get_settings
+    from ai_do_api.core.storage import get_minio_client
+    from ai_do_api.domains.ai.registry import reset_ai_capability_registry
+    from ai_do_api.domains.auth import models as auth_models  # noqa: F401
+    from ai_do_api.domains.meeting import models as meeting_models  # noqa: F401
+    from ai_do_api.domains.pms import models as pms_models  # noqa: F401
+    from ai_do_api.domains.rag.runtime import reset_rag_runtime_caches
+    from ai_do_api.domains.whiteboard import models as whiteboard_models  # noqa: F401
 
     _clear_cache(get_settings)
     _clear_cache(get_async_pool_client)
@@ -311,22 +311,22 @@ def _build_client(
     with engine.begin() as connection:
         connection.exec_driver_sql("DROP TABLE IF EXISTS alembic_version")
 
-    from aidoo_api.app import create_app
+    from ai_do_api.app import create_app
 
     app = create_app()
     return TestClient(app)
 
 
 def _teardown_client_state() -> None:
-    from aidoo_api.core.db import Base, get_engine, get_session_factory
-    from aidoo_api.core.llm import (
+    from ai_do_api.core.db import Base, get_engine, get_session_factory
+    from ai_do_api.core.llm import (
         get_async_pool_client,
         get_pool_client,
     )
-    from aidoo_api.core.settings import get_settings
-    from aidoo_api.core.storage import get_minio_client
-    from aidoo_api.domains.ai.registry import reset_ai_capability_registry
-    from aidoo_api.domains.rag.runtime import reset_rag_runtime_caches
+    from ai_do_api.core.settings import get_settings
+    from ai_do_api.core.storage import get_minio_client
+    from ai_do_api.domains.ai.registry import reset_ai_capability_registry
+    from ai_do_api.domains.rag.runtime import reset_rag_runtime_caches
 
     engine = get_engine()
     Base.metadata.drop_all(bind=engine)

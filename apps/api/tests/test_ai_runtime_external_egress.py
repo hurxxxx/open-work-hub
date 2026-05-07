@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from aidoo_api.core.settings import Settings
-from aidoo_api.domains.ai.runtime.external_egress import (
+from ai_do_api.core.settings import Settings
+from ai_do_api.domains.ai.runtime.external_egress import (
     allowed_external_providers,
     evaluate_external_egress,
     normalize_external_provider,
@@ -13,13 +13,13 @@ from aidoo_api.domains.ai.runtime.external_egress import (
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "ai_runtime"
 SETTING_ALIASES = {
-    "ai_external_llm_enabled": "AIDOO_AI_EXTERNAL_LLM_ENABLED",
-    "ai_external_planning_enabled": "AIDOO_AI_EXTERNAL_PLANNING_ENABLED",
-    "ai_external_reasoning_enabled": "AIDOO_AI_EXTERNAL_REASONING_ENABLED",
-    "ai_external_quality_review_enabled": "AIDOO_AI_EXTERNAL_QUALITY_REVIEW_ENABLED",
-    "ai_external_search_enabled": "AIDOO_AI_EXTERNAL_SEARCH_ENABLED",
-    "ai_allowed_external_providers": "AIDOO_AI_ALLOWED_EXTERNAL_PROVIDERS",
-    "ai_default_external_search_provider": "AIDOO_AI_DEFAULT_EXTERNAL_SEARCH_PROVIDER",
+    "ai_external_llm_enabled": "AI_DO_AI_EXTERNAL_LLM_ENABLED",
+    "ai_external_planning_enabled": "AI_DO_AI_EXTERNAL_PLANNING_ENABLED",
+    "ai_external_reasoning_enabled": "AI_DO_AI_EXTERNAL_REASONING_ENABLED",
+    "ai_external_quality_review_enabled": "AI_DO_AI_EXTERNAL_QUALITY_REVIEW_ENABLED",
+    "ai_external_search_enabled": "AI_DO_AI_EXTERNAL_SEARCH_ENABLED",
+    "ai_allowed_external_providers": "AI_DO_AI_ALLOWED_EXTERNAL_PROVIDERS",
+    "ai_default_external_search_provider": "AI_DO_AI_DEFAULT_EXTERNAL_SEARCH_PROVIDER",
 }
 
 
@@ -28,7 +28,7 @@ def _settings(**overrides):
         SETTING_ALIASES.get(key, key): value for key, value in overrides.items()
     }
     return Settings(
-        postgres_dsn="postgresql+psycopg://aidoo_test:aidoo_test@127.0.0.1:5432/aidoo_test",
+        postgres_dsn="postgresql+psycopg://ai_do_test:ai_do_test@127.0.0.1:5432/ai_do_test",
         **aliased_overrides,
     )
 

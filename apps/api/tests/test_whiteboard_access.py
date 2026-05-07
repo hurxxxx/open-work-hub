@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from aidoo_api.core.db import get_session_factory
-from aidoo_api.domains.auth.access import ensure_dev_login_seed_data
+from ai_do_api.core.db import get_session_factory
+from ai_do_api.domains.auth.access import ensure_dev_login_seed_data
 
 
 def test_whiteboard_reuses_pms_space_acl(client: TestClient) -> None:

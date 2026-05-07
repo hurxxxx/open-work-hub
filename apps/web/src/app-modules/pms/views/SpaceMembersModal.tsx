@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Dialog, Button } from '@aidoo/ui';
+import { Dialog, Button } from '@ai-do/ui';
 import {
   Check,
   Crown,

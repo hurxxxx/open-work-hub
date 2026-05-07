@@ -174,7 +174,7 @@ Docker Desktop 의 WSL Integration 이 활성화되어 있어 WSL 안에서 `doc
 2. `docker compose -f compose.local.yml up -d`
 3. `docker compose -f compose.local.yml ps` 로 전부 `healthy` 가 될 때까지 기다리기 (최대 2분 polling)
 4. 헬스체크:
-   - `pg_isready` 로그 확인 또는 `docker exec doowon-postgres pg_isready -U aidoo_db -d doowon_ai_portal_dev`
+   - `pg_isready` 로그 확인 또는 `docker exec doowon-postgres pg_isready -U ai_do_db -d ai_do_portal_dev`
    - `docker exec doowon-redis redis-cli ping` → `PONG`
    - `curl -fsS http://127.0.0.1:59200` (OpenSearch 루트 응답 200)
    - `curl -fsS http://127.0.0.1:59000/minio/health/ready`

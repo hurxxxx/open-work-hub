@@ -23,8 +23,8 @@ def _bootstrap_admin_session(client: TestClient) -> dict:
     response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "AIDOO Admin",
-            "email": "admin@aidoo.local",
+            "full_name": "AI-DO Admin",
+            "email": "admin@ai-do.local",
             "password": "supersecret123",
         },
     )

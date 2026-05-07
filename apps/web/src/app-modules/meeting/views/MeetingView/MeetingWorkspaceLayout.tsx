@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, ExternalLink, Loader2, PanelRightOpen, X } from 'lucide-react';
-import { BlockViewer, Button, CollaborativeBlockEditor, DetailDrawer } from '@aidoo/ui';
+import { BlockViewer, Button, CollaborativeBlockEditor, DetailDrawer } from '@ai-do/ui';
 import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';

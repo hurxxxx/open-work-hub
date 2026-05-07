@@ -19,14 +19,14 @@ API_SRC = WORKSPACE_ROOT / "apps" / "api" / "src"
 if str(API_SRC) not in sys.path:
     sys.path.insert(0, str(API_SRC))
 
-from aidoo_api.core.db import Base  # noqa: E402
-from aidoo_api.core.telemetry import (
+from ai_do_api.core.db import Base  # noqa: E402
+from ai_do_api.core.telemetry import (
     bootstrap_telemetry,
     get_tracer_provider,
     start_as_current_span,
 )  # noqa: E402
-from aidoo_api.domains.auth.models import Team, User, Workspace  # noqa: E402
-from aidoo_api.domains.docs.models import (  # noqa: E402
+from ai_do_api.domains.auth.models import Team, User, Workspace  # noqa: E402
+from ai_do_api.domains.docs.models import (  # noqa: E402
     DocMeetingAccess,
     NativeDoc,
     NativeDocContainer,
@@ -34,14 +34,14 @@ from aidoo_api.domains.docs.models import (  # noqa: E402
     NativeDocPage,
     NativeDocUserShare,
 )
-from aidoo_api.domains.meeting.models import (  # noqa: E402
+from ai_do_api.domains.meeting.models import (  # noqa: E402
     Meeting,
     MeetingAttendee,
     MeetingDocLink,
     MeetingRecording,
     MeetingTaskLink,
 )
-from aidoo_api.domains.pms.models import (  # noqa: E402
+from ai_do_api.domains.pms.models import (  # noqa: E402
     Folder,
     Issue,
     IssueComment,
@@ -51,22 +51,22 @@ from aidoo_api.domains.pms.models import (  # noqa: E402
     Milestone,
     TaskList,
 )
-from aidoo_api.domains.planner.models import PlannerEvent  # noqa: E402
-from aidoo_api.domains.rag.contracts import RagSyncLane, RagSyncOperation  # noqa: E402
-from aidoo_api.domains.rag.docs_projection import NATIVE_DOC_RESOURCE_TYPE  # noqa: E402
-from aidoo_api.domains.rag.meeting_projection import MEETING_RESOURCE_TYPE  # noqa: E402
-from aidoo_api.domains.rag.planner_projection import PLANNER_EVENT_RESOURCE_TYPE  # noqa: E402
-from aidoo_api.domains.rag.pms_projection import PMS_ISSUE_RESOURCE_TYPE  # noqa: E402
-from aidoo_api.domains.rag.providers import (  # noqa: E402
+from ai_do_api.domains.planner.models import PlannerEvent  # noqa: E402
+from ai_do_api.domains.rag.contracts import RagSyncLane, RagSyncOperation  # noqa: E402
+from ai_do_api.domains.rag.docs_projection import NATIVE_DOC_RESOURCE_TYPE  # noqa: E402
+from ai_do_api.domains.rag.meeting_projection import MEETING_RESOURCE_TYPE  # noqa: E402
+from ai_do_api.domains.rag.planner_projection import PLANNER_EVENT_RESOURCE_TYPE  # noqa: E402
+from ai_do_api.domains.rag.pms_projection import PMS_ISSUE_RESOURCE_TYPE  # noqa: E402
+from ai_do_api.domains.rag.providers import (  # noqa: E402
     RagProviderConfigurationError,
     RagProviderTransientError,
 )
-from aidoo_api.domains.rag.models import RagSyncJob, RagVisibilityRecomputeJob  # noqa: E402
-from aidoo_api.domains.rag.outbox import (  # noqa: E402
+from ai_do_api.domains.rag.models import RagSyncJob, RagVisibilityRecomputeJob  # noqa: E402
+from ai_do_api.domains.rag.outbox import (  # noqa: E402
     enqueue_rag_sync_job,
     enqueue_rag_visibility_recompute_job,
 )
-from aidoo_api.domains.pms.rag_sync import (  # noqa: E402
+from ai_do_api.domains.pms.rag_sync import (  # noqa: E402
     PMS_LABEL_RECOMPUTE_SCOPE,
     PMS_MEETING_VISIBILITY_SCOPE,
 )
@@ -182,7 +182,7 @@ def _init_worker_db(
 
 def _reload_worker_module(module_name: str):
     for cached_name in list(sys.modules):
-        if cached_name == "aidoo_worker" or cached_name.startswith("aidoo_worker."):
+        if cached_name == "ai_do_worker" or cached_name.startswith("ai_do_worker."):
             sys.modules.pop(cached_name, None)
     return importlib.import_module(module_name)
 
@@ -200,7 +200,7 @@ def test_celery_routes_rag_tasks_to_dedicated_queues(
     monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
     monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
 
-    celery_module = _reload_worker_module("aidoo_worker.celery_app")
+    celery_module = _reload_worker_module("ai_do_worker.celery_app")
     routes = celery_module.celery_app.conf.task_routes
 
     assert routes["rag.sync_resource"]["queue"] == "rag_sync_realtime"
@@ -230,7 +230,7 @@ def test_sync_resource_worker_span_inherits_outbox_trace_context(
         ],
     )
 
-    bootstrap_telemetry(service_name="aidoo-worker-test")
+    bootstrap_telemetry(service_name="ai-do-worker-test")
     exporter = InMemorySpanExporter()
     provider = get_tracer_provider()
     assert provider is not None
@@ -260,7 +260,7 @@ def test_sync_resource_worker_span_inherits_outbox_trace_context(
                 )
                 job_id = job.id
 
-    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
     result = tasks_module.sync_resource.run(job_id)
 
     assert result == "disabled"
@@ -320,7 +320,7 @@ def test_recompute_visibility_worker_marks_terminal_statuses(
             )
             disabled_job_id = disabled_job.id
 
-    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
     assert tasks_module.recompute_visibility.run(disabled_job_id) == "disabled"
 
     with Session(engine) as session:
@@ -340,8 +340,8 @@ def test_recompute_visibility_worker_marks_terminal_statuses(
             )
             enabled_job_id = enabled_job.id
 
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
-    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    monkeypatch.setenv("DOOWON_WORKER_AI_DO_RAG_ENABLED", "1")
+    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
     assert tasks_module.recompute_visibility.run(enabled_job_id) == "unsupported_scope_type"
 
     with Session(engine) as session:
@@ -364,8 +364,8 @@ def test_sync_resource_worker_ignores_already_closed_job(
     )
     monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
     monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_QDRANT_COLLECTION_PREFIX", "worker-rag-test")
+    monkeypatch.setenv("DOOWON_WORKER_AI_DO_RAG_ENABLED", "1")
+    monkeypatch.setenv("DOOWON_WORKER_AI_DO_QDRANT_COLLECTION_PREFIX", "worker-rag-test")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -397,7 +397,7 @@ def test_sync_resource_worker_ignores_already_closed_job(
             session.add(
                 User(
                     id="user-1",
-                    email="worker-doc-owner@aidoo.local",
+                    email="worker-doc-owner@ai-do.local",
                     full_name="Worker Doc Owner",
                     password_hash="hash",
                     status="active",
@@ -433,7 +433,7 @@ def test_sync_resource_worker_ignores_already_closed_job(
             )
             job_id = job.id
 
-    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
     assert tasks_module.sync_resource.run(job_id) == "succeeded"
     assert tasks_module.sync_resource.run(job_id) == "ignored"
 
@@ -485,7 +485,7 @@ def test_recompute_visibility_worker_ignores_already_closed_job(
             )
             job_id = job.id
 
-    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
     assert tasks_module.recompute_visibility.run(job_id) == "disabled"
     assert tasks_module.recompute_visibility.run(job_id) == "ignored"
 
@@ -508,7 +508,7 @@ def test_recompute_visibility_worker_queues_docs_sync_jobs_for_meeting_scope(
     )
     monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
     monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
+    monkeypatch.setenv("DOOWON_WORKER_AI_DO_RAG_ENABLED", "1")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -540,14 +540,14 @@ def test_recompute_visibility_worker_queues_docs_sync_jobs_for_meeting_scope(
                 [
                     User(
                         id="user-1",
-                        email="worker-doc-owner@aidoo.local",
+                        email="worker-doc-owner@ai-do.local",
                         full_name="Worker Doc Owner",
                         password_hash="hash",
                         status="active",
                     ),
                     User(
                         id="user-2",
-                        email="worker-attendee@aidoo.local",
+                        email="worker-attendee@ai-do.local",
                         full_name="Worker Attendee",
                         password_hash="hash",
                         status="active",
@@ -606,7 +606,7 @@ def test_recompute_visibility_worker_queues_docs_sync_jobs_for_meeting_scope(
             )
             visibility_job_id = visibility_job.id
 
-    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
     assert tasks_module.recompute_visibility.run(visibility_job_id) == "queued"
 
     with Session(engine) as session:
@@ -638,7 +638,7 @@ def test_recompute_visibility_worker_uses_cursor_doc_ids_when_meeting_is_missing
     )
     monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
     monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
+    monkeypatch.setenv("DOOWON_WORKER_AI_DO_RAG_ENABLED", "1")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -669,7 +669,7 @@ def test_recompute_visibility_worker_uses_cursor_doc_ids_when_meeting_is_missing
             session.add(
                 User(
                     id="user-1",
-                    email="worker-doc-owner@aidoo.local",
+                    email="worker-doc-owner@ai-do.local",
                     full_name="Worker Doc Owner",
                     password_hash="hash",
                     status="active",
@@ -695,7 +695,7 @@ def test_recompute_visibility_worker_uses_cursor_doc_ids_when_meeting_is_missing
             )
             visibility_job_id = visibility_job.id
 
-    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
     assert tasks_module.recompute_visibility.run(visibility_job_id) == "queued"
 
     with Session(engine) as session:
@@ -723,7 +723,7 @@ def test_recompute_visibility_worker_queues_pms_visibility_updates_for_meeting_s
     )
     monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
     monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
+    monkeypatch.setenv("DOOWON_WORKER_AI_DO_RAG_ENABLED", "1")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -758,14 +758,14 @@ def test_recompute_visibility_worker_queues_pms_visibility_updates_for_meeting_s
                 [
                     User(
                         id="user-1",
-                        email="worker-owner@aidoo.local",
+                        email="worker-owner@ai-do.local",
                         full_name="Worker Owner",
                         password_hash="hash",
                         status="active",
                     ),
                     User(
                         id="user-2",
-                        email="worker-reader@aidoo.local",
+                        email="worker-reader@ai-do.local",
                         full_name="Worker Reader",
                         password_hash="hash",
                         status="active",
@@ -851,7 +851,7 @@ def test_recompute_visibility_worker_queues_pms_visibility_updates_for_meeting_s
             )
             visibility_job_id = visibility_job.id
 
-    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
     assert tasks_module.recompute_visibility.run(visibility_job_id) == "queued"
 
     with Session(engine) as session:
@@ -880,7 +880,7 @@ def test_recompute_visibility_worker_uses_cursor_issue_ids_when_pms_meeting_is_m
     )
     monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
     monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
+    monkeypatch.setenv("DOOWON_WORKER_AI_DO_RAG_ENABLED", "1")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -914,7 +914,7 @@ def test_recompute_visibility_worker_uses_cursor_issue_ids_when_pms_meeting_is_m
             session.add(
                 User(
                     id="user-1",
-                    email="worker-owner@aidoo.local",
+                    email="worker-owner@ai-do.local",
                     full_name="Worker Owner",
                     password_hash="hash",
                     status="active",
@@ -966,7 +966,7 @@ def test_recompute_visibility_worker_uses_cursor_issue_ids_when_pms_meeting_is_m
             )
             visibility_job_id = visibility_job.id
 
-    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
     assert tasks_module.recompute_visibility.run(visibility_job_id) == "queued"
 
     with Session(engine) as session:
@@ -994,7 +994,7 @@ def test_recompute_visibility_worker_uses_cursor_issue_ids_for_deleted_pms_label
     )
     monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
     monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
+    monkeypatch.setenv("DOOWON_WORKER_AI_DO_RAG_ENABLED", "1")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -1027,7 +1027,7 @@ def test_recompute_visibility_worker_uses_cursor_issue_ids_for_deleted_pms_label
             session.add(
                 User(
                     id="user-1",
-                    email="worker-owner@aidoo.local",
+                    email="worker-owner@ai-do.local",
                     full_name="Worker Owner",
                     password_hash="hash",
                     status="active",
@@ -1079,7 +1079,7 @@ def test_recompute_visibility_worker_uses_cursor_issue_ids_for_deleted_pms_label
             )
             visibility_job_id = visibility_job.id
 
-    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
     assert tasks_module.recompute_visibility.run(visibility_job_id) == "queued"
 
     with Session(engine) as session:
@@ -1107,8 +1107,8 @@ def test_sync_resource_worker_upserts_docs_projection_with_fake_provider(
     )
     monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
     monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_QDRANT_COLLECTION_PREFIX", "worker-rag-test")
+    monkeypatch.setenv("DOOWON_WORKER_AI_DO_RAG_ENABLED", "1")
+    monkeypatch.setenv("DOOWON_WORKER_AI_DO_QDRANT_COLLECTION_PREFIX", "worker-rag-test")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -1140,7 +1140,7 @@ def test_sync_resource_worker_upserts_docs_projection_with_fake_provider(
             session.add(
                 User(
                     id="user-1",
-                    email="worker-doc-owner@aidoo.local",
+                    email="worker-doc-owner@ai-do.local",
                     full_name="Worker Doc Owner",
                     password_hash="hash",
                     status="active",
@@ -1176,7 +1176,7 @@ def test_sync_resource_worker_upserts_docs_projection_with_fake_provider(
             )
             job_id = job.id
 
-    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
     result = tasks_module.sync_resource.run(job_id)
 
     assert result == "succeeded"
@@ -1207,8 +1207,8 @@ def test_sync_resource_worker_deletes_docs_projection_with_fake_provider(
     )
     monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
     monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_QDRANT_COLLECTION_PREFIX", "worker-rag-test")
+    monkeypatch.setenv("DOOWON_WORKER_AI_DO_RAG_ENABLED", "1")
+    monkeypatch.setenv("DOOWON_WORKER_AI_DO_QDRANT_COLLECTION_PREFIX", "worker-rag-test")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -1240,7 +1240,7 @@ def test_sync_resource_worker_deletes_docs_projection_with_fake_provider(
             session.add(
                 User(
                     id="user-1",
-                    email="worker-doc-owner@aidoo.local",
+                    email="worker-doc-owner@ai-do.local",
                     full_name="Worker Doc Owner",
                     password_hash="hash",
                     status="active",
@@ -1276,7 +1276,7 @@ def test_sync_resource_worker_deletes_docs_projection_with_fake_provider(
             )
             upsert_job_id = upsert_job.id
 
-    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
     assert tasks_module.sync_resource.run(upsert_job_id) == "succeeded"
 
     with Session(engine) as session:
@@ -1317,8 +1317,8 @@ def test_sync_resource_worker_upserts_planner_projection_with_fake_provider(
     )
     monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
     monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_QDRANT_COLLECTION_PREFIX", "worker-rag-test")
+    monkeypatch.setenv("DOOWON_WORKER_AI_DO_RAG_ENABLED", "1")
+    monkeypatch.setenv("DOOWON_WORKER_AI_DO_QDRANT_COLLECTION_PREFIX", "worker-rag-test")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -1345,7 +1345,7 @@ def test_sync_resource_worker_upserts_planner_projection_with_fake_provider(
             session.add(
                 User(
                     id="user-1",
-                    email="worker-planner-owner@aidoo.local",
+                    email="worker-planner-owner@ai-do.local",
                     full_name="Worker Planner Owner",
                     password_hash="hash",
                     status="active",
@@ -1373,7 +1373,7 @@ def test_sync_resource_worker_upserts_planner_projection_with_fake_provider(
             )
             job_id = job.id
 
-    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
     result = tasks_module.sync_resource.run(job_id)
 
     assert result == "succeeded"
@@ -1406,8 +1406,8 @@ def test_sync_resource_worker_upserts_meeting_projection_with_fake_provider(
     )
     monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
     monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_QDRANT_COLLECTION_PREFIX", "worker-rag-test")
+    monkeypatch.setenv("DOOWON_WORKER_AI_DO_RAG_ENABLED", "1")
+    monkeypatch.setenv("DOOWON_WORKER_AI_DO_QDRANT_COLLECTION_PREFIX", "worker-rag-test")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -1439,14 +1439,14 @@ def test_sync_resource_worker_upserts_meeting_projection_with_fake_provider(
                 [
                     User(
                         id="user-1",
-                        email="worker-meeting-organizer@aidoo.local",
+                        email="worker-meeting-organizer@ai-do.local",
                         full_name="Worker Meeting Organizer",
                         password_hash="hash",
                         status="active",
                     ),
                     User(
                         id="user-2",
-                        email="worker-meeting-attendee@aidoo.local",
+                        email="worker-meeting-attendee@ai-do.local",
                         full_name="Worker Meeting Attendee",
                         password_hash="hash",
                         status="active",
@@ -1498,7 +1498,7 @@ def test_sync_resource_worker_upserts_meeting_projection_with_fake_provider(
             )
             job_id = job.id
 
-    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
     result = tasks_module.sync_resource.run(job_id)
 
     assert result == "succeeded"
@@ -1532,8 +1532,8 @@ def test_sync_resource_worker_upserts_pms_issue_projection_with_fake_provider(
     )
     monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
     monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_QDRANT_COLLECTION_PREFIX", "worker-rag-test")
+    monkeypatch.setenv("DOOWON_WORKER_AI_DO_RAG_ENABLED", "1")
+    monkeypatch.setenv("DOOWON_WORKER_AI_DO_QDRANT_COLLECTION_PREFIX", "worker-rag-test")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -1569,14 +1569,14 @@ def test_sync_resource_worker_upserts_pms_issue_projection_with_fake_provider(
                 [
                     User(
                         id="user-1",
-                        email="worker-pms-reporter@aidoo.local",
+                        email="worker-pms-reporter@ai-do.local",
                         full_name="Worker PMS Reporter",
                         password_hash="hash",
                         status="active",
                     ),
                     User(
                         id="user-2",
-                        email="worker-pms-grantee@aidoo.local",
+                        email="worker-pms-grantee@ai-do.local",
                         full_name="Worker PMS Grantee",
                         password_hash="hash",
                         status="active",
@@ -1662,7 +1662,7 @@ def test_sync_resource_worker_upserts_pms_issue_projection_with_fake_provider(
             )
             job_id = job.id
 
-    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
     result = tasks_module.sync_resource.run(job_id)
 
     assert result == "succeeded"
@@ -1696,13 +1696,13 @@ def test_provider_bundle_uses_qdrant_vector_index_when_configured(
     )
     monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
     monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AIDOO_VECTOR_INDEX_PROVIDER", "qdrant")
-    monkeypatch.setenv("AIDOO_QDRANT_URL", "http://qdrant.test:6333")
-    monkeypatch.setenv("AIDOO_QDRANT_API_KEY", "secret")
+    monkeypatch.setenv("AI_DO_VECTOR_INDEX_PROVIDER", "qdrant")
+    monkeypatch.setenv("AI_DO_QDRANT_URL", "http://qdrant.test:6333")
+    monkeypatch.setenv("AI_DO_QDRANT_API_KEY", "secret")
 
-    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
     tasks_module._provider_bundle.cache_clear()
-    rag_runtime = importlib.import_module("aidoo_api.domains.rag.runtime")
+    rag_runtime = importlib.import_module("ai_do_api.domains.rag.runtime")
 
     created: dict[str, str | None] = {}
 
@@ -1734,14 +1734,14 @@ def test_collection_name_matches_model_scoped_runtime_resolution(
     )
     monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
     monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AIDOO_EMBEDDING_PROVIDER", "deepinfra")
+    monkeypatch.setenv("AI_DO_EMBEDDING_PROVIDER", "deepinfra")
     monkeypatch.setenv("DEEPINFRA_EMBEDDING_MODEL", "Qwen/Qwen3-Embedding-8B")
 
-    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
 
     collection = tasks_module._collection_name()
 
-    assert collection == "doowon-rag-qwen-qwen3-embedding-8b"
+    assert collection == "ai-do-rag-qwen-qwen3-embedding-8b"
 
 
 def test_worker_settings_ignore_deepinfra_alias_validation_when_provider_not_selected(
@@ -1754,14 +1754,14 @@ def test_worker_settings_ignore_deepinfra_alias_validation_when_provider_not_sel
         create_policy_table=True,
         seed_policy_rows=True,
     )
-    settings_module = _reload_worker_module("aidoo_worker.settings")
+    settings_module = _reload_worker_module("ai_do_worker.settings")
     settings = settings_module.Settings(
         _env_file=None,
         DOOWON_POSTGRES_DSN=_worker_dsn(db_path),
         DOOWON_WORKER_POSTGRES_DSN=_worker_dsn(db_path),
-        AIDOO_RAG_ENABLED="0",
-        AIDOO_EMBEDDING_PROVIDER="fake",
-        AIDOO_RERANK_PROVIDER="fake",
+        AI_DO_RAG_ENABLED="0",
+        AI_DO_EMBEDDING_PROVIDER="fake",
+        AI_DO_RERANK_PROVIDER="fake",
         DEEPINFRA_BASE_URL="http://127.0.0.1:8080/openai",
     )
 
@@ -1784,9 +1784,9 @@ def test_sync_resource_worker_schedules_retry_with_backoff(
     )
     monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
     monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_JOB_MAX_ATTEMPTS", "3")
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_JOB_RETRY_BACKOFF_SECONDS", "7")
+    monkeypatch.setenv("DOOWON_WORKER_AI_DO_RAG_ENABLED", "1")
+    monkeypatch.setenv("DOOWON_WORKER_AI_DO_RAG_JOB_MAX_ATTEMPTS", "3")
+    monkeypatch.setenv("DOOWON_WORKER_AI_DO_RAG_JOB_RETRY_BACKOFF_SECONDS", "7")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -1816,7 +1816,7 @@ def test_sync_resource_worker_schedules_retry_with_backoff(
             )
             job_id = job.id
 
-    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
     monkeypatch.setattr(
         tasks_module,
         "_process_sync_job",
@@ -1857,9 +1857,9 @@ def test_sync_resource_worker_merges_retry_when_duplicate_pending_job_exists(
     )
     monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
     monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_JOB_MAX_ATTEMPTS", "3")
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_JOB_RETRY_BACKOFF_SECONDS", "7")
+    monkeypatch.setenv("DOOWON_WORKER_AI_DO_RAG_ENABLED", "1")
+    monkeypatch.setenv("DOOWON_WORKER_AI_DO_RAG_JOB_MAX_ATTEMPTS", "3")
+    monkeypatch.setenv("DOOWON_WORKER_AI_DO_RAG_JOB_RETRY_BACKOFF_SECONDS", "7")
 
     class _FakeSignature:
         def apply_async(self, *, queue: str, retry: bool) -> None:
@@ -1871,7 +1871,7 @@ def test_sync_resource_worker_merges_retry_when_duplicate_pending_job_exists(
             return _FakeSignature()
 
     monkeypatch.setattr(
-        "aidoo_api.domains.rag.outbox._get_celery_client",
+        "ai_do_api.domains.rag.outbox._get_celery_client",
         lambda: _FakeCeleryClient(),
     )
 
@@ -1902,7 +1902,7 @@ def test_sync_resource_worker_merges_retry_when_duplicate_pending_job_exists(
                 resource_id="doc-retry-merge",
             ).id
 
-    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
     merged_pending_id: str | None = None
 
     def _inject_duplicate_pending(_session, job):
@@ -1959,9 +1959,9 @@ def test_sync_resource_worker_uses_retry_after_for_transient_provider_errors(
     )
     monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
     monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_JOB_MAX_ATTEMPTS", "3")
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_JOB_RETRY_BACKOFF_SECONDS", "7")
+    monkeypatch.setenv("DOOWON_WORKER_AI_DO_RAG_ENABLED", "1")
+    monkeypatch.setenv("DOOWON_WORKER_AI_DO_RAG_JOB_MAX_ATTEMPTS", "3")
+    monkeypatch.setenv("DOOWON_WORKER_AI_DO_RAG_JOB_RETRY_BACKOFF_SECONDS", "7")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -1991,7 +1991,7 @@ def test_sync_resource_worker_uses_retry_after_for_transient_provider_errors(
             )
             job_id = job.id
 
-    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
     monkeypatch.setattr(
         tasks_module,
         "_process_sync_job",
@@ -2027,8 +2027,8 @@ def test_sync_resource_worker_cancels_non_retryable_provider_configuration_error
     )
     monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
     monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_JOB_MAX_ATTEMPTS", "3")
+    monkeypatch.setenv("DOOWON_WORKER_AI_DO_RAG_ENABLED", "1")
+    monkeypatch.setenv("DOOWON_WORKER_AI_DO_RAG_JOB_MAX_ATTEMPTS", "3")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -2058,7 +2058,7 @@ def test_sync_resource_worker_cancels_non_retryable_provider_configuration_error
             )
             job_id = job.id
 
-    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
     monkeypatch.setattr(
         tasks_module,
         "_process_sync_job",
@@ -2095,8 +2095,8 @@ def test_sync_resource_worker_dead_letters_poison_message_after_max_attempts(
     )
     monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
     monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_JOB_MAX_ATTEMPTS", "1")
+    monkeypatch.setenv("DOOWON_WORKER_AI_DO_RAG_ENABLED", "1")
+    monkeypatch.setenv("DOOWON_WORKER_AI_DO_RAG_JOB_MAX_ATTEMPTS", "1")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -2126,7 +2126,7 @@ def test_sync_resource_worker_dead_letters_poison_message_after_max_attempts(
             )
             job_id = job.id
 
-    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
     monkeypatch.setattr(
         tasks_module,
         "_process_sync_job",
@@ -2162,9 +2162,9 @@ def test_sync_backfill_worker_drains_chunked_batch_with_throttle(
     )
     monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
     monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_BACKFILL_BATCH_SIZE", "2")
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_BACKFILL_THROTTLE_MS", "50")
+    monkeypatch.setenv("DOOWON_WORKER_AI_DO_RAG_ENABLED", "1")
+    monkeypatch.setenv("DOOWON_WORKER_AI_DO_RAG_BACKFILL_BATCH_SIZE", "2")
+    monkeypatch.setenv("DOOWON_WORKER_AI_DO_RAG_BACKFILL_THROTTLE_MS", "50")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -2204,7 +2204,7 @@ def test_sync_backfill_worker_drains_chunked_batch_with_throttle(
                 lane=RagSyncLane.REALTIME,
             ).id
 
-    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
     processed: list[str] = []
     sleeps: list[float] = []
     monkeypatch.setattr(tasks_module, "_process_sync_job", lambda _session, job: processed.append(job.id) or "succeeded")

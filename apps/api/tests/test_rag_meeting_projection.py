@@ -6,20 +6,20 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from aidoo_api.core.db import get_session_factory
-import aidoo_api.core.settings as core_settings
-import aidoo_api.domains.meeting.rag_sync as meeting_rag_sync
-from aidoo_api.domains.auth.access import ensure_dev_login_seed_data, load_user_graph
-from aidoo_api.domains.auth.models import User, Workspace, WorkspaceUserBinding
-from aidoo_api.domains.auth.security import new_id
-from aidoo_api.domains.meeting.models import Meeting, MeetingAttendee, MeetingRecording
-from aidoo_api.domains.rag.access_filter import build_user_rag_post_filter
-from aidoo_api.domains.rag.contracts import RagQueryRequest, RagSyncOperation
-from aidoo_api.domains.rag.meeting_projection import MEETING_RESOURCE_TYPE, load_meeting_projection
-from aidoo_api.domains.rag.models import RagSyncJob
-from aidoo_api.domains.rag.providers.fake import FakeEmbeddingClient, FakeVectorIndexClient
-from aidoo_api.domains.rag.query_service import RagQueryService
-from aidoo_api.domains.rag.service import RagService
+from ai_do_api.core.db import get_session_factory
+import ai_do_api.core.settings as core_settings
+import ai_do_api.domains.meeting.rag_sync as meeting_rag_sync
+from ai_do_api.domains.auth.access import ensure_dev_login_seed_data, load_user_graph
+from ai_do_api.domains.auth.models import User, Workspace, WorkspaceUserBinding
+from ai_do_api.domains.auth.security import new_id
+from ai_do_api.domains.meeting.models import Meeting, MeetingAttendee, MeetingRecording
+from ai_do_api.domains.rag.access_filter import build_user_rag_post_filter
+from ai_do_api.domains.rag.contracts import RagQueryRequest, RagSyncOperation
+from ai_do_api.domains.rag.meeting_projection import MEETING_RESOURCE_TYPE, load_meeting_projection
+from ai_do_api.domains.rag.models import RagSyncJob
+from ai_do_api.domains.rag.providers.fake import FakeEmbeddingClient, FakeVectorIndexClient
+from ai_do_api.domains.rag.query_service import RagQueryService
+from ai_do_api.domains.rag.service import RagService
 
 
 def _dev_login(client: TestClient, account_key: str) -> dict:
@@ -76,14 +76,14 @@ def test_meeting_projection_and_query_acl_follow_participants(client: TestClient
 
         attendee = User(
             id=new_id(),
-            email="meeting-attendee-rag@aidoo.local",
+            email="meeting-attendee-rag@ai-do.local",
             full_name="Meeting Attendee",
             password_hash="hash",
             status="active",
         )
         outsider = User(
             id=new_id(),
-            email="meeting-outsider-rag@aidoo.local",
+            email="meeting-outsider-rag@ai-do.local",
             full_name="Meeting Outsider",
             password_hash="hash",
             status="active",
@@ -198,14 +198,14 @@ def test_meeting_router_mutations_enqueue_rag_jobs(client: TestClient, monkeypat
         assert workspace is not None
         attendee = User(
             id=new_id(),
-            email="meeting-hook-attendee@aidoo.local",
+            email="meeting-hook-attendee@ai-do.local",
             full_name="Meeting Hook Attendee",
             password_hash="hash",
             status="active",
         )
         late_attendee = User(
             id=new_id(),
-            email="meeting-hook-late@aidoo.local",
+            email="meeting-hook-late@ai-do.local",
             full_name="Meeting Hook Late",
             password_hash="hash",
             status="active",

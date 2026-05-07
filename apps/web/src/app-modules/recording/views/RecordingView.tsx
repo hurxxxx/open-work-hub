@@ -21,7 +21,7 @@ import {
   Square,
   Upload,
 } from 'lucide-react';
-import { Button, DropdownMenu, useConfirm } from '@aidoo/ui';
+import { Button, DropdownMenu, useConfirm } from '@ai-do/ui';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { normalizeTimeZone } from '@/src/platform/time/time-utils';

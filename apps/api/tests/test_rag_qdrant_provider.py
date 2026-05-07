@@ -2,30 +2,30 @@ from __future__ import annotations
 
 import warnings
 
-import aidoo_api.domains.rag.metrics as rag_metrics_module
+import ai_do_api.domains.rag.metrics as rag_metrics_module
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 import pytest
 from qdrant_client import QdrantClient
 
-from aidoo_api.domains.rag.contracts import (
+from ai_do_api.domains.rag.contracts import (
     RagDeleteRequest,
     RagProjection,
     RagQueryRequest,
     RagVectorSearchRequest,
 )
-from aidoo_api.domains.rag.providers import RagProviderConfigurationError
-from aidoo_api.domains.rag.providers.fake import FakeEmbeddingClient
-from aidoo_api.domains.rag.providers.qdrant import (
+from ai_do_api.domains.rag.providers import RagProviderConfigurationError
+from ai_do_api.domains.rag.providers.fake import FakeEmbeddingClient
+from ai_do_api.domains.rag.providers.qdrant import (
     QdrantVectorIndexClient,
     _sparse_vector_from_terms,
 )
-from aidoo_api.domains.rag.providers.openai_compatible import (
+from ai_do_api.domains.rag.providers.openai_compatible import (
     RagProviderTimeoutError,
     RagProviderTransientError,
 )
-from aidoo_api.domains.rag.query_service import RagQueryService
-from aidoo_api.domains.rag.service import RagService
+from ai_do_api.domains.rag.query_service import RagQueryService
+from ai_do_api.domains.rag.service import RagService
 
 pytestmark = pytest.mark.filterwarnings(
     "ignore:Payload indexes have no effect in the local Qdrant.*"

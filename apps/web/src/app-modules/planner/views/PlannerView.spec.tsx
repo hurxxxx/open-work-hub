@@ -281,7 +281,7 @@ describe('PlannerView', () => {
     plannerHarness.updatePlannerEvent.mockClear();
     plannerHarness.resetCalendarState();
     plannerHarness.setCalendarEvents([]);
-    window.localStorage.removeItem('aidoo:planner-timeline-range-days');
+    window.localStorage.removeItem('ai-do:planner-timeline-range-days');
   });
 
   it('uses local YYYY-MM-DD ranges and opens planner event creation from the toolbar', async () => {
@@ -435,7 +435,7 @@ describe('PlannerView', () => {
       expect(lastCall.from).toBe(formatYmd(rangeStart));
       expect(lastCall.to).toBe(formatYmd(addDays(rangeStart, 56)));
       expect(
-        window.localStorage.getItem('aidoo:planner-timeline-range-days'),
+        window.localStorage.getItem('ai-do:planner-timeline-range-days'),
       ).toBe('56');
     });
   });

@@ -1,20 +1,20 @@
 from __future__ import annotations
 
-import aidoo_api.domains.rag.metrics as rag_metrics_module
+import ai_do_api.domains.rag.metrics as rag_metrics_module
 import pytest
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 
-from aidoo_api.domains.rag.contracts import RagAnswerMode, RagProjection, RagQueryRequest
-from aidoo_api.domains.rag.metrics import build_rag_metrics
-from aidoo_api.domains.rag.providers.fake import (
+from ai_do_api.domains.rag.contracts import RagAnswerMode, RagProjection, RagQueryRequest
+from ai_do_api.domains.rag.metrics import build_rag_metrics
+from ai_do_api.domains.rag.providers.fake import (
     FakeEmbeddingClient,
     FakeOcrClient,
     FakeRerankClient,
     FakeVectorIndexClient,
 )
-from aidoo_api.domains.rag.query_service import RagQueryService
-from aidoo_api.domains.rag.service import RagService
+from ai_do_api.domains.rag.query_service import RagQueryService
+from ai_do_api.domains.rag.service import RagService
 
 
 def _metric_map(reader: InMemoryMetricReader) -> dict[str, object]:
@@ -210,7 +210,7 @@ class _RecordingSynthesizer:
     provider_name = "stub-grounded-answer"
 
     def synthesize(self, *, query: str, hits):
-        from aidoo_api.domains.rag.contracts import RagGroundedAnswer, RagGroundedCitation
+        from ai_do_api.domains.rag.contracts import RagGroundedAnswer, RagGroundedCitation
 
         return RagGroundedAnswer(
             text=f"answer for {query}",

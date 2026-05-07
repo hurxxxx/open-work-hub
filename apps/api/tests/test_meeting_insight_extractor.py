@@ -6,18 +6,18 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from aidoo_api.core.db import get_session_factory
-from aidoo_api.domains.auth.access import ensure_dev_login_seed_data, load_user_graph
-from aidoo_api.domains.auth.models import AuditLog, Workspace
-from aidoo_api.domains.auth.security import new_id
-from aidoo_api.domains.meeting import insights as meeting_insights
-from aidoo_api.domains.meeting.models import (
+from ai_do_api.core.db import get_session_factory
+from ai_do_api.domains.auth.access import ensure_dev_login_seed_data, load_user_graph
+from ai_do_api.domains.auth.models import AuditLog, Workspace
+from ai_do_api.domains.auth.security import new_id
+from ai_do_api.domains.meeting import insights as meeting_insights
+from ai_do_api.domains.meeting.models import (
     Meeting,
     MeetingAttendee,
     MeetingInsight,
     MeetingRecording,
 )
-from aidoo_api.domains.planner.service import parse_iso_or_date
+from ai_do_api.domains.planner.service import parse_iso_or_date
 
 
 def _dev_login(client: TestClient, account_key: str) -> dict:

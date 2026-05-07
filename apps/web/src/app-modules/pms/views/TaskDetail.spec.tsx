@@ -22,7 +22,7 @@ const mockCreateDependency = vi.fn();
 const mockDeleteDependency = vi.fn();
 const mockListTaskListIssues = vi.fn();
 
-vi.mock('@aidoo/ui', () => ({
+vi.mock('@ai-do/ui', () => ({
   Badge: ({ children }: { children: ReactNode }) => <span>{children}</span>,
   Button: ({
     children,

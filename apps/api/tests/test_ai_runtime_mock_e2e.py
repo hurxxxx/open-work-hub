@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 from ai_runtime_mock_harness import run_mock_external_graph_stream
-from aidoo_api.domains.ai import router as ai_router
+from ai_do_api.domains.ai import router as ai_router
 
 
 @pytest.fixture(autouse=True)

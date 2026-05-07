@@ -1,5 +1,5 @@
 import { CheckSquare, Circle, Clock, MessageSquare, User2 } from 'lucide-react';
-import { Badge } from '@aidoo/ui';
+import { Badge } from '@ai-do/ui';
 
 import type { PmsIssue, PmsTaskListStatus } from '../api/pms-api';
 import {

@@ -143,13 +143,13 @@ describe('ChatComposer', () => {
       render(<ChatComposer {...defaultProps({ input: '/' })} />);
       expect(screen.getByRole('listbox')).not.toBeNull();
       // Should list AI tool options — sanity check a known one.
-      expect(screen.getAllByText('아이두 통합검색').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('AI-DO 통합검색').length).toBeGreaterThan(0);
     });
 
     it('filters items by query after "/"', () => {
       render(<ChatComposer {...defaultProps({ input: '/fmea' })} />);
       expect(screen.getByText('FMEA 비교')).not.toBeNull();
-      expect(screen.queryByText('아이두 통합검색')).toBeNull();
+      expect(screen.queryByText('AI-DO 통합검색')).toBeNull();
     });
 
     it('hides the menu entirely when no tool matches (fall-through)', () => {

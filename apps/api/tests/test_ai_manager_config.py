@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from aidoo_api.core.settings import Settings
-from aidoo_api.domains.ai.manager_runtime import (
+from ai_do_api.core.settings import Settings
+from ai_do_api.domains.ai.manager_runtime import (
     AI_MANAGER_ADAPTER_ID,
     build_ai_manager_config,
 )
@@ -9,21 +9,21 @@ from aidoo_api.domains.ai.manager_runtime import (
 
 def _settings(**overrides):
     aliases = {
-        "ai_manager_enabled": "AIDOO_AI_MANAGER_ENABLED",
-        "ai_manager_provider": "AIDOO_AI_MANAGER_PROVIDER",
-        "ai_manager_model": "AIDOO_AI_MANAGER_MODEL",
-        "ai_manager_max_loops": "AIDOO_AI_MANAGER_MAX_LOOPS",
+        "ai_manager_enabled": "AI_DO_AI_MANAGER_ENABLED",
+        "ai_manager_provider": "AI_DO_AI_MANAGER_PROVIDER",
+        "ai_manager_model": "AI_DO_AI_MANAGER_MODEL",
+        "ai_manager_max_loops": "AI_DO_AI_MANAGER_MAX_LOOPS",
         "ai_manager_trace_sensitive_data": (
-            "AIDOO_AI_MANAGER_TRACE_SENSITIVE_DATA"
+            "AI_DO_AI_MANAGER_TRACE_SENSITIVE_DATA"
         ),
-        "ai_manager_store_response": "AIDOO_AI_MANAGER_STORE_RESPONSE",
+        "ai_manager_store_response": "AI_DO_AI_MANAGER_STORE_RESPONSE",
         "ai_manager_hosted_tools_enabled": (
-            "AIDOO_AI_MANAGER_HOSTED_TOOLS_ENABLED"
+            "AI_DO_AI_MANAGER_HOSTED_TOOLS_ENABLED"
         ),
     }
     return Settings(
         _env_file=None,
-        DOOWON_POSTGRES_DSN="postgresql+psycopg://aidoo_test:aidoo_test@127.0.0.1:5432/aidoo_test",
+        DOOWON_POSTGRES_DSN="postgresql+psycopg://ai_do_test:ai_do_test@127.0.0.1:5432/ai_do_test",
         **{aliases.get(key, key): value for key, value in overrides.items()},
     )
 
@@ -103,14 +103,14 @@ def test_ai_manager_rejects_non_openai_provider() -> None:
 def test_ai_manager_env_aliases_parse() -> None:
     settings = Settings(
         _env_file=None,
-        DOOWON_POSTGRES_DSN="postgresql+psycopg://aidoo_test:aidoo_test@127.0.0.1:5432/aidoo_test",
-        AIDOO_AI_MANAGER_ENABLED="1",
-        AIDOO_AI_MANAGER_PROVIDER="openai",
-        AIDOO_AI_MANAGER_MODEL="gpt-test",
-        AIDOO_AI_MANAGER_MAX_LOOPS="2",
-        AIDOO_AI_MANAGER_TRACE_SENSITIVE_DATA="0",
-        AIDOO_AI_MANAGER_STORE_RESPONSE="0",
-        AIDOO_AI_MANAGER_HOSTED_TOOLS_ENABLED="0",
+        DOOWON_POSTGRES_DSN="postgresql+psycopg://ai_do_test:ai_do_test@127.0.0.1:5432/ai_do_test",
+        AI_DO_AI_MANAGER_ENABLED="1",
+        AI_DO_AI_MANAGER_PROVIDER="openai",
+        AI_DO_AI_MANAGER_MODEL="gpt-test",
+        AI_DO_AI_MANAGER_MAX_LOOPS="2",
+        AI_DO_AI_MANAGER_TRACE_SENSITIVE_DATA="0",
+        AI_DO_AI_MANAGER_STORE_RESPONSE="0",
+        AI_DO_AI_MANAGER_HOSTED_TOOLS_ENABLED="0",
     )
 
     config = build_ai_manager_config(settings)

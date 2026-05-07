@@ -349,7 +349,7 @@ DGX Spark 단일 노드 운영은 본 보고서의 권고 방향을 거의 모�
 
 - **2-노드 클러스터**: Qwen3.5-35B-A3B-FP8 analogue에서 Marlin FP8 기준 495 tok/s aggregate (c=32) 사례가 있다. Qwen3.6-35B-A3B 기본 운영에서는 같은 수치를 보장하지 말고, manager 노드 ↔ specialist 노드 분리 또는 dense 모델 + MoE 모델 hetero 운영의 헤드룸으로만 본다.
 - **모델 escalation**: Qwen3.5-122B-A10B NVFP4 양자화가 단일 Spark에 적재된 community 사례가 있다 (234GB → 75.6GB). 이는 "큰 critic/synthesis 모델을 단일 Spark에 올릴 가능성"을 보여주는 analogue일 뿐이며, Qwen3.6-35B-A3B 기본 운영과 별도 검증 대상이다.
-- **vLLM build/parser drift**: Spark 운영 자체가 단일 스택이지만, vLLM nightly 이미지·CUDA build·`qwen3` reasoning parser·`qwen3_coder` tool parser 조합이 빠르게 바뀐다. parser/finish_reason/tool delta 회귀 테스트를 별도 contract로 고정해, image/parser 업그레이드가 silently agent loop를 깨뜨리지 않게 한다 ([`apps/api/src/aidoo_api/core/llm_adapters.py`](apps/api/src/aidoo_api/core/llm_adapters.py)에 vLLM adapter contract를 유지).
+- **vLLM build/parser drift**: Spark 운영 자체가 단일 스택이지만, vLLM nightly 이미지·CUDA build·`qwen3` reasoning parser·`qwen3_coder` tool parser 조합이 빠르게 바뀐다. parser/finish_reason/tool delta 회귀 테스트를 별도 contract로 고정해, image/parser 업그레이드가 silently agent loop를 깨뜨리지 않게 한다 ([`apps/api/src/ai_do_api/core/llm_adapters.py`](apps/api/src/ai_do_api/core/llm_adapters.py)에 vLLM adapter contract를 유지).
 
 ## Small Domain Agent Design Method
 

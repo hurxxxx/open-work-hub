@@ -13,7 +13,7 @@ def _dev_login(client: TestClient, account_key: str) -> dict:
 def test_docs_native_docs_and_direct_user_share_grant_docs_access(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
 
-    owner = _create_user(client, admin["token"], email="docs-owner@aidoo.local", full_name="Docs Owner")
+    owner = _create_user(client, admin["token"], email="docs-owner@ai-do.local", full_name="Docs Owner")
     owner_id = owner["user"]["id"]
     _grant_workspace_access(client, admin["token"], owner_id, "docs")
     owner_token = _login(client, owner["user"]["email"], owner["temporary_password"])
@@ -49,7 +49,7 @@ def test_docs_native_docs_and_direct_user_share_grant_docs_access(client: TestCl
     shared_user = _create_user(
         client,
         admin["token"],
-        email="docs-shared@aidoo.local",
+        email="docs-shared@ai-do.local",
         full_name="Docs Shared User",
     )
     shared_user_id = shared_user["user"]["id"]
@@ -97,7 +97,7 @@ def test_docs_hub_reuses_pms_acl_and_blocks_resharing_of_source_docs(client: Tes
         content_blocks=[],
     )
 
-    viewer = _create_user(client, admin["token"], email="docs-viewer@aidoo.local", full_name="Docs Viewer")
+    viewer = _create_user(client, admin["token"], email="docs-viewer@ai-do.local", full_name="Docs Viewer")
     _grant_workspace_access(client, admin["token"], viewer["user"]["id"], "docs")
     _grant_workspace_access(client, admin["token"], viewer["user"]["id"], "pms")
     _add_task_list_member(client, admin["token"], task_list["id"], viewer["user"]["id"], "viewer")
@@ -134,7 +134,7 @@ def test_docs_hub_reuses_pms_acl_and_blocks_resharing_of_source_docs(client: Tes
     )
     assert viewer_share_response.status_code == 403
 
-    member = _create_user(client, admin["token"], email="docs-user@aidoo.local", full_name="Docs User")
+    member = _create_user(client, admin["token"], email="docs-user@ai-do.local", full_name="Docs User")
     _grant_workspace_access(client, admin["token"], member["user"]["id"], "docs")
     _grant_workspace_access(client, admin["token"], member["user"]["id"], "pms")
     _add_task_list_member(client, admin["token"], task_list["id"], member["user"]["id"], "member")
@@ -180,11 +180,11 @@ def test_docs_hub_reuses_pms_acl_and_blocks_resharing_of_source_docs(client: Tes
 def test_internal_shared_links_require_auth_and_honor_read_vs_edit(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
 
-    owner = _create_user(client, admin["token"], email="share-owner@aidoo.local", full_name="Share Owner")
+    owner = _create_user(client, admin["token"], email="share-owner@ai-do.local", full_name="Share Owner")
     _grant_workspace_access(client, admin["token"], owner["user"]["id"], "docs")
     owner_token = _login(client, owner["user"]["email"], owner["temporary_password"])
 
-    recipient = _create_user(client, admin["token"], email="share-recipient@aidoo.local", full_name="Share Recipient")
+    recipient = _create_user(client, admin["token"], email="share-recipient@ai-do.local", full_name="Share Recipient")
     recipient_token = _login(client, recipient["user"]["email"], recipient["temporary_password"])
 
     create_doc_response = client.post(
@@ -265,8 +265,8 @@ def test_workspace_scoped_shareable_users_stay_in_requested_docs_workspace(
     )
     assert scoped_response.status_code == 200
     scoped_emails = {item["email"] for item in scoped_response.json()}
-    assert "hq-admin@aidoo.local" in scoped_emails
-    assert "innovation-lab-admin@aidoo.local" not in scoped_emails
+    assert "hq-admin@ai-do.local" in scoped_emails
+    assert "innovation-lab-admin@ai-do.local" not in scoped_emails
 
     legacy_response = client.get(
         "/api/v1/workspaces/hq/docs/shareable-users",
@@ -275,14 +275,14 @@ def test_workspace_scoped_shareable_users_stay_in_requested_docs_workspace(
     )
     assert legacy_response.status_code == 200
     legacy_emails = {item["email"] for item in legacy_response.json()}
-    assert "hq-admin@aidoo.local" in legacy_emails
-    assert "innovation-lab-admin@aidoo.local" not in legacy_emails
+    assert "hq-admin@ai-do.local" in legacy_emails
+    assert "innovation-lab-admin@ai-do.local" not in legacy_emails
 
 
 def test_duplicate_native_doc_clones_pages_into_new_private_doc(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
 
-    owner = _create_user(client, admin["token"], email="dup-owner@aidoo.local", full_name="Dup Owner")
+    owner = _create_user(client, admin["token"], email="dup-owner@ai-do.local", full_name="Dup Owner")
     _grant_workspace_access(client, admin["token"], owner["user"]["id"], "docs")
     owner_token = _login(client, owner["user"]["email"], owner["temporary_password"])
 
@@ -336,7 +336,7 @@ def test_duplicate_native_doc_clones_pages_into_new_private_doc(client: TestClie
 
 def test_native_doc_page_patch_reorders_and_moves_parent(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
-    owner = _create_user(client, admin["token"], email="reorder-owner@aidoo.local", full_name="Reorder Owner")
+    owner = _create_user(client, admin["token"], email="reorder-owner@ai-do.local", full_name="Reorder Owner")
     _grant_workspace_access(client, admin["token"], owner["user"]["id"], "docs")
     owner_token = _login(client, owner["user"]["email"], owner["temporary_password"])
 
@@ -416,7 +416,7 @@ def test_native_doc_page_patch_reorders_and_moves_parent(client: TestClient) -> 
 
 def test_native_doc_page_patch_rejects_cycle(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
-    owner = _create_user(client, admin["token"], email="cycle-owner@aidoo.local", full_name="Cycle Owner")
+    owner = _create_user(client, admin["token"], email="cycle-owner@ai-do.local", full_name="Cycle Owner")
     _grant_workspace_access(client, admin["token"], owner["user"]["id"], "docs")
     owner_token = _login(client, owner["user"]["email"], owner["temporary_password"])
 
@@ -460,11 +460,11 @@ def test_native_doc_page_patch_rejects_cycle(client: TestClient) -> None:
 def test_duplicate_doc_via_read_share_creates_private_copy_for_recipient(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
 
-    owner = _create_user(client, admin["token"], email="dup-share-owner@aidoo.local", full_name="Owner")
+    owner = _create_user(client, admin["token"], email="dup-share-owner@ai-do.local", full_name="Owner")
     _grant_workspace_access(client, admin["token"], owner["user"]["id"], "docs")
     owner_token = _login(client, owner["user"]["email"], owner["temporary_password"])
 
-    recipient = _create_user(client, admin["token"], email="dup-share-recipient@aidoo.local", full_name="Recipient")
+    recipient = _create_user(client, admin["token"], email="dup-share-recipient@ai-do.local", full_name="Recipient")
     _grant_workspace_access(client, admin["token"], recipient["user"]["id"], "docs")
     recipient_token = _login(client, recipient["user"]["email"], recipient["temporary_password"])
 
@@ -498,8 +498,8 @@ def _bootstrap_admin_session(client: TestClient) -> dict:
     response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "AIDOO Admin",
-            "email": "admin@aidoo.local",
+            "full_name": "AI-DO Admin",
+            "email": "admin@ai-do.local",
             "password": "supersecret123",
         },
     )

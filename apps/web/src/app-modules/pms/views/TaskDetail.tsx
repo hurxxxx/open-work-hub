@@ -19,8 +19,8 @@ import {
   Download,
   FileIcon,
 } from 'lucide-react';
-import { Badge, Button, BlockEditor, BlockViewer } from '@aidoo/ui';
-import type { BlockContent } from '@aidoo/ui';
+import { Badge, Button, BlockEditor, BlockViewer } from '@ai-do/ui';
+import type { BlockContent } from '@ai-do/ui';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '@/src/platform/auth/auth-provider';

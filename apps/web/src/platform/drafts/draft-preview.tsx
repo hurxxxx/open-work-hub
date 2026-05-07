@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 
-import { Button, MetricInline, Panel } from '@aidoo/ui';
+import { Button, MetricInline, Panel } from '@ai-do/ui';
 
 export function DraftPreview() {
   const { t } = useTranslation('apps');

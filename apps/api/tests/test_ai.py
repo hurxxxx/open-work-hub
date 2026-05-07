@@ -7,12 +7,12 @@ from openai import OpenAIError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from aidoo_api.core import llm as llm_core
-from aidoo_api.core.db import get_engine
-from aidoo_api.core.settings import get_settings
-from aidoo_api.domains.ai.models import LlmPolicy
-from aidoo_api.domains.ai import router as ai_router
-from aidoo_api.domains.auth.models import AuditLog
+from ai_do_api.core import llm as llm_core
+from ai_do_api.core.db import get_engine
+from ai_do_api.core.settings import get_settings
+from ai_do_api.domains.ai.models import LlmPolicy
+from ai_do_api.domains.ai import router as ai_router
+from ai_do_api.domains.auth.models import AuditLog
 from test_meeting import _auth_headers, _bootstrap_admin_session, _create_meeting, _dev_login
 
 
@@ -528,7 +528,7 @@ def test_readyz_uses_effective_readiness_while_ai_health_stays_raw(
 
     health_response = client.get(
         _workspace_ai_path(workspace_slug, "/health"),
-        headers={**_auth_headers(auth["token"]), "x-aidoo-locale": "en-US"},
+        headers={**_auth_headers(auth["token"]), "x-ai-do-locale": "en-US"},
     )
     assert health_response.status_code == 200, health_response.text
     health_payload = health_response.json()

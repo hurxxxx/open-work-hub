@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Dialog } from '@aidoo/ui';
+import { Button, Dialog } from '@ai-do/ui';
 import { CheckSquare, FileText, Paperclip, Plus, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 

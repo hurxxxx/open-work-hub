@@ -81,7 +81,7 @@ RUN pip install uv
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen
 COPY . .
-CMD ["uv", "run", "uvicorn", "aidoo_api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uv", "run", "uvicorn", "ai_do_api.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
 ### 3.3 .dockerignore
@@ -109,9 +109,9 @@ services:
   postgres:
     image: postgres:18
     environment:
-      POSTGRES_USER: aidoo
+      POSTGRES_USER: ai-do
       POSTGRES_PASSWORD: ...
-      POSTGRES_DB: aidoo
+      POSTGRES_DB: ai-do
     volumes: [pg_data:/var/lib/postgresql/data]
 volumes:
   pg_data:
@@ -190,10 +190,10 @@ Compose가 "옛 도구"라는 건 오해입니다. 단일 호스트 배포는 Co
 ```nginx
 server {
   listen 443 ssl http2;
-  server_name aidoo.example.com;
+  server_name ai-do.example.com;
 
-  ssl_certificate     /etc/letsencrypt/live/aidoo/fullchain.pem;
-  ssl_certificate_key /etc/letsencrypt/live/aidoo/privkey.pem;
+  ssl_certificate     /etc/letsencrypt/live/ai-do/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/ai-do/privkey.pem;
 
   # 정적 SPA
   root /usr/share/nginx/html;
@@ -252,7 +252,7 @@ Nginx는 가장 보편적이고 자료가 풍부해 장기 유지에 유리합�
 4. DB 덤프 복원, Alembic 마이그레이션.
 5. DNS를 새 서버 IP로 변경.
 
-**이게 왜 AIDOO Portal에 중요한가**: 클라우드 비용 최적화로 인스턴스 사이즈를 바꾸거나, 리전 이전을 해야 할 때 **반나절에 끝낼 수 있는 루틴**이 된다는 뜻입니다. 수동 서버 구축이었다면 며칠이 걸립니다.
+**이게 왜 AI-DO Portal에 중요한가**: 클라우드 비용 최적화로 인스턴스 사이즈를 바꾸거나, 리전 이전을 해야 할 때 **반나절에 끝낼 수 있는 루틴**이 된다는 뜻입니다. 수동 서버 구축이었다면 며칠이 걸립니다.
 
 ### 🛠️ 5분 실습 — 컨테이너 안 탐험
 

@@ -15,7 +15,7 @@ Phase 6의 구현 방향을 전환한다. 이전 runtime-kernel 우선 계획은
 ## Current Execution State
 
 - Current PR/stage: PR1 through PR5 workspace draft implemented as a mockable manager/runtime spike, with the first OpenAI Agents SDK adapter boundary and independent internal local-agent runner in place.
-- Last completed: `openai-agents` dependency, AI manager settings, safe SDK defaults, module boundary, manager DTOs, prompt redaction boundary, `LocalAgentResult` safety validation, `run_local_specialist` adapter boundary, mock manager SSE stream path behind `AIDOO_AI_MANAGER_ENABLED`, bounded manager review loop tests, OpenAI Agents SDK agent/run-config/tool/stream adapter tests, provider-independent `LocalModelAgentRunner` using the existing local pool with `pool_hint="local"`, `ToolGatewayLocalAgentRunner` for read-tool evidence calls plus local model summary, real OpenAI smoke with `gpt-5.4-mini`, MLX local-model smoke for Docs/PMS/Planner read tasks, and approval-gated PMS/Planner CRUD capability expansion.
+- Last completed: `openai-agents` dependency, AI manager settings, safe SDK defaults, module boundary, manager DTOs, prompt redaction boundary, `LocalAgentResult` safety validation, `run_local_specialist` adapter boundary, mock manager SSE stream path behind `AI_DO_AI_MANAGER_ENABLED`, bounded manager review loop tests, OpenAI Agents SDK agent/run-config/tool/stream adapter tests, provider-independent `LocalModelAgentRunner` using the existing local pool with `pool_hint="local"`, `ToolGatewayLocalAgentRunner` for read-tool evidence calls plus local model summary, real OpenAI smoke with `gpt-5.4-mini`, MLX local-model smoke for Docs/PMS/Planner read tasks, and approval-gated PMS/Planner CRUD capability expansion.
 - Current domain write policy: PMS supports approval-gated create/update/comment/delete, Planner supports approval-gated create/update/delete, Meeting create remains approval-gated, and Docs is intentionally AI read-only for now. Docs write capability can be reconsidered later but must not be exposed in the MVP capability registry.
 - Stopped/deferred: runtime-kernel expansion, graph persistence invariant hardening, runtime retention scheduler, inspection hardening, durable workflow backend design, high-risk graph support, approval-preview graph execution.
 - Next exact task: switch active implementation to [`05-meeting-work-intelligence.md`](./05-meeting-work-intelligence.md): local-first meeting/chat structured extraction, golden sample quality gate, wizard UI, and approval-gated PMS/Planner handoff.
@@ -35,13 +35,13 @@ Required implementation dependency:
 
 Required feature flags/settings:
 
-- `AIDOO_AI_MANAGER_ENABLED=false`
-- `AIDOO_AI_MANAGER_PROVIDER=openai`
-- `AIDOO_AI_MANAGER_MODEL=gpt-5.4-mini` for MVP/dev smoke, with no silent default in production
-- `AIDOO_AI_MANAGER_MAX_LOOPS=3`
-- `AIDOO_AI_MANAGER_TRACE_SENSITIVE_DATA=false`
-- `AIDOO_AI_MANAGER_STORE_RESPONSE=false`
-- `AIDOO_AI_MANAGER_HOSTED_TOOLS_ENABLED=false`
+- `AI_DO_AI_MANAGER_ENABLED=false`
+- `AI_DO_AI_MANAGER_PROVIDER=openai`
+- `AI_DO_AI_MANAGER_MODEL=gpt-5.4-mini` for MVP/dev smoke, with no silent default in production
+- `AI_DO_AI_MANAGER_MAX_LOOPS=3`
+- `AI_DO_AI_MANAGER_TRACE_SENSITIVE_DATA=false`
+- `AI_DO_AI_MANAGER_STORE_RESPONSE=false`
+- `AI_DO_AI_MANAGER_HOSTED_TOOLS_ENABLED=false`
 
 ### 2. Manager owns decisions; internal agents own internal data
 
@@ -97,7 +97,7 @@ The MVP loop is intentionally bounded:
 2. Manager calls one or more internal agent tasks through the function tool.
 3. Manager reviews each `LocalAgentResult`.
 4. Manager either calls another specialist, asks the user a clarifying/approval question, or produces the final response.
-5. The run stops at `AIDOO_AI_MANAGER_MAX_LOOPS`, default 3, with a partial answer and explicit gap if still unresolved.
+5. The run stops at `AI_DO_AI_MANAGER_MAX_LOOPS`, default 3, with a partial answer and explicit gap if still unresolved.
 
 No autonomous unbounded loop is allowed. A loop iteration means one manager review cycle after internal agent work, not every token/tool event inside the SDK.
 
@@ -192,7 +192,7 @@ Goal: connect the manager to the existing SSE chat surface without replacing nor
 
 Behavior:
 
-- When `AIDOO_AI_MANAGER_ENABLED=false`, current chat behavior is unchanged.
+- When `AI_DO_AI_MANAGER_ENABLED=false`, current chat behavior is unchanged.
 - When enabled and a request is ai-manager eligible, the API creates an OpenAI manager adapter with the `run_local_specialist` function tool. No PMS/Planner/Docs OpenAI SDK agents or handoffs are created.
 - The API streams manager planning, internal agent execution status, review status, and final answer through existing `AgentEventEnvelope` types where possible.
 - SDK run state is not treated as the internal audit source of truth; internal run metadata stores only scrubbed summaries.
@@ -265,8 +265,8 @@ Live OpenAI smoke, opt-in:
 
 ```bash
 cd apps/api
-AIDOO_RUN_LIVE_OPENAI_AI_MANAGER=1 \
-AIDOO_AI_MANAGER_MODEL=gpt-5.4-mini \
+AI_DO_RUN_LIVE_OPENAI_AI_MANAGER=1 \
+AI_DO_AI_MANAGER_MODEL=gpt-5.4-mini \
 uv run pytest tests/test_ai_manager_live.py
 ```
 
@@ -315,8 +315,8 @@ The command should return only historical/deferred notes, not active next-step i
 Environment:
 
 - Reset local infra back to the existing Doowon stack and removed accidental `doowon-dev-*` resources.
-- Used `doowon-postgres` / `doowon_ai_portal_dev`, API `127.0.0.1:8000`, web `127.0.0.1:4200`, and MLX local model server `127.0.0.1:8080`.
-- Browser account: `delivery-hub-member@aidoo.local`, workspace route `/w/delivery-hub/ai`.
+- Used `doowon-postgres` / `ai_do_portal_dev`, API `127.0.0.1:8000`, web `127.0.0.1:4200`, and MLX local model server `127.0.0.1:8080`.
+- Browser account: `delivery-hub-member@ai-do.local`, workspace route `/w/delivery-hub/ai`.
 - Browser audit checked final URL, accessibility snapshots, console logs, and page errors. Console output was limited to Vite/React DevTools messages; `agent-browser errors` still showed blank historical entries without stack/message.
 
 Test summary:
@@ -374,7 +374,7 @@ Environment:
 - Hardware: Apple M5 Pro, 48GB RAM.
 - Model source: https://huggingface.co/mlx-community/gemma-4-26B-A4B-it-OptiQ-4bit
 - MLX server: `127.0.0.1:8080`, API `127.0.0.1:8000`, web `127.0.0.1:4200`.
-- Browser account: `delivery-hub-member@aidoo.local`, route `/w/delivery-hub/ai`.
+- Browser account: `delivery-hub-member@ai-do.local`, route `/w/delivery-hub/ai`.
 - Gemma cache size after first load: about `15G`.
 
 Code/setup cleanup:
@@ -438,7 +438,7 @@ Current Qwen quality guardrails:
 
 ## Rollback Plan
 
-- Keep `AIDOO_AI_MANAGER_ENABLED=false` as the default.
+- Keep `AI_DO_AI_MANAGER_ENABLED=false` as the default.
 - If the manager path fails, route back to the existing single-loop chat path.
 - If a leakage risk is found, disable AI manager, revoke provider keys if needed, and preserve affected run summaries for audit.
 - If OpenAI Agents SDK blocks required behavior, keep DTOs and internal agent boundary, then replace only the manager runner implementation.

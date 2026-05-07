@@ -304,8 +304,8 @@ describe('AIView', () => {
       value: vi.fn(),
       writable: true,
     });
-    window.localStorage.removeItem('aidoo.ai.streamEnabled');
-    window.localStorage.removeItem('aidoo.ai.backendMode');
+    window.localStorage.removeItem('ai-do.ai.streamEnabled');
+    window.localStorage.removeItem('ai-do.ai.backendMode');
   });
 
   it('rolls back the optimistic user turn and restores input on pre-stream fallback failure', async () => {
@@ -697,7 +697,7 @@ describe('AIView', () => {
     );
 
     // Regression: the API already prepends its own AGENT_SYSTEM_PROMPT on every
-    // turn (apps/api/src/aidoo_api/domains/ai/agent.py). Sending a client-side
+    // turn (apps/api/src/ai_do_api/domains/ai/agent.py). Sending a client-side
     // system message produced two consecutive system messages, which mlx-lm
     // rejected with "System message must be at the beginning" (HTTP 404).
     const sentMessages = aiHarness.streamAiChat.mock.calls[0][0].payload

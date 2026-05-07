@@ -4,11 +4,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from aidoo_api.core.settings import get_settings
-from aidoo_api.domains.ai.registry import reset_ai_capability_registry
-from aidoo_api.core.db import get_engine, get_session_factory
-from aidoo_api.domains.auth.access import ensure_dev_login_seed_data
-from aidoo_api.domains.auth.models import Workspace, WorkspaceAppEntitlement
+from ai_do_api.core.settings import get_settings
+from ai_do_api.domains.ai.registry import reset_ai_capability_registry
+from ai_do_api.core.db import get_engine, get_session_factory
+from ai_do_api.domains.auth.access import ensure_dev_login_seed_data
+from ai_do_api.domains.auth.models import Workspace, WorkspaceAppEntitlement
 
 
 def _dev_login(client: TestClient, account_key: str) -> dict:
@@ -132,7 +132,7 @@ def test_manifest_and_openapi_include_pms_write_tools_when_enabled(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("AIDOO_AI_WRITE_TOOLS_ENABLED", "1")
+    monkeypatch.setenv("AI_DO_AI_WRITE_TOOLS_ENABLED", "1")
     _reset_settings_and_registry()
     try:
         auth = _dev_login(client, "delivery-hub-admin")
@@ -172,7 +172,7 @@ def test_manifest_and_openapi_include_pms_write_tools_when_enabled(
         assert "/mcp/tools/planner.delete_event" in openapi_payload["paths"]
         assert "/mcp/tools/docs.create_page" not in openapi_payload["paths"]
     finally:
-        monkeypatch.delenv("AIDOO_AI_WRITE_TOOLS_ENABLED", raising=False)
+        monkeypatch.delenv("AI_DO_AI_WRITE_TOOLS_ENABLED", raising=False)
         _reset_settings_and_registry()
 
 
@@ -180,7 +180,7 @@ def test_planner_app_manifest_and_openapi_include_write_tool_when_enabled(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("AIDOO_AI_WRITE_TOOLS_ENABLED", "1")
+    monkeypatch.setenv("AI_DO_AI_WRITE_TOOLS_ENABLED", "1")
     _reset_settings_and_registry()
     try:
         auth = _dev_login(client, "delivery-hub-admin")
@@ -211,5 +211,5 @@ def test_planner_app_manifest_and_openapi_include_write_tool_when_enabled(
             "/mcp/tools/planner.delete_event",
         }
     finally:
-        monkeypatch.delenv("AIDOO_AI_WRITE_TOOLS_ENABLED", raising=False)
+        monkeypatch.delenv("AI_DO_AI_WRITE_TOOLS_ENABLED", raising=False)
         _reset_settings_and_registry()

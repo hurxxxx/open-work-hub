@@ -1,8 +1,8 @@
-# AIDOO PMS 구현 계획
+# AI-DO PMS 구현 계획
 
 ## 목표
 
-- AIDOO 안에 실제로 운영 가능한 경량 PMS를 구축한다.
+- AI-DO 안에 실제로 운영 가능한 경량 PMS를 구축한다.
 - 초기 버전은 현대적인 프로젝트 관리 도구의 핵심 기능만 먼저 구현한다.
 - AI 보조 기능은 넣지 않는다.
 - 대신 REST API를 표준화해 웹, 향후 CLI, 향후 챗봇이 같은 PMS API를 사용하도록 설계한다.
@@ -36,7 +36,7 @@
 
 ## 구현 원칙
 
-- AIDOO 단일 테넌트 구조로 시작한다.
+- AI-DO 단일 테넌트 구조로 시작한다.
 - PMS는 공통 identity 계층의 `workspace` 아래에 놓는다. 기본 workspace key 는 `pms` 다.
 - 협업 경계는 장기적으로 `Workspace > Team > Project` 로 정렬한다.
 - 현재 PMS REST API는 기존 `project membership(owner/member)` 과 공존한다.

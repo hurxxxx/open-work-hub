@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import BaseModel, ConfigDict
 
-from aidoo_api.domains.ai.registry import (
+from ai_do_api.domains.ai.registry import (
     AiCapabilityRegistry,
     get_ai_capability_registry,
     reset_ai_capability_registry,

@@ -11,8 +11,8 @@ def _bootstrap_admin_session(client: TestClient) -> dict:
     response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "AIDOO Admin",
-            "email": "admin@aidoo.local",
+            "full_name": "AI-DO Admin",
+            "email": "admin@ai-do.local",
             "password": "supersecret123",
         },
     )
@@ -90,7 +90,7 @@ def test_add_remove_member_endpoints(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
     token = admin["token"]
     workspace = _create_workspace(client, token, name="People Hub")
-    other_user = _create_user(client, token, email="alice@aidoo.local", full_name="Alice")
+    other_user = _create_user(client, token, email="alice@ai-do.local", full_name="Alice")
 
     add_response = client.post(
         f"/api/v1/admin/workspaces/{workspace['id']}/members",
@@ -165,15 +165,15 @@ def test_member_endpoints_require_workspace_admin(client: TestClient) -> None:
     intruder_payload = _create_user_with_password(
         client,
         admin_token,
-        email="intruder@aidoo.local",
+        email="intruder@ai-do.local",
         full_name="Intruder",
-        password="Aidoo!intruder1",
+        password="AI-DO!intruder1",
     )
     intruder = intruder_payload["user"]
 
     login = client.post(
         "/api/v1/auth/login",
-        json={"email": "intruder@aidoo.local", "password": "Aidoo!intruder1"},
+        json={"email": "intruder@ai-do.local", "password": "AI-DO!intruder1"},
     )
     assert login.status_code == 200, login.text
     intruder_token = login.json()["token"]
@@ -236,7 +236,7 @@ def test_paginated_members_endpoint_filter_search_and_role_counts(client: TestCl
         u = _create_user(
             client,
             token,
-            email=f"user{i}@aidoo.local",
+            email=f"user{i}@ai-do.local",
             full_name=f"User {i}",
         )
         user_ids.append(u["id"])
@@ -280,7 +280,7 @@ def test_paginated_members_endpoint_filter_search_and_role_counts(client: TestCl
         headers=_auth_headers(token),
     ).json()
     assert search_filter["total"] == 1
-    assert search_filter["items"][0]["subject_secondary"] == "user2@aidoo.local"
+    assert search_filter["items"][0]["subject_secondary"] == "user2@ai-do.local"
 
 
 def test_bulk_member_endpoint_partial_failure(client: TestClient) -> None:
@@ -288,8 +288,8 @@ def test_bulk_member_endpoint_partial_failure(client: TestClient) -> None:
     token = admin["token"]
     workspace = _create_workspace(client, token, name="Bulk Lab")
 
-    user_a = _create_user(client, token, email="alice@aidoo.local", full_name="Alice")
-    user_b = _create_user(client, token, email="bob@aidoo.local", full_name="Bob")
+    user_a = _create_user(client, token, email="alice@ai-do.local", full_name="Alice")
+    user_b = _create_user(client, token, email="bob@ai-do.local", full_name="Bob")
 
     response = client.post(
         f"/api/v1/admin/workspaces/{workspace['id']}/members/bulk",
@@ -345,9 +345,9 @@ def test_other_admin_can_demote_and_remove_admin(client: TestClient) -> None:
     second_payload = _create_user_with_password(
         client,
         token,
-        email="second@aidoo.local",
+        email="second@ai-do.local",
         full_name="Second Admin",
-        password="Aidoo!second12",
+        password="AI-DO!second12",
     )
     second_id = second_payload["user"]["id"]
 
@@ -361,7 +361,7 @@ def test_other_admin_can_demote_and_remove_admin(client: TestClient) -> None:
     # Login as the second admin and try to remove the only owner.
     login = client.post(
         "/api/v1/auth/login",
-        json={"email": "second@aidoo.local", "password": "Aidoo!second12"},
+        json={"email": "second@ai-do.local", "password": "AI-DO!second12"},
     )
     assert login.status_code == 200, login.text
     second_token = login.json()["token"]

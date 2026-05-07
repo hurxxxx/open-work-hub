@@ -20,7 +20,7 @@
 - BlockNote 기반 docs/meeting 실시간 협업 로컬 검증 중 3개 문제를 수정했다.
 - web dev proxy `/api` 에 `ws: true` 가 빠져 websocket upgrade 가 API 로 전달되지 않던 문제를 [apps/web/vite.config.mts](apps/web/vite.config.mts) 에서 수정.
 - 커스텀 websocket 래퍼가 브라우저 `Event` 객체를 재-dispatch 하면서 `InvalidStateError` 를 내던 문제와, `y-websocket` 이 기대하는 instance `OPEN/CLOSED` 상수 부재를 [packages/ui/src/lib/editor/collaborative-block-editor.tsx](packages/ui/src/lib/editor/collaborative-block-editor.tsx) 에서 수정.
-- API 쪽 `DocsCollabHub.get_room()` 이 `await room.start()` 로 멈춰 `auth_ok` 이후 `room.serve()` 까지 진행되지 않던 문제를 [apps/api/src/aidoo_api/domains/docs/collab.py](apps/api/src/aidoo_api/domains/docs/collab.py) 에서 background task + `room.started.wait()` 패턴으로 수정.
+- API 쪽 `DocsCollabHub.get_room()` 이 `await room.start()` 로 멈춰 `auth_ok` 이후 `room.serve()` 까지 진행되지 않던 문제를 [apps/api/src/ai_do_api/domains/docs/collab.py](apps/api/src/ai_do_api/domains/docs/collab.py) 에서 background task + `room.started.wait()` 패턴으로 수정.
 - 공식 BlockNote Yjs 유틸(`blocksToYDoc`) 직접 import 정렬 시도는 로컬 Vite/workspace dev 환경에서 `Yjs was already imported` 경고와 함께 실시간 sync 가 불안정해져 보류했다. 현재는 안정성을 우선해 `yjs_state` 가 있으면 collaboration state 로 부팅하고, 없는 초기 문서만 `initialContent` fallback 을 사용한다.
 - 로컬 브라우저 재검증:
   - URL: `http://localhost:4200/w/hq/meeting/e1a27370-499d-4740-b82a-b3bae5882872`
@@ -33,12 +33,12 @@
 [MEETING-APP-PLAN.md §324](MEETING-APP-PLAN.md#L324) 의 PR2 를 [autoplan H2/H3/H4 lock decisions](MEETING-APP-PLAN.md#L557) + 1차 plan review 보완사항 모두 반영하여 구현.
 
 **핵심 변경**:
-- ✅ **3-mode PMS ACL split**: [pms/access.py](apps/api/src/aidoo_api/domains/pms/access.py) 에 `_ensure_list_member` / `_ensure_issue_readable` / `_ensure_issue_writable` 신규 모듈. [pms/router.py](apps/api/src/aidoo_api/domains/pms/router.py) 의 14 callsite 중 단 3 개 (`_get_issue_for_user`, `download_attachment`, `list_issue_custom_field_values`) 만 IssueUserAccess fallback 적용. 나머지 12 개는 list member only — list metadata (issues 목록, labels, statuses, templates, CSV export) 누출 차단
+- ✅ **3-mode PMS ACL split**: [pms/access.py](apps/api/src/ai_do_api/domains/pms/access.py) 에 `_ensure_list_member` / `_ensure_issue_readable` / `_ensure_issue_writable` 신규 모듈. [pms/router.py](apps/api/src/ai_do_api/domains/pms/router.py) 의 14 callsite 중 단 3 개 (`_get_issue_for_user`, `download_attachment`, `list_issue_custom_field_values`) 만 IssueUserAccess fallback 적용. 나머지 12 개는 list member only — list metadata (issues 목록, labels, statuses, templates, CSV export) 누출 차단
 - ✅ **IssueUserAccess full treatment**: `expires_at` (default = meeting.end_at + 7d), `revoked_at`, `granted_by_meeting_id`, `granted_by_user_id`, `reason` enum, `revoke_reason`. **Partial unique index** `(issue_id, user_id, granted_by_meeting_id) WHERE revoked_at IS NULL` — multi-meeting safety 의 핵심. 같은 issue 가 meeting A/B 양쪽에 첨부된 경우 row 2개로 분리되어, A detach 해도 B grant 가 살아있으면 read 유지
-- ✅ **DocMeetingAccess 신규 테이블**: [docs/models.py:150](apps/api/src/aidoo_api/domains/docs/models.py#L150). `upsert_native_doc_user_share` 재사용 거부 — meeting 출처 추적 불가, 참석자 제거 시 cleanup 불가능. 동일한 lifecycle 컬럼 + partial unique. [docs/router.py:222-237](apps/api/src/aidoo_api/domains/docs/router.py#L222) 의 `_compute_native_access` 가 fallback 으로 추가
+- ✅ **DocMeetingAccess 신규 테이블**: [docs/models.py:150](apps/api/src/ai_do_api/domains/docs/models.py#L150). `upsert_native_doc_user_share` 재사용 거부 — meeting 출처 추적 불가, 참석자 제거 시 cleanup 불가능. 동일한 lifecycle 컬럼 + partial unique. [docs/router.py:222-237](apps/api/src/ai_do_api/domains/docs/router.py#L222) 의 `_compute_native_access` 가 fallback 으로 추가
 - ✅ **ensure_issue_attachable / ensure_doc_attachable 신규**: attach 권한과 read 권한 분리. **Chain abuse 방지** — meeting A 에서 grant 받은 user 가 그 issue/doc 을 meeting B 에 reattach 할 수 없음 (attach 는 list member / doc owner 만)
-- ✅ **Meeting attach/create grant 자동화**: [meeting/service.py](apps/api/src/aidoo_api/domains/meeting/service.py) 의 `_attach_issue_link` / `_attach_doc_link` 가 link upsert + 모든 attendee 에게 grant 생성. caller / platform_admin / list-member 는 skip. detach/delete/_replace_attendees 모두 service-layer revoke 함수 호출
-- ✅ **One-step Meeting create**: `MeetingCreateRequest.task_ids[]` / `doc_ids[]` 신설. [create_meeting](apps/api/src/aidoo_api/domains/meeting/service.py#L505) 가 create + attach + grant 를 단일 트랜잭션에 atomic 처리. 어느 한 attach 실패 → 전체 롤백 + meeting 미생성. file upload 는 여전히 two-step (multipart 라 atomic 묶기 비현실적), MeetingCreateModal 의 partial failure 패널은 file 만 표시
+- ✅ **Meeting attach/create grant 자동화**: [meeting/service.py](apps/api/src/ai_do_api/domains/meeting/service.py) 의 `_attach_issue_link` / `_attach_doc_link` 가 link upsert + 모든 attendee 에게 grant 생성. caller / platform_admin / list-member 는 skip. detach/delete/_replace_attendees 모두 service-layer revoke 함수 호출
+- ✅ **One-step Meeting create**: `MeetingCreateRequest.task_ids[]` / `doc_ids[]` 신설. [create_meeting](apps/api/src/ai_do_api/domains/meeting/service.py#L505) 가 create + attach + grant 를 단일 트랜잭션에 atomic 처리. 어느 한 attach 실패 → 전체 롤백 + meeting 미생성. file upload 는 여전히 two-step (multipart 라 atomic 묶기 비현실적), MeetingCreateModal 의 partial failure 패널은 file 만 표시
 - ✅ **Reschedule TTL sync**: `update_meeting` 이 `original_end_at` 비교 → `bump_grant_expiry_for_meeting` + `bump_doc_grant_expiry_for_meeting` 호출. end_at 이 새 시점으로 바뀌면 모든 active grant 의 `expires_at` 도 `new_end_at + 7d` 로 갱신
 - ✅ **Cross-workspace 차단**: `_validate_attendee_users` 가 `workspace_id` 받아서 `resolve_workspace_role` 검사. meeting workspace 외부 user invite 시 422
 - ✅ **PMS project_id → list_id rename (Strategy B)**: 신규 migration `5f2f47dc2d11_rename_pms_project_to_list` 가 `pms_projects` → `pms_lists` rename + 7개 child 테이블 FK 컬럼 rename + 14개 인덱스 rename. SQLAlchemy attribute 도 `list_id` 로 통일하되 `project_id = synonym("list_id")` 트릭으로 router.py 의 155 callsite 가 무중단 작동. response payload 도 `list_id` 로 전환, `validation_alias=AliasChoices("list_id", "project_id")` 로 input 양쪽 다 받음. URL `/api/v1/pms/projects/*` 는 dual-route alias 로 1 PR grace 동안 유지
@@ -61,9 +61,9 @@
 - agent-browser dogfood → MeetingCreateModal 정상, TaskPickerModal 정상, console 0 errors
 
 **핵심 신규/수정 파일**:
-- 신규: [pms/access.py](apps/api/src/aidoo_api/domains/pms/access.py), [pms/access_grants.py](apps/api/src/aidoo_api/domains/pms/access_grants.py), [docs/access_grants.py](apps/api/src/aidoo_api/domains/docs/access_grants.py)
+- 신규: [pms/access.py](apps/api/src/ai_do_api/domains/pms/access.py), [pms/access_grants.py](apps/api/src/ai_do_api/domains/pms/access_grants.py), [docs/access_grants.py](apps/api/src/ai_do_api/domains/docs/access_grants.py)
 - 신규 migration: [5f2f47dc2d11_rename_pms_project_to_list.py](apps/api/alembic/versions/5f2f47dc2d11_rename_pms_project_to_list.py), [8b1b7fa4b72b_add_meeting_access_grants.py](apps/api/alembic/versions/8b1b7fa4b72b_add_meeting_access_grants.py)
-- 수정: [pms/models.py](apps/api/src/aidoo_api/domains/pms/models.py) (PmsList rename + IssueUserAccess), [pms/router.py](apps/api/src/aidoo_api/domains/pms/router.py) (helper shim + dual-route), [docs/models.py](apps/api/src/aidoo_api/domains/docs/models.py) (DocMeetingAccess), [docs/router.py](apps/api/src/aidoo_api/domains/docs/router.py) (fallback), [meeting/service.py](apps/api/src/aidoo_api/domains/meeting/service.py) (grant 자동화), [meeting/permissions.py](apps/api/src/aidoo_api/domains/meeting/permissions.py) (재import + ensure_doc_attachable), [meeting/schemas.py](apps/api/src/aidoo_api/domains/meeting/schemas.py) (task_ids/doc_ids), [meeting/router.py](apps/api/src/aidoo_api/domains/meeting/router.py)
+- 수정: [pms/models.py](apps/api/src/ai_do_api/domains/pms/models.py) (PmsList rename + IssueUserAccess), [pms/router.py](apps/api/src/ai_do_api/domains/pms/router.py) (helper shim + dual-route), [docs/models.py](apps/api/src/ai_do_api/domains/docs/models.py) (DocMeetingAccess), [docs/router.py](apps/api/src/ai_do_api/domains/docs/router.py) (fallback), [meeting/service.py](apps/api/src/ai_do_api/domains/meeting/service.py) (grant 자동화), [meeting/permissions.py](apps/api/src/ai_do_api/domains/meeting/permissions.py) (재import + ensure_doc_attachable), [meeting/schemas.py](apps/api/src/ai_do_api/domains/meeting/schemas.py) (task_ids/doc_ids), [meeting/router.py](apps/api/src/ai_do_api/domains/meeting/router.py)
 - 프런트: [MeetingDetail.tsx](apps/web/src/components/views/MeetingView/MeetingDetail.tsx), [MeetingCreateModal.tsx](apps/web/src/components/views/MeetingView/MeetingCreateModal.tsx), [meeting-api.ts](apps/web/src/domains/meeting/meeting-api.ts), [pms-api.ts](apps/web/src/domains/pms/pms-api.ts), PMSView 컴포넌트 4개
 
 **이월 부채** (PR2 에서 처리하지 않고 후속 PR 로):
@@ -80,15 +80,15 @@
 - ✅ **Legacy URL 호환 redirect 전면 제거**: `WorkspaceAppRedirect` + `rewriteLegacyAppPath` + `app-shell.ts` legacy 분기 + `NAV_ITEMS` legacy deep-link 전부 철거. `/meeting`, `/docs`, `/pms`, `/planner`, `/ai` 직접 진입 시 신규 `NotFoundView` 로 404. `/docs/shared/:shareToken` 공개 공유 라우트는 legacy 가 아니므로 유지.
 - ✅ **NAV_ITEMS 재설계**: `NavItem.path` 대신 `pathSuffix?` (query/hash), `absolutePath?` (admin 등 workspace-aware 아닌 경로), `linkAppId?` (cross-app 딥링크, `meeting-minutes` 용) 3필드로 분리. SubSidebar 가 `resolveNavItemHref` helper 로 URL 조립. `AppBarItem.path` 는 `buildAppLink` 가 런타임 계산하므로 필드 자체 제거.
 - ✅ **Web typecheck 7건 해결**: `canShowAppChrome('home')` 회로, `FEATURE_BY_APP_ID[home]` 가드, `motion.div` `onDragStartCapture` 로 네이티브 drag 타입 우회, PMSView 의 `token` narrowing 용 local binding, `admin-permissions.ts` 의 `Set<string>` literal widening. 최종 `pnpm nx typecheck web` **0 errors**.
-- ✅ **`datetime.utcnow()` deprecation**: [meeting/service.py:429](apps/api/src/aidoo_api/domains/meeting/service.py#L429) 에서 `datetime.now(UTC).replace(tzinfo=None)` 로 교체. [docs/models.py:12](apps/api/src/aidoo_api/domains/docs/models.py#L12) 와 동일 패턴. pytest 재검증은 Docker 기동 후 1회만 수행 필요 (testcontainer 기반).
+- ✅ **`datetime.utcnow()` deprecation**: [meeting/service.py:429](apps/api/src/ai_do_api/domains/meeting/service.py#L429) 에서 `datetime.now(UTC).replace(tzinfo=None)` 로 교체. [docs/models.py:12](apps/api/src/ai_do_api/domains/docs/models.py#L12) 와 동일 패턴. pytest 재검증은 Docker 기동 후 1회만 수행 필요 (testcontainer 기반).
 - ✅ **Meeting 회귀 QA (agent-browser)**: 시나리오 A~D 전부 통과 (아래 상세)
 - ⚠️ **다크모드 톤**: 구조만 확인. 실 QA 는 PR5 로 이관 (D6 와 함께).
 
 ### Round 12 agent-browser QA — 2026-04-13
 
-- **시나리오 A 해피 패스** (`delivery-hub-admin@aidoo.local`, `/w/delivery-hub/meeting`):
+- **시나리오 A 해피 패스** (`delivery-hub-admin@ai-do.local`, `/w/delivery-hub/meeting`):
   - Meeting 생성 성공 (`PR1 마감 agent-browser QA smoke`, 시작 12:00 종료 13:00 KST 입력 → 목록에 `오후 12:00 – 오후 01:00` 정확히 표시)
-  - 참석자 검색 & 추가 정상 (`delivery-hub-member@aidoo.local`)
+  - 참석자 검색 & 추가 정상 (`delivery-hub-member@ai-do.local`)
   - 파일 업로드 성공 (`PR1-STATUS.md` 61.8 KB, MinIO presigned URL 반환)
   - 파일 다운로드 버튼 노출 확인
   - TaskPickerModal 오픈 + project dropdown 로드 + empty state 정상 (dev DB 이슈 0건)
@@ -97,7 +97,7 @@
   - 회의 삭제 confirm dialog → 실제 삭제 → 목록 `예정된 회의가 없습니다` empty state
 - **시나리오 B Legacy URL → 404** (로그인 상태에서 직접 주소 입력):
   - `/meeting`, `/docs`, `/pms`, `/planner`, `/ai` **전부** `NotFoundView` "페이지를 찾을 수 없습니다" 로 떨어짐. AppBar 는 정상 렌더링되어 재진입 가능.
-- **시나리오 C AI 사이드바 "회의록" deep-link** (`innovation-lab-admin@aidoo.local`, `/w/innovation-lab/ai`):
+- **시나리오 C AI 사이드바 "회의록" deep-link** (`innovation-lab-admin@ai-do.local`, `/w/innovation-lab/ai`):
   - SubSidebar 회의록 링크의 `href` = `/w/innovation-lab/meeting?tab=recordings` (workspace-aware + pathSuffix 조립 정상)
   - 클릭 시 실제로 `/w/innovation-lab/meeting?tab=recordings` 로 이동 확인 — `NavItem.linkAppId='meeting' + pathSuffix='?tab=recordings'` 재설계 검증 완료
 - **시나리오 D 역할별 교차**: 라운드 11 (2026-04-12) 에서 이미 매트릭스 검증 완료. 라운드 12 변경점은 legacy URL + NavItem 재설계에 국한되므로 해당 검증은 생략.
@@ -119,7 +119,7 @@
 - `apps/web/src/components/views/PMSView/BoardView.tsx` — `onDragStart` → `onDragStartCapture` (framer-motion drag handler 타입 회피)
 - `apps/web/src/components/views/PMSView/PMSView.tsx` — `token` local binding 으로 `string | null` narrowing
 - `apps/web/src/domains/admin/admin-permissions.ts` — `new Set<string>(...)` literal widening
-- `apps/api/src/aidoo_api/domains/meeting/service.py` — `datetime.now(UTC).replace(tzinfo=None)`
+- `apps/api/src/ai_do_api/domains/meeting/service.py` — `datetime.now(UTC).replace(tzinfo=None)`
 - `MEETING-APP-PLAN.md` — PR2/PR5 이월 메모 추가
 - `PR1-STATUS.md` — 이 문서 업데이트
 
@@ -132,13 +132,13 @@
 
 ### UI E2E smoke (agent-browser, 2026-04-11)
 
-- `delivery-hub-admin@aidoo.local` 폼 로그인 성공
+- `delivery-hub-admin@ai-do.local` 폼 로그인 성공
 - legacy `/meeting` → `/w/delivery-hub/meeting` redirect 확인
 - Meeting 생성 성공: `Agent Browser E2E Smoke`
 - Meeting detail 에서 파일 업로드 성공: `PR0-RESULT.md`
 - 다운로드 버튼으로 `/tmp/doowon-downloads` 저장 확인
 - `/w/delivery-hub/settings` 의 workspace detail + 멤버 관리 dialog 정상 오픈
-- `platform-admin@aidoo.local` 로그인 후 `/admin/workspaces` 진입, `Aidoo HQ -> Delivery Hub` detail panel 전환 및 멤버 관리 dialog 정상 오픈
+- `platform-admin@ai-do.local` 로그인 후 `/admin/workspaces` 진입, `AI-DO HQ -> Delivery Hub` detail panel 전환 및 멤버 관리 dialog 정상 오픈
 - 음수 경로 확인: `delivery-hub-admin` 으로 `/w/knowledge-base/meeting` 접근 시 `접근 권한 없음`
 - page error 는 없었고, console 에는 `DialogContent` 의 `Description` / `aria-describedby` 누락 warning 2건이 남음
 
@@ -146,11 +146,11 @@
 
 - 자동화 baseline 재확인: `pytest apps/api/tests/` **75 passed**, `pnpm nx typecheck web` 기존 오류 7건 유지
 - 역할별 앱 가시성 / 직접 URL 가드:
-  - `delivery-hub-member@aidoo.local` → AppBar `HOME/PMS/DOCS/Planner/MEETING`, `/w/delivery-hub/settings` 와 `/admin` 모두 `접근 권한 없음`
-  - `knowledge-base-member@aidoo.local` → AppBar `HOME/DOCS`, `/w/knowledge-base/meeting`, `/w/knowledge-base/pms` 모두 `접근 권한 없음`
-  - `innovation-lab-member@aidoo.local` → AppBar `HOME/AI/DOCS/MEETING`, `/w/innovation-lab/pms` 는 `접근 권한 없음`
-  - `planning-desk-member@aidoo.local` → AppBar `HOME/Planner`, `/w/planning-desk/docs` 는 `접근 권한 없음`
-  - `platform-admin@aidoo.local` 도 workspace `enabled_apps` 를 우회하지 못함. `/w/knowledge-base/meeting` 직접 진입 시 `접근 권한 없음`
+  - `delivery-hub-member@ai-do.local` → AppBar `HOME/PMS/DOCS/Planner/MEETING`, `/w/delivery-hub/settings` 와 `/admin` 모두 `접근 권한 없음`
+  - `knowledge-base-member@ai-do.local` → AppBar `HOME/DOCS`, `/w/knowledge-base/meeting`, `/w/knowledge-base/pms` 모두 `접근 권한 없음`
+  - `innovation-lab-member@ai-do.local` → AppBar `HOME/AI/DOCS/MEETING`, `/w/innovation-lab/pms` 는 `접근 권한 없음`
+  - `planning-desk-member@ai-do.local` → AppBar `HOME/Planner`, `/w/planning-desk/docs` 는 `접근 권한 없음`
+  - `platform-admin@ai-do.local` 도 workspace `enabled_apps` 를 우회하지 못함. `/w/knowledge-base/meeting` 직접 진입 시 `접근 권한 없음`
 - workspace 전환/fallback:
   - `planning-desk-member` 에게 임시 workspace 를 추가한 뒤 `/w/acl-e2e-lab-20260412/meeting` 접근 성공 확인
   - 같은 세션에서 workspace switcher 로 `Planning Desk` 전환 시, 현재 app 이 지원되면 `/w/planning-desk/planner` 로 유지되고 지원되지 않으면 `/` 로 fallback
@@ -186,7 +186,7 @@
 - 라우팅 재구조화: 앱 실경로를 `/w/:workspaceSlug/<app>` 로 통일. `AppBar`, `SubSidebar`, `App.tsx`, `workspace-utils.ts` 가 현재 workspace slug 와 enabled apps 를 기준으로 경로를 계산.
 - Admin/Workspace settings 공용화: `WorkspaceDetailPanel` 을 분리해 Admin Console 과 `/w/:workspaceSlug/settings` 가 같은 패널을 공유. workspace admin 도 profile/apps/members 를 직접 관리 가능.
 - 멤버 관리 UX 확장: workspace member bulk add picker, paginated drawer, name/email candidate search, near-fullscreen fixed modal, 리스트 영역 확장까지 반영. 라운드 8 당시 TODO 였던 "orphan 진단/space membership 가시성" 문제의 실제 대응면이 됨.
-- 로그인 UX: 로그인 화면이 seed accounts 를 category 별로 노출. 원격 dev DB 에 legacy `*@aidoo.local` 계정이 섞여 있어도 bootstrap payload 기준 바로 로그인 가능.
+- 로그인 UX: 로그인 화면이 seed accounts 를 category 별로 노출. 원격 dev DB 에 legacy `*@ai-do.local` 계정이 섞여 있어도 bootstrap payload 기준 바로 로그인 가능.
 
 **관련 커밋**:
 - `cff47b0` workspace rearchitecture: collaboration spaces with enabled apps
@@ -222,7 +222,7 @@ docs_native_docs: 0
 pms_docs 좀비:    제거됨
 ```
 
-**시드 계정 공유 비밀번호**: `Aidoo!dev1234`
+**시드 계정 공유 비밀번호**: `AI-DO!dev1234`
 
 ## 2. PR1 본체 (라운드 1-2) — 완료 상태
 
@@ -245,7 +245,7 @@ PR1 skeleton 작성 당시 산출물. **자세한 체크리스트는 §3, §5 �
 
 **증상**: 워크스페이스 바인딩만 있는 비조직자·비참석자 사용자도 Upcoming 탭을 열면 다른 사람이 만든 회의가 다 보임. 클릭하면 403 (`get_meeting` 에서 `_ensure_user_can_view` 차단).
 
-**원인**: [service.py:list_meetings](apps/api/src/aidoo_api/domains/meeting/service.py) 의 `scope="upcoming"` / `"all"` 분기가 user 필터를 안 걸었음. `scope="mine"` 만 organizer/attendee 로 좁혔음.
+**원인**: [service.py:list_meetings](apps/api/src/ai_do_api/domains/meeting/service.py) 의 `scope="upcoming"` / `"all"` 분기가 user 필터를 안 걸었음. `scope="mine"` 만 organizer/attendee 로 좁혔음.
 
 **Fix**: platform admin 이 아닌 caller 에게는 모든 scope 에 organizer-or-attendee 필터를 항상 적용. platform admin 은 종전대로 `upcoming`/`all` 에서 워크스페이스 전체 조회 가능. `mine` 은 admin 도 본인 것만 보도록 명시 좁힘 (탭 라벨이 정확하게).
 
@@ -366,10 +366,10 @@ meetings:
 **의미**: PR1 기존 동작은 organizer 만 attach/detach. 사용자는 attendee 도 prep material 을 미리 올릴 수 있고, 누가 올린 attachment 는 그 사람 (또는 organizer) 만 삭제할 수 있어야 한다고 명시.
 
 **Backend**:
-- [permissions.py](apps/api/src/aidoo_api/domains/meeting/permissions.py) 에 `is_participant`, `ensure_meeting_participant`, `ensure_link_remover` 추가.
+- [permissions.py](apps/api/src/ai_do_api/domains/meeting/permissions.py) 에 `is_participant`, `ensure_meeting_participant`, `ensure_link_remover` 추가.
   - `ensure_meeting_participant` — organizer/attendee/admin 통과, 그 외 403
   - `ensure_link_remover` — organizer/admin/`added_by_id == user.id` 통과, 그 외 403
-- [service.py](apps/api/src/aidoo_api/domains/meeting/service.py) 의 `attach_task` / `attach_doc` 가 `ensure_meeting_organizer` → `ensure_meeting_participant` 로 교체. `detach_task` / `detach_doc` 는 link 의 `added_by_id` 를 조회한 후 `ensure_link_remover` 호출.
+- [service.py](apps/api/src/ai_do_api/domains/meeting/service.py) 의 `attach_task` / `attach_doc` 가 `ensure_meeting_organizer` → `ensure_meeting_participant` 로 교체. `detach_task` / `detach_doc` 는 link 의 `added_by_id` 를 조회한 후 `ensure_link_remover` 호출.
 
 **Frontend**:
 - [meeting-permissions.ts](apps/web/src/domains/meeting/meeting-permissions.ts) 에 `isParticipant`, `canAttachToMeeting`, `canRemoveAttachment` 추가. 기존 `canEditMeeting` 은 metadata edit (organizer-only) 용도로 의미 명시.
@@ -388,11 +388,11 @@ NB: 권한 매트릭스 테스트는 task 가 아닌 **doc** 으로 작성. 이�
 **아키텍처**: PMS Attachment 패턴 그대로 복용. MinIO 경로는 `meeting/{meeting_id}/{attachment_id}/{filename}`. 1시간 presigned GET URL 발급. 100 MB 사이즈 제한.
 
 **Backend**:
-- [models.py](apps/api/src/aidoo_api/domains/meeting/models.py) `MeetingFileAttachment` 모델 — id, meeting_id, filename, content_type, size_bytes, storage_key (unique), added_by_id, created_at. Meeting 에 cascade delete 관계 추가.
+- [models.py](apps/api/src/ai_do_api/domains/meeting/models.py) `MeetingFileAttachment` 모델 — id, meeting_id, filename, content_type, size_bytes, storage_key (unique), added_by_id, created_at. Meeting 에 cascade delete 관계 추가.
 - [alembic/versions/13e887cfb1db_add_meeting_file_attachments.py](apps/api/alembic/versions/13e887cfb1db_add_meeting_file_attachments.py) — autogenerate 로 생성. CREATE TABLE 1개 + 인덱스 2개 (meeting_id, added_by_id). upgrade/downgrade/upgrade 왕복 + alembic check drift 0 검증 완료. **단 dev DB 에는 아직 미적용** (사용자 승인 후 적용).
-- [schemas.py](apps/api/src/aidoo_api/domains/meeting/schemas.py) `MeetingFileAttachmentOut` 추가, `MeetingDetail.file_attachments` 필드.
-- [service.py](apps/api/src/aidoo_api/domains/meeting/service.py) `attach_file` (async, multipart UploadFile), `detach_file`, `_serialize_file_attachment`, `_build_file_download_url` (모듈 레벨 — 테스트에서 monkeypatch 가능). `_load_meeting` 의 selectinload 에 `file_attachments` + `MeetingFileAttachment.added_by` 추가.
-- [router.py](apps/api/src/aidoo_api/domains/meeting/router.py) `POST /meetings/{id}/files` (multipart), `DELETE /meetings/{id}/files/{file_id}`.
+- [schemas.py](apps/api/src/ai_do_api/domains/meeting/schemas.py) `MeetingFileAttachmentOut` 추가, `MeetingDetail.file_attachments` 필드.
+- [service.py](apps/api/src/ai_do_api/domains/meeting/service.py) `attach_file` (async, multipart UploadFile), `detach_file`, `_serialize_file_attachment`, `_build_file_download_url` (모듈 레벨 — 테스트에서 monkeypatch 가능). `_load_meeting` 의 selectinload 에 `file_attachments` + `MeetingFileAttachment.added_by` 추가.
+- [router.py](apps/api/src/ai_do_api/domains/meeting/router.py) `POST /meetings/{id}/files` (multipart), `DELETE /meetings/{id}/files/{file_id}`.
 
 **Frontend**:
 - [meeting-api.ts](apps/web/src/domains/meeting/meeting-api.ts) `MeetingFileAttachment` 타입, `uploadMeetingFile` (FormData multipart), `deleteMeetingFile` 함수. `MeetingDetail.file_attachments` 필드 추가.
@@ -436,7 +436,7 @@ NB: 권한 매트릭스 테스트는 task 가 아닌 **doc** 으로 작성. 이�
 
 **증상**: dev 서버가 재시작되거나 로그인 버튼만 눌러도 사용자가 만든 space 의 TeamMember row 가 사라짐. 사용자는 "분명 멤버를 추가했는데 나중에 0 명" 상태를 반복 경험.
 
-**원인**: [access.py:ensure_dev_login_seed_data](apps/api/src/aidoo_api/domains/auth/access.py) 의 per-user reconcile loop 이 `"default_pms_space 가 아닌 TeamMember 는 무조건 DELETE"` 라는 공격적 로직을 가지고 있었음. 본래 의도는 "seed 계정의 default space 역할 관리" 였는데 user-created space 의 membership 까지 쓸어버림. `ensure_dev_login_seed_data` 는 매 부팅 + `GET /auth/bootstrap-status` + `POST /auth/dev-login` + `POST /auth/dev-admin-login` 마다 돌았기 때문에 사용자가 계정 전환만 해도 데이터가 파괴됨.
+**원인**: [access.py:ensure_dev_login_seed_data](apps/api/src/ai_do_api/domains/auth/access.py) 의 per-user reconcile loop 이 `"default_pms_space 가 아닌 TeamMember 는 무조건 DELETE"` 라는 공격적 로직을 가지고 있었음. 본래 의도는 "seed 계정의 default space 역할 관리" 였는데 user-created space 의 membership 까지 쓸어버림. `ensure_dev_login_seed_data` 는 매 부팅 + `GET /auth/bootstrap-status` + `POST /auth/dev-login` + `POST /auth/dev-admin-login` 마다 돌았기 때문에 사용자가 계정 전환만 해도 데이터가 파괴됨.
 
 **Fix (2 단계)**:
 1. **Round 7a** (commit `bc6bdab`) — seed loop 을 default_pms_space 의 row 만 reconcile 하도록 좁힘. 다른 space 의 membership 은 건드리지 않음. user data 파괴는 즉시 중단.
@@ -446,8 +446,8 @@ NB: 권한 매트릭스 테스트는 task 가 아닌 **doc** 으로 작성. 이�
 
 **발견 계기**: 사용자가 pms-member 로 회의에 task 와 파일을 동시에 등록했는데 **파일만 저장되고 task 는 사라짐**. 파일이 성공한 건 silent failure 경로였고, task 는 meeting `ensure_issue_readable` 에서 403 을 받은 상태.
 
-**원인**: meeting 의 [permissions.py:ensure_issue_readable](apps/api/src/aidoo_api/domains/meeting/permissions.py) 가 `ProjectMember` 테이블을 직접 조회했음. 그런데:
-- `ProjectMember` 모델은 [pms/models.py:129](apps/api/src/aidoo_api/domains/pms/models.py#L129) 에 존재
+**원인**: meeting 의 [permissions.py:ensure_issue_readable](apps/api/src/ai_do_api/domains/meeting/permissions.py) 가 `ProjectMember` 테이블을 직접 조회했음. 그런데:
+- `ProjectMember` 모델은 [pms/models.py:129](apps/api/src/ai_do_api/domains/pms/models.py#L129) 에 존재
 - **INSERT 코드는 0 곳** (grep 으로 검증)
 - `list_project_members` / `add_project_member` / `update_member_role` 라우터는 모두 내부적으로 `list_space_members`/`add_space_member`/`update_space_member` 를 호출하고 응답만 `ProjectMemberItem` 모양으로 다시 포장
 - `Project.members` 관계는 `member_count` 계산 fallback 으로만 쓰이고, 실제 count 는 `Team.members` 로 별도 계산됨
@@ -544,7 +544,7 @@ NB: 권한 매트릭스 테스트는 task 가 아닌 **doc** 으로 작성. 이�
 
 ### 백엔드 (`apps/api/`)
 
-**신규 도메인 폴더** [apps/api/src/aidoo_api/domains/meeting/](apps/api/src/aidoo_api/domains/meeting/)
+**신규 도메인 폴더** [apps/api/src/ai_do_api/domains/meeting/](apps/api/src/ai_do_api/domains/meeting/)
 - `models.py` — 5개 SQLAlchemy 모델: Meeting, MeetingAttendee, MeetingTaskLink, MeetingDocLink, MeetingRecording
 - `schemas.py` — Pydantic 요청/응답 (MeetingCreateRequest, MeetingDetail, MeetingListResponse, MeetingUserItem 등)
 - `service.py` — 비즈니스 로직 (`create_meeting`, `update_meeting`, `delete_meeting`, `attach_task`, `attach_doc`, `list_meetings`, `_replace_attendees` 등)
@@ -556,12 +556,12 @@ NB: 권한 매트릭스 테스트는 task 가 아닌 **doc** 으로 작성. 이�
 - 5 CREATE TABLE 정확히. 다른 변경 0
 - baseline `0b843a383b2b` 다음의 첫 실제 마이그레이션
 - 로컬 docker 에서 upgrade → downgrade → upgrade 왕복 검증 완료
-- **원격 dev DB (`14.39.166.163:37677/doowon_ai_portal_dev`) 에 적용 완료** — `alembic current` → `d8fe1ed8923a (head)`
+- **원격 dev DB (`14.39.166.163:37677/ai_do_portal_dev`) 에 적용 완료** — `alembic current` → `d8fe1ed8923a (head)`
 
 **라우터 마운트와 시드**
-- [apps/api/src/aidoo_api/app.py](apps/api/src/aidoo_api/app.py) — `meeting_router` include
-- [apps/api/src/aidoo_api/domains/auth/access.py](apps/api/src/aidoo_api/domains/auth/access.py) — `meeting` 워크스페이스 + `nav.meeting` 정책 + `APP_FEATURE_CODES["meeting"] = "nav.meeting"`
-- [apps/api/src/aidoo_api/core/db.py](apps/api/src/aidoo_api/core/db.py) — meeting 모델 import (init_db)
+- [apps/api/src/ai_do_api/app.py](apps/api/src/ai_do_api/app.py) — `meeting_router` include
+- [apps/api/src/ai_do_api/domains/auth/access.py](apps/api/src/ai_do_api/domains/auth/access.py) — `meeting` 워크스페이스 + `nav.meeting` 정책 + `APP_FEATURE_CODES["meeting"] = "nav.meeting"`
+- [apps/api/src/ai_do_api/core/db.py](apps/api/src/ai_do_api/core/db.py) — meeting 모델 import (init_db)
 - [apps/api/alembic/env.py](apps/api/alembic/env.py) — meeting 모델 import (autogenerate)
 - [apps/api/tests/conftest.py](apps/api/tests/conftest.py) — meeting 모델 import
 
@@ -758,10 +758,10 @@ cd apps/api && uv run --python 3.12 alembic revision --autogenerate -m "..."
 ## 9. 디버깅에 자주 쓸 위치
 
 ### 백엔드
-- 회의 생성/수정 로직: [apps/api/src/aidoo_api/domains/meeting/service.py](apps/api/src/aidoo_api/domains/meeting/service.py)
-- 권한 검사: [apps/api/src/aidoo_api/domains/meeting/permissions.py](apps/api/src/aidoo_api/domains/meeting/permissions.py)
-- 라우터 + 사용자 검색: [apps/api/src/aidoo_api/domains/meeting/router.py](apps/api/src/aidoo_api/domains/meeting/router.py)
-- 워크스페이스/feature 시드: [apps/api/src/aidoo_api/domains/auth/access.py](apps/api/src/aidoo_api/domains/auth/access.py) (DEFAULT_WORKSPACES, DEFAULT_FEATURE_POLICIES)
+- 회의 생성/수정 로직: [apps/api/src/ai_do_api/domains/meeting/service.py](apps/api/src/ai_do_api/domains/meeting/service.py)
+- 권한 검사: [apps/api/src/ai_do_api/domains/meeting/permissions.py](apps/api/src/ai_do_api/domains/meeting/permissions.py)
+- 라우터 + 사용자 검색: [apps/api/src/ai_do_api/domains/meeting/router.py](apps/api/src/ai_do_api/domains/meeting/router.py)
+- 워크스페이스/feature 시드: [apps/api/src/ai_do_api/domains/auth/access.py](apps/api/src/ai_do_api/domains/auth/access.py) (DEFAULT_WORKSPACES, DEFAULT_FEATURE_POLICIES)
 
 ### 프런트엔드
 - API 호출: [apps/web/src/domains/meeting/meeting-api.ts](apps/web/src/domains/meeting/meeting-api.ts)
@@ -801,7 +801,7 @@ cd apps/api && uv run --python 3.12 alembic revision --autogenerate -m "..."
 | 협업 노트 구현/회귀 참고 문서 | [docs/working/meeting-notes-collaboration-implementation.md](docs/working/meeting-notes-collaboration-implementation.md) |
 | Alembic 워크플로 | [apps/api/README.md](apps/api/README.md) "데이터베이스 마이그레이션" 섹션 |
 | 원격 DB DSN | [.env](.env) `DOOWON_POSTGRES_DSN` |
-| FastAPI app composition | [apps/api/src/aidoo_api/app.py](apps/api/src/aidoo_api/app.py) |
+| FastAPI app composition | [apps/api/src/ai_do_api/app.py](apps/api/src/ai_do_api/app.py) |
 | 디자인 토큰 단일 소스 | [packages/ui/styles.css](packages/ui/styles.css) |
 
 ## 13. 이번 세션 commit 히스토리 (가장 최근 → 오래된 순)

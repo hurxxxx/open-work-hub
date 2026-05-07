@@ -2,8 +2,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from aidoo_api.core import llm
-from aidoo_api.core.settings import Settings, get_settings
+from ai_do_api.core import llm
+from ai_do_api.core.settings import Settings, get_settings
 
 
 class FakeModels:
@@ -51,7 +51,7 @@ def _clear_pool_client_cache() -> None:
 def clear_settings_cache(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(
         "DOOWON_POSTGRES_DSN",
-        "postgresql+psycopg://aidoo_test:aidoo_test@127.0.0.1:5432/aidoo_test",
+        "postgresql+psycopg://ai_do_test:ai_do_test@127.0.0.1:5432/ai_do_test",
     )
     get_settings.cache_clear()
     _clear_pool_client_cache()
@@ -64,7 +64,7 @@ def test_llm_settings_default_to_local_mlx() -> None:
     settings = Settings(
         _env_file=None,
         DOOWON_POSTGRES_DSN=(
-            "postgresql+psycopg://aidoo_test:aidoo_test@127.0.0.1:5432/aidoo_test"
+            "postgresql+psycopg://ai_do_test:ai_do_test@127.0.0.1:5432/ai_do_test"
         ),
         DOOWON_LLM_DEFAULT_MODEL="",
         DOOWON_LLM_CANONICAL_MODEL="",
@@ -142,7 +142,7 @@ def test_dual_health_reports_each_pool_independently(
 def test_choose_pool_defaults_to_local_only_without_policy_row(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from aidoo_api.core.llm import LlmTaskContext, choose_pool
+    from ai_do_api.core.llm import LlmTaskContext, choose_pool
 
     class _FakeDb:
         def execute(self, *_args, **_kwargs):
@@ -169,7 +169,7 @@ def test_choose_pool_defaults_to_local_only_without_policy_row(
 
 
 def test_choose_pool_local_hint_forces_local_even_on_external_policy() -> None:
-    from aidoo_api.core.llm import LlmTaskContext, choose_pool
+    from ai_do_api.core.llm import LlmTaskContext, choose_pool
 
     class _FakeDb:
         def execute(self, *_args, **_kwargs):
@@ -200,7 +200,7 @@ def test_choose_pool_local_hint_forces_local_even_on_external_policy() -> None:
 
 
 def test_choose_pool_forces_local_when_pii_detected_in_external_policy() -> None:
-    from aidoo_api.core.llm import LlmTaskContext, choose_pool
+    from ai_do_api.core.llm import LlmTaskContext, choose_pool
 
     class _FakeDb:
         def execute(self, *_args, **_kwargs):
@@ -228,7 +228,7 @@ def test_choose_pool_forces_local_when_pii_detected_in_external_policy() -> None
 
 
 def test_choose_pool_uses_external_when_policy_external_and_no_pii() -> None:
-    from aidoo_api.core.llm import LlmTaskContext, choose_pool
+    from ai_do_api.core.llm import LlmTaskContext, choose_pool
 
     class _FakeDb:
         def execute(self, *_args, **_kwargs):
@@ -255,7 +255,7 @@ def test_choose_pool_uses_external_when_policy_external_and_no_pii() -> None:
 
 
 def test_scan_pii_matches_space_separated_kr_rrn_and_phone() -> None:
-    from aidoo_api.core.pii import scan_pii
+    from ai_do_api.core.pii import scan_pii
 
     hits = scan_pii(
         [
@@ -268,7 +268,7 @@ def test_scan_pii_matches_space_separated_kr_rrn_and_phone() -> None:
 
 
 def test_scan_pii_matches_separatorless_kr_phone() -> None:
-    from aidoo_api.core.pii import scan_pii
+    from ai_do_api.core.pii import scan_pii
 
     hits = scan_pii(["연락처는 01012345678 입니다."])
 

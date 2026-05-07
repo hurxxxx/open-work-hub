@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Dialog, Button } from '@aidoo/ui';
+import { Dialog, Button } from '@ai-do/ui';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { createPmsTaskList, type PmsTaskList } from '../api/pms-api';

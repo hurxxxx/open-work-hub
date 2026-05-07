@@ -8,7 +8,7 @@
 
 ## 0. 프로젝트 한 줄 컨텍스트
 
-Doowon AI Portal 은 Nx 모노레포다. React 19 + Router v7 프런트 (`apps/web`), FastAPI 백엔드 (`apps/api`, 패키지명 `aidoo_api`), 잡 워커 (`apps/worker`). 회사 내부 직원용 포털이며 PMS/Docs 도메인이 이미 백엔드에 있고, Meeting 앱을 5개 PR 에 걸쳐 신규 도입 중.
+Doowon AI Portal 은 Nx 모노레포다. React 19 + Router v7 프런트 (`apps/web`), FastAPI 백엔드 (`apps/api`, 패키지명 `ai_do_api`), 잡 워커 (`apps/worker`). 회사 내부 직원용 포털이며 PMS/Docs 도메인이 이미 백엔드에 있고, Meeting 앱을 5개 PR 에 걸쳐 신규 도입 중.
 
 ## 1. PR1 이 뭔가
 
@@ -20,7 +20,7 @@ Doowon AI Portal 은 Nx 모노레포다. React 19 + Router v7 프런트 (`apps/w
 
 ### 백엔드 산출물
 
-- 새 도메인 폴더: `apps/api/src/aidoo_api/domains/meeting/{__init__.py, models.py, router.py, schemas.py, service.py, permissions.py}`
+- 새 도메인 폴더: `apps/api/src/ai_do_api/domains/meeting/{__init__.py, models.py, router.py, schemas.py, service.py, permissions.py}`
 - 5개 SQLAlchemy 모델 (아래 §4 참조)
 - Alembic 마이그레이션 1개 — `alembic revision --autogenerate -m "add_meeting_tables"`. **PR0 이후 첫 실제 마이그레이션이라 milestone 의미가 있음**
 - REST 엔드포인트:
@@ -30,7 +30,7 @@ Doowon AI Portal 은 Nx 모노레포다. React 19 + Router v7 프런트 (`apps/w
   - `PATCH /api/v1/meeting/meetings/{id}` — 수정 (참석자 추가/제거 포함)
   - `POST /api/v1/meeting/meetings/{id}/tasks` / `DELETE .../tasks/{issue_id}` — 태스크 첨부/제거
   - `POST /api/v1/meeting/meetings/{id}/docs` / `DELETE .../docs/{doc_item_id}` — Doc 첨부/제거
-- workspace feature flag: `nav.meeting` 시드 추가 (`apps/api/src/aidoo_api/domains/auth/access.py` 의 seed 확장)
+- workspace feature flag: `nav.meeting` 시드 추가 (`apps/api/src/ai_do_api/domains/auth/access.py` 의 seed 확장)
 - 권한: organizer 만 수정/삭제, 참석자는 read. PMS task 첨부 시 task 권한 검증 (`_ensure_issue_readable` 류 — **단, IssueUserAccess 폴백은 PR2 작업이므로 PR1 에서는 권한 없으면 단순 403**)
 
 ### 프런트엔드 산출물
@@ -61,7 +61,7 @@ Doowon AI Portal 은 Nx 모노레포다. React 19 + Router v7 프런트 (`apps/w
 자세한 건 [PR0-RESULT.md](PR0-RESULT.md). 핵심만:
 
 - **Alembic 인프라가 셋업돼 있다.** `apps/api/alembic.ini` + `apps/api/alembic/env.py` + baseline `0b843a383b2b_baseline_2026_04_10`
-- **원격 dev DB (`14.39.166.163:37677/doowon_ai_portal_dev`) 는 baseline 으로 stamp 돼 있다.** `alembic current` → `0b843a383b2b (head)`
+- **원격 dev DB (`14.39.166.163:37677/ai_do_portal_dev`) 는 baseline 으로 stamp 돼 있다.** `alembic current` → `0b843a383b2b (head)`
 - **PR0 이후 첫 마이그레이션**: PR1 의 5개 Meeting 테이블 + feature_policies 시드 변경 (있다면)
 - `init_db()` 는 더 이상 `create_all()` 을 부르지 않음. `DOOWON_API_AUTO_MIGRATE=1` 일 때만 `alembic upgrade head` 호출. **prod 에서는 절대 이 플래그 켜지 말 것**
 - 테스트는 ephemeral Docker postgres 를 씀 (`apps/api/tests/conftest.py` 의 `postgres_dsn` 픽스처). Docker Desktop 켜져있어야 동작
@@ -71,11 +71,11 @@ Doowon AI Portal 은 Nx 모노레포다. React 19 + Router v7 프런트 (`apps/w
 
 ```
 1. 도메인 폴더 생성
-   apps/api/src/aidoo_api/domains/meeting/{__init__.py, models.py, schemas.py, router.py, service.py, permissions.py}
+   apps/api/src/ai_do_api/domains/meeting/{__init__.py, models.py, schemas.py, router.py, service.py, permissions.py}
 
 2. 5개 SQLAlchemy 모델 작성 (아래 §4 스키마)
 
-3. apps/api/src/aidoo_api/core/db.py 의 init_db() 에 meeting 모델 import 추가
+3. apps/api/src/ai_do_api/core/db.py 의 init_db() 에 meeting 모델 import 추가
    apps/api/alembic/env.py 에도 import 추가 (autogenerate 가 메타데이터 인지하도록)
 
 4. 마이그레이션 생성 + 검토
@@ -173,7 +173,7 @@ Doowon AI Portal 은 Nx 모노레포다. React 19 + Router v7 프런트 (`apps/w
 **결정 필요**: doc 참조 방식. 두 옵션:
 
 - **(a) NativeDoc 직접 FK**: `doc_id String(36) FK→docs_native_docs.id`. 단순. SpaceDoc 은 PR2 결정사항.
-- **(b) Polymorphic**: `source_type String(24)` + `source_doc_id String(36)`. `apps/api/src/aidoo_api/domains/docs/models.py` 의 `DocsUserItemPref` 가 이미 이 패턴을 씀. 양쪽 다 첨부 가능하지만 FK 무결성 약함.
+- **(b) Polymorphic**: `source_type String(24)` + `source_doc_id String(36)`. `apps/api/src/ai_do_api/domains/docs/models.py` 의 `DocsUserItemPref` 가 이미 이 패턴을 씀. 양쪽 다 첨부 가능하지만 FK 무결성 약함.
 
 **권장**: (a). PR1 은 NativeDoc 만 지원, plan §2 line 65 의 SpaceDoc share 결정은 PR2 로 미뤄져 있음. 단순함이 우선.
 
@@ -206,7 +206,7 @@ Doowon AI Portal 은 Nx 모노레포다. React 19 + Router v7 프런트 (`apps/w
 | `linked_doc_id` | `String(36)` FK→docs_native_docs.id, nullable | PR3 가 채움 |
 | `created_at` | `DateTime` default utcnow_naive | |
 
-기존 `apps/api/src/aidoo_api/domains/auth/models.py` 의 `utcnow_naive()` 와 `apps/api/src/aidoo_api/domains/pms/models.py` 의 패턴을 그대로 따라가면 됨.
+기존 `apps/api/src/ai_do_api/domains/auth/models.py` 의 `utcnow_naive()` 와 `apps/api/src/ai_do_api/domains/pms/models.py` 의 패턴을 그대로 따라가면 됨.
 
 ## 5. 결정해야 할 것 (recommended defaults 와 함께)
 
@@ -255,11 +255,11 @@ Doowon AI Portal 은 Nx 모노레포다. React 19 + Router v7 프런트 (`apps/w
 | Alembic 워크플로 가이드 | [apps/api/README.md](apps/api/README.md) "데이터베이스 마이그레이션" 섹션 |
 | PR0 산출물과 인프라 상태 | [PR0-RESULT.md](PR0-RESULT.md) |
 | 원격 DB DSN | [.env](.env) `DOOWON_POSTGRES_DSN` |
-| FastAPI app composition | [apps/api/src/aidoo_api/app.py](apps/api/src/aidoo_api/app.py) |
+| FastAPI app composition | [apps/api/src/ai_do_api/app.py](apps/api/src/ai_do_api/app.py) |
 | Alembic env.py (모델 import 위치) | [apps/api/alembic/env.py](apps/api/alembic/env.py) |
-| init_db (도메인 import 위치) | [apps/api/src/aidoo_api/core/db.py](apps/api/src/aidoo_api/core/db.py) |
-| 기존 도메인 모델 패턴 참조 | [apps/api/src/aidoo_api/domains/pms/models.py](apps/api/src/aidoo_api/domains/pms/models.py) |
-| 인증/권한 헬퍼 | [apps/api/src/aidoo_api/domains/auth/dependencies.py](apps/api/src/aidoo_api/domains/auth/dependencies.py) |
+| init_db (도메인 import 위치) | [apps/api/src/ai_do_api/core/db.py](apps/api/src/ai_do_api/core/db.py) |
+| 기존 도메인 모델 패턴 참조 | [apps/api/src/ai_do_api/domains/pms/models.py](apps/api/src/ai_do_api/domains/pms/models.py) |
+| 인증/권한 헬퍼 | [apps/api/src/ai_do_api/domains/auth/dependencies.py](apps/api/src/ai_do_api/domains/auth/dependencies.py) |
 
 ## 9. 사용자 선호 (이전 세션에서 확인됨)
 

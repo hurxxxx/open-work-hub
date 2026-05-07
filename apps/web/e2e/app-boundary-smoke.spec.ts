@@ -103,13 +103,13 @@ test.describe('AI-friendly app boundary smoke', () => {
         path: '/w/hq/settings',
         assert: async (current) => {
           await expect(current.getByText('Workspace Settings')).toBeVisible();
-          await expect(current.getByRole('heading', { level: 1, name: 'Aidoo HQ' })).toBeVisible();
+          await expect(current.getByRole('heading', { level: 1, name: 'AI-DO HQ' })).toBeVisible();
         },
       },
       {
         path: '/tool/search?workspace=hq',
         assert: async (current) => {
-          await expect(current.getByRole('heading', { name: '아이두 통합검색' })).toBeVisible();
+          await expect(current.getByRole('heading', { name: 'AI-DO 통합검색' })).toBeVisible();
         },
       },
     ];
@@ -166,7 +166,7 @@ test.describe('AI-friendly app boundary smoke', () => {
 
     await page.goto('/admin/workspaces');
     await expect(page.getByRole('heading', { name: 'Workspaces', exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Aidoo HQ/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /AI-DO HQ/ })).toBeVisible();
 
     errors.expectClean();
   });

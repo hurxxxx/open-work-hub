@@ -6,9 +6,9 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from aidoo_api.core.db import get_engine
-from aidoo_api.domains.meeting.models import MeetingRecording, MeetingRecordingStaging
-from aidoo_api.domains.meeting import recordings as recording_service
+from ai_do_api.core.db import get_engine
+from ai_do_api.domains.meeting.models import MeetingRecording, MeetingRecordingStaging
+from ai_do_api.domains.meeting import recordings as recording_service
 
 from test_meeting import _auth_headers, _bootstrap_admin_session, _create_meeting
 
@@ -309,7 +309,7 @@ def test_only_one_user_can_record_at_a_time(client, monkeypatch, tmp_path) -> No
     second = _create_user_with_workspaces(
         client,
         admin_token,
-        email="second-recorder@aidoo.local",
+        email="second-recorder@ai-do.local",
         full_name="Second Recorder",
         workspace_keys=["meeting"],
     )
@@ -403,7 +403,7 @@ def test_delete_recording_permission_and_cleanup(client, monkeypatch, tmp_path) 
     other = _create_user_with_workspaces(
         client,
         admin_token,
-        email="other-recording@aidoo.local",
+        email="other-recording@ai-do.local",
         full_name="Other Recording",
         workspace_keys=["meeting"],
     )
@@ -489,7 +489,7 @@ def test_stale_recording_lock_auto_releases(client, monkeypatch, tmp_path) -> No
     second = _create_user_with_workspaces(
         client,
         admin_token,
-        email="stale-second@aidoo.local",
+        email="stale-second@ai-do.local",
         full_name="Stale Second",
         workspace_keys=["meeting"],
     )

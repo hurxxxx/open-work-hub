@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
-import { InlineNotice } from '@aidoo/ui';
+import { InlineNotice } from '@ai-do/ui';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { hasWorkspaceAdminAccess, workspaceRoleAllows } from '@/src/platform/auth/auth-api';

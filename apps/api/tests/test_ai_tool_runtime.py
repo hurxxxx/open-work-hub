@@ -5,8 +5,8 @@ from types import SimpleNamespace
 from fastapi import HTTPException, status
 import pytest
 
-from aidoo_api.domains.ai import tool_runtime
-from aidoo_api.domains.ai.tool_service import ToolRequiresApproval
+from ai_do_api.domains.ai import tool_runtime
+from ai_do_api.domains.ai.tool_service import ToolRequiresApproval
 
 
 def test_execute_tool_call_treats_http_conflict_as_error(

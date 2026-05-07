@@ -168,7 +168,7 @@ Vite(빛)는 2020년 Evan You(Vue 창시자)가 공개한 빌드 도구입니다
 
 ### 4.5 🛠️ 5분 실습 — SPA 동작 직접 보기
 
-1. 브라우저에서 AIDOO Portal 개발 서버(`http://localhost:4200`)를 연다.
+1. 브라우저에서 AI-DO Portal 개발 서버(`http://localhost:4200`)를 연다.
 2. **F12** → **Network** 탭 → 상단 필터를 "Fetch/XHR" 로 설정 → 필터 입력란에 `doc` 입력.
 3. 좌측 메뉴에서 문서·이슈·워크스페이스를 여러 번 눌러 본다.
 4. **관찰 포인트:** URL은 바뀌는데 `document`(HTML 문서)는 **맨 처음 한 번만 로드**, 이후엔 `/api/...` JSON 호출만 쌓인다. 이것이 **SPA(Single Page Application — 한 페이지짜리 앱이 화면만 갈아 끼우는 구조)** 의 정체.

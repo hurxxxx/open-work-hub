@@ -3,14 +3,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from aidoo_api.domains.ai.runtime.graph_execution import (
+from ai_do_api.domains.ai.runtime.graph_execution import (
     GRAPH_INSTRUCTED_SINGLE_LOOP_ADAPTER_ID,
     GRAPH_NODE_RUNNER_ADAPTER_ID,
     attach_graph_execution_adapter_decision,
     build_graph_execution_system_prompt,
 )
-from aidoo_api.domains.ai.runtime.manager_validation import ManagerGraphValidationResult
-from aidoo_api.domains.ai.runtime.routing import (
+from ai_do_api.domains.ai.runtime.manager_validation import ManagerGraphValidationResult
+from ai_do_api.domains.ai.runtime.routing import (
     RuntimeRoutingDecision,
     attach_manager_graph_validation_result,
     attach_trace_only_graph_validation,

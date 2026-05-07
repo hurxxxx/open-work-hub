@@ -210,7 +210,7 @@ API 서버를 여러 개 띄우면(예: `pnpm dev:api:1`, `:2`) 서로 다른 �
 
 ## 6. DocsCollabHub — 프로젝트 구현의 중심
 
-백엔드 쪽의 `apps/api/src/aidoo_api/domains/docs/collab.py`(조사 결과) 가 **DocsCollabHub**라는 클래스로 이 전체 릴레이를 관리합니다. 주요 책임:
+백엔드 쪽의 `apps/api/src/ai_do_api/domains/docs/collab.py`(조사 결과) 가 **DocsCollabHub**라는 클래스로 이 전체 릴레이를 관리합니다. 주요 책임:
 
 - WebSocket 연결 수락/정리
 - 방(room)별 Yjs 상태 유지

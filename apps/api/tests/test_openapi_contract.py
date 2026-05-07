@@ -11,9 +11,9 @@ def test_openapi_schema_exports_without_runtime_initialization(
         "postgresql+psycopg://openapi:openapi@127.0.0.1:1/openapi",
     )
 
-    from aidoo_api.core.settings import get_settings
-    from aidoo_api import app as app_module
-    from aidoo_api.openapi_contract import assert_openapi_contract
+    from ai_do_api.core.settings import get_settings
+    from ai_do_api import app as app_module
+    from ai_do_api.openapi_contract import assert_openapi_contract
 
     get_settings.cache_clear()
     monkeypatch.setattr(

@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronDown, ChevronRight, Loader2, Plus } from 'lucide-react';
-import { useConfirm } from '@aidoo/ui/feedback/confirm-dialog';
-import { InlineNotice } from '@aidoo/ui/feedback/inline-notice';
-import { usePrompt } from '@aidoo/ui/feedback/prompt-dialog';
+import { useConfirm } from '@ai-do/ui/feedback/confirm-dialog';
+import { InlineNotice } from '@ai-do/ui/feedback/inline-notice';
+import { usePrompt } from '@ai-do/ui/feedback/prompt-dialog';
 import { useTranslation } from 'react-i18next';
 
 import {

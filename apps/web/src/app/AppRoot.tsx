@@ -2,7 +2,7 @@ import { BrowserRouter as Router } from 'react-router-dom';
 import {
   ToastProvider,
   ToastViewport,
-} from '@aidoo/ui/providers/toast-provider';
+} from '@ai-do/ui/providers/toast-provider';
 
 import { AppContent } from './shell/AppContent';
 

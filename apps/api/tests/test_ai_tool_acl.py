@@ -8,12 +8,12 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from aidoo_api.core import llm as llm_core
-from aidoo_api.core.db import get_engine, get_session_factory
-from aidoo_api.core.settings import get_settings
-from aidoo_api.domains.ai.models import LlmPolicy
-from aidoo_api.domains.auth.access import ensure_dev_login_seed_data
-from aidoo_api.domains.auth.models import AuditLog
+from ai_do_api.core import llm as llm_core
+from ai_do_api.core.db import get_engine, get_session_factory
+from ai_do_api.core.settings import get_settings
+from ai_do_api.domains.ai.models import LlmPolicy
+from ai_do_api.domains.auth.access import ensure_dev_login_seed_data
+from ai_do_api.domains.auth.models import AuditLog
 
 
 def _dev_login(client: TestClient, account_key: str) -> dict:

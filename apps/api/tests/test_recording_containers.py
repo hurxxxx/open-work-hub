@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from aidoo_api.domains.recording import service as recording_service
+from ai_do_api.domains.recording import service as recording_service
 
 from test_meeting import _auth_headers, _bootstrap_admin_session, _create_meeting
 

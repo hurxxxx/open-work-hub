@@ -408,8 +408,8 @@ Agent runtime은 serving stack에 종속되지 않지만, 로컬 model profile �
 
 AI manager path는 feature flag 뒤에서 시작한다.
 
-- `AIDOO_AI_MANAGER_ENABLED=false`가 기본값이다.
-- `AIDOO_AI_MANAGER_TRACE_SENSITIVE_DATA=false`, `AIDOO_AI_MANAGER_STORE_RESPONSE=false`, `AIDOO_AI_MANAGER_HOSTED_TOOLS_ENABLED=false`가 MVP 기본값이다.
+- `AI_DO_AI_MANAGER_ENABLED=false`가 기본값이다.
+- `AI_DO_AI_MANAGER_TRACE_SENSITIVE_DATA=false`, `AI_DO_AI_MANAGER_STORE_RESPONSE=false`, `AI_DO_AI_MANAGER_HOSTED_TOOLS_ENABLED=false`가 MVP 기본값이다.
 - single-loop path는 Phase B 이후에도 eval/perf gate 통과 전까지 canonical fallback으로 유지한다.
 - `AgentRun`, `AgentInvocation`, `AgentTraceEvent`는 read-only inspection endpoint를 제공한다. UI는 후속 UI 단계에서 붙이더라도 운영/검증은 SQL 없이 가능해야 한다.
 - `AgentTraceEvent` 이름과 payload는 OTel-exportable하게 설계하고, GenAI semantic convention version을 고정한다.
@@ -724,7 +724,7 @@ Artifact wrapper, section ordering, citation insertion, required field validatio
 
 ### Execution flow
 
-1. Chat request가 들어오면 `AIDOO_AI_MANAGER_ENABLED`와 fast path 조건을 먼저 평가한다.
+1. Chat request가 들어오면 `AI_DO_AI_MANAGER_ENABLED`와 fast path 조건을 먼저 평가한다.
 2. Entrypoint가 `interactive_read`, `grounded_report`, `long_doc`, `high_risk_action` 중 runtime profile을 고정한다.
 3. `RequestSensitivityClassifier`가 user request, conversation scope, attached data, requested context, available tool scope를 기준으로 pre-routing `DataSensitivityDecision`을 생성한다.
 4. `ModelRouter`가 runtime profile, `DataSensitivityDecision`, external manager feature flag, provider availability, cost/latency budget을 기준으로 AI manager eligibility를 결정한다.
@@ -736,7 +736,7 @@ Artifact wrapper, section ordering, citation insertion, required field validatio
 10. Internal agent는 local model gateway, 기존 MCP capability/RAG/domain service, workspace-scoped tool gateway를 사용해 internal evidence를 수집한다.
 11. Internal agent는 raw internal data가 아니라 `LocalAgentResult`를 반환한다.
 12. Manager는 `LocalAgentResult`를 리뷰하고 final answer, 추가 specialist call, 사용자 질문, partial answer 중 하나를 선택한다.
-13. 추가 specialist call은 `AIDOO_AI_MANAGER_MAX_LOOPS` 안에서만 허용한다. 기본값은 3 review cycle이다.
+13. 추가 specialist call은 `AI_DO_AI_MANAGER_MAX_LOOPS` 안에서만 허용한다. 기본값은 3 review cycle이다.
 14. 외부 공개 자료 검색은 MVP 후속 단계다. 활성화 시에도 external search result는 `ExternalSearchResult`로 normalize한 뒤 `EvidencePacket`에 merge한다.
 15. Write/external/batch action은 risk-based approval gate 또는 review queue를 통과한다. MVP에서는 기존 `AiToolApproval` 흐름을 유지한다.
 
@@ -898,7 +898,7 @@ A2A를 도입하더라도 내부 tool/context/approval contract를 대체하지 
 - OpenAI Agents SDK를 Phase 6 MVP manager runtime으로 채택한다.
 - Claude Agent SDK는 MCP-heavy spike 후보로만 문서화하고 첫 구현에 포함하지 않는다.
 - PMS/Planner/Docs internal agents는 OpenAI SDK Agent/handoff가 아니라 `domains.ai.internal_agents` 아래 provider-independent local agents로 둔다.
-- `AIDOO_AI_MANAGER_ENABLED=false`, `AIDOO_AI_MANAGER_PROVIDER=openai`, `AIDOO_AI_MANAGER_MODEL`, `AIDOO_AI_MANAGER_MAX_LOOPS=3`, `AIDOO_AI_MANAGER_TRACE_SENSITIVE_DATA=false`, `AIDOO_AI_MANAGER_STORE_RESPONSE=false`, `AIDOO_AI_MANAGER_HOSTED_TOOLS_ENABLED=false` 설정을 추가한다. MVP/dev smoke 권장 manager model은 `gpt-5.4-mini`이며, production에는 silent default를 두지 않는다.
+- `AI_DO_AI_MANAGER_ENABLED=false`, `AI_DO_AI_MANAGER_PROVIDER=openai`, `AI_DO_AI_MANAGER_MODEL`, `AI_DO_AI_MANAGER_MAX_LOOPS=3`, `AI_DO_AI_MANAGER_TRACE_SENSITIVE_DATA=false`, `AI_DO_AI_MANAGER_STORE_RESPONSE=false`, `AI_DO_AI_MANAGER_HOSTED_TOOLS_ENABLED=false` 설정을 추가한다. MVP/dev smoke 권장 manager model은 `gpt-5.4-mini`이며, production에는 silent default를 두지 않는다.
 - `AiManagerInput`, `ManagerPlan`, `LocalAgentTask`, `LocalAgentResult`, `ManagerReview` DTO를 추가한다.
 - `LocalAgentResult`는 raw internal data를 포함할 수 없고, redacted summary, artifact ref, coverage/gap, sensitivity label만 포함한다.
 - OpenAI Agents SDK tracing은 sensitive data capture off 또는 scrubbed mode를 기본으로 둔다.
@@ -925,7 +925,7 @@ A2A를 도입하더라도 내부 tool/context/approval contract를 대체하지 
 - manager는 request sensitivity classification을 통과한 raw user prompt 또는 redacted prompt, non-sensitive metadata, available agent/tool description, prior redacted summaries를 입력으로 받는다.
 - manager run config는 sensitive trace capture off, response storage off, hosted tools disabled를 강제한다.
 - manager output은 existing `AgentEventEnvelope`로 planning, specialist-running, review, final/gap 상태를 노출한다.
-- manager loop는 `AIDOO_AI_MANAGER_MAX_LOOPS` 안에서만 specialist 재호출을 허용한다.
+- manager loop는 `AI_DO_AI_MANAGER_MAX_LOOPS` 안에서만 specialist 재호출을 허용한다.
 - OpenAI API failure, malformed tool args, internal agent failure, loop limit exceeded는 clear failure 또는 partial answer로 종료한다.
 - cancellation은 SDK run과 internal agent boundary 사이에 전파한다.
 
@@ -948,7 +948,7 @@ A2A를 도입하더라도 내부 tool/context/approval contract를 대체하지 
 - AI manager adapter
   - OpenAI manager adapter가 structured plan을 만들고 `run_local_specialist` delegate tool을 호출한다.
   - manager는 sensitivity classification을 통과한 raw user prompt 또는 redacted prompt와 non-sensitive metadata만 받을 수 있다.
-  - manager loop는 `AIDOO_AI_MANAGER_MAX_LOOPS`를 넘지 않는다.
+  - manager loop는 `AI_DO_AI_MANAGER_MAX_LOOPS`를 넘지 않는다.
   - OpenAI API failure, malformed tool args, internal agent failure, loop limit exceeded가 clear failure 또는 partial answer로 끝난다.
 - Internal agent boundary
   - PMS/Planner/Docs internal agents는 OpenAI SDK Agent/handoff가 아니다.
@@ -1031,7 +1031,7 @@ A2A를 도입하더라도 내부 tool/context/approval contract를 대체하지 
 | structured output | OpenAI function tool schema/structured output + Pydantic validation + runtime business validator |
 | manager output | `ManagerPlan`, `LocalAgentTask`, `ManagerReview` contract |
 | internal agent output | `LocalAgentResult` contract |
-| rollout flag | `AIDOO_AI_MANAGER_ENABLED=false` 기본값 |
+| rollout flag | `AI_DO_AI_MANAGER_ENABLED=false` 기본값 |
 | 외부 LLM 사용 | 기본 manager가 아니라 optional external reviewer/writer로 사용 |
 | 외부 LLM 역할 | 내부 데이터 processor가 아니라 reviewer/writer/search provider |
 | 외부 원문 전송 | 사용자 raw prompt는 request sensitivity classification 통과 시에만 허용. 민감 엔티티가 있으면 redacted prompt 또는 차단. 내부 문서 원문/PLM/order/raw tool result/식별자/가격/계약/secret은 금지 |
@@ -1144,9 +1144,9 @@ A2A를 도입하더라도 내부 tool/context/approval contract를 대체하지 
 
 이 문서는 설계 계획이므로 코드 rollback은 없다. 이후 구현 단계에서 문제가 생기면 다음 순서로 되돌린다.
 
-1. `AIDOO_AI_MANAGER_ENABLED=false`로 AI manager 진입을 중단한다.
+1. `AI_DO_AI_MANAGER_ENABLED=false`로 AI manager 진입을 중단한다.
 2. OpenAI provider key 또는 manager provider 설정을 비활성화해 모든 external manager 호출을 중단한다.
-3. `AIDOO_AI_EXTERNAL_SEARCH_ENABLED=false`로 모든 external search 호출을 중단한다.
+3. `AI_DO_AI_EXTERNAL_SEARCH_ENABLED=false`로 모든 external search 호출을 중단한다.
 4. AI manager path를 기존 single-loop/local path로 되돌린다.
 5. external quality review를 비활성화하고 local verifier만 사용한다.
 6. ExternalSearchProvider 장애 시 internal-only search로 fallback한다.

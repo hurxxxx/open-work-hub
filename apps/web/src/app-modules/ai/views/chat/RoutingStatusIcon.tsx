@@ -1,6 +1,6 @@
 import { Shield, ShieldAlert } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Tooltip } from '@aidoo/ui';
+import { Tooltip } from '@ai-do/ui';
 import type {
   AiBackendMode,
   LlmHealthResponse,

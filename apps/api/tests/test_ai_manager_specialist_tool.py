@@ -6,9 +6,9 @@ from types import SimpleNamespace
 from pydantic import ValidationError
 import pytest
 
-from aidoo_api.core.llm import LlmTaskContext
-from aidoo_api.domains.ai import internal_agents
-from aidoo_api.domains.ai.manager_runtime import (
+from ai_do_api.core.llm import LlmTaskContext
+from ai_do_api.domains.ai import internal_agents
+from ai_do_api.domains.ai.manager_runtime import (
     LocalLlmSpecialistRunner,
     LocalToolGatewaySpecialistRunner,
     RUN_LOCAL_SPECIALIST_TOOL_NAME,
@@ -19,7 +19,7 @@ from aidoo_api.domains.ai.manager_runtime import (
     run_local_specialist,
     validate_local_specialist_task,
 )
-from aidoo_api.domains.ai.tool_runtime import ToolCallExecution
+from ai_do_api.domains.ai.tool_runtime import ToolCallExecution
 
 
 class CapturingRunner:
@@ -231,7 +231,7 @@ def test_local_llm_specialist_runner_forces_local_pool(monkeypatch: pytest.Monke
         return (_response("로컬 근거 요약입니다."), None, None)
 
     monkeypatch.setattr(
-        "aidoo_api.domains.ai.internal_agents.complete_chat",
+        "ai_do_api.domains.ai.internal_agents.complete_chat",
         fake_complete_chat,
     )
     runner = LocalLlmSpecialistRunner(
@@ -262,7 +262,7 @@ def test_run_local_specialist_converts_unsafe_local_llm_output(
         return (_response("가상고객A ORD-TEST-001 계약 리스크입니다."), None, None)
 
     monkeypatch.setattr(
-        "aidoo_api.domains.ai.internal_agents.complete_chat",
+        "ai_do_api.domains.ai.internal_agents.complete_chat",
         fake_complete_chat,
     )
 
@@ -304,11 +304,11 @@ def test_local_tool_gateway_specialist_runner_calls_read_tool_then_local_summary
         return (_response("도구 근거 기반 redacted summary입니다."), None, None)
 
     monkeypatch.setattr(
-        "aidoo_api.domains.ai.internal_agents.execute_tool_call",
+        "ai_do_api.domains.ai.internal_agents.execute_tool_call",
         fake_execute_tool_call,
     )
     monkeypatch.setattr(
-        "aidoo_api.domains.ai.internal_agents.complete_chat",
+        "ai_do_api.domains.ai.internal_agents.complete_chat",
         fake_complete_chat,
     )
     runner = LocalToolGatewaySpecialistRunner(
@@ -357,11 +357,11 @@ def test_local_tool_gateway_specialist_runner_extracts_search_query(
         return (_response("검색 결과 요약입니다."), None, None)
 
     monkeypatch.setattr(
-        "aidoo_api.domains.ai.internal_agents.execute_tool_call",
+        "ai_do_api.domains.ai.internal_agents.execute_tool_call",
         fake_execute_tool_call,
     )
     monkeypatch.setattr(
-        "aidoo_api.domains.ai.internal_agents.complete_chat",
+        "ai_do_api.domains.ai.internal_agents.complete_chat",
         fake_complete_chat,
     )
     runner = LocalToolGatewaySpecialistRunner(
@@ -405,7 +405,7 @@ def test_local_tool_gateway_specialist_runner_returns_blocked_on_approval(
         )
 
     monkeypatch.setattr(
-        "aidoo_api.domains.ai.internal_agents.execute_tool_call",
+        "ai_do_api.domains.ai.internal_agents.execute_tool_call",
         fake_execute_tool_call,
     )
     runner = LocalToolGatewaySpecialistRunner(
@@ -450,11 +450,11 @@ def test_local_tool_gateway_specialist_runner_executes_approved_write_with_exact
         return (_response("승인된 PMS 삭제 결과 요약입니다."), None, None)
 
     monkeypatch.setattr(
-        "aidoo_api.domains.ai.internal_agents.execute_tool_call",
+        "ai_do_api.domains.ai.internal_agents.execute_tool_call",
         fake_execute_tool_call,
     )
     monkeypatch.setattr(
-        "aidoo_api.domains.ai.internal_agents.complete_chat",
+        "ai_do_api.domains.ai.internal_agents.complete_chat",
         fake_complete_chat,
     )
     runner = LocalToolGatewaySpecialistRunner(

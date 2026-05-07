@@ -1,7 +1,7 @@
 [project]
-name = "aidoo-worker"
+name = "ai-do-worker"
 version = "0.1.0"
-description = "Celery worker scaffold for AIDOO, Doowon's AI work portal."
+description = "Celery worker scaffold for AI-DO, Doowon's AI work portal."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
@@ -51,4 +51,4 @@ target-version = "py312"
 pythonpath = ["src"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/aidoo_worker"]
+packages = ["src/ai_do_worker"]

@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from types import SimpleNamespace
 
-from aidoo_api.domains.ai.mcp import AiMcpClient, _descriptor_matches_app
-from aidoo_api.domains.ai.registry import AiCapabilityDescriptor
+from ai_do_api.domains.ai.mcp import AiMcpClient, _descriptor_matches_app
+from ai_do_api.domains.ai.registry import AiCapabilityDescriptor
 
 
 @dataclass

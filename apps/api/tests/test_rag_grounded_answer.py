@@ -4,18 +4,18 @@ from types import SimpleNamespace
 
 import pytest
 
-from aidoo_api.domains.rag import application as rag_application
-from aidoo_api.domains.rag.contracts import (
+from ai_do_api.domains.rag import application as rag_application
+from ai_do_api.domains.rag.contracts import (
     RagAnswerMode,
     RagProjection,
     RagQueryRequest,
     RagQueryResponse,
 )
-from aidoo_api.domains.rag.grounded_answer import LlmGroundedAnswerSynthesizer
-from aidoo_api.domains.rag.providers import RagProviderTransientError
-from aidoo_api.domains.rag.providers.fake import FakeEmbeddingClient, FakeVectorIndexClient
-from aidoo_api.domains.rag.query_service import RagQueryService
-from aidoo_api.domains.rag.service import RagService
+from ai_do_api.domains.rag.grounded_answer import LlmGroundedAnswerSynthesizer
+from ai_do_api.domains.rag.providers import RagProviderTransientError
+from ai_do_api.domains.rag.providers.fake import FakeEmbeddingClient, FakeVectorIndexClient
+from ai_do_api.domains.rag.query_service import RagQueryService
+from ai_do_api.domains.rag.service import RagService
 
 
 def test_llm_grounded_answer_synthesizer_keeps_only_citation_backed_statements(monkeypatch) -> None:
@@ -46,7 +46,7 @@ def test_llm_grounded_answer_synthesizer_keeps_only_citation_backed_statements(m
         return response, None, None
 
     monkeypatch.setattr(
-        "aidoo_api.domains.rag.grounded_answer.complete_chat",
+        "ai_do_api.domains.rag.grounded_answer.complete_chat",
         _fake_complete_chat,
     )
 
@@ -100,7 +100,7 @@ def test_llm_grounded_answer_synthesizer_routes_through_llm_runtime(monkeypatch)
         return response, None, None
 
     monkeypatch.setattr(
-        "aidoo_api.domains.rag.grounded_answer.complete_chat",
+        "ai_do_api.domains.rag.grounded_answer.complete_chat",
         _fake_complete_chat,
     )
 

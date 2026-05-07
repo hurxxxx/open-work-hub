@@ -1,5 +1,5 @@
 {
-  "name": "aidoo-portal",
+  "name": "ai-do-portal",
   "private": true,
   "packageManager": "pnpm@10.33.0",
   "scripts": {

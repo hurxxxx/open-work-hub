@@ -5,20 +5,20 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from aidoo_api.core.db import get_session_factory
-import aidoo_api.core.settings as core_settings
-from aidoo_api.domains.auth.access import ensure_dev_login_seed_data
-from aidoo_api.domains.auth.models import User, Workspace, WorkspaceUserBinding
-from aidoo_api.domains.auth.security import new_id
-import aidoo_api.domains.planner.rag_sync as planner_rag_sync
-from aidoo_api.domains.rag.access_filter import build_user_rag_post_filter
-from aidoo_api.domains.rag.contracts import RagQueryRequest
-from aidoo_api.domains.rag.models import RagSyncJob
-from aidoo_api.domains.rag.planner_projection import load_planner_event_projection
-from aidoo_api.domains.rag.planner_projection import PLANNER_EVENT_RESOURCE_TYPE
-from aidoo_api.domains.rag.providers.fake import FakeEmbeddingClient, FakeVectorIndexClient
-from aidoo_api.domains.rag.query_service import RagQueryService
-from aidoo_api.domains.rag.service import RagService
+from ai_do_api.core.db import get_session_factory
+import ai_do_api.core.settings as core_settings
+from ai_do_api.domains.auth.access import ensure_dev_login_seed_data
+from ai_do_api.domains.auth.models import User, Workspace, WorkspaceUserBinding
+from ai_do_api.domains.auth.security import new_id
+import ai_do_api.domains.planner.rag_sync as planner_rag_sync
+from ai_do_api.domains.rag.access_filter import build_user_rag_post_filter
+from ai_do_api.domains.rag.contracts import RagQueryRequest
+from ai_do_api.domains.rag.models import RagSyncJob
+from ai_do_api.domains.rag.planner_projection import load_planner_event_projection
+from ai_do_api.domains.rag.planner_projection import PLANNER_EVENT_RESOURCE_TYPE
+from ai_do_api.domains.rag.providers.fake import FakeEmbeddingClient, FakeVectorIndexClient
+from ai_do_api.domains.rag.query_service import RagQueryService
+from ai_do_api.domains.rag.service import RagService
 
 
 def _dev_login(client: TestClient, account_key: str) -> dict:
@@ -136,7 +136,7 @@ def test_public_planner_event_survives_rag_post_filter_for_workspace_member(
         workspace_id = workspace.id
         viewer = User(
             id=new_id(),
-            email="planner-rag-viewer@aidoo.local",
+            email="planner-rag-viewer@ai-do.local",
             full_name="Planner Rag Viewer",
             password_hash="hash",
             status="active",

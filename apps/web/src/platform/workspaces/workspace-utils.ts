@@ -47,8 +47,8 @@ const WORKSPACE_API_PREFIXES = [
   '/api/v1/wiki',
 ] as const;
 
-const LAST_WORKSPACE_STORAGE_KEY = 'aidoo:last-workspace-slug';
-const LAST_WORKSPACE_APP_STORAGE_KEY = 'aidoo:last-workspace-app';
+const LAST_WORKSPACE_STORAGE_KEY = 'ai-do:last-workspace-slug';
+const LAST_WORKSPACE_APP_STORAGE_KEY = 'ai-do:last-workspace-app';
 const WORKSPACE_APP_PATH_PATTERN = /^\/w\/[^/]+\/(home|ai|pms|docs|whiteboard|planner|meeting|recording|learning)(?:\/|$)/;
 
 function isWorkspaceAppId(value: string | null | undefined): value is WorkspaceAppId {

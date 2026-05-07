@@ -15,7 +15,7 @@ pnpm vm:app:deploy
 
 - `nx build web` 로 web production build가 깨지지 않는지 확인한다.
 - 기존 API, web, worker, worker-beat 프로세스를 중지한다.
-- VM profile (`AIDOO_ENV_PROFILE=vm`) 기준으로 API, web dev server, worker, worker-beat를 다시 시작한다.
+- VM profile (`AI_DO_ENV_PROFILE=vm`) 기준으로 API, web dev server, worker, worker-beat를 다시 시작한다.
 - 마지막에 API health, web shell, collab route 상태를 출력한다.
 
 ### 재시작만 할 때
@@ -58,6 +58,6 @@ pnpm vm:app:logs
 
 - 이 VM preview에서는 `prod.sh restart` 를 쓰지 않는다. `prod.sh` nginx stack도 `4200` 포트를 사용하므로 현재 preview web 프로세스와 충돌할 수 있다.
 - VM Docker 접근은 일반 `docker` socket 권한이 없을 수 있으므로 repo helper (`dev_docker`) 또는 `sudo -n docker` 경로를 사용한다.
-- API pytest의 Docker fixture는 `AIDOO_ENV_PROFILE=vm` 또는 `AIDOO_TEST_DOCKER_NETWORK=host` 를 붙여 실행해야 host-network fixture가 맞게 동작한다.
+- API pytest의 Docker fixture는 `AI_DO_ENV_PROFILE=vm` 또는 `AI_DO_TEST_DOCKER_NETWORK=host` 를 붙여 실행해야 host-network fixture가 맞게 동작한다.
 
 자세한 운영 유사 검증 메모는 `docs/working/dev-collab-validation.md` 를 참고한다.

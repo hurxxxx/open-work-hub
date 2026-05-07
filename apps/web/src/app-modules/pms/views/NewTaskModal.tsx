@@ -6,8 +6,8 @@ import {
   Paperclip,
   Bell,
 } from 'lucide-react';
-import { Dialog, Button, BlockEditor } from '@aidoo/ui';
-import type { BlockContent } from '@aidoo/ui';
+import { Dialog, Button, BlockEditor } from '@ai-do/ui';
+import type { BlockContent } from '@ai-do/ui';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { useMediaUpload } from '@/src/platform/media/use-media-upload';

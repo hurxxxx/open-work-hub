@@ -35,7 +35,7 @@ const TIMELINE_RANGE_OPTIONS = [14, 28, 56] as const;
 type TimelineRangeDays = (typeof TIMELINE_RANGE_OPTIONS)[number];
 
 const DEFAULT_TIMELINE_RANGE_DAYS: TimelineRangeDays = 28;
-const TIMELINE_RANGE_STORAGE_KEY = 'aidoo:planner-timeline-range-days';
+const TIMELINE_RANGE_STORAGE_KEY = 'ai-do:planner-timeline-range-days';
 
 const SURFACE_MODE_LABEL_KEYS: Record<PlannerSurfaceMode, string> = {
   calendar: 'planner.surfaces.calendar',

@@ -5,8 +5,8 @@ import base64
 from fastapi.testclient import TestClient
 import y_py as Y
 
-from aidoo_api.core.db import get_session_factory
-from aidoo_api.domains.auth.access import ensure_dev_login_seed_data
+from ai_do_api.core.db import get_session_factory
+from ai_do_api.domains.auth.access import ensure_dev_login_seed_data
 
 
 def test_whiteboard_create_update_reload_and_archive(client: TestClient) -> None:

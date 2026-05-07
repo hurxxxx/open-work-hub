@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from aidoo_api.domains.ai.manager_runtime import (
+from ai_do_api.domains.ai.manager_runtime import (
     AiManagerInput,
     ManagerPromptPayload,
     LocalAgentResult,

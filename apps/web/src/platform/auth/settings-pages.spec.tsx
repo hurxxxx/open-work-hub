@@ -15,9 +15,9 @@ const mockRevokeSession = vi.fn();
 function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
   return {
     id: 'user-1',
-    email: 'member@aidoo.local',
-    full_name: 'AIDOO Member',
-    display_name: 'AIDOO Member',
+    email: 'member@ai-do.local',
+    full_name: 'AI-DO Member',
+    display_name: 'AI-DO Member',
     job_title: 'Platform Owner',
     status: 'active',
     theme_preference: 'system',

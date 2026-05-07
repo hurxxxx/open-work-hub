@@ -3,7 +3,7 @@ import { MessageSquare, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
-import { useConfirm } from '@aidoo/ui/feedback/confirm-dialog';
+import { useConfirm } from '@ai-do/ui/feedback/confirm-dialog';
 
 import { aiManifest } from './manifest';
 import type { AppSidebarConfig } from '@/src/app/shell/sidebar-types';

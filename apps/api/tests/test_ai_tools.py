@@ -6,14 +6,14 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from aidoo_api.domains.auth.security import new_id
-from aidoo_api.core.settings import get_settings
-from aidoo_api.domains.ai.registry import reset_ai_capability_registry
-from aidoo_api.core.db import get_engine
-from aidoo_api.core.db import get_session_factory
-from aidoo_api.domains.auth.access import ensure_dev_login_seed_data
-from aidoo_api.domains.auth.models import AuditLog, Workspace, WorkspaceAppEntitlement
-from aidoo_api.domains.meeting.models import MeetingInsight, MeetingRecording
+from ai_do_api.domains.auth.security import new_id
+from ai_do_api.core.settings import get_settings
+from ai_do_api.domains.ai.registry import reset_ai_capability_registry
+from ai_do_api.core.db import get_engine
+from ai_do_api.core.db import get_session_factory
+from ai_do_api.domains.auth.access import ensure_dev_login_seed_data
+from ai_do_api.domains.auth.models import AuditLog, Workspace, WorkspaceAppEntitlement
+from ai_do_api.domains.meeting.models import MeetingInsight, MeetingRecording
 
 
 def _dev_login(client: TestClient, account_key: str) -> dict:
@@ -232,7 +232,7 @@ def test_ai_tool_invoke_meeting_extract_actions_returns_insights(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    from aidoo_api.domains.meeting import insights as meeting_insights
+    from ai_do_api.domains.meeting import insights as meeting_insights
 
     session = _dev_login(client, "delivery-hub-admin")
     token = session["token"]
@@ -325,7 +325,7 @@ def test_ai_tool_invoke_meeting_extract_actions_returns_stored_drafts_without_re
     client: TestClient,
     monkeypatch,
 ) -> None:
-    from aidoo_api.domains.meeting import insights as meeting_insights
+    from ai_do_api.domains.meeting import insights as meeting_insights
 
     session = _dev_login(client, "delivery-hub-admin")
     token = session["token"]
@@ -393,7 +393,7 @@ def test_ai_tool_invoke_meeting_extract_decisions_returns_insights(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    from aidoo_api.domains.meeting import insights as meeting_insights
+    from ai_do_api.domains.meeting import insights as meeting_insights
 
     session = _dev_login(client, "delivery-hub-admin")
     token = session["token"]
@@ -659,7 +659,7 @@ def test_ai_tool_invoke_pms_write_tool_requires_approval_when_enabled(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("AIDOO_AI_WRITE_TOOLS_ENABLED", "1")
+    monkeypatch.setenv("AI_DO_AI_WRITE_TOOLS_ENABLED", "1")
     _reset_settings_and_registry()
     try:
         session = _dev_login(client, "delivery-hub-admin")
@@ -697,7 +697,7 @@ def test_ai_tool_invoke_pms_write_tool_requires_approval_when_enabled(
         assert delete_audit_payload["tool_name"] == "pms.delete_issue"
         assert delete_audit_payload["status"] == "blocked"
     finally:
-        monkeypatch.delenv("AIDOO_AI_WRITE_TOOLS_ENABLED", raising=False)
+        monkeypatch.delenv("AI_DO_AI_WRITE_TOOLS_ENABLED", raising=False)
         _reset_settings_and_registry()
 
 
@@ -705,7 +705,7 @@ def test_ai_tool_invoke_planner_update_validation_returns_localized_code(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("AIDOO_AI_WRITE_TOOLS_ENABLED", "1")
+    monkeypatch.setenv("AI_DO_AI_WRITE_TOOLS_ENABLED", "1")
     _reset_settings_and_registry()
     try:
         session = _dev_login(client, "delivery-hub-admin")
@@ -713,7 +713,7 @@ def test_ai_tool_invoke_planner_update_validation_returns_localized_code(
 
         response = client.post(
             _workspace_tool_path("delivery-hub", "planner.update_event"),
-            headers={**_auth_headers(token), "x-aidoo-locale": "ko-KR"},
+            headers={**_auth_headers(token), "x-ai-do-locale": "ko-KR"},
             json={
                 "arguments": {
                     "event_id": "event-validation-target",
@@ -730,7 +730,7 @@ def test_ai_tool_invoke_planner_update_validation_returns_localized_code(
         assert audit_payload["tool_name"] == "planner.update_event"
         assert audit_payload["status"] == "error"
     finally:
-        monkeypatch.delenv("AIDOO_AI_WRITE_TOOLS_ENABLED", raising=False)
+        monkeypatch.delenv("AI_DO_AI_WRITE_TOOLS_ENABLED", raising=False)
         _reset_settings_and_registry()
 
 
@@ -738,7 +738,7 @@ def test_ai_tool_invoke_pms_update_validation_returns_localized_code(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("AIDOO_AI_WRITE_TOOLS_ENABLED", "1")
+    monkeypatch.setenv("AI_DO_AI_WRITE_TOOLS_ENABLED", "1")
     _reset_settings_and_registry()
     try:
         session = _dev_login(client, "delivery-hub-admin")
@@ -746,7 +746,7 @@ def test_ai_tool_invoke_pms_update_validation_returns_localized_code(
 
         response = client.post(
             _workspace_tool_path("delivery-hub", "pms.update_issue"),
-            headers={**_auth_headers(token), "x-aidoo-locale": "ko-KR"},
+            headers={**_auth_headers(token), "x-ai-do-locale": "ko-KR"},
             json={"arguments": {"issue_id": "issue-validation-target"}},
         )
 
@@ -758,7 +758,7 @@ def test_ai_tool_invoke_pms_update_validation_returns_localized_code(
         assert audit_payload["tool_name"] == "pms.update_issue"
         assert audit_payload["status"] == "error"
     finally:
-        monkeypatch.delenv("AIDOO_AI_WRITE_TOOLS_ENABLED", raising=False)
+        monkeypatch.delenv("AI_DO_AI_WRITE_TOOLS_ENABLED", raising=False)
         _reset_settings_and_registry()
 
 
@@ -766,7 +766,7 @@ def test_ai_tool_invoke_meeting_and_planner_write_tools_require_approval_when_en
     client: TestClient,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("AIDOO_AI_WRITE_TOOLS_ENABLED", "1")
+    monkeypatch.setenv("AI_DO_AI_WRITE_TOOLS_ENABLED", "1")
     _reset_settings_and_registry()
     try:
         session = _dev_login(client, "delivery-hub-admin")
@@ -818,5 +818,5 @@ def test_ai_tool_invoke_meeting_and_planner_write_tools_require_approval_when_en
         )
         assert planner_delete_response.status_code == 409, planner_delete_response.text
     finally:
-        monkeypatch.delenv("AIDOO_AI_WRITE_TOOLS_ENABLED", raising=False)
+        monkeypatch.delenv("AI_DO_AI_WRITE_TOOLS_ENABLED", raising=False)
         _reset_settings_and_registry()

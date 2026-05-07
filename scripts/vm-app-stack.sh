@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-export AIDOO_ENV_PROFILE="${AIDOO_ENV_PROFILE:-vm}"
+export AI_DO_ENV_PROFILE="${AI_DO_ENV_PROFILE:-vm}"
 source "$ROOT_DIR/scripts/dev-env.sh"
 
 COMMAND="${1:-status}"
@@ -119,7 +119,7 @@ start_api() {
     cd "$ROOT_DIR/apps/api"
     export DOOWON_API_AUTO_MIGRATE=1
     export DOOWON_API_INSTANCE_ID="$API_INSTANCE_ID"
-    exec "$ROOT_DIR/apps/api/.venv/bin/python" -m uvicorn aidoo_api.main:app --app-dir src --host 127.0.0.1 --port "$API_PORT"
+    exec "$ROOT_DIR/apps/api/.venv/bin/python" -m uvicorn ai_do_api.main:app --app-dir src --host 127.0.0.1 --port "$API_PORT"
   ' >>"$LOG_DIR/api-$API_PORT.log" 2>&1 &
   echo "$!" >"$PID_DIR/api-$API_PORT.pid"
   echo "[vm] started api:$API_PORT pid=$(cat "$PID_DIR/api-$API_PORT.pid")"
@@ -174,7 +174,7 @@ start_worker() {
     : >"$LOG_DIR/worker.log"
     ROOT_DIR="$ROOT_DIR" WORKER_QUEUES="$WORKER_QUEUES" setsid bash -lc '
       cd "$ROOT_DIR/apps/worker"
-      exec uv run --python 3.12 python -m celery -A aidoo_worker.celery_app:celery_app worker --loglevel=info -Q "$WORKER_QUEUES"
+      exec uv run --python 3.12 python -m celery -A ai_do_worker.celery_app:celery_app worker --loglevel=info -Q "$WORKER_QUEUES"
     ' >>"$LOG_DIR/worker.log" 2>&1 &
     echo "$!" >"$PID_DIR/worker.pid"
     echo "[vm] started worker pid=$(cat "$PID_DIR/worker.pid") queues=$WORKER_QUEUES"
@@ -187,7 +187,7 @@ start_worker() {
     : >"$LOG_DIR/worker-beat.log"
     ROOT_DIR="$ROOT_DIR" RUNTIME_DIR="$RUNTIME_DIR" setsid bash -lc '
       cd "$ROOT_DIR/apps/worker"
-      exec uv run --python 3.12 python -m celery -A aidoo_worker.celery_app:celery_app beat --loglevel=info --schedule "$RUNTIME_DIR/celerybeat-schedule.db"
+      exec uv run --python 3.12 python -m celery -A ai_do_worker.celery_app:celery_app beat --loglevel=info --schedule "$RUNTIME_DIR/celerybeat-schedule.db"
     ' >>"$LOG_DIR/worker-beat.log" 2>&1 &
     echo "$!" >"$PID_DIR/worker-beat.pid"
     echo "[vm] started worker beat pid=$(cat "$PID_DIR/worker-beat.pid")"
@@ -218,7 +218,7 @@ status_code() {
 status_stack() {
   echo "[vm] runtime"
   echo "  root: $ROOT_DIR"
-  echo "  profile: $AIDOO_ENV_PROFILE"
+  echo "  profile: $AI_DO_ENV_PROFILE"
   echo "  public_url: $PUBLIC_URL"
   echo
   echo "[vm] docker compose"

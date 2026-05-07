@@ -44,7 +44,7 @@ type WhiteboardLayoutMode = 'cards' | 'list';
 type WhiteboardSortValue = 'updated_desc' | 'viewed_desc' | 'created_desc' | 'title_asc';
 type WhiteboardSortOption = { labelKey: string; sortBy: string; sortDir: 'asc' | 'desc' };
 
-const VIEW_MODE_STORAGE_KEY = 'aidoo:whiteboard:view-mode';
+const VIEW_MODE_STORAGE_KEY = 'ai-do:whiteboard:view-mode';
 
 const VIEW_LABEL_KEYS: Record<WhiteboardHubView, string> = {
   all: 'shell:nav.whiteboard-all',

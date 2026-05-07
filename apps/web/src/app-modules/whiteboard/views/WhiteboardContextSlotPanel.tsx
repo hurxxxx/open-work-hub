@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Button } from '@aidoo/ui';
+import { Button } from '@ai-do/ui';
 import { Loader2, PencilRuler, Plus, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 

@@ -8,17 +8,17 @@ from types import SimpleNamespace
 
 import pytest
 
-from aidoo_api.core.settings import Settings, get_settings
-from aidoo_api.domains.rag import application as rag_application
-from aidoo_api.domains.rag.contracts import RagAnswerMode, RagProjection, RagQueryRequest, RagQueryResponse
-from aidoo_api.domains.rag.providers.fake import FakeEmbeddingClient, FakeVectorIndexClient
-from aidoo_api.domains.rag.query_service import RagQueryService
-from aidoo_api.domains.rag.runtime import (
+from ai_do_api.core.settings import Settings, get_settings
+from ai_do_api.domains.rag import application as rag_application
+from ai_do_api.domains.rag.contracts import RagAnswerMode, RagProjection, RagQueryRequest, RagQueryResponse
+from ai_do_api.domains.rag.providers.fake import FakeEmbeddingClient, FakeVectorIndexClient
+from ai_do_api.domains.rag.query_service import RagQueryService
+from ai_do_api.domains.rag.runtime import (
     get_rag_query_service,
     reset_rag_runtime_caches,
     resolve_default_collection_name,
 )
-from aidoo_api.domains.rag.service import RagService
+from ai_do_api.domains.rag.service import RagService
 
 
 def _reset_settings() -> None:
@@ -31,12 +31,12 @@ def test_rag_settings_are_disabled_by_default(monkeypatch) -> None:
     settings = Settings(
         _env_file=None,
         DOOWON_POSTGRES_DSN="postgresql+psycopg://test:test@127.0.0.1:5432/test",
-        AIDOO_RAG_ENABLED=False,
-        AIDOO_RAG_UI_ENABLED=False,
-        AIDOO_VECTOR_INDEX_PROVIDER="fake",
-        AIDOO_EMBEDDING_PROVIDER="fake",
-        AIDOO_OCR_PROVIDER="fake",
-        AIDOO_RERANK_PROVIDER="fake",
+        AI_DO_RAG_ENABLED=False,
+        AI_DO_RAG_UI_ENABLED=False,
+        AI_DO_VECTOR_INDEX_PROVIDER="fake",
+        AI_DO_EMBEDDING_PROVIDER="fake",
+        AI_DO_OCR_PROVIDER="fake",
+        AI_DO_RERANK_PROVIDER="fake",
     )
 
     assert settings.rag_enabled is False
@@ -63,7 +63,7 @@ def test_rag_settings_ignore_deepinfra_alias_validation_when_provider_not_select
     settings = Settings(
         _env_file=None,
         DOOWON_POSTGRES_DSN="postgresql+psycopg://test:test@127.0.0.1:5432/test",
-        AIDOO_RAG_ENABLED=False,
+        AI_DO_RAG_ENABLED=False,
         DEEPINFRA_BASE_URL="http://127.0.0.1:8080/openai",
     )
 
@@ -75,7 +75,7 @@ def test_ensure_rag_enabled_raises_domain_error(monkeypatch) -> None:
     settings = Settings(
         _env_file=None,
         DOOWON_POSTGRES_DSN="postgresql+psycopg://test:test@127.0.0.1:5432/test",
-        AIDOO_RAG_ENABLED=False,
+        AI_DO_RAG_ENABLED=False,
     )
 
     with pytest.raises(rag_application.RagUnavailableError) as exc_info:
@@ -252,16 +252,16 @@ def test_resolve_default_collection_name_normalizes_embedding_model() -> None:
     settings = SimpleNamespace(
         rag_embedding_provider="deepinfra",
         rag_deepinfra_embedding_model="Qwen/Qwen3-Embedding-8B",
-        rag_qdrant_collection_prefix="doowon-rag",
+        rag_qdrant_collection_prefix="ai-do-rag",
     )
-    assert resolve_default_collection_name(settings) == "doowon-rag-qwen-qwen3-embedding-8b"
+    assert resolve_default_collection_name(settings) == "ai-do-rag-qwen-qwen3-embedding-8b"
 
 
 def test_get_rag_query_service_is_cached(monkeypatch) -> None:
     monkeypatch.setenv("DOOWON_POSTGRES_DSN", "postgresql+psycopg://test:test@127.0.0.1:5432/test")
-    monkeypatch.setenv("AIDOO_VECTOR_INDEX_PROVIDER", "fake")
-    monkeypatch.setenv("AIDOO_EMBEDDING_PROVIDER", "fake")
-    monkeypatch.setenv("AIDOO_RERANK_PROVIDER", "fake")
+    monkeypatch.setenv("AI_DO_VECTOR_INDEX_PROVIDER", "fake")
+    monkeypatch.setenv("AI_DO_EMBEDDING_PROVIDER", "fake")
+    monkeypatch.setenv("AI_DO_RERANK_PROVIDER", "fake")
 
     _reset_settings()
     reset_rag_runtime_caches()
@@ -609,8 +609,8 @@ def test_rag_service_imports_do_not_pull_optional_provider_sdks() -> None:
     )
     script = """
 import sys
-import aidoo_api.domains.rag.query_service  # noqa: F401
-import aidoo_api.domains.rag.service  # noqa: F401
+import ai_do_api.domains.rag.query_service  # noqa: F401
+import ai_do_api.domains.rag.service  # noqa: F401
 unexpected = sorted(
     name for name in sys.modules
     if name == "qdrant_client"
@@ -640,7 +640,7 @@ def test_rag_provider_package_import_is_lazy_for_optional_sdks() -> None:
     )
     script = """
 import sys
-import aidoo_api.domains.rag.providers  # noqa: F401
+import ai_do_api.domains.rag.providers  # noqa: F401
 unexpected = sorted(
     name for name in sys.modules
     if name == "qdrant_client" or name.startswith("qdrant_client.")

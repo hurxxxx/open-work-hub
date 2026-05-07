@@ -1,22 +1,22 @@
 [importlinter]
-root_package = aidoo_api
+root_package = ai_do_api
 
 [importlinter:contract:routers_are_composition_only]
 name = Router modules are imported only by the API composition registry
 type = protected
 protected_modules =
-    aidoo_api.domains.*.router
-    aidoo_api.domains.auth.workspace_router
+    ai_do_api.domains.*.router
+    ai_do_api.domains.auth.workspace_router
 allowed_importers =
-    aidoo_api.api_registry
+    ai_do_api.api_registry
 as_packages = false
 
 [importlinter:contract:domains_do_not_import_composition_roots]
 name = Domain modules do not import API composition roots
 type = forbidden
 source_modules =
-    aidoo_api.domains
+    ai_do_api.domains
 forbidden_modules =
-    aidoo_api.app
-    aidoo_api.main
-    aidoo_api.api_registry
+    ai_do_api.app
+    ai_do_api.main
+    ai_do_api.api_registry

@@ -8,11 +8,11 @@ import pytest
 from starlette.websockets import WebSocketDisconnect
 import y_py as Y
 
-from aidoo_api.domains.docs.collab import CollabPageContext, DocsCollabHub, make_room_key
-from aidoo_api.domains.docs.collab_codec import blocks_to_yjs_state, yjs_state_to_blocks
-from aidoo_api.domains.auth.security import new_id
-from aidoo_api.domains.media.models import MediaFile
-from aidoo_api.core.db import get_session_factory
+from ai_do_api.domains.docs.collab import CollabPageContext, DocsCollabHub, make_room_key
+from ai_do_api.domains.docs.collab_codec import blocks_to_yjs_state, yjs_state_to_blocks
+from ai_do_api.domains.auth.security import new_id
+from ai_do_api.domains.media.models import MediaFile
+from ai_do_api.core.db import get_session_factory
 from test_docs_hub import (
     _add_task_list_member,
     _auth_headers,
@@ -189,7 +189,7 @@ def test_docs_native_page_linked_media_resolves_for_shared_user(client: TestClie
     member = _create_user_with_workspaces(
         client,
         admin["token"],
-        email="docs-media-member@aidoo.local",
+        email="docs-media-member@ai-do.local",
         full_name="Docs Media Member",
         workspace_keys=["hq"],
     )
@@ -315,7 +315,7 @@ def test_meeting_notes_collab_session_is_revoked_when_attendee_is_removed(client
     attendee = _create_user_with_workspaces(
         client,
         admin_token,
-        email="notes-collab-attendee@aidoo.local",
+        email="notes-collab-attendee@ai-do.local",
         full_name="Notes Collab Attendee",
         workspace_keys=[workspace_slug],
     )
@@ -376,7 +376,7 @@ def test_pms_container_doc_collab_session_uses_workspace_acl_and_page_ref(client
     member = _create_user_with_workspaces(
         client,
         admin_token,
-        email="space-collab-member@aidoo.local",
+        email="space-collab-member@ai-do.local",
         full_name="Space Collab Member",
         workspace_keys=[workspace_slug],
     )

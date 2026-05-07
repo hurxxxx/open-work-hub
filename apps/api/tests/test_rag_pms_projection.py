@@ -4,27 +4,27 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
-from aidoo_api.core.db import get_session_factory
-from aidoo_api.domains.auth.access import bind_current_workspace, ensure_dev_login_seed_data
-from aidoo_api.domains.auth.models import Team, User, Workspace
-from aidoo_api.domains.auth.security import new_id
-from aidoo_api.domains.pms.access_grants import grant_issue_access
-from aidoo_api.domains.pms.models import Issue, TaskList
-from aidoo_api.domains.rag.access_filter import build_user_rag_post_filter
-from aidoo_api.domains.rag.contracts import RagQueryRequest
-from aidoo_api.domains.rag.providers.fake import FakeEmbeddingClient, FakeVectorIndexClient
-from aidoo_api.domains.rag.pms_projection import PMS_ISSUE_RESOURCE_TYPE, load_issue_projection
-from aidoo_api.domains.rag.query_service import RagQueryService
-from aidoo_api.domains.rag.service import RagService
+from ai_do_api.core.db import get_session_factory
+from ai_do_api.domains.auth.access import bind_current_workspace, ensure_dev_login_seed_data
+from ai_do_api.domains.auth.models import Team, User, Workspace
+from ai_do_api.domains.auth.security import new_id
+from ai_do_api.domains.pms.access_grants import grant_issue_access
+from ai_do_api.domains.pms.models import Issue, TaskList
+from ai_do_api.domains.rag.access_filter import build_user_rag_post_filter
+from ai_do_api.domains.rag.contracts import RagQueryRequest
+from ai_do_api.domains.rag.providers.fake import FakeEmbeddingClient, FakeVectorIndexClient
+from ai_do_api.domains.rag.pms_projection import PMS_ISSUE_RESOURCE_TYPE, load_issue_projection
+from ai_do_api.domains.rag.query_service import RagQueryService
+from ai_do_api.domains.rag.service import RagService
 
 
 def test_issue_projection_preserves_expired_grants_for_query_time_acl_checks(client) -> None:
     with get_session_factory()() as db:
         ensure_dev_login_seed_data(db)
-        owner = db.scalar(select(User).where(User.email == "delivery-hub-admin@aidoo.local"))
-        shared_user = db.scalar(select(User).where(User.email == "platform-admin@aidoo.local"))
-        expired_user = db.scalar(select(User).where(User.email == "hq-admin@aidoo.local"))
-        revoked_user = db.scalar(select(User).where(User.email == "delivery-hub-member@aidoo.local"))
+        owner = db.scalar(select(User).where(User.email == "delivery-hub-admin@ai-do.local"))
+        shared_user = db.scalar(select(User).where(User.email == "platform-admin@ai-do.local"))
+        expired_user = db.scalar(select(User).where(User.email == "hq-admin@ai-do.local"))
+        revoked_user = db.scalar(select(User).where(User.email == "delivery-hub-member@ai-do.local"))
         workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
         assert owner is not None
         assert shared_user is not None
@@ -132,8 +132,8 @@ def test_issue_query_post_filter_rejects_expired_grant_hits(client) -> None:
 
     with get_session_factory()() as db:
         ensure_dev_login_seed_data(db)
-        owner = db.scalar(select(User).where(User.email == "delivery-hub-admin@aidoo.local"))
-        expired_user = db.scalar(select(User).where(User.email == "hq-admin@aidoo.local"))
+        owner = db.scalar(select(User).where(User.email == "delivery-hub-admin@ai-do.local"))
+        expired_user = db.scalar(select(User).where(User.email == "hq-admin@ai-do.local"))
         workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
         assert owner is not None
         assert expired_user is not None

@@ -119,7 +119,7 @@ def _init_worker_db(
 
 def _reload_worker_module(module_name: str):
     for cached_name in list(sys.modules):
-        if cached_name == "aidoo_worker" or cached_name.startswith("aidoo_worker."):
+        if cached_name == "ai_do_worker" or cached_name.startswith("ai_do_worker."):
             sys.modules.pop(cached_name, None)
     return importlib.import_module(module_name)
 
@@ -138,7 +138,7 @@ def test_celery_app_fails_fast_when_llm_policy_table_is_missing(
     monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
 
     with pytest.raises(RuntimeError, match="Run API migrations before starting the worker"):
-        _reload_worker_module("aidoo_worker.celery_app")
+        _reload_worker_module("ai_do_worker.celery_app")
 
 
 def test_meeting_summarize_uses_complete_chat_without_local_precheck(
@@ -154,7 +154,7 @@ def test_meeting_summarize_uses_complete_chat_without_local_precheck(
     monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
     monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
 
-    meeting_module = _reload_worker_module("aidoo_worker.tasks.meeting")
+    meeting_module = _reload_worker_module("ai_do_worker.tasks.meeting")
 
     recording = SimpleNamespace(
         id="rec-1",
@@ -230,7 +230,7 @@ def test_meeting_extract_insights_invokes_worker_service_without_stopping_pipeli
     monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
     monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
 
-    meeting_module = _reload_worker_module("aidoo_worker.tasks.meeting")
+    meeting_module = _reload_worker_module("ai_do_worker.tasks.meeting")
 
     recording = SimpleNamespace(
         id="rec-2",
@@ -309,8 +309,8 @@ def test_meeting_insights_module_imports_under_worker_env(
     monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
     monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
 
-    meeting_module = _reload_worker_module("aidoo_worker.tasks.meeting")
+    meeting_module = _reload_worker_module("ai_do_worker.tasks.meeting")
 
     imported = meeting_module._meeting_insights_module()
 
-    assert imported.__name__ == "aidoo_api.domains.meeting.insights"
+    assert imported.__name__ == "ai_do_api.domains.meeting.insights"

@@ -1,13 +1,13 @@
 # LiveKit Video Chat Intranet Plan
 
-> 문서 성격: AIDOO Meeting 앱에 self-hosted LiveKit 기반 화상 채팅을 추가하기 위한 실행 계획.
+> 문서 성격: AI-DO Meeting 앱에 self-hosted LiveKit 기반 화상 채팅을 추가하기 위한 실행 계획.
 > 핵심 결정: 제품 내부 통합은 LiveKit Open Source를 1순위로 한다. 사내망/무도메인 환경은 public domain 없이도 운영할 수 있지만, 브라우저 카메라/마이크 보안 요구 때문에 HTTPS/WSS와 신뢰된 인증서 체인은 반드시 준비한다.
 
 ## Context
 
 현재 Meeting 앱은 회의 일정, 참석자, 회의 노트, 첨부, 녹음 업로드, 전사/요약 파이프라인을 이미 갖고 있다.
 
-- Backend: `apps/api/src/aidoo_api/domains/meeting/`
+- Backend: `apps/api/src/ai_do_api/domains/meeting/`
   - Meeting CRUD
   - 참석자 권한
   - notes ensure
@@ -26,7 +26,7 @@
 2026-05-07 조사 기준:
 
 - LiveKit Open Source는 Apache-2.0 라이선스이며 WebRTC SFU, SDK, token 기반 접속, recording/egress 경로를 제공한다.
-- Jitsi Meet도 Apache-2.0이고 빠른 iframe 통합에는 적합하지만, AIDOO의 Meeting/Notes/Recording/Transcript 파이프라인과 깊게 결합하려면 iframe 중심 통합이 제약이 된다.
+- Jitsi Meet도 Apache-2.0이고 빠른 iframe 통합에는 적합하지만, AI-DO의 Meeting/Notes/Recording/Transcript 파이프라인과 깊게 결합하려면 iframe 중심 통합이 제약이 된다.
 - OpenVidu Community는 LiveKit 기반의 운영 번들 성격이 강하다. 빠른 single-node 사내 설치에는 후보지만, upstream SDK/토큰/egress 흐름을 직접 통제하려면 LiveKit이 단순하다.
 - mediasoup은 ISC 라이선스라 자유롭지만 signaling, auth, room lifecycle, UI, recording을 직접 설계해야 하므로 현재 제품 목표에는 저수준이다.
 
@@ -48,7 +48,7 @@
 
 LiveKit Cloud는 기본 범위에서 제외한다. 사내망 요구는 외부 네트워크에 의존하지 않는 media plane이므로 LiveKit server, optional TURN, optional Egress worker를 내부 VM 또는 서버에 직접 띄운다.
 
-FastAPI는 미디어를 중계하지 않는다. AIDOO API는 다음만 담당한다.
+FastAPI는 미디어를 중계하지 않는다. AI-DO API는 다음만 담당한다.
 
 - Meeting 권한 확인
 - LiveKit room name 결정
@@ -66,7 +66,7 @@ FastAPI는 미디어를 중계하지 않는다. AIDOO API는 다음만 담당한
 권장 우선순위:
 
 1. 사내 DNS 이름 사용
-   - 예: `aidoo.intra`, `livekit.intra`, `turn.intra`
+   - 예: `ai-do.intra`, `livekit.intra`, `turn.intra`
    - public DNS가 아니라 내부 DNS여도 된다.
 2. 사내 CA로 인증서 발급
    - 각 PC/브라우저/모바일 장비에 root CA를 신뢰 저장소로 배포한다.
@@ -79,13 +79,13 @@ FastAPI는 미디어를 중계하지 않는다. AIDOO API는 다음만 담당한
 
 ### 3. Meeting room identity is deterministic
 
-LiveKit room name은 AIDOO의 workspace/meeting 식별자에서 안정적으로 만든다.
+LiveKit room name은 AI-DO의 workspace/meeting 식별자에서 안정적으로 만든다.
 
 ```text
-aidoo:<workspace_id>:meeting:<meeting_id>
+ai-do:<workspace_id>:meeting:<meeting_id>
 ```
 
-토큰 identity는 AIDOO user id를 기준으로 한다.
+토큰 identity는 AI-DO user id를 기준으로 한다.
 
 ```text
 identity = <user_id>
@@ -102,7 +102,7 @@ metadata = {
 
 ### 4. Recording remains product-owned
 
-LiveKit Egress를 사용하더라도 canonical recording 상태와 전사/문서화 파이프라인은 AIDOO가 소유한다.
+LiveKit Egress를 사용하더라도 canonical recording 상태와 전사/문서화 파이프라인은 AI-DO가 소유한다.
 
 권장 흐름:
 
@@ -112,7 +112,7 @@ User clicks Record in Meeting video panel
   -> API starts LiveKit Egress
   -> Egress writes to MinIO/S3-compatible bucket
   -> LiveKit webhook or API poll marks egress complete
-  -> AIDOO creates/links Recording or MeetingRecording row
+  -> AI-DO creates/links Recording or MeetingRecording row
   -> existing recording.transcribe pipeline continues
 ```
 
@@ -127,7 +127,7 @@ DOOWON_VIDEO_ENABLED=false
 DOOWON_LIVEKIT_URL=
 DOOWON_LIVEKIT_API_KEY=
 DOOWON_LIVEKIT_API_SECRET=
-DOOWON_LIVEKIT_ROOM_PREFIX=aidoo
+DOOWON_LIVEKIT_ROOM_PREFIX=ai-do
 ```
 
 `DOOWON_VIDEO_ENABLED=false`이면 UI는 화상회의 버튼/패널을 숨기고 현재 Meeting/Recording 동작을 유지한다.
@@ -194,10 +194,10 @@ rtc:
 
 파일 범위:
 
-- `apps/api/src/aidoo_api/core/settings.py`
-- `apps/api/src/aidoo_api/domains/meeting/schemas.py`
-- `apps/api/src/aidoo_api/domains/meeting/router.py`
-- `apps/api/src/aidoo_api/domains/meeting/service.py`
+- `apps/api/src/ai_do_api/core/settings.py`
+- `apps/api/src/ai_do_api/domains/meeting/schemas.py`
+- `apps/api/src/ai_do_api/domains/meeting/router.py`
+- `apps/api/src/ai_do_api/domains/meeting/service.py`
 - `apps/api/tests/test_meeting_video.py`
 - `apps/api/pyproject.toml`
 
@@ -219,7 +219,7 @@ POST /api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting_id}/video-tok
 {
   "enabled": true,
   "ws_url": "wss://livekit.intra",
-  "room_name": "aidoo:workspace-123:meeting:meeting-456",
+  "room_name": "ai-do:workspace-123:meeting:meeting-456",
   "token": "<jwt>",
   "participant_identity": "user-789"
 }
@@ -293,18 +293,18 @@ openssl s_client -connect livekit.intra:443 -servername livekit.intra
 
 브라우저 검증:
 
-- `https://aidoo.intra`에서 카메라/마이크 permission prompt가 뜬다.
+- `https://ai-do.intra`에서 카메라/마이크 permission prompt가 뜬다.
 - `wss://livekit.intra` 연결이 mixed content나 certificate error 없이 열린다.
 
 ### Stage 5 - Recording/Egress integration
 
 파일 범위:
 
-- `apps/api/src/aidoo_api/domains/meeting/router.py`
-- `apps/api/src/aidoo_api/domains/meeting/schemas.py`
-- `apps/api/src/aidoo_api/domains/meeting/service.py`
-- `apps/api/src/aidoo_api/domains/recording/` 또는 current recording compatibility layer
-- `apps/worker/src/aidoo_worker/tasks/recording.py`
+- `apps/api/src/ai_do_api/domains/meeting/router.py`
+- `apps/api/src/ai_do_api/domains/meeting/schemas.py`
+- `apps/api/src/ai_do_api/domains/meeting/service.py`
+- `apps/api/src/ai_do_api/domains/recording/` 또는 current recording compatibility layer
+- `apps/worker/src/ai_do_worker/tasks/recording.py`
 - `apps/api/tests/test_meeting_video_egress.py`
 
 작업:
@@ -373,7 +373,7 @@ POST /meeting/meetings/{meeting_id}/video-egress/stop
 
 ### Intranet manual
 
-- 사내 PC 두 대가 `https://aidoo.intra`로 접속한다.
+- 사내 PC 두 대가 `https://ai-do.intra`로 접속한다.
 - 사내 CA가 배포되지 않은 PC에서는 의도적으로 실패한다.
 - CA 배포된 PC에서는 certificate warning 없이 접속한다.
 - 서로 다른 VLAN/방화벽 구간에서 UDP 연결 가능 여부를 확인한다.
@@ -383,7 +383,7 @@ POST /meeting/meetings/{meeting_id}/video-egress/stop
 
 - 회의 중 egress start/stop이 동작한다.
 - MinIO에 object가 생성된다.
-- AIDOO recording row가 생성 또는 연결된다.
+- AI-DO recording row가 생성 또는 연결된다.
 - playback이 동작한다.
 - 전사 pipeline으로 이어진다.
 
@@ -418,6 +418,6 @@ POST /meeting/meetings/{meeting_id}/video-egress/stop
 
 - API token endpoint는 feature flag 뒤에 둔다. 문제가 생기면 `DOOWON_VIDEO_ENABLED=false`로 비활성화한다.
 - Web은 video panel을 lazy route/component로 분리한다. SDK import 또는 runtime 문제가 있으면 panel만 숨기고 기존 Meeting workspace를 유지한다.
-- Infra에서 LiveKit container는 기존 postgres/redis/minio/nginx와 독립 서비스로 둔다. 장애 시 LiveKit만 중지하고 AIDOO core 앱은 계속 운영한다.
+- Infra에서 LiveKit container는 기존 postgres/redis/minio/nginx와 독립 서비스로 둔다. 장애 시 LiveKit만 중지하고 AI-DO core 앱은 계속 운영한다.
 - Egress integration은 Stage 5까지 분리한다. 녹화 문제가 있으면 기존 browser audio recording/import path로 되돌린다.
 - 사내 TLS/CA 배포 문제가 있으면 운영 출시를 보류하고 localhost/dev 검증만 유지한다.

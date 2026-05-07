@@ -5,14 +5,14 @@ services:
     restart: unless-stopped
     network_mode: host
     environment:
-      POSTGRES_USER: aidoo_db
-      POSTGRES_PASSWORD: aidoo_db
-      POSTGRES_DB: doowon_ai_portal
+      POSTGRES_USER: ai_do_db
+      POSTGRES_PASSWORD: ai_do_db
+      POSTGRES_DB: ai_do_portal
     command: ["postgres", "-c", "port=${DOOWON_DEV_POSTGRES_PORT:-55432}"]
     volumes:
       - doowon-dev-postgres-data:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p ${DOOWON_DEV_POSTGRES_PORT:-55432} -U aidoo_db -d doowon_ai_portal"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p ${DOOWON_DEV_POSTGRES_PORT:-55432} -U ai_do_db -d ai_do_portal"]
       interval: 10s
       timeout: 5s
       retries: 10

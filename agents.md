@@ -83,7 +83,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 - web 구조 변경 후에는 `pnpm check:web-architecture` 와 필요한 경우 `pnpm nx e2e-shell web` 을 함께 확인한다.
 
 ### API Boundaries
-- FastAPI router 등록은 `aidoo_api.api_registry` 를 composition root 로 사용한다. domain service/module 에서 `*.router` 를 import 하지 않는다.
+- FastAPI router 등록은 `ai_do_api.api_registry` 를 composition root 로 사용한다. domain service/module 에서 `*.router` 를 import 하지 않는다.
 - 재사용 가능한 domain 로직은 router 가 아니라 `service`, `read_model`, 또는 명시적인 helper 모듈에 둔다.
 - OpenAPI 타입은 `pnpm generate:api-client` 로 갱신하고, 사람이 `apps/web/src/platform/api/openapi.generated.d.ts` 를 직접 수정하지 않는다.
 - API 계약/경계 변경 후에는 `pnpm check:api-contract` 와 `pnpm check:api-architecture` 를 확인한다.

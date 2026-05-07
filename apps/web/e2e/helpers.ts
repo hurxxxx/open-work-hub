@@ -1,7 +1,7 @@
 import type { Page, Route } from '@playwright/test';
 
 const FAKE_TOKEN = 'e2e-test-token';
-const AUTH_TOKEN_STORAGE_KEY = 'aidoo.auth.token';
+const AUTH_TOKEN_STORAGE_KEY = 'ai-do.auth.token';
 
 type E2EUser = {
   id: string;
@@ -42,7 +42,7 @@ type WorkspaceBootstrapNavFixture = {
 // provider treats the seeded token as a live session.
 export const FAKE_WORKSPACE_USER: E2EUser = {
   id: 'user-e2e',
-  email: 'e2e@aidoo.local',
+  email: 'e2e@ai-do.local',
   full_name: 'E2E Tester',
   display_name: 'E2E Tester',
   status: 'active',
@@ -51,7 +51,7 @@ export const FAKE_WORKSPACE_USER: E2EUser = {
   time_zone: 'Asia/Seoul',
   primary_org_unit: null,
   workspaces: [
-    { id: 'workspace-hq', slug: 'hq', name: 'Aidoo HQ', role: 'admin' },
+    { id: 'workspace-hq', slug: 'hq', name: 'AI-DO HQ', role: 'admin' },
   ],
   workspace_roles: [],
   system_roles: [],
@@ -62,7 +62,7 @@ export const FAKE_WORKSPACE_USER: E2EUser = {
 
 export const FAKE_PLATFORM_ADMIN_USER: E2EUser = {
   ...FAKE_WORKSPACE_USER,
-  email: 'platform-admin@aidoo.local',
+  email: 'platform-admin@ai-do.local',
   full_name: 'Platform Admin',
   display_name: 'Platform Admin',
   system_roles: ['platform_admin'],
@@ -100,7 +100,7 @@ const NAV_ITEMS_BY_APP: Record<string, WorkspaceBootstrapNavFixture[]> = {
     navItem({
       id: 'search',
       app_id: 'ai',
-      title: '아이두 통합검색',
+      title: 'AI-DO 통합검색',
       category: 'Core Tools',
       icon_key: 'search',
     }),
@@ -325,7 +325,7 @@ function buildWorkspaceBootstrap(
     workspace: {
       id: 'workspace-hq',
       slug: 'hq',
-      name: 'Aidoo HQ',
+      name: 'AI-DO HQ',
       role: 'admin',
     },
     apps,
@@ -336,7 +336,7 @@ function buildWorkspaceBootstrap(
 const WORKSPACE_FIXTURE = {
   id: 'workspace-hq',
   key: 'hq',
-  name: 'Aidoo HQ',
+  name: 'AI-DO HQ',
   description: 'E2E workspace',
   active: true,
   team_count: 0,

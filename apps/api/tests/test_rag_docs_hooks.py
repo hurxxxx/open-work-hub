@@ -5,14 +5,14 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from aidoo_api.core.db import get_session_factory
-from aidoo_api.core.principal import user_principal
-from aidoo_api.domains.auth.access import ensure_dev_login_seed_data, load_user_graph
-from aidoo_api.domains.auth.models import Workspace
-from aidoo_api.domains.docs import rag_sync as docs_rag_sync
-from aidoo_api.domains.docs import service as docs_service
-from aidoo_api.domains.rag.docs_projection import NATIVE_DOC_RESOURCE_TYPE
-from aidoo_api.domains.rag.models import RagSyncJob, RagVisibilityRecomputeJob
+from ai_do_api.core.db import get_session_factory
+from ai_do_api.core.principal import user_principal
+from ai_do_api.domains.auth.access import ensure_dev_login_seed_data, load_user_graph
+from ai_do_api.domains.auth.models import Workspace
+from ai_do_api.domains.docs import rag_sync as docs_rag_sync
+from ai_do_api.domains.docs import service as docs_service
+from ai_do_api.domains.rag.docs_projection import NATIVE_DOC_RESOURCE_TYPE
+from ai_do_api.domains.rag.models import RagSyncJob, RagVisibilityRecomputeJob
 
 
 def _dev_login(client: TestClient, account_key: str) -> dict:
@@ -194,7 +194,7 @@ def test_meeting_doc_acl_changes_enqueue_rag_visibility_recompute_jobs(
     attendee = _create_user_with_workspaces(
         client,
         admin_token,
-        email="meeting-rag-reader@aidoo.local",
+        email="meeting-rag-reader@ai-do.local",
         full_name="Meeting Rag Reader",
         workspace_keys=["meeting", "docs"],
     )

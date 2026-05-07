@@ -87,7 +87,7 @@ Phase 3.5에서 Doowon AI capability registry는 단순 `OpenAI function` 목록
 - Phase 3.5는 read capability parity + MCP bridge + inspection/export까지다.
 - write capability 실행은 Phase 4부터 활성화한다.
 - write anchor용 DTO / preview builder는 Phase 3.5에서 미리 둘 수 있다.
-- executable write tool은 Phase 4에서만 등록하며, `AIDOO_AI_WRITE_TOOLS_ENABLED=true` 일 때에만 discovery 대상이 된다.
+- executable write tool은 Phase 4에서만 등록하며, `AI_DO_AI_WRITE_TOOLS_ENABLED=true` 일 때에만 discovery 대상이 된다.
 - 즉 Phase 4 이후에도 write capability는 코드 존재와 discovery 노출을 분리해서 rollout 한다.
 
 ### 8. 필수 테스트를 고정한다
@@ -129,4 +129,4 @@ capability contract를 바꾸는 PR은 **문서 + 테스트 + 코드** 를 같�
 - 새 앱 추가 시 이 ADR의 규칙을 먼저 확인하고 capability를 추가한다.
 - `plans/00-ai-platform-roadmap.md` 와 Phase 4 계획은 구현 상태가 바뀔 때 이 ADR과 같이 정합성을 맞춘다.
 - Phase 4에서 write capability를 실제로 활성화할 때 fine-grained discoverability predicate와 approval persistence 문서를 이어서 확정한다.
-- write capability 추가 시 `AIDOO_AI_WRITE_TOOLS_ENABLED` off/on 양쪽 discovery test를 함께 유지한다.
+- write capability 추가 시 `AI_DO_AI_WRITE_TOOLS_ENABLED` off/on 양쪽 discovery test를 함께 유지한다.

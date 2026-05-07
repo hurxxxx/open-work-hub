@@ -28,7 +28,7 @@ for raw_line in path.read_text(encoding="utf-8").splitlines():
         continue
     key, value = line.split("=", 1)
     key = key.strip()
-    if key == "AIDOO_ENV_PROFILE" and key in os.environ:
+    if key == "AI_DO_ENV_PROFILE" and key in os.environ:
         continue
     value = value.strip()
     if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
@@ -63,9 +63,9 @@ export DOOWON_DEV_PID_DIR="${DOOWON_DEV_PID_DIR:-$DOOWON_DEV_RUNTIME_DIR/pids}"
 export DOOWON_DEV_LOG_DIR="${DOOWON_DEV_LOG_DIR:-$DOOWON_DEV_RUNTIME_DIR/logs}"
 export DOOWON_DEV_NGINX_CONF_TEMPLATE_PATH="${DOOWON_DEV_NGINX_CONF_TEMPLATE_PATH:-$ROOT_DIR/ops/dev/nginx.conf.template}"
 export DOOWON_DEV_NGINX_CONF_PATH="${DOOWON_DEV_NGINX_CONF_PATH:-$DOOWON_DEV_RUNTIME_DIR/nginx.conf}"
-export AIDOO_ENV_PROFILE="${AIDOO_ENV_PROFILE:-local}"
+export AI_DO_ENV_PROFILE="${AI_DO_ENV_PROFILE:-local}"
 
-export DOOWON_POSTGRES_DSN="${DOOWON_POSTGRES_DSN:-postgresql+psycopg://aidoo_db:aidoo_db@127.0.0.1:${DOOWON_DEV_POSTGRES_PORT}/doowon_ai_portal}"
+export DOOWON_POSTGRES_DSN="${DOOWON_POSTGRES_DSN:-postgresql+psycopg://ai_do_db:ai_do_db@127.0.0.1:${DOOWON_DEV_POSTGRES_PORT}/ai_do_portal}"
 export DOOWON_REDIS_URL="$DOOWON_DEV_REDIS_URL"
 export DOOWON_API_COLLAB_REDIS_URL="$DOOWON_DEV_COLLAB_REDIS_URL"
 export DOOWON_WORKER_BROKER_URL="$DOOWON_DEV_WORKER_BROKER_URL"
@@ -73,14 +73,14 @@ export DOOWON_WORKER_RESULT_BACKEND="$DOOWON_DEV_WORKER_RESULT_BACKEND"
 export DOOWON_MINIO_ENDPOINT="${DOOWON_MINIO_ENDPOINT:-http://127.0.0.1:${DOOWON_DEV_MINIO_PORT}}"
 export DOOWON_MINIO_ACCESS_KEY="${DOOWON_MINIO_ACCESS_KEY:-minioadmin}"
 export DOOWON_MINIO_SECRET_KEY="${DOOWON_MINIO_SECRET_KEY:-minioadmin}"
-export DOOWON_MINIO_BUCKET="${DOOWON_MINIO_BUCKET:-aidoo-portal}"
+export DOOWON_MINIO_BUCKET="${DOOWON_MINIO_BUCKET:-ai-do-portal}"
 export DOOWON_LLM_HEALTHCHECK_ON_STARTUP="${DOOWON_LLM_HEALTHCHECK_ON_STARTUP:-0}"
 export DOOWON_LLM_REQUIRED="${DOOWON_LLM_REQUIRED:-0}"
 export DOOWON_API_ALLOW_DEV_ADMIN_LOGIN="${DOOWON_API_ALLOW_DEV_ADMIN_LOGIN:-1}"
 export DOOWON_IMAGE_API_KEY="${DOOWON_IMAGE_API_KEY:-${OPENAI_API_KEY:-}}"
 
 dev_docker() {
-  case "$AIDOO_ENV_PROFILE" in
+  case "$AI_DO_ENV_PROFILE" in
     local|"")
       docker "$@"
       ;;
@@ -94,11 +94,11 @@ dev_docker() {
       fi
       ;;
     prod|production)
-      echo "[dev] AIDOO_ENV_PROFILE=$AIDOO_ENV_PROFILE is not supported for dev docker commands" >&2
+      echo "[dev] AI_DO_ENV_PROFILE=$AI_DO_ENV_PROFILE is not supported for dev docker commands" >&2
       return 1
       ;;
     *)
-      echo "[dev] invalid AIDOO_ENV_PROFILE: $AIDOO_ENV_PROFILE (expected local, vm, prod)" >&2
+      echo "[dev] invalid AI_DO_ENV_PROFILE: $AI_DO_ENV_PROFILE (expected local, vm, prod)" >&2
       return 1
       ;;
   esac
@@ -109,7 +109,7 @@ dev_docker_available() {
 }
 
 dev_compose_file() {
-  case "$AIDOO_ENV_PROFILE" in
+  case "$AI_DO_ENV_PROFILE" in
     vm)
       printf '%s/compose.dev.host.yml\n' "$ROOT_DIR"
       ;;
@@ -142,7 +142,7 @@ dev_render_nginx_conf() {
   dev_ensure_runtime_dirs
   local upstream_host
   local listen_port
-  if [[ "$AIDOO_ENV_PROFILE" == "vm" ]]; then
+  if [[ "$AI_DO_ENV_PROFILE" == "vm" ]]; then
     upstream_host="127.0.0.1"
     listen_port="$DOOWON_DEV_NGINX_PORT"
   else

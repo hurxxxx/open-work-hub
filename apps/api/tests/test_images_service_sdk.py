@@ -3,9 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
-from aidoo_api.domains.images import service
-from aidoo_api.domains.images.template_catalog import BUILTIN_IMAGE_TEMPLATES
-from aidoo_api.domains.images.prompt import (
+from ai_do_api.domains.images import service
+from ai_do_api.domains.images.template_catalog import BUILTIN_IMAGE_TEMPLATES
+from ai_do_api.domains.images.prompt import (
     BRIEF_SYSTEM_PROMPT,
     build_direct_edit_prompt,
     build_agent_prompt,
@@ -67,7 +67,7 @@ def test_run_brief_agent_uses_agents_sdk_provider(monkeypatch) -> None:
     assert captured["input"] == "brief context"
     assert captured["max_turns"] == 10
     assert type(captured["run_config"].model_provider).__name__ == "OpenAIProvider"
-    assert captured["run_config"].workflow_name == "AIDOO Image Plan"
+    assert captured["run_config"].workflow_name == "AI-DO Image Plan"
 
 
 def test_image_plan_prompt_forbids_placeholder_tokens() -> None:

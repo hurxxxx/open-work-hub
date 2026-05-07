@@ -6,12 +6,12 @@ from typing import Any
 
 import pytest
 
-from aidoo_api.core.llm import LlmPoolConfig, LlmTaskContext, PolicyDecision, ResolvedLlmExecution
-from aidoo_api.core.principal import user_principal
-from aidoo_api.core.llm_adapters import StreamChunk
-from aidoo_api.domains.ai import agent as agent_module
-from aidoo_api.domains.ai.events import EnvelopeEncoder
-from aidoo_api.domains.ai.tool_runtime import ToolCallExecution
+from ai_do_api.core.llm import LlmPoolConfig, LlmTaskContext, PolicyDecision, ResolvedLlmExecution
+from ai_do_api.core.principal import user_principal
+from ai_do_api.core.llm_adapters import StreamChunk
+from ai_do_api.domains.ai import agent as agent_module
+from ai_do_api.domains.ai.events import EnvelopeEncoder
+from ai_do_api.domains.ai.tool_runtime import ToolCallExecution
 
 
 pytestmark = pytest.mark.anyio

@@ -5,16 +5,16 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from aidoo_api.core.db import get_session_factory
-from aidoo_api.core.principal import user_principal
-from aidoo_api.domains.auth.access import ensure_dev_login_seed_data, load_user_graph
-from aidoo_api.domains.auth.models import Workspace
-from aidoo_api.domains.docs import service as docs_service
-from aidoo_api.domains.meeting import service as meeting_service
-from aidoo_api.domains.pms import service as pms_service
-from aidoo_api.domains.pms.models import Issue, IssueActivityLog, IssueComment, Notification
-from aidoo_api.domains.planner import service as planner_service
-from aidoo_api.domains.planner.models import PlannerEvent
+from ai_do_api.core.db import get_session_factory
+from ai_do_api.core.principal import user_principal
+from ai_do_api.domains.auth.access import ensure_dev_login_seed_data, load_user_graph
+from ai_do_api.domains.auth.models import Workspace
+from ai_do_api.domains.docs import service as docs_service
+from ai_do_api.domains.meeting import service as meeting_service
+from ai_do_api.domains.pms import service as pms_service
+from ai_do_api.domains.pms.models import Issue, IssueActivityLog, IssueComment, Notification
+from ai_do_api.domains.planner import service as planner_service
+from ai_do_api.domains.planner.models import PlannerEvent
 
 
 def _dev_login(client: TestClient, account_key: str) -> dict:

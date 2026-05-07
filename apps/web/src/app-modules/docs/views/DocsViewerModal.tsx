@@ -15,7 +15,7 @@ import {
   CollaborativeBlockEditor,
   Dialog,
   type BlockContent,
-} from '@aidoo/ui';
+} from '@ai-do/ui';
 
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/platform/auth/auth-provider';

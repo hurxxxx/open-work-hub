@@ -9,7 +9,7 @@ import {
   LayoutDashboard,
   Loader2,
 } from 'lucide-react';
-import { DonutChartCard, Panel } from '@aidoo/ui';
+import { DonutChartCard, Panel } from '@ai-do/ui';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   getPmsDashboardSummary,

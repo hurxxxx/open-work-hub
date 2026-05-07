@@ -10,9 +10,9 @@
     "types": ["vite/client", "vitest"],
     "baseUrl": ".",
     "paths": {
-      "@aidoo/ui": ["../../packages/ui/src/index.ts"],
-      "@aidoo/ui/*": ["../../packages/ui/src/lib/*"],
-      "@aidoo/ui/styles.css": ["../../packages/ui/styles.css"],
+      "@ai-do/ui": ["../../packages/ui/src/index.ts"],
+      "@ai-do/ui/*": ["../../packages/ui/src/lib/*"],
+      "@ai-do/ui/styles.css": ["../../packages/ui/styles.css"],
       "@/src/*": ["src/*"]
     }
   },

@@ -28,7 +28,7 @@
   - saved public event `멤버 공개 이벤트`
   - event rendered on `2026-03-29 09:00`
 - Verified `MeetingCreateModal` availability flow:
-  - invited `Aidoo HQ Member`
+  - invited `AI-DO HQ Member`
   - changed meeting time to `2026-03-29 09:30-10:00`
   - inline conflict summary showed `멤버 공개 이벤트 · 09:00-10:00`
   - `스케줄 보기` modal opened and rendered attendee row + public event title

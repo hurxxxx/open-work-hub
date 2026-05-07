@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
-from aidoo_worker.tasks import images
+from ai_do_worker.tasks import images
 
 
 def test_run_agent_gives_illustrator_autonomous_web_and_image_tools(monkeypatch) -> None:

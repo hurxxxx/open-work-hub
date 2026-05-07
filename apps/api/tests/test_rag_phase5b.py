@@ -5,30 +5,30 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from aidoo_api.core.db import get_engine, get_session_factory
-from aidoo_api.core.principal import user_principal
-from aidoo_api.core.settings import get_settings
-from aidoo_api.domains.ai.registry import reset_ai_capability_registry
-from aidoo_api.domains.ai.router import _resolve_agent_tool_specs
-from aidoo_api.domains.auth.access import ensure_dev_login_seed_data, load_user_graph
-from aidoo_api.domains.auth.models import Workspace, WorkspaceAppEntitlement
-from aidoo_api.domains.docs import service as docs_service
-from aidoo_api.domains.rag import application as rag_application
-from aidoo_api.domains.rag.contracts import RagGroundedAnswer, RagGroundedCitation
-from aidoo_api.domains.rag.docs_projection import load_native_doc_projection
-from aidoo_api.domains.rag.models import RagSyncJob
-import aidoo_api.domains.rag.outbox as rag_outbox
-from aidoo_api.domains.rag.providers.fake import (
+from ai_do_api.core.db import get_engine, get_session_factory
+from ai_do_api.core.principal import user_principal
+from ai_do_api.core.settings import get_settings
+from ai_do_api.domains.ai.registry import reset_ai_capability_registry
+from ai_do_api.domains.ai.router import _resolve_agent_tool_specs
+from ai_do_api.domains.auth.access import ensure_dev_login_seed_data, load_user_graph
+from ai_do_api.domains.auth.models import Workspace, WorkspaceAppEntitlement
+from ai_do_api.domains.docs import service as docs_service
+from ai_do_api.domains.rag import application as rag_application
+from ai_do_api.domains.rag.contracts import RagGroundedAnswer, RagGroundedCitation
+from ai_do_api.domains.rag.docs_projection import load_native_doc_projection
+from ai_do_api.domains.rag.models import RagSyncJob
+import ai_do_api.domains.rag.outbox as rag_outbox
+from ai_do_api.domains.rag.providers.fake import (
     FakeEmbeddingClient,
     FakeRerankClient,
     FakeVectorIndexClient,
 )
-from aidoo_api.domains.rag.query_service import RagQueryService
-from aidoo_api.domains.rag.runtime import (
+from ai_do_api.domains.rag.query_service import RagQueryService
+from ai_do_api.domains.rag.runtime import (
     reset_rag_runtime_caches,
     resolve_default_collection_name,
 )
-from aidoo_api.domains.rag.service import RagService
+from ai_do_api.domains.rag.service import RagService
 
 
 @pytest.fixture(autouse=True)
@@ -67,7 +67,7 @@ def _stub_grounded_answer(monkeypatch) -> None:
         )
 
     monkeypatch.setattr(
-        "aidoo_api.domains.rag.grounded_answer.LlmGroundedAnswerSynthesizer.synthesize",
+        "ai_do_api.domains.rag.grounded_answer.LlmGroundedAnswerSynthesizer.synthesize",
         _fake_synthesize,
     )
 
@@ -164,7 +164,7 @@ def test_workspace_rag_query_route_returns_indexed_hits(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("AIDOO_RAG_ENABLED", "1")
+    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
     _reset_settings_and_registry()
     session, query_service = _seed_fake_query_service(client, "delivery-hub-admin")
     monkeypatch.setattr(
@@ -190,7 +190,7 @@ def test_workspace_rag_query_route_filters_out_foreign_workspace_hits(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("AIDOO_RAG_ENABLED", "1")
+    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
     _reset_settings_and_registry()
     delivery_session = _dev_login(client, "delivery-hub-admin")
     hq_session = _dev_login(client, "hq-admin")
@@ -270,7 +270,7 @@ def test_workspace_rag_sources_and_reindex_routes_work(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("AIDOO_RAG_ENABLED", "1")
+    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
     _reset_settings_and_registry()
     session = _dev_login(client, "delivery-hub-admin")
     with get_session_factory()() as db:
@@ -321,7 +321,7 @@ def test_rag_ai_manifest_and_tool_invoke_respect_feature_and_entitlements(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("AIDOO_RAG_ENABLED", "1")
+    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
     _reset_settings_and_registry()
     session, query_service = _seed_fake_query_service(client, "delivery-hub-admin")
     monkeypatch.setattr(
@@ -362,7 +362,7 @@ def test_workspace_rag_reindex_requires_admin(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("AIDOO_RAG_ENABLED", "1")
+    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
     _reset_settings_and_registry()
     session = _dev_login(client, "delivery-hub-member")
 
@@ -378,7 +378,7 @@ def test_agent_tool_specs_hide_rag_tools_without_search_intent(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("AIDOO_RAG_ENABLED", "1")
+    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
     _reset_settings_and_registry()
     session = _dev_login(client, "delivery-hub-admin")
 
@@ -422,7 +422,7 @@ def test_workspace_rag_reindex_enforces_cooldown(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("AIDOO_RAG_ENABLED", "1")
+    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
     _reset_settings_and_registry()
     session = _dev_login(client, "delivery-hub-admin")
     with get_session_factory()() as db:
@@ -457,7 +457,7 @@ def test_workspace_rag_query_validates_payload(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("AIDOO_RAG_ENABLED", "1")
+    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
     _reset_settings_and_registry()
     session = _dev_login(client, "delivery-hub-admin")
 
@@ -494,7 +494,7 @@ def test_workspace_rag_query_rejects_non_member(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("AIDOO_RAG_ENABLED", "1")
+    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
     _reset_settings_and_registry()
     session = _dev_login(client, "hq-member")
 
@@ -512,7 +512,7 @@ def test_rag_ai_manifest_hides_tools_when_no_searchable_apps_enabled(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("AIDOO_RAG_ENABLED", "1")
+    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
     _reset_settings_and_registry()
     session = _dev_login(client, "delivery-hub-admin")
     for app_id in ("docs", "meeting", "pms", "planner"):

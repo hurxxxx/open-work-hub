@@ -12,7 +12,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-import { Button, InlineNotice } from '@aidoo/ui';
+import { Button, InlineNotice } from '@ai-do/ui';
 
 import type { AuthUser } from '@/src/platform/auth/auth-api';
 import { i18n } from '@/src/platform/i18n';

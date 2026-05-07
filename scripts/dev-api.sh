@@ -27,4 +27,4 @@ if [[ "${DOOWON_API_AUTO_MIGRATE:-}" == "" ]]; then
 fi
 
 cd "$ROOT_DIR/apps/api"
-exec "$ROOT_DIR/apps/api/.venv/bin/python" -m uvicorn aidoo_api.main:app --app-dir src --host 127.0.0.1 --port "$PORT"
+exec "$ROOT_DIR/apps/api/.venv/bin/python" -m uvicorn ai_do_api.main:app --app-dir src --host 127.0.0.1 --port "$PORT"

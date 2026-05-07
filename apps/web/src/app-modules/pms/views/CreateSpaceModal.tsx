@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Layout, UserPlus, X } from 'lucide-react';
-import { Dialog, Button } from '@aidoo/ui';
+import { Dialog, Button } from '@ai-do/ui';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { hasWorkspaceMembership } from '@/src/platform/auth/auth-api';

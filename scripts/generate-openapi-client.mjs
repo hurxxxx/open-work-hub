@@ -8,7 +8,7 @@ import path from 'node:path';
 const repoRoot = process.cwd();
 const checkOnly = process.argv.includes('--check');
 const targetPath = path.join(repoRoot, 'apps/web/src/platform/api/openapi.generated.d.ts');
-const tempDir = mkdtempSync(path.join(tmpdir(), 'aidoo-openapi-'));
+const tempDir = mkdtempSync(path.join(tmpdir(), 'ai-do-openapi-'));
 const schemaPath = path.join(tempDir, 'openapi.json');
 const generatedPath = checkOnly ? path.join(tempDir, 'openapi.generated.d.ts') : targetPath;
 
@@ -32,12 +32,12 @@ try {
       [
         'import json, os',
         'from pathlib import Path',
-        'from aidoo_api.app import create_app',
-        'from aidoo_api.openapi_contract import assert_openapi_contract',
+        'from ai_do_api.app import create_app',
+        'from ai_do_api.openapi_contract import assert_openapi_contract',
         'app = create_app(initialize_runtime=False)',
         'schema = app.openapi()',
         'assert_openapi_contract(schema)',
-        'Path(os.environ["AIDOO_OPENAPI_OUTPUT"]).write_text(',
+        'Path(os.environ["AI_DO_OPENAPI_OUTPUT"]).write_text(',
         '    json.dumps(schema, ensure_ascii=False, indent=2) + "\\n",',
         '    encoding="utf-8",',
         ')',
@@ -47,7 +47,7 @@ try {
       cwd: path.join(repoRoot, 'apps/api'),
       env: {
         ...process.env,
-        AIDOO_OPENAPI_OUTPUT: schemaPath,
+        AI_DO_OPENAPI_OUTPUT: schemaPath,
         DOOWON_POSTGRES_DSN:
           process.env.DOOWON_POSTGRES_DSN
           ?? 'postgresql+psycopg://openapi:openapi@127.0.0.1:1/openapi',

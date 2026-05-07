@@ -1,6 +1,6 @@
 export const DEFAULT_LOCALE = 'ko-KR';
 export const SUPPORTED_LOCALES = ['ko-KR', 'en-US'] as const;
-export const LOCALE_STORAGE_KEY = 'aidoo:locale';
+export const LOCALE_STORAGE_KEY = 'ai-do:locale';
 
 export type AppLocale = (typeof SUPPORTED_LOCALES)[number];
 

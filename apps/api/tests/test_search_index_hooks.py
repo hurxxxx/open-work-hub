@@ -3,11 +3,11 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from aidoo_api.core.db import get_session_factory
-from aidoo_api.domains.pms.access_grants import grant_issue_access, revoke_issue_access
-from aidoo_api.domains.search import outbox as search_outbox
-from aidoo_api.domains.search.indexing import process_search_index_job
-from aidoo_api.domains.search.models import SearchIndexJob
+from ai_do_api.core.db import get_session_factory
+from ai_do_api.domains.pms.access_grants import grant_issue_access, revoke_issue_access
+from ai_do_api.domains.search import outbox as search_outbox
+from ai_do_api.domains.search.indexing import process_search_index_job
+from ai_do_api.domains.search.models import SearchIndexJob
 
 from test_meeting import (
     _auth_headers,
@@ -167,14 +167,14 @@ def test_doc_user_share_grant_and_revoke_refresh_search_acl_projection(
     owner = _create_user_with_workspaces(
         client,
         admin["token"],
-        email="search-doc-owner@aidoo.local",
+        email="search-doc-owner@ai-do.local",
         full_name="Search Doc Owner",
         workspace_keys=["docs"],
     )
     recipient = _create_user_with_workspaces(
         client,
         admin["token"],
-        email="search-doc-recipient@aidoo.local",
+        email="search-doc-recipient@ai-do.local",
         full_name="Search Doc Recipient",
         workspace_keys=["docs"],
     )
@@ -218,7 +218,7 @@ def test_meeting_attendee_add_and_remove_refresh_search_acl_projection(
     attendee = _create_user_with_workspaces(
         client,
         admin["token"],
-        email="search-meeting-attendee@aidoo.local",
+        email="search-meeting-attendee@ai-do.local",
         full_name="Search Meeting Attendee",
         workspace_keys=["meeting"],
     )
@@ -260,7 +260,7 @@ def test_meeting_delete_detaches_access_grant_foreign_keys_and_deletes_search_do
     attendee = _create_user_with_workspaces(
         client,
         admin["token"],
-        email="search-meeting-delete-attendee@aidoo.local",
+        email="search-meeting-delete-attendee@ai-do.local",
         full_name="Search Meeting Delete Attendee",
         workspace_keys=["meeting", "pms"],
     )
@@ -314,7 +314,7 @@ def test_pms_issue_user_access_grant_and_revoke_refresh_search_acl_projection(
     recipient = _create_user_with_workspaces(
         client,
         admin["token"],
-        email="search-pms-recipient@aidoo.local",
+        email="search-pms-recipient@ai-do.local",
         full_name="Search PMS Recipient",
         workspace_keys=["pms"],
     )

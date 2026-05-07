@@ -51,8 +51,8 @@ def test_auth_bootstrap_and_protected_search(client: TestClient) -> None:
     setup_response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "AIDOO Admin",
-            "email": "admin@aidoo.local",
+            "full_name": "AI-DO Admin",
+            "email": "admin@ai-do.local",
             "password": "supersecret123",
         },
     )
@@ -73,7 +73,7 @@ def test_auth_bootstrap_and_protected_search(client: TestClient) -> None:
         headers={"Authorization": f"Bearer {token}"},
     )
     assert me_response.status_code == 200
-    assert me_response.json()["email"] == "admin@aidoo.local"
+    assert me_response.json()["email"] == "admin@ai-do.local"
 
     search_response = client.post(
         "/api/v1/workspaces/hq/search/documents",
@@ -102,8 +102,8 @@ def test_auth_login_success_and_invalid_password(client: TestClient) -> None:
     setup_response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "AIDOO Admin",
-            "email": "admin@aidoo.local",
+            "full_name": "AI-DO Admin",
+            "email": "admin@ai-do.local",
             "password": "supersecret123",
         },
     )
@@ -112,19 +112,19 @@ def test_auth_login_success_and_invalid_password(client: TestClient) -> None:
     login_response = client.post(
         "/api/v1/auth/login",
         json={
-            "email": "ADMIN@AIDOO.LOCAL",
+            "email": "ADMIN@AI-DO.LOCAL",
             "password": "supersecret123",
         },
     )
     assert login_response.status_code == 200
-    assert login_response.json()["user"]["email"] == "admin@aidoo.local"
+    assert login_response.json()["user"]["email"] == "admin@ai-do.local"
     assert "platform_admin" in login_response.json()["user"]["system_roles"]
     assert login_response.json()["token"]
 
     invalid_password_response = client.post(
         "/api/v1/auth/login",
         json={
-            "email": "admin@aidoo.local",
+            "email": "admin@ai-do.local",
             "password": "wrongpass123",
         },
     )
@@ -135,8 +135,8 @@ def test_auth_error_messages_are_localized(client: TestClient) -> None:
     setup_response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "AIDOO Admin",
-            "email": "admin@aidoo.local",
+            "full_name": "AI-DO Admin",
+            "email": "admin@ai-do.local",
             "password": "supersecret123",
         },
     )
@@ -146,20 +146,20 @@ def test_auth_error_messages_are_localized(client: TestClient) -> None:
         "/api/v1/auth/login",
         headers={"Accept-Language": "en-US"},
         json={
-            "email": "admin@aidoo.local",
+            "email": "admin@ai-do.local",
             "password": "wrongpass123",
         },
     )
     assert english_response.status_code == 401
     assert english_response.json()["detail"] == "Email or password is invalid."
     assert english_response.json()["code"] == "auth.invalid_credentials"
-    assert english_response.headers["X-Aidoo-Error-Code"] == "auth.invalid_credentials"
+    assert english_response.headers["X-AI-DO-Error-Code"] == "auth.invalid_credentials"
 
     korean_response = client.post(
         "/api/v1/auth/login",
         headers={"Accept-Language": "ko-KR"},
         json={
-            "email": "admin@aidoo.local",
+            "email": "admin@ai-do.local",
             "password": "wrongpass123",
         },
     )
@@ -171,7 +171,7 @@ def test_auth_error_messages_are_localized(client: TestClient) -> None:
         "/api/v1/auth/me",
         headers={
             "Accept-Language": "en-US",
-            "X-Aidoo-Locale": "ko-KR",
+            "X-AI-DO-Locale": "ko-KR",
         },
     )
     assert explicit_locale_response.status_code == 401
@@ -200,7 +200,7 @@ def test_generic_request_validation_error_is_localized(client: TestClient) -> No
     response = client.post(
         "/api/v1/auth/login",
         headers={"Accept-Language": "ko-KR"},
-        json={"email": "admin@aidoo.local"},
+        json={"email": "admin@ai-do.local"},
     )
 
     assert response.status_code == 422, response.text
@@ -222,7 +222,7 @@ def test_generic_request_validation_error_preserves_dynamic_constraints(
     response = client.post(
         "/api/v1/auth/login",
         headers={"Accept-Language": "en-US"},
-        json={"email": "admin@aidoo.local", "password": "short"},
+        json={"email": "admin@ai-do.local", "password": "short"},
     )
 
     assert response.status_code == 422, response.text
@@ -238,8 +238,8 @@ def test_dev_admin_login_shortcut(client: TestClient) -> None:
     setup_response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "AIDOO Admin",
-            "email": "admin@aidoo.local",
+            "full_name": "AI-DO Admin",
+            "email": "admin@ai-do.local",
             "password": "supersecret123",
         },
     )
@@ -248,19 +248,19 @@ def test_dev_admin_login_shortcut(client: TestClient) -> None:
     dev_login_response = client.post("/api/v1/auth/dev-admin-login")
     assert dev_login_response.status_code == 200
     payload = dev_login_response.json()
-    assert payload["user"]["email"] == "admin@aidoo.local"
+    assert payload["user"]["email"] == "admin@ai-do.local"
     assert "platform_admin" in payload["user"]["system_roles"]
     assert payload["token"]
 
 
 def test_dev_admin_login_shortcut_skips_non_admin_email_match(client: TestClient) -> None:
     _create_direct_user(
-        email="admin@aidoo.local",
+        email="admin@ai-do.local",
         full_name="Plain Admin Email",
         is_admin=False,
     )
     _create_direct_user(
-        email="platform-owner@aidoo.local",
+        email="platform-owner@ai-do.local",
         full_name="Platform Owner",
         is_admin=True,
     )
@@ -268,7 +268,7 @@ def test_dev_admin_login_shortcut_skips_non_admin_email_match(client: TestClient
     dev_login_response = client.post("/api/v1/auth/dev-admin-login")
     assert dev_login_response.status_code == 200
     payload = dev_login_response.json()
-    assert payload["user"]["email"] == "platform-owner@aidoo.local"
+    assert payload["user"]["email"] == "platform-owner@ai-do.local"
     assert "platform_admin" in payload["user"]["system_roles"]
 
 
@@ -289,7 +289,7 @@ def test_seeded_dev_login_accounts_are_listed_and_can_log_in(client: TestClient)
     )
     assert platform_admin_login_response.status_code == 200
     platform_admin_payload = platform_admin_login_response.json()
-    assert platform_admin_payload["user"]["email"] == "platform-admin@aidoo.local"
+    assert platform_admin_payload["user"]["email"] == "platform-admin@ai-do.local"
     assert "platform_admin" in platform_admin_payload["user"]["system_roles"]
     assert platform_admin_payload["user"]["workspaces"] == []
     assert "app_access" not in platform_admin_payload["user"]
@@ -300,7 +300,7 @@ def test_seeded_dev_login_accounts_are_listed_and_can_log_in(client: TestClient)
     )
     assert dev_login_response.status_code == 200
     login_payload = dev_login_response.json()
-    assert login_payload["user"]["email"] == "delivery-hub-member@aidoo.local"
+    assert login_payload["user"]["email"] == "delivery-hub-member@ai-do.local"
     assert [item["slug"] for item in login_payload["user"]["workspaces"]] == ["delivery-hub"]
     assert any(item["role"] == "member" for item in login_payload["user"]["workspaces"])
 
@@ -318,8 +318,8 @@ def test_dev_login_creates_missing_dev_accounts_on_demand(client: TestClient) ->
     setup_response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "AIDOO Admin",
-            "email": "admin@aidoo.local",
+            "full_name": "AI-DO Admin",
+            "email": "admin@ai-do.local",
             "password": "supersecret123",
         },
     )
@@ -339,7 +339,7 @@ def test_dev_login_creates_missing_dev_accounts_on_demand(client: TestClient) ->
         json={"account_key": "platform-admin"},
     )
     assert platform_admin_login_response.status_code == 200
-    assert platform_admin_login_response.json()["user"]["email"] == "platform-admin@aidoo.local"
+    assert platform_admin_login_response.json()["user"]["email"] == "platform-admin@ai-do.local"
     assert "platform_admin" in platform_admin_login_response.json()["user"]["system_roles"]
 
     # After seeding, bootstrap-status surfaces the full dev-login account
@@ -357,7 +357,7 @@ def test_dev_login_shortcut_allows_configured_external_host(monkeypatch) -> None
 
     from starlette.requests import Request
 
-    from aidoo_api.domains.auth import router as auth_router
+    from ai_do_api.domains.auth import router as auth_router
 
     def request_for(host: str, *, forwarded_host: str | None = None) -> Request:
         headers = [(b"host", host.encode("ascii"))]
@@ -465,7 +465,7 @@ def test_auth_preferences_password_and_sessions(client: TestClient) -> None:
     login_response = client.post(
         "/api/v1/auth/login",
         json={
-            "email": "admin@aidoo.local",
+            "email": "admin@ai-do.local",
             "password": "supersecret123",
         },
     )
@@ -485,7 +485,7 @@ def test_auth_preferences_password_and_sessions(client: TestClient) -> None:
     old_login_response = client.post(
         "/api/v1/auth/login",
         json={
-            "email": "admin@aidoo.local",
+            "email": "admin@ai-do.local",
             "password": "supersecret123",
         },
     )
@@ -494,7 +494,7 @@ def test_auth_preferences_password_and_sessions(client: TestClient) -> None:
     new_login_response = client.post(
         "/api/v1/auth/login",
         json={
-            "email": "admin@aidoo.local",
+            "email": "admin@ai-do.local",
             "password": "newsupersecret123",
         },
     )
@@ -505,8 +505,8 @@ def test_documents_search_filters_and_grounded_answer(client: TestClient) -> Non
     setup_response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "AIDOO Admin",
-            "email": "admin@aidoo.local",
+            "full_name": "AI-DO Admin",
+            "email": "admin@ai-do.local",
             "password": "supersecret123",
         },
     )
@@ -538,8 +538,8 @@ def _bootstrap_admin(client: TestClient) -> str:
     setup_response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "AIDOO Admin",
-            "email": "admin@aidoo.local",
+            "full_name": "AI-DO Admin",
+            "email": "admin@ai-do.local",
             "password": "supersecret123",
         },
     )
@@ -567,15 +567,15 @@ def _create_direct_user(
 ) -> tuple[str, str]:
     from sqlalchemy import select
 
-    from aidoo_api.core.db import get_session_factory
-    from aidoo_api.domains.auth.models import (
+    from ai_do_api.core.db import get_session_factory
+    from ai_do_api.domains.auth.models import (
         AuthSession,
         User,
         UserSystemRole,
         Workspace,
         WorkspaceUserBinding,
     )
-    from aidoo_api.domains.auth.security import (
+    from ai_do_api.domains.auth.security import (
         hash_password,
         issue_session_token,
         new_id,
@@ -636,8 +636,8 @@ def _create_direct_user(
 
 
 def _seed_dev_login_accounts() -> None:
-    from aidoo_api.core.db import get_session_factory
-    from aidoo_api.domains.auth.access import ensure_dev_login_seed_data
+    from ai_do_api.core.db import get_session_factory
+    from ai_do_api.domains.auth.access import ensure_dev_login_seed_data
 
     db = get_session_factory()()
     try:
@@ -713,8 +713,8 @@ def test_admin_identity_management_endpoints(client: TestClient) -> None:
         "/api/v1/admin/users",
         headers=headers,
         json={
-            "email": "member@aidoo.local",
-            "full_name": "AIDOO Member",
+            "email": "member@ai-do.local",
+            "full_name": "AI-DO Member",
             "display_name": "Member",
             "primary_org_unit_id": root_org_unit_id,
             "group_ids": [group_id],
@@ -723,7 +723,7 @@ def test_admin_identity_management_endpoints(client: TestClient) -> None:
     assert create_user_response.status_code == 201
     created_user = create_user_response.json()["user"]
     temporary_password = create_user_response.json()["temporary_password"]
-    assert created_user["email"] == "member@aidoo.local"
+    assert created_user["email"] == "member@ai-do.local"
     assert created_user["must_change_password"] is True
     assert temporary_password
 
@@ -759,14 +759,14 @@ def test_admin_identity_management_endpoints(client: TestClient) -> None:
         f"/api/v1/admin/users/{created_user['id']}",
         headers=headers,
         json={
-            "full_name": "AIDOO Member Updated",
+            "full_name": "AI-DO Member Updated",
             "display_name": "Updated Member",
             "status": "active",
             "group_ids": [group_id],
         },
     )
     assert update_user_response.status_code == 200
-    assert update_user_response.json()["full_name"] == "AIDOO Member Updated"
+    assert update_user_response.json()["full_name"] == "AI-DO Member Updated"
     assert update_user_response.json()["display_name"] == "Updated Member"
     assert update_user_response.json()["group_ids"] == [group_id]
 
@@ -774,7 +774,7 @@ def test_admin_identity_management_endpoints(client: TestClient) -> None:
         "/api/v1/admin/users",
         headers=headers,
         json={
-            "email": "delete-me@aidoo.local",
+            "email": "delete-me@ai-do.local",
             "full_name": "Delete Me",
             "display_name": "Delete Me",
             "primary_org_unit_id": root_org_unit_id,
@@ -842,7 +842,7 @@ def test_admin_identity_management_endpoints(client: TestClient) -> None:
         json={"user_ids": [created_user["id"]]},
     )
     assert team_members_response.status_code == 200
-    assert team_members_response.json()[0]["email"] == "member@aidoo.local"
+    assert team_members_response.json()[0]["email"] == "member@ai-do.local"
 
     audit_logs_response = client.get("/api/v1/admin/audit-logs", headers=headers)
     assert audit_logs_response.status_code == 200
@@ -891,7 +891,7 @@ def test_workspace_scoped_team_management_requires_workspace_admin_role(client: 
         "/api/v1/admin/users",
         headers=admin_headers,
         json={
-            "email": "scoped-manager@aidoo.local",
+            "email": "scoped-manager@ai-do.local",
             "full_name": "Scoped Manager",
             "group_ids": [permission_group_id],
         },
@@ -967,7 +967,7 @@ def test_non_workspace_routes_require_workspace_membership(client: TestClient) -
         "/api/v1/admin/users",
         headers=admin_headers,
         json={
-            "email": "docs-user@aidoo.local",
+            "email": "docs-user@ai-do.local",
             "full_name": "Docs User",
         },
     )
@@ -1069,7 +1069,7 @@ def test_pms_task_list_workflow_and_dashboard(client: TestClient) -> None:
         headers={"Authorization": f"Bearer {token}"},
         json={
             "key": "AID",
-            "name": "AIDOO PMS",
+            "name": "AI-DO PMS",
             "description": "Execution management",
         },
     )
@@ -1210,7 +1210,7 @@ def test_pms_task_list_workflow_and_dashboard(client: TestClient) -> None:
 def test_pms_membership_permissions(client: TestClient) -> None:
     admin_token = _bootstrap_admin(client)
     outsider_id, outsider_token = _create_direct_user(
-        email="member@aidoo.local",
+        email="member@ai-do.local",
         full_name="List Member",
         workspace_keys=("hq",),
     )
@@ -1253,7 +1253,7 @@ def test_pms_membership_permissions(client: TestClient) -> None:
 def test_pms_space_members_still_need_workspace_membership(client: TestClient) -> None:
     admin_token = _bootstrap_admin(client)
     member_id, member_token = _create_direct_user(
-        email="space-only@aidoo.local",
+        email="space-only@ai-do.local",
         full_name="Space Only Member",
     )
 
@@ -1288,7 +1288,7 @@ def test_pms_space_members_still_need_workspace_membership(client: TestClient) -
 def test_pms_space_creator_becomes_owner_and_last_manager_is_protected(client: TestClient) -> None:
     _bootstrap_admin(client)
     creator_id, creator_token = _create_direct_user(
-        email="space-creator@aidoo.local",
+        email="space-creator@ai-do.local",
         full_name="Space Creator",
         workspace_keys=("hq",),
     )
@@ -1333,7 +1333,7 @@ def test_platform_admin_without_workspace_membership_cannot_view_pms_spaces(clie
     assert task_list_response.status_code == 201
 
     _, platform_admin_token = _create_direct_user(
-        email="platform-admin@aidoo.local",
+        email="platform-admin@ai-do.local",
         full_name="Platform Admin",
         system_roles=("platform_admin",),
     )
@@ -1423,7 +1423,7 @@ def test_group_workspace_templates_grant_and_revoke_effective_workspace_access(
         "/api/v1/admin/users",
         headers=admin_headers,
         json={
-            "email": "group-operator@aidoo.local",
+            "email": "group-operator@ai-do.local",
             "full_name": "Group Operator",
         },
     )

@@ -8,7 +8,7 @@ import {
   Plus,
   MoreHorizontal
 } from 'lucide-react';
-import { BlockEditor } from '@aidoo/ui';
+import { BlockEditor } from '@ai-do/ui';
 import { useTranslation } from 'react-i18next';
 import { useMediaUpload } from '@/src/platform/media/use-media-upload';
 import { cn } from '@/src/lib/utils';

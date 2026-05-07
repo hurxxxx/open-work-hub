@@ -11,7 +11,7 @@ import {
   Tabs,
   TabsList,
   TabsTrigger,
-} from '@aidoo/ui';
+} from '@ai-do/ui';
 
 import {
   createAdminUser,
@@ -964,7 +964,7 @@ function PeopleSection({ token }: { token: string }) {
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = 'aidoo-people.csv';
+      anchor.download = 'ai-do-people.csv';
       anchor.click();
       URL.revokeObjectURL(url);
     } catch (caughtError) {

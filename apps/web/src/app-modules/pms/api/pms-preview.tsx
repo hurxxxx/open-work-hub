@@ -1,4 +1,4 @@
-import { MetricInline, Panel, StatusBadge } from '@aidoo/ui';
+import { MetricInline, Panel, StatusBadge } from '@ai-do/ui';
 import { useTranslation } from 'react-i18next';
 
 const pmsMetrics = [

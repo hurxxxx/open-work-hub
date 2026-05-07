@@ -201,7 +201,7 @@ export function AppBar({
     ? t('shell:apps.settings')
     : activeWorkspaceApp?.title
       ?? t(`shell:apps.${activeAppId}`, {
-        defaultValue: appBarItemById.get(activeAppId as (typeof APP_BAR_ITEMS)[number]['id'])?.title ?? 'AIDOO',
+        defaultValue: appBarItemById.get(activeAppId as (typeof APP_BAR_ITEMS)[number]['id'])?.title ?? 'AI-DO',
       });
   const mobileTitle = (
     <>

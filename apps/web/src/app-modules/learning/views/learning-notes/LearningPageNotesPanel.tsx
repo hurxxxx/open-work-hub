@@ -13,7 +13,7 @@ import {
   Pencil,
   X,
 } from 'lucide-react';
-import { BlockEditor, BlockViewer, type BlockContent } from '@aidoo/ui';
+import { BlockEditor, BlockViewer, type BlockContent } from '@ai-do/ui';
 import { useTranslation } from 'react-i18next';
 
 import { formatRelativeTime, normalizeTimeZone } from '@/src/platform/time/time-utils';

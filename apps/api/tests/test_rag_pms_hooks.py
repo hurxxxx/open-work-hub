@@ -6,21 +6,21 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from aidoo_api.core.db import get_session_factory
-from aidoo_api.domains.auth.access import ensure_dev_login_seed_data
-from aidoo_api.domains.auth.models import Team, User, Workspace
-from aidoo_api.domains.meeting.models import Meeting
-from aidoo_api.domains.pms import rag_sync as pms_rag_sync
-from aidoo_api.domains.pms.access_grants import (
+from ai_do_api.core.db import get_session_factory
+from ai_do_api.domains.auth.access import ensure_dev_login_seed_data
+from ai_do_api.domains.auth.models import Team, User, Workspace
+from ai_do_api.domains.meeting.models import Meeting
+from ai_do_api.domains.pms import rag_sync as pms_rag_sync
+from ai_do_api.domains.pms.access_grants import (
     bump_grant_expiry_for_meeting,
     grant_issue_access,
     revoke_grants_for_issue_attachment,
     revoke_grants_for_meeting,
     revoke_grants_for_meeting_attendee,
 )
-from aidoo_api.domains.pms.models import Issue, IssueUserAccess, TaskList
-from aidoo_api.domains.rag.models import RagSyncJob, RagVisibilityRecomputeJob
-from aidoo_api.domains.rag.pms_projection import PMS_ISSUE_RESOURCE_TYPE
+from ai_do_api.domains.pms.models import Issue, IssueUserAccess, TaskList
+from ai_do_api.domains.rag.models import RagSyncJob, RagVisibilityRecomputeJob
+from ai_do_api.domains.rag.pms_projection import PMS_ISSUE_RESOURCE_TYPE
 
 
 def _dev_login(client: TestClient, account_key: str) -> dict:
@@ -407,7 +407,7 @@ def test_meeting_issue_acl_changes_enqueue_rag_visibility_recompute_jobs(
     attendee = _create_user_with_workspaces(
         client,
         admin_token,
-        email="meeting-rag-issue-reader@aidoo.local",
+        email="meeting-rag-issue-reader@ai-do.local",
         full_name="Meeting Rag Issue Reader",
         workspace_keys=["meeting", "pms"],
     )
@@ -472,14 +472,14 @@ def test_pms_access_grant_helpers_enqueue_expected_job_types(
         )
         reporter = User(
             id="rag-pms-owner",
-            email="rag-pms-owner@aidoo.local",
+            email="rag-pms-owner@ai-do.local",
             full_name="RAG PMS Owner",
             password_hash="hash",
             status="active",
         )
         attendee = User(
             id="rag-pms-attendee",
-            email="rag-pms-attendee@aidoo.local",
+            email="rag-pms-attendee@ai-do.local",
             full_name="RAG PMS Attendee",
             password_hash="hash",
             status="active",

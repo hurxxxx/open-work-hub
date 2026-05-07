@@ -71,7 +71,7 @@ Celery 워커: 1234 작업 처리 → 결과 저장
 # apps/api/src/.../tasks.py
 from celery import Celery
 
-app = Celery("aidoo", broker="redis://redis:6379/0", backend="redis://redis:6379/1")
+app = Celery("ai-do", broker="redis://redis:6379/0", backend="redis://redis:6379/1")
 
 @app.task
 def send_welcome_email(user_id: int):
@@ -199,7 +199,7 @@ def sync_with_openai(self, prompt: str):
 - **비동기(async)** (파이썬 문법): 한 프로세스 안에서 I/O를 기다리는 동안 다른 일을 하는 **동시성**. 여전히 같은 요청 안.
 - **백그라운드 작업(Celery)**: 요청과 **분리된 프로세스**에서 나중에 돌리는 방식.
 
-이 세 가지는 다른 층위입니다. AIDOO는 FastAPI의 `async` + Celery의 백그라운드를 같이 씁니다.
+이 세 가지는 다른 층위입니다. AI-DO는 FastAPI의 `async` + Celery의 백그라운드를 같이 씁니다.
 
 ---
 
@@ -225,12 +225,12 @@ services:
   api:
     ...               # FastAPI
   worker:
-    command: celery -A aidoo_api worker --loglevel=info
+    command: celery -A ai_do_api worker --loglevel=info
   beat:
-    command: celery -A aidoo_api beat --loglevel=info
+    command: celery -A ai_do_api beat --loglevel=info
 ```
 
-워커 코드는 `apps/worker` 아래에 위치하며, API와 같은 가상환경·의존성을 공유하되 실행 엔트리포인트만 다릅니다. 태스크 정의 자체는 `apps/api/src/aidoo_api/tasks/` 같은 폴더에 도메인별로 나뉘어 있습니다.
+워커 코드는 `apps/worker` 아래에 위치하며, API와 같은 가상환경·의존성을 공유하되 실행 엔트리포인트만 다릅니다. 태스크 정의 자체는 `apps/api/src/ai_do_api/tasks/` 같은 폴더에 도메인별로 나뉘어 있습니다.
 
 ### 8.1 🏢 업무 시나리오
 

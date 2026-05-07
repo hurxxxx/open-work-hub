@@ -69,7 +69,7 @@ export interface UseChatStreamApi {
   upsertPendingApproval: (approval: PendingApproval) => void;
 }
 
-const AI_STREAM_ENABLED_STORAGE_KEY = 'aidoo.ai.streamEnabled';
+const AI_STREAM_ENABLED_STORAGE_KEY = 'ai-do.ai.streamEnabled';
 
 const INITIAL_STATE: ChatStreamState = {
   contentBuffer: '',

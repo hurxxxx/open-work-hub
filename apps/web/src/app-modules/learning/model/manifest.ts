@@ -40,7 +40,7 @@ export const LEARNING_COURSES: LearningCourse[] = [
     slug: VCF,
     title: '바이브 코딩 입문',
     description:
-      '소프트웨어·프로그래밍 기본 개념부터 AIDOO 스택, 실전 바이브 코딩 워크플로까지. 전 구성원 공용 온보딩 트랙입니다.',
+      '소프트웨어·프로그래밍 기본 개념부터 AI-DO 스택, 실전 바이브 코딩 워크플로까지. 전 구성원 공용 온보딩 트랙입니다.',
     parts: [
       {
         slug: 'intro',
@@ -76,7 +76,7 @@ export const LEARNING_COURSES: LearningCourse[] = [
       },
       {
         slug: 'stack',
-        title: 'AIDOO 기술 스택',
+        title: 'AI-DO 기술 스택',
         lessons: [
           { id: 'vcf-020-system-overview', slug: '20-system-overview', title: '시스템 조감도', file: `${VCF}/20-시스템-조감도.md` },
           { id: 'vcf-021-monorepo', slug: '21-monorepo', title: '모노레포 · Nx · pnpm', file: `${VCF}/21-모노레포-Nx-pnpm.md` },

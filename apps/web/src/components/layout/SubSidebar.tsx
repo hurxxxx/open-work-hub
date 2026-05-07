@@ -94,7 +94,7 @@ export const SubSidebar = ({
   const SIDEBAR_DEFAULT_WIDTH = 240;
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     if (typeof window === 'undefined') return SIDEBAR_DEFAULT_WIDTH;
-    const saved = window.localStorage.getItem('aidoo:sub-sidebar-width');
+    const saved = window.localStorage.getItem('ai-do:sub-sidebar-width');
     const parsed = saved ? parseInt(saved, 10) : NaN;
     if (
       Number.isFinite(parsed) &&
@@ -108,13 +108,13 @@ export const SubSidebar = ({
   const [isResizing, setIsResizing] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
-    return window.localStorage.getItem('aidoo:sub-sidebar-collapsed') === '1';
+    return window.localStorage.getItem('ai-do:sub-sidebar-collapsed') === '1';
   });
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     window.localStorage.setItem(
-      'aidoo:sub-sidebar-collapsed',
+      'ai-do:sub-sidebar-collapsed',
       isCollapsed ? '1' : '0',
     );
   }, [isCollapsed]);
@@ -147,7 +147,7 @@ export const SubSidebar = ({
   useEffect(() => {
     if (typeof window === 'undefined') return;
     window.localStorage.setItem(
-      'aidoo:sub-sidebar-width',
+      'ai-do:sub-sidebar-width',
       String(sidebarWidth),
     );
   }, [sidebarWidth]);

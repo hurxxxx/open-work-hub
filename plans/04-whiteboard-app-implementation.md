@@ -103,24 +103,24 @@ Phase 1에서는 Excalidraw 빌트인 AI 기능은 비활성화한다.
 ### PR 1 — Backend whiteboard 도메인 skeleton + 모델
 
 **파일**
-- `apps/api/src/aidoo_api/domains/whiteboard/__init__.py` (신규)
-- `apps/api/src/aidoo_api/domains/whiteboard/models.py` (신규)
+- `apps/api/src/ai_do_api/domains/whiteboard/__init__.py` (신규)
+- `apps/api/src/ai_do_api/domains/whiteboard/models.py` (신규)
   - `Whiteboard` (id, workspace_id, owner_id, title, source_app/kind/ref, generation_kind, scene JSON, created/updated/trashed_at)
   - `WhiteboardContainer` (NativeDocContainer mirror)
   - `WhiteboardUserShare`, `WhiteboardLinkShare`
   - `WhiteboardCollabDocument`
   - `WhiteboardUserItemPref`
-- `apps/api/src/aidoo_api/domains/whiteboard/service.py` (신규) — CRUD + container link
-- `apps/api/src/aidoo_api/domains/whiteboard/router.py` (신규)
+- `apps/api/src/ai_do_api/domains/whiteboard/service.py` (신규) — CRUD + container link
+- `apps/api/src/ai_do_api/domains/whiteboard/router.py` (신규)
   - `POST /api/whiteboards` — 생성 (workspace_id, title, container 옵션)
   - `GET /api/whiteboards/{id}` — 조회 (scene JSON 포함)
   - `PATCH /api/whiteboards/{id}` — 메타/scene 업데이트
   - `DELETE /api/whiteboards/{id}` — trash
   - `GET /api/whiteboards?container_app=&container_type=&container_id=` — 컨테이너별 목록
-- `apps/api/src/aidoo_api/domains/whiteboard/access_grants.py` (신규) — docs 패턴 mirror
-- `apps/api/src/aidoo_api/domains/whiteboard/registry.py` — app shell registration
+- `apps/api/src/ai_do_api/domains/whiteboard/access_grants.py` (신규) — docs 패턴 mirror
+- `apps/api/src/ai_do_api/domains/whiteboard/registry.py` — app shell registration
 - `apps/api/alembic/versions/<rev>_add_whiteboard_domain.py` (신규) — additive 마이그레이션
-- `apps/api/src/aidoo_api/main.py` 또는 router aggregator — `whiteboard_router` 등록
+- `apps/api/src/ai_do_api/main.py` 또는 router aggregator — `whiteboard_router` 등록
 - `apps/api/tests/test_whiteboard_crud.py` (신규)
 - `apps/api/tests/test_whiteboard_container_link.py` (신규)
 - `apps/api/tests/test_whiteboard_access.py` (신규)
@@ -159,7 +159,7 @@ Phase 1에서는 Excalidraw 빌트인 AI 기능은 비활성화한다.
 ### PR 3 — PMS Whiteboard 탭 통합
 
 **파일**
-- `apps/api/src/aidoo_api/domains/pms/router.py` 또는 service — 태스크/워크스페이스 컨테이너의 화이트보드 카운트/목록 endpoint 추가 (또는 기존 컨테이너 children API에 `whiteboard` 카드 타입 추가)
+- `apps/api/src/ai_do_api/domains/pms/router.py` 또는 service — 태스크/워크스페이스 컨테이너의 화이트보드 카운트/목록 endpoint 추가 (또는 기존 컨테이너 children API에 `whiteboard` 카드 타입 추가)
 - `apps/web/src/domains/pms/` 내 PMS 상세 페이지 — "Whiteboard" 탭 추가, `WhiteboardList`를 `container_app="pms"` 필터로 임베드
 - `apps/web/src/domains/pms/` 내 "Docs" 탭 컴포넌트와 시각적 패리티 유지 (탭 헤더, 빈 상태, 생성 CTA)
 - `apps/web/e2e/pms-whiteboard-tab.spec.ts` (신규) — PMS 태스크에서 Whiteboard 탭 → 화이트보드 생성 → 화이트보드 열기
@@ -172,9 +172,9 @@ Phase 1에서는 Excalidraw 빌트인 AI 기능은 비활성화한다.
 ### PR 4 — Realtime collab (Yjs)
 
 **파일**
-- `apps/api/src/aidoo_api/domains/whiteboard/collab.py` (신규) — Yjs WebSocket 라우팅 (docs/collab.py 패턴 mirror)
-- `apps/api/src/aidoo_api/domains/whiteboard/collab_codec.py` (신규) — Excalidraw scene ↔ Yjs doc 변환
-- `apps/api/src/aidoo_api/domains/whiteboard/router.py` — `GET /api/whiteboards/{id}/collab` WebSocket 핸들러 등록
+- `apps/api/src/ai_do_api/domains/whiteboard/collab.py` (신규) — Yjs WebSocket 라우팅 (docs/collab.py 패턴 mirror)
+- `apps/api/src/ai_do_api/domains/whiteboard/collab_codec.py` (신규) — Excalidraw scene ↔ Yjs doc 변환
+- `apps/api/src/ai_do_api/domains/whiteboard/router.py` — `GET /api/whiteboards/{id}/collab` WebSocket 핸들러 등록
 - `apps/web/src/domains/whiteboard/components/WhiteboardView.tsx` — Yjs provider + Excalidraw 바인딩
 - `apps/web/src/domains/whiteboard/lib/yjs-binding.ts` (신규) — Excalidraw `onChange` ↔ Y.Map 동기화
 - `apps/api/tests/test_whiteboard_collab.py` (신규)
@@ -187,7 +187,7 @@ Phase 1에서는 Excalidraw 빌트인 AI 기능은 비활성화한다.
 ### PR 5 — Sharing (user/link shares) + 권한
 
 **파일**
-- `apps/api/src/aidoo_api/domains/whiteboard/router.py` — share 엔드포인트
+- `apps/api/src/ai_do_api/domains/whiteboard/router.py` — share 엔드포인트
   - `POST /api/whiteboards/{id}/shares/users`
   - `POST /api/whiteboards/{id}/shares/link`
   - `GET /api/whiteboards/shared/{token}` — 공개 링크 view
@@ -202,8 +202,8 @@ Phase 1에서는 Excalidraw 빌트인 AI 기능은 비활성화한다.
 ### PR 6 — RAG sync + export + item prefs
 
 **파일**
-- `apps/api/src/aidoo_api/domains/whiteboard/rag_sync.py` (신규) — text element 추출 → RAG 인덱싱 (docs/rag_sync.py mirror)
-- `apps/api/src/aidoo_api/domains/whiteboard/router.py` — `GET /api/whiteboards/{id}/export?format=png|svg` (서버 사이드는 클라이언트가 보낸 export 결과를 media에 저장)
+- `apps/api/src/ai_do_api/domains/whiteboard/rag_sync.py` (신규) — text element 추출 → RAG 인덱싱 (docs/rag_sync.py mirror)
+- `apps/api/src/ai_do_api/domains/whiteboard/router.py` — `GET /api/whiteboards/{id}/export?format=png|svg` (서버 사이드는 클라이언트가 보낸 export 결과를 media에 저장)
 - `apps/web/src/domains/whiteboard/components/WhiteboardView.tsx` — favorite, last_viewed 추적
 - `apps/api/tests/test_whiteboard_rag_sync.py` (신규)
 
@@ -215,7 +215,7 @@ Phase 1에서는 Excalidraw 빌트인 AI 기능은 비활성화한다.
 
 ### 단위·통합 테스트
 - `uv run pytest tests/test_whiteboard_*.py` (각 PR 범위)
-- `uv run ruff check src/aidoo_api/domains/whiteboard/`
+- `uv run ruff check src/ai_do_api/domains/whiteboard/`
 - 기존 docs 테스트 그린 유지
 
 ### 수동 검증 (각 PR 완료 시)

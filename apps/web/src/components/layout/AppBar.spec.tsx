@@ -37,9 +37,9 @@ vi.mock('./NotificationPanel', () => ({
 function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
   return {
     id: 'user-1',
-    email: 'member@aidoo.local',
-    full_name: 'AIDOO Member',
-    display_name: 'AIDOO Member',
+    email: 'member@ai-do.local',
+    full_name: 'AI-DO Member',
+    display_name: 'AI-DO Member',
     status: 'active',
     theme_preference: 'system',
     locale: 'ko-KR',
@@ -48,7 +48,7 @@ function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
       {
         id: 'workspace-hq',
         slug: 'hq',
-        name: 'Aidoo HQ',
+        name: 'AI-DO HQ',
         role: 'owner',
       },
       {
@@ -247,7 +247,7 @@ describe('AppBar', () => {
   });
 
   it('renders the switcher on global routes using the persisted shell workspace and filters app icons by that workspace', () => {
-    window.localStorage.setItem('aidoo:last-workspace-slug', 'innovation-lab');
+    window.localStorage.setItem('ai-do:last-workspace-slug', 'innovation-lab');
     const currentUser = buildUser();
     const shellWorkspaceSlug = resolveShellWorkspaceSlug(currentUser, null);
     const { container } = renderAppBar({
@@ -314,7 +314,7 @@ describe('AppBar', () => {
           {
             id: 'workspace-hq',
             slug: 'hq',
-            name: 'Aidoo HQ',
+            name: 'AI-DO HQ',
             role: 'owner',
           },
           {
@@ -337,7 +337,7 @@ describe('AppBar', () => {
   });
 
   it('uses the remembered app when switching from an admin route', async () => {
-    window.localStorage.setItem('aidoo:last-workspace-app', 'meeting');
+    window.localStorage.setItem('ai-do:last-workspace-app', 'meeting');
 
     renderAppBar({
       activeAppId: 'settings',

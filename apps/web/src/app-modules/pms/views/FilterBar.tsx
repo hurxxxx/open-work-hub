@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { X, Filter, ChevronDown, Save, BookmarkCheck, Search } from 'lucide-react';
-import { DetailDrawer } from '@aidoo/ui';
+import { DetailDrawer } from '@ai-do/ui';
 import { useTranslation } from 'react-i18next';
 import type { IssueFilterParams, PmsTaskListMember, PmsMilestone, PmsLabel, PmsTaskListStatus } from '../api/pms-api';
 import {

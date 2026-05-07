@@ -16,7 +16,7 @@ import {
   DropdownMenu,
   InlineNotice,
   Select,
-} from '@aidoo/ui';
+} from '@ai-do/ui';
 
 import {
   bulkWorkspaceMembers,

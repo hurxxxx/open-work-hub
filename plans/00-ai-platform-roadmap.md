@@ -8,7 +8,7 @@
 
 ## Context
 
-프로젝트(aidoo-portal)의 AI 레이어를 인프라부터 제품 UX까지 새로 설계한다.
+프로젝트(ai-do-portal)의 AI 레이어를 인프라부터 제품 UX까지 새로 설계한다.
 
 ### 현재 상태
 - Phase 1~5 완료로 LLM request context, streaming envelope, tool calling, MCP-shaped capability bridge, write approval, meeting intelligence, internal RAG orchestration이 들어왔다.
@@ -79,7 +79,7 @@ LOCAL POOL ────┐                    ┌──── EXTERNAL POOL
 | 기타 worker | user-initiated면 id 보존, system-triggered면 None | 원본 리소스 FK |
 
 - 모든 tool이 `LlmTaskContext.workspace_id`로 쿼리 제한. 크로스 워크스페이스 데이터 접근 원천 불가.
-- 현재 `/ai/*` 보호는 **route 함수 내부가 아니라 `app.include_router(...)`의 app-level dependency 체인**에 걸려 있다 ([`app.py:93-110`](../apps/api/src/aidoo_api/app.py#L93-L110)). legacy 경로와 `/workspaces/{slug}` 경로로 **2중 mount**되어 있어 둘 다 회귀 대상.
+- 현재 `/ai/*` 보호는 **route 함수 내부가 아니라 `app.include_router(...)`의 app-level dependency 체인**에 걸려 있다 ([`app.py:93-110`](../apps/api/src/ai_do_api/app.py#L93-L110)). legacy 경로와 `/workspaces/{slug}` 경로로 **2중 mount**되어 있어 둘 다 회귀 대상.
 - P1 목표는 "없는 인증 추가"가 아니라 이 보호 체인을 **LLM foundation 계약으로 명시**하고, 신규 `/ai/health`와 `/ai/chat/stream`(P2)·`/ai/jobs`(P6)까지 동일 체인을 회귀 테스트로 고정하는 것.
 - **예외**: `/healthz`, `/readyz`는 system liveness probe로 무인증 허용 (LB health check 용도). 보호 체인은 `/ai/*`에만 적용. 회귀 테스트에서 `/readyz` 공개 유지를 검증.
 - 현재 워커는 `primary.ready`면 local, 아니면 fallback — **자동 크로스풀 폴백**. P1에서 제거.
@@ -274,7 +274,7 @@ Phase 3로 넘어가기 전에 아래 4개 계약을 먼저 고정한다. 목표
 - `scope_ref`는 Phase 4 기준 meeting only
 - `MeetingInsight` 는 별도 테이블 + `payload_json`
 - approval reload 복구는 `live_pending_approval` payload를 진실원으로 사용
-- write capability discovery는 `AIDOO_AI_WRITE_TOOLS_ENABLED=true` 일 때만 노출
+- write capability discovery는 `AI_DO_AI_WRITE_TOOLS_ENABLED=true` 일 때만 노출
 
 **검증 요약**:
 - backend approval / conversation / stream / tool / meeting insight 회귀 green
@@ -439,12 +439,12 @@ Phase 3로 넘어가기 전에 아래 4개 계약을 먼저 고정한다. 목표
 - `core/asr.py::ASRBackend` Protocol
 
 Phase별 신규 영역:
-- `apps/api/src/aidoo_api/core/pii.py`, `llm_adapters.py`
-- `apps/api/src/aidoo_api/domains/rag/`
-- `apps/api/src/aidoo_api/domains/ai/` — models, tools, agent, policy_service, audit
-- `apps/api/src/aidoo_api/domains/ai/runtime/` and `domains/ai/internal_agents.py` — Phase 6 AgentRun/Invocation/Trace, AI manager DTO, internal agent boundary, evidence, verifier, model routing, egress policy
-- `apps/worker/src/aidoo_worker/tasks/llm_batch.py`
-- `apps/worker/src/aidoo_worker/tasks/rag_sync.py`
+- `apps/api/src/ai_do_api/core/pii.py`, `llm_adapters.py`
+- `apps/api/src/ai_do_api/domains/rag/`
+- `apps/api/src/ai_do_api/domains/ai/` — models, tools, agent, policy_service, audit
+- `apps/api/src/ai_do_api/domains/ai/runtime/` and `domains/ai/internal_agents.py` — Phase 6 AgentRun/Invocation/Trace, AI manager DTO, internal agent boundary, evidence, verifier, model routing, egress policy
+- `apps/worker/src/ai_do_worker/tasks/llm_batch.py`
+- `apps/worker/src/ai_do_worker/tasks/rag_sync.py`
 - `apps/web/src/domains/ai/` — 대거 개편
 - `apps/web/src/domains/admin/` — LLM 탭 추가
 

@@ -1,5 +1,5 @@
-export const AUTH_TOKEN_STORAGE_KEY = 'aidoo.auth.token';
-export const AUTH_POST_LOGOUT_HOME_REDIRECT_STORAGE_KEY = 'aidoo.auth.post-logout-home';
+export const AUTH_TOKEN_STORAGE_KEY = 'ai-do.auth.token';
+export const AUTH_POST_LOGOUT_HOME_REDIRECT_STORAGE_KEY = 'ai-do.auth.post-logout-home';
 
 export function readStoredAuthToken(): string | null {
   if (typeof window === 'undefined') {

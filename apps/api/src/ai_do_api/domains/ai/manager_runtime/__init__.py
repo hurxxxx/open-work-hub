@@ -1,0 +1,83 @@
+from __future__ import annotations
+
+from ai_do_api.domains.ai.manager_runtime.config import (
+    AI_MANAGER_ADAPTER_ID,
+    AiManagerConfig,
+    build_ai_manager_config,
+)
+from ai_do_api.domains.ai.manager_runtime.contracts import (
+    AiManagerInput,
+    ManagerPromptPayload,
+    LocalAgentResult,
+    LocalAgentTask,
+    ManagerPlan,
+    ManagerReview,
+    assert_external_manager_payload_safe,
+    build_manager_prompt_payload,
+    detect_forbidden_external_payload_entities,
+    redact_external_manager_payload,
+)
+from ai_do_api.domains.ai.manager_runtime.manager_stream import (
+    AI_MANAGER_RUNTIME_PROFILE,
+    AiManagerClient,
+    AiManagerStreamContext,
+    StaticAiManagerClient,
+    build_ai_manager_input,
+    run_ai_manager_stream,
+)
+from ai_do_api.domains.ai.manager_runtime.openai_adapter import (
+    OpenAIAiManagerRunContext,
+    build_openai_ai_manager_agent,
+    build_openai_ai_manager_model_settings,
+    build_openai_ai_manager_run_config,
+    build_run_local_specialist_function_tool,
+    run_openai_ai_manager_stream,
+)
+from ai_do_api.domains.ai.manager_runtime.specialist_tool import (
+    RUN_LOCAL_SPECIALIST_TOOL_NAME,
+    LocalLlmSpecialistRunner,
+    LocalSpecialistRunner,
+    LocalSpecialistToolContext,
+    LocalToolGatewaySpecialistRunner,
+    StaticLocalSpecialistRunner,
+    build_local_specialist_tool_context,
+    run_local_specialist,
+    validate_local_specialist_task,
+)
+
+__all__ = [
+    "AI_MANAGER_ADAPTER_ID",
+    "AI_MANAGER_RUNTIME_PROFILE",
+    "AiManagerConfig",
+    "AiManagerClient",
+    "AiManagerInput",
+    "ManagerPromptPayload",
+    "AiManagerStreamContext",
+    "LocalAgentResult",
+    "LocalAgentTask",
+    "ManagerPlan",
+    "ManagerReview",
+    "RUN_LOCAL_SPECIALIST_TOOL_NAME",
+    "LocalLlmSpecialistRunner",
+    "LocalSpecialistRunner",
+    "LocalSpecialistToolContext",
+    "LocalToolGatewaySpecialistRunner",
+    "OpenAIAiManagerRunContext",
+    "StaticAiManagerClient",
+    "StaticLocalSpecialistRunner",
+    "assert_external_manager_payload_safe",
+    "build_ai_manager_config",
+    "build_ai_manager_input",
+    "build_manager_prompt_payload",
+    "build_local_specialist_tool_context",
+    "build_openai_ai_manager_agent",
+    "build_openai_ai_manager_model_settings",
+    "build_openai_ai_manager_run_config",
+    "build_run_local_specialist_function_tool",
+    "detect_forbidden_external_payload_entities",
+    "redact_external_manager_payload",
+    "run_local_specialist",
+    "run_ai_manager_stream",
+    "run_openai_ai_manager_stream",
+    "validate_local_specialist_task",
+]

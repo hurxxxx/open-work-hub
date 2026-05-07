@@ -7,23 +7,23 @@ from sqlalchemy import engine_from_config, pool
 from alembic import context
 
 # Import Base and all model modules so Base.metadata is fully populated.
-from aidoo_api.core.db import Base
-from aidoo_api.core.settings import get_settings
-from aidoo_api.domains.ai import approvals as ai_approvals  # noqa: F401
-from aidoo_api.domains.ai import models as ai_models  # noqa: F401
-from aidoo_api.domains.ai.runtime import models as ai_runtime_models  # noqa: F401
-from aidoo_api.domains.auth import models as auth_models  # noqa: F401
-from aidoo_api.domains.conversations import models as conversations_models  # noqa: F401
-from aidoo_api.domains.docs import models as docs_models  # noqa: F401
-from aidoo_api.domains.images import models as images_models  # noqa: F401
-from aidoo_api.domains.media import models as media_models  # noqa: F401
-from aidoo_api.domains.meeting import models as meeting_models  # noqa: F401
-from aidoo_api.domains.planner import models as planner_models  # noqa: F401
-from aidoo_api.domains.pms import models as pms_models  # noqa: F401
-from aidoo_api.domains.rag import models as rag_models  # noqa: F401
-from aidoo_api.domains.recording import models as recording_models  # noqa: F401
-from aidoo_api.domains.search import models as search_models  # noqa: F401
-from aidoo_api.domains.whiteboard import models as whiteboard_models  # noqa: F401
+from ai_do_api.core.db import Base
+from ai_do_api.core.settings import get_settings
+from ai_do_api.domains.ai import approvals as ai_approvals  # noqa: F401
+from ai_do_api.domains.ai import models as ai_models  # noqa: F401
+from ai_do_api.domains.ai.runtime import models as ai_runtime_models  # noqa: F401
+from ai_do_api.domains.auth import models as auth_models  # noqa: F401
+from ai_do_api.domains.conversations import models as conversations_models  # noqa: F401
+from ai_do_api.domains.docs import models as docs_models  # noqa: F401
+from ai_do_api.domains.images import models as images_models  # noqa: F401
+from ai_do_api.domains.media import models as media_models  # noqa: F401
+from ai_do_api.domains.meeting import models as meeting_models  # noqa: F401
+from ai_do_api.domains.planner import models as planner_models  # noqa: F401
+from ai_do_api.domains.pms import models as pms_models  # noqa: F401
+from ai_do_api.domains.rag import models as rag_models  # noqa: F401
+from ai_do_api.domains.recording import models as recording_models  # noqa: F401
+from ai_do_api.domains.search import models as search_models  # noqa: F401
+from ai_do_api.domains.whiteboard import models as whiteboard_models  # noqa: F401
 
 config = context.config
 

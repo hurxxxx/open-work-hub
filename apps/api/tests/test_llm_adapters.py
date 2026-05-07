@@ -14,17 +14,17 @@ from openai import OpenAIError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from aidoo_api.core import llm as llm_core
-from aidoo_api.core.db import get_engine
-from aidoo_api.core.llm import LlmTaskContext, complete_chat_stream
-from aidoo_api.core.llm_adapters import (
+from ai_do_api.core import llm as llm_core
+from ai_do_api.core.db import get_engine
+from ai_do_api.core.llm import LlmTaskContext, complete_chat_stream
+from ai_do_api.core.llm_adapters import (
     MlxLmStreamAdapter,
     OpenRouterStreamAdapter,
     StreamChunk,
 )
-from aidoo_api.domains.ai.models import LlmPolicy
-from aidoo_api.domains.auth.models import AuditLog
-from aidoo_api.core.settings import get_settings
+from ai_do_api.domains.ai.models import LlmPolicy
+from ai_do_api.domains.auth.models import AuditLog
+from ai_do_api.core.settings import get_settings
 
 
 pytestmark = pytest.mark.anyio

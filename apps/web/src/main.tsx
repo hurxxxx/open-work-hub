@@ -1,6 +1,6 @@
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
-import '@aidoo/ui/styles.css';
+import '@ai-do/ui/styles.css';
 import { i18n } from '@/src/platform/i18n';
 import App from './App';
 import './index.css';

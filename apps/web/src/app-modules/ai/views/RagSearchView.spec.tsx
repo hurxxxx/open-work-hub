@@ -12,9 +12,9 @@ const authHarness = vi.hoisted(() => ({
     token: 'test-token',
     user: {
       id: 'user-1',
-      email: 'member@aidoo.local',
-      full_name: 'AIDOO Member',
-      display_name: 'AIDOO Member',
+      email: 'member@ai-do.local',
+      full_name: 'AI-DO Member',
+      display_name: 'AI-DO Member',
       status: 'active',
       theme_preference: 'system',
     locale: 'ko-KR',
@@ -23,7 +23,7 @@ const authHarness = vi.hoisted(() => ({
         {
           id: 'workspace-hq',
           slug: 'hq',
-          name: 'Aidoo HQ',
+          name: 'AI-DO HQ',
           role: 'admin',
         },
       ],
@@ -73,7 +73,7 @@ function renderView({
                 workspace: {
                   id: `workspace-${workspaceSlug}`,
                   slug: workspaceSlug,
-                  name: 'Aidoo HQ',
+                  name: 'AI-DO HQ',
                   role: 'admin',
                 },
                 apps: [],
@@ -155,7 +155,7 @@ describe('RagSearchView keyword search', () => {
       {
         id: 'workspace-hq',
         slug: 'hq',
-        name: 'Aidoo HQ',
+        name: 'AI-DO HQ',
         role: 'admin',
       },
     ];

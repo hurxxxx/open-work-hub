@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { DataTable, Panel, StatusBadge, type DataTableColumn } from '@aidoo/ui';
+import { DataTable, Panel, StatusBadge, type DataTableColumn } from '@ai-do/ui';
 
 type PlmRow = {
   template: string;

@@ -11,8 +11,8 @@ import {
   User,
 } from 'lucide-react';
 
-import { InlineNotice } from '@aidoo/ui/feedback/inline-notice';
-import { Button } from '@aidoo/ui/primitives/button';
+import { InlineNotice } from '@ai-do/ui/feedback/inline-notice';
+import { Button } from '@ai-do/ui/primitives/button';
 
 import { cn } from '@/src/lib/utils';
 import {

@@ -20,8 +20,8 @@ def _seed_dev_accounts() -> None:
     """Run the full dev-login seed loop so the /auth/dev-login route can
     find the seeded fixtures (ensure_dev_login_seed_data delegates to
     ensure_seed_data internally)."""
-    from aidoo_api.core.db import get_session_factory
-    from aidoo_api.domains.auth.access import ensure_dev_login_seed_data
+    from ai_do_api.core.db import get_session_factory
+    from ai_do_api.domains.auth.access import ensure_dev_login_seed_data
 
     session_factory = get_session_factory()
     with session_factory() as db:
@@ -30,9 +30,9 @@ def _seed_dev_accounts() -> None:
 
 
 def test_seed_preserves_user_created_space_membership(client: TestClient) -> None:
-    from aidoo_api.core.db import get_session_factory
-    from aidoo_api.domains.auth.access import ensure_seed_data
-    from aidoo_api.domains.auth.models import TeamMember
+    from ai_do_api.core.db import get_session_factory
+    from ai_do_api.domains.auth.access import ensure_seed_data
+    from ai_do_api.domains.auth.models import TeamMember
 
     _seed_dev_accounts()
 
@@ -107,8 +107,8 @@ def test_dev_login_is_idempotent_and_preserves_user_spaces(
     Before the guard landed, each of those requests walked every seed user's
     TeamMember rows and wiped out anything outside the default PMS space,
     destroying user-created spaces on every login."""
-    from aidoo_api.core.db import get_session_factory
-    from aidoo_api.domains.auth.models import TeamMember
+    from ai_do_api.core.db import get_session_factory
+    from ai_do_api.domains.auth.models import TeamMember
     from sqlalchemy import select
 
     _seed_dev_accounts()
@@ -184,9 +184,9 @@ def test_ensure_seed_data_does_not_overwrite_workspace_renames(
     canonical defaults every time it ran, which made admin-console renames
     silently revert on the next server restart. The guard should skip the
     reconcile entirely once the infrastructure is in place."""
-    from aidoo_api.core.db import get_session_factory
-    from aidoo_api.domains.auth.access import ensure_seed_data
-    from aidoo_api.domains.auth.models import Workspace
+    from ai_do_api.core.db import get_session_factory
+    from ai_do_api.domains.auth.access import ensure_seed_data
+    from ai_do_api.domains.auth.models import Workspace
     from sqlalchemy import select
 
     _seed_dev_accounts()
@@ -224,8 +224,8 @@ def test_seed_still_reconciles_default_space_membership(
     platform-admin (team_role=None) should not have a membership there at all."""
     _seed_dev_accounts()
 
-    from aidoo_api.core.db import get_session_factory
-    from aidoo_api.domains.auth.models import TeamMember, User
+    from ai_do_api.core.db import get_session_factory
+    from ai_do_api.domains.auth.models import TeamMember, User
 
     session_factory = get_session_factory()
     with session_factory() as db:
@@ -238,9 +238,9 @@ def test_seed_still_reconciles_default_space_membership(
                 select(TeamMember).where(TeamMember.user_id == user.id)
             )
 
-        delivery_hub_admin_ms = membership_for("delivery-hub-admin@aidoo.local")
-        delivery_hub_member_ms = membership_for("delivery-hub-member@aidoo.local")
-        admin_ms = membership_for("platform-admin@aidoo.local")
+        delivery_hub_admin_ms = membership_for("delivery-hub-admin@ai-do.local")
+        delivery_hub_member_ms = membership_for("delivery-hub-member@ai-do.local")
+        admin_ms = membership_for("platform-admin@ai-do.local")
 
         assert delivery_hub_admin_ms is not None, "delivery-hub-admin should own the default space"
         assert delivery_hub_admin_ms.role == "owner"
@@ -255,8 +255,8 @@ def test_dev_login_recreates_missing_dev_workspace_seeds(
 ) -> None:
     from sqlalchemy.orm import selectinload
 
-    from aidoo_api.core.db import get_session_factory
-    from aidoo_api.domains.auth.models import Team, Workspace
+    from ai_do_api.core.db import get_session_factory
+    from ai_do_api.domains.auth.models import Team, Workspace
 
     _seed_dev_accounts()
     session_factory = get_session_factory()

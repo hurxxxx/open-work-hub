@@ -4,8 +4,8 @@ from datetime import datetime, timedelta
 
 from fastapi.testclient import TestClient
 
-from aidoo_api.core.db import get_session_factory
-from aidoo_api.domains.auth.access import ensure_dev_login_seed_data
+from ai_do_api.core.db import get_session_factory
+from ai_do_api.domains.auth.access import ensure_dev_login_seed_data
 
 
 def test_whiteboard_pms_space_container_link_filters_and_sort_order(client: TestClient) -> None:

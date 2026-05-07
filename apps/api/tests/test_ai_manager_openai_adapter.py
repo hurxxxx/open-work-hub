@@ -5,16 +5,16 @@ from typing import Any
 
 import pytest
 
-from aidoo_api.domains.ai import events as ai_events
-from aidoo_api.domains.ai.events import EnvelopeEncoder
-from aidoo_api.domains.ai.manager_runtime import (
+from ai_do_api.domains.ai import events as ai_events
+from ai_do_api.domains.ai.events import EnvelopeEncoder
+from ai_do_api.domains.ai.manager_runtime import (
     AiManagerConfig,
     AiManagerStreamContext,
     StaticLocalSpecialistRunner,
     build_ai_manager_input,
     build_local_specialist_tool_context,
 )
-from aidoo_api.domains.ai.manager_runtime import openai_adapter
+from ai_do_api.domains.ai.manager_runtime import openai_adapter
 
 
 class FakeRunStream:

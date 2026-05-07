@@ -22,8 +22,8 @@ def alembic_config(monkeypatch: pytest.MonkeyPatch, postgres_dsn: str):
     monkeypatch.setenv("DOOWON_POSTGRES_DSN", postgres_dsn)
     monkeypatch.setenv("DOOWON_LLM_HEALTHCHECK_ON_STARTUP", "0")
 
-    from aidoo_api.core.db import _alembic_config
-    from aidoo_api.core.settings import get_settings
+    from ai_do_api.core.db import _alembic_config
+    from ai_do_api.core.settings import get_settings
 
     get_settings.cache_clear()
 

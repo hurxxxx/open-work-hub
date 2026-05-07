@@ -1,4 +1,4 @@
-from aidoo_api.core.i18n import LocalizedApiMessage, select_locale, translate_message
+from ai_do_api.core.i18n import LocalizedApiMessage, select_locale, translate_message
 
 
 def test_select_locale_prefers_explicit_app_locale() -> None:

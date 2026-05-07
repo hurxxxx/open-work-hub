@@ -5,18 +5,18 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-from aidoo_api.core.db import Base
-from aidoo_api.core.telemetry import (
+from ai_do_api.core.db import Base
+from ai_do_api.core.telemetry import (
     bootstrap_telemetry,
     current_trace_id,
     get_tracer_provider,
     start_as_current_span,
 )
-from aidoo_api.domains.auth.models import Workspace
-from aidoo_api.domains.rag.contracts import RagSyncLane, RagSyncOperation, RagTraceContext
-from aidoo_api.domains.rag.models import RagSyncJob, RagVisibilityRecomputeJob
-import aidoo_api.domains.rag.outbox as rag_outbox
-from aidoo_api.domains.rag.outbox import (
+from ai_do_api.domains.auth.models import Workspace
+from ai_do_api.domains.rag.contracts import RagSyncLane, RagSyncOperation, RagTraceContext
+from ai_do_api.domains.rag.models import RagSyncJob, RagVisibilityRecomputeJob
+import ai_do_api.domains.rag.outbox as rag_outbox
+from ai_do_api.domains.rag.outbox import (
     enqueue_rag_sync_job,
     enqueue_rag_visibility_recompute_job,
 )
@@ -126,7 +126,7 @@ def test_enqueue_rag_visibility_recompute_job_persists_cursor() -> None:
 
 
 def test_enqueue_rag_sync_job_captures_current_trace_context() -> None:
-    bootstrap_telemetry(service_name="aidoo-api-test")
+    bootstrap_telemetry(service_name="ai-do-api-test")
     exporter = InMemorySpanExporter()
     provider = get_tracer_provider()
     assert provider is not None
@@ -160,7 +160,7 @@ def test_enqueue_rag_sync_job_captures_current_trace_context() -> None:
 
 
 def test_enqueue_rag_sync_job_allows_explicit_empty_trace_context() -> None:
-    bootstrap_telemetry(service_name="aidoo-api-test")
+    bootstrap_telemetry(service_name="ai-do-api-test")
 
     session = _session()
     try:

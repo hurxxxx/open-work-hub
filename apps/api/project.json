@@ -9,14 +9,14 @@
       "executor": "nx:run-commands",
       "options": {
         "cwd": "apps/api",
-        "command": "DOOWON_API_AUTO_MIGRATE=1 uv run --python 3.12 uvicorn aidoo_api.main:app --app-dir src --host 127.0.0.1 --port 8000 --reload"
+        "command": "DOOWON_API_AUTO_MIGRATE=1 uv run --python 3.12 uvicorn ai_do_api.main:app --app-dir src --host 127.0.0.1 --port 8000 --reload"
       }
     },
     "serve": {
       "executor": "nx:run-commands",
       "options": {
         "cwd": "apps/api",
-        "command": "uv run --python 3.12 uvicorn aidoo_api.main:app --app-dir src --host 127.0.0.1 --port 8000"
+        "command": "uv run --python 3.12 uvicorn ai_do_api.main:app --app-dir src --host 127.0.0.1 --port 8000"
       }
     },
     "lint": {

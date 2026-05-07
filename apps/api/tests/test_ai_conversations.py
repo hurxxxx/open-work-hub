@@ -5,11 +5,11 @@ from datetime import timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from aidoo_api.core.db import get_engine
-from aidoo_api.domains.ai import approvals as ai_approvals
-from aidoo_api.domains.auth.models import User, Workspace
-from aidoo_api.domains.conversations import service as conversations_service
-from aidoo_api.domains.conversations.models import Conversation
+from ai_do_api.core.db import get_engine
+from ai_do_api.domains.ai import approvals as ai_approvals
+from ai_do_api.domains.auth.models import User, Workspace
+from ai_do_api.domains.conversations import service as conversations_service
+from ai_do_api.domains.conversations.models import Conversation
 from test_meeting import _auth_headers, _bootstrap_admin_session, _create_meeting
 
 

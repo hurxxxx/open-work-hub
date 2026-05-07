@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'motion/react';
 import { X, Plus, Pencil, Trash2, Check, Loader2 } from 'lucide-react';
-import { Button, InlineNotice, Select } from '@aidoo/ui';
+import { Button, InlineNotice, Select } from '@ai-do/ui';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { formatDateTime, normalizeTimeZone } from '@/src/platform/time/time-utils';

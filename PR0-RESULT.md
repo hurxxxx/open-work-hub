@@ -28,10 +28,10 @@
 | 파일 | 역할 |
 |---|---|
 | `apps/api/alembic.ini` | Alembic 설정. `prepend_sys_path = src`, DSN 은 env.py 가 동적 주입 |
-| `apps/api/alembic/env.py` | `aidoo_api.core.db.Base.metadata` 를 target 으로, DSN 은 `get_settings().postgres_dsn` 에서 해석. `compare_type` / `compare_server_default` 활성화 |
+| `apps/api/alembic/env.py` | `ai_do_api.core.db.Base.metadata` 를 target 으로, DSN 은 `get_settings().postgres_dsn` 에서 해석. `compare_type` / `compare_server_default` 활성화 |
 | `apps/api/alembic/versions/0b843a383b2b_baseline_2026_04_10.py` | autogenerate 베이스라인. 36개 테이블 (기존 손제작 11개 포함). 840줄 |
-| `apps/api/src/aidoo_api/core/db.py` | `_apply_postgres_schema_compat()` + `create_all()` 호출 완전 제거. `init_db()` 는 `DOOWON_API_AUTO_MIGRATE` 가 truthy 일 때만 `run_migrations()` 호출 |
-| `apps/api/src/aidoo_api/reset_dev_db.py` | `drop_all` → `DROP TABLE alembic_version` → `run_migrations()` 흐름으로 전환 |
+| `apps/api/src/ai_do_api/core/db.py` | `_apply_postgres_schema_compat()` + `create_all()` 호출 완전 제거. `init_db()` 는 `DOOWON_API_AUTO_MIGRATE` 가 truthy 일 때만 `run_migrations()` 호출 |
+| `apps/api/src/ai_do_api/reset_dev_db.py` | `drop_all` → `DROP TABLE alembic_version` → `run_migrations()` 흐름으로 전환 |
 | `apps/api/tests/conftest.py:82` | 픽스처가 `DOOWON_API_AUTO_MIGRATE=1` 을 monkeypatch 로 켜서 alembic 으로 부트스트랩 |
 | `apps/api/tests/test_alembic_migrations.py` | (1) `alembic upgrade head` smoke (2) `alembic check` 드리프트 가드 |
 | `apps/api/README.md` | "데이터베이스 마이그레이션 (Alembic)" 섹션 추가 |
@@ -45,7 +45,7 @@
 ### 원격 dev DB
 
 - 호스트: `14.39.166.163:37677`
-- DB: `doowon_ai_portal_dev`
+- DB: `ai_do_portal_dev`
 - DSN: 프로젝트 루트 [.env](.env) 의 `DOOWON_POSTGRES_DSN` 에서 자동 로드 (Settings 가 `WORKSPACE_ROOT/.env` 에서 읽음)
 - **Alembic 상태: 현재 `2d4f6c9ab1ef (head)`**. PR0 마무리 시점에는 `0b843a383b2b` 로 stamp 했고, 그 이후 리비전은 정상 `upgrade` 로 누적 적용됨
 - 현재 기준 `alembic check` drift 0
@@ -53,7 +53,7 @@
 
 ### 테스트 DB
 
-- conftest.py 의 `postgres_dsn` 픽스처가 매 세션마다 일회용 `postgres:18` Docker 컨테이너를 띄움 (`aidoo-api-test-<hash>`)
+- conftest.py 의 `postgres_dsn` 픽스처가 매 세션마다 일회용 `postgres:18` Docker 컨테이너를 띄움 (`ai-do-api-test-<hash>`)
 - 테스트는 schema drop/recreate 를 반복하므로 **원격 dev DB 에 절대 붙이면 안 됨**
 - Docker Desktop 이 켜져있어야 동작
 - 픽스처 종료 시 `--rm` 으로 자동 정리
@@ -70,7 +70,7 @@
 
 ### Local Docker 컨테이너를 한 번 띄웠다가 지웠다 (왜?)
 
-`alembic revision --autogenerate` 는 `Base.metadata` 와 **현재 DB introspect 결과**를 diff 함. 원격 DB 는 이미 모든 테이블이 만들어진 상태라 거기에 대고 autogenerate 를 돌리면 빈 migration 이 나옴. CREATE TABLE 36개가 들어간 baseline 을 받으려면 빈 스키마 대상이 필수. 그래서 일회용 `aidoo-alembic-bootstrap` 컨테이너를 띄워 baseline 만 생성하고 즉시 `docker rm -f` 로 정리했음. 지금은 doowon 관련 docker 컨테이너 0개.
+`alembic revision --autogenerate` 는 `Base.metadata` 와 **현재 DB introspect 결과**를 diff 함. 원격 DB 는 이미 모든 테이블이 만들어진 상태라 거기에 대고 autogenerate 를 돌리면 빈 migration 이 나옴. CREATE TABLE 36개가 들어간 baseline 을 받으려면 빈 스키마 대상이 필수. 그래서 일회용 `ai-do-alembic-bootstrap` 컨테이너를 띄워 baseline 만 생성하고 즉시 `docker rm -f` 로 정리했음. 지금은 doowon 관련 docker 컨테이너 0개.
 
 ### 원격 DB 는 stamp head 만 적용 (upgrade 아님)
 

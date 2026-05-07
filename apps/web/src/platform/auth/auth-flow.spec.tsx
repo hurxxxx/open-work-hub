@@ -15,9 +15,9 @@ import type { AuthUser } from './auth-api';
 function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
   return {
     id: 'user-1',
-    email: 'member@aidoo.local',
-    full_name: 'AIDOO Member',
-    display_name: 'AIDOO Member',
+    email: 'member@ai-do.local',
+    full_name: 'AI-DO Member',
+    display_name: 'AI-DO Member',
     status: 'active',
     theme_preference: 'system',
     locale: 'ko-KR',
@@ -27,7 +27,7 @@ function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
       {
         id: 'workspace-hq',
         slug: 'hq',
-        name: 'Aidoo HQ',
+        name: 'AI-DO HQ',
         role: 'admin',
       },
     ],
@@ -114,9 +114,9 @@ describe('auth flow', () => {
           JSON.stringify({
             token: 'setup-token',
             user: buildUser({
-              email: 'admin@aidoo.local',
-              full_name: 'AIDOO Admin',
-              display_name: 'AIDOO Admin',
+              email: 'admin@ai-do.local',
+              full_name: 'AI-DO Admin',
+              display_name: 'AI-DO Admin',
               system_roles: ['platform_admin'],
               workspaces: [],
             }),
@@ -135,10 +135,10 @@ describe('auth flow', () => {
 
     await screen.findByRole('heading', { name: '최초 관리자 설정' });
     fireEvent.change(screen.getByLabelText('이름'), {
-      target: { value: 'AIDOO Admin' },
+      target: { value: 'AI-DO Admin' },
     });
     fireEvent.change(screen.getByLabelText('이메일'), {
-      target: { value: 'admin@aidoo.local' },
+      target: { value: 'admin@ai-do.local' },
     });
     fireEvent.change(screen.getByLabelText('비밀번호'), {
       target: { value: 'supersecret123' },
@@ -146,7 +146,7 @@ describe('auth flow', () => {
     fireEvent.click(screen.getByRole('button', { name: '관리자 계정 만들기' }));
 
     await screen.findByText('Protected Shell');
-    expect(screen.getByText('admin@aidoo.local')).toBeTruthy();
+    expect(screen.getByText('admin@ai-do.local')).toBeTruthy();
     expect(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBe('setup-token');
   });
 
@@ -182,7 +182,7 @@ describe('auth flow', () => {
 
     await screen.findByRole('heading', { name: '로그인' });
     fireEvent.change(screen.getByLabelText('이메일'), {
-      target: { value: 'member@aidoo.local' },
+      target: { value: 'member@ai-do.local' },
     });
     fireEvent.change(screen.getByLabelText('비밀번호'), {
       target: { value: 'supersecret123' },
@@ -190,7 +190,7 @@ describe('auth flow', () => {
     fireEvent.click(screen.getByRole('button', { name: '로그인' }));
 
     await screen.findByText('Protected Shell');
-    expect(screen.getByText('member@aidoo.local')).toBeTruthy();
+    expect(screen.getByText('member@ai-do.local')).toBeTruthy();
     expect(screen.getByTestId('location').textContent).toBe('/docs');
     expect(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBe('login-token');
     expect(window.localStorage.getItem(LOCALE_STORAGE_KEY)).toBe('en-US');
@@ -214,9 +214,9 @@ describe('auth flow', () => {
           JSON.stringify({
             token: 'dev-admin-token',
             user: buildUser({
-              email: 'admin@aidoo.local',
-              full_name: 'AIDOO Admin',
-              display_name: 'AIDOO Admin',
+              email: 'admin@ai-do.local',
+              full_name: 'AI-DO Admin',
+              display_name: 'AI-DO Admin',
               system_roles: ['platform_admin'],
               workspaces: [],
             }),
@@ -237,7 +237,7 @@ describe('auth flow', () => {
     fireEvent.click(screen.getByRole('button', { name: '개발용 관리자 바로 로그인' }));
 
     await screen.findByText('Protected Shell');
-    expect(screen.getByText('admin@aidoo.local')).toBeTruthy();
+    expect(screen.getByText('admin@ai-do.local')).toBeTruthy();
     expect(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBe('dev-admin-token');
   });
 
@@ -255,14 +255,14 @@ describe('auth flow', () => {
               {
                 account_key: 'platform-admin',
                 label: 'Platform Admin',
-                email: 'platform-admin@aidoo.local',
+                email: 'platform-admin@ai-do.local',
                 description: '전역 관리자 권한으로 모든 워크스페이스와 설정을 관리합니다.',
                 category: 'Administrators',
               },
               {
                 account_key: 'delivery-hub-member',
                 label: 'Delivery Hub Member',
-                email: 'delivery-hub-member@aidoo.local',
+                email: 'delivery-hub-member@ai-do.local',
                 description: 'Delivery Hub 워크스페이스 멤버 계정입니다. 기본 Team Space 멤버 권한이 함께 제공됩니다.',
                 category: 'Workspaces',
               },
@@ -280,7 +280,7 @@ describe('auth flow', () => {
           JSON.stringify({
             token: 'dev-account-token',
             user: buildUser({
-              email: 'delivery-hub-member@aidoo.local',
+              email: 'delivery-hub-member@ai-do.local',
               full_name: 'Delivery Hub Member',
               display_name: 'Delivery Hub Member',
               workspace_roles: [
@@ -319,7 +319,7 @@ describe('auth flow', () => {
     fireEvent.click(screen.getByRole('button', { name: /Delivery Hub Member/ }));
 
     await screen.findByText('Protected Shell');
-    expect(screen.getByText('delivery-hub-member@aidoo.local')).toBeTruthy();
+    expect(screen.getByText('delivery-hub-member@ai-do.local')).toBeTruthy();
     expect(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBe('dev-account-token');
   });
 
@@ -341,7 +341,7 @@ describe('auth flow', () => {
           JSON.stringify(
             buildUser({
               id: 'user-2',
-              email: 'saved@aidoo.local',
+              email: 'saved@ai-do.local',
               full_name: 'Saved User',
               display_name: 'Saved User',
             }),
@@ -359,7 +359,7 @@ describe('auth flow', () => {
     renderAuthFlow(['/ai']);
 
     await screen.findByText('Protected Shell');
-    expect(screen.getByText('saved@aidoo.local')).toBeTruthy();
+    expect(screen.getByText('saved@ai-do.local')).toBeTruthy();
   });
 
   it('clears session state on logout and returns to login', async () => {
@@ -381,7 +381,7 @@ describe('auth flow', () => {
           JSON.stringify(
             buildUser({
               id: 'user-2',
-              email: 'saved@aidoo.local',
+              email: 'saved@ai-do.local',
               full_name: 'Saved User',
               display_name: 'Saved User',
             }),
@@ -430,7 +430,7 @@ describe('auth flow', () => {
           JSON.stringify(
             buildUser({
               id: 'user-2',
-              email: 'saved@aidoo.local',
+              email: 'saved@ai-do.local',
               full_name: 'Saved User',
               display_name: 'Saved User',
             }),
@@ -475,7 +475,7 @@ describe('auth flow', () => {
     await screen.findByRole('heading', { name: '로그인' });
 
     fireEvent.change(screen.getByLabelText('이메일'), {
-      target: { value: 'member@aidoo.local' },
+      target: { value: 'member@ai-do.local' },
     });
     fireEvent.change(screen.getByLabelText('비밀번호'), {
       target: { value: 'supersecret123' },
@@ -483,7 +483,7 @@ describe('auth flow', () => {
     fireEvent.click(screen.getByRole('button', { name: '로그인' }));
 
     await screen.findByText('Protected Shell');
-    expect(screen.getByText('member@aidoo.local')).toBeTruthy();
+    expect(screen.getByText('member@ai-do.local')).toBeTruthy();
     expect(screen.getByTestId('location').textContent).toBe('/');
     expect(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBe('login-token');
   });

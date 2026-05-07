@@ -7,7 +7,7 @@ import {
   stubWorkspaceAppDataBackend,
 } from './helpers';
 
-const LOCALE_STORAGE_KEY = 'aidoo:locale';
+const LOCALE_STORAGE_KEY = 'ai-do:locale';
 
 async function stubFullShell(
   page: Page,
@@ -194,7 +194,7 @@ test.describe('i18n locale smoke', () => {
         path: '/tool/search?workspace=hq',
         assert: async (current) => {
           await expect(
-            current.getByRole('heading', { name: 'AIDOO Search' }),
+            current.getByRole('heading', { name: 'AI-DO Search' }),
           ).toBeVisible();
           await expect(
             current.getByPlaceholder(

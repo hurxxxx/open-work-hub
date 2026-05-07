@@ -74,7 +74,7 @@ curl http://127.0.0.1:8000/api/v1/ai/health     # 인증 필요, raw local/exter
 cd apps/api
 
 # 1. 모델 변경 후 마이그레이션 자동 생성
-DOOWON_POSTGRES_DSN=postgresql+psycopg://aidoo_db:aidoo_db@127.0.0.1:5432/doowon_ai_portal \
+DOOWON_POSTGRES_DSN=postgresql+psycopg://ai_do_db:ai_do_db@127.0.0.1:5432/ai_do_portal \
   uv run --python 3.12 alembic revision --autogenerate -m "add_meeting_tables"
 
 # 2. 생성된 alembic/versions/<hash>_*.py 파일을 반드시 손으로 검토

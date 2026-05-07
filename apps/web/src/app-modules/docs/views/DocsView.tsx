@@ -24,7 +24,7 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { BlockEditor, BlockViewer, CollaborativeBlockEditor, useConfirm, usePrompt } from '@aidoo/ui';
+import { BlockEditor, BlockViewer, CollaborativeBlockEditor, useConfirm, usePrompt } from '@ai-do/ui';
 import {
   DndContext,
   DragOverlay,

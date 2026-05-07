@@ -20,13 +20,13 @@ from conftest import (
     _find_free_port,
     _teardown_client_state,
 )
-from aidoo_api.core.db import get_session_factory
-from aidoo_api.domains.auth.access import ensure_dev_login_seed_data
-from aidoo_api.domains.auth.models import Workspace
-from aidoo_api.domains.docs import service as docs_service
-from aidoo_api.domains.pms.access_grants import grant_issue_access, revoke_issue_access
-from aidoo_api.domains.search.indexing import process_search_index_job
-from aidoo_api.domains.search.models import SearchIndexJob
+from ai_do_api.core.db import get_session_factory
+from ai_do_api.domains.auth.access import ensure_dev_login_seed_data
+from ai_do_api.domains.auth.models import Workspace
+from ai_do_api.domains.docs import service as docs_service
+from ai_do_api.domains.pms.access_grants import grant_issue_access, revoke_issue_access
+from ai_do_api.domains.search.indexing import process_search_index_job
+from ai_do_api.domains.search.models import SearchIndexJob
 
 
 OPENSEARCH_IMAGE = "opensearchproject/opensearch:3.3.2"
@@ -37,7 +37,7 @@ def opensearch_url() -> str:
     _ensure_docker_image(OPENSEARCH_IMAGE)
     port = _find_free_port()
     transport_port = _find_free_port()
-    container_name = f"aidoo-opensearch-test-{uuid.uuid4().hex[:10]}"
+    container_name = f"ai-do-opensearch-test-{uuid.uuid4().hex[:10]}"
     url = f"http://127.0.0.1:{port}"
     subprocess.run(
         [
@@ -80,7 +80,7 @@ def search_client(
     opensearch_url: str,
 ) -> TestClient:
     monkeypatch.setenv("DOOWON_OPENSEARCH_URL", opensearch_url)
-    monkeypatch.setenv("DOOWON_OPENSEARCH_INDEX_PREFIX", f"aidoo_test_{uuid.uuid4().hex[:10]}")
+    monkeypatch.setenv("DOOWON_OPENSEARCH_INDEX_PREFIX", f"ai_do_test_{uuid.uuid4().hex[:10]}")
     test_client = _build_client(
         monkeypatch,
         postgres_dsn=postgres_dsn,
@@ -234,7 +234,7 @@ def _create_pms_issue(
 
 
 def test_keyword_search_does_not_refresh_workspace_index_on_query(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    from aidoo_api.domains.search import service as search_service
+    from ai_do_api.domains.search import service as search_service
 
     session = _dev_login(client)
     token = session["token"]
@@ -290,7 +290,7 @@ def test_keyword_search_returns_503_when_index_requires_backfill(
     workspace_count: int,
     expected_reason: str,
 ) -> None:
-    from aidoo_api.domains.search import service as search_service
+    from ai_do_api.domains.search import service as search_service
 
     session = _dev_login(client)
     token = session["token"]

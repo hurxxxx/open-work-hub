@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
-from aidoo_api.domains.ai.events import (
+from ai_do_api.domains.ai.events import (
     AgentEventEnvelope,
     ContentDeltaEvent,
     DoneEvent,
@@ -194,7 +194,7 @@ def test_envelope_schema_snapshot_matches() -> None:
     """Guards against accidental wire-format changes.
 
     If this fails after an intentional change, regenerate with:
-        python -c "from aidoo_api.domains.ai.events import envelope_schema; \
+        python -c "from ai_do_api.domains.ai.events import envelope_schema; \
 import json, pathlib; \
 pathlib.Path('apps/api/tests/fixtures/envelope_schema.json').write_text( \
 json.dumps(envelope_schema(), indent=2, sort_keys=True) + chr(10))"

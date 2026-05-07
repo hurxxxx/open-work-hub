@@ -15,7 +15,7 @@ const availabilityHarness = vi.hoisted(() => ({
 const MEETING_START_ISO = '2026-04-14T05:00:00.000Z';
 const MEETING_END_ISO = '2026-04-14T06:00:00.000Z';
 
-vi.mock('@aidoo/ui', () => ({
+vi.mock('@ai-do/ui', () => ({
   Dialog: ({
     open,
     title,
@@ -91,8 +91,8 @@ describe('MeetingAvailabilityPanel', () => {
       <MeetingAvailabilityPanel
         workspaceSlug="hq"
         attendeeUsers={[
-          { id: 'user-1', email: 'alice@aidoo.ai', full_name: 'Alice Kim' },
-          { id: 'user-2', email: 'bob@aidoo.ai', full_name: 'Bob Lee' },
+          { id: 'user-1', email: 'alice@ai-do.ai', full_name: 'Alice Kim' },
+          { id: 'user-2', email: 'bob@ai-do.ai', full_name: 'Bob Lee' },
         ]}
         meetingStart={new Date(MEETING_START_ISO)}
         meetingEnd={new Date(MEETING_END_ISO)}
@@ -107,9 +107,9 @@ describe('MeetingAvailabilityPanel', () => {
 
     expect(screen.getByRole('heading', { name: '참석자 스케줄' })).toBeTruthy();
     expect(screen.getAllByText('Alice Kim').length).toBeGreaterThan(0);
-    expect(screen.getByText('alice@aidoo.ai')).toBeTruthy();
+    expect(screen.getByText('alice@ai-do.ai')).toBeTruthy();
     expect(screen.getAllByText('Bob Lee').length).toBeGreaterThan(0);
-    expect(screen.getByText('bob@aidoo.ai')).toBeTruthy();
+    expect(screen.getByText('bob@ai-do.ai')).toBeTruthy();
   });
 
   it('moves the compared week when the modal navigation buttons are clicked', async () => {
@@ -123,7 +123,7 @@ describe('MeetingAvailabilityPanel', () => {
       <MeetingAvailabilityPanel
         workspaceSlug="hq"
         attendeeUsers={[
-          { id: 'user-1', email: 'alice@aidoo.ai', full_name: 'Alice Kim' },
+          { id: 'user-1', email: 'alice@ai-do.ai', full_name: 'Alice Kim' },
         ]}
         meetingStart={meetingStart}
         meetingEnd={new Date(MEETING_END_ISO)}

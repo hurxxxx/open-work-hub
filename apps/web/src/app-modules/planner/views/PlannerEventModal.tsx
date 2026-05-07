@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Dialog } from '@aidoo/ui';
+import { Button, Dialog } from '@ai-do/ui';
 import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';

@@ -3,13 +3,13 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from aidoo_api.core.db import get_session_factory
-from aidoo_api.core.llm import get_supported_llm_tasks
-from aidoo_api.domains.ai.models import LlmPolicy
-from aidoo_api.domains.ai.registry import get_ai_capability_registry
-from aidoo_api.domains.auth import access as auth_access
-from aidoo_api.domains.auth.access import ensure_dev_login_seed_data
-from aidoo_api.domains.auth.models import Workspace, WorkspaceAppEntitlement
+from ai_do_api.core.db import get_session_factory
+from ai_do_api.core.llm import get_supported_llm_tasks
+from ai_do_api.domains.ai.models import LlmPolicy
+from ai_do_api.domains.ai.registry import get_ai_capability_registry
+from ai_do_api.domains.auth import access as auth_access
+from ai_do_api.domains.auth.access import ensure_dev_login_seed_data
+from ai_do_api.domains.auth.models import Workspace, WorkspaceAppEntitlement
 
 
 def _dev_login(client: TestClient, account_key: str) -> dict:

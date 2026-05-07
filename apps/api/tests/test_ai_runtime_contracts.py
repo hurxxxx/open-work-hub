@@ -7,8 +7,8 @@ from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 from pydantic import ValidationError
 
-from aidoo_api.app import runtime_registry_validation_exception_handler
-from aidoo_api.domains.ai.runtime import (
+from ai_do_api.app import runtime_registry_validation_exception_handler
+from ai_do_api.domains.ai.runtime import (
     DEFAULT_AGENT_DEFINITIONS,
     AgentDefinitionResolver,
     AgentInvocationContract,
@@ -42,7 +42,7 @@ from aidoo_api.domains.ai.runtime import (
     validate_manager_graph_candidate,
     GraphSchedulerError,
 )
-from aidoo_api.domains.ai.runtime.metrics import (
+from ai_do_api.domains.ai.runtime.metrics import (
     build_runtime_metrics,
     record_external_execution,
     record_inspection_request,

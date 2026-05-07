@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import json
 
-from aidoo_api.core.settings import Settings
-from aidoo_api.domains.ai.runtime.external_adapters import ExternalSearchExecutionAdapter
-from aidoo_api.domains.ai.runtime.external_egress import evaluate_external_egress
-from aidoo_api.domains.ai.runtime.external_search import (
+from ai_do_api.core.settings import Settings
+from ai_do_api.domains.ai.runtime.external_adapters import ExternalSearchExecutionAdapter
+from ai_do_api.domains.ai.runtime.external_egress import evaluate_external_egress
+from ai_do_api.domains.ai.runtime.external_search import (
     EXTERNAL_SEARCH_ADAPTER_ID,
     MockExternalSearchAdapter,
     build_external_search_request,
@@ -17,11 +17,11 @@ from aidoo_api.domains.ai.runtime.external_search import (
 
 def _settings(**overrides):
     aliases = {
-        "ai_external_planning_enabled": "AIDOO_AI_EXTERNAL_PLANNING_ENABLED",
-        "ai_external_search_enabled": "AIDOO_AI_EXTERNAL_SEARCH_ENABLED",
+        "ai_external_planning_enabled": "AI_DO_AI_EXTERNAL_PLANNING_ENABLED",
+        "ai_external_search_enabled": "AI_DO_AI_EXTERNAL_SEARCH_ENABLED",
     }
     return Settings(
-        postgres_dsn="postgresql+psycopg://aidoo_test:aidoo_test@127.0.0.1:5432/aidoo_test",
+        postgres_dsn="postgresql+psycopg://ai_do_test:ai_do_test@127.0.0.1:5432/ai_do_test",
         **{aliases.get(key, key): value for key, value in overrides.items()},
     )
 

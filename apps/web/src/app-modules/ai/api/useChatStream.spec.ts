@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useChatStream } from './useChatStream';
 
-const STREAM_FLAG_KEY = 'aidoo.ai.streamEnabled';
+const STREAM_FLAG_KEY = 'ai-do.ai.streamEnabled';
 const SEND_PAYLOAD = {
   messages: [{ role: 'user' as const, content: 'hi' }],
 };
@@ -263,7 +263,7 @@ describe('useChatStream', () => {
 
   it('falls back to sync chat when the hidden stream flag is off', async () => {
     window.localStorage.setItem(STREAM_FLAG_KEY, 'false');
-    window.localStorage.setItem('aidoo:last-workspace-slug', 'hq');
+    window.localStorage.setItem('ai-do:last-workspace-slug', 'hq');
     globalThis.fetch = vi
       .fn()
       .mockResolvedValue(
@@ -322,7 +322,7 @@ describe('useChatStream', () => {
       }),
     );
     globalThis.fetch = fetchMock as typeof globalThis.fetch;
-    window.localStorage.setItem('aidoo:last-workspace-slug', 'hq');
+    window.localStorage.setItem('ai-do:last-workspace-slug', 'hq');
 
     const { result } = renderHook(() => useChatStream('token-abc'));
     await act(async () => {

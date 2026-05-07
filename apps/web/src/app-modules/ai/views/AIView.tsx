@@ -58,8 +58,8 @@ const ArtifactPanel = lazy(() =>
   })),
 );
 
-const AI_BACKEND_MODE_STORAGE_KEY = 'aidoo.ai.backendMode';
-const AI_SCOPE_STORAGE_PREFIX = 'aidoo.ai.scope.';
+const AI_BACKEND_MODE_STORAGE_KEY = 'ai-do.ai.backendMode';
+const AI_SCOPE_STORAGE_PREFIX = 'ai-do.ai.scope.';
 const FALLBACK_CHATBOT_APP_IDS = ['pms', 'meeting', 'planner', 'docs', 'ai'];
 
 function chatScopeStorageKey(workspaceSlug: string | undefined): string | null {
@@ -1121,7 +1121,7 @@ export function AIView({ toolItems = [] }: { toolItems?: NavItem[] }) {
     resetChat();
 
     // No client-side system message: the API prepends its own AGENT_SYSTEM_PROMPT
-    // (apps/api/src/aidoo_api/domains/ai/agent.py) on every turn. Sending one
+    // (apps/api/src/ai_do_api/domains/ai/agent.py) on every turn. Sending one
     // here produced two consecutive system messages, which providers like
     // mlx-lm reject with "System message must be at the beginning" (HTTP 404).
     const messages = serializeTurnsForModel(nextTurns);

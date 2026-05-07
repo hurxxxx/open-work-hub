@@ -161,7 +161,7 @@ SSE는 **전송 레이어 표준**(HTTP 이벤트 스트림)일 뿐입니다. �
 
 ```python
 messages = [
-    {"role": "system", "content": "당신은 AIDOO 포털의 비서이며 한국어로 응답합니다."},
+    {"role": "system", "content": "당신은 AI-DO 포털의 비서이며 한국어로 응답합니다."},
     {"role": "user", "content": user_input}
 ]
 ```
@@ -239,8 +239,8 @@ MCP는 편리하지만 AI에게 실제 도구 접근 권한을 주는 기술입�
 
 ### 6.5 이 프로젝트의 MCP 지점
 
-- **내부 MCP 서버**: AIDOO의 PMS/문서/캘린더 기능을 MCP로 노출해 승인된 AI 클라이언트가 이 조직 데이터를 쓸 수 있도록.
-- **외부 MCP 연결**: AIDOO 채팅 AI가 외부 MCP 도구(GitHub, Slack, DB 등)를 호출.
+- **내부 MCP 서버**: AI-DO의 PMS/문서/캘린더 기능을 MCP로 노출해 승인된 AI 클라이언트가 이 조직 데이터를 쓸 수 있도록.
+- **외부 MCP 연결**: AI-DO 채팅 AI가 외부 MCP 도구(GitHub, Slack, DB 등)를 호출.
 
 관련 결정은 `adr/0002-mcp-capability-platform.md` 에 기록되어 있습니다. 핵심은 "**MCP-first capability platform**" 방침입니다.
 
@@ -259,7 +259,7 @@ MCP는 편리하지만 AI에게 실제 도구 접근 권한을 주는 기술입�
 
 ### 🏢 "회의 생성"을 MCP 도구로 내보내는 과정
 
-AX TF에서 "AI 도구에서 직접 AIDOO 회의를 잡게 해 주세요"라는 요청이 왔다고 합시다. MCP-first 방침에 따른 흐름:
+AX TF에서 "AI 도구에서 직접 AI-DO 회의를 잡게 해 주세요"라는 요청이 왔다고 합시다. MCP-first 방침에 따른 흐름:
 
 1. `meeting.create` capability를 MCP 도구로 선언(discoverability: "회의 주제·참석자·시간을 받아 회의를 만듭니다").
 2. preview: 호출 전 AI가 "이런 회의를 만들 예정입니다"를 사용자에게 보여 준다.
@@ -284,7 +284,7 @@ AX TF에서 "AI 도구에서 직접 AIDOO 회의를 잡게 해 주세요"라는 
 
 ## 7. 에이전트 패턴 확장 — 실무 기준
 
-12장에서 본 기본 루프는 출발점이지, 종착점이 아닙니다. AIDOO Portal 관점에서 자주 쓰는 패턴을 정리합니다.
+12장에서 본 기본 루프는 출발점이지, 종착점이 아닙니다. AI-DO Portal 관점에서 자주 쓰는 패턴을 정리합니다.
 
 ### 7.1 ReAct — 생각·행동·관찰
 
@@ -312,7 +312,7 @@ AI가 자기 답을 **스스로 비판하고 한 번 더 다듬는** 패턴. "�
 "큰 작업을 먼저 **단계 리스트**로 쪼개고, 한 단계씩 실행"하는 패턴.
 
 - 장점: 긴 작업에서 컨텍스트가 드리프트되는 것을 방지.
-- AIDOO 예: "메모장 도메인을 새로 만들어" → AI가 먼저 10단계 계획 제시 → 사용자 확인 → 1단계부터 실행.
+- AI-DO 예: "메모장 도메인을 새로 만들어" → AI가 먼저 10단계 계획 제시 → 사용자 확인 → 1단계부터 실행.
 
 ### 7.4 ReWOO — 도구 호출 통합 계획
 
@@ -398,7 +398,7 @@ AI API 벤더는 초당/분당 요청 수 제한이 있습니다. 재시도 + �
   - `hooks/` — `useChatStream`, `useToolInvocation`
   - `types.ts`
 
-백엔드는 `apps/api/src/aidoo_api/domains/ai/`:
+백엔드는 `apps/api/src/ai_do_api/domains/ai/`:
 
 - `ai/`
   - `router.py` — `/ai/...` 엔드포인트, SSE 핸들러(sse-starlette)
@@ -419,7 +419,7 @@ AI API 벤더는 초당/분당 요청 수 제한이 있습니다. 재시도 + �
 5. 승인: 홈 디렉터리 밖을 읽으려 하면 사용자 확인 필요
 6. 감사 로그: 누가, 언제, 어떤 경로를 조회했는지 기록
 
-이 경험을 하면 **AIDOO 기능을 MCP로 내보낸다는 것의 실감**이 잡힙니다.
+이 경험을 하면 **AI-DO 기능을 MCP로 내보낸다는 것의 실감**이 잡힙니다.
 
 ---
 

@@ -4,8 +4,8 @@ import json
 
 import pytest
 
-from aidoo_api.domains.ai.events import EnvelopeEncoder
-from aidoo_api.domains.ai.manager_runtime import (
+from ai_do_api.domains.ai.events import EnvelopeEncoder
+from ai_do_api.domains.ai.manager_runtime import (
     AiManagerConfig,
     AiManagerInput,
     AiManagerStreamContext,

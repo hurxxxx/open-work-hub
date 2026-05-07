@@ -7,14 +7,14 @@
 
 현재 시스템에는 Meeting 앱 내부에 녹음 기능이 이미 구현되어 있다.
 
-- Backend: `apps/api/src/aidoo_api/domains/meeting/recordings.py`
+- Backend: `apps/api/src/ai_do_api/domains/meeting/recordings.py`
   - chunk staging
   - MinIO 저장
   - playback URL
   - retry / delete / cleanup
   - meeting recording pipeline enqueue
 - DB model: `MeetingRecording`, `MeetingRecordingStaging`
-- Worker: `apps/worker/src/aidoo_worker/tasks/meeting.py`
+- Worker: `apps/worker/src/ai_do_worker/tasks/meeting.py`
   - `meeting.transcribe`
   - `meeting.summarize`
   - `meeting.extract_insights`
@@ -62,7 +62,7 @@ v1의 성공 기준:
 
 ### 1. Recording is the canonical domain
 
-새 도메인은 `apps/api/src/aidoo_api/domains/recording/`에 둔다.
+새 도메인은 `apps/api/src/ai_do_api/domains/recording/`에 둔다.
 
 Meeting 전용 recording service가 canonical이 되면 안 된다. 앞으로 녹음과 관련된 저장, 업로드, 복구, playback, retry, pipeline 상태 관리는 Recording 도메인이 소유한다.
 

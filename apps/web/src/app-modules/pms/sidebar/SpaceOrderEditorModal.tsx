@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Dialog } from '@aidoo/ui/primitives/dialog';
-import { Button } from '@aidoo/ui/primitives/button';
+import { Dialog } from '@ai-do/ui/primitives/dialog';
+import { Button } from '@ai-do/ui/primitives/button';
 import { ArrowDown, ArrowUp, FileText, FolderOpen, List as ListIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 

@@ -10,10 +10,10 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from aidoo_api.core import llm as llm_core
-from aidoo_api.core.db import get_engine
-from aidoo_api.core.settings import get_settings
-from aidoo_api.domains.ai.models import LlmPolicy
+from ai_do_api.core import llm as llm_core
+from ai_do_api.core.db import get_engine
+from ai_do_api.core.settings import get_settings
+from ai_do_api.domains.ai.models import LlmPolicy
 from test_meeting import _auth_headers, _bootstrap_admin_session, _dev_login
 
 

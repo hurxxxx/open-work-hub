@@ -46,9 +46,9 @@
 
 핵심 파일:
 
-- [collab.py](../../apps/api/src/aidoo_api/domains/docs/collab.py)
-- [router.py](../../apps/api/src/aidoo_api/domains/docs/router.py)
-- [models.py](../../apps/api/src/aidoo_api/domains/docs/models.py)
+- [collab.py](../../apps/api/src/ai_do_api/domains/docs/collab.py)
+- [router.py](../../apps/api/src/ai_do_api/domains/docs/router.py)
+- [models.py](../../apps/api/src/ai_do_api/domains/docs/models.py)
 - migration: [9d26f5a7c1b4_add_docs_collab_documents.py](../../apps/api/alembic/versions/9d26f5a7c1b4_add_docs_collab_documents.py)
 
 핵심 개념:
@@ -77,7 +77,7 @@
 인증:
 
 - 현재 주 경로는 websocket query param token 이다.
-- 서버는 [router.py](../../apps/api/src/aidoo_api/domains/docs/router.py) 의 `_resolve_collab_ws_token()` 에서 `query token` 을 우선 받고, 없으면 첫 프레임 auth handshake fallback 을 사용한다.
+- 서버는 [router.py](../../apps/api/src/ai_do_api/domains/docs/router.py) 의 `_resolve_collab_ws_token()` 에서 `query token` 을 우선 받고, 없으면 첫 프레임 auth handshake fallback 을 사용한다.
 
 room lifecycle:
 
@@ -90,7 +90,7 @@ room lifecycle:
 closed socket 처리:
 
 - ypy-websocket fan-out 중에는 이미 끊긴 client 로 send 가 자연스럽게 발생할 수 있다.
-- [collab.py](../../apps/api/src/aidoo_api/domains/docs/collab.py) 의 `FastAPIYjsWebsocket.send/close` 는 `WebSocketDisconnect`, `ClientDisconnected` 를 정상 teardown 으로 흡수한다.
+- [collab.py](../../apps/api/src/ai_do_api/domains/docs/collab.py) 의 `FastAPIYjsWebsocket.send/close` 는 `WebSocketDisconnect`, `ClientDisconnected` 를 정상 teardown 으로 흡수한다.
 
 ## 프런트 구조
 

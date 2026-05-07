@@ -60,7 +60,7 @@ packages:
   - 'packages/*'
 ```
 
-이 설정으로 `apps/web`, `apps/api`(※ 파이썬은 제외), `packages/ui` 등이 모두 같은 워크스페이스의 "내부 패키지"가 됩니다. 서로를 `@aidoo/ui` 같은 이름으로 import 할 수 있습니다.
+이 설정으로 `apps/web`, `apps/api`(※ 파이썬은 제외), `packages/ui` 등이 모두 같은 워크스페이스의 "내부 패키지"가 됩니다. 서로를 `@ai-do/ui` 같은 이름으로 import 할 수 있습니다.
 
 ### 2.2 package.json의 `packageManager`
 
@@ -151,18 +151,18 @@ apps/api/         Python FastAPI
   ├── pyproject.toml   (Python 의존성)
   ├── project.json     (Nx에서는 Python도 관리 가능)
   ├── alembic/
-  └── src/aidoo_api/
+  └── src/ai_do_api/
       └── domains/...
 
 apps/worker/      Python Celery 워커
   ├── pyproject.toml
-  └── src/aidoo_worker/
+  └── src/ai_do_worker/
       └── tasks/
 
 apps/ops/         운영 도구 (초기 단계)
 
 packages/ui/      공통 UI 컴포넌트
-  ├── package.json  (name: "@aidoo/ui")
+  ├── package.json  (name: "@ai-do/ui")
   ├── src/index.tsx
   └── src/styles.css
 
@@ -178,10 +178,10 @@ Python 앱 두 개는 pnpm-workspace에 넣지 않고(파이썬은 자체 패키
 `apps/web/src/App.tsx` 안에서 공통 UI를 쓸 때:
 
 ```ts
-import { AppShell } from '@aidoo/ui';
+import { AppShell } from '@ai-do/ui';
 ```
 
-이렇게 되려면 `packages/ui/package.json`의 `name` 이 `@aidoo/ui`여야 하고, `apps/web/package.json`이 그걸 `dependencies`(or `workspace:*` 참조)로 포함해야 합니다. pnpm 워크스페이스가 이 연결을 자동으로 처리합니다.
+이렇게 되려면 `packages/ui/package.json`의 `name` 이 `@ai-do/ui`여야 하고, `apps/web/package.json`이 그걸 `dependencies`(or `workspace:*` 참조)로 포함해야 합니다. pnpm 워크스페이스가 이 연결을 자동으로 처리합니다.
 
 ---
 

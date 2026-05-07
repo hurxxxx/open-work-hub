@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Check } from 'lucide-react';
-import { DetailDrawer } from '@aidoo/ui';
+import { DetailDrawer } from '@ai-do/ui';
 
 import { AppBar } from '@/src/components/layout/AppBar';
 import { imageWizardBackgroundWorkSource } from '@/src/app-modules/ai/background-work';

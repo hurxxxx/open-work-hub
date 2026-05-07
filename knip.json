@@ -37,10 +37,10 @@
         "@/src/*": [
           "src/*"
         ],
-        "@aidoo/ui": [
+        "@ai-do/ui": [
           "../../packages/ui/src/index.ts"
         ],
-        "@aidoo/ui/styles.css": [
+        "@ai-do/ui/styles.css": [
           "../../packages/ui/styles.css"
         ]
       },

@@ -5,23 +5,23 @@ from datetime import UTC, datetime, timedelta
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from aidoo_api.core.db import get_session_factory
-from aidoo_api.domains.auth.access import ensure_dev_login_seed_data, load_user_graph
-from aidoo_api.domains.auth.models import User, Workspace
-from aidoo_api.domains.auth.security import new_id
-from aidoo_api.domains.docs import service as docs_service
-from aidoo_api.domains.docs.access_grants import grant_doc_access
-from aidoo_api.domains.docs.models import NativeDocLinkShare, NativeDocPage, NativeDocUserShare
-from aidoo_api.domains.rag.contracts import RagAnswerMode, RagQueryRequest
-from aidoo_api.domains.rag.access_filter import build_user_rag_post_filter
-from aidoo_api.domains.rag.docs_projection import NATIVE_DOC_RESOURCE_TYPE, load_native_doc_projection
-from aidoo_api.domains.rag.providers.fake import (
+from ai_do_api.core.db import get_session_factory
+from ai_do_api.domains.auth.access import ensure_dev_login_seed_data, load_user_graph
+from ai_do_api.domains.auth.models import User, Workspace
+from ai_do_api.domains.auth.security import new_id
+from ai_do_api.domains.docs import service as docs_service
+from ai_do_api.domains.docs.access_grants import grant_doc_access
+from ai_do_api.domains.docs.models import NativeDocLinkShare, NativeDocPage, NativeDocUserShare
+from ai_do_api.domains.rag.contracts import RagAnswerMode, RagQueryRequest
+from ai_do_api.domains.rag.access_filter import build_user_rag_post_filter
+from ai_do_api.domains.rag.docs_projection import NATIVE_DOC_RESOURCE_TYPE, load_native_doc_projection
+from ai_do_api.domains.rag.providers.fake import (
     FakeEmbeddingClient,
     FakeRerankClient,
     FakeVectorIndexClient,
 )
-from aidoo_api.domains.rag.query_service import RagQueryService
-from aidoo_api.domains.rag.service import RagService
+from ai_do_api.domains.rag.query_service import RagQueryService
+from ai_do_api.domains.rag.service import RagService
 
 
 def _dev_login(client: TestClient, account_key: str) -> dict:
@@ -38,9 +38,9 @@ def test_native_doc_projection_preserves_grants_for_query_time_expiry_checks(
     session = _dev_login(client, "delivery-hub-admin")
     with get_session_factory()() as db:
         owner = load_user_graph(db, session["user"]["id"])
-        shared_user = db.scalar(select(User).where(User.email == "platform-admin@aidoo.local"))
-        expired_user = db.scalar(select(User).where(User.email == "hq-admin@aidoo.local"))
-        revoked_user = db.scalar(select(User).where(User.email == "delivery-hub-member@aidoo.local"))
+        shared_user = db.scalar(select(User).where(User.email == "platform-admin@ai-do.local"))
+        expired_user = db.scalar(select(User).where(User.email == "hq-admin@ai-do.local"))
+        revoked_user = db.scalar(select(User).where(User.email == "delivery-hub-member@ai-do.local"))
         workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
         assert owner is not None
         assert shared_user is not None
@@ -224,7 +224,7 @@ def test_native_doc_query_post_filter_rejects_expired_grant_hits(client: TestCli
 
     with get_session_factory()() as db:
         owner = load_user_graph(db, session["user"]["id"])
-        expired_user = db.scalar(select(User).where(User.email == "hq-admin@aidoo.local"))
+        expired_user = db.scalar(select(User).where(User.email == "hq-admin@ai-do.local"))
         workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
         assert owner is not None
         assert expired_user is not None

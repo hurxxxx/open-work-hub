@@ -6,16 +6,16 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from aidoo_api.core.db import get_engine
-from aidoo_api.domains.ai.runtime.models import (
+from ai_do_api.core.db import get_engine
+from ai_do_api.domains.ai.runtime.models import (
     AgentInvocation,
     AgentRun,
     AgentTraceEvent,
 )
-from aidoo_api.domains.auth.models import AuditLog, User, Workspace
-from aidoo_api.domains.auth.security import new_id
-from aidoo_api.domains.conversations.models import Conversation
-from aidoo_api.domains.meeting.models import utcnow_naive
+from ai_do_api.domains.auth.models import AuditLog, User, Workspace
+from ai_do_api.domains.auth.security import new_id
+from ai_do_api.domains.conversations.models import Conversation
+from ai_do_api.domains.meeting.models import utcnow_naive
 from test_meeting import _auth_headers, _bootstrap_admin_session
 
 

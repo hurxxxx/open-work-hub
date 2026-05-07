@@ -14,9 +14,9 @@ import {
 function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
   return {
     id: 'user-1',
-    email: 'member@aidoo.local',
-    full_name: 'AIDOO Member',
-    display_name: 'AIDOO Member',
+    email: 'member@ai-do.local',
+    full_name: 'AI-DO Member',
+    display_name: 'AI-DO Member',
     status: 'active',
     theme_preference: 'system',
     locale: 'ko-KR',
@@ -25,7 +25,7 @@ function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
       {
         id: 'workspace-hq',
         slug: 'hq',
-        name: 'Aidoo HQ',
+        name: 'AI-DO HQ',
         role: 'admin',
       },
     ],
@@ -66,7 +66,7 @@ describe('resolveNavItemHref', () => {
   function aiItem(overrides: Partial<NavItem> = {}): NavItem {
     return {
       id: 'search',
-      title: '아이두 통합검색',
+      title: 'AI-DO 통합검색',
       icon: Search,
       category: 'Core Tools',
       appId: 'ai',
@@ -145,7 +145,7 @@ describe('resolveToolInvocationHref', () => {
   function aiItem(overrides: Partial<NavItem> = {}): NavItem {
     return {
       id: 'search',
-      title: '아이두 통합검색',
+      title: 'AI-DO 통합검색',
       icon: Search,
       category: 'Core Tools',
       appId: 'ai',
@@ -237,7 +237,7 @@ describe('rewriteWorkspaceApiPath', () => {
   });
 
   it('rewrites workspace-scoped rag endpoints with the active workspace slug', () => {
-    window.localStorage.setItem('aidoo:last-workspace-slug', 'hq');
+    window.localStorage.setItem('ai-do:last-workspace-slug', 'hq');
 
     expect(rewriteWorkspaceApiPath('/api/v1/rag/query')).toBe(
       '/api/v1/workspaces/hq/rag/query',
@@ -245,7 +245,7 @@ describe('rewriteWorkspaceApiPath', () => {
   });
 
   it('prefers the explicit tool workspace query over the last workspace slug', () => {
-    window.localStorage.setItem('aidoo:last-workspace-slug', 'hq');
+    window.localStorage.setItem('ai-do:last-workspace-slug', 'hq');
     window.history.replaceState({}, '', '/tool/pms-list-list-1?workspace=lab&issue=issue-1');
 
     expect(rewriteWorkspaceApiPath('/api/v1/pms/issues/issue-1')).toBe(
@@ -254,7 +254,7 @@ describe('rewriteWorkspaceApiPath', () => {
   });
 
   it('rewrites legacy app API prefixes to workspace-scoped endpoints', () => {
-    window.localStorage.setItem('aidoo:last-workspace-slug', 'hq');
+    window.localStorage.setItem('ai-do:last-workspace-slug', 'hq');
 
     expect(rewriteWorkspaceApiPath('/api/v1/meeting/meetings')).toBe(
       '/api/v1/workspaces/hq/meeting/meetings',
@@ -277,7 +277,7 @@ describe('rewriteWorkspaceApiPath', () => {
   });
 
   it('preserves intentionally public shared-link endpoints', () => {
-    window.localStorage.setItem('aidoo:last-workspace-slug', 'hq');
+    window.localStorage.setItem('ai-do:last-workspace-slug', 'hq');
 
     expect(rewriteWorkspaceApiPath('/api/v1/docs/shared-links/share-1')).toBe(
       '/api/v1/docs/shared-links/share-1',

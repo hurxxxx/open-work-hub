@@ -14,8 +14,8 @@
     "baseUrl": ".",
     "types": ["node"],
     "paths": {
-      "@aidoo/ui": ["packages/ui/src/index.ts"],
-      "@aidoo/ui/*": ["packages/ui/src/lib/*"]
+      "@ai-do/ui": ["packages/ui/src/index.ts"],
+      "@ai-do/ui/*": ["packages/ui/src/lib/*"]
     }
   },
   "exclude": ["node_modules", "dist"]

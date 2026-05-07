@@ -38,8 +38,8 @@
 - `rewriteWorkspaceApiPath` — 도메인 클라이언트가 자동으로 `/api/v1/workspaces/:slug/...` 경로 생성 ([workspace-utils.ts:205](../../apps/web/src/domains/workspaces/workspace-utils.ts#L205))
 - 기존 meeting/pms/docs 도메인 hook
 - 백엔드 엔드포인트:
-  - `GET /api/v1/workspaces/:slug/meeting/meetings?scope=upcoming` — [meeting/router.py:63-79](../../apps/api/src/aidoo_api/domains/meeting/router.py#L63-L79)
-  - `GET /api/v1/workspaces/:slug/docs/recent-pages?limit=10` — [docs/router.py:1714](../../apps/api/src/aidoo_api/domains/docs/router.py#L1714)
+  - `GET /api/v1/workspaces/:slug/meeting/meetings?scope=upcoming` — [meeting/router.py:63-79](../../apps/api/src/ai_do_api/domains/meeting/router.py#L63-L79)
+  - `GET /api/v1/workspaces/:slug/docs/recent-pages?limit=10` — [docs/router.py:1714](../../apps/api/src/ai_do_api/domains/docs/router.py#L1714)
   - PMS assigned-to-me — 존재 여부 사전 확인 필요, 없으면 해당 위젯만 다음 라운드로
 
 ## 구현 시 검증 루틴

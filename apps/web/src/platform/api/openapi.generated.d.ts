@@ -400,7 +400,7 @@ export interface paths {
          * @description Agent-aware SSE stream.
          *
          *     Wire protocol is documented in
-         *     ``apps/api/src/aidoo_api/domains/ai/events_schema.md``. HTTP status is
+         *     ``apps/api/src/ai_do_api/domains/ai/events_schema.md``. HTTP status is
          *     always 200 once the stream opens — failures surface as ``error`` +
          *     ``done(finish_reason=error)`` envelopes.
          */

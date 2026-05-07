@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import { ArrowRight, Lock, Mail, ShieldCheck, User } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import { InlineNotice } from '@aidoo/ui/feedback/inline-notice';
+import { InlineNotice } from '@ai-do/ui/feedback/inline-notice';
 
 import { useAuth } from './auth-context';
 

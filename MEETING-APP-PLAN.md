@@ -5,7 +5,7 @@
 
 ## Context
 
-포털 앱바에 새 "Meeting" 앱을 추가한다. 현재 이 레포는 Nx 모노레포(React 19 + Router v7 프런트, FastAPI `aidoo_api` 백엔드, `apps/worker` 잡 처리기)로 구성되어 있고, PMS/Docs는 정식 백엔드 도메인이 있는 반면 **Planner는 백엔드가 없는 프런트 프로토타입**이다. 또한 AI 앱 네비에 "회의록" 어시스턴트와 Docs 네비에 "Meeting Notes" 진입점만 자리가 잡혀 있을 뿐 실제 구현이 없다.
+포털 앱바에 새 "Meeting" 앱을 추가한다. 현재 이 레포는 Nx 모노레포(React 19 + Router v7 프런트, FastAPI `ai_do_api` 백엔드, `apps/worker` 잡 처리기)로 구성되어 있고, PMS/Docs는 정식 백엔드 도메인이 있는 반면 **Planner는 백엔드가 없는 프런트 프로토타입**이다. 또한 AI 앱 네비에 "회의록" 어시스턴트와 Docs 네비에 "Meeting Notes" 진입점만 자리가 잡혀 있을 뿐 실제 구현이 없다.
 
 이번 작업의 목적은 (1) 미팅 개설/참석자 관리/회의실 예약 UX, (2) 참석자 가용성 조회 기반 충돌 경고, (3) PMS 태스크·Docs 링크 + 자동 읽기 전용 권한 부여, (4) 녹음 → Whisper 전사 → LLM 요약 → 태스크 회의록 자동 생성, (5) 포털 홈 상단 위젯·개인 플래너 자동 반영을 엔드투엔드로 갖추는 것이다. Planner 백엔드가 없으므로 **공용 `events` 테이블**을 함께 구축해 Planner와 Meeting이 동일 소스를 바라보게 만든다. AI 회의록 어시스턴트 항목은 Meeting 앱으로 딥링크되는 진입점으로 남긴다.
 
@@ -17,7 +17,7 @@
 
 ## 백엔드: 신규 도메인 두 개
 
-### 1) `apps/api/src/aidoo_api/domains/calendar/` (새 공용 이벤트 도메인)
+### 1) `apps/api/src/ai_do_api/domains/calendar/` (새 공용 이벤트 도메인)
 
 **DB 모델 (`models.py`)**
 - `Event`: `id, workspace_id, owner_id, title, description, start_at, end_at, all_day, location_text, source_type ('planner' | 'meeting' | 'pms' | 'external'), source_id, event_type ('event' | 'task' | 'focus' | 'ooo' | 'meeting'), rrule (nullable), cancelled_at, created_at, updated_at`
@@ -30,7 +30,7 @@
 - `POST /api/v1/calendar/events` — Planner/Meeting 공용 쓰기 진입점 (source_type 지정)
 - `PATCH /api/v1/calendar/events/{id}`, `DELETE /api/v1/calendar/events/{id}`
 
-### 2) `apps/api/src/aidoo_api/domains/meeting/`
+### 2) `apps/api/src/ai_do_api/domains/meeting/`
 
 **DB 모델 (`models.py`)**
 - `MeetingRoom`: `id, workspace_id, name, capacity, location, equipment, is_active, created_by_admin_id, created_at`. 관리자 생성이 기본이나 `created_by_user_id` + `ad_hoc=True` 플래그로 미팅 개설자가 임시 추가한 장소를 구분.
@@ -60,14 +60,14 @@
 
 ### 3) PMS 태스크 ACL 신설
 
-- 파일: [apps/api/src/aidoo_api/domains/pms/models.py](apps/api/src/aidoo_api/domains/pms/models.py)
+- 파일: [apps/api/src/ai_do_api/domains/pms/models.py](apps/api/src/ai_do_api/domains/pms/models.py)
 - 신규 모델 `IssueUserAccess`: `id, issue_id, user_id, access_level ('read'), granted_by_meeting_id, granted_at`
-- [apps/api/src/aidoo_api/domains/pms/router.py](apps/api/src/aidoo_api/domains/pms/router.py) `_ensure_project_access()` (line 950 부근)에 폴백 추가: 프로젝트 멤버가 아니면 `IssueUserAccess`를 조회해 `access_level='read'`이면 읽기 전용 허용, 쓰기 경로에서는 여전히 차단. 기존 함수 하나를 `_ensure_issue_readable(user, issue)` / `_ensure_issue_writable(user, issue)`로 분할하고, 이슈 상세·댓글 조회 엔드포인트만 readable을 쓰도록 바꾼다.
+- [apps/api/src/ai_do_api/domains/pms/router.py](apps/api/src/ai_do_api/domains/pms/router.py) `_ensure_project_access()` (line 950 부근)에 폴백 추가: 프로젝트 멤버가 아니면 `IssueUserAccess`를 조회해 `access_level='read'`이면 읽기 전용 허용, 쓰기 경로에서는 여전히 차단. 기존 함수 하나를 `_ensure_issue_readable(user, issue)` / `_ensure_issue_writable(user, issue)`로 분할하고, 이슈 상세·댓글 조회 엔드포인트만 readable을 쓰도록 바꾼다.
 - 미팅 저장 플로우에서 참석자×링크된 태스크 조합으로 upsert, 참석자 제거 시 해당 행 삭제.
 
 ### 4) Docs 공유는 기존 메커니즘 재사용
 
-- [apps/api/src/aidoo_api/domains/docs/router.py](apps/api/src/aidoo_api/domains/docs/router.py)의 `upsert_native_doc_user_share()`(line ~1620)를 재사용해 `access_level='read'`로 grant. SpaceDoc의 경우 팀 권한 기반이라 별도 `SpaceDocUserShare` (없으면 신설) 또는 단일 `DocItemUserShare` 추상화. 구현 시 기존 Native 경로 우선으로 범위 축소.
+- [apps/api/src/ai_do_api/domains/docs/router.py](apps/api/src/ai_do_api/domains/docs/router.py)의 `upsert_native_doc_user_share()`(line ~1620)를 재사용해 `access_level='read'`로 grant. SpaceDoc의 경우 팀 권한 기반이라 별도 `SpaceDocUserShare` (없으면 신설) 또는 단일 `DocItemUserShare` 추상화. 구현 시 기존 Native 경로 우선으로 범위 축소.
 
 ### 5) 녹음/전사 파이프라인 (실연동)
 
@@ -114,7 +114,7 @@
 - [apps/web/src/components/views/HomeView.tsx](apps/web/src/components/views/HomeView.tsx) — `Assigned to me` 섹션 위에 **"Today's Meetings"** 섹션 추가. `SectionHeader` 재사용, `meeting-api`의 `listMeetings({ scope: 'mine', from: today, to: tomorrow })`로 채운다. 현재 `assignedTasks` 하드코딩 패턴을 따라가되 실제 API 연동 (동일 섹션의 Tasks는 별도 작업). 각 카드 클릭 시 `/meeting/:id`로 이동.
 
 ### 충돌 알림 (포털 접속 시)
-- 전역 레이아웃에 사용 중인 auth 훅 근처에 `useMeetingConflictToast()` 훅 추가. 로그인 직후 `GET /meeting/meetings/mine/conflict-feed`를 호출, 미확인 충돌이 있으면 `@aidoo/ui` 토스트/알림 드롭다운으로 노출하고 사용자가 확인하면 `POST .../ack`.
+- 전역 레이아웃에 사용 중인 auth 훅 근처에 `useMeetingConflictToast()` 훅 추가. 로그인 직후 `GET /meeting/meetings/mine/conflict-feed`를 호출, 미확인 충돌이 있으면 `@ai-do/ui` 토스트/알림 드롭다운으로 노출하고 사용자가 확인하면 `POST .../ack`.
 
 ### SubSidebar "+" 드롭다운
 - 최근 커밋(`5ecdd05`)에서 생성된 헤더 드롭다운에 "New Meeting" 항목과 단축키 추가. window 이벤트 `meeting:create-event`를 디스패치하는 패턴을 Planner에서 그대로 차용.
@@ -122,15 +122,15 @@
 ## 수정/신규 파일 요약
 
 백엔드 신규:
-- `apps/api/src/aidoo_api/domains/calendar/{__init__.py,models.py,router.py,schemas.py,service.py}`
-- `apps/api/src/aidoo_api/domains/meeting/{__init__.py,models.py,router.py,schemas.py,service.py,permissions.py}`
+- `apps/api/src/ai_do_api/domains/calendar/{__init__.py,models.py,router.py,schemas.py,service.py}`
+- `apps/api/src/ai_do_api/domains/meeting/{__init__.py,models.py,router.py,schemas.py,service.py,permissions.py}`
 - Alembic 마이그레이션 1개 (events, meeting_* , issue_user_access 테이블)
 - `apps/worker/jobs/meeting_transcription.py`
 
 백엔드 수정:
-- [apps/api/src/aidoo_api/domains/pms/models.py](apps/api/src/aidoo_api/domains/pms/models.py) — `IssueUserAccess` 추가
-- [apps/api/src/aidoo_api/domains/pms/router.py](apps/api/src/aidoo_api/domains/pms/router.py) — `_ensure_project_access`를 readable/writable로 분리
-- `apps/api/src/aidoo_api/main.py` (또는 app factory) — 두 신규 라우터 마운트
+- [apps/api/src/ai_do_api/domains/pms/models.py](apps/api/src/ai_do_api/domains/pms/models.py) — `IssueUserAccess` 추가
+- [apps/api/src/ai_do_api/domains/pms/router.py](apps/api/src/ai_do_api/domains/pms/router.py) — `_ensure_project_access`를 readable/writable로 분리
+- `apps/api/src/ai_do_api/main.py` (또는 app factory) — 두 신규 라우터 마운트
 - 워크스페이스 feature flag 테이블/시드에 `nav.meeting` 추가
 
 프런트 신규:
@@ -150,7 +150,7 @@
 
 - 사용자/권한: [apps/web/src/domains/auth/auth-api.ts](apps/web/src/domains/auth/auth-api.ts), `hasFeatureAccess`, `WorkspaceGate`
 - 디자인 토큰: [packages/ui/styles.css](packages/ui/styles.css), [apps/web/src/index.css](apps/web/src/index.css)
-- UI 프리미티브: `@aidoo/ui` Button/Modal/Toast, BlockNote 에디터 (`/packages/ui/src/lib/editor`)
+- UI 프리미티브: `@ai-do/ui` Button/Modal/Toast, BlockNote 에디터 (`/packages/ui/src/lib/editor`)
 - PMS 이슈 조회: `listProjectIssues()` in [apps/web/src/domains/pms/pms-api.ts](apps/web/src/domains/pms/pms-api.ts)
 - Docs 허브 조회/공유: `listDocsHub()`, `upsertDocUserShare()`
 - Planner 그리드: [apps/web/src/components/views/PlannerView.tsx](apps/web/src/components/views/PlannerView.tsx) (추출 후 공유)
@@ -463,12 +463,12 @@ Concrete a11y requirements shipped with each feature's first PR (not polish PR5)
 |---|---|---|---|---|
 | MeetingView list row | `app-text-body`, `app-text-caption` | `border-t border-app-border` row (HomeView pattern) | `--ui-color-ink`, `--ui-color-ink-subtle` | `Video`, `Users`, `AlertTriangle` |
 | Home widget row | Same as MeetingView list row | Same — `SectionHeader` + border row | Same | Same + `ChevronRight` |
-| MeetingCreateModal | `app-text-title-md` header, `app-text-body` fields, `app-text-caption` hints | `@aidoo/ui` `Dialog` (centered, NOT SchedulePopover) | `--ui-color-surface`, `--ui-color-border`, `--ui-color-warning` for conflict banner | `X` close, `Calendar`, `Users`, `MapPin`, `CheckCircle`, `FileText`, `Plus` |
+| MeetingCreateModal | `app-text-title-md` header, `app-text-body` fields, `app-text-caption` hints | `@ai-do/ui` `Dialog` (centered, NOT SchedulePopover) | `--ui-color-surface`, `--ui-color-border`, `--ui-color-warning` for conflict banner | `X` close, `Calendar`, `Users`, `MapPin`, `CheckCircle`, `FileText`, `Plus` |
 | MeetingDetail | `app-text-title-lg`, `app-text-title-md`, `app-text-body` | `card` class for hero, bordered sections for rest | `--ui-color-surface`, semantic status via `--ui-color-success/warning/danger` | `Video`, `Mic`, `FileText`, `Link2`, `Users`, `MapPin`, `Clock` |
 | AvailabilityOverlay | `app-text-micro` for time labels | Inner panel of Create modal | `--ui-color-warning` busy, `--ui-color-success` free | none (pure rectangles) |
 | RecordingControls | `app-text-body` | `card` or inline panel | `--ui-color-danger` pulsing dot while recording | `Mic`, `Square` (stop), `Upload`, `Pause` |
 | TranscriptionRail | `app-text-caption` step labels | Inline below actions | `--ui-color-accent` active, `--ui-color-ink-subtle` inactive | `Check` (done), `Loader2` (in-progress spin) |
-| ConflictToast | `app-text-body` | `@aidoo/ui` Toast | `--ui-color-warning` background | `AlertTriangle` |
+| ConflictToast | `app-text-body` | `@ai-do/ui` Toast | `--ui-color-warning` background | `AlertTriangle` |
 | MeetingRoomsAdmin | `app-text-title-md`, `app-text-body` | Table (same pattern as PMS admin views) | Standard | `Plus`, `Edit2`, `Trash2`, `MapPin` |
 
 **Dark mode**: All surfaces ship both light and dark. Use the existing `dark:` Tailwind variants — do not invent new tokens.
@@ -520,22 +520,22 @@ Concrete a11y requirements shipped with each feature's first PR (not polish PR5)
 
 ### C1. Project has no Alembic — plan's "Alembic 마이그레이션" is unimplementable
 - Verified: `apps/api/pyproject.toml:12` lists Alembic as a dependency, but there is NO `alembic.ini`, NO `alembic/`, NO `versions/` directory.
-- Current schema management: `apps/api/src/aidoo_api/core/db.py:41` calls `Base.metadata.create_all()` plus hand-written compatibility SQL.
+- Current schema management: `apps/api/src/ai_do_api/core/db.py:41` calls `Base.metadata.create_all()` plus hand-written compatibility SQL.
 - Impact: PR1 cannot safely add ~10 new tables as described. Any ALTER in later PRs will silently diverge from the declared models.
 - **AUTO-DECISION (Mechanical, P1 completeness)**: Add a **PR0** before PR1 that (a) bootstraps Alembic (`alembic init`, generate baseline from current Base.metadata via `alembic revision --autogenerate`, stamp head), (b) adds CI guard that fails if models drift from the latest revision, (c) documents the migration workflow in the API app's README. Alternative (fallback): stay on create_all with additive-only schema and hard-block any ALTER until Alembic ships. Plan must pick one in PR0.
 
 ### C2. Media router + orphan cleanup beat will silently DELETE meeting recordings
 - Verified:
-  - `apps/api/src/aidoo_api/domains/media/router.py:24` — upload reads entire file into memory via `await file.read()`
-  - `apps/api/src/aidoo_api/domains/media/router.py:50` — size cap is 10 MB (`MAX_MEDIA_UPLOAD_SIZE`)
-  - `apps/api/src/aidoo_api/domains/media/router.py:213` — `resource_type` accepts only `issue` and `docs_native_page`
-  - `apps/worker/src/aidoo_worker/celery_app.py:15` — beat schedule includes `cleanup_orphan_media` hourly
-  - `apps/worker/src/aidoo_worker/tasks/media.py:50` — task deletes media rows older than 24h where `resource_type IS NULL`
+  - `apps/api/src/ai_do_api/domains/media/router.py:24` — upload reads entire file into memory via `await file.read()`
+  - `apps/api/src/ai_do_api/domains/media/router.py:50` — size cap is 10 MB (`MAX_MEDIA_UPLOAD_SIZE`)
+  - `apps/api/src/ai_do_api/domains/media/router.py:213` — `resource_type` accepts only `issue` and `docs_native_page`
+  - `apps/worker/src/ai_do_worker/celery_app.py:15` — beat schedule includes `cleanup_orphan_media` hourly
+  - `apps/worker/src/ai_do_worker/tasks/media.py:50` — task deletes media rows older than 24h where `resource_type IS NULL`
 - Impact: A 4-hour recording is ~115 MB and will be rejected by the 10 MB cap. Even if uploaded, if the ingest code forgets to set `resource_type='meeting_recording'`, the hourly beat task silently deletes the file. This is a **data loss** bug waiting to happen.
-- **AUTO-DECISION (Mechanical, P1 completeness)**: The plan adds a dedicated `POST /api/v1/meeting/recordings` endpoint (PR3) with (a) streaming upload to MinIO via `put_object(..., length=-1, part_size=5*1024*1024)` multipart, (b) per-resource size cap (1 GB), (c) `audio/*` content-type policy, (d) `resource_type='meeting_recording'` and `resource_id=recording.id` on the MediaFile row so orphan cleanup skips it. Do NOT reuse `/media/upload`. Also: `apps/worker/src/aidoo_worker/tasks/media.py:50` gets a fix that explicitly excludes `resource_type IN ('meeting_recording')` even when it IS set, as a belt-and-suspenders guard, and an integration test verifies the cleanup job does NOT delete meeting recordings.
+- **AUTO-DECISION (Mechanical, P1 completeness)**: The plan adds a dedicated `POST /api/v1/meeting/recordings` endpoint (PR3) with (a) streaming upload to MinIO via `put_object(..., length=-1, part_size=5*1024*1024)` multipart, (b) per-resource size cap (1 GB), (c) `audio/*` content-type policy, (d) `resource_type='meeting_recording'` and `resource_id=recording.id` on the MediaFile row so orphan cleanup skips it. Do NOT reuse `/media/upload`. Also: `apps/worker/src/ai_do_worker/tasks/media.py:50` gets a fix that explicitly excludes `resource_type IN ('meeting_recording')` even when it IS set, as a belt-and-suspenders guard, and an integration test verifies the cleanup job does NOT delete meeting recordings.
 
 ### C3. No production Celery job contract — meeting_transcription would be the first long-running workload
-- Verified: existing tasks at `apps/worker/src/aidoo_worker/celery_app.py:8`, `apps/worker/src/aidoo_worker/tasks/ocr.py:4`, `apps/worker/src/aidoo_worker/tasks/media.py:38` are all stubs or short cleanup jobs. None have `acks_late=True`, `task_time_limit`, retry policy, DLQ, cancellation, idempotency keys, or progress heartbeats.
+- Verified: existing tasks at `apps/worker/src/ai_do_worker/celery_app.py:8`, `apps/worker/src/ai_do_worker/tasks/ocr.py:4`, `apps/worker/src/ai_do_worker/tasks/media.py:38` are all stubs or short cleanup jobs. None have `acks_late=True`, `task_time_limit`, retry policy, DLQ, cancellation, idempotency keys, or progress heartbeats.
 - Impact: A 4-hour recording running through faster-whisper + Ollama will blow past Celery defaults, not retry correctly on transient Ollama failures, continue running if the meeting is deleted, and leave orphan partial Docs if the summarization step crashes.
 - **AUTO-DECISION (Mechanical, P1 completeness + P5 explicit)**: PR3 includes a production Celery contract for meeting jobs, documented inline:
   - Split into `meeting.transcribe` (CPU/GPU-bound) and `meeting.summarize` (LLM-bound) chained via Celery `chain()`. Each retries independently.
@@ -657,7 +657,7 @@ Plan has `MeetingAttendee.conflict_detected: bool` computed once on create. D8 d
                    calendar-api         meeting-api
                               │         │
              ┌────────────────▼─────────▼────────────────┐
-             │             FastAPI aidoo_api             │
+             │             FastAPI ai_do_api             │
              │                                            │
              │  ┌──────────┐      ┌───────────┐          │
              │  │ calendar │◄─────│  meeting  │          │
@@ -828,7 +828,7 @@ The /autoplan skill normally writes a restore point file, a test plan artifact, 
 - New backend domain `meeting/` (no calendar/events yet): `Meeting`, `MeetingAttendee` (no mirror event_id), `MeetingRoom`, `MeetingTaskLink`, `MeetingDocLink`, `MeetingNote`, `MeetingRecording` tables via Alembic migration.
 - AppBar registration: `constants.ts`, `app-shell.ts`, `App.tsx`, `WorkspaceGate featureCode="nav.meeting"`, AI sidebar `meeting-minutes` rewired as deep link.
 - MeetingView shell with List, Recordings, Rooms tabs (no Calendar tab yet — deferred to PR4). List shows meetings sorted by start time.
-- MeetingCreateModal with field order per D1 (title → linked work → time → attendees → room → save row). @aidoo/ui Dialog component (not SchedulePopover). Save row has dynamic primary button text per D5.
+- MeetingCreateModal with field order per D1 (title → linked work → time → attendees → room → save row). @ai-do/ui Dialog component (not SchedulePopover). Save row has dynamic primary button text per D5.
 - Accessibility per D6: modal focus trap + return, conflict banner as `role="alert"` with live region, Korean VoiceOver smoke test.
 - `nav.meeting` feature flag seeded.
 - Tests per H7: meeting create transaction rollback, CRUD contract, SubSidebar "+" event dispatch, title truncation.

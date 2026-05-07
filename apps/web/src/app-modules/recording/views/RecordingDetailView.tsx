@@ -14,7 +14,7 @@ import {
   RefreshCw,
   Trash2,
 } from 'lucide-react';
-import { Button, useConfirm } from '@aidoo/ui';
+import { Button, useConfirm } from '@ai-do/ui';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { DocsViewerModal } from '@/src/app-modules/docs/public-api';

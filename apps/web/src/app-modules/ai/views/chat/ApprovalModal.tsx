@@ -1,4 +1,4 @@
-import { Button, Dialog } from '@aidoo/ui';
+import { Button, Dialog } from '@ai-do/ui';
 import { Check, Loader2, ShieldAlert, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';

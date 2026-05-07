@@ -12,13 +12,13 @@ from sqlalchemy import create_engine, inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
-from aidoo_api.domains.ai import approvals as ai_approvals
-from aidoo_api.domains.ai.runtime.models import (
+from ai_do_api.domains.ai import approvals as ai_approvals
+from ai_do_api.domains.ai.runtime.models import (
     AgentInvocation,
     AgentRun,
     AgentTraceEvent,
 )
-from aidoo_api.domains.ai.runtime.persistence import (
+from ai_do_api.domains.ai.runtime.persistence import (
     append_graph_schedule_trace_events,
     append_trace_event,
     prepare_trace_payload,
@@ -26,10 +26,10 @@ from aidoo_api.domains.ai.runtime.persistence import (
     scrub_completed_runtime_records,
     scrub_trace_payload,
 )
-from aidoo_api.domains.auth.models import User, Workspace
-from aidoo_api.domains.auth.security import new_id
-from aidoo_api.domains.conversations.models import Conversation
-from aidoo_api.domains.meeting.models import utcnow_naive
+from ai_do_api.domains.auth.models import User, Workspace
+from ai_do_api.domains.auth.security import new_id
+from ai_do_api.domains.conversations.models import Conversation
+from ai_do_api.domains.meeting.models import utcnow_naive
 
 
 @pytest.fixture
@@ -40,8 +40,8 @@ def runtime_session_factory(
     monkeypatch.setenv("DOOWON_POSTGRES_DSN", postgres_dsn)
     monkeypatch.setenv("DOOWON_LLM_HEALTHCHECK_ON_STARTUP", "0")
 
-    from aidoo_api.core.db import _alembic_config, get_engine, get_session_factory
-    from aidoo_api.core.settings import get_settings
+    from ai_do_api.core.db import _alembic_config, get_engine, get_session_factory
+    from ai_do_api.core.settings import get_settings
 
     get_settings.cache_clear()
     get_engine.cache_clear()
@@ -71,7 +71,7 @@ def _seed_scope(db: Session) -> tuple[Workspace, User, Conversation]:
     )
     user = User(
         id=new_id(),
-        email=f"runtime-{suffix}@aidoo.local",
+        email=f"runtime-{suffix}@ai-do.local",
         full_name="Runtime Test User",
         password_hash="test",
     )
@@ -122,7 +122,7 @@ def test_runtime_migration_creates_kernel_tables(
 def test_runtime_migration_downgrade_upgrade_round_trip(
     runtime_session_factory: sessionmaker[Session],
 ) -> None:
-    from aidoo_api.core.db import _alembic_config
+    from ai_do_api.core.db import _alembic_config
 
     command.downgrade(_alembic_config(), "-1")
     command.upgrade(_alembic_config(), "head")

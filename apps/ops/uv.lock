@@ -12,7 +12,7 @@ wheels = [
 ]
 
 [[package]]
-name = "aidoo-ops"
+name = "ai-do-ops"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

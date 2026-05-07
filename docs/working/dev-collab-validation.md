@@ -47,7 +47,7 @@ Verified on 2026-05-03:
   interface and be reached from the host without `-p` port publishing. The smoke
   check used an Alpine container listening on `127.0.0.1:59999` and `curl
   http://127.0.0.1:59999/` returned `ok`.
-- `AIDOO_ENV_PROFILE=vm` selects `compose.dev.host.yml`; all infra services in
+- `AI_DO_ENV_PROFILE=vm` selects `compose.dev.host.yml`; all infra services in
   that compose file use `network_mode: host`.
 - Because host networking ignores Docker port publishing, infra containers must
   explicitly listen on the configured host ports:
@@ -56,7 +56,7 @@ Verified on 2026-05-03:
   - MinIO uses `--address :$DOOWON_DEV_MINIO_PORT` and
     `--console-address :$DOOWON_DEV_MINIO_CONSOLE_PORT`.
 - API pytest Docker fixtures follow the same convention when
-  `AIDOO_ENV_PROFILE=vm` or `AIDOO_TEST_DOCKER_NETWORK=host` is set: they pass
+  `AI_DO_ENV_PROFILE=vm` or `AI_DO_TEST_DOCKER_NETWORK=host` is set: they pass
   `--network host`, skip `-p`, and start each service on the selected host port.
 - The current user cannot access `/var/run/docker.sock` directly on this VM, so
   VM commands should either run through the repo helpers (`dev_docker`) or use

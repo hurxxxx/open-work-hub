@@ -20,8 +20,8 @@ def _bootstrap_admin_session(client: TestClient) -> dict:
     response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "AIDOO Admin",
-            "email": "admin@aidoo.local",
+            "full_name": "AI-DO Admin",
+            "email": "admin@ai-do.local",
             "password": "supersecret123",
         },
     )
@@ -90,7 +90,7 @@ def test_anonymous_requests_are_rejected(client: TestClient) -> None:
 
 def test_any_user_can_create_and_edit_their_own_private_note(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
-    _, alice_token = _create_member(client, admin["token"], email="alice@aidoo.local")
+    _, alice_token = _create_member(client, admin["token"], email="alice@ai-do.local")
 
     response = client.put(
         "/api/v1/learning/notes/me",
@@ -128,8 +128,8 @@ def test_private_notes_are_hidden_from_everyone_else_including_admin(
     client: TestClient,
 ) -> None:
     admin = _bootstrap_admin_session(client)
-    _, alice_token = _create_member(client, admin["token"], email="alice@aidoo.local")
-    _, bob_token = _create_member(client, admin["token"], email="bob@aidoo.local")
+    _, alice_token = _create_member(client, admin["token"], email="alice@ai-do.local")
+    _, bob_token = _create_member(client, admin["token"], email="bob@ai-do.local")
 
     created = client.put(
         "/api/v1/learning/notes/me",
@@ -174,10 +174,10 @@ def test_private_notes_are_hidden_from_everyone_else_including_admin(
 def test_public_notes_are_listed_and_readable_by_everyone(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
     alice_id, alice_token = _create_member(
-        client, admin["token"], email="alice@aidoo.local", full_name="Alice"
+        client, admin["token"], email="alice@ai-do.local", full_name="Alice"
     )
     _, bob_token = _create_member(
-        client, admin["token"], email="bob@aidoo.local", full_name="Bob"
+        client, admin["token"], email="bob@ai-do.local", full_name="Bob"
     )
 
     alice_note = client.put(
@@ -217,8 +217,8 @@ def test_list_returns_own_private_note_at_top_alongside_others_public(
     client: TestClient,
 ) -> None:
     admin = _bootstrap_admin_session(client)
-    _, alice_token = _create_member(client, admin["token"], email="alice@aidoo.local")
-    _, bob_token = _create_member(client, admin["token"], email="bob@aidoo.local")
+    _, alice_token = _create_member(client, admin["token"], email="alice@ai-do.local")
+    _, bob_token = _create_member(client, admin["token"], email="bob@ai-do.local")
 
     # Bob creates a public note first.
     client.put(
@@ -250,8 +250,8 @@ def test_list_returns_own_private_note_at_top_alongside_others_public(
 
 def test_archive_and_restore_are_owner_only(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
-    _, alice_token = _create_member(client, admin["token"], email="alice@aidoo.local")
-    _, bob_token = _create_member(client, admin["token"], email="bob@aidoo.local")
+    _, alice_token = _create_member(client, admin["token"], email="alice@ai-do.local")
+    _, bob_token = _create_member(client, admin["token"], email="bob@ai-do.local")
 
     created = client.put(
         "/api/v1/learning/notes/me",
@@ -305,7 +305,7 @@ def test_archive_and_restore_are_owner_only(client: TestClient) -> None:
 
 def test_upsert_rejects_malformed_content_blocks(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
-    _, alice_token = _create_member(client, admin["token"], email="alice@aidoo.local")
+    _, alice_token = _create_member(client, admin["token"], email="alice@ai-do.local")
 
     bad = _payload()
     bad["content_blocks"] = [{"no_type_field": True}]
@@ -319,7 +319,7 @@ def test_upsert_rejects_malformed_content_blocks(client: TestClient) -> None:
 
 def test_upsert_rejects_invalid_visibility(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
-    _, alice_token = _create_member(client, admin["token"], email="alice@aidoo.local")
+    _, alice_token = _create_member(client, admin["token"], email="alice@ai-do.local")
 
     bad = _payload()
     bad["visibility"] = "world"
@@ -333,7 +333,7 @@ def test_upsert_rejects_invalid_visibility(client: TestClient) -> None:
 
 def test_native_doc_tagging(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
-    _, alice_token = _create_member(client, admin["token"], email="alice@aidoo.local")
+    _, alice_token = _create_member(client, admin["token"], email="alice@ai-do.local")
 
     response = client.put(
         "/api/v1/learning/notes/me",
@@ -345,8 +345,8 @@ def test_native_doc_tagging(client: TestClient) -> None:
 
     from sqlalchemy import select
 
-    from aidoo_api.core.db import get_session_factory
-    from aidoo_api.domains.docs.models import NativeDoc
+    from ai_do_api.core.db import get_session_factory
+    from ai_do_api.domains.docs.models import NativeDoc
 
     factory = get_session_factory()
     with factory() as session:

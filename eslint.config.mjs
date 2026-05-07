@@ -45,7 +45,7 @@ export default [
     rules: {},
   },
   // Prevent direct imports of wrapped libraries in app code.
-  // These should only be imported via @aidoo/ui wrappers.
+  // These should only be imported via @ai-do/ui wrappers.
   {
     files: ['apps/**/*.ts', 'apps/**/*.tsx'],
     rules: {
@@ -55,17 +55,17 @@ export default [
           paths: [
             {
               name: 'recharts',
-              message: 'Use chart components from @aidoo/ui instead.',
+              message: 'Use chart components from @ai-do/ui instead.',
             },
             {
               name: '@tanstack/react-table',
-              message: 'Use DataTable from @aidoo/ui instead.',
+              message: 'Use DataTable from @ai-do/ui instead.',
             },
           ],
           patterns: [
             {
               group: ['@radix-ui/*'],
-              message: 'Use primitives from @aidoo/ui instead.',
+              message: 'Use primitives from @ai-do/ui instead.',
             },
             {
               group: [

@@ -18,17 +18,17 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 import uvicorn
 
-from aidoo_api.core import llm as llm_core
-from aidoo_api.core.db import get_engine
-from aidoo_api.core.llm_adapters import StreamChunk
-from aidoo_api.core.settings import get_settings
-from aidoo_api.domains.ai import agent as ai_agent
-from aidoo_api.domains.ai import approvals as ai_approvals
-from aidoo_api.domains.ai.models import LlmPolicy
-from aidoo_api.domains.ai import router as ai_router
-from aidoo_api.domains.ai.runtime.models import AgentInvocation, AgentRun, AgentTraceEvent
-from aidoo_api.domains.ai.runtime.graph_scheduler import GraphSchedulerError
-from aidoo_api.domains.auth.models import AuditLog, Workspace, WorkspaceAppEntitlement
+from ai_do_api.core import llm as llm_core
+from ai_do_api.core.db import get_engine
+from ai_do_api.core.llm_adapters import StreamChunk
+from ai_do_api.core.settings import get_settings
+from ai_do_api.domains.ai import agent as ai_agent
+from ai_do_api.domains.ai import approvals as ai_approvals
+from ai_do_api.domains.ai.models import LlmPolicy
+from ai_do_api.domains.ai import router as ai_router
+from ai_do_api.domains.ai.runtime.models import AgentInvocation, AgentRun, AgentTraceEvent
+from ai_do_api.domains.ai.runtime.graph_scheduler import GraphSchedulerError
+from ai_do_api.domains.auth.models import AuditLog, Workspace, WorkspaceAppEntitlement
 from test_meeting import (
     _auth_headers,
     _bootstrap_admin_session,
@@ -485,7 +485,7 @@ def test_chat_stream_requires_workspace_membership(client: TestClient) -> None:
     outsider = _create_user_with_workspaces(
         client,
         admin["token"],
-        email="stream-outsider@aidoo.local",
+        email="stream-outsider@ai-do.local",
         full_name="Stream Outsider",
         workspace_keys=[],
     )
@@ -514,8 +514,8 @@ def test_chat_stream_includes_meeting_scope_prompt_for_scoped_conversation(
 
     meeting = _create_meeting(client, auth["token"], title="Scoped meeting")
 
-    from aidoo_api.domains.auth.models import User
-    from aidoo_api.domains.conversations import service as conversations_service
+    from ai_do_api.domains.auth.models import User
+    from ai_do_api.domains.conversations import service as conversations_service
 
     with Session(get_engine()) as db:
         workspace = db.scalar(select(Workspace).where(Workspace.key == slug))
@@ -626,7 +626,7 @@ def test_chat_stream_ai_manager_enabled_uses_sdk_adapter_boundary(
     monkeypatch.setattr(settings, "ai_manager_model", "gpt-test")
     monkeypatch.setattr(settings, "ai_manager_max_loops", 3)
 
-    from aidoo_api.domains.ai.manager_runtime import (
+    from ai_do_api.domains.ai.manager_runtime import (
         StaticLocalSpecialistRunner,
         run_ai_manager_stream,
     )

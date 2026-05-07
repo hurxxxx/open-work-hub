@@ -12,7 +12,7 @@ import {
   SearchField,
   type DataTableColumn,
   useToast,
-} from '@aidoo/ui';
+} from '@ai-do/ui';
 
 import {
   searchDocuments,

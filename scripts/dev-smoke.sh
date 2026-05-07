@@ -72,7 +72,7 @@ curl -fsS \
   "$DOOWON_DEV_BASE_URL/api/v1/auth/dev-login" >/dev/null
 curl -fsS \
   -H 'Content-Type: application/json' \
-  -d '{"email":"platform-admin@aidoo.local","password":"Aidoo!dev1234"}' \
+  -d '{"email":"platform-admin@ai-do.local","password":"AI-DO!dev1234"}' \
   "$DOOWON_DEV_BASE_URL/api/v1/auth/login" >/dev/null
 
 echo "[dev] smoke checks passed"

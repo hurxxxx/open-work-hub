@@ -11,7 +11,7 @@ import {
   Loader2,
   Users,
 } from 'lucide-react';
-import { Panel } from '@aidoo/ui';
+import { Panel } from '@ai-do/ui';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {

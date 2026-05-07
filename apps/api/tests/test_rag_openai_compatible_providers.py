@@ -3,9 +3,9 @@ from __future__ import annotations
 import httpx
 import pytest
 
-import aidoo_api.domains.rag.providers.openai_compatible as provider_module
-from aidoo_api.domains.rag.contracts import RagProjection, RagVectorSearchHit
-from aidoo_api.domains.rag.providers.openai_compatible import (
+import ai_do_api.domains.rag.providers.openai_compatible as provider_module
+from ai_do_api.domains.rag.contracts import RagProjection, RagVectorSearchHit
+from ai_do_api.domains.rag.providers.openai_compatible import (
     DeepInfraEmbeddingClient,
     DeepInfraRerankClient,
     OpenAICompatibleRerankClient,

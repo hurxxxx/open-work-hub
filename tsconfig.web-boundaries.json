@@ -4,8 +4,8 @@
     "baseUrl": ".",
     "paths": {
       "@/src/*": ["apps/web/src/*"],
-      "@aidoo/ui": ["packages/ui/src/index.ts"],
-      "@aidoo/ui/styles.css": ["packages/ui/styles.css"]
+      "@ai-do/ui": ["packages/ui/src/index.ts"],
+      "@ai-do/ui/styles.css": ["packages/ui/styles.css"]
     }
   },
   "include": ["apps/web/src/**/*.ts", "apps/web/src/**/*.tsx"]
