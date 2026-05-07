@@ -37,9 +37,7 @@ DEFAULT_TIME_ZONE = "Asia/Seoul"
 DEFAULT_LOCALE = "ko-KR"
 SUPPORTED_LOCALES = frozenset({"ko-KR", "en-US"})
 
-SYSTEM_ROLE_ORDER = (
-    SYSTEM_PLATFORM_ADMIN,
-)
+SYSTEM_ROLE_ORDER = (SYSTEM_PLATFORM_ADMIN,)
 VALID_SYSTEM_ROLES = frozenset(SYSTEM_ROLE_ORDER)
 
 
@@ -131,39 +129,20 @@ TEAM_ROLE_ALIASES = {
 }
 DEFAULT_WORKSPACE_SEEDS = [
     {
-        "key": "hq",
-        "name": "AI-DO HQ",
-        "description": "Primary collaboration workspace.",
-    }
-]
-DEV_WORKSPACE_SEEDS = [
+        "key": "administrator",
+        "name": "Administrator",
+        "description": "Administrator workspace.",
+    },
     {
         "key": "ai-tft",
-        "name": "AI-TFT팀",
-        "description": "Workspace for the AI-TFT team.",
-    },
-    {
-        "key": "innovation-lab",
-        "name": "Innovation Lab",
-        "description": "Workspace for AI and exploratory collaboration.",
-    },
-    {
-        "key": "knowledge-base",
-        "name": "Knowledge Base",
-        "description": "Workspace focused on shared documents and references.",
-    },
-    {
-        "key": "planning-desk",
-        "name": "Planning Desk",
-        "description": "Workspace focused on planning and schedules.",
-    },
-    {
-        "key": "delivery-hub",
-        "name": "Delivery Hub",
-        "description": "Workspace for delivery teams running PMS, Docs, and Meetings.",
+        "name": "AI TFT",
+        "description": "Workspace for the AI TFT team.",
     },
 ]
-DEV_WORKSPACE_SEED_KEYS = frozenset(definition["key"] for definition in DEV_WORKSPACE_SEEDS)
+DEV_WORKSPACE_SEEDS = []
+DEV_WORKSPACE_SEED_KEYS = frozenset(
+    definition["key"] for definition in [*DEFAULT_WORKSPACE_SEEDS, *DEV_WORKSPACE_SEEDS]
+)
 
 DEFAULT_PMS_SPACE_KEY = "team-space"
 DEFAULT_PMS_SPACE_NAME = "Team Space"
@@ -171,82 +150,25 @@ DEFAULT_PMS_SPACE_DESCRIPTION = "Default PMS space for shared lists and docs."
 
 DEV_LOGIN_PASSWORD = "AI-DO!dev1234"
 
-def _build_workspace_dev_login_accounts() -> list[dict[str, Any]]:
-    items: list[dict[str, Any]] = []
-    for workspace_definition in [*DEFAULT_WORKSPACE_SEEDS, *DEV_WORKSPACE_SEEDS]:
-        workspace_key = workspace_definition["key"]
-        workspace_name = workspace_definition["name"]
-        has_pms = workspace_key in {"hq", "ai-tft", "delivery-hub"}
-
-        items.append(
-            {
-                "key": f"{workspace_key}-admin",
-                "label": f"{workspace_name} Admin",
-                "email": f"{workspace_key}-admin@ai-do.local",
-                "description": (
-                    f"{workspace_name} 워크스페이스 관리자 계정입니다."
-                    + (" 기본 Team Space 소유자 권한이 함께 제공됩니다." if has_pms else "")
-                ),
-                "category": "Workspaces",
-                "workspace_memberships": [(workspace_key, "admin")],
-                "team_memberships": [(workspace_key, "owner")] if has_pms else [],
-            }
-        )
-        items.append(
-            {
-                "key": f"{workspace_key}-member",
-                "label": f"{workspace_name} Member",
-                "email": f"{workspace_key}-member@ai-do.local",
-                "description": (
-                    f"{workspace_name} 워크스페이스 멤버 계정입니다."
-                    + (" 기본 Team Space 멤버 권한이 함께 제공됩니다." if has_pms else "")
-                ),
-                "category": "Workspaces",
-                "workspace_memberships": [(workspace_key, "member")],
-                "team_memberships": [(workspace_key, "member")] if has_pms else [],
-            }
-        )
-    return items
-
-
 DEV_LOGIN_ACCOUNTS = [
     {
-        "key": "platform-admin",
-        "label": "Platform Admin",
-        "email": "platform-admin@ai-do.local",
-        "description": "전역 관리자 권한으로 모든 워크스페이스와 설정을 관리합니다.",
+        "key": "administrator",
+        "label": "Administrator",
+        "email": "admin@ai-do.local",
+        "description": "관리자 권한으로 Administrator와 AI TFT 워크스페이스를 관리합니다.",
         "category": "Administrators",
         "group": {
-            "name": "Platform Admins",
-            "slug": "platform-admins",
-            "description": "Seeded platform administrators.",
+            "name": "Administrators",
+            "slug": "administrators",
+            "description": "Seeded administrators.",
             "system_roles": [SYSTEM_PLATFORM_ADMIN],
         },
-        "workspace_memberships": [("ai-tft", "admin")],
-        "team_memberships": [("ai-tft", "owner")],
+        "workspace_memberships": [("administrator", "admin"), ("ai-tft", "admin")],
+        "team_memberships": [("administrator", "owner"), ("ai-tft", "owner")],
     },
-    *_build_workspace_dev_login_accounts(),
 ]
 
 DEV_LOGIN_ACCOUNT_MAP = {item["key"]: item for item in DEV_LOGIN_ACCOUNTS}
-
-DEFAULT_DEV_PMS_TASK_LIST = {
-    "key": "DEMO",
-    "name": "Demo Workspace List",
-    "description": "Seeded PMS list for role-based smoke checks.",
-}
-DEFAULT_DEV_TASK_LIST_STATUSES = [
-    ("backlog", "Backlog", "#6b7280", "backlog", 0),
-    ("todo", "Todo", "#3b82f6", "active", 1),
-    ("in_progress", "In Progress", "#f59e0b", "active", 2),
-    ("done", "Done", "#22c55e", "done", 3),
-    ("canceled", "Canceled", "#ef4444", "canceled", 4),
-]
-DEFAULT_DEV_TASK_LIST_LABELS = [
-    ("blocked", "#b45309"),
-    ("customer", "#1d4ed8"),
-    ("qa", "#0f766e"),
-]
 
 USER_GRAPH_OPTIONS = (
     joinedload(User.primary_org_unit),
@@ -259,11 +181,10 @@ USER_GRAPH_OPTIONS = (
     .selectinload(AccessGroup.workspace_bindings)
     .joinedload(WorkspaceGroupBinding.workspace),
     selectinload(User.workspace_bindings).joinedload(WorkspaceUserBinding.workspace),
-    selectinload(User.team_memberships)
-    .joinedload(TeamMember.team)
-    .joinedload(Team.workspace),
+    selectinload(User.team_memberships).joinedload(TeamMember.team).joinedload(Team.workspace),
     selectinload(User.sessions),
 )
+
 
 def slugify(value: str) -> str:
     return (
@@ -371,15 +292,19 @@ def _higher_team_role(left: str | None, right: str | None) -> str | None:
 
 def _replace_user_system_roles(db: Session, user_id: str, roles: Sequence[str]) -> None:
     requested_roles = {
-        normalized
-        for role in roles
-        if (normalized := normalize_system_role(role)) is not None
+        normalized for role in roles if (normalized := normalize_system_role(role)) is not None
     }
-    current_links = db.scalars(select(UserSystemRole).where(UserSystemRole.user_id == user_id)).all()
+    current_links = db.scalars(
+        select(UserSystemRole).where(UserSystemRole.user_id == user_id)
+    ).all()
     current_normalized_roles: set[str] = set()
     for link in current_links:
         normalized_role = normalize_system_role(link.role)
-        if normalized_role is None or normalized_role not in requested_roles or link.role != normalized_role:
+        if (
+            normalized_role is None
+            or normalized_role not in requested_roles
+            or link.role != normalized_role
+        ):
             db.delete(link)
             continue
         current_normalized_roles.add(normalized_role)
@@ -393,15 +318,19 @@ def replace_user_system_roles(db: Session, user_id: str, roles: Sequence[str]) -
 
 def _replace_group_system_roles(db: Session, group_id: str, roles: Sequence[str]) -> None:
     requested_roles = {
-        normalized
-        for role in roles
-        if (normalized := normalize_system_role(role)) is not None
+        normalized for role in roles if (normalized := normalize_system_role(role)) is not None
     }
-    current_links = db.scalars(select(GroupSystemRole).where(GroupSystemRole.group_id == group_id)).all()
+    current_links = db.scalars(
+        select(GroupSystemRole).where(GroupSystemRole.group_id == group_id)
+    ).all()
     current_normalized_roles: set[str] = set()
     for link in current_links:
         normalized_role = normalize_system_role(link.role)
-        if normalized_role is None or normalized_role not in requested_roles or link.role != normalized_role:
+        if (
+            normalized_role is None
+            or normalized_role not in requested_roles
+            or link.role != normalized_role
+        ):
             db.delete(link)
             continue
         current_normalized_roles.add(normalized_role)
@@ -484,7 +413,9 @@ def _ensure_user_system_role_migration(db: Session) -> None:
     for user in db.scalars(select(User)).all():
         current_roles = {
             normalize_system_role(role)
-            for role in db.scalars(select(UserSystemRole.role).where(UserSystemRole.user_id == user.id)).all()
+            for role in db.scalars(
+                select(UserSystemRole.role).where(UserSystemRole.user_id == user.id)
+            ).all()
             if normalize_system_role(role) is not None
         }
         migrated_roles: set[str] = set()
@@ -498,10 +429,7 @@ def _ensure_workspace_rows(
     db: Session,
     definitions: Sequence[dict[str, Any]],
 ) -> dict[str, Workspace]:
-    workspaces = {
-        workspace.key: workspace
-        for workspace in db.scalars(select(Workspace)).all()
-    }
+    workspaces = {workspace.key: workspace for workspace in db.scalars(select(Workspace)).all()}
     ensured: dict[str, Workspace] = {}
     for definition in definitions:
         workspace = workspaces.get(definition["key"])
@@ -615,9 +543,7 @@ def ensure_workspace_app_entitlements(db: Session) -> None:
 
 def are_dev_login_accounts_seeded(db: Session) -> bool:
     required_emails = {definition["email"] for definition in DEV_LOGIN_ACCOUNTS}
-    existing = set(
-        db.scalars(select(User.email).where(User.email.in_(required_emails))).all()
-    )
+    existing = set(db.scalars(select(User.email).where(User.email.in_(required_emails))).all())
     return required_emails.issubset(existing)
 
 
@@ -729,7 +655,7 @@ def ensure_dev_login_seed_data(db: Session) -> None:
             workspace.key: workspace
             for workspace in db.scalars(select(Workspace).where(Workspace.active.is_(True))).all()
         },
-        **_ensure_workspace_rows(db, DEV_WORKSPACE_SEEDS),
+        **_ensure_workspace_rows(db, [*DEFAULT_WORKSPACE_SEEDS, *DEV_WORKSPACE_SEEDS]),
     }
     ensure_workspace_app_entitlements(db)
     default_spaces_by_workspace_key = {
@@ -765,7 +691,6 @@ def ensure_dev_login_seed_data(db: Session) -> None:
         _replace_group_system_roles(db, group.id, group_definition["system_roles"])
         group_ids_by_slug[group_definition["slug"]] = group.id
 
-    seeded_users: dict[str, User] = {}
     for definition in DEV_LOGIN_ACCOUNTS:
         user = db.scalar(select(User).where(User.email == definition["email"]))
         if user is None:
@@ -799,9 +724,7 @@ def ensure_dev_login_seed_data(db: Session) -> None:
 
         group_definition = definition.get("group")
         group_ids = (
-            [group_ids_by_slug[group_definition["slug"]]]
-            if group_definition is not None
-            else []
+            [group_ids_by_slug[group_definition["slug"]]] if group_definition is not None else []
         )
         assign_user_groups(db, user, group_ids)
         _replace_user_system_roles(db, user.id, [])
@@ -817,60 +740,6 @@ def ensure_dev_login_seed_data(db: Session) -> None:
             definition.get("team_memberships", []),
             default_spaces_by_workspace_key,
         )
-        seeded_users[definition["key"]] = user
-
-    from ai_do_api.domains.pms.models import Label, TaskList, TaskListStatus
-
-    platform_admin = seeded_users.get("platform-admin")
-    delivery_workspace = workspace_by_key.get("delivery-hub") or workspace_by_key.get("hq")
-    if platform_admin is not None and delivery_workspace is not None:
-        default_delivery_space = ensure_workspace_default_pms_space(db, delivery_workspace)
-        task_list = db.scalar(select(TaskList).where(TaskList.key == DEFAULT_DEV_PMS_TASK_LIST["key"]))
-        if task_list is None:
-            task_list = TaskList(
-                id=new_id(),
-                key=DEFAULT_DEV_PMS_TASK_LIST["key"],
-                name=DEFAULT_DEV_PMS_TASK_LIST["name"],
-                description=DEFAULT_DEV_PMS_TASK_LIST["description"],
-                status="active",
-                team_id=default_delivery_space.id,
-                created_by_id=platform_admin.id,
-            )
-            db.add(task_list)
-            db.flush()
-        else:
-            task_list.name = DEFAULT_DEV_PMS_TASK_LIST["name"]
-            task_list.description = DEFAULT_DEV_PMS_TASK_LIST["description"]
-            task_list.status = "active"
-            task_list.archived = False
-            task_list.team_id = default_delivery_space.id
-            db.add(task_list)
-            db.flush()
-
-        if not db.scalar(select(TaskListStatus.id).where(TaskListStatus.list_id == task_list.id)):
-            for slug, name, color, category, sort_order in DEFAULT_DEV_TASK_LIST_STATUSES:
-                db.add(
-                    TaskListStatus(
-                        id=new_id(),
-                        list_id=task_list.id,
-                        slug=slug,
-                        name=name,
-                        color=color,
-                        category=category,
-                        sort_order=sort_order,
-                    )
-                )
-
-        if not db.scalar(select(Label.id).where(Label.list_id == task_list.id)):
-            for name, color in DEFAULT_DEV_TASK_LIST_LABELS:
-                db.add(
-                    Label(
-                        id=new_id(),
-                        list_id=task_list.id,
-                        name=name,
-                        color=color,
-                    )
-                )
 
     db.commit()
 
@@ -977,9 +846,7 @@ def resolve_system_roles(db: Session, user: User) -> list[str]:
 def has_system_role(db: Session, user: User, *roles: str) -> bool:
     role_set = set(resolve_system_roles(db, user))
     normalized_requested_roles = {
-        normalized
-        for role in roles
-        if (normalized := normalize_system_role(role)) is not None
+        normalized for role in roles if (normalized := normalize_system_role(role)) is not None
     }
     return any(role in role_set for role in normalized_requested_roles)
 
@@ -1009,10 +876,13 @@ def resolve_workspace_role_map(db: Session, user: User) -> dict[str, str]:
         normalized_role = normalize_workspace_role(binding.role)
         if not binding.workspace.active or normalized_role is None:
             continue
-        role_map[binding.workspace_id] = _higher_workspace_role(
-            role_map.get(binding.workspace_id),
-            normalized_role,
-        ) or normalized_role
+        role_map[binding.workspace_id] = (
+            _higher_workspace_role(
+                role_map.get(binding.workspace_id),
+                normalized_role,
+            )
+            or normalized_role
+        )
 
     for link in user.group_links:
         if not link.group.active:
@@ -1021,10 +891,13 @@ def resolve_workspace_role_map(db: Session, user: User) -> dict[str, str]:
             normalized_role = normalize_workspace_role(binding.role)
             if not binding.workspace.active or normalized_role is None:
                 continue
-            role_map[binding.workspace_id] = _higher_workspace_role(
-                role_map.get(binding.workspace_id),
-                normalized_role,
-            ) or normalized_role
+            role_map[binding.workspace_id] = (
+                _higher_workspace_role(
+                    role_map.get(binding.workspace_id),
+                    normalized_role,
+                )
+                or normalized_role
+            )
 
     return role_map
 
@@ -1055,7 +928,9 @@ def resolve_group_slugs(user: User) -> list[str]:
 
 def resolve_workspaces(db: Session, user: User) -> list[dict[str, Any]]:
     active_workspaces = db.scalars(
-        select(Workspace).where(Workspace.active.is_(True)).order_by(Workspace.name.asc(), Workspace.key.asc())
+        select(Workspace)
+        .where(Workspace.active.is_(True))
+        .order_by(Workspace.name.asc(), Workspace.key.asc())
     ).all()
     role_map = resolve_workspace_role_map(db, user)
 
@@ -1077,9 +952,7 @@ def resolve_workspaces(db: Session, user: User) -> list[dict[str, Any]]:
 
 def resolve_workspace_enabled_app_ids(db: Session, workspace_id: str) -> list[str]:
     if not _workspace_app_entitlements_table_exists(db):
-        return [
-            app.app_id for app in iter_workspace_app_catalog() if app.enabled_by_default
-        ]
+        return [app.app_id for app in iter_workspace_app_catalog() if app.enabled_by_default]
     enabled_ids = {
         app_id
         for app_id, enabled in db.execute(
@@ -1090,9 +963,7 @@ def resolve_workspace_enabled_app_ids(db: Session, workspace_id: str) -> list[st
         if enabled
     }
     if not enabled_ids:
-        enabled_ids = {
-            app.app_id for app in iter_workspace_app_catalog() if app.enabled_by_default
-        }
+        enabled_ids = {app.app_id for app in iter_workspace_app_catalog() if app.enabled_by_default}
     return [app_id for app_id in WORKSPACE_APP_IDS if app_id in enabled_ids]
 
 
@@ -1145,9 +1016,7 @@ def build_workspace_bootstrap(
     from ai_do_api.domains.ai.registry import get_chatbot_capable_app_ids
 
     chatbot_app_ids = [
-        app_id
-        for app_id in get_chatbot_capable_app_ids()
-        if app_id in enabled_app_ids
+        app_id for app_id in get_chatbot_capable_app_ids() if app_id in enabled_app_ids
     ]
 
     return {
@@ -1226,7 +1095,9 @@ def serialize_auth_user(db: Session, user: User) -> dict[str, Any]:
     }
 
 
-def serialize_session_item(session_id: str, current_session_id: str | None, session: Any) -> dict[str, Any]:
+def serialize_session_item(
+    session_id: str, current_session_id: str | None, session: Any
+) -> dict[str, Any]:
     return {
         "id": session.id,
         "is_current": session.id == current_session_id,

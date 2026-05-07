@@ -3,19 +3,7 @@ from datetime import date, timedelta
 from fastapi.testclient import TestClient
 
 EXPECTED_DEV_LOGIN_ACCOUNT_KEYS = {
-    "platform-admin",
-    "hq-admin",
-    "hq-member",
-    "ai-tft-admin",
-    "ai-tft-member",
-    "innovation-lab-admin",
-    "innovation-lab-member",
-    "knowledge-base-admin",
-    "knowledge-base-member",
-    "planning-desk-admin",
-    "planning-desk-member",
-    "delivery-hub-admin",
-    "delivery-hub-member",
+    "administrator",
 }
 
 
@@ -285,29 +273,20 @@ def test_seeded_dev_login_accounts_are_listed_and_can_log_in(client: TestClient)
     account_keys = {item["account_key"] for item in payload["dev_login_accounts"]}
     assert account_keys == EXPECTED_DEV_LOGIN_ACCOUNT_KEYS
 
-    platform_admin_login_response = client.post(
+    admin_login_response = client.post(
         "/api/v1/auth/dev-login",
-        json={"account_key": "platform-admin"},
+        json={"account_key": "administrator"},
     )
-    assert platform_admin_login_response.status_code == 200
-    platform_admin_payload = platform_admin_login_response.json()
-    assert platform_admin_payload["user"]["email"] == "platform-admin@ai-do.local"
-    assert "platform_admin" in platform_admin_payload["user"]["system_roles"]
-    assert len(platform_admin_payload["user"]["workspaces"]) == 1
-    assert platform_admin_payload["user"]["workspaces"][0]["slug"] == "ai-tft"
-    assert platform_admin_payload["user"]["workspaces"][0]["name"] == "AI-TFT팀"
-    assert platform_admin_payload["user"]["workspaces"][0]["role"] == "admin"
-    assert "app_access" not in platform_admin_payload["user"]
-
-    dev_login_response = client.post(
-        "/api/v1/auth/dev-login",
-        json={"account_key": "delivery-hub-member"},
-    )
-    assert dev_login_response.status_code == 200
-    login_payload = dev_login_response.json()
-    assert login_payload["user"]["email"] == "delivery-hub-member@ai-do.local"
-    assert [item["slug"] for item in login_payload["user"]["workspaces"]] == ["delivery-hub"]
-    assert any(item["role"] == "member" for item in login_payload["user"]["workspaces"])
+    assert admin_login_response.status_code == 200
+    admin_payload = admin_login_response.json()
+    assert admin_payload["user"]["email"] == "admin@ai-do.local"
+    assert "platform_admin" in admin_payload["user"]["system_roles"]
+    assert {item["slug"] for item in admin_payload["user"]["workspaces"]} == {
+        "administrator",
+        "ai-tft",
+    }
+    assert {item["role"] for item in admin_payload["user"]["workspaces"]} == {"admin"}
+    assert "app_access" not in admin_payload["user"]
 
 
 def test_dev_login_creates_missing_dev_accounts_on_demand(client: TestClient) -> None:
@@ -338,22 +317,20 @@ def test_dev_login_creates_missing_dev_accounts_on_demand(client: TestClient) ->
     account_keys = {item["account_key"] for item in payload["dev_login_accounts"]}
     assert account_keys == EXPECTED_DEV_LOGIN_ACCOUNT_KEYS
 
-    # First dev-login for platform-admin seeds the full DEV_LOGIN_ACCOUNTS set.
-    platform_admin_login_response = client.post(
+    # First dev-login for administrator seeds the full DEV_LOGIN_ACCOUNTS set.
+    admin_login_response = client.post(
         "/api/v1/auth/dev-login",
-        json={"account_key": "platform-admin"},
+        json={"account_key": "administrator"},
     )
-    assert platform_admin_login_response.status_code == 200
-    assert platform_admin_login_response.json()["user"]["email"] == "platform-admin@ai-do.local"
-    assert "platform_admin" in platform_admin_login_response.json()["user"]["system_roles"]
+    assert admin_login_response.status_code == 200
+    assert admin_login_response.json()["user"]["email"] == "admin@ai-do.local"
+    assert "platform_admin" in admin_login_response.json()["user"]["system_roles"]
 
     # After seeding, bootstrap-status surfaces the full dev-login account
     # list without having to mutate the database itself.
     second_status = client.get("/api/v1/auth/bootstrap-status")
     assert second_status.status_code == 200
-    account_keys = {
-        item["account_key"] for item in second_status.json()["dev_login_accounts"]
-    }
+    account_keys = {item["account_key"] for item in second_status.json()["dev_login_accounts"]}
     assert account_keys == EXPECTED_DEV_LOGIN_ACCOUNT_KEYS
 
 
@@ -910,7 +887,9 @@ def test_workspace_scoped_team_management_requires_workspace_admin_role(client: 
     )
     scoped_headers = {"Authorization": f"Bearer {scoped_user_token}"}
 
-    inaccessible_workspaces_response = client.get("/api/v1/admin/workspaces", headers=scoped_headers)
+    inaccessible_workspaces_response = client.get(
+        "/api/v1/admin/workspaces", headers=scoped_headers
+    )
     assert inaccessible_workspaces_response.status_code == 200
     assert inaccessible_workspaces_response.json() == []
 
@@ -1328,7 +1307,9 @@ def test_pms_space_creator_becomes_owner_and_last_manager_is_protected(client: T
     assert remove_response.status_code == 409
 
 
-def test_platform_admin_without_workspace_membership_cannot_view_pms_spaces(client: TestClient) -> None:
+def test_platform_admin_without_workspace_membership_cannot_view_pms_spaces(
+    client: TestClient,
+) -> None:
     admin_token = _bootstrap_admin(client)
     task_list_response = client.post(
         "/api/v1/workspaces/hq/pms/lists",

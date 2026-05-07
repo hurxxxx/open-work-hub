@@ -29,7 +29,13 @@ from ai_do_api.domains.auth.access import (
     serialize_auth_user,
 )
 from ai_do_api.domains.auth.dependencies import AuthContext, require_auth_context
-from ai_do_api.domains.auth.models import AuthSession, OrgUnit, User, Workspace, WorkspaceUserBinding
+from ai_do_api.domains.auth.models import (
+    AuthSession,
+    OrgUnit,
+    User,
+    Workspace,
+    WorkspaceUserBinding,
+)
 from ai_do_api.domains.auth.security import (
     hash_password,
     issue_session_token,
@@ -278,9 +284,7 @@ def _is_local_dev_admin_login_available(request: Request) -> bool:
         return True
 
     allowed_hosts = {
-        host.strip().lower()
-        for host in settings.dev_login_allowed_hosts.split(",")
-        if host.strip()
+        host.strip().lower() for host in settings.dev_login_allowed_hosts.split(",") if host.strip()
     }
     if not allowed_hosts:
         return False
@@ -324,9 +328,7 @@ def bootstrap_status(
             [
                 DevLoginAccountResponse.model_validate(item)
                 for item in (
-                    list_dev_login_account_catalog()
-                    if has_users
-                    else list_dev_login_accounts(db)
+                    list_dev_login_account_catalog() if has_users else list_dev_login_accounts(db)
                 )
             ]
             if dev_admin_login_available
@@ -376,8 +378,10 @@ def setup_first_user(
     db.add(user)
     db.flush()
     replace_user_system_roles(db, user.id, [SYSTEM_PLATFORM_ADMIN])
-    default_workspace = db.scalar(select(Workspace).where(Workspace.key == "hq"))
-    if default_workspace is not None:
+    default_workspaces = db.scalars(
+        select(Workspace).where(Workspace.key.in_(["administrator", "ai-tft"]))
+    ).all()
+    for default_workspace in default_workspaces:
         db.add(
             WorkspaceUserBinding(
                 id=new_id(),

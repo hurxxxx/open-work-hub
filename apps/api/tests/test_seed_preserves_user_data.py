@@ -6,6 +6,7 @@ spaces on every app boot because ``init_db()`` calls ``ensure_seed_data()``
 at startup — users would create a space, restart the API, and find their
 space was still there but the membership row behind it was gone.
 """
+
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
@@ -39,7 +40,7 @@ def test_seed_preserves_user_created_space_membership(client: TestClient) -> Non
     # Log in as the seeded workspace member account and create a new PMS space.
     login_response = client.post(
         "/api/v1/auth/dev-login",
-        json={"account_key": "delivery-hub-member"},
+        json={"account_key": "administrator"},
     )
     assert login_response.status_code == 200, login_response.text
     session = login_response.json()
@@ -47,7 +48,7 @@ def test_seed_preserves_user_created_space_membership(client: TestClient) -> Non
     user_id = session["user"]["id"]
 
     create_response = client.post(
-        "/api/v1/workspaces/delivery-hub/pms/spaces",
+        "/api/v1/workspaces/ai-tft/pms/spaces",
         headers=_auth_headers(token),
         json={"name": "My Private Space", "description": ""},
     )
@@ -63,9 +64,7 @@ def test_seed_preserves_user_created_space_membership(client: TestClient) -> Non
                 TeamMember.user_id == user_id,
             )
         )
-        assert membership is not None, (
-            "create_space should register the creator as a TeamMember"
-        )
+        assert membership is not None, "create_space should register the creator as a TeamMember"
         assert membership.role == "owner"
 
     # Re-run the seed loop (equivalent to restarting the API).
@@ -89,7 +88,7 @@ def test_seed_preserves_user_created_space_membership(client: TestClient) -> Non
 
     # And the user should still be able to list the space.
     list_response = client.get(
-        "/api/v1/workspaces/delivery-hub/pms/spaces",
+        "/api/v1/workspaces/ai-tft/pms/spaces",
         headers=_auth_headers(token),
     )
     assert list_response.status_code == 200
@@ -113,17 +112,17 @@ def test_dev_login_is_idempotent_and_preserves_user_spaces(
 
     _seed_dev_accounts()
 
-    # delivery-hub-member creates a private space.
+    # administrator creates a private space.
     login = client.post(
         "/api/v1/auth/dev-login",
-        json={"account_key": "delivery-hub-member"},
+        json={"account_key": "administrator"},
     )
     assert login.status_code == 200
     token = login.json()["token"]
     user_id = login.json()["user"]["id"]
 
     create = client.post(
-        "/api/v1/workspaces/delivery-hub/pms/spaces",
+        "/api/v1/workspaces/ai-tft/pms/spaces",
         headers=_auth_headers(token),
         json={"name": "Private Space", "description": ""},
     )
@@ -144,22 +143,16 @@ def test_dev_login_is_idempotent_and_preserves_user_spaces(
     assert owner_row() is not None
 
     # Simulate the dev flow: open login screen (bootstrap-status), then log
-    # in as platform-admin, then back to delivery-hub-member. Each of these calls
+    # in as administrator, then back to administrator. Each of these calls
     # used to re-run ensure_dev_login_seed_data.
     for _ in range(3):
+        assert client.get("/api/v1/auth/bootstrap-status").status_code == 200
         assert (
-            client.get("/api/v1/auth/bootstrap-status").status_code == 200
-        )
-        assert (
-            client.post(
-                "/api/v1/auth/dev-login", json={"account_key": "platform-admin"}
-            ).status_code
+            client.post("/api/v1/auth/dev-login", json={"account_key": "administrator"}).status_code
             == 200
         )
         assert (
-            client.post(
-                "/api/v1/auth/dev-login", json={"account_key": "delivery-hub-member"}
-            ).status_code
+            client.post("/api/v1/auth/dev-login", json={"account_key": "administrator"}).status_code
             == 200
         )
 
@@ -170,7 +163,7 @@ def test_dev_login_is_idempotent_and_preserves_user_spaces(
 
     # The user-created space should also still be listed.
     list_response = client.get(
-        "/api/v1/workspaces/delivery-hub/pms/spaces",
+        "/api/v1/workspaces/ai-tft/pms/spaces",
         headers=_auth_headers(token),
     )
     assert list_response.status_code == 200
@@ -191,7 +184,7 @@ def test_ensure_seed_data_does_not_overwrite_workspace_renames(
 
     _seed_dev_accounts()
     session_factory = get_session_factory()
-    workspace_key = "delivery-hub"
+    workspace_key = "ai-tft"
 
     with session_factory() as db:
         ws = db.scalar(select(Workspace).where(Workspace.key == workspace_key))
@@ -219,9 +212,8 @@ def test_seed_still_reconciles_default_space_membership(
     client: TestClient,
 ) -> None:
     """The seed loop should still enforce the team_role declared in
-    DEV_LOGIN_ACCOUNTS against the default PMS space — e.g. delivery-hub-admin
-    should own the default space, delivery-hub-member should be a member, and
-    platform-admin should only own the AI-TFT default space."""
+    DEV_LOGIN_ACCOUNTS against the default PMS spaces for Administrator and
+    AI TFT."""
     _seed_dev_accounts()
 
     from ai_do_api.core.db import get_session_factory
@@ -245,20 +237,15 @@ def test_seed_still_reconciles_default_space_membership(
                 )
             )
 
-        delivery_hub_admin_ms = membership_for("delivery-hub-admin@ai-do.local", "delivery-hub")
-        delivery_hub_member_ms = membership_for("delivery-hub-member@ai-do.local", "delivery-hub")
-        platform_ai_tft_ms = membership_for("platform-admin@ai-do.local", "ai-tft")
-        platform_delivery_ms = membership_for("platform-admin@ai-do.local", "delivery-hub")
+        administrator_space_ms = membership_for("admin@ai-do.local", "administrator")
+        ai_tft_space_ms = membership_for("admin@ai-do.local", "ai-tft")
 
-        assert delivery_hub_admin_ms is not None, "delivery-hub-admin should own the default space"
-        assert delivery_hub_admin_ms.role == "owner"
-        assert delivery_hub_member_ms is not None, (
-            "delivery-hub-member should be seeded into default space"
+        assert administrator_space_ms is not None, (
+            "administrator should own the Administrator default space"
         )
-        assert delivery_hub_member_ms.role == "member"
-        assert platform_ai_tft_ms is not None, "platform-admin should own the AI-TFT default space"
-        assert platform_ai_tft_ms.role == "owner"
-        assert platform_delivery_ms is None
+        assert administrator_space_ms.role == "owner"
+        assert ai_tft_space_ms is not None, "administrator should own the AI TFT default space"
+        assert ai_tft_space_ms.role == "owner"
 
 
 def test_dev_login_recreates_missing_dev_workspace_seeds(
@@ -273,31 +260,28 @@ def test_dev_login_recreates_missing_dev_workspace_seeds(
     session_factory = get_session_factory()
 
     with session_factory() as db:
-        innovation_lab = db.scalar(
+        ai_tft_workspace = db.scalar(
             select(Workspace)
             .options(
                 selectinload(Workspace.user_bindings),
                 selectinload(Workspace.group_bindings),
                 selectinload(Workspace.teams).selectinload(Team.members),
             )
-            .where(Workspace.key == "innovation-lab")
+            .where(Workspace.key == "ai-tft")
         )
-        assert innovation_lab is not None
-        db.delete(innovation_lab)
+        assert ai_tft_workspace is not None
+        db.delete(ai_tft_workspace)
         db.commit()
 
     login_response = client.post(
         "/api/v1/auth/dev-login",
-        json={"account_key": "innovation-lab-member"},
+        json={"account_key": "administrator"},
     )
     assert login_response.status_code == 200, login_response.text
     assert any(
-        workspace["slug"] == "innovation-lab"
-        for workspace in login_response.json()["user"]["workspaces"]
+        workspace["slug"] == "ai-tft" for workspace in login_response.json()["user"]["workspaces"]
     )
 
     with session_factory() as db:
-        restored_workspace = db.scalar(
-            select(Workspace).where(Workspace.key == "innovation-lab")
-        )
+        restored_workspace = db.scalar(select(Workspace).where(Workspace.key == "ai-tft"))
         assert restored_workspace is not None

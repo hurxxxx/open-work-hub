@@ -6,7 +6,10 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ai_do_api.core.db import get_session_factory
-from ai_do_api.domains.auth.access import ensure_dev_login_seed_data
+from ai_do_api.domains.auth.access import (
+    ensure_dev_login_seed_data,
+    ensure_workspace_default_pms_space,
+)
 from ai_do_api.domains.auth.models import Team, User, Workspace
 from ai_do_api.domains.auth.security import new_id
 from ai_do_api.domains.docs.models import NativeDoc, NativeDocContainer, NativeDocPage
@@ -16,9 +19,9 @@ from ai_do_api.domains.pms.models import Issue, IssueComment, TaskList
 from ai_do_api.domains.search.service import refresh_workspace_keyword_index
 
 
-WORKSPACE_KEY = "delivery-hub"
-ADMIN_EMAIL = "delivery-hub-admin@ai-do.local"
-MEMBER_EMAIL = "delivery-hub-member@ai-do.local"
+WORKSPACE_KEY = "ai-tft"
+ADMIN_EMAIL = "admin@ai-do.local"
+SAMPLE_TASK_LIST_KEY = "SEARCH"
 SAMPLE_PREFIX = "[검색검증]"
 SOURCE_REF_PREFIX = "keyword-search-e2e"
 
@@ -41,15 +44,14 @@ def main() -> None:
         ensure_dev_login_seed_data(db)
         workspace = _one(db, select(Workspace).where(Workspace.key == WORKSPACE_KEY))
         admin = _one(db, select(User).where(User.email == ADMIN_EMAIL))
-        member = _one(db, select(User).where(User.email == MEMBER_EMAIL))
-        task_list = _one(db, select(TaskList).where(TaskList.key == "DEMO"))
+        task_list = _get_or_create_sample_task_list(db, workspace, admin)
 
         _clear_previous_samples(db, workspace)
         created = {
-            "docs": _seed_docs(db, workspace, member, task_list),
-            "meetings": _seed_meetings(db, workspace, admin, member),
-            "issues": _seed_issues(db, task_list, admin, member),
-            "events": _seed_events(db, workspace, member),
+            "docs": _seed_docs(db, workspace, admin, task_list),
+            "meetings": _seed_meetings(db, workspace, admin, admin),
+            "issues": _seed_issues(db, task_list, admin, admin),
+            "events": _seed_events(db, workspace, admin),
         }
         db.flush()
         refresh_workspace_keyword_index(db, workspace=workspace)
@@ -61,6 +63,30 @@ def main() -> None:
     )
     print(f"Workspace: {WORKSPACE_KEY}")
     print("Suggested queries: 예산 리스크, 고객 이탈, 납기 지연, 배터리 발열, 런칭 체크리스트")
+
+
+def _get_or_create_sample_task_list(db: Session, workspace: Workspace, admin: User) -> TaskList:
+    team = ensure_workspace_default_pms_space(db, workspace)
+    task_list = db.scalar(
+        select(TaskList).where(
+            TaskList.team_id == team.id,
+            TaskList.key == SAMPLE_TASK_LIST_KEY,
+        )
+    )
+    if task_list is not None:
+        return task_list
+    task_list = TaskList(
+        id=new_id(),
+        key=SAMPLE_TASK_LIST_KEY,
+        name="Search Sample List",
+        description="Sample PMS list for keyword search verification.",
+        status="active",
+        team_id=team.id,
+        created_by_id=admin.id,
+    )
+    db.add(task_list)
+    db.flush()
+    return task_list
 
 
 def _clear_previous_samples(db: Session, workspace: Workspace) -> None:
@@ -137,7 +163,9 @@ def _seed_docs(db: Session, workspace: Workspace, owner: User, task_list: TaskLi
                         f"{topic} 관련 담당자는 매일 오전 스탠드업에서 상태를 공유하고, "
                         "차단 요인은 PMS 이슈와 회의록에 연결합니다."
                     ),
-                    _paragraph("검색 검증용 데이터로 문서 제목, 본문, 컨테이너 facet 확인에 사용합니다."),
+                    _paragraph(
+                        "검색 검증용 데이터로 문서 제목, 본문, 컨테이너 facet 확인에 사용합니다."
+                    ),
                 ],
             )
         )
@@ -205,7 +233,9 @@ def _seed_meetings(db: Session, workspace: Workspace, organizer: User, attendee:
 
 
 def _seed_issues(db: Session, task_list: TaskList, reporter: User, assignee: User) -> int:
-    max_number = db.scalar(select(func.max(Issue.issue_number)).where(Issue.list_id == task_list.id)) or 0
+    max_number = (
+        db.scalar(select(func.max(Issue.issue_number)).where(Issue.list_id == task_list.id)) or 0
+    )
     statuses = ["backlog", "todo", "in_progress", "done", "canceled"]
     priorities = ["low", "medium", "high", "urgent"]
     today = date.today()
