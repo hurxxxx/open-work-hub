@@ -48,6 +48,7 @@ NN-<kebab-slug>.md
 | [`03-phase6-evidence-runtime-implementation.md`](./03-phase6-evidence-runtime-implementation.md) | 실행 기록/보류 계획 | AI manager/runtime spike 완료, Meeting Work Intelligence로 후속 전환 |
 | [`04-whiteboard-app-implementation.md`](./04-whiteboard-app-implementation.md) | 실행 계획 | Excalidraw 기반 Whiteboard 앱 (Docs 동등 first-class entity) 구현 계획 |
 | [`05-meeting-work-intelligence.md`](./05-meeting-work-intelligence.md) | 실행 계획 | 회의록/채팅 원문을 업무 항목으로 전환하는 local-first vertical slice |
+| [`07-livekit-video-chat-intranet.md`](./07-livekit-video-chat-intranet.md) | 실행 계획 | self-hosted LiveKit 기반 사내망 화상 채팅 통합 계획 |
 
 완료된 플랜은 [`docs/planning-log.md`](../docs/planning-log.md)에서 확인.
 
