@@ -45,6 +45,31 @@ def test_workspace_bootstrap_returns_entitled_apps_and_nav(client: TestClient) -
     assert any(item["id"] == "pms-tasks-assigned" for item in payload["nav"])
 
 
+def test_ai_tft_workspace_seed_and_platform_admin_membership(client: TestClient) -> None:
+    session = _dev_login(client, "platform-admin")
+    token = session["token"]
+
+    workspaces = {item["slug"]: item for item in session["user"]["workspaces"]}
+    assert workspaces["ai-tft"]["name"] == "AI-TFT팀"
+    assert workspaces["ai-tft"]["role"] == "admin"
+
+    response = client.get(
+        "/api/v1/workspaces/ai-tft/bootstrap",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["workspace"]["slug"] == "ai-tft"
+    assert payload["workspace"]["name"] == "AI-TFT팀"
+
+    spaces_response = client.get(
+        "/api/v1/workspaces/ai-tft/pms/spaces",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert spaces_response.status_code == 200
+    assert any(item["current_user_role"] == "owner" for item in spaces_response.json())
+
+
 def test_workspace_bootstrap_hides_disabled_app(client: TestClient) -> None:
     session = _dev_login(client, "delivery-hub-member")
     token = session["token"]

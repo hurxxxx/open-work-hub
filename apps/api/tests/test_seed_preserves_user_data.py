@@ -221,33 +221,44 @@ def test_seed_still_reconciles_default_space_membership(
     """The seed loop should still enforce the team_role declared in
     DEV_LOGIN_ACCOUNTS against the default PMS space — e.g. delivery-hub-admin
     should own the default space, delivery-hub-member should be a member, and
-    platform-admin (team_role=None) should not have a membership there at all."""
+    platform-admin should only own the AI-TFT default space."""
     _seed_dev_accounts()
 
     from ai_do_api.core.db import get_session_factory
-    from ai_do_api.domains.auth.models import TeamMember, User
+    from ai_do_api.domains.auth.models import Team, TeamMember, User, Workspace
 
     session_factory = get_session_factory()
     with session_factory() as db:
         # Seed accounts by email
-        def membership_for(email: str) -> TeamMember | None:
+        def membership_for(email: str, workspace_key: str) -> TeamMember | None:
             user = db.scalar(select(User).where(User.email == email))
             if user is None:
                 return None
             return db.scalar(
-                select(TeamMember).where(TeamMember.user_id == user.id)
+                select(TeamMember)
+                .join(Team, Team.id == TeamMember.team_id)
+                .join(Workspace, Workspace.id == Team.workspace_id)
+                .where(
+                    TeamMember.user_id == user.id,
+                    Team.key == "team-space",
+                    Workspace.key == workspace_key,
+                )
             )
 
-        delivery_hub_admin_ms = membership_for("delivery-hub-admin@ai-do.local")
-        delivery_hub_member_ms = membership_for("delivery-hub-member@ai-do.local")
-        admin_ms = membership_for("platform-admin@ai-do.local")
+        delivery_hub_admin_ms = membership_for("delivery-hub-admin@ai-do.local", "delivery-hub")
+        delivery_hub_member_ms = membership_for("delivery-hub-member@ai-do.local", "delivery-hub")
+        platform_ai_tft_ms = membership_for("platform-admin@ai-do.local", "ai-tft")
+        platform_delivery_ms = membership_for("platform-admin@ai-do.local", "delivery-hub")
 
         assert delivery_hub_admin_ms is not None, "delivery-hub-admin should own the default space"
         assert delivery_hub_admin_ms.role == "owner"
-        assert delivery_hub_member_ms is not None, "delivery-hub-member should be seeded into default space"
+        assert delivery_hub_member_ms is not None, (
+            "delivery-hub-member should be seeded into default space"
+        )
         assert delivery_hub_member_ms.role == "member"
-        # platform-admin has team_role=None → no membership
-        assert admin_ms is None
+        assert platform_ai_tft_ms is not None, "platform-admin should own the AI-TFT default space"
+        assert platform_ai_tft_ms.role == "owner"
+        assert platform_delivery_ms is None
 
 
 def test_dev_login_recreates_missing_dev_workspace_seeds(

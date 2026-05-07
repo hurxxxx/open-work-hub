@@ -6,6 +6,8 @@ EXPECTED_DEV_LOGIN_ACCOUNT_KEYS = {
     "platform-admin",
     "hq-admin",
     "hq-member",
+    "ai-tft-admin",
+    "ai-tft-member",
     "innovation-lab-admin",
     "innovation-lab-member",
     "knowledge-base-admin",
@@ -291,7 +293,10 @@ def test_seeded_dev_login_accounts_are_listed_and_can_log_in(client: TestClient)
     platform_admin_payload = platform_admin_login_response.json()
     assert platform_admin_payload["user"]["email"] == "platform-admin@ai-do.local"
     assert "platform_admin" in platform_admin_payload["user"]["system_roles"]
-    assert platform_admin_payload["user"]["workspaces"] == []
+    assert len(platform_admin_payload["user"]["workspaces"]) == 1
+    assert platform_admin_payload["user"]["workspaces"][0]["slug"] == "ai-tft"
+    assert platform_admin_payload["user"]["workspaces"][0]["name"] == "AI-TFT팀"
+    assert platform_admin_payload["user"]["workspaces"][0]["role"] == "admin"
     assert "app_access" not in platform_admin_payload["user"]
 
     dev_login_response = client.post(

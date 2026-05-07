@@ -138,6 +138,11 @@ DEFAULT_WORKSPACE_SEEDS = [
 ]
 DEV_WORKSPACE_SEEDS = [
     {
+        "key": "ai-tft",
+        "name": "AI-TFT팀",
+        "description": "Workspace for the AI-TFT team.",
+    },
+    {
         "key": "innovation-lab",
         "name": "Innovation Lab",
         "description": "Workspace for AI and exploratory collaboration.",
@@ -171,7 +176,7 @@ def _build_workspace_dev_login_accounts() -> list[dict[str, Any]]:
     for workspace_definition in [*DEFAULT_WORKSPACE_SEEDS, *DEV_WORKSPACE_SEEDS]:
         workspace_key = workspace_definition["key"]
         workspace_name = workspace_definition["name"]
-        has_pms = workspace_key in {"hq", "delivery-hub"}
+        has_pms = workspace_key in {"hq", "ai-tft", "delivery-hub"}
 
         items.append(
             {
@@ -217,8 +222,8 @@ DEV_LOGIN_ACCOUNTS = [
             "description": "Seeded platform administrators.",
             "system_roles": [SYSTEM_PLATFORM_ADMIN],
         },
-        "workspace_memberships": [],
-        "team_memberships": [],
+        "workspace_memberships": [("ai-tft", "admin")],
+        "team_memberships": [("ai-tft", "owner")],
     },
     *_build_workspace_dev_login_accounts(),
 ]
