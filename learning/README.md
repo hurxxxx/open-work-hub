@@ -70,6 +70,7 @@ learning/
 
 | 슬러그 | 제목 | 설명 |
 | --- | --- | --- |
+| `ai-do-business-ai-curriculum` | 현업을 위한 AI-Doo 12주 교육 | PoC 주간교육을 현업 실무형으로 재구성한 12주 과정. 기존 자료를 참조하며 AI 협업, RAG, 승인, 운영 품질, 인계를 다룹니다. |
 | `vibe-coding-foundations` | 바이브 코딩 입문 | 소프트웨어·프로그래밍 기본부터 AI-DO 스택, 실전 워크플로까지. 전 구성원 공용 온보딩 트랙. |
 | `database-storage-basics` | 데이터베이스 입문 — 저장소를 고르는 법 | SQL, NoSQL, 캐시, 검색, 벡터 DB, 객체 저장소까지 초보자 눈높이로 비교하는 저장소 선택 트랙. |
 
