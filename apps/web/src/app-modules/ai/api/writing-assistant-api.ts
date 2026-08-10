@@ -6,13 +6,11 @@ import type { ApiSchema } from '@/src/platform/api/types';
 import { i18n } from '@/src/platform/i18n';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
-export type DraftGenerateRequest = ApiSchema<'DraftGenerateRequest'>;
 export type MailGenerateRequest = ApiSchema<'MailGenerateRequest'>;
 export type TranslateRequest = ApiSchema<'TranslateRequest'>;
 export type DocumentDownloadRequest = ApiSchema<'DocumentDownloadRequest'>;
 export type WritingResult = ApiSchema<'WritingResult'>;
-export type WritingLang = DraftGenerateRequest['lang'];
-export type DraftType = DraftGenerateRequest['type'];
+export type WritingLang = MailGenerateRequest['lang'];
 export type MailTone = MailGenerateRequest['tone'];
 export type TranslateTargetLang = TranslateRequest['target_lang'];
 export type DownloadFormat = DocumentDownloadRequest['format'];
@@ -75,30 +73,6 @@ async function writingRequest<T>(
       i18n.t('apps:ai.writingAssistant.errors.connect'),
     );
   }
-}
-
-export function generateDraft(args: {
-  token: string;
-  workspaceSlug: string | null;
-  text: string;
-  type: DraftType;
-  lang: WritingLang;
-}): Promise<WritingResult> {
-  const body: DraftGenerateRequest = {
-    text: args.text,
-    type: args.type,
-    lang: args.lang,
-  };
-  return writingRequest<WritingResult>(
-    '/api/v1/writing-assistant/draft/generate',
-    args.token,
-    args.workspaceSlug,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    },
-  );
 }
 
 export function translateWriting(args: {

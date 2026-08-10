@@ -156,33 +156,6 @@ const NAV_ITEMS_BY_APP: Record<string, WorkspaceBootstrapNavFixture[]> = {
       icon_key: 'globe-2',
     }),
   ],
-  drafting: [
-    navItem({
-      id: 'drafting',
-      app_id: 'drafting',
-      title: '기안작성 도우미',
-      category: 'Business AI',
-      icon_key: 'file-text',
-    }),
-  ],
-  'document-translate': [
-    navItem({
-      id: 'translate',
-      app_id: 'document-translate',
-      title: '문서 번역/요약',
-      category: 'Business AI',
-      icon_key: 'languages',
-    }),
-  ],
-  'spec-compare': [
-    navItem({
-      id: 'spec-compare',
-      app_id: 'spec-compare',
-      title: '규격서 비교',
-      category: 'Business AI',
-      icon_key: 'file-search',
-    }),
-  ],
   pms: [
     navItem({
       id: 'pms-inbox',
@@ -336,33 +309,6 @@ const APP_BAR_CATEGORIES: WorkspaceBootstrapAppBarCategoryFixture[] = [
         title: '웹 검색 봇',
         route_base: '/web-search',
         icon_key: 'globe-2',
-      }),
-    ],
-  },
-  {
-    id: 'category-business-tools',
-    key: 'business-tools',
-    title: '업무',
-    icon_key: 'briefcase',
-    position: 1,
-    items: [
-      categoryItem({
-        app_id: 'drafting',
-        title: '기안작성 도우미',
-        route_base: '/drafting',
-        icon_key: 'file-text',
-      }),
-      categoryItem({
-        app_id: 'document-translate',
-        title: '문서 번역/요약',
-        route_base: '/document-translate',
-        icon_key: 'languages',
-      }),
-      categoryItem({
-        app_id: 'spec-compare',
-        title: '규격서 비교',
-        route_base: '/spec-compare',
-        icon_key: 'file-search',
       }),
     ],
   },

@@ -62,11 +62,6 @@ playwright-report/
 apps/web/test-results/
 apps/web/playwright-report/
 
-# Local product-spec comparison samples and generated reference outputs
-test_samples/
-deliverables/product-spec-compare/
-scripts/pptx_spec_master_compare.py
-scripts/product_spec_compare_experiment.py
 secrets/
 .secure
 

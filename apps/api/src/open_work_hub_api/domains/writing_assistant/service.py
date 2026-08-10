@@ -1,4 +1,4 @@
-"""기안/메일 작성 비즈니스 로직 — 내부 LLM(``complete_chat``) 호출.
+"""메일 작성 비즈니스 로직 — 등록된 LLM 워크로드 호출.
 
 무상태이며 DB 영속화가 없다. AI 챗봇의 동기식
 ``complete_chat`` 패턴을 따른다.
@@ -14,7 +14,6 @@ from open_work_hub_api.domains.ai.gateway import LlmWorkloadContext, execute_llm
 from . import prompts
 from .schemas import WritingResult
 
-DRAFT_TASK_KIND = "draft_assist"
 MAIL_TASK_KIND = "mail_compose"
 TRANSLATE_TASK_KIND = "writing_translate"
 
@@ -27,18 +26,6 @@ def _generate(db: Session, context: LlmTaskContext, prompt: str) -> str:
         messages=[{"role": "user", "content": prompt}],
     )
     return result.completion.text
-
-
-def generate_draft(
-    db: Session,
-    context: LlmTaskContext,
-    *,
-    text: str,
-    draft_type: str,
-    lang: str,
-) -> WritingResult:
-    prompt = prompts.build_draft_prompt(text, draft_type, lang)
-    return WritingResult(result=_generate(db, context, prompt))
 
 
 def generate_mail(

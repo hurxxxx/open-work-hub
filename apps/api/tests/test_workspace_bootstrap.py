@@ -530,9 +530,6 @@ def test_registry_drives_llm_task_seed_and_tool_metadata(client: TestClient) -> 
         "meeting_insight_actions",
         "meeting_insight_decisions",
         "meeting_insight_followup",
-        "spec_compare_compare",
-        "spec_compare_extract",
-        "spec_compare_report",
     } <= task_kinds
     assert {
         "pms.search_tasks",

@@ -1,4 +1,4 @@
-"""기안/메일 작성 도우미 요청·응답 Pydantic 스키마."""
+"""메일 작성 도우미 요청·응답 Pydantic 스키마."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-DraftType = Literal["general", "cooperation", "purchase", "report", "proposal", "minutes"]
 MailTone = Literal[
     "friendly", "polite", "formal", "concise", "apologize", "report", "assertive", "technical"
 ]
@@ -24,12 +23,6 @@ MAX_DOWNLOAD_CONTENT = 100_000
 MAX_FILENAME = 200
 
 
-class DraftGenerateRequest(BaseModel):
-    text: str = Field(min_length=1, max_length=MAX_PROMPT_INPUT, description="기안 작성 내용 입력")
-    type: DraftType = "general"
-    lang: WritingLang = "ko"
-
-
 class MailGenerateRequest(BaseModel):
     intent: str = Field(min_length=1, max_length=MAX_PROMPT_INPUT, description="전달하고 싶은 내용")
     original_mail: str = Field(default="", max_length=MAX_ORIGINAL_MAIL)
@@ -38,7 +31,9 @@ class MailGenerateRequest(BaseModel):
 
 
 class TranslateRequest(BaseModel):
-    source: str = Field(min_length=1, max_length=MAX_TRANSLATE_SOURCE, description="번역할 한국어 본문")
+    source: str = Field(
+        min_length=1, max_length=MAX_TRANSLATE_SOURCE, description="번역할 한국어 본문"
+    )
     target_lang: TranslateTargetLang = "en"
 
 

@@ -2228,38 +2228,6 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "이미지가 아직 준비되지 않았습니다.",
         "en-US": "Image is not ready yet.",
     },
-    "spec_compare.not_found": {
-        "ko-KR": "규격서 비교 작업을 찾을 수 없습니다.",
-        "en-US": "Specification comparison job not found.",
-    },
-    "spec_compare.forbidden": {
-        "ko-KR": "이 규격서 비교 작업에 접근할 권한이 없습니다.",
-        "en-US": "You do not have access to this specification comparison job.",
-    },
-    "spec_compare.empty_upload": {
-        "ko-KR": "업로드된 규격서 파일이 비어 있습니다.",
-        "en-US": "Uploaded specification file is empty.",
-    },
-    "spec_compare.upload_too_large": {
-        "ko-KR": "규격서 파일이 허용된 크기를 초과합니다.",
-        "en-US": "Specification file exceeds the allowed size.",
-    },
-    "spec_compare.invalid_file_type": {
-        "ko-KR": "PPTX, DOCX, PDF 규격서 파일만 비교할 수 있습니다.",
-        "en-US": "Only PPTX, DOCX, and PDF specification files are supported.",
-    },
-    "spec_compare.upload_failed": {
-        "ko-KR": "규격서 파일을 저장하지 못했습니다.",
-        "en-US": "Failed to store the specification files.",
-    },
-    "spec_compare.dispatch_failed": {
-        "ko-KR": "규격서 비교 작업을 큐에 전달하지 못했습니다.",
-        "en-US": "Failed to dispatch the specification comparison job.",
-    },
-    "spec_compare.not_ready": {
-        "ko-KR": "규격서 비교 결과가 아직 준비되지 않았습니다.",
-        "en-US": "Specification comparison result is not ready yet.",
-    },
     "writing_assistant.download_render_failed": {
         "ko-KR": "문서를 생성할 수 없습니다.",
         "en-US": "Unable to render the document.",
@@ -2267,34 +2235,6 @@ MESSAGES: dict[str, dict[str, str]] = {
     "writing_assistant.app_disabled": {
         "ko-KR": "이 워크스페이스에서 작성 도우미 앱이 비활성화되어 있습니다.",
         "en-US": "The writing assistant app is disabled for this workspace.",
-    },
-    "document_translate.unsupported_file_type": {
-        "ko-KR": "지원하지 않는 파일 형식입니다. (PDF/DOCX/XLSX/PPTX/TXT)",
-        "en-US": "Unsupported file type. (PDF/DOCX/XLSX/PPTX/TXT)",
-    },
-    "document_translate.upload_too_large": {
-        "ko-KR": "업로드 파일이 너무 큽니다. 최대 50MB까지 업로드할 수 있습니다.",
-        "en-US": "Uploaded file is too large. Uploads are limited to 50 MB.",
-    },
-    "document_translate.invalid_mode": {
-        "ko-KR": "지원하지 않는 모드입니다. (translate/summarize/extract)",
-        "en-US": "Unsupported mode. (translate/summarize/extract)",
-    },
-    "document_translate.invalid_language": {
-        "ko-KR": "지원하지 않는 출력 언어입니다. (ko/en/zh/ja/es/de)",
-        "en-US": "Unsupported output language. (ko/en/zh/ja/es/de)",
-    },
-    "document_translate.invalid_summary_level": {
-        "ko-KR": "지원하지 않는 요약 수준입니다. (brief/detailed)",
-        "en-US": "Unsupported summary level. (brief/detailed)",
-    },
-    "document_translate.extraction_failed": {
-        "ko-KR": "문서에서 텍스트를 추출하지 못했습니다. (스캔 이미지 PDF 등은 지원하지 않습니다)",
-        "en-US": "Could not extract text from the document. (scanned/image-only PDFs are not supported)",
-    },
-    "document_translate.empty_text": {
-        "ko-KR": "처리할 텍스트가 없습니다.",
-        "en-US": "No text to process.",
     },
 }
 

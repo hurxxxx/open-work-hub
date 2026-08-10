@@ -49,9 +49,9 @@ const genericBootstrapGatedRoute = {
   id: 'chatbot.generic-feature',
   type: 'element',
 } as const;
-const specCompareRoute = {
+const customUngatedRoute = {
   appId: 'chatbot',
-  id: 'chatbot.spec-compare',
+  id: 'chatbot.custom-tool',
   type: 'element',
 } as const;
 
@@ -326,11 +326,11 @@ describe('tool view route model', () => {
     expect(
       decision({
         item: betaItem,
-        matchedToolRoute: specCompareRoute,
-        toolId: 'spec-compare',
+        matchedToolRoute: customUngatedRoute,
+        toolId: 'custom-tool',
       }),
     ).toEqual({
-      routeId: 'chatbot.spec-compare',
+      routeId: 'chatbot.custom-tool',
       type: 'tool_element',
     });
   });
@@ -395,11 +395,11 @@ describe('tool view route model', () => {
     expect(
       decision({
         item: betaItem,
-        matchedToolRoute: specCompareRoute,
-        toolId: 'spec-compare',
+        matchedToolRoute: customUngatedRoute,
+        toolId: 'custom-tool',
       }),
     ).toEqual({
-      routeId: 'chatbot.spec-compare',
+      routeId: 'chatbot.custom-tool',
       type: 'tool_element',
     });
   });

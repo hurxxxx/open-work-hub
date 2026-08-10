@@ -10,9 +10,6 @@ from open_work_hub_api.domains.community.app_catalog import COMMUNITY_WORKSPACE_
 from open_work_hub_api.domains.conversations.app_catalog import CHATBOT_WORKSPACE_APP
 from open_work_hub_api.domains.diagrams.app_catalog import DIAGRAMS_WORKSPACE_APP
 from open_work_hub_api.domains.docs.app_catalog import DOCS_WORKSPACE_APP
-from open_work_hub_api.domains.document_translate.app_catalog import (
-    DOCUMENT_TRANSLATE_WORKSPACE_APP,
-)
 from open_work_hub_api.domains.files.app_catalog import FILES_WORKSPACE_APP
 from open_work_hub_api.domains.images.app_catalog import IMAGE_WIZARD_WORKSPACE_APP
 from open_work_hub_api.domains.mail.app_catalog import MAIL_WORKSPACE_APP
@@ -21,12 +18,10 @@ from open_work_hub_api.domains.planner.app_catalog import PLANNER_WORKSPACE_APP
 from open_work_hub_api.domains.pms.app_catalog import PMS_WORKSPACE_APP
 from open_work_hub_api.domains.recording.app_catalog import RECORDING_WORKSPACE_APP
 from open_work_hub_api.domains.retrieval.app_catalog import RETRIEVAL_SEARCH_WORKSPACE_APP
-from open_work_hub_api.domains.spec_compare.app_catalog import SPEC_COMPARE_WORKSPACE_APP
 from open_work_hub_api.domains.video_chat.app_catalog import VIDEO_CHAT_WORKSPACE_APP
 from open_work_hub_api.domains.web_search.app_catalog import WEB_SEARCH_WORKSPACE_APPS
 from open_work_hub_api.domains.whiteboard.app_catalog import WHITEBOARD_WORKSPACE_APP
 from open_work_hub_api.domains.writing_assistant.app_catalog import (
-    DRAFTING_WORKSPACE_APP,
     EMAIL_ASSISTANT_WORKSPACE_APP,
 )
 
@@ -48,9 +43,6 @@ _WORKSPACE_APP_REGISTRATIONS = (
     MEETING_WORKSPACE_APP,
     VIDEO_CHAT_WORKSPACE_APP,
     RECORDING_WORKSPACE_APP,
-    DRAFTING_WORKSPACE_APP,
-    DOCUMENT_TRANSLATE_WORKSPACE_APP,
-    SPEC_COMPARE_WORKSPACE_APP,
     IMAGE_WIZARD_WORKSPACE_APP,
     EMAIL_ASSISTANT_WORKSPACE_APP,
     RETRIEVAL_SEARCH_WORKSPACE_APP,

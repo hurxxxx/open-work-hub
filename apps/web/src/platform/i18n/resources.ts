@@ -317,9 +317,6 @@ export const resources = {
         settings: '설정',
         'video-chat': '화상채팅',
         whiteboard: '화이트보드',
-        drafting: '기안작성 도우미',
-        'document-translate': '문서 번역/요약',
-        'spec-compare': '규격서 비교',
         'image-wizard': '이미지 위저드',
         'email-assistant': '메일 작성 도우미',
       },
@@ -336,9 +333,6 @@ export const resources = {
         recording: '녹음과 후속 처리 상태를 관리합니다.',
         community: '전사 커뮤니티 게시판을 확인합니다.',
         'video-chat': '브라우저 기반 화상회의를 실행합니다.',
-        drafting: '업무 기안 초안을 빠르게 작성합니다.',
-        'document-translate': '문서를 OCR, 번역, 요약합니다.',
-        'spec-compare': '규격서 두 버전의 차이를 비교합니다.',
         'image-wizard': '업무용 이미지를 단계별로 생성합니다.',
         'email-assistant': '업무 메일 초안을 작성합니다.',
         'web-search': '최신 공개 웹 정보를 검색합니다.',
@@ -346,9 +340,6 @@ export const resources = {
       nav: {
         chatbot: 'AI 챗봇',
         search: 'Open Work Hub 통합검색',
-        drafting: '기안작성 도우미',
-        translate: '문서 번역/요약',
-        'spec-compare': '규격서 비교',
         'image-wizard': '이미지 위저드',
         'email-assistant': '메일 작성 도우미',
         'retrieval-search': 'Retrieval 진단 검색',
@@ -409,9 +400,6 @@ export const resources = {
       navDescriptions: {
         chatbot: '사내 데이터와 도구를 활용하는 대화형 어시스턴트',
         search: '사내 문서를 근거 기반으로 찾는 메인 검색 허브',
-        drafting: '공문, 협조전, 구매 요청 같은 업무 기안 초안 작성',
-        translate: '업로드 문서의 OCR, 번역, 요약 작업',
-        'spec-compare': '규격 문서 두 버전의 변경점 비교',
         'video-chat-room': 'LiveKit OSS 기반 화상 회의 검증',
         'image-wizard': '인포그래픽이나 업무용 이미지를 위저드 형식으로 생성',
         'email-assistant': '업무 메일 초안 생성',
@@ -2097,21 +2085,6 @@ export const resources = {
                 ready: '준비됨',
               },
               workloadCatalog: {
-                specCompareCompare: {
-                  description:
-                    '추출된 규격 항목을 비교하고 주요 차이를 판정합니다.',
-                  label: '규격서 차이 비교',
-                },
-                specCompareExtract: {
-                  description:
-                    '비교 대상 규격서에서 구조화된 규격 항목을 추출합니다.',
-                  label: '규격서 데이터 추출',
-                },
-                specCompareReport: {
-                  description:
-                    '규격 항목 비교 결과를 요약해 검토 보고서를 생성합니다.',
-                  label: '규격서 비교 보고서',
-                },
                 webSearchAnswer: {
                   description:
                     '일반 공개 웹 검색 결과를 근거와 함께 답변으로 생성합니다.',
@@ -2269,7 +2242,8 @@ export const resources = {
               title: '정책 규칙',
               updated: '정책 규칙을 수정했습니다.',
               userSearchPlaceholder: '이름 또는 이메일로 사용자 검색',
-              userSearchPrompt: '검색어를 입력하거나 목록에서 사용자를 선택하세요.',
+              userSearchPrompt:
+                '검색어를 입력하거나 목록에서 사용자를 선택하세요.',
               workspaceSearchPlaceholder: '워크스페이스 이름, key, 설명 검색',
             },
             exceptions: {
@@ -2461,9 +2435,6 @@ export const resources = {
             },
             taskDescriptions: {
               chatbot: '사용자와 대화하는 일반 챗봇 응답입니다.',
-              document_translate:
-                '문서 번역, 요약, 핵심 정보 추출을 수행합니다.',
-              draft_assist: '업무 기안서와 제안서 작성을 지원합니다.',
               mail_compose: '업무 메일 작성을 지원합니다.',
               mail_reply_draft: '동기화된 메일에 대한 답장 초안을 작성합니다.',
               mail_summarize: '동기화된 메일 메시지를 요약합니다.',
@@ -2474,11 +2445,6 @@ export const resources = {
               meeting_summary: '회의 음성/대화 기록을 요약합니다.',
               rag_grounded_answer:
                 '워크스페이스 RAG 검색 결과를 근거로 답변을 생성합니다.',
-              spec_compare_compare: '두 규격서의 차이를 비교합니다.',
-              spec_compare_extract:
-                '규격서에서 비교에 필요한 구조화 데이터를 추출합니다.',
-              spec_compare_report:
-                '규격서 비교 결과를 보고서 형태로 정리합니다.',
               writing_translate:
                 '수정된 한국어 기준문을 대상 언어로 다시 번역합니다.',
             },
@@ -2763,8 +2729,7 @@ export const resources = {
               periodActiveEmployees: '기간 실제 접속',
               targetEmployees: '집계 대상',
               targetScopeAll: '집계 대상 미설정: 전체 사용자 기준',
-              targetScopeConfigured:
-                '대상 사용자 {{users}}명',
+              targetScopeConfigured: '대상 사용자 {{users}}명',
               todayActiveEmployees: '종료일 실제 접속',
               users: '전체 사용자',
               workActivity: '업무 활용 이벤트',
@@ -3515,155 +3480,6 @@ export const resources = {
           streamStartFailed: 'AI 스트리밍을 시작하지 못했습니다. ({{status}})',
           streamFailed: 'AI 스트리밍에 실패했습니다.',
         },
-        specCompare: {
-          title: '규격서 비교',
-          refresh: '새로고침',
-          baseFile: '기준 규격서',
-          targetFile: '비교 규격서',
-          chooseFile: '파일 선택 또는 드래그 앤 드롭',
-          removeFile: '파일 제거',
-          reset: '초기화',
-          download: '보고서 다운로드',
-          downloadWord: 'Word',
-          downloadPdf: 'PDF',
-          deleteJob: '작업 삭제',
-          deleteJobConfirm: '이 비교 작업을 삭제할까요? 되돌릴 수 없습니다.',
-          supportedHint:
-            'PPTX, DOCX, PDF 규격서를 지원합니다. 파일을 끌어다 놓거나 클릭하여 선택하세요.',
-          start: '비교 시작',
-          submitting: '작업 생성 중...',
-          recentJobs: '최근 비교 작업',
-          emptyJobs: '아직 비교 작업이 없습니다.',
-          untitledJob: '제목 없는 비교 작업',
-          emptyTitle: '두 개의 규격서를 선택하세요',
-          emptyDescription:
-            '기준 파일과 비교 파일을 업로드하면 관리자가 선택한 AI 모델이 차이점 표와 마크다운 보고서를 생성합니다.',
-          failedFallback: '규격서 비교에 실패했습니다.',
-          loadingResult: '결과를 불러오는 중입니다.',
-          emptyRows: '표시할 비교 항목이 없습니다.',
-          emptySpecItems: '추출된 사양 항목이 없습니다.',
-          emptyEvidence: '표시할 근거 블록이 없습니다.',
-          errors: {
-            connect: '규격서 비교 API 서버에 연결하지 못했습니다.',
-            requestFailed: '규격서 비교 요청에 실패했습니다. ({{status}})',
-            loadJobs: '비교 작업 목록을 불러오지 못했습니다.',
-            loadResult: '비교 결과를 불러오지 못했습니다.',
-            poll: '비교 작업 상태를 갱신하지 못했습니다.',
-            create: '비교 작업을 생성하지 못했습니다.',
-            delete: '비교 작업을 삭제하지 못했습니다.',
-            download: '보고서를 다운로드하지 못했습니다.',
-          },
-          status: {
-            queued: '대기',
-            running: '진행 중',
-            succeeded: '완료',
-            failed: '실패',
-            cancelled: '취소',
-          },
-          stage: {
-            queued: '작업 대기 중',
-            extracting: '문서 추출 중',
-            matching: '사양 후보 정렬 중',
-            comparing: 'AI 비교 중',
-            finalizing: '비교표 정리 중',
-            rendering: '보고서 생성 중',
-            running: '비교 진행 중',
-            succeeded: '완료',
-            failed: '실패',
-            cancelled: '취소',
-          },
-          tabs: {
-            report: '보고서',
-            table: '비교표',
-            specs: '사양 DB',
-            evidence: '근거',
-          },
-          summary: {
-            total: '전체',
-            same: '동일',
-            different: '상이',
-            baseOnly: '기준만',
-            targetOnly: '비교만',
-            baseSpecs: '기준 사양',
-            targetSpecs: '비교 사양',
-          },
-          table: {
-            status: '판정',
-            spec: '사양 항목',
-            base: '기준 문서',
-            target: '비교 문서',
-            summary: '설명',
-          },
-          specItems: {
-            baseCount: '기준 문서 {{count}}건',
-            targetCount: '비교 문서 {{count}}건',
-            document: '문서',
-            baseDocument: '기준',
-            targetDocument: '비교',
-            category: '분류',
-            item: '사양 항목',
-            value: '값',
-            condition: '조건',
-            evidence: '근거',
-            confidence: '신뢰도',
-            method: '추출',
-          },
-          rowStatus: {
-            same: '동일',
-            different: '상이',
-            base_only: '기준만',
-            target_only: '비교만',
-            unknown: '판단 보류',
-          },
-        },
-        documentTranslate: {
-          title: '문서 번역/요약',
-          reset: '초기화',
-          modes: {
-            translate: '🌐 번역',
-            summarize: '📋 요약',
-            extract: '🔑 핵심 추출',
-          },
-          descriptions: {
-            translate: '문서를 선택한 출력 언어로 자연스럽게 번역합니다.',
-            summarize:
-              '문서를 줄글로 요약합니다. 내용과 결론을 이해하는 용도예요. (간략/상세 선택)',
-            extract:
-              '키워드·수치·날짜·결정사항 등 핵심 정보를 목록으로 뽑습니다. 데이터를 다시 활용하는 용도예요.',
-          },
-          summaryLevels: {
-            brief: '간략',
-            detailed: '상세',
-          },
-          targetLang: '출력 언어',
-          inputLabel: '문서 입력 텍스트',
-          resizePanels: '입력과 결과 패널 너비 조절',
-          langs: {
-            ko: '🇰🇷 한국어',
-            en: '🇺🇸 영어',
-            zh: '🇨🇳 중국어',
-            ja: '🇯🇵 일본어',
-            es: '🇪🇸 스페인어',
-            de: '🇩🇪 독일어',
-          },
-          uploadHint:
-            '문서 파일을 드래그하거나 클릭 (PDF, DOCX, XLSX, PPTX, TXT)',
-          clearFile: '제거',
-          or: '또는',
-          textPlaceholder: '번역·요약할 텍스트를 붙여넣으세요.',
-          resultTitle: '결과',
-          resultPlaceholder: '처리 결과가 여기에 표시됩니다.',
-          processing: '문서를 처리 중입니다...',
-          copy: '복사',
-          copied: '복사됨',
-          download: '다운로드',
-          errors: {
-            connect: '문서 번역/요약 API 서버에 연결하지 못했습니다.',
-            requestFailed: '요청에 실패했습니다. ({{status}})',
-            processFailed: '문서 처리에 실패했습니다.',
-            noInput: '파일을 업로드하거나 텍스트를 입력하세요.',
-          },
-        },
         writingAssistant: {
           resultTitle: '작성 결과',
           referenceTitle: '한국어 번역 (참고용)',
@@ -3681,51 +3497,6 @@ export const resources = {
             requestFailed: '요청에 실패했습니다. ({{status}})',
             downloadFailed: '다운로드에 실패했습니다.',
             syncFailed: '원문 갱신(재번역)에 실패했습니다.',
-          },
-        },
-        drafting: {
-          title: '기안작성 도우미',
-          reset: '초기화',
-          typeLabel: '기안 종류',
-          langLabel: '작성 언어',
-          inputLabel: '기안 작성 내용 입력',
-          generate: '기안서 자동 작성',
-          generating: '기안서를 작성 중입니다...',
-          resultPlaceholder:
-            '왼쪽에 내용을 입력하고 작성 버튼을 누르면 기안서가 여기에 표시됩니다.',
-          types: {
-            general: '일반 기안',
-            cooperation: '협조전',
-            purchase: '구매 요청',
-            report: '업무 보고',
-            proposal: '제안서',
-            minutes: '회의록',
-          },
-          filenames: {
-            general: '기안서',
-            cooperation: '협조전',
-            purchase: '구매요청서',
-            report: '업무보고서',
-            proposal: '제안서',
-            minutes: '회의록',
-          },
-          placeholders: {
-            general:
-              '기안 내용을 간략히 입력하세요.\n예) 사무용품 구매 승인 요청합니다.',
-            cooperation:
-              '협조 부서, 요청 사항, 기한 등을 입력하세요.\n예) 품질팀에 신규 부품 검사 협조 요청, 3월 말까지',
-            purchase:
-              '품명, 수량, 예상 금액, 구매 사유를 입력하세요.\n예) 노트북 5대, 대당 150만원, 신규 입사자 지급용',
-            report:
-              '보고할 업무 내용, 현황, 이슈를 입력하세요.\n예) 3월 생산 실적 보고, 목표 대비 102% 달성',
-            proposal:
-              '제안 배경, 목적, 주요 내용을 입력하세요.\n예) 공정 자동화 도입 제안, 연간 인건비 30% 절감 기대',
-            minutes:
-              '회의명, 참석자, 주요 논의 내용을 입력하세요.\n예) 3월 경영회의, 생산/품질/영업팀 참석, 2분기 계획 논의',
-          },
-          errors: {
-            empty: '기안 내용을 입력해주세요.',
-            generateFailed: '기안 생성에 실패했습니다.',
           },
         },
         emailAssistant: {
@@ -6363,9 +6134,6 @@ export const resources = {
         settings: 'Settings',
         'video-chat': 'Video Chat',
         whiteboard: 'Whiteboard',
-        drafting: 'Drafting Assistant',
-        'document-translate': 'Document Translate/Summary',
-        'spec-compare': 'Specification Compare',
         'image-wizard': 'Image Wizard',
         'email-assistant': 'Email Assistant',
       },
@@ -6382,9 +6150,6 @@ export const resources = {
         recording: 'Manage recordings and processing status.',
         community: 'Open company-wide community boards.',
         'video-chat': 'Run browser-based video meetings.',
-        drafting: 'Draft business documents quickly.',
-        'document-translate': 'OCR, translate, and summarize documents.',
-        'spec-compare': 'Compare two specification versions.',
         'image-wizard': 'Generate work images step by step.',
         'email-assistant': 'Draft business emails.',
         'web-search': 'Search current public web information.',
@@ -6392,9 +6157,6 @@ export const resources = {
       nav: {
         chatbot: 'AI Chatbot',
         search: 'Open Work Hub Search',
-        drafting: 'Drafting Assistant',
-        translate: 'Document Translate/Summary',
-        'spec-compare': 'Specification Compare',
         'image-wizard': 'Image Wizard',
         'email-assistant': 'Email Assistant',
         'retrieval-search': 'Retrieval Diagnostics',
@@ -6455,11 +6217,6 @@ export const resources = {
       navDescriptions: {
         chatbot: 'Conversational assistant using internal data and tools',
         search: 'Main grounded search hub for internal documents',
-        drafting:
-          'Draft business memos, cooperation notes, and purchase requests',
-        translate: 'OCR, translation, and summary for uploaded documents',
-        'spec-compare':
-          'Compare changes between two specification document versions',
         'video-chat-room': 'Validate LiveKit OSS video meetings',
         'image-wizard':
           'Generate infographic / business document images via a guided wizard',
@@ -8179,21 +7936,6 @@ export const resources = {
                 ready: 'Ready',
               },
               workloadCatalog: {
-                specCompareCompare: {
-                  description:
-                    'Compare extracted specification items and identify key differences.',
-                  label: 'Specification difference analysis',
-                },
-                specCompareExtract: {
-                  description:
-                    'Extract structured specification items from comparison documents.',
-                  label: 'Specification data extraction',
-                },
-                specCompareReport: {
-                  description:
-                    'Summarize specification comparison results into a review report.',
-                  label: 'Specification comparison report',
-                },
                 webSearchAnswer: {
                   description:
                     'Turn general public web search results into an answer with supporting sources.',
@@ -8546,9 +8288,6 @@ export const resources = {
             },
             taskDescriptions: {
               chatbot: 'User-facing interactive chat responses.',
-              document_translate:
-                'Document translation, summarization, and key extraction.',
-              draft_assist: 'Business draft and proposal drafting assistant.',
               mail_compose: 'Business email composition assistant.',
               mail_reply_draft: 'Drafts replies for synced mail messages.',
               mail_summarize: 'Summarizes synced mail messages.',
@@ -8561,12 +8300,6 @@ export const resources = {
               meeting_summary: 'Summarizes meeting transcripts.',
               rag_grounded_answer:
                 'Synthesizes answers grounded in workspace RAG results.',
-              spec_compare_compare:
-                'Compares differences between two specifications.',
-              spec_compare_extract:
-                'Extracts structured data needed to compare specifications.',
-              spec_compare_report:
-                'Turns specification comparison results into a report.',
               writing_translate:
                 'Re-translates edited Korean reference text back to the target language.',
             },
@@ -8856,8 +8589,7 @@ export const resources = {
               periodActiveEmployees: 'Active in period',
               targetEmployees: 'Target employees',
               targetScopeAll: 'No usage targets saved: all users included',
-              targetScopeConfigured:
-                '{{users}} target users',
+              targetScopeConfigured: '{{users}} target users',
               todayActiveEmployees: 'End-date active',
               users: 'Total users',
               workActivity: 'Work activity events',
@@ -9615,157 +9347,6 @@ export const resources = {
           streamStartFailed: 'Could not start AI streaming. ({{status}})',
           streamFailed: 'The AI stream failed.',
         },
-        specCompare: {
-          title: 'Specification Compare',
-          refresh: 'Refresh',
-          baseFile: 'Base specification',
-          targetFile: 'Target specification',
-          chooseFile: 'Choose a file or drag and drop',
-          removeFile: 'Remove file',
-          reset: 'Reset',
-          download: 'Download report',
-          downloadWord: 'Word',
-          downloadPdf: 'PDF',
-          deleteJob: 'Delete comparison',
-          deleteJobConfirm:
-            'Delete this comparison job? This cannot be undone.',
-          supportedHint:
-            'PPTX, DOCX, and PDF specifications are supported. Drag a file here or click to select.',
-          start: 'Start comparison',
-          submitting: 'Creating job...',
-          recentJobs: 'Recent comparisons',
-          emptyJobs: 'No comparison jobs yet.',
-          untitledJob: 'Untitled comparison',
-          emptyTitle: 'Select two specification files',
-          emptyDescription:
-            'Upload a base file and a target file. The admin-selected AI model will generate a difference table and Markdown report.',
-          failedFallback: 'Specification comparison failed.',
-          loadingResult: 'Loading result.',
-          emptyRows: 'No comparison rows to show.',
-          emptySpecItems: 'No extracted specification items to show.',
-          emptyEvidence: 'No evidence blocks to show.',
-          errors: {
-            connect: 'Could not connect to the specification comparison API.',
-            requestFailed:
-              'Specification comparison request failed. ({{status}})',
-            loadJobs: 'Could not load comparison jobs.',
-            loadResult: 'Could not load the comparison result.',
-            poll: 'Could not refresh the comparison job status.',
-            create: 'Could not create the comparison job.',
-            delete: 'Could not delete the comparison job.',
-            download: 'Could not download the report.',
-          },
-          status: {
-            queued: 'Queued',
-            running: 'Running',
-            succeeded: 'Done',
-            failed: 'Failed',
-            cancelled: 'Cancelled',
-          },
-          stage: {
-            queued: 'Waiting in queue',
-            extracting: 'Extracting documents',
-            matching: 'Aligning specification candidates',
-            comparing: 'Comparing with AI',
-            finalizing: 'Finalizing comparison rows',
-            rendering: 'Rendering report',
-            running: 'Comparison running',
-            succeeded: 'Done',
-            failed: 'Failed',
-            cancelled: 'Cancelled',
-          },
-          tabs: {
-            report: 'Report',
-            table: 'Table',
-            specs: 'Spec DB',
-            evidence: 'Evidence',
-          },
-          summary: {
-            total: 'Total',
-            same: 'Same',
-            different: 'Different',
-            baseOnly: 'Base only',
-            targetOnly: 'Target only',
-            baseSpecs: 'Base specs',
-            targetSpecs: 'Target specs',
-          },
-          table: {
-            status: 'Status',
-            spec: 'Specification',
-            base: 'Base document',
-            target: 'Target document',
-            summary: 'Summary',
-          },
-          specItems: {
-            baseCount: 'Base document {{count}} items',
-            targetCount: 'Target document {{count}} items',
-            document: 'Document',
-            baseDocument: 'Base',
-            targetDocument: 'Target',
-            category: 'Category',
-            item: 'Specification',
-            value: 'Value',
-            condition: 'Condition',
-            evidence: 'Evidence',
-            confidence: 'Confidence',
-            method: 'Extraction',
-          },
-          rowStatus: {
-            same: 'Same',
-            different: 'Different',
-            base_only: 'Base only',
-            target_only: 'Target only',
-            unknown: 'Needs review',
-          },
-        },
-        documentTranslate: {
-          title: 'Document Translate/Summary',
-          reset: 'Reset',
-          modes: {
-            translate: '🌐 Translate',
-            summarize: '📋 Summarize',
-            extract: '🔑 Extract',
-          },
-          descriptions: {
-            translate:
-              'Translate the document naturally into the selected output language.',
-            summarize:
-              'Summarize the document as prose to grasp its content and conclusions. (Brief/Detailed)',
-            extract:
-              'Pull out key facts — keywords, figures, dates, decisions — as a reusable list.',
-          },
-          summaryLevels: {
-            brief: 'Brief',
-            detailed: 'Detailed',
-          },
-          targetLang: 'Output language',
-          inputLabel: 'Document input text',
-          resizePanels: 'Resize input and result panels',
-          langs: {
-            ko: '🇰🇷 Korean',
-            en: '🇺🇸 English',
-            zh: '🇨🇳 Chinese',
-            ja: '🇯🇵 Japanese',
-            es: '🇪🇸 Spanish',
-            de: '🇩🇪 German',
-          },
-          uploadHint: 'Drag or click to upload (PDF, DOCX, XLSX, PPTX, TXT)',
-          clearFile: 'Remove',
-          or: 'or',
-          textPlaceholder: 'Paste the text to translate or summarize.',
-          resultTitle: 'Result',
-          resultPlaceholder: 'The result will appear here.',
-          processing: 'Processing document...',
-          copy: 'Copy',
-          copied: 'Copied',
-          download: 'Download',
-          errors: {
-            connect: 'Failed to connect to the document translate API server.',
-            requestFailed: 'Request failed. ({{status}})',
-            processFailed: 'Failed to process the document.',
-            noInput: 'Upload a file or enter text.',
-          },
-        },
         writingAssistant: {
           resultTitle: 'Result',
           referenceTitle: 'Korean translation (reference)',
@@ -9784,51 +9365,6 @@ export const resources = {
             requestFailed: 'Request failed. ({{status}})',
             downloadFailed: 'Download failed.',
             syncFailed: 'Failed to update the document (re-translation).',
-          },
-        },
-        drafting: {
-          title: 'Drafting Assistant',
-          reset: 'Reset',
-          typeLabel: 'Draft type',
-          langLabel: 'Language',
-          inputLabel: 'Draft content',
-          generate: 'Generate draft',
-          generating: 'Generating the draft...',
-          resultPlaceholder:
-            'Enter content on the left and click generate — the draft appears here.',
-          types: {
-            general: 'General',
-            cooperation: 'Cooperation',
-            purchase: 'Purchase',
-            report: 'Report',
-            proposal: 'Proposal',
-            minutes: 'Minutes',
-          },
-          filenames: {
-            general: 'draft',
-            cooperation: 'cooperation_request',
-            purchase: 'purchase_request',
-            report: 'report',
-            proposal: 'proposal',
-            minutes: 'minutes',
-          },
-          placeholders: {
-            general:
-              'Briefly describe the draft content.\ne.g. Requesting approval to purchase office supplies.',
-            cooperation:
-              'Enter the cooperating department, request, and deadline.\ne.g. Request QA team to inspect new parts by end of March.',
-            purchase:
-              'Enter item, quantity, estimated cost, and reason.\ne.g. 5 laptops, 1.5M KRW each, for new hires.',
-            report:
-              'Enter the work, status, and issues to report.\ne.g. March production report, 102% of target achieved.',
-            proposal:
-              'Enter the background, objective, and key points.\ne.g. Propose process automation, expecting 30% annual labor cost savings.',
-            minutes:
-              'Enter meeting name, attendees, and key discussion.\ne.g. March management meeting; production/QA/sales; Q2 plan discussion.',
-          },
-          errors: {
-            empty: 'Please enter the draft content.',
-            generateFailed: 'Failed to generate the draft.',
           },
         },
         emailAssistant: {

@@ -8,15 +8,19 @@ import {
 
 describe('AI feature guides', () => {
   it('uses only the registry projection supplied by the caller', () => {
-    const featureGuideToolIds = new Set(['drafting']);
+    const featureGuideToolIds = new Set(['image-wizard']);
 
-    expect(hasAiFeatureGuide('drafting', featureGuideToolIds)).toBe(true);
+    expect(hasAiFeatureGuide('image-wizard', featureGuideToolIds)).toBe(true);
     expect(hasAiFeatureGuide('diagrams', featureGuideToolIds)).toBe(false);
     expect(hasAiFeatureGuide('docs', featureGuideToolIds)).toBe(false);
   });
 
   it('derives guide metadata from an accepted tool id', () => {
-    expect(getAiFeatureGuideSrc('drafting')).toBe('/help/ai/drafting.html');
-    expect(getAiFeatureGuideTitleKey('drafting')).toBe('shell:nav.drafting');
+    expect(getAiFeatureGuideSrc('image-wizard')).toBe(
+      '/help/ai/image-wizard.html',
+    );
+    expect(getAiFeatureGuideTitleKey('image-wizard')).toBe(
+      'shell:nav.image-wizard',
+    );
   });
 });

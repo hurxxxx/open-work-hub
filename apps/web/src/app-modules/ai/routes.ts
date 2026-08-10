@@ -1,9 +1,7 @@
 import { createElement, lazy, type ReactNode } from 'react';
 
 import { chatbotWorkspaceRoutes } from '@/src/app-modules/chatbot';
-import {
-  webSearchWorkspaceRoutes,
-} from '@/src/app-modules/web-search';
+import { webSearchWorkspaceRoutes } from '@/src/app-modules/web-search';
 import { WorkspaceFeatureAppGate } from '@/src/app/shell/gates';
 import { lazyRoute } from '@/src/app/shell/lazy-route';
 import type { StaticRouteDefinition } from '@/src/app/shell/navigation-types';
@@ -22,21 +20,6 @@ const ImageWizardToolView = lazy(() =>
     default: module.ImageWizardToolView,
   })),
 );
-const SpecCompareView = lazy(() =>
-  import('./views/SpecCompareView').then((module) => ({
-    default: module.SpecCompareView,
-  })),
-);
-const DocumentTranslateView = lazy(() =>
-  import('./views/DocumentTranslateView').then((module) => ({
-    default: module.DocumentTranslateView,
-  })),
-);
-const DraftingView = lazy(() =>
-  import('./views/DraftingView').then((module) => ({
-    default: module.DraftingView,
-  })),
-);
 const EmailAssistantView = lazy(() =>
   import('./views/EmailAssistantView').then((module) => ({
     default: module.EmailAssistantView,
@@ -47,11 +30,6 @@ export const ragSearchToolElement = lazyRoute(createElement(RagSearchView));
 export const imageWizardToolElement = lazyRoute(
   createElement(ImageWizardToolView),
 );
-export const specCompareToolElement = lazyRoute(createElement(SpecCompareView));
-export const documentTranslateToolElement = lazyRoute(
-  createElement(DocumentTranslateView),
-);
-export const draftingToolElement = lazyRoute(createElement(DraftingView));
 export const emailAssistantToolElement = lazyRoute(
   createElement(EmailAssistantView),
 );

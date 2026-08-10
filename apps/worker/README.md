@@ -11,7 +11,6 @@ Celery 기반 background worker다.
 - 이미지 생성
 - 검색 색인
 - 초안 export
-- spec compare
 
 실행:
 

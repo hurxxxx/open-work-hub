@@ -1,4 +1,4 @@
-"""기안/메일 작성 프롬프트 — 원본(`drafteditor.py`, `mailwriter.py`) 프롬프트를 그대로 포팅.
+"""메일 작성 프롬프트.
 
 원본은 외부 Claude 를 썼지만 Open Work Hub 는 기본적으로 로컬 LLM(Qwen 계열)을 쓴다. 로컬 LLM 이
 한국어 출력에 한자(漢字)·중국어를 섞는 경향이 있어, 한국어(``lang == "ko"``) 출력에는
@@ -7,35 +7,7 @@
 
 from __future__ import annotations
 
-# 기안 종류별 설명. 원본 drafteditor.py 의 DRAFT_TYPE_PROMPTS 를 그대로 옮김.
-DRAFT_TYPE_PROMPTS: dict[str, dict[str, str]] = {
-    "ko": {
-        "general": "일반 업무 기안서",
-        "cooperation": "부서 간 협조전 (협조 요청 배경, 협조 요청 사항, 기대 효과, 협조 기한 포함)",
-        "purchase": "구매 요청서 (품명, 수량, 예상 금액, 구매 사유, 납기 희망일 포함)",
-        "report": "업무 보고서 (현황, 진행 사항, 이슈, 향후 계획 포함)",
-        "proposal": "제안서 (배경, 목적, 세부 내용, 기대 효과, 일정 포함)",
-        "minutes": "회의록 (회의명, 일시, 참석자, 안건, 논의 내용, 결정 사항, 후속 조치 포함)",
-    },
-    "en": {
-        "general": "general business draft document",
-        "cooperation": "inter-department cooperation request letter (include: background, requested items, expected benefits, deadline)",
-        "purchase": "purchase request form (include: item name, quantity, estimated cost, purpose, desired delivery date)",
-        "report": "business report (include: current status, progress, issues, future plans)",
-        "proposal": "proposal document (include: background, objectives, details, expected benefits, schedule)",
-        "minutes": "meeting minutes (include: meeting title, date/time, attendees, agenda, discussion, decisions, follow-up actions)",
-    },
-    "zh": {
-        "general": "一般业务起草文件",
-        "cooperation": "部门间协作请求函（包含：协作请求背景、协作请求事项、预期效果、协作期限）",
-        "purchase": "采购申请书（包含：品名、数量、预估金额、采购理由、希望交付日期）",
-        "report": "业务报告（包含：现状、进展、问题、未来计划）",
-        "proposal": "提案书（包含：背景、目的、详细内容、预期效果、日程）",
-        "minutes": "会议纪要（包含：会议名称、日期时间、参会人员、议题、讨论内容、决议事项、后续措施）",
-    },
-}
-
-# 메일 어투. 원본 mailwriter.py 의 tone_map 을 그대로 옮김.
+# 메일 어투.
 MAIL_TONE_PROMPTS: dict[str, str] = {
     "friendly": "친근하고 따뜻한 말투로, 이모지를 적절히 사용하여",
     "polite": "공손하고 정중한 말투로, 격식을 갖추어",
@@ -69,71 +41,6 @@ _KO_TRANSLATION_ONLY_DIRECTIVE = (
 )
 
 
-def build_draft_prompt(text: str, draft_type: str, lang: str) -> str:
-    """기안서 작성 프롬프트를 생성한다."""
-    if lang not in DRAFT_TYPE_PROMPTS:
-        lang = "ko"
-    type_desc = DRAFT_TYPE_PROMPTS[lang].get(draft_type, DRAFT_TYPE_PROMPTS[lang]["general"])
-
-    if lang == "en":
-        return f"""You are a professional business document writer for the user's organization.
-Write a {type_desc} based on the user input below.
-
-The body of the document must be in formal business English. Do NOT use Korean (한글) characters in the document body.
-
-Writing rules:
-- Plain text only. NO markdown symbols (*, **, #, -, etc.) in the document body.
-- Use square brackets for section titles. Example: [Title], [Body], [Background]
-- Use formal, business-appropriate English in the document body.
-- Include title, body, and closing.
-
-OUTPUT FORMAT (follow this order strictly):
-  1) The complete document in English
-  2) A blank line, then "---" as a separator
-  3) A blank line, then "[한국어 번역 / 참고용]" as a header
-  4) A natural Korean translation of the entire document above (so the Korean author can verify the content)
-Do NOT add any other explanations or notes outside this structure.
-
-[User Input]
-{text}""" + _KO_TRANSLATION_ONLY_DIRECTIVE
-
-    if lang == "zh":
-        return f"""你是用户所在组织的专业商务文档起草人。
-请根据下面的用户输入,撰写一份{type_desc}。
-
-文档正文必须使用正式商务中文(简体)。文档正文中绝对不要使用韩语(한글)字符。
-
-写作规则:
-- 文档正文仅使用纯文本。不要使用 Markdown 符号(*, **, #, - 等)。
-- 章节标题使用方括号。例如:[标题]、[正文]、[背景]
-- 使用正式、商务风格的中文。
-- 包含标题、正文和结尾。
-
-输出格式(严格按此顺序):
-  1) 完整的中文文档
-  2) 空行,然后 "---" 作为分隔符
-  3) 空行,然后 "[한국어 번역 / 참고용]" 作为标题
-  4) 上述文档的自然韩语翻译(以便韩国作者审核内容)
-除此结构外,不要添加任何其他说明或备注。
-
-[用户输入]
-{text}""" + _KO_TRANSLATION_ONLY_DIRECTIVE
-
-    prompt = f"""당신은 Open Work Hub의 전문 기안 작성자입니다.
-아래 내용을 바탕으로 {type_desc} 형식의 기안서를 작성하세요.
-
-작성 규칙:
-- 마크다운 기호(*, **, #, - 등)를 사용하지 말고 일반 텍스트로 작성하세요.
-- 구분 제목은 대괄호로 표기하세요. 예: [제목], [본문]
-- 공식적이고 격식 있는 문체로 한국어(한글)로 작성하세요.
-- 기안서 양식에 맞게 제목, 본문, 마무리를 포함하세요.
-- 기안서만 출력하고, 다른 설명은 생략하세요.
-
-[사용자 입력 내용]
-{text}"""
-    return prompt + _KOREAN_ONLY_DIRECTIVE
-
-
 def build_translate_prompt(source: str, target_lang: str) -> str:
     """본문을 대상 언어로 재번역하는 프롬프트. 원본 mailwriter.py translate 와 동일.
 
@@ -142,14 +49,17 @@ def build_translate_prompt(source: str, target_lang: str) -> str:
     - 외국어 결과물을 직접 수정하면 그 외국어를 한국어로 번역해 오른쪽 참고 번역을 갱신한다.
     """
     if target_lang == "ko":
-        return f"""다음 비즈니스 문서를 자연스러운 한국어 비즈니스 문체로 번역해주세요.
+        return (
+            f"""다음 비즈니스 문서를 자연스러운 한국어 비즈니스 문체로 번역해주세요.
 동일한 구조(제목/타이틀, 인사말, 본문 단락, 맺음말)와 동일한 격식 수준을 유지하세요.
 원문이 대괄호로 섹션 제목을 표기하면 한국어에서도 대괄호를 사용하세요. 예: [제목], [본문].
 평문만 사용하세요 — 마크다운 기호(*, **, #)를 쓰지 마세요.
 번역된 한국어 문서만 출력하세요. 설명이나 원문은 출력하지 마세요.
 
 [원문]
-{source}""" + _KOREAN_ONLY_DIRECTIVE
+{source}"""
+            + _KOREAN_ONLY_DIRECTIVE
+        )
 
     if target_lang == "zh":
         return f"""请将下面的韩语商务文档翻译成正式的商务简体中文。

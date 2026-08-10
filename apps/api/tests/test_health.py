@@ -632,8 +632,7 @@ def _replace_workspace_user_bindings(
         headers=headers,
         json={
             "users": [
-                {"subject_id": user_id, "role": role}
-                for user_id, role in roles_by_user_id.items()
+                {"subject_id": user_id, "role": role} for user_id, role in roles_by_user_id.items()
             ],
         },
     )
@@ -1064,11 +1063,6 @@ def test_non_workspace_routes_require_workspace_membership(client: TestClient) -
     )
     assert documents_forbidden_response.status_code == 403
 
-    drafts_forbidden_response = client.get(
-        "/api/v1/workspaces/administrator/drafts", headers=user_headers
-    )
-    assert drafts_forbidden_response.status_code == 403
-
     wiki_forbidden_response = client.get(
         "/api/v1/workspaces/administrator/wiki/pages", headers=user_headers
     )
@@ -1095,11 +1089,6 @@ def test_non_workspace_routes_require_workspace_membership(client: TestClient) -
         json={"query": "compressor specification"},
     )
     assert documents_allowed_response.status_code == 200
-
-    drafts_allowed_response = client.get(
-        "/api/v1/workspaces/administrator/drafts", headers=user_headers
-    )
-    assert drafts_allowed_response.status_code == 200
 
     wiki_allowed_response = client.get(
         "/api/v1/workspaces/administrator/wiki/pages", headers=user_headers

@@ -39,7 +39,6 @@ from open_work_hub_api.domains.documents.router import router as documents_route
 from open_work_hub_api.domains.diagrams.router import router as diagrams_router
 from open_work_hub_api.domains.dm.router import public_router as dm_public_router
 from open_work_hub_api.domains.dm.router import router as dm_router
-from open_work_hub_api.domains.drafts.router import router as drafts_router
 from open_work_hub_api.domains.files.router import public_router as files_public_router
 from open_work_hub_api.domains.files.router import router as files_router
 from open_work_hub_api.domains.images.router import router as images_router
@@ -60,8 +59,6 @@ from open_work_hub_api.domains.recording.router import router as recording_route
 from open_work_hub_api.domains.realtime.router import ws_router as realtime_ws_router
 from open_work_hub_api.domains.retrieval.router import router as retrieval_router
 from open_work_hub_api.domains.search.router import router as search_router
-from open_work_hub_api.domains.document_translate.router import router as document_translate_router
-from open_work_hub_api.domains.spec_compare.router import router as spec_compare_router
 from open_work_hub_api.domains.usage.router import router as usage_router
 from open_work_hub_api.domains.video_chat.router import router as video_chat_router
 from open_work_hub_api.domains.web_search.router import router as web_search_router
@@ -149,7 +146,6 @@ def _router_specs() -> list[_RouterSpec]:
         _RouterSpec(diagrams_router, "workspace", "workspace"),
         _RouterSpec(docs_ws_router, "workspace"),
         _RouterSpec(whiteboard_ws_router, "workspace"),
-        _RouterSpec(drafts_router, "workspace", "workspace"),
         _RouterSpec(files_router, "workspace", "workspace"),
         _RouterSpec(files_public_router, "api"),
         _RouterSpec(ocr_router, "workspace", "workspace"),
@@ -170,8 +166,6 @@ def _router_specs() -> list[_RouterSpec]:
         _RouterSpec(web_search_router, "workspace", "workspace"),
         _RouterSpec(mail_router, "api", "protected"),
         _RouterSpec(search_router, "workspace", "workspace"),
-        _RouterSpec(spec_compare_router, "workspace", "workspace"),
-        _RouterSpec(document_translate_router, "workspace", "workspace"),
         _RouterSpec(writing_assistant_router, "workspace", "workspace"),
         _RouterSpec(media_router, "api", "protected"),
         _RouterSpec(media_public_router, "api"),

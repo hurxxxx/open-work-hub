@@ -219,6 +219,21 @@ Core Enablement가 다음 scaffold를 먼저 준비한다.
 - AI/guide 목록이 하드코딩 ID가 아니라 manifest surface에서 파생되는가
 - Workspace keyword search가 Backend registry와 bootstrap에서 파생되고 Frontend source flag가 없는가
 
+## 앱 제거 체크리스트
+
+앱을 폐기할 때는 화면과 메뉴만 숨기지 않고 앱이 소유한 계약을 함께 제거한다.
+
+- Backend catalog composition, router, server-side gate와 AI/worker registration
+- Web feature manifest, route, API client, 도움말, i18n과 app-local test
+- 앱 전용 테이블과 활성 entitlement, platform visibility, launcher category, 사용자 pin
+- 제거된 workload의 route override와 앱·task 범위로 한정된 AI 보안 설정
+- OpenAPI와 생성 타입을 다시 생성한 뒤 Backend/Web registry가 같은 앱 집합을 노출하는지 검증
+
+감사 로그와 사용량 기록처럼 과거 행위의 증거인 데이터는 앱 폐기와 별개로 보존한다. DB 밖의
+object storage나 broker에 남은 객체·메시지는 Alembic으로 정리하지 않으며, 해당 저장소의 보존
+정책과 운영 절차로 별도 처리한다. 데이터 삭제 migration의 downgrade는 스키마만 복원할 수 있고
+삭제된 사용자 데이터나 설정을 복구하지 못한다는 점을 migration 문서에 명시한다.
+
 ## 검증
 
 최소 정적·단위 검증은 다음과 같다.

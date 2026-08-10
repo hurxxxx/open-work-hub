@@ -12,7 +12,6 @@ RAG_SYNC_REALTIME_QUEUE = "rag_sync_realtime"
 RAG_SYNC_BACKFILL_QUEUE = "rag_sync_backfill"
 RAG_VISIBILITY_RECOMPUTE_QUEUE = "rag_visibility_recompute"
 SEARCH_INDEX_REALTIME_QUEUE = "search_index_realtime"
-SPEC_COMPARE_QUEUE = "spec_compare"
 AI_GRAPH_QUEUE = "ai-graph"
 
 FILE_STORAGE_CLEANUP_TASK_NAME = "files.cleanup_storage_object"
@@ -23,14 +22,12 @@ RAG_SYNC_RESOURCE_TASK_NAME = "rag.sync_resource"
 RAG_SYNC_BACKFILL_RESOURCE_TASK_NAME = "rag.sync_backfill_resource"
 RAG_VISIBILITY_RECOMPUTE_TASK_NAME = "rag.recompute_visibility"
 SEARCH_INDEX_RESOURCE_TASK_NAME = "search.index_resource"
-SPEC_COMPARE_RUN_JOB_TASK_NAME = "spec_compare.run_job"
 AI_GRAPH_RUN_TASK_NAME = "ai_graph.run"
 AI_GRAPH_REPUBLISH_TASK_NAME = "ai_graph.republish"
 
 TASK_QUEUE_ROUTES: Mapping[str, str] = {
     "documents.sync": DEFAULT_QUEUE,
     "ocr.normalize": DEFAULT_QUEUE,
-    "drafts.export": DEFAULT_QUEUE,
     "media.cleanup_orphans": DEFAULT_QUEUE,
     FILE_STORAGE_CLEANUP_TASK_NAME: DEFAULT_QUEUE,
     FILE_STORAGE_CLEANUP_REPUBLISH_TASK_NAME: DEFAULT_QUEUE,
@@ -55,7 +52,6 @@ TASK_QUEUE_ROUTES: Mapping[str, str] = {
     AI_GRAPH_REPUBLISH_TASK_NAME: DEFAULT_QUEUE,
     "search.republish_pending_index_jobs": DEFAULT_QUEUE,
     IMAGE_GENERATION_TASK_NAME: IMAGE_GENERATION_QUEUE,
-    SPEC_COMPARE_RUN_JOB_TASK_NAME: SPEC_COMPARE_QUEUE,
     MAIL_SYNC_TASK_NAME: MAIL_SYNC_QUEUE,
     "mail.sync_account": MAIL_SYNC_QUEUE,
     "mail.dispatch_due_sync_jobs": DEFAULT_QUEUE,
@@ -74,7 +70,6 @@ WORKER_QUEUE_GROUPS: Mapping[str, tuple[str, ...]] = {
         MEETING_TRANSCRIBE_QUEUE,
         IMAGE_GENERATION_QUEUE,
         RAG_SYNC_BACKFILL_QUEUE,
-        SPEC_COMPARE_QUEUE,
     ),
     "ai_graph": (AI_GRAPH_QUEUE,),
 }
@@ -190,8 +185,6 @@ __all__ = [
     "RAG_VISIBILITY_RECOMPUTE_TASK_NAME",
     "SEARCH_INDEX_REALTIME_QUEUE",
     "SEARCH_INDEX_RESOURCE_TASK_NAME",
-    "SPEC_COMPARE_QUEUE",
-    "SPEC_COMPARE_RUN_JOB_TASK_NAME",
     "SERVER_MANAGED_QUEUE_GROUPS",
     "SERVER_MANAGED_QUEUE_NAMES",
     "TASK_QUEUE_ROUTES",

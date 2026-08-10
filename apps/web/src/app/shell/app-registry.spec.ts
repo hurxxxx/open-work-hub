@@ -131,13 +131,7 @@ describe('app module registry', () => {
     ).toContain('/w/:workspaceSlug/pms/lists/:taskListId');
     expect(
       getAppModuleWorkspaceRoutes('business').map((route) => route.path),
-    ).toContain('/w/:workspaceSlug/document-translate');
-    expect(
-      getAppModuleWorkspaceRoutes('business').map((route) => route.path),
     ).toContain('/w/:workspaceSlug/retrieval-search');
-    expect(
-      getAppModuleWorkspaceRoutes('business').map((route) => route.path),
-    ).toContain('/w/:workspaceSlug/drafting');
   });
 
   it('derives app-owned global route definitions from the app registry', () => {
@@ -176,16 +170,11 @@ describe('app module registry', () => {
       'docs.main',
       'whiteboard.main',
       'diagrams.main',
-      'drafting.main',
-      'document-translate.main',
-      'spec-compare.main',
       'image-wizard.main',
       'email-assistant.main',
       'retrieval-search.main',
     ]);
-    const translateItem = getNavItem('translate');
     const pmsItem = getNavItem('pms-inbox');
-    expect(translateItem).not.toBeNull();
     expect(pmsItem).not.toBeNull();
     expect(getToolViewRoute({ item: docsItem, toolId: 'docs-all' })?.id).toBe(
       'docs.main',
@@ -202,14 +191,8 @@ describe('app module registry', () => {
     });
     expect(workspaceSearchRoute).not.toHaveProperty('bootstrapAppId');
     expect(
-      getToolViewRoute({ item: translateItem, toolId: 'translate' })?.id,
-    ).toBe('document-translate.main');
-    expect(
       getToolViewRoute({ item: null, toolId: 'retrieval-search' })?.id,
     ).toBe('retrieval-search.main');
-    expect(
-      getToolViewRoute({ item: null, toolId: 'drafting' })?.id,
-    ).toBe('drafting.main');
     expect(
       pmsItem
         ? getToolViewRoute({ item: pmsItem, toolId: 'pms-inbox' })?.id
@@ -234,11 +217,8 @@ describe('app module registry', () => {
 
   it('derives AI tool surfaces from feature module registrations', () => {
     expect([...WORKSPACE_AI_TOOL_APP_IDS].sort()).toEqual([
-      'document-translate',
-      'drafting',
       'email-assistant',
       'image-wizard',
-      'spec-compare',
     ]);
     expect(WORKSPACE_AI_TOOL_APP_IDS).not.toContain('docs');
     expect(WORKSPACE_AI_TOOL_APP_IDS).not.toContain('retrieval-search');
@@ -248,9 +228,6 @@ describe('app module registry', () => {
     expect([...APP_FEATURE_GUIDE_TOOL_IDS]).toEqual([
       'chatbot',
       'search',
-      'drafting',
-      'translate',
-      'spec-compare',
       'image-wizard',
       'email-assistant',
     ]);
@@ -644,7 +621,7 @@ describe('app module registry', () => {
 
   it('exposes nav items through the registry public API', () => {
     expect(getNavItem('search')).toBeNull();
-    expect(getNavItem('drafting')?.appId).toBe('business');
+    expect(getNavItem('email-assistant')?.appId).toBe('business');
     expect(getNavItem('retrieval-search')?.appId).toBe('business');
     expect(getNavItem('pms-tasks-assigned')?.appId).toBe('collaboration');
     expect(getNavItem('missing-tool')).toBeNull();

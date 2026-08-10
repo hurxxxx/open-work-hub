@@ -263,8 +263,7 @@ export function ResultPanel({
   const [downloading, setDownloading] = useState<DownloadFormat | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
-  // 새 생성/초기화로 결과물이 바뀌면 직전 다운로드 에러를 지운다. EmailAssistantView 는
-  // key 로 리마운트되지만 DraftingView 는 그렇지 않아, 패널 내부에서 직접 처리한다.
+  // 새 생성/초기화로 결과물이 바뀌면 직전 다운로드 에러를 지운다.
   useEffect(() => {
     setDownloadError(null);
   }, [content]);

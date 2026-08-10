@@ -826,7 +826,6 @@ def get_ai_capability_registry() -> AiCapabilityRegistry:
         "open_work_hub_api.domains.meeting",
         "open_work_hub_api.domains.planner",
         "open_work_hub_api.domains.pms",
-        "open_work_hub_api.domains.spec_compare",
         "open_work_hub_api.domains.retrieval",
         "open_work_hub_api.domains.rag",
         "open_work_hub_api.domains.web_search",

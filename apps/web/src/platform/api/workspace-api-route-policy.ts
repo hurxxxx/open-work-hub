@@ -19,7 +19,6 @@ export type WorkspaceApiRoutePolicySource = {
 
 export const PLATFORM_WORKSPACE_API_PREFIXES = [
   '/api/v1/connectors',
-  '/api/v1/drafts',
   '/api/v1/rag',
   '/api/v1/search',
   '/api/v1/wiki',

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { FileSearch, FileText, Mic, Settings } from 'lucide-react';
+import { FileText, Mic, Settings } from 'lucide-react';
 
 import type { AuthUser } from '../auth/auth-api';
 import type { NavItem } from '@/src/app/shell/navigation-types';
@@ -208,8 +208,8 @@ describe('buildWorkspaceAppPath', () => {
 describe('resolveNavItemHref', () => {
   function aiItem(overrides: Partial<NavItem> = {}): NavItem {
     return {
-      id: 'drafting',
-      title: '기안작성 도우미',
+      id: 'custom-agent-tool',
+      title: 'Custom Agent Tool',
       icon: FileText,
       category: 'Core Tools',
       appId: 'chatbot',
@@ -224,18 +224,18 @@ describe('resolveNavItemHref', () => {
         'hq',
         buildUser(),
       ),
-    ).toBe('/tool/drafting?workspace=hq');
+    ).toBe('/tool/custom-agent-tool?workspace=hq');
   });
 
-  it('routes the sidebar spec compare item to the workspace-scoped tool', () => {
+  it('routes another sidebar item to the workspace-scoped tool', () => {
     const item = aiItem({
-      id: 'spec-compare',
-      title: '규격서 비교',
-      icon: FileSearch,
+      id: 'custom-review-tool',
+      title: 'Custom Review Tool',
+      icon: FileText,
       workspaceScopedTool: true,
     });
     expect(resolveNavItemHref(item, 'hq', buildUser())).toBe(
-      '/tool/spec-compare?workspace=hq',
+      '/tool/custom-review-tool?workspace=hq',
     );
   });
 
@@ -378,8 +378,8 @@ describe('resolveNavItemHref', () => {
 describe('resolveToolInvocationHref', () => {
   function aiItem(overrides: Partial<NavItem> = {}): NavItem {
     return {
-      id: 'drafting',
-      title: '기안작성 도우미',
+      id: 'custom-agent-tool',
+      title: 'Custom Agent Tool',
       icon: FileText,
       category: 'Core Tools',
       appId: 'chatbot',
@@ -393,7 +393,7 @@ describe('resolveToolInvocationHref', () => {
     // for these, making slash-selection a no-op. Tool invocation must land on
     // the actual tool UI.
     expect(resolveToolInvocationHref(aiItem(), 'hq', buildUser())).toBe(
-      '/tool/drafting?workspace=hq',
+      '/tool/custom-agent-tool?workspace=hq',
     );
     const chatbot = aiItem({
       id: 'chatbot',
@@ -404,13 +404,13 @@ describe('resolveToolInvocationHref', () => {
     expect(resolveToolInvocationHref(chatbot, 'hq', buildUser())).toBe(
       '/tool/chatbot',
     );
-    const specCompare = aiItem({
-      id: 'spec-compare',
-      title: '규격서 비교',
-      icon: FileSearch,
+    const reviewTool = aiItem({
+      id: 'custom-review-tool',
+      title: 'Custom Review Tool',
+      icon: FileText,
     });
-    expect(resolveToolInvocationHref(specCompare, 'hq', buildUser())).toBe(
-      '/tool/spec-compare?workspace=hq',
+    expect(resolveToolInvocationHref(reviewTool, 'hq', buildUser())).toBe(
+      '/tool/custom-review-tool?workspace=hq',
     );
   });
 
@@ -475,7 +475,7 @@ describe('resolveToolInvocationHref', () => {
     // to /tool/:id rather than the app's landing page.
     const item = aiItem({ linkAppId: 'chatbot' });
     expect(resolveToolInvocationHref(item, 'hq', buildUser())).toBe(
-      '/tool/drafting?workspace=hq',
+      '/tool/custom-agent-tool?workspace=hq',
     );
   });
 });

@@ -60,20 +60,12 @@ test.describe('AI-friendly app boundary smoke', () => {
         },
       },
       {
-        path: '/w/hq/drafting',
-        assert: async (current) => {
-          await expect(
-            current.getByRole('heading', {
-              name: /기안작성 도우미|Drafting Assistant/,
-            }),
-          ).toBeVisible();
-        },
-      },
-      {
         path: '/w/hq/chatbot',
         assert: async (current) => {
           await expect(
-            current.getByRole('heading', { name: /AI 어시스턴트 챗봇|AI Assistant Chatbot/ }),
+            current.getByRole('heading', {
+              name: /AI 어시스턴트 챗봇|AI Assistant Chatbot/,
+            }),
           ).toBeVisible();
         },
       },
@@ -144,7 +136,10 @@ test.describe('AI-friendly app boundary smoke', () => {
             current.getByText(/Workspace Settings|워크스페이스 설정/),
           ).toBeVisible();
           await expect(
-            current.getByRole('heading', { level: 1, name: 'Open Work Hub HQ' }),
+            current.getByRole('heading', {
+              level: 1,
+              name: 'Open Work Hub HQ',
+            }),
           ).toBeVisible();
         },
       },
@@ -174,14 +169,7 @@ test.describe('AI-friendly app boundary smoke', () => {
   }) => {
     await stubWorkspaceAppDataBackend(page);
     await stubShellBackend(page, {
-      enabledAppIds: [
-        'home',
-        'chatbot',
-        'docs',
-        'drafting',
-        'planner',
-        'pms',
-      ],
+      enabledAppIds: ['home', 'chatbot', 'docs', 'planner', 'pms'],
     });
     await stubConversationsApi(page);
     const errors = collectBrowserErrors(page);
@@ -229,7 +217,9 @@ test.describe('AI-friendly app boundary smoke', () => {
     await expect(
       page.locator('main').getByRole('heading', { level: 1 }),
     ).toBeVisible();
-    await expect(page.getByRole('button', { name: /Open Work Hub HQ/ })).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: /Open Work Hub HQ/ }),
+    ).toBeVisible();
 
     errors.expectClean();
   });

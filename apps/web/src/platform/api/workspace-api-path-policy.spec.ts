@@ -79,12 +79,6 @@ describe('workspace API path policy', () => {
         'hq',
       ),
     ).toBe('/api/v1/workspaces/hq/writing-assistant/records');
-    expect(
-      rewriteWorkspaceApiPathForWorkspace(
-        '/api/v1/spec-compare/analyze',
-        'hq',
-      ),
-    ).toBe('/api/v1/workspaces/hq/spec-compare/analyze');
   });
 
   it('collects workspace API prefixes from app manifests and platform route policy', () => {
@@ -93,10 +87,8 @@ describe('workspace API path policy', () => {
         '/api/v1/chatbot',
         '/api/v1/announcements',
         '/api/v1/connectors',
-        '/api/v1/document-translate',
         '/api/v1/docs',
         '/api/v1/diagrams',
-        '/api/v1/spec-compare',
         '/api/v1/pms',
         '/api/v1/writing-assistant',
         '/api/v1/retrieval',

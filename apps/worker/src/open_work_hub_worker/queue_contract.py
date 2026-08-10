@@ -42,8 +42,6 @@ from open_work_hub_api.core.worker_queue_contract import (  # noqa: E402,F401
     GENERAL_WORKER_QUEUE_NAMES,
     SEARCH_INDEX_REALTIME_QUEUE,
     SEARCH_INDEX_RESOURCE_TASK_NAME,
-    SPEC_COMPARE_QUEUE,
-    SPEC_COMPARE_RUN_JOB_TASK_NAME,
     SERVER_MANAGED_QUEUE_GROUPS,
     SERVER_MANAGED_QUEUE_NAMES,
     TASK_QUEUE_ROUTES,
@@ -76,9 +74,7 @@ def assert_worker_queue_access(
     """
 
     if isinstance(requested_queues, str):
-        queue_names = {
-            item.strip() for item in requested_queues.split(",") if item.strip()
-        }
+        queue_names = {item.strip() for item in requested_queues.split(",") if item.strip()}
     else:
         try:
             queue_names = {

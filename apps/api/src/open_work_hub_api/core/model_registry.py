@@ -35,7 +35,6 @@ def import_all_models() -> None:
     from open_work_hub_api.domains.release_notes import models as release_notes_models  # noqa: F401
     from open_work_hub_api.domains.recording import models as recording_models  # noqa: F401
     from open_work_hub_api.domains.search import models as search_models  # noqa: F401
-    from open_work_hub_api.domains.spec_compare import models as spec_compare_models  # noqa: F401
     from open_work_hub_api.domains.usage import models as usage_models  # noqa: F401
     from open_work_hub_api.domains.video_chat import models as video_chat_models  # noqa: F401
     from open_work_hub_api.domains.whiteboard import models as whiteboard_models  # noqa: F401

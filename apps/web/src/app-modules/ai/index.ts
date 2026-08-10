@@ -8,12 +8,9 @@ export {
   aiGlobalRoutes,
   aiWorkspaceRoutes,
   aiToolViewRoutes,
-  documentTranslateToolElement,
-  draftingToolElement,
   emailAssistantToolElement,
   imageWizardToolElement,
   ragSearchToolElement,
-  specCompareToolElement,
 } from './routes';
 export { aiSidebarConfig } from './sidebar-config';
 export { createImageWizardBackgroundWorkSource } from './background-work';

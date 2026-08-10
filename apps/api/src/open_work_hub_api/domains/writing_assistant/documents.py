@@ -1,4 +1,4 @@
-"""기안/메일 결과 텍스트를 다운로드 가능한 TXT/DOCX/PDF 바이트로 변환.
+"""메일 결과 텍스트를 다운로드 가능한 TXT/DOCX/PDF 바이트로 변환.
 
 원본(`C:\\server\\routes\\document.py`)의 ``download_document`` 구조 파서를 포팅하되,
 PDF 한글 폰트는 Windows 전용 ``malgun.ttf`` 대신 reportlab 에 내장된 한국어 CID 폰트
@@ -17,9 +17,7 @@ _DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.doc
 _RE_DIVIDER = re.compile(r"^[─━\-=]{4,}")
 _RE_BRACKET = re.compile(r"^\[.+\]")
 _RE_NUM_SECTION = re.compile(r"^\d+\.\s")
-_RE_META = re.compile(
-    r"^(회의명|일시|장소|참석자|회의\s*기본정보|기안명|기안자|작성일|제목|수신|발신)\s*[:：](.*)$"
-)
+_RE_META = re.compile(r"^(일시|장소|참석자|작성일|제목|수신|발신)\s*[:：](.*)$")
 _RE_SUB_INDENT = re.compile(r"^\s{4,}")
 _RE_SUB_BULLET = re.compile(r"^\s{2,}[-·•]")
 _RE_BULLET = re.compile(r"^[-·•]\s")
@@ -141,23 +139,47 @@ def build_pdf(content: str) -> bytes:
     )
 
     s_title = ParagraphStyle(
-        "dt", fontName=head_font, fontSize=16, leading=22, spaceAfter=10,
+        "dt",
+        fontName=head_font,
+        fontSize=16,
+        leading=22,
+        spaceAfter=10,
         textColor=colors.HexColor("#1a3a6b"),
     )
     # 대괄호 제목([제목])과 번호 섹션(1. ...)은 동일한 헤딩 스타일을 공유한다.
     s_section = ParagraphStyle(
-        "ds", fontName=head_font, fontSize=13, leading=18, spaceBefore=14, spaceAfter=6,
-        textColor=colors.HexColor("#1a3a6b"), backColor=colors.HexColor("#eef2ff"),
+        "ds",
+        fontName=head_font,
+        fontSize=13,
+        leading=18,
+        spaceBefore=14,
+        spaceAfter=6,
+        textColor=colors.HexColor("#1a3a6b"),
+        backColor=colors.HexColor("#eef2ff"),
         borderPadding=(4, 8, 4, 8),
     )
     s_subsec = ParagraphStyle(
-        "dsub", fontName=head_font, fontSize=12, leading=17, spaceBefore=10, spaceAfter=4,
-        textColor=colors.HexColor("#2c5282"), leftIndent=8,
+        "dsub",
+        fontName=head_font,
+        fontSize=12,
+        leading=17,
+        spaceBefore=10,
+        spaceAfter=4,
+        textColor=colors.HexColor("#2c5282"),
+        leftIndent=8,
     )
-    s_meta = ParagraphStyle("dm", fontName=body_font, fontSize=11, leading=16, spaceAfter=2, leftIndent=10)
-    s_item = ParagraphStyle("di", fontName=body_font, fontSize=11, leading=17, spaceAfter=2, leftIndent=16)
-    s_sub = ParagraphStyle("dsu", fontName=body_font, fontSize=11, leading=16, spaceAfter=1, leftIndent=28)
-    s_text = ParagraphStyle("dn", fontName=body_font, fontSize=11, leading=17, spaceAfter=2, leftIndent=10)
+    s_meta = ParagraphStyle(
+        "dm", fontName=body_font, fontSize=11, leading=16, spaceAfter=2, leftIndent=10
+    )
+    s_item = ParagraphStyle(
+        "di", fontName=body_font, fontSize=11, leading=17, spaceAfter=2, leftIndent=16
+    )
+    s_sub = ParagraphStyle(
+        "dsu", fontName=body_font, fontSize=11, leading=16, spaceAfter=1, leftIndent=28
+    )
+    s_text = ParagraphStyle(
+        "dn", fontName=body_font, fontSize=11, leading=17, spaceAfter=2, leftIndent=10
+    )
 
     def esc(s: str) -> str:
         return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
@@ -180,8 +202,13 @@ def build_pdf(content: str) -> bytes:
             continue
         if _RE_DIVIDER.match(trimmed):
             story.append(
-                HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#3b5bdb"),
-                           spaceBefore=6, spaceAfter=6)
+                HRFlowable(
+                    width="100%",
+                    thickness=1.5,
+                    color=colors.HexColor("#3b5bdb"),
+                    spaceBefore=6,
+                    spaceAfter=6,
+                )
             )
             continue
         if _RE_BRACKET.match(trimmed):
@@ -195,7 +222,9 @@ def build_pdf(content: str) -> bytes:
             continue
         meta = _RE_META.match(trimmed)
         if meta:
-            story.append(Paragraph(f"<b>{esc(meta.group(1))}:</b> {md(meta.group(2).strip())}", s_meta))
+            story.append(
+                Paragraph(f"<b>{esc(meta.group(1))}:</b> {md(meta.group(2).strip())}", s_meta)
+            )
             continue
         if _RE_SUB_INDENT.match(raw) or _RE_SUB_BULLET.match(raw):
             clean = re.sub(r"^[-·•]\s*", "", trimmed)

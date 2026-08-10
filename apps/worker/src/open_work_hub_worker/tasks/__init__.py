@@ -3,7 +3,6 @@
 from open_work_hub_worker.tasks import (  # noqa: F401
     ai_graph,
     documents,
-    drafts,
     file_storage_cleanup,
     images,
     mail,
@@ -13,5 +12,4 @@ from open_work_hub_worker.tasks import (  # noqa: F401
     rag_sync,
     recording,
     search_index,
-    spec_compare,
 )

@@ -16,8 +16,6 @@ import {
 } from '@/src/app-modules/community';
 import { diagramsManifest } from '@/src/app-modules/diagrams/manifest';
 import { docsManifest } from '@/src/app-modules/docs/manifest';
-import { documentTranslateManifest } from '@/src/app-modules/document-translate';
-import { draftingManifest } from '@/src/app-modules/drafting';
 import { emailAssistantManifest } from '@/src/app-modules/email-assistant';
 import { filesManifest } from '@/src/app-modules/files/manifest';
 import { homeManifest, homeModule } from '@/src/app-modules/home';
@@ -29,7 +27,6 @@ import { pmsManifest } from '@/src/app-modules/pms/manifest';
 import { retrievalSearchManifest } from '@/src/app-modules/retrieval-search';
 import { recordingManifest } from '@/src/app-modules/recording/manifest';
 import { settingsManifest, settingsModule } from '@/src/app-modules/settings';
-import { specCompareManifest } from '@/src/app-modules/spec-compare';
 import { videoChatManifest } from '@/src/app-modules/video-chat/manifest';
 import { webSearchManifest } from '@/src/app-modules/web-search/manifest';
 import { whiteboardManifest } from '@/src/app-modules/whiteboard/manifest';
@@ -44,8 +41,6 @@ export {
   communityManifest,
   diagramsManifest,
   docsManifest,
-  documentTranslateManifest,
-  draftingManifest,
   emailAssistantManifest,
   filesManifest,
   homeManifest,
@@ -57,7 +52,6 @@ export {
   retrievalSearchManifest,
   recordingManifest,
   settingsManifest,
-  specCompareManifest,
   videoChatManifest,
   webSearchManifest,
   whiteboardManifest,
