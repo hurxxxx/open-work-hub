@@ -38,6 +38,8 @@ Options:
   --web-only     Start only the frontend dev server.
   --api-only     Start only the FastAPI dev server.
   --no-infra     Skip starting the dev docker infra (redis, etc).
+  --minimal-infra
+                 Start only PostgreSQL and Redis and disable optional startup dependencies.
   --status       Show repo-managed dev server status for the selected projects and exit.
   --stop         Stop repo-managed dev servers for the selected projects and exit.
   --restart      Stop repo-managed dev servers for the selected projects, then start them again.
@@ -49,9 +51,12 @@ Defaults:
   - Starts `web` and `api`
   - Boots the dev docker infra (redis/search/vector; postgres/minio when OPEN_WORK_HUB_INFRA_USE_LOCAL_* is on)
     so features like the docs collab relay can reach redis at 127.0.0.1:56380
+  - `--minimal-infra` is intended for authentication and core UI smoke tests;
+    storage, AI, search, video, and RAG-dependent features remain unavailable
   - Uses `dynamic-legacy` Nx output for readable local logs
   - Stops all child servers when you press Ctrl+C or close the session
     (docker infra keeps running across sessions; stop it with `scripts/infra-stack.sh dev stop`)
+  - Stop only the minimal containers with `pnpm dev:infra:minimal:down`
 EOF
 }
 
@@ -62,6 +67,7 @@ stop_only=0
 restart=0
 reset_nx=0
 infra_enabled=1
+minimal_infra=0
 output_style="dynamic-legacy"
 
 while [[ $# -gt 0 ]]; do
@@ -77,6 +83,9 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-infra)
       infra_enabled=0
+      ;;
+    --minimal-infra)
+      minimal_infra=1
       ;;
     --status)
       status_only=1
@@ -105,6 +114,24 @@ while [[ $# -gt 0 ]]; do
   esac
   shift
 done
+
+if (( minimal_infra )); then
+  export OPEN_WORK_HUB_INFRA_USE_LOCAL_POSTGRES=1
+  export OPEN_WORK_HUB_INFRA_USE_LOCAL_MINIO=0
+  export OPEN_WORK_HUB_POSTGRES_DSN="postgresql+psycopg://${OPEN_WORK_HUB_INFRA_POSTGRES_USER}:${OPEN_WORK_HUB_INFRA_POSTGRES_PASSWORD}@127.0.0.1:${OPEN_WORK_HUB_INFRA_POSTGRES_PORT}/${OPEN_WORK_HUB_INFRA_POSTGRES_DB}"
+  export OPEN_WORK_HUB_API_OBJECT_STORAGE_REQUIRED=0
+  export OPEN_WORK_HUB_API_SEED_DEV_LOGIN_ACCOUNT=1
+  export OPEN_WORK_HUB_API_VIDEO_CHAT_ENABLED=false
+  export OPEN_WORK_HUB_IMAGE_ENABLED=true
+  export OPEN_WORK_HUB_LLM_HEALTHCHECK_ON_STARTUP=false
+  export OPEN_WORK_HUB_LLM_REQUIRED=false
+  export OPEN_WORK_HUB_OPF_ENABLED=false
+  export OPEN_WORK_HUB_OPF_HEALTHCHECK_ON_STARTUP=false
+  export OPEN_WORK_HUB_OPF_REQUIRED=false
+  export OPEN_WORK_HUB_RAG_ENABLED=false
+  export OPEN_WORK_HUB_RAG_PRELOAD_ON_STARTUP=false
+  export OPEN_WORK_HUB_API_RECORDING_SPOOL_DIR="$OPEN_WORK_HUB_DEV_RUNTIME_DIR/recording-spool"
+fi
 
 if (( with_worker )); then
   projects+=("worker")
@@ -218,16 +245,20 @@ start_dev_infra() {
     return 0
   fi
 
-  local desired=(redis)
-  desired+=(opensearch qdrant)
-  if [[ "$(printf '%s' "${OPEN_WORK_HUB_API_VIDEO_CHAT_ENABLED:-true}" | tr '[:upper:]' '[:lower:]')" != "false" ]]; then
-    desired+=(livekit)
-  fi
-  if dev_use_local_postgres; then
-    desired+=(postgres)
-  fi
-  if dev_use_local_minio; then
-    desired+=(minio)
+  local desired=()
+  if (( minimal_infra )); then
+    desired=(postgres redis)
+  else
+    desired=(redis opensearch qdrant)
+    if [[ "$(printf '%s' "${OPEN_WORK_HUB_API_VIDEO_CHAT_ENABLED:-true}" | tr '[:upper:]' '[:lower:]')" != "false" ]]; then
+      desired+=(livekit)
+    fi
+    if dev_use_local_postgres; then
+      desired+=(postgres)
+    fi
+    if dev_use_local_minio; then
+      desired+=(minio)
+    fi
   fi
 
   # Stop dev-nginx only when it is configured to collide with the web dev server.
@@ -288,8 +319,10 @@ start_dev_infra() {
 
   echo "Starting dev infra: ${services[*]}"
   local compose_file
+  local compose_env_file
   compose_file="$(dev_compose_file)"
-  if ! dev_docker compose --env-file "$ROOT_DIR/.env" -f "$compose_file" up -d "${services[@]}"; then
+  compose_env_file="$(dev_compose_env_file)"
+  if ! dev_docker compose --env-file "$compose_env_file" -f "$compose_file" up -d "${services[@]}"; then
     echo "Failed to start dev infra via docker compose." >&2
     exit 1
   fi
@@ -298,19 +331,38 @@ start_dev_infra() {
   # If we're reusing an existing redis, the port-listener check above already
   # confirmed it's bound; `compose exec redis` would not address it anyway.
   local started_redis=0
+  local started_postgres=0
   for svc in "${services[@]}"; do
     [[ "$svc" == "redis" ]] && started_redis=1
+    [[ "$svc" == "postgres" ]] && started_postgres=1
   done
   if (( started_redis )); then
     local attempts=0
     while (( attempts < 30 )); do
-      if dev_docker compose --env-file "$ROOT_DIR/.env" -f "$compose_file" exec -T redis redis-cli ping >/dev/null 2>&1; then
-        return 0
+      if dev_docker compose --env-file "$compose_env_file" -f "$compose_file" exec -T redis redis-cli ping >/dev/null 2>&1; then
+        break
       fi
       attempts=$((attempts + 1))
       sleep 0.3
     done
-    echo "Warning: redis did not respond to PING within ~9s; continuing anyway." >&2
+    if (( attempts == 30 )); then
+      echo "Warning: redis did not respond to PING within ~9s; continuing anyway." >&2
+    fi
+  fi
+  if (( started_postgres )); then
+    local attempts=0
+    while (( attempts < 60 )); do
+      if dev_docker compose --env-file "$compose_env_file" -f "$compose_file" exec -T postgres \
+        pg_isready -U "$OPEN_WORK_HUB_INFRA_POSTGRES_USER" -d "$OPEN_WORK_HUB_INFRA_POSTGRES_DB" >/dev/null 2>&1; then
+        break
+      fi
+      attempts=$((attempts + 1))
+      sleep 0.5
+    done
+    if (( attempts == 60 )); then
+      echo "PostgreSQL did not become ready within 30s." >&2
+      exit 1
+    fi
   fi
 }
 

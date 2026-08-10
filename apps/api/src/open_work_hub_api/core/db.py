@@ -77,7 +77,10 @@ def init_db() -> None:
     release script and leave this flag unset.
     """
     from open_work_hub_api.domains.ai import approvals as ai_approvals  # noqa: F401
-    from open_work_hub_api.domains.auth.access import ensure_seed_data
+    from open_work_hub_api.domains.auth.access import (
+        ensure_dev_login_seed_data,
+        ensure_seed_data,
+    )
 
     import_all_models()
 
@@ -86,4 +89,7 @@ def init_db() -> None:
 
     engine = get_engine()
     with Session(engine) as session:
-        ensure_seed_data(session)
+        if get_settings().seed_dev_login_account:
+            ensure_dev_login_seed_data(session)
+        else:
+            ensure_seed_data(session)

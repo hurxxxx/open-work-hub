@@ -59,6 +59,10 @@ from open_work_hub_api.version import RUNTIME_REVISION, VERSION as APP_VERSION
 logger = logging.getLogger(__name__)
 
 
+def _skip_object_storage_prepare() -> None:
+    return None
+
+
 def _request_locale(request: Request) -> str:
     return select_locale(
         explicit_locale=request.headers.get("x-open-work-hub-locale"),
@@ -131,7 +135,11 @@ def create_app(
         if selected_external_runtime is None:
             selected_external_runtime = ProductionApiExternalRuntime(
                 settings,
-                storage_prepare=ensure_bucket,
+                storage_prepare=(
+                    ensure_bucket
+                    if settings.object_storage_required
+                    else _skip_object_storage_prepare
+                ),
             )
         install_stack_dump_signal()
         initialize_platform_extensions(settings)

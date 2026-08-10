@@ -6,7 +6,7 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import inspect, select
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.orm import Session, selectinload
 
 from open_work_hub_api.core.principal import personal_user_principal
 from open_work_hub_api.core.settings import get_settings
@@ -61,7 +61,11 @@ from open_work_hub_api.domains.auth.workspace_app_features import (
 from open_work_hub_api.domains.auth.workspace_bootstrap_projection import (
     project_workspace_bootstrap_apps,
 )
-from open_work_hub_api.domains.auth.security import derive_login_id_from_email, hash_password, new_id
+from open_work_hub_api.domains.auth.security import (
+    derive_login_id_from_email,
+    hash_password,
+    new_id,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +127,9 @@ DEFAULT_PMS_SPACE_KEY = "team-space"
 DEFAULT_PMS_SPACE_NAME = "Team Space"
 DEFAULT_PMS_SPACE_DESCRIPTION = "Default PMS space for shared lists and docs."
 
-DEV_LOGIN_PASSWORD = "Open Work Hub!dev1234"
+DEV_APP_BAR_CATEGORY_KEY = "dev-all-apps"
+DEV_APP_BAR_CATEGORY_TITLE = "All Apps"
+DEV_APP_BAR_CATEGORY_ICON_KEY = "layout-grid"
 
 DEV_LOGIN_ACCOUNTS = [
     {
@@ -360,6 +366,70 @@ def ensure_platform_app_visibility(db: Session) -> None:
     db.flush()
 
 
+def ensure_dev_seed_app_access(
+    db: Session,
+    workspace_by_key: dict[str, Workspace],
+) -> None:
+    """Make every registered launcher app available in development seed workspaces."""
+
+    ensure_workspace_app_entitlements(db)
+    ensure_platform_app_visibility(db)
+
+    seed_workspace_ids = {
+        workspace.id
+        for workspace_key, workspace in workspace_by_key.items()
+        if workspace_key in DEV_WORKSPACE_SEED_KEYS
+    }
+    workspace_app_ids = {
+        app.app_id
+        for app in iter_workspace_app_catalog()
+        if _workspace_app_should_have_entitlement(app)
+    }
+    if seed_workspace_ids and workspace_app_ids:
+        entitlements = db.scalars(
+            select(WorkspaceAppEntitlement).where(
+                WorkspaceAppEntitlement.workspace_id.in_(seed_workspace_ids),
+                WorkspaceAppEntitlement.app_id.in_(workspace_app_ids),
+            )
+        ).all()
+        for entitlement in entitlements:
+            if entitlement.visibility_override is None:
+                entitlement.visibility_override = True
+                db.add(entitlement)
+
+    if not _platform_app_bar_category_tables_exist(db):
+        return
+
+    category = db.scalar(
+        select(PlatformAppBarCategory).where(PlatformAppBarCategory.key == DEV_APP_BAR_CATEGORY_KEY)
+    )
+    if category is None:
+        category = PlatformAppBarCategory(
+            id=new_id(),
+            key=DEV_APP_BAR_CATEGORY_KEY,
+            title=DEV_APP_BAR_CATEGORY_TITLE,
+            icon_key=DEV_APP_BAR_CATEGORY_ICON_KEY,
+            position=0,
+        )
+        db.add(category)
+        db.flush()
+
+    existing_app_ids = set(db.scalars(select(PlatformAppBarCategoryApp.app_id)).all())
+    category_apps = [app for app in iter_workspace_app_catalog() if app.launcher_category]
+    for position, app in enumerate(category_apps):
+        if app.app_id in existing_app_ids:
+            continue
+        db.add(
+            PlatformAppBarCategoryApp(
+                id=new_id(),
+                category_id=category.id,
+                app_id=app.app_id,
+                position=position,
+            )
+        )
+    db.flush()
+
+
 def are_dev_login_accounts_seeded(db: Session) -> bool:
     required_emails = {definition["email"] for definition in DEV_LOGIN_ACCOUNTS}
     existing = set(db.scalars(select(User.email).where(User.email.in_(required_emails))).all())
@@ -462,8 +532,12 @@ def ensure_dev_login_seed_data(db: Session) -> None:
         and are_dev_login_accounts_seeded(db)
         and are_dev_workspace_seeds_present(db)
     ):
-        ensure_workspace_app_entitlements(db)
-        ensure_platform_app_visibility(db)
+        workspace_by_key = {
+            workspace.key: workspace
+            for workspace in db.scalars(select(Workspace).where(Workspace.active.is_(True))).all()
+        }
+        ensure_dev_seed_app_access(db, workspace_by_key)
+        db.commit()
         return
 
     ensure_seed_data(db)
@@ -474,12 +548,13 @@ def ensure_dev_login_seed_data(db: Session) -> None:
         },
         **_ensure_workspace_rows(db, [*DEFAULT_WORKSPACE_SEEDS, *DEV_WORKSPACE_SEEDS]),
     }
-    ensure_workspace_app_entitlements(db)
+    ensure_dev_seed_app_access(db, workspace_by_key)
     default_spaces_by_workspace_key = {
         workspace_key: ensure_workspace_default_pms_space(db, workspace)
         for workspace_key, workspace in workspace_by_key.items()
     }
 
+    dev_login_password = get_settings().dev_login_password
     for definition in DEV_LOGIN_ACCOUNTS:
         user = db.scalar(select(User).where(User.email == definition["email"]))
         if user is None:
@@ -489,7 +564,7 @@ def ensure_dev_login_seed_data(db: Session) -> None:
                 email=definition["email"],
                 full_name=definition["label"],
                 display_name=definition["label"],
-                password_hash=hash_password(DEV_LOGIN_PASSWORD),
+                password_hash=hash_password(dev_login_password),
                 status="active",
                 must_change_password=False,
                 theme_preference="system",
@@ -504,7 +579,7 @@ def ensure_dev_login_seed_data(db: Session) -> None:
             )
             user.full_name = definition["label"]
             user.display_name = definition["label"]
-            user.password_hash = hash_password(DEV_LOGIN_PASSWORD)
+            user.password_hash = hash_password(dev_login_password)
             user.status = "active"
             user.must_change_password = False
             user.theme_preference = "system"

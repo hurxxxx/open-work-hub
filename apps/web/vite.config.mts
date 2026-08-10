@@ -35,7 +35,7 @@ export default defineConfig(() => ({
   },
   server: {
     port: webDevPort,
-    host: '0.0.0.0',
+    host: process.env.OPEN_WORK_HUB_WEB_DEV_HOST ?? '127.0.0.1',
     proxy: {
       '/api': {
         target: apiProxyTarget,
@@ -55,7 +55,7 @@ export default defineConfig(() => ({
   },
   preview: {
     port: webDevPort,
-    host: '0.0.0.0',
+    host: process.env.OPEN_WORK_HUB_WEB_DEV_HOST ?? '127.0.0.1',
     proxy: {
       '/api': {
         target: apiProxyTarget,

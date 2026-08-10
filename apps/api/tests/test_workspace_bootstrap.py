@@ -15,6 +15,8 @@ from open_work_hub_api.domains.ai.registry import (
 )
 from open_work_hub_api.domains.auth import access as auth_access
 from open_work_hub_api.domains.auth.models import (
+    PlatformAppBarCategory,
+    PlatformAppBarCategoryApp,
     PlatformAppVisibility,
     Workspace,
     WorkspaceAppEntitlement,
@@ -25,7 +27,9 @@ from open_work_hub_api.domains.auth.workspace_apps import (
     WorkspaceNavCatalogItem,
     iter_workspace_app_catalog,
 )
-from open_work_hub_api.domains.auth.workspace_bootstrap_projection import project_workspace_bootstrap_apps
+from open_work_hub_api.domains.auth.workspace_bootstrap_projection import (
+    project_workspace_bootstrap_apps,
+)
 
 
 def _dev_login(client: TestClient, account_key: str) -> dict:
@@ -68,10 +72,6 @@ def test_workspace_entitlement_seed_policy_uses_launcher_metadata() -> None:
     assert auth_access._workspace_app_should_have_entitlement(platform_app) is False
 
 
-
-
-
-
 def test_apps_bootstrap_hard_hides_platform_disabled_app(
     client: TestClient,
 ) -> None:
@@ -93,12 +93,6 @@ def test_apps_bootstrap_hard_hides_platform_disabled_app(
     assert "mail" not in {item["app_id"] for item in payload["apps"]}
     assert "mail" not in {item["app_id"] for item in payload["personal_tools"]}
     assert "mail" not in payload["platform_enabled_app_ids"]
-
-
-
-
-
-
 
 
 def test_workspace_bootstrap_projection_builds_apps_and_flat_nav() -> None:
@@ -304,6 +298,85 @@ def test_general_workspace_seed_and_admin_membership(client: TestClient) -> None
     )
     assert spaces_response.status_code == 200
     assert any(item["current_user_role"] == "owner" for item in spaces_response.json())
+
+
+def test_dev_seed_workspaces_expose_every_registered_app(client: TestClient, monkeypatch) -> None:
+    monkeypatch.setenv("OPEN_WORK_HUB_IMAGE_ENABLED", "1")
+    get_settings.cache_clear()
+    try:
+        session = _dev_login(client, "administrator")
+        token = session["token"]
+        headers = {"Authorization": f"Bearer {token}"}
+        catalog = tuple(iter_workspace_app_catalog())
+
+        workspace_response = client.get(
+            "/api/v1/workspaces/general/bootstrap",
+            headers=headers,
+        )
+        assert workspace_response.status_code == 200, workspace_response.text
+        workspace_payload = workspace_response.json()
+        expected_workspace_app_ids = {
+            app.app_id for app in catalog if app.availability_scope == "workspace"
+        }
+        assert {item["app_id"] for item in workspace_payload["apps"]} == (
+            expected_workspace_app_ids
+        )
+
+        global_response = client.get("/api/v1/apps/bootstrap", headers=headers)
+        assert global_response.status_code == 200, global_response.text
+        global_payload = global_response.json()
+        expected_platform_app_ids = {
+            app.app_id for app in catalog if app.availability_scope == "platform"
+        }
+        assert {item["app_id"] for item in global_payload["apps"]} == (expected_platform_app_ids)
+
+        categorized_app_ids = {
+            item["app_id"]
+            for payload in (workspace_payload, global_payload)
+            for category in payload["app_bar_categories"]
+            for item in category["items"]
+        }
+        personal_tool_ids = {item["app_id"] for item in global_payload["personal_tools"]}
+        fixed_app_ids = {app.app_id for app in catalog if app.launcher_fixed}
+        assert categorized_app_ids | personal_tool_ids | fixed_app_ids == {
+            app.app_id for app in catalog
+        }
+
+        with get_session_factory()() as db:
+            workspace = db.scalar(select(Workspace).where(Workspace.key == "general"))
+            assert workspace is not None
+            overrides = dict(
+                db.execute(
+                    select(
+                        WorkspaceAppEntitlement.app_id,
+                        WorkspaceAppEntitlement.visibility_override,
+                    ).where(WorkspaceAppEntitlement.workspace_id == workspace.id)
+                ).all()
+            )
+            expected_entitled_app_ids = {
+                app.app_id
+                for app in catalog
+                if auth_access._workspace_app_should_have_entitlement(app)
+            }
+            assert expected_entitled_app_ids <= overrides.keys()
+            assert all(overrides[app_id] is True for app_id in expected_entitled_app_ids)
+
+            category = db.scalar(
+                select(PlatformAppBarCategory).where(
+                    PlatformAppBarCategory.key == auth_access.DEV_APP_BAR_CATEGORY_KEY
+                )
+            )
+            assert category is not None
+            category_app_ids = set(
+                db.scalars(
+                    select(PlatformAppBarCategoryApp.app_id).where(
+                        PlatformAppBarCategoryApp.category_id == category.id
+                    )
+                ).all()
+            )
+            assert category_app_ids == {app.app_id for app in catalog if app.launcher_category}
+    finally:
+        get_settings.cache_clear()
 
 
 def test_workspace_bootstrap_ignores_stale_category_app_entitlement(

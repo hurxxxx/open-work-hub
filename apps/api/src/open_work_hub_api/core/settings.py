@@ -55,7 +55,10 @@ class Settings(BaseSettings):
         validation_alias="OPEN_WORK_HUB_ENV_PROFILE",
     )
     allow_dev_admin_login: bool = True
+    dev_login_password: str = Field(default="open-work-hub-dev-only", min_length=8, repr=False)
     dev_login_allowed_hosts: str = ""
+    seed_dev_login_account: bool = False
+    object_storage_required: bool = True
     instance_id: str = Field(
         default="api",
         validation_alias="OPEN_WORK_HUB_API_INSTANCE_ID",
@@ -807,7 +810,20 @@ class Settings(BaseSettings):
     def _validate_runtime_config(self) -> "Settings":
         self.environment = normalize_runtime_environment(self.environment)
         self.env_profile = self.env_profile.strip().lower()
-        self.open_work_hub_desktop_update_dirs = open_work_hub_desktop_update_dir_values(_settings_env_values())
+        if is_production_like_environment(self.environment):
+            if self.seed_dev_login_account:
+                raise ValueError(
+                    "OPEN_WORK_HUB_API_SEED_DEV_LOGIN_ACCOUNT must be disabled "
+                    "for preview/production."
+                )
+            if not self.object_storage_required:
+                raise ValueError(
+                    "OPEN_WORK_HUB_API_OBJECT_STORAGE_REQUIRED must stay enabled "
+                    "for preview/production."
+                )
+        self.open_work_hub_desktop_update_dirs = open_work_hub_desktop_update_dir_values(
+            _settings_env_values()
+        )
         self.frontend_dist_dir = self.frontend_dist_dir.strip() or DEFAULT_FRONTEND_DIST_DIR
         self.dm_attachment_signing_key = _normalize_dm_attachment_signing_key(
             self.dm_attachment_signing_key,
@@ -847,7 +863,9 @@ def _normalize_dm_attachment_signing_key(value: str, *, environment: str) -> str
         is_production_like_environment(environment)
         and normalized == DEFAULT_DM_ATTACHMENT_SIGNING_KEY
     ):
-        raise ValueError("OPEN_WORK_HUB_DM_ATTACHMENT_SIGNING_KEY must be set for preview/production.")
+        raise ValueError(
+            "OPEN_WORK_HUB_DM_ATTACHMENT_SIGNING_KEY must be set for preview/production."
+        )
     return normalized
 
 

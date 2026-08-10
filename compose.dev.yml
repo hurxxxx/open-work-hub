@@ -1,6 +1,28 @@
 name: open-work-hub-dev
 
 services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: open-work-hub-dev-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${OPEN_WORK_HUB_INFRA_POSTGRES_DB:-open_work_hub_dev}
+      POSTGRES_PASSWORD: ${OPEN_WORK_HUB_INFRA_POSTGRES_PASSWORD:-open_work_hub_dev}
+      POSTGRES_USER: ${OPEN_WORK_HUB_INFRA_POSTGRES_USER:-open_work_hub_dev}
+    ports:
+      - "127.0.0.1:${OPEN_WORK_HUB_INFRA_POSTGRES_PORT:-55433}:5432"
+    volumes:
+      - open-work-hub-dev-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
   redis:
     image: redis:7
     container_name: open-work-hub-dev-redis
@@ -90,6 +112,8 @@ services:
       - ${OPEN_WORK_HUB_DEV_NGINX_CONF_PATH:-./ops/dev/nginx.conf}:/etc/nginx/conf.d/default.conf:ro
 
 volumes:
+  open-work-hub-dev-postgres-data:
+    name: open-work-hub-dev-postgres-data
   open-work-hub-dev-redis-data:
     name: open-work-hub-dev-redis-data
   open-work-hub-dev-opensearch-data:

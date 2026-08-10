@@ -30,6 +30,25 @@ def _seed_dev_accounts() -> None:
         db.commit()
 
 
+def test_seeded_dev_account_supports_id_password_login(client: TestClient) -> None:
+    _seed_dev_accounts()
+
+    response = client.post(
+        "/api/v1/auth/login",
+        json={
+            "login_id": "administrator",
+            "password": "open-work-hub-dev-only",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["user"]["login_id"] == "administrator"
+    assert payload["user"]["email"] == "admin@open-work-hub.local"
+    assert "platform_admin" in payload["user"]["system_roles"]
+    assert payload["token"]
+
+
 def test_seed_preserves_user_created_space_membership(client: TestClient) -> None:
     from open_work_hub_api.core.db import get_session_factory
     from open_work_hub_api.domains.auth.access import ensure_seed_data
@@ -194,14 +213,10 @@ def test_dev_login_seed_syncs_new_workspace_app_catalog_rows(
         workspace_ids = set(db.scalars(select(Workspace.id)).all())
         assert workspace_ids
         db.execute(
-            delete(WorkspaceAppEntitlement).where(
-                WorkspaceAppEntitlement.app_id == "web-search"
-            )
+            delete(WorkspaceAppEntitlement).where(WorkspaceAppEntitlement.app_id == "web-search")
         )
         db.execute(
-            delete(PlatformAppVisibility).where(
-                PlatformAppVisibility.app_id == "web-search"
-            )
+            delete(PlatformAppVisibility).where(PlatformAppVisibility.app_id == "web-search")
         )
         db.commit()
 
@@ -300,7 +315,9 @@ def test_seed_still_reconciles_default_space_membership(
             "administrator should own the Administrator default space"
         )
         assert administrator_space_ms.role == "owner"
-        assert general_space_ms is not None, "administrator should own the General Workspace default space"
+        assert general_space_ms is not None, (
+            "administrator should own the General Workspace default space"
+        )
         assert general_space_ms.role == "owner"
 
 

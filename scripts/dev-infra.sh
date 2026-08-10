@@ -8,33 +8,65 @@ if [[ "$(basename "$ROOT_DIR")" == "prod" && "${OPEN_WORK_HUB_ALLOW_PROD_CHECKOU
 fi
 source "$ROOT_DIR/scripts/dev-env.sh"
 COMMAND="${1:-up}"
+MODE="${2:-}"
+
+if [[ -n "$MODE" && "$MODE" != "--minimal" ]]; then
+  echo "Unknown option: $MODE" >&2
+  echo "Usage: $0 {up|down|logs|ps|start|stop|status} [--minimal]" >&2
+  exit 2
+fi
 
 cd "$ROOT_DIR"
 COMPOSE_FILE="$(dev_compose_file)"
+COMPOSE_ENV_FILE="$(dev_compose_env_file)"
+
+compose() {
+  dev_docker compose --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" "$@"
+}
 
 case "$COMMAND" in
   up|start)
+    if [[ "$MODE" == "--minimal" ]]; then
+      compose up -d --wait postgres redis
+      exit 0
+    fi
+
     dev_render_nginx_conf
     services=(redis opensearch qdrant nginx)
-    if [[ "$(printf '%s' "${OPEN_WORK_HUB_API_VIDEO_CHAT_ENABLED:-true}" | tr '[:upper:]' '[:lower:]')" != "false" ]]; then
-      services+=(livekit)
+    if dev_use_local_postgres; then
+      services=(postgres "${services[@]}")
     fi
     if dev_use_local_minio; then
       services=(minio "${services[@]}")
     fi
-    dev_docker compose --env-file "$ROOT_DIR/.env" -f "$COMPOSE_FILE" up -d "${services[@]}"
+    if [[ "$(printf '%s' "${OPEN_WORK_HUB_API_VIDEO_CHAT_ENABLED:-true}" | tr '[:upper:]' '[:lower:]')" != "false" ]]; then
+      services+=(livekit)
+    fi
+    compose up -d "${services[@]}"
     ;;
   down|stop)
-    dev_docker compose --env-file "$ROOT_DIR/.env" -f "$COMPOSE_FILE" down
+    if [[ "$MODE" == "--minimal" ]]; then
+      compose stop postgres redis
+    else
+      compose down
+    fi
     ;;
   logs)
-    dev_docker compose --env-file "$ROOT_DIR/.env" -f "$COMPOSE_FILE" logs -f
+    if [[ "$MODE" == "--minimal" ]]; then
+      compose logs -f postgres redis
+    else
+      compose logs -f
+    fi
     ;;
   ps|status)
-    dev_docker compose --env-file "$ROOT_DIR/.env" -f "$COMPOSE_FILE" ps
+    if [[ "$MODE" == "--minimal" ]]; then
+      compose ps postgres redis
+    else
+      compose ps
+    fi
     ;;
   *)
-    echo "Usage: $0 {up|down|logs|ps|start|stop|status}" >&2
+    echo "Usage: $0 {up|down|logs|ps|start|stop|status} [--minimal]" >&2
     exit 1
     ;;
 esac

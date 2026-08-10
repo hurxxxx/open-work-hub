@@ -35,6 +35,22 @@ pnpm dev
 The web application listens on `http://127.0.0.1:4200` by default. Runtime settings
 use the `OPEN_WORK_HUB_*` prefix; adjust `.env` for services that are not running locally.
 
+For an authentication and core UI smoke test, PostgreSQL and Redis are sufficient:
+
+```bash
+pnpm dev:minimal
+pnpm dev:login-smoke
+pnpm e2e:install # first browser run only
+pnpm dev:login-browser-smoke
+```
+
+`dev:minimal` starts only the PostgreSQL and Redis containers and disables optional
+object storage, AI, search, video, and RAG startup dependencies. The development seed
+account uses ID `administrator` and password `open-work-hub-dev-only`. This account and
+the minimal runtime are rejected by preview and production settings. The `administrator`
+and `general` seed workspaces expose every registered app through the `All Apps` launcher,
+with workspace-admin access for the seeded account.
+
 Useful checks:
 
 ```bash
