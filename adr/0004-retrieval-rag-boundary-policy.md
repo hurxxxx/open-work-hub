@@ -47,8 +47,8 @@ The active RAG scope is intentionally narrow:
 - workspace: Docs native official documents
 - workspace: approved Files sources behind their source activation gate
 
-Knowledge source documents, Meeting, PMS, Planner, and Learning Notes personal
-documents are not active RAG sources. They can be reconsidered only with
+Knowledge source documents and documents from Meeting, PMS, and Planner are
+not active RAG sources. They can be reconsidered only with
 explicit ACL, ingestion, source listing, and quality tests.
 
 Files is an approved source behind its named operator gate and exact

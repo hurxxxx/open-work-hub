@@ -203,15 +203,13 @@ test('walk excludes specs, tests, and generated OpenAPI declarations', () => {
   );
 });
 
-test('walk excludes paths that own i18n resources or learning model data', () => {
+test('walk excludes paths that own i18n resources', () => {
   const root = path.join(path.sep, 'repo');
   const findings = scanMemoryFiles({
     [path.join(root, 'apps/web/src/Feature.tsx')]:
       'export function View() { return <button>Save changes</button>; }\n',
     [path.join(root, 'apps/web/src/platform/i18n/resources.ts')]:
       'export const resources = { "en-US": { save: "Save changes" } };\n',
-    [path.join(root, 'apps/web/src/app-modules/learning/model/cards.ts')]:
-      'export const card = { title: "학습 카드" };\n',
   });
 
   assert.deepEqual(

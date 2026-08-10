@@ -40,14 +40,6 @@ _SOURCE_CATALOG: tuple[RetrievalSourceCatalogItem, ...] = (
         description="Prototype fixture source retained for audit visibility; not RAG.",
         active=False,
     ),
-    RetrievalSourceCatalogItem(
-        source="learning_notes_personal",
-        label="Learning notes personal embeddings",
-        scope="user",
-        backend="native_doc_embedding",
-        description="Personal learning-note vector logic retained outside the unified surface.",
-        active=False,
-    ),
 )
 
 _DEFAULT_SOURCES_BY_STRATEGY: dict[RetrievalStrategy, tuple[str, ...]] = {

@@ -7,7 +7,6 @@ const DEFAULT_EXCLUDE_FILE_RE =
   /(openapi\.generated\.d\.ts|\.spec\.tsx?$|\.test\.tsx?$)/;
 const DEFAULT_EXCLUDE_PATH_PARTS = [
   `${path.sep}platform${path.sep}i18n${path.sep}`,
-  `${path.sep}app-modules${path.sep}learning${path.sep}model${path.sep}`,
 ];
 
 const DEFAULT_PATTERNS = [

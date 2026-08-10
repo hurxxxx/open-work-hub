@@ -156,15 +156,6 @@ const NAV_ITEMS_BY_APP: Record<string, WorkspaceBootstrapNavFixture[]> = {
       icon_key: 'globe-2',
     }),
   ],
-  learning: [
-    navItem({
-      id: 'learning-home',
-      app_id: 'learning',
-      title: '전체 학습 홈',
-      category: '업무 앱',
-      icon_key: 'graduation-cap',
-    }),
-  ],
   drafting: [
     navItem({
       id: 'drafting',
@@ -355,12 +346,6 @@ const APP_BAR_CATEGORIES: WorkspaceBootstrapAppBarCategoryFixture[] = [
     icon_key: 'briefcase',
     position: 1,
     items: [
-      categoryItem({
-        app_id: 'learning',
-        title: '학습',
-        route_base: '/learning',
-        icon_key: 'graduation-cap',
-      }),
       categoryItem({
         app_id: 'drafting',
         title: '기안작성 도우미',

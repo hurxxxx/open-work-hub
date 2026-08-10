@@ -83,7 +83,7 @@ describe('app module registry', () => {
     );
     const duplicateAiNav: AppModuleManifest = {
       ...aiManifest,
-      appBarItem: { id: 'learning', title: 'Duplicate Learning', icon: Home },
+      appBarItem: { id: 'duplicate-ai', title: 'Duplicate AI', icon: Home },
       navItems: [...aiManifest.navItems, { ...aiManifest.navItems[0] }],
     };
 

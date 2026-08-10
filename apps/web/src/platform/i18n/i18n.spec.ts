@@ -54,15 +54,11 @@ describe('i18n dynamic messages', () => {
 
     expect(i18n.t('apps:docs.documentCount', { count: 1 })).toBe('1 document');
     expect(i18n.t('apps:docs.documentCount', { count: 2 })).toBe('2 documents');
-    expect(i18n.t('apps:learning.lessonCount', { count: 1 })).toBe('1 lesson');
-    expect(i18n.t('apps:learning.lessonCount', { count: 3 })).toBe('3 lessons');
 
     await i18n.changeLanguage('ko-KR');
 
     expect(i18n.t('apps:docs.documentCount', { count: 1 })).toBe('1개 문서');
     expect(i18n.t('apps:docs.documentCount', { count: 2 })).toBe('2개 문서');
-    expect(i18n.t('apps:learning.lessonCount', { count: 1 })).toBe('1개 레슨');
-    expect(i18n.t('apps:learning.lessonCount', { count: 3 })).toBe('3개 레슨');
   });
 
   it('syncs public locale side effects through the session module', () => {

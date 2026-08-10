@@ -43,7 +43,6 @@ from open_work_hub_api.domains.drafts.router import router as drafts_router
 from open_work_hub_api.domains.files.router import public_router as files_public_router
 from open_work_hub_api.domains.files.router import router as files_router
 from open_work_hub_api.domains.images.router import router as images_router
-from open_work_hub_api.domains.learning_notes.router import router as learning_notes_router
 from open_work_hub_api.domains.mail.router import router as mail_router
 from open_work_hub_api.domains.media.router import public_router as media_public_router
 from open_work_hub_api.domains.media.router import router as media_router
@@ -176,9 +175,6 @@ def _router_specs() -> list[_RouterSpec]:
         _RouterSpec(writing_assistant_router, "workspace", "workspace"),
         _RouterSpec(media_router, "api", "protected"),
         _RouterSpec(media_public_router, "api"),
-        # Learning page notes: global content, gated by the router's own
-        # permission checks instead of workspace membership.
-        _RouterSpec(learning_notes_router, "api", "protected"),
     ]
 
 

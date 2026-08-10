@@ -15,7 +15,6 @@ from open_work_hub_api.domains.document_translate.app_catalog import (
 )
 from open_work_hub_api.domains.files.app_catalog import FILES_WORKSPACE_APP
 from open_work_hub_api.domains.images.app_catalog import IMAGE_WIZARD_WORKSPACE_APP
-from open_work_hub_api.domains.learning_notes.app_catalog import LEARNING_WORKSPACE_APP
 from open_work_hub_api.domains.mail.app_catalog import MAIL_WORKSPACE_APP
 from open_work_hub_api.domains.meeting.app_catalog import MEETING_WORKSPACE_APP
 from open_work_hub_api.domains.planner.app_catalog import PLANNER_WORKSPACE_APP
@@ -49,7 +48,6 @@ _WORKSPACE_APP_REGISTRATIONS = (
     MEETING_WORKSPACE_APP,
     VIDEO_CHAT_WORKSPACE_APP,
     RECORDING_WORKSPACE_APP,
-    LEARNING_WORKSPACE_APP,
     DRAFTING_WORKSPACE_APP,
     DOCUMENT_TRANSLATE_WORKSPACE_APP,
     SPEC_COMPARE_WORKSPACE_APP,

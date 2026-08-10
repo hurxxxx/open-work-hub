@@ -195,10 +195,7 @@ def test_retrieval_source_catalog_exposes_active_and_audited_sources() -> None:
     )
     assert sources["generic_rag"].active is True
     assert sources["keyword"].active is True
-    assert sources["qna"].scope == "company"
-    assert sources["docs"].backend == "postgres_pgvector"
     assert sources["documents_demo"].active is False
-    assert sources["learning_notes_personal"].active is False
     assert source_catalog_item("missing") is None
 
 

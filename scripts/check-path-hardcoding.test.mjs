@@ -52,9 +52,8 @@ test('findLegacyPathReferences detects legacy prod and dev paths from in-memory 
   ]);
 });
 
-test('findLegacyPathReferences excludes learning and docs reference paths', () => {
+test('findLegacyPathReferences excludes docs reference paths', () => {
   const files = [
-    'learning/setup.md',
     'docs/reference/deploy.md',
     'docs/reference/nested/deploy.md',
     'docs/runbook.md',
@@ -67,7 +66,6 @@ test('findLegacyPathReferences excludes learning and docs reference paths', () =
   });
 
   assert.deepEqual(findings.map((finding) => finding.file), ['docs/runbook.md']);
-  assert.equal(isExcludedPath('learning/setup.md'), true);
   assert.equal(isExcludedPath('docs/reference/deploy.md'), true);
   assert.equal(isExcludedPath('docs/runbook.md'), false);
 });

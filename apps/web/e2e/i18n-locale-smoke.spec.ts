@@ -170,19 +170,6 @@ test.describe('i18n locale smoke', () => {
         },
       },
       {
-        path: '/w/hq/learning',
-        assert: async (current) => {
-          await expect(
-            current.getByRole('heading', { name: 'All Courses' }),
-          ).toBeVisible();
-          await expect(
-            current.getByText(
-              'Education content available to all members. New courses will be added here as they become ready.',
-            ),
-          ).toBeVisible();
-        },
-      },
-      {
         path: '/w/hq/settings',
         assert: async (current) => {
           await expect(

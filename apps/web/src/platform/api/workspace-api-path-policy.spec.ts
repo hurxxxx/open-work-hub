@@ -108,7 +108,6 @@ describe('workspace API path policy', () => {
     expect(getWorkspaceApiPrefixes()).not.toContain('/api/v1/auth');
     expect(getWorkspaceApiPrefixes()).not.toContain('/api/v1/community');
     expect(getWorkspaceApiPrefixes()).not.toContain('/api/v1/qna');
-    expect(getWorkspaceApiPrefixes()).not.toContain('/api/v1/learning/notes');
   });
 
   it('rewrites new app APIs when their manifest contributes a workspace prefix', () => {

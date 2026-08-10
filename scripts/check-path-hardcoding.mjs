@@ -10,7 +10,7 @@ const LEGACY_CHECKOUT_BASE = '/projects/open-work-hub-';
 const DEFAULT_LEGACY_PATHS = ['prod', 'dev'].map(
   (suffix) => `${LEGACY_CHECKOUT_BASE}${suffix}`,
 );
-const DEFAULT_EXCLUDED_PATH_PREFIXES = ['learning/', 'docs/reference/'];
+const DEFAULT_EXCLUDED_PATH_PREFIXES = ['docs/reference/'];
 export const FAILURE_MESSAGE =
   'Found legacy checkout path references outside excluded reference docs.';
 

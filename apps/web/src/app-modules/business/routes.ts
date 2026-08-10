@@ -1,6 +1,5 @@
 import { createElement, type ReactNode } from 'react';
 
-import { learningWorkspaceRoutes } from '@/src/app-modules/learning';
 import type { CompiledFeatureShellRegistration } from '@/src/app/shell/feature-module-registry';
 import { WorkspaceFeatureAppGate } from '@/src/app/shell/gates';
 import type {
@@ -19,19 +18,6 @@ function withFeatureAppGate(
     appId: featureAppId,
     children: element,
   });
-}
-
-function rewriteWorkspaceRoute(
-  route: WorkspaceRouteDefinition,
-): WorkspaceRouteDefinition {
-  const featureAppId = route.bootstrapAppId ?? route.appId;
-  return {
-    ...route,
-    appId: BUSINESS_APP_ID,
-    bootstrapAppId: featureAppId,
-    path: route.path,
-    element: withFeatureAppGate(featureAppId, route.element),
-  };
 }
 
 function rewriteFeatureShellToolRoute(
@@ -84,7 +70,6 @@ const businessFeatureWorkspaceRoutes =
   );
 
 export const businessWorkspaceRoutes: WorkspaceRouteDefinition[] = [
-  ...learningWorkspaceRoutes.map(rewriteWorkspaceRoute),
   ...businessToolRoutes,
   ...businessFeatureWorkspaceRoutes,
 ];

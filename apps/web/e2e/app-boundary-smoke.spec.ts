@@ -138,17 +138,6 @@ test.describe('AI-friendly app boundary smoke', () => {
         },
       },
       {
-        path: '/w/hq/learning',
-        assert: async (current) => {
-          await expect(
-            current.getByRole('heading', { name: /All Courses|전체 코스/ }),
-          ).toBeVisible();
-          await expect(
-            current.getByRole('region', { name: /Course list|코스 목록/ }),
-          ).toBeVisible();
-        },
-      },
-      {
         path: '/w/hq/settings',
         assert: async (current) => {
           await expect(
@@ -190,7 +179,6 @@ test.describe('AI-friendly app boundary smoke', () => {
         'chatbot',
         'docs',
         'drafting',
-        'learning',
         'planner',
         'pms',
       ],

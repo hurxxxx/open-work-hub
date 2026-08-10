@@ -52,11 +52,6 @@ export default defineConfig(() => ({
         rewrite: rewriteDrawioProxyPath,
       },
     },
-    fs: {
-      // Allow serving files from the repo root so learning/*.md (outside
-      // apps/web) can be imported via import.meta.glob.
-      allow: ['..', '../..'],
-    },
   },
   preview: {
     port: webDevPort,

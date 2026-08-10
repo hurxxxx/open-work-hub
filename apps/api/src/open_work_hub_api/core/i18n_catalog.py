@@ -776,46 +776,6 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "협업 작성자를 찾을 수 없습니다.",
         "en-US": "Collaboration actor not found.",
     },
-    "learning.note_not_found": {
-        "ko-KR": "학습 노트를 찾을 수 없습니다.",
-        "en-US": "Learning note not found.",
-    },
-    "learning.my_note_not_found": {
-        "ko-KR": "내 학습 노트를 찾을 수 없습니다.",
-        "en-US": "My learning note not found.",
-    },
-    "learning.unknown_visibility": {
-        "ko-KR": "알 수 없는 공개 범위입니다.",
-        "en-US": "Unknown visibility.",
-    },
-    "learning.content_blocks_list_required": {
-        "ko-KR": "content_blocks는 리스트여야 합니다.",
-        "en-US": "content_blocks must be a list.",
-    },
-    "learning.content_block_object_required": {
-        "ko-KR": "content_blocks[{index}]는 JSON 객체여야 합니다.",
-        "en-US": "content_blocks[{index}] must be a JSON object.",
-    },
-    "learning.content_block_type_required": {
-        "ko-KR": "content_blocks[{index}].type이 필요합니다.",
-        "en-US": "content_blocks[{index}].type is required.",
-    },
-    "learning.content_blocks_not_serializable": {
-        "ko-KR": "content_blocks를 JSON으로 직렬화할 수 없습니다.",
-        "en-US": "content_blocks is not JSON-serializable.",
-    },
-    "learning.content_blocks_too_large": {
-        "ko-KR": "content_blocks payload가 허용된 최대 크기를 초과했습니다.",
-        "en-US": "content_blocks payload exceeds the maximum allowed size.",
-    },
-    "learning.note_page_missing": {
-        "ko-KR": "노트에 페이지가 없습니다.",
-        "en-US": "Note has no page.",
-    },
-    "learning.note_active_page_missing": {
-        "ko-KR": "노트에 활성 페이지가 없습니다.",
-        "en-US": "Note has no active page.",
-    },
     "media.unsupported_file_type": {
         "ko-KR": "지원하지 않는 파일 형식입니다: {content_type}. 허용: {allowed_types}",
         "en-US": "Unsupported file type: {content_type}. Allowed: {allowed_types}",

@@ -24,8 +24,12 @@
         "eslint.config.mjs",
         "scripts/blocknote-collab-codec.mjs",
         "scripts/check-contracts-publish-tag.mjs",
+        "scripts/check-path-hardcoding.mjs",
+        "scripts/check-path-hardcoding.test.mjs",
         "scripts/run-affected-api-tests.mjs",
-        "scripts/check-web-app-boundaries.mjs"
+        "scripts/check-web-app-boundaries.mjs",
+        "scripts/check-web-app-boundaries.test.mjs",
+        "scripts/web-i18n-message-checker.test.mjs"
       ],
       "paths": {
         "@/src/*": [

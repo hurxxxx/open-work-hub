@@ -55,11 +55,6 @@ samples/
 !apps/web/public/maskable-icon-512x512.png
 !apps/web/public/mstile-150x150.png
 !apps/web/public/image-wizard/templates/*.png
-!apps/web/public/ppt-templates/*.png
-!apps/web/public/ppt-templates/corporate-seminar/*.png
-!apps/web/public/ppt-templates/corporate-education/*.png
-!apps/web/public/ppt-templates/corporate-meeting/*.png
-!learning/open-work-hub-business-ai-curriculum/assets/diagrams/*.png
 
 # Playwright E2E run artifacts
 test-results/
