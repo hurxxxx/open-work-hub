@@ -2,10 +2,10 @@ import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, LazyMotion, domAnimation, m } from 'motion/react';
 import { ChevronDown, ChevronRight, Loader2, Plus } from 'lucide-react';
-import { useConfirm } from '@ai-do/ui/feedback/confirm-dialog';
-import { InlineNotice } from '@ai-do/ui/feedback/inline-notice';
-import { usePrompt } from '@ai-do/ui/feedback/prompt-dialog';
-import { useToast } from '@ai-do/ui/providers/toast-provider';
+import { useConfirm } from '@open-alm/ui/feedback/confirm-dialog';
+import { InlineNotice } from '@open-alm/ui/feedback/inline-notice';
+import { usePrompt } from '@open-alm/ui/feedback/prompt-dialog';
+import { useToast } from '@open-alm/ui/providers/toast-provider';
 import { useTranslation } from 'react-i18next';
 
 import {

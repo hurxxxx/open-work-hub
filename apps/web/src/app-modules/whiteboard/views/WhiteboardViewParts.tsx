@@ -9,7 +9,7 @@ import {
   Star,
   Users,
 } from 'lucide-react';
-import { DropdownMenu, type DropdownItem } from '@ai-do/ui';
+import { DropdownMenu, type DropdownItem } from '@open-alm/ui';
 
 import {
   formatDateTime as formatZonedDateTime,

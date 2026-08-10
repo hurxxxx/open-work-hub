@@ -29,7 +29,7 @@ function workspace(overrides: Partial<Workspace>): Workspace {
   return {
     id: 'workspace-hq',
     slug: 'hq',
-    name: 'AI-DO HQ',
+    name: 'Open ALM HQ',
     role: 'owner',
     ...overrides,
   };
@@ -181,7 +181,7 @@ const APP_BAR_CATEGORIES: WorkspaceBootstrapAppBarCategory[] = [
 describe('app-bar model', () => {
   it('projects workspace switcher options with query filtering and default normalization', () => {
     const workspaces = [
-      workspace({ id: 'workspace-hq', slug: 'hq', name: 'AI-DO HQ' }),
+      workspace({ id: 'workspace-hq', slug: 'hq', name: 'Open ALM HQ' }),
       workspace({ id: 'workspace-bravo', slug: 'bravo', name: 'Bravo Team' }),
       workspace({ id: 'workspace-alpha', slug: 'alpha', name: 'Alpha Team' }),
     ];
@@ -196,7 +196,7 @@ describe('app-bar model', () => {
     });
 
     expect(projection.currentWorkspace?.slug).toBe('hq');
-    expect(projection.currentWorkspaceName).toBe('AI-DO HQ');
+    expect(projection.currentWorkspaceName).toBe('Open ALM HQ');
     expect(projection.pinnedWorkspace).toBeNull();
     expect(projection.otherWorkspaces.map((item) => item.slug)).toEqual([
       'alpha',
@@ -216,7 +216,7 @@ describe('app-bar model', () => {
       workspaceFallbackLabel: 'Workspace',
       workspaceQuery: 'hq',
       workspaces: [
-        workspace({ id: 'workspace-hq', slug: 'hq', name: 'AI-DO HQ' }),
+        workspace({ id: 'workspace-hq', slug: 'hq', name: 'Open ALM HQ' }),
         workspace({ id: 'workspace-other', slug: 'other', name: 'Other' }),
       ],
     });

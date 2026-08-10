@@ -3,7 +3,7 @@ import asyncio
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from ai_do_api.client_build import ClientBuildGuardMiddleware
+from open_alm_api.client_build import ClientBuildGuardMiddleware
 
 
 def test_websocket_build_guard_accepts_before_policy_close() -> None:
@@ -31,7 +31,7 @@ def test_websocket_build_guard_accepts_before_policy_close() -> None:
             {
                 "type": "websocket",
                 "path": "/api/realtime",
-                "query_string": b"__ai_do_build=build-old",
+                "query_string": b"__open_alm_build=build-old",
                 "headers": [(b"host", b"app.test")],
             },
             receive,
@@ -68,7 +68,7 @@ def test_client_build_guard_short_circuits_stale_writes_before_handler() -> None
     stale_response = client.post(
         "/api/write",
         headers={
-            "X-AI-DO-Web-Build": "build-old",
+            "X-Open ALM-Web-Build": "build-old",
             "Sec-Fetch-Site": "same-origin",
             "Sec-Fetch-Dest": "empty",
         },
@@ -80,7 +80,7 @@ def test_client_build_guard_short_circuits_stale_writes_before_handler() -> None
     current_response = client.post(
         "/api/write",
         headers={
-            "X-AI-DO-Web-Build": "build-current",
+            "X-Open ALM-Web-Build": "build-current",
             "Sec-Fetch-Site": "same-origin",
             "Sec-Fetch-Dest": "empty",
         },

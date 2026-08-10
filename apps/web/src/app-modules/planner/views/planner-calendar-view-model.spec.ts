@@ -50,7 +50,7 @@ describe('planner calendar view model', () => {
     persistTimelineRangeDays(56);
     expect(readTimelineRangeDays()).toBe(56);
 
-    window.localStorage.setItem('ai-do:planner-timeline-range-days', '7');
+    window.localStorage.setItem('open-alm:planner-timeline-range-days', '7');
     expect(readTimelineRangeDays()).toBe(28);
   });
 

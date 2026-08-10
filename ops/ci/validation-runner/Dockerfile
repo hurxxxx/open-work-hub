@@ -11,7 +11,7 @@ RUN npm install --global --force corepack@0.34.0 \
 
 ARG NODE_DEPENDENCY_SHA256
 
-WORKDIR /opt/ai-do/node-runtime
+WORKDIR /opt/open-alm/node-runtime
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/contracts/package.json packages/contracts/package.json
@@ -83,61 +83,61 @@ RUN uv pip install --system --no-cache PyYAML==6.0.3 \
 
 ARG API_DEPENDENCY_SHA256
 
-COPY apps/api/pyproject.toml apps/api/uv.lock /opt/ai-do/locks/api/
+COPY apps/api/pyproject.toml apps/api/uv.lock /opt/open-alm/locks/api/
 
 RUN test -n "${API_DEPENDENCY_SHA256}" \
     && actual_api_dependency_sha256="$( \
       { \
-        sha256sum /opt/ai-do/locks/api/pyproject.toml | awk '{print $1}'; \
-        sha256sum /opt/ai-do/locks/api/uv.lock | awk '{print $1}'; \
+        sha256sum /opt/open-alm/locks/api/pyproject.toml | awk '{print $1}'; \
+        sha256sum /opt/open-alm/locks/api/uv.lock | awk '{print $1}'; \
       } | sha256sum | awk '{print $1}' \
     )" \
     && test "${actual_api_dependency_sha256}" = "${API_DEPENDENCY_SHA256}" \
     && UV_COMPILE_BYTECODE=1 \
-      UV_PROJECT_ENVIRONMENT=/opt/ai-do/venvs/api \
+      UV_PROJECT_ENVIRONMENT=/opt/open-alm/venvs/api \
       uv sync \
-        --directory /opt/ai-do/locks/api \
+        --directory /opt/open-alm/locks/api \
         --frozen \
         --python 3.12 \
         --group dev \
         --no-cache \
         --no-install-project \
     && printf '%s\n' "${API_DEPENDENCY_SHA256}" \
-      > /opt/ai-do/locks/api/dependency.sha256 \
-    && UV_OFFLINE=1 /opt/ai-do/venvs/api/bin/python -I -c \
+      > /opt/open-alm/locks/api/dependency.sha256 \
+    && UV_OFFLINE=1 /opt/open-alm/venvs/api/bin/python -I -c \
       'import pytest, xdist; assert pytest.version_tuple[0] == 8' \
     && rm -rf /root/.cache/uv
 
 ARG WORKER_DEPENDENCY_SHA256
 
-COPY apps/worker/pyproject.toml apps/worker/uv.lock /opt/ai-do/locks/worker/
+COPY apps/worker/pyproject.toml apps/worker/uv.lock /opt/open-alm/locks/worker/
 
 RUN test -n "${WORKER_DEPENDENCY_SHA256}" \
     && actual_worker_dependency_sha256="$( \
       { \
-        sha256sum /opt/ai-do/locks/worker/pyproject.toml | awk '{print $1}'; \
-        sha256sum /opt/ai-do/locks/worker/uv.lock | awk '{print $1}'; \
+        sha256sum /opt/open-alm/locks/worker/pyproject.toml | awk '{print $1}'; \
+        sha256sum /opt/open-alm/locks/worker/uv.lock | awk '{print $1}'; \
       } | sha256sum | awk '{print $1}' \
     )" \
     && test "${actual_worker_dependency_sha256}" = "${WORKER_DEPENDENCY_SHA256}" \
     && UV_COMPILE_BYTECODE=1 \
-      UV_PROJECT_ENVIRONMENT=/opt/ai-do/venvs/worker \
+      UV_PROJECT_ENVIRONMENT=/opt/open-alm/venvs/worker \
       uv sync \
-        --directory /opt/ai-do/locks/worker \
+        --directory /opt/open-alm/locks/worker \
         --frozen \
         --python 3.12 \
         --group dev \
         --no-cache \
         --no-install-project \
     && printf '%s\n' "${WORKER_DEPENDENCY_SHA256}" \
-      > /opt/ai-do/locks/worker/dependency.sha256 \
-    && UV_OFFLINE=1 /opt/ai-do/venvs/worker/bin/python -I -c \
+      > /opt/open-alm/locks/worker/dependency.sha256 \
+    && UV_OFFLINE=1 /opt/open-alm/venvs/worker/bin/python -I -c \
       'import pytest; assert pytest.version_tuple[0] == 8' \
     && rm -rf /root/.cache/uv
 
 COPY --from=validation_node_runtime \
-  /opt/ai-do/node-runtime \
-  /opt/ai-do/node-runtime
+  /opt/open-alm/node-runtime \
+  /opt/open-alm/node-runtime
 
 ARG NODE_DEPENDENCY_SHA256
 
@@ -146,12 +146,12 @@ LABEL ai.do.validation.node-dependency-sha256="${NODE_DEPENDENCY_SHA256}"
 LABEL ai.do.validation.worker-dependency-sha256="${WORKER_DEPENDENCY_SHA256}"
 
 ENV UV_LINK_MODE=copy
-ENV AI_DO_API_IMAGE_DEPENDENCY_FILE=/opt/ai-do/locks/api/dependency.sha256
-ENV AI_DO_API_IMAGE_VENV=/opt/ai-do/venvs/api
-ENV AI_DO_API_IMAGE_NODE_DEPENDENCY_FILE=/opt/ai-do/node-runtime/dependency.sha256
-ENV AI_DO_API_IMAGE_NODE_MODULES=/opt/ai-do/node-runtime/node_modules
-ENV AI_DO_NODE_IMAGE_DEPENDENCY_FILE=/opt/ai-do/node-runtime/dependency.sha256
-ENV AI_DO_NODE_IMAGE_MODULES=/opt/ai-do/node-runtime/node_modules
-ENV AI_DO_WORKER_IMAGE_DEPENDENCY_FILE=/opt/ai-do/locks/worker/dependency.sha256
-ENV AI_DO_WORKER_IMAGE_VENV=/opt/ai-do/venvs/worker
+ENV OPEN_ALM_API_IMAGE_DEPENDENCY_FILE=/opt/open-alm/locks/api/dependency.sha256
+ENV OPEN_ALM_API_IMAGE_VENV=/opt/open-alm/venvs/api
+ENV OPEN_ALM_API_IMAGE_NODE_DEPENDENCY_FILE=/opt/open-alm/node-runtime/dependency.sha256
+ENV OPEN_ALM_API_IMAGE_NODE_MODULES=/opt/open-alm/node-runtime/node_modules
+ENV OPEN_ALM_NODE_IMAGE_DEPENDENCY_FILE=/opt/open-alm/node-runtime/dependency.sha256
+ENV OPEN_ALM_NODE_IMAGE_MODULES=/opt/open-alm/node-runtime/node_modules
+ENV OPEN_ALM_WORKER_IMAGE_DEPENDENCY_FILE=/opt/open-alm/locks/worker/dependency.sha256
+ENV OPEN_ALM_WORKER_IMAGE_VENV=/opt/open-alm/venvs/worker
 WORKDIR /builds

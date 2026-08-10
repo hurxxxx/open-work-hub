@@ -1,0 +1,13 @@
+[Unit]
+Description=Open ALM CI validation network egress policy
+After=docker.service network-online.target
+Wants=docker.service network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/open-alm-ci-validation-egress --apply
+ExecReload=/usr/local/sbin/open-alm-ci-validation-egress --apply
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

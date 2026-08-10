@@ -4,27 +4,27 @@ set -Eeuo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 validation_image_helper="$repo_root/scripts/build-ci-validation-image.sh"
 source "$validation_image_helper"
-project_path="dwdcc/ai-do"
-runner_name="ai-do-validation-docker-runner"
-validation_tag="ai-do-validation"
-validation_image="$AI_DO_VALIDATION_IMAGE"
-validation_image_id="$AI_DO_VALIDATION_IMAGE_ID"
+project_path="open-alm/open-alm"
+runner_name="open-alm-validation-docker-runner"
+validation_tag="open-alm-validation"
+validation_image="$OPEN_ALM_VALIDATION_IMAGE"
+validation_image_id="$OPEN_ALM_VALIDATION_IMAGE_ID"
 gitlab_runner_version="18.11.2"
 helper_image_repository="registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper"
 helper_image_manifest_digest="sha256:39e9155b72aff010f55a8bbfdb94fedeb0824de18612795d8b901ac4b42d99f5"
 helper_image_local_id="sha256:39e9155b72aff010f55a8bbfdb94fedeb0824de18612795d8b901ac4b42d99f5"
 helper_image="${helper_image_repository}:x86_64-v${gitlab_runner_version}"
 helper_image_pinned="${helper_image_repository}@${helper_image_manifest_digest}"
-validation_network="ai-do-validation"
+validation_network="open-alm-validation"
 validation_subnet="172.29.250.0/24"
 validation_gateway="172.29.250.1"
-egress_source="$repo_root/ops/ci/ai-do-ci-validation-egress.sh"
-egress_service_source="$repo_root/ops/ci/ai-do-ci-validation-egress.service"
-egress_target="/usr/local/sbin/ai-do-ci-validation-egress"
-egress_service_target="/etc/systemd/system/ai-do-ci-validation-egress.service"
+egress_source="$repo_root/ops/ci/open-alm-ci-validation-egress.sh"
+egress_service_source="$repo_root/ops/ci/open-alm-ci-validation-egress.service"
+egress_target="/usr/local/sbin/open-alm-ci-validation-egress"
+egress_service_target="/etc/systemd/system/open-alm-ci-validation-egress.service"
 redis_service_image="redis@sha256:5a77f0f4698389019f828f6387049ce1d5adbea204e56422aa7720dab7034287"
 minio_service_image="minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e"
-opensearch_service_image="ai-do-opensearch@sha256:fa1c515ec9913749d8cc7c76c66ac22c377ba9d4ac22132ee9a1749792f12d6d"
+opensearch_service_image="open-alm-opensearch@sha256:fa1c515ec9913749d8cc7c76c66ac22c377ba9d4ac22132ee9a1749792f12d6d"
 service_images=(
   "$redis_service_image"
   "$minio_service_image"
@@ -43,7 +43,7 @@ if [[ -n "$(git -C "$repo_root" status --porcelain)" ]]; then
 fi
 bash "$validation_image_helper" --verify-source-only
 source "$repo_root/scripts/ci/control-plane-lock.sh"
-acquire_ai_do_ci_control_plane_lock
+acquire_open_alm_ci_control_plane_lock
 
 git -C "$repo_root" fetch --quiet origin dev
 local_head="$(git -C "$repo_root" rev-parse HEAD)"
@@ -80,7 +80,7 @@ if [[ -z "$project_id" ]]; then
 fi
 codex_runner_ids="$(
   glab api "projects/${project_id}/runners?per_page=100" |
-    jq -r '.[] | select(.description == "ai-do-local-codex-runner") | .id'
+    jq -r '.[] | select(.description == "open-alm-local-codex-runner") | .id'
 )"
 if [[ "$(wc -w <<<"$codex_runner_ids")" -ne 1 ]]; then
   echo "Expected exactly one transitional Codex runner before validation bootstrap." >&2
@@ -89,9 +89,9 @@ fi
 codex_runner_id="$codex_runner_ids"
 codex_runner_json="$(glab api "runners/${codex_runner_id}")"
 if ! jq -e '
-  .description == "ai-do-local-codex-runner"
+  .description == "open-alm-local-codex-runner"
   and .status == "online"
-  and (.tag_list | sort) == ["ai-do-local", "codex-local"]
+  and (.tag_list | sort) == ["open-alm-local", "codex-local"]
   and .paused == false
   and .locked == true
   and .run_untagged == false
@@ -154,7 +154,7 @@ if [[ "$(jq -r '.[0].Id' <<<"$helper_image_metadata")" != "$helper_image_local_i
   echo "The GitLab Runner helper image does not match its pinned local identity." >&2
   exit 2
 fi
-AI_DO_VALIDATION_DOCKER_CONFIG="$docker_config_dir" \
+OPEN_ALM_VALIDATION_DOCKER_CONFIG="$docker_config_dir" \
   bash "$validation_image_helper"
 for service_image in "${service_images[@]}"; do
   if ! docker --config "$docker_config_dir" image inspect "$service_image" >/dev/null; then
@@ -192,7 +192,7 @@ sudo install -o root -g root -m 700 "$egress_source" "$egress_target"
 sudo install -o root -g root -m 644 \
   "$egress_service_source" "$egress_service_target"
 sudo systemctl daemon-reload
-sudo systemctl enable --now ai-do-ci-validation-egress.service >/dev/null
+sudo systemctl enable --now open-alm-ci-validation-egress.service >/dev/null
 sudo "$egress_target" --check
 
 existing_validation_ids="$(
@@ -282,9 +282,9 @@ if [[ "$validation_status" != "online" ]]; then
 fi
 validation_runner_json="$(glab api "runners/${runner_id}")"
 if ! jq -e '
-  .description == "ai-do-validation-docker-runner"
+  .description == "open-alm-validation-docker-runner"
   and .status == "online"
-  and .tag_list == ["ai-do-validation"]
+  and .tag_list == ["open-alm-validation"]
   and .paused == false
   and .locked == true
   and .run_untagged == false

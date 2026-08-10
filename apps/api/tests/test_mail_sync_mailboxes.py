@@ -3,11 +3,11 @@ from __future__ import annotations
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from ai_do_api.core.db import Base
-from ai_do_api.domains.auth.models import User, Workspace
-from ai_do_api.domains.mail.clients import MailboxInfo, MailConnectionSettings
-from ai_do_api.domains.mail.models import MailAccount, MailMailbox, MailSyncState
-from ai_do_api.domains.mail.sync_mailboxes import (
+from open_alm_api.core.db import Base
+from open_alm_api.domains.auth.models import User, Workspace
+from open_alm_api.domains.mail.clients import MailboxInfo, MailConnectionSettings
+from open_alm_api.domains.mail.models import MailAccount, MailMailbox, MailSyncState
+from open_alm_api.domains.mail.sync_mailboxes import (
     deduplicate_mailboxes,
     ensure_inbox_mailbox,
     ensure_mailbox,
@@ -79,7 +79,7 @@ def _seed_account(session: Session) -> MailAccount:
             User(
                 id="user-1",
                 login_id="user-1",
-                email="user-1@ai-do.local",
+                email="user-1@open-alm.local",
                 full_name="User One",
                 password_hash="hash",
                 status="active",

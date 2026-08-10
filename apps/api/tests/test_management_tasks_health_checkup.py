@@ -19,18 +19,18 @@ from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from ai_do_api.core.db import Base, get_db_session
-from ai_do_api.domains.auth.models import OrgUnit, User
-from ai_do_api.domains.hr.master import (
+from open_alm_api.core.db import Base, get_db_session
+from open_alm_api.domains.auth.models import OrgUnit, User
+from open_alm_api.domains.hr.master import (
     HR_MASTER_ERP_VIEW_SCHEMA_VERSION,
     HrMasterErpEmployee,
     HrMasterErpEmployeeSnapshot,
     HrMasterErpEmployeeSnapshotMetadata,
 )
-from ai_do_api.domains.management_tasks import router as health_router
-from ai_do_api.domains.management_tasks import service
-from ai_do_api.domains.management_tasks import xlsx as health_xlsx
-from ai_do_api.domains.management_tasks.models import (
+from open_alm_api.domains.management_tasks import router as health_router
+from open_alm_api.domains.management_tasks import service
+from open_alm_api.domains.management_tasks import xlsx as health_xlsx
+from open_alm_api.domains.management_tasks.models import (
     ManagementHealthCheckupSettings,
     ManagementHealthCheckupSettingsHistory,
     ManagementHealthDecisionRow,
@@ -38,16 +38,16 @@ from ai_do_api.domains.management_tasks.models import (
     ManagementHealthPriorRow,
     ManagementHealthPriorUpload,
 )
-from ai_do_api.domains.management_tasks.rules import (
+from open_alm_api.domains.management_tasks.rules import (
     AGE_CALC_INTERNATIONAL,
     AGE_CALC_KOREAN,
     DeterminationSettings,
     determine,
 )
-from ai_do_api.domains.management_tasks.schemas import (
+from open_alm_api.domains.management_tasks.schemas import (
     HealthCheckupSettingsUpdateRequest,
 )
-from ai_do_api.domains.management_tasks.xlsx import (
+from open_alm_api.domains.management_tasks.xlsx import (
     MAX_UPLOAD_BYTES,
     UnsafeXlsxError,
     build_employee_table_xlsx,

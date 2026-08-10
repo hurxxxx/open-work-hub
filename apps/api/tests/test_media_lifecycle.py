@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from ai_do_api.domains.media.lifecycle import (
+from open_alm_api.domains.media.lifecycle import (
     apply_media_links,
     build_media_upload_record,
     media_upload_response_payload,
     plan_orphan_media_cleanup,
 )
-from ai_do_api.domains.media.models import MediaFile
-from ai_do_api.domains.media.object_storage import (
+from open_alm_api.domains.media.models import MediaFile
+from open_alm_api.domains.media.object_storage import (
     MediaObjectRemovalFailure,
     MediaObjectRemovalResult,
 )

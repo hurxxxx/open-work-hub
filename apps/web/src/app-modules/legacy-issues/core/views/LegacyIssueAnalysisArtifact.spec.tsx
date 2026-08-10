@@ -7,7 +7,7 @@ import {
   parseLegacyIssueAnalysisPayload,
 } from './LegacyIssueAnalysisArtifact';
 
-vi.mock('@ai-do/ui', () => ({
+vi.mock('@open-alm/ui', () => ({
   BarChartCard: ({
     categories,
     series,

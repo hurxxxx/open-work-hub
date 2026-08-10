@@ -10,8 +10,8 @@ usage() {
 Usage: ./prod.sh {install|render|start|stop|restart|status|log|logs|smoke|infra}
 
 Commands:
-  install  Render and enable user-level ai-do-prod-* systemd units.
-  render   Re-render user-level ai-do-prod-* systemd units.
+  install  Render and enable user-level open-alm-prod-* systemd units.
+  render   Re-render user-level open-alm-prod-* systemd units.
   start    Start production systemd units.
   stop     Stop production systemd units.
   restart  Re-render and restart production systemd units.

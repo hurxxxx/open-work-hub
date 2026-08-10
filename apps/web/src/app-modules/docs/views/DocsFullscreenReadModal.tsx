@@ -24,7 +24,7 @@ import {
   ZoomOut,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { BlockViewer, type BlockContent } from '@ai-do/ui';
+import { BlockViewer, type BlockContent } from '@open-alm/ui';
 
 import { cn } from '@/src/lib/utils';
 import {
@@ -327,7 +327,7 @@ function useDocsFullscreenReadModalElement({
             clientY: event.clientY - rect.top,
             deltaX: event.deltaX,
             deltaY: event.deltaY,
-            type: 'ai-do-docs-html-wheel',
+            type: 'open-alm-docs-html-wheel',
           },
           '*',
         );

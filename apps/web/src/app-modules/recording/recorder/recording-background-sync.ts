@@ -1,4 +1,4 @@
-const RECORDING_SYNC_TAG = 'ai-do-recording-upload';
+const RECORDING_SYNC_TAG = 'open-alm-recording-upload';
 const RECORDING_SYNC_WORKER = '/recording-sync-sw.js';
 
 type SyncRegistration = ServiceWorkerRegistration & {
@@ -33,7 +33,7 @@ export function bindRecordingBackgroundSync(onSync: () => void): () => void {
     return () => undefined;
   }
   const handleMessage = (event: MessageEvent) => {
-    if (event.data?.type === 'ai-do-recording-sync') {
+    if (event.data?.type === 'open-alm-recording-sync') {
       onSync();
     }
   };

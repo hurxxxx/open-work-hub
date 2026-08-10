@@ -6,7 +6,7 @@ identical (e.g. a swapped image whose OCR yields the same/empty text).
 """
 from __future__ import annotations
 
-from ai_do_api.domains.qna import service
+from open_alm_api.domains.qna import service
 
 
 _BASE = dict(

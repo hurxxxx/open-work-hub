@@ -5,12 +5,12 @@ from typing import Any
 
 import pytest
 
-from ai_do_api.core.llm import LlmPoolConfig
-from ai_do_api.core.settings import get_settings
-from ai_do_api.domains.ai import audit as audit_module
-from ai_do_api.domains.ai import gateway as gateway_module
-from ai_do_api.domains.ai import masking as masking_module
-from ai_do_api.domains.ai.gateway import (
+from open_alm_api.core.llm import LlmPoolConfig
+from open_alm_api.core.settings import get_settings
+from open_alm_api.domains.ai import audit as audit_module
+from open_alm_api.domains.ai import gateway as gateway_module
+from open_alm_api.domains.ai import masking as masking_module
+from open_alm_api.domains.ai.gateway import (
     AiGatewayContextPack,
     AiGatewayPolicyViolation,
     AiGatewayRequest,
@@ -19,12 +19,12 @@ from ai_do_api.domains.ai.gateway import (
     execute_llm,
     resolve_gateway_execution,
 )
-from ai_do_api.domains.ai.privacy_filter import PrivacyFilterDetection, PrivacyFilterSpan
-from ai_do_api.domains.ai.registry import (
+from open_alm_api.domains.ai.privacy_filter import PrivacyFilterDetection, PrivacyFilterSpan
+from open_alm_api.domains.ai.registry import (
     get_ai_capability_registry,
     reset_ai_capability_registry,
 )
-from ai_do_api.domains.ai.security_policy import (
+from open_alm_api.domains.ai.security_policy import (
     POLICY_MASK_AND_SEND_REASON,
     AiSecurityPolicyDecision,
 )
@@ -133,7 +133,7 @@ def test_gateway_unknown_task_kind_does_not_route_external() -> None:
 def test_registered_external_provider_is_blocked_by_egress_allowlist_even_when_security_is_off(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("AI_DO_LLM_EXTERNAL_ALLOWED_PROVIDERS", "openai")
+    monkeypatch.setenv("OPEN_ALM_LLM_EXTERNAL_ALLOWED_PROVIDERS", "openai")
     get_settings.cache_clear()
     try:
         with pytest.raises(AiGatewayPolicyViolation) as exc_info:

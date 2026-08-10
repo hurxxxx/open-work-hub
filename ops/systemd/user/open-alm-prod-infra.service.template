@@ -1,0 +1,18 @@
+[Unit]
+Description=Open ALM Production Infrastructure
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=__OPEN_ALM_ROOT__
+Environment=OPEN_ALM_INFRA_BIND_HOST=0.0.0.0
+ExecStart=__OPEN_ALM_ROOT__/scripts/infra-stack.sh prod up
+ExecStop=__OPEN_ALM_ROOT__/scripts/infra-stack.sh prod stop
+RemainAfterExit=yes
+UMask=0077
+TimeoutStartSec=600
+TimeoutStopSec=180
+
+[Install]
+WantedBy=default.target

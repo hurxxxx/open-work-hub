@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from ai_do_api.domains.ai.agent_write_guard import (
+from open_alm_api.domains.ai.agent_write_guard import (
     latest_user_message_has_write_intent,
     write_tool_names_from_specs,
 )
-from ai_do_api.domains.ai.tool_contracts import AgentToolSpec
+from open_alm_api.domains.ai.tool_contracts import AgentToolSpec
 
 
 def _tool_spec(name: str) -> AgentToolSpec:

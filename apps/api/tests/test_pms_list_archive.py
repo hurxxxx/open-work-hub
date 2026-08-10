@@ -5,15 +5,15 @@ from datetime import date
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from ai_do_api.core.db import get_session_factory
-from ai_do_api.domains.auth.security import new_id
-from ai_do_api.domains.auth.models import Workspace
-from ai_do_api.domains.pms.models import TaskUserAccess
-from ai_do_api.domains.pms.search_projection import (
+from open_alm_api.core.db import get_session_factory
+from open_alm_api.domains.auth.security import new_id
+from open_alm_api.domains.auth.models import Workspace
+from open_alm_api.domains.pms.models import TaskUserAccess
+from open_alm_api.domains.pms.search_projection import (
     load_pms_task_search_document,
     load_workspace_pms_task_search_documents,
 )
-from ai_do_api.domains.rag.pms_projection import load_task_projection
+from open_alm_api.domains.rag.pms_projection import load_task_projection
 from test_pms_issues import (
     _add_task_list_member,
     _auth_headers,
@@ -260,7 +260,7 @@ def test_list_archive_permissions_and_workspace_isolation(client: TestClient) ->
         account = _create_user(
             client,
             owner["token"],
-            email=f"archive-{role}@ai-do.local",
+            email=f"archive-{role}@open-alm.local",
             full_name=f"Archive {role.title()}",
         )
         _add_task_list_member(
@@ -325,7 +325,7 @@ def test_list_archive_permissions_and_workspace_isolation(client: TestClient) ->
     grant_reader = _create_user(
         client,
         owner["token"],
-        email="archive-grant-reader@ai-do.local",
+        email="archive-grant-reader@open-alm.local",
         full_name="Archive Grant Reader",
     )
     _grant_workspace_access(

@@ -10,8 +10,8 @@ API_SRC = WORKSPACE_ROOT / "apps" / "api" / "src"
 if str(API_SRC) not in sys.path:
     sys.path.insert(0, str(API_SRC))
 
-from ai_do_api.core.settings import Settings as ApiSettings  # noqa: E402
-from ai_do_worker.settings import Settings as WorkerSettings  # noqa: E402
+from open_alm_api.core.settings import Settings as ApiSettings  # noqa: E402
+from open_alm_worker.settings import Settings as WorkerSettings  # noqa: E402
 
 
 SHARED_RUNTIME_SETTING_FIELDS = (
@@ -112,12 +112,12 @@ def test_api_worker_shared_runtime_settings_contracts_match() -> None:
 
 def test_worker_erp_database_settings_use_the_existing_env_contract() -> None:
     expected_aliases = {
-        "erp_db_ip": "AI_DO_ERP_DB_IP",
-        "erp_db_port": "AI_DO_ERP_DB_PORT",
-        "erp_db_name": "AI_DO_ERP_DB_NAME",
-        "erp_db_id": "AI_DO_ERP_DB_ID",
-        "erp_db_pw": "AI_DO_ERP_DB_PW",
-        "erp_db_timeout_seconds": "AI_DO_ERP_DB_TIMEOUT_SECONDS",
+        "erp_db_ip": "OPEN_ALM_ERP_DB_IP",
+        "erp_db_port": "OPEN_ALM_ERP_DB_PORT",
+        "erp_db_name": "OPEN_ALM_ERP_DB_NAME",
+        "erp_db_id": "OPEN_ALM_ERP_DB_ID",
+        "erp_db_pw": "OPEN_ALM_ERP_DB_PW",
+        "erp_db_timeout_seconds": "OPEN_ALM_ERP_DB_TIMEOUT_SECONDS",
     }
 
     assert {

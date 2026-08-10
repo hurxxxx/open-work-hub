@@ -13,8 +13,8 @@ import { rewriteWorkspaceApiPathForWorkspace } from '@/src/platform/api/workspac
 
 export type WorkspaceAppId = WorkspaceShellAppId;
 
-const LAST_WORKSPACE_STORAGE_KEY = 'ai-do:last-workspace-slug';
-const LAST_WORKSPACE_APP_STORAGE_KEY = 'ai-do:last-workspace-app';
+const LAST_WORKSPACE_STORAGE_KEY = 'open-alm:last-workspace-slug';
+const LAST_WORKSPACE_APP_STORAGE_KEY = 'open-alm:last-workspace-app';
 const WORKSPACE_APP_PATH_PATTERN = /^\/w\/[^/]+\/([^/]+)(?:\/|$)/;
 const WORKSPACE_APP_ID_MAX_LENGTH = 128;
 const WORKSPACE_APP_ID_SEGMENT_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;

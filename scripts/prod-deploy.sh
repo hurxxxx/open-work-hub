@@ -47,11 +47,11 @@ load_prod_deploy_env_file() {
     key="${line%%=*}"
     value="${line#*=}"
     key="$(trim_prod_deploy_env_text "$key")"
-    if [[ "$key" != AI_DO_PROD_* \
-      && "$key" != AI_DO_POSTGRES_DSN \
-      && "$key" != AI_DO_IMAGE_ENABLED \
-      && "$key" != AI_DO_DRAWIO_PORT \
-      && "$key" != AI_DO_DRAWIO_SERVER_URL ]]; then
+    if [[ "$key" != OPEN_ALM_PROD_* \
+      && "$key" != OPEN_ALM_POSTGRES_DSN \
+      && "$key" != OPEN_ALM_IMAGE_ENABLED \
+      && "$key" != OPEN_ALM_DRAWIO_PORT \
+      && "$key" != OPEN_ALM_DRAWIO_SERVER_URL ]]; then
       continue
     fi
     value="$(normalize_prod_deploy_env_value "$value")"
@@ -63,17 +63,17 @@ load_prod_deploy_env_file() {
 
 load_prod_deploy_env_file
 
-EXPECTED_ROOT="$(normalize_prod_deploy_env_value "${AI_DO_PROD_ROOT:-/projects/ai-do/prod}")"
-EXPECTED_BRANCH="$(normalize_prod_deploy_env_value "${AI_DO_PROD_BRANCH:-main}")"
-EXPECTED_REMOTE_REF="$(normalize_prod_deploy_env_value "${AI_DO_PROD_REMOTE_REF:-origin/$EXPECTED_BRANCH}")"
-BACKUP_ROOT="$(normalize_prod_deploy_env_value "${AI_DO_PROD_BACKUP_ROOT:-/projects/ai-do/backups/prod}")"
-POSTGRES_DSN="$(normalize_prod_deploy_env_value "${AI_DO_POSTGRES_DSN:-}")"
-KEYWORD_REINDEX_WORKSPACE_KEYS="$(normalize_prod_deploy_env_value "${AI_DO_PROD_KEYWORD_REINDEX_WORKSPACE_KEYS:-}")"
-KEYWORD_REINDEX_ALL_ACTIVE="$(normalize_prod_deploy_env_value "${AI_DO_PROD_KEYWORD_REINDEX_ALL_ACTIVE:-0}")"
-RELEASE_GATE_ADAPTERS="$(normalize_prod_deploy_env_value "${AI_DO_PROD_RELEASE_GATE_ADAPTERS:-}")"
-SKIP_RELEASE_GATES="$(normalize_prod_deploy_env_value "${AI_DO_PROD_SKIP_RELEASE_GATES:-0}")"
-IMAGE_ENABLED="$(normalize_prod_deploy_env_value "${AI_DO_IMAGE_ENABLED:-false}")"
-MODEL_SETTINGS_CUTOVER_ENV_FILE="$(normalize_prod_deploy_env_value "${AI_DO_PROD_MODEL_SETTINGS_CUTOVER_ENV_FILE:-$ROOT_DIR/.env}")"
+EXPECTED_ROOT="$(normalize_prod_deploy_env_value "${OPEN_ALM_PROD_ROOT:-/projects/open-alm/prod}")"
+EXPECTED_BRANCH="$(normalize_prod_deploy_env_value "${OPEN_ALM_PROD_BRANCH:-main}")"
+EXPECTED_REMOTE_REF="$(normalize_prod_deploy_env_value "${OPEN_ALM_PROD_REMOTE_REF:-origin/$EXPECTED_BRANCH}")"
+BACKUP_ROOT="$(normalize_prod_deploy_env_value "${OPEN_ALM_PROD_BACKUP_ROOT:-/projects/open-alm/backups/prod}")"
+POSTGRES_DSN="$(normalize_prod_deploy_env_value "${OPEN_ALM_POSTGRES_DSN:-}")"
+KEYWORD_REINDEX_WORKSPACE_KEYS="$(normalize_prod_deploy_env_value "${OPEN_ALM_PROD_KEYWORD_REINDEX_WORKSPACE_KEYS:-}")"
+KEYWORD_REINDEX_ALL_ACTIVE="$(normalize_prod_deploy_env_value "${OPEN_ALM_PROD_KEYWORD_REINDEX_ALL_ACTIVE:-0}")"
+RELEASE_GATE_ADAPTERS="$(normalize_prod_deploy_env_value "${OPEN_ALM_PROD_RELEASE_GATE_ADAPTERS:-}")"
+SKIP_RELEASE_GATES="$(normalize_prod_deploy_env_value "${OPEN_ALM_PROD_SKIP_RELEASE_GATES:-0}")"
+IMAGE_ENABLED="$(normalize_prod_deploy_env_value "${OPEN_ALM_IMAGE_ENABLED:-false}")"
+MODEL_SETTINGS_CUTOVER_ENV_FILE="$(normalize_prod_deploy_env_value "${OPEN_ALM_PROD_MODEL_SETTINGS_CUTOVER_ENV_FILE:-$ROOT_DIR/.env}")"
 DRY_RUN=0
 TLS_EXPIRY_BREAK_GLASS=0
 STAGED_FRONTEND_DIR=""
@@ -88,7 +88,7 @@ usage() {
   cat >&2 <<'EOF'
 Usage: scripts/prod-deploy.sh [--dry-run] [--keyword-reindex-all-active] [--tls-expiry-break-glass]
 
-Runs the production release flow from /projects/ai-do/prod:
+Runs the production release flow from /projects/open-alm/prod:
   1. print git state
   2. validate the public TLS certificate expiry and SAN contract
   3. install locked dependencies
@@ -109,17 +109,17 @@ Options:
                                  Expired, untrusted, wrong-host, or missing-SAN certificates still fail.
 
 Release gates:
-  AI_DO_PROD_RELEASE_GATE_ADAPTERS configures comma-separated gate adapters.
+  OPEN_ALM_PROD_RELEASE_GATE_ADAPTERS configures comma-separated gate adapters.
   Gate adapters declare pre_activate or post_activate execution phases.
   keyword_dataset_scope runs in pre_activate while search writers are quiesced.
   llm_provider_settings_cutover imports legacy external LLM settings before activation.
   image_model_settings_cutover drains and validates image settings before activation.
-  AI_DO_IMAGE_ENABLED=true requires image_model_settings_cutover and cannot bypass gates.
-  AI_DO_PROD_MODEL_SETTINGS_CUTOVER_ENV_FILE may point to a one-shot file under .runtime/.
-  AI_DO_PROD_KEYWORD_REINDEX_WORKSPACE_KEYS configures keyword_dataset_scope workspaces.
-  AI_DO_PROD_KEYWORD_REINDEX_ALL_ACTIVE=1 or --keyword-reindex-all-active selects every active workspace.
-  AI_DO_PROD_SKIP_RELEASE_GATES=1 is required to deliberately bypass all gates.
-  AI_DO_PROD_REMOTE_REF defaults to origin/<AI_DO_PROD_BRANCH> for stale-check protection.
+  OPEN_ALM_IMAGE_ENABLED=true requires image_model_settings_cutover and cannot bypass gates.
+  OPEN_ALM_PROD_MODEL_SETTINGS_CUTOVER_ENV_FILE may point to a one-shot file under .runtime/.
+  OPEN_ALM_PROD_KEYWORD_REINDEX_WORKSPACE_KEYS configures keyword_dataset_scope workspaces.
+  OPEN_ALM_PROD_KEYWORD_REINDEX_ALL_ACTIVE=1 or --keyword-reindex-all-active selects every active workspace.
+  OPEN_ALM_PROD_SKIP_RELEASE_GATES=1 is required to deliberately bypass all gates.
+  OPEN_ALM_PROD_REMOTE_REF defaults to origin/<OPEN_ALM_PROD_BRANCH> for stale-check protection.
 
 Database migration safety:
   The N+2 Knowledge physical-retirement migration performs its fail-closed
@@ -129,19 +129,19 @@ EOF
 }
 
 require_prod_checkout() {
-  if [[ "${AI_DO_ALLOW_NON_PROD_CHECKOUT_PROD_COMMANDS:-0}" == "1" ]]; then
+  if [[ "${OPEN_ALM_ALLOW_NON_PROD_CHECKOUT_PROD_COMMANDS:-0}" == "1" ]]; then
     return
   fi
   if [[ "$ROOT_DIR" != "$EXPECTED_ROOT" ]]; then
     echo "Refusing to deploy production from unexpected checkout: $ROOT_DIR" >&2
-    echo "Expected $EXPECTED_ROOT, or set AI_DO_ALLOW_NON_PROD_CHECKOUT_PROD_COMMANDS=1 for a deliberate dry-run/break-glass operation." >&2
+    echo "Expected $EXPECTED_ROOT, or set OPEN_ALM_ALLOW_NON_PROD_CHECKOUT_PROD_COMMANDS=1 for a deliberate dry-run/break-glass operation." >&2
     exit 1
   fi
   local branch
   branch="$(git -C "$ROOT_DIR" rev-parse --abbrev-ref HEAD)"
   if [[ "$branch" != "$EXPECTED_BRANCH" ]]; then
     echo "Refusing to deploy production from branch '$branch'; expected '$EXPECTED_BRANCH'." >&2
-    echo "Set AI_DO_ALLOW_NON_PROD_CHECKOUT_PROD_COMMANDS=1 only for a deliberate rollback/break-glass operation." >&2
+    echo "Set OPEN_ALM_ALLOW_NON_PROD_CHECKOUT_PROD_COMMANDS=1 only for a deliberate rollback/break-glass operation." >&2
     exit 1
   fi
   if [[ -n "$(git -C "$ROOT_DIR" status --porcelain)" ]]; then
@@ -156,11 +156,11 @@ require_synced_prod_checkout() {
   local remote_name="${EXPECTED_REMOTE_REF%%/*}"
   local remote_branch="${EXPECTED_REMOTE_REF#*/}"
   if [[ -z "$remote_name" || "$remote_name" == "$EXPECTED_REMOTE_REF" ]]; then
-    echo "AI_DO_PROD_REMOTE_REF must be a remote ref such as origin/$EXPECTED_BRANCH; got '$EXPECTED_REMOTE_REF'." >&2
+    echo "OPEN_ALM_PROD_REMOTE_REF must be a remote ref such as origin/$EXPECTED_BRANCH; got '$EXPECTED_REMOTE_REF'." >&2
     exit 1
   fi
   if [[ -z "$remote_branch" || "$remote_branch" == "$EXPECTED_REMOTE_REF" ]]; then
-    echo "AI_DO_PROD_REMOTE_REF must include a branch path such as origin/$EXPECTED_BRANCH; got '$EXPECTED_REMOTE_REF'." >&2
+    echo "OPEN_ALM_PROD_REMOTE_REF must include a branch path such as origin/$EXPECTED_BRANCH; got '$EXPECTED_REMOTE_REF'." >&2
     exit 1
   fi
 
@@ -230,15 +230,15 @@ run_prod_smoke_step() {
 run_postgres_backup_step() {
   local backup_file="${1:?backup file is required}"
   printf '\n[prod-deploy] Back up production Postgres\n'
-  printf '[prod-deploy] $ pg_dump -Fc -f %q <AI_DO_POSTGRES_DSN>\n' "$backup_file"
+  printf '[prod-deploy] $ pg_dump -Fc -f %q <OPEN_ALM_POSTGRES_DSN>\n' "$backup_file"
   if (( DRY_RUN )); then
     return 0
   fi
   if [[ -z "$POSTGRES_DSN" ]]; then
-    echo "AI_DO_POSTGRES_DSN is required for production Postgres backups." >&2
+    echo "OPEN_ALM_POSTGRES_DSN is required for production Postgres backups." >&2
     return 2
   fi
-  AI_DO_POSTGRES_DSN="$POSTGRES_DSN" AI_DO_BACKUP_FILE="$backup_file" python3 - <<'PY'
+  OPEN_ALM_POSTGRES_DSN="$POSTGRES_DSN" OPEN_ALM_BACKUP_FILE="$backup_file" python3 - <<'PY'
 from __future__ import annotations
 
 import hashlib
@@ -248,10 +248,10 @@ import sys
 from urllib.parse import parse_qsl, unquote, urlsplit
 
 
-raw_dsn = os.environ.get("AI_DO_POSTGRES_DSN", "").strip()
-backup_file = os.environ["AI_DO_BACKUP_FILE"]
+raw_dsn = os.environ.get("OPEN_ALM_POSTGRES_DSN", "").strip()
+backup_file = os.environ["OPEN_ALM_BACKUP_FILE"]
 if "://" not in raw_dsn:
-    sys.exit("AI_DO_POSTGRES_DSN must be a PostgreSQL URL.")
+    sys.exit("OPEN_ALM_POSTGRES_DSN must be a PostgreSQL URL.")
 
 scheme, rest = raw_dsn.split("://", 1)
 if scheme in {"postgresql+psycopg", "postgresql+asyncpg", "postgres"}:
@@ -259,7 +259,7 @@ if scheme in {"postgresql+psycopg", "postgresql+asyncpg", "postgres"}:
 elif scheme == "postgresql":
     dsn = raw_dsn
 else:
-    sys.exit("AI_DO_POSTGRES_DSN must use a PostgreSQL scheme.")
+    sys.exit("OPEN_ALM_POSTGRES_DSN must use a PostgreSQL scheme.")
 
 parsed = urlsplit(dsn)
 host = parsed.hostname or ""
@@ -268,7 +268,7 @@ user = unquote(parsed.username or "")
 password = unquote(parsed.password or "")
 database = unquote(parsed.path.lstrip("/"))
 if not host or not user or not database:
-    sys.exit("AI_DO_POSTGRES_DSN must include host, user, and database.")
+    sys.exit("OPEN_ALM_POSTGRES_DSN must include host, user, and database.")
 
 env = os.environ.copy()
 env.update(
@@ -365,7 +365,7 @@ def require_artifact(relative: str) -> None:
 
 index_path = root / "index.html"
 manifest_path = root / ".vite" / "manifest.json"
-build_id_path = root / ".ai-do-build-id"
+build_id_path = root / ".open-alm-build-id"
 for required in (index_path, manifest_path, build_id_path, root / "assets"):
     if not required.exists():
         fail(f"missing frontend build artifact: {required.relative_to(root)}")
@@ -449,10 +449,10 @@ cleanup_prod_deploy() {
   elif (( ACTIVATION_STARTED && ! FRONTEND_PROMOTED )); then
     echo "[prod-deploy] Frontend promotion did not complete; keeping search-writing app units fail-closed." >&2
     if (( ! SEARCH_WRITERS_QUIESCED )); then
-      if systemctl --user stop ai-do-prod-api.service; then
+      if systemctl --user stop open-alm-prod-api.service; then
         API_STOPPED=1
       else
-        echo "Failed to enforce fail-closed state for ai-do-prod-api.service." >&2
+        echo "Failed to enforce fail-closed state for open-alm-prod-api.service." >&2
       fi
     fi
     status=1
@@ -467,10 +467,10 @@ cleanup_prod_deploy() {
     fi
   elif (( API_STOPPED )); then
     echo "[prod-deploy] Restoring production API after interrupted activation" >&2
-    if systemctl --user start ai-do-prod-api.service; then
+    if systemctl --user start open-alm-prod-api.service; then
       API_STOPPED=0
     else
-      echo "Failed to restore ai-do-prod-api.service." >&2
+      echo "Failed to restore open-alm-prod-api.service." >&2
       status=1
     fi
   fi
@@ -479,7 +479,7 @@ cleanup_prod_deploy() {
 
 acquire_prod_deploy_lock() {
   local lock_path
-  lock_path="$(git -C "$ROOT_DIR" rev-parse --path-format=absolute --git-path ai-do-prod-deploy.lock)" || return 2
+  lock_path="$(git -C "$ROOT_DIR" rev-parse --path-format=absolute --git-path open-alm-prod-deploy.lock)" || return 2
   exec {DEPLOY_LOCK_FD}>"$lock_path"
   if ! flock -n "$DEPLOY_LOCK_FD"; then
     echo "Another production deployment is already running for $ROOT_DIR." >&2
@@ -496,19 +496,19 @@ run_frontend_build_step() {
   STAGED_FRONTEND_DIR="$release_root/.web-staging-${release_timestamp}-$$"
 
   printf '\n[prod-deploy] Build production web assets in staging\n'
-  printf '[prod-deploy] $ VITE_AI_DO_BUILD_ID=%q pnpm exec nx build web --skip-nx-cache --args=--outDir=...\n' "$FRONTEND_BUILD_ID"
+  printf '[prod-deploy] $ VITE_OPEN_ALM_BUILD_ID=%q pnpm exec nx build web --skip-nx-cache --args=--outDir=...\n' "$FRONTEND_BUILD_ID"
   if (( DRY_RUN )); then
     return 0
   fi
   mkdir -p "$release_root" || return $?
   remove_frontend_release_dir "$STAGED_FRONTEND_DIR" || return $?
-  if ! VITE_AI_DO_BUILD_ID="$FRONTEND_BUILD_ID" \
+  if ! VITE_OPEN_ALM_BUILD_ID="$FRONTEND_BUILD_ID" \
     pnpm exec nx build web --skip-nx-cache \
       --args="--outDir=$STAGED_FRONTEND_DIR --manifest=.vite/manifest.json"; then
     cleanup_staged_frontend_build
     return 1
   fi
-  printf '%s\n' "$FRONTEND_BUILD_ID" >"$STAGED_FRONTEND_DIR/.ai-do-build-id"
+  printf '%s\n' "$FRONTEND_BUILD_ID" >"$STAGED_FRONTEND_DIR/.open-alm-build-id"
   if ! validate_frontend_build "$STAGED_FRONTEND_DIR" "$FRONTEND_BUILD_ID"; then
     cleanup_staged_frontend_build
     return 1
@@ -705,18 +705,18 @@ validate_release_gate_configuration() {
   case "${IMAGE_ENABLED,,}" in
     1|true|yes|on)
       if [[ "$SKIP_RELEASE_GATES" == "1" ]]; then
-        echo "AI_DO_IMAGE_ENABLED=true cannot bypass production release gates." >&2
+        echo "OPEN_ALM_IMAGE_ENABLED=true cannot bypass production release gates." >&2
         return 2
       fi
       if ! csv_contains "$adapters" "image_model_settings_cutover"; then
-        echo "AI_DO_IMAGE_ENABLED=true requires the image_model_settings_cutover release gate adapter." >&2
+        echo "OPEN_ALM_IMAGE_ENABLED=true requires the image_model_settings_cutover release gate adapter." >&2
         return 2
       fi
       ;;
     0|false|no|off)
       ;;
     *)
-      echo "AI_DO_IMAGE_ENABLED must be a boolean value." >&2
+      echo "OPEN_ALM_IMAGE_ENABLED must be a boolean value." >&2
       return 2
       ;;
   esac
@@ -724,24 +724,24 @@ validate_release_gate_configuration() {
     return 0
   fi
   if [[ -n "$RELEASE_GATE_ADAPTERS" && -z "$(normalized_csv_items "$RELEASE_GATE_ADAPTERS")" ]]; then
-    echo "AI_DO_PROD_RELEASE_GATE_ADAPTERS must contain at least one release gate adapter name, or set AI_DO_PROD_SKIP_RELEASE_GATES=1 for a deliberate bypass." >&2
+    echo "OPEN_ALM_PROD_RELEASE_GATE_ADAPTERS must contain at least one release gate adapter name, or set OPEN_ALM_PROD_SKIP_RELEASE_GATES=1 for a deliberate bypass." >&2
     return 2
   fi
   if [[ -n "$KEYWORD_REINDEX_WORKSPACE_KEYS" && -z "$(workspace_key_args "$KEYWORD_REINDEX_WORKSPACE_KEYS")" ]]; then
-    echo "AI_DO_PROD_KEYWORD_REINDEX_WORKSPACE_KEYS must contain at least one workspace key when set." >&2
+    echo "OPEN_ALM_PROD_KEYWORD_REINDEX_WORKSPACE_KEYS must contain at least one workspace key when set." >&2
     return 2
   fi
   if [[ "$KEYWORD_REINDEX_ALL_ACTIVE" != "0" && "$KEYWORD_REINDEX_ALL_ACTIVE" != "1" ]]; then
-    echo "AI_DO_PROD_KEYWORD_REINDEX_ALL_ACTIVE must be 0 or 1." >&2
+    echo "OPEN_ALM_PROD_KEYWORD_REINDEX_ALL_ACTIVE must be 0 or 1." >&2
     return 2
   fi
   if [[ "$KEYWORD_REINDEX_ALL_ACTIVE" == "1" && -n "$(workspace_key_args "$KEYWORD_REINDEX_WORKSPACE_KEYS")" ]]; then
-    echo "AI_DO_PROD_KEYWORD_REINDEX_ALL_ACTIVE/--keyword-reindex-all-active and AI_DO_PROD_KEYWORD_REINDEX_WORKSPACE_KEYS are mutually exclusive." >&2
+    echo "OPEN_ALM_PROD_KEYWORD_REINDEX_ALL_ACTIVE/--keyword-reindex-all-active and OPEN_ALM_PROD_KEYWORD_REINDEX_WORKSPACE_KEYS are mutually exclusive." >&2
     return 2
   fi
   if [[ -z "$adapters" ]]; then
     echo "Production release gates are not configured." >&2
-    echo "Set AI_DO_PROD_RELEASE_GATE_ADAPTERS, AI_DO_PROD_KEYWORD_REINDEX_WORKSPACE_KEYS, --keyword-reindex-all-active, or AI_DO_PROD_SKIP_RELEASE_GATES=1 for a deliberate bypass." >&2
+    echo "Set OPEN_ALM_PROD_RELEASE_GATE_ADAPTERS, OPEN_ALM_PROD_KEYWORD_REINDEX_WORKSPACE_KEYS, --keyword-reindex-all-active, or OPEN_ALM_PROD_SKIP_RELEASE_GATES=1 for a deliberate bypass." >&2
     return 2
   fi
 
@@ -799,13 +799,13 @@ run_llm_provider_settings_cutover_gate() {
   printf -v env_file_arg '%q' "$MODEL_SETTINGS_CUTOVER_ENV_FILE"
   run_shell_step \
     "Preview legacy external LLM provider settings cutover" \
-    "cd '$ROOT_DIR/apps/api' && AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 python scripts/import_legacy_llm_provider_settings.py --env-file $env_file_arg"
+    "cd '$ROOT_DIR/apps/api' && OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 python scripts/import_legacy_llm_provider_settings.py --env-file $env_file_arg"
   run_shell_step \
     "Apply legacy external LLM provider settings cutover" \
-    "cd '$ROOT_DIR/apps/api' && AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 python scripts/import_legacy_llm_provider_settings.py --env-file $env_file_arg --apply"
+    "cd '$ROOT_DIR/apps/api' && OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 python scripts/import_legacy_llm_provider_settings.py --env-file $env_file_arg --apply"
   run_shell_step \
     "Verify external LLM provider settings cutover idempotency" \
-    "cd '$ROOT_DIR/apps/api' && AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 python scripts/import_legacy_llm_provider_settings.py --env-file $env_file_arg --apply"
+    "cd '$ROOT_DIR/apps/api' && OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 python scripts/import_legacy_llm_provider_settings.py --env-file $env_file_arg --apply"
 }
 
 run_image_model_settings_cutover_gate() {
@@ -813,19 +813,19 @@ run_image_model_settings_cutover_gate() {
   printf -v env_file_arg '%q' "$MODEL_SETTINGS_CUTOVER_ENV_FILE"
   run_shell_step \
     "Require an idle image generation queue before settings cutover" \
-    "cd '$ROOT_DIR/apps/api' && AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 python scripts/check_image_model_settings_cutover.py --jobs-only"
+    "cd '$ROOT_DIR/apps/api' && OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 python scripts/check_image_model_settings_cutover.py --jobs-only"
   run_shell_step \
     "Preview legacy image model settings cutover" \
-    "cd '$ROOT_DIR/apps/api' && AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 python scripts/import_legacy_image_model_settings.py --env-file $env_file_arg"
+    "cd '$ROOT_DIR/apps/api' && OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 python scripts/import_legacy_image_model_settings.py --env-file $env_file_arg"
   run_shell_step \
     "Apply legacy image model settings cutover" \
-    "cd '$ROOT_DIR/apps/api' && AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 python scripts/import_legacy_image_model_settings.py --env-file $env_file_arg --apply"
+    "cd '$ROOT_DIR/apps/api' && OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 python scripts/import_legacy_image_model_settings.py --env-file $env_file_arg --apply"
   run_shell_step \
     "Verify image model settings cutover idempotency" \
-    "cd '$ROOT_DIR/apps/api' && AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 python scripts/import_legacy_image_model_settings.py --env-file $env_file_arg --apply"
+    "cd '$ROOT_DIR/apps/api' && OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 python scripts/import_legacy_image_model_settings.py --env-file $env_file_arg --apply"
   run_shell_step \
     "Validate image model settings readiness after cutover" \
-    "cd '$ROOT_DIR/apps/api' && AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 python scripts/check_image_model_settings_cutover.py"
+    "cd '$ROOT_DIR/apps/api' && OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 python scripts/check_image_model_settings_cutover.py"
 }
 
 run_release_gates() {
@@ -841,12 +841,12 @@ run_release_gates() {
   local adapters
   adapters="$(configured_release_gate_adapters)"
   if [[ "$SKIP_RELEASE_GATES" == "1" ]]; then
-    printf '\n[prod-deploy] Release gate phase %s: deliberately bypassed by AI_DO_PROD_SKIP_RELEASE_GATES=1\n' "$phase"
+    printf '\n[prod-deploy] Release gate phase %s: deliberately bypassed by OPEN_ALM_PROD_SKIP_RELEASE_GATES=1\n' "$phase"
     return 0
   fi
   if [[ -z "$adapters" ]]; then
     echo "Production release gates are not configured." >&2
-    echo "Set AI_DO_PROD_RELEASE_GATE_ADAPTERS, AI_DO_PROD_KEYWORD_REINDEX_WORKSPACE_KEYS, --keyword-reindex-all-active, or AI_DO_PROD_SKIP_RELEASE_GATES=1 for a deliberate bypass." >&2
+    echo "Set OPEN_ALM_PROD_RELEASE_GATE_ADAPTERS, OPEN_ALM_PROD_KEYWORD_REINDEX_WORKSPACE_KEYS, --keyword-reindex-all-active, or OPEN_ALM_PROD_SKIP_RELEASE_GATES=1 for a deliberate bypass." >&2
     return 2
   fi
 
@@ -869,7 +869,7 @@ run_release_gates() {
 validate_keyword_dataset_scope_gate() {
   local explicit_adapters="${1:-0}"
   if [[ "$explicit_adapters" == "1" ]] && [[ -z "$(keyword_reindex_args)" ]]; then
-    echo "Configure AI_DO_PROD_KEYWORD_REINDEX_WORKSPACE_KEYS or --keyword-reindex-all-active for release gate adapter keyword_dataset_scope." >&2
+    echo "Configure OPEN_ALM_PROD_KEYWORD_REINDEX_WORKSPACE_KEYS or --keyword-reindex-all-active for release gate adapter keyword_dataset_scope." >&2
     return 2
   fi
 }
@@ -878,15 +878,15 @@ run_keyword_dataset_scope_gate() {
   local keyword_args
   keyword_args="$(keyword_reindex_args)"
   if [[ -z "$keyword_args" ]]; then
-    echo "Configure AI_DO_PROD_KEYWORD_REINDEX_WORKSPACE_KEYS or --keyword-reindex-all-active for release gate adapter keyword_dataset_scope." >&2
+    echo "Configure OPEN_ALM_PROD_KEYWORD_REINDEX_WORKSPACE_KEYS or --keyword-reindex-all-active for release gate adapter keyword_dataset_scope." >&2
     return 2
   fi
   run_shell_step \
     "Rebuild keyword search index for dataset-scoped release gate" \
-    "cd '$ROOT_DIR/apps/api' && AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 python -m ai_do_api.backfill_keyword_search${keyword_args}"
+    "cd '$ROOT_DIR/apps/api' && OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 python -m open_alm_api.backfill_keyword_search${keyword_args}"
   run_shell_step \
     "Smoke dataset-scoped keyword search release gate" \
-    "cd '$ROOT_DIR/apps/api' && AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 python -m ai_do_api.smoke_keyword_dataset_scope${keyword_args}"
+    "cd '$ROOT_DIR/apps/api' && OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 python -m open_alm_api.smoke_keyword_dataset_scope${keyword_args}"
 }
 
 main() {
@@ -945,7 +945,7 @@ main() {
     "cd '$ROOT_DIR/apps/worker' && uv sync --python 3.12 --frozen --no-dev"
   run_shell_step \
     "Validate Alembic revision graph" \
-    "cd '$ROOT_DIR/apps/api' && AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 python '$ROOT_DIR/scripts/check-alembic-state.py' --graph-only"
+    "cd '$ROOT_DIR/apps/api' && OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 python '$ROOT_DIR/scripts/check-alembic-state.py' --graph-only"
   run_step "Create backup directory" install -d -m 700 "$BACKUP_ROOT" "$backup_dir"
   run_frontend_build_step "$timestamp"
   run_step \
@@ -961,13 +961,13 @@ main() {
   run_postgres_backup_step "$backup_file"
   run_shell_step \
     "Run Alembic migrations" \
-    "cd '$ROOT_DIR/apps/api' && AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 alembic upgrade head"
+    "cd '$ROOT_DIR/apps/api' && OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 alembic upgrade head"
   run_shell_step \
     "Verify Alembic database revision" \
-    "cd '$ROOT_DIR/apps/api' && AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 python '$ROOT_DIR/scripts/check-alembic-state.py'"
+    "cd '$ROOT_DIR/apps/api' && OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 python '$ROOT_DIR/scripts/check-alembic-state.py'"
   run_shell_step \
     "Fence and republish patent prior-art jobs onto the protected queue" \
-    "cd '$ROOT_DIR/apps/api' && AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 python scripts/reconcile_patent_prior_art_queue.py"
+    "cd '$ROOT_DIR/apps/api' && OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 python scripts/reconcile_patent_prior_art_queue.py"
   run_release_gates pre_activate
   if (( ! DRY_RUN )); then
     ACTIVATION_STARTED=1

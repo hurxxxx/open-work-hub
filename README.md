@@ -1,62 +1,58 @@
-# AI-DO
+# Open ALM
 
-## 운영/개발 분리
+Open ALM is a modular application lifecycle management platform. It brings planning,
+workspaces, tasks, documents, meetings, files, search, and AI-assisted workflows into
+one extensible product.
 
-이 서버의 운영 checkout은 `/projects/ai-do/prod`이며 `main` 브랜치를 따른다.
-개발 checkout은 `/projects/ai-do/dev`이며 `dev` 브랜치를 따른다.
-운영 서비스는 user-level systemd의 `ai-do-prod-*` unit으로 관리한다.
+## Architecture
 
-일반 개발은 `/projects/ai-do/dev`의 `dev` 브랜치에서 수행한다. 개발 검증이 끝난
-변경만 GitLab MR로 `main`에 병합하고, `/projects/ai-do/prod`는 병합된 `main`을 배포하는
-운영 checkout으로 유지한다.
+- `apps/web`: React and Vite web application
+- `apps/api`: FastAPI application and database migrations
+- `apps/worker`: background jobs and asynchronous workflows
+- `apps/ops`: operational APIs and administration tools
+- `packages`: shared contracts, UI components, and web platform code
+- `ops`: container and deployment definitions
 
-The standard deployment entrypoint is `pnpm prod:deploy`. Run
-`pnpm prod:deploy -- --dry-run` first. `pnpm prod:install` is only for explicitly
-installing or refreshing systemd unit files; it is not a deployment command.
+The default development stack uses PostgreSQL, Redis, MinIO, OpenSearch, and Qdrant.
+Optional AI and media services can be enabled through environment settings.
 
-운영 Nginx는 TLS와 reverse proxy만 담당한다. Web production build는 FastAPI가
-`AI_DO_API_SERVE_FRONTEND=1` 설정으로 정적 서빙한다.
+## Requirements
 
-배포 후 별도 상태 확인이 필요하면:
+- Node.js 22 or later
+- pnpm 10.33.0
+- Python 3.12 and `uv`
+- Docker with Compose
 
-```bash
-pnpm prod:status
-pnpm prod:smoke
-```
-
-배포의 backup, dependency/build, migration/head, release gate, 최종 smoke 계약은
-[`production deployment layout`](./docs/domains/release/production-deployment-layout.md)을 따른다.
-
-재시작만 필요하면:
+## Local development
 
 ```bash
-pnpm prod:restart
+cp .env.example .env
+pnpm install --frozen-lockfile
+pnpm dev:infra:up
+pnpm dev
 ```
 
-문서 색인은 `docs/README.md` 를 먼저 본다.
+The web application listens on `http://127.0.0.1:4200` by default. Runtime settings
+use the `OPEN_ALM_*` prefix; adjust `.env` for services that are not running locally.
 
-## Local LLM / DGX Spark
+Useful checks:
 
-DGX Spark `102` / `103` 서버의 SSH 접속, Dashboard, vLLM endpoint, CX7 직결 링크, Qwen3.6 운영 설정은 `docs/domains/inference-gateway/dgx-spark-servers.md` 를 정본으로 본다.
-비밀번호와 Hugging Face token 원문은 저장소 문서에 기록하지 않는다.
+```bash
+pnpm check:project-version
+pnpm check:path-hardcoding
+pnpm check:python-source-integrity
+pnpm nx run-many -t typecheck --all
+```
 
-## Inference Gateway
+See [`docs/README.md`](./docs/README.md) for architecture and domain documentation.
 
-Embedding, reranker, Docling, ASR 풀로드 백엔드는 별도 레포
-`/projects/ai-do/ai-do-inference-gateway`에서 운영한다. AI-DO 루트의
-`pnpm inference-gateway:*` 스크립트는 해당 레포의 실행 스크립트로 위임한다.
-운영/검증 절차는 `docs/domains/inference-gateway/backend-operations.md`를 정본으로 본다.
+## Security
 
-## AI-DO Desktop
+Never commit `.env`, credentials, production data, customer documents, or generated
+backups. Keep only safe placeholders in `.env.example` and report security issues
+privately to the repository owner.
 
-Electron desktop client는 별도 레포 `/projects/ai-do/ai-do-desktop`에서 관리한다.
-GitLab 프로젝트는 `dwdcc/ai-do-desktop`이다. 이 포털 repo에는 desktop update
-feed serving contract와 웹 설치 링크 설정만 남긴다.
+## Status
 
-### 루트 Markdown 기준
-
-루트에는 현재 진입점 `README.md`와 활성 에이전트 규칙 `agents.md`만 둔다.
-예외로 `CLAUDE.md`는 Claude Code 도구 실행 환경 전용 운영 노트다.
-완료됐거나 현재 구현과 달라진 계획/MR 로그는 기본 작업 컨텍스트에 넣지 않는다.
-과거 계획은 저장소 정본 문서로 유지하지 않는다. 원문이 필요하면 사용자가 명시했을 때
-Git 이력에서만 복원하고, 현재 상태는 `docs/current/`와 코드/테스트를 기준으로 확인한다.
+Open ALM is being generalized from an internal application into an independent ALM
+project. Interfaces and deployment contracts may change while this work is in progress.

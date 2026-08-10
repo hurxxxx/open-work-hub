@@ -12,8 +12,8 @@ def _bootstrap_admin_session(client: TestClient) -> dict:
     response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "AI-DO Admin",
-            "email": "admin@ai-do.local",
+            "full_name": "Open ALM Admin",
+            "email": "admin@open-alm.local",
             "password": "supersecret123",
         },
     )
@@ -22,8 +22,8 @@ def _bootstrap_admin_session(client: TestClient) -> dict:
 
 
 def _sync_groupware_user() -> None:
-    from ai_do_api.core.db import get_session_factory
-    from ai_do_api.domains.hr.groupware_sync import (
+    from open_alm_api.core.db import get_session_factory
+    from open_alm_api.domains.hr.groupware_sync import (
         GroupwareOrgRow,
         GroupwareUserRow,
         sync_groupware_hr,
@@ -166,7 +166,7 @@ def test_admin_hr_user_actions_allow_block_but_not_delete_or_password_reset(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from ai_do_api.domains.auth import router as auth_router
+    from open_alm_api.domains.auth import router as auth_router
 
     session = _bootstrap_admin_session(client)
     headers = _auth_headers(session["token"])

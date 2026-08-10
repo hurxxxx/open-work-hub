@@ -6,8 +6,8 @@ from typing import Any, cast
 from unittest.mock import Mock
 from uuid import uuid4
 
-from ai_do_api.domains.legacy_issues import ai_search_planner
-from ai_do_api.domains.legacy_issues.ai_search import (
+from open_alm_api.domains.legacy_issues import ai_search_planner
+from open_alm_api.domains.legacy_issues.ai_search import (
     sanitize_legacy_issue_search_plan,
 )
 

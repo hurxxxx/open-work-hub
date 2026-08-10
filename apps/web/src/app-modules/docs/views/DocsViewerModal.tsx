@@ -16,11 +16,11 @@ import {
   markdownToBlockContent,
   useConfirm,
   type BlockContent,
-} from '@ai-do/ui';
+} from '@open-alm/ui';
 import {
   REALTIME_TOPIC_EVENT_TYPES,
   createDocsPagesRealtimeSubscriptionMessage,
-} from '@ai-do/contracts/realtime';
+} from '@open-alm/contracts/realtime';
 
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/platform/auth/auth-provider';

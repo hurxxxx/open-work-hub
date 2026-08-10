@@ -8,7 +8,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router-dom';
 import { Loader2, Plus, Save, Settings, X } from 'lucide-react';
-import { useToast } from '@ai-do/ui';
+import { useToast } from '@open-alm/ui';
 
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/platform/auth/auth-provider';

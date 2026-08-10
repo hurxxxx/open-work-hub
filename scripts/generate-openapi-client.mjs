@@ -12,7 +12,7 @@ const targetPath = path.join(
   repoRoot,
   'packages/contracts/src/openapi.generated.d.ts',
 );
-const tempDir = mkdtempSync(path.join(tmpdir(), 'ai-do-openapi-'));
+const tempDir = mkdtempSync(path.join(tmpdir(), 'open-alm-openapi-'));
 const schemaPath = path.join(tempDir, 'openapi.json');
 const generatedPath = checkOnly
   ? path.join(tempDir, 'openapi.generated.d.ts')
@@ -39,12 +39,12 @@ try {
       [
         'import json, os',
         'from pathlib import Path',
-        'from ai_do_api.app import create_app',
-        'from ai_do_api.openapi_contract import assert_openapi_contract',
+        'from open_alm_api.app import create_app',
+        'from open_alm_api.openapi_contract import assert_openapi_contract',
         'app = create_app(initialize_runtime=False)',
         'schema = app.openapi()',
         'assert_openapi_contract(schema)',
-        'Path(os.environ["AI_DO_OPENAPI_OUTPUT"]).write_text(',
+        'Path(os.environ["OPEN_ALM_OPENAPI_OUTPUT"]).write_text(',
         '    json.dumps(schema, ensure_ascii=False, indent=2) + "\\n",',
         '    encoding="utf-8",',
         ')',
@@ -54,11 +54,11 @@ try {
       cwd: path.join(repoRoot, 'apps/api'),
       env: {
         ...process.env,
-        AI_DO_OPENAPI_OUTPUT: schemaPath,
-        AI_DO_POSTGRES_DSN:
-          process.env.AI_DO_POSTGRES_DSN ??
+        OPEN_ALM_OPENAPI_OUTPUT: schemaPath,
+        OPEN_ALM_POSTGRES_DSN:
+          process.env.OPEN_ALM_POSTGRES_DSN ??
           'postgresql+psycopg://openapi:openapi@127.0.0.1:1/openapi',
-        AI_DO_LLM_HEALTHCHECK_ON_STARTUP: '0',
+        OPEN_ALM_LLM_HEALTHCHECK_ON_STARTUP: '0',
       },
     },
   );

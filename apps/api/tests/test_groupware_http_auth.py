@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ai_do_api.domains.auth import groupware_http
+from open_alm_api.domains.auth import groupware_http
 
 
 class _Response:

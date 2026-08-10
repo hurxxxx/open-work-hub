@@ -19,7 +19,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { InlineNotice } from '@ai-do/ui';
+import { InlineNotice } from '@open-alm/ui';
 
 import { cn } from '@/src/lib/utils';
 import {

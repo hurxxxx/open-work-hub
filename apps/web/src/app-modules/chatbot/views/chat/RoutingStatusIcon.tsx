@@ -1,6 +1,6 @@
 import { Shield, ShieldAlert } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Tooltip } from '@ai-do/ui';
+import { Tooltip } from '@open-alm/ui';
 import type { AiBackendMode, LlmHealthResponse } from '../../api/chatbot-api';
 
 interface RoutingStatusIconProps {

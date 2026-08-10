@@ -1,7 +1,7 @@
 {
-  "name": "AI-DO",
-  "short_name": "AI-DO",
-  "description": "AI-DO",
+  "name": "Open ALM",
+  "short_name": "Open ALM",
+  "description": "Open ALM",
   "id": "/",
   "start_url": "/",
   "display": "standalone",

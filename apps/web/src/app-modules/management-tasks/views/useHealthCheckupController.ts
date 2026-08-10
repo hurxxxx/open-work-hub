@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useToast } from '@ai-do/ui';
+import { useToast } from '@open-alm/ui';
 
 import {
   fetchDeterminations,

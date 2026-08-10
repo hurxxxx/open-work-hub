@@ -5,7 +5,7 @@
 
 ## Context
 
-AI-DO has several search-like paths: Generic RAG, keyword search, Q&A RAG,
+Open ALM has several search-like paths: Generic RAG, keyword search, Q&A RAG,
 legacy issue AI search, fixture document search, and AI graph evidence packing.
 They share user intent but do not share one backend. Treating all of them as
 one deep abstraction hides important differences in ownership, permissions,

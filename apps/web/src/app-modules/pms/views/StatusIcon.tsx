@@ -6,7 +6,7 @@ import {
   CircleSlash,
   XCircle,
 } from 'lucide-react';
-import { Tooltip } from '@ai-do/ui';
+import { Tooltip } from '@open-alm/ui';
 import { cn } from '@/src/lib/utils';
 import type { PmsTaskListStatus } from '../api/pms-api';
 

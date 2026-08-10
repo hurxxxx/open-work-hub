@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Button, Dialog } from '@ai-do/ui';
+import { Button, Dialog } from '@open-alm/ui';
 
 export const FORM_FIELD_CONTROL_CLASS_NAME =
   'app-text-body w-full rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink placeholder:text-app-ink/30 transition-all focus:border-app-accent focus:outline-none';

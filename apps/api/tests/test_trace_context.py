@@ -2,15 +2,15 @@ from __future__ import annotations
 
 from opentelemetry import baggage
 
-from ai_do_api.core.telemetry import bootstrap_telemetry, get_tracer
-from ai_do_api.core.trace_context import (
+from open_alm_api.core.telemetry import bootstrap_telemetry, get_tracer
+from open_alm_api.core.trace_context import (
     serialize_current_trace_context,
     start_span_with_trace_context,
 )
 
 
 def test_start_span_with_trace_context_preserves_mapping_baggage() -> None:
-    bootstrap_telemetry(service_name="ai-do-api-test")
+    bootstrap_telemetry(service_name="open-alm-api-test")
     tracer = get_tracer("tests.trace_context")
 
     with start_span_with_trace_context(

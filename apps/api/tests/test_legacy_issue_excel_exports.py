@@ -12,15 +12,15 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException
 
-from ai_do_api.core.db import Base
-from ai_do_api.domains.auth.models import User, Workspace, utcnow_naive
-from ai_do_api.domains.legacy_issues.dataset_records import (
+from open_alm_api.core.db import Base
+from open_alm_api.domains.auth.models import User, Workspace, utcnow_naive
+from open_alm_api.domains.legacy_issues.dataset_records import (
     export_dataset_records_xlsx,
     get_dataset_definition,
 )
-from ai_do_api.domains.legacy_issues import excel_exports as excel_export_service
-from ai_do_api.domains.legacy_issues import router as legacy_issue_router
-from ai_do_api.domains.legacy_issues.excel_exports import (
+from open_alm_api.domains.legacy_issues import excel_exports as excel_export_service
+from open_alm_api.domains.legacy_issues import router as legacy_issue_router
+from open_alm_api.domains.legacy_issues.excel_exports import (
     EXCEL_EXPORT_MAX_ATTEMPTS,
     EXCEL_EXPORT_MAX_ATTACHMENTS_PER_RECORD,
     EXCEL_EXPORT_STALE_RUNNING_AFTER,
@@ -42,8 +42,8 @@ from ai_do_api.domains.legacy_issues.excel_exports import (
     republish_pending_excel_export_jobs,
     validate_excel_export_attachments,
 )
-from ai_do_api.domains.legacy_issues.excel_ole_package import embed_ole_attachments
-from ai_do_api.domains.legacy_issues.models import LegacyIssueExcelExportJob
+from open_alm_api.domains.legacy_issues.excel_ole_package import embed_ole_attachments
+from open_alm_api.domains.legacy_issues.models import LegacyIssueExcelExportJob
 
 
 class _StorageResponse(BytesIO):

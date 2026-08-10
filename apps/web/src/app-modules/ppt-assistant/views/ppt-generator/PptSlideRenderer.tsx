@@ -6,10 +6,10 @@ import type { PptSlide } from '../../api/ppt-generator-api';
 
 /**
  * slides_spec(구조화 데이터)를 HTML 슬라이드로 렌더한다. .pptx 빌더(design/builders_a4.py)와
- * 동일한 두원공조 A4 경영진 보고 양식(27.517×19.05cm)을 재현한다.
+ * 동일한 Open ALM A4 경영진 보고 양식(27.517×19.05cm)을 재현한다.
  *
  * 빌더가 cm 절대좌표로 그리므로, 공통 chrome(워터마크·Confidential 배지·로고·분할 가로선·
- * 대각선 DCC 워터마크·저작권)도 같은 좌표를 캔버스 대비 %로 환산해 절대배치한다. 본문 콘텐츠
+ * 대각선 브랜드 워터마크·저작권)도 같은 좌표를 캔버스 대비 %로 환산해 절대배치한다. 본문 콘텐츠
  * 영역만 안전 구역 안에서 flex 로 흐른다. 폰트 크기는 pt → cqw(컨테이너 폭 1%) 로 환산해
  * 슬라이드 폭에 맞춰 자동 스케일된다.
  */
@@ -22,7 +22,6 @@ const X = (cm: number) => `${((cm / CW) * 100).toFixed(3)}%`;
 const Y = (cm: number) => `${((cm / CH) * 100).toFixed(3)}%`;
 // pt → cqw (1pt=0.03528cm, 폭 27.517cm 기준): pt * 0.03528 / 27.517 * 100
 const FT = (pt: number) => `${(pt * 0.128208).toFixed(3)}cqw`;
-const LOGO_SRC = '/ppt-templates/doowon_wordmark.png';
 
 // builders_a4.py COLORS 와 1:1
 const C = {
@@ -35,7 +34,7 @@ const C = {
   verLabel: '#666666',
   bodyRule: '#808080',
   bodyTitle: '#1A1A1A',
-  dccWatermark: '#F0E0E0',
+  brandWatermark: '#F0E0E0',
   copyright: '#C8C8C8',
   dateText: '#000000',
   surface: '#F5F6F8',
@@ -54,16 +53,16 @@ const C = {
 } as const;
 
 // builders_a4.py §3 고정 문자열 — 변경 금지 (Control/Confidential 사이 더블 스페이스)
-const COVER_WATERMARK_TEXT = 'DOOWON Climate Control  Confidential Documents';
+const COVER_WATERMARK_TEXT = 'Open ALM  Confidential Documents';
 const CONFIDENTIAL_BADGE_TEXT = 'Confidential';
-const DCC_WATERMARK_TEXT = 'DCC Confidential Documents';
+const BRAND_WATERMARK_TEXT = 'Open ALM Confidential Documents';
 const COPYRIGHT_TEXT =
-  'Doowon Climate Control Co., Ltd. : This information is exclusive property of ' +
-  'Doowon Corporation. Without their consent, it may not be required or given to ' +
+  'Open ALM : This information is exclusive property of ' +
+  'Open ALM. Without their consent, it may not be required or given to ' +
   'third parties.';
 
 const FONT_STACK =
-  "'HDharmony M','현대하모니 M','Pretendard','Malgun Gothic',-apple-system,sans-serif"; // i18n-exempt-line: font family name
+  "'Pretendard M','Pretendard','Pretendard','Malgun Gothic',-apple-system,sans-serif"; // i18n-exempt-line: font family name
 
 type Dict = Record<string, unknown>;
 
@@ -111,14 +110,24 @@ function SlideFrame({ children }: { children: ReactNode }) {
   );
 }
 
-// 실제 두원 로고(빨간 O + 스워시). height 만 지정하면 종횡비 자동.
+// 이미지 자산에 의존하지 않는 Open ALM 워드마크.
 function Logo({ style }: { style?: CSSProperties }) {
   return (
-    <img
-      src={LOGO_SRC}
-      alt="DOOWON"
-      style={{ display: 'block', width: 'auto', ...style }}
-    />
+    <div
+      aria-label="Open ALM"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        color: C.navy,
+        fontSize: FT(10),
+        fontWeight: 800,
+        letterSpacing: '-0.03em',
+        whiteSpace: 'nowrap',
+        ...style,
+      }}
+    >
+      Open ALM
+    </div>
   );
 }
 
@@ -158,7 +167,7 @@ function A4CoverSlide({ data }: { data: Dict }) {
     `${today.getFullYear()}.${String(today.getMonth() + 1).padStart(2, '0')}.${String(
       today.getDate(),
     ).padStart(2, '0')}`;
-  const author = str(data, 'AUTHOR', '㈜두원공조 기술연구소 AI TFT');
+  const author = str(data, 'AUTHOR', 'Open ALM');
   const version = str(data, 'VERSION', 'Ver 1');
   const abs = (s: CSSProperties): CSSProperties => ({
     position: 'absolute',
@@ -188,7 +197,7 @@ function A4CoverSlide({ data }: { data: Dict }) {
       {/* 2) Confidential 배지 */}
       <ConfidentialBadge />
 
-      {/* 3) 제목 (HDharmony Bold 32pt, C.coverTitle) */}
+      {/* 3) 제목 (Pretendard Bold 32pt, C.coverTitle) */}
       <div
         style={abs({
           left: X(1.5),
@@ -226,7 +235,7 @@ function A4CoverSlide({ data }: { data: Dict }) {
         })}
       />
 
-      {/* 6) Ver 라벨 (HDharmony 16pt, C.verLabel, 짧은 밑줄 위 가운데) */}
+      {/* 6) Ver 라벨 (Pretendard 16pt, C.verLabel, 짧은 밑줄 위 가운데) */}
       <div
         style={abs({
           left: X(20.2),
@@ -243,7 +252,7 @@ function A4CoverSlide({ data }: { data: Dict }) {
         {version}
       </div>
 
-      {/* 7) 날짜 (HDharmony Bold 22pt, C.coverTitle) */}
+      {/* 7) 날짜 (Pretendard Bold 22pt, C.coverTitle) */}
       <div
         style={abs({
           left: X(1.5),
@@ -260,7 +269,7 @@ function A4CoverSlide({ data }: { data: Dict }) {
         {date}
       </div>
 
-      {/* 8) 작성자 (HDharmony Bold 32pt, C.coverTitle) */}
+      {/* 8) 작성자 (Pretendard Bold 32pt, C.coverTitle) */}
       <div
         style={abs({
           left: X(1.5),
@@ -303,7 +312,7 @@ function BodyChrome({
 
   return (
     <>
-      {/* S1 — ▣ 제목 (HDharmony Bold 30pt, C.bodyTitle) */}
+      {/* S1 — ▣ 제목 (Pretendard Bold 30pt, C.bodyTitle) */}
       <div
         style={abs({
           left: X(0.7),
@@ -367,7 +376,7 @@ function BodyChrome({
         })}
       />
 
-      {/* L3 — DOOWON 로고 (gap 안). 네이티브 apply_body_chrome 와 동일: x=22.5, top=1.65, h=0.40cm.
+      {/* L3 — OPEN ALM 로고 (gap 안). 네이티브 apply_body_chrome 와 동일: x=22.5, top=1.65, h=0.40cm.
           (이전 0.55cm/1.5 는 로고가 커져 우상단 날짜와 겹쳐 'YYYY'가 가려짐) */}
       <Logo style={abs({ left: X(22.5), top: Y(1.65), height: Y(0.4) })} />
 
@@ -377,7 +386,7 @@ function BodyChrome({
           left: '50%',
           top: '49%',
           transform: 'translate(-50%,-50%) rotate(-30deg)',
-          color: C.dccWatermark,
+          color: C.brandWatermark,
           fontWeight: 700,
           fontSize: FT(32),
           fontFamily: 'Arial, sans-serif',
@@ -386,7 +395,7 @@ function BodyChrome({
           pointerEvents: 'none',
         })}
       >
-        {DCC_WATERMARK_TEXT}
+        {BRAND_WATERMARK_TEXT}
       </div>
 
       {/* L5 — 하단 영문 저작권 (Arial 7pt, C.copyright) */}
@@ -2090,7 +2099,7 @@ function BrandlogySlide({ data }: { data: Dict }) {
 }
 
 // ════════════════════════════════════════════════════════════
-// 두원 사내 진행보고 "하우스 스타일" (design/builders_house.py 재현)
+// Open ALM 사내 진행보고 "하우스 스타일" (design/builders_house.py 재현)
 // 본문 블록(lead/table/timeline/conclusion)만 담당하고, 위/아래 틀은 세미나(A4) 본문 틀
 // (SlideFrame + BodyChrome)을 그대로 재사용한다. 캔버스 A4(가로) 27.517×19.05cm.
 // ════════════════════════════════════════════════════════════
@@ -3235,7 +3244,7 @@ function HouseBlock({ block, fill }: { block: Dict; fill?: boolean }) {
 const WRAP_NARROW = new Set(' ,.:;·|/\\-–—()[]{}\'"~!?%'.split(''));
 function textWidthCm(s: string, fs = 12, wrap = false): number {
   const em = fs * 0.03528;
-  // 현대하모니 M COM 실측: 한글 1.03, ascii 0.6, 공백·문장부호 0.33em. wrap 모드에서 좁은 문자 반영
+  // Pretendard COM 실측: 한글 1.03, ascii 0.6, 공백·문장부호 0.33em. wrap 모드에서 좁은 문자 반영
   // (예전엔 공백·쉼표를 0.6으로 세어 부풀어 행 팽창·표 과대추정).
   const ko = wrap ? 1.03 : 1.1;
   const ascii = wrap ? 0.6 : 0.6;

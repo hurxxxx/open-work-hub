@@ -13,7 +13,7 @@
   - Consumes only the `news` queue, so it never picks up other developers'
     shared default-queue tasks.
 
-  Set AI_DO_INDUSTRY_REPORT_CRAWL_ENABLED=1 to let collection actually run
+  Set OPEN_ALM_INDUSTRY_REPORT_CRAWL_ENABLED=1 to let collection actually run
   (otherwise the task returns "disabled", mirroring production).
 
   Set IR_LOCAL_BEAT_SECONDS to a positive number (e.g. 60) to enable an embedded
@@ -43,5 +43,5 @@ foreach ($raw in Get-Content $envFile) {
   Set-Item -Path "env:$k" -Value $v
 }
 
-Write-Host "==> industry-report worker (queue: news)  broker: $env:AI_DO_WORKER_BROKER_URL" -ForegroundColor Cyan
+Write-Host "==> industry-report worker (queue: news)  broker: $env:OPEN_ALM_WORKER_BROKER_URL" -ForegroundColor Cyan
 & $py (Join-Path $root "scripts\industry_report_local_worker.py")

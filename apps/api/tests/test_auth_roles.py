@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from ai_do_api.domains.auth.roles import (
+from open_alm_api.domains.auth.roles import (
     SYSTEM_PLATFORM_ADMIN,
     _higher_team_role,
     _higher_workspace_role,

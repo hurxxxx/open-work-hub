@@ -21,4 +21,4 @@ export {
   type CoreSubSidebarCreateMenuState as SubSidebarCreateMenuState,
   type CoreSubSidebarRect as SubSidebarRect,
   widthFromCoreSubSidebarPointer as widthFromSubSidebarPointer,
-} from '@ai-do/core-web/sub-sidebar-frame';
+} from '@open-alm/core-web/sub-sidebar-frame';

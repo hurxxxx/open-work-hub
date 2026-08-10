@@ -8,7 +8,7 @@ import {
   Loader2,
   RefreshCw,
 } from 'lucide-react';
-import { useToast } from '@ai-do/ui';
+import { useToast } from '@open-alm/ui';
 
 import { UserDateTime } from '@/src/components/date/UserDateTime';
 import { useAuth } from '@/src/platform/auth/auth-provider';

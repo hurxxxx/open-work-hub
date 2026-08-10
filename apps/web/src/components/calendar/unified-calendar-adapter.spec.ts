@@ -38,7 +38,7 @@ describe('unified calendar adapter', () => {
     });
   });
 
-  it('roundtrips AI-DO calendar events through FullCalendar extended props', () => {
+  it('roundtrips Open ALM calendar events through FullCalendar extended props', () => {
     const source = calendarEvent({ id: 'event-1' });
     const fullCalendarEvent = toFullCalendarEvent(source);
 

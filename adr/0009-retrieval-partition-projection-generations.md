@@ -5,7 +5,7 @@
 
 ## Context
 
-AI-DO는 OpenSearch keyword search, Qdrant Generic RAG, Legacy Issues PostgreSQL FTS/pgvector를 공용 Retrieval Module에서 조합한다. 현재 OpenSearch document ID와 Qdrant point ID, query filter, Search/RAG outbox identity에는 workspace 또는 scope가 포함되어 있다.
+Open ALM는 OpenSearch keyword search, Qdrant Generic RAG, Legacy Issues PostgreSQL FTS/pgvector를 공용 Retrieval Module에서 조합한다. 현재 OpenSearch document ID와 Qdrant point ID, query filter, Search/RAG outbox identity에는 workspace 또는 scope가 포함되어 있다.
 
 이 구조에서는 대량 Files corpus의 관리 workspace나 공개 범위를 바꿀 때 다음 비용과 경쟁 조건이 생긴다.
 
@@ -14,7 +14,7 @@ AI-DO는 OpenSearch keyword search, Qdrant Generic RAG, Legacy Issues PostgreSQL
 - workspace가 다른 두 outbox stream 사이에서 늦은 delete가 최신 upsert를 제거하는 경쟁
 - backend payload를 권한 정본으로 오인할 위험
 
-한편 AI-DO source의 실제 권한 모델은 서로 다르다. Files는 owner/visibility/folder ancestry, Docs는 target/share/grant, Meeting은 organizer/attendee, PMS는 Team, Planner는 owner, QNA는 company/workspace corpus를 사용한다. 하나의 partition scope를 모든 source의 실제 grant로 사용할 수 없다.
+한편 Open ALM source의 실제 권한 모델은 서로 다르다. Files는 owner/visibility/folder ancestry, Docs는 target/share/grant, Meeting은 organizer/attendee, PMS는 Team, Planner는 owner, QNA는 company/workspace corpus를 사용한다. 하나의 partition scope를 모든 source의 실제 grant로 사용할 수 없다.
 
 대안은 workspace별 physical index/collection, custom routing, resource별 partition, backend metadata in-place rewrite였다. 이들은 workspace 이동 비용, shard/collection 수, partial move 비용 또는 권한 결합도를 높인다.
 

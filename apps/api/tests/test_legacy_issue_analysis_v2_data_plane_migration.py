@@ -4,7 +4,7 @@ import importlib.util
 from pathlib import Path
 from types import ModuleType
 
-from ai_do_api.domains.legacy_issues.analysis_v2.views import (
+from open_alm_api.domains.legacy_issues.analysis_v2.views import (
     ANALYSIS_VIEW_CONTRACTS,
     CHECKLIST_ITEMS_VIEW_V1,
     CHECKLISTS_VIEW_V1,

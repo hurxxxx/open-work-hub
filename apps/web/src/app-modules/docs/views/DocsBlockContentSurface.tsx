@@ -6,7 +6,7 @@ import {
   BlockViewer,
   CollaborativeBlockEditor,
   type BlockContent,
-} from '@ai-do/ui';
+} from '@open-alm/ui';
 
 import {
   getDocsCollabSession,

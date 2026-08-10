@@ -5,9 +5,9 @@ from types import SimpleNamespace
 from typing import Any, cast
 from uuid import uuid4
 
-from ai_do_api.domains.ai.gateway import AiGatewayDecision
-from ai_do_api.domains.legacy_issues import analysis_planner
-from ai_do_api.domains.legacy_issues.analysis_contracts import (
+from open_alm_api.domains.ai.gateway import AiGatewayDecision
+from open_alm_api.domains.legacy_issues import analysis_planner
+from open_alm_api.domains.legacy_issues.analysis_contracts import (
     AnalysisCountingUnit,
     AnalysisDataSource,
     AnalysisMode,
@@ -21,14 +21,14 @@ from ai_do_api.domains.legacy_issues.analysis_contracts import (
     QueryFamilyId,
     QueryRequestV1,
 )
-from ai_do_api.domains.legacy_issues.analysis_planner import (
+from open_alm_api.domains.legacy_issues.analysis_planner import (
     plan_legacy_issue_analysis,
 )
-from ai_do_api.domains.legacy_issues.dataset_records import (
+from open_alm_api.domains.legacy_issues.dataset_records import (
     COMMON_MASTER_FIELDS,
     DatasetFieldDefinition,
 )
-from ai_do_api.domains.legacy_issues.task_kinds import (
+from open_alm_api.domains.legacy_issues.task_kinds import (
     LEGACY_ISSUE_ANALYSIS_PLAN_WORKLOAD_ID,
 )
 
@@ -1871,7 +1871,7 @@ def _mock_execute(monkeypatch, results: list[SimpleNamespace]):
 
     execute = Mock(side_effect=results)
     monkeypatch.setattr(
-        "ai_do_api.domains.legacy_issues.analysis_planner.execute_llm",
+        "open_alm_api.domains.legacy_issues.analysis_planner.execute_llm",
         execute,
     )
     return execute

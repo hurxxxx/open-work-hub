@@ -93,7 +93,7 @@ export const resources = {
         backToHelpCenter: '도움말 센터로 돌아가기',
         featureGuideButton: '사용 가이드',
         description:
-          'AI-DO 앱을 사용할 때 필요한 공식 사용 가이드를 확인합니다.',
+          'Open ALM 앱을 사용할 때 필요한 공식 사용 가이드를 확인합니다.',
         eyebrow: '도움말',
         open: '도움말',
         pmsGuideDescription:
@@ -105,11 +105,11 @@ export const resources = {
       businessSites: {
         description: '자주 쓰는 사내 업무 사이트를 엽니다.',
         groupwareDescription: '전자결재, 게시판, 사내 업무 시스템',
-        groupwareTitle: '두원공조 그룹웨어',
+        groupwareTitle: 'Open ALM 그룹웨어',
         open: '업무 사이트 링크',
         title: '업무 사이트',
         welfareMallDescription: '복지 혜택 및 상품 이용',
-        welfareMallTitle: '두원공조 복지몰',
+        welfareMallTitle: 'Open ALM 복지몰',
       },
       releaseNotes: {
         dismissFailed: '릴리즈 안내를 읽음 처리하지 못했습니다.',
@@ -302,9 +302,9 @@ export const resources = {
         switch: '워크스페이스 전환',
       },
       documentTitle: {
-        app: '{{app}} | AI-DO',
+        app: '{{app}} | Open ALM',
         profile: '내 설정',
-        workspaceApp: '{{workspace}} · {{app}} | AI-DO',
+        workspaceApp: '{{workspace}} · {{app}} | Open ALM',
       },
       apps: {
         ai: 'AI',
@@ -400,7 +400,7 @@ export const resources = {
       nav: {
         chatbot: 'AI 챗봇',
         'health-checkup': '종합검진',
-        search: 'AI-DO 통합검색',
+        search: 'Open ALM 통합검색',
         drafting: '기안작성 도우미',
         translate: '문서 번역/요약',
         'spec-compare': '규격서 비교',
@@ -732,11 +732,11 @@ export const resources = {
         aiDoDesktopMacDescription:
           'macOS 빌드가 업로드되면 이 링크로 설치본을 받을 수 있습니다.',
         aiDoDesktopMacGuide:
-          '압축을 풀거나 DMG를 열어 AI-DO Desktop을 Applications로 이동하세요.',
+          '압축을 풀거나 DMG를 열어 Open ALM Desktop을 Applications로 이동하세요.',
         aiDoDesktopMacTitle: 'macOS',
         aiDoDesktopSettingsDescription:
-          '운영체제별 AI-DO Desktop 설치 파일을 다운로드합니다.',
-        aiDoDesktopTitle: 'AI-DO Desktop 데스크톱 앱',
+          '운영체제별 Open ALM Desktop 설치 파일을 다운로드합니다.',
+        aiDoDesktopTitle: 'Open ALM Desktop 데스크톱 앱',
         aiDoDesktopUnavailable: '준비 중',
         aiDoDesktopWindowsDescription:
           'Windows 트레이에서 상주하는 NSIS 설치 파일입니다.',
@@ -794,7 +794,7 @@ export const resources = {
         passwordRequired: '비밀번호 변경이 필요합니다.',
         profile: '프로필',
         releaseNotes: '업데이트 내역',
-        releaseNotesDescription: 'AI-DO 배포 변경사항을 확인합니다.',
+        releaseNotesDescription: 'Open ALM 배포 변경사항을 확인합니다.',
         releaseNotesEmpty: '표시할 업데이트 내역이 없습니다.',
         releaseNotesLoadFailed: '업데이트 내역을 불러오지 못했습니다.',
         releaseNotesRead: '확인함',
@@ -7336,7 +7336,7 @@ export const resources = {
         pptGenerator: {
           title: 'PPT 자동 생성',
           subtitle:
-            '주제·자료를 입력하면 두원공조 양식으로 슬라이드를 자동 생성합니다.',
+            '주제·자료를 입력하면 Open ALM 양식으로 슬라이드를 자동 생성합니다.',
           languages: {
             korean: '한국어',
             english: 'English',
@@ -8188,7 +8188,7 @@ export const resources = {
             filePrefix: '특허분석',
             documentTitle: '특허 분석 - {{num}}',
             heading: '특허 분석 리포트 — {{num}}',
-            subtitle: '생성일 {{stamp}} · 두원공조 AI 특허 분석 도우미 (I-Do)',
+            subtitle: '생성일 {{stamp}} · Open ALM AI 특허 분석 도우미 (I-Do)',
             claimNumber: '청구항 {{num}}',
             common: {
               original: '원문',
@@ -8438,7 +8438,7 @@ export const resources = {
             '대화 목록에 표시할 이름을 입력하세요.',
           renameConversationFailed: '대화 이름을 변경하지 못했습니다.',
           renameConversationSuccess: '대화 이름을 변경했습니다.',
-          search: 'AI-DO 통합검색',
+          search: 'Open ALM 통합검색',
           searchConversations: '대화 검색',
           untitledConversation: '제목 없는 대화',
           newConversation: '새 대화',
@@ -8489,7 +8489,7 @@ export const resources = {
           sortRelevance: '관련도',
           subtitle: '{{workspace}}의 문서, 회의, PMS, 일정을 검색합니다.',
           subtitleFallback: '업무 데이터를 검색합니다.',
-          title: 'AI-DO 통합검색',
+          title: 'Open ALM 통합검색',
           updated: '{{date}} 업데이트',
           visibilityPrivate: '비공개',
           visibilityPublic: '공개',
@@ -9078,7 +9078,7 @@ export const resources = {
           },
           selectedDocument: '선택한 문서',
           selectedEvidence: '선택 근거',
-          title: 'AI-DO 통합검색',
+          title: 'Open ALM 통합검색',
           topResults: '상위 결과',
           type: '유형',
           views: {
@@ -10946,7 +10946,7 @@ export const resources = {
         aiGuideTitle: 'AI features guide',
         backToHelpCenter: 'Back to help center',
         featureGuideButton: 'Usage guide',
-        description: 'Find official user guides for AI-DO apps.',
+        description: 'Find official user guides for Open ALM apps.',
         eyebrow: 'Help',
         open: 'Help',
         pmsGuideDescription:
@@ -10958,11 +10958,11 @@ export const resources = {
       businessSites: {
         description: 'Open frequently used internal work sites.',
         groupwareDescription: 'Approvals, boards, and internal work systems',
-        groupwareTitle: 'DWDCC Groupware',
+        groupwareTitle: 'OPEN_ALM Groupware',
         open: 'Work site links',
         title: 'Work Sites',
         welfareMallDescription: 'Employee benefits and welfare shopping',
-        welfareMallTitle: 'DWDCC Welfare Mall',
+        welfareMallTitle: 'OPEN_ALM Welfare Mall',
       },
       releaseNotes: {
         dismissFailed: 'Could not mark the release note as read.',
@@ -11158,9 +11158,9 @@ export const resources = {
         switch: 'Switch workspace',
       },
       documentTitle: {
-        app: '{{app}} | AI-DO',
+        app: '{{app}} | Open ALM',
         profile: 'My Settings',
-        workspaceApp: '{{workspace}} · {{app}} | AI-DO',
+        workspaceApp: '{{workspace}} · {{app}} | Open ALM',
       },
       apps: {
         ai: 'AI',
@@ -11257,7 +11257,7 @@ export const resources = {
       nav: {
         chatbot: 'AI Chatbot',
         'health-checkup': 'Health Checkup',
-        search: 'AI-DO Search',
+        search: 'Open ALM Search',
         drafting: 'Drafting Assistant',
         translate: 'Document Translate/Summary',
         'spec-compare': 'Specification Compare',
@@ -11592,7 +11592,7 @@ export const resources = {
       settings: {
         activeSessions: 'Active Sessions',
         appearance: 'Appearance',
-        aiDoDesktop: 'AI-DO Desktop',
+        aiDoDesktop: 'Open ALM Desktop',
         aiDoDesktopDescription:
           'Keep DM notifications and chat available in each OS tray or status area after closing the browser.',
         aiDoDesktopCurrentOs: 'Current OS',
@@ -11606,11 +11606,11 @@ export const resources = {
         aiDoDesktopMacDescription:
           'Once the macOS build is uploaded, this link will provide the installer.',
         aiDoDesktopMacGuide:
-          'Unzip it or open the DMG, then move AI-DO Desktop to Applications.',
+          'Unzip it or open the DMG, then move Open ALM Desktop to Applications.',
         aiDoDesktopMacTitle: 'macOS',
         aiDoDesktopSettingsDescription:
-          'Download the AI-DO Desktop installer for each operating system.',
-        aiDoDesktopTitle: 'AI-DO Desktop App',
+          'Download the Open ALM Desktop installer for each operating system.',
+        aiDoDesktopTitle: 'Open ALM Desktop App',
         aiDoDesktopUnavailable: 'Preparing',
         aiDoDesktopWindowsDescription:
           'NSIS installer for the Windows tray app.',
@@ -11669,7 +11669,7 @@ export const resources = {
         passwordRequired: 'You must change your password.',
         profile: 'Profile',
         releaseNotes: 'Update History',
-        releaseNotesDescription: 'Review AI-DO release changes.',
+        releaseNotesDescription: 'Review Open ALM release changes.',
         releaseNotesEmpty: 'No updates to show.',
         releaseNotesLoadFailed: 'Could not load update history.',
         releaseNotesRead: 'Read',
@@ -18294,7 +18294,7 @@ export const resources = {
         pptGenerator: {
           title: 'PPT Auto Generation',
           subtitle:
-            'Enter a topic or materials and slides are generated automatically in the Doowon Climate Control format.',
+            'Enter a topic or materials and slides are generated automatically in the Open ALM Climate Control format.',
           languages: {
             korean: 'Korean',
             english: 'English',
@@ -19163,7 +19163,7 @@ export const resources = {
             documentTitle: 'Patent analysis - {{num}}',
             heading: 'Patent analysis report - {{num}}',
             subtitle:
-              'Generated {{stamp}} · Doowon Climate Control AI patent analysis assistant (I-Do)',
+              'Generated {{stamp}} · Open ALM Climate Control AI patent analysis assistant (I-Do)',
             claimNumber: 'Claim {{num}}',
             common: {
               original: 'Original',
@@ -19417,7 +19417,7 @@ export const resources = {
             'Enter the name shown in the conversation list.',
           renameConversationFailed: 'Could not rename the conversation.',
           renameConversationSuccess: 'Conversation renamed.',
-          search: 'AI-DO Search',
+          search: 'Open ALM Search',
           searchConversations: 'Search conversations',
           untitledConversation: 'Untitled conversation',
           newConversation: 'New conversation',
@@ -19469,7 +19469,7 @@ export const resources = {
           subtitle:
             'Search docs, meetings, PMS, and schedules in {{workspace}}.',
           subtitleFallback: 'Search work data.',
-          title: 'AI-DO Search',
+          title: 'Open ALM Search',
           updated: 'Updated {{date}}',
           visibilityPrivate: 'Private',
           visibilityPublic: 'Public',
@@ -20073,7 +20073,7 @@ export const resources = {
           },
           selectedDocument: 'Selected document',
           selectedEvidence: 'Selected evidence',
-          title: 'AI-DO unified search',
+          title: 'Open ALM unified search',
           topResults: 'Top results',
           type: 'Type',
           views: {

@@ -9,33 +9,33 @@ from sqlalchemy import event, select
 
 from dev_accounts import auth_headers, dev_login
 
-from ai_do_api.core.db import get_engine, get_session_factory
-from ai_do_api.domains.auth.models import User, Workspace
-from ai_do_api.domains.files import service as files_service
-from ai_do_api.domains.files.models import (
+from open_alm_api.core.db import get_engine, get_session_factory
+from open_alm_api.domains.auth.models import User, Workspace
+from open_alm_api.domains.files import service as files_service
+from open_alm_api.domains.files.models import (
     FileManagerCorpus,
     FileManagerFile,
     FileManagerFileSourceMetadata,
 )
-from ai_do_api.domains.files import search as file_search
-from ai_do_api.domains.files.external_projection import safe_external_source_metadata
-from ai_do_api.domains.files.router import require_file_search_runtime
-from ai_do_api.domains.files.search import FileSearchRuntime
-from ai_do_api.domains.files.search_projection import build_file_search_document
-from ai_do_api.domains.rag.contracts import RagChunk, RagProjection, RagScopeKind
-from ai_do_api.domains.rag.providers.fake import (
+from open_alm_api.domains.files import search as file_search
+from open_alm_api.domains.files.external_projection import safe_external_source_metadata
+from open_alm_api.domains.files.router import require_file_search_runtime
+from open_alm_api.domains.files.search import FileSearchRuntime
+from open_alm_api.domains.files.search_projection import build_file_search_document
+from open_alm_api.domains.rag.contracts import RagChunk, RagProjection, RagScopeKind
+from open_alm_api.domains.rag.providers.fake import (
     FakeEmbeddingClient,
     FakeVectorIndexClient,
 )
-from ai_do_api.domains.rag.query_service import RagQueryService
-from ai_do_api.domains.rag.service import RagService
-from ai_do_api.domains.source_access.resource_types import FILE_MANAGER_FILE_RESOURCE_TYPE
-from ai_do_api.domains.search.backend_contracts import (
+from open_alm_api.domains.rag.query_service import RagQueryService
+from open_alm_api.domains.rag.service import RagService
+from open_alm_api.domains.source_access.resource_types import FILE_MANAGER_FILE_RESOURCE_TYPE
+from open_alm_api.domains.search.backend_contracts import (
     KeywordSearchHit,
     KeywordSearchQuery,
     KeywordSearchResult,
 )
-from ai_do_api.domains.retrieval.runtime_binding import (
+from open_alm_api.domains.retrieval.runtime_binding import (
     PartitionedRetrievalRuntimeUnavailable,
 )
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ai_do_api.domains.ai.runtime.agent_definitions import (
+from open_alm_api.domains.ai.runtime.agent_definitions import (
     AgentDefinition,
     AgentDefinitionResolver,
     resolve_agent_definitions,

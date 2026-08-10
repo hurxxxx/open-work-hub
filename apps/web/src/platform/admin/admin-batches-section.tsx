@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { FileSearch, Play, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import { Button, Dialog, InlineNotice, Tooltip } from '@ai-do/ui';
+import { Button, Dialog, InlineNotice, Tooltip } from '@open-alm/ui';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {

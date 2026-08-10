@@ -7,8 +7,8 @@ import {
   resolveDmComposerSendCommand,
   shouldSubmitDmComposerKey as shouldSubmitContractDmComposerKey,
   upsertDmConversation,
-} from '@ai-do/contracts/dm';
-import type { DmRealtimeStateResult } from '@ai-do/contracts/dm';
+} from '@open-alm/contracts/dm';
+import type { DmRealtimeStateResult } from '@open-alm/contracts/dm';
 
 import type { DmMessage, DmThread } from '../api/dm-api';
 

@@ -8,17 +8,17 @@ from sqlalchemy import create_engine
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
-from ai_do_api.core.db import Base
-from ai_do_api.domains.auth.models import OrgUnit, User, Workspace
-from ai_do_api.domains.legacy_issues.analysis_catalog import (
+from open_alm_api.core.db import Base
+from open_alm_api.domains.auth.models import OrgUnit, User, Workspace
+from open_alm_api.domains.legacy_issues.analysis_catalog import (
     AnalysisCatalogError,
     FamilyExecutionKind,
     QUERY_FAMILY_CATALOG,
     build_analysis_field_catalog,
     validate_query_request,
 )
-from ai_do_api.domains.legacy_issues import analysis_sql
-from ai_do_api.domains.legacy_issues.analysis_contracts import (
+from open_alm_api.domains.legacy_issues import analysis_sql
+from open_alm_api.domains.legacy_issues.analysis_contracts import (
     AnalysisMode,
     AnalysisPlanV1,
     AnalysisScopeV1,
@@ -39,19 +39,19 @@ from ai_do_api.domains.legacy_issues.analysis_contracts import (
     WindowOperator,
     WindowSpecV1,
 )
-from ai_do_api.domains.legacy_issues.analysis_sql import (
+from open_alm_api.domains.legacy_issues.analysis_sql import (
     compile_analysis_query,
     execute_analysis_query,
 )
-from ai_do_api.domains.legacy_issues.dataset_records import (
+from open_alm_api.domains.legacy_issues.dataset_records import (
     COMMON_MASTER_DATASET_KEY,
     COMMON_MASTER_FIELDS,
 )
-from ai_do_api.domains.legacy_issues.models import (
+from open_alm_api.domains.legacy_issues.models import (
     LegacyIssueDataRevision,
     LegacyIssueRecord,
 )
-from ai_do_api.domains.retrieval.models import RetrievalPartition
+from open_alm_api.domains.retrieval.models import RetrievalPartition
 
 
 FIELDS = build_analysis_field_catalog(COMMON_MASTER_FIELDS)

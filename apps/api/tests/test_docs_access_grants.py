@@ -7,16 +7,16 @@ from sqlalchemy import select
 
 from dev_accounts import dev_login
 
-from ai_do_api.core.db import get_session_factory
-from ai_do_api.domains.auth.models import User, Workspace
-from ai_do_api.domains.auth.security import new_id
-from ai_do_api.domains.docs import access_grants
-from ai_do_api.domains.docs.access_grants import (
+from open_alm_api.core.db import get_session_factory
+from open_alm_api.domains.auth.models import User, Workspace
+from open_alm_api.domains.auth.security import new_id
+from open_alm_api.domains.docs import access_grants
+from open_alm_api.domains.docs.access_grants import (
     bump_doc_grant_expiry_for_meeting,
     revoke_doc_grants_for_meeting_attendee,
 )
-from ai_do_api.domains.docs.models import DocMeetingAccess, NativeDoc
-from ai_do_api.domains.meeting.models import Meeting
+from open_alm_api.domains.docs.models import DocMeetingAccess, NativeDoc
+from open_alm_api.domains.meeting.models import Meeting
 
 
 def test_revoke_doc_grants_for_meeting_attendee_updates_active_grants_and_enqueues(
@@ -103,8 +103,8 @@ def _create_docs_meeting_access_context(
 
     with get_session_factory()() as db:
         workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
-        owner = db.scalar(select(User).where(User.email == "delivery-hub-admin@ai-do.local"))
-        recipient = db.scalar(select(User).where(User.email == "delivery-hub-member@ai-do.local"))
+        owner = db.scalar(select(User).where(User.email == "delivery-hub-admin@open-alm.local"))
+        recipient = db.scalar(select(User).where(User.email == "delivery-hub-member@open-alm.local"))
         assert workspace is not None
         assert owner is not None
         assert recipient is not None

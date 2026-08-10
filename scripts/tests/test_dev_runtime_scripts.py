@@ -22,7 +22,7 @@ class DevRuntimeScriptsTest(unittest.TestCase):
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            env={**os.environ, "AI_DO_SKIP_DOTENV": "1"},
+            env={**os.environ, "OPEN_ALM_SKIP_DOTENV": "1"},
         )
 
     def test_unmanaged_local_smoke_skips_managed_checks(self) -> None:
@@ -30,21 +30,21 @@ class DevRuntimeScriptsTest(unittest.TestCase):
 set -euo pipefail
 source {shlex.quote(str(DEV_SMOKE))}
 systemctl() {{ return 3; }}
-AI_DO_DEV_MANAGED_RUNTIME_CHECK=auto
+OPEN_ALM_DEV_MANAGED_RUNTIME_CHECK=auto
 if dev_managed_runtime_check_enabled; then
   exit 9
 else
   status=$?
 fi
 [[ "$status" == "1" ]]
-AI_DO_DEV_MANAGED_RUNTIME_CHECK=0
+OPEN_ALM_DEV_MANAGED_RUNTIME_CHECK=0
 if dev_managed_runtime_check_enabled; then
   exit 10
 else
   status=$?
 fi
 [[ "$status" == "1" ]]
-AI_DO_DEV_MANAGED_RUNTIME_CHECK=1
+OPEN_ALM_DEV_MANAGED_RUNTIME_CHECK=1
 dev_managed_runtime_check_enabled
 """
         result = self.run_bash(script)
@@ -55,7 +55,7 @@ dev_managed_runtime_check_enabled
         script = f"""
 set -euo pipefail
 source {shlex.quote(str(DEV_SMOKE))}
-AI_DO_DEV_MANAGED_RUNTIME_CHECK=invalid
+OPEN_ALM_DEV_MANAGED_RUNTIME_CHECK=invalid
 if dev_managed_runtime_check_enabled; then
   exit 9
 else
@@ -115,35 +115,35 @@ fi
                 stdout=subprocess.PIPE,
             ).stdout.strip()
             unit_dir = temp / "config" / "systemd" / "user"
-            patent = (unit_dir / "ai-do-dev-worker-patent.service").read_text(
+            patent = (unit_dir / "open-alm-dev-worker-patent.service").read_text(
                 encoding="utf-8"
             )
-            self.assertIn("Environment=AI_DO_WORKER_QUEUE_GROUP=patent", patent)
-            self.assertIn(f"Environment=AI_DO_RUNTIME_REVISION={revision}", patent)
+            self.assertIn("Environment=OPEN_ALM_WORKER_QUEUE_GROUP=patent", patent)
+            self.assertIn(f"Environment=OPEN_ALM_RUNTIME_REVISION={revision}", patent)
             self.assertIn("-Q patent_prior_art_server_v1", patent)
             self.assertIn("--concurrency 1", patent)
-            self.assertIn("PartOf=ai-do-dev-app.service", patent)
+            self.assertIn("PartOf=open-alm-dev-app.service", patent)
             self.assertIn(
                 f"ExecCondition=/usr/bin/test -f {ROOT}/ops/systemd/user/"
-                "ai-do-dev-worker-patent.service.template",
+                "open-alm-dev-worker-patent.service.template",
                 patent,
             )
-            self.assertNotIn("__AI_DO_", patent)
+            self.assertNotIn("__OPEN_ALM_", patent)
 
             revisioned_units = (
-                "ai-do-dev-app.service",
-                "ai-do-dev-worker.service",
-                "ai-do-dev-worker-realtime.service",
-                "ai-do-dev-worker-long.service",
-                "ai-do-dev-worker-patent.service",
-                "ai-do-dev-worker-ai-graph.service",
-                "ai-do-dev-worker-ppt.service",
-                "ai-do-dev-worker-beat.service",
+                "open-alm-dev-app.service",
+                "open-alm-dev-worker.service",
+                "open-alm-dev-worker-realtime.service",
+                "open-alm-dev-worker-long.service",
+                "open-alm-dev-worker-patent.service",
+                "open-alm-dev-worker-ai-graph.service",
+                "open-alm-dev-worker-ppt.service",
+                "open-alm-dev-worker-beat.service",
             )
             for unit_name in revisioned_units:
                 unit_text = (unit_dir / unit_name).read_text(encoding="utf-8")
                 self.assertIn(
-                    f"Environment=AI_DO_RUNTIME_REVISION={revision}",
+                    f"Environment=OPEN_ALM_RUNTIME_REVISION={revision}",
                     unit_text,
                     unit_name,
                 )
@@ -179,7 +179,7 @@ fi
             "--celery-queues --celery-queue-group patent",
             script.replace("\\\n", ""),
         )
-        self.assertIn("ai-do-dev-worker-patent@", script)
+        self.assertIn("open-alm-dev-worker-patent@", script)
         self.assertIn('pool.get("max-concurrency") != 1', script)
         self.assertIn("protected patent queue has an unauthorized consumer", script)
         self.assertIn(
@@ -200,9 +200,9 @@ fi
         self.assertIn('systemctl --user disable "$unit"', script)
         self.assertIn('rm -f "$UNIT_DIR/$unit"', script)
         self.assertIn(
-            "PartOf=ai-do-dev-app.service",
+            "PartOf=open-alm-dev-app.service",
             (
-                ROOT / "ops/systemd/user/ai-do-dev-worker-patent.service.template"
+                ROOT / "ops/systemd/user/open-alm-dev-worker-patent.service.template"
             ).read_text(encoding="utf-8"),
         )
 

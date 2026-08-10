@@ -22,18 +22,18 @@ afterEach(() => {
 });
 
 describe('Matomo tracking configuration', () => {
-  it('uses the AI-DO Matomo server for production hosts', () => {
+  it('uses the Open ALM Matomo server for production hosts', () => {
     expect(
-      resolveMatomoTrackingConfig({}, { hostname: 'dwdcc.kr' }),
+      resolveMatomoTrackingConfig({}, { hostname: 'open-alm.example' }),
     ).toMatchObject({
       siteId: '1',
-      trackerBaseUrl: 'https://matomo.dwdcc.kr/',
+      trackerBaseUrl: 'https://matomo.open-alm.example/',
     });
   });
 
   it('does not track dev or localhost by default', () => {
     expect(
-      resolveMatomoTrackingConfig({}, { hostname: 'dev.dwdcc.kr' }),
+      resolveMatomoTrackingConfig({}, { hostname: 'dev.open-alm.example' }),
     ).toBeNull();
     expect(
       resolveMatomoTrackingConfig({}, { hostname: 'localhost' }),
@@ -43,8 +43,8 @@ describe('Matomo tracking configuration', () => {
   it('can be disabled explicitly', () => {
     expect(
       resolveMatomoTrackingConfig(
-        { VITE_AI_DO_MATOMO_ENABLED: 'false' },
-        { hostname: 'dwdcc.kr' },
+        { VITE_OPEN_ALM_MATOMO_ENABLED: 'false' },
+        { hostname: 'open-alm.example' },
       ),
     ).toBeNull();
   });
@@ -53,31 +53,31 @@ describe('Matomo tracking configuration', () => {
 describe('Matomo tracker installation', () => {
   it('installs the Matomo script and queues the base tracker settings', () => {
     window.history.replaceState({}, '', '/w/main/home');
-    document.title = 'AI-DO Home';
+    document.title = 'Open ALM Home';
 
     installedTracking = installMatomoTracking(
-      { VITE_AI_DO_MATOMO_ALLOWED_HOSTS: 'localhost' },
+      { VITE_OPEN_ALM_MATOMO_ALLOWED_HOSTS: 'localhost' },
       window,
     );
 
     expect(installedTracking).not.toBeNull();
     expect(window._paq).toEqual([
-      ['setTrackerUrl', 'https://matomo.dwdcc.kr/matomo.php'],
+      ['setTrackerUrl', 'https://matomo.open-alm.example/matomo.php'],
       ['setSiteId', '1'],
       ['enableLinkTracking'],
     ]);
     expect(
       document
-        .querySelector('script#ai-do-matomo-tracker')
+        .querySelector('script#open-alm-matomo-tracker')
         ?.getAttribute('src'),
-    ).toBe('https://matomo.dwdcc.kr/matomo.js');
+    ).toBe('https://matomo.open-alm.example/matomo.js');
   });
 
   it('tracks shell route context once per page key', () => {
     window.history.replaceState({}, '', '/w/main/home');
 
     installedTracking = installMatomoTracking(
-      { VITE_AI_DO_MATOMO_ALLOWED_HOSTS: 'localhost' },
+      { VITE_OPEN_ALM_MATOMO_ALLOWED_HOSTS: 'localhost' },
       window,
     );
     window._paq?.splice(0);
@@ -109,7 +109,7 @@ describe('Matomo tracker installation', () => {
 
   it('sets the logged-in user id, login id, and name for later page views', () => {
     installedTracking = installMatomoTracking(
-      { VITE_AI_DO_MATOMO_ALLOWED_HOSTS: 'localhost' },
+      { VITE_OPEN_ALM_MATOMO_ALLOWED_HOSTS: 'localhost' },
       window,
     );
     window._paq?.splice(0);
@@ -118,7 +118,7 @@ describe('Matomo tracker installation', () => {
       {
         userId: 'member',
         userLoginId: 'member',
-        userName: 'AI-DO Member',
+        userName: 'Open ALM Member',
       },
       window,
     );
@@ -127,7 +127,7 @@ describe('Matomo tracker installation', () => {
     expect(window._paq).toEqual([
       ['setUserId', 'member'],
       ['setCustomDimension', 4, 'member'],
-      ['setCustomDimension', 1, 'AI-DO Member'],
+      ['setCustomDimension', 1, 'Open ALM Member'],
       ['resetUserId'],
       ['deleteCustomDimension', 1],
       ['deleteCustomDimension', 4],
@@ -135,13 +135,13 @@ describe('Matomo tracker installation', () => {
   });
 
   it('does not install twice', () => {
-    const env = { VITE_AI_DO_MATOMO_ALLOWED_HOSTS: 'localhost' };
+    const env = { VITE_OPEN_ALM_MATOMO_ALLOWED_HOSTS: 'localhost' };
 
     installedTracking = installMatomoTracking(env, window);
 
     expect(installMatomoTracking(env, window)).toBeNull();
     expect(
-      document.querySelectorAll('script#ai-do-matomo-tracker'),
+      document.querySelectorAll('script#open-alm-matomo-tracker'),
     ).toHaveLength(1);
   });
 });

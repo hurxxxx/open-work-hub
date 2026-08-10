@@ -17,7 +17,7 @@ import {
   InlineNotice,
   Input,
   type DataTableColumn,
-} from '@ai-do/ui';
+} from '@open-alm/ui';
 
 import { UserDateTime } from '@/src/components/date/UserDateTime';
 

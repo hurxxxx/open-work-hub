@@ -11,7 +11,7 @@ def test_docs_native_docs_and_direct_user_share_grant_docs_access(client: TestCl
     admin = _bootstrap_admin_session(client)
 
     owner = _create_user(
-        client, admin["token"], email="docs-owner@ai-do.local", full_name="Docs Owner"
+        client, admin["token"], email="docs-owner@open-alm.local", full_name="Docs Owner"
     )
     owner_id = owner["user"]["id"]
     _grant_workspace_access(client, admin["token"], owner_id, "administrator")
@@ -50,7 +50,7 @@ def test_docs_native_docs_and_direct_user_share_grant_docs_access(client: TestCl
     shared_user = _create_user(
         client,
         admin["token"],
-        email="docs-shared@ai-do.local",
+        email="docs-shared@open-alm.local",
         full_name="Docs Shared User",
     )
     shared_user_id = shared_user["user"]["id"]
@@ -105,7 +105,7 @@ def test_docs_hub_reuses_pms_acl_and_blocks_resharing_of_source_docs(client: Tes
     )
 
     viewer = _create_user(
-        client, admin["token"], email="docs-viewer@ai-do.local", full_name="Docs Viewer"
+        client, admin["token"], email="docs-viewer@open-alm.local", full_name="Docs Viewer"
     )
     _grant_workspace_access(client, admin["token"], viewer["user"]["id"], "administrator")
     _add_task_list_member(client, admin["token"], task_list["id"], viewer["user"]["id"], "viewer")
@@ -145,7 +145,7 @@ def test_docs_hub_reuses_pms_acl_and_blocks_resharing_of_source_docs(client: Tes
     assert viewer_share_response.status_code == 403
 
     member = _create_user(
-        client, admin["token"], email="docs-user@ai-do.local", full_name="Docs User"
+        client, admin["token"], email="docs-user@open-alm.local", full_name="Docs User"
     )
     _grant_workspace_access(client, admin["token"], member["user"]["id"], "administrator")
     _add_task_list_member(client, admin["token"], task_list["id"], member["user"]["id"], "member")
@@ -248,7 +248,7 @@ def test_space_docs_filter_includes_readable_task_linked_docs(client: TestClient
     viewer = _create_user(
         client,
         admin["token"],
-        email="task-linked-doc-viewer@ai-do.local",
+        email="task-linked-doc-viewer@open-alm.local",
         full_name="Task Linked Doc Viewer",
     )
     _grant_workspace_access(client, admin["token"], viewer["user"]["id"], "administrator")
@@ -278,13 +278,13 @@ def test_internal_shared_links_require_auth_and_honor_read_vs_edit(client: TestC
     admin = _bootstrap_admin_session(client)
 
     owner = _create_user(
-        client, admin["token"], email="share-owner@ai-do.local", full_name="Share Owner"
+        client, admin["token"], email="share-owner@open-alm.local", full_name="Share Owner"
     )
     _grant_workspace_access(client, admin["token"], owner["user"]["id"], "administrator")
     owner_token = _login(client, owner["user"]["email"], owner["temporary_password"])
 
     recipient = _create_user(
-        client, admin["token"], email="share-recipient@ai-do.local", full_name="Share Recipient"
+        client, admin["token"], email="share-recipient@open-alm.local", full_name="Share Recipient"
     )
     recipient_token = _login(client, recipient["user"]["email"], recipient["temporary_password"])
 
@@ -359,7 +359,7 @@ def test_workspace_scoped_shareable_users_stay_in_requested_docs_workspace(
     member = _create_user(
         client,
         admin["token"],
-        email="administrator-docs-member@ai-do.local",
+        email="administrator-docs-member@open-alm.local",
         full_name="Administrator Docs Member",
     )
     _grant_workspace_access(client, admin["token"], member["user"]["id"], "administrator")
@@ -372,14 +372,14 @@ def test_workspace_scoped_shareable_users_stay_in_requested_docs_workspace(
     )
     assert response.status_code == 200
     emails = {item["email"] for item in response.json()}
-    assert "admin@ai-do.local" in emails
-    assert "innovation-lab-admin@ai-do.local" not in emails
+    assert "admin@open-alm.local" in emails
+    assert "innovation-lab-admin@open-alm.local" not in emails
 
 
 def test_native_doc_page_patch_rejects_cycle(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
     owner = _create_user(
-        client, admin["token"], email="cycle-owner@ai-do.local", full_name="Cycle Owner"
+        client, admin["token"], email="cycle-owner@open-alm.local", full_name="Cycle Owner"
     )
     _grant_workspace_access(client, admin["token"], owner["user"]["id"], "administrator")
     owner_token = _login(client, owner["user"]["email"], owner["temporary_password"])
@@ -427,13 +427,13 @@ def test_duplicate_doc_via_read_share_creates_private_copy_for_recipient(
     admin = _bootstrap_admin_session(client)
 
     owner = _create_user(
-        client, admin["token"], email="dup-share-owner@ai-do.local", full_name="Owner"
+        client, admin["token"], email="dup-share-owner@open-alm.local", full_name="Owner"
     )
     _grant_workspace_access(client, admin["token"], owner["user"]["id"], "administrator")
     owner_token = _login(client, owner["user"]["email"], owner["temporary_password"])
 
     recipient = _create_user(
-        client, admin["token"], email="dup-share-recipient@ai-do.local", full_name="Recipient"
+        client, admin["token"], email="dup-share-recipient@open-alm.local", full_name="Recipient"
     )
     _grant_workspace_access(client, admin["token"], recipient["user"]["id"], "administrator")
     recipient_token = _login(client, recipient["user"]["email"], recipient["temporary_password"])
@@ -468,8 +468,8 @@ def _bootstrap_admin_session(client: TestClient) -> dict:
     response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "AI-DO Admin",
-            "email": "admin@ai-do.local",
+            "full_name": "Open ALM Admin",
+            "email": "admin@open-alm.local",
             "password": "supersecret123",
         },
     )

@@ -15,4 +15,4 @@ export {
   type CoreBackgroundWorkSourceItemsSnapshot as BackgroundWorkSourceItemsSnapshot,
   type CoreBackgroundWorkStatus as BackgroundWorkStatus,
   type CoreBackgroundWorkToastEvent as BackgroundWorkToastEvent,
-} from '@ai-do/core-web/background-work';
+} from '@open-alm/core-web/background-work';

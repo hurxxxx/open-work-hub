@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
-const AI_SCOPE_STORAGE_PREFIX = 'ai-do.ai.scope.';
+const AI_SCOPE_STORAGE_PREFIX = 'open-alm.ai.scope.';
 
 export function chatScopeStorageKey(
   workspaceSlug: string | undefined,

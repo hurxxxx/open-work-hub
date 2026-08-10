@@ -16,8 +16,8 @@ from collections.abc import Sequence
 
 from alembic import op
 
-from ai_do_api.core.db import Base
-from ai_do_api.domains.dataviz import sys_perf_models as _sys_perf_models  # noqa: F401
+from open_alm_api.core.db import Base
+from open_alm_api.domains.dataviz import sys_perf_models as _sys_perf_models  # noqa: F401
 
 
 revision: str = "e0a1b2c3d4f5"

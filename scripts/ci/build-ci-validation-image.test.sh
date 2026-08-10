@@ -32,11 +32,11 @@ cp \
   "$temporary_root/ops/ci/validation-runner/"
 
 contract="$(
-  AI_DO_VALIDATION_REPO_ROOT="$temporary_root" \
+  OPEN_ALM_VALIDATION_REPO_ROOT="$temporary_root" \
     bash "$helper" --print-contract
 )"
 grep -F \
-  'image=ai-do-validation:node25-python312-pg18-api-a3e8c22a3552-worker-3149583cef20-node-e7c57b3bacf9-484482bced42' \
+  'image=open-alm-validation:node25-python312-pg18-api-a3e8c22a3552-worker-3149583cef20-node-e7c57b3bacf9-484482bced42' \
   <<<"$contract" >/dev/null
 grep -F \
   'image_id=sha256:89345c7907b296ea557a61e9a4c956ee9915c3fb9b611b3923f36bcc4c65d526' \
@@ -56,7 +56,7 @@ grep -F \
 
 printf '\n# contract mismatch\n' \
   >>"$temporary_root/apps/api/pyproject.toml"
-if AI_DO_VALIDATION_REPO_ROOT="$temporary_root" \
+if OPEN_ALM_VALIDATION_REPO_ROOT="$temporary_root" \
   bash "$helper" --verify-source-only \
   >"$temporary_root/mismatch.out" 2>"$temporary_root/mismatch.err"; then
   echo "expected changed API dependency inputs to fail source verification" >&2

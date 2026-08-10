@@ -75,20 +75,20 @@ def env_values() -> dict[str, str]:
 def load_connection_from_env() -> ConnectionInfo:
     values = env_values()
     required_keys = (
-        "AI_DO_PLM_ORACLE_HOST",
-        "AI_DO_PLM_ORACLE_SID",
-        "AI_DO_PLM_ORACLE_USER",
-        "AI_DO_PLM_ORACLE_PASSWORD",
+        "OPEN_ALM_PLM_ORACLE_HOST",
+        "OPEN_ALM_PLM_ORACLE_SID",
+        "OPEN_ALM_PLM_ORACLE_USER",
+        "OPEN_ALM_PLM_ORACLE_PASSWORD",
     )
     missing = [key for key in required_keys if not values.get(key, "").strip()]
     if missing:
         raise ValueError(f"Missing PLM env keys: {', '.join(missing)}")
-    port_text = values.get("AI_DO_PLM_ORACLE_PORT", "1521").strip() or "1521"
+    port_text = values.get("OPEN_ALM_PLM_ORACLE_PORT", "1521").strip() or "1521"
     return ConnectionInfo(
-        host=values["AI_DO_PLM_ORACLE_HOST"].strip(),
-        sid=values["AI_DO_PLM_ORACLE_SID"].strip(),
-        user=values["AI_DO_PLM_ORACLE_USER"].strip(),
-        password=values["AI_DO_PLM_ORACLE_PASSWORD"],
+        host=values["OPEN_ALM_PLM_ORACLE_HOST"].strip(),
+        sid=values["OPEN_ALM_PLM_ORACLE_SID"].strip(),
+        user=values["OPEN_ALM_PLM_ORACLE_USER"].strip(),
+        password=values["OPEN_ALM_PLM_ORACLE_PASSWORD"],
         port=int(port_text),
     )
 
@@ -98,7 +98,7 @@ def resolve_ojdbc_jar(configured: str | None) -> Path | None:
     candidates: list[Path] = []
     if configured:
         candidates.append(Path(configured).expanduser())
-    env_jar = values.get("AI_DO_PLM_OJDBC_JAR", "").strip()
+    env_jar = values.get("OPEN_ALM_PLM_OJDBC_JAR", "").strip()
     if env_jar:
         candidates.append(Path(env_jar).expanduser())
     candidates.extend(DEFAULT_OJDBC_JAR_CANDIDATES)
@@ -606,7 +606,7 @@ def run_smoke(args: argparse.Namespace) -> int:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run a redacted read-only PLM Oracle JDBC smoke check from AI_DO_PLM_* env."
+        description="Run a redacted read-only PLM Oracle JDBC smoke check from OPEN_ALM_PLM_* env."
     )
     parser.add_argument("--ojdbc-jar")
     parser.add_argument(

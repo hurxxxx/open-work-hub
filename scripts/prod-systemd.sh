@@ -6,22 +6,22 @@ COMMAND="status"
 TLS_EXPIRY_BREAK_GLASS=0
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 WORKER_UNITS=(
-  ai-do-prod-worker.service
-  ai-do-prod-worker-realtime.service
-  ai-do-prod-worker-long.service
-  ai-do-prod-worker-patent.service
-  ai-do-prod-worker-ai-graph.service
-  ai-do-prod-worker-ppt.service
+  open-alm-prod-worker.service
+  open-alm-prod-worker-realtime.service
+  open-alm-prod-worker-long.service
+  open-alm-prod-worker-patent.service
+  open-alm-prod-worker-ai-graph.service
+  open-alm-prod-worker-ppt.service
 )
 SEARCH_WRITER_UNITS=(
-  ai-do-prod-api.service
-  ai-do-prod-collab.service
+  open-alm-prod-api.service
+  open-alm-prod-collab.service
   "${WORKER_UNITS[@]}"
-  ai-do-prod-worker-beat.service
+  open-alm-prod-worker-beat.service
 )
 UNITS=(
-  ai-do-privacy-filter.service
-  ai-do-prod-infra.service
+  open-alm-privacy-filter.service
+  open-alm-prod-infra.service
   "${SEARCH_WRITER_UNITS[@]}"
 )
 
@@ -69,7 +69,7 @@ load_prod_systemd_env_file() {
     key="${line%%=*}"
     value="${line#*=}"
     key="$(trim_prod_systemd_env_text "$key")"
-    if [[ "$key" != AI_DO_PROD_* && "$key" != AI_DO_DRAWIO_PORT ]]; then
+    if [[ "$key" != OPEN_ALM_PROD_* && "$key" != OPEN_ALM_DRAWIO_PORT ]]; then
       continue
     fi
     value="$(normalize_prod_systemd_env_value "$value")"
@@ -81,36 +81,36 @@ load_prod_systemd_env_file() {
 
 load_prod_systemd_env_file
 
-EXPECTED_ROOT="$(normalize_prod_systemd_env_value "${AI_DO_PROD_ROOT:-/projects/ai-do/prod}")"
-EXPECTED_BRANCH="$(normalize_prod_systemd_env_value "${AI_DO_PROD_BRANCH:-main}")"
-SMOKE_ATTEMPTS="$(normalize_prod_systemd_env_value "${AI_DO_PROD_SMOKE_ATTEMPTS:-30}")"
-SMOKE_DELAY_SECONDS="$(normalize_prod_systemd_env_value "${AI_DO_PROD_SMOKE_DELAY_SECONDS:-2}")"
-SMOKE_CELERY_TIMEOUT_SECONDS="$(normalize_prod_systemd_env_value "${AI_DO_PROD_SMOKE_CELERY_TIMEOUT_SECONDS:-5}")"
-SMOKE_WEB_HOST="$(normalize_prod_systemd_env_value "${AI_DO_PROD_SMOKE_WEB_HOST:-}")"
-SMOKE_WORKSPACE_PATH="$(normalize_prod_systemd_env_value "${AI_DO_PROD_SMOKE_WORKSPACE_PATH:-}")"
-DRAWIO_PORT="$(normalize_prod_systemd_env_value "${AI_DO_DRAWIO_PORT:-18083}")"
+EXPECTED_ROOT="$(normalize_prod_systemd_env_value "${OPEN_ALM_PROD_ROOT:-/projects/open-alm/prod}")"
+EXPECTED_BRANCH="$(normalize_prod_systemd_env_value "${OPEN_ALM_PROD_BRANCH:-main}")"
+SMOKE_ATTEMPTS="$(normalize_prod_systemd_env_value "${OPEN_ALM_PROD_SMOKE_ATTEMPTS:-30}")"
+SMOKE_DELAY_SECONDS="$(normalize_prod_systemd_env_value "${OPEN_ALM_PROD_SMOKE_DELAY_SECONDS:-2}")"
+SMOKE_CELERY_TIMEOUT_SECONDS="$(normalize_prod_systemd_env_value "${OPEN_ALM_PROD_SMOKE_CELERY_TIMEOUT_SECONDS:-5}")"
+SMOKE_WEB_HOST="$(normalize_prod_systemd_env_value "${OPEN_ALM_PROD_SMOKE_WEB_HOST:-}")"
+SMOKE_WORKSPACE_PATH="$(normalize_prod_systemd_env_value "${OPEN_ALM_PROD_SMOKE_WORKSPACE_PATH:-}")"
+DRAWIO_PORT="$(normalize_prod_systemd_env_value "${OPEN_ALM_DRAWIO_PORT:-18083}")"
 
 require_prod_checkout_identity() {
-  if [[ "${AI_DO_ALLOW_NON_PROD_CHECKOUT_PROD_COMMANDS:-0}" == "1" ]]; then
+  if [[ "${OPEN_ALM_ALLOW_NON_PROD_CHECKOUT_PROD_COMMANDS:-0}" == "1" ]]; then
     return
   fi
   if [[ "$ROOT_DIR" != "$EXPECTED_ROOT" ]]; then
     echo "Refusing to manage production systemd units from unexpected checkout: $ROOT_DIR" >&2
-    echo "Expected $EXPECTED_ROOT, or set AI_DO_ALLOW_NON_PROD_CHECKOUT_PROD_COMMANDS=1 for a deliberate break-glass operation." >&2
+    echo "Expected $EXPECTED_ROOT, or set OPEN_ALM_ALLOW_NON_PROD_CHECKOUT_PROD_COMMANDS=1 for a deliberate break-glass operation." >&2
     exit 1
   fi
   local branch
   branch="$(git -C "$ROOT_DIR" rev-parse --abbrev-ref HEAD)"
   if [[ "$branch" != "$EXPECTED_BRANCH" ]]; then
     echo "Refusing to manage production systemd units from branch '$branch'; expected '$EXPECTED_BRANCH'." >&2
-    echo "Set AI_DO_ALLOW_NON_PROD_CHECKOUT_PROD_COMMANDS=1 only for a deliberate rollback/break-glass operation." >&2
+    echo "Set OPEN_ALM_ALLOW_NON_PROD_CHECKOUT_PROD_COMMANDS=1 only for a deliberate rollback/break-glass operation." >&2
     exit 1
   fi
 }
 
 require_clean_prod_checkout() {
   require_prod_checkout_identity
-  if [[ "${AI_DO_ALLOW_NON_PROD_CHECKOUT_PROD_COMMANDS:-0}" == "1" ]]; then
+  if [[ "${OPEN_ALM_ALLOW_NON_PROD_CHECKOUT_PROD_COMMANDS:-0}" == "1" ]]; then
     return
   fi
   if [[ -n "$(git -C "$ROOT_DIR" status --porcelain)" ]]; then
@@ -132,7 +132,7 @@ root = Path(os.environ["ROOT_DIR"]).resolve()
 unit_dir = Path(os.environ["UNIT_DIR"])
 template_dir = root / "ops" / "systemd" / "user"
 sys.path.insert(0, str(root / "apps" / "worker" / "src"))
-from ai_do_worker.queue_contract import (
+from open_alm_worker.queue_contract import (
     celery_worker_group_concurrency,
     celery_worker_queue_argument,
 )
@@ -142,26 +142,26 @@ runtime_revision = subprocess.check_output(
     text=True,
 ).strip()
 replacements = {
-    "__AI_DO_ROOT__": str(root),
-    "__AI_DO_API_PYTHON__": str(root / "apps" / "api" / ".venv" / "bin" / "python"),
-    "__AI_DO_WORKER_QUEUE_NAMES__": celery_worker_queue_argument(),
-    "__AI_DO_WORKER_DEFAULT_QUEUE_NAMES__": celery_worker_queue_argument("default"),
-    "__AI_DO_WORKER_DEFAULT_CONCURRENCY__": str(celery_worker_group_concurrency("default")),
-    "__AI_DO_WORKER_REALTIME_QUEUE_NAMES__": celery_worker_queue_argument("realtime"),
-    "__AI_DO_WORKER_REALTIME_CONCURRENCY__": str(celery_worker_group_concurrency("realtime")),
-    "__AI_DO_WORKER_LONG_QUEUE_NAMES__": celery_worker_queue_argument("long"),
-    "__AI_DO_WORKER_LONG_CONCURRENCY__": str(celery_worker_group_concurrency("long")),
-    "__AI_DO_WORKER_PATENT_QUEUE_NAMES__": celery_worker_queue_argument("patent"),
-    "__AI_DO_WORKER_PATENT_CONCURRENCY__": str(celery_worker_group_concurrency("patent")),
-    "__AI_DO_WORKER_AI_GRAPH_QUEUE_NAMES__": celery_worker_queue_argument("ai_graph"),
-    "__AI_DO_WORKER_AI_GRAPH_CONCURRENCY__": str(celery_worker_group_concurrency("ai_graph")),
-    "__AI_DO_WORKER_PPT_QUEUE_NAMES__": celery_worker_queue_argument("ppt"),
-    "__AI_DO_WORKER_PPT_CONCURRENCY__": str(celery_worker_group_concurrency("ppt")),
-    "__AI_DO_RUNTIME_REVISION__": runtime_revision,
+    "__OPEN_ALM_ROOT__": str(root),
+    "__OPEN_ALM_API_PYTHON__": str(root / "apps" / "api" / ".venv" / "bin" / "python"),
+    "__OPEN_ALM_WORKER_QUEUE_NAMES__": celery_worker_queue_argument(),
+    "__OPEN_ALM_WORKER_DEFAULT_QUEUE_NAMES__": celery_worker_queue_argument("default"),
+    "__OPEN_ALM_WORKER_DEFAULT_CONCURRENCY__": str(celery_worker_group_concurrency("default")),
+    "__OPEN_ALM_WORKER_REALTIME_QUEUE_NAMES__": celery_worker_queue_argument("realtime"),
+    "__OPEN_ALM_WORKER_REALTIME_CONCURRENCY__": str(celery_worker_group_concurrency("realtime")),
+    "__OPEN_ALM_WORKER_LONG_QUEUE_NAMES__": celery_worker_queue_argument("long"),
+    "__OPEN_ALM_WORKER_LONG_CONCURRENCY__": str(celery_worker_group_concurrency("long")),
+    "__OPEN_ALM_WORKER_PATENT_QUEUE_NAMES__": celery_worker_queue_argument("patent"),
+    "__OPEN_ALM_WORKER_PATENT_CONCURRENCY__": str(celery_worker_group_concurrency("patent")),
+    "__OPEN_ALM_WORKER_AI_GRAPH_QUEUE_NAMES__": celery_worker_queue_argument("ai_graph"),
+    "__OPEN_ALM_WORKER_AI_GRAPH_CONCURRENCY__": str(celery_worker_group_concurrency("ai_graph")),
+    "__OPEN_ALM_WORKER_PPT_QUEUE_NAMES__": celery_worker_queue_argument("ppt"),
+    "__OPEN_ALM_WORKER_PPT_CONCURRENCY__": str(celery_worker_group_concurrency("ppt")),
+    "__OPEN_ALM_RUNTIME_REVISION__": runtime_revision,
 }
 templates = [
-    template_dir / "ai-do-privacy-filter.service.template",
-    *sorted(template_dir.glob("ai-do-prod-*.service.template")),
+    template_dir / "open-alm-privacy-filter.service.template",
+    *sorted(template_dir.glob("open-alm-prod-*.service.template")),
 ]
 for template in templates:
     if not template.exists():
@@ -235,17 +235,17 @@ assert_worker_queues_consumed() {
   local expected_queues protected_queue legacy_queue active_queues_json worker_stats_json
   expected_queues="$(
     PYTHONPATH="$python_path" \
-      "$ROOT_DIR/apps/worker/.venv/bin/python" -m ai_do_worker.queue_contract --celery-queues
+      "$ROOT_DIR/apps/worker/.venv/bin/python" -m open_alm_worker.queue_contract --celery-queues
   )"
   protected_queue="$(
     PYTHONPATH="$python_path" \
-      "$ROOT_DIR/apps/worker/.venv/bin/python" -m ai_do_worker.queue_contract \
+      "$ROOT_DIR/apps/worker/.venv/bin/python" -m open_alm_worker.queue_contract \
         --celery-queues --celery-queue-group patent
   )"
   legacy_queue="$(
     PYTHONPATH="$python_path" \
       "$ROOT_DIR/apps/worker/.venv/bin/python" - <<'PY'
-from ai_do_worker.queue_contract import LEGACY_PATENT_PRIOR_ART_QUEUE
+from open_alm_worker.queue_contract import LEGACY_PATENT_PRIOR_ART_QUEUE
 
 print(LEGACY_PATENT_PRIOR_ART_QUEUE)
 PY
@@ -253,13 +253,13 @@ PY
   active_queues_json="$(
     PYTHONPATH="$python_path" \
       "$ROOT_DIR/apps/worker/.venv/bin/python" -m celery \
-        -A ai_do_worker.celery_app:celery_app inspect active_queues \
+        -A open_alm_worker.celery_app:celery_app inspect active_queues \
         --timeout="$SMOKE_CELERY_TIMEOUT_SECONDS" --json
   )"
   worker_stats_json="$(
     PYTHONPATH="$python_path" \
       "$ROOT_DIR/apps/worker/.venv/bin/python" -m celery \
-        -A ai_do_worker.celery_app:celery_app inspect stats \
+        -A open_alm_worker.celery_app:celery_app inspect stats \
         --timeout="$SMOKE_CELERY_TIMEOUT_SECONDS" --json
   )"
   EXPECTED_QUEUES="$expected_queues" \
@@ -318,7 +318,7 @@ if len(protected_owners) != 1:
     )
     raise SystemExit(1)
 protected_owner = next(iter(protected_owners))
-if not protected_owner.startswith("ai-do-prod-worker-patent@"):
+if not protected_owner.startswith("open-alm-prod-worker-patent@"):
     print(
         "[prod-systemd] protected patent queue has an unauthorized consumer",
         file=sys.stderr,
@@ -351,7 +351,7 @@ assert_unit_runtime_revisions() {
       return 1
     fi
     if ! tr '\0' '\n' <"/proc/$pid/environ" |
-      grep -Fqx "AI_DO_RUNTIME_REVISION=$expected_revision"; then
+      grep -Fqx "OPEN_ALM_RUNTIME_REVISION=$expected_revision"; then
       echo "[prod-systemd] stale runtime revision detected for $unit" >&2
       return 1
     fi
@@ -364,7 +364,7 @@ curl_optional_prod_smoke_path() {
     return 0
   fi
   if [[ "$path" != /* ]]; then
-    echo "AI_DO_PROD_SMOKE_WORKSPACE_PATH must start with '/': $path" >&2
+    echo "OPEN_ALM_PROD_SMOKE_WORKSPACE_PATH must start with '/': $path" >&2
     return 2
   fi
   curl -fsSI "http://127.0.0.1:8000${path}" >/dev/null
@@ -392,7 +392,7 @@ assert_drawio_container_healthy() {
   health_status="$(
     docker inspect \
       --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing-healthcheck{{end}}' \
-      ai-do-prod-drawio \
+      open-alm-prod-drawio \
       2>/dev/null
   )" || return $?
   [[ "$health_status" == "healthy" ]]
@@ -411,13 +411,13 @@ smoke_once() {
   local health_json collab_health_json bootstrap_json
   local expected_revision
   local worker_unit
-  systemctl --user is-active --quiet ai-do-privacy-filter.service || return $?
-  systemctl --user is-active --quiet ai-do-prod-api.service || return $?
-  systemctl --user is-active --quiet ai-do-prod-collab.service || return $?
+  systemctl --user is-active --quiet open-alm-privacy-filter.service || return $?
+  systemctl --user is-active --quiet open-alm-prod-api.service || return $?
+  systemctl --user is-active --quiet open-alm-prod-collab.service || return $?
   for worker_unit in "${WORKER_UNITS[@]}"; do
     systemctl --user is-active --quiet "$worker_unit" || return $?
   done
-  systemctl --user is-active --quiet ai-do-prod-worker-beat.service || return $?
+  systemctl --user is-active --quiet open-alm-prod-worker-beat.service || return $?
   expected_revision="$(git -C "$ROOT_DIR" rev-parse HEAD)" || return $?
   assert_unit_runtime_revisions "$expected_revision" || return $?
   curl -fsS http://127.0.0.1:18081/healthz >/dev/null || return $?
@@ -458,20 +458,20 @@ smoke() {
 
 dump_stacks() {
   local unit
-  for unit in ai-do-prod-api.service ai-do-prod-collab.service; do
+  for unit in open-alm-prod-api.service open-alm-prod-collab.service; do
     echo "[prod-systemd] requesting Python stack dump from $unit via SIGUSR1" >&2
     systemctl --user kill --kill-who=main --signal=SIGUSR1 "$unit"
   done
 }
 
 rollback_patent_queue() {
-  AI_DO_API_AUTO_MIGRATE=0 \
+  OPEN_ALM_API_AUTO_MIGRATE=0 \
     "$ROOT_DIR/apps/api/.venv/bin/python" \
     "$ROOT_DIR/apps/api/scripts/rollback_patent_prior_art_queue.py"
 }
 
 rollback_patent_worker() {
-  local unit="ai-do-prod-worker-patent.service"
+  local unit="open-alm-prod-worker-patent.service"
   local writer
   systemctl --user stop "${SEARCH_WRITER_UNITS[@]}"
   for writer in "${SEARCH_WRITER_UNITS[@]}"; do

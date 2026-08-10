@@ -4,7 +4,7 @@
 
 대상:
 
-- Portal: `dwdcc-OMEN-35L-GT16-0xxx`
+- Portal: `open-alm-OMEN-35L-GT16-0xxx`
 - Local AI replica: `dgx-spark-102`, `dgx-spark-103`
 
 이 문서는 Portal과 두 DGX Spark를 재시작하는 순서, 안전 경계, 완료 판정을
@@ -29,9 +29,9 @@ DGX topology와 watchdog은
 - PostgreSQL main cluster는 `network-online.target`과
   `NetworkManager-wait-online.service` 뒤에 시작한다. 저장소 정본은
   `ops/systemd/system/postgresql@18-main.service.d/network-online.conf`다.
-- CI validation cluster는 Docker가 `ai-do-validation` bridge를 복구한 뒤 시작한다.
+- CI validation cluster는 Docker가 `open-alm-validation` bridge를 복구한 뒤 시작한다.
   저장소 정본은
-  `ops/systemd/system/postgresql@18-ai_do_ci.service.d/network-online.conf`다.
+  `ops/systemd/system/postgresql@18-open_alm_ci.service.d/network-online.conf`다.
 - Portal Inference Gateway user unit은 부팅 시 사용할 PATH를 명시하고 기존
   `.venv`에서 직접 시작한다.
 - 폐기된 `rag-infra.service`는 표준 runtime 대상이 아니며 disabled/inactive다.
@@ -65,17 +65,17 @@ uptime
 systemctl is-system-running
 systemctl --failed --no-pager
 systemctl is-active docker containerd nginx postgresql@18-main.service ssh
-systemctl is-active ai-do-tls-expiry-check.timer
+systemctl is-active open-alm-tls-expiry-check.timer
 pg_lsclusters
 ss -lnt '( sport = :5432 )'
 systemctl show postgresql@18-main.service -p Wants -p After
 
 loginctl show-user "$(id -un)" -p Linger -p State
 systemctl --user --failed --no-pager
-systemctl --user list-units 'ai-do-*.service' --all --no-pager
+systemctl --user list-units 'open-alm-*.service' --all --no-pager
 
-git -C /projects/ai-do/prod status --short --branch
-git -C /projects/ai-do/dev status --short --branch
+git -C /projects/open-alm/prod status --short --branch
+git -C /projects/open-alm/dev status --short --branch
 docker ps --format 'table {{.Names}}\t{{.Status}}'
 
 uname -r
@@ -84,11 +84,11 @@ modinfo -F version nvidia
 nvidia-smi
 test ! -e /run/reboot-required || cat /run/reboot-required
 
-cd /projects/ai-do/prod
+cd /projects/open-alm/prod
 pnpm prod:status
 pnpm prod:smoke
 
-cd /projects/ai-do/dev
+cd /projects/open-alm/dev
 pnpm dev:systemd:status
 pnpm dev:smoke
 pnpm inference-gateway:status
@@ -112,8 +112,8 @@ for host in dgx-spark-102 dgx-spark-103; do
     systemctl is-system-running
     systemctl --failed --no-pager
     systemctl is-active docker vllm-qwen36-docker.service \
-      ai-do-local-ai-backend.service ai-do-local-ai-backend-watchdog.timer
-    systemctl list-timers ai-do-local-ai-backend-watchdog.timer --no-pager
+      open-alm-local-ai-backend.service open-alm-local-ai-backend-watchdog.timer
+    systemctl list-timers open-alm-local-ai-backend-watchdog.timer --no-pager
     nvidia-smi
     free -h
     df -h /
@@ -168,8 +168,8 @@ ssh dgx-spark-102 '
   systemctl is-system-running
   systemctl --failed --no-pager
   systemctl is-active docker vllm-qwen36-docker.service \
-    ai-do-local-ai-backend.service ai-do-local-ai-backend-watchdog.timer
-  systemctl list-timers ai-do-local-ai-backend-watchdog.timer --no-pager
+    open-alm-local-ai-backend.service open-alm-local-ai-backend-watchdog.timer
+  systemctl list-timers open-alm-local-ai-backend-watchdog.timer --no-pager
   nvidia-smi
 '
 
@@ -187,8 +187,8 @@ ssh dgx-spark-103 '
   systemctl is-system-running
   systemctl --failed --no-pager
   systemctl is-active docker vllm-qwen36-docker.service \
-    ai-do-local-ai-backend.service ai-do-local-ai-backend-watchdog.timer haproxy
-  systemctl list-timers ai-do-local-ai-backend-watchdog.timer --no-pager
+    open-alm-local-ai-backend.service open-alm-local-ai-backend-watchdog.timer haproxy
+  systemctl list-timers open-alm-local-ai-backend-watchdog.timer --no-pager
   nvidia-smi
   sudo haproxy -c -f /etc/haproxy/haproxy.cfg
 '
@@ -211,15 +211,15 @@ pg_lsclusters
 ss -lnt '( sport = :5432 )'
 
 systemctl --user --failed --no-pager
-systemctl --user list-units 'ai-do-*.service' --all --no-pager
+systemctl --user list-units 'open-alm-*.service' --all --no-pager
 docker ps --format 'table {{.Names}}\t{{.Status}}'
 nvidia-smi
 
-cd /projects/ai-do/prod
+cd /projects/open-alm/prod
 pnpm prod:status
 pnpm prod:smoke
 
-cd /projects/ai-do/dev
+cd /projects/open-alm/dev
 pnpm dev:systemd:status
 pnpm dev:smoke
 pnpm inference-gateway:smoke
@@ -229,10 +229,10 @@ pnpm inference-gateway:smoke
 
 ```bash
 for url in \
-  https://dwdcc.kr/ \
-  https://dev.dwdcc.kr/ \
-  https://matomo.dwdcc.kr/ \
-  https://grafana.dwdcc.kr/; do
+  https://open-alm.example/ \
+  https://dev.open-alm.example/ \
+  https://matomo.open-alm.example/ \
+  https://grafana.open-alm.example/; do
   curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' "$url"
 done
 ```

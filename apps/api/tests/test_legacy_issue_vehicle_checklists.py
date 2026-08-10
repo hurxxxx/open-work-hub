@@ -6,16 +6,16 @@ from sqlalchemy import create_engine, event, func, select
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException
 
-from ai_do_api.core.db import Base, get_session_factory
-from ai_do_api.core.i18n import translate_message
-from ai_do_api.domains.auth.models import OrgUnit, User, Workspace, utcnow_naive
-from ai_do_api.domains.legacy_issues import router as legacy_issue_router
-from ai_do_api.domains.legacy_issues.dataset_records import (
+from open_alm_api.core.db import Base, get_session_factory
+from open_alm_api.core.i18n import translate_message
+from open_alm_api.domains.auth.models import OrgUnit, User, Workspace, utcnow_naive
+from open_alm_api.domains.legacy_issues import router as legacy_issue_router
+from open_alm_api.domains.legacy_issues.dataset_records import (
     COMMON_MASTER_DATASET_KEY,
     create_dataset_record,
     get_dataset_definition_with_all_module_fields,
 )
-from ai_do_api.domains.legacy_issues.models import (
+from open_alm_api.domains.legacy_issues.models import (
     LegacyIssueAttachment,
     LegacyIssueColumnOrder,
     LegacyIssueDataRevision,
@@ -30,12 +30,12 @@ from ai_do_api.domains.legacy_issues.models import (
     LegacyIssueVehicleModuleChecklist,
     LegacyIssueVehicleStage,
 )
-from ai_do_api.domains.legacy_issues.revisioning import (
+from open_alm_api.domains.legacy_issues.revisioning import (
     REVISION_STATUS_DRAFT,
     REVISION_STATUS_PUBLISHED,
     legacy_issue_dataset_revision_key,
 )
-from ai_do_api.domains.legacy_issues.vehicle_checklists import (
+from open_alm_api.domains.legacy_issues.vehicle_checklists import (
     VEHICLE_CHECKLIST_CHECK_FIELD_KEYS,
     VEHICLE_CHECKLIST_RECORD_KIND,
     VEHICLE_MODEL_RECORD_KIND,
@@ -58,7 +58,7 @@ from ai_do_api.domains.legacy_issues.vehicle_checklists import (
     vehicle_checklist_summaries,
     vehicle_generated_checklist_counts,
 )
-from ai_do_api.domains.retrieval.models import RetrievalPartition
+from open_alm_api.domains.retrieval.models import RetrievalPartition
 from dev_accounts import auth_headers, create_workspace_user_session
 
 
@@ -1552,7 +1552,7 @@ def test_vehicle_checklist_delete_http_enforces_workspace_membership(
         workspace_key="vehicle-checklist-member-workspace",
         workspace_name="Vehicle Checklist Member Workspace",
         login_id="vehiclechecklistmember",
-        email="vehicle-checklist-member@ai-do.local",
+        email="vehicle-checklist-member@open-alm.local",
         full_name="Vehicle Checklist Member",
         role="member",
     )
@@ -1561,7 +1561,7 @@ def test_vehicle_checklist_delete_http_enforces_workspace_membership(
         workspace_key="vehicle-checklist-outsider-workspace",
         workspace_name="Vehicle Checklist Outsider Workspace",
         login_id="vehiclechecklistoutsider",
-        email="vehicle-checklist-outsider@ai-do.local",
+        email="vehicle-checklist-outsider@open-alm.local",
         full_name="Vehicle Checklist Outsider",
         role="member",
     )
@@ -1691,7 +1691,7 @@ def test_vehicle_model_create_allows_members_but_delete_requires_admin(
         workspace_key="vehicle-model-member-workspace",
         workspace_name="Vehicle Model Member Workspace",
         login_id="vehiclemodelmember",
-        email="vehicle-model-member@ai-do.local",
+        email="vehicle-model-member@open-alm.local",
         full_name="Vehicle Model Member",
         role="member",
     )
@@ -1736,7 +1736,7 @@ def test_vehicle_model_create_allows_members_but_delete_requires_admin(
         client,
         workspace_key="vehicle-model-member-workspace",
         login_id="vehiclemodelstageadmin",
-        email="vehicle-model-stage-admin@ai-do.local",
+        email="vehicle-model-stage-admin@open-alm.local",
         full_name="Vehicle Model Stage Admin",
         role="admin",
     )

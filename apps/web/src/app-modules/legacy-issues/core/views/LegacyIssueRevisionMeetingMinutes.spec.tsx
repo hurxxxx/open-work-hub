@@ -61,8 +61,8 @@ vi.mock(
 
 vi.mock('@/src/platform/browser/browser-download', () => browserMocks);
 
-vi.mock('@ai-do/ui', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@ai-do/ui')>()),
+vi.mock('@open-alm/ui', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@open-alm/ui')>()),
   useConfirm: () => ({ confirm: uiMocks.confirm, confirmDialog: null }),
   useToast: () => uiMocks.toastApi,
 }));

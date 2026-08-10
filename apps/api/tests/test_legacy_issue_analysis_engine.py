@@ -9,9 +9,9 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
-from ai_do_api.core.db import Base
-from ai_do_api.domains.auth.models import OrgUnit, User, Workspace
-from ai_do_api.domains.legacy_issues.analysis_catalog import (
+from open_alm_api.core.db import Base
+from open_alm_api.domains.auth.models import OrgUnit, User, Workspace
+from open_alm_api.domains.legacy_issues.analysis_catalog import (
     AnalysisCatalogError,
     EXPECTED_QUERY_FAMILY_COUNT,
     FamilyExecutionKind,
@@ -20,7 +20,7 @@ from ai_do_api.domains.legacy_issues.analysis_catalog import (
     build_analysis_field_catalog,
     validate_query_request,
 )
-from ai_do_api.domains.legacy_issues.analysis_contracts import (
+from open_alm_api.domains.legacy_issues.analysis_contracts import (
     PUBLIC_CELL_MAX_CHARS,
     PUBLIC_QUERY_ROWS_MAX_BYTES,
     AnalysisColumnV1,
@@ -39,25 +39,25 @@ from ai_do_api.domains.legacy_issues.analysis_contracts import (
     QueryRequestV1,
     TimeGrain,
 )
-from ai_do_api.domains.legacy_issues.analysis_sql import (
+from open_alm_api.domains.legacy_issues.analysis_sql import (
     build_visible_records_relation,
     execute_analysis_plan,
     resolve_analysis_scope,
 )
-from ai_do_api.domains.legacy_issues.dataset_records import (
+from open_alm_api.domains.legacy_issues.dataset_records import (
     COMMON_MASTER_DATASET_KEY,
     COMMON_MASTER_FIELDS,
     DatasetFieldDefinition,
 )
-from ai_do_api.domains.legacy_issues.models import (
+from open_alm_api.domains.legacy_issues.models import (
     LegacyIssueAttachment,
     LegacyIssueDataRevision,
     LegacyIssueRecord,
 )
-from ai_do_api.domains.legacy_issues.revisioning import (
+from open_alm_api.domains.legacy_issues.revisioning import (
     legacy_issue_dataset_revision_key,
 )
-from ai_do_api.domains.retrieval.models import RetrievalPartition
+from open_alm_api.domains.retrieval.models import RetrievalPartition
 
 
 MULTI_VALUE_FIELD = DatasetFieldDefinition(

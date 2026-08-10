@@ -1,4 +1,4 @@
-import type { BlockContent } from '@ai-do/ui';
+import type { BlockContent } from '@open-alm/ui';
 import { describe, expect, it } from 'vitest';
 
 import type { PmsTaskListStatus, PmsTaskTemplate } from '../api/pms-api';

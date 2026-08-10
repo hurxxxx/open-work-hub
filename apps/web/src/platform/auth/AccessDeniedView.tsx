@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { InlineNotice } from '@ai-do/ui/feedback/inline-notice';
+import { InlineNotice } from '@open-alm/ui/feedback/inline-notice';
 
 export function AccessDeniedView({
   title,

@@ -5,18 +5,18 @@ from datetime import datetime
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from ai_do_api.core.db import get_session_factory
-from ai_do_api.domains.auth.models import AuditLog
-from ai_do_api.domains.auth.security import new_id
-from ai_do_api.domains.hr.erp_snapshot import (
+from open_alm_api.core.db import get_session_factory
+from open_alm_api.domains.auth.models import AuditLog
+from open_alm_api.domains.auth.security import new_id
+from open_alm_api.domains.hr.erp_snapshot import (
     ERP_EMPLOYEE_SCHEMA_VERSION,
     ERP_EMPLOYEE_SCOPE_KEY,
     ERP_SOURCE_SYSTEM,
 )
-from ai_do_api.domains.hr.groupware_sync import GROUPWARE_SOURCE_SYSTEM
-from ai_do_api.domains.hr.history import GROUPWARE_SCOPE_KEY, HR_SNAPSHOT_SCHEMA_VERSION
-from ai_do_api.domains.hr.master import HR_MASTER_SCHEMA_VERSION
-from ai_do_api.domains.hr.models import (
+from open_alm_api.domains.hr.groupware_sync import GROUPWARE_SOURCE_SYSTEM
+from open_alm_api.domains.hr.history import GROUPWARE_SCOPE_KEY, HR_SNAPSHOT_SCHEMA_VERSION
+from open_alm_api.domains.hr.master import HR_MASTER_SCHEMA_VERSION
+from open_alm_api.domains.hr.models import (
     HrIdentityResolutionState,
     HrMasterConflictRow,
     HrMasterGroupRow,
@@ -34,8 +34,8 @@ def _bootstrap_admin_session(client: TestClient) -> dict:
     response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "AI-DO Admin",
-            "email": "admin@ai-do.local",
+            "full_name": "Open ALM Admin",
+            "email": "admin@open-alm.local",
             "password": "supersecret123",
         },
     )
@@ -572,7 +572,7 @@ def test_admin_can_directly_map_different_name_users_and_revoke(
     assert groupware_directory.json()["items"][0]["record_id"] == groupware_candidate_id
 
     monkeypatch.setattr(
-        "ai_do_api.domains.admin.router.dispatch_hr_master_build",
+        "open_alm_api.domains.admin.router.dispatch_hr_master_build",
         lambda **kwargs: "task-1",
     )
     missing_reason = client.post(
@@ -667,7 +667,7 @@ def test_admin_manages_workforce_categories_and_person_override(
     seeded = _seed_hr_master()
     headers = _auth_headers(session["token"])
     monkeypatch.setattr(
-        "ai_do_api.domains.admin.router.dispatch_hr_master_build",
+        "open_alm_api.domains.admin.router.dispatch_hr_master_build",
         lambda **kwargs: "task-1",
     )
 

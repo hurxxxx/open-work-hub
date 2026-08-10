@@ -144,8 +144,8 @@ test('unknown lane declarations fail clearly', () => {
 });
 
 test('GitLab MR lane labels declare the change lane', () => {
-  const previousLane = process.env.AI_DO_CHANGE_LANE;
-  delete process.env.AI_DO_CHANGE_LANE;
+  const previousLane = process.env.OPEN_ALM_CHANGE_LANE;
+  delete process.env.OPEN_ALM_CHANGE_LANE;
   const fixture = loadFixture('app-only.json');
   try {
     const result = checkAppPlatformGuardrails(fixture.changes, {
@@ -158,9 +158,9 @@ test('GitLab MR lane labels declare the change lane', () => {
     assert.equal(result.laneDeclarationSource, 'CI_MERGE_REQUEST_LABELS');
   } finally {
     if (previousLane === undefined) {
-      delete process.env.AI_DO_CHANGE_LANE;
+      delete process.env.OPEN_ALM_CHANGE_LANE;
     } else {
-      process.env.AI_DO_CHANGE_LANE = previousLane;
+      process.env.OPEN_ALM_CHANGE_LANE = previousLane;
     }
   }
 });
@@ -324,7 +324,7 @@ test('Claude and agent guidance plus MR templates are protected policy surfaces'
 
 test('scaffolded app worker modules stay sandboxed while bootstrap remains core', () => {
   assert.deepEqual(
-    classifyPath('apps/worker/src/ai_do_worker/tasks/apps/meal_invoice/run.py'),
+    classifyPath('apps/worker/src/open_alm_worker/tasks/apps/meal_invoice/run.py'),
     {
       lane: LANES.APP_SANDBOX,
       protectedSurface: null,
@@ -332,16 +332,16 @@ test('scaffolded app worker modules stay sandboxed while bootstrap remains core'
     },
   );
   assert.equal(
-    classifyPath('apps/worker/src/ai_do_worker/celery_app.py').lane,
+    classifyPath('apps/worker/src/open_alm_worker/celery_app.py').lane,
     LANES.CORE_PLATFORM,
   );
   assert.equal(
-    classifyPath('apps/worker/src/ai_do_worker/tasks/__init__.py')
+    classifyPath('apps/worker/src/open_alm_worker/tasks/__init__.py')
       .protectedSurface,
     'core-platform',
   );
   assert.equal(
-    classifyPath('apps/api/src/ai_do_api/api_registry.py').protectedSurface,
+    classifyPath('apps/api/src/open_alm_api/api_registry.py').protectedSurface,
     'api-core',
   );
   assert.equal(
@@ -505,13 +505,13 @@ test('guardrail suite can resolve the lane from an injected env object', () => {
   const fixture = loadFixture('app-only.json');
   const result = runGuardrailSuite({
     changes: fixture.changes,
-    env: { AI_DO_CHANGE_LANE: LANES.APP_SANDBOX },
+    env: { OPEN_ALM_CHANGE_LANE: LANES.APP_SANDBOX },
     validators: [],
   });
 
   assert.equal(result.ok, true);
   assert.equal(result.declaredLane, LANES.APP_SANDBOX);
-  assert.equal(result.laneDeclarationSource, 'AI_DO_CHANGE_LANE');
+  assert.equal(result.laneDeclarationSource, 'OPEN_ALM_CHANGE_LANE');
 });
 
 test('guardrail report formats validation details and protected hits', () => {
@@ -649,11 +649,11 @@ test('manifest contract rejects legacy frontend workspace search authority', () 
 
 test('workspace keyword search harness rejects misplaced adapter declarations', () => {
   const repoRoot = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'ai-do-search-harness-'),
+    path.join(os.tmpdir(), 'open-alm-search-harness-'),
   );
   const apiPath = path.join(
     repoRoot,
-    'apps/api/src/ai_do_api/domains/billing/service.py',
+    'apps/api/src/open_alm_api/domains/billing/service.py',
   );
   fs.mkdirSync(path.dirname(apiPath), { recursive: true });
   fs.writeFileSync(apiPath, 'SOURCE = SearchEntityAdapter()\n', 'utf8');
@@ -666,7 +666,7 @@ test('workspace keyword search harness rejects misplaced adapter declarations', 
 
 test('workspace keyword search harness enforces composition, lifecycle, and locale evidence', () => {
   const repoRoot = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'ai-do-search-contract-'),
+    path.join(os.tmpdir(), 'open-alm-search-contract-'),
   );
   const writeFixture = (relativePath, source) => {
     const absolutePath = path.join(repoRoot, relativePath);
@@ -674,11 +674,11 @@ test('workspace keyword search harness enforces composition, lifecycle, and loca
     fs.writeFileSync(absolutePath, source, 'utf8');
   };
   writeFixture(
-    'apps/api/src/ai_do_api/domains/search/schemas.py',
+    'apps/api/src/open_alm_api/domains/search/schemas.py',
     'class SearchEntityType:\n    BILLING_RECORD = "billing_record"\n',
   );
   writeFixture(
-    'apps/api/src/ai_do_api/domains/billing/search_projection.py',
+    'apps/api/src/open_alm_api/domains/billing/search_projection.py',
     `BILLING_SEARCH_ADAPTER = SearchEntityAdapter(
     entity_type=SearchEntityType.BILLING_RECORD.value,
     label_key="ai.search.entityBilling",
@@ -686,8 +686,8 @@ test('workspace keyword search harness enforces composition, lifecycle, and loca
 `,
   );
   writeFixture(
-    'apps/api/src/ai_do_api/domains/search/default_entity_adapters.py',
-    `from ai_do_api.domains.billing.search_projection import BILLING_SEARCH_ADAPTER
+    'apps/api/src/open_alm_api/domains/search/default_entity_adapters.py',
+    `from open_alm_api.domains.billing.search_projection import BILLING_SEARCH_ADAPTER
 
 ADAPTERS = (BILLING_SEARCH_ADAPTER,)
 `,
@@ -763,8 +763,8 @@ def test_billing_delete_search_lifecycle():
   );
 
   writeFixture(
-    'apps/api/src/ai_do_api/domains/search/default_entity_adapters.py',
-    `from ai_do_api.domains.billing.search_projection import BILLING_SEARCH_ADAPTER
+    'apps/api/src/open_alm_api/domains/search/default_entity_adapters.py',
+    `from open_alm_api.domains.billing.search_projection import BILLING_SEARCH_ADAPTER
 `,
   );
   writeFixture(
@@ -1094,10 +1094,10 @@ test('current CODEOWNERS declares protected surface owners', () => {
 });
 
 test('CODEOWNERS validation reports missing protected owner rules', () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-do-codeowners-'));
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'open-alm-codeowners-'));
   fs.writeFileSync(
     path.join(tempDir, 'CODEOWNERS'),
-    '/apps/web/src/app/ @dwdcc\n',
+    '/apps/web/src/app/ @open-alm\n',
     'utf8',
   );
 
@@ -1129,8 +1129,8 @@ test('GitLab CI validation rejects release validation bypasses', () => {
   );
   for (const source of [
     currentSource.replace(
-      '    - AI_DO_POSTGRES_DSN=postgresql+psycopg://contract:contract@127.0.0.1:1/ai_do_ci_contracts AI_DO_WORKER_QUEUE_GROUP=default pnpm nx run api:ci-contracts --parallel=6 --outputStyle=static --skip-nx-cache',
-      '    - AI_DO_POSTGRES_DSN=postgresql+psycopg://contract:contract@127.0.0.1:1/ai_do_ci_contracts AI_DO_WORKER_QUEUE_GROUP=default pnpm nx run api:ci-contracts --parallel=6 --outputStyle=static --skip-nx-cache || true',
+      '    - OPEN_ALM_POSTGRES_DSN=postgresql+psycopg://contract:contract@127.0.0.1:1/open_alm_ci_contracts OPEN_ALM_WORKER_QUEUE_GROUP=default pnpm nx run api:ci-contracts --parallel=6 --outputStyle=static --skip-nx-cache',
+      '    - OPEN_ALM_POSTGRES_DSN=postgresql+psycopg://contract:contract@127.0.0.1:1/open_alm_ci_contracts OPEN_ALM_WORKER_QUEUE_GROUP=default pnpm nx run api:ci-contracts --parallel=6 --outputStyle=static --skip-nx-cache || true',
     ),
     currentSource.replace(
       '    - pnpm ci:app-web-contracts',
@@ -1141,7 +1141,7 @@ test('GitLab CI validation rejects release validation bypasses', () => {
       '',
     ),
   ]) {
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-do-gitlab-ci-'));
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'open-alm-gitlab-ci-'));
     try {
       fs.writeFileSync(path.join(tempDir, '.gitlab-ci.yml'), source, 'utf8');
       const result = validateGitlabCiGuardrailArtifact({ repoRoot: tempDir });
@@ -1207,7 +1207,7 @@ test('GitLab CI validation rejects weakened Codex gates', () => {
   ];
 
   for (const [source, expectedError] of cases) {
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-do-gitlab-ci-'));
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'open-alm-gitlab-ci-'));
     try {
       fs.writeFileSync(path.join(tempDir, '.gitlab-ci.yml'), source, 'utf8');
       const result = validateGitlabCiGuardrailArtifact({ repoRoot: tempDir });
@@ -1223,7 +1223,7 @@ test('GitLab CI validation rejects weakened Codex gates', () => {
 });
 
 test('GitLab CI validation rejects a shallow release checkout', () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-do-gitlab-ci-'));
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'open-alm-gitlab-ci-'));
   fs.writeFileSync(
     path.join(tempDir, '.gitlab-ci.yml'),
     `release_validation:
@@ -1325,7 +1325,7 @@ test('package harness scripts retain deterministic app contract gates', () => {
     'uv lock --check --directory apps/worker',
     'UV_PROJECT_ENVIRONMENT=../../.runtime/ci-api-venv uv sync --frozen --python 3.12 --group dev --directory apps/api',
     'UV_PROJECT_ENVIRONMENT=../../.runtime/ci-worker-venv uv sync --frozen --python 3.12 --group dev --directory apps/worker',
-    'AI_DO_POSTGRES_DSN=postgresql+psycopg://contract:contract@127.0.0.1:1/ai_do_ci_contracts AI_DO_WORKER_QUEUE_GROUP=default pnpm nx run api:ci-contracts',
+    'OPEN_ALM_POSTGRES_DSN=postgresql+psycopg://contract:contract@127.0.0.1:1/open_alm_ci_contracts OPEN_ALM_WORKER_QUEUE_GROUP=default pnpm nx run api:ci-contracts',
     'nx run api:ci-contracts',
     '--parallel=6',
     '--skip-nx-cache',
@@ -1389,11 +1389,11 @@ test('package harness scripts retain deterministic app contract gates', () => {
   );
   assert.match(
     workerProject.targets['contract-tests'].options.command,
-    /AI_DO_WORKER_BROKER_URL=memory:\/\//,
+    /OPEN_ALM_WORKER_BROKER_URL=memory:\/\//,
   );
   assert.match(
     workerProject.targets['contract-tests'].options.command,
-    /AI_DO_WORKER_RESULT_BACKEND=cache\+memory:\/\//,
+    /OPEN_ALM_WORKER_RESULT_BACKEND=cache\+memory:\/\//,
   );
   for (const target of [
     ...apiLeafTargets.map((targetName) => apiProject.targets[targetName]),

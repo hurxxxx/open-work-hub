@@ -6,7 +6,7 @@ import {
   resolveCoreGlobalRouteAppId,
   resolveCoreManifestNavItemId,
   resolveCoreWorkspaceRouteAppId,
-} from '@ai-do/core-web/shell-navigation';
+} from '@open-alm/core-web/shell-navigation';
 
 import type {
   AppModuleId,

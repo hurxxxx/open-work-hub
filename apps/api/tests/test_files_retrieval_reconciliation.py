@@ -7,31 +7,31 @@ import pytest
 from sqlalchemy import create_engine, event, select, update
 from sqlalchemy.orm import Session
 
-from ai_do_api.core.db import Base
-from ai_do_api.domains.auth.models import OrgUnit, User, Workspace
-from ai_do_api.domains.files.rag_sync import (
+from open_alm_api.core.db import Base
+from open_alm_api.domains.auth.models import OrgUnit, User, Workspace
+from open_alm_api.domains.files.rag_sync import (
     adopt_legacy_file_retrieval_heads,
     capture_file_retrieval_event_watermark,
     inspect_file_retrieval_reconciliation,
     stage_file_retrieval_reconciliation,
 )
-from ai_do_api.domains.files import rag_sync as files_rag_sync
-from ai_do_api.domains.files.models import (
+from open_alm_api.domains.files import rag_sync as files_rag_sync
+from open_alm_api.domains.files.models import (
     FileManagerCorpus,
     FileManagerFile,
     FileManagerFolder,
 )
-from ai_do_api.domains.rag.models import RagSyncJob
-from ai_do_api.domains.rag.contracts import RagSyncOperation
-from ai_do_api.domains.retrieval.models import (
+from open_alm_api.domains.rag.models import RagSyncJob
+from open_alm_api.domains.rag.contracts import RagSyncOperation
+from open_alm_api.domains.retrieval.models import (
     RetrievalPartition,
     RetrievalProjectionEvent,
     RetrievalProjectionHead,
 )
-from ai_do_api.domains.retrieval.projection_fencing import record_projection_event
-from ai_do_api.domains.retrieval.projection_fencing import ProjectionEventRef
-from ai_do_api.domains.search.models import SearchIndexJob
-from ai_do_api.domains.source_access.resource_types import FILE_MANAGER_FILE_RESOURCE_TYPE
+from open_alm_api.domains.retrieval.projection_fencing import record_projection_event
+from open_alm_api.domains.retrieval.projection_fencing import ProjectionEventRef
+from open_alm_api.domains.search.models import SearchIndexJob
+from open_alm_api.domains.source_access.resource_types import FILE_MANAGER_FILE_RESOURCE_TYPE
 
 
 _PARTITION_ID = "6fa05b2e-8f30-4388-af56-c229636fa6c9"

@@ -16,7 +16,7 @@ function workspace(
 ): WorkspaceSummary {
   return {
     id: 'workspace-hq',
-    name: 'AI-DO HQ',
+    name: 'Open ALM HQ',
     role: 'admin',
     slug: 'hq',
     ...overrides,
@@ -26,9 +26,9 @@ function workspace(
 function user(overrides: Partial<AuthUser> = {}): AuthUser {
   return {
     date_format: 'korean',
-    display_name: 'AI-DO Member',
-    email: 'member@ai-do.local',
-    full_name: 'AI-DO Member',
+    display_name: 'Open ALM Member',
+    email: 'member@open-alm.local',
+    full_name: 'Open ALM Member',
     id: 'user-1',
     locale: 'ko-KR',
     login_id: 'member',
@@ -58,7 +58,7 @@ describe('shell ui model', () => {
   });
 
   it('builds compact initials with a fallback', () => {
-    expect(getInitials('AI-DO HQ', 'WS')).toBe('AD');
+    expect(getInitials('Open ALM HQ', 'WS')).toBe('AD');
     expect(getInitials('Delivery', 'WS')).toBe('D');
     expect(getInitials('   ', 'WS')).toBe('WS');
   });

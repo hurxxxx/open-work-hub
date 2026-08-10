@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from ai_do_api.domains.plm import raw_oracle
-from ai_do_api.domains.plm.raw_oracle import (
+from open_alm_api.domains.plm import raw_oracle
+from open_alm_api.domains.plm.raw_oracle import (
     PLM_INTERNAL_ROWNUM_COLUMN,
     PlmRawColumn,
     PlmRawOracleError,
@@ -104,8 +104,8 @@ def test_load_connection_info_requires_plm_settings(
 
     assert exc_info.value.status_code == 503
     assert exc_info.value.code == "plm.connection_config_missing"
-    assert "AI_DO_PLM_ORACLE_HOST" in exc_info.value.params["keys"]
-    assert "AI_DO_PLM_ORACLE_PASSWORD" in exc_info.value.params["keys"]
+    assert "OPEN_ALM_PLM_ORACLE_HOST" in exc_info.value.params["keys"]
+    assert "OPEN_ALM_PLM_ORACLE_PASSWORD" in exc_info.value.params["keys"]
 
 
 def test_resolve_ojdbc_jar_prefers_configured_path(
@@ -149,9 +149,9 @@ def test_build_raw_query_sql_wraps_select_with_rownum_pagination() -> None:
     )
 
     assert "select 부품번호, 리비전 from infodba.viewpart" in sql
-    assert "rownum AI_DO_INTERNAL_RN" in sql
+    assert "rownum OPEN_ALM_INTERNAL_RN" in sql
     assert "rownum <= 151" in sql
-    assert "AI_DO_INTERNAL_RN > 100" in sql
+    assert "OPEN_ALM_INTERNAL_RN > 100" in sql
 
 
 def test_strip_internal_rownum_column_removes_fetch_sentinel() -> None:

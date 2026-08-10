@@ -5,7 +5,7 @@ import asyncio
 from fastapi import HTTPException
 import pytest
 
-from ai_do_api.domains.dm import attachment_upload
+from open_alm_api.domains.dm import attachment_upload
 
 
 def test_read_dm_attachment_upload_returns_content_size_and_sniff_prefix() -> None:

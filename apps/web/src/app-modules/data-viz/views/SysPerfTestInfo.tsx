@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Loader2 } from 'lucide-react';
-import { InlineNotice } from '@ai-do/ui';
+import { InlineNotice } from '@open-alm/ui';
 
 import { cn } from '@/src/lib/utils';
 import { type SysPerfUploadedFile } from '../api/dataviz-api';

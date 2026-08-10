@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { RefreshCw, Search } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 
-import { Button, InlineNotice } from '@ai-do/ui';
+import { Button, InlineNotice } from '@open-alm/ui';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {

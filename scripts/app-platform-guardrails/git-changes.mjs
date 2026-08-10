@@ -76,7 +76,7 @@ export function resolveBaseRef({
 } = {}) {
   const candidates = [
     explicitBase,
-    env.AI_DO_GUARDRAILS_BASE,
+    env.OPEN_ALM_GUARDRAILS_BASE,
     env.CI_MERGE_REQUEST_DIFF_BASE_SHA,
     env.CI_MERGE_REQUEST_TARGET_BRANCH_NAME
       ? `origin/${env.CI_MERGE_REQUEST_TARGET_BRANCH_NAME}`

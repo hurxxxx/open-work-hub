@@ -9,8 +9,8 @@ import pytest
 from dev_accounts import dev_login
 import y_py as Y
 
-from ai_do_api.domains.collaboration import CollabConnectionLimitExceeded
-from ai_do_api.domains.whiteboard.collab import WhiteboardCollabContext, WhiteboardCollabHub
+from open_alm_api.domains.collaboration import CollabConnectionLimitExceeded
+from open_alm_api.domains.whiteboard.collab import WhiteboardCollabContext, WhiteboardCollabHub
 
 
 def test_whiteboard_create_update_reload_and_archive(client: TestClient) -> None:

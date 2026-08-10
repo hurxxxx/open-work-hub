@@ -5,9 +5,9 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from ai_do_api.core.settings import get_settings
-from ai_do_api.domains.dm import attachment_links
-from ai_do_api.domains.dm.models import DmMessageAttachment
+from open_alm_api.core.settings import get_settings
+from open_alm_api.domains.dm import attachment_links
+from open_alm_api.domains.dm.models import DmMessageAttachment
 
 
 def _attachment(*, content_type: str = "text/plain") -> DmMessageAttachment:
@@ -197,7 +197,7 @@ def test_dm_attachment_signature_uses_dedicated_signing_key(
 
 
 def test_dm_attachment_signing_key_env_alias_is_supported(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("AI_DO_DM_ATTACHMENT_SIGNING_KEY", "env-signing-secret")
+    monkeypatch.setenv("OPEN_ALM_DM_ATTACHMENT_SIGNING_KEY", "env-signing-secret")
     get_settings.cache_clear()
     try:
         settings = get_settings()

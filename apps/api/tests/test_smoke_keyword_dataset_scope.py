@@ -5,13 +5,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from ai_do_api.domains.search.backend_contracts import (
+from open_alm_api.domains.search.backend_contracts import (
     KeywordSearchHit,
     KeywordSearchQuery,
     KeywordSearchResult,
 )
-from ai_do_api import smoke_keyword_dataset_scope
-from ai_do_api.smoke_keyword_dataset_scope import verify_workspace_keyword_index
+from open_alm_api import smoke_keyword_dataset_scope
+from open_alm_api.smoke_keyword_dataset_scope import verify_workspace_keyword_index
 
 
 @dataclass(frozen=True)

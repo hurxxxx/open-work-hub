@@ -6,14 +6,14 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ai_do_api.core.db import get_session_factory
-from ai_do_api.domains.auth.access import bind_current_workspace
-from ai_do_api.domains.auth.models import User, Workspace
-from ai_do_api.domains.whiteboard.access import (
+from open_alm_api.core.db import get_session_factory
+from open_alm_api.domains.auth.access import bind_current_workspace
+from open_alm_api.domains.auth.models import User, Workspace
+from open_alm_api.domains.whiteboard.access import (
     load_whiteboard_for_share_token_or_404,
     load_whiteboard_for_user_or_404,
 )
-from ai_do_api.domains.whiteboard.item_mutations import (
+from open_alm_api.domains.whiteboard.item_mutations import (
     WhiteboardItemUpdateCommand,
     update_whiteboard_item,
 )

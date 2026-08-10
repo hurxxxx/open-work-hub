@@ -4,7 +4,7 @@ import logging
 
 import httpx
 
-from ai_do_api.core.logging_security import install_sensitive_http_logging_guard
+from open_alm_api.core.logging_security import install_sensitive_http_logging_guard
 
 
 def test_http_client_request_urls_are_not_logged(caplog) -> None:

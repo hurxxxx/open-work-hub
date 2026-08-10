@@ -5,17 +5,17 @@ from datetime import datetime
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from ai_do_api.core.db import Base
-from ai_do_api.domains.auth.models import User, Workspace
-from ai_do_api.domains.mail.clients import FetchedAttachment, FetchedMessage, MailboxSyncBatch
-from ai_do_api.domains.mail.models import (
+from open_alm_api.core.db import Base
+from open_alm_api.domains.auth.models import User, Workspace
+from open_alm_api.domains.mail.clients import FetchedAttachment, FetchedMessage, MailboxSyncBatch
+from open_alm_api.domains.mail.models import (
     MailAccount,
     MailAttachment,
     MailMailbox,
     MailMessage,
     MailMessageBody,
 )
-from ai_do_api.domains.mail.sync_batch import apply_sync_batch, cursor_for_mailbox_sync
+from open_alm_api.domains.mail.sync_batch import apply_sync_batch, cursor_for_mailbox_sync
 
 
 def _session() -> Session:
@@ -39,7 +39,7 @@ def _user() -> User:
     return User(
         id="user-1",
         login_id="user-1",
-        email="user-1@ai-do.local",
+        email="user-1@open-alm.local",
         full_name="User One",
         password_hash="hash",
         status="active",

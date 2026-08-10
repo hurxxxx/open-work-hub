@@ -7,12 +7,12 @@ import pytest
 from sqlalchemy import literal, select
 from sqlalchemy.dialects import postgresql
 
-from ai_do_api.domains.legacy_issues import analysis_generated_executor as executor
-from ai_do_api.domains.legacy_issues.analysis_generated_executor import (
+from open_alm_api.domains.legacy_issues import analysis_generated_executor as executor
+from open_alm_api.domains.legacy_issues.analysis_generated_executor import (
     GeneratedAnalysisExecutionError,
     execute_generated_analysis,
 )
-from ai_do_api.domains.legacy_issues.analysis_generated_sql import (
+from open_alm_api.domains.legacy_issues.analysis_generated_sql import (
     GENERATED_SQL_AGGREGATE_LIMIT,
     GENERATED_SQL_DETAIL_LIMIT,
     GENERATED_SQL_MAX_PLAN_COST,
@@ -20,7 +20,7 @@ from ai_do_api.domains.legacy_issues.analysis_generated_sql import (
     GENERATED_SQL_TIMEOUT_MS,
     ValidatedGeneratedSql,
 )
-from ai_do_api.domains.legacy_issues.analysis_sql_fallback import (
+from open_alm_api.domains.legacy_issues.analysis_sql_fallback import (
     LegacyIssueGeneratedSqlPlan,
 )
 

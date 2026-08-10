@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Database, Loader2 } from 'lucide-react';
-import { EmptyState, InlineNotice, useConfirm } from '@ai-do/ui';
+import { EmptyState, InlineNotice, useConfirm } from '@open-alm/ui';
 
 import type { PartsState } from './sysperf-parts-state';
 import {

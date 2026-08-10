@@ -35,27 +35,27 @@ _SRC = Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from ai_do_api.core.db import get_session_factory  # noqa: E402
-from ai_do_api.domains.auth.access import is_platform_admin_user  # noqa: E402
-from ai_do_api.domains.auth.models import User, Workspace, utcnow_naive  # noqa: E402
-from ai_do_api.domains.auth.security import new_id  # noqa: E402
-from ai_do_api.domains.legacy_issues.ai_search import (  # noqa: E402
+from open_alm_api.core.db import get_session_factory  # noqa: E402
+from open_alm_api.domains.auth.access import is_platform_admin_user  # noqa: E402
+from open_alm_api.domains.auth.models import User, Workspace, utcnow_naive  # noqa: E402
+from open_alm_api.domains.auth.security import new_id  # noqa: E402
+from open_alm_api.domains.legacy_issues.ai_search import (  # noqa: E402
     reindex_legacy_issue_revision_ai_chunks,
 )
-from ai_do_api.domains.legacy_issues.dataset_records import (  # noqa: E402
+from open_alm_api.domains.legacy_issues.dataset_records import (  # noqa: E402
     COMMON_MASTER_DATASET_KEY,
     get_dataset_definition_with_all_module_fields,
     import_dataset_records,
 )
-from ai_do_api.domains.legacy_issues.models import (  # noqa: E402
+from open_alm_api.domains.legacy_issues.models import (  # noqa: E402
     LegacyIssueAttachment,
     LegacyIssueDataRevision,
     LegacyIssueRecord,
 )
-from ai_do_api.domains.legacy_issues.partitioning import (  # noqa: E402
+from open_alm_api.domains.legacy_issues.partitioning import (  # noqa: E402
     ensure_revision_partition,
 )
-from ai_do_api.domains.legacy_issues.revisioning import (  # noqa: E402
+from open_alm_api.domains.legacy_issues.revisioning import (  # noqa: E402
     REVISION_STATUS_PUBLISHED,
     add_revision_event,
     legacy_issue_dataset_revision_key,

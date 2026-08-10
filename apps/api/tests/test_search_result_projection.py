@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from ai_do_api.domains.search.result_projection import build_search_hit
+from open_alm_api.domains.search.result_projection import build_search_hit
 
 
 def test_search_hit_normalizes_legacy_pms_deep_link() -> None:

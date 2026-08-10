@@ -9,11 +9,11 @@ from fastapi.testclient import TestClient
 import pytest
 from sqlalchemy import select
 
-from ai_do_api.core.db import get_session_factory
-from ai_do_api.core.settings import get_settings
-from ai_do_api.domains.admin.api_keys_router import router as api_keys_router
-from ai_do_api.domains.auth.models import AuditLog, PlatformApiKey
-from ai_do_api.domains.auth.platform_api_keys import (
+from open_alm_api.core.db import get_session_factory
+from open_alm_api.core.settings import get_settings
+from open_alm_api.domains.admin.api_keys_router import router as api_keys_router
+from open_alm_api.domains.auth.models import AuditLog, PlatformApiKey
+from open_alm_api.domains.auth.platform_api_keys import (
     PlatformApiPrincipal,
     PlatformApiKeyServiceError,
     hash_platform_api_key,
@@ -126,7 +126,7 @@ def test_admin_platform_api_key_lifecycle_matches_ui_contract(
         headers=admin_headers,
     )
     assert session_probe.status_code == 401
-    assert session_probe.headers["x-ai-do-error-code"] == "platform_api_key.invalid"
+    assert session_probe.headers["x-open-alm-error-code"] == "platform_api_key.invalid"
     assert session_probe.headers["cache-control"] == "private, no-store"
     assert session_probe.headers["pragma"] == "no-cache"
 
@@ -165,7 +165,7 @@ def test_admin_platform_api_key_lifecycle_matches_ui_contract(
         headers=auth_headers(secret),
     )
     assert rejected_probe.status_code == 401
-    assert rejected_probe.headers["x-ai-do-error-code"] == "platform_api_key.invalid"
+    assert rejected_probe.headers["x-open-alm-error-code"] == "platform_api_key.invalid"
     assert rejected_probe.headers["cache-control"] == "private, no-store"
     assert rejected_probe.headers["pragma"] == "no-cache"
 
@@ -174,13 +174,13 @@ def test_admin_platform_api_key_lifecycle_matches_ui_contract(
         headers=admin_headers,
     )
     assert rejected_reveal.status_code == 409
-    assert rejected_reveal.headers["x-ai-do-error-code"] == "admin.platform_api_key_inactive"
+    assert rejected_reveal.headers["x-open-alm-error-code"] == "admin.platform_api_key_inactive"
     rejected_revoke = client.post(
         f"/api/v1/admin/api-keys/{item['id']}/revoke",
         headers=admin_headers,
     )
     assert rejected_revoke.status_code == 409
-    assert rejected_revoke.headers["x-ai-do-error-code"] == "admin.platform_api_key_inactive"
+    assert rejected_revoke.headers["x-open-alm-error-code"] == "admin.platform_api_key_inactive"
 
     with get_session_factory()() as db:
         audits = list(
@@ -220,7 +220,7 @@ def test_admin_platform_api_keys_reject_unknown_scopes_and_non_admins(
         json={"name": "Invalid scope", "scopes": ["hr:write"]},
     )
     assert invalid_scope.status_code == 400
-    assert invalid_scope.headers["x-ai-do-error-code"] == "admin.platform_api_key_scope_invalid"
+    assert invalid_scope.headers["x-open-alm-error-code"] == "admin.platform_api_key_scope_invalid"
 
     for deceptive_name in ("line\nbreak", "trusted\u202ereversed"):
         invalid_name = client.post(
@@ -229,7 +229,7 @@ def test_admin_platform_api_keys_reject_unknown_scopes_and_non_admins(
             json={"name": deceptive_name, "scopes": ["hr:read"]},
         )
         assert invalid_name.status_code == 400
-        assert invalid_name.headers["x-ai-do-error-code"] == "admin.platform_api_key_name_invalid"
+        assert invalid_name.headers["x-open-alm-error-code"] == "admin.platform_api_key_name_invalid"
 
     issued = client.post(
         "/api/v1/admin/api-keys",
@@ -289,7 +289,7 @@ def test_platform_api_key_rejects_malformed_tokens_and_cannot_become_a_user_sess
             headers=auth_headers(malformed),
         )
         assert rejected.status_code == 401
-        assert rejected.headers["x-ai-do-error-code"] == "platform_api_key.invalid"
+        assert rejected.headers["x-open-alm-error-code"] == "platform_api_key.invalid"
         assert rejected.headers["cache-control"] == "private, no-store"
         assert rejected.headers["pragma"] == "no-cache"
 
@@ -298,7 +298,7 @@ def test_platform_api_key_rejects_malformed_tokens_and_cannot_become_a_user_sess
         params={"api_key": secret},
     )
     assert query_only.status_code == 401
-    assert query_only.headers["x-ai-do-error-code"] == "platform_api_key.required"
+    assert query_only.headers["x-open-alm-error-code"] == "platform_api_key.required"
     assert query_only.headers["cache-control"] == "private, no-store"
     assert query_only.headers["pragma"] == "no-cache"
 
@@ -329,7 +329,7 @@ def test_platform_api_key_encryption_root_fails_closed_without_breaking_hash_aut
     secret = issued["api_key"]
 
     monkeypatch.setenv(
-        "AI_DO_AI_MODEL_CREDENTIAL_ENCRYPTION_KEY",
+        "OPEN_ALM_AI_MODEL_CREDENTIAL_ENCRYPTION_KEY",
         "rotated-platform-key-test-root",
     )
     get_settings.cache_clear()
@@ -340,7 +340,7 @@ def test_platform_api_key_encryption_root_fails_closed_without_breaking_hash_aut
         )
         assert failed_reveal.status_code == 503
         assert (
-            failed_reveal.headers["x-ai-do-error-code"]
+            failed_reveal.headers["x-open-alm-error-code"]
             == "admin.platform_api_key_encryption_unavailable"
         )
 
@@ -365,7 +365,7 @@ def test_platform_api_key_issue_requires_an_encryption_root(
 ) -> None:
     _register_test_routes(client)
     admin_session = dev_login(client)
-    monkeypatch.setenv("AI_DO_AI_MODEL_CREDENTIAL_ENCRYPTION_KEY", "")
+    monkeypatch.setenv("OPEN_ALM_AI_MODEL_CREDENTIAL_ENCRYPTION_KEY", "")
     get_settings.cache_clear()
     try:
         response = client.post(
@@ -375,7 +375,7 @@ def test_platform_api_key_issue_requires_an_encryption_root(
         )
         assert response.status_code == 503
         assert (
-            response.headers["x-ai-do-error-code"]
+            response.headers["x-open-alm-error-code"]
             == "admin.platform_api_key_encryption_unavailable"
         )
         with get_session_factory()() as db:

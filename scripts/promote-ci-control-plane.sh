@@ -2,18 +2,18 @@
 set -Eeuo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-source_project_path="dwdcc/ai-do"
-ci_project_path="dwdcc/ai-do-ci"
-ci_project_name="ai-do-ci"
+source_project_path="open-alm/open-alm"
+ci_project_path="open-alm/open-alm-ci"
+ci_project_name="open-alm-ci"
 staged_ci_file="ops/ci/ci-first.gitlab-ci.yml"
 external_ci_file=".gitlab-ci.yml"
-installed_codex_runner="${CODEX_REVIEW_RUNNER_SCRIPT:-/home/dwdcc/.local/bin/ai-do-codex-review-ci}"
-runner_config_file="${GITLAB_RUNNER_CONFIG_FILE:-/home/dwdcc/.gitlab-runner/config.toml}"
-runner_service="${GITLAB_RUNNER_SERVICE:-ai-do-codex-gitlab-runner.service}"
-installed_egress_policy="/usr/local/sbin/ai-do-ci-validation-egress"
-validation_image="ai-do-validation:node25-python312-pg18-api-a3e8c22a3552-worker-3149583cef20-node-e7c57b3bacf9-484482bced42"
+installed_codex_runner="${CODEX_REVIEW_RUNNER_SCRIPT:-/home/open-alm/.local/bin/open-alm-codex-review-ci}"
+runner_config_file="${GITLAB_RUNNER_CONFIG_FILE:-/home/open-alm/.gitlab-runner/config.toml}"
+runner_service="${GITLAB_RUNNER_SERVICE:-open-alm-codex-gitlab-runner.service}"
+installed_egress_policy="/usr/local/sbin/open-alm-ci-validation-egress"
+validation_image="open-alm-validation:node25-python312-pg18-api-a3e8c22a3552-worker-3149583cef20-node-e7c57b3bacf9-484482bced42"
 validation_image_id="sha256:89345c7907b296ea557a61e9a4c956ee9915c3fb9b611b3923f36bcc4c65d526"
-previous_validation_image="ai-do-validation:node25-python312-pg18-api-a3e8c22a3552-worker-3149583cef20-node-006af39bdce4-484482bced42"
+previous_validation_image="open-alm-validation:node25-python312-pg18-api-a3e8c22a3552-worker-3149583cef20-node-006af39bdce4-484482bced42"
 gitlab_runner_version="18.11.2"
 helper_image_repository="registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper"
 helper_image_manifest_digest="sha256:39e9155b72aff010f55a8bbfdb94fedeb0824de18612795d8b901ac4b42d99f5"
@@ -35,7 +35,7 @@ if [[ -n "$(git -C "$repo_root" status --porcelain)" ]]; then
   exit 2
 fi
 source "$repo_root/scripts/ci/control-plane-lock.sh"
-acquire_ai_do_ci_control_plane_lock
+acquire_open_alm_ci_control_plane_lock
 
 git -C "$repo_root" fetch --quiet origin dev
 source_sha="$(git -C "$repo_root" rev-parse HEAD)"
@@ -64,7 +64,7 @@ bash -n "$repo_root/scripts/codex-review-ci.sh"
 bash -n "$repo_root/scripts/build-ci-validation-image.sh"
 bash -n "$repo_root/scripts/install-ci-validation-runner.sh"
 bash -n "$repo_root/scripts/install-ci-light-validation-runner.sh"
-bash -n "$repo_root/ops/ci/ai-do-ci-validation-egress.sh"
+bash -n "$repo_root/ops/ci/open-alm-ci-validation-egress.sh"
 bash "$repo_root/scripts/codex-review-ci.sh" \
   --validate-gitlab-ci-contract "$repo_root/$staged_ci_file" |
   grep -Fx "feature-codex-release-v1" >/dev/null
@@ -90,9 +90,9 @@ runner_details="$(
 )"
 if [[ "$(
   jq '[.[] | select(
-    .description == "ai-do-validation-docker-runner"
+    .description == "open-alm-validation-docker-runner"
     and (.status == "paused" or .status == "online")
-    and .tag_list == ["ai-do-validation"]
+    and .tag_list == ["open-alm-validation"]
     and (.paused | type) == "boolean"
     and .locked == true
     and .run_untagged == false
@@ -105,9 +105,9 @@ if [[ "$(
 fi
 if [[ "$(
   jq '[.[] | select(
-    .description == "ai-do-validation-light-docker-runner"
+    .description == "open-alm-validation-light-docker-runner"
     and (.status == "paused" or .status == "online")
-    and .tag_list == ["ai-do-validation-light"]
+    and .tag_list == ["open-alm-validation-light"]
     and (.paused | type) == "boolean"
     and .locked == true
     and .run_untagged == false
@@ -120,10 +120,10 @@ if [[ "$(
 fi
 if [[ "$(
   jq '[.[] | select(
-    .description == "ai-do-local-codex-runner"
+    .description == "open-alm-local-codex-runner"
     and (.status == "paused" or .status == "online")
     and (
-      (.tag_list | sort) == ["ai-do-local", "codex-local"]
+      (.tag_list | sort) == ["open-alm-local", "codex-local"]
       or .tag_list == ["codex-local"]
     )
     and (.paused | type) == "boolean"
@@ -138,21 +138,21 @@ fi
 codex_runner_id="$(
   jq -r '
     .[]
-    | select(.description == "ai-do-local-codex-runner")
+    | select(.description == "open-alm-local-codex-runner")
     | .id
   ' <<<"$runner_details"
 )"
 validation_runner_id="$(
   jq -r '
     .[]
-    | select(.description == "ai-do-validation-docker-runner")
+    | select(.description == "open-alm-validation-docker-runner")
     | .id
   ' <<<"$runner_details"
 )"
 light_runner_id="$(
   jq -r '
     .[]
-    | select(.description == "ai-do-validation-light-docker-runner")
+    | select(.description == "open-alm-validation-light-docker-runner")
     | .id
   ' <<<"$runner_details"
 )"
@@ -514,7 +514,7 @@ if ! cmp -s "$repo_root/scripts/codex-review-ci.sh" "$installed_codex_runner"; t
 fi
 if ! sudo -n test -x "$installed_egress_policy" ||
    ! sudo -n cmp -s \
-     "$repo_root/ops/ci/ai-do-ci-validation-egress.sh" \
+     "$repo_root/ops/ci/open-alm-ci-validation-egress.sh" \
      "$installed_egress_policy" ||
    ! sudo -n "$installed_egress_policy" --check; then
   echo "Install and verify the merged validation egress policy before promotion." >&2
@@ -562,17 +562,17 @@ runner_sections = source.split("[[runners]]")
 heavy_sections = [
     index
     for index, section in enumerate(runner_sections)
-    if 'name = "ai-do-validation-docker-runner"' in section
+    if 'name = "open-alm-validation-docker-runner"' in section
 ]
 light_sections = [
     index
     for index, section in enumerate(runner_sections)
-    if 'name = "ai-do-validation-light-docker-runner"' in section
+    if 'name = "open-alm-validation-light-docker-runner"' in section
 ]
 codex_sections = [
     index
     for index, section in enumerate(runner_sections)
-    if 'name = "ai-do-local-codex-runner"' in section
+    if 'name = "open-alm-local-codex-runner"' in section
 ]
 if (
     len(heavy_sections) != 1
@@ -641,7 +641,7 @@ codex_limit_lines = re.findall(
     codex_section,
 )
 if codex_limit_lines == []:
-    name_line = '  name = "ai-do-local-codex-runner"\n'
+    name_line = '  name = "open-alm-local-codex-runner"\n'
     if codex_section.count(name_line) != 1:
         print("Codex runner name is not in the expected state.", file=sys.stderr)
         raise SystemExit(1)
@@ -676,12 +676,12 @@ restart_runner_service
 
 if ! /usr/bin/python3 -I - \
   "$runner_config_file" \
-  "ai-do-validation-docker-runner" \
+  "open-alm-validation-docker-runner" \
   "$validation_image" \
-  "ai-do-validation-light-docker-runner" \
+  "open-alm-validation-light-docker-runner" \
   "redis@sha256:5a77f0f4698389019f828f6387049ce1d5adbea204e56422aa7720dab7034287" \
   "minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e" \
-  "ai-do-opensearch@sha256:fa1c515ec9913749d8cc7c76c66ac22c377ba9d4ac22132ee9a1749792f12d6d" <<'PY'
+  "open-alm-opensearch@sha256:fa1c515ec9913749d8cc7c76c66ac22c377ba9d4ac22132ee9a1749792f12d6d" <<'PY'
 from __future__ import annotations
 
 import sys
@@ -719,7 +719,7 @@ checks = {
     "security_opt": "no-new-privileges:true" in docker.get("security_opt", []),
     "limit": runner.get("limit") == 1,
     "request_concurrency": runner.get("request_concurrency") == 2,
-    "network_mode": docker.get("network_mode") == "ai-do-validation",
+    "network_mode": docker.get("network_mode") == "open-alm-validation",
     "extra_hosts": docker.get("extra_hosts") == ["ci-postgres.internal:172.29.250.1"],
     "allowed_images": docker.get("allowed_images") == [validation_image],
     "pull_policy": docker.get("pull_policy") == ["never"],
@@ -766,7 +766,7 @@ light_checks = {
     "limit": light_runner.get("limit") == 1,
     "request_concurrency": light_runner.get("request_concurrency") == 2,
     "network_mode": (
-        light_docker.get("network_mode") == "ai-do-validation-light"
+        light_docker.get("network_mode") == "open-alm-validation-light"
     ),
     "extra_hosts": light_docker.get("extra_hosts") in (None, []),
     "allowed_images": light_docker.get("allowed_images") == [validation_image],
@@ -795,7 +795,7 @@ if failed:
 codex_matches = [
     candidate
     for candidate in config.get("runners", [])
-    if candidate.get("name") == "ai-do-local-codex-runner"
+    if candidate.get("name") == "open-alm-local-codex-runner"
 ]
 if len(codex_matches) != 1 or codex_matches[0].get("limit") != 2:
     print("Codex runner capacity reservation contract failed.", file=sys.stderr)
@@ -904,7 +904,7 @@ else
   ci_commit_payload="$(
     jq -n \
       --arg branch main \
-      --arg message "chore(ci): promote ai-do ${source_sha} [skip ci]" \
+      --arg message "chore(ci): promote open-alm ${source_sha} [skip ci]" \
       --arg action "$ci_action" \
       --arg file_path "$external_ci_file" \
       --arg content "$ci_content" \
@@ -980,9 +980,9 @@ glab api --method PUT "runners/${validation_runner_id}" \
 validation_runner_changed=1
 updated_validation_runner_json="$(glab api "runners/${validation_runner_id}")"
 if ! jq -e '
-  .description == "ai-do-validation-docker-runner"
+  .description == "open-alm-validation-docker-runner"
   and .status == "online"
-  and .tag_list == ["ai-do-validation"]
+  and .tag_list == ["open-alm-validation"]
   and .paused == false
 ' >/dev/null <<<"$updated_validation_runner_json"; then
   echo "The validation runner did not return online after image promotion." >&2
@@ -996,9 +996,9 @@ glab api --method PUT "runners/${light_runner_id}" \
 light_runner_changed=1
 updated_light_runner_json="$(glab api "runners/${light_runner_id}")"
 if ! jq -e '
-  .description == "ai-do-validation-light-docker-runner"
+  .description == "open-alm-validation-light-docker-runner"
   and .status == "online"
-  and .tag_list == ["ai-do-validation-light"]
+  and .tag_list == ["open-alm-validation-light"]
   and .paused == false
 ' >/dev/null <<<"$updated_light_runner_json"; then
   echo "The light validation runner did not return online after promotion." >&2
@@ -1013,7 +1013,7 @@ glab api --method PUT "runners/${codex_runner_id}" \
 codex_runner_changed=1
 updated_codex_runner_json="$(glab api "runners/${codex_runner_id}")"
 if ! jq -e '
-  .description == "ai-do-local-codex-runner"
+  .description == "open-alm-local-codex-runner"
   and .status == "online"
   and .tag_list == ["codex-local"]
   and .paused == false

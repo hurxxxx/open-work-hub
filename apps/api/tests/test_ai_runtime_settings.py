@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from ai_do_api.core.settings import Settings
+from open_alm_api.core.settings import Settings
 
 
 def test_model_status_targets_accept_runtime_env_aliases() -> None:
     settings = Settings(
-        postgres_dsn="postgresql+psycopg://ai_do_test:ai_do_test@127.0.0.1:5432/ai_do_test",
-        AI_DO_MODEL_STATUS_REQUEST_TIMEOUT_SECONDS="7",
-        AI_DO_MODEL_STATUS_DIAGNOSTIC_TARGETS_JSON='[{"id":"replica-a"}]',
+        postgres_dsn="postgresql+psycopg://open_alm_test:open_alm_test@127.0.0.1:5432/open_alm_test",
+        OPEN_ALM_MODEL_STATUS_REQUEST_TIMEOUT_SECONDS="7",
+        OPEN_ALM_MODEL_STATUS_DIAGNOSTIC_TARGETS_JSON='[{"id":"replica-a"}]',
     )
 
     assert settings.model_status_request_timeout_seconds == 7
@@ -16,7 +16,7 @@ def test_model_status_targets_accept_runtime_env_aliases() -> None:
 
 def test_phase6_runtime_feature_flags_default_off() -> None:
     settings = Settings(
-        postgres_dsn="postgresql+psycopg://ai_do_test:ai_do_test@127.0.0.1:5432/ai_do_test"
+        postgres_dsn="postgresql+psycopg://open_alm_test:open_alm_test@127.0.0.1:5432/open_alm_test"
     )
 
     assert settings.ai_runtime_graph_enabled is False
@@ -40,28 +40,28 @@ def test_phase6_runtime_feature_flags_default_off() -> None:
     assert settings.ai_allowed_external_providers == "openai,anthropic,gemini,kipris"
 
 
-def test_phase6_runtime_shadow_write_flag_accepts_doowon_api_alias() -> None:
+def test_phase6_runtime_shadow_write_flag_accepts_corporate_api_alias() -> None:
     settings = Settings(
-        postgres_dsn="postgresql+psycopg://ai_do_test:ai_do_test@127.0.0.1:5432/ai_do_test",
-        AI_DO_AI_RUNTIME_SHADOW_WRITE_ENABLED="0",
+        postgres_dsn="postgresql+psycopg://open_alm_test:open_alm_test@127.0.0.1:5432/open_alm_test",
+        OPEN_ALM_AI_RUNTIME_SHADOW_WRITE_ENABLED="0",
     )
 
     assert settings.ai_runtime_shadow_write_enabled is False
 
 
-def test_phase6_runtime_trace_payload_cap_accepts_doowon_api_alias() -> None:
+def test_phase6_runtime_trace_payload_cap_accepts_corporate_api_alias() -> None:
     settings = Settings(
-        postgres_dsn="postgresql+psycopg://ai_do_test:ai_do_test@127.0.0.1:5432/ai_do_test",
-        AI_DO_AI_RUNTIME_TRACE_PAYLOAD_MAX_BYTES="65536",
+        postgres_dsn="postgresql+psycopg://open_alm_test:open_alm_test@127.0.0.1:5432/open_alm_test",
+        OPEN_ALM_AI_RUNTIME_TRACE_PAYLOAD_MAX_BYTES="65536",
     )
 
     assert settings.ai_runtime_trace_payload_max_bytes == 65536
 
 
-def test_local_tool_calling_flag_accepts_doowon_api_alias() -> None:
+def test_local_tool_calling_flag_accepts_corporate_api_alias() -> None:
     settings = Settings(
-        postgres_dsn="postgresql+psycopg://ai_do_test:ai_do_test@127.0.0.1:5432/ai_do_test",
-        AI_DO_AI_LOCAL_TOOL_CALLING_ENABLED="1",
+        postgres_dsn="postgresql+psycopg://open_alm_test:open_alm_test@127.0.0.1:5432/open_alm_test",
+        OPEN_ALM_AI_LOCAL_TOOL_CALLING_ENABLED="1",
     )
 
     assert settings.ai_local_tool_calling_enabled is True

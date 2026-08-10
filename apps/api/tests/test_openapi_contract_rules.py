@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ai_do_api.openapi_contract_rules import validate_openapi_contract_rules
+from open_alm_api.openapi_contract_rules import validate_openapi_contract_rules
 
 
 def messages(schema: dict) -> list[str]:

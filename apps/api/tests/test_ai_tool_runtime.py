@@ -4,8 +4,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from ai_do_api.domains.ai import tool_runtime
-from ai_do_api.domains.ai.tool_service import ToolRequiresApproval
+from open_alm_api.domains.ai import tool_runtime
+from open_alm_api.domains.ai.tool_service import ToolRequiresApproval
 
 
 def test_execute_tool_call_maps_approval_required_exception_to_blocked(

@@ -14,14 +14,14 @@ import openpyxl
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-from ai_do_api.core.db import Base
-from ai_do_api.domains.auth.models import User, Workspace
-from ai_do_api.domains.patent_automation import field_defs as fd
-from ai_do_api.domains.patent_automation import invoice_pipeline as ip
-from ai_do_api.domains.patent_automation import service
-from ai_do_api.domains.patent_automation.models import PatentCostLine, PatentCostRun
-from ai_do_api.domains.patent_automation import summary_xlsx as sx
-from ai_do_api.domains.patent_automation.disclosure_form import parse_disclosure_form
+from open_alm_api.core.db import Base
+from open_alm_api.domains.auth.models import User, Workspace
+from open_alm_api.domains.patent_automation import field_defs as fd
+from open_alm_api.domains.patent_automation import invoice_pipeline as ip
+from open_alm_api.domains.patent_automation import service
+from open_alm_api.domains.patent_automation.models import PatentCostLine, PatentCostRun
+from open_alm_api.domains.patent_automation import summary_xlsx as sx
+from open_alm_api.domains.patent_automation.disclosure_form import parse_disclosure_form
 
 
 # ── field registry ──────────────────────────────────────────────────────────
@@ -39,7 +39,7 @@ def test_normalize_numeric_metric_and_money() -> None:
     # 실적/년월(YYYY.MM)은 6자리 YYYYMM로, 금액 노이즈는 반올림
     assert ip._to_int  # smoke
     assert fd  # smoke
-    from ai_do_api.domains.patent_automation import service
+    from open_alm_api.domains.patent_automation import service
 
     assert service._normalize_numeric("submit_metric", "2007.02") == "200702"
     assert service._normalize_numeric("application_metric", "200704") == "200704"
@@ -152,7 +152,7 @@ def test_parse_overseas_sinsegi_oa() -> None:
 
 
 # ── overseas 유미 (금액-통화 순서 "(1115.00 EUR)" + "환율:1740" + 분담율) ─────────
-# 청구서상 외화는 총액(1115.00 EUR)이나 HMC 분담분을 제외한 두원 몫만 청구되므로
+# 청구서상 외화는 총액(1115.00 EUR)이나 HMC 분담분을 제외한 Open ALM 몫만 청구되므로
 # 표시 외화 = 원화비용 ÷ 환율 = 557.50 EUR 로 일관화한다.
 OVERSEAS_YOUME = (
     "제 목: 독일 특허출원 102012113179.1\n"
@@ -237,7 +237,7 @@ MARKPRO_DOMESTIC = (
     "비용분담정보 관납료(\\) 수수료(\\) 합계(\\)\n"
     "1 KR P 2013-0086164 10-2064159-00-00 2026-01-03 7 6 2033-07-22\n"
     "열교환기용 튜브\n"
-    "주식회사 두원공조\n"
+    "주식회사 Open ALM\n"
     "205,800 16,000 221,800\n"
 )
 
@@ -261,7 +261,7 @@ MARKPRO_OVERSEAS = (
     "총 건 수: 1건\n"
     "현지비용(US$) 현지비용(￦) 수수료(￦) 부가세(￦) 송금수수료(￦) 합계(￦)\n"
     "1 CN ZL201910260958.7 8 2039-04-02 1020190044248\n"
-    "P 201910260958.7 2026-04-02 DOOWON CLIMATE CONTROL CO. LTD.\n"
+    "P 201910260958.7 2026-04-02 OPEN ALM CLIMATE CONTROL CO. LTD.\n"
     "차량용 냉난방 시스템\n"
     "376.62 561,239 130,000 13,000 31,549 735,788\n"
 )
@@ -379,7 +379,7 @@ OVERSEAS_HANYANG = (
     "제 목：차량의 공조 장치\n"
     "미국 특허출원(18/228,493) Miscellaneous Action대응료 청구의 건\n"
     "구분 청구내역 외화비용 원화비용\n"
-    "·Miscellaneous Action대응료[두원공조] USD 175.00 WON 265,767\n"
+    "·Miscellaneous Action대응료[Open ALM] USD 175.00 WON 265,767\n"
     "해외비용 ·국외송금수수료 USD 0.00 WON 500\n"
     "소 계(A) USD 175.00 WON 266,267\n"
     "·대리인 수수료 WON 67,933\n"
@@ -507,8 +507,8 @@ def _line(**kw):
 def test_import_scope_guard_preserves_other_scope() -> None:
     """부분 업로드(국내-only/해외-only)가 다른 scope의 공유 레코드를 미러 삭제하지 못하게 하는
     가드. 해외-only 업로드 시 국내(연도/수기) 레코드는 삭제 대상이 아니어야 한다."""
-    from ai_do_api.domains.patent_automation import field_defs as fd
-    from ai_do_api.domains.patent_automation import service
+    from open_alm_api.domains.patent_automation import field_defs as fd
+    from open_alm_api.domains.patent_automation import service
 
     ov = fd.OVERSEAS_SOURCE_SHEET
     # 해외-only 업로드: 해외 레코드만 삭제 대상, 국내(연도/수기=None)는 보존.
@@ -578,7 +578,7 @@ def test_delete_record_preserves_cost_lines_by_nulling_record_reference() -> Non
 
 
 def test_build_approval_html_header_count_is_vat_count() -> None:
-    from ai_do_api.domains.patent_automation import approval_html as ah
+    from open_alm_api.domains.patent_automation import approval_html as ah
 
     lines = [
         _line(section="심사청구", supply_amount=500000, vat=0),  # 관납료만 → vat 0
@@ -595,7 +595,7 @@ def test_build_approval_html_header_count_is_vat_count() -> None:
 
 
 def test_parse_count_amount_xlsx_roundtrip() -> None:
-    from ai_do_api.domains.patent_automation import approval_html as ah
+    from open_alm_api.domains.patent_automation import approval_html as ah
 
     lines = [_line(), _line(section="심사청구", supply_amount=839300, vat=0)]
     xlsx = sx.build_count_amount_summary(lines, period="2026-01", date_label="2026.01")

@@ -50,7 +50,7 @@ defines the shared durable execution and artifact model.
   run. Reload reads the conversation and graph-run projection; live events only
   accelerate the same DB-backed state.
 - Before applying the analysis data-plane migration, a database administrator
-  provisions the cluster-wide `ai_do_analysis_reader` role and grants it to the
+  provisions the cluster-wide `open_alm_analysis_reader` role and grants it to the
   application role. The idempotent bootstrap is
   `psql "$ADMIN_DSN" --set=app_role=<application-role> --file scripts/provision-ai-analysis-reader.sql`.
   The migration fails closed if this least-privilege role contract is absent.

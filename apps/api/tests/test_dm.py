@@ -5,7 +5,7 @@ import base64
 from fastapi.testclient import TestClient
 import pytest
 
-from ai_do_api.domains.dm.request_normalization import DM_MESSAGE_BODY_MAX_LENGTH
+from open_alm_api.domains.dm.request_normalization import DM_MESSAGE_BODY_MAX_LENGTH
 from dev_accounts import auth_headers, create_workspace_user_session, dev_login
 
 
@@ -645,14 +645,14 @@ def test_group_dm_management_tracks_membership_lifecycle(client: TestClient) -> 
         client,
         workspace_key="administrator",
         login_id="dmadded",
-        email="dm-added@ai-do.local",
+        email="dm-added@open-alm.local",
         full_name="DM Added",
     )
     member_added = create_workspace_user_session(
         client,
         workspace_key="administrator",
         login_id="dmmemberadded",
-        email="dm-member-added@ai-do.local",
+        email="dm-member-added@open-alm.local",
         full_name="DM Member Added",
     )
 

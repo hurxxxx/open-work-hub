@@ -8,18 +8,18 @@ from sqlalchemy import create_engine, inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ai_do_api.core.db import Base
-from ai_do_api.domains.hr.erp_snapshot import run_erp_hr_snapshot
-from ai_do_api.domains.hr.groupware_sync import GroupwareOrgRow, GroupwareUserRow
-from ai_do_api.domains.hr.history import (
+from open_alm_api.core.db import Base
+from open_alm_api.domains.hr.erp_snapshot import run_erp_hr_snapshot
+from open_alm_api.domains.hr.groupware_sync import GroupwareOrgRow, GroupwareUserRow
+from open_alm_api.domains.hr.history import (
     canonical_payload_hash,
     prune_hr_history,
     run_groupware_hr_sync,
 )
-from ai_do_api.domains.hr.identity_resolution import (
+from open_alm_api.domains.hr.identity_resolution import (
     advance_identity_resolution_revision,
 )
-from ai_do_api.domains.hr.master import (
+from open_alm_api.domains.hr.master import (
     HR_MASTER_ERP_VIEW_SCHEMA_VERSION,
     HR_MASTER_SCHEMA_VERSION,
     HrMasterErpEmployeeSnapshotError,
@@ -31,7 +31,7 @@ from ai_do_api.domains.hr.master import (
     load_latest_succeeded_hr_master_run,
     prune_hr_master_history,
 )
-from ai_do_api.domains.hr.models import (
+from open_alm_api.domains.hr.models import (
     HrMasterConflictRow,
     HrMasterGroupRow,
     HrMasterPersonRow,

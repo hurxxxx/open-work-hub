@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from fastapi import HTTPException
 import pytest
 
-from ai_do_api.domains.dm import serialization
+from open_alm_api.domains.dm import serialization
 
 
 NOW = datetime(2026, 5, 21, 12, 0, 0)

@@ -483,7 +483,7 @@ function validateManifestContractFields(
     );
   } else if (
     apiDomain.value !== null &&
-    !pathExists(`apps/api/src/ai_do_api/domains/${apiDomain.value}`)
+    !pathExists(`apps/api/src/open_alm_api/domains/${apiDomain.value}`)
   ) {
     pushManifestError(
       errors,

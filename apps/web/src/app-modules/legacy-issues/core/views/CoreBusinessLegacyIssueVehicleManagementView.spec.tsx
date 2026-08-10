@@ -105,7 +105,7 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: testMocks.translate }),
 }));
 
-vi.mock('@ai-do/ui', () => ({
+vi.mock('@open-alm/ui', () => ({
   Dialog: ({
     actions,
     children,

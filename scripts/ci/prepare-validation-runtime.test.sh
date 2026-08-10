@@ -36,15 +36,15 @@ combined_sha256 \
   "$repo_root/apps/worker/uv.lock" >"$worker_marker"
 
 runtime_env=(
-  "AI_DO_NODE_IMAGE_DEPENDENCY_FILE=$node_marker"
-  "AI_DO_API_IMAGE_DEPENDENCY_FILE=$api_marker"
-  "AI_DO_WORKER_IMAGE_DEPENDENCY_FILE=$worker_marker"
-  "AI_DO_NODE_IMAGE_MODULES=$node_runtime"
-  "AI_DO_API_IMAGE_VENV=$api_runtime"
-  "AI_DO_WORKER_IMAGE_VENV=$worker_runtime"
-  "AI_DO_NODE_CHECKOUT_MODULES_LINK=$temporary_root/checkout/node_modules"
-  "AI_DO_API_CHECKOUT_VENV_LINK=$temporary_root/checkout/.runtime/ci-api-venv"
-  "AI_DO_WORKER_CHECKOUT_VENV_LINK=$temporary_root/checkout/.runtime/ci-worker-venv"
+  "OPEN_ALM_NODE_IMAGE_DEPENDENCY_FILE=$node_marker"
+  "OPEN_ALM_API_IMAGE_DEPENDENCY_FILE=$api_marker"
+  "OPEN_ALM_WORKER_IMAGE_DEPENDENCY_FILE=$worker_marker"
+  "OPEN_ALM_NODE_IMAGE_MODULES=$node_runtime"
+  "OPEN_ALM_API_IMAGE_VENV=$api_runtime"
+  "OPEN_ALM_WORKER_IMAGE_VENV=$worker_runtime"
+  "OPEN_ALM_NODE_CHECKOUT_MODULES_LINK=$temporary_root/checkout/node_modules"
+  "OPEN_ALM_API_CHECKOUT_VENV_LINK=$temporary_root/checkout/.runtime/ci-api-venv"
+  "OPEN_ALM_WORKER_CHECKOUT_VENV_LINK=$temporary_root/checkout/.runtime/ci-worker-venv"
 )
 
 env "${runtime_env[@]}" bash "$helper"

@@ -6,9 +6,9 @@ from fastapi.responses import StreamingResponse
 import pytest
 from starlette.exceptions import HTTPException
 
-from ai_do_api.domains.auth.models import utcnow_naive
-from ai_do_api.domains.legacy_issues import attachment_indexing
-from ai_do_api.domains.legacy_issues.dataset_records import (
+from open_alm_api.domains.auth.models import utcnow_naive
+from open_alm_api.domains.legacy_issues import attachment_indexing
+from open_alm_api.domains.legacy_issues.dataset_records import (
     DATASET_ATTACHMENT_MAX_BYTES,
     DATASET_ATTACHMENT_DESCRIPTION_MAX_CHARS,
     LegacyIssueDatasetDefinition,
@@ -18,7 +18,7 @@ from ai_do_api.domains.legacy_issues.dataset_records import (
     dataset_attachment_content_headers,
     normalize_attachment_description,
 )
-from ai_do_api.domains.legacy_issues.attachment_indexing import (
+from open_alm_api.domains.legacy_issues.attachment_indexing import (
     _CHUNK_OVERLAP_CHARS,
     AttachmentExtractionArtifact,
     _attachment_summary_source_text,
@@ -27,14 +27,14 @@ from ai_do_api.domains.legacy_issues.attachment_indexing import (
     _sanitize_attachment_summary,
     _split_text,
 )
-from ai_do_api.domains.legacy_issues.ai_search import build_legacy_issue_search_terms
-from ai_do_api.domains.legacy_issues.models import (
+from open_alm_api.domains.legacy_issues.ai_search import build_legacy_issue_search_terms
+from open_alm_api.domains.legacy_issues.models import (
     LegacyIssueAiChunk,
     LegacyIssueAttachment,
     LegacyIssueDataRevision,
     LegacyIssueRecord,
 )
-from ai_do_api.domains.legacy_issues.router import (
+from open_alm_api.domains.legacy_issues.router import (
     LegacyIssueAssistantMatchedChunkItem,
     LegacyIssueAttachmentUpdateRequest,
 )
@@ -92,7 +92,7 @@ def test_attachment_update_request_tracks_partial_patch_fields() -> None:
 def test_direct_attachment_paths_reject_disabled_compressor_module(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from ai_do_api.domains.legacy_issues import router as legacy_router
+    from open_alm_api.domains.legacy_issues import router as legacy_router
 
     attachment = SimpleNamespace(record_id="record-1")
 
@@ -147,7 +147,7 @@ def test_direct_attachment_paths_reject_disabled_compressor_module(
 def test_attachment_patch_uses_record_revision_editor(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from ai_do_api.domains.legacy_issues import router as legacy_router
+    from open_alm_api.domains.legacy_issues import router as legacy_router
 
     attachment = _attachment_for_revision("published-revision")
     events: list[str] = []
@@ -234,7 +234,7 @@ def test_attachment_patch_uses_record_revision_editor(
 async def test_attachment_upload_uses_record_revision_editor(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from ai_do_api.domains.legacy_issues import router as legacy_router
+    from open_alm_api.domains.legacy_issues import router as legacy_router
 
     attachment = _attachment_for_revision("published-revision")
     events: list[str] = []
@@ -297,7 +297,7 @@ async def test_attachment_upload_uses_record_revision_editor(
 def test_attachment_delete_uses_record_revision_editor(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from ai_do_api.domains.legacy_issues import router as legacy_router
+    from open_alm_api.domains.legacy_issues import router as legacy_router
 
     attachment = _attachment_for_revision("published-revision")
     events: list[str] = []
@@ -362,7 +362,7 @@ def test_attachment_delete_uses_record_revision_editor(
 def test_attachment_index_retry_uses_record_revision_editor(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from ai_do_api.domains.legacy_issues import router as legacy_router
+    from open_alm_api.domains.legacy_issues import router as legacy_router
 
     attachment = _attachment_for_revision("published-revision")
     events: list[str] = []
@@ -772,11 +772,11 @@ def test_draft_attachment_projection_copy_flushes_attachment_first(
         events.append("copy_projection")
 
     monkeypatch.setattr(
-        "ai_do_api.domains.legacy_issues.dataset_records.list_dataset_attachments",
+        "open_alm_api.domains.legacy_issues.dataset_records.list_dataset_attachments",
         fake_list_dataset_attachments,
     )
     monkeypatch.setattr(
-        "ai_do_api.domains.legacy_issues.dataset_records._copy_dataset_attachment_index_projection",
+        "open_alm_api.domains.legacy_issues.dataset_records._copy_dataset_attachment_index_projection",
         fake_copy_projection,
     )
 
@@ -875,11 +875,11 @@ def test_draft_attachment_copy_requeues_in_flight_indexing(
             return None
 
     monkeypatch.setattr(
-        "ai_do_api.domains.legacy_issues.dataset_records.list_dataset_attachments",
+        "open_alm_api.domains.legacy_issues.dataset_records.list_dataset_attachments",
         lambda *_args, **_kwargs: [source_attachment],
     )
     monkeypatch.setattr(
-        "ai_do_api.domains.legacy_issues.settings.get_legacy_issue_settings",
+        "open_alm_api.domains.legacy_issues.settings.get_legacy_issue_settings",
         lambda: SimpleNamespace(ai_attachment_index_enabled=indexing_enabled),
     )
 

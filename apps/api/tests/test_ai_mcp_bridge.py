@@ -6,10 +6,10 @@ from dev_accounts import dev_login
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ai_do_api.core.settings import get_settings
-from ai_do_api.domains.ai.registry import reset_ai_capability_registry
-from ai_do_api.core.db import get_engine
-from ai_do_api.domains.auth.models import PlatformAppVisibility
+from open_alm_api.core.settings import get_settings
+from open_alm_api.domains.ai.registry import reset_ai_capability_registry
+from open_alm_api.core.db import get_engine
+from open_alm_api.domains.auth.models import PlatformAppVisibility
 
 
 def _dev_login(client: TestClient, account_key: str) -> dict:
@@ -117,7 +117,7 @@ def test_manifest_and_openapi_include_pms_write_tools_when_enabled(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("AI_DO_AI_WRITE_TOOLS_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_AI_WRITE_TOOLS_ENABLED", "1")
     _reset_settings_and_registry()
     try:
         auth = _dev_login(client, "delivery-hub-admin")
@@ -157,7 +157,7 @@ def test_manifest_and_openapi_include_pms_write_tools_when_enabled(
         assert "/mcp/tools/planner.delete_event" in openapi_payload["paths"]
         assert "/mcp/tools/docs.create_page" not in openapi_payload["paths"]
     finally:
-        monkeypatch.delenv("AI_DO_AI_WRITE_TOOLS_ENABLED", raising=False)
+        monkeypatch.delenv("OPEN_ALM_AI_WRITE_TOOLS_ENABLED", raising=False)
         _reset_settings_and_registry()
 
 
@@ -165,7 +165,7 @@ def test_planner_app_manifest_and_openapi_include_write_tool_when_enabled(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("AI_DO_AI_WRITE_TOOLS_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_AI_WRITE_TOOLS_ENABLED", "1")
     _reset_settings_and_registry()
     try:
         auth = _dev_login(client, "delivery-hub-admin")
@@ -196,5 +196,5 @@ def test_planner_app_manifest_and_openapi_include_write_tool_when_enabled(
             "/mcp/tools/planner.delete_event",
         }
     finally:
-        monkeypatch.delenv("AI_DO_AI_WRITE_TOOLS_ENABLED", raising=False)
+        monkeypatch.delenv("OPEN_ALM_AI_WRITE_TOOLS_ENABLED", raising=False)
         _reset_settings_and_registry()

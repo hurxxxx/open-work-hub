@@ -155,7 +155,7 @@ test.describe('AI-friendly app boundary smoke', () => {
             current.getByText(/Workspace Settings|워크스페이스 설정/),
           ).toBeVisible();
           await expect(
-            current.getByRole('heading', { level: 1, name: 'AI-DO HQ' }),
+            current.getByRole('heading', { level: 1, name: 'Open ALM HQ' }),
           ).toBeVisible();
         },
       },
@@ -163,7 +163,7 @@ test.describe('AI-friendly app boundary smoke', () => {
         path: '/tool/search?workspace=hq',
         assert: async (current) => {
           await expect(
-            current.getByRole('heading', { name: 'AI-DO 통합검색' }),
+            current.getByRole('heading', { name: 'Open ALM 통합검색' }),
           ).toBeVisible();
         },
       },
@@ -223,11 +223,11 @@ test.describe('AI-friendly app boundary smoke', () => {
       .click();
 
     const groupwareLink = page.getByRole('menuitem', {
-      name: /Groupware|두원공조 그룹웨어/,
+      name: /Groupware|Open ALM 그룹웨어/,
     });
     await expect(groupwareLink).toHaveAttribute(
       'href',
-      'http://gw.dwdcc.co.kr/index.aspx',
+      'http://gw.example.com/index.aspx',
     );
     await expect(groupwareLink).toBeInViewport();
     errors.expectClean();
@@ -264,7 +264,7 @@ test.describe('AI-friendly app boundary smoke', () => {
     await expect(
       page.locator('main').getByRole('heading', { level: 1 }),
     ).toBeVisible();
-    await expect(page.getByRole('button', { name: /AI-DO HQ/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Open ALM HQ/ })).toBeVisible();
 
     errors.expectClean();
   });

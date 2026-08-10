@@ -36,11 +36,11 @@ const translate: AppBarTranslator = (key, options) =>
       'shell:businessSites.description': '자주 쓰는 사내 업무 사이트를 엽니다.',
       'shell:businessSites.groupwareDescription':
         '전자결재, 게시판, 사내 업무 시스템',
-      'shell:businessSites.groupwareTitle': '두원공조 그룹웨어',
+      'shell:businessSites.groupwareTitle': 'Open ALM 그룹웨어',
       'shell:businessSites.open': '업무 사이트 링크',
       'shell:businessSites.title': '업무 사이트',
       'shell:businessSites.welfareMallDescription': '복지 혜택 및 상품 이용',
-      'shell:businessSites.welfareMallTitle': '두원공조 복지몰',
+      'shell:businessSites.welfareMallTitle': 'Open ALM 복지몰',
       'shell:helpCenter.open': '도움말',
       'shell:notifications.title': '알림',
       'shell:search.title': '통합검색',
@@ -129,19 +129,19 @@ describe('AppBarDesktopRail', () => {
     ).toBe('true');
 
     const groupwareLink = screen.getByRole('menuitem', {
-      name: /두원공조 그룹웨어/,
+      name: /Open ALM 그룹웨어/,
     });
     expect(groupwareLink.getAttribute('href')).toBe(
-      'http://gw.dwdcc.co.kr/index.aspx',
+      'http://gw.example.com/index.aspx',
     );
     expect(groupwareLink.getAttribute('target')).toBe('_blank');
     expect(groupwareLink.getAttribute('rel')).toBe('noreferrer');
 
     const welfareMallLink = screen.getByRole('menuitem', {
-      name: /두원공조 복지몰/,
+      name: /Open ALM 복지몰/,
     });
     expect(welfareMallLink.getAttribute('href')).toBe(
-      'https://dwdcc.ezwel.com/pc/mypage/auth/login/pc/product/main/welfare-mall',
+      'https://open-alm.ezwel.com/pc/mypage/auth/login/pc/product/main/welfare-mall',
     );
     expect(welfareMallLink.getAttribute('target')).toBe('_blank');
     expect(welfareMallLink.getAttribute('rel')).toBe('noreferrer');

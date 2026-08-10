@@ -78,7 +78,7 @@ async function request<T>(
  * `updated_at` bumps on follow-up replies don't change the URL, so the
  * route search params alone won't catch them.
  */
-export const CONVERSATIONS_UPDATED_EVENT = 'doowon:ai:conversations-updated';
+export const CONVERSATIONS_UPDATED_EVENT = 'corporate:ai:conversations-updated';
 
 export function listConversations(
   token: string,

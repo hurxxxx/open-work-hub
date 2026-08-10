@@ -5,10 +5,10 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from ai_do_api.core.db import Base
-from ai_do_api.domains.auth.models import User
-from ai_do_api.domains.mail import service
-from ai_do_api.domains.mail.models import (
+from open_alm_api.core.db import Base
+from open_alm_api.domains.auth.models import User
+from open_alm_api.domains.mail import service
+from open_alm_api.domains.mail.models import (
     MailAccount,
     MailMailbox,
     MailMessage,

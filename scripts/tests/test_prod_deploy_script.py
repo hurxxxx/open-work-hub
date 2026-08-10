@@ -36,11 +36,11 @@ class ProdDeployScriptTest(unittest.TestCase):
         allow_non_prod_checkout: bool = True,
     ) -> subprocess.CompletedProcess[str]:
         env = os.environ.copy()
-        env["AI_DO_IMAGE_ENABLED"] = "false"
+        env["OPEN_ALM_IMAGE_ENABLED"] = "false"
         if allow_non_prod_checkout:
-            env["AI_DO_ALLOW_NON_PROD_CHECKOUT_PROD_COMMANDS"] = "1"
+            env["OPEN_ALM_ALLOW_NON_PROD_CHECKOUT_PROD_COMMANDS"] = "1"
         else:
-            env.pop("AI_DO_ALLOW_NON_PROD_CHECKOUT_PROD_COMMANDS", None)
+            env.pop("OPEN_ALM_ALLOW_NON_PROD_CHECKOUT_PROD_COMMANDS", None)
         return subprocess.run(
             ["bash", "-lc", script],
             cwd=ROOT,
@@ -63,11 +63,11 @@ class ProdDeployScriptTest(unittest.TestCase):
             (root / ".env").write_text(
                 "\n".join(
                     [
-                        'export AI_DO_PROD_SKIP_RELEASE_GATES="1" # deliberate',
-                        "AI_DO_PROD_RELEASE_GATE_ADAPTERS=' keyword_dataset_scope '",
-                        "AI_DO_PROD_KEYWORD_REINDEX_WORKSPACE_KEYS= ws-a, ws-b # scoped",
-                        "AI_DO_PROD_KEYWORD_REINDEX_ALL_ACTIVE=0",
-                        "AI_DO_PROD_REMOTE_REF= origin/main # default",
+                        'export OPEN_ALM_PROD_SKIP_RELEASE_GATES="1" # deliberate',
+                        "OPEN_ALM_PROD_RELEASE_GATE_ADAPTERS=' keyword_dataset_scope '",
+                        "OPEN_ALM_PROD_KEYWORD_REINDEX_WORKSPACE_KEYS= ws-a, ws-b # scoped",
+                        "OPEN_ALM_PROD_KEYWORD_REINDEX_ALL_ACTIVE=0",
+                        "OPEN_ALM_PROD_REMOTE_REF= origin/main # default",
                     ]
                 )
                 + "\n",
@@ -76,22 +76,22 @@ class ProdDeployScriptTest(unittest.TestCase):
             bash = f"""
 set -euo pipefail
 source {shlex.quote(str(SCRIPT))}
-unset AI_DO_PROD_SKIP_RELEASE_GATES
-unset AI_DO_PROD_RELEASE_GATE_ADAPTERS
-unset AI_DO_PROD_KEYWORD_REINDEX_WORKSPACE_KEYS
-unset AI_DO_PROD_KEYWORD_REINDEX_ALL_ACTIVE
-unset AI_DO_PROD_REMOTE_REF
+unset OPEN_ALM_PROD_SKIP_RELEASE_GATES
+unset OPEN_ALM_PROD_RELEASE_GATE_ADAPTERS
+unset OPEN_ALM_PROD_KEYWORD_REINDEX_WORKSPACE_KEYS
+unset OPEN_ALM_PROD_KEYWORD_REINDEX_ALL_ACTIVE
+unset OPEN_ALM_PROD_REMOTE_REF
 ROOT_DIR={shlex.quote(str(root))}
 load_prod_deploy_env_file
-[[ "$AI_DO_PROD_SKIP_RELEASE_GATES" == "1" ]]
-[[ "$AI_DO_PROD_RELEASE_GATE_ADAPTERS" == " keyword_dataset_scope " ]]
-[[ "$AI_DO_PROD_KEYWORD_REINDEX_WORKSPACE_KEYS" == "ws-a, ws-b" ]]
-[[ "$AI_DO_PROD_KEYWORD_REINDEX_ALL_ACTIVE" == "0" ]]
-[[ "$AI_DO_PROD_REMOTE_REF" == "origin/main" ]]
-SKIP_RELEASE_GATES="${{AI_DO_PROD_SKIP_RELEASE_GATES:-0}}"
-RELEASE_GATE_ADAPTERS="${{AI_DO_PROD_RELEASE_GATE_ADAPTERS:-}}"
-KEYWORD_REINDEX_WORKSPACE_KEYS="${{AI_DO_PROD_KEYWORD_REINDEX_WORKSPACE_KEYS:-}}"
-KEYWORD_REINDEX_ALL_ACTIVE="${{AI_DO_PROD_KEYWORD_REINDEX_ALL_ACTIVE:-0}}"
+[[ "$OPEN_ALM_PROD_SKIP_RELEASE_GATES" == "1" ]]
+[[ "$OPEN_ALM_PROD_RELEASE_GATE_ADAPTERS" == " keyword_dataset_scope " ]]
+[[ "$OPEN_ALM_PROD_KEYWORD_REINDEX_WORKSPACE_KEYS" == "ws-a, ws-b" ]]
+[[ "$OPEN_ALM_PROD_KEYWORD_REINDEX_ALL_ACTIVE" == "0" ]]
+[[ "$OPEN_ALM_PROD_REMOTE_REF" == "origin/main" ]]
+SKIP_RELEASE_GATES="${{OPEN_ALM_PROD_SKIP_RELEASE_GATES:-0}}"
+RELEASE_GATE_ADAPTERS="${{OPEN_ALM_PROD_RELEASE_GATE_ADAPTERS:-}}"
+KEYWORD_REINDEX_WORKSPACE_KEYS="${{OPEN_ALM_PROD_KEYWORD_REINDEX_WORKSPACE_KEYS:-}}"
+KEYWORD_REINDEX_ALL_ACTIVE="${{OPEN_ALM_PROD_KEYWORD_REINDEX_ALL_ACTIVE:-0}}"
 validate_release_gate_configuration
 """
 
@@ -276,16 +276,16 @@ expected="|Require an idle image generation queue before settings cutover|Previe
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / ".env").write_text(
-                "AI_DO_PROD_SKIP_RELEASE_GATES=0\n",
+                "OPEN_ALM_PROD_SKIP_RELEASE_GATES=0\n",
                 encoding="utf-8",
             )
             bash = f"""
 set -euo pipefail
 source {shlex.quote(str(SCRIPT))}
-AI_DO_PROD_SKIP_RELEASE_GATES=1
+OPEN_ALM_PROD_SKIP_RELEASE_GATES=1
 ROOT_DIR={shlex.quote(str(root))}
 load_prod_deploy_env_file
-[[ "$AI_DO_PROD_SKIP_RELEASE_GATES" == "1" ]]
+[[ "$OPEN_ALM_PROD_SKIP_RELEASE_GATES" == "1" ]]
 """
 
             result = self.run_bash(bash)
@@ -336,26 +336,26 @@ require_prod_checkout
                 SYSTEMD_SCRIPT.read_text(encoding="utf-8"),
             ]
         )
-        referenced_keys = set(re.findall(r"\bAI_DO_PROD_[A-Z0-9_]+\b", script_text))
+        referenced_keys = set(re.findall(r"\bOPEN_ALM_PROD_[A-Z0-9_]+\b", script_text))
         contract = runpy.run_path(str(ENV_CONTRACT_SCRIPT))
         declared_keys = set(contract["DEPLOY_ENV_KEYS"])
 
         self.assertFalse(
             referenced_keys - declared_keys,
-            "AI_DO_PROD_* keys used by production scripts must be in DEPLOY_ENV_KEYS",
+            "OPEN_ALM_PROD_* keys used by production scripts must be in DEPLOY_ENV_KEYS",
         )
 
     def test_production_systemd_smoke_checks_readiness(self) -> None:
         script = SYSTEMD_SCRIPT.read_text(encoding="utf-8")
 
-        self.assertIn("ai-do-prod-worker.service", script)
-        self.assertIn("ai-do-prod-worker-realtime.service", script)
-        self.assertIn("ai-do-prod-worker-long.service", script)
-        self.assertIn("ai-do-prod-worker-patent.service", script)
-        self.assertIn("ai-do-prod-worker-ai-graph.service", script)
-        self.assertIn("ai-do-prod-worker-ppt.service", script)
+        self.assertIn("open-alm-prod-worker.service", script)
+        self.assertIn("open-alm-prod-worker-realtime.service", script)
+        self.assertIn("open-alm-prod-worker-long.service", script)
+        self.assertIn("open-alm-prod-worker-patent.service", script)
+        self.assertIn("open-alm-prod-worker-ai-graph.service", script)
+        self.assertIn("open-alm-prod-worker-ppt.service", script)
         self.assertIn("systemctl --user is-active --quiet \"$worker_unit\"", script)
-        self.assertIn("systemctl --user is-active --quiet ai-do-prod-worker-beat.service", script)
+        self.assertIn("systemctl --user is-active --quiet open-alm-prod-worker-beat.service", script)
         self.assertIn("http://127.0.0.1:8000/healthz", script)
         self.assertIn("http://127.0.0.1:8000/readyz", script)
         self.assertIn("assert_prod_health_payload", script)
@@ -364,7 +364,7 @@ require_prod_checkout
         self.assertIn("assert_prod_bootstrap_payload", script)
         self.assertIn('payload.get("dev_admin_login_available") is not False', script)
         self.assertIn("assert_worker_queues_consumed", script)
-        self.assertIn("ai_do_worker.queue_contract --celery-queues", script)
+        self.assertIn("open_alm_worker.queue_contract --celery-queues", script)
         self.assertIn(
             "--celery-queues --celery-queue-group patent",
             script.replace("\\\n", ""),
@@ -547,7 +547,7 @@ run_prod_smoke_step smoke-two
             script,
         )
         self.assertIn(
-            "${AI_DO_PROD_BACKUP_ROOT:-/projects/ai-do/backups/prod}",
+            "${OPEN_ALM_PROD_BACKUP_ROOT:-/projects/open-alm/backups/prod}",
             script,
         )
         self.assertIn("sha256={digest.hexdigest()}", script)
@@ -579,8 +579,8 @@ run_prod_smoke_step smoke-two
     def test_production_systemd_uses_deploy_checkout_guard(self) -> None:
         script = SYSTEMD_SCRIPT.read_text(encoding="utf-8")
 
-        self.assertIn("AI_DO_PROD_ROOT", script)
-        self.assertIn("AI_DO_PROD_BRANCH", script)
+        self.assertIn("OPEN_ALM_PROD_ROOT", script)
+        self.assertIn("OPEN_ALM_PROD_BRANCH", script)
         self.assertIn('git -C "$ROOT_DIR" rev-parse --abbrev-ref HEAD', script)
         self.assertIn('git -C "$ROOT_DIR" status --porcelain', script)
         self.assertIn("require_clean_prod_checkout", script)
@@ -600,17 +600,17 @@ bash {shlex.quote(str(SYSTEMD_SCRIPT))} quiesce-search-writers
         result = self.run_bash(bash)
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("--user stop ai-do-prod-api.service", result.stdout)
-        self.assertIn("ai-do-prod-collab.service", result.stdout)
-        self.assertIn("ai-do-prod-worker.service", result.stdout)
-        self.assertIn("ai-do-prod-worker-realtime.service", result.stdout)
-        self.assertIn("ai-do-prod-worker-long.service", result.stdout)
-        self.assertIn("ai-do-prod-worker-patent.service", result.stdout)
-        self.assertIn("ai-do-prod-worker-ai-graph.service", result.stdout)
-        self.assertIn("ai-do-prod-worker-ppt.service", result.stdout)
-        self.assertIn("ai-do-prod-worker-beat.service", result.stdout)
-        self.assertNotIn("ai-do-prod-infra.service", result.stdout)
-        self.assertNotIn("ai-do-privacy-filter.service", result.stdout)
+        self.assertIn("--user stop open-alm-prod-api.service", result.stdout)
+        self.assertIn("open-alm-prod-collab.service", result.stdout)
+        self.assertIn("open-alm-prod-worker.service", result.stdout)
+        self.assertIn("open-alm-prod-worker-realtime.service", result.stdout)
+        self.assertIn("open-alm-prod-worker-long.service", result.stdout)
+        self.assertIn("open-alm-prod-worker-patent.service", result.stdout)
+        self.assertIn("open-alm-prod-worker-ai-graph.service", result.stdout)
+        self.assertIn("open-alm-prod-worker-ppt.service", result.stdout)
+        self.assertIn("open-alm-prod-worker-beat.service", result.stdout)
+        self.assertNotIn("open-alm-prod-infra.service", result.stdout)
+        self.assertNotIn("open-alm-privacy-filter.service", result.stdout)
 
     def test_production_systemd_can_resume_search_writing_app_units(self) -> None:
         bash = f"""
@@ -623,75 +623,75 @@ bash {shlex.quote(str(SYSTEMD_SCRIPT))} resume-search-writers
         result = self.run_bash(bash)
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("--user start ai-do-prod-api.service", result.stdout)
-        self.assertIn("ai-do-prod-collab.service", result.stdout)
-        self.assertIn("ai-do-prod-worker-patent.service", result.stdout)
-        self.assertIn("ai-do-prod-worker-beat.service", result.stdout)
-        self.assertNotIn("ai-do-prod-infra.service", result.stdout)
+        self.assertIn("--user start open-alm-prod-api.service", result.stdout)
+        self.assertIn("open-alm-prod-collab.service", result.stdout)
+        self.assertIn("open-alm-prod-worker-patent.service", result.stdout)
+        self.assertIn("open-alm-prod-worker-beat.service", result.stdout)
+        self.assertNotIn("open-alm-prod-infra.service", result.stdout)
 
     def test_production_systemd_renders_only_prod_units(self) -> None:
         script = SYSTEMD_SCRIPT.read_text(encoding="utf-8")
 
-        self.assertIn('template_dir.glob("ai-do-prod-*.service.template")', script)
-        self.assertIn("__AI_DO_WORKER_DEFAULT_QUEUE_NAMES__", script)
-        self.assertIn("__AI_DO_WORKER_REALTIME_QUEUE_NAMES__", script)
-        self.assertIn("__AI_DO_WORKER_LONG_QUEUE_NAMES__", script)
-        self.assertIn("__AI_DO_WORKER_PATENT_QUEUE_NAMES__", script)
-        self.assertIn("__AI_DO_WORKER_PATENT_CONCURRENCY__", script)
-        self.assertIn("__AI_DO_WORKER_PPT_QUEUE_NAMES__", script)
-        self.assertIn("__AI_DO_WORKER_AI_GRAPH_QUEUE_NAMES__", script)
-        self.assertIn("__AI_DO_RUNTIME_REVISION__", script)
+        self.assertIn('template_dir.glob("open-alm-prod-*.service.template")', script)
+        self.assertIn("__OPEN_ALM_WORKER_DEFAULT_QUEUE_NAMES__", script)
+        self.assertIn("__OPEN_ALM_WORKER_REALTIME_QUEUE_NAMES__", script)
+        self.assertIn("__OPEN_ALM_WORKER_LONG_QUEUE_NAMES__", script)
+        self.assertIn("__OPEN_ALM_WORKER_PATENT_QUEUE_NAMES__", script)
+        self.assertIn("__OPEN_ALM_WORKER_PATENT_CONCURRENCY__", script)
+        self.assertIn("__OPEN_ALM_WORKER_PPT_QUEUE_NAMES__", script)
+        self.assertIn("__OPEN_ALM_WORKER_AI_GRAPH_QUEUE_NAMES__", script)
+        self.assertIn("__OPEN_ALM_RUNTIME_REVISION__", script)
         template_text = "\n".join(
             [
                 (
-                    ROOT / "ops/systemd/user/ai-do-prod-worker.service.template"
+                    ROOT / "ops/systemd/user/open-alm-prod-worker.service.template"
                 ).read_text(encoding="utf-8"),
                 (
-                    ROOT / "ops/systemd/user/ai-do-prod-worker-realtime.service.template"
+                    ROOT / "ops/systemd/user/open-alm-prod-worker-realtime.service.template"
                 ).read_text(encoding="utf-8"),
                 (
-                    ROOT / "ops/systemd/user/ai-do-prod-worker-long.service.template"
+                    ROOT / "ops/systemd/user/open-alm-prod-worker-long.service.template"
                 ).read_text(encoding="utf-8"),
                 (
-                    ROOT / "ops/systemd/user/ai-do-prod-worker-patent.service.template"
+                    ROOT / "ops/systemd/user/open-alm-prod-worker-patent.service.template"
                 ).read_text(encoding="utf-8"),
                 (
-                    ROOT / "ops/systemd/user/ai-do-prod-worker-ai-graph.service.template"
+                    ROOT / "ops/systemd/user/open-alm-prod-worker-ai-graph.service.template"
                 ).read_text(encoding="utf-8"),
                 (
-                    ROOT / "ops/systemd/user/ai-do-prod-worker-ppt.service.template"
+                    ROOT / "ops/systemd/user/open-alm-prod-worker-ppt.service.template"
                 ).read_text(encoding="utf-8"),
                 (
-                    ROOT / "ops/systemd/user/ai-do-prod-worker-beat.service.template"
+                    ROOT / "ops/systemd/user/open-alm-prod-worker-beat.service.template"
                 ).read_text(encoding="utf-8"),
             ]
         )
-        self.assertIn("Environment=AI_DO_WORKER_QUEUE_GROUP=default", template_text)
-        self.assertIn("Environment=AI_DO_WORKER_QUEUE_GROUP=realtime", template_text)
-        self.assertIn("Environment=AI_DO_WORKER_QUEUE_GROUP=long", template_text)
-        self.assertIn("Environment=AI_DO_WORKER_QUEUE_GROUP=patent", template_text)
-        self.assertIn("Environment=AI_DO_WORKER_QUEUE_GROUP=ai_graph", template_text)
-        self.assertIn("Environment=AI_DO_WORKER_QUEUE_GROUP=ppt", template_text)
-        self.assertIn("Environment=AI_DO_WORKER_QUEUE_GROUP=beat", template_text)
-        self.assertIn("--hostname=ai-do-prod-worker-default@%H", template_text)
-        self.assertIn("--hostname=ai-do-prod-worker-realtime@%H", template_text)
-        self.assertIn("--hostname=ai-do-prod-worker-long@%H", template_text)
-        self.assertIn("--hostname=ai-do-prod-worker-patent@%H", template_text)
-        self.assertIn("--hostname=ai-do-prod-worker-ai-graph@%H", template_text)
-        self.assertIn("--hostname=ai-do-prod-worker-ppt@%H", template_text)
-        self.assertIn("-Q __AI_DO_WORKER_PATENT_QUEUE_NAMES__", template_text)
-        self.assertIn("--concurrency __AI_DO_WORKER_PATENT_CONCURRENCY__", template_text)
-        self.assertIn("PartOf=ai-do-prod-api.service", template_text)
+        self.assertIn("Environment=OPEN_ALM_WORKER_QUEUE_GROUP=default", template_text)
+        self.assertIn("Environment=OPEN_ALM_WORKER_QUEUE_GROUP=realtime", template_text)
+        self.assertIn("Environment=OPEN_ALM_WORKER_QUEUE_GROUP=long", template_text)
+        self.assertIn("Environment=OPEN_ALM_WORKER_QUEUE_GROUP=patent", template_text)
+        self.assertIn("Environment=OPEN_ALM_WORKER_QUEUE_GROUP=ai_graph", template_text)
+        self.assertIn("Environment=OPEN_ALM_WORKER_QUEUE_GROUP=ppt", template_text)
+        self.assertIn("Environment=OPEN_ALM_WORKER_QUEUE_GROUP=beat", template_text)
+        self.assertIn("--hostname=open-alm-prod-worker-default@%H", template_text)
+        self.assertIn("--hostname=open-alm-prod-worker-realtime@%H", template_text)
+        self.assertIn("--hostname=open-alm-prod-worker-long@%H", template_text)
+        self.assertIn("--hostname=open-alm-prod-worker-patent@%H", template_text)
+        self.assertIn("--hostname=open-alm-prod-worker-ai-graph@%H", template_text)
+        self.assertIn("--hostname=open-alm-prod-worker-ppt@%H", template_text)
+        self.assertIn("-Q __OPEN_ALM_WORKER_PATENT_QUEUE_NAMES__", template_text)
+        self.assertIn("--concurrency __OPEN_ALM_WORKER_PATENT_CONCURRENCY__", template_text)
+        self.assertIn("PartOf=open-alm-prod-api.service", template_text)
         self.assertIn(
-            "ExecCondition=/usr/bin/test -f __AI_DO_ROOT__/ops/systemd/user/"
-            "ai-do-prod-worker-patent.service.template",
+            "ExecCondition=/usr/bin/test -f __OPEN_ALM_ROOT__/ops/systemd/user/"
+            "open-alm-prod-worker-patent.service.template",
             template_text,
         )
         self.assertIn(
-            "Environment=AI_DO_RUNTIME_REVISION=__AI_DO_RUNTIME_REVISION__",
+            "Environment=OPEN_ALM_RUNTIME_REVISION=__OPEN_ALM_RUNTIME_REVISION__",
             template_text,
         )
-        self.assertNotIn("ai-do-inference-gateway.service.template", script)
+        self.assertNotIn("open-alm-inference-gateway.service.template", script)
 
     def test_production_deploy_syncs_api_and_worker_python_environments(self) -> None:
         script = SCRIPT.read_text(encoding="utf-8")
@@ -720,9 +720,9 @@ bash {shlex.quote(str(SYSTEMD_SCRIPT))} resume-search-writers
             deploy_script.index("Wait for production smoke checks after activation"),
         )
         self.assertIn('systemctl --user restart "${UNITS[@]}"', systemd_script)
-        self.assertIn("ai-do-prod-api.service", systemd_script)
-        self.assertIn("ai-do-prod-worker-patent.service", systemd_script)
-        self.assertIn("ai-do-prod-worker-beat.service", systemd_script)
+        self.assertIn("open-alm-prod-api.service", systemd_script)
+        self.assertIn("open-alm-prod-worker-patent.service", systemd_script)
+        self.assertIn("open-alm-prod-worker-beat.service", systemd_script)
         self.assertLess(
             systemd_script.index('assert_unit_runtime_revisions "$expected_revision"'),
             systemd_script.index("assert_worker_queues_consumed || return $?"),
@@ -766,7 +766,7 @@ bash {shlex.quote(str(SYSTEMD_SCRIPT))} resume-search-writers
             temp = Path(directory)
             unit_dir = temp / "systemd"
             unit_dir.mkdir()
-            unit_file = unit_dir / "ai-do-prod-worker-patent.service"
+            unit_file = unit_dir / "open-alm-prod-worker-patent.service"
             unit_file.write_text("rendered", encoding="utf-8")
             rollback_marker = temp / "rollback-called"
             bash = f"""
@@ -796,7 +796,7 @@ rollback_patent_worker
             temp = Path(directory)
             unit_dir = temp / "systemd"
             unit_dir.mkdir()
-            unit_file = unit_dir / "ai-do-prod-worker-patent.service"
+            unit_file = unit_dir / "open-alm-prod-worker-patent.service"
             unit_file.write_text("rendered", encoding="utf-8")
             calls = temp / "calls"
             bash = f"""
@@ -825,7 +825,7 @@ rollback_patent_worker
             self.assertLess(
                 recorded.index("queue-rollback"),
                 recorded.index(
-                    "systemctl:--user disable ai-do-prod-worker-patent.service"
+                    "systemctl:--user disable open-alm-prod-worker-patent.service"
                 ),
             )
 
@@ -953,7 +953,7 @@ FRONTEND_PROMOTED=1
 API_STOPPED=1
 cleanup_prod_deploy 0
 [[ "$API_STOPPED" == "0" ]]
-[[ "$calls" == *"--user start ai-do-prod-api.service"* ]]
+[[ "$calls" == *"--user start open-alm-prod-api.service"* ]]
 """
 
         result = self.run_bash(bash)
@@ -993,8 +993,8 @@ if cleanup_prod_deploy 0; then
   exit 91
 fi
 [[ "$API_STOPPED" == "1" ]]
-[[ "$calls" == *"--user stop ai-do-prod-api.service"* ]]
-[[ "$calls" != *"--user start ai-do-prod-api.service"* ]]
+[[ "$calls" == *"--user stop open-alm-prod-api.service"* ]]
+[[ "$calls" != *"--user start open-alm-prod-api.service"* ]]
 """
 
         result = self.run_bash(bash)
@@ -1015,7 +1015,7 @@ fi
         script = SCRIPT.read_text(encoding="utf-8")
 
         self.assertIn('--outDir=$STAGED_FRONTEND_DIR', script)
-        self.assertNotIn('AI_DO_WEB_BUILD_OUT_DIR=', script)
+        self.assertNotIn('OPEN_ALM_WEB_BUILD_OUT_DIR=', script)
 
     def test_production_deploy_rejects_incomplete_frontend_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1026,7 +1026,7 @@ fi
                 '<script type="module" src="/assets/missing.js"></script>',
                 encoding="utf-8",
             )
-            (staged / ".ai-do-build-id").write_text("build-current\n", encoding="utf-8")
+            (staged / ".open-alm-build-id").write_text("build-current\n", encoding="utf-8")
             (staged / ".vite" / "manifest.json").write_text(
                 '{"index.html":{"file":"assets/missing.js","isEntry":true}}',
                 encoding="utf-8",

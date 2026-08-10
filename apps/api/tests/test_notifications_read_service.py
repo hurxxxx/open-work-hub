@@ -8,16 +8,16 @@ from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from ai_do_api.core.db import Base
-from ai_do_api.domains.auth.models import User
-from ai_do_api.domains.notifications.read_service import (
+from open_alm_api.core.db import Base
+from open_alm_api.domains.auth.models import User
+from open_alm_api.domains.notifications.read_service import (
     list_user_notifications,
     mark_all_read_and_publish,
     mark_one_read_and_publish,
     mark_all_read,
     mark_one_read,
 )
-from ai_do_api.domains.pms.models import Notification
+from open_alm_api.domains.pms.models import Notification
 
 
 def _session() -> Session:
@@ -31,7 +31,7 @@ def _add_user(session: Session, user_id: str) -> None:
         User(
             id=user_id,
             login_id=user_id,
-            email=f"{user_id}@ai-do.local",
+            email=f"{user_id}@open-alm.local",
             full_name=user_id.title(),
             password_hash="hash",
             status="active",

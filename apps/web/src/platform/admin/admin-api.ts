@@ -1,4 +1,4 @@
-import { authRoutes } from '@ai-do/contracts/auth';
+import { authRoutes } from '@open-alm/contracts/auth';
 import { apiFetchJsonWithMappedError } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
 import type {

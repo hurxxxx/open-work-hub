@@ -2,7 +2,7 @@ import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Plus, X } from 'lucide-react';
 
-import { Button } from '@ai-do/ui';
+import { Button } from '@open-alm/ui';
 
 import type { PatentPriorArtSearchValues } from '../api/patent-prior-art-api';
 import type { EditablePlanField } from '../model/patent-prior-art-view-model';

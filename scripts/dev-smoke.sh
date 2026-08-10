@@ -23,21 +23,21 @@ bootstrap_accounts_count() {
 }
 
 DEV_MANAGED_WORKER_UNITS=(
-  ai-do-dev-worker.service
-  ai-do-dev-worker-realtime.service
-  ai-do-dev-worker-long.service
-  ai-do-dev-worker-patent.service
-  ai-do-dev-worker-ai-graph.service
-  ai-do-dev-worker-ppt.service
+  open-alm-dev-worker.service
+  open-alm-dev-worker-realtime.service
+  open-alm-dev-worker-long.service
+  open-alm-dev-worker-patent.service
+  open-alm-dev-worker-ai-graph.service
+  open-alm-dev-worker-ppt.service
 )
 DEV_MANAGED_REVISION_UNITS=(
-  ai-do-dev-app.service
+  open-alm-dev-app.service
   "${DEV_MANAGED_WORKER_UNITS[@]}"
-  ai-do-dev-worker-beat.service
+  open-alm-dev-worker-beat.service
 )
 
 dev_managed_runtime_check_enabled() {
-  case "${AI_DO_DEV_MANAGED_RUNTIME_CHECK:-auto}" in
+  case "${OPEN_ALM_DEV_MANAGED_RUNTIME_CHECK:-auto}" in
     1|true|yes|on)
       return 0
       ;;
@@ -46,13 +46,13 @@ dev_managed_runtime_check_enabled() {
       ;;
     auto)
       if command -v systemctl >/dev/null 2>&1 &&
-        systemctl --user is-active --quiet ai-do-dev-app.service; then
+        systemctl --user is-active --quiet open-alm-dev-app.service; then
         return 0
       fi
       return 1
       ;;
     *)
-      echo "[dev] AI_DO_DEV_MANAGED_RUNTIME_CHECK must be auto, 1, or 0" >&2
+      echo "[dev] OPEN_ALM_DEV_MANAGED_RUNTIME_CHECK must be auto, 1, or 0" >&2
       return 2
       ;;
   esac
@@ -72,7 +72,7 @@ assert_dev_unit_runtime_revisions() {
       return 1
     fi
     if ! tr '\0' '\n' <"/proc/$pid/environ" |
-      grep -Fqx "AI_DO_RUNTIME_REVISION=$expected_revision"; then
+      grep -Fqx "OPEN_ALM_RUNTIME_REVISION=$expected_revision"; then
       echo "[dev] stale runtime revision detected for $unit" >&2
       return 1
     fi
@@ -82,7 +82,7 @@ assert_dev_unit_runtime_revisions() {
 assert_dev_api_runtime_revisions() {
   local expected_revision="${1:?revision is required}"
   local instance port actual_revision
-  for instance in $(seq 1 "$AI_DO_DEV_API_COUNT"); do
+  for instance in $(seq 1 "$OPEN_ALM_DEV_API_COUNT"); do
     port="$(dev_api_port "$instance")"
     actual_revision="$(
       api_health_payload "$port" |
@@ -106,16 +106,16 @@ assert_dev_worker_queues_consumed() {
   fi
   expected_queues="$(
     PYTHONPATH="$python_path" \
-      "$worker_python" -m ai_do_worker.queue_contract --celery-queues
+      "$worker_python" -m open_alm_worker.queue_contract --celery-queues
   )"
   protected_queue="$(
     PYTHONPATH="$python_path" \
-      "$worker_python" -m ai_do_worker.queue_contract \
+      "$worker_python" -m open_alm_worker.queue_contract \
         --celery-queues --celery-queue-group patent
   )"
   legacy_queue="$(
     PYTHONPATH="$python_path" "$worker_python" - <<'PY'
-from ai_do_worker.queue_contract import LEGACY_PATENT_PRIOR_ART_QUEUE
+from open_alm_worker.queue_contract import LEGACY_PATENT_PRIOR_ART_QUEUE
 
 print(LEGACY_PATENT_PRIOR_ART_QUEUE)
 PY
@@ -128,7 +128,7 @@ import sys
 
 from redis import Redis
 
-from ai_do_worker.settings import get_settings
+from open_alm_worker.settings import get_settings
 
 broker = Redis.from_url(
     get_settings().broker_url,
@@ -155,13 +155,13 @@ PY
   active_queues_json="$(
     PYTHONPATH="$python_path" \
       "$worker_python" -m celery \
-        -A ai_do_worker.celery_app:celery_app inspect active_queues \
+        -A open_alm_worker.celery_app:celery_app inspect active_queues \
         --timeout=5 --json
   )"
   worker_stats_json="$(
     PYTHONPATH="$python_path" \
       "$worker_python" -m celery \
-        -A ai_do_worker.celery_app:celery_app inspect stats \
+        -A open_alm_worker.celery_app:celery_app inspect stats \
         --timeout=5 --json
   )"
   EXPECTED_QUEUES="$expected_queues" \
@@ -219,7 +219,7 @@ if len(protected_owners) != 1:
     print("[dev] protected patent queue must have exactly one consumer", file=sys.stderr)
     raise SystemExit(1)
 protected_owner = next(iter(protected_owners))
-if not protected_owner.startswith("ai-do-dev-worker-patent@"):
+if not protected_owner.startswith("open-alm-dev-worker-patent@"):
     print("[dev] protected patent queue has an unauthorized consumer", file=sys.stderr)
     raise SystemExit(1)
 
@@ -251,11 +251,11 @@ main() {
   local dev_login_accounts_count seen_ids seen_count managed_check_status
 
   echo "[dev] checking api instances"
-  for instance in $(seq 1 "$AI_DO_DEV_API_COUNT"); do
+  for instance in $(seq 1 "$OPEN_ALM_DEV_API_COUNT"); do
     port="$(dev_api_port "$instance")"
     expected_id="$(dev_api_name "$instance")"
-    if [[ "$AI_DO_DEV_API_COUNT" == "1" ]]; then
-      expected_id="${AI_DO_API_INSTANCE_ID:-dev-api}"
+    if [[ "$OPEN_ALM_DEV_API_COUNT" == "1" ]]; then
+      expected_id="${OPEN_ALM_API_INSTANCE_ID:-dev-api}"
     fi
     actual_id="$(api_health_payload "$port" | api_instance_id_from_health)"
     if [[ "$actual_id" != "$expected_id" ]]; then
@@ -264,13 +264,13 @@ main() {
     fi
   done
 
-  web_shell_base_url="${AI_DO_DEV_WEB_BASE_URL:-http://127.0.0.1:${AI_DO_WEB_DEV_PORT:-4200}}"
+  web_shell_base_url="${OPEN_ALM_DEV_WEB_BASE_URL:-http://127.0.0.1:${OPEN_ALM_WEB_DEV_PORT:-4200}}"
   echo "[dev] checking web shell"
   curl -fsSI "$web_shell_base_url/" | grep -iq "200 OK"
   curl -fsSI "$web_shell_base_url/w/hq/meeting/example" | grep -iq "200 OK"
 
   echo "[dev] checking nginx api proxy"
-  bootstrap_json="$(curl -fsS "$AI_DO_DEV_BASE_URL/api/v1/auth/bootstrap-status")"
+  bootstrap_json="$(curl -fsS "$OPEN_ALM_DEV_BASE_URL/api/v1/auth/bootstrap-status")"
   dev_admin_login_available="$(printf '%s' "$bootstrap_json" | bootstrap_field 'dev_admin_login_available')"
   dev_login_accounts_count="$(printf '%s' "$bootstrap_json" | bootstrap_accounts_count)"
   if [[ "$dev_admin_login_available" != "True" && "$dev_admin_login_available" != "true" ]]; then
@@ -282,13 +282,13 @@ main() {
     return 1
   fi
 
-  if (( AI_DO_DEV_API_COUNT > 1 )); then
+  if (( OPEN_ALM_DEV_API_COUNT > 1 )); then
     echo "[dev] checking nginx load balancing headers"
     seen_ids="$(
       for _ in $(seq 1 24); do
-        curl -fsS -D - -o /dev/null "$AI_DO_DEV_BASE_URL/api/v1/auth/bootstrap-status" \
+        curl -fsS -D - -o /dev/null "$OPEN_ALM_DEV_BASE_URL/api/v1/auth/bootstrap-status" \
           | tr -d '\r' \
-          | awk -F': ' 'tolower($1)=="x-doowon-instance-id"{print $2}'
+          | awk -F': ' 'tolower($1)=="x-corporate-instance-id"{print $2}'
       done | sort -u
     )"
     seen_count="$(printf '%s\n' "$seen_ids" | sed '/^$/d' | wc -l | tr -d ' ')"
@@ -305,14 +305,14 @@ main() {
   curl -fsS \
     -H 'Content-Type: application/json' \
     -d '{"account_key":"administrator"}' \
-    "$AI_DO_DEV_BASE_URL/api/v1/auth/dev-login" >/dev/null
+    "$OPEN_ALM_DEV_BASE_URL/api/v1/auth/dev-login" >/dev/null
 
-  if [[ "${AI_DO_DEV_SMOKE_STANDARD_LOGIN:-0}" == "1" ]]; then
+  if [[ "${OPEN_ALM_DEV_SMOKE_STANDARD_LOGIN:-0}" == "1" ]]; then
     echo "[dev] checking standard login"
     curl -fsS \
       -H 'Content-Type: application/json' \
-      -d '{"login_id":"admin","password":"AI-DO!dev1234"}' \
-      "$AI_DO_DEV_BASE_URL/api/v1/auth/login" >/dev/null
+      -d '{"login_id":"admin","password":"Open ALM!dev1234"}' \
+      "$OPEN_ALM_DEV_BASE_URL/api/v1/auth/login" >/dev/null
   fi
 
   if dev_managed_runtime_check_enabled; then

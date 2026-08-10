@@ -7,7 +7,7 @@ Feature MR(`* → dev`) 파이프라인은 `codex_review` 하나만 실행한다
 ## Trust Boundary
 
 - GitLab job은 MR checkout의 script가 아니라
-  `/home/dwdcc/.local/bin/ai-do-codex-review-ci`를 호출한다.
+  `/home/open-alm/.local/bin/open-alm-codex-review-ci`를 호출한다.
 - Source checkout은 read-only review 대상이다. Target SHA의 승인된 CI·policy·evidence를
   사용하고 source의 agent/skill/prompt 변경은 review 대상으로만 본다.
 - Codex에는 GitLab/CI token, credentialed remote, 임의 MR note 본문을 전달하지 않는다.
@@ -55,7 +55,7 @@ project의 `ci_config_path`를 그 full SHA로 pin한다.
 
 ## Validation PostgreSQL
 
-`release_validation`은 운영·개발 DB와 분리된 `18/ai_do_ci` 클러스터만 사용한다.
+`release_validation`은 운영·개발 DB와 분리된 `18/open_alm_ci` 클러스터만 사용한다.
 `scripts/configure-ci-validation-env.sh`가 listener, role, credential과 test workload
 설정을 소유한다. 이 클러스터에는 영속 데이터를 두지 않으며 per-test
 `TRUNCATE + pg_restore`의 checkpoint 비용을 피하기 위해 durable write 설정을 끈다.

@@ -250,7 +250,7 @@ def validate_static_revision_graph(api_root: Path) -> str:
 
 def run_alembic(api_root: Path, *args: str) -> str:
     env = os.environ.copy()
-    env["AI_DO_API_AUTO_MIGRATE"] = "0"
+    env["OPEN_ALM_API_AUTO_MIGRATE"] = "0"
     process = subprocess.run(
         ["alembic", *args],
         cwd=api_root,

@@ -6,18 +6,18 @@ from sqlalchemy import create_engine, func, select, update
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException
 
-from ai_do_api.core.db import Base
-from ai_do_api.domains.auth.models import (
+from open_alm_api.core.db import Base
+from open_alm_api.domains.auth.models import (
     AuditLog,
     OrgUnit,
     User,
     Workspace,
     WorkspaceUserBinding,
 )
-from ai_do_api.domains.legacy_issues import ai_search
-from ai_do_api.domains.legacy_issues import router as legacy_issue_router
-from ai_do_api.domains.legacy_issues.app_catalog import LEGACY_ISSUES_WORKSPACE_APP
-from ai_do_api.domains.legacy_issues.dataset_records import (
+from open_alm_api.domains.legacy_issues import ai_search
+from open_alm_api.domains.legacy_issues import router as legacy_issue_router
+from open_alm_api.domains.legacy_issues.app_catalog import LEGACY_ISSUES_WORKSPACE_APP
+from open_alm_api.domains.legacy_issues.dataset_records import (
     CLAIM_REGION_OPTIONS,
     COUNTERMEASURE_TYPE_OPTIONS,
     COMMON_MASTER_DATASET_KEY,
@@ -55,32 +55,32 @@ from ai_do_api.domains.legacy_issues.dataset_records import (
     upsert_system_field_setting,
     validate_required_values,
 )
-from ai_do_api.domains.legacy_issues.module_access import (
+from open_alm_api.domains.legacy_issues.module_access import (
     LEGACY_ISSUE_COMPRESSOR_MODULE_KEYS,
     enabled_legacy_issue_module_keys,
     require_compressor_module_enabled,
 )
-from ai_do_api.domains.legacy_issues.module_direct_editors import (
+from open_alm_api.domains.legacy_issues.module_direct_editors import (
     can_user_direct_edit_module,
     grant_module_direct_editor,
     list_module_direct_editors,
     revoke_module_direct_editor,
 )
-from ai_do_api.domains.legacy_issues.router import (
+from open_alm_api.domains.legacy_issues.router import (
     LegacyIssueRecordBatchCreateItem,
     LegacyIssueRecordBatchSaveRequest,
     LegacyIssueRecordBatchUpdateItem,
 )
-from ai_do_api.domains.legacy_issues.column_orders import (
+from open_alm_api.domains.legacy_issues.column_orders import (
     COLUMN_ORDER_ATTACHMENT_KEY,
     get_column_order,
     sanitize_column_order,
     sanitize_hidden_column_keys,
     upsert_column_order,
 )
-from ai_do_api.domains.legacy_issues.history import normalize_history_value
-from ai_do_api.domains.legacy_issues.module_fields import create_module_field
-from ai_do_api.domains.legacy_issues.models import (
+from open_alm_api.domains.legacy_issues.history import normalize_history_value
+from open_alm_api.domains.legacy_issues.module_fields import create_module_field
+from open_alm_api.domains.legacy_issues.models import (
     LegacyIssueAiChunk,
     LegacyIssueAttachment,
     LegacyIssueColumnOrder,
@@ -93,7 +93,7 @@ from ai_do_api.domains.legacy_issues.models import (
     LegacyIssueRevisionOverviewHistory,
     LegacyIssueSystemFieldSetting,
 )
-from ai_do_api.domains.legacy_issues.revisioning import (
+from open_alm_api.domains.legacy_issues.revisioning import (
     cancel_draft_revision,
     complete_revision_review,
     create_draft_revision,
@@ -109,8 +109,8 @@ from ai_do_api.domains.legacy_issues.revisioning import (
     update_revision_approval_assignees,
     update_revision_overview_history,
 )
-from ai_do_api.domains.retrieval.models import RetrievalPartition
-from ai_do_api.domains.legacy_issues.tabular_import import EXPORT_RECORD_ID_HEADER
+from open_alm_api.domains.retrieval.models import RetrievalPartition
+from open_alm_api.domains.legacy_issues.tabular_import import EXPORT_RECORD_ID_HEADER
 
 
 def _session() -> Session:
@@ -255,7 +255,7 @@ def test_platform_admin_can_update_revision_overview_history_with_audit(
         db.add_all([workspace, user, _binding(workspace, user), revision, history])
         db.commit()
         monkeypatch.setattr(
-            "ai_do_api.domains.legacy_issues.revisioning.is_platform_admin_user",
+            "open_alm_api.domains.legacy_issues.revisioning.is_platform_admin_user",
             lambda *_args, **_kwargs: True,
         )
 
@@ -333,7 +333,7 @@ def test_overview_history_preserves_existing_employee_snapshot_on_later_edits(
         db.add_all([workspace, admin, former_employee, revision, history])
         db.commit()
         monkeypatch.setattr(
-            "ai_do_api.domains.legacy_issues.revisioning.is_platform_admin_user",
+            "open_alm_api.domains.legacy_issues.revisioning.is_platform_admin_user",
             lambda *_args, **_kwargs: True,
         )
 
@@ -392,7 +392,7 @@ def test_overview_history_direct_name_clears_existing_employee_link(monkeypatch)
         db.add_all([workspace, admin, employee, revision, history])
         db.commit()
         monkeypatch.setattr(
-            "ai_do_api.domains.legacy_issues.revisioning.is_platform_admin_user",
+            "open_alm_api.domains.legacy_issues.revisioning.is_platform_admin_user",
             lambda *_args, **_kwargs: True,
         )
 
@@ -425,7 +425,7 @@ def test_non_platform_admin_cannot_update_revision_overview_history(monkeypatch)
         db.add_all([workspace, user])
         db.commit()
         monkeypatch.setattr(
-            "ai_do_api.domains.legacy_issues.revisioning.is_platform_admin_user",
+            "open_alm_api.domains.legacy_issues.revisioning.is_platform_admin_user",
             lambda *_args, **_kwargs: False,
         )
 
@@ -485,7 +485,7 @@ def test_platform_admin_can_create_manual_revision_overview_history_with_audit(
         db.add_all([workspace, admin, _binding(workspace, admin), revision, imported])
         db.commit()
         monkeypatch.setattr(
-            "ai_do_api.domains.legacy_issues.revisioning.is_platform_admin_user",
+            "open_alm_api.domains.legacy_issues.revisioning.is_platform_admin_user",
             lambda *_args, **_kwargs: True,
         )
 
@@ -623,7 +623,7 @@ def test_overview_number_change_keeps_canonical_revision_number_immutable(
         )
         db.commit()
         monkeypatch.setattr(
-            "ai_do_api.domains.legacy_issues.revisioning.is_platform_admin_user",
+            "open_alm_api.domains.legacy_issues.revisioning.is_platform_admin_user",
             lambda *_args, **_kwargs: True,
         )
         with pytest.raises(HTTPException) as manual_conflict_error:
@@ -743,7 +743,7 @@ def test_delete_overview_history_soft_hides_row_and_links_published_revision(
         db.add_all([workspace, admin, _binding(workspace, admin), revision, history])
         db.commit()
         monkeypatch.setattr(
-            "ai_do_api.domains.legacy_issues.revisioning.is_platform_admin_user",
+            "open_alm_api.domains.legacy_issues.revisioning.is_platform_admin_user",
             lambda *_args, **_kwargs: True,
         )
 
@@ -789,7 +789,7 @@ def test_hide_published_revision_from_overview_is_idempotent(monkeypatch) -> Non
         db.add_all([workspace, admin, _binding(workspace, admin), revision])
         db.commit()
         monkeypatch.setattr(
-            "ai_do_api.domains.legacy_issues.revisioning.is_platform_admin_user",
+            "open_alm_api.domains.legacy_issues.revisioning.is_platform_admin_user",
             lambda *_args, **_kwargs: True,
         )
 
@@ -836,7 +836,7 @@ def test_non_platform_admin_cannot_create_or_delete_overview_history(
         db.add_all([workspace, user])
         db.commit()
         monkeypatch.setattr(
-            "ai_do_api.domains.legacy_issues.revisioning.is_platform_admin_user",
+            "open_alm_api.domains.legacy_issues.revisioning.is_platform_admin_user",
             lambda *_args, **_kwargs: False,
         )
 
@@ -2478,7 +2478,7 @@ def test_platform_admin_can_edit_latest_published_module_without_new_revision(
         db.add_all([workspace, admin, revision])
         db.flush()
         monkeypatch.setattr(
-            "ai_do_api.domains.legacy_issues.revisioning.is_platform_admin_user",
+            "open_alm_api.domains.legacy_issues.revisioning.is_platform_admin_user",
             lambda *args, **kwargs: True,
         )
 
@@ -2512,7 +2512,7 @@ def test_platform_admin_can_save_owned_module_draft(monkeypatch) -> None:
         db.add_all([workspace, admin, revision])
         db.flush()
         monkeypatch.setattr(
-            "ai_do_api.domains.legacy_issues.revisioning.is_platform_admin_user",
+            "open_alm_api.domains.legacy_issues.revisioning.is_platform_admin_user",
             lambda *args, **kwargs: True,
         )
 
@@ -2545,7 +2545,7 @@ def test_member_cannot_edit_latest_published_module_without_draft(monkeypatch) -
         db.add_all([workspace, member, revision])
         db.flush()
         monkeypatch.setattr(
-            "ai_do_api.domains.legacy_issues.revisioning.is_platform_admin_user",
+            "open_alm_api.domains.legacy_issues.revisioning.is_platform_admin_user",
             lambda *args, **kwargs: False,
         )
 
@@ -2613,11 +2613,11 @@ def test_explicit_module_editor_can_edit_only_assigned_latest_published_module(
         )
         db.flush()
         monkeypatch.setattr(
-            "ai_do_api.domains.legacy_issues.revisioning.is_platform_admin_user",
+            "open_alm_api.domains.legacy_issues.revisioning.is_platform_admin_user",
             lambda *args, **kwargs: False,
         )
         monkeypatch.setattr(
-            "ai_do_api.domains.legacy_issues.module_direct_editors.is_platform_admin_user",
+            "open_alm_api.domains.legacy_issues.module_direct_editors.is_platform_admin_user",
             lambda *args, **kwargs: False,
         )
 
@@ -2662,7 +2662,7 @@ def test_platform_admin_can_grant_and_revoke_heat_exchanger_direct_editor(
         )
         db.flush()
         monkeypatch.setattr(
-            "ai_do_api.domains.legacy_issues.module_direct_editors.is_platform_admin_user",
+            "open_alm_api.domains.legacy_issues.module_direct_editors.is_platform_admin_user",
             lambda user, *args, **kwargs: user.id == admin.id,
         )
 
@@ -2802,7 +2802,7 @@ def test_direct_editor_grant_rejects_non_workspace_user(monkeypatch) -> None:
         db.add_all([workspace, admin, outsider, _binding(workspace, admin)])
         db.flush()
         monkeypatch.setattr(
-            "ai_do_api.domains.legacy_issues.module_direct_editors.is_platform_admin_user",
+            "open_alm_api.domains.legacy_issues.module_direct_editors.is_platform_admin_user",
             lambda user, *args, **kwargs: user.id == admin.id,
         )
 
@@ -2838,11 +2838,11 @@ def test_workspace_admin_cannot_manage_module_direct_editors(monkeypatch) -> Non
         db.add_all([workspace, workspace_admin, binding, revision])
         db.flush()
         monkeypatch.setattr(
-            "ai_do_api.domains.legacy_issues.module_direct_editors.is_platform_admin_user",
+            "open_alm_api.domains.legacy_issues.module_direct_editors.is_platform_admin_user",
             lambda *args, **kwargs: False,
         )
         monkeypatch.setattr(
-            "ai_do_api.domains.legacy_issues.revisioning.is_platform_admin_user",
+            "open_alm_api.domains.legacy_issues.revisioning.is_platform_admin_user",
             lambda *args, **kwargs: False,
         )
 
@@ -2895,7 +2895,7 @@ def test_platform_admin_cannot_edit_published_module_with_active_draft(monkeypat
         db.add_all([workspace, admin, published, draft])
         db.flush()
         monkeypatch.setattr(
-            "ai_do_api.domains.legacy_issues.revisioning.is_platform_admin_user",
+            "open_alm_api.domains.legacy_issues.revisioning.is_platform_admin_user",
             lambda *args, **kwargs: True,
         )
 
@@ -2937,7 +2937,7 @@ def test_platform_admin_cannot_edit_older_published_module(monkeypatch) -> None:
         db.add_all([workspace, admin, older_revision, latest_revision])
         db.flush()
         monkeypatch.setattr(
-            "ai_do_api.domains.legacy_issues.revisioning.is_platform_admin_user",
+            "open_alm_api.domains.legacy_issues.revisioning.is_platform_admin_user",
             lambda *args, **kwargs: True,
         )
 
@@ -3084,11 +3084,11 @@ def test_platform_admin_can_force_cancel_another_users_draft(
         db.add_all([workspace, owner, admin, member, revision, record, attachment])
         db.flush()
         monkeypatch.setattr(
-            "ai_do_api.domains.legacy_issues.revisioning.is_platform_admin_user",
+            "open_alm_api.domains.legacy_issues.revisioning.is_platform_admin_user",
             lambda candidate, _db: candidate.id == admin.id,
         )
         monkeypatch.setattr(
-            "ai_do_api.domains.legacy_issues.module_direct_editors.is_platform_admin_user",
+            "open_alm_api.domains.legacy_issues.module_direct_editors.is_platform_admin_user",
             lambda candidate, _db: candidate.id == admin.id,
         )
 
@@ -3249,11 +3249,11 @@ def test_module_direct_editor_can_only_force_cancel_draft_in_assigned_module(
         )
         db.flush()
         monkeypatch.setattr(
-            "ai_do_api.domains.legacy_issues.revisioning.is_platform_admin_user",
+            "open_alm_api.domains.legacy_issues.revisioning.is_platform_admin_user",
             lambda *args, **kwargs: False,
         )
         monkeypatch.setattr(
-            "ai_do_api.domains.legacy_issues.module_direct_editors.is_platform_admin_user",
+            "open_alm_api.domains.legacy_issues.module_direct_editors.is_platform_admin_user",
             lambda *args, **kwargs: False,
         )
 
@@ -4169,7 +4169,7 @@ def test_batch_record_save_merges_update_cells_and_creates_rows(monkeypatch) -> 
             lambda *args, **kwargs: {},
         )
         monkeypatch.setattr(
-            "ai_do_api.domains.legacy_issues.revisioning.is_platform_admin_user",
+            "open_alm_api.domains.legacy_issues.revisioning.is_platform_admin_user",
             lambda *args, **kwargs: False,
         )
 
@@ -4295,7 +4295,7 @@ def test_batch_record_save_allows_direct_admin_create_on_published_revision(
             lambda *args, **kwargs: {},
         )
         monkeypatch.setattr(
-            "ai_do_api.domains.legacy_issues.revisioning.is_platform_admin_user",
+            "open_alm_api.domains.legacy_issues.revisioning.is_platform_admin_user",
             lambda *args, **kwargs: True,
         )
 
@@ -4374,11 +4374,11 @@ def test_delete_record_allows_direct_editor_on_published_revision(
             lambda *args, **kwargs: None,
         )
         monkeypatch.setattr(
-            "ai_do_api.domains.legacy_issues.revisioning.is_platform_admin_user",
+            "open_alm_api.domains.legacy_issues.revisioning.is_platform_admin_user",
             lambda *args, **kwargs: False,
         )
         monkeypatch.setattr(
-            "ai_do_api.domains.legacy_issues.module_direct_editors.is_platform_admin_user",
+            "open_alm_api.domains.legacy_issues.module_direct_editors.is_platform_admin_user",
             lambda *args, **kwargs: False,
         )
 

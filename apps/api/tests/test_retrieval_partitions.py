@@ -7,18 +7,18 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ai_do_api.core.db import Base
-from ai_do_api.domains.auth.models import OrgUnit, User, Workspace
-from ai_do_api.domains.retrieval.models import (
+from open_alm_api.core.db import Base
+from open_alm_api.domains.auth.models import OrgUnit, User, Workspace
+from open_alm_api.domains.retrieval.models import (
     RetrievalPartition,
     RetrievalPartitionCandidateScope,
 )
-from ai_do_api.domains.retrieval.partition_adapter_registry import (
+from open_alm_api.domains.retrieval.partition_adapter_registry import (
     RetrievalProjectionBinding,
     register_retrieval_partition_adapter,
     reset_retrieval_partition_adapters,
 )
-from ai_do_api.domains.retrieval.partitioning import (
+from open_alm_api.domains.retrieval.partitioning import (
     RetrievalPartitionConflict,
     RetrievalPartitionInvalidTarget,
     RetrievalPartitionUnbound,
@@ -224,7 +224,7 @@ def test_resource_read_scope_is_server_resolved_from_registered_adapter(
         )
     )
     monkeypatch.setattr(
-        "ai_do_api.domains.retrieval.default_partition_adapters."
+        "open_alm_api.domains.retrieval.default_partition_adapters."
         "ensure_retrieval_partition_adapters_registered",
         lambda: None,
     )
@@ -297,7 +297,7 @@ def test_candidate_scope_transition_preserves_partition_identity(db: Session) ->
 def test_files_source_owned_adapter_rejects_generic_candidate_scope_transition(
     db: Session,
 ) -> None:
-    from ai_do_api.domains.files.source_access import FileManagerSourceAccessAdapter
+    from open_alm_api.domains.files.source_access import FileManagerSourceAccessAdapter
 
     adapter = FileManagerSourceAccessAdapter()
     partition = create_managed_partition(

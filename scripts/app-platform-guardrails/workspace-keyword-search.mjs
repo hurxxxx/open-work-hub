@@ -8,7 +8,7 @@ const FRONTEND_LEGACY_TOKENS = [
   'WORKSPACE_SEARCH_SOURCE_APP_IDS',
 ];
 const SEARCH_PROJECTION_PATH =
-  /^apps\/api\/src\/ai_do_api\/domains\/([^/]+)\/search_projection\.py$/;
+  /^apps\/api\/src\/open_alm_api\/domains\/([^/]+)\/search_projection\.py$/;
 const SEARCH_LABEL_KEY_PATTERN = /^ai\.search\.(entity[A-Z][A-Za-z0-9]*)$/;
 const SEARCH_LIFECYCLE_OPERATIONS = ['create', 'update', 'delete'];
 
@@ -178,7 +178,7 @@ function searchLabelLocaleCoverage(resourcesSource, labelProperty) {
 
 function searchEntityEnumValues(repoRoot) {
   const schemaSource = readFileIfPresent(
-    path.join(repoRoot, 'apps/api/src/ai_do_api/domains/search/schemas.py'),
+    path.join(repoRoot, 'apps/api/src/open_alm_api/domains/search/schemas.py'),
   );
   return new Map(
     [
@@ -237,7 +237,7 @@ export function validateWorkspaceKeywordSearchHarness({
   });
 
   visitFiles(
-    path.join(repoRoot, 'apps/api/src/ai_do_api/domains'),
+    path.join(repoRoot, 'apps/api/src/open_alm_api/domains'),
     (absolutePath) => {
       if (!absolutePath.endsWith('.py')) {
         return;
@@ -248,7 +248,7 @@ export function validateWorkspaceKeywordSearchHarness({
       if (
         source.includes('SearchEntityAdapter(') &&
         filePath !==
-          'apps/api/src/ai_do_api/domains/search/entity_adapter_registry.py' &&
+          'apps/api/src/open_alm_api/domains/search/entity_adapter_registry.py' &&
         !projectionMatch
       ) {
         errors.push({
@@ -261,7 +261,7 @@ export function validateWorkspaceKeywordSearchHarness({
         /register_search_(?:entity_descriptor|projection_adapter)\s*\(/.test(
           source,
         ) &&
-        !filePath.startsWith('apps/api/src/ai_do_api/domains/search/')
+        !filePath.startsWith('apps/api/src/open_alm_api/domains/search/')
       ) {
         errors.push({
           filePath,
@@ -291,7 +291,7 @@ export function validateWorkspaceKeywordSearchHarness({
   const compositionSource = readFileIfPresent(
     path.join(
       repoRoot,
-      'apps/api/src/ai_do_api/domains/search/default_entity_adapters.py',
+      'apps/api/src/open_alm_api/domains/search/default_entity_adapters.py',
     ),
   );
   const lifecycleTestSource = readFileIfPresent(
@@ -302,7 +302,7 @@ export function validateWorkspaceKeywordSearchHarness({
   );
 
   for (const declaration of adapterDeclarations) {
-    const moduleName = `ai_do_api.domains.${declaration.domain}.search_projection`;
+    const moduleName = `open_alm_api.domains.${declaration.domain}.search_projection`;
     const constantOccurrences = [
       ...compositionSource.matchAll(
         new RegExp(`\\b${escapeRegExp(declaration.constantName)}\\b`, 'g'),

@@ -2,7 +2,7 @@
 
 ## 한 줄 요약
 
-AI-DO는 독립적인 AI HUB 플랫폼이다. PMS, Planner, Docs, Files 등은 현재 코드 기준으로
+Open ALM는 독립적인 AI HUB 플랫폼이다. PMS, Planner, Docs, Files 등은 현재 코드 기준으로
 유지하되 Meeting과 Recording은 미완성·미운영이며, Mail도 미완성·미운영이고 추가 개발 여부가
 아직 정해지지 않았다. 범용 Knowledge 제품 기능과 domain runtime/model은 퇴역했다.
 문서중앙화 연계는 Files를 정본으로 하는 source-specific mcloudoc 수용 경계만 구현했으며,
@@ -14,8 +14,8 @@ module 구조이다.
 
 ## 운영/개발 체크아웃
 
-운영 서버에서는 `/projects/ai-do/prod`가 `main` 브랜치 운영 checkout이고,
-`/projects/ai-do/dev`가 `dev` 브랜치 개발 checkout이다. 개발 변경은 `dev`에서
+운영 서버에서는 `/projects/open-alm/prod`가 `main` 브랜치 운영 checkout이고,
+`/projects/open-alm/dev`가 `dev` 브랜치 개발 checkout이다. 개발 변경은 `dev`에서
 검증한 뒤 GitLab MR로 `main`에 병합한다. 구 경로 호환 symlink는 두지 않는다.
 
 ## 구현 상태 표
@@ -32,10 +32,10 @@ module 구조이다.
 | Recording              | 미완성·미운영                                           | 전사/요약/문서 연결 코드는 운영 사용 대상이 아니며 완성·인수 기준을 별도 결정                                                                                                                            |
 | Docs/Collab            | 구현됨                                                  | BlockNote/Yjs 기반 문서 협업과 native Docs RAG 유지                                                                                                                                                      |
 | Files                  | 구현됨, 운영 empty generation gate 활성                 | production은 검증된 empty pair 기반 가용성 bootstrap만 완료했으며 실데이터 품질은 `deferred_until_nonempty`이다. source-managed explicit grants는 아직 비활성인 mcloudoc 수용 capability다.              |
-| mcloudoc               | AI-DO 수용 기반 구현, 외부 adapter 미구현               | 대상중립 source/document/run, Files binding, typed metadata·ACL, 증분/snapshot 계약은 구현. 대상 transport·인증·필드/identity 매핑과 공동 E2E 확정 전 운영 source·worker는 만들거나 켜지 않음            |
+| mcloudoc               | Open ALM 수용 기반 구현, 외부 adapter 미구현               | 대상중립 source/document/run, Files binding, typed metadata·ACL, 증분/snapshot 계약은 구현. 대상 transport·인증·필드/identity 매핑과 공동 E2E 확정 전 운영 source·worker는 만들거나 켜지 않음            |
 | Knowledge              | 제품 기능·domain runtime/model 제거 완료(Release N)     | app/API/domain model과 PMS·Meeting 이중쓰기는 제거했다. Release N/N+1은 비우회 임시 cutover gate와 legacy 4개 table/Alembic-only metadata를 보존하며 registry는 N+1, 물리 table·gate는 N+2에서 제거한다. |
 | Whiteboard             | 구현됨                                                  | 필요 사례가 명확할 때 RAG/export 보조 기능 검토                                                                                                                                                          |
-| AI-DO Desktop          | 별도 repo로 분리                                        | 앱 소스와 패키징은 `/projects/ai-do/ai-do-desktop`, 포털은 update feed/session link 유지                                                                                                                 |
+| Open ALM Desktop          | 별도 repo로 분리                                        | 앱 소스와 패키징은 `/projects/open-alm/open-alm-desktop`, 포털은 update feed/session link 유지                                                                                                                 |
 | Keyword Search         | 구현됨, 주력                                            | OpenSearch 기반 workspace 검색. Retrieval layer와 함께 통합 검색 진입점으로 유지                                                                                                                         |
 | RAG runtime            | 로컬 provider 반영, 주력                                | Snowflake-ko/Qdrant/Docling 기반. Docs native가 active workspace 대상이고 QNA는 company 대상                                                                                                             |
 | AI Gateway             | 정책/audit 기반 구현, adoption 부분 완료                | Core gateway와 provider SDK/HTTP envelope가 동작한다. 비용 계산·quota/throttling은 미구현이며 현재 계약은 `docs/domains/ai/gateway.md`를 따른다.                                                         |

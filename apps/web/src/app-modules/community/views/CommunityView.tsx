@@ -22,7 +22,7 @@ import {
   Input,
   Select,
   useConfirm,
-} from '@ai-do/ui';
+} from '@open-alm/ui';
 
 import { UserDateTime } from '@/src/components/date/UserDateTime';
 import { hasAdminConsoleAccess } from '@/src/platform/auth/auth-api';

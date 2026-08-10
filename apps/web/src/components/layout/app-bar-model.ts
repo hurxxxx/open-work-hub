@@ -534,7 +534,7 @@ export function buildAppBarItemsProjection({
             translate(`shell:apps.${activeAppId}`, {
               defaultValue:
                 appBarItemById.get(activeAppId as AppBarItem['id'])?.title ??
-                'AI-DO',
+                'Open ALM',
             })),
     draftItems,
     fixedItems,

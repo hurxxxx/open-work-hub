@@ -5,11 +5,11 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from ai_do_api.core.db import Base
-from ai_do_api.domains.auth.models import Workspace
-from ai_do_api.domains.rag import queue_health
-from ai_do_api.domains.rag.contracts import RagJobStatus, RagSyncLane, RagSyncOperation
-from ai_do_api.domains.rag.models import RagSyncJob, RagVisibilityRecomputeJob
+from open_alm_api.core.db import Base
+from open_alm_api.domains.auth.models import Workspace
+from open_alm_api.domains.rag import queue_health
+from open_alm_api.domains.rag.contracts import RagJobStatus, RagSyncLane, RagSyncOperation
+from open_alm_api.domains.rag.models import RagSyncJob, RagVisibilityRecomputeJob
 
 
 def _engine():

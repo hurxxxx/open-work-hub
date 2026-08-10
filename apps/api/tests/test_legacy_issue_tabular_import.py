@@ -5,11 +5,11 @@ from io import BytesIO
 
 from openpyxl import Workbook
 
-from ai_do_api.domains.legacy_issues.dataset_records import (
+from open_alm_api.domains.legacy_issues.dataset_records import (
     clean_dataset_values,
     get_dataset_definition,
 )
-from ai_do_api.domains.legacy_issues.tabular_import import parse_tabular_upload
+from open_alm_api.domains.legacy_issues.tabular_import import parse_tabular_upload
 
 
 def test_xlsx_date_and_datetime_cells_are_normalized_by_date_fields() -> None:

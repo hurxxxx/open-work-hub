@@ -8,16 +8,16 @@ from typing import Any
 
 import pytest
 
-from ai_do_api.domains.retrieval import files_cutover
-from ai_do_api.domains.retrieval.files_cutover import (
+from open_alm_api.domains.retrieval import files_cutover
+from open_alm_api.domains.retrieval.files_cutover import (
     FilesRetrievalCutoverError,
     check_files_retrieval_cutover,
 )
-from ai_do_api.domains.retrieval.files_generation_runner import FilesGenerationError
-from ai_do_api.domains.retrieval.runtime_binding import (
+from open_alm_api.domains.retrieval.files_generation_runner import FilesGenerationError
+from open_alm_api.domains.retrieval.runtime_binding import (
     PartitionedRetrievalRuntimeUnavailable,
 )
-from ai_do_api.domains.retrieval.models import RetrievalProjectionGeneration
+from open_alm_api.domains.retrieval.models import RetrievalProjectionGeneration
 
 
 _CHECKER_SCRIPT = (
@@ -80,7 +80,7 @@ def test_enabled_files_retrieval_cutover_verifies_bound_backend_existence(
     runtime = SimpleNamespace(
         release_cohort="release_20260723",
         keyword_search_client=keyword,
-        rag_collection="ai-do-rag-v1-release_20260723",
+        rag_collection="open-alm-rag-v1-release_20260723",
     )
     monkeypatch.setattr(
         files_cutover,
@@ -162,8 +162,8 @@ def test_files_retrieval_cutover_does_not_fallback_from_partial_active_pair() ->
         id="opensearch-release_20260723",
         backend="opensearch",
         generation_key="release_20260723",
-        physical_name="ai-do-test_keyword_search_documents_v3_release_20260723",
-        alias_name="ai-do-test_keyword_search_documents",
+        physical_name="open-alm-test_keyword_search_documents_v3_release_20260723",
+        alias_name="open-alm-test_keyword_search_documents",
         schema_version=3,
         state="active",
         validation_state="passed",
@@ -189,7 +189,7 @@ def test_files_retrieval_cutover_default_qdrant_probe_is_read_only_and_closed(
     runtime = SimpleNamespace(
         release_cohort="release_20260723",
         keyword_search_client=SimpleNamespace(index_exists=lambda: True),
-        rag_collection="ai-do-rag-v1-release_20260723",
+        rag_collection="open-alm-rag-v1-release_20260723",
     )
     monkeypatch.setattr(
         files_cutover,
@@ -238,7 +238,7 @@ def test_files_retrieval_cutover_fails_closed_when_physical_index_is_missing(
     runtime = SimpleNamespace(
         release_cohort="release_20260723",
         keyword_search_client=SimpleNamespace(index_exists=lambda: False),
-        rag_collection="ai-do-rag-v1-release_20260723",
+        rag_collection="open-alm-rag-v1-release_20260723",
     )
     monkeypatch.setattr(
         files_cutover,
@@ -264,7 +264,7 @@ def test_files_retrieval_cutover_fails_closed_when_physical_collection_is_missin
     runtime = SimpleNamespace(
         release_cohort="release_20260723",
         keyword_search_client=SimpleNamespace(index_exists=lambda: True),
-        rag_collection="ai-do-rag-v1-release_20260723",
+        rag_collection="open-alm-rag-v1-release_20260723",
     )
     monkeypatch.setattr(
         files_cutover,
@@ -289,7 +289,7 @@ def test_files_retrieval_cutover_sanitizes_backend_probe_failures(
     runtime = SimpleNamespace(
         release_cohort="release_20260723",
         keyword_search_client=SimpleNamespace(index_exists=lambda: True),
-        rag_collection="ai-do-rag-v1-release_20260723",
+        rag_collection="open-alm-rag-v1-release_20260723",
     )
     monkeypatch.setattr(
         files_cutover,

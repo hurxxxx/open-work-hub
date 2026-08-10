@@ -102,12 +102,12 @@ def alembic_config(
     monkeypatch: pytest.MonkeyPatch,
     postgres_dsn: str,
 ) -> Iterator[object]:
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", postgres_dsn)
-    monkeypatch.setenv("AI_DO_API_AUTO_MIGRATE", "0")
-    monkeypatch.setenv("AI_DO_LLM_HEALTHCHECK_ON_STARTUP", "0")
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", postgres_dsn)
+    monkeypatch.setenv("OPEN_ALM_API_AUTO_MIGRATE", "0")
+    monkeypatch.setenv("OPEN_ALM_LLM_HEALTHCHECK_ON_STARTUP", "0")
 
-    from ai_do_api.core.db import _alembic_config
-    from ai_do_api.core.settings import get_settings
+    from open_alm_api.core.db import _alembic_config
+    from open_alm_api.core.settings import get_settings
 
     get_settings.cache_clear()
     engine = create_engine(postgres_dsn)
@@ -198,7 +198,7 @@ def _insert_mcloudoc_downgrade_fixture(
             ) VALUES (
                 'mcloudoc-downgrade-user',
                 'mcloudoc-downgrade-user',
-                'mcloudoc-downgrade@ai-do.local',
+                'mcloudoc-downgrade@open-alm.local',
                 'mcloudoc Downgrade User',
                 'hash',
                 'local',
@@ -369,7 +369,7 @@ def _insert_knowledge_schema_retirement_fixture(connection) -> None:
             ) VALUES (
                 'knowledge-retirement-user',
                 'knowledge-retirement-user',
-                'knowledge-retirement@ai-do.local',
+                'knowledge-retirement@open-alm.local',
                 'Knowledge Retirement User',
                 'hash',
                 'local',
@@ -899,7 +899,7 @@ def test_fresh_database_reaches_head_without_model_drift(
         engine.dispose()
     _assert_no_model_drift(alembic_config)
 
-    from ai_do_api.core.db import get_engine, get_session_factory, init_db
+    from open_alm_api.core.db import get_engine, get_session_factory, init_db
 
     get_engine.cache_clear()
     get_session_factory.cache_clear()
@@ -1718,8 +1718,8 @@ def test_legacy_registrant_label_migration_preserves_custom_labels(
 ) -> None:
     command.upgrade(alembic_config, LEGACY_REGISTRANT_LABEL_PREVIOUS_REVISION)
 
-    from ai_do_api.domains.auth.models import Workspace
-    from ai_do_api.domains.legacy_issues.models import LegacyIssueSystemFieldSetting
+    from open_alm_api.domains.auth.models import Workspace
+    from open_alm_api.domains.legacy_issues.models import LegacyIssueSystemFieldSetting
 
     engine = create_engine(postgres_dsn)
     try:
@@ -1814,8 +1814,8 @@ def test_legacy_vehicle_stage_migration_backfills_existing_checklists(
 ) -> None:
     command.upgrade(alembic_config, LEGACY_VEHICLE_STAGE_PREVIOUS_REVISION)
 
-    from ai_do_api.domains.auth.models import User, Workspace
-    from ai_do_api.domains.legacy_issues.models import (
+    from open_alm_api.domains.auth.models import User, Workspace
+    from open_alm_api.domains.legacy_issues.models import (
         LegacyIssueDataRevision,
         LegacyIssueVehicleModel,
     )
@@ -1969,7 +1969,7 @@ def test_hr_workforce_management_downgrade_removes_v4_only_state(
         alembic_config,
         KNOWLEDGE_SCHEMA_RETIREMENT_PREVIOUS_REVISION,
     )
-    from ai_do_api.domains.hr.models import (
+    from open_alm_api.domains.hr.models import (
         HrMasterPersonRow,
         HrMasterRun,
         HrManualIdentityLink,
@@ -2239,7 +2239,7 @@ def test_legacy_issue_reports_are_backfilled_into_numbered_artifacts(
                 ) VALUES (
                     'report-backfill-user',
                     'report-backfill-user',
-                    'report-backfill@ai-do.local',
+                    'report-backfill@open-alm.local',
                     'Report Backfill User',
                     'hash',
                     'local',
@@ -2364,7 +2364,7 @@ def test_completed_ai_artifact_allows_only_visibility_and_fk_lineage_cleanup(
                 ) VALUES (
                     'artifact-guard-user',
                     'artifact-guard-user',
-                    'artifact-guard@ai-do.local',
+                    'artifact-guard@open-alm.local',
                     'Artifact Guard User',
                     'hash',
                     'local',
@@ -3628,7 +3628,7 @@ def test_populated_pre_partition_schema_reaches_head_without_rewriting_rows(
                     ) VALUES (
                         'migration-preserve-user',
                         'migration-preserve-user',
-                        'migration-preserve@ai-do.local',
+                        'migration-preserve@open-alm.local',
                         'Migration Preserve User',
                         'hash',
                         'local',
@@ -4084,7 +4084,7 @@ def test_consolidated_release_note_preserves_identity_and_restores_original(
                     ) VALUES (
                         'consolidated-release-note-reader',
                         'consolidated-release-note-reader',
-                        'consolidated-release-note-reader@ai-do.local',
+                        'consolidated-release-note-reader@open-alm.local',
                         'Consolidated Release Note Reader',
                         'hash',
                         'local',
@@ -4215,7 +4215,7 @@ def test_july_20_release_note_combines_content_and_supersedes_july_16(
                     ) VALUES (
                         'july-20-release-note-reader',
                         'july-20-release-note-reader',
-                        'july-20-release-note-reader@ai-do.local',
+                        'july-20-release-note-reader@open-alm.local',
                         'July 20 Release Note Reader',
                         'hash',
                         'local',
@@ -4670,7 +4670,7 @@ def test_global_personal_apps_upgrade_preserves_populated_mail_and_planner_scope
                     ) VALUES (
                         'global-personal-user',
                         'global-personal-user',
-                        'global-personal@ai-do.local',
+                        'global-personal@open-alm.local',
                         'Global Personal User',
                         'hash',
                         'local',
@@ -4707,19 +4707,19 @@ def test_global_personal_apps_upgrade_preserves_populated_mail_and_planner_scope
                         'global-personal-mail-account',
                         'global-personal-workspace',
                         'global-personal-user',
-                        'mail@ai-do.local',
+                        'mail@open-alm.local',
                         'Preserved Mail',
                         'imap',
                         'imap',
-                        'imap.ai-do.local',
+                        'imap.open-alm.local',
                         993,
                         'ssl',
-                        'mail@ai-do.local',
+                        'mail@open-alm.local',
                         'encrypted-incoming',
-                        'smtp.ai-do.local',
+                        'smtp.open-alm.local',
                         587,
                         'starttls',
-                        'mail@ai-do.local',
+                        'mail@open-alm.local',
                         'encrypted-smtp',
                         true,
                         'connected',
@@ -4867,7 +4867,7 @@ def test_head_repairs_already_applied_destructive_global_personal_schema(
                     ) VALUES (
                         'global-repair-user',
                         'global-repair-user',
-                        'global-repair@ai-do.local',
+                        'global-repair@open-alm.local',
                         'Global Repair User',
                         'hash',
                         'local',
@@ -4904,19 +4904,19 @@ def test_head_repairs_already_applied_destructive_global_personal_schema(
                         'global-repair-mail-account',
                         'global-repair-workspace',
                         'global-repair-user',
-                        'repair@ai-do.local',
+                        'repair@open-alm.local',
                         'Repair Mail',
                         'imap',
                         'imap',
-                        'imap.ai-do.local',
+                        'imap.open-alm.local',
                         993,
                         'ssl',
-                        'repair@ai-do.local',
+                        'repair@open-alm.local',
                         'encrypted-incoming',
-                        'smtp.ai-do.local',
+                        'smtp.open-alm.local',
                         587,
                         'starttls',
-                        'repair@ai-do.local',
+                        'repair@open-alm.local',
                         'encrypted-smtp',
                         true,
                         'connected',

@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from ai_do_api.domains.dm import message_delivery, message_flow
+from open_alm_api.domains.dm import message_delivery, message_flow
 
 
 NOW = datetime(2026, 5, 21, 12, 0, 0)

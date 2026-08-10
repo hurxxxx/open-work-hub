@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 from minio.error import S3Error
 
-from ai_do_api.domains.media.object_storage import (
+from open_alm_api.domains.media.object_storage import (
     DEFAULT_MEDIA_CONTENT_TYPE,
     MediaObjectNotFoundError,
     MediaObjectReadError,

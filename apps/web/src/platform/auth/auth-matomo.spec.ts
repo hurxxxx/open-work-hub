@@ -7,9 +7,9 @@ function user(overrides: Partial<AuthUser> = {}): AuthUser {
   return {
     app_bar_layout: { pinned_app_ids: [] },
     date_format: 'korean',
-    display_name: 'AI-DO Member',
-    email: 'member@ai-do.local',
-    full_name: 'AI-DO Member',
+    display_name: 'Open ALM Member',
+    email: 'member@open-alm.local',
+    full_name: 'Open ALM Member',
     id: 'internal-user-1',
     job_title: null,
     last_login_at: null,
@@ -32,7 +32,7 @@ describe('resolveMatomoUserIdentity', () => {
     expect(resolveMatomoUserIdentity(user())).toEqual({
       userId: 'member',
       userLoginId: 'member',
-      userName: 'AI-DO Member',
+      userName: 'Open ALM Member',
     });
   });
 

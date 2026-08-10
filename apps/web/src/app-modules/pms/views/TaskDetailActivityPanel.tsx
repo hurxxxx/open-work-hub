@@ -1,4 +1,4 @@
-import { Button } from '@ai-do/ui';
+import { Button } from '@open-alm/ui';
 import { Loader2, Send } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 

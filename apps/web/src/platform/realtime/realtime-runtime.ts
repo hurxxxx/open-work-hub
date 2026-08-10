@@ -2,7 +2,7 @@ import {
   REALTIME_CLIENT_EVENT_TYPES,
   REALTIME_SERVER_EVENT_TYPES,
   type DocsPagesRealtimeSubscriptionMessage,
-} from '@ai-do/contracts/realtime';
+} from '@open-alm/contracts/realtime';
 
 export type RealtimeStatus = 'connecting' | 'live' | 'offline';
 

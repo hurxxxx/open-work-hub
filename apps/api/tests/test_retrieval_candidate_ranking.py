@@ -4,8 +4,8 @@ from collections.abc import Sequence
 
 import pytest
 
-from ai_do_api.domains.rag.contracts import RagVectorSearchHit
-from ai_do_api.domains.retrieval.candidate_ranking import (
+from open_alm_api.domains.rag.contracts import RagVectorSearchHit
+from open_alm_api.domains.retrieval.candidate_ranking import (
     MAX_CANDIDATES,
     MAX_CANDIDATE_TEXT_CHARS,
     MAX_QUERY_CHARS,

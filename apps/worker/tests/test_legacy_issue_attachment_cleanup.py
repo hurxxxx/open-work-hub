@@ -17,8 +17,8 @@ API_SRC = WORKSPACE_ROOT / "apps" / "api" / "src"
 if str(API_SRC) not in sys.path:
     sys.path.insert(0, str(API_SRC))
 
-from ai_do_api.core.db import Base
-from ai_do_api.domains.legacy_issues.models import (
+from open_alm_api.core.db import Base
+from open_alm_api.domains.legacy_issues.models import (
     LegacyIssueRevisionMeetingAttachment,
     LegacyIssueRevisionMeetingAttachmentCleanup,
     LegacyIssueVehicleModuleChecklistAttachmentCleanup,
@@ -76,11 +76,11 @@ class _ModelReferencedStorageKeySession:
 
 
 def _load_tasks(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("AI_DO_WORKER_QUEUE_GROUP", "default")
-    from ai_do_worker.settings import get_settings
+    monkeypatch.setenv("OPEN_ALM_WORKER_QUEUE_GROUP", "default")
+    from open_alm_worker.settings import get_settings
 
     get_settings.cache_clear()
-    return importlib.import_module("ai_do_worker.tasks.legacy_issue_attachment_index")
+    return importlib.import_module("open_alm_worker.tasks.legacy_issue_attachment_index")
 
 
 def test_cleanup_task_drains_more_than_100_rows_and_retries_failure_next_run(

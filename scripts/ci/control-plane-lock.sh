@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 
-ai_do_ci_control_plane_default_lock_file() {
-  printf '%s\n' "/home/dwdcc/.local/state/ai-do-ci-control-plane.lock"
+open_alm_ci_control_plane_default_lock_file() {
+  printf '%s\n' "/home/open-alm/.local/state/open-alm-ci-control-plane.lock"
 }
 
-acquire_ai_do_ci_control_plane_lock() {
-  local requested_lock_file="${1:-$(ai_do_ci_control_plane_default_lock_file)}"
+acquire_open_alm_ci_control_plane_lock() {
+  local requested_lock_file="${1:-$(open_alm_ci_control_plane_default_lock_file)}"
 
-  if [[ -n "${AI_DO_CI_CONTROL_PLANE_LOCK_FD:-}" ]]; then
-    if [[ "${AI_DO_CI_CONTROL_PLANE_LOCK_FILE:-}" != "$requested_lock_file" ]] ||
-       [[ ! "$AI_DO_CI_CONTROL_PLANE_LOCK_FD" =~ ^[0-9]+$ ]] ||
-       ! : >&"$AI_DO_CI_CONTROL_PLANE_LOCK_FD" ||
-       ! flock -n "$AI_DO_CI_CONTROL_PLANE_LOCK_FD"; then
+  if [[ -n "${OPEN_ALM_CI_CONTROL_PLANE_LOCK_FD:-}" ]]; then
+    if [[ "${OPEN_ALM_CI_CONTROL_PLANE_LOCK_FILE:-}" != "$requested_lock_file" ]] ||
+       [[ ! "$OPEN_ALM_CI_CONTROL_PLANE_LOCK_FD" =~ ^[0-9]+$ ]] ||
+       ! : >&"$OPEN_ALM_CI_CONTROL_PLANE_LOCK_FD" ||
+       ! flock -n "$OPEN_ALM_CI_CONTROL_PLANE_LOCK_FD"; then
       echo "Inherited CI control-plane lock state is invalid." >&2
       return 2
     fi
@@ -27,15 +27,15 @@ acquire_ai_do_ci_control_plane_lock() {
     return 2
   fi
 
-  exec {AI_DO_CI_CONTROL_PLANE_LOCK_FD}>"$requested_lock_file"
+  exec {OPEN_ALM_CI_CONTROL_PLANE_LOCK_FD}>"$requested_lock_file"
   chmod 600 "$requested_lock_file"
-  if ! flock -n "$AI_DO_CI_CONTROL_PLANE_LOCK_FD"; then
-    exec {AI_DO_CI_CONTROL_PLANE_LOCK_FD}>&-
-    unset AI_DO_CI_CONTROL_PLANE_LOCK_FD
+  if ! flock -n "$OPEN_ALM_CI_CONTROL_PLANE_LOCK_FD"; then
+    exec {OPEN_ALM_CI_CONTROL_PLANE_LOCK_FD}>&-
+    unset OPEN_ALM_CI_CONTROL_PLANE_LOCK_FD
     echo "Another CI control-plane mutation is active." >&2
     return 2
   fi
-  AI_DO_CI_CONTROL_PLANE_LOCK_FILE="$requested_lock_file"
-  export AI_DO_CI_CONTROL_PLANE_LOCK_FD
-  export AI_DO_CI_CONTROL_PLANE_LOCK_FILE
+  OPEN_ALM_CI_CONTROL_PLANE_LOCK_FILE="$requested_lock_file"
+  export OPEN_ALM_CI_CONTROL_PLANE_LOCK_FD
+  export OPEN_ALM_CI_CONTROL_PLANE_LOCK_FILE
 }

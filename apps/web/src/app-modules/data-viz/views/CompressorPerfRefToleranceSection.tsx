@@ -1,7 +1,7 @@
 import { useMemo, useRef } from 'react';
 import { Loader2, Save, Upload } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { InlineNotice } from '@ai-do/ui';
+import { InlineNotice } from '@open-alm/ui';
 
 import { cn } from '@/src/lib/utils';
 import type {

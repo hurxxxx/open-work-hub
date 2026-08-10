@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from ai_do_api.domains.meeting.notes_lifecycle import (
+from open_alm_api.domains.meeting.notes_lifecycle import (
     meeting_notes_doc_title,
     meeting_notes_page_title,
     resolve_notes_lifecycle_action,

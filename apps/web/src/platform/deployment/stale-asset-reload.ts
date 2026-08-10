@@ -1,4 +1,4 @@
-const STALE_ASSET_RELOAD_STORAGE_KEY = 'ai-do:stale-asset-reload-at';
+const STALE_ASSET_RELOAD_STORAGE_KEY = 'open-alm:stale-asset-reload-at';
 const DEFAULT_STALE_ASSET_RELOAD_COOLDOWN_MS = 60_000;
 export const STALE_ASSET_RELOAD_QUERY_PARAM = '__reload';
 

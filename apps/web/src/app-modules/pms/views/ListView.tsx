@@ -33,7 +33,7 @@ import {
   Check,
   RotateCcw,
 } from 'lucide-react';
-import { Button } from '@ai-do/ui';
+import { Button } from '@open-alm/ui';
 import { useTranslation } from 'react-i18next';
 import { DateInput } from '@/src/components/date/DateInput';
 import {

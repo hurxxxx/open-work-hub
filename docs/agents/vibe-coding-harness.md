@@ -32,7 +32,7 @@ app-local 변경이다. 이 변경만으로 Core Enablement, app-delivery skill,
 - CI, agent policy, checker, guardrail exclusion, CODEOWNERS.
 
 필요한 extension point가 없으면 기능 MR을 확대하거나 lane을 높이지 말고
-`ai-do-vibe-app-delivery`의 core-enablement brief를 작성한다. Core Enablement MR은
+`open-alm-vibe-app-delivery`의 core-enablement brief를 작성한다. Core Enablement MR은
 `.gitlab/merge_request_templates/Core_Enablement.md`를 사용하고 독립 배포·기본 비활성·
 활성화 소유권을 명시한다.
 
@@ -64,7 +64,7 @@ Lane은 app delivery, protected platform, migration/generated/shared runtime, �
 | App identity/manifest/API prefix | `docs/domains/app-platform/README.md` | 기존 composition/registration을 사용하고 local allowlist·deep import를 만들지 않는다 |
 | UI component/time/feedback | `docs/agents/ui-components.md`, `docs/product/ui-design-principles.md` | 공용 UI, i18n, accessibility, user time contract 재사용 |
 | API/data/auth | 현재 domain code/tests | 서버 RBAC, workspace isolation, authoritative persistence, compatibility |
-| AI capability/LLM | ADR 0002, ADR 0005, `ai-do-mcp-capability-governance` | registered workload/common interface, server route, budget/audit/approval, no direct provider call |
+| AI capability/LLM | ADR 0002, ADR 0005, `open-alm-mcp-capability-governance` | registered workload/common interface, server route, budget/audit/approval, no direct provider call |
 | Search/RAG/projection | `docs/domains/retrieval/README.md`, ADR 0009 | partition은 ACL이 아니며 source ACL·stable identity·version fence·generation cutover 적용 |
 | File/network | 현재 parser/service와 security tests | observed type, counted limits, redirect마다 SSRF 검증, TLS, safe content disposition |
 | Worker | worker bootstrap와 app task tests | 배포 import/registration, queue/beat, retry/idempotency |
@@ -113,7 +113,7 @@ Codex review만 수행하고, 비-Codex 전체 검증은 `dev → main` release 
 기능 MR은 clean/committed branch에서 다음 명령으로 등록한다.
 
 ```bash
-pnpm mr:publish -- --title "<title>" --description-file /tmp/ai-do-mr.md
+pnpm mr:publish -- --title "<title>" --description-file /tmp/open-alm-mr.md
 ```
 
 Publisher는 current target, clean state, merge result, diff와 lane metadata를 확인하고 동일 SHA의
@@ -123,7 +123,7 @@ push pipeline, 생성 즉시 auto-merge로 이 흐름을 대체하지 않는다.
 
 MR evidence와 review는 latest source SHA와 target merge result에 결합한다. Source가 바뀌면
 affected evidence를 갱신하고, target이 바뀌어 merged surface가 달라지면 관련 검증을 다시 본다.
-MR review/merge 판단을 실제로 요청한 경우에만 `ai-do-mr-review-validation`을 사용한다.
+MR review/merge 판단을 실제로 요청한 경우에만 `open-alm-mr-review-validation`을 사용한다.
 
 ## Stop Conditions
 

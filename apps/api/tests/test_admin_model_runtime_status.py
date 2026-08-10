@@ -7,15 +7,15 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from ai_do_api.core.settings import Settings
-from ai_do_api.domains.admin import model_runtime_status_router
-from ai_do_api.domains.admin import model_runtime_status_service
-from ai_do_api.domains.admin.model_runtime_status_schemas import (
+from open_alm_api.core.settings import Settings
+from open_alm_api.domains.admin import model_runtime_status_router
+from open_alm_api.domains.admin import model_runtime_status_service
+from open_alm_api.domains.admin.model_runtime_status_schemas import (
     AdminModelRuntimeStatusResponse,
     ModelRuntimeModelResponse,
     ModelRuntimeTargetResponse,
 )
-from ai_do_api.domains.admin.model_runtime_status_service import (
+from open_alm_api.domains.admin.model_runtime_status_service import (
     collect_model_runtime_status,
 )
 from tests.dev_accounts import auth_headers, dev_login
@@ -23,7 +23,7 @@ from tests.dev_accounts import auth_headers, dev_login
 
 def _settings(**overrides: object) -> Settings:
     values = {
-        "postgres_dsn": ("postgresql+psycopg://ai_do_test:ai_do_test@127.0.0.1:5432/ai_do_test"),
+        "postgres_dsn": ("postgresql+psycopg://open_alm_test:open_alm_test@127.0.0.1:5432/open_alm_test"),
         "inference_gateway_base_url": "http://current-server:18080",
         "inference_gateway_api_key": "gateway-secret",
         "llm_local_base_url": "http://dgx-lb:8000/v1",

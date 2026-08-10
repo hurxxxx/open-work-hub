@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TFunction } from 'i18next';
-import type { BlockContent } from '@ai-do/ui';
+import type { BlockContent } from '@open-alm/ui';
 
 import { linkMedia, extractMediaIds } from '@/src/platform/media/media-api';
 import {

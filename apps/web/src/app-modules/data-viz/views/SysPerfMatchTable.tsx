@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, Loader2, RefreshCw, Repeat2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { InlineNotice } from '@ai-do/ui';
+import { InlineNotice } from '@open-alm/ui';
 
 import { type SysPerfUploadedFile } from '../api/dataviz-api';
 import { MEASURE_ITEMS } from './sysperf-items';

@@ -11,15 +11,15 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 from starlette.exceptions import HTTPException
 
-from ai_do_api.core.db import Base
-from ai_do_api.domains.auth.models import AuditLog, OrgUnit, User, Workspace, utcnow_naive
-from ai_do_api.domains.legacy_issues.models import (
+from open_alm_api.core.db import Base
+from open_alm_api.domains.auth.models import AuditLog, OrgUnit, User, Workspace, utcnow_naive
+from open_alm_api.domains.legacy_issues.models import (
     LegacyIssueDataRevision,
     LegacyIssueRevisionMeetingAttachment,
     LegacyIssueRevisionMeetingAttachmentCleanup,
     LegacyIssueRevisionOverviewHistory,
 )
-from ai_do_api.domains.legacy_issues.revision_meeting_attachments import (
+from open_alm_api.domains.legacy_issues.revision_meeting_attachments import (
     RevisionMeetingAttachmentStorage,
     RevisionMeetingAttachmentUpload,
     can_delete_revision_meeting_attachment,
@@ -34,7 +34,7 @@ from ai_do_api.domains.legacy_issues.revision_meeting_attachments import (
     update_revision_meeting_attachment_description,
     upload_revision_meeting_attachment,
 )
-from ai_do_api.domains.legacy_issues.revisioning import (
+from open_alm_api.domains.legacy_issues.revisioning import (
     ensure_initial_published_revision,
     ensure_published_revision_overview_history,
 )
@@ -128,7 +128,7 @@ def _upload(
 def _install_fake_storage(
     monkeypatch: pytest.MonkeyPatch,
 ) -> tuple["_FakeStorageClient", RevisionMeetingAttachmentStorage]:
-    from ai_do_api.domains.legacy_issues import revision_meeting_attachments as service
+    from open_alm_api.domains.legacy_issues import revision_meeting_attachments as service
 
     client = _FakeStorageClient()
     storage = RevisionMeetingAttachmentStorage(
@@ -148,7 +148,7 @@ def _install_fake_storage(
 def test_upload_reader_counts_chunks_normalizes_metadata_and_rejects_invalid_size(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from ai_do_api.domains.legacy_issues import revision_meeting_attachments as service
+    from open_alm_api.domains.legacy_issues import revision_meeting_attachments as service
 
     file = _AsyncUploadFile(
         chunks=[b"abc", b"def"],
@@ -496,7 +496,7 @@ def test_list_attachments_optionally_filters_and_validates_visible_history() -> 
 def test_upload_flush_failure_queues_cleanup_when_object_removal_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from ai_do_api.domains.legacy_issues import revision_meeting_attachments as service
+    from open_alm_api.domains.legacy_issues import revision_meeting_attachments as service
 
     client, _storage = _install_fake_storage(monkeypatch)
     with _session() as db:
@@ -582,7 +582,7 @@ def test_upload_refresh_failure_rolls_back_and_compensates_object(
 def test_upload_idempotency_unique_conflict_compensates_losing_object(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from ai_do_api.domains.legacy_issues import revision_meeting_attachments as service
+    from open_alm_api.domains.legacy_issues import revision_meeting_attachments as service
 
     client, _storage = _install_fake_storage(monkeypatch)
     with _session() as db:
@@ -665,7 +665,7 @@ def test_upload_idempotency_unique_conflict_compensates_losing_object(
 def test_router_contract_requires_idempotency_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from ai_do_api.domains.legacy_issues import router as legacy_router
+    from open_alm_api.domains.legacy_issues import router as legacy_router
 
     route_methods = {
         (route.path, method)
@@ -763,8 +763,8 @@ def test_router_contract_requires_idempotency_key(
 def test_router_confirmed_precommit_failure_removes_unreferenced_object(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from ai_do_api.domains.legacy_issues import revision_meeting_attachments as service
-    from ai_do_api.domains.legacy_issues import router as legacy_router
+    from open_alm_api.domains.legacy_issues import revision_meeting_attachments as service
+    from open_alm_api.domains.legacy_issues import router as legacy_router
 
     client, _storage = _install_fake_storage(monkeypatch)
     with _session() as db:
@@ -828,8 +828,8 @@ def test_router_confirmed_precommit_failure_removes_unreferenced_object(
 def test_router_commit_ack_loss_preserves_committed_object(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from ai_do_api.domains.legacy_issues import revision_meeting_attachments as service
-    from ai_do_api.domains.legacy_issues import router as legacy_router
+    from open_alm_api.domains.legacy_issues import revision_meeting_attachments as service
+    from open_alm_api.domains.legacy_issues import router as legacy_router
 
     client, _storage = _install_fake_storage(monkeypatch)
     with _session() as db:
@@ -892,7 +892,7 @@ def test_router_commit_ack_loss_preserves_committed_object(
 def test_unresolved_dbapi_commit_failure_preserves_object_for_orphan_reconciliation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from ai_do_api.domains.legacy_issues import revision_meeting_attachments as service
+    from open_alm_api.domains.legacy_issues import revision_meeting_attachments as service
 
     client, storage = _install_fake_storage(monkeypatch)
     with _session() as db:
@@ -1088,7 +1088,7 @@ def test_ensure_published_overview_links_active_and_never_reexposes_hidden() -> 
 def test_generic_and_internal_revision_reads_do_not_create_meeting_overview_rows(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from ai_do_api.domains.legacy_issues import revisioning
+    from open_alm_api.domains.legacy_issues import revisioning
 
     monkeypatch.setattr(revisioning, "ensure_revision_partition", lambda *_args: "partition")
     with _session() as db:

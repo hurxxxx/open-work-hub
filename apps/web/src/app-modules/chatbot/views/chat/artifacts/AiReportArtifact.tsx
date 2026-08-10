@@ -1,4 +1,4 @@
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@ai-do/ui';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@open-alm/ui';
 import { Download } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';

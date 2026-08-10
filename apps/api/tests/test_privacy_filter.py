@@ -4,14 +4,14 @@ import json
 import sys
 from types import SimpleNamespace
 
-from ai_do_api.core.settings import Settings
-from ai_do_api.domains.ai import privacy_filter
+from open_alm_api.core.settings import Settings
+from open_alm_api.domains.ai import privacy_filter
 
 
 def _settings(**overrides: object) -> Settings:
     values = {
         "postgres_dsn": (
-            "postgresql+psycopg://ai_do_test:ai_do_test@127.0.0.1:5432/ai_do_test"
+            "postgresql+psycopg://open_alm_test:open_alm_test@127.0.0.1:5432/open_alm_test"
         ),
         "opf_enabled": True,
         "opf_checkpoint": "openai/privacy-filter",

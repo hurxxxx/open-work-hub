@@ -23,7 +23,7 @@ const hookMocks = vi.hoisted(() => ({
   toast: { error: vi.fn(), success: vi.fn() },
 }));
 
-vi.mock('@ai-do/ui', () => ({
+vi.mock('@open-alm/ui', () => ({
   useToast: () => hookMocks.toast,
 }));
 

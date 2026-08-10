@@ -1,4 +1,4 @@
-from ai_do_api.domains.files.archive_planner import (
+from open_alm_api.domains.files.archive_planner import (
     ArchivePlanFile,
     ArchivePlanFolder,
     PlannedArchiveEntry,

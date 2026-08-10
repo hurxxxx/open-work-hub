@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Loader2, Save } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { InlineNotice, Input } from '@ai-do/ui';
+import { InlineNotice, Input } from '@open-alm/ui';
 
 import { cn } from '@/src/lib/utils';
 import type { ProfileTolCell } from '../api/dataviz-api';

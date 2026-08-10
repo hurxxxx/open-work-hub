@@ -1,6 +1,6 @@
 # Inference Gateway Domain
 
-Inference Gateway 도메인 문서는 AI-DO 메인 API/worker와 분리된 로컬 추론 백엔드 운영 기준을 둔다.
+Inference Gateway 도메인 문서는 Open ALM 메인 API/worker와 분리된 로컬 추론 백엔드 운영 기준을 둔다.
 LLM 호출 정책, audit, 사용량/비용 귀속, throttling 계획은 [AI Gateway 계약과 로드맵](../ai/gateway.md)을
 정본으로 본다.
 

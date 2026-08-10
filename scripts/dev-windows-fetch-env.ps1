@@ -6,7 +6,7 @@
   - Skips when .env.local already exists (use -Force to overwrite).
   - Installs glab via winget if not on PATH; refreshes PATH from the registry so the
     same session can invoke it.
-  - Configures the dwdcc internal GitLab host (http on port 8929).
+  - Configures the open-alm internal GitLab host (http on port 8929).
   - Authenticates: prefers GLAB_PAT or GITLAB_TOKEN from the environment (non-interactive,
     safe for tooling). Falls back to interactive `glab auth login` when neither is set.
   - Resolves the secure file by name (".env.local") and downloads it to the repo root.
@@ -34,7 +34,7 @@ $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
 $gitlabHost = "128.1.253.101:8929"
-$repo = "dwdcc/ai-do"
+$repo = "open-alm/open-alm"
 $envFile = Join-Path $root ".env.local"
 
 if ((Test-Path $envFile) -and -not $Force) {

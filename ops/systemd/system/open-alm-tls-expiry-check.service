@@ -1,0 +1,17 @@
+[Unit]
+Description=Check the public Open ALM TLS certificate expiry and SAN contract
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+DynamicUser=yes
+ExecStart=/usr/bin/python3 /usr/local/libexec/open-alm/check_live_tls_expiry.py --host=open-alm.example --required-san=open-alm.example --required-san=*.open-alm.example --threshold-days=30
+TimeoutStartSec=30s
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+RestrictAddressFamilies=AF_INET AF_INET6
+UMask=0077

@@ -6,26 +6,26 @@ from types import SimpleNamespace
 from langgraph.checkpoint.memory import MemorySaver
 import pytest
 
-from ai_do_api.core.llm_errors import LlmRuntimeError
-from ai_do_api.domains.ai_graph.contracts import AiGraphNodeResult
-from ai_do_api.domains.ai_graph.runtime import AiGraphRuntimeContext, compile_graph
-from ai_do_api.domains.legacy_issues.analysis_graph.application import (
+from open_alm_api.core.llm_errors import LlmRuntimeError
+from open_alm_api.domains.ai_graph.contracts import AiGraphNodeResult
+from open_alm_api.domains.ai_graph.runtime import AiGraphRuntimeContext, compile_graph
+from open_alm_api.domains.legacy_issues.analysis_graph.application import (
     LegacyIssueAnalysisIncompleteError,
     LegacyIssueGraphDependencies,
     _source_payload,
     build_legacy_issue_node_adapters,
 )
-from ai_do_api.domains.legacy_issues.analysis_graph.contracts import (
+from open_alm_api.domains.legacy_issues.analysis_graph.contracts import (
     AnalysisDataBundle,
     AnalysisEvidence,
     AnalysisInterpretation,
     AnalysisQueryResult,
 )
-from ai_do_api.domains.legacy_issues.analysis_graph.llm import (
+from open_alm_api.domains.legacy_issues.analysis_graph.llm import (
     GraphStructuredOutputError,
     parse_json_object,
 )
-from ai_do_api.domains.legacy_issues.analysis_graph.topology import (
+from open_alm_api.domains.legacy_issues.analysis_graph.topology import (
     legacy_issue_analysis_graph_spec,
 )
 

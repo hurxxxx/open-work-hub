@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Plot from 'react-plotly.js';
 import { Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { EmptyState, InlineNotice, Select } from '@ai-do/ui';
+import { EmptyState, InlineNotice, Select } from '@open-alm/ui';
 
 import { cn } from '@/src/lib/utils';
 import { type SysPerfUploadedFile } from '../api/dataviz-api';

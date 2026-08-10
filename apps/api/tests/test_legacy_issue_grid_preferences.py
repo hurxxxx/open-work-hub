@@ -3,7 +3,7 @@ from threading import Barrier
 
 from fastapi.testclient import TestClient
 
-from ai_do_api.domains.legacy_issues import router as legacy_issue_router
+from open_alm_api.domains.legacy_issues import router as legacy_issue_router
 from dev_accounts import create_workspace_user_session
 
 
@@ -45,7 +45,7 @@ def test_grid_preferences_persist_per_workspace_user_kind_and_key(
         client,
         workspace_key="legacy-grid-pref-a",
         login_id="legacy-grid-pref-user-a",
-        email="legacy-grid-pref-user-a@ai-do.local",
+        email="legacy-grid-pref-user-a@open-alm.local",
     )
     headers = _headers(first["token"])
     dataset_path = (
@@ -128,7 +128,7 @@ def test_grid_preferences_persist_per_workspace_user_kind_and_key(
         client,
         workspace_key="legacy-grid-pref-a",
         login_id="legacy-grid-pref-user-b",
-        email="legacy-grid-pref-user-b@ai-do.local",
+        email="legacy-grid-pref-user-b@open-alm.local",
     )
     assert client.get(
         dataset_path,
@@ -147,7 +147,7 @@ def test_grid_preferences_persist_per_workspace_user_kind_and_key(
         client,
         workspace_key="legacy-grid-pref-b",
         login_id="legacy-grid-pref-user-a",
-        email="legacy-grid-pref-user-a@ai-do.local",
+        email="legacy-grid-pref-user-a@open-alm.local",
     )
     other_workspace_path = (
         "/api/v1/workspaces/legacy-grid-pref-b/legacy-issues/grid-preferences/dataset/aircon"
@@ -203,7 +203,7 @@ def test_grid_preferences_validate_scope_payload_and_workspace_access(
         client,
         workspace_key="legacy-grid-pref-guards",
         login_id="legacy-grid-pref-guard-user",
-        email="legacy-grid-pref-guard-user@ai-do.local",
+        email="legacy-grid-pref-guard-user@open-alm.local",
     )
     headers = _headers(session["token"])
     base_path = "/api/v1/workspaces/legacy-grid-pref-guards/legacy-issues/grid-preferences"
@@ -356,7 +356,7 @@ def test_grid_preference_put_delete_race_allows_exactly_one_revision_winner(
         client,
         workspace_key="legacy-grid-pref-race",
         login_id="legacy-grid-pref-race-user",
-        email="legacy-grid-pref-race-user@ai-do.local",
+        email="legacy-grid-pref-race-user@open-alm.local",
     )
     headers = _headers(session["token"])
     dataset_path = (
@@ -456,7 +456,7 @@ def test_grid_preference_reset_tombstone_rejects_late_stale_save(
         client,
         workspace_key="legacy-grid-pref-stale-save",
         login_id="legacy-grid-pref-stale-save-user",
-        email="legacy-grid-pref-stale-save-user@ai-do.local",
+        email="legacy-grid-pref-stale-save-user@open-alm.local",
     )
     headers = _headers(session["token"])
     dataset_path = (

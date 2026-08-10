@@ -8,7 +8,7 @@
     },
     {
       "status": "A",
-      "path": "apps/api/src/ai_do_api/domains/pms/widget.py"
+      "path": "apps/api/src/open_alm_api/domains/pms/widget.py"
     }
   ],
   "sources": {

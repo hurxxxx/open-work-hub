@@ -1,5 +1,5 @@
-export const AUTH_TOKEN_STORAGE_KEY = 'ai-do.auth.token';
-const AUTH_POST_LOGOUT_HOME_REDIRECT_STORAGE_KEY = 'ai-do.auth.post-logout-home';
+export const AUTH_TOKEN_STORAGE_KEY = 'open-alm.auth.token';
+const AUTH_POST_LOGOUT_HOME_REDIRECT_STORAGE_KEY = 'open-alm.auth.post-logout-home';
 
 type BrowserStorageName = 'localStorage' | 'sessionStorage';
 

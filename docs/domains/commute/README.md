@@ -22,7 +22,7 @@
 | 항목            | 값                                                                    |
 | --------------- | --------------------------------------------------------------------- |
 | DB              | 플랫폼 공용 PostgreSQL (앱별 DB를 따로 만들지 않는다)                 |
-| 모델            | `apps/api/src/ai_do_api/domains/<domain>/models.py`                   |
+| 모델            | `apps/api/src/open_alm_api/domains/<domain>/models.py`                   |
 | 스키마 변경     | `apps/api/alembic/versions/` — 수기 마이그레이션, 단일 head 유지      |
 | 모델 등록       | `core/model_registry.py` 와 `alembic/env.py` 양쪽에 import 추가        |
 | 테이블 접두사   | 도메인명 (`commute_*`, `hr_*`, `legacy_issue_*`)                      |
@@ -75,7 +75,7 @@
 우리 DB에 적재하고 그 뒤로는 우리가 정본**으로 삼는다. 실제 API는 이 저장소만 조회하도록 한다.
 
 ```
-[외부 근태 서버]  --(1시간 주기 수집)-->  [AI-DO PostgreSQL]  -->  화면·집계
+[외부 근태 서버]  --(1시간 주기 수집)-->  [Open ALM PostgreSQL]  -->  화면·집계
                                              ^ 정본
 ```
 

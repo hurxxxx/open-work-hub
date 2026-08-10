@@ -65,10 +65,10 @@ printf '%s\n' "$node_dependency_sha256" >"$image_node_dependency_file"
 
 offline_log="$temporary_root/offline.log"
 FAKE_PYTHON_LOG="$offline_log" \
-  AI_DO_API_IMAGE_VENV="$image_venv" \
-  AI_DO_API_IMAGE_DEPENDENCY_FILE="$image_dependency_file" \
-  AI_DO_API_IMAGE_NODE_DEPENDENCY_FILE="$image_node_dependency_file" \
-  AI_DO_API_IMAGE_NODE_MODULES="$image_node_modules" \
+  OPEN_ALM_API_IMAGE_VENV="$image_venv" \
+  OPEN_ALM_API_IMAGE_DEPENDENCY_FILE="$image_dependency_file" \
+  OPEN_ALM_API_IMAGE_NODE_DEPENDENCY_FILE="$image_node_dependency_file" \
+  OPEN_ALM_API_IMAGE_NODE_MODULES="$image_node_modules" \
   bash "$wrapper" standard tests/test_example.py
 test "$(readlink "$contract_repo/node_modules")" = "$image_node_modules"
 grep -F \
@@ -77,13 +77,13 @@ grep -F \
 
 load_log="$temporary_root/load.log"
 FAKE_PYTHON_LOG="$load_log" \
-  AI_DO_API_IMAGE_VENV="$image_venv" \
-  AI_DO_API_IMAGE_DEPENDENCY_FILE="$image_dependency_file" \
-  AI_DO_API_IMAGE_NODE_DEPENDENCY_FILE="$image_node_dependency_file" \
-  AI_DO_API_IMAGE_NODE_MODULES="$image_node_modules" \
-  AI_DO_API_PYTEST_WORKERS=7 \
-  AI_DO_API_PYTEST_SCHEDULER=load \
-  AI_DO_API_PYTEST_MAXSCHEDCHUNK=4 \
+  OPEN_ALM_API_IMAGE_VENV="$image_venv" \
+  OPEN_ALM_API_IMAGE_DEPENDENCY_FILE="$image_dependency_file" \
+  OPEN_ALM_API_IMAGE_NODE_DEPENDENCY_FILE="$image_node_dependency_file" \
+  OPEN_ALM_API_IMAGE_NODE_MODULES="$image_node_modules" \
+  OPEN_ALM_API_PYTEST_WORKERS=7 \
+  OPEN_ALM_API_PYTEST_SCHEDULER=load \
+  OPEN_ALM_API_PYTEST_MAXSCHEDCHUNK=4 \
   bash "$wrapper" standard tests/test_example.py
 grep -F \
   '1|-m pytest -q -m not slow and not external_integration and not migration -n 7 --dist load --maxschedchunk 4 --durations 50 --durations-min 1 tests/test_example.py' \
@@ -94,11 +94,11 @@ if grep -F -- '--maxschedchunk' "$offline_log" >/dev/null; then
 fi
 
 if FAKE_PYTHON_LOG="$temporary_root/invalid-scheduler.log" \
-  AI_DO_API_IMAGE_VENV="$image_venv" \
-  AI_DO_API_IMAGE_DEPENDENCY_FILE="$image_dependency_file" \
-  AI_DO_API_IMAGE_NODE_DEPENDENCY_FILE="$image_node_dependency_file" \
-  AI_DO_API_IMAGE_NODE_MODULES="$image_node_modules" \
-  AI_DO_API_PYTEST_SCHEDULER=invalid \
+  OPEN_ALM_API_IMAGE_VENV="$image_venv" \
+  OPEN_ALM_API_IMAGE_DEPENDENCY_FILE="$image_dependency_file" \
+  OPEN_ALM_API_IMAGE_NODE_DEPENDENCY_FILE="$image_node_dependency_file" \
+  OPEN_ALM_API_IMAGE_NODE_MODULES="$image_node_modules" \
+  OPEN_ALM_API_PYTEST_SCHEDULER=invalid \
   bash "$wrapper" standard tests/test_example.py \
   >"$temporary_root/invalid-scheduler.out" \
   2>"$temporary_root/invalid-scheduler.err"; then
@@ -106,24 +106,24 @@ if FAKE_PYTHON_LOG="$temporary_root/invalid-scheduler.log" \
   exit 1
 fi
 grep -F \
-  'AI_DO_API_PYTEST_SCHEDULER must be load or worksteal.' \
+  'OPEN_ALM_API_PYTEST_SCHEDULER must be load or worksteal.' \
   "$temporary_root/invalid-scheduler.err" >/dev/null
 
 FAKE_PYTHON_STATUS=5 \
   FAKE_PYTHON_LOG="$offline_log" \
-  AI_DO_API_ALLOW_EMPTY=1 \
-  AI_DO_API_IMAGE_VENV="$image_venv" \
-  AI_DO_API_IMAGE_DEPENDENCY_FILE="$image_dependency_file" \
-  AI_DO_API_IMAGE_NODE_DEPENDENCY_FILE="$image_node_dependency_file" \
-  AI_DO_API_IMAGE_NODE_MODULES="$image_node_modules" \
+  OPEN_ALM_API_ALLOW_EMPTY=1 \
+  OPEN_ALM_API_IMAGE_VENV="$image_venv" \
+  OPEN_ALM_API_IMAGE_DEPENDENCY_FILE="$image_dependency_file" \
+  OPEN_ALM_API_IMAGE_NODE_DEPENDENCY_FILE="$image_node_dependency_file" \
+  OPEN_ALM_API_IMAGE_NODE_MODULES="$image_node_modules" \
   bash "$wrapper" standard tests/test_external_only.py
 
 printf '%064d\n' 0 >"$image_dependency_file"
 if FAKE_PYTHON_LOG="$offline_log" \
-  AI_DO_API_IMAGE_VENV="$image_venv" \
-  AI_DO_API_IMAGE_DEPENDENCY_FILE="$image_dependency_file" \
-  AI_DO_API_IMAGE_NODE_DEPENDENCY_FILE="$image_node_dependency_file" \
-  AI_DO_API_IMAGE_NODE_MODULES="$image_node_modules" \
+  OPEN_ALM_API_IMAGE_VENV="$image_venv" \
+  OPEN_ALM_API_IMAGE_DEPENDENCY_FILE="$image_dependency_file" \
+  OPEN_ALM_API_IMAGE_NODE_DEPENDENCY_FILE="$image_node_dependency_file" \
+  OPEN_ALM_API_IMAGE_NODE_MODULES="$image_node_modules" \
   bash "$wrapper" standard tests/test_example.py \
   >"$temporary_root/mismatch.out" 2>"$temporary_root/mismatch.err"; then
   echo "expected the offline dependency mismatch to fail" >&2
@@ -134,10 +134,10 @@ grep -F 'Offline API dependency mismatch:' "$temporary_root/mismatch.err" >/dev/
 printf '%s\n' "$dependency_sha256" >"$image_dependency_file"
 printf '%064d\n' 0 >"$image_node_dependency_file"
 if FAKE_PYTHON_LOG="$offline_log" \
-  AI_DO_API_IMAGE_VENV="$image_venv" \
-  AI_DO_API_IMAGE_DEPENDENCY_FILE="$image_dependency_file" \
-  AI_DO_API_IMAGE_NODE_DEPENDENCY_FILE="$image_node_dependency_file" \
-  AI_DO_API_IMAGE_NODE_MODULES="$image_node_modules" \
+  OPEN_ALM_API_IMAGE_VENV="$image_venv" \
+  OPEN_ALM_API_IMAGE_DEPENDENCY_FILE="$image_dependency_file" \
+  OPEN_ALM_API_IMAGE_NODE_DEPENDENCY_FILE="$image_node_dependency_file" \
+  OPEN_ALM_API_IMAGE_NODE_MODULES="$image_node_modules" \
   bash "$wrapper" standard tests/test_example.py \
   >"$temporary_root/node-mismatch.out" \
   2>"$temporary_root/node-mismatch.err"; then
@@ -168,37 +168,37 @@ PATH="$fake_bin:$PATH" \
   FAKE_UV_LOG="$bootstrap_log" \
   FAKE_PYTHON_SOURCE="$fake_python_source" \
   FAKE_PYTHON_LOG="$bootstrap_python_log" \
-  AI_DO_API_DEPENDENCY_MODE=bootstrap \
-  AI_DO_API_BOOTSTRAP_VENV="$bootstrap_venv" \
-  AI_DO_API_IMAGE_NODE_DEPENDENCY_FILE="$image_node_dependency_file" \
-  AI_DO_API_IMAGE_NODE_MODULES="$image_node_modules" \
-  AI_DO_API_PREPARE_ONLY=1 \
+  OPEN_ALM_API_DEPENDENCY_MODE=bootstrap \
+  OPEN_ALM_API_BOOTSTRAP_VENV="$bootstrap_venv" \
+  OPEN_ALM_API_IMAGE_NODE_DEPENDENCY_FILE="$image_node_dependency_file" \
+  OPEN_ALM_API_IMAGE_NODE_MODULES="$image_node_modules" \
+  OPEN_ALM_API_PREPARE_ONLY=1 \
   bash "$wrapper" standard
 grep -F \
   "sync --directory $contract_repo/apps/api --frozen --python 3.12 --group dev --no-install-project" \
   "$bootstrap_log" >/dev/null
-test "$(<"$bootstrap_venv/.ai-do-api-dependency-sha256")" = "$dependency_sha256"
+test "$(<"$bootstrap_venv/.open-alm-api-dependency-sha256")" = "$dependency_sha256"
 
 PATH="$fake_bin:$PATH" \
   FAKE_UV_LOG="$bootstrap_log" \
   FAKE_PYTHON_SOURCE="$fake_python_source" \
   FAKE_PYTHON_LOG="$bootstrap_python_log" \
-  AI_DO_API_DEPENDENCY_MODE=bootstrap \
-  AI_DO_API_BOOTSTRAP_VENV="$bootstrap_venv" \
-  AI_DO_API_IMAGE_NODE_DEPENDENCY_FILE="$image_node_dependency_file" \
-  AI_DO_API_IMAGE_NODE_MODULES="$image_node_modules" \
-  AI_DO_API_PREPARE_ONLY=1 \
+  OPEN_ALM_API_DEPENDENCY_MODE=bootstrap \
+  OPEN_ALM_API_BOOTSTRAP_VENV="$bootstrap_venv" \
+  OPEN_ALM_API_IMAGE_NODE_DEPENDENCY_FILE="$image_node_dependency_file" \
+  OPEN_ALM_API_IMAGE_NODE_MODULES="$image_node_modules" \
+  OPEN_ALM_API_PREPARE_ONLY=1 \
   bash "$wrapper" standard
 test "$(wc -l <"$bootstrap_log")" -eq 1
 
 external_log="$temporary_root/external.log"
 printf '%s\n' "$dependency_sha256" >"$image_dependency_file"
 FAKE_PYTHON_LOG="$external_log" \
-  AI_DO_API_IMAGE_VENV="$image_venv" \
-  AI_DO_API_IMAGE_DEPENDENCY_FILE="$image_dependency_file" \
-  AI_DO_API_IMAGE_NODE_DEPENDENCY_FILE="$image_node_dependency_file" \
-  AI_DO_API_IMAGE_NODE_MODULES="$image_node_modules" \
-  AI_DO_API_TEST_RUN_ID=contract-test \
+  OPEN_ALM_API_IMAGE_VENV="$image_venv" \
+  OPEN_ALM_API_IMAGE_DEPENDENCY_FILE="$image_dependency_file" \
+  OPEN_ALM_API_IMAGE_NODE_DEPENDENCY_FILE="$image_node_dependency_file" \
+  OPEN_ALM_API_IMAGE_NODE_MODULES="$image_node_modules" \
+  OPEN_ALM_API_TEST_RUN_ID=contract-test \
   bash "$wrapper" external tests/test_external.py
 grep -F \
   '1|-m pytest -q -m external_integration tests/test_external.py' \
@@ -209,12 +209,12 @@ grep -F \
 
 cleanup_only_log="$temporary_root/cleanup-only.log"
 FAKE_PYTHON_LOG="$cleanup_only_log" \
-  AI_DO_API_IMAGE_VENV="$image_venv" \
-  AI_DO_API_IMAGE_DEPENDENCY_FILE="$image_dependency_file" \
-  AI_DO_API_IMAGE_NODE_DEPENDENCY_FILE="$image_node_dependency_file" \
-  AI_DO_API_IMAGE_NODE_MODULES="$image_node_modules" \
-  AI_DO_API_TEST_RUN_ID=contract-test \
-  AI_DO_API_CLEANUP_ONLY=1 \
+  OPEN_ALM_API_IMAGE_VENV="$image_venv" \
+  OPEN_ALM_API_IMAGE_DEPENDENCY_FILE="$image_dependency_file" \
+  OPEN_ALM_API_IMAGE_NODE_DEPENDENCY_FILE="$image_node_dependency_file" \
+  OPEN_ALM_API_IMAGE_NODE_MODULES="$image_node_modules" \
+  OPEN_ALM_API_TEST_RUN_ID=contract-test \
+  OPEN_ALM_API_CLEANUP_ONLY=1 \
   bash "$wrapper" external
 test "$(wc -l <"$cleanup_only_log")" -eq 1
 grep -F \

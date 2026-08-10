@@ -11,7 +11,7 @@ import {
   SearchField,
   Select,
   Tooltip,
-} from '@ai-do/ui';
+} from '@open-alm/ui';
 
 import {
   createAdminUser,
@@ -823,7 +823,7 @@ function usePeopleSectionElement({ token }: { token: string }): ReactNode {
         new Blob([encodeAdminPeopleCsv({ header, rows })], {
           type: 'text/csv;charset=utf-8',
         }),
-        'ai-do-people.csv',
+        'open-alm-people.csv',
       );
     } catch (caughtError) {
       setError(

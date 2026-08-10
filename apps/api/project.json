@@ -9,14 +9,14 @@
       "executor": "nx:run-commands",
       "options": {
         "cwd": "apps/api",
-        "command": "AI_DO_API_AUTO_MIGRATE=${AI_DO_API_AUTO_MIGRATE:-1} uv run --python 3.12 uvicorn ai_do_api.main:app --app-dir src --host ${AI_DO_DEV_API_HOST:-127.0.0.1} --port ${AI_DO_API_DEV_PORT:-8001} --reload"
+        "command": "OPEN_ALM_API_AUTO_MIGRATE=${OPEN_ALM_API_AUTO_MIGRATE:-1} uv run --python 3.12 uvicorn open_alm_api.main:app --app-dir src --host ${OPEN_ALM_DEV_API_HOST:-127.0.0.1} --port ${OPEN_ALM_API_DEV_PORT:-8001} --reload"
       }
     },
     "serve": {
       "executor": "nx:run-commands",
       "options": {
         "cwd": "apps/api",
-        "command": "uv run --python 3.12 uvicorn ai_do_api.main:app --app-dir src --host 127.0.0.1 --port ${AI_DO_API_DEV_PORT:-8001}"
+        "command": "uv run --python 3.12 uvicorn open_alm_api.main:app --app-dir src --host 127.0.0.1 --port ${OPEN_ALM_API_DEV_PORT:-8001}"
       }
     },
     "lint": {
@@ -30,7 +30,7 @@
       "executor": "nx:run-commands",
       "options": {
         "cwd": "apps/api",
-        "command": "uv run --python 3.12 --group dev python -m pytest -n ${AI_DO_API_PYTEST_WORKERS:-8} --dist=worksteal -m 'not slow and not external_integration and not migration'"
+        "command": "uv run --python 3.12 --group dev python -m pytest -n ${OPEN_ALM_API_PYTEST_WORKERS:-8} --dist=worksteal -m 'not slow and not external_integration and not migration'"
       }
     },
     "test-budget": {
@@ -62,7 +62,7 @@
       "cache": false,
       "options": {
         "cwd": "apps/api",
-        "command": "uv run --python 3.12 --group dev python ../../scripts/check-api-test-budget.py --output ../../api-test-report.json && uv run --python 3.12 --group dev python -m pytest -n ${AI_DO_API_PYTEST_WORKERS:-8} --dist=worksteal -m 'not slow and not external_integration and not migration' && uv run --python 3.12 --group dev python -m pytest -m 'slow and not external_integration and not migration' && uv run --python 3.12 --group dev python -m pytest -m migration && bash ../../scripts/api-test-vm.sh -m external_integration"
+        "command": "uv run --python 3.12 --group dev python ../../scripts/check-api-test-budget.py --output ../../api-test-report.json && uv run --python 3.12 --group dev python -m pytest -n ${OPEN_ALM_API_PYTEST_WORKERS:-8} --dist=worksteal -m 'not slow and not external_integration and not migration' && uv run --python 3.12 --group dev python -m pytest -m 'slow and not external_integration and not migration' && uv run --python 3.12 --group dev python -m pytest -m migration && bash ../../scripts/api-test-vm.sh -m external_integration"
       }
     },
     "test-slow": {

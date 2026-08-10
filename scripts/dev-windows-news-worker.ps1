@@ -38,5 +38,5 @@ foreach ($raw in Get-Content $envFile) {
   Set-Item -Path "env:$k" -Value $v
 }
 
-Write-Host "==> news worker (queue: news)  broker: $env:AI_DO_WORKER_BROKER_URL" -ForegroundColor Cyan
+Write-Host "==> news worker (queue: news)  broker: $env:OPEN_ALM_WORKER_BROKER_URL" -ForegroundColor Cyan
 & $py (Join-Path $root "scripts\news_local_worker.py")

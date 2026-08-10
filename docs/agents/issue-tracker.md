@@ -1,6 +1,6 @@
 # Issue Tracker
 
-AI-DO work is tracked in GitLab Issues for `dwdcc/ai-do` on the self-hosted GitLab remote.
+Open ALM work is tracked in GitLab Issues for `open-alm/open-alm` on the self-hosted GitLab remote.
 
 Use `glab` when creating, reading, or updating issues. Durable implementation decisions should be linked from issues to the owning document under `docs/current`, `docs/domains`, or `docs/apps`, or to an accepted ADR under root `adr/`, instead of living only in issue comments.
 

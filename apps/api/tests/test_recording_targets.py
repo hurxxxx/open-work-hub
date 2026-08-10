@@ -5,8 +5,8 @@ import hashlib
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from ai_do_api.domains.recording import blob_store
-from ai_do_api.domains.recording import service as recording_service
+from open_alm_api.domains.recording import blob_store
+from open_alm_api.domains.recording import service as recording_service
 
 from test_meeting import _auth_headers, _bootstrap_admin_session, _first_workspace_slug
 

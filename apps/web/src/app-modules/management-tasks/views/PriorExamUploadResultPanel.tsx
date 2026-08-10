@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { InlineNotice, Panel } from '@ai-do/ui';
+import { InlineNotice, Panel } from '@open-alm/ui';
 
 import type { HealthCheckupPriorExamUpload } from '../api/health-checkup-api';
 

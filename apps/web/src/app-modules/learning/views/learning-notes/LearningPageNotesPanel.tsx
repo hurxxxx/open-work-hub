@@ -13,7 +13,7 @@ import {
   Pencil,
   X,
 } from 'lucide-react';
-import { BlockEditor, type BlockContent } from '@ai-do/ui';
+import { BlockEditor, type BlockContent } from '@open-alm/ui';
 import { useTranslation } from 'react-i18next';
 
 import { useLearningPageNoteDetail } from '../../api/learning-notes-hooks';

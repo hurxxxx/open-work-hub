@@ -9,32 +9,32 @@ import httpx
 import pytest
 from sqlalchemy.orm import Session
 
-from ai_do_api.domains.patent.kipris import (
+from open_alm_api.domains.patent.kipris import (
     KiprisError,
     PatentSearchJurisdictionPage,
     PatentSearchPage,
     PatentSearchResult,
 )
-from ai_do_api.domains.patent_prior_art import (
+from open_alm_api.domains.patent_prior_art import (
     PATENT_PRIOR_ART_CANDIDATE_ASSESSMENT_WORKLOAD_ID,
     PATENT_PRIOR_ART_SEARCH_PLAN_WORKLOAD_ID,
 )
-from ai_do_api.domains.patent_prior_art import pipeline, planning
-from ai_do_api.domains.patent_prior_art.pipeline import (
+from open_alm_api.domains.patent_prior_art import pipeline, planning
+from open_alm_api.domains.patent_prior_art.pipeline import (
     PatentPriorArtPipelineCancelled,
     PatentPriorArtTransientError,
     run_patent_prior_art,
 )
-from ai_do_api.domains.patent_prior_art.planning import (
+from open_alm_api.domains.patent_prior_art.planning import (
     compile_provider_queries,
     preview_patent_prior_art_search,
 )
-from ai_do_api.domains.patent_prior_art.schemas import (
+from open_alm_api.domains.patent_prior_art.schemas import (
     PatentPriorArtSearchPlanDraft,
     PatentPriorArtSearchValues,
 )
-from ai_do_api.domains.ai.gateway import AiGatewayPolicyViolation
-from ai_do_api.domains.retrieval.candidate_ranking import (
+from open_alm_api.domains.ai.gateway import AiGatewayPolicyViolation
+from open_alm_api.domains.retrieval.candidate_ranking import (
     MAX_QUERY_CHARS,
     CandidateRankingService,
 )

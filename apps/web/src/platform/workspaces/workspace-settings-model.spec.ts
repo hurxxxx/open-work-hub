@@ -43,9 +43,9 @@ function user(overrides: Partial<AuthUser> = {}): AuthUser {
   return {
     id: 'user-1',
     login_id: 'member',
-    email: 'member@ai-do.local',
-    full_name: 'AI-DO Member',
-    display_name: 'AI-DO Member',
+    email: 'member@open-alm.local',
+    full_name: 'Open ALM Member',
+    display_name: 'Open ALM Member',
     status: 'active',
     theme_preference: 'system',
     locale: 'ko-KR',

@@ -5,14 +5,14 @@ import sys
 from redis import Redis
 from sqlalchemy.orm import Session
 
-from ai_do_api.core.db import get_engine
-from ai_do_api.core.settings import get_settings
-from ai_do_api.core.worker_queue_contract import LEGACY_PATENT_PRIOR_ART_QUEUE
-from ai_do_api.domains.patent_prior_art.dispatch import (
+from open_alm_api.core.db import get_engine
+from open_alm_api.core.settings import get_settings
+from open_alm_api.core.worker_queue_contract import LEGACY_PATENT_PRIOR_ART_QUEUE
+from open_alm_api.domains.patent_prior_art.dispatch import (
     PatentPriorArtJobDispatcher,
     get_celery_client,
 )
-from ai_do_api.domains.patent_prior_art.queue_cutover import (
+from open_alm_api.domains.patent_prior_art.queue_cutover import (
     PatentPriorArtQueueCutoverError,
     rollback_patent_prior_art_queue_cutover,
 )

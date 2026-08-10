@@ -6,8 +6,8 @@ from types import SimpleNamespace
 from fastapi import HTTPException
 import pytest
 
-from ai_do_api.domains.dm import attachment_records
-from ai_do_api.domains.dm.models import DmMessageAttachment
+from open_alm_api.domains.dm import attachment_records
+from open_alm_api.domains.dm.models import DmMessageAttachment
 
 
 def test_create_attachment_persists_row_and_stores_object(

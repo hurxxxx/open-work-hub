@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from ai_do_api.domains.ai.artifact_parser import (
+from open_alm_api.domains.ai.artifact_parser import (
     ArtifactStreamParser,
     ParsedArtifactBody,
     ParsedArtifactEnd,

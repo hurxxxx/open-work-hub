@@ -1,0 +1,21 @@
+[Unit]
+Description=Open ALM Development App
+Wants=network-online.target open-alm-privacy-filter.service
+After=network-online.target open-alm-privacy-filter.service
+
+[Service]
+Type=simple
+Environment=OPEN_ALM_RUNTIME_REVISION=__OPEN_ALM_RUNTIME_REVISION__
+WorkingDirectory=__OPEN_ALM_ROOT__
+ExecStart=__OPEN_ALM_ROOT__/dev.sh --plain-logs
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0077
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=300
+TimeoutStopSec=120
+KillMode=control-group
+
+[Install]
+WantedBy=default.target

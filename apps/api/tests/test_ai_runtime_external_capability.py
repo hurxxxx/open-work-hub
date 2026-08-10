@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 
-from ai_do_api.domains.ai.runtime.external_capability import (
+from open_alm_api.domains.ai.runtime.external_capability import (
     decide_external_capability_request,
 )
-from ai_do_api.domains.ai.runtime.external_egress import ExternalEgressDecision
+from open_alm_api.domains.ai.runtime.external_egress import ExternalEgressDecision
 
 
 def test_external_capability_request_decision_handles_ready_and_sanitized_empty() -> None:

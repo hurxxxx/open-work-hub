@@ -6,40 +6,40 @@ from types import SimpleNamespace
 
 import pytest
 
-import ai_do_api.platform_extensions as platform_extensions
-from ai_do_api.domains.ai.registry import (
+import open_alm_api.platform_extensions as platform_extensions
+from open_alm_api.domains.ai.registry import (
     get_ai_capability_registry,
     reset_ai_capability_registry,
 )
-from ai_do_api.core import llm as llm_core
-from ai_do_api.core.workspace_app_registry import (
+from open_alm_api.core import llm as llm_core
+from open_alm_api.core.workspace_app_registry import (
     WorkspaceAppCatalogItem,
     WorkspaceAppRegistration,
 )
-from ai_do_api.core.asr_backend_registry import reset_asr_backends
-from ai_do_api.core.settings import Settings, get_settings
-from ai_do_api.core.llm_provider_registry import (
+from open_alm_api.core.asr_backend_registry import reset_asr_backends
+from open_alm_api.core.settings import Settings, get_settings
+from open_alm_api.core.llm_provider_registry import (
     ExternalLlmProviderDescriptor,
     ensure_default_external_llm_providers_registered,
     external_llm_provider_ids,
     register_external_llm_provider,
     reset_external_llm_providers,
 )
-from ai_do_api.core.platform_retirements import KNOWLEDGE_SOURCE_REGISTRY_RETIRED
-from ai_do_api.core.llm_execution_adapters import (
+from open_alm_api.core.platform_retirements import KNOWLEDGE_SOURCE_REGISTRY_RETIRED
+from open_alm_api.core.llm_execution_adapters import (
     ensure_default_llm_execution_adapters_registered,
     llm_execution_adapter_keys,
     reset_llm_execution_adapters,
     supports_tool_calling,
 )
-from ai_do_api.core.llm_pool_config_registry import (
+from open_alm_api.core.llm_pool_config_registry import (
     LlmPoolConfigValues,
     ensure_default_llm_pool_config_resolvers_registered,
     llm_pool_config_resolver_keys,
     register_llm_pool_config_resolver,
     reset_llm_pool_config_resolvers,
 )
-from ai_do_api.core.llm_model_profiles import (
+from open_alm_api.core.llm_model_profiles import (
     LlmGenerationProfile,
     build_chat_payload,
     ensure_default_llm_generation_profiles_registered,
@@ -48,7 +48,7 @@ from ai_do_api.core.llm_model_profiles import (
     reset_llm_generation_profiles,
     resolve_reasoning_effort,
 )
-from ai_do_api.domains.ai.runtime.external_adapters import (
+from open_alm_api.domains.ai.runtime.external_adapters import (
     register_external_planner_execution_adapter,
     register_external_search_execution_adapter,
     reset_external_execution_adapters,
@@ -57,33 +57,33 @@ from ai_do_api.domains.ai.runtime.external_adapters import (
     supported_external_planner_execution_adapters,
     supported_external_search_execution_adapters,
 )
-from ai_do_api.domains.ai.runtime.external_planner import (
+from open_alm_api.domains.ai.runtime.external_planner import (
     ExternalPlannerExecutionResult,
 )
-from ai_do_api.domains.ai.runtime.external_search import (
+from open_alm_api.domains.ai.runtime.external_search import (
     ExternalSearchExecutionResult,
 )
-from ai_do_api.domains.conversations.default_scope_adapters import (
+from open_alm_api.domains.conversations.default_scope_adapters import (
     ensure_conversation_scope_adapters_registered,
 )
-from ai_do_api.domains.conversations.scope_registry import (
+from open_alm_api.domains.conversations.scope_registry import (
     get_conversation_scope_adapter,
     reset_conversation_scope_adapters,
 )
-from ai_do_api.domains.docs.app_catalog import DOCS_WORKSPACE_APP
-from ai_do_api.domains.docs import search_projection as docs_search_projection
-from ai_do_api.domains.docs.search_projection import (
+from open_alm_api.domains.docs.app_catalog import DOCS_WORKSPACE_APP
+from open_alm_api.domains.docs import search_projection as docs_search_projection
+from open_alm_api.domains.docs.search_projection import (
     DOCS_WORKSPACE_KEYWORD_SEARCH_ADAPTER,
 )
-from ai_do_api.domains.docs.source_access import NativeDocSourceAccessAdapter
-from ai_do_api.domains.files import search_projection as file_search_projection
-from ai_do_api.domains.files.retrieval_contract import (
+from open_alm_api.domains.docs.source_access import NativeDocSourceAccessAdapter
+from open_alm_api.domains.files import search_projection as file_search_projection
+from open_alm_api.domains.files.retrieval_contract import (
     files_retrieval_active_for_environment,
 )
-from ai_do_api.domains.meeting.app_catalog import MEETING_WORKSPACE_APP
-from ai_do_api.domains.planner.app_catalog import PLANNER_WORKSPACE_APP
-from ai_do_api.domains.pms.app_catalog import PMS_WORKSPACE_APP
-from ai_do_api.domains.images.agent_runtime import (
+from open_alm_api.domains.meeting.app_catalog import MEETING_WORKSPACE_APP
+from open_alm_api.domains.planner.app_catalog import PLANNER_WORKSPACE_APP
+from open_alm_api.domains.pms.app_catalog import PMS_WORKSPACE_APP
+from open_alm_api.domains.images.agent_runtime import (
     ImageBriefRuntimeResult,
     ImageGenerationRuntimeResult,
     ensure_builtin_image_agent_runtime_adapters_registered,
@@ -91,16 +91,16 @@ from ai_do_api.domains.images.agent_runtime import (
     register_image_agent_runtime_adapter,
     reset_image_agent_runtime_adapters,
 )
-from ai_do_api.domains.images.provider_registry import (
+from open_alm_api.domains.images.provider_registry import (
     ImageProviderDescriptor,
     register_image_provider,
     reset_image_providers,
 )
-from ai_do_api.domains.rag.default_source_adapters import (
+from open_alm_api.domains.rag.default_source_adapters import (
     ensure_rag_source_adapters_registered,
     resolve_rag_resource_types_for_source_kinds,
 )
-from ai_do_api.domains.rag.source_adapter_registry import (
+from open_alm_api.domains.rag.source_adapter_registry import (
     RagResourceAdapter,
     RagSourceAdapter,
     RagVisibilityScopeAdapter,
@@ -111,24 +111,24 @@ from ai_do_api.domains.rag.source_adapter_registry import (
     register_rag_visibility_scope_adapter,
     reset_rag_source_adapters,
 )
-from ai_do_api.domains.retrieval.partition_adapter_ids import (
+from open_alm_api.domains.retrieval.partition_adapter_ids import (
     FILES_RETRIEVAL_PARTITION_ADAPTER_ID,
 )
-from ai_do_api.domains.retrieval.partition_adapter_registry import (
+from open_alm_api.domains.retrieval.partition_adapter_registry import (
     register_retrieval_partition_adapter,
     reset_retrieval_partition_adapters,
 )
-from ai_do_api.domains.search.default_entity_adapters import (
+from open_alm_api.domains.search.default_entity_adapters import (
     ensure_search_entity_descriptors_registered,
 )
-from ai_do_api.domains.search.default_index_hook_adapters import (
+from open_alm_api.domains.search.default_index_hook_adapters import (
     ensure_search_index_hooks_registered,
 )
-from ai_do_api.domains.search.backend_factory import reset_keyword_search_backends
-from ai_do_api.domains.search.default_projection_adapters import (
+from open_alm_api.domains.search.backend_factory import reset_keyword_search_backends
+from open_alm_api.domains.search.default_projection_adapters import (
     ensure_search_projection_adapters_registered,
 )
-from ai_do_api.domains.search.entity_adapter_registry import (
+from open_alm_api.domains.search.entity_adapter_registry import (
     SearchEntityAdapter,
     SearchIndexLifecycleHooks,
     get_search_entity_adapter,
@@ -139,32 +139,32 @@ from ai_do_api.domains.search.entity_adapter_registry import (
     search_people_roles,
     search_sort_fields,
 )
-from ai_do_api.domains.search.entity_registry import (
+from open_alm_api.domains.search.entity_registry import (
     SearchEntityDescriptor,
     label_for_search_entity,
     register_search_entity_descriptor,
     reset_search_entity_descriptors,
 )
-from ai_do_api.domains.search import hooks as search_hooks
-from ai_do_api.domains.search.hook_registry import (
+from open_alm_api.domains.search import hooks as search_hooks
+from open_alm_api.domains.search.hook_registry import (
     get_search_index_hook_registration,
     has_search_index_hook,
     register_search_index_hook,
     reset_search_index_hooks,
 )
-from ai_do_api.domains.search.projection_registry import (
+from open_alm_api.domains.search.projection_registry import (
     FunctionSearchProjectionAdapter,
     get_search_projection_adapter,
     register_search_projection_adapter,
     reset_search_projection_adapters,
 )
-from ai_do_api.domains.search.resource_mapping import resource_type_for_search_entity
-from ai_do_api.domains.search.schemas import SearchEntityType
-from ai_do_api.domains.source_access.policy import SourceAclPolicy
-from ai_do_api.domains.source_access.default_adapters import (
+from open_alm_api.domains.search.resource_mapping import resource_type_for_search_entity
+from open_alm_api.domains.search.schemas import SearchEntityType
+from open_alm_api.domains.source_access.policy import SourceAclPolicy
+from open_alm_api.domains.source_access.default_adapters import (
     ensure_builtin_source_access_adapters_registered,
 )
-from ai_do_api.domains.source_access.targets import (
+from open_alm_api.domains.source_access.targets import (
     TargetAccessProjection,
     TargetRef,
     target_access_allowed,
@@ -174,17 +174,17 @@ from ai_do_api.domains.source_access.targets import (
     register_target_access_adapter,
     reset_target_access_adapters,
 )
-from ai_do_api.domains.source_access.registry import (
+from open_alm_api.domains.source_access.registry import (
     get_source_access_adapter,
     has_source_access_adapter,
     register_source_access_adapter,
     reset_source_access_adapters,
 )
-from ai_do_api.domains.source_access.resource_types import (
+from open_alm_api.domains.source_access.resource_types import (
     FILE_MANAGER_FILE_RESOURCE_TYPE,
     NATIVE_DOC_RESOURCE_TYPE,
 )
-from ai_do_api.platform_extensions import (
+from open_alm_api.platform_extensions import (
     PlatformExtensionBootstrapError,
     initialize_platform_extensions,
     validate_platform_extension_registries,
@@ -215,7 +215,7 @@ def _reset_platform_registries() -> None:
 
 def _test_settings(**overrides) -> Settings:
     return Settings(
-        AI_DO_POSTGRES_DSN=("postgresql+psycopg://ai_do_test:ai_do_test@127.0.0.1:5432/ai_do_test"),
+        OPEN_ALM_POSTGRES_DSN=("postgresql+psycopg://open_alm_test:open_alm_test@127.0.0.1:5432/open_alm_test"),
         **overrides,
     )
 
@@ -568,10 +568,10 @@ def test_platform_extension_validation_keeps_disabled_rag_gateway_tools_register
 ) -> None:
     _reset_platform_registries()
     get_settings.cache_clear()
-    monkeypatch.setenv("AI_DO_RAG_ENABLED", "0")
+    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "0")
     try:
         snapshot = initialize_platform_extensions(
-            settings=_test_settings(AI_DO_RAG_ENABLED=False),
+            settings=_test_settings(OPEN_ALM_RAG_ENABLED=False),
         )
 
         assert "rag.query" in snapshot.ai_tool_names
@@ -583,7 +583,7 @@ def test_platform_extension_validation_keeps_disabled_rag_gateway_tools_register
 def test_platform_extension_validation_rejects_unregistered_asr_backend() -> None:
     _reset_platform_registries()
     try:
-        settings = _test_settings(AI_DO_API_ASR_BACKEND="plugin_asr")
+        settings = _test_settings(OPEN_ALM_API_ASR_BACKEND="plugin_asr")
 
         with pytest.raises(
             PlatformExtensionBootstrapError,
@@ -600,8 +600,8 @@ def test_platform_extension_validation_rejects_enabled_external_execution_adapte
     _reset_platform_registries()
     try:
         planner_settings = _test_settings(
-            AI_DO_AI_EXTERNAL_PLANNER_EXECUTION_ENABLED=True,
-            AI_DO_AI_EXTERNAL_PLANNER_EXECUTION_ADAPTER="vendor-planner",
+            OPEN_ALM_AI_EXTERNAL_PLANNER_EXECUTION_ENABLED=True,
+            OPEN_ALM_AI_EXTERNAL_PLANNER_EXECUTION_ADAPTER="vendor-planner",
         )
 
         with pytest.raises(
@@ -613,8 +613,8 @@ def test_platform_extension_validation_rejects_enabled_external_execution_adapte
             initialize_platform_extensions(settings=planner_settings)
 
         search_settings = _test_settings(
-            AI_DO_AI_EXTERNAL_SEARCH_EXECUTION_ENABLED=True,
-            AI_DO_AI_EXTERNAL_SEARCH_EXECUTION_ADAPTER="vendor-search",
+            OPEN_ALM_AI_EXTERNAL_SEARCH_EXECUTION_ENABLED=True,
+            OPEN_ALM_AI_EXTERNAL_SEARCH_EXECUTION_ADAPTER="vendor-search",
         )
 
         with pytest.raises(
@@ -704,12 +704,12 @@ def test_platform_validation_accepts_search_only_external_provider_adapter() -> 
             VendorSearchAdapter,
         )
         settings = _test_settings(
-            AI_DO_AI_ALLOWED_EXTERNAL_PROVIDERS="vendor-search",
-            AI_DO_AI_DEFAULT_EXTERNAL_LLM_PROVIDER="openai",
-            AI_DO_AI_DEFAULT_EXTERNAL_SEARCH_PROVIDER="vendor-search",
-            AI_DO_AI_EXTERNAL_SEARCH_ENABLED=True,
-            AI_DO_AI_EXTERNAL_SEARCH_EXECUTION_ENABLED=True,
-            AI_DO_AI_EXTERNAL_SEARCH_EXECUTION_ADAPTER="vendor-search",
+            OPEN_ALM_AI_ALLOWED_EXTERNAL_PROVIDERS="vendor-search",
+            OPEN_ALM_AI_DEFAULT_EXTERNAL_LLM_PROVIDER="openai",
+            OPEN_ALM_AI_DEFAULT_EXTERNAL_SEARCH_PROVIDER="vendor-search",
+            OPEN_ALM_AI_EXTERNAL_SEARCH_ENABLED=True,
+            OPEN_ALM_AI_EXTERNAL_SEARCH_EXECUTION_ENABLED=True,
+            OPEN_ALM_AI_EXTERNAL_SEARCH_EXECUTION_ADAPTER="vendor-search",
         )
 
         snapshot = initialize_platform_extensions(settings=settings)
@@ -875,8 +875,8 @@ def test_platform_extension_validation_rejects_enabled_unknown_rag_provider() ->
     _reset_platform_registries()
     try:
         settings = _test_settings(
-            AI_DO_RAG_ENABLED=True,
-            AI_DO_RAG_VECTOR_INDEX_PROVIDER="missing-vector",
+            OPEN_ALM_RAG_ENABLED=True,
+            OPEN_ALM_RAG_VECTOR_INDEX_PROVIDER="missing-vector",
         )
 
         with pytest.raises(
@@ -1077,9 +1077,9 @@ def test_platform_extension_validation_rejects_search_contract_owned_by_another_
         def secret_index_hook():
             return None
 
-        secret_workspace_loader.__module__ = "ai_do_api.domains.secret.search_projection"
-        secret_document_loader.__module__ = "ai_do_api.domains.secret.search_projection"
-        secret_index_hook.__module__ = "ai_do_api.domains.secret.search_hooks"
+        secret_workspace_loader.__module__ = "open_alm_api.domains.secret.search_projection"
+        secret_document_loader.__module__ = "open_alm_api.domains.secret.search_projection"
+        secret_index_hook.__module__ = "open_alm_api.domains.secret.search_hooks"
 
         hook_name = "secret.enqueue_record"
         register_search_index_hook(
@@ -1147,9 +1147,9 @@ def test_platform_extension_validation_accepts_explicit_backend_domain_different
         def index_hook():
             return None
 
-        workspace_loader.__module__ = "ai_do_api.domains.quality_records.search_projection"
-        document_loader.__module__ = "ai_do_api.domains.quality_records.search_projection"
-        index_hook.__module__ = "ai_do_api.domains.quality_records.search_hooks"
+        workspace_loader.__module__ = "open_alm_api.domains.quality_records.search_projection"
+        document_loader.__module__ = "open_alm_api.domains.quality_records.search_projection"
+        index_hook.__module__ = "open_alm_api.domains.quality_records.search_hooks"
 
         class QualitySourceAccessAdapter:
             adapter_id = "quality_records"
@@ -1819,7 +1819,7 @@ def test_default_target_access_adapters_reregister_after_reset() -> None:
 def test_target_access_import_does_not_register_default_adapters() -> None:
     reset_target_access_adapters()
 
-    source_access_targets = importlib.import_module("ai_do_api.domains.source_access.targets")
+    source_access_targets = importlib.import_module("open_alm_api.domains.source_access.targets")
     importlib.reload(source_access_targets)
 
     assert has_target_access_adapter("docs") is False
@@ -1891,7 +1891,7 @@ def test_external_provider_descriptor_projects_default_pool_config() -> None:
             )
         )
         settings = _test_settings(
-            AI_DO_LLM_EXTERNAL_ALLOWED_PROVIDERS="plugin",
+            OPEN_ALM_LLM_EXTERNAL_ALLOWED_PROVIDERS="plugin",
         )
 
         config = llm_core.get_pool_config(
@@ -1915,7 +1915,7 @@ def test_configured_custom_llm_provider_requires_runtime_adapter() -> None:
     try:
         register_external_llm_provider(ExternalLlmProviderDescriptor("plugin", official=False))
         settings = _test_settings(
-            AI_DO_LLM_EXTERNAL_ALLOWED_PROVIDERS="plugin",
+            OPEN_ALM_LLM_EXTERNAL_ALLOWED_PROVIDERS="plugin",
         )
 
         with pytest.raises(
@@ -1931,7 +1931,7 @@ def test_custom_llm_provider_settings_can_be_created_before_provider_registratio
     _reset_platform_registries()
     try:
         settings = _test_settings(
-            AI_DO_LLM_EXTERNAL_ALLOWED_PROVIDERS="plugin",
+            OPEN_ALM_LLM_EXTERNAL_ALLOWED_PROVIDERS="plugin",
         )
         register_external_llm_provider(
             ExternalLlmProviderDescriptor(
@@ -1967,7 +1967,7 @@ def test_platform_validation_rejects_unknown_external_llm_provider_setting() -> 
     _reset_platform_registries()
     try:
         settings = _test_settings(
-            AI_DO_LLM_EXTERNAL_ALLOWED_PROVIDERS="typo-provider",
+            OPEN_ALM_LLM_EXTERNAL_ALLOWED_PROVIDERS="typo-provider",
         )
 
         with pytest.raises(PlatformExtensionBootstrapError) as excinfo:
@@ -1975,7 +1975,7 @@ def test_platform_validation_rejects_unknown_external_llm_provider_setting() -> 
 
         message = str(excinfo.value)
         assert (
-            "AI_DO_LLM_EXTERNAL_ALLOWED_PROVIDERS contains unsupported external "
+            "OPEN_ALM_LLM_EXTERNAL_ALLOWED_PROVIDERS contains unsupported external "
             "provider(s): typo-provider"
         ) in message
     finally:
@@ -1986,17 +1986,17 @@ def test_platform_validation_rejects_ai_external_llm_default_outside_allowlist()
     _reset_platform_registries()
     try:
         settings = _test_settings(
-            AI_DO_AI_EXTERNAL_LLM_ENABLED=True,
-            AI_DO_AI_ALLOWED_EXTERNAL_PROVIDERS="anthropic",
-            AI_DO_AI_DEFAULT_EXTERNAL_LLM_PROVIDER="openai",
-            AI_DO_AI_DEFAULT_EXTERNAL_SEARCH_PROVIDER="anthropic",
+            OPEN_ALM_AI_EXTERNAL_LLM_ENABLED=True,
+            OPEN_ALM_AI_ALLOWED_EXTERNAL_PROVIDERS="anthropic",
+            OPEN_ALM_AI_DEFAULT_EXTERNAL_LLM_PROVIDER="openai",
+            OPEN_ALM_AI_DEFAULT_EXTERNAL_SEARCH_PROVIDER="anthropic",
         )
 
         with pytest.raises(
             PlatformExtensionBootstrapError,
             match=(
-                "AI_DO_AI_DEFAULT_EXTERNAL_LLM_PROVIDER must be listed in "
-                "AI_DO_AI_ALLOWED_EXTERNAL_PROVIDERS: openai"
+                "OPEN_ALM_AI_DEFAULT_EXTERNAL_LLM_PROVIDER must be listed in "
+                "OPEN_ALM_AI_ALLOWED_EXTERNAL_PROVIDERS: openai"
             ),
         ):
             initialize_platform_extensions(settings=settings)
@@ -2008,14 +2008,14 @@ def test_platform_validation_rejects_unknown_ai_external_llm_default() -> None:
     _reset_platform_registries()
     try:
         settings = _test_settings(
-            AI_DO_AI_EXTERNAL_LLM_ENABLED=True,
-            AI_DO_AI_DEFAULT_EXTERNAL_LLM_PROVIDER="typo-provider",
+            OPEN_ALM_AI_EXTERNAL_LLM_ENABLED=True,
+            OPEN_ALM_AI_DEFAULT_EXTERNAL_LLM_PROVIDER="typo-provider",
         )
 
         with pytest.raises(
             PlatformExtensionBootstrapError,
             match=(
-                "AI_DO_AI_DEFAULT_EXTERNAL_LLM_PROVIDER contains unsupported "
+                "OPEN_ALM_AI_DEFAULT_EXTERNAL_LLM_PROVIDER contains unsupported "
                 "external provider: typo-provider"
             ),
         ):
@@ -2044,7 +2044,7 @@ def test_configured_custom_llm_provider_requires_explicit_runtime_contract() -> 
             ),
         )
         settings = _test_settings(
-            AI_DO_LLM_EXTERNAL_ALLOWED_PROVIDERS="plugin",
+            OPEN_ALM_LLM_EXTERNAL_ALLOWED_PROVIDERS="plugin",
         )
 
         with pytest.raises(PlatformExtensionBootstrapError) as exc_info:
@@ -2083,7 +2083,7 @@ def test_openai_compatible_custom_llm_provider_can_use_default_runtime_contract(
             ),
         )
         settings = _test_settings(
-            AI_DO_LLM_EXTERNAL_ALLOWED_PROVIDERS="plugin",
+            OPEN_ALM_LLM_EXTERNAL_ALLOWED_PROVIDERS="plugin",
         )
 
         snapshot = initialize_platform_extensions(settings=settings)
@@ -2444,7 +2444,7 @@ def test_default_source_access_adapters_reregister_after_reset() -> None:
 def test_source_access_policy_import_does_not_register_default_adapters() -> None:
     reset_source_access_adapters()
 
-    source_access_policy = importlib.import_module("ai_do_api.domains.source_access.policy")
+    source_access_policy = importlib.import_module("open_alm_api.domains.source_access.policy")
     importlib.reload(source_access_policy)
 
     assert has_source_access_adapter(NATIVE_DOC_RESOURCE_TYPE) is False

@@ -1,6 +1,6 @@
 # UI Components Reference
 
-AI-DO web UI는 새 화면을 만들기 전에 기존 공용 컴포넌트와 app-scoped 재사용
+Open ALM web UI는 새 화면을 만들기 전에 기존 공용 컴포넌트와 app-scoped 재사용
 컴포넌트를 먼저 확인한다. 공용화는 실제로 여러 앱에서 재사용될 때만 하고, 한 앱의
 업무 흐름에 묶인 컴포넌트는 해당 `app-modules/<appId>/` 안에 둔다.
 이 문서는 UI 재사용 보조 지침이다. 개발 구조/추상화 판단이 충돌하면 `llm-friendly-development.md`를 우선한다.

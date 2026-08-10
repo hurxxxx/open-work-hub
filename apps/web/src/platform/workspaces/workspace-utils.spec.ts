@@ -30,9 +30,9 @@ function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
   return {
     id: 'user-1',
     login_id: 'member',
-    email: 'member@ai-do.local',
-    full_name: 'AI-DO Member',
-    display_name: 'AI-DO Member',
+    email: 'member@open-alm.local',
+    full_name: 'Open ALM Member',
+    display_name: 'Open ALM Member',
     status: 'active',
     theme_preference: 'system',
     locale: 'ko-KR',
@@ -41,7 +41,7 @@ function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
       {
         id: 'workspace-hq',
         slug: 'hq',
-        name: 'AI-DO HQ',
+        name: 'Open ALM HQ',
         role: 'admin',
       },
     ],
@@ -62,7 +62,7 @@ describe('resolveRootEntryPath', () => {
   });
 
   it('prefers the user default workspace over the stored last workspace', () => {
-    window.localStorage.setItem('ai-do:last-workspace-slug', 'hq');
+    window.localStorage.setItem('open-alm:last-workspace-slug', 'hq');
 
     expect(
       resolveRootEntryPath(
@@ -72,13 +72,13 @@ describe('resolveRootEntryPath', () => {
             {
               id: 'workspace-hq',
               slug: 'hq',
-              name: 'AI-DO HQ',
+              name: 'Open ALM HQ',
               role: 'admin',
             },
             {
               id: 'workspace-demo',
               slug: 'demo',
-              name: 'AI-DO Demo',
+              name: 'Open ALM Demo',
               role: 'member',
             },
           ],
@@ -116,13 +116,13 @@ describe('stored workspace selection', () => {
   });
 
   it('clears the last workspace and app together', () => {
-    window.localStorage.setItem('ai-do:last-workspace-slug', 'hq');
-    window.localStorage.setItem('ai-do:last-workspace-app', 'chatbot');
+    window.localStorage.setItem('open-alm:last-workspace-slug', 'hq');
+    window.localStorage.setItem('open-alm:last-workspace-app', 'chatbot');
 
     clearStoredWorkspaceSelection();
 
-    expect(window.localStorage.getItem('ai-do:last-workspace-slug')).toBeNull();
-    expect(window.localStorage.getItem('ai-do:last-workspace-app')).toBeNull();
+    expect(window.localStorage.getItem('open-alm:last-workspace-slug')).toBeNull();
+    expect(window.localStorage.getItem('open-alm:last-workspace-app')).toBeNull();
   });
 
   it('switches workspaces only with enabled bootstrap app ids', () => {
@@ -131,13 +131,13 @@ describe('stored workspace selection', () => {
         {
           id: 'workspace-hq',
           slug: 'hq',
-          name: 'AI-DO HQ',
+          name: 'Open ALM HQ',
           role: 'admin',
         },
         {
           id: 'workspace-demo',
           slug: 'demo',
-          name: 'AI-DO Demo',
+          name: 'Open ALM Demo',
           role: 'member',
         },
       ],
@@ -147,12 +147,12 @@ describe('stored workspace selection', () => {
       resolveWorkspaceSwitchPath(user, '/w/hq/docs', 'demo', ['docs']),
     ).toBe('/w/demo/docs');
 
-    window.localStorage.setItem('ai-do:last-workspace-app', 'typo-app');
+    window.localStorage.setItem('open-alm:last-workspace-app', 'typo-app');
     expect(
       resolveWorkspaceSwitchPath(user, '/w/hq/typo-app', 'demo', ['docs']),
     ).toBe('/');
 
-    window.localStorage.setItem('ai-do:last-workspace-app', 'docs');
+    window.localStorage.setItem('open-alm:last-workspace-app', 'docs');
     expect(
       resolveWorkspaceSwitchPath(user, '/w/hq/typo-app', 'demo', ['docs']),
     ).toBe('/w/demo/docs');
@@ -599,7 +599,7 @@ describe('rewriteWorkspaceApiPath', () => {
   });
 
   it('rewrites workspace-scoped rag endpoints with the active workspace slug', () => {
-    window.localStorage.setItem('ai-do:last-workspace-slug', 'hq');
+    window.localStorage.setItem('open-alm:last-workspace-slug', 'hq');
 
     expect(rewriteWorkspaceApiPath('/api/v1/rag/query')).toBe(
       '/api/v1/workspaces/hq/rag/query',
@@ -607,7 +607,7 @@ describe('rewriteWorkspaceApiPath', () => {
   });
 
   it('prefers the explicit tool workspace query over the last workspace slug', () => {
-    window.localStorage.setItem('ai-do:last-workspace-slug', 'hq');
+    window.localStorage.setItem('open-alm:last-workspace-slug', 'hq');
     window.history.replaceState(
       {},
       '',
@@ -620,7 +620,7 @@ describe('rewriteWorkspaceApiPath', () => {
   });
 
   it('does not fall back to browser state when the explicit workspace slug is empty', () => {
-    window.localStorage.setItem('ai-do:last-workspace-slug', 'hq');
+    window.localStorage.setItem('open-alm:last-workspace-slug', 'hq');
 
     expect(rewriteWorkspaceApiPath('/api/v1/docs/hub', '')).toBe(
       '/api/v1/docs/hub',

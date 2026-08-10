@@ -4,4 +4,4 @@ export type {
   ApiOperation,
   ApiPath,
   ApiSchema,
-} from '@ai-do/contracts/api';
+} from '@open-alm/contracts/api';

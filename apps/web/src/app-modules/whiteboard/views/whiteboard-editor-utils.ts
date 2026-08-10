@@ -1,4 +1,4 @@
-import { colorForCollaborativeUser } from '@ai-do/ui';
+import { colorForCollaborativeUser } from '@open-alm/ui';
 
 export type SaveStatus = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
 export type CollabStatus =

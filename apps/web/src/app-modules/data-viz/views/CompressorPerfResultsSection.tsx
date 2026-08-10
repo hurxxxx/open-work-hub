@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Download, Loader2, RefreshCw, Trash2 } from 'lucide-react';
-import { EmptyState } from '@ai-do/ui';
+import { EmptyState } from '@open-alm/ui';
 
 import { cn } from '@/src/lib/utils';
 import type {

@@ -1,7 +1,7 @@
 import type { Page, Route } from '@playwright/test';
 
 const FAKE_TOKEN = 'e2e-test-token';
-const AUTH_TOKEN_STORAGE_KEY = 'ai-do.auth.token';
+const AUTH_TOKEN_STORAGE_KEY = 'open-alm.auth.token';
 
 type E2EUser = {
   id: string;
@@ -66,7 +66,7 @@ type WorkspaceBootstrapKeywordSearchEntityTypeFixture = {
 // provider treats the seeded token as a live session.
 export const FAKE_WORKSPACE_USER: E2EUser = {
   id: 'user-e2e',
-  email: 'e2e@ai-do.local',
+  email: 'e2e@open-alm.local',
   full_name: 'E2E Tester',
   display_name: 'E2E Tester',
   status: 'active',
@@ -75,7 +75,7 @@ export const FAKE_WORKSPACE_USER: E2EUser = {
   time_zone: 'Asia/Seoul',
   primary_org_unit: null,
   workspaces: [
-    { id: 'workspace-hq', slug: 'hq', name: 'AI-DO HQ', role: 'admin' },
+    { id: 'workspace-hq', slug: 'hq', name: 'Open ALM HQ', role: 'admin' },
   ],
   workspace_roles: [],
   system_roles: [],
@@ -86,7 +86,7 @@ export const FAKE_WORKSPACE_USER: E2EUser = {
 
 export const FAKE_PLATFORM_ADMIN_USER: E2EUser = {
   ...FAKE_WORKSPACE_USER,
-  email: 'platform-admin@ai-do.local',
+  email: 'platform-admin@open-alm.local',
   full_name: 'Platform Admin',
   display_name: 'Platform Admin',
   system_roles: ['platform_admin'],
@@ -553,7 +553,7 @@ function buildWorkspaceBootstrap(
     workspace: {
       id: 'workspace-hq',
       slug: 'hq',
-      name: 'AI-DO HQ',
+      name: 'Open ALM HQ',
       role: 'admin',
     },
     apps,
@@ -571,7 +571,7 @@ function buildWorkspaceBootstrap(
 const WORKSPACE_FIXTURE = {
   id: 'workspace-hq',
   key: 'hq',
-  name: 'AI-DO HQ',
+  name: 'Open ALM HQ',
   description: 'E2E workspace',
   active: true,
   team_count: 0,

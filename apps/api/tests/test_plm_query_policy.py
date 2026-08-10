@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from ai_do_api.domains.plm.query_policy import (
+from open_alm_api.domains.plm.query_policy import (
     PlmQueryPolicyError,
     build_plm_query_preview,
     validate_read_only_plm_sql,

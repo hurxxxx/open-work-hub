@@ -1,13 +1,13 @@
 # Windows 네이티브 로컬 개발 셋업
 
-Windows에서 WSL 없이 AI-DO를 개발하는 표준 절차다. 앱(web/api)만 로컬에서 실행하고,
+Windows에서 WSL 없이 Open ALM를 개발하는 표준 절차다. 앱(web/api)만 로컬에서 실행하고,
 DB·Redis·MinIO·OpenSearch·Qdrant는 server dev host `128.1.253.101`, local LLM과
 Inference Gateway는 DGX application LB `128.1.253.103`의 공유 dev 인프라를 직접 쓴다.
 
 전제:
 
-- 레포는 `C:\projects\ai-do` 등 `C:\projects` 하위 통일 경로에 둔다.
-- 인프라 접속값은 GitLab Secure Files 의 **`.env.local`** 을 받아 루트에 둔다(4단계). 키는 `AI_DO_*` 계약(`.env.example`)을 따른다.
+- 레포는 `C:\projects\open-alm` 등 `C:\projects` 하위 통일 경로에 둔다.
+- 인프라 접속값은 GitLab Secure Files 의 **`.env.local`** 을 받아 루트에 둔다(4단계). 키는 `OPEN_ALM_*` 계약(`.env.example`)을 따른다.
 - API 는 로컬 **단일 인스턴스**로 띄우고, 공유 dev DB 에 로컬에서 migration 을 적용하지 않는다.
 - 개발은 `dev` 에서 분기한 feature 브랜치에서 하고 **MR(`feature` → `dev`)** 로 합친다. GitLab 기본 target이 `main`이어도 기능 MR은 반드시 `dev`로 지정한다. 로컬에서 `dev`/`main` 직접 push 금지.
 
@@ -93,18 +93,18 @@ finally {
 
 # 인증 상태와 Secure Files 메타데이터만 확인한다. 토큰/파일 내용은 출력하지 않는다.
 glab auth status --hostname 128.1.253.101:8929
-glab securefile list -R dwdcc/ai-do
+glab securefile list -R open-alm/open-alm
 
 # .env.local 을 이름으로 다운로드한다. glab 이 checksum 을 검증한다.
-glab securefile download --name .env.local --path .env.local -R dwdcc/ai-do
+glab securefile download --name .env.local --path .env.local -R open-alm/open-alm
 Get-Item .env.local | Select-Object Name,Length,LastWriteTime
 ```
 
 `--use-keyring` 이 해당 Windows 환경에서 실패하면 같은 명령을 `--use-keyring` 없이 다시 실행한다.
 그 경우 glab 은 토큰을 사용자 홈의 glab 설정 파일에 저장한다. 이후 에이전트는 저장된 인증으로
-`glab securefile download --name .env.local --path .env.local -R dwdcc/ai-do` 를 직접 재실행할 수 있다.
+`glab securefile download --name .env.local --path .env.local -R open-alm/open-alm` 를 직접 재실행할 수 있다.
 
-`.env.local` 은 gitignore 대상이며 `AI_DO_*` 키만 쓴다(레거시 프로젝트 prefix 금지). 루트의 `.env` 는 만들지 않는다.
+`.env.local` 은 gitignore 대상이며 `OPEN_ALM_*` 키만 쓴다(레거시 프로젝트 prefix 금지). 루트의 `.env` 는 만들지 않는다.
 
 ## 4. 실행
 
@@ -119,14 +119,14 @@ powershell -ExecutionPolicy Bypass -File scripts\dev-windows.ps1 -WebOnly   # we
 - 포그라운드로 떠 있다(Ctrl+C 로 종료). 터미널을 닫으면 서버도 내려간다.
 
 런처는 API 를 띄울 때 `.env.local` 을 프로세스 환경에 주입하고, 로컬 docker 인프라를 띄우지 않으며,
-공유 dev DB 에 auto-migrate 하지 않고(`AI_DO_API_AUTO_MIGRATE=0`), LLM 백엔드로 기동을 막지 않는다.
+공유 dev DB 에 auto-migrate 하지 않고(`OPEN_ALM_API_AUTO_MIGRATE=0`), LLM 백엔드로 기동을 막지 않는다.
 `-WebOnly` 는 `.env.local` 이 있으면 읽고, 없으면 기존 환경변수와 Vite 기본 프록시를 쓴다.
 
 ## 5. 검증 (실제 확인됨)
 
 ```powershell
 # DB 인증 (psycopg)
-$dsn = ((Get-Content .env.local | sls '^AI_DO_POSTGRES_DSN=').Line -replace '^AI_DO_POSTGRES_DSN=','') -replace '\+psycopg',''
+$dsn = ((Get-Content .env.local | sls '^OPEN_ALM_POSTGRES_DSN=').Line -replace '^OPEN_ALM_POSTGRES_DSN=','') -replace '\+psycopg',''
 $env:_T=$dsn; apps\api\.venv\Scripts\python.exe -c "import os,psycopg;c=psycopg.connect(os.environ['_T']);print('PG OK',c.execute('select current_user').fetchone()[0]);c.close()"; $env:_T=$null
 
 # health + dev-login (api 기동 후)

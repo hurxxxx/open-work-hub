@@ -1,6 +1,6 @@
 # 외부 REST 연계 계약
 
-이 문서는 AI-DO 외부 REST interface가 공통으로 사용하는 API 키, scope, OpenAPI와 운영
+이 문서는 Open ALM 외부 REST interface가 공통으로 사용하는 API 키, scope, OpenAPI와 운영
 경계의 정본이다. 설계 결정은
 [ADR 0012](../../../adr/0012-platform-api-keys-and-rest-integrations.md)를 따른다.
 도메인별 field와 조회 규칙은 각 도메인 문서가 소유한다. 첫 적용 대상인 통합 인사는
@@ -44,7 +44,7 @@ API에 전달해도 사용자 session이나 관리자 권한으로 해석하지 
 남기지 않는다. 원문을 표시하는 dialog는 닫을 때 메모리 상태를 초기화한다.
 키 이름에는 운영 화면을 속일 수 있는 제어 문자와 bidi formatting 문자를 허용하지 않는다.
 현재 v1 암호문은 API와 worker에 이미 배포된
-`AI_DO_AI_MODEL_CREDENTIAL_ENCRYPTION_KEY` root에서 플랫폼 API 키 전용 purpose key를
+`OPEN_ALM_AI_MODEL_CREDENTIAL_ENCRYPTION_KEY` root에서 플랫폼 API 키 전용 purpose key를
 파생해 보호한다. 이 값의 변경은 AI model credential뿐 아니라 기존 플랫폼 API 키의 재조회에도
 영향을 주므로 rotation 전에 두 종류의 암호문 재암호화 계획을 함께 세운다. 검증은 별도 hash를
 사용하므로 복호화 설정 장애를 사용자 session이나 다른 인증 방식으로 우회하지 않는다.
@@ -70,7 +70,7 @@ FastAPI request/response model이 실행 계약과 API 스펙의 단일 정본�
 | 스펙·generated type drift 검사 | `pnpm check:api-contract`  |
 
 외부 consumer는 배포 환경의 `/openapi.json`에서 `/api/v1/integrations/*` path와 참조 schema를
-가져가거나, 저장소에서 생성한 `@ai-do/contracts/openapi` type을 사용할 수 있다. Endpoint를
+가져가거나, 저장소에서 생성한 `@open-alm/contracts/openapi` type을 사용할 수 있다. Endpoint를
 추가하거나 response field를 바꿀 때는 OpenAPI와 generated type을 같은 변경으로 갱신한다.
 
 ## 감사와 데이터 최소화

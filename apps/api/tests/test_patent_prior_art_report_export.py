@@ -7,12 +7,12 @@ import zipfile
 from docx import Document
 import pytest
 
-from ai_do_api.domains.patent_prior_art.report_export import render_report_export
-from ai_do_api.domains.patent_prior_art.reporting import (
+from open_alm_api.domains.patent_prior_art.report_export import render_report_export
+from open_alm_api.domains.patent_prior_art.reporting import (
     build_detailed_report,
     render_markdown_report,
 )
-from ai_do_api.domains.patent_prior_art.schemas import PatentPriorArtReportFormat
+from open_alm_api.domains.patent_prior_art.schemas import PatentPriorArtReportFormat
 
 
 _PRIVATE_RANKING_MARKER = "DO_NOT_EXPORT_92731"

@@ -7,8 +7,8 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 import pytest
-from ai_do_api.core import llm as llm_core
-from ai_do_api.core.settings import get_settings
+from open_alm_api.core import llm as llm_core
+from open_alm_api.core.settings import get_settings
 from test_meeting import _auth_headers, _bootstrap_admin_session, _dev_login
 
 

@@ -35,7 +35,7 @@ custom URL에 넣지 않는다.
 | basis        | 모집단과 정본                                                                                                                                                                                                                  | schema                              |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------- |
 | `erp`        | 최신 호환 성공 master에서 ERP row가 연결된 사람. 종합검진과 같은 ERP 모집단이며 groupware-only·external·격리 conflict는 제외한다.                                                                                              | `hr-master-erp-employee-v2`         |
-| `groupware`  | 그룹웨어 HR sync로 적용된 AI-DO 사용자·조직 projection. ERP-only 인력과 로컬 계정은 제외한다. 로그인 ID, 실제 이메일, 계정 상태와 그룹웨어 조직을 정본으로 사용한다. 내부 대체 이메일(`@groupware.local`)은 `null`로 반환한다. | `groupware-v1`                      |
+| `groupware`  | 그룹웨어 HR sync로 적용된 Open ALM 사용자·조직 projection. ERP-only 인력과 로컬 계정은 제외한다. 로그인 ID, 실제 이메일, 계정 상태와 그룹웨어 조직을 정본으로 사용한다. 내부 대체 이메일(`@groupware.local`)은 `null`로 반환한다. | `groupware-v1`                      |
 | `integrated` | 최신 호환 성공 master의 person, 해외/외부 person과 격리 conflict 정보. ERP 연결 field와 master에 고정된 그룹웨어 field의 authority는 ADR 0011을 따른다. 호출 시점의 변경 가능한 사용자 계정 상태는 섞지 않는다.                | 현재 master schema (`hr-master-v5`) |
 
 ERP response가 제공하는 생년월일·입사일·전화번호는 ERP v2 계약에 포함된다. `phone_number`는

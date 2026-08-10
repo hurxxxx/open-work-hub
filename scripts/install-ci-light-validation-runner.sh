@@ -2,10 +2,10 @@
 set -Eeuo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-project_path="dwdcc/ai-do"
-runner_name="ai-do-validation-light-docker-runner"
-validation_tag="ai-do-validation-light"
-validation_image="ai-do-validation:node25-python312-pg18-api-a3e8c22a3552-worker-3149583cef20-node-e7c57b3bacf9-484482bced42"
+project_path="open-alm/open-alm"
+runner_name="open-alm-validation-light-docker-runner"
+validation_tag="open-alm-validation-light"
+validation_image="open-alm-validation:node25-python312-pg18-api-a3e8c22a3552-worker-3149583cef20-node-e7c57b3bacf9-484482bced42"
 validation_image_id="sha256:89345c7907b296ea557a61e9a4c956ee9915c3fb9b611b3923f36bcc4c65d526"
 gitlab_runner_version="18.11.2"
 helper_image_repository="registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper"
@@ -13,14 +13,14 @@ helper_image_manifest_digest="sha256:39e9155b72aff010f55a8bbfdb94fedeb0824de1861
 helper_image_local_id="sha256:39e9155b72aff010f55a8bbfdb94fedeb0824de18612795d8b901ac4b42d99f5"
 helper_image="${helper_image_repository}:x86_64-v${gitlab_runner_version}"
 helper_image_pinned="${helper_image_repository}@${helper_image_manifest_digest}"
-validation_network="ai-do-validation-light"
+validation_network="open-alm-validation-light"
 validation_subnet="172.29.251.0/24"
 validation_gateway="172.29.251.1"
-egress_source="$repo_root/ops/ci/ai-do-ci-validation-egress.sh"
-egress_service_source="$repo_root/ops/ci/ai-do-ci-validation-egress.service"
-egress_target="/usr/local/sbin/ai-do-ci-validation-egress"
-egress_service_target="/etc/systemd/system/ai-do-ci-validation-egress.service"
-runner_config_file="${GITLAB_RUNNER_CONFIG_FILE:-/home/dwdcc/.gitlab-runner/config.toml}"
+egress_source="$repo_root/ops/ci/open-alm-ci-validation-egress.sh"
+egress_service_source="$repo_root/ops/ci/open-alm-ci-validation-egress.service"
+egress_target="/usr/local/sbin/open-alm-ci-validation-egress"
+egress_service_target="/etc/systemd/system/open-alm-ci-validation-egress.service"
+runner_config_file="${GITLAB_RUNNER_CONFIG_FILE:-/home/open-alm/.gitlab-runner/config.toml}"
 current_branch="$(git -C "$repo_root" branch --show-current)"
 
 if [[ "$current_branch" != "dev" ]]; then
@@ -32,7 +32,7 @@ if [[ -n "$(git -C "$repo_root" status --porcelain)" ]]; then
   exit 2
 fi
 source "$repo_root/scripts/ci/control-plane-lock.sh"
-acquire_ai_do_ci_control_plane_lock
+acquire_open_alm_ci_control_plane_lock
 
 git -C "$repo_root" fetch --quiet origin dev
 local_head="$(git -C "$repo_root" rev-parse HEAD)"
@@ -75,7 +75,7 @@ if [[ "$actual_gitlab_runner_version" != "$gitlab_runner_version" ]]; then
   exit 2
 fi
 
-bash -n "$repo_root/ops/ci/ai-do-ci-validation-egress.sh"
+bash -n "$repo_root/ops/ci/open-alm-ci-validation-egress.sh"
 bash "$repo_root/scripts/codex-review-ci.sh" \
   --validate-gitlab-ci-contract "$repo_root/ops/ci/ci-first.gitlab-ci.yml" >/dev/null
 
@@ -95,9 +95,9 @@ runner_details="$(
 )"
 if [[ "$(
   jq '[.[] | select(
-    .description == "ai-do-validation-docker-runner"
+    .description == "open-alm-validation-docker-runner"
     and .status == "online"
-    and .tag_list == ["ai-do-validation"]
+    and .tag_list == ["open-alm-validation"]
     and .paused == false
     and .locked == true
     and .run_untagged == false
@@ -109,7 +109,7 @@ if [[ "$(
 fi
 if [[ "$(
   jq '[.[] | select(
-    .description == "ai-do-local-codex-runner"
+    .description == "open-alm-local-codex-runner"
     and (.status == "online" or .status == "paused")
     and .tag_list == ["codex-local"]
     and (.paused | type) == "boolean"
@@ -134,28 +134,28 @@ fi
 validation_runner_id="$(
   jq -r '
     .[]
-    | select(.description == "ai-do-validation-docker-runner")
+    | select(.description == "open-alm-validation-docker-runner")
     | .id
   ' <<<"$runner_details"
 )"
 codex_runner_id="$(
   jq -r '
     .[]
-    | select(.description == "ai-do-local-codex-runner")
+    | select(.description == "open-alm-local-codex-runner")
     | .id
   ' <<<"$runner_details"
 )"
 previous_validation_paused="$(
   jq -r '
     .[]
-    | select(.description == "ai-do-validation-docker-runner")
+    | select(.description == "open-alm-validation-docker-runner")
     | .paused
   ' <<<"$runner_details"
 )"
 previous_codex_paused="$(
   jq -r '
     .[]
-    | select(.description == "ai-do-local-codex-runner")
+    | select(.description == "open-alm-local-codex-runner")
     | .paused
   ' <<<"$runner_details"
 )"
@@ -275,11 +275,11 @@ sudo install -o root -g root -m 700 "$egress_source" "$egress_target"
 sudo install -o root -g root -m 644 \
   "$egress_service_source" "$egress_service_target"
 sudo systemctl daemon-reload
-if ! sudo systemctl is-active --quiet ai-do-ci-validation-egress.service; then
+if ! sudo systemctl is-active --quiet open-alm-ci-validation-egress.service; then
   echo "The heavy validation egress service must already be active." >&2
   exit 2
 fi
-sudo systemctl enable ai-do-ci-validation-egress.service >/dev/null
+sudo systemctl enable open-alm-ci-validation-egress.service >/dev/null
 sudo "$egress_target" --apply-light
 sudo "$egress_target" --check
 
@@ -412,7 +412,7 @@ checks = {
     "disable_cache": docker.get("disable_cache") is True,
     "cap_drop": docker.get("cap_drop") == ["ALL"],
     "security_opt": "no-new-privileges:true" in docker.get("security_opt", []),
-    "network_mode": docker.get("network_mode") == "ai-do-validation-light",
+    "network_mode": docker.get("network_mode") == "open-alm-validation-light",
     "extra_hosts": docker.get("extra_hosts") in (None, []),
     "allowed_images": docker.get("allowed_images") == [sys.argv[3]],
     "allowed_services": docker.get("allowed_services") in (None, []),
@@ -446,11 +446,11 @@ for _attempt in $(seq 1 30); do
   sleep 2
 done
 if ! jq -e '
-  .description == "ai-do-validation-light-docker-runner"
+  .description == "open-alm-validation-light-docker-runner"
   and (.status == "paused" or .status == "online")
   and (.contacted_at | type) == "string"
   and .contacted_at != ""
-  and .tag_list == ["ai-do-validation-light"]
+  and .tag_list == ["open-alm-validation-light"]
   and .paused == true
   and .locked == true
   and .run_untagged == false

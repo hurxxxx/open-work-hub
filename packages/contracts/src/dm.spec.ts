@@ -284,10 +284,10 @@ describe('DM shared view model projections', () => {
 
   it('supports direct-thread preview prefix policies for web and desktop callers', () => {
     const direct = conversation({
-      other_user: user({ id: 'u2', display_name: 'AI-DO Bot' }),
+      other_user: user({ id: 'u2', display_name: 'Open ALM Bot' }),
       last_message: message({
         sender_id: 'u2',
-        sender_name: 'AI-DO Bot',
+        sender_name: 'Open ALM Bot',
         body: '내 커뮤니티 글에 댓글이 달렸습니다',
       }),
     });
@@ -305,7 +305,7 @@ describe('DM shared view model projections', () => {
         labels,
         senderPrefix: 'incoming',
       }),
-    ).toBe('AI-DO Bot: 내 커뮤니티 글에 댓글이 달렸습니다');
+    ).toBe('Open ALM Bot: 내 커뮤니티 글에 댓글이 달렸습니다');
   });
 
   it('projects composer and pending attachment state consistently', () => {

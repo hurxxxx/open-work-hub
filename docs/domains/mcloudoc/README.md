@@ -1,6 +1,6 @@
 # mcloudoc 연계 경계
 
-이 문서는 문서중앙화 시스템 mcloudoc를 AI-DO Files 검색·RAG 파이프라인에
+이 문서는 문서중앙화 시스템 mcloudoc를 Open ALM Files 검색·RAG 파이프라인에
 연결하기 위한 현재 구현 경계와 활성화 조건의 정본이다. 대상 시스템의 전송 방식,
 인증, 변경 식별 규칙, 메타데이터·권한 사전이 확정되지 않았으므로 외부 adapter는
 아직 구현하지 않는다.
@@ -37,7 +37,7 @@ flowchart LR
 ```
 
 외부 adapter가 맡을 일은 인증, 호출·수신, 대상 payload 해석, 원문 byte 확보,
-외부 principal을 AI-DO principal로 해석하는 일이다. Core는 전달받은 결과의 크기와
+외부 principal을 Open ALM principal로 해석하는 일이다. Core는 전달받은 결과의 크기와
 형태, idempotency, lifecycle, 최종 ACL을 책임진다. Core가 임의로 revision의 대소를
 비교하거나 대상 필드 의미를 추측하지 않는다.
 
@@ -103,7 +103,7 @@ flowchart LR
 1. transport 방식과 인증/TLS/호출 방향을 확정한다.
 2. 목록·원문·변경·삭제·pagination/cursor·rate limit 계약을 고정한다.
 3. 제목, 작성자, 작성일, 부서, 문서 종류와 실제 원천 필드를 매핑한다.
-4. mcloudoc principal을 AI-DO 사용자·조직·팀으로 해석하는 기준과 미해결 정책을
+4. mcloudoc principal을 Open ALM 사용자·조직·팀으로 해석하는 기준과 미해결 정책을
    공동 승인한다.
 5. 표본으로 최초 수집, 신규·변경·삭제, ACL revoke, 재시도, partial/complete
    snapshot과 검색·답변·다운로드 E2E를 수행한다.

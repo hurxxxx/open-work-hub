@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useReducer } from 'react';
-import { Button, Dialog } from '@ai-do/ui';
+import { Button, Dialog } from '@open-alm/ui';
 import { useTranslation } from 'react-i18next';
 import { CalendarDays, Clock3 } from 'lucide-react';
 

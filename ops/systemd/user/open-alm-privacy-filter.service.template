@@ -1,0 +1,22 @@
+[Unit]
+Description=Open ALM Shared Privacy Filter
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=__OPEN_ALM_ROOT__/apps/api
+Environment=OPEN_ALM_API_AUTO_MIGRATE=0
+Environment=OPEN_ALM_OPF_SERVICE_BASE_URL=
+ExecStart=__OPEN_ALM_API_PYTHON__ -m uvicorn open_alm_api.domains.ai.privacy_filter_service:app --app-dir src --host 127.0.0.1 --port 18081
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0077
+Restart=always
+RestartSec=10
+TimeoutStartSec=900
+TimeoutStopSec=180
+KillMode=control-group
+
+[Install]
+WantedBy=default.target

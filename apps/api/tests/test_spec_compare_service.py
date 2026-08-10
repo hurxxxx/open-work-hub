@@ -5,12 +5,12 @@ from types import SimpleNamespace
 from fastapi import HTTPException
 import pytest
 
-from ai_do_api.domains.spec_compare import service
-from ai_do_api.domains.spec_compare.artifacts import (
+from open_alm_api.domains.spec_compare import service
+from open_alm_api.domains.spec_compare.artifacts import (
     SpecCompareArtifactRef,
     SpecCompareInputArtifacts,
 )
-from ai_do_api.domains.spec_compare.models import SpecCompareJob
+from open_alm_api.domains.spec_compare.models import SpecCompareJob
 
 
 class FakeDb:

@@ -22,7 +22,7 @@ import {
   DropdownMenu,
   InlineNotice,
   Select,
-} from '@ai-do/ui';
+} from '@open-alm/ui';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { normalizeTimeZone } from '@/src/platform/time/time-utils';
 import { UserSearchMultiSelect } from '@/src/platform/users/UserSearchMultiSelect';

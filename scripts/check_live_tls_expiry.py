@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed health check for the public DWDCC TLS certificate."""
+"""Fail-closed health check for the public OPEN_ALM TLS certificate."""
 
 from __future__ import annotations
 
@@ -13,9 +13,9 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, TextIO
 
 
-DEFAULT_HOST = "dwdcc.kr"
+DEFAULT_HOST = "open-alm.example"
 DEFAULT_PORT = 443
-DEFAULT_REQUIRED_SANS = ("*.dwdcc.kr", "dwdcc.kr")
+DEFAULT_REQUIRED_SANS = ("*.open-alm.example", "open-alm.example")
 DEFAULT_THRESHOLD_DAYS = 30
 
 Certificate = dict[str, Any]

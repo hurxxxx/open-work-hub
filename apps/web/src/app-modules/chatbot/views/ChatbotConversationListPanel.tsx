@@ -17,7 +17,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
-import { useConfirm, usePrompt, useToast } from '@ai-do/ui';
+import { useConfirm, usePrompt, useToast } from '@open-alm/ui';
 
 import {
   CONVERSATIONS_UPDATED_EVENT,

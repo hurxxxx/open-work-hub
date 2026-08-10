@@ -6,30 +6,30 @@ from fastapi.testclient import TestClient
 import pytest
 from sqlalchemy import delete, select
 
-from ai_do_api.core.db import get_session_factory
-from ai_do_api.domains.auth.models import AuditLog, OrgUnit, User
-from ai_do_api.domains.auth.platform_api_keys import PlatformApiPrincipal
-from ai_do_api.domains.auth.security import new_id
-from ai_do_api.domains.hr.erp_snapshot import (
+from open_alm_api.core.db import get_session_factory
+from open_alm_api.domains.auth.models import AuditLog, OrgUnit, User
+from open_alm_api.domains.auth.platform_api_keys import PlatformApiPrincipal
+from open_alm_api.domains.auth.security import new_id
+from open_alm_api.domains.hr.erp_snapshot import (
     ERP_EMPLOYEE_SCHEMA_VERSION,
     ERP_EMPLOYEE_SCOPE_KEY,
     ERP_SOURCE_SYSTEM,
 )
-from ai_do_api.domains.hr.groupware_sync import GROUPWARE_SOURCE_SYSTEM
-from ai_do_api.domains.hr.history import (
+from open_alm_api.domains.hr.groupware_sync import GROUPWARE_SOURCE_SYSTEM
+from open_alm_api.domains.hr.history import (
     GROUPWARE_SCOPE_KEY,
     HR_SNAPSHOT_SCHEMA_VERSION,
     canonical_payload_hash,
 )
-from ai_do_api.domains.hr.integration_router import (
+from open_alm_api.domains.hr.integration_router import (
     require_hr_integration_read,
     router as hr_integration_router,
 )
-from ai_do_api.domains.hr.master import (
+from open_alm_api.domains.hr.master import (
     HR_MASTER_SCHEMA_VERSION,
     HrMasterErpEmployee,
 )
-from ai_do_api.domains.hr.models import (
+from open_alm_api.domains.hr.models import (
     HrMasterConflictRow,
     HrMasterExternalPersonRow,
     HrMasterGroupRow,

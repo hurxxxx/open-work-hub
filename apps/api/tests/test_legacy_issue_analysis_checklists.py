@@ -7,9 +7,9 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
-from ai_do_api.core.db import Base
-from ai_do_api.domains.auth.models import OrgUnit, User, Workspace
-from ai_do_api.domains.legacy_issues.analysis_contracts import (
+from open_alm_api.core.db import Base
+from open_alm_api.domains.auth.models import OrgUnit, User, Workspace
+from open_alm_api.domains.legacy_issues.analysis_contracts import (
     AnalysisCountingUnit,
     AnalysisDataSource,
     AnalysisMode,
@@ -23,21 +23,21 @@ from ai_do_api.domains.legacy_issues.analysis_contracts import (
     QueryFamilyId,
     QueryRequestV1,
 )
-from ai_do_api.domains.legacy_issues.analysis_sql import (
+from open_alm_api.domains.legacy_issues.analysis_sql import (
     CHECKLIST_ANALYSIS_FIELDS,
     build_visible_records_relation,
     execute_analysis_plan,
     execute_analysis_query,
     resolve_analysis_scope,
 )
-from ai_do_api.domains.legacy_issues.analysis_v2.scope import (
+from open_alm_api.domains.legacy_issues.analysis_v2.scope import (
     resolve_runtime_sql_scope,
 )
-from ai_do_api.domains.legacy_issues.dataset_records import (
+from open_alm_api.domains.legacy_issues.dataset_records import (
     COMMON_MASTER_DATASET_KEY,
     COMMON_MASTER_FIELDS,
 )
-from ai_do_api.domains.legacy_issues.models import (
+from open_alm_api.domains.legacy_issues.models import (
     LegacyIssueDataRevision,
     LegacyIssueRecord,
     LegacyIssueVehicleModel,
@@ -45,10 +45,10 @@ from ai_do_api.domains.legacy_issues.models import (
     LegacyIssueVehicleModuleChecklistRecord,
     LegacyIssueVehicleStage,
 )
-from ai_do_api.domains.legacy_issues.revisioning import (
+from open_alm_api.domains.legacy_issues.revisioning import (
     legacy_issue_dataset_revision_key,
 )
-from ai_do_api.domains.retrieval.models import RetrievalPartition
+from open_alm_api.domains.retrieval.models import RetrievalPartition
 
 
 ANALYSIS_FIELDS = (*COMMON_MASTER_FIELDS, *CHECKLIST_ANALYSIS_FIELDS)

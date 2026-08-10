@@ -5,7 +5,7 @@ import type { LegacyIssueExcelExportJob } from '../api/legacy-issue-common-api';
 
 export const LEGACY_ISSUE_EXCEL_EXPORT_POLL_INTERVAL_MS = 2_000;
 const MAX_CONSECUTIVE_POLL_FAILURES = 5;
-const STORAGE_PREFIX = 'ai-do.legacy-issues.excel-export-job.v1';
+const STORAGE_PREFIX = 'open-alm.legacy-issues.excel-export-job.v1';
 
 export type LegacyIssueExcelExportFailureReason =
   | 'create'

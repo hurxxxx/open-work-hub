@@ -14,7 +14,7 @@ import {
   DM_REALTIME_EVENT_TYPES,
   normalizeDmRealtimeEvent,
   upsertDmConversation,
-} from '@ai-do/contracts/dm';
+} from '@open-alm/contracts/dm';
 
 import {
   useRealtime,

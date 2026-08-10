@@ -17,37 +17,37 @@ SPEC.loader.exec_module(runtime_separation)
 
 
 DEV_ENV = """\
-AI_DO_ENV_PROFILE=dev
-AI_DO_API_ENVIRONMENT=development
-AI_DO_API_INSTANCE_ID=dev-api
-AI_DO_API_SERVE_FRONTEND=false
-AI_DO_API_ALLOW_DEV_ADMIN_LOGIN=1
-COMPOSE_PROJECT_NAME=ai-do-dev
-AI_DO_INFRA_CONTAINER_PREFIX=ai-do-dev
-AI_DO_MINIO_BUCKET=ai-do-dev
-AI_DO_OPENSEARCH_INDEX_PREFIX=ai-do-dev
-AI_DO_RAG_QDRANT_COLLECTION_PREFIX=ai-do-dev-rag
-AI_DO_DRAWIO_BIND_HOST=0.0.0.0
-AI_DO_DRAWIO_SERVER_URL=
+OPEN_ALM_ENV_PROFILE=dev
+OPEN_ALM_API_ENVIRONMENT=development
+OPEN_ALM_API_INSTANCE_ID=dev-api
+OPEN_ALM_API_SERVE_FRONTEND=false
+OPEN_ALM_API_ALLOW_DEV_ADMIN_LOGIN=1
+COMPOSE_PROJECT_NAME=open-alm-dev
+OPEN_ALM_INFRA_CONTAINER_PREFIX=open-alm-dev
+OPEN_ALM_MINIO_BUCKET=open-alm-dev
+OPEN_ALM_OPENSEARCH_INDEX_PREFIX=open-alm-dev
+OPEN_ALM_RAG_QDRANT_COLLECTION_PREFIX=open-alm-dev-rag
+OPEN_ALM_DRAWIO_BIND_HOST=0.0.0.0
+OPEN_ALM_DRAWIO_SERVER_URL=
 """
 
 PROD_ENV = """\
-AI_DO_ENV_PROFILE=prod
-AI_DO_API_ENVIRONMENT=production
-AI_DO_API_INSTANCE_ID=prod-api
-AI_DO_API_SERVE_FRONTEND=true
-AI_DO_API_ALLOW_DEV_ADMIN_LOGIN=0
-COMPOSE_PROJECT_NAME=ai-do-prod
-AI_DO_INFRA_CONTAINER_PREFIX=ai-do-prod
-AI_DO_MINIO_BUCKET=ai-do-prod
-AI_DO_OPENSEARCH_INDEX_PREFIX=ai-do-prod
-AI_DO_RAG_QDRANT_COLLECTION_PREFIX=ai-do-prod-rag
-AI_DO_DRAWIO_BIND_HOST=127.0.0.1
-AI_DO_DRAWIO_PORT=18083
-AI_DO_DRAWIO_SERVER_URL=https://drawio.dwdcc.kr/
-AI_DO_API_DEV_LOGIN_ALLOWED_HOSTS=
-AI_DO_PROD_SMOKE_WEB_HOST=prod.example.test
-AI_DO_PROD_SMOKE_WORKSPACE_PATH=/w/prod-smoke
+OPEN_ALM_ENV_PROFILE=prod
+OPEN_ALM_API_ENVIRONMENT=production
+OPEN_ALM_API_INSTANCE_ID=prod-api
+OPEN_ALM_API_SERVE_FRONTEND=true
+OPEN_ALM_API_ALLOW_DEV_ADMIN_LOGIN=0
+COMPOSE_PROJECT_NAME=open-alm-prod
+OPEN_ALM_INFRA_CONTAINER_PREFIX=open-alm-prod
+OPEN_ALM_MINIO_BUCKET=open-alm-prod
+OPEN_ALM_OPENSEARCH_INDEX_PREFIX=open-alm-prod
+OPEN_ALM_RAG_QDRANT_COLLECTION_PREFIX=open-alm-prod-rag
+OPEN_ALM_DRAWIO_BIND_HOST=127.0.0.1
+OPEN_ALM_DRAWIO_PORT=18083
+OPEN_ALM_DRAWIO_SERVER_URL=https://drawio.open-alm.example/
+OPEN_ALM_API_DEV_LOGIN_ALLOWED_HOSTS=
+OPEN_ALM_PROD_SMOKE_WEB_HOST=prod.example.test
+OPEN_ALM_PROD_SMOKE_WORKSPACE_PATH=/w/prod-smoke
 """
 
 
@@ -116,34 +116,34 @@ class RuntimeSeparationScannerTest(unittest.TestCase):
                 '"ci":{"dependsOn":["env-contract","runtime-separation","skills","path-hardcoding"]}'
                 '}}\n'
             ),
-            root / "apps/api/project.json": "${AI_DO_API_DEV_PORT:-8001}\n",
+            root / "apps/api/project.json": "${OPEN_ALM_API_DEV_PORT:-8001}\n",
             root / "ops/dev/nginx.conf.template": "proxy_pass http://dev-api;\n",
             root
-            / "ops/compose/ai-do-dev.infra.yml": (
-                "container_name: ai-do-dev-drawio\n"
-                '${AI_DO_DRAWIO_BIND_HOST:-0.0.0.0}\n'
+            / "ops/compose/open-alm-dev.infra.yml": (
+                "container_name: open-alm-dev-drawio\n"
+                '${OPEN_ALM_DRAWIO_BIND_HOST:-0.0.0.0}\n'
                 "healthcheck:\n"
                 "condition: service_healthy\n"
             ),
             root
-            / "ops/compose/ai-do-prod.infra.yml": (
-                "container_name: ai-do-prod-drawio\n"
-                '${AI_DO_DRAWIO_BIND_HOST:-127.0.0.1}\n'
-                '${AI_DO_DRAWIO_PORT:-18083}\n'
+            / "ops/compose/open-alm-prod.infra.yml": (
+                "container_name: open-alm-prod-drawio\n"
+                '${OPEN_ALM_DRAWIO_BIND_HOST:-127.0.0.1}\n'
+                '${OPEN_ALM_DRAWIO_PORT:-18083}\n'
                 "healthcheck:\n"
             ),
             root
-            / "ops/nginx/dwdcc.kr.proxy-only.conf": (
-                "server_name drawio.dwdcc.kr;\n"
+            / "ops/nginx/open-alm.example.proxy-only.conf": (
+                "server_name drawio.open-alm.example;\n"
                 "proxy_pass http://127.0.0.1:18083;\n"
                 "location /drawio/ {\n"
-                "  rewrite ^/drawio/(.*)$ https://drawio.dwdcc.kr/$1 permanent;\n"
+                "  rewrite ^/drawio/(.*)$ https://drawio.open-alm.example/$1 permanent;\n"
                 "}\n"
             ),
             root / "scripts/prod-systemd.sh": "require_prod_checkout\n",
             root / "scripts/infra-stack.sh": "require_matching_checkout\n",
             root
-            / "scripts/dev-env.sh": 'AI_DO_ENV_PROFILE="${AI_DO_ENV_PROFILE:-dev}"\n',
+            / "scripts/dev-env.sh": 'OPEN_ALM_ENV_PROFILE="${OPEN_ALM_ENV_PROFILE:-dev}"\n',
             root / ".env.example": DEV_ENV,
             root.parent / "dev" / ".env": DEV_ENV,
             root.parent / "prod" / ".env": PROD_ENV,
@@ -164,65 +164,65 @@ class RuntimeSeparationScannerTest(unittest.TestCase):
 
     def passing_live_systemd_units(self) -> dict[tuple[str, ...], str]:
         unit_texts = {
-            "ai-do-prod-api.service": (
-                "WorkingDirectory=/projects/ai-do/prod/apps/api\n"
-                "ExecStart=/projects/ai-do/prod/apps/api/.venv/bin/python -m uvicorn ai_do_api.app:app\n"
+            "open-alm-prod-api.service": (
+                "WorkingDirectory=/projects/open-alm/prod/apps/api\n"
+                "ExecStart=/projects/open-alm/prod/apps/api/.venv/bin/python -m uvicorn open_alm_api.app:app\n"
             ),
-            "ai-do-prod-collab.service": (
-                "WorkingDirectory=/projects/ai-do/prod/apps/api\n"
-                "Environment=AI_DO_API_INSTANCE_ID=prod-collab\n"
-                "ExecStart=/projects/ai-do/prod/apps/api/.venv/bin/python -m uvicorn "
-                "ai_do_api.app:app --port 8009\n"
+            "open-alm-prod-collab.service": (
+                "WorkingDirectory=/projects/open-alm/prod/apps/api\n"
+                "Environment=OPEN_ALM_API_INSTANCE_ID=prod-collab\n"
+                "ExecStart=/projects/open-alm/prod/apps/api/.venv/bin/python -m uvicorn "
+                "open_alm_api.app:app --port 8009\n"
             ),
-            "ai-do-prod-worker.service": (
-                "WorkingDirectory=/projects/ai-do/prod/apps/worker\n"
-                "Environment=PYTHONPATH=/projects/ai-do/prod/apps/worker/src\n"
-                "Environment=AI_DO_WORKER_QUEUE_GROUP=default\n"
-                "ExecStart=/projects/ai-do/prod/apps/worker/.venv/bin/python -m celery "
-                "-A ai_do_worker.celery_app:celery_app worker "
-                "--hostname=ai-do-prod-worker-default@prod-host -Q celery\n"
+            "open-alm-prod-worker.service": (
+                "WorkingDirectory=/projects/open-alm/prod/apps/worker\n"
+                "Environment=PYTHONPATH=/projects/open-alm/prod/apps/worker/src\n"
+                "Environment=OPEN_ALM_WORKER_QUEUE_GROUP=default\n"
+                "ExecStart=/projects/open-alm/prod/apps/worker/.venv/bin/python -m celery "
+                "-A open_alm_worker.celery_app:celery_app worker "
+                "--hostname=open-alm-prod-worker-default@prod-host -Q celery\n"
             ),
-            "ai-do-prod-worker-realtime.service": (
-                "WorkingDirectory=/projects/ai-do/prod/apps/worker\n"
-                "Environment=PYTHONPATH=/projects/ai-do/prod/apps/worker/src\n"
-                "Environment=AI_DO_WORKER_QUEUE_GROUP=realtime\n"
-                "ExecStart=/projects/ai-do/prod/apps/worker/.venv/bin/python -m celery "
-                "-A ai_do_worker.celery_app:celery_app worker "
-                "--hostname=ai-do-prod-worker-realtime@prod-host -Q mail_sync,rag_sync_realtime\n"
+            "open-alm-prod-worker-realtime.service": (
+                "WorkingDirectory=/projects/open-alm/prod/apps/worker\n"
+                "Environment=PYTHONPATH=/projects/open-alm/prod/apps/worker/src\n"
+                "Environment=OPEN_ALM_WORKER_QUEUE_GROUP=realtime\n"
+                "ExecStart=/projects/open-alm/prod/apps/worker/.venv/bin/python -m celery "
+                "-A open_alm_worker.celery_app:celery_app worker "
+                "--hostname=open-alm-prod-worker-realtime@prod-host -Q mail_sync,rag_sync_realtime\n"
             ),
-            "ai-do-prod-worker-long.service": (
-                "WorkingDirectory=/projects/ai-do/prod/apps/worker\n"
-                "Environment=PYTHONPATH=/projects/ai-do/prod/apps/worker/src\n"
-                "Environment=AI_DO_WORKER_QUEUE_GROUP=long\n"
-                "ExecStart=/projects/ai-do/prod/apps/worker/.venv/bin/python -m celery "
-                "-A ai_do_worker.celery_app:celery_app worker "
-                "--hostname=ai-do-prod-worker-long@prod-host -Q meeting_transcribe,image_generation\n"
+            "open-alm-prod-worker-long.service": (
+                "WorkingDirectory=/projects/open-alm/prod/apps/worker\n"
+                "Environment=PYTHONPATH=/projects/open-alm/prod/apps/worker/src\n"
+                "Environment=OPEN_ALM_WORKER_QUEUE_GROUP=long\n"
+                "ExecStart=/projects/open-alm/prod/apps/worker/.venv/bin/python -m celery "
+                "-A open_alm_worker.celery_app:celery_app worker "
+                "--hostname=open-alm-prod-worker-long@prod-host -Q meeting_transcribe,image_generation\n"
             ),
-            "ai-do-prod-worker-ai-graph.service": (
-                "WorkingDirectory=/projects/ai-do/prod/apps/worker\n"
-                "Environment=PYTHONPATH=/projects/ai-do/prod/apps/worker/src\n"
-                "Environment=AI_DO_WORKER_QUEUE_GROUP=ai_graph\n"
-                "ExecStart=/projects/ai-do/prod/apps/worker/.venv/bin/python -m celery "
-                "-A ai_do_worker.celery_app:celery_app worker "
-                "--hostname=ai-do-prod-worker-ai-graph@prod-host -Q ai-graph\n"
+            "open-alm-prod-worker-ai-graph.service": (
+                "WorkingDirectory=/projects/open-alm/prod/apps/worker\n"
+                "Environment=PYTHONPATH=/projects/open-alm/prod/apps/worker/src\n"
+                "Environment=OPEN_ALM_WORKER_QUEUE_GROUP=ai_graph\n"
+                "ExecStart=/projects/open-alm/prod/apps/worker/.venv/bin/python -m celery "
+                "-A open_alm_worker.celery_app:celery_app worker "
+                "--hostname=open-alm-prod-worker-ai-graph@prod-host -Q ai-graph\n"
             ),
-            "ai-do-prod-worker-ppt.service": (
-                "WorkingDirectory=/projects/ai-do/prod/apps/worker\n"
-                "Environment=PYTHONPATH=/projects/ai-do/prod/apps/worker/src\n"
-                "Environment=AI_DO_WORKER_QUEUE_GROUP=ppt\n"
-                "ExecStart=/projects/ai-do/prod/apps/worker/.venv/bin/python -m celery "
-                "-A ai_do_worker.celery_app:celery_app worker "
-                "--hostname=ai-do-prod-worker-ppt@prod-host -Q ppt_generation\n"
+            "open-alm-prod-worker-ppt.service": (
+                "WorkingDirectory=/projects/open-alm/prod/apps/worker\n"
+                "Environment=PYTHONPATH=/projects/open-alm/prod/apps/worker/src\n"
+                "Environment=OPEN_ALM_WORKER_QUEUE_GROUP=ppt\n"
+                "ExecStart=/projects/open-alm/prod/apps/worker/.venv/bin/python -m celery "
+                "-A open_alm_worker.celery_app:celery_app worker "
+                "--hostname=open-alm-prod-worker-ppt@prod-host -Q ppt_generation\n"
             ),
-            "ai-do-prod-worker-beat.service": (
-                "WorkingDirectory=/projects/ai-do/prod/apps/worker\n"
-                "Environment=PYTHONPATH=/projects/ai-do/prod/apps/worker/src\n"
-                "Environment=AI_DO_WORKER_QUEUE_GROUP=beat\n"
-                "ExecStart=/projects/ai-do/prod/apps/worker/.venv/bin/python -m celery "
-                "-A ai_do_worker.celery_app:celery_app beat --loglevel=info "
-                "--schedule /projects/ai-do/prod/.runtime/celerybeat-schedule.db\n"
+            "open-alm-prod-worker-beat.service": (
+                "WorkingDirectory=/projects/open-alm/prod/apps/worker\n"
+                "Environment=PYTHONPATH=/projects/open-alm/prod/apps/worker/src\n"
+                "Environment=OPEN_ALM_WORKER_QUEUE_GROUP=beat\n"
+                "ExecStart=/projects/open-alm/prod/apps/worker/.venv/bin/python -m celery "
+                "-A open_alm_worker.celery_app:celery_app beat --loglevel=info "
+                "--schedule /projects/open-alm/prod/.runtime/celerybeat-schedule.db\n"
             ),
-            "ai-do-dev-app.service": "WorkingDirectory=/projects/ai-do/dev\n",
+            "open-alm-dev-app.service": "WorkingDirectory=/projects/open-alm/dev\n",
         }
         return {
             ("systemctl", "--user", "cat", unit_name): unit_text
@@ -233,7 +233,7 @@ class RuntimeSeparationScannerTest(unittest.TestCase):
                 "inspect",
                 "--format",
                 "{{if .State.Health}}{{.State.Health.Status}}{{else}}missing-healthcheck{{end}}",
-                "ai-do-prod-drawio",
+                "open-alm-prod-drawio",
             ): "healthy\n",
             ("curl", "-fsSI", "http://127.0.0.1:18083/"): "HTTP/1.1 200 OK\n",
         }
@@ -259,8 +259,8 @@ class RuntimeSeparationScannerTest(unittest.TestCase):
             root = Path(directory) / "dev"
             texts = self.passing_texts(root.resolve())
             texts[root.resolve().parent / "prod" / ".env"] = PROD_ENV.replace(
-                "AI_DO_API_ENVIRONMENT=production",
-                f"AI_DO_API_ENVIRONMENT={secret}",
+                "OPEN_ALM_API_ENVIRONMENT=production",
+                f"OPEN_ALM_API_ENVIRONMENT={secret}",
             )
             adapter = FakeRuntimeAdapter(text_by_path=texts)
 
@@ -271,7 +271,7 @@ class RuntimeSeparationScannerTest(unittest.TestCase):
             )
 
         self.assertIn("env_key_unexpected", self.codes(report))
-        self.assertIn("prod: AI_DO_API_ENVIRONMENT", self.messages(report))
+        self.assertIn("prod: OPEN_ALM_API_ENVIRONMENT", self.messages(report))
         self.assertNotIn(secret, self.messages(report))
 
     def test_static_file_policy_reports_named_failures(self) -> None:
@@ -319,7 +319,7 @@ class RuntimeSeparationScannerTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "dev"
             texts = self.passing_texts(root.resolve())
-            texts[root.resolve() / "ops/nginx/dwdcc.kr.proxy-only.conf"] += (
+            texts[root.resolve() / "ops/nginx/open-alm.example.proxy-only.conf"] += (
                 "location   ^~   /inference-gateway/ {\n"
                 "  proxy_pass   http://127.0.0.1:18080;\n"
                 "}\n"
@@ -377,11 +377,11 @@ class RuntimeSeparationScannerTest(unittest.TestCase):
             root = Path(directory) / "dev"
             command_by_args = self.passing_live_systemd_units()
             command_by_args[
-                ("systemctl", "--user", "cat", "ai-do-prod-worker-realtime.service")
+                ("systemctl", "--user", "cat", "open-alm-prod-worker-realtime.service")
             ] = (
-                "WorkingDirectory=/projects/ai-do/dev/apps/worker\n"
-                "Environment=PYTHONPATH=/projects/ai-do/prod/apps/worker/src\n"
-                "ExecStart=/projects/ai-do/prod/apps/worker/.venv/bin/python -m celery\n"
+                "WorkingDirectory=/projects/open-alm/dev/apps/worker\n"
+                "Environment=PYTHONPATH=/projects/open-alm/prod/apps/worker/src\n"
+                "ExecStart=/projects/open-alm/prod/apps/worker/.venv/bin/python -m celery\n"
             )
             adapter = FakeRuntimeAdapter(
                 text_by_path=self.passing_texts(root.resolve()),
@@ -413,7 +413,7 @@ class RuntimeSeparationScannerTest(unittest.TestCase):
 
         self.assertIn("prod_worker_realtime_systemd_unit_dev_checkout", self.codes(report))
         self.assertIn("prod_worker_realtime_systemd_unit_missing_contract", self.codes(report))
-        self.assertIn("ai-do-prod-worker-realtime.service", self.messages(report))
+        self.assertIn("open-alm-prod-worker-realtime.service", self.messages(report))
 
 
 if __name__ == "__main__":

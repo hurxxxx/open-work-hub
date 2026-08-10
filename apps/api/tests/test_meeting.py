@@ -16,8 +16,8 @@ def _bootstrap_admin_session(client: TestClient) -> dict:
     response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "AI-DO Admin",
-            "email": "admin@ai-do.local",
+            "full_name": "Open ALM Admin",
+            "email": "admin@open-alm.local",
             "password": "supersecret123",
         },
     )
@@ -258,7 +258,7 @@ def test_non_organizer_attendee_cannot_modify_meeting(client: TestClient) -> Non
     member = _create_user_with_workspaces(
         client,
         admin_token,
-        email="member@ai-do.local",
+        email="member@open-alm.local",
         full_name="Meeting Member",
         workspace_keys=["administrator"],
     )
@@ -309,21 +309,21 @@ def test_attendee_can_invite_other_attendees(client: TestClient) -> None:
     invitee_a = _create_user_with_workspaces(
         client,
         admin_token,
-        email="invitee-a@ai-do.local",
+        email="invitee-a@open-alm.local",
         full_name="Invitee A",
         workspace_keys=["administrator"],
     )
     invitee_b = _create_user_with_workspaces(
         client,
         admin_token,
-        email="invitee-b@ai-do.local",
+        email="invitee-b@open-alm.local",
         full_name="Invitee B",
         workspace_keys=["administrator"],
     )
     outsider = _create_user_with_workspaces(
         client,
         admin_token,
-        email="outsider-meeting@ai-do.local",
+        email="outsider-meeting@open-alm.local",
         full_name="Meeting Outsider",
         workspace_keys=["administrator"],
     )
@@ -497,7 +497,7 @@ def test_meeting_notes_attendee_can_edit_and_loses_access_when_removed(client: T
     attendee = _create_user_with_workspaces(
         client,
         admin_token,
-        email="notes-attendee@ai-do.local",
+        email="notes-attendee@open-alm.local",
         full_name="Notes Attendee",
         workspace_keys=[workspace_slug],
     )
@@ -620,7 +620,7 @@ def test_attach_task_returns_403_for_user_without_list_access(
     organizer = _create_user_with_workspaces(
         client,
         admin_token,
-        email="organizer@ai-do.local",
+        email="organizer@open-alm.local",
         full_name="Meeting Organizer",
         workspace_keys=["administrator"],
     )
@@ -704,7 +704,7 @@ def test_meeting_create_rejects_attendees_outside_meeting_workspace(
     outsider = _create_user_with_workspaces(
         client,
         admin_token,
-        email="no-workspace@ai-do.local",
+        email="no-workspace@open-alm.local",
         full_name="No Workspace",
         workspace_keys=[],
     )
@@ -733,7 +733,7 @@ def test_user_without_meeting_workspace_access_is_blocked(
     outsider = _create_user_with_workspaces(
         client,
         admin_token,
-        email="outsider@ai-do.local",
+        email="outsider@open-alm.local",
         full_name="Outsider",
         workspace_keys=[],  # No meeting workspace access.
     )
@@ -767,7 +767,7 @@ def test_meeting_user_search_returns_users_without_pms_access(
     _create_user_with_workspaces(
         client,
         admin_token,
-        email="alice@ai-do.local",
+        email="alice@open-alm.local",
         full_name="Alice Park",
         workspace_keys=["administrator"],
         primary_org_unit_id=org_unit_id,
@@ -775,14 +775,14 @@ def test_meeting_user_search_returns_users_without_pms_access(
     _create_user_with_workspaces(
         client,
         admin_token,
-        email="bob@ai-do.local",
+        email="bob@open-alm.local",
         full_name="Bob Lee",
         workspace_keys=["administrator"],
     )
     _create_user_with_workspaces(
         client,
         admin_token,
-        email="outsider@ai-do.local",
+        email="outsider@open-alm.local",
         full_name="Outside Workspace",
         workspace_keys=[],
     )
@@ -795,8 +795,8 @@ def test_meeting_user_search_returns_users_without_pms_access(
     assert response.status_code == 200
     payload = response.json()
     emails = {item["email"] for item in payload}
-    assert {"admin@ai-do.local", "alice@ai-do.local", "bob@ai-do.local"} <= emails
-    assert "outsider@ai-do.local" not in emails
+    assert {"admin@open-alm.local", "alice@open-alm.local", "bob@open-alm.local"} <= emails
+    assert "outsider@open-alm.local" not in emails
 
     # Partial-name query.
     name_response = client.get(
@@ -805,7 +805,7 @@ def test_meeting_user_search_returns_users_without_pms_access(
         params={"q": "alice"},
     )
     assert name_response.status_code == 200
-    assert [item["email"] for item in name_response.json()] == ["alice@ai-do.local"]
+    assert [item["email"] for item in name_response.json()] == ["alice@open-alm.local"]
 
     # Partial-email query — confirms that users without PMS workspace access
     # are still searchable from the meeting modal.
@@ -815,7 +815,7 @@ def test_meeting_user_search_returns_users_without_pms_access(
         params={"q": "bob@"},
     )
     assert email_response.status_code == 200
-    assert [item["email"] for item in email_response.json()] == ["bob@ai-do.local"]
+    assert [item["email"] for item in email_response.json()] == ["bob@open-alm.local"]
 
     department_response = client.get(
         "/api/v1/workspaces/administrator/meeting/users",
@@ -824,7 +824,7 @@ def test_meeting_user_search_returns_users_without_pms_access(
     )
     assert department_response.status_code == 200
     department_payload = department_response.json()
-    assert [item["email"] for item in department_payload] == ["alice@ai-do.local"]
+    assert [item["email"] for item in department_payload] == ["alice@open-alm.local"]
     assert department_payload[0]["primary_org_unit_name"] == "Design Ops"
 
 
@@ -834,7 +834,7 @@ def test_workspace_scoped_meeting_routes_keep_administrator_context(client: Test
     member = _create_user_with_workspaces(
         client,
         admin["token"],
-        email="administrator-meeting-member@ai-do.local",
+        email="administrator-meeting-member@open-alm.local",
         full_name="Administrator Meeting Member",
         workspace_keys=["administrator"],
     )
@@ -857,8 +857,8 @@ def test_workspace_scoped_meeting_routes_keep_administrator_context(client: Test
     )
     assert scoped_users_response.status_code == 200
     scoped_emails = {item["email"] for item in scoped_users_response.json()}
-    assert "admin@ai-do.local" in scoped_emails
-    assert "innovation-lab-admin@ai-do.local" not in scoped_emails
+    assert "admin@open-alm.local" in scoped_emails
+    assert "innovation-lab-admin@open-alm.local" not in scoped_emails
 
     legacy_users_response = client.get(
         "/api/v1/workspaces/administrator/meeting/users",
@@ -867,8 +867,8 @@ def test_workspace_scoped_meeting_routes_keep_administrator_context(client: Test
     )
     assert legacy_users_response.status_code == 200
     legacy_emails = {item["email"] for item in legacy_users_response.json()}
-    assert "admin@ai-do.local" in legacy_emails
-    assert "innovation-lab-admin@ai-do.local" not in legacy_emails
+    assert "admin@open-alm.local" in legacy_emails
+    assert "innovation-lab-admin@open-alm.local" not in legacy_emails
 
     create_response = client.post(
         "/api/v1/workspaces/administrator/meeting/meetings",
@@ -983,7 +983,7 @@ def _install_fake_minio(monkeypatch) -> _FakeMinioClient:
     """Patch the meeting service module's storage and URL builder to a
     fake in-memory MinIO so the upload/list/delete paths can be exercised
     without external dependencies."""
-    from ai_do_api.domains.meeting import file_storage as meeting_file_storage
+    from open_alm_api.domains.meeting import file_storage as meeting_file_storage
 
     fake = _FakeMinioClient()
     monkeypatch.setattr(
@@ -1080,7 +1080,7 @@ def test_attendee_can_attach_task_via_space_access(client: TestClient) -> None:
     attendee = _create_user_with_workspaces(
         client,
         admin_token,
-        email="space-prep@ai-do.local",
+        email="space-prep@open-alm.local",
         full_name="Space Prep",
         workspace_keys=["administrator"],
     )
@@ -1132,7 +1132,7 @@ def test_attendee_can_attach_doc_and_only_adder_can_remove(
     attendee = _create_user_with_workspaces(
         client,
         admin_token,
-        email="prep@ai-do.local",
+        email="prep@open-alm.local",
         full_name="Prep Attendee",
         workspace_keys=["administrator"],
     )
@@ -1217,7 +1217,7 @@ def test_meeting_attachment_grants_allow_read_but_not_metadata_or_sharing(
     attendee = _create_user_with_workspaces(
         client,
         admin_token,
-        email="meeting-reader@ai-do.local",
+        email="meeting-reader@open-alm.local",
         full_name="Meeting Reader",
         workspace_keys=["administrator"],
     )
@@ -1290,7 +1290,7 @@ def test_meeting_add_attendee_inherits_existing_task_and_doc_attachment_grants(
     attendee = _create_user_with_workspaces(
         client,
         admin_token,
-        email="late-reader@ai-do.local",
+        email="late-reader@open-alm.local",
         full_name="Late Reader",
         workspace_keys=["administrator"],
     )
@@ -1362,7 +1362,7 @@ def test_meeting_detach_preserves_other_meeting_grants_until_last_source_is_remo
     attendee = _create_user_with_workspaces(
         client,
         admin_token,
-        email="multi-reader@ai-do.local",
+        email="multi-reader@open-alm.local",
         full_name="Multi Reader",
         workspace_keys=["administrator"],
     )
@@ -1447,7 +1447,7 @@ def test_meeting_reschedule_resyncs_issue_and_doc_grant_expiry(
     attendee = _create_user_with_workspaces(
         client,
         admin_token,
-        email="expiry-reader@ai-do.local",
+        email="expiry-reader@open-alm.local",
         full_name="Expiry Reader",
         workspace_keys=["administrator"],
     )
@@ -1534,7 +1534,7 @@ def test_meeting_file_attachment_upload_and_permission_matrix(
     attendee = _create_user_with_workspaces(
         client,
         admin_token,
-        email="filer@ai-do.local",
+        email="filer@open-alm.local",
         full_name="File Attendee",
         workspace_keys=["administrator"],
     )
@@ -1636,7 +1636,7 @@ def test_meeting_file_upload_rejects_non_participant(
     stranger = _create_user_with_workspaces(
         client,
         admin_token,
-        email="lurker3@ai-do.local",
+        email="lurker3@open-alm.local",
         full_name="Stranger",
         workspace_keys=["administrator"],
     )
@@ -1664,7 +1664,7 @@ def test_non_participant_cannot_attach_doc(client: TestClient) -> None:
     stranger = _create_user_with_workspaces(
         client,
         admin_token,
-        email="lurker2@ai-do.local",
+        email="lurker2@open-alm.local",
         full_name="Lurker",
         workspace_keys=["administrator"],
     )
@@ -1794,7 +1794,7 @@ def test_upcoming_scope_does_not_leak_other_users_meetings(
     outsider = _create_user_with_workspaces(
         client,
         admin_token,
-        email="lurker@ai-do.local",
+        email="lurker@open-alm.local",
         full_name="Lurker",
         workspace_keys=["administrator"],
     )
@@ -1863,7 +1863,7 @@ def test_meeting_update_changes_time_and_attendees(client: TestClient) -> None:
     member = _create_user_with_workspaces(
         client,
         admin_token,
-        email="invitee@ai-do.local",
+        email="invitee@open-alm.local",
         full_name="Invitee User",
         workspace_keys=["administrator"],
     )

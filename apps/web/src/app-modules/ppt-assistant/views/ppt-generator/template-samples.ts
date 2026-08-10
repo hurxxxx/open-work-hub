@@ -6,14 +6,14 @@ import type { PptSlide } from '../../api/ppt-generator-api';
  * 실시간 렌더해, 미리보기 이미지를 따로 업로드하지 않아도 양식을 바로 보여준다.
  *
  * 키 = family id. 네이티브 렌더러가 있는 양식(a4-*, house-report)은 본문까지,
- * HTML 경로(doowon-*)는 두원 표지(a4-cover)까지 보여준다.
+ * HTML 경로(corporate-*)는 Open ALM 표지(a4-cover)까지 보여준다.
  */
 const COVER = (title: string): PptSlide => ({
   layout: 'a4-cover',
   data: {
     TITLE: title,
     DATE: '2026. 6. 16',
-    AUTHOR: '㈜두원공조 기술연구소 AI TFT',
+    AUTHOR: 'Open ALM',
     VERSION: 'Ver 1',
   },
 });
@@ -118,14 +118,14 @@ const SAMPLES: Record<string, PptSlide[]> = {
     },
   ],
 
-  // 두원 사내 진행보고 "하우스 스타일"(doowon-house / TEST)은 미리보기를 노출하지 않는다
+  // Open ALM 사내 진행보고 "하우스 스타일"(corporate-house / TEST)은 미리보기를 노출하지 않는다
   // (테스트용 양식 — 템플릿 카드의 미리보기 버튼 숨김). 샘플 슬라이드를 정의하지 않으면
   // getTemplateSampleSlides 가 빈 배열을 반환해 canPreview 가 false 가 된다.
 
-  // HTML 경로(doowon-*) — 본문은 HTML 렌더라 React 샘플이 없어 두원 표지까지 보여준다.
-  'doowon-seminar': [COVER('AI 컨퍼런스 참석 보고')],
-  'doowon-education': [COVER('AI 비전 실무 교육 참가 보고서')],
-  'doowon-meeting': [COVER('주간 업무 회의록')],
+  // HTML 경로(corporate-*) — 본문은 HTML 렌더라 React 샘플이 없어 Open ALM 표지까지 보여준다.
+  'corporate-seminar': [COVER('AI 컨퍼런스 참석 보고')],
+  'corporate-education': [COVER('AI 비전 실무 교육 참가 보고서')],
+  'corporate-meeting': [COVER('주간 업무 회의록')],
 };
 
 /** family 의 미리보기 샘플 슬라이드. 없으면 빈 배열. */
@@ -134,18 +134,9 @@ export function getTemplateSampleSlides(familyId: string | null | undefined): Pp
   return SAMPLES[familyId] ?? [];
 }
 
-/**
- * HTML 경로(doowon-*) 양식은 본문이 서버 HTML 렌더라 React 라이브 샘플이 표지 1장뿐이다.
- * 대신 번들된 정적 미리보기 이미지(apps/web/public/ppt-templates/<family>/slide_N.png)를
- * 표지+본문 여러 장으로 보여줘, 미리보기 모달에서 좌우 화살표로 넘겨볼 수 있게 한다.
- */
-const STATIC_PREVIEWS: Record<string, string[]> = {
-  'doowon-seminar': [1, 2, 3].map((i) => `/ppt-templates/doowon-seminar/slide_${i}.png`),
-  'doowon-education': [1, 2, 3, 4, 5, 6].map(
-    (i) => `/ppt-templates/doowon-education/slide_${i}.png`,
-  ),
-  'doowon-meeting': ['/ppt-templates/doowon-meeting/slide_1.png'],
-};
+// Customer-specific static previews are intentionally not bundled. Live samples above
+// remain available without carrying branded screenshots in the repository.
+const STATIC_PREVIEWS: Record<string, string[]> = {};
 
 /** family 의 번들 정적 미리보기 이미지 URL. 없으면 빈 배열. */
 export function getTemplateStaticPreviews(familyId: string | null | undefined): string[] {

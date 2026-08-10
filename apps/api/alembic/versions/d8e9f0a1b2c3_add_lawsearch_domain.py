@@ -5,7 +5,7 @@ Revises: b1d2c3e4f5a6
 Create Date: 2026-05-29 12:00:00.000000
 
 자동차 공조 부품의 지역별 법규·규제·자동차 표준 검색 도메인.
-초기 seed 데이터(JSON 7종)는 src/ai_do_api/domains/lawsearch/sample_data/ 에서 읽어 삽입.
+초기 seed 데이터(JSON 7종)는 src/open_alm_api/domains/lawsearch/sample_data/ 에서 읽어 삽입.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ depends_on: Union[str, Sequence[str], None] = None
 SEED_DIR = (
     Path(__file__).resolve().parents[2]
     / "src"
-    / "ai_do_api"
+    / "open_alm_api"
     / "domains"
     / "lawsearch"
     / "sample_data"

@@ -6,21 +6,21 @@ import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-from ai_do_api.core.db import Base
-from ai_do_api.domains.files.models import FileManagerCorpus, FileManagerFile  # noqa: F401
-from ai_do_api.domains.mcloudoc.contracts import (
+from open_alm_api.core.db import Base
+from open_alm_api.domains.files.models import FileManagerCorpus, FileManagerFile  # noqa: F401
+from open_alm_api.domains.mcloudoc.contracts import (
     CompleteIngestRun,
     McloudocChange,
     ResolvedGrant,
     StartIngestRun,
 )
-from ai_do_api.domains.mcloudoc.models import (
+from open_alm_api.domains.mcloudoc.models import (
     McloudocDocument,
     McloudocIngestRun,
     McloudocSource,
 )
-from ai_do_api.domains.mcloudoc.ports import FilesUpsertCommand, FilesUpsertResult
-from ai_do_api.domains.mcloudoc.service import (
+from open_alm_api.domains.mcloudoc.ports import FilesUpsertCommand, FilesUpsertResult
+from open_alm_api.domains.mcloudoc.service import (
     McloudocCoreError,
     apply_change,
     complete_ingest_run,

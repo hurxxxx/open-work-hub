@@ -12,30 +12,30 @@ from sqlalchemy.orm import Session
 
 from dev_accounts import dev_login
 
-from ai_do_api.core.db import get_engine
-from ai_do_api.domains.ai.registry import (
+from open_alm_api.core.db import get_engine
+from open_alm_api.domains.ai.registry import (
     WorkspaceEntitlementView,
     get_ai_capability_registry,
     reset_ai_capability_registry,
 )
-from ai_do_api.domains.auth.models import (
+from open_alm_api.domains.auth.models import (
     PlatformAppVisibility,
     Workspace,
     WorkspaceAppEntitlement,
 )
-from ai_do_api.domains.auth.security import new_id
-from ai_do_api.domains.auth.workspace_apps import get_workspace_app_catalog_item
-from ai_do_api.domains.conversations.app_catalog import CHATBOT_WORKSPACE_APP
-from ai_do_api.domains.rag.contracts import (
+from open_alm_api.domains.auth.security import new_id
+from open_alm_api.domains.auth.workspace_apps import get_workspace_app_catalog_item
+from open_alm_api.domains.conversations.app_catalog import CHATBOT_WORKSPACE_APP
+from open_alm_api.domains.rag.contracts import (
     RagAnswerMode,
     RagQueryHit,
     RagQueryResponse,
 )
-from ai_do_api.domains.rag.default_source_adapters import registered_rag_app_ids
-from ai_do_api.domains.rag.providers.fake import FakeRerankClient
-from ai_do_api.domains.retrieval import application as retrieval_application
-from ai_do_api.domains.retrieval import tools as retrieval_tools
-from ai_do_api.domains.retrieval.contracts import (
+from open_alm_api.domains.rag.default_source_adapters import registered_rag_app_ids
+from open_alm_api.domains.rag.providers.fake import FakeRerankClient
+from open_alm_api.domains.retrieval import application as retrieval_application
+from open_alm_api.domains.retrieval import tools as retrieval_tools
+from open_alm_api.domains.retrieval.contracts import (
     RetrievalAnswerMode,
     RetrievalCitation,
     RetrievalGroundedAnswer,
@@ -43,19 +43,19 @@ from ai_do_api.domains.retrieval.contracts import (
     RetrievalQueryRequest,
     RetrievalStrategy,
 )
-from ai_do_api.domains.retrieval.grounding import RetrievalGroundingResult
-from ai_do_api.domains.retrieval.source_catalog import (
+from open_alm_api.domains.retrieval.grounding import RetrievalGroundingResult
+from open_alm_api.domains.retrieval.source_catalog import (
     default_sources_for_strategy,
     iter_retrieval_source_catalog,
     registered_retrieval_source_app_ids,
     source_catalog_item,
 )
-from ai_do_api.domains.retrieval.tools import retrieval_discoverable_app_ids
-from ai_do_api.domains.search.backend_contracts import (
+from open_alm_api.domains.retrieval.tools import retrieval_discoverable_app_ids
+from open_alm_api.domains.search.backend_contracts import (
     KeywordSearchQuery,
     KeywordSearchResult,
 )
-from ai_do_api.domains.search.schemas import (
+from open_alm_api.domains.search.schemas import (
     KeywordSearchResponse,
     SearchFacets,
     SearchHit,
@@ -245,7 +245,7 @@ def test_unified_legacy_issue_retrieval_filters_disabled_compressor_modules(
         return [], SimpleNamespace(methods=())
 
     monkeypatch.setattr(
-        "ai_do_api.domains.legacy_issues.ai_search.search_legacy_issue_evidence",
+        "open_alm_api.domains.legacy_issues.ai_search.search_legacy_issue_evidence",
         fake_search,
     )
     monkeypatch.setattr(

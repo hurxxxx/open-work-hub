@@ -1,6 +1,6 @@
 import type { Dispatch, FormEvent } from 'react';
-import { Button } from '@ai-do/ui/primitives/button';
-import { InlineNotice } from '@ai-do/ui/feedback/inline-notice';
+import { Button } from '@open-alm/ui/primitives/button';
+import { InlineNotice } from '@open-alm/ui/feedback/inline-notice';
 
 import { normalizeTimeZone } from '@/src/platform/time/time-utils';
 import { SettingsFieldRow } from './SettingsFieldRow';

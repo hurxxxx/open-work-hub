@@ -4,8 +4,8 @@ from fastapi.testclient import TestClient
 
 from dev_accounts import auth_headers, create_workspace_user_session, dev_login
 
-from ai_do_api.core.db import get_session_factory
-from ai_do_api.domains.files.models import (
+from open_alm_api.core.db import get_session_factory
+from open_alm_api.domains.files.models import (
     FileManagerCorpus,
     FileManagerFile,
     FileManagerFolder,
@@ -55,7 +55,7 @@ def test_file_corpus_management_denies_non_admin_workspace_member(
         client,
         workspace_key="administrator",
         login_id="filecorpusmember",
-        email="file-corpus-member@ai-do.local",
+        email="file-corpus-member@open-alm.local",
         full_name="File Corpus Member",
         role="member",
     )

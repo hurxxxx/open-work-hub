@@ -3,7 +3,7 @@ import {
   isDmImageMimeType,
   readyDmPendingAttachmentIds,
   uploadingDmPendingAttachmentCount,
-} from '@ai-do/contracts/dm';
+} from '@open-alm/contracts/dm';
 
 import type { DmMessageAttachment } from '../api/dm-api';
 

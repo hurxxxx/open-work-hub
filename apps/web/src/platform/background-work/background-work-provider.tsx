@@ -3,7 +3,7 @@ import type { TFunction } from 'i18next';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ExternalLink, Loader2, Square } from 'lucide-react';
-import { useToast } from '@ai-do/ui/providers/toast-provider';
+import { useToast } from '@open-alm/ui/providers/toast-provider';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {

@@ -8,7 +8,7 @@ import {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Loader2, Plus, Trash2 } from 'lucide-react';
-import { InlineNotice, Select, useConfirm } from '@ai-do/ui';
+import { InlineNotice, Select, useConfirm } from '@open-alm/ui';
 
 import { cn } from '@/src/lib/utils';
 import {

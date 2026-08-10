@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion } from 'motion/react';
 import { Trash2 } from 'lucide-react';
-import { InlineNotice, useConfirm } from '@ai-do/ui';
+import { InlineNotice, useConfirm } from '@open-alm/ui';
 
 import { cn } from '@/src/lib/utils';
 import { downloadBlobAsFile } from '@/src/platform/browser/browser-download';

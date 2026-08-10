@@ -20,7 +20,7 @@ import {
   Square,
   Upload,
 } from 'lucide-react';
-import { Button, DropdownMenu, InlineNotice, useConfirm } from '@ai-do/ui';
+import { Button, DropdownMenu, InlineNotice, useConfirm } from '@open-alm/ui';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { formatDateTime as formatZonedDateTime, normalizeTimeZone } from '@/src/platform/time/time-utils';

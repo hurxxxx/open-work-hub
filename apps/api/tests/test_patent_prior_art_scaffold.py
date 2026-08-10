@@ -7,23 +7,23 @@ import pytest
 from fastapi import APIRouter, FastAPI, File, HTTPException, Request, Response, UploadFile
 from pydantic import ValidationError
 
-from ai_do_api.domains.ai.registry import (
+from open_alm_api.domains.ai.registry import (
     get_ai_capability_registry,
     reset_ai_capability_registry,
 )
-from ai_do_api.domains.ai.gateway import AiGatewayPolicyViolation
-from ai_do_api.domains.patent_prior_art import (
+from open_alm_api.domains.ai.gateway import AiGatewayPolicyViolation
+from open_alm_api.domains.patent_prior_art import (
     PATENT_PRIOR_ART_APP_ID,
     PATENT_PRIOR_ART_CANDIDATE_ASSESSMENT_TASK_KIND,
     PATENT_PRIOR_ART_CANDIDATE_ASSESSMENT_WORKLOAD_ID,
     PATENT_PRIOR_ART_SEARCH_PLAN_TASK_KIND,
     PATENT_PRIOR_ART_SEARCH_PLAN_WORKLOAD_ID,
 )
-from ai_do_api.domains.patent_prior_art import service
-from ai_do_api.domains.patent_prior_art.app_catalog import (
+from open_alm_api.domains.patent_prior_art import service
+from open_alm_api.domains.patent_prior_art.app_catalog import (
     PATENT_PRIOR_ART_WORKSPACE_APP,
 )
-from ai_do_api.domains.patent_prior_art.schemas import (
+from open_alm_api.domains.patent_prior_art.schemas import (
     PatentPriorArtJobCreateRequest,
     PatentPriorArtQueryPreviewRequest,
     PatentPriorArtSearchValues,
@@ -64,7 +64,7 @@ def test_job_create_requires_idempotency_key() -> None:
 
 
 def test_scaffold_rejects_oversized_or_unverifiable_body_before_parsing() -> None:
-    from ai_do_api.domains.patent_prior_art.router import (
+    from open_alm_api.domains.patent_prior_art.router import (
         _BODY_LIMIT_BY_ENDPOINT,
         parse_file,
         router,
@@ -111,7 +111,7 @@ def test_scaffold_rejects_oversized_or_unverifiable_body_before_parsing() -> Non
 
 
 def test_scaffold_body_limit_preserves_method_not_allowed() -> None:
-    from ai_do_api.domains.patent_prior_art.router import (
+    from open_alm_api.domains.patent_prior_art.router import (
         _BODY_LIMIT_BY_ENDPOINT,
         parse_file,
         router,
@@ -150,11 +150,11 @@ def test_scaffold_body_limit_preserves_method_not_allowed() -> None:
 def test_scaffold_counts_actual_body_for_chunked_and_understated_requests(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from ai_do_api.domains.patent_prior_art.router import (
+    from open_alm_api.domains.patent_prior_art.router import (
         _BODY_LIMIT_BY_ENDPOINT,
         _BodySizeLimitRoute,
     )
-    from ai_do_api.app import localized_http_exception_handler
+    from open_alm_api.app import localized_http_exception_handler
     from starlette.exceptions import HTTPException as StarletteHTTPException
 
     limited_router = APIRouter(route_class=_BodySizeLimitRoute)
@@ -231,8 +231,8 @@ def test_scaffold_closes_partial_multipart_spool_on_body_overflow(
     import starlette.formparsers as formparsers
     from starlette.exceptions import HTTPException as StarletteHTTPException
 
-    from ai_do_api.app import localized_http_exception_handler
-    from ai_do_api.domains.patent_prior_art.router import (
+    from open_alm_api.app import localized_http_exception_handler
+    from open_alm_api.domains.patent_prior_art.router import (
         _BODY_LIMIT_BY_ENDPOINT,
         _BodySizeLimitRoute,
     )
@@ -314,7 +314,7 @@ def test_scaffold_closes_partial_multipart_spool_on_body_overflow(
 def test_preview_maps_core_external_transfer_block_to_localized_forbidden(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from ai_do_api.domains.patent_prior_art.router import preview_query
+    from open_alm_api.domains.patent_prior_art.router import preview_query
 
     def blocked_preview(*_args: Any, **_kwargs: Any) -> None:
         raise AiGatewayPolicyViolation(

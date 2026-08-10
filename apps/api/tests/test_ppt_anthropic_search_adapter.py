@@ -5,7 +5,7 @@ import json
 import httpx
 import pytest
 
-from ai_do_api.domains.ppt_generator import anthropic_search_adapter as adapter
+from open_alm_api.domains.ppt_generator import anthropic_search_adapter as adapter
 
 
 def test_anthropic_ppt_research_keeps_native_web_search_and_citations(monkeypatch) -> None:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from ai_do_api.domains.admin import document_processing_projection
+from open_alm_api.domains.admin import document_processing_projection
 from tests.dev_accounts import auth_headers, dev_login
 
 

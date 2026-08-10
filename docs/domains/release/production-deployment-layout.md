@@ -4,32 +4,32 @@
 병합·배포 시 완료한다. 그 전까지 실제 default는 배포 SHA의 `.env.example`과
 `scripts/prod-deploy.sh`로 확인한다.
 
-이 문서는 AI-DO 서버의 운영/개발 checkout 분리, release/rollback, DB migration
+이 문서는 Open ALM 서버의 운영/개발 checkout 분리, release/rollback, DB migration
 원칙을 정리한다.
 
 ## 운영/개발 기준
 
-운영 checkout은 `/projects/ai-do/prod`, 개발 checkout은 `/projects/ai-do/dev`를
+운영 checkout은 `/projects/open-alm/prod`, 개발 checkout은 `/projects/open-alm/dev`를
 사용한다.
 
 | 대상                       | 기준                                                     |
 | -------------------------- | -------------------------------------------------------- |
-| 운영 코드                  | `/projects/ai-do/prod`, `main` branch                    |
-| 개발 코드                  | `/projects/ai-do/dev`, `dev` branch                      |
-| 운영 배포 rollback DB 백업 | `/projects/ai-do/backups/prod/<timestamp>/postgres.dump` |
-| 운영 SysPerf 파일 저장소   | `/data_nas/ai-do-prod/sysperf`                           |
-| 개발 SysPerf 파일 저장소   | `/data_nas/ai-do-dev/sysperf`                            |
+| 운영 코드                  | `/projects/open-alm/prod`, `main` branch                    |
+| 개발 코드                  | `/projects/open-alm/dev`, `dev` branch                      |
+| 운영 배포 rollback DB 백업 | `/projects/open-alm/backups/prod/<timestamp>/postgres.dump` |
+| 운영 SysPerf 파일 저장소   | `/data_nas/open-alm-prod/sysperf`                           |
+| 개발 SysPerf 파일 저장소   | `/data_nas/open-alm-dev/sysperf`                            |
 
 원칙:
 
-- 개발은 `/projects/ai-do/dev` checkout의 `dev` 브랜치에서 수행한다.
-- 운영은 `/projects/ai-do/prod` checkout의 `main` 브랜치를 기준으로 배포한다.
+- 개발은 `/projects/open-alm/dev` checkout의 `dev` 브랜치에서 수행한다.
+- 운영은 `/projects/open-alm/prod` checkout의 `main` 브랜치를 기준으로 배포한다.
 - 개발 완료 후에는 `dev`에서 `main`으로 PR/MR을 만들어 병합한다. 운영 checkout에서
   임의 개발 커밋을 만들지 않는다.
 - 이전 checkout 이름을 가리키는 호환 symlink는 두지 않는다.
 - Nginx는 checkout 경로를 알지 않고 TLS/reverse proxy만 담당한다.
 - 운영 배포의 첫 번째 PostgreSQL rollback dump는 로컬
-  `/projects/ai-do/backups/prod`에 필수 생성한다. 디렉터리 `0700`, 파일 `0600`,
+  `/projects/open-alm/backups/prod`에 필수 생성한다. 디렉터리 `0700`, 파일 `0600`,
   비어 있지 않은 archive, `pg_restore -l`, SHA-256을 확인한다.
 - NAS 또는 다른 off-host 저장소는 검증된 로컬 dump의 선택적 2차 사본이다. 장애가
   서비스 readiness나 표준 배포를 중단시키지 않는다.
@@ -46,50 +46,50 @@ Nginx
   -> collab websocket     http://127.0.0.1:8009
   -> /                    http://127.0.0.1:8000
 
-ai-do-privacy-filter.service
-ai-do-prod-infra.service
-ai-do-prod-api.service
+open-alm-privacy-filter.service
+open-alm-prod-infra.service
+open-alm-prod-api.service
   -> FastAPI API
   -> frontend dist static serving
   -> SPA fallback
 
-ai-do-prod-collab.service
-ai-do-prod-worker.service
-ai-do-prod-worker-realtime.service
-ai-do-prod-worker-long.service
-ai-do-prod-worker-ppt.service
-ai-do-prod-worker-beat.service
+open-alm-prod-collab.service
+open-alm-prod-worker.service
+open-alm-prod-worker-realtime.service
+open-alm-prod-worker-long.service
+open-alm-prod-worker-ppt.service
+open-alm-prod-worker-beat.service
 ```
 
-FastAPI는 `AI_DO_API_SERVE_FRONTEND=1`일 때 `dist/apps/web`을 정적 서빙한다.
+FastAPI는 `OPEN_ALM_API_SERVE_FRONTEND=1`일 때 `dist/apps/web`을 정적 서빙한다.
 Nginx는 `root`나 checkout path를 갖지 않는다.
 
 ## 적용된 이름 규칙
 
 | 구성요소                 | 운영                                                      | 개발                                                      |
 | ------------------------ | --------------------------------------------------------- | --------------------------------------------------------- |
-| Compose project          | `ai-do-prod`                                              | `ai-do-dev`                                               |
-| Postgres DB/user         | `ai_do_prod`                                              | `ai_do_dev`                                               |
+| Compose project          | `open-alm-prod`                                              | `open-alm-dev`                                               |
+| Postgres DB/user         | `open_alm_prod`                                              | `open_alm_dev`                                               |
 | Postgres runtime         | native PostgreSQL, shared listener with DB/role isolation | native PostgreSQL, shared listener with DB/role isolation |
-| Redis container          | `ai-do-prod-redis`                                        | `ai-do-dev-redis`                                         |
-| MinIO container          | `ai-do-prod-minio`                                        | `ai-do-dev-minio`                                         |
-| MinIO bucket             | `ai-do-prod`                                              | `ai-do-dev`                                               |
-| OpenSearch container     | `ai-do-prod-opensearch`                                   | `ai-do-dev-opensearch`                                    |
-| OpenSearch index prefix  | `ai-do-prod`                                              | `ai-do-dev`                                               |
-| Qdrant container         | `ai-do-prod-qdrant`                                       | `ai-do-dev-qdrant`                                        |
-| Qdrant collection prefix | `ai-do-prod-rag`                                          | `ai-do-dev-rag`                                           |
-| draw.io container        | `ai-do-prod-drawio` on `127.0.0.1:18083`                  | `ai-do-dev-drawio` on published `:18082`                  |
+| Redis container          | `open-alm-prod-redis`                                        | `open-alm-dev-redis`                                         |
+| MinIO container          | `open-alm-prod-minio`                                        | `open-alm-dev-minio`                                         |
+| MinIO bucket             | `open-alm-prod`                                              | `open-alm-dev`                                               |
+| OpenSearch container     | `open-alm-prod-opensearch`                                   | `open-alm-dev-opensearch`                                    |
+| OpenSearch index prefix  | `open-alm-prod`                                              | `open-alm-dev`                                               |
+| Qdrant container         | `open-alm-prod-qdrant`                                       | `open-alm-dev-qdrant`                                        |
+| Qdrant collection prefix | `open-alm-prod-rag`                                          | `open-alm-dev-rag`                                           |
+| draw.io container        | `open-alm-prod-drawio` on `127.0.0.1:18083`                  | `open-alm-dev-drawio` on published `:18082`                  |
 
-운영 인프라는 `ops/compose/ai-do-prod.infra.yml`, 개발 인프라는
-`ops/compose/ai-do-dev.infra.yml`이 기준이다. PostgreSQL은 Docker가 아니라 서버 native
+운영 인프라는 `ops/compose/open-alm-prod.infra.yml`, 개발 인프라는
+`ops/compose/open-alm-dev.infra.yml`이 기준이다. PostgreSQL은 Docker가 아니라 서버 native
 service로 실행한다. Portal에서는 loopback과 관리 LAN 주소의 `:5432`를 함께 listen하며,
 `pg_hba.conf`가 외부 개발 DB와 승인된 운영 계정을 구분한다. main cluster는
 `network-online.target`과 `NetworkManager-wait-online.service` 뒤에 시작해야 하며 정본
 drop-in은 `ops/systemd/system/postgresql@18-main.service.d/network-online.conf`다. Redis,
-MinIO, OpenSearch, Qdrant는 `AI_DO_INFRA_BIND_HOST`에 바인딩하며 기본값은 `0.0.0.0`이다.
+MinIO, OpenSearch, Qdrant는 `OPEN_ALM_INFRA_BIND_HOST`에 바인딩하며 기본값은 `0.0.0.0`이다.
 서버 외부 개발 환경은 `.env.local`에 게시된 dev 인프라 포트로 접속한다. container 내부
 기본 포트 `6379`와 `9000`을 외부 endpoint로 사용하지 않는다.
-draw.io는 다이어그램 앱 전용 컨테이너이며 운영에서는 `drawio.dwdcc.kr` 별도 origin으로
+draw.io는 다이어그램 앱 전용 컨테이너이며 운영에서는 `drawio.open-alm.example` 별도 origin으로
 프록시한다. 상세 운영 절차는 [Diagrams 앱 운영](../../apps/diagrams/README.md)을 따른다.
 
 PostgreSQL/pgvector 원칙:
@@ -109,8 +109,8 @@ AI graph 등)는 이 template에서 생성한다. 문서의 고정 unit 개수�
 판정하지 않는다. 실제 대상과 enablement는 다음 명령으로 확인한다.
 
 ```bash
-systemctl --user list-unit-files 'ai-do-*.service' --no-pager
-systemctl --user list-units 'ai-do-*.service' --all --no-pager
+systemctl --user list-unit-files 'open-alm-*.service' --no-pager
+systemctl --user list-units 'open-alm-*.service' --all --no-pager
 ```
 
 ## 데이터 배치
@@ -121,7 +121,7 @@ systemctl --user list-units 'ai-do-*.service' --all --no-pager
 - Redis
 - MinIO primary bucket
 - Qdrant/OpenSearch primary data
-- `/projects/ai-do/backups/prod/<timestamp>/postgres.dump`의 배포 전 PostgreSQL dump
+- `/projects/open-alm/backups/prod/<timestamp>/postgres.dump`의 배포 전 PostgreSQL dump
 
 선택적 NAS 2차 archive/off-host copy:
 
@@ -131,8 +131,8 @@ systemctl --user list-units 'ai-do-*.service' --all --no-pager
 - `.env`, Nginx config, systemd unit snapshot
 - release/debug artifact
 - SysPerf uploaded workbooks and generated CSV files, separated by runtime
-  environment under `/data_nas/ai-do-dev/sysperf` and
-  `/data_nas/ai-do-prod/sysperf`
+  environment under `/data_nas/open-alm-dev/sysperf` and
+  `/data_nas/open-alm-prod/sysperf`
 
 DB와 vector primary를 NFS에 두지 않는다. NFS는 latency와 tail latency 변동이 커서
 hot path보다 2차 백업/아카이브에 맞다. NAS mount 부재나 장애는 서비스 기동과 표준
@@ -144,7 +144,7 @@ hot path보다 2차 백업/아카이브에 맞다. NAS mount 부재나 장애는
 1. prod checkout이 main 및 origin/main과 일치하는지 검증
 2. pnpm/API/worker locked dependency 동기화
 3. Alembic revision graph 사전 검증
-4. /projects/ai-do/backups/prod/<timestamp>/postgres.dump에 PostgreSQL 백업 생성
+4. /projects/open-alm/backups/prod/<timestamp>/postgres.dump에 PostgreSQL 백업 생성
 5. 현재 `dist/apps/web`과 분리된 staging 디렉터리에 web production build
 6. Vite manifest, `index.html`, 로컬 asset, frontend build ID 무결성 검증
 7. API, collab, worker, beat를 quiesce하고 infra/OpenSearch는 유지
@@ -182,16 +182,16 @@ fail-closed한다. 인증서가 현재 유효하고 신뢰 체인·hostname·필
 `--tls-expiry-break-glass` 절차를 사용한다. 이 옵션은 dry-run에서 실제 배포로 유지되지 않으므로
 두 명령에 각각 명시해야 하며, 실제 만료나 인증서 신뢰 오류는 우회하지 않는다.
 
-배포 전에 `.env`에서 `AI_DO_PROD_RELEASE_GATE_ADAPTERS` 또는
-`AI_DO_PROD_KEYWORD_REINDEX_WORKSPACE_KEYS`를 의도한 운영 gate로 설정한다. gate를 실행하지
-않는 배포는 `AI_DO_PROD_SKIP_RELEASE_GATES=1`을 명시한 승인된 우회일 때만 허용한다.
+배포 전에 `.env`에서 `OPEN_ALM_PROD_RELEASE_GATE_ADAPTERS` 또는
+`OPEN_ALM_PROD_KEYWORD_REINDEX_WORKSPACE_KEYS`를 의도한 운영 gate로 설정한다. gate를 실행하지
+않는 배포는 `OPEN_ALM_PROD_SKIP_RELEASE_GATES=1`을 명시한 승인된 우회일 때만 허용한다.
 세 값이 모두 비어 있거나 false이면 dry-run과 실제 배포 모두 중단한다.
 
 외부 LLM·이미지 provider를 DB 제어면으로 처음 전환하는 release는
-`AI_DO_PROD_RELEASE_GATE_ADAPTERS`에
+`OPEN_ALM_PROD_RELEASE_GATE_ADAPTERS`에
 `llm_provider_settings_cutover,image_model_settings_cutover`를 포함한다. legacy 값은 runtime
 `.env`에서 제거하고 `.runtime/` 아래 권한 제한 일회성 dotenv 파일로 옮긴 뒤, 그 경로를 배포
-프로세스의 `AI_DO_PROD_MODEL_SETTINGS_CUTOVER_ENV_FILE`로만 전달한다. Image 기능이 활성화된
+프로세스의 `OPEN_ALM_PROD_MODEL_SETTINGS_CUTOVER_ENV_FILE`로만 전달한다. Image 기능이 활성화된
 환경은 `image_model_settings_cutover`를 생략하거나 release gate 전체를 우회할 수 없다. Gate는
 migration과 app/worker quiesce 후 preview/apply/재적용을 수행하고, broker queue와 DB의
 queued/running 이미지 작업이 모두 0이며 활성 설정·credential 복호화가 유효할 때만 activation을
@@ -227,8 +227,8 @@ Files v3 build·quality·cutover는
 
 Workspace keyword search 구조 변경 release는 선택 workspace key 목록 대신 명령 범위에서
 `--keyword-reindex-all-active`를 명시하거나 `.env`의
-`AI_DO_PROD_KEYWORD_REINDEX_ALL_ACTIVE=1`을 사용할 수 있다. 이 설정과
-`AI_DO_PROD_KEYWORD_REINDEX_WORKSPACE_KEYS`는 상호 배타적이며, 전체 workspace 선택은 암묵적
+`OPEN_ALM_PROD_KEYWORD_REINDEX_ALL_ACTIVE=1`을 사용할 수 있다. 이 설정과
+`OPEN_ALM_PROD_KEYWORD_REINDEX_WORKSPACE_KEYS`는 상호 배타적이며, 전체 workspace 선택은 암묵적
 기본값이 아니다. Gate는 등록된 모든 search entity를 workspace별로 rebuild하고 total/entity별 count를
 출력한 뒤 smoke를 실행한다. 물리 index 없음은 실패지만 정상적인 0-document workspace는
 성공이다. Smoke는 활성 source별 projection 문서 수와 인덱스 문서 수를 일치시키고,
@@ -252,17 +252,17 @@ v3에는 사용하지 않는다.
 
 ```bash
 cd apps/api
-AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 python -m ai_do_api.backfill_keyword_search \
+OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 python -m open_alm_api.backfill_keyword_search \
   --all-active \
   --index-generation release_<release-id>
 
-AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 python -m ai_do_api.evaluate_retrieval_quality \
+OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 python -m open_alm_api.evaluate_retrieval_quality \
   --corpus /path/to/retrieval-corpus-v1.json \
   --index-generation release_<release-id> \
   --output /path/to/retrieval-quality-release_<release-id>.json
 
 # Workspace keyword v2 generation을 활성화하되 writer는 계속 정지한 상태로 둔다.
-AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 python -m ai_do_api.backfill_keyword_search \
+OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 python -m open_alm_api.backfill_keyword_search \
   --activate-existing-generation release_<release-id> \
   --quality-report /path/to/retrieval-quality-release_<release-id>.json \
   --quality-corpus /path/to/retrieval-corpus-v1.json \
@@ -285,7 +285,7 @@ cutover runbook을 따른다. 현재 Files runner는 후속 generation upgrade/r
 
 ```bash
 cd apps/api
-AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 python -m ai_do_api.backfill_keyword_search \
+OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 python -m open_alm_api.backfill_keyword_search \
   --activate-existing-generation release_<previous-release-id> \
   --quality-report /path/to/retrieval-quality-release_<previous-release-id>.json \
   --quality-corpus /path/to/retrieval-corpus-v1.json \
@@ -297,7 +297,7 @@ AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 python -m ai_do_api.backfill_keywo
 
 ```bash
 cd apps/api
-AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 python -m ai_do_api.backfill_keyword_search \
+OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 python -m open_alm_api.backfill_keyword_search \
   --rollback-legacy-v1 \
   --confirm-writes-quiesced
 ```
@@ -322,7 +322,7 @@ asset을 현재 release의 `/assets`에 섞지 않는다. build 또는 migration
 변경되지 않으며 migration quiesce 이후 실패는 구 API가 새 schema에 쓰는 것을 막기 위해 app unit을
 정지한 채 fail-closed한다. 같은 checkout의 배포는 non-blocking file lock으로 직렬화한다. frontend 승격
 전 pre-activation gate가 실패하면 staged frontend를 활성화하지 않고 API, collab, worker, beat를
-quiesce한 채 fail-closed한다. `ai-do-prod-infra.service`와 OpenSearch는 gate 동안 유지한다. 승격 완료
+quiesce한 채 fail-closed한다. `open-alm-prod-infra.service`와 OpenSearch는 gate 동안 유지한다. 승격 완료
 후 unit restart가 실패하거나 배포 프로세스가 interrupt된 경우에만 cleanup trap이 새 frontend와
 맞는 search-writing app unit 전체를 다시 기동한다. `prod-systemd.sh quiesce-search-writers`와
 `resume-search-writers`는 이 배포 상태 전이를 위한 명시적 내부 명령이다. Pre-activation gate 실패
@@ -355,10 +355,10 @@ Activation과 첫 smoke 이후 post-activation gate가 실패하면 새 runtime�
 표시 전에 콘솔이 종료되거나 연결이 끊겼으면 배포 성공으로 간주하지 않고 상태·smoke·journal을
 재확인한다.
 
-Production web build는 동일한 build ID를 JavaScript bundle과 `.ai-do-build-id`에 기록한다.
+Production web build는 동일한 build ID를 JavaScript bundle과 `.open-alm-build-id`에 기록한다.
 브라우저의 same-origin API fetch/XHR/WebSocket 요청은 이 ID를 전달하고, API는 현재 ID와 다른
 요청을 route/handler 실행 전에 차단한다. HTTP mismatch는 `409`, `Cache-Control: no-store`,
-`X-AI-DO-Reload-Required: 1`로 응답하고 WebSocket은 close code `4409`를 사용한다. 브라우저는
+`X-Open ALM-Reload-Required: 1`로 응답하고 WebSocket은 close code `4409`를 사용한다. 브라우저는
 현재 URL에 일회성 `__reload` 값을 붙여 최신 HTML로 이동하며 정상 bootstrap 후 해당 값만
 제거한다. build ID가 없는 non-browser API client는 기존 계약을 유지한다.
 
@@ -392,16 +392,16 @@ command -v libreoffice || command -v soffice
 command -v tesseract
 ```
 
-PPT finalize 는 `ai-do-prod-worker-ppt.service`가 수행하므로 chromium/chrome 계열 브라우저는
+PPT finalize 는 `open-alm-prod-worker-ppt.service`가 수행하므로 chromium/chrome 계열 브라우저는
 prod PPT worker 호스트에 설치되어야 한다. 워커는 systemd sandbox와 충돌하기 쉬운 Snap Chromium
 래퍼보다 시스템 Chrome/Edge를 우선하며, 기동 전 `ppt_browser_smoke`로 실제 HTML→PPT 변환까지
 확인한다. smoke가 실패하면 PPT 워커도 시작하지 않으므로 unit 로그의 브라우저 stderr를 먼저
-확인한다. 표준 PATH 밖의 브라우저를 쓸 때는 `AI_DO_PPT_BROWSER_PATH`가 해당 systemd 서비스의
+확인한다. 표준 PATH 밖의 브라우저를 쓸 때는 `OPEN_ALM_PPT_BROWSER_PATH`가 해당 systemd 서비스의
 프로세스 환경에 전달되도록 unit override 또는 렌더링된 `Environment=`에 명시한다.
 
 첨부 Excel 일정표 렌더는 `POST /ppt-generator/generate` 요청 처리 중 API 호스트에서 수행하므로
 LibreOffice Calc/soffice 는 prod API 호스트에 필요하다. 경로가 표준 PATH 밖이면
-`AI_DO_PPT_SOFFICE`로 명시한다.
+`OPEN_ALM_PPT_SOFFICE`로 명시한다.
 
 ## Worker 큐 이름 변경 (drain / requeue / empty)
 
@@ -412,24 +412,24 @@ Celery 브로커는 Redis이고 큐 이름 prefix를 쓰지 않으므로, 각 �
 enqueue된 잔여 메시지는 새 워커가 소비하지 않아 **고아 상태**가 된다. 큐 이름을 바꾸는
 release는 아래 drain/requeue/empty 절차를 함께 수행한다.
 
-현재 큐 이름·그룹의 정본은 `apps/api/src/ai_do_api/core/worker_queue_contract.py`이며,
+현재 큐 이름·그룹의 정본은 `apps/api/src/open_alm_api/core/worker_queue_contract.py`이며,
 배포 대상 큐 목록은 다음으로 확인한다.
 
 ```bash
-apps/worker/.venv/bin/python -m ai_do_worker.queue_contract --celery-queues
+apps/worker/.venv/bin/python -m open_alm_worker.queue_contract --celery-queues
 ```
 
 PPT 생성은 브라우저·전용 환경이 필요해 `ppt` 그룹(`ppt_generate_dedicated`)을
-`ai-do-prod-worker-ppt.service`만 전용 소비한다(원격/공용 long 워커의 가로채기 방지).
+`open-alm-prod-worker-ppt.service`만 전용 소비한다(원격/공용 long 워커의 가로채기 방지).
 특허 선행기술 조사는 `patent` 그룹(`patent_prior_art_server_v1`)을
-`ai-do-prod-worker-patent.service`만 concurrency 1로 소비한다. 인자 없는
+`open-alm-prod-worker-patent.service`만 concurrency 1로 소비한다. 인자 없는
 `--celery-queues`는 로컬/일반 worker 목록이므로 이 서버 전용 큐를 출력하지 않는다.
 
 절차(옛 이름 `OLD`, 새 이름 `NEW`. 아래 예시는 PPT):
 
 ```bash
-# 0) 브로커 접속 — prod .env 의 Redis broker DSN(db 0). worker 는 AI_DO_WORKER_BROKER_URL 을 읽는다.
-BROKER="$(grep -E '^AI_DO_WORKER_BROKER_URL=' /projects/ai-do/prod/.env | tail -1 | cut -d= -f2-)"
+# 0) 브로커 접속 — prod .env 의 Redis broker DSN(db 0). worker 는 OPEN_ALM_WORKER_BROKER_URL 을 읽는다.
+BROKER="$(grep -E '^OPEN_ALM_WORKER_BROKER_URL=' /projects/open-alm/prod/.env | tail -1 | cut -d= -f2-)"
 OLD=ppt_generate; NEW=ppt_generate_dedicated
 
 # 1) 옛 큐에 잔여 메시지가 있는지 확인
@@ -451,14 +451,14 @@ done
 redis-cli -u "$BROKER" LLEN "$OLD"        # 0 이어야 함
 
 # 4) 새 전용 워커가 새 큐를 소비하는지 확인(배포 스크립트의 assert_worker_queues_consumed 와 동일)
-apps/worker/.venv/bin/python -m celery -A ai_do_worker.celery_app:celery_app \
+apps/worker/.venv/bin/python -m celery -A open_alm_worker.celery_app:celery_app \
   inspect active_queues        # ppt_generate_dedicated 가 보여야 함
 ```
 
 주의 — **옛 `-Q`를 물고 있는 워커의 재구독**: 옛 설정(원격/공용 long 등)에 `ppt_generate`가
 `-Q`로 박혀 있으면 브로커 재접속 때마다 옛 큐를 다시 구독해 가로챈다. `inspect active_queues`
 결과에 `ppt_generate`를 소비하는 워커가 남아 있으면 그 워커에 대해
-`celery -A ai_do_worker.celery_app:celery_app control cancel_consumer ppt_generate`로 즉시
+`celery -A open_alm_worker.celery_app:celery_app control cancel_consumer ppt_generate`로 즉시
 중단하되, **재시작하면 되살아나므로** 그 워커의 기동 설정(`-Q`)을 현행 `queue_contract` 기준
 (`--celery-queues`)으로 교정해야 근본 해결된다.
 
@@ -469,7 +469,7 @@ apps/worker/.venv/bin/python -m celery -A ai_do_worker.celery_app:celery_app \
 - API, collab, 관리형 worker, Beat의 시작 시 고정 `runtime_revision`이 배포 checkout의
   현재 Git revision과 같다.
 - `patent_prior_art_server_v1`의 소비자는
-  `ai-do-prod-worker-patent@...` 하나뿐이고 pool concurrency는 1이다.
+  `open-alm-prod-worker-patent@...` 하나뿐이고 pool concurrency는 1이다.
 - 어떤 Celery 노드도 구 큐 `patent_prior_art`를 소비하지 않는다.
 
 특허 작업의 현재 시도와 재시도 시점은 DB가 정본이다. 구 Redis LIST의 메시지를 새 큐로
@@ -550,6 +550,6 @@ commit을 checkout한 뒤 `prod:restart`를 실행하는 절차는 systemd guard
 
 writer 중단이나 역전환이 실패하면 unit 삭제로 진행하지 않고 모든 writer를 중단한 상태로
 남긴다. 성공 후에만 이전 revision checkout/deploy를 계속한다. 준비 없이 코드가 먼저
-되돌아가더라도 새 unit의 `PartOf=ai-do-prod-api.service`가 API stop/restart에 함께 worker를
+되돌아가더라도 새 unit의 `PartOf=open-alm-prod-api.service`가 API stop/restart에 함께 worker를
 중단하고, checkout에 unit template이 없으면 `ExecCondition`이 재기동을 거부한다. 이
 안전장치는 DB migration 호환성 검토를 대신하지 않는다.

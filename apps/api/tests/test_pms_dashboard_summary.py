@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from types import SimpleNamespace
 
-from ai_do_api.domains.pms.dashboard_summary import dashboard_summary_payload
+from open_alm_api.domains.pms.dashboard_summary import dashboard_summary_payload
 
 
 def task(

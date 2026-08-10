@@ -6,19 +6,19 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from ai_do_api.core.principal import CallerPrincipal
-from ai_do_api.domains.planner.event_access import (
+from open_alm_api.core.principal import CallerPrincipal
+from open_alm_api.domains.planner.event_access import (
     ensure_planner_principal_user,
     require_planner_user_write_principal,
 )
-from ai_do_api.domains.planner.event_application import (
+from open_alm_api.domains.planner.event_application import (
     PlannerEventCreateCommand,
     PlannerEventUpdateCommand,
     apply_planner_event_update,
     new_planner_event,
 )
-from ai_do_api.domains.planner.models import PlannerEvent
-from ai_do_api.domains.rag.contracts import RagSyncOperation
+from open_alm_api.domains.planner.models import PlannerEvent
+from open_alm_api.domains.rag.contracts import RagSyncOperation
 
 
 def test_new_planner_event_builds_model_from_command() -> None:

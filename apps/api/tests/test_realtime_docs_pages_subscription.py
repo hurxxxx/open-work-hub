@@ -6,8 +6,8 @@ from types import SimpleNamespace
 from fastapi import HTTPException
 import pytest
 
-from ai_do_api.domains.realtime import docs_pages_subscription
-from ai_do_api.domains.realtime.docs_pages_subscription import (
+from open_alm_api.domains.realtime import docs_pages_subscription
+from open_alm_api.domains.realtime.docs_pages_subscription import (
     resolve_docs_pages_subscription,
     resolve_docs_pages_subscription_in_session,
 )

@@ -12,16 +12,16 @@ import pytest
 from sqlalchemy import create_engine, event, func, select
 from sqlalchemy.orm import Session
 
-from ai_do_api.core.db import Base
-from ai_do_api.domains.auth.models import (
+from open_alm_api.core.db import Base
+from open_alm_api.domains.auth.models import (
     OrgUnit,
     User,
     UserSystemRole,
     Workspace,
     WorkspaceUserBinding,
 )
-from ai_do_api.domains.files import bulk_ingest, service as files_service
-from ai_do_api.domains.files.models import (
+from open_alm_api.domains.files import bulk_ingest, service as files_service
+from open_alm_api.domains.files.models import (
     FileManagerBulkIngestEntry,
     FileManagerBulkIngestRun,
     FileManagerCorpus,
@@ -29,13 +29,13 @@ from ai_do_api.domains.files.models import (
     FileManagerFolder,
     FileManagerStorageCleanupJob,
 )
-from ai_do_api.domains.rag.models import RagSyncJob
-from ai_do_api.domains.retrieval.models import (
+from open_alm_api.domains.rag.models import RagSyncJob
+from open_alm_api.domains.retrieval.models import (
     RetrievalPartition,
     RetrievalProjectionEvent,
     RetrievalProjectionHead,
 )
-from ai_do_api.domains.search.models import SearchIndexJob
+from open_alm_api.domains.search.models import SearchIndexJob
 
 
 WORKSPACE_ID = "workspace-a"

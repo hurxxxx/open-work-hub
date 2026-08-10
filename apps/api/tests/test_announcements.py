@@ -71,7 +71,7 @@ def test_announcement_requires_admin_to_write(client: TestClient) -> None:
     member = _create_user_with_workspaces(
         client,
         admin_token,
-        email="ann-member@ai-do.local",
+        email="ann-member@open-alm.local",
         full_name="Announcement Member",
         workspace_keys=["administrator"],
     )
@@ -99,7 +99,7 @@ def test_announcement_company_scope_visibility(client: TestClient) -> None:
     other = _create_user_with_workspaces(
         client,
         token,
-        email="ann-other-workspace@ai-do.local",
+        email="ann-other-workspace@open-alm.local",
         full_name="Other Workspace User",
         workspace_keys=["ai-tft"],
     )
@@ -170,7 +170,7 @@ def test_company_announcement_requires_platform_admin(client: TestClient) -> Non
     member = _create_user_with_workspaces(
         client,
         admin_token,
-        email="ann-company-member@ai-do.local",
+        email="ann-company-member@open-alm.local",
         full_name="Company Member",
         workspace_keys=["administrator"],
     )

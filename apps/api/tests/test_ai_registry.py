@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from ai_do_api.core.settings import get_settings
-from ai_do_api.domains.ai.registry import (
+from open_alm_api.core.settings import get_settings
+from open_alm_api.domains.ai.registry import (
     AiCapabilityRegistry,
     get_ai_capability_registry,
     reset_ai_capability_registry,
@@ -160,7 +160,7 @@ def test_pms_write_anchors_are_hidden_when_write_tools_disabled() -> None:
 
 
 def test_pms_write_tools_register_when_enabled(monkeypatch) -> None:
-    monkeypatch.setenv("AI_DO_AI_WRITE_TOOLS_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_AI_WRITE_TOOLS_ENABLED", "1")
     _reset_settings_and_registry()
     try:
         registry = get_ai_capability_registry()
@@ -218,5 +218,5 @@ def test_pms_write_tools_register_when_enabled(monkeypatch) -> None:
         } <= full_specs
         assert "docs.create_page" not in full_specs
     finally:
-        monkeypatch.delenv("AI_DO_AI_WRITE_TOOLS_ENABLED", raising=False)
+        monkeypatch.delenv("OPEN_ALM_AI_WRITE_TOOLS_ENABLED", raising=False)
         _reset_settings_and_registry()

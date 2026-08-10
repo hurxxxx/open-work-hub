@@ -7,21 +7,21 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ai_do_api.domains.ai.conversation_scope import conversation_scope_turn_context
-from ai_do_api.core.db import get_engine
-from ai_do_api.domains.ai import approvals as ai_approvals
-from ai_do_api.domains.auth.models import User, Workspace
-from ai_do_api.domains.conversations.default_scope_adapters import (
+from open_alm_api.domains.ai.conversation_scope import conversation_scope_turn_context
+from open_alm_api.core.db import get_engine
+from open_alm_api.domains.ai import approvals as ai_approvals
+from open_alm_api.domains.auth.models import User, Workspace
+from open_alm_api.domains.conversations.default_scope_adapters import (
     ensure_conversation_scope_adapters_registered,
 )
-from ai_do_api.domains.conversations import service as conversations_service
-from ai_do_api.domains.conversations.models import Conversation
-from ai_do_api.domains.conversations.scope_registry import (
+from open_alm_api.domains.conversations import service as conversations_service
+from open_alm_api.domains.conversations.models import Conversation
+from open_alm_api.domains.conversations.scope_registry import (
     ConversationExperience,
     register_conversation_scope_adapter,
     reset_conversation_scope_adapters,
 )
-from ai_do_api.platform_extensions import _validate_conversation_scope_registry_contracts
+from open_alm_api.platform_extensions import _validate_conversation_scope_registry_contracts
 from test_meeting import _auth_headers, _bootstrap_admin_session, _create_meeting
 
 

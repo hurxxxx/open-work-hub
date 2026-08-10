@@ -17,7 +17,7 @@ import {
   Upload,
   X,
 } from 'lucide-react';
-import { useConfirm, useToast } from '@ai-do/ui';
+import { useConfirm, useToast } from '@open-alm/ui';
 
 import { cn } from '@/src/lib/utils';
 import { ApiRequestError } from '@/src/platform/api/client';

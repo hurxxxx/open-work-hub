@@ -1,16 +1,16 @@
 # RAG Domain
 
-AI-DO RAG domain은 문서 chunking, embedding, vector indexing, rerank, grounded answer synthesis, source adapter policy를 소유한다. 여러 검색 표면을 얇게 묶는 공개 진입점은 [Retrieval 서비스 레이어](../retrieval/README.md)를 정본으로 본다.
+Open ALM RAG domain은 문서 chunking, embedding, vector indexing, rerank, grounded answer synthesis, source adapter policy를 소유한다. 여러 검색 표면을 얇게 묶는 공개 진입점은 [Retrieval 서비스 레이어](../retrieval/README.md)를 정본으로 본다.
 
 ## 현재 구현
 
 주요 코드:
 
-- `apps/api/src/ai_do_api/domains/rag/`
-- `apps/api/src/ai_do_api/backfill_rag.py`
-- `apps/worker/src/ai_do_worker/tasks/rag_sync.py`
-- `apps/api/src/ai_do_api/domains/search/`
-- `apps/api/src/ai_do_api/domains/legacy_issues/ai_search.py`
+- `apps/api/src/open_alm_api/domains/rag/`
+- `apps/api/src/open_alm_api/backfill_rag.py`
+- `apps/worker/src/open_alm_worker/tasks/rag_sync.py`
+- `apps/api/src/open_alm_api/domains/search/`
+- `apps/api/src/open_alm_api/domains/legacy_issues/ai_search.py`
 
 핵심 backend:
 
@@ -107,7 +107,7 @@ LLM 관리 라우팅 화면에도 노출해 전용 Vision 모델로 전환할 �
 
 현재 `legacy_issues.attachment_vision`과 `meal_invoice_ocr_extract`는 별도 Vision 서버나
 전용 model endpoint를 직접 호출하지 않는다. 두 workload 모두 공통 local LLM 라우팅과
-관리자가 선택한 `vision` capability 모델을 사용한다. `AI_DO_RAG_VISION_OCR_ENABLED`는 레거시
+관리자가 선택한 `vision` capability 모델을 사용한다. `OPEN_ALM_RAG_VISION_OCR_ENABLED`는 레거시
 첨부 Vision 추출의 실행 gate일 뿐, 별도 모델 선택 설정이 아니다.
 
 Vision 모델 선택 자체는 `/admin/llm?tab=routing`의 workload override로 관리한다. 따라서

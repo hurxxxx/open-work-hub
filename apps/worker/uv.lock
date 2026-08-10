@@ -26,7 +26,7 @@ wheels = [
 ]
 
 [[package]]
-name = "ai-do-worker"
+name = "open-alm-worker"
 version = "0.1.1"
 source = { editable = "." }
 dependencies = [

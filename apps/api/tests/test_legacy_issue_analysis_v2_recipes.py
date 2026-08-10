@@ -5,19 +5,19 @@ from datetime import date
 import pytest
 from pydantic import ValidationError
 
-from ai_do_api.domains.legacy_issues.analysis_v2.contracts import (
+from open_alm_api.domains.legacy_issues.analysis_v2.contracts import (
     AnalysisRoute,
     AnalysisRouteDecision,
     FallbackReason,
 )
-from ai_do_api.domains.legacy_issues.analysis_v2.recipes import (
+from open_alm_api.domains.legacy_issues.analysis_v2.recipes import (
     default_recipe_catalog,
 )
-from ai_do_api.domains.legacy_issues.analysis_v2.sql_policy import (
+from open_alm_api.domains.legacy_issues.analysis_v2.sql_policy import (
     SafeSqlPolicy,
     SafeSqlPolicyError,
 )
-from ai_do_api.domains.legacy_issues.analysis_v2.views import (
+from open_alm_api.domains.legacy_issues.analysis_v2.views import (
     CHECKLIST_ITEMS_VIEW_V1,
     CHECKLISTS_VIEW_V1,
     ISSUE_RECORDS_VIEW_V1,
@@ -211,7 +211,7 @@ def test_detail_recipe_supports_exact_group_filters_and_missing_values() -> None
         "issue_details",
         1,
         {
-            "suppliers": ["두원공조"],
+            "suppliers": ["Open ALM"],
             "part_number_missing": True,
             "occurrence_stages": ["MP"],
             "process_names": ["조립"],
@@ -227,7 +227,7 @@ def test_detail_recipe_supports_exact_group_filters_and_missing_values() -> None
     assert "i.process_name IN (%(process_names_0)s)" in rendered.sql
     assert "i.cause_type IN (%(cause_types_0)s)" in rendered.sql
     assert rendered.bindings == {
-        "suppliers_0": "두원공조",
+        "suppliers_0": "Open ALM",
         "occurrence_stages_0": "MP",
         "process_names_0": "조립",
         "cause_types_0": "설계",

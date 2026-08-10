@@ -15,12 +15,12 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class LiveTlsExpiryTest(unittest.TestCase):
     @staticmethod
-    def dwdcc_certificate(*, expires_at: str = "Sep  6 03:15:57 2026 GMT") -> dict:
+    def open-alm_certificate(*, expires_at: str = "Sep  6 03:15:57 2026 GMT") -> dict:
         return {
             "notAfter": expires_at,
             "subjectAltName": (
-                ("DNS", "*.dwdcc.kr"),
-                ("DNS", "dwdcc.kr"),
+                ("DNS", "*.open-alm.example"),
+                ("DNS", "open-alm.example"),
             ),
         }
 
@@ -30,7 +30,7 @@ class LiveTlsExpiryTest(unittest.TestCase):
 
         exit_code = check_live_tls_expiry.run(
             [],
-            certificate_fetcher=lambda *_args: self.dwdcc_certificate(),
+            certificate_fetcher=lambda *_args: self.open-alm_certificate(),
             now=lambda: datetime(2026, 7, 23, tzinfo=UTC),
             stdout=stdout,
             stderr=stderr,
@@ -38,7 +38,7 @@ class LiveTlsExpiryTest(unittest.TestCase):
 
         self.assertEqual(exit_code, 0, stderr.getvalue())
         self.assertIn('"status": "ok"', stdout.getvalue())
-        self.assertIn('"host": "dwdcc.kr"', stdout.getvalue())
+        self.assertIn('"host": "open-alm.example"', stdout.getvalue())
         self.assertIn('"expires_at": "2026-09-06T03:15:57Z"', stdout.getvalue())
         self.assertEqual(stderr.getvalue(), "")
 
@@ -48,7 +48,7 @@ class LiveTlsExpiryTest(unittest.TestCase):
 
         exit_code = check_live_tls_expiry.run(
             [],
-            certificate_fetcher=lambda *_args: self.dwdcc_certificate(),
+            certificate_fetcher=lambda *_args: self.open-alm_certificate(),
             now=lambda: datetime(2026, 8, 7, 3, 15, 57, tzinfo=UTC),
             stdout=stdout,
             stderr=stderr,
@@ -65,7 +65,7 @@ class LiveTlsExpiryTest(unittest.TestCase):
 
         exit_code = check_live_tls_expiry.run(
             ["--threshold-days=0"],
-            certificate_fetcher=lambda *_args: self.dwdcc_certificate(),
+            certificate_fetcher=lambda *_args: self.open-alm_certificate(),
             now=lambda: datetime(2026, 9, 6, 3, 15, 56, tzinfo=UTC),
             stdout=stdout,
             stderr=stderr,
@@ -81,7 +81,7 @@ class LiveTlsExpiryTest(unittest.TestCase):
 
         exit_code = check_live_tls_expiry.run(
             ["--threshold-days=0"],
-            certificate_fetcher=lambda *_args: self.dwdcc_certificate(),
+            certificate_fetcher=lambda *_args: self.open-alm_certificate(),
             now=lambda: datetime(2026, 9, 6, 3, 15, 57, tzinfo=UTC),
             stdout=stdout,
             stderr=stderr,
@@ -95,8 +95,8 @@ class LiveTlsExpiryTest(unittest.TestCase):
     def test_missing_required_wildcard_san_fails_closed(self) -> None:
         stdout = io.StringIO()
         stderr = io.StringIO()
-        certificate = self.dwdcc_certificate()
-        certificate["subjectAltName"] = (("DNS", "dwdcc.kr"),)
+        certificate = self.open-alm_certificate()
+        certificate["subjectAltName"] = (("DNS", "open-alm.example"),)
 
         exit_code = check_live_tls_expiry.run(
             ["--threshold-days=0"],
@@ -109,7 +109,7 @@ class LiveTlsExpiryTest(unittest.TestCase):
         self.assertEqual(exit_code, 1)
         self.assertEqual(stdout.getvalue(), "")
         self.assertIn('"reason": "required_san_missing"', stderr.getvalue())
-        self.assertIn('"missing_sans": ["*.dwdcc.kr"]', stderr.getvalue())
+        self.assertIn('"missing_sans": ["*.open-alm.example"]', stderr.getvalue())
 
     def test_tls_connection_failure_is_fail_closed_and_secret_free(self) -> None:
         stdout = io.StringIO()
@@ -153,7 +153,7 @@ class LiveTlsExpiryTest(unittest.TestCase):
 
         exit_code = check_live_tls_expiry.run(
             ["--now", "2026-08-07T03:15:57Z"],
-            certificate_fetcher=lambda *_args: self.dwdcc_certificate(),
+            certificate_fetcher=lambda *_args: self.open-alm_certificate(),
             now=lambda: self.fail("system clock must not be read"),
             stdout=stdout,
             stderr=stderr,
@@ -168,7 +168,7 @@ class LiveTlsExpiryTest(unittest.TestCase):
         def must_not_fetch(*_args: object) -> dict:
             nonlocal fetched
             fetched = True
-            return self.dwdcc_certificate()
+            return self.open-alm_certificate()
 
         with redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit) as raised:
@@ -182,19 +182,19 @@ class LiveTlsExpiryTest(unittest.TestCase):
 
     def test_systemd_timer_runs_the_fail_closed_check_daily(self) -> None:
         service = (
-            ROOT / "ops/systemd/system/ai-do-tls-expiry-check.service"
+            ROOT / "ops/systemd/system/open-alm-tls-expiry-check.service"
         ).read_text(encoding="utf-8")
         timer = (
-            ROOT / "ops/systemd/system/ai-do-tls-expiry-check.timer"
+            ROOT / "ops/systemd/system/open-alm-tls-expiry-check.timer"
         ).read_text(encoding="utf-8")
 
         self.assertIn(
-            "ExecStart=/usr/bin/python3 /usr/local/libexec/ai-do/check_live_tls_expiry.py",
+            "ExecStart=/usr/bin/python3 /usr/local/libexec/open-alm/check_live_tls_expiry.py",
             service,
         )
         self.assertIn("--threshold-days=30", service)
-        self.assertIn("--required-san=dwdcc.kr", service)
-        self.assertIn("--required-san=*.dwdcc.kr", service)
+        self.assertIn("--required-san=open-alm.example", service)
+        self.assertIn("--required-san=*.open-alm.example", service)
         self.assertIn("TimeoutStartSec=30s", service)
         self.assertIn("UMask=0077", service)
         self.assertIn("OnCalendar=daily", timer)
@@ -213,7 +213,7 @@ class LiveTlsExpiryTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("dry-run", result.stdout)
         self.assertIn("--apply", result.stdout)
-        self.assertIn("ai-do-tls-expiry-check.timer", result.stdout)
+        self.assertIn("open-alm-tls-expiry-check.timer", result.stdout)
 
     def test_monitor_installer_rejects_replace_without_apply(self) -> None:
         result = subprocess.run(

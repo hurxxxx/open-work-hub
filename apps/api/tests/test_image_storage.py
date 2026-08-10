@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import timedelta
 from types import SimpleNamespace
 
-from ai_do_api.domains.images import storage
+from open_alm_api.domains.images import storage
 
 
 def test_put_reference_image_object_writes_to_configured_bucket(monkeypatch) -> None:

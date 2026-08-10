@@ -4,15 +4,15 @@ from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException
 
-from ai_do_api.core.db import Base, get_session_factory
-from ai_do_api.core.i18n import translate_message
-from ai_do_api.domains.auth.models import OrgUnit, User, Workspace, utcnow_naive
-from ai_do_api.domains.legacy_issues.dataset_records import (
+from open_alm_api.core.db import Base, get_session_factory
+from open_alm_api.core.i18n import translate_message
+from open_alm_api.domains.auth.models import OrgUnit, User, Workspace, utcnow_naive
+from open_alm_api.domains.legacy_issues.dataset_records import (
     COMMON_MASTER_DATASET_KEY,
     create_dataset_record,
     get_dataset_definition_for_view,
 )
-from ai_do_api.domains.legacy_issues.models import (
+from open_alm_api.domains.legacy_issues.models import (
     LegacyIssueAttachment,
     LegacyIssueDataRevision,
     LegacyIssueModuleField,
@@ -26,20 +26,20 @@ from ai_do_api.domains.legacy_issues.models import (
     LegacyIssueVehicleModuleChecklistRecord,
     LegacyIssueVehicleStage,
 )
-from ai_do_api.domains.legacy_issues.revisioning import (
+from open_alm_api.domains.legacy_issues.revisioning import (
     REVISION_STATUS_DRAFT,
     REVISION_STATUS_PUBLISHED,
     legacy_issue_dataset_revision_key,
 )
-from ai_do_api.domains.legacy_issues.vehicle_checklists import (
+from open_alm_api.domains.legacy_issues.vehicle_checklists import (
     create_vehicle_model,
     create_vehicle_stage,
 )
-from ai_do_api.domains.retrieval.models import RetrievalPartition
-from ai_do_api.domains.legacy_issues import (
+from open_alm_api.domains.retrieval.models import RetrievalPartition
+from open_alm_api.domains.legacy_issues import (
     vehicle_module_checklists as vehicle_module_checklist_service,
 )
-from ai_do_api.domains.legacy_issues.vehicle_module_checklists import (
+from open_alm_api.domains.legacy_issues.vehicle_module_checklists import (
     VEHICLE_MODULE_CHECKLIST_RECORD_KIND,
     complete_vehicle_module_checklist,
     create_vehicle_module_checklist,
@@ -880,7 +880,7 @@ def test_module_checklist_create_and_delete_http_enforce_workspace_membership(
         workspace_key="module-checklist-member-workspace",
         workspace_name="Module Checklist Member Workspace",
         login_id="modulechecklistmember",
-        email="module-checklist-member@ai-do.local",
+        email="module-checklist-member@open-alm.local",
         full_name="Module Checklist Member",
         role="member",
     )
@@ -889,7 +889,7 @@ def test_module_checklist_create_and_delete_http_enforce_workspace_membership(
         workspace_key="module-checklist-outsider-workspace",
         workspace_name="Module Checklist Outsider Workspace",
         login_id="modulechecklistoutsider",
-        email="module-checklist-outsider@ai-do.local",
+        email="module-checklist-outsider@open-alm.local",
         full_name="Module Checklist Outsider",
         role="member",
     )

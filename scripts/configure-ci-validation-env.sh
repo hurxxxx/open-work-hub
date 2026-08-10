@@ -2,25 +2,25 @@
 set -Eeuo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-project_path="dwdcc/ai-do"
+project_path="open-alm/open-alm"
 mode="${1:---apply}"
 postgres_major="18"
-cluster_name="ai_do_ci"
+cluster_name="open_alm_ci"
 cluster_port="55432"
 postgres_max_locks_per_transaction="1024"
 postgres_max_wal_size="8GB"
 postgres_checkpoint_timeout="1min"
 postgres_checkpoint_completion_target="0"
 cluster_dsn_host="ci-postgres.internal"
-validation_network="ai-do-validation"
+validation_network="open-alm-validation"
 validation_subnet="172.29.250.0/24"
 cluster_listen_address="172.29.250.1"
 cluster_data_dir="/data/postgres/${postgres_major}/${cluster_name}"
 cluster_unit_name="postgresql@${postgres_major}-${cluster_name}.service"
 cluster_systemd_drop_in_source="${repo_root}/ops/systemd/system/${cluster_unit_name}.d/network-online.conf"
 cluster_systemd_drop_in_target="/etc/systemd/system/${cluster_unit_name}.d/network-online.conf"
-ci_role="ai_do_ci_validation"
-analysis_role="ai_do_analysis_reader"
+ci_role="open_alm_ci_validation"
+analysis_role="open_alm_analysis_reader"
 current_branch=""
 
 ci_postgres_setting_lines() {
@@ -79,7 +79,7 @@ case "$mode" in
       exit 2
     fi
     source "$repo_root/scripts/ci/control-plane-lock.sh"
-    acquire_ai_do_ci_control_plane_lock
+    acquire_open_alm_ci_control_plane_lock
     git -C "$repo_root" fetch --quiet origin dev
     local_dev_sha="$(git -C "$repo_root" rev-parse HEAD)"
     remote_dev_sha="$(git -C "$repo_root" rev-parse origin/dev)"
@@ -189,7 +189,7 @@ if ! bash "$repo_root/scripts/codex-review-ci.sh" \
 fi
 validation_runner_ids="$(
   glab api "projects/${project_id}/runners?per_page=100" |
-    jq -r '.[] | select(.description == "ai-do-validation-docker-runner") | .id'
+    jq -r '.[] | select(.description == "open-alm-validation-docker-runner") | .id'
 )"
 if [[ "$(wc -w <<<"$validation_runner_ids")" -ne 1 ]]; then
   echo "Expected exactly one validation runner before PostgreSQL rotation." >&2
@@ -198,10 +198,10 @@ fi
 validation_runner_id="$validation_runner_ids"
 validation_runner_json="$(glab api "runners/${validation_runner_id}")"
 if ! jq -e '
-  .description == "ai-do-validation-docker-runner"
+  .description == "open-alm-validation-docker-runner"
   and (.status == "online" or .status == "paused")
   and .online == true
-  and .tag_list == ["ai-do-validation"]
+  and .tag_list == ["open-alm-validation"]
   and .locked == true
   and .run_untagged == false
   and .runner_type == "project_type"
@@ -358,7 +358,7 @@ credentials_dir="$(mktemp -d)"
 chmod 600 "$hba_temp"
 chmod 700 "$credentials_dir"
 printf '%s\n' \
-  "# Managed by AI-DO scripts/configure-ci-validation-env.sh" \
+  "# Managed by Open ALM scripts/configure-ci-validation-env.sh" \
   "local all postgres peer" \
   "local all all scram-sha-256" \
   "host all ${ci_role} 127.0.0.1/32 scram-sha-256" \
@@ -475,7 +475,7 @@ sudo -n -u postgres psql \
   --quiet \
   <"$bootstrap_sql" >/dev/null
 
-postgres_dsn_file="$credentials_dir/AI_DO_CI_POSTGRES_DSN"
+postgres_dsn_file="$credentials_dir/OPEN_ALM_CI_POSTGRES_DSN"
 printf 'postgresql+psycopg://%s:%s@%s:%s/postgres' \
   "$ci_role" "$ci_password" "$cluster_dsn_host" "$cluster_port" \
   >"$postgres_dsn_file"
@@ -490,7 +490,7 @@ ci_variable_count="$(
 ci_variable_action="$(ci_variable_write_action "$ci_variable_count")"
 case "$ci_variable_action" in
   set)
-    glab variable set AI_DO_CI_POSTGRES_DSN \
+    glab variable set OPEN_ALM_CI_POSTGRES_DSN \
       --repo "$project_path" \
       --scope ci-validation \
       --raw \
@@ -500,7 +500,7 @@ case "$ci_variable_action" in
       <"$postgres_dsn_file" >/dev/null
     ;;
   update)
-    glab variable update AI_DO_CI_POSTGRES_DSN \
+    glab variable update OPEN_ALM_CI_POSTGRES_DSN \
       --repo "$project_path" \
       --scope ci-validation \
       --raw \

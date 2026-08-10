@@ -8,7 +8,7 @@ import {
   Loader2,
   RefreshCw,
 } from 'lucide-react';
-import { InlineNotice } from '@ai-do/ui';
+import { InlineNotice } from '@open-alm/ui';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { useWorkspaceBootstrapContext } from '@/src/platform/workspaces/workspace-bootstrap-context';

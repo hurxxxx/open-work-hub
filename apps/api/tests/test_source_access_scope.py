@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy import Column, MetaData, String, Table, create_engine, select
 
-from ai_do_api.domains.source_access.access_scope import AccessScopeRules
+from open_alm_api.domains.source_access.access_scope import AccessScopeRules
 
 
 def _member_rules() -> AccessScopeRules:

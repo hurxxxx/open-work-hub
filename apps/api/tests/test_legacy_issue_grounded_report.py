@@ -1,4 +1,4 @@
-from ai_do_api.domains.legacy_issues.grounded_report import (
+from open_alm_api.domains.legacy_issues.grounded_report import (
     render_grounded_legacy_issue_report,
 )
 

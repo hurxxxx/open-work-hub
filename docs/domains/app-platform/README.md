@@ -1,6 +1,6 @@
 # 앱 플랫폼 등록 계약
 
-이 문서는 AI-DO 앱의 identity, 등록, 조합, launcher 노출과 tenant/workspace 접근 게이트의
+이 문서는 Open ALM 앱의 identity, 등록, 조합, launcher 노출과 tenant/workspace 접근 게이트의
 현재 정본이다. 앱 구현 구조와 검증 깊이는
 [바이브 코딩 하네스](../../agents/vibe-coding-harness.md)를 함께 따른다.
 
@@ -23,7 +23,7 @@ composition root의 명시적인 객체 목록은 의도된 구조다. 앱을 �
 
 ## Tenant와 앱 scope
 
-AI-DO의 최상위 tenant는 회사이며, 현재는 회사별 배포·데이터베이스·설정 묶음으로 암묵적으로
+Open ALM의 최상위 tenant는 회사이며, 현재는 회사별 배포·데이터베이스·설정 묶음으로 암묵적으로
 식별한다. Workspace는 회사 tenant 아래의 부서·팀·프로젝트 협업 범위다. 전체 범위 계약은
 [ADR 0007](../../../adr/0007-company-tenant-workspace-scope.md)을 따른다.
 
@@ -42,7 +42,7 @@ Launcher category, 정렬과 개인 pin은 표시 구성일 뿐 앱 접근 권�
 
 ## Backend 등록
 
-앱을 소유한 API domain은 `apps/api/src/ai_do_api/domains/<domain>/app_catalog.py`에서
+앱을 소유한 API domain은 `apps/api/src/open_alm_api/domains/<domain>/app_catalog.py`에서
 불변 `WorkspaceAppRegistration`을 내보낸다.
 
 ```python
@@ -69,7 +69,7 @@ Frontend manifest의 `resourceScope`는 데이터 소유권을 나타낸다. 현
 resource다. availability scope와 resource scope를 같은 개념으로 취급하지 않는다.
 
 Core Enablement 단계에서 이 객체를
-`apps/api/src/ai_do_api/domains/auth/workspace_apps.py`의 조합 tuple에 import한다.
+`apps/api/src/open_alm_api/domains/auth/workspace_apps.py`의 조합 tuple에 import한다.
 `compile_workspace_app_registry()`는 다음 값을 검증하고 파생한다.
 
 - kebab-case app/nav ID와 workspace route base

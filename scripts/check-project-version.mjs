@@ -32,23 +32,23 @@ const checks = [
     label: 'ops package version',
   },
   {
-    file: 'apps/api/src/ai_do_api/version.py',
+    file: 'apps/api/src/open_alm_api/version.py',
     pattern: /^VERSION = "([^"]+)"/m,
     label: 'API runtime version',
   },
   {
     file: 'apps/api/uv.lock',
-    pattern: /name = "ai-do-api"\nversion = "([^"]+)"/,
+    pattern: /name = "open-alm-api"\nversion = "([^"]+)"/,
     label: 'API lockfile version',
   },
   {
     file: 'apps/worker/uv.lock',
-    pattern: /name = "ai-do-worker"\nversion = "([^"]+)"/,
+    pattern: /name = "open-alm-worker"\nversion = "([^"]+)"/,
     label: 'worker lockfile version',
   },
   {
     file: 'apps/ops/uv.lock',
-    pattern: /name = "ai-do-ops"\nversion = "([^"]+)"/,
+    pattern: /name = "open-alm-ops"\nversion = "([^"]+)"/,
     label: 'ops lockfile version',
   },
 ];

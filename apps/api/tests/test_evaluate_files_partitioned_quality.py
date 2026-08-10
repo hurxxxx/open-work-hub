@@ -9,24 +9,24 @@ from types import SimpleNamespace
 
 import pytest
 
-from ai_do_api import evaluate_files_partitioned_quality as quality_cli
-from ai_do_api.domains.auth.models import User, Workspace
-from ai_do_api.domains.retrieval.contracts import (
+from open_alm_api import evaluate_files_partitioned_quality as quality_cli
+from open_alm_api.domains.auth.models import User, Workspace
+from open_alm_api.domains.retrieval.contracts import (
     RetrievalHit,
     RetrievalProfile,
     RetrievalQueryResponse,
     RetrievalStrategy,
 )
-from ai_do_api.domains.retrieval.evaluation import (
+from open_alm_api.domains.retrieval.evaluation import (
     RetrievalEvaluationReport,
     RetrievalQualityGateArtifact,
 )
-from ai_do_api.domains.retrieval.files_generation_runner import (
+from open_alm_api.domains.retrieval.files_generation_runner import (
     FilesBackendPairInspection,
     FilesPhysicalProjectionInventory,
     FilesSourceProjectionSnapshot,
 )
-from ai_do_api.domains.retrieval.files_quality_evaluator import (
+from open_alm_api.domains.retrieval.files_quality_evaluator import (
     FilesQualityEvaluationError,
     evaluate_files_partitioned_quality,
 )
@@ -107,8 +107,8 @@ def _corpus_bytes() -> bytes:
 
 def _settings():
     return SimpleNamespace(
-        opensearch_index_prefix="ai-do-search",
-        rag_qdrant_collection_prefix="ai-do-rag",
+        opensearch_index_prefix="open-alm-search",
+        rag_qdrant_collection_prefix="open-alm-rag",
         rag_embedding_provider="inference_gateway",
         rag_local_embedding_model="example/embedding-model",
         rag_local_embedding_revision="revision-a",
@@ -161,7 +161,7 @@ def test_evaluator_queries_only_the_exact_partitioned_physical_pair() -> None:
         identity_sha256="1" * 64,
         content_sha256="4" * 64,
         config_sha256="5" * 64,
-        physical_id="ai-do-rag-example-embedding-model-v1-release_20260723",
+        physical_id="open-alm-rag-example-embedding-model-v1-release_20260723",
     )
     backends = _Backends(FilesBackendPairInspection(opensearch=opensearch, qdrant=qdrant))
     keyword_bindings: list[str] = []
@@ -207,8 +207,8 @@ def test_evaluator_queries_only_the_exact_partitioned_physical_pair() -> None:
         retrieval_query=query_retrieval,
     )
 
-    assert keyword_bindings == ["ai-do-search_keyword_search_documents_v3_release_20260723"]
-    assert vector_bindings == ["ai-do-rag-example-embedding-model-v1-release_20260723"]
+    assert keyword_bindings == ["open-alm-search_keyword_search_documents_v3_release_20260723"]
+    assert vector_bindings == ["open-alm-rag-example-embedding-model-v1-release_20260723"]
     assert len(backends.inspected_specs) == 2
     assert backends.inspected_specs[0] == backends.inspected_specs[1]
     assert len(calls) == 180
@@ -221,7 +221,7 @@ def test_evaluator_queries_only_the_exact_partitioned_physical_pair() -> None:
     assert all(call["keyword_search_client"] is keyword_client for call in calls)
     assert all(call["rag_query_service"] is rag_query_service for call in calls)
     assert all(
-        call["rag_collection"] == "ai-do-rag-example-embedding-model-v1-release_20260723"
+        call["rag_collection"] == "open-alm-rag-example-embedding-model-v1-release_20260723"
         for call in calls
     )
     assert all(call["rag_allowed_unlisted_source_kinds"] == frozenset({"files"}) for call in calls)
@@ -256,7 +256,7 @@ def test_evaluator_fails_closed_if_the_physical_generation_changes_mid_run() -> 
         identity_sha256="1" * 64,
         content_sha256="4" * 64,
         config_sha256="5" * 64,
-        physical_id="ai-do-rag-example-embedding-model-v1-release_20260723",
+        physical_id="open-alm-rag-example-embedding-model-v1-release_20260723",
     )
 
     class ChangingBackends:
@@ -321,7 +321,7 @@ def test_evaluator_fails_closed_if_principal_acl_universe_changes_mid_run() -> N
         identity_sha256="1" * 64,
         content_sha256="4" * 64,
         config_sha256="5" * 64,
-        physical_id="ai-do-rag-example-embedding-model-v1-release_20260723",
+        physical_id="open-alm-rag-example-embedding-model-v1-release_20260723",
     )
     policies = iter(
         (
@@ -568,7 +568,7 @@ def test_cli_sanitizes_unexpected_evaluation_failures(
     monkeypatch.setattr(quality_cli, "FilesPhysicalGenerationBackends", Backends)
 
     def fail(**_kwargs):
-        logging.getLogger("ai_do_api.domains.retrieval.application").warning(
+        logging.getLogger("open_alm_api.domains.retrieval.application").warning(
             "sensitive query user-sensitive file-sensitive"
         )
         raise RuntimeError("sensitive query user-sensitive file-sensitive")

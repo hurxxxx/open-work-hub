@@ -9,7 +9,7 @@ import {
   TabsList,
   TabsTrigger,
   Tooltip,
-} from '@ai-do/ui';
+} from '@open-alm/ui';
 
 import {
   filterIconPickerKeys,

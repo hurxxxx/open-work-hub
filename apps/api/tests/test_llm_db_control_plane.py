@@ -4,17 +4,17 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import delete
 
-from ai_do_api.core import llm as llm_core
-from ai_do_api.core.db import get_session_factory
-from ai_do_api.core.settings import get_settings
-from ai_do_api.domains.ai import gateway as gateway_module
-from ai_do_api.domains.ai.gateway import LlmWorkloadContext, build_llm_workload_request
-from ai_do_api.domains.ai.model_credentials import encrypt_api_key
-from ai_do_api.domains.ai.model_settings_models import (
+from open_alm_api.core import llm as llm_core
+from open_alm_api.core.db import get_session_factory
+from open_alm_api.core.settings import get_settings
+from open_alm_api.domains.ai import gateway as gateway_module
+from open_alm_api.domains.ai.gateway import LlmWorkloadContext, build_llm_workload_request
+from open_alm_api.domains.ai.model_credentials import encrypt_api_key
+from open_alm_api.domains.ai.model_settings_models import (
     AiModelCatalogEntry,
     AiModelProviderConfig,
 )
-from ai_do_api.domains.ai.model_settings_service import (
+from open_alm_api.domains.ai.model_settings_service import (
     AiModelSettingsError,
     get_ai_model_settings_snapshot,
     resolve_ai_model_workload_route,
@@ -29,10 +29,10 @@ _DB_SECRET = "test-db-anthropic-secret"
 
 
 def _configure_conflicting_external_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("AI_DO_LLM_ANTHROPIC_API_KEY", "test-env-anthropic-secret")
-    monkeypatch.setenv("AI_DO_LLM_ANTHROPIC_BASE_URL", "https://env.example.test")
-    monkeypatch.setenv("AI_DO_LLM_ANTHROPIC_DEFAULT_MODEL", "env-only-model")
-    monkeypatch.setenv("AI_DO_LLM_ANTHROPIC_CANONICAL_MODEL", "env-only-model")
+    monkeypatch.setenv("OPEN_ALM_LLM_ANTHROPIC_API_KEY", "test-env-anthropic-secret")
+    monkeypatch.setenv("OPEN_ALM_LLM_ANTHROPIC_BASE_URL", "https://env.example.test")
+    monkeypatch.setenv("OPEN_ALM_LLM_ANTHROPIC_DEFAULT_MODEL", "env-only-model")
+    monkeypatch.setenv("OPEN_ALM_LLM_ANTHROPIC_CANONICAL_MODEL", "env-only-model")
     get_settings.cache_clear()
 
 

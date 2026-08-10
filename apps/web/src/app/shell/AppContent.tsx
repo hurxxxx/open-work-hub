@@ -20,7 +20,7 @@ import {
 } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Check } from 'lucide-react';
-import { DetailDrawer } from '@ai-do/ui';
+import { DetailDrawer } from '@open-alm/ui';
 import {
   AnimatePresence,
   LazyMotion,

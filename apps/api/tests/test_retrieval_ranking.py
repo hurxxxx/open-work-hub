@@ -3,11 +3,11 @@ from __future__ import annotations
 import pytest
 from types import SimpleNamespace
 
-from ai_do_api.domains.rag.contracts import RagGroundedAnswer, RagGroundedCitation
-from ai_do_api.domains.rag.providers.fake import FakeRerankClient
-from ai_do_api.domains.retrieval.contracts import RetrievalHit
-from ai_do_api.domains.retrieval import grounding
-from ai_do_api.domains.retrieval.ranking import (
+from open_alm_api.domains.rag.contracts import RagGroundedAnswer, RagGroundedCitation
+from open_alm_api.domains.rag.providers.fake import FakeRerankClient
+from open_alm_api.domains.retrieval.contracts import RetrievalHit
+from open_alm_api.domains.retrieval import grounding
+from open_alm_api.domains.retrieval.ranking import (
     candidate_limit,
     canonical_resource_identity,
     dedupe_ranked_hits,

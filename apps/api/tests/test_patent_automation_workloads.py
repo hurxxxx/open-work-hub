@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from ai_do_api.domains.ai.registry import AiCapabilityRegistry
-from ai_do_api.domains.patent_automation import (
+from open_alm_api.domains.ai.registry import AiCapabilityRegistry
+from open_alm_api.domains.patent_automation import (
     PATENT_AUTOMATION_APP_ID,
     PATENT_INVOICE_EXTRACT_TASK_KIND,
     PATENT_INVOICE_EXTRACT_WORKLOAD_ID,
     register_ai_capabilities,
 )
-from ai_do_api.domains.patent_automation import llm_extract
+from open_alm_api.domains.patent_automation import llm_extract
 
 
 def test_registers_patent_invoice_extraction_workload() -> None:

@@ -21,8 +21,8 @@ def _seed_dev_accounts() -> None:
     """Run the full dev-login seed loop so the /auth/dev-login route can
     find the seeded fixtures (ensure_dev_login_seed_data delegates to
     ensure_seed_data internally)."""
-    from ai_do_api.core.db import get_session_factory
-    from ai_do_api.domains.auth.access import ensure_dev_login_seed_data
+    from open_alm_api.core.db import get_session_factory
+    from open_alm_api.domains.auth.access import ensure_dev_login_seed_data
 
     session_factory = get_session_factory()
     with session_factory() as db:
@@ -31,9 +31,9 @@ def _seed_dev_accounts() -> None:
 
 
 def test_seed_preserves_user_created_space_membership(client: TestClient) -> None:
-    from ai_do_api.core.db import get_session_factory
-    from ai_do_api.domains.auth.access import ensure_seed_data
-    from ai_do_api.domains.auth.models import TeamMember
+    from open_alm_api.core.db import get_session_factory
+    from open_alm_api.domains.auth.access import ensure_seed_data
+    from open_alm_api.domains.auth.models import TeamMember
 
     _seed_dev_accounts()
 
@@ -106,8 +106,8 @@ def test_dev_login_is_idempotent_and_preserves_user_spaces(
     Before the guard landed, each of those requests walked every seed user's
     TeamMember rows and wiped out anything outside the default PMS space,
     destroying user-created spaces on every login."""
-    from ai_do_api.core.db import get_session_factory
-    from ai_do_api.domains.auth.models import TeamMember
+    from open_alm_api.core.db import get_session_factory
+    from open_alm_api.domains.auth.models import TeamMember
     from sqlalchemy import select
 
     _seed_dev_accounts()
@@ -179,9 +179,9 @@ def test_dev_login_seed_syncs_new_workspace_app_catalog_rows(
     visibility rows are additive product metadata and need to be inserted when
     a new app such as web-search is added after a DB already exists.
     """
-    from ai_do_api.core.db import get_session_factory
-    from ai_do_api.domains.auth.access import ensure_dev_login_seed_data
-    from ai_do_api.domains.auth.models import (
+    from open_alm_api.core.db import get_session_factory
+    from open_alm_api.domains.auth.access import ensure_dev_login_seed_data
+    from open_alm_api.domains.auth.models import (
         PlatformAppVisibility,
         Workspace,
         WorkspaceAppEntitlement,
@@ -233,9 +233,9 @@ def test_ensure_seed_data_does_not_overwrite_workspace_renames(
     canonical defaults every time it ran, which made admin-console renames
     silently revert on the next server restart. The guard should skip the
     reconcile entirely once the infrastructure is in place."""
-    from ai_do_api.core.db import get_session_factory
-    from ai_do_api.domains.auth.access import ensure_seed_data
-    from ai_do_api.domains.auth.models import Workspace
+    from open_alm_api.core.db import get_session_factory
+    from open_alm_api.domains.auth.access import ensure_seed_data
+    from open_alm_api.domains.auth.models import Workspace
     from sqlalchemy import select
 
     _seed_dev_accounts()
@@ -272,8 +272,8 @@ def test_seed_still_reconciles_default_space_membership(
     AI TFT."""
     _seed_dev_accounts()
 
-    from ai_do_api.core.db import get_session_factory
-    from ai_do_api.domains.auth.models import Team, TeamMember, User, Workspace
+    from open_alm_api.core.db import get_session_factory
+    from open_alm_api.domains.auth.models import Team, TeamMember, User, Workspace
 
     session_factory = get_session_factory()
     with session_factory() as db:
@@ -293,8 +293,8 @@ def test_seed_still_reconciles_default_space_membership(
                 )
             )
 
-        administrator_space_ms = membership_for("admin@ai-do.local", "administrator")
-        ai_tft_space_ms = membership_for("admin@ai-do.local", "ai-tft")
+        administrator_space_ms = membership_for("admin@open-alm.local", "administrator")
+        ai_tft_space_ms = membership_for("admin@open-alm.local", "ai-tft")
 
         assert administrator_space_ms is not None, (
             "administrator should own the Administrator default space"
@@ -309,8 +309,8 @@ def test_dev_login_recreates_missing_dev_workspace_seeds(
 ) -> None:
     from sqlalchemy.orm import selectinload
 
-    from ai_do_api.core.db import get_session_factory
-    from ai_do_api.domains.auth.models import Team, Workspace
+    from open_alm_api.core.db import get_session_factory
+    from open_alm_api.domains.auth.models import Team, Workspace
 
     _seed_dev_accounts()
     session_factory = get_session_factory()

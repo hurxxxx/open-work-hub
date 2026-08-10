@@ -138,7 +138,7 @@ class SkillHarnessScannerTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             write_text(
-                root / ".agents" / "skills" / "ai-do-desktop-release" / "REFERENCE.md",
+                root / ".agents" / "skills" / "open-alm-desktop-release" / "REFERENCE.md",
                 "retired content\n",
             )
             write_text(
@@ -154,7 +154,7 @@ class SkillHarnessScannerTest(unittest.TestCase):
         self.assertIn("retired_skill_present", self.codes(report))
         self.assertIn("retired_skill_reference", self.codes(report))
         self.assertIn(
-            "retired project skill directories must be removed: ai-do-desktop-release",
+            "retired project skill directories must be removed: open-alm-desktop-release",
             self.messages(report),
         )
 

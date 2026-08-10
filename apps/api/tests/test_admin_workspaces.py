@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from ai_do_api.core.settings import get_settings
-from ai_do_api.domains.docs.app_catalog import DOCS_WORKSPACE_APP
+from open_alm_api.core.settings import get_settings
+from open_alm_api.domains.docs.app_catalog import DOCS_WORKSPACE_APP
 
 
 def _auth_headers(token: str) -> dict[str, str]:
@@ -14,8 +14,8 @@ def _bootstrap_admin_session(client: TestClient) -> dict:
     response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "AI-DO Admin",
-            "email": "admin@ai-do.local",
+            "full_name": "Open ALM Admin",
+            "email": "admin@open-alm.local",
             "password": "supersecret123",
         },
     )
@@ -156,7 +156,7 @@ def test_replace_workspace_bindings_rejects_unknown_user_atomically(
     member = _create_user(
         client,
         token,
-        email="known@ai-do.local",
+        email="known@open-alm.local",
         full_name="Known Member",
     )
     added = client.post(
@@ -208,9 +208,9 @@ def test_replace_workspace_bindings_rejects_all_admin_removal_atomically(
     second_platform_admin = _create_user_with_password(
         client,
         token,
-        email="second-platform@ai-do.local",
+        email="second-platform@open-alm.local",
         full_name="Second Platform Admin",
-        password="AI-DO!platform2",
+        password="Open ALM!platform2",
     )
     promoted = client.patch(
         f"/api/v1/admin/users/{second_platform_admin['user']['id']}",
@@ -222,7 +222,7 @@ def test_replace_workspace_bindings_rejects_all_admin_removal_atomically(
         "/api/v1/auth/login",
         json={
             "login_id": "second-platform",
-            "password": "AI-DO!platform2",
+            "password": "Open ALM!platform2",
         },
     )
     assert login.status_code == 200, login.text
@@ -258,13 +258,13 @@ def test_replace_workspace_bindings_keeps_valid_replace_behavior(
     existing_member = _create_user(
         client,
         token,
-        email="existing@ai-do.local",
+        email="existing@open-alm.local",
         full_name="Existing Member",
     )
     new_member = _create_user(
         client,
         token,
-        email="new@ai-do.local",
+        email="new@open-alm.local",
         full_name="New Member",
     )
     added = client.post(
@@ -548,9 +548,9 @@ def test_sensitive_workspace_app_activation_requires_platform_admin(
     workspace_admin_payload = _create_user_with_password(
         client,
         platform_token,
-        email="workspaceadmin@ai-do.local",
+        email="workspaceadmin@open-alm.local",
         full_name="Workspace Admin",
-        password="AI-DO!workspace1",
+        password="Open ALM!workspace1",
     )
     add_response = client.post(
         f"/api/v1/admin/workspaces/{workspace['id']}/members",
@@ -565,7 +565,7 @@ def test_sensitive_workspace_app_activation_requires_platform_admin(
 
     login = client.post(
         "/api/v1/auth/login",
-        json={"login_id": "workspaceadmin", "password": "AI-DO!workspace1"},
+        json={"login_id": "workspaceadmin", "password": "Open ALM!workspace1"},
     )
     assert login.status_code == 200, login.text
     workspace_admin_response = client.patch(
@@ -673,7 +673,7 @@ def test_add_remove_member_endpoints(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
     token = admin["token"]
     workspace = _create_workspace(client, token, name="People Hub")
-    other_user = _create_user(client, token, email="alice@ai-do.local", full_name="Alice")
+    other_user = _create_user(client, token, email="alice@open-alm.local", full_name="Alice")
 
     add_response = client.post(
         f"/api/v1/admin/workspaces/{workspace['id']}/members",
@@ -748,15 +748,15 @@ def test_member_endpoints_require_workspace_admin(client: TestClient) -> None:
     intruder_payload = _create_user_with_password(
         client,
         admin_token,
-        email="intruder@ai-do.local",
+        email="intruder@open-alm.local",
         full_name="Intruder",
-        password="AI-DO!intruder1",
+        password="Open ALM!intruder1",
     )
     intruder = intruder_payload["user"]
 
     login = client.post(
         "/api/v1/auth/login",
-        json={"login_id": "intruder", "password": "AI-DO!intruder1"},
+        json={"login_id": "intruder", "password": "Open ALM!intruder1"},
     )
     assert login.status_code == 200, login.text
     intruder_token = login.json()["token"]
@@ -816,7 +816,7 @@ def test_paginated_members_endpoint_filter_search_and_role_counts(client: TestCl
         u = _create_user(
             client,
             token,
-            email=f"user{i}@ai-do.local",
+            email=f"user{i}@open-alm.local",
             full_name=f"User {i}",
         )
         user_ids.append(u["id"])
@@ -859,7 +859,7 @@ def test_paginated_members_endpoint_filter_search_and_role_counts(client: TestCl
         headers=_auth_headers(token),
     ).json()
     assert search_filter["total"] == 1
-    assert search_filter["items"][0]["subject_secondary"] == "user2@ai-do.local"
+    assert search_filter["items"][0]["subject_secondary"] == "user2@open-alm.local"
 
 
 def test_bulk_member_endpoint_partial_failure(client: TestClient) -> None:
@@ -867,8 +867,8 @@ def test_bulk_member_endpoint_partial_failure(client: TestClient) -> None:
     token = admin["token"]
     workspace = _create_workspace(client, token, name="Bulk Lab")
 
-    user_a = _create_user(client, token, email="alice@ai-do.local", full_name="Alice")
-    user_b = _create_user(client, token, email="bob@ai-do.local", full_name="Bob")
+    user_a = _create_user(client, token, email="alice@open-alm.local", full_name="Alice")
+    user_b = _create_user(client, token, email="bob@open-alm.local", full_name="Bob")
 
     response = client.post(
         f"/api/v1/admin/workspaces/{workspace['id']}/members/bulk",
@@ -924,9 +924,9 @@ def test_other_admin_can_demote_and_remove_admin(client: TestClient) -> None:
     second_payload = _create_user_with_password(
         client,
         token,
-        email="second@ai-do.local",
+        email="second@open-alm.local",
         full_name="Second Admin",
-        password="AI-DO!second12",
+        password="Open ALM!second12",
     )
     second_id = second_payload["user"]["id"]
 
@@ -940,7 +940,7 @@ def test_other_admin_can_demote_and_remove_admin(client: TestClient) -> None:
     # Login as the second admin and try to remove the only owner.
     login = client.post(
         "/api/v1/auth/login",
-        json={"login_id": "second", "password": "AI-DO!second12"},
+        json={"login_id": "second", "password": "Open ALM!second12"},
     )
     assert login.status_code == 200, login.text
     second_token = login.json()["token"]

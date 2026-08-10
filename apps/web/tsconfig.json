@@ -9,16 +9,16 @@
     "types": ["vite/client", "vitest"],
     "rootDir": "../..",
     "paths": {
-      "@ai-do/contracts": ["../../packages/contracts/src/index.ts"],
-      "@ai-do/contracts/openapi": [
+      "@open-alm/contracts": ["../../packages/contracts/src/index.ts"],
+      "@open-alm/contracts/openapi": [
         "../../packages/contracts/src/openapi.generated.d.ts"
       ],
-      "@ai-do/contracts/*": ["../../packages/contracts/src/*"],
-      "@ai-do/core-web": ["../../packages/core-web/src/index.ts"],
-      "@ai-do/core-web/*": ["../../packages/core-web/src/*"],
-      "@ai-do/ui": ["../../packages/ui/src/index.ts"],
-      "@ai-do/ui/*": ["../../packages/ui/src/lib/*"],
-      "@ai-do/ui/styles.css": ["../../packages/ui/styles.css"],
+      "@open-alm/contracts/*": ["../../packages/contracts/src/*"],
+      "@open-alm/core-web": ["../../packages/core-web/src/index.ts"],
+      "@open-alm/core-web/*": ["../../packages/core-web/src/*"],
+      "@open-alm/ui": ["../../packages/ui/src/index.ts"],
+      "@open-alm/ui/*": ["../../packages/ui/src/lib/*"],
+      "@open-alm/ui/styles.css": ["../../packages/ui/styles.css"],
       "@/src/*": ["./src/*"]
     }
   },

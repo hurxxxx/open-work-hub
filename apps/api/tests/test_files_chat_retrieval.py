@@ -8,14 +8,14 @@ from sqlalchemy import select
 
 from dev_accounts import auth_headers, dev_login
 
-from ai_do_api.core.db import get_session_factory
-from ai_do_api.domains.auth.models import User, Workspace
-from ai_do_api.domains.files import chat_retrieval
-from ai_do_api.domains.files import service as files_service
-from ai_do_api.domains.files.models import FileManagerFile
-from ai_do_api.domains.files.search import FileSearchRuntime, FileSearchUnavailable
-from ai_do_api.domains.retrieval.contracts import RetrievalHit
-from ai_do_api.domains.source_access.resource_types import FILE_MANAGER_FILE_RESOURCE_TYPE
+from open_alm_api.core.db import get_session_factory
+from open_alm_api.domains.auth.models import User, Workspace
+from open_alm_api.domains.files import chat_retrieval
+from open_alm_api.domains.files import service as files_service
+from open_alm_api.domains.files.models import FileManagerFile
+from open_alm_api.domains.files.search import FileSearchRuntime, FileSearchUnavailable
+from open_alm_api.domains.retrieval.contracts import RetrievalHit
+from open_alm_api.domains.source_access.resource_types import FILE_MANAGER_FILE_RESOURCE_TYPE
 
 
 def test_file_chat_evidence_raises_existing_unavailable_error_for_closed_runtime(
@@ -292,7 +292,7 @@ def test_file_chat_evidence_filters_stale_cross_workspace_candidate_with_source_
 
     with get_session_factory()() as db:
         workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
-        user = db.scalar(select(User).where(User.email == "delivery-hub-member@ai-do.local"))
+        user = db.scalar(select(User).where(User.email == "delivery-hub-member@open-alm.local"))
         assert workspace is not None and user is not None
         _stub_retrieval(
             monkeypatch,

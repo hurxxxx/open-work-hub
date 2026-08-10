@@ -83,7 +83,7 @@ const TAB_EMOJI: Record<TabId, string> = {
 };
 
 function historyStorageKey(workspaceSlug: string | null): string | null {
-  return workspaceSlug ? `ai-do.patent.history.${workspaceSlug}` : null;
+  return workspaceSlug ? `open-alm.patent.history.${workspaceSlug}` : null;
 }
 
 function readHistory(workspaceSlug: string | null): HistoryEntry[] {
@@ -114,7 +114,7 @@ function writeHistory(
 
 // Report tab input|result split ratio (fraction of width given to the input
 // pane). Clamped to a sane band so neither pane can be dragged shut.
-const REPORT_SPLIT_KEY = 'ai-do.patent.report.split';
+const REPORT_SPLIT_KEY = 'open-alm.patent.report.split';
 const SPLIT_MIN = 0.25;
 const SPLIT_MAX = 0.75;
 
@@ -139,7 +139,7 @@ function writeReportSplit(ratio: number): void {
 }
 
 // '내 검색' history sidebar width (px), drag-resizable from its right edge.
-const HISTORY_WIDTH_KEY = 'ai-do.patent.history-width';
+const HISTORY_WIDTH_KEY = 'open-alm.patent.history-width';
 const HISTORY_MIN_WIDTH = 180;
 const HISTORY_MAX_WIDTH = 420;
 const HISTORY_DEFAULT_WIDTH = 224;

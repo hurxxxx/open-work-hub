@@ -6,9 +6,9 @@ import pytest
 from sqlalchemy import create_engine, event, select
 from sqlalchemy.orm import Session
 
-from ai_do_api.core.db import Base
-from ai_do_api.domains.auth.models import AuditLog, OrgUnit, User
-from ai_do_api.domains.hr.erp_snapshot import (
+from open_alm_api.core.db import Base
+from open_alm_api.domains.auth.models import AuditLog, OrgUnit, User
+from open_alm_api.domains.hr.erp_snapshot import (
     AcceptedErpEmployeeSnapshotError,
     ERP_EMPLOYEE_COLUMNS,
     ERP_EMPLOYEE_LEGACY_SCHEMA_VERSION,
@@ -21,15 +21,15 @@ from ai_do_api.domains.hr.erp_snapshot import (
     load_latest_erp_hr_snapshot_run,
     run_erp_hr_snapshot,
 )
-from ai_do_api.domains.hr.groupware_sync import GroupwareOrgRow, GroupwareUserRow
-from ai_do_api.domains.hr.history import prune_hr_history, run_groupware_hr_sync
-from ai_do_api.domains.hr.models import (
+from open_alm_api.domains.hr.groupware_sync import GroupwareOrgRow, GroupwareUserRow
+from open_alm_api.domains.hr.history import prune_hr_history, run_groupware_hr_sync
+from open_alm_api.domains.hr.models import (
     HrSyncChange,
     HrSyncOrgSnapshotRow,
     HrSyncRun,
     HrSyncUserSnapshotRow,
 )
-from ai_do_api.domains.management_tasks import service as health_checkup_service
+from open_alm_api.domains.management_tasks import service as health_checkup_service
 
 
 @pytest.fixture

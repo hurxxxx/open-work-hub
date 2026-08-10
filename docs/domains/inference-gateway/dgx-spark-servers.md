@@ -3,7 +3,7 @@
 상태: 운영 참고 문서
 운영 변경 전에는 반드시 live endpoint와 배포 대상 환경 파일을 다시 확인한다.
 
-이 문서는 DGX Spark replica와 load balancer를 AI-DO local LLM으로 연결하는 계약만
+이 문서는 DGX Spark replica와 load balancer를 Open ALM local LLM으로 연결하는 계약만
 설명한다. 일시적인 메모리 사용량, 하드웨어 상태, SSH 키·지문, 현재 로드된 특정 모델명은
 문서에 보관하지 않는다.
 
@@ -13,7 +13,7 @@
 - provider endpoint와 연결 설정: 관리자 `LLM 관리 > Provider`
 - 각 vLLM 프로세스가 실제로 로드하는 모델: 서버의 `/srv/vllm/qwen36-docker.env`
 - vLLM 시작 동작: `ops/vllm/start-qwen36-docker.sh`
-- 관리 화면의 replica 진단 대상: `AI_DO_MODEL_STATUS_DIAGNOSTIC_TARGETS_JSON`
+- 관리 화면의 replica 진단 대상: `OPEN_ALM_MODEL_STATUS_DIAGNOSTIC_TARGETS_JSON`
 
 관리자 설정은 이미 실행 중인 vLLM 프로세스의 모델을 교체하지 않는다. 먼저 서버 runtime을
 변경하고 `/v1/models`를 확인한 다음, 관리자가 탐색·승인·기본 모델 선택을 수행한다.
@@ -68,7 +68,7 @@ VLLM_IMAGE=<validated-runtime-image>
 replica 직접 진단은 코드의 고정 102/103 목록이 아니라 다음 JSON 배열로 선언한다.
 
 ```env
-AI_DO_MODEL_STATUS_DIAGNOSTIC_TARGETS_JSON='[
+OPEN_ALM_MODEL_STATUS_DIAGNOSTIC_TARGETS_JSON='[
   {"id":"dgx-spark-102","display_name":"DGX Spark 102","endpoint_url":"http://128.1.253.102:8000/v1","provider_id":"local","role":"redundancy"},
   {"id":"dgx-spark-103","display_name":"DGX Spark 103","endpoint_url":"http://128.1.253.103:8001/v1","provider_id":"local","role":"redundancy"}
 ]'

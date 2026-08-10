@@ -2,7 +2,7 @@
 
 상태: 현재 정책과 구현 경계
 
-AI-DO의 기본 AI 동작은 내부 원본을 읽고, 검색하고, 요약하는 보조 기능이다. 원본 시스템을 실제로 변경하는 write 동작은 기능 플래그, 사용자 승인, 원본 ACL, 감사 로그가 모두 충족될 때만 실행한다.
+Open ALM의 기본 AI 동작은 내부 원본을 읽고, 검색하고, 요약하는 보조 기능이다. 원본 시스템을 실제로 변경하는 write 동작은 기능 플래그, 사용자 승인, 원본 ACL, 감사 로그가 모두 충족될 때만 실행한다.
 
 ## 기본 원칙
 
@@ -27,7 +27,7 @@ AI-DO의 기본 AI 동작은 내부 원본을 읽고, 검색하고, 요약하는
 
 ## 현재 구현 계약
 
-- `AI_DO_AI_WRITE_TOOLS_ENABLED`의 기본값은 `false`다. 비활성 상태에서는 write tool을 registry와 AI surface에 노출하지 않는다.
+- `OPEN_ALM_AI_WRITE_TOOLS_ENABLED`의 기본값은 `false`다. 비활성 상태에서는 write tool을 registry와 AI surface에 노출하지 않는다.
 - 활성화 시 PMS의 task 생성·수정·댓글·삭제, Meeting의 회의 생성, Planner의 일정 생성·수정·삭제 tool을 등록한다.
 - write tool은 `mode="write"`, `approval_required=True`, 유효한 `preview_builder_id`를 선언한다. Registry는 이 계약에서 descriptor의 `approval_policy="required"`를 파생한다.
 - 첫 실행은 approval preview와 `approval_required` 이벤트를 만들고 실행을 중단한다.

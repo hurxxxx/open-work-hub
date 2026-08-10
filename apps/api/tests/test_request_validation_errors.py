@@ -1,4 +1,4 @@
-from ai_do_api.core.request_validation_errors import build_request_validation_error_body
+from open_alm_api.core.request_validation_errors import build_request_validation_error_body
 
 
 def test_request_validation_body_prefers_first_domain_error() -> None:

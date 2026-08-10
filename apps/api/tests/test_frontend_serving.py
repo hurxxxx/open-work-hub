@@ -2,12 +2,12 @@ from fastapi.testclient import TestClient
 import pytest
 from starlette.websockets import WebSocketDisconnect
 
-from ai_do_api.app import create_app
-from ai_do_api.core.settings import DEFAULT_FRONTEND_DIST_DIR, get_settings
+from open_alm_api.app import create_app
+from open_alm_api.core.settings import DEFAULT_FRONTEND_DIST_DIR, get_settings
 
 
 def test_empty_frontend_dist_dir_uses_default(monkeypatch) -> None:
-    monkeypatch.setenv("AI_DO_API_FRONTEND_DIST_DIR", "")
+    monkeypatch.setenv("OPEN_ALM_API_FRONTEND_DIST_DIR", "")
     get_settings.cache_clear()
     try:
         assert get_settings().frontend_dist_dir == DEFAULT_FRONTEND_DIST_DIR
@@ -26,8 +26,8 @@ def test_frontend_serving_returns_static_asset_and_spa_fallback(
     (frontend_dir / "recording-sync-sw.js").write_text("// sw", encoding="utf-8")
     (assets_dir / "app.js").write_text("console.log('ok');", encoding="utf-8")
 
-    monkeypatch.setenv("AI_DO_API_SERVE_FRONTEND", "1")
-    monkeypatch.setenv("AI_DO_API_FRONTEND_DIST_DIR", str(frontend_dir))
+    monkeypatch.setenv("OPEN_ALM_API_SERVE_FRONTEND", "1")
+    monkeypatch.setenv("OPEN_ALM_API_FRONTEND_DIST_DIR", str(frontend_dir))
     get_settings.cache_clear()
     try:
         client = TestClient(create_app(initialize_runtime=False))
@@ -77,8 +77,8 @@ def test_frontend_serving_does_not_fallback_missing_static_assets(
     frontend_dir.mkdir()
     (frontend_dir / "index.html").write_text('<div id="root"></div>', encoding="utf-8")
 
-    monkeypatch.setenv("AI_DO_API_SERVE_FRONTEND", "1")
-    monkeypatch.setenv("AI_DO_API_FRONTEND_DIST_DIR", str(frontend_dir))
+    monkeypatch.setenv("OPEN_ALM_API_SERVE_FRONTEND", "1")
+    monkeypatch.setenv("OPEN_ALM_API_FRONTEND_DIST_DIR", str(frontend_dir))
     get_settings.cache_clear()
     try:
         client = TestClient(create_app(initialize_runtime=False))
@@ -101,17 +101,17 @@ def test_frontend_build_guard_rejects_stale_browser_requests_before_routing(
     frontend_dir = tmp_path / "web"
     frontend_dir.mkdir()
     (frontend_dir / "index.html").write_text('<div id="root"></div>', encoding="utf-8")
-    (frontend_dir / ".ai-do-build-id").write_text("build-current\n", encoding="utf-8")
+    (frontend_dir / ".open-alm-build-id").write_text("build-current\n", encoding="utf-8")
 
-    monkeypatch.setenv("AI_DO_API_SERVE_FRONTEND", "1")
-    monkeypatch.setenv("AI_DO_API_FRONTEND_DIST_DIR", str(frontend_dir))
+    monkeypatch.setenv("OPEN_ALM_API_SERVE_FRONTEND", "1")
+    monkeypatch.setenv("OPEN_ALM_API_FRONTEND_DIST_DIR", str(frontend_dir))
     get_settings.cache_clear()
     try:
         client = TestClient(create_app(initialize_runtime=False))
         stale_response = client.get(
             "/api/not-a-real-route",
             headers={
-                "X-AI-DO-Web-Build": "build-old",
+                "X-Open ALM-Web-Build": "build-old",
                 "Sec-Fetch-Site": "same-origin",
                 "Sec-Fetch-Dest": "empty",
             },
@@ -126,7 +126,7 @@ def test_frontend_build_guard_rejects_stale_browser_requests_before_routing(
         current_response = client.get(
             "/api/not-a-real-route",
             headers={
-                "X-AI-DO-Web-Build": "build-current",
+                "X-Open ALM-Web-Build": "build-current",
                 "Sec-Fetch-Site": "same-origin",
                 "Sec-Fetch-Dest": "empty",
             },
@@ -146,8 +146,8 @@ def test_frontend_build_guard_rejects_stale_browser_requests_before_routing(
     for response in (stale_response, missing_browser_response):
         assert response.status_code == 409
         assert response.headers["cache-control"] == "no-store"
-        assert response.headers["x-ai-do-reload-required"] == "1"
-        assert response.headers["x-ai-do-web-build"] == "build-current"
+        assert response.headers["x-open-alm-reload-required"] == "1"
+        assert response.headers["x-open-alm-web-build"] == "build-current"
         assert response.json()["code"] == "CLIENT_BUILD_MISMATCH"
     assert current_response.status_code == 404
     assert non_browser_response.status_code == 404
@@ -158,21 +158,21 @@ def test_frontend_build_guard_rejects_stale_websockets(monkeypatch, tmp_path) ->
     frontend_dir = tmp_path / "web"
     frontend_dir.mkdir()
     (frontend_dir / "index.html").write_text('<div id="root"></div>', encoding="utf-8")
-    (frontend_dir / ".ai-do-build-id").write_text("build-current\n", encoding="utf-8")
+    (frontend_dir / ".open-alm-build-id").write_text("build-current\n", encoding="utf-8")
 
-    monkeypatch.setenv("AI_DO_API_SERVE_FRONTEND", "1")
-    monkeypatch.setenv("AI_DO_API_FRONTEND_DIST_DIR", str(frontend_dir))
+    monkeypatch.setenv("OPEN_ALM_API_SERVE_FRONTEND", "1")
+    monkeypatch.setenv("OPEN_ALM_API_FRONTEND_DIST_DIR", str(frontend_dir))
     get_settings.cache_clear()
     try:
         client = TestClient(create_app(initialize_runtime=False))
         with client.websocket_connect(
-            "/api/not-a-real-websocket?__ai_do_build=build-old"
+            "/api/not-a-real-websocket?__open_alm_build=build-old"
         ) as stale_websocket:
             with pytest.raises(WebSocketDisconnect) as stale_exc:
                 stale_websocket.receive_text()
         with pytest.raises(WebSocketDisconnect) as current_exc:
             with client.websocket_connect(
-                "/api/not-a-real-websocket?__ai_do_build=build-current"
+                "/api/not-a-real-websocket?__open_alm_build=build-current"
             ):
                 pass
     finally:
@@ -190,8 +190,8 @@ def test_frontend_serving_does_not_swallow_reserved_api_paths(
     frontend_dir.mkdir()
     (frontend_dir / "index.html").write_text('<div id="root"></div>', encoding="utf-8")
 
-    monkeypatch.setenv("AI_DO_API_SERVE_FRONTEND", "1")
-    monkeypatch.setenv("AI_DO_API_FRONTEND_DIST_DIR", str(frontend_dir))
+    monkeypatch.setenv("OPEN_ALM_API_SERVE_FRONTEND", "1")
+    monkeypatch.setenv("OPEN_ALM_API_FRONTEND_DIST_DIR", str(frontend_dir))
     get_settings.cache_clear()
     try:
         client = TestClient(create_app(initialize_runtime=False))
@@ -211,8 +211,8 @@ def test_frontend_serving_closes_unknown_websocket_paths(
     frontend_dir.mkdir()
     (frontend_dir / "index.html").write_text('<div id="root"></div>', encoding="utf-8")
 
-    monkeypatch.setenv("AI_DO_API_SERVE_FRONTEND", "1")
-    monkeypatch.setenv("AI_DO_API_FRONTEND_DIST_DIR", str(frontend_dir))
+    monkeypatch.setenv("OPEN_ALM_API_SERVE_FRONTEND", "1")
+    monkeypatch.setenv("OPEN_ALM_API_FRONTEND_DIST_DIR", str(frontend_dir))
     get_settings.cache_clear()
     try:
         client = TestClient(create_app(initialize_runtime=False))

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
-import type { BlockContent } from '@ai-do/ui';
+import type { BlockContent } from '@open-alm/ui';
 import { useTranslation } from 'react-i18next';
 
 import { normalizeTimeZone } from '@/src/platform/time/time-utils';

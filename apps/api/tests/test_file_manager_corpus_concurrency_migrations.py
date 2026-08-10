@@ -11,21 +11,21 @@ from sqlalchemy import create_engine, event, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from ai_do_api.domains.auth.access import load_user_graph
-from ai_do_api.domains.auth.models import (
+from open_alm_api.domains.auth.access import load_user_graph
+from open_alm_api.domains.auth.models import (
     User,
     UserSystemRole,
     Workspace,
     WorkspaceUserBinding,
 )
-from ai_do_api.domains.files import service as files_service
-from ai_do_api.domains.files.models import (
+from open_alm_api.domains.files import service as files_service
+from open_alm_api.domains.files.models import (
     FileManagerCorpus,
     FileManagerFile,
     FileManagerFolder,
 )
-from ai_do_api.domains.retrieval.models import RetrievalPartition
-from ai_do_api.domains.retrieval.partitioning import ensure_default_partition
+from open_alm_api.domains.retrieval.models import RetrievalPartition
+from open_alm_api.domains.retrieval.partitioning import ensure_default_partition
 
 
 pytestmark = pytest.mark.migration

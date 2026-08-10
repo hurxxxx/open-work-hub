@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from ai_do_api.domains.images.context_refs import (
+from open_alm_api.domains.images.context_refs import (
     doc_page_snapshot,
     flatten_doc_text,
     hydrated_context_ref,
@@ -13,8 +13,8 @@ from ai_do_api.domains.images.context_refs import (
     task_list_snapshot,
     task_snapshot,
 )
-from ai_do_api.domains.images import context_ref_hydration
-from ai_do_api.domains.images.context_ref_hydration import hydrate_context_refs
+from open_alm_api.domains.images import context_ref_hydration
+from open_alm_api.domains.images.context_ref_hydration import hydrate_context_refs
 
 
 class _FakeDb:

@@ -23,7 +23,7 @@ import {
   useConfirm,
   useToast,
   type DataTableColumn,
-} from '@ai-do/ui';
+} from '@open-alm/ui';
 
 import { downloadBlobAsFile } from '@/src/platform/browser/browser-download';
 import { useAuth } from '@/src/platform/auth/auth-provider';

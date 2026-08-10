@@ -26,7 +26,7 @@ class ApiI18nMessageCheckerTest(unittest.TestCase):
     ):
         catalog_messages_text = textwrap.dedent(catalog_messages).strip()
         catalog_source = api_i18n.PythonSource(
-            path=Path("/repo/apps/api/src/ai_do_api/core/i18n_catalog.py"),
+            path=Path("/repo/apps/api/src/open_alm_api/core/i18n_catalog.py"),
             text=(
                 'SUPPORTED_LOCALES = ("ko-KR", "en-US")\n'
                 f"MESSAGES = {catalog_messages_text}\n"
@@ -36,7 +36,7 @@ class ApiI18nMessageCheckerTest(unittest.TestCase):
         )
         source_files = tuple(
             api_i18n.PythonSource(
-                path=Path("/repo/apps/api/src/ai_do_api") / relative_path,
+                path=Path("/repo/apps/api/src/open_alm_api") / relative_path,
                 text=textwrap.dedent(text),
             )
             for relative_path, text in (source_texts or {}).items()

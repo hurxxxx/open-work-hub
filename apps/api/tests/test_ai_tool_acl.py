@@ -11,10 +11,10 @@ from dev_accounts import dev_login
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ai_do_api.core import llm as llm_core
-from ai_do_api.core.db import get_engine
-from ai_do_api.core.settings import get_settings
-from ai_do_api.domains.auth.models import AuditLog
+from open_alm_api.core import llm as llm_core
+from open_alm_api.core.db import get_engine
+from open_alm_api.core.settings import get_settings
+from open_alm_api.domains.auth.models import AuditLog
 
 
 def _dev_login(client: TestClient, account_key: str) -> dict:

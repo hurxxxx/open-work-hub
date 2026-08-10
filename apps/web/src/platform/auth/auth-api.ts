@@ -1,5 +1,5 @@
-import { authRoutes } from '@ai-do/contracts/auth';
-import { hasCoreWorkspaceMembership } from '@ai-do/core-web/workspace-access';
+import { authRoutes } from '@open-alm/contracts/auth';
+import { hasCoreWorkspaceMembership } from '@open-alm/core-web/workspace-access';
 
 import { apiFetchJsonWithMappedError } from '@/src/platform/api/client';
 import type { WorkspaceShellAppId } from '@/src/app/shell/navigation-types';

@@ -195,18 +195,18 @@ def test_test_resource_names_are_scoped_to_the_run() -> None:
     minio_target = infra.new_minio_target()
     index_prefix = infra.new_opensearch_index_prefix()
 
-    assert minio_target.bucket.startswith("ai-do-api-test-abc123-")
-    assert index_prefix.startswith("ai_do_api_test_abc123_")
-    assert infra.postgres_run_prefix == "ai_do_test_abc123_"
+    assert minio_target.bucket.startswith("open-alm-api-test-abc123-")
+    assert index_prefix.startswith("open_alm_api_test_abc123_")
+    assert infra.postgres_run_prefix == "open_alm_test_abc123_"
 
 
 def test_cleanup_refuses_resources_outside_the_current_run() -> None:
     infra = _infra()
 
     with pytest.raises(RuntimeError, match="outside this test run"):
-        infra.cleanup_minio_bucket("ai-do-dev")
+        infra.cleanup_minio_bucket("open-alm-dev")
     with pytest.raises(RuntimeError, match="outside this test run"):
-        infra.cleanup_opensearch_indices("ai-do-dev")
+        infra.cleanup_opensearch_indices("open-alm-dev")
 
 
 def test_opensearch_cleanup_deletes_and_verifies_run_prefix(monkeypatch) -> None:
@@ -233,25 +233,25 @@ def test_opensearch_cleanup_deletes_and_verifies_run_prefix(monkeypatch) -> None
         lambda url, **_kwargs: calls.append(("get", url)) or Response(),
     )
 
-    infra.cleanup_opensearch_indices("ai_do_api_test_abc123_case")
+    infra.cleanup_opensearch_indices("open_alm_api_test_abc123_case")
 
     assert calls == [
-        ("delete", "http://127.0.0.1:59210/ai_do_api_test_abc123_case*"),
+        ("delete", "http://127.0.0.1:59210/open_alm_api_test_abc123_case*"),
         (
             "get",
-            "http://127.0.0.1:59210/_cat/indices/ai_do_api_test_abc123_case*",
+            "http://127.0.0.1:59210/_cat/indices/open_alm_api_test_abc123_case*",
         ),
     ]
 
 
 def test_load_refuses_production_profile(monkeypatch) -> None:
     values = {
-        "AI_DO_TEST_REDIS_URL": "redis://127.0.0.1:56380/0",
-        "AI_DO_TEST_MINIO_ENDPOINT": "http://127.0.0.1:59010",
-        "AI_DO_TEST_MINIO_ACCESS_KEY": "test-access",
-        "AI_DO_TEST_MINIO_SECRET_KEY": "test-secret",
-        "AI_DO_TEST_OPENSEARCH_URL": "http://127.0.0.1:59210",
-        "AI_DO_ENV_PROFILE": "production",
+        "OPEN_ALM_TEST_REDIS_URL": "redis://127.0.0.1:56380/0",
+        "OPEN_ALM_TEST_MINIO_ENDPOINT": "http://127.0.0.1:59010",
+        "OPEN_ALM_TEST_MINIO_ACCESS_KEY": "test-access",
+        "OPEN_ALM_TEST_MINIO_SECRET_KEY": "test-secret",
+        "OPEN_ALM_TEST_OPENSEARCH_URL": "http://127.0.0.1:59210",
+        "OPEN_ALM_ENV_PROFILE": "production",
     }
     monkeypatch.setattr(
         infra_module.os,
@@ -266,11 +266,11 @@ def test_load_refuses_production_profile(monkeypatch) -> None:
 
 def test_load_refuses_missing_environment_profile(monkeypatch) -> None:
     values = {
-        "AI_DO_TEST_REDIS_URL": "redis://127.0.0.1:56380/0",
-        "AI_DO_TEST_MINIO_ENDPOINT": "http://127.0.0.1:59010",
-        "AI_DO_TEST_MINIO_ACCESS_KEY": "test-access",
-        "AI_DO_TEST_MINIO_SECRET_KEY": "test-secret",
-        "AI_DO_TEST_OPENSEARCH_URL": "http://127.0.0.1:59210",
+        "OPEN_ALM_TEST_REDIS_URL": "redis://127.0.0.1:56380/0",
+        "OPEN_ALM_TEST_MINIO_ENDPOINT": "http://127.0.0.1:59010",
+        "OPEN_ALM_TEST_MINIO_ACCESS_KEY": "test-access",
+        "OPEN_ALM_TEST_MINIO_SECRET_KEY": "test-secret",
+        "OPEN_ALM_TEST_OPENSEARCH_URL": "http://127.0.0.1:59210",
     }
     monkeypatch.setattr(
         infra_module.os,
@@ -313,7 +313,7 @@ def test_minio_cleanup_verifies_bucket_absence(monkeypatch) -> None:
         lambda _self: fake_client,
     )
 
-    bucket = "ai-do-api-test-abc123-case"
+    bucket = "open-alm-api-test-abc123-case"
     infra.cleanup_minio_bucket(bucket)
 
     assert removed == [f"{bucket}/item", bucket]
@@ -323,12 +323,12 @@ def test_unrecognized_test_endpoint_requires_explicit_non_production_ack(
     monkeypatch,
 ) -> None:
     values = {
-        "AI_DO_TEST_REDIS_URL": "redis://production-alias.invalid:6379/0",
-        "AI_DO_TEST_MINIO_ENDPOINT": "https://production-alias.invalid:9000",
-        "AI_DO_TEST_MINIO_ACCESS_KEY": "test-access",
-        "AI_DO_TEST_MINIO_SECRET_KEY": "test-secret",
-        "AI_DO_TEST_OPENSEARCH_URL": "https://production-alias.invalid:9200",
-        "AI_DO_ENV_PROFILE": "development",
+        "OPEN_ALM_TEST_REDIS_URL": "redis://production-alias.invalid:6379/0",
+        "OPEN_ALM_TEST_MINIO_ENDPOINT": "https://production-alias.invalid:9000",
+        "OPEN_ALM_TEST_MINIO_ACCESS_KEY": "test-access",
+        "OPEN_ALM_TEST_MINIO_SECRET_KEY": "test-secret",
+        "OPEN_ALM_TEST_OPENSEARCH_URL": "https://production-alias.invalid:9200",
+        "OPEN_ALM_ENV_PROFILE": "development",
     }
     monkeypatch.setattr(
         infra_module.os,
@@ -348,7 +348,7 @@ def test_unrecognized_postgres_template_is_rejected_without_ack(monkeypatch) -> 
         infra_module.os,
         "getenv",
         lambda name, default=None: (
-            "development" if name == "AI_DO_ENV_PROFILE" else default
+            "development" if name == "OPEN_ALM_ENV_PROFILE" else default
         ),
     )
     monkeypatch.setattr(infra_module, "_approved_dev_values", lambda _name: set())

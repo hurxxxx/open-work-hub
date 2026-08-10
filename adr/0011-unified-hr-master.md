@@ -149,7 +149,7 @@ resolution revision으로 재생성한다. Master row는 완료 후 365일 보�
 - 잘못된 사번은 정상 인원의 반영을 막지 않지만 conflict로 명시적으로 드러난다.
 - Source별 조직 체계는 보존되며 ERP 평면 부서에 존재하지 않는 계층을 추론하지
   않는다.
-- 종합검진은 master의 ERP 기준 view로 전환하되 AI-DO 계정·권한은 그룹웨어 projection을
+- 종합검진은 master의 ERP 기준 view로 전환하되 Open ALM 계정·권한은 그룹웨어 projection을
   유지한다.
 - 관리자 매핑과 인력 구분은 integrated 정합 projection만 바꾸며 ERP 기준 view의 인원,
   9개 field와 projection hash를 바꾸지 않는다.

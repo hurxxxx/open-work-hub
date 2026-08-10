@@ -11,8 +11,8 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock('@ai-do/ui', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@ai-do/ui')>();
+vi.mock('@open-alm/ui', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@open-alm/ui')>();
   return {
     ...actual,
     BlockEditor: () => <div data-testid="block-editor" />,

@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { RefreshCw, Square, Trash2 } from 'lucide-react';
 
-import { Button } from '@ai-do/ui';
+import { Button } from '@open-alm/ui';
 
 import { UserDateTime } from '@/src/components/date/UserDateTime';
 import { cn } from '@/src/lib/utils';

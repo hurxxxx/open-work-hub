@@ -3,7 +3,7 @@ import {
   REALTIME_CLIENT_EVENT_TYPES,
   REALTIME_SERVER_EVENT_TYPES,
   createDocsPagesRealtimeSubscriptionMessage,
-} from '@ai-do/contracts/realtime';
+} from '@open-alm/contracts/realtime';
 
 import {
   createRealtimeRuntime,

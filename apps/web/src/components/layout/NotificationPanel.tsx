@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { LazyMotion, domAnimation, m } from 'motion/react';
 import { X, Check, CheckCheck, Loader2 } from 'lucide-react';
-import { Button } from '@ai-do/ui/primitives/button';
+import { Button } from '@open-alm/ui/primitives/button';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { FLOATING_DM_OPEN_EVENT } from '@/src/platform/personal-widgets/floating-panel-events';
 import {

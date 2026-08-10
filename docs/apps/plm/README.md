@@ -1,6 +1,6 @@
 # PLM App
 
-PLM은 AI-DO의 원장 시스템이 아니다. 현재 코드에는 PLM 데이터를 변경하는 write endpoint나 AI tool이 없다.
+PLM은 Open ALM의 원장 시스템이 아니다. 현재 코드에는 PLM 데이터를 변경하는 write endpoint나 AI tool이 없다.
 
 ## 현재 구현
 

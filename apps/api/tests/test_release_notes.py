@@ -86,7 +86,7 @@ def test_release_note_current_dismiss_and_history(client: TestClient) -> None:
                 "과거차 문제점",
                 "PPT 생성",
                 "업무 사이트",
-                "두원공조 그룹웨어",
+                "Open ALM 그룹웨어",
                 "읽기 전용",
                 "검색 버튼",
                 "자동 작업 화면",

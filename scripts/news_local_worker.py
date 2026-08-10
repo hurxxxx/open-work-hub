@@ -2,7 +2,7 @@
 
 Runs a minimal Celery worker that consumes ONLY the dedicated ``news`` queue and
 runs ``news.collect_all`` via the shared service logic. It deliberately does NOT
-import ``ai_do_worker.tasks`` (which would pull in heavy/ML deps and other task
+import ``open_alm_worker.tasks`` (which would pull in heavy/ML deps and other task
 modules), and it does NOT consume the shared default queue — so it never steals
 other developers' tasks from the shared dev broker.
 
@@ -24,19 +24,19 @@ _API_SRC = _ROOT / "apps" / "api" / "src"
 if str(_API_SRC) not in sys.path:
     sys.path.insert(0, str(_API_SRC))
 
-from ai_do_api.core.settings import get_settings  # noqa: E402
-from ai_do_api.core.worker_queue_contract import (  # noqa: E402
+from open_alm_api.core.settings import get_settings  # noqa: E402
+from open_alm_api.core.worker_queue_contract import (  # noqa: E402
     NEWS_COLLECT_QUEUE,
     NEWS_COLLECT_TASK_NAME,
 )
-from ai_do_api.domains.news import service  # noqa: E402
+from open_alm_api.domains.news import service  # noqa: E402
 
 settings = get_settings()
 # Local-dev: optionally consume a private queue so a shared-broker worker on
-# another machine cannot steal this collection task. Set AI_DO_NEWS_COLLECT_QUEUE
+# another machine cannot steal this collection task. Set OPEN_ALM_NEWS_COLLECT_QUEUE
 # in .env.local (e.g. "news-<hostname>"); empty falls back to the shared "news".
 NEWS_QUEUE = settings.news_collect_queue_override or NEWS_COLLECT_QUEUE
-app = Celery("ai_do_news_local", broker=settings.worker_broker_url)
+app = Celery("open_alm_news_local", broker=settings.worker_broker_url)
 app.conf.task_default_queue = NEWS_QUEUE
 app.conf.task_ignore_result = True
 

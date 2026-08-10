@@ -136,19 +136,19 @@ export const PROTECTED_SURFACES = Object.freeze({
     requiredLane: LANES.CORE_PLATFORM,
     label: 'API core module',
     nextAction:
-      'Move domain behavior into apps/api/src/ai_do_api/domains/<appDomain>, or request Core Platform review.',
+      'Move domain behavior into apps/api/src/open_alm_api/domains/<appDomain>, or request Core Platform review.',
     pathPatterns: [
-      /^apps\/api\/src\/ai_do_api\/api_registry\.py$/,
-      /^apps\/api\/src\/ai_do_api\/platform_extensions\.py$/,
-      /^apps\/api\/src\/ai_do_api\/domains\/[^/]+\/search_(?:hooks|projection|registration)\.py$/,
+      /^apps\/api\/src\/open_alm_api\/api_registry\.py$/,
+      /^apps\/api\/src\/open_alm_api\/platform_extensions\.py$/,
+      /^apps\/api\/src\/open_alm_api\/domains\/[^/]+\/search_(?:hooks|projection|registration)\.py$/,
     ],
     codeownerPatterns: [
-      '/apps/api/src/ai_do_api/api_registry.py',
-      '/apps/api/src/ai_do_api/platform_extensions.py',
-      '/apps/api/src/ai_do_api/domains/*/search_*.py',
-      '/apps/api/src/ai_do_api/core/',
-      '/apps/api/src/ai_do_api/domains/auth/',
-      '/apps/api/src/ai_do_api/domains/ai/',
+      '/apps/api/src/open_alm_api/api_registry.py',
+      '/apps/api/src/open_alm_api/platform_extensions.py',
+      '/apps/api/src/open_alm_api/domains/*/search_*.py',
+      '/apps/api/src/open_alm_api/core/',
+      '/apps/api/src/open_alm_api/domains/auth/',
+      '/apps/api/src/open_alm_api/domains/ai/',
     ],
   },
   'core-platform': {
@@ -157,10 +157,10 @@ export const PROTECTED_SURFACES = Object.freeze({
     nextAction:
       'Move app-local work into the app sandbox, or request Core Platform review for repository-level changes.',
     pathPatterns: [
-      /^apps\/worker\/src\/ai_do_worker\/(?:celery_app|queue_contract|runtime|settings)\.py$/,
-      /^apps\/worker\/src\/ai_do_worker\/tasks\/__init__\.py$/,
+      /^apps\/worker\/src\/open_alm_worker\/(?:celery_app|queue_contract|runtime|settings)\.py$/,
+      /^apps\/worker\/src\/open_alm_worker\/tasks\/__init__\.py$/,
     ],
-    codeownerPatterns: ['/apps/worker/src/ai_do_worker/'],
+    codeownerPatterns: ['/apps/worker/src/open_alm_worker/'],
   },
   contract: {
     requiredLane: LANES.CORE_PLATFORM,
@@ -171,7 +171,7 @@ export const PROTECTED_SURFACES = Object.freeze({
     pathPatterns: [
       /^packages\/contracts\//,
       /^scripts\/generate-openapi-client\.mjs$/,
-      /^apps\/api\/src\/ai_do_api\/openapi_contract\.py$/,
+      /^apps\/api\/src\/open_alm_api\/openapi_contract\.py$/,
     ],
     codeownerPatterns: ['/packages/contracts/'],
   },
@@ -287,11 +287,11 @@ export const WINDOWS_GUARDRAIL_FILES = [
 
 export const WINDOWS_FORBIDDEN_PATTERNS = [
   {
-    pattern: /\/projects\/ai-do\/prod|\\projects\\ai-do\\prod/i,
+    pattern: /\/projects\/open-alm\/prod|\\projects\\open-alm\\prod/i,
     label: 'production checkout path',
   },
   {
-    pattern: /\bai-do-prod\b/i,
+    pattern: /\bopen-alm-prod\b/i,
     label: 'production runtime/container/service name',
   },
   {
@@ -299,11 +299,11 @@ export const WINDOWS_FORBIDDEN_PATTERNS = [
     label: 'production deployment command',
   },
   {
-    pattern: /\bAI_DO_[A-Z0-9_]*PROD[A-Z0-9_]*\b/,
+    pattern: /\bOPEN_ALM_[A-Z0-9_]*PROD[A-Z0-9_]*\b/,
     label: 'production environment variable',
   },
   {
-    pattern: /\bAI_DO_API_ENVIRONMENT\s*=\s*["']?production\b/i,
+    pattern: /\bOPEN_ALM_API_ENVIRONMENT\s*=\s*["']?production\b/i,
     label: 'production API environment',
   },
   {

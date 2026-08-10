@@ -3,25 +3,25 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
-from ai_do_api.domains.ai.gateway import LlmWorkloadContext
-from ai_do_api.domains.legacy_issues.analysis_v2.agent import (
+from open_alm_api.domains.ai.gateway import LlmWorkloadContext
+from open_alm_api.domains.legacy_issues.analysis_v2.agent import (
     LEGACY_ISSUES_SQL_AGENT_WORKLOAD_ID,
     AiDoChatModel,
     build_sql_agent,
     run_analysis_tools,
 )
-from ai_do_api.domains.legacy_issues.analysis_v2.contracts import RetrievalHit
-from ai_do_api.domains.legacy_issues.analysis_v2.execution import (
+from open_alm_api.domains.legacy_issues.analysis_v2.contracts import RetrievalHit
+from open_alm_api.domains.legacy_issues.analysis_v2.execution import (
     AuthorizedQueryRequest,
     RawQueryResult,
     SafeAnalysisQueryService,
 )
-from ai_do_api.domains.legacy_issues.analysis_v2.recipes import default_recipe_catalog
-from ai_do_api.domains.legacy_issues.analysis_v2.retrieval import (
+from open_alm_api.domains.legacy_issues.analysis_v2.recipes import default_recipe_catalog
+from open_alm_api.domains.legacy_issues.analysis_v2.retrieval import (
     LlamaIndexRetrieverAdapter,
     RetrievalRequest,
 )
-from ai_do_api.domains.legacy_issues.analysis_v2.tools import AnalysisToolset
+from open_alm_api.domains.legacy_issues.analysis_v2.tools import AnalysisToolset
 
 
 class _QueryGateway:
@@ -104,7 +104,7 @@ def _toolset() -> AnalysisToolset:
     )
 
 
-def test_ai_do_chat_model_synthesizes_tool_calls_and_returns_typed_transcript() -> None:
+def test_open_alm_chat_model_synthesizes_tool_calls_and_returns_typed_transcript() -> None:
     completions = _CompletionSequence()
     model = AiDoChatModel(
         db=object(),  # type: ignore[arg-type]
@@ -169,7 +169,7 @@ def test_analysis_agent_preserves_completed_tool_results_on_later_model_error(
 
     with caplog.at_level(
         "WARNING",
-        logger="ai_do_api.domains.legacy_issues.analysis_v2.agent",
+        logger="open_alm_api.domains.legacy_issues.analysis_v2.agent",
     ):
         result = run_analysis_tools(
             build_sql_agent(model=model, toolset=_toolset()),

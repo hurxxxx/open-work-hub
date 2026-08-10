@@ -236,7 +236,7 @@ function validateCodexReviewCiContract({ source, filePath, errors }) {
     });
   }
   if (
-    !codexReview.includes('    - /home/dwdcc/.local/bin/ai-do-codex-review-ci')
+    !codexReview.includes('    - /home/open-alm/.local/bin/open-alm-codex-review-ci')
   ) {
     errors.push({
       filePath,
@@ -286,7 +286,7 @@ function validateCodexReviewCiContract({ source, filePath, errors }) {
   }
 
   const expectedScript = `  script:
-    - /home/dwdcc/.local/bin/ai-do-codex-review-ci`;
+    - /home/open-alm/.local/bin/open-alm-codex-review-ci`;
   if (extractGitlabChildBlock(codexReview, 'script') !== expectedScript) {
     errors.push({
       filePath,
@@ -357,7 +357,7 @@ function validateCodexReviewCiContract({ source, filePath, errors }) {
     GIT_DEPTH: "0"
   before_script: []
   script:
-    - /home/dwdcc/.local/bin/ai-do-codex-review-ci
+    - /home/open-alm/.local/bin/open-alm-codex-review-ci
   after_script: []
   artifacts:
     when: always

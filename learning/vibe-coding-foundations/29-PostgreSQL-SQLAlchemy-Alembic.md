@@ -67,7 +67,7 @@
 - Celery 결과 저장(부분적)·감사 로그.
 - 필요 시 `pgvector`로 임베딩 저장.
 
-AI-DO 서버의 dev/prod PostgreSQL은 Docker 컨테이너가 아니라 native PostgreSQL service로 `127.0.0.1:5432`에서 실행됩니다. 애플리케이션은 `.env`의 `AI_DO_POSTGRES_DSN`으로 접속하고, `pgvector`와 `pg_trgm` 확장을 같은 DB 안에서 사용합니다.
+Open ALM 서버의 dev/prod PostgreSQL은 Docker 컨테이너가 아니라 native PostgreSQL service로 `127.0.0.1:5432`에서 실행됩니다. 애플리케이션은 `.env`의 `OPEN_ALM_POSTGRES_DSN`으로 접속하고, `pgvector`와 `pg_trgm` 확장을 같은 DB 안에서 사용합니다.
 
 ### 2.5 대안
 
@@ -181,7 +181,7 @@ user = session.scalars(stmt).first()
 stmt = (
   select(User, Workspace)
   .join(Workspace, User.workspace_id == Workspace.id)
-  .where(Workspace.slug == "doowon-hq")
+  .where(Workspace.slug == "corporate-hq")
 )
 rows = session.execute(stmt).all()
 ```

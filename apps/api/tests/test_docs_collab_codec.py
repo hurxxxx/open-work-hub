@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from ai_do_api.domains.docs.collab_codec import (
+from open_alm_api.domains.docs.collab_codec import (
     BlockNoteCollabCodec,
     CodecPayload,
     CodecProcessResult,

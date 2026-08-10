@@ -4,13 +4,13 @@ import {
   type StaleAssetReloadRuntime,
 } from './stale-asset-reload';
 
-export const CLIENT_BUILD_HEADER = 'X-AI-DO-Web-Build';
-export const CLIENT_RELOAD_REQUIRED_HEADER = 'X-AI-DO-Reload-Required';
-export const CLIENT_BUILD_WEBSOCKET_QUERY_PARAM = '__ai_do_build';
+export const CLIENT_BUILD_HEADER = 'X-Open ALM-Web-Build';
+export const CLIENT_RELOAD_REQUIRED_HEADER = 'X-Open ALM-Reload-Required';
+export const CLIENT_BUILD_WEBSOCKET_QUERY_PARAM = '__open_alm_build';
 export const CLIENT_BUILD_WEBSOCKET_CLOSE_CODE = 4409;
 
 export const WEB_BUILD_ID =
-  (import.meta.env.VITE_AI_DO_BUILD_ID as string | undefined)?.trim() ?? '';
+  (import.meta.env.VITE_OPEN_ALM_BUILD_ID as string | undefined)?.trim() ?? '';
 
 interface ClientBuildFetchRuntime extends StaleAssetReloadRuntime {
   fetch: typeof fetch;

@@ -1,4 +1,4 @@
-from ai_do_api.domains.recording.chunk_sequence import (
+from open_alm_api.domains.recording.chunk_sequence import (
     chunk_sequences,
     plan_chunk_assembly,
 )

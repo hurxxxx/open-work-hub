@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ai_do_api.domains.dm import realtime_event_types
+from open_alm_api.domains.dm import realtime_event_types
 
 
 def test_dm_realtime_event_type_constants_match_client_contract() -> None:

@@ -7,30 +7,30 @@ import pytest
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 
-from ai_do_api.core.db import Base
-from ai_do_api.domains.auth.models import User, UserSystemRole, Workspace
-from ai_do_api.domains.files import external_lifecycle
-from ai_do_api.domains.files.models import (
+from open_alm_api.core.db import Base
+from open_alm_api.domains.auth.models import User, UserSystemRole, Workspace
+from open_alm_api.domains.files import external_lifecycle
+from open_alm_api.domains.files.models import (
     FileManagerCorpus,
     FileManagerFile,
     FileManagerFileAccessGrant,
     FileManagerFileSourceMetadata,
     FileManagerStorageCleanupJob,
 )
-from ai_do_api.domains.mcloudoc.contracts import ResolvedGrant
-from ai_do_api.domains.mcloudoc import files_adapter
-from ai_do_api.domains.mcloudoc.files_adapter import (
+from open_alm_api.domains.mcloudoc.contracts import ResolvedGrant
+from open_alm_api.domains.mcloudoc import files_adapter
+from open_alm_api.domains.mcloudoc.files_adapter import (
     McloudocFilesAdapterError,
     SqlAlchemyMcloudocFilesIngress,
 )
-from ai_do_api.domains.mcloudoc.models import (
+from open_alm_api.domains.mcloudoc.models import (
     McloudocDocument,
     McloudocIngestRun,
     McloudocSource,
 )
-from ai_do_api.domains.mcloudoc.ports import FilesUpsertCommand
-from ai_do_api.domains.rag.contracts import RagSyncOperation
-from ai_do_api.domains.retrieval.models import RetrievalPartition
+from open_alm_api.domains.mcloudoc.ports import FilesUpsertCommand
+from open_alm_api.domains.rag.contracts import RagSyncOperation
+from open_alm_api.domains.retrieval.models import RetrievalPartition
 
 
 class _FakeSession:

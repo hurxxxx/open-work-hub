@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 import pytest
 
-from ai_do_api import external_runtime as runtime_module
+from open_alm_api import external_runtime as runtime_module
 
 
 class _ProbeService:

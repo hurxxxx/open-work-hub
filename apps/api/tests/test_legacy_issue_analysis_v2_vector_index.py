@@ -6,12 +6,12 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from ai_do_api.domains.legacy_issues.analysis_v2.contracts import RetrievalHit
-from ai_do_api.domains.legacy_issues.analysis_v2.retrieval import (
+from open_alm_api.domains.legacy_issues.analysis_v2.contracts import RetrievalHit
+from open_alm_api.domains.legacy_issues.analysis_v2.retrieval import (
     RetrievalBoundaryError,
     RetrievalRequest,
 )
-from ai_do_api.domains.legacy_issues.analysis_v2.vector_index import (
+from open_alm_api.domains.legacy_issues.analysis_v2.vector_index import (
     GenerationIndexNode,
     GenerationQueryScope,
     PGVectorAuthorizedRetriever,

@@ -3,7 +3,7 @@
 Mirrors ``news_local_worker.py``: runs a minimal Celery worker that consumes
 ONLY the dedicated ``news`` queue (which ``industry_report`` shares) against the
 shared dev broker and runs ``industry_report.collect_all`` via the shared
-service logic. It deliberately does NOT import ``ai_do_worker.tasks`` (heavy/ML
+service logic. It deliberately does NOT import ``open_alm_worker.tasks`` (heavy/ML
 deps) and never consumes the shared default queue.
 
 The production daily schedule lives in ``apps/worker/.../celery_app.py``
@@ -12,7 +12,7 @@ interval by setting ``IR_LOCAL_BEAT_SECONDS`` (e.g. ``60``); leave it unset to r
 the worker only and trigger collection on demand via ``POST
 /api/v1/industry-report/fetch``.
 
-Honors ``AI_DO_INDUSTRY_REPORT_CRAWL_ENABLED`` exactly like the real task: when
+Honors ``OPEN_ALM_INDUSTRY_REPORT_CRAWL_ENABLED`` exactly like the real task: when
 disabled, ``collect_all`` returns ``{"status": "disabled"}`` without crawling.
 
 Usage (Windows):
@@ -35,15 +35,15 @@ _API_SRC = _ROOT / "apps" / "api" / "src"
 if str(_API_SRC) not in sys.path:
     sys.path.insert(0, str(_API_SRC))
 
-from ai_do_api.core.settings import get_settings  # noqa: E402
-from ai_do_api.core.worker_queue_contract import (  # noqa: E402
+from open_alm_api.core.settings import get_settings  # noqa: E402
+from open_alm_api.core.worker_queue_contract import (  # noqa: E402
     INDUSTRY_REPORT_COLLECT_QUEUE,
     INDUSTRY_REPORT_COLLECT_TASK_NAME,
 )
-from ai_do_api.domains.industry_report import service  # noqa: E402
+from open_alm_api.domains.industry_report import service  # noqa: E402
 
 settings = get_settings()
-app = Celery("ai_do_industry_report_local", broker=settings.worker_broker_url)
+app = Celery("open_alm_industry_report_local", broker=settings.worker_broker_url)
 app.conf.task_default_queue = INDUSTRY_REPORT_COLLECT_QUEUE
 app.conf.task_ignore_result = True
 

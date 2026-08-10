@@ -5,27 +5,27 @@ from fastapi.testclient import TestClient
 from dev_accounts import dev_login
 from sqlalchemy import select
 
-from ai_do_api.core.db import get_session_factory
-from ai_do_api.core.llm import get_supported_llm_tasks
-from ai_do_api.core.settings import Settings, get_settings
-from ai_do_api.domains.ai.chat_context_policy import filter_business_chat_context_app_ids
-from ai_do_api.domains.ai.registry import (
+from open_alm_api.core.db import get_session_factory
+from open_alm_api.core.llm import get_supported_llm_tasks
+from open_alm_api.core.settings import Settings, get_settings
+from open_alm_api.domains.ai.chat_context_policy import filter_business_chat_context_app_ids
+from open_alm_api.domains.ai.registry import (
     get_ai_capability_registry,
     get_chatbot_capable_app_ids,
 )
-from ai_do_api.domains.auth import access as auth_access
-from ai_do_api.domains.auth.models import (
+from open_alm_api.domains.auth import access as auth_access
+from open_alm_api.domains.auth.models import (
     PlatformAppVisibility,
     Workspace,
     WorkspaceAppEntitlement,
 )
-from ai_do_api.domains.auth.security import new_id
-from ai_do_api.domains.auth.workspace_apps import (
+from open_alm_api.domains.auth.security import new_id
+from open_alm_api.domains.auth.workspace_apps import (
     WorkspaceAppCatalogItem,
     WorkspaceNavCatalogItem,
     iter_workspace_app_catalog,
 )
-from ai_do_api.domains.auth.workspace_bootstrap_projection import project_workspace_bootstrap_apps
+from open_alm_api.domains.auth.workspace_bootstrap_projection import project_workspace_bootstrap_apps
 
 
 def _dev_login(client: TestClient, account_key: str) -> dict:
@@ -72,7 +72,7 @@ def test_workspace_bootstrap_returns_entitled_apps_and_nav(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("AI_DO_LEGACY_ISSUE_COMPRESSOR_ENABLED", "0")
+    monkeypatch.setenv("OPEN_ALM_LEGACY_ISSUE_COMPRESSOR_ENABLED", "0")
     get_settings.cache_clear()
     session = _dev_login(client, "administrator")
     token = session["token"]
@@ -207,7 +207,7 @@ def test_workspace_bootstrap_exposes_legacy_issues_without_implicit_category(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("AI_DO_LEGACY_ISSUE_COMPRESSOR_ENABLED", "0")
+    monkeypatch.setenv("OPEN_ALM_LEGACY_ISSUE_COMPRESSOR_ENABLED", "0")
     get_settings.cache_clear()
     session = _dev_login(client, "administrator")
     token = session["token"]
@@ -267,14 +267,14 @@ def test_workspace_bootstrap_exposes_legacy_issues_without_implicit_category(
 def test_legacy_issue_compressor_setting_defaults_off_and_accepts_env_alias(
     monkeypatch,
 ) -> None:
-    monkeypatch.delenv("AI_DO_LEGACY_ISSUE_COMPRESSOR_ENABLED", raising=False)
-    postgres_dsn = "postgresql+psycopg://ai_do_test:ai_do_test@127.0.0.1:5432/ai_do_test"
+    monkeypatch.delenv("OPEN_ALM_LEGACY_ISSUE_COMPRESSOR_ENABLED", raising=False)
+    postgres_dsn = "postgresql+psycopg://open_alm_test:open_alm_test@127.0.0.1:5432/open_alm_test"
 
     disabled_settings = Settings(_env_file=None, postgres_dsn=postgres_dsn)
     enabled_settings = Settings(
         _env_file=None,
         postgres_dsn=postgres_dsn,
-        AI_DO_LEGACY_ISSUE_COMPRESSOR_ENABLED="1",
+        OPEN_ALM_LEGACY_ISSUE_COMPRESSOR_ENABLED="1",
     )
 
     assert disabled_settings.legacy_issue_compressor_enabled is False
@@ -285,7 +285,7 @@ def test_workspace_bootstrap_includes_compressor_nav_when_feature_enabled(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("AI_DO_LEGACY_ISSUE_COMPRESSOR_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_LEGACY_ISSUE_COMPRESSOR_ENABLED", "1")
     get_settings.cache_clear()
     session = _dev_login(client, "administrator")
     token = session["token"]
@@ -475,7 +475,7 @@ def test_workspace_bootstrap_includes_image_wizard_when_image_feature_enabled(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("AI_DO_IMAGE_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_IMAGE_ENABLED", "1")
     get_settings.cache_clear()
 
     session = _dev_login(client, "administrator")

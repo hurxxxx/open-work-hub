@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from ai_do_api.version import RUNTIME_REVISION, VERSION
+from open_alm_api.version import RUNTIME_REVISION, VERSION
 
 
 def test_healthz(client: TestClient) -> None:
@@ -19,7 +19,7 @@ def test_healthz_preserves_inbound_trace_id(client: TestClient) -> None:
         headers={"traceparent": f"00-{trace_id}-1234567890abcdef-01"},
     )
     assert response.status_code == 200
-    assert response.headers["X-Doowon-Trace-Id"] == trace_id
+    assert response.headers["X-Open ALM-Trace-Id"] == trace_id
 
 
 def test_auth_bootstrap_and_protected_search(client: TestClient) -> None:
@@ -40,8 +40,8 @@ def test_auth_bootstrap_and_protected_search(client: TestClient) -> None:
     setup_response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "AI-DO Admin",
-            "email": "admin@ai-do.local",
+            "full_name": "Open ALM Admin",
+            "email": "admin@open-alm.local",
             "password": "supersecret123",
         },
     )
@@ -68,7 +68,7 @@ def test_auth_bootstrap_and_protected_search(client: TestClient) -> None:
         headers={"Authorization": f"Bearer {token}"},
     )
     assert me_response.status_code == 200
-    assert me_response.json()["email"] == "admin@ai-do.local"
+    assert me_response.json()["email"] == "admin@open-alm.local"
 
     search_response = client.post(
         "/api/v1/workspaces/administrator/search/documents",
@@ -97,9 +97,9 @@ def test_auth_login_success_and_invalid_password(client: TestClient) -> None:
     setup_response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "AI-DO Admin",
+            "full_name": "Open ALM Admin",
             "login_id": "admin",
-            "email": "admin@ai-do.local",
+            "email": "admin@open-alm.local",
             "password": "supersecret123",
         },
     )
@@ -113,7 +113,7 @@ def test_auth_login_success_and_invalid_password(client: TestClient) -> None:
         },
     )
     assert login_response.status_code == 200
-    assert login_response.json()["user"]["email"] == "admin@ai-do.local"
+    assert login_response.json()["user"]["email"] == "admin@open-alm.local"
     assert "platform_admin" in login_response.json()["user"]["system_roles"]
     assert login_response.json()["token"]
 
@@ -131,9 +131,9 @@ def test_auth_preferences_manage_default_workspace(client: TestClient) -> None:
     setup_response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "AI-DO Admin",
+            "full_name": "Open ALM Admin",
             "login_id": "admin",
-            "email": "admin@ai-do.local",
+            "email": "admin@open-alm.local",
             "password": "supersecret123",
         },
     )
@@ -163,7 +163,7 @@ def test_auth_preferences_manage_default_workspace(client: TestClient) -> None:
         json={
             "full_name": "Pending Member",
             "login_id": "pending-member",
-            "email": "pending@ai-do.local",
+            "email": "pending@open-alm.local",
             "temporary_password": "memberpass123",
         },
     )
@@ -296,8 +296,8 @@ def test_auth_signup_is_disabled_after_setup(client: TestClient) -> None:
     setup_response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "AI-DO Admin",
-            "email": "admin@ai-do.local",
+            "full_name": "Open ALM Admin",
+            "email": "admin@open-alm.local",
             "password": "supersecret123",
         },
     )
@@ -308,7 +308,7 @@ def test_auth_signup_is_disabled_after_setup(client: TestClient) -> None:
         json={
             "full_name": "New Member",
             "login_id": "new-member",
-            "email": "NEW@AI-DO.LOCAL",
+            "email": "NEW@Open ALM.LOCAL",
             "password": "memberpass123",
             "password_confirm": "memberpass123",
         },
@@ -325,7 +325,7 @@ def test_auth_signup_validates_payload_then_returns_disabled(
         json={
             "full_name": "Early Member",
             "login_id": "early",
-            "email": "early@ai-do.local",
+            "email": "early@open-alm.local",
             "password": "memberpass123",
             "password_confirm": "memberpass123",
         },
@@ -336,8 +336,8 @@ def test_auth_signup_validates_payload_then_returns_disabled(
     setup_response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "AI-DO Admin",
-            "email": "admin@ai-do.local",
+            "full_name": "Open ALM Admin",
+            "email": "admin@open-alm.local",
             "password": "supersecret123",
         },
     )
@@ -348,7 +348,7 @@ def test_auth_signup_validates_payload_then_returns_disabled(
         json={
             "full_name": "Duplicate Admin",
             "login_id": "duplicate-admin",
-            "email": "ADMIN@AI-DO.LOCAL",
+            "email": "ADMIN@Open ALM.LOCAL",
             "password": "memberpass123",
             "password_confirm": "memberpass123",
         },
@@ -362,7 +362,7 @@ def test_auth_signup_validates_payload_then_returns_disabled(
         json={
             "full_name": "Mismatch Member",
             "login_id": "mismatch",
-            "email": "mismatch@ai-do.local",
+            "email": "mismatch@open-alm.local",
             "password": "memberpass123",
             "password_confirm": "different123",
         },
@@ -376,8 +376,8 @@ def test_auth_error_messages_are_localized(client: TestClient) -> None:
     setup_response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "AI-DO Admin",
-            "email": "admin@ai-do.local",
+            "full_name": "Open ALM Admin",
+            "email": "admin@open-alm.local",
             "password": "supersecret123",
         },
     )
@@ -394,7 +394,7 @@ def test_auth_error_messages_are_localized(client: TestClient) -> None:
     assert english_response.status_code == 401
     assert english_response.json()["detail"] == "ID or password is invalid."
     assert english_response.json()["code"] == "auth.invalid_credentials"
-    assert english_response.headers["X-AI-DO-Error-Code"] == "auth.invalid_credentials"
+    assert english_response.headers["X-Open ALM-Error-Code"] == "auth.invalid_credentials"
 
     korean_response = client.post(
         "/api/v1/auth/login",
@@ -412,7 +412,7 @@ def test_auth_error_messages_are_localized(client: TestClient) -> None:
         "/api/v1/auth/me",
         headers={
             "Accept-Language": "en-US",
-            "X-AI-DO-Locale": "ko-KR",
+            "X-Open ALM-Locale": "ko-KR",
         },
     )
     assert explicit_locale_response.status_code == 401
@@ -587,8 +587,8 @@ def _bootstrap_admin(client: TestClient) -> str:
     setup_response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "AI-DO Admin",
-            "email": "admin@ai-do.local",
+            "full_name": "Open ALM Admin",
+            "email": "admin@open-alm.local",
             "password": "supersecret123",
         },
     )
@@ -650,15 +650,15 @@ def _create_direct_user(
 ) -> tuple[str, str]:
     from sqlalchemy import select
 
-    from ai_do_api.core.db import get_session_factory
-    from ai_do_api.domains.auth.models import (
+    from open_alm_api.core.db import get_session_factory
+    from open_alm_api.domains.auth.models import (
         AuthSession,
         User,
         UserSystemRole,
         Workspace,
         WorkspaceUserBinding,
     )
-    from ai_do_api.domains.auth.security import (
+    from open_alm_api.domains.auth.security import (
         hash_password,
         issue_session_token,
         new_id,
@@ -778,7 +778,7 @@ def test_admin_identity_management_endpoints(client: TestClient) -> None:
         "/api/v1/admin/users",
         headers=headers,
         json={
-            "email": "legacy-group-field@ai-do.local",
+            "email": "legacy-group-field@open-alm.local",
             "full_name": "Legacy Group Field",
             "group_ids": [],
         },
@@ -789,8 +789,8 @@ def test_admin_identity_management_endpoints(client: TestClient) -> None:
         "/api/v1/admin/users",
         headers=headers,
         json={
-            "email": "member@ai-do.local",
-            "full_name": "AI-DO Member",
+            "email": "member@open-alm.local",
+            "full_name": "Open ALM Member",
             "display_name": "Member",
             "employee_code": "E-100",
             "primary_org_unit_id": root_org_unit_id,
@@ -800,7 +800,7 @@ def test_admin_identity_management_endpoints(client: TestClient) -> None:
     assert create_user_response.status_code == 201
     created_user = create_user_response.json()["user"]
     temporary_password = create_user_response.json()["temporary_password"]
-    assert created_user["email"] == "member@ai-do.local"
+    assert created_user["email"] == "member@open-alm.local"
     assert created_user["employee_code"] == "E-100"
     assert created_user["must_change_password"] is True
     assert temporary_password
@@ -851,7 +851,7 @@ def test_admin_identity_management_endpoints(client: TestClient) -> None:
         f"/api/v1/admin/users/{created_user['id']}",
         headers=headers,
         json={
-            "full_name": "AI-DO Member Updated",
+            "full_name": "Open ALM Member Updated",
             "display_name": "Updated Member",
             "employee_code": "E-101",
             "status": "active",
@@ -859,7 +859,7 @@ def test_admin_identity_management_endpoints(client: TestClient) -> None:
         },
     )
     assert update_user_response.status_code == 200
-    assert update_user_response.json()["full_name"] == "AI-DO Member Updated"
+    assert update_user_response.json()["full_name"] == "Open ALM Member Updated"
     assert update_user_response.json()["display_name"] == "Updated Member"
     assert update_user_response.json()["employee_code"] == "E-101"
     assert update_user_response.json()["system_roles"] == ["platform_admin"]
@@ -868,7 +868,7 @@ def test_admin_identity_management_endpoints(client: TestClient) -> None:
         "/api/v1/admin/users",
         headers=headers,
         json={
-            "email": "delete-me@ai-do.local",
+            "email": "delete-me@open-alm.local",
             "full_name": "Delete Me",
             "display_name": "Delete Me",
             "primary_org_unit_id": root_org_unit_id,
@@ -945,7 +945,7 @@ def test_admin_identity_management_endpoints(client: TestClient) -> None:
         json={"user_ids": [created_user["id"]]},
     )
     assert team_members_response.status_code == 200
-    assert team_members_response.json()[0]["email"] == "member@ai-do.local"
+    assert team_members_response.json()[0]["email"] == "member@open-alm.local"
 
     audit_logs_response = client.get("/api/v1/admin/audit-logs", headers=headers)
     assert audit_logs_response.status_code == 200
@@ -982,7 +982,7 @@ def test_workspace_scoped_team_management_requires_workspace_admin_role(client: 
         "/api/v1/admin/users",
         headers=admin_headers,
         json={
-            "email": "scoped-manager@ai-do.local",
+            "email": "scoped-manager@open-alm.local",
             "full_name": "Scoped Manager",
         },
     )
@@ -1059,7 +1059,7 @@ def test_non_workspace_routes_require_workspace_membership(client: TestClient) -
         "/api/v1/admin/users",
         headers=admin_headers,
         json={
-            "email": "docs-user@ai-do.local",
+            "email": "docs-user@open-alm.local",
             "full_name": "Docs User",
         },
     )
@@ -1142,7 +1142,7 @@ def test_non_workspace_routes_require_workspace_membership(client: TestClient) -
 def test_pms_membership_permissions(client: TestClient) -> None:
     admin_token = _bootstrap_admin(client)
     outsider_id, outsider_token = _create_direct_user(
-        email="member@ai-do.local",
+        email="member@open-alm.local",
         full_name="List Member",
         workspace_keys=("administrator",),
     )
@@ -1185,7 +1185,7 @@ def test_pms_membership_permissions(client: TestClient) -> None:
 def test_pms_space_members_still_need_workspace_membership(client: TestClient) -> None:
     admin_token = _bootstrap_admin(client)
     member_id, member_token = _create_direct_user(
-        email="space-only@ai-do.local",
+        email="space-only@open-alm.local",
         full_name="Space Only Member",
     )
 
@@ -1220,7 +1220,7 @@ def test_pms_space_members_still_need_workspace_membership(client: TestClient) -
 def test_pms_space_creator_becomes_owner_and_last_manager_is_protected(client: TestClient) -> None:
     _bootstrap_admin(client)
     creator_id, creator_token = _create_direct_user(
-        email="space-creator@ai-do.local",
+        email="space-creator@open-alm.local",
         full_name="Space Creator",
         workspace_keys=("administrator",),
     )
@@ -1267,7 +1267,7 @@ def test_platform_admin_without_workspace_membership_cannot_view_pms_spaces(
     assert task_list_response.status_code == 201
 
     _, platform_admin_token = _create_direct_user(
-        email="platform-admin@ai-do.local",
+        email="platform-admin@open-alm.local",
         full_name="Platform Admin",
         system_roles=("platform_admin",),
     )
@@ -1308,7 +1308,7 @@ def test_workspace_bindings_grant_and_revoke_effective_workspace_access(
         "/api/v1/admin/users",
         headers=admin_headers,
         json={
-            "email": "workspace-operator@ai-do.local",
+            "email": "workspace-operator@open-alm.local",
             "full_name": "Workspace Operator",
         },
     )

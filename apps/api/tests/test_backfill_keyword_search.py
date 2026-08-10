@@ -5,8 +5,8 @@ import json
 
 import pytest
 
-from ai_do_api import backfill_keyword_search
-from ai_do_api.domains.retrieval.evaluation import (
+from open_alm_api import backfill_keyword_search
+from open_alm_api.domains.retrieval.evaluation import (
     RetrievalEvaluationReport,
     RetrievalQualityGateArtifact,
     retrieval_quality_corpus_sha256,

@@ -6,11 +6,11 @@ from types import SimpleNamespace
 import pytest
 from pydantic import SecretStr
 
-from ai_do_api.core.settings import Settings
-from ai_do_api.domains.ai.external_gateway import AiExternalCapabilityRequest
-from ai_do_api.domains.ai import external_gateway
-from ai_do_api.domains.ai.model_settings_service import AiModelSettingsError
-from ai_do_api.domains.web_search import router, service
+from open_alm_api.core.settings import Settings
+from open_alm_api.domains.ai.external_gateway import AiExternalCapabilityRequest
+from open_alm_api.domains.ai import external_gateway
+from open_alm_api.domains.ai.model_settings_service import AiModelSettingsError
+from open_alm_api.domains.web_search import router, service
 
 
 class _AsyncTextStream:

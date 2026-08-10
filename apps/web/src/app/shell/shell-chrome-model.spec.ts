@@ -15,9 +15,9 @@ import {
 function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
   return {
     date_format: 'korean',
-    display_name: 'AI-DO Member',
-    email: 'member@ai-do.local',
-    full_name: 'AI-DO Member',
+    display_name: 'Open ALM Member',
+    email: 'member@open-alm.local',
+    full_name: 'Open ALM Member',
     id: 'user-1',
     locale: 'ko-KR',
     login_id: 'member',
@@ -31,7 +31,7 @@ function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
     workspaces: [
       {
         id: 'workspace-hq',
-        name: 'AI-DO HQ',
+        name: 'Open ALM HQ',
         role: 'admin',
         slug: 'hq',
       },
@@ -85,13 +85,13 @@ describe('shell chrome model', () => {
           workspaces: [
             {
               id: 'workspace-hq',
-              name: 'AI-DO HQ',
+              name: 'Open ALM HQ',
               role: 'admin',
               slug: 'hq',
             },
             {
               id: 'workspace-demo',
-              name: 'AI-DO Demo',
+              name: 'Open ALM Demo',
               role: 'member',
               slug: 'demo',
             },

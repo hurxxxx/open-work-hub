@@ -10,8 +10,8 @@ from sqlalchemy import create_engine, event, func, select
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException
 
-from ai_do_api.core.db import Base
-from ai_do_api.domains.auth.models import (
+from open_alm_api.core.db import Base
+from open_alm_api.domains.auth.models import (
     OrgUnit,
     Team,
     TeamMember,
@@ -20,10 +20,10 @@ from ai_do_api.domains.auth.models import (
     Workspace,
     WorkspaceUserBinding,
 )
-from ai_do_api.domains.files import external_lifecycle, service as files_service
-from ai_do_api.domains.files.external_access import authorize_explicit_file_ids
-from ai_do_api.domains.files.external_lifecycle import ExternalFileGrant
-from ai_do_api.domains.files.models import (
+from open_alm_api.domains.files import external_lifecycle, service as files_service
+from open_alm_api.domains.files.external_access import authorize_explicit_file_ids
+from open_alm_api.domains.files.external_lifecycle import ExternalFileGrant
+from open_alm_api.domains.files.models import (
     FileManagerCorpus,
     FileManagerFile,
     FileManagerFileAccessGrant,
@@ -31,13 +31,13 @@ from ai_do_api.domains.files.models import (
     FileManagerFolder,
     FileManagerStorageCleanupJob,
 )
-from ai_do_api.domains.files.source_access import (
+from open_alm_api.domains.files.source_access import (
     authorize_many_files,
     can_read_file,
     has_accessible_file,
 )
-from ai_do_api.domains.rag.contracts import RagSyncOperation
-from ai_do_api.domains.retrieval.models import RetrievalPartition
+from open_alm_api.domains.rag.contracts import RagSyncOperation
+from open_alm_api.domains.retrieval.models import RetrievalPartition
 
 
 WORKSPACE_ID = "workspace-source"

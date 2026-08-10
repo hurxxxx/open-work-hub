@@ -25,11 +25,11 @@ foreach ($raw in Get-Content $envFile) {
 }
 
 $env:PYTHONPATH = "$root\apps\worker\src;$root\apps\api\src"
-$env:AI_DO_LLM_HEALTHCHECK_ON_STARTUP = "0"
-$env:AI_DO_LLM_REQUIRED = "0"
+$env:OPEN_ALM_LLM_HEALTHCHECK_ON_STARTUP = "0"
+$env:OPEN_ALM_LLM_REQUIRED = "0"
 
 Write-Host "==> ppt worker #2 (queue: ppt_generate_dedicated, node: ppt-local2)" -ForegroundColor Cyan
-& $py -m celery -A ai_do_worker.celery_app:celery_app worker `
+& $py -m celery -A open_alm_worker.celery_app:celery_app worker `
   -Q ppt_generate_dedicated `
   --pool=solo `
   --concurrency=1 `

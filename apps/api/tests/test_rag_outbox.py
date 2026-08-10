@@ -8,36 +8,36 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-from ai_do_api.core.db import Base
-from ai_do_api.core.telemetry import (
+from open_alm_api.core.db import Base
+from open_alm_api.core.telemetry import (
     bootstrap_telemetry,
     current_trace_id,
     get_tracer_provider,
     start_as_current_span,
 )
-from ai_do_api.domains.auth.models import Workspace
-from ai_do_api.domains.rag.contracts import (
+from open_alm_api.domains.auth.models import Workspace
+from open_alm_api.domains.rag.contracts import (
     RagScopeKind,
     RagSyncLane,
     RagSyncOperation,
     RagTraceContext,
 )
-from ai_do_api.domains.rag.models import RagSyncJob, RagVisibilityRecomputeJob
-from ai_do_api.domains.retrieval.models import (
+from open_alm_api.domains.rag.models import RagSyncJob, RagVisibilityRecomputeJob
+from open_alm_api.domains.retrieval.models import (
     RetrievalPartition,
     RetrievalProjectionEvent,
     RetrievalProjectionHead,
 )
-from ai_do_api.domains.retrieval.projection_fencing import (
+from open_alm_api.domains.retrieval.projection_fencing import (
     ProjectionEventRef,
     record_projection_event,
 )
-import ai_do_api.domains.rag.outbox as rag_outbox
-from ai_do_api.domains.rag.outbox import (
+import open_alm_api.domains.rag.outbox as rag_outbox
+from open_alm_api.domains.rag.outbox import (
     enqueue_rag_sync_job,
     enqueue_rag_visibility_recompute_job,
 )
-from ai_do_api.domains.rag.source_adapter_registry import (
+from open_alm_api.domains.rag.source_adapter_registry import (
     RagResourceAdapter,
     RagVisibilityScopeAdapter,
     register_rag_resource_adapter,
@@ -368,7 +368,7 @@ def test_enqueue_rag_visibility_recompute_job_rejects_unregistered_scope_type() 
 
 
 def test_enqueue_rag_sync_job_captures_current_trace_context() -> None:
-    bootstrap_telemetry(service_name="ai-do-api-test")
+    bootstrap_telemetry(service_name="open-alm-api-test")
     exporter = InMemorySpanExporter()
     provider = get_tracer_provider()
     assert provider is not None
@@ -402,7 +402,7 @@ def test_enqueue_rag_sync_job_captures_current_trace_context() -> None:
 
 
 def test_enqueue_rag_sync_job_allows_explicit_empty_trace_context() -> None:
-    bootstrap_telemetry(service_name="ai-do-api-test")
+    bootstrap_telemetry(service_name="open-alm-api-test")
 
     session = _session()
     try:

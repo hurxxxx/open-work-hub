@@ -5,7 +5,7 @@
 
 ## Context
 
-AI-DO originally grew around workspace-scoped apps: routes live under
+Open ALM originally grew around workspace-scoped apps: routes live under
 `/w/:workspaceSlug/...`, APIs are usually mounted under
 `/api/v1/workspaces/{workspace_slug}/...`, and RAG documents carry a
 `workspace_id`.
@@ -27,7 +27,7 @@ wrong ownership boundary:
 
 ## Decision
 
-AI-DO supports a first-class **company-scoped global app** contract.
+Open ALM supports a first-class **company-scoped global app** contract.
 
 ### 1. Canonical route and API shape
 

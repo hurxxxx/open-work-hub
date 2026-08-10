@@ -1,6 +1,6 @@
 # Retrieval Service Layer
 
-AI-DO retrieval은 RAG, keyword search, QNA, legacy issue AI search의 공개 Interface이자
+Open ALM retrieval은 RAG, keyword search, QNA, legacy issue AI search의 공개 Interface이자
 교차 backend 순위 결합 Module이다. 백엔드별 ingestion, parser, embedding, index, ACL,
 native candidate 생성은 기존 domain이 계속 소유한다. Retrieval은 이 경계 위에서 후보를
 정규화하고, 결합하고, 전역 rerank하고, 최종 evidence를 한 번 grounding한다.
@@ -9,14 +9,14 @@ native candidate 생성은 기존 domain이 계속 소유한다. Retrieval은 �
 
 주요 코드:
 
-- `apps/api/src/ai_do_api/domains/retrieval/application.py`
-- `apps/api/src/ai_do_api/domains/retrieval/contracts.py`
-- `apps/api/src/ai_do_api/domains/retrieval/source_catalog.py`
-- `apps/api/src/ai_do_api/domains/retrieval/ranking.py`
-- `apps/api/src/ai_do_api/domains/retrieval/grounding.py`
-- `apps/api/src/ai_do_api/domains/retrieval/evaluation.py`
-- `apps/api/src/ai_do_api/domains/retrieval/router.py`
-- `apps/api/src/ai_do_api/domains/retrieval/tools.py`
+- `apps/api/src/open_alm_api/domains/retrieval/application.py`
+- `apps/api/src/open_alm_api/domains/retrieval/contracts.py`
+- `apps/api/src/open_alm_api/domains/retrieval/source_catalog.py`
+- `apps/api/src/open_alm_api/domains/retrieval/ranking.py`
+- `apps/api/src/open_alm_api/domains/retrieval/grounding.py`
+- `apps/api/src/open_alm_api/domains/retrieval/evaluation.py`
+- `apps/api/src/open_alm_api/domains/retrieval/router.py`
+- `apps/api/src/open_alm_api/domains/retrieval/tools.py`
 
 공개 표면:
 
@@ -27,7 +27,7 @@ native candidate 생성은 기존 domain이 계속 소유한다. Retrieval은 �
 - Web workspace API route policy: `/api/v1/retrieval`
 - Frontend client: `apps/web/src/platform/retrieval/retrieval-api.ts`
 - Frontend diagnostics UI: `apps/web/src/app-modules/retrieval-search`
-- Feature flag: `AI_DO_RETRIEVAL_UNIFIED_ENABLED` default `true`
+- Feature flag: `OPEN_ALM_RETRIEVAL_UNIFIED_ENABLED` default `true`
 
 ## 검색 경계
 
@@ -202,7 +202,7 @@ schema로 판정한다. 발견 요청일 때만 특정 산출물 형식을 중�
 BM25/dense baseline 누락, 세 결과의 query count 불일치, 어느 전략에서든 ACL/citation/p95 위반,
 v2 mapping version 불일치, backfill document count 불일치도 모두 fail-closed한다.
 
-`python -m ai_do_api.evaluate_retrieval_quality`는 named staging generation의 BM25와
+`python -m open_alm_api.evaluate_retrieval_quality`는 named staging generation의 BM25와
 Qdrant dense를 사용해 keyword/semantic/hybrid를 각각 실행한다. `--prepare-staged-files`는
 Files source가 preview/production에서 inactive인 동안 generation 전용 임시 Qdrant collection과
 staging OpenSearch generation만 준비하며 live alias를 이동하지 않는다. 이 옵션은 stale vector 재사용을

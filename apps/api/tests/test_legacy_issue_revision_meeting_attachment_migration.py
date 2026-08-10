@@ -7,13 +7,13 @@ import pytest
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import IntegrityError
 
-from ai_do_api.core.db import Base
-from ai_do_api.domains.auth.models import OrgUnit, User, Workspace
-from ai_do_api.domains.legacy_issues.models import (
+from open_alm_api.core.db import Base
+from open_alm_api.domains.auth.models import OrgUnit, User, Workspace
+from open_alm_api.domains.legacy_issues.models import (
     LegacyIssueDataRevision,
     LegacyIssueRevisionOverviewHistory,
 )
-from ai_do_api.domains.retrieval.models import RetrievalPartition
+from open_alm_api.domains.retrieval.models import RetrievalPartition
 
 
 pytestmark = pytest.mark.migration
@@ -30,11 +30,11 @@ def revision_meeting_attachment_migration_config(
     monkeypatch: pytest.MonkeyPatch,
     postgres_dsn: str,
 ) -> Iterator[object]:
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", postgres_dsn)
-    monkeypatch.setenv("AI_DO_LLM_HEALTHCHECK_ON_STARTUP", "0")
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", postgres_dsn)
+    monkeypatch.setenv("OPEN_ALM_LLM_HEALTHCHECK_ON_STARTUP", "0")
 
-    from ai_do_api.core.db import _alembic_config
-    from ai_do_api.core.settings import get_settings
+    from open_alm_api.core.db import _alembic_config
+    from open_alm_api.core.settings import get_settings
 
     get_settings.cache_clear()
     engine = create_engine(postgres_dsn)
@@ -97,7 +97,7 @@ def test_revision_meeting_attachment_migration_backfills_and_is_reversible(
                     ) VALUES (
                         'meeting-attachment-user',
                         'meeting-attachment-user',
-                        'meeting-attachment-user@ai-do.local',
+                        'meeting-attachment-user@open-alm.local',
                         'Meeting Attachment User',
                         'hash',
                         'local',

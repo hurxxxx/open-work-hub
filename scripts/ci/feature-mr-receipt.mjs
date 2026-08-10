@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-const RECEIPT_PATTERN = /\n\n<!-- ai-do:pf:v1:([A-Za-z0-9_-]{43}) -->$/;
+const RECEIPT_PATTERN = /\n\n<!-- open-alm:pf:v1:([A-Za-z0-9_-]{43}) -->$/;
 
 function canonicalDescription(description) {
   return description.trimEnd();
@@ -10,7 +10,7 @@ function receiptDigest({ description, label, sourceSha, targetSha }) {
   return createHash('sha256')
     .update(
       [
-        'ai-do-feature-mr-preflight-v1',
+        'open-alm-feature-mr-preflight-v1',
         sourceSha,
         targetSha,
         label,
@@ -27,7 +27,7 @@ export function attachLocalPreflightReceipt(context) {
     );
   }
   const receipt = receiptDigest(context);
-  return `${canonicalDescription(context.description)}\n\n<!-- ai-do:pf:v1:${receipt} -->`;
+  return `${canonicalDescription(context.description)}\n\n<!-- open-alm:pf:v1:${receipt} -->`;
 }
 
 export function verifyLocalPreflightReceipt(context) {

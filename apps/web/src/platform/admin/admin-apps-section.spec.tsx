@@ -23,8 +23,8 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-vi.mock('@ai-do/ui', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@ai-do/ui')>()),
+vi.mock('@open-alm/ui', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@open-alm/ui')>()),
   useToast: () => ({ error: vi.fn(), success: vi.fn() }),
 }));
 

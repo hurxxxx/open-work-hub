@@ -1,6 +1,6 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Button } from '@ai-do/ui';
+import { Button } from '@open-alm/ui';
 
 export const HEALTH_CHECKUP_PAGE_SIZES = [25, 50, 100] as const;
 export type HealthCheckupPageSize = (typeof HEALTH_CHECKUP_PAGE_SIZES)[number];

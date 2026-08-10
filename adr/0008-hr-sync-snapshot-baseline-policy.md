@@ -13,7 +13,7 @@
 
 검토한 대안은 다음과 같다.
 
-- AI-DO의 현재 `users`와 `org_units`만 최신 원천과 비교한다. 저장량은 작지만 원본과 판정 근거를
+- Open ALM의 현재 `users`와 `org_units`만 최신 원천과 비교한다. 저장량은 작지만 원본과 판정 근거를
   재현하지 못한다.
 - 변경 event만 저장한다. 변경 조회는 쉽지만 diff 구현 오류나 source schema 변화가 있으면 원본
   기준으로 재계산할 수 없다.
@@ -70,7 +70,7 @@ run을 거부한다.
 ### 완전한 최신 snapshot에서의 부재를 퇴직으로 판정한다
 
 `projection_apply`인 그룹웨어에서 검증을 통과한 완전한 candidate에 직전 baseline의 사용자가
-없으면 해당 사용자를 퇴직으로 판정한다. 퇴직은 AI-DO 계정을 삭제하지 않고 `suspended`로
+없으면 해당 사용자를 퇴직으로 판정한다. 퇴직은 Open ALM 계정을 삭제하지 않고 `suspended`로
 바꾸며 모든 활성 세션을 폐기한다.
 사용자 UUID, 권한·membership, 사용자 소유 데이터와 관리자가 설정한 `login_blocked` 값은
 보존한다.
@@ -80,7 +80,7 @@ run을 거부한다.
 ### 사번으로 계정 생명주기를 연결한다
 
 그룹웨어 원천 행의 주소는 사용자 `(source_system, domain_num, user_num)`, 조직
-`(source_system, domain_num, org_code)`로 보존한다. 퇴직·재입사를 거쳐 같은 사람의 AI-DO
+`(source_system, domain_num, org_code)`로 보존한다. 퇴직·재입사를 거쳐 같은 사람의 Open ALM
 계정을 연결하는 기준은 원천 `EMP_NO` 사번이다.
 
 같은 사번의 재입사는 `user_num`이나 로그인 ID가 바뀌어도 기존 내부 사용자 UUID를 다시
@@ -90,7 +90,7 @@ run을 거부한다.
 새 사번은 새 계정을 만들고 기존 계정과 자동 병합하거나 권한·데이터를 이전하지 않는다. 사번이
 누락·중복되거나 새 사번의 로그인 ID가 기존 계정과 충돌하는 등 identity가 모호하면 conflict로
 기록하고 자동 반영하지 않는다. 이름, 이메일이나 로그인 ID의 유사성만으로 계정을 병합하지 않는다.
-이 계정 생명주기 규칙은 ERP `snapshot_only` 행을 AI-DO 계정에 연결하는 규칙이 아니다.
+이 계정 생명주기 규칙은 ERP `snapshot_only` 행을 Open ALM 계정에 연결하는 규칙이 아니다.
 
 ## Consequences
 

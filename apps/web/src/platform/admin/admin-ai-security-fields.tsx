@@ -11,7 +11,7 @@ import React, {
 import { useTranslation } from 'react-i18next';
 import { CircleHelp, Search, X } from 'lucide-react';
 
-import { Tooltip } from '@ai-do/ui';
+import { Tooltip } from '@open-alm/ui';
 
 import type { AuthUser } from '@/src/platform/auth/auth-api';
 import { UserSearchMultiSelect } from '@/src/platform/users/UserSearchMultiSelect';

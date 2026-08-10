@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Input, Panel } from '@ai-do/ui';
+import { Button, Input, Panel } from '@open-alm/ui';
 
 import { UserDateTime } from '@/src/components/date/UserDateTime';
 import type {

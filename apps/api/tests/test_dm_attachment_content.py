@@ -3,8 +3,8 @@ from __future__ import annotations
 from fastapi import HTTPException
 import pytest
 
-from ai_do_api.domains.dm import attachment_content
-from ai_do_api.domains.dm.models import DmMessageAttachment
+from open_alm_api.domains.dm import attachment_content
+from open_alm_api.domains.dm.models import DmMessageAttachment
 
 
 def _attachment(*, content_type: str = "image/png") -> DmMessageAttachment:

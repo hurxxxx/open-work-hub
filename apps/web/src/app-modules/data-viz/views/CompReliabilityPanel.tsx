@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { Loader2, Upload } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { EmptyState, InlineNotice, Select } from '@ai-do/ui';
+import { EmptyState, InlineNotice, Select } from '@open-alm/ui';
 
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/platform/auth/auth-provider';

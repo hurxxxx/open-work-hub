@@ -22,9 +22,9 @@ STATIC_TEXT_FILE_PATHS: Mapping[str, Path] = {
     "api_project": Path("apps/api/project.json"),
     "ci_harness_project": Path("scripts/ci/project.json"),
     "dev_nginx_template": Path("ops/dev/nginx.conf.template"),
-    "dev_infra_compose": Path("ops/compose/ai-do-dev.infra.yml"),
-    "prod_infra_compose": Path("ops/compose/ai-do-prod.infra.yml"),
-    "prod_nginx_proxy": Path("ops/nginx/dwdcc.kr.proxy-only.conf"),
+    "dev_infra_compose": Path("ops/compose/open-alm-dev.infra.yml"),
+    "prod_infra_compose": Path("ops/compose/open-alm-prod.infra.yml"),
+    "prod_nginx_proxy": Path("ops/nginx/open-alm.example.proxy-only.conf"),
     "prod_systemd_script": Path("scripts/prod-systemd.sh"),
     "infra_stack_script": Path("scripts/infra-stack.sh"),
     "dev_env_script": Path("scripts/dev-env.sh"),
@@ -32,11 +32,11 @@ STATIC_TEXT_FILE_PATHS: Mapping[str, Path] = {
 
 STATIC_PRESENCE_PATHS: Mapping[str, Path] = {
     "vm_app_stack": Path("scripts/vm-app-stack.sh"),
-    "preview_deploy_skill": Path(".agents/skills/ai-do-preview-deploy"),
+    "preview_deploy_skill": Path(".agents/skills/open-alm-preview-deploy"),
 }
 
 REQUIRED_SYSTEMD_TEMPLATE_SETTINGS: Mapping[str, frozenset[str]] = {
-    "ai-do-dev-app.service.template": frozenset(
+    "open-alm-dev-app.service.template": frozenset(
         {
             "NoNewPrivileges=true",
             "PrivateTmp=true",
@@ -44,7 +44,7 @@ REQUIRED_SYSTEMD_TEMPLATE_SETTINGS: Mapping[str, frozenset[str]] = {
             "KillMode=control-group",
         }
     ),
-    "ai-do-prod-api.service.template": frozenset(
+    "open-alm-prod-api.service.template": frozenset(
         {
             "NoNewPrivileges=true",
             "PrivateTmp=true",
@@ -52,7 +52,7 @@ REQUIRED_SYSTEMD_TEMPLATE_SETTINGS: Mapping[str, frozenset[str]] = {
             "KillMode=control-group",
         }
     ),
-    "ai-do-prod-collab.service.template": frozenset(
+    "open-alm-prod-collab.service.template": frozenset(
         {
             "NoNewPrivileges=true",
             "PrivateTmp=true",
@@ -60,7 +60,7 @@ REQUIRED_SYSTEMD_TEMPLATE_SETTINGS: Mapping[str, frozenset[str]] = {
             "KillMode=control-group",
         }
     ),
-    "ai-do-prod-worker.service.template": frozenset(
+    "open-alm-prod-worker.service.template": frozenset(
         {
             "NoNewPrivileges=true",
             "PrivateTmp=true",
@@ -68,7 +68,7 @@ REQUIRED_SYSTEMD_TEMPLATE_SETTINGS: Mapping[str, frozenset[str]] = {
             "KillMode=mixed",
         }
     ),
-    "ai-do-prod-worker-long.service.template": frozenset(
+    "open-alm-prod-worker-long.service.template": frozenset(
         {
             "NoNewPrivileges=true",
             "PrivateTmp=true",
@@ -76,7 +76,7 @@ REQUIRED_SYSTEMD_TEMPLATE_SETTINGS: Mapping[str, frozenset[str]] = {
             "KillMode=mixed",
         }
     ),
-    "ai-do-prod-worker-realtime.service.template": frozenset(
+    "open-alm-prod-worker-realtime.service.template": frozenset(
         {
             "NoNewPrivileges=true",
             "PrivateTmp=true",
@@ -84,7 +84,7 @@ REQUIRED_SYSTEMD_TEMPLATE_SETTINGS: Mapping[str, frozenset[str]] = {
             "KillMode=mixed",
         }
     ),
-    "ai-do-prod-worker-ai-graph.service.template": frozenset(
+    "open-alm-prod-worker-ai-graph.service.template": frozenset(
         {
             "NoNewPrivileges=true",
             "PrivateTmp=true",
@@ -92,7 +92,7 @@ REQUIRED_SYSTEMD_TEMPLATE_SETTINGS: Mapping[str, frozenset[str]] = {
             "KillMode=mixed",
         }
     ),
-    "ai-do-prod-worker-ppt.service.template": frozenset(
+    "open-alm-prod-worker-ppt.service.template": frozenset(
         {
             "NoNewPrivileges=true",
             "PrivateTmp=true",
@@ -100,7 +100,7 @@ REQUIRED_SYSTEMD_TEMPLATE_SETTINGS: Mapping[str, frozenset[str]] = {
             "KillMode=mixed",
         }
     ),
-    "ai-do-dev-worker-long.service.template": frozenset(
+    "open-alm-dev-worker-long.service.template": frozenset(
         {
             "NoNewPrivileges=true",
             "PrivateTmp=true",
@@ -108,7 +108,7 @@ REQUIRED_SYSTEMD_TEMPLATE_SETTINGS: Mapping[str, frozenset[str]] = {
             "KillMode=mixed",
         }
     ),
-    "ai-do-dev-worker-ai-graph.service.template": frozenset(
+    "open-alm-dev-worker-ai-graph.service.template": frozenset(
         {
             "NoNewPrivileges=true",
             "PrivateTmp=true",
@@ -116,7 +116,7 @@ REQUIRED_SYSTEMD_TEMPLATE_SETTINGS: Mapping[str, frozenset[str]] = {
             "KillMode=mixed",
         }
     ),
-    "ai-do-dev-worker-ppt.service.template": frozenset(
+    "open-alm-dev-worker-ppt.service.template": frozenset(
         {
             "NoNewPrivileges=true",
             "PrivateTmp=true",
@@ -124,7 +124,7 @@ REQUIRED_SYSTEMD_TEMPLATE_SETTINGS: Mapping[str, frozenset[str]] = {
             "KillMode=mixed",
         }
     ),
-    "ai-do-prod-worker-beat.service.template": frozenset(
+    "open-alm-prod-worker-beat.service.template": frozenset(
         {
             "NoNewPrivileges=true",
             "PrivateTmp=true",
@@ -135,85 +135,85 @@ REQUIRED_SYSTEMD_TEMPLATE_SETTINGS: Mapping[str, frozenset[str]] = {
 }
 LIVE_SYSTEMD_UNIT_EXPECTATIONS: Mapping[str, tuple[str, tuple[str, ...]]] = {
     "prod_api": (
-        "ai-do-prod-api.service",
+        "open-alm-prod-api.service",
         (
-            "WorkingDirectory=/projects/ai-do/prod/apps/api",
-            "/projects/ai-do/prod/apps/api/.venv/bin/python -m uvicorn",
+            "WorkingDirectory=/projects/open-alm/prod/apps/api",
+            "/projects/open-alm/prod/apps/api/.venv/bin/python -m uvicorn",
         ),
     ),
     "prod_collab": (
-        "ai-do-prod-collab.service",
+        "open-alm-prod-collab.service",
         (
-            "WorkingDirectory=/projects/ai-do/prod/apps/api",
-            "Environment=AI_DO_API_INSTANCE_ID=prod-collab",
-            "/projects/ai-do/prod/apps/api/.venv/bin/python -m uvicorn",
+            "WorkingDirectory=/projects/open-alm/prod/apps/api",
+            "Environment=OPEN_ALM_API_INSTANCE_ID=prod-collab",
+            "/projects/open-alm/prod/apps/api/.venv/bin/python -m uvicorn",
             "--port 8009",
         ),
     ),
     "prod_worker_default": (
-        "ai-do-prod-worker.service",
+        "open-alm-prod-worker.service",
         (
-            "WorkingDirectory=/projects/ai-do/prod/apps/worker",
-            "Environment=PYTHONPATH=/projects/ai-do/prod/apps/worker/src",
-            "Environment=AI_DO_WORKER_QUEUE_GROUP=default",
-            "/projects/ai-do/prod/apps/worker/.venv/bin/python -m celery",
-            "--hostname=ai-do-prod-worker-default@",
+            "WorkingDirectory=/projects/open-alm/prod/apps/worker",
+            "Environment=PYTHONPATH=/projects/open-alm/prod/apps/worker/src",
+            "Environment=OPEN_ALM_WORKER_QUEUE_GROUP=default",
+            "/projects/open-alm/prod/apps/worker/.venv/bin/python -m celery",
+            "--hostname=open-alm-prod-worker-default@",
             "-Q celery",
         ),
     ),
     "prod_worker_realtime": (
-        "ai-do-prod-worker-realtime.service",
+        "open-alm-prod-worker-realtime.service",
         (
-            "WorkingDirectory=/projects/ai-do/prod/apps/worker",
-            "Environment=PYTHONPATH=/projects/ai-do/prod/apps/worker/src",
-            "Environment=AI_DO_WORKER_QUEUE_GROUP=realtime",
-            "/projects/ai-do/prod/apps/worker/.venv/bin/python -m celery",
-            "--hostname=ai-do-prod-worker-realtime@",
+            "WorkingDirectory=/projects/open-alm/prod/apps/worker",
+            "Environment=PYTHONPATH=/projects/open-alm/prod/apps/worker/src",
+            "Environment=OPEN_ALM_WORKER_QUEUE_GROUP=realtime",
+            "/projects/open-alm/prod/apps/worker/.venv/bin/python -m celery",
+            "--hostname=open-alm-prod-worker-realtime@",
         ),
     ),
     "prod_worker_long": (
-        "ai-do-prod-worker-long.service",
+        "open-alm-prod-worker-long.service",
         (
-            "WorkingDirectory=/projects/ai-do/prod/apps/worker",
-            "Environment=PYTHONPATH=/projects/ai-do/prod/apps/worker/src",
-            "Environment=AI_DO_WORKER_QUEUE_GROUP=long",
-            "/projects/ai-do/prod/apps/worker/.venv/bin/python -m celery",
-            "--hostname=ai-do-prod-worker-long@",
+            "WorkingDirectory=/projects/open-alm/prod/apps/worker",
+            "Environment=PYTHONPATH=/projects/open-alm/prod/apps/worker/src",
+            "Environment=OPEN_ALM_WORKER_QUEUE_GROUP=long",
+            "/projects/open-alm/prod/apps/worker/.venv/bin/python -m celery",
+            "--hostname=open-alm-prod-worker-long@",
         ),
     ),
     "prod_worker_ai_graph": (
-        "ai-do-prod-worker-ai-graph.service",
+        "open-alm-prod-worker-ai-graph.service",
         (
-            "WorkingDirectory=/projects/ai-do/prod/apps/worker",
-            "Environment=PYTHONPATH=/projects/ai-do/prod/apps/worker/src",
-            "Environment=AI_DO_WORKER_QUEUE_GROUP=ai_graph",
-            "/projects/ai-do/prod/apps/worker/.venv/bin/python -m celery",
-            "--hostname=ai-do-prod-worker-ai-graph@",
+            "WorkingDirectory=/projects/open-alm/prod/apps/worker",
+            "Environment=PYTHONPATH=/projects/open-alm/prod/apps/worker/src",
+            "Environment=OPEN_ALM_WORKER_QUEUE_GROUP=ai_graph",
+            "/projects/open-alm/prod/apps/worker/.venv/bin/python -m celery",
+            "--hostname=open-alm-prod-worker-ai-graph@",
         ),
     ),
     "prod_worker_ppt": (
-        "ai-do-prod-worker-ppt.service",
+        "open-alm-prod-worker-ppt.service",
         (
-            "WorkingDirectory=/projects/ai-do/prod/apps/worker",
-            "Environment=PYTHONPATH=/projects/ai-do/prod/apps/worker/src",
-            "Environment=AI_DO_WORKER_QUEUE_GROUP=ppt",
-            "/projects/ai-do/prod/apps/worker/.venv/bin/python -m celery",
-            "--hostname=ai-do-prod-worker-ppt@",
+            "WorkingDirectory=/projects/open-alm/prod/apps/worker",
+            "Environment=PYTHONPATH=/projects/open-alm/prod/apps/worker/src",
+            "Environment=OPEN_ALM_WORKER_QUEUE_GROUP=ppt",
+            "/projects/open-alm/prod/apps/worker/.venv/bin/python -m celery",
+            "--hostname=open-alm-prod-worker-ppt@",
         ),
     ),
     "prod_worker_beat": (
-        "ai-do-prod-worker-beat.service",
+        "open-alm-prod-worker-beat.service",
         (
-            "WorkingDirectory=/projects/ai-do/prod/apps/worker",
-            "Environment=PYTHONPATH=/projects/ai-do/prod/apps/worker/src",
-            "Environment=AI_DO_WORKER_QUEUE_GROUP=beat",
-            "/projects/ai-do/prod/apps/worker/.venv/bin/python -m celery",
-            "--schedule /projects/ai-do/prod/.runtime/celerybeat-schedule.db",
+            "WorkingDirectory=/projects/open-alm/prod/apps/worker",
+            "Environment=PYTHONPATH=/projects/open-alm/prod/apps/worker/src",
+            "Environment=OPEN_ALM_WORKER_QUEUE_GROUP=beat",
+            "/projects/open-alm/prod/apps/worker/.venv/bin/python -m celery",
+            "--schedule /projects/open-alm/prod/.runtime/celerybeat-schedule.db",
         ),
     ),
     "dev_app": (
-        "ai-do-dev-app.service",
-        ("WorkingDirectory=/projects/ai-do/dev",),
+        "open-alm-dev-app.service",
+        ("WorkingDirectory=/projects/open-alm/dev",),
     ),
 }
 
@@ -417,34 +417,34 @@ def expected_env_values(label: str) -> tuple[dict[str, set[str]], set[str]]:
     if label in {"dev", "example"}:
         return (
             {
-                "AI_DO_API_ENVIRONMENT": {"development"},
-                "AI_DO_API_INSTANCE_ID": {"dev-api"},
-                "AI_DO_API_SERVE_FRONTEND": {"false", "0"},
-                "AI_DO_API_ALLOW_DEV_ADMIN_LOGIN": {"1", "true"},
-                "COMPOSE_PROJECT_NAME": {"ai-do-dev"},
-                "AI_DO_INFRA_CONTAINER_PREFIX": {"ai-do-dev"},
-                "AI_DO_MINIO_BUCKET": {"ai-do-dev"},
-                "AI_DO_OPENSEARCH_INDEX_PREFIX": {"ai-do-dev"},
-                "AI_DO_RAG_QDRANT_COLLECTION_PREFIX": {"ai-do-dev-rag"},
-                "AI_DO_DRAWIO_BIND_HOST": {"0.0.0.0"},
-                "AI_DO_DRAWIO_SERVER_URL": {""},
+                "OPEN_ALM_API_ENVIRONMENT": {"development"},
+                "OPEN_ALM_API_INSTANCE_ID": {"dev-api"},
+                "OPEN_ALM_API_SERVE_FRONTEND": {"false", "0"},
+                "OPEN_ALM_API_ALLOW_DEV_ADMIN_LOGIN": {"1", "true"},
+                "COMPOSE_PROJECT_NAME": {"open-alm-dev"},
+                "OPEN_ALM_INFRA_CONTAINER_PREFIX": {"open-alm-dev"},
+                "OPEN_ALM_MINIO_BUCKET": {"open-alm-dev"},
+                "OPEN_ALM_OPENSEARCH_INDEX_PREFIX": {"open-alm-dev"},
+                "OPEN_ALM_RAG_QDRANT_COLLECTION_PREFIX": {"open-alm-dev-rag"},
+                "OPEN_ALM_DRAWIO_BIND_HOST": {"0.0.0.0"},
+                "OPEN_ALM_DRAWIO_SERVER_URL": {""},
             },
             {"dev"},
         )
     return (
         {
-            "AI_DO_API_ENVIRONMENT": {"production"},
-            "AI_DO_API_INSTANCE_ID": {"prod-api"},
-            "AI_DO_API_SERVE_FRONTEND": {"true", "1"},
-            "AI_DO_API_ALLOW_DEV_ADMIN_LOGIN": {"0", "false"},
-            "COMPOSE_PROJECT_NAME": {"ai-do-prod"},
-            "AI_DO_INFRA_CONTAINER_PREFIX": {"ai-do-prod"},
-            "AI_DO_MINIO_BUCKET": {"ai-do-prod"},
-            "AI_DO_OPENSEARCH_INDEX_PREFIX": {"ai-do-prod"},
-            "AI_DO_RAG_QDRANT_COLLECTION_PREFIX": {"ai-do-prod-rag"},
-            "AI_DO_DRAWIO_BIND_HOST": {"127.0.0.1"},
-            "AI_DO_DRAWIO_PORT": {"18083"},
-            "AI_DO_DRAWIO_SERVER_URL": {"https://drawio.dwdcc.kr/"},
+            "OPEN_ALM_API_ENVIRONMENT": {"production"},
+            "OPEN_ALM_API_INSTANCE_ID": {"prod-api"},
+            "OPEN_ALM_API_SERVE_FRONTEND": {"true", "1"},
+            "OPEN_ALM_API_ALLOW_DEV_ADMIN_LOGIN": {"0", "false"},
+            "COMPOSE_PROJECT_NAME": {"open-alm-prod"},
+            "OPEN_ALM_INFRA_CONTAINER_PREFIX": {"open-alm-prod"},
+            "OPEN_ALM_MINIO_BUCKET": {"open-alm-prod"},
+            "OPEN_ALM_OPENSEARCH_INDEX_PREFIX": {"open-alm-prod"},
+            "OPEN_ALM_RAG_QDRANT_COLLECTION_PREFIX": {"open-alm-prod-rag"},
+            "OPEN_ALM_DRAWIO_BIND_HOST": {"127.0.0.1"},
+            "OPEN_ALM_DRAWIO_PORT": {"18083"},
+            "OPEN_ALM_DRAWIO_SERVER_URL": {"https://drawio.open-alm.example/"},
         },
         {"prod", "production"},
     )
@@ -519,13 +519,13 @@ def evaluate_env_files(
 
         expected, profile_allowed = expected_env_values(env_file.name)
         if env_file.name == "prod" and env_file.values.get(
-            "AI_DO_API_DEV_LOGIN_ALLOWED_HOSTS",
+            "OPEN_ALM_API_DEV_LOGIN_ALLOWED_HOSTS",
             "",
         ):
             failures.append(
                 failure(
                     "prod_dev_login_hosts_set",
-                    "prod: AI_DO_API_DEV_LOGIN_ALLOWED_HOSTS must be empty",
+                    "prod: OPEN_ALM_API_DEV_LOGIN_ALLOWED_HOSTS must be empty",
                 )
             )
 
@@ -533,7 +533,7 @@ def evaluate_env_files(
             failures,
             env_file.name,
             env_file.values,
-            "AI_DO_ENV_PROFILE",
+            "OPEN_ALM_ENV_PROFILE",
             profile_allowed,
         )
         for key, allowed in expected.items():
@@ -557,7 +557,7 @@ def evaluate_static_files(
         failures.append(
             failure(
                 "preview_deploy_skill_present",
-                "ai-do-preview-deploy skill must be removed",
+                "open-alm-preview-deploy skill must be removed",
             )
         )
 
@@ -622,14 +622,14 @@ def evaluate_static_files(
         )
 
     api_project = files["api_project"].text or ""
-    if "${AI_DO_API_DEV_PORT:-8000}" in api_project:
+    if "${OPEN_ALM_API_DEV_PORT:-8000}" in api_project:
         failures.append(
             failure(
                 "api_dev_port_uses_prod_default",
                 "api project dev/serve targets must not default to prod port 8000",
             )
         )
-    if "${AI_DO_API_DEV_PORT:-8001}" not in api_project:
+    if "${OPEN_ALM_API_DEV_PORT:-8001}" not in api_project:
         failures.append(
             failure(
                 "api_dev_port_missing_dev_default",
@@ -638,7 +638,7 @@ def evaluate_static_files(
         )
 
     nginx_template = files["dev_nginx_template"].text or ""
-    if "__AI_DO_DEV_API_UPSTREAM_HOST__:8000" in nginx_template:
+    if "__OPEN_ALM_DEV_API_UPSTREAM_HOST__:8000" in nginx_template:
         failures.append(
             failure(
                 "dev_nginx_uses_prod_api_port",
@@ -647,14 +647,14 @@ def evaluate_static_files(
         )
 
     dev_compose = files["dev_infra_compose"].text or ""
-    if "ai-do-dev-drawio" not in dev_compose or "service_healthy" not in dev_compose:
+    if "open-alm-dev-drawio" not in dev_compose or "service_healthy" not in dev_compose:
         failures.append(
             failure(
                 "dev_drawio_healthcheck_missing",
                 "dev infra compose must include a healthy draw.io service dependency",
             )
         )
-    if "${AI_DO_DRAWIO_BIND_HOST:-0.0.0.0}" not in dev_compose:
+    if "${OPEN_ALM_DRAWIO_BIND_HOST:-0.0.0.0}" not in dev_compose:
         failures.append(
             failure(
                 "dev_drawio_bind_default_unexpected",
@@ -663,21 +663,21 @@ def evaluate_static_files(
         )
 
     prod_compose = files["prod_infra_compose"].text or ""
-    if "ai-do-prod-drawio" not in prod_compose or "healthcheck:" not in prod_compose:
+    if "open-alm-prod-drawio" not in prod_compose or "healthcheck:" not in prod_compose:
         failures.append(
             failure(
                 "prod_drawio_healthcheck_missing",
-                "prod infra compose must health-check ai-do-prod-drawio",
+                "prod infra compose must health-check open-alm-prod-drawio",
             )
         )
-    if "${AI_DO_DRAWIO_BIND_HOST:-127.0.0.1}" not in prod_compose:
+    if "${OPEN_ALM_DRAWIO_BIND_HOST:-127.0.0.1}" not in prod_compose:
         failures.append(
             failure(
                 "prod_drawio_bind_default_unexpected",
                 "prod draw.io bind host must default to 127.0.0.1",
             )
         )
-    if "${AI_DO_DRAWIO_PORT:-18083}" not in prod_compose:
+    if "${OPEN_ALM_DRAWIO_PORT:-18083}" not in prod_compose:
         failures.append(
             failure(
                 "prod_drawio_port_default_unexpected",
@@ -686,18 +686,18 @@ def evaluate_static_files(
         )
 
     prod_nginx_proxy = files["prod_nginx_proxy"].text or ""
-    if "server_name drawio.dwdcc.kr" not in prod_nginx_proxy:
+    if "server_name drawio.open-alm.example" not in prod_nginx_proxy:
         failures.append(
             failure(
                 "prod_drawio_origin_missing",
-                "prod nginx must expose draw.io on drawio.dwdcc.kr",
+                "prod nginx must expose draw.io on drawio.open-alm.example",
             )
         )
     if "proxy_pass http://127.0.0.1:18083" not in prod_nginx_proxy:
         failures.append(
             failure(
                 "prod_drawio_proxy_missing",
-                "prod nginx must proxy drawio.dwdcc.kr to 127.0.0.1:18083",
+                "prod nginx must proxy drawio.open-alm.example to 127.0.0.1:18083",
             )
         )
     if "location /drawio/" in prod_nginx_proxy and "proxy_pass http://127.0.0.1:18083/" in prod_nginx_proxy:
@@ -734,13 +734,13 @@ def evaluate_static_files(
                 "infra-stack.sh is missing checkout guard",
             )
         )
-    if 'AI_DO_ENV_PROFILE="${AI_DO_ENV_PROFILE:-dev}"' not in (
+    if 'OPEN_ALM_ENV_PROFILE="${OPEN_ALM_ENV_PROFILE:-dev}"' not in (
         files["dev_env_script"].text or ""
     ):
         failures.append(
             failure(
                 "dev_env_profile_default_missing",
-                "dev-env.sh must default AI_DO_ENV_PROFILE to dev",
+                "dev-env.sh must default OPEN_ALM_ENV_PROFILE to dev",
             )
         )
 
@@ -876,18 +876,18 @@ def evaluate_systemd_units(
                 )
             )
             continue
-        if name.startswith("prod_") and "/projects/ai-do/dev" in unit_text:
+        if name.startswith("prod_") and "/projects/open-alm/dev" in unit_text:
             failures.append(
                 failure(
                     f"{name}_systemd_unit_dev_checkout",
-                    f"{unit_name} must not point at /projects/ai-do/dev",
+                    f"{unit_name} must not point at /projects/open-alm/dev",
                 )
             )
-        if name.startswith("prod_") and "__AI_DO_" in unit_text:
+        if name.startswith("prod_") and "__OPEN_ALM_" in unit_text:
             failures.append(
                 failure(
                     f"{name}_systemd_unit_unrendered_placeholder",
-                    f"{unit_name} must not contain unrendered AI-DO placeholders",
+                    f"{unit_name} must not contain unrendered Open ALM placeholders",
                 )
             )
         for snippet in required_snippets:
@@ -913,7 +913,7 @@ def evaluate_drawio_live_commands(
         failures.append(
             failure(
                 "prod_drawio_container_unhealthy",
-                "ai-do-prod-drawio container health must be healthy",
+                "open-alm-prod-drawio container health must be healthy",
             )
         )
 
@@ -1031,8 +1031,8 @@ def build_snapshot(
         next((env_file.text for env_file in env_files if env_file.name == "prod"), "")
         or ""
     )
-    prod_smoke_host = prod_env_values.get("AI_DO_PROD_SMOKE_WEB_HOST", "").strip() or None
-    prod_drawio_port = prod_env_values.get("AI_DO_DRAWIO_PORT", "18083").strip() or "18083"
+    prod_smoke_host = prod_env_values.get("OPEN_ALM_PROD_SMOKE_WEB_HOST", "").strip() or None
+    prod_drawio_port = prod_env_values.get("OPEN_ALM_DRAWIO_PORT", "18083").strip() or "18083"
 
     http_endpoints: tuple[JsonEndpointSnapshot, ...] = ()
     systemd_units: tuple[CommandSnapshot, ...] = ()
@@ -1087,7 +1087,7 @@ def build_snapshot(
                     "inspect",
                     "--format",
                     "{{if .State.Health}}{{.State.Health.Status}}{{else}}missing-healthcheck{{end}}",
-                    "ai-do-prod-drawio",
+                    "open-alm-prod-drawio",
                 ),
                 text=adapter.command_text(
                     (
@@ -1095,7 +1095,7 @@ def build_snapshot(
                         "inspect",
                         "--format",
                         "{{if .State.Health}}{{.State.Health.Status}}{{else}}missing-healthcheck{{end}}",
-                        "ai-do-prod-drawio",
+                        "open-alm-prod-drawio",
                     )
                 ),
             ),
@@ -1138,7 +1138,7 @@ def format_report_lines(report: RuntimeSeparationReport) -> tuple[str, ...]:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Audit AI-DO runtime separation.")
+    parser = argparse.ArgumentParser(description="Audit Open ALM runtime separation.")
     parser.add_argument(
         "--mode",
         choices=("static", "live"),

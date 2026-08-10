@@ -16,15 +16,15 @@ fi
 
 INSTANCE_ID="${2:-$(dev_api_name "$INSTANCE_INDEX")}"
 
-export AI_DO_API_INSTANCE_ID="$INSTANCE_ID"
+export OPEN_ALM_API_INSTANCE_ID="$INSTANCE_ID"
 
-if [[ "${AI_DO_API_AUTO_MIGRATE:-}" == "" ]]; then
+if [[ "${OPEN_ALM_API_AUTO_MIGRATE:-}" == "" ]]; then
   if [[ "$PORT" == "8001" ]]; then
-    export AI_DO_API_AUTO_MIGRATE=1
+    export OPEN_ALM_API_AUTO_MIGRATE=1
   else
-    export AI_DO_API_AUTO_MIGRATE=0
+    export OPEN_ALM_API_AUTO_MIGRATE=0
   fi
 fi
 
 cd "$ROOT_DIR/apps/api"
-exec "$ROOT_DIR/apps/api/.venv/bin/python" -m uvicorn ai_do_api.main:app --app-dir src --host "$AI_DO_DEV_API_HOST" --port "$PORT"
+exec "$ROOT_DIR/apps/api/.venv/bin/python" -m uvicorn open_alm_api.main:app --app-dir src --host "$OPEN_ALM_DEV_API_HOST" --port "$PORT"

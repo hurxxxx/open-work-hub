@@ -1,6 +1,6 @@
 import { useEffect, useReducer } from 'react';
-import { Button, Dialog } from '@ai-do/ui';
-import { useConfirm } from '@ai-do/ui/feedback/confirm-dialog';
+import { Button, Dialog } from '@open-alm/ui';
+import { useConfirm } from '@open-alm/ui/feedback/confirm-dialog';
 import { Download, ImageIcon, Loader2, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 

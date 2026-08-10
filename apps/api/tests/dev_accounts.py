@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from ai_do_api.core.db import get_session_factory
-from ai_do_api.domains.auth.access import ensure_dev_login_seed_data
+from open_alm_api.core.db import get_session_factory
+from open_alm_api.domains.auth.access import ensure_dev_login_seed_data
 
 
 TEST_USER_PASSWORD = "supersecret123"
@@ -14,7 +14,7 @@ _LEGACY_ACCOUNTS = {
         "workspace_name": "Delivery Hub",
         "role": "admin",
         "login_id": "deliveryhubadmin",
-        "email": "delivery-hub-admin@ai-do.local",
+        "email": "delivery-hub-admin@open-alm.local",
         "full_name": "Delivery Hub Admin",
     },
     "delivery-hub-member": {
@@ -22,7 +22,7 @@ _LEGACY_ACCOUNTS = {
         "workspace_name": "Delivery Hub",
         "role": "member",
         "login_id": "deliveryhubmember",
-        "email": "delivery-hub-member@ai-do.local",
+        "email": "delivery-hub-member@open-alm.local",
         "full_name": "Delivery Hub Member",
     },
     "knowledge-base-admin": {
@@ -30,7 +30,7 @@ _LEGACY_ACCOUNTS = {
         "workspace_name": "Knowledge Base",
         "role": "admin",
         "login_id": "knowledgebaseadmin",
-        "email": "knowledge-base-admin@ai-do.local",
+        "email": "knowledge-base-admin@open-alm.local",
         "full_name": "Knowledge Base Admin",
     },
 }

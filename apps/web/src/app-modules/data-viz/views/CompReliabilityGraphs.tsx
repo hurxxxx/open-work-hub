@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Data, Layout } from 'plotly.js';
 import { useTranslation } from 'react-i18next';
-import { EmptyState } from '@ai-do/ui';
+import { EmptyState } from '@open-alm/ui';
 
 import { cn } from '@/src/lib/utils';
 import type { DurabilityGraphResponse } from '../api/dataviz-api';

@@ -16,7 +16,7 @@ import {
   InlineNotice,
   Input,
   SearchField,
-} from '@ai-do/ui';
+} from '@open-alm/ui';
 
 import { cn } from '@/src/lib/utils';
 

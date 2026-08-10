@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Check, Copy, Download, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Tooltip } from '@ai-do/ui';
+import { Tooltip } from '@open-alm/ui';
 import 'highlight.js/styles/github.css';
 
 import { DocumentArtifact } from '@/src/components/artifacts/DocumentArtifact';

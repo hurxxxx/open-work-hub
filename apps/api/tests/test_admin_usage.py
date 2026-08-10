@@ -6,24 +6,24 @@ from zoneinfo import ZoneInfo
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from ai_do_api.core.db import get_session_factory
-from ai_do_api.domains.auth.access import record_audit_log
-from ai_do_api.domains.auth.models import AuthSession, utcnow_naive
-from ai_do_api.domains.auth.security import new_id
-from ai_do_api.domains.community.models import CommunityChannel, CommunityComment, CommunityPost
-from ai_do_api.domains.community.service import DEFAULT_CHANNEL_KEY, ensure_default_channels
-from ai_do_api.domains.docs.models import NativeDoc
-from ai_do_api.domains.images.models import ImageGeneration
-from ai_do_api.domains.meeting.models import Meeting
-from ai_do_api.domains.pms.models import Attachment, Task, TaskList
-from ai_do_api.domains.usage.models import UsageEvent, UsageExcludedUser
-from ai_do_api.domains.usage.service import (
+from open_alm_api.core.db import get_session_factory
+from open_alm_api.domains.auth.access import record_audit_log
+from open_alm_api.domains.auth.models import AuthSession, utcnow_naive
+from open_alm_api.domains.auth.security import new_id
+from open_alm_api.domains.community.models import CommunityChannel, CommunityComment, CommunityPost
+from open_alm_api.domains.community.service import DEFAULT_CHANNEL_KEY, ensure_default_channels
+from open_alm_api.domains.docs.models import NativeDoc
+from open_alm_api.domains.images.models import ImageGeneration
+from open_alm_api.domains.meeting.models import Meeting
+from open_alm_api.domains.pms.models import Attachment, Task, TaskList
+from open_alm_api.domains.usage.models import UsageEvent, UsageExcludedUser
+from open_alm_api.domains.usage.service import (
     USAGE_EVENT_APP_OPEN,
     USAGE_EVENT_CONTENT_VIEW,
     USAGE_EVENT_SEARCH_QUERY,
     record_usage_event,
 )
-from ai_do_api.domains.whiteboard.models import Whiteboard
+from open_alm_api.domains.whiteboard.models import Whiteboard
 
 
 def _auth_headers(token: str) -> dict[str, str]:
@@ -34,8 +34,8 @@ def _bootstrap_admin_session(client: TestClient) -> dict:
     response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "AI-DO Admin",
-            "email": "admin@ai-do.local",
+            "full_name": "Open ALM Admin",
+            "email": "admin@open-alm.local",
             "password": "supersecret123",
         },
     )

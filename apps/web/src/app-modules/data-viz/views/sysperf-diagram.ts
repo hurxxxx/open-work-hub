@@ -71,7 +71,7 @@ export interface SysPerfDiagramPlotLabels {
   tsTitle: (args: { refrigerant: string }) => string;
 }
 
-const DIAGRAM_FONT = "'현대하모니', 'Malgun Gothic', sans-serif";
+const DIAGRAM_FONT = "'Pretendard', 'Malgun Gothic', sans-serif";
 const CYCLE_COLORS = SYSPERF_DIAGRAM_COLORS.cycle;
 
 export function normalizeSysPerfTsAxis(axis: SysPerfTsAxis): SysPerfTsAxis {

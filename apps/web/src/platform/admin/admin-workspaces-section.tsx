@@ -11,7 +11,7 @@ import {
   Tabs,
   TabsList,
   TabsTrigger,
-} from '@ai-do/ui';
+} from '@open-alm/ui';
 
 import { createWorkspace, listWorkspaces, type WorkspaceItem } from './admin-api';
 import { useAuth } from '@/src/platform/auth/auth-provider';

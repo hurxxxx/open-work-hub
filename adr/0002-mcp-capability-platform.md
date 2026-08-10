@@ -5,7 +5,7 @@
 
 ## Context
 
-Doowon AI capability registry는 단순 `OpenAI function` 목록에서 **MCP-first capability platform** 으로 전환됐다. 현재 구현은 다음 구조를 전제로 한다.
+Open ALM AI capability registry는 단순 `OpenAI function` 목록에서 **MCP-first capability platform** 으로 전환됐다. 현재 구현은 다음 구조를 전제로 한다.
 
 - 내부 정본 계약은 `AiCapabilityDescriptor`
 - AI-facing 1차 산출물은 MCP manifest
@@ -92,7 +92,7 @@ Doowon AI capability registry는 단순 `OpenAI function` 목록에서 **MCP-fir
 
 - Read capability parity, MCP bridge, inspection/export는 현재 계약에 포함한다.
 - Write DTO, preview builder, handler 코드는 둘 수 있지만 discovery 노출은 분리한다.
-- executable write tool은 `AI_DO_AI_WRITE_TOOLS_ENABLED=true` 일 때에만 discovery 대상이 된다.
+- executable write tool은 `OPEN_ALM_AI_WRITE_TOOLS_ENABLED=true` 일 때에만 discovery 대상이 된다.
 - write capability는 코드 존재와 discovery 노출을 분리해서 rollout 한다.
 
 ### 8. 필수 테스트를 고정한다
@@ -134,4 +134,4 @@ capability contract를 바꾸는 PR은 **문서 + 테스트 + 코드** 를 같�
 - 새 앱 추가 시 이 ADR의 규칙을 먼저 확인하고 capability를 추가한다.
 - capability platform 구현 상태가 바뀌면 관련 current/domain 문서와 하네스 검증 기준을 이 ADR과 같이 정합성 있게 갱신한다.
 - write capability를 실제로 활성화할 때 fine-grained discoverability predicate와 approval persistence 기준을 함께 확정한다.
-- write capability 추가 시 `AI_DO_AI_WRITE_TOOLS_ENABLED` off/on 양쪽 discovery test를 함께 유지한다.
+- write capability 추가 시 `OPEN_ALM_AI_WRITE_TOOLS_ENABLED` off/on 양쪽 discovery test를 함께 유지한다.

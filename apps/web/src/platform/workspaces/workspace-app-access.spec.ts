@@ -12,9 +12,9 @@ function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
   return {
     id: 'user-1',
     login_id: 'user',
-    email: 'user@ai-do.local',
-    full_name: 'AI-DO User',
-    display_name: 'AI-DO User',
+    email: 'user@open-alm.local',
+    full_name: 'Open ALM User',
+    display_name: 'Open ALM User',
     status: 'active',
     theme_preference: 'system',
     locale: 'ko-KR',
@@ -24,7 +24,7 @@ function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
       {
         id: 'workspace-hq',
         slug: 'hq',
-        name: 'AI-DO HQ',
+        name: 'Open ALM HQ',
         role: 'admin',
       },
     ],

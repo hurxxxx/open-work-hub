@@ -5,7 +5,7 @@
 #   bash scripts/mlx-serve.sh            # foreground
 #   nohup bash scripts/mlx-serve.sh &    # background
 #
-# Default port:  8080 (matches AI_DO_LLM_LOCAL_BASE_URL default)
+# Default port:  8080 (matches OPEN_ALM_LLM_LOCAL_BASE_URL default)
 #
 # Override via env:
 #   MLX_MODEL=mlx-community/<model> MLX_PORT=8090 bash scripts/mlx-serve.sh

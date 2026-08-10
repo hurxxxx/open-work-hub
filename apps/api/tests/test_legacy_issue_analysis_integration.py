@@ -7,29 +7,29 @@ from typing import Any, cast
 from unittest.mock import Mock
 from uuid import uuid4
 
-from ai_do_api.domains.ai.gateway import AiGatewayDecision
-from ai_do_api.domains.legacy_issues import (
+from open_alm_api.domains.ai.gateway import AiGatewayDecision
+from open_alm_api.domains.legacy_issues import (
     ai_assistant,
     analysis_application,
     analysis_sql_fallback,
     conversation_scope,
 )
-from ai_do_api.domains.legacy_issues.ai_assistant import (
+from open_alm_api.domains.legacy_issues.ai_assistant import (
     LegacyIssueAssistantResult,
     run_legacy_issue_assistant,
 )
-from ai_do_api.domains.legacy_issues.ai_search import (
+from open_alm_api.domains.legacy_issues.ai_search import (
     LegacyIssueAssistantSearchPlan,
     LegacyIssueEvidence,
     LegacyIssueSearchProfile,
     sanitize_legacy_issue_search_plan,
 )
-from ai_do_api.domains.legacy_issues.analysis_application import (
+from open_alm_api.domains.legacy_issues.analysis_application import (
     LegacyIssueAnalysisOutcome,
     compact_analysis_prompt_payload,
     run_legacy_issue_analysis,
 )
-from ai_do_api.domains.legacy_issues.analysis_contracts import (
+from open_alm_api.domains.legacy_issues.analysis_contracts import (
     AnalysisColumnV1,
     AnalysisCountingUnit,
     AnalysisDataSource,
@@ -42,13 +42,13 @@ from ai_do_api.domains.legacy_issues.analysis_contracts import (
     QueryFamilyId,
     QueryRequestV1,
 )
-from ai_do_api.domains.legacy_issues.analysis_planner import LegacyIssuePlannerResult
-from ai_do_api.domains.legacy_issues.dataset_records import DatasetFieldDefinition
-from ai_do_api.domains.legacy_issues.conversation_scope import (
+from open_alm_api.domains.legacy_issues.analysis_planner import LegacyIssuePlannerResult
+from open_alm_api.domains.legacy_issues.dataset_records import DatasetFieldDefinition
+from open_alm_api.domains.legacy_issues.conversation_scope import (
     LegacyIssueConversationScopeAdapter,
     LegacyIssuePromptAnalysis,
 )
-from ai_do_api.domains.legacy_issues import router as legacy_issue_router
+from open_alm_api.domains.legacy_issues import router as legacy_issue_router
 
 
 def test_analytics_executes_exact_catalog_without_semantic_retrieval(
@@ -266,7 +266,7 @@ def test_generated_failure_degrades_to_semantic_and_preserves_all_decisions(
     )
     generated_planner = Mock(return_value=(object(), [generated_decision]))
     generated_executor = Mock(side_effect=RuntimeError("generated execution failed"))
-    generated_module = ModuleType("ai_do_api.domains.legacy_issues.analysis_generated_executor")
+    generated_module = ModuleType("open_alm_api.domains.legacy_issues.analysis_generated_executor")
     setattr(generated_module, "execute_generated_analysis", generated_executor)
     monkeypatch.setitem(sys.modules, generated_module.__name__, generated_module)
     monkeypatch.setattr(
@@ -346,7 +346,7 @@ def test_checklist_generated_failure_never_substitutes_legacy_semantic_evidence(
     semantic_search = Mock(side_effect=AssertionError("legacy semantic search must not run"))
     generated_planner = Mock(return_value=(object(), [generated_decision]))
     generated_executor = Mock(side_effect=RuntimeError("generated execution failed"))
-    generated_module = ModuleType("ai_do_api.domains.legacy_issues.analysis_generated_executor")
+    generated_module = ModuleType("open_alm_api.domains.legacy_issues.analysis_generated_executor")
     setattr(generated_module, "execute_generated_analysis", generated_executor)
     monkeypatch.setitem(sys.modules, generated_module.__name__, generated_module)
     monkeypatch.setattr(
@@ -397,7 +397,7 @@ def test_generated_fallback_preserves_hybrid_semantic_evidence(monkeypatch) -> N
         "queries": [],
     }
     generated_executor = Mock(return_value=generated_payload)
-    generated_module = ModuleType("ai_do_api.domains.legacy_issues.analysis_generated_executor")
+    generated_module = ModuleType("open_alm_api.domains.legacy_issues.analysis_generated_executor")
     setattr(generated_module, "execute_generated_analysis", generated_executor)
     monkeypatch.setitem(sys.modules, generated_module.__name__, generated_module)
     monkeypatch.setattr(
@@ -442,7 +442,7 @@ def test_multi_source_generated_fallback_is_marked_degraded(monkeypatch) -> None
         "mode": "generated",
         "queries": [],
     }
-    generated_module = ModuleType("ai_do_api.domains.legacy_issues.analysis_generated_executor")
+    generated_module = ModuleType("open_alm_api.domains.legacy_issues.analysis_generated_executor")
     setattr(
         generated_module,
         "execute_generated_analysis",
@@ -500,7 +500,7 @@ def test_multi_source_generated_failure_preserves_execution_error(monkeypatch) -
         profile=_semantic_profile(),
         decision=_decision("semantic"),
     )
-    generated_module = ModuleType("ai_do_api.domains.legacy_issues.analysis_generated_executor")
+    generated_module = ModuleType("open_alm_api.domains.legacy_issues.analysis_generated_executor")
     setattr(
         generated_module,
         "execute_generated_analysis",
@@ -558,7 +558,7 @@ def test_generated_fallback_preserves_semantic_cohort_evidence(monkeypatch) -> N
         profile=_semantic_profile(),
         decision=_decision("semantic"),
     )
-    generated_module = ModuleType("ai_do_api.domains.legacy_issues.analysis_generated_executor")
+    generated_module = ModuleType("open_alm_api.domains.legacy_issues.analysis_generated_executor")
     setattr(
         generated_module,
         "execute_generated_analysis",

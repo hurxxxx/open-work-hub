@@ -12,7 +12,7 @@
     `uv run` here: it re-syncs against uv.lock on every start and would try to
     rebuild the locally-built y-py wheel from the registry sdist (which fails on
     Windows). The bootstrap installs y-py into the venv; this launcher just uses it.
-  - Does NOT auto-migrate the shared dev DB (AI_DO_API_AUTO_MIGRATE=0). DB
+  - Does NOT auto-migrate the shared dev DB (OPEN_ALM_API_AUTO_MIGRATE=0). DB
     migrations are coordinated and applied from the server dev checkout.
 
 .PARAMETER ApiOnly   Start only the api.
@@ -65,12 +65,12 @@ $apiProc = $null
 if (-not $WebOnly) {
   # Local-dev safe defaults (match server dev): never auto-migrate the shared dev DB,
   # and don't gate startup on the LLM backend being reachable.
-  $env:AI_DO_API_AUTO_MIGRATE = "0"
-  $env:AI_DO_LLM_HEALTHCHECK_ON_STARTUP = "0"
-  $env:AI_DO_LLM_REQUIRED = "0"
+  $env:OPEN_ALM_API_AUTO_MIGRATE = "0"
+  $env:OPEN_ALM_LLM_HEALTHCHECK_ON_STARTUP = "0"
+  $env:OPEN_ALM_LLM_REQUIRED = "0"
   Write-Host "==> api  http://127.0.0.1:8001/docs" -ForegroundColor Cyan
   $apiProc = Start-Process -PassThru -NoNewWindow -FilePath $py `
-    -ArgumentList @("-m","uvicorn","ai_do_api.main:app","--app-dir","src","--host","127.0.0.1","--port","8001","--reload") `
+    -ArgumentList @("-m","uvicorn","open_alm_api.main:app","--app-dir","src","--host","127.0.0.1","--port","8001","--reload") `
     -WorkingDirectory (Join-Path $root "apps\api")
   if ($ApiOnly) {
     Write-Host "api pid $($apiProc.Id). Ctrl+C to stop." -ForegroundColor Green

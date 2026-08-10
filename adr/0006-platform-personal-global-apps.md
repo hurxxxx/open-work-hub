@@ -5,7 +5,7 @@
 
 ## Context
 
-AI-DO의 앱 활성화와 데이터 소유권은 기존에 workspace 하나의 축으로 취급됐다. 그러나
+Open ALM의 앱 활성화와 데이터 소유권은 기존에 workspace 하나의 축으로 취급됐다. 그러나
 Community는 회사 전체 리소스이고, Mail과 Planner는 사용자가 소유하는 개인화 도구다.
 이 앱들을 선택된 workspace에 묶으면 workspace가 없는 사용자, 여러 workspace의 일정과
 메일, 전역 DM·개인 위젯에서 인위적인 범위가 생긴다.

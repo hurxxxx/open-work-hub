@@ -16,7 +16,7 @@ export interface PptFamily {
   id: string;
   name: string;
   aspect: string;
-  /** 본문 슬라이드 수를 사용자가 정할 수 있는 양식(자유/두원/doowon-v2)인지. */
+  /** 본문 슬라이드 수를 사용자가 정할 수 있는 양식(자유/Open ALM/corporate-v2)인지. */
   multi_body?: boolean;
   preview_images?: PptTemplatePreviewImage[];
 }

@@ -7,7 +7,7 @@ import {
   useRef,
   type RefObject,
 } from 'react';
-import { Button, Dialog, useConfirm } from '@ai-do/ui';
+import { Button, Dialog, useConfirm } from '@open-alm/ui';
 import {
   Check,
   Crown,

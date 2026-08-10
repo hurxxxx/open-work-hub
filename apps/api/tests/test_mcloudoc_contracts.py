@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
-from ai_do_api.domains.mcloudoc.contracts import (
+from open_alm_api.domains.mcloudoc.contracts import (
     MAX_RAW_JSON_BYTES,
     MAX_RESOLVED_GRANTS,
     MAX_SEARCHABLE_CONTENT_BYTES,

@@ -11,7 +11,7 @@ import {
   Play,
   RefreshCw,
 } from 'lucide-react';
-import { Button, useConfirm } from '@ai-do/ui';
+import { Button, useConfirm } from '@open-alm/ui';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { DocsViewerModal } from '@/src/app-modules/docs/public-api';

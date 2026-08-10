@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ai_do_worker.tasks import mail
+from open_alm_worker.tasks import mail
 
 
 class _Session:

@@ -1,4 +1,4 @@
-import { BarChartCard, LineChartCard, type ChartSeries } from '@ai-do/ui';
+import { BarChartCard, LineChartCard, type ChartSeries } from '@open-alm/ui';
 import { AlertTriangle } from 'lucide-react';
 import { useId, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';

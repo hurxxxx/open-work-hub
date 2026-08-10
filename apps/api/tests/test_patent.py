@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import UploadFile
 
-from ai_do_api.domains.patent import kipris, llm, prompts, router, service
+from open_alm_api.domains.patent import kipris, llm, prompts, router, service
 
 
 class _FakeResponse:
@@ -36,7 +36,7 @@ def _word_search_xml() -> str:
         <applicationNumber>10-2024-0001234</applicationNumber>
         <registrationNumber>10-2500000</registrationNumber>
         <inventionTitle>전기차 히트펌프 시스템</inventionTitle>
-        <applicantName>두원공조</applicantName>
+        <applicantName>Open ALM</applicantName>
         <applicationDate>20240115</applicationDate>
         <registerStatus>등록</registerStatus>
         <ipcNumber>F25B30/00</ipcNumber>
@@ -64,7 +64,7 @@ def test_word_search_parses_items_and_total(monkeypatch: pytest.MonkeyPatch) -> 
     assert total == 42
     assert len(items) == 1
     assert items[0]["app_no"] == "10-2024-0001234"
-    assert items[0]["applicant"] == "두원공조"
+    assert items[0]["applicant"] == "Open ALM"
     assert items[0]["ipc"] == "F25B30/00"
 
 
@@ -771,7 +771,7 @@ def test_generic_foreign_result_uses_unpadded_provider_number_when_publication_m
 def test_platform_kipris_factory_owns_settings_and_fails_closed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from ai_do_api.core import settings as settings_module
+    from open_alm_api.core import settings as settings_module
 
     monkeypatch.setattr(
         settings_module,
@@ -1108,7 +1108,7 @@ def test_ai_search_shapes_results_and_tags(monkeypatch: pytest.MonkeyPatch) -> N
                     "app_no": "10-2024-0001234",
                     "reg_no": "",
                     "title": "전기차 히트펌프",
-                    "applicant": "두원공조",
+                    "applicant": "Open ALM",
                     "date": "20240115",
                     "status": "등록",
                     "ipc": "F25B30/00",
@@ -1117,7 +1117,7 @@ def test_ai_search_shapes_results_and_tags(monkeypatch: pytest.MonkeyPatch) -> N
             ],
             1,
         ),
-        applicant_names=lambda q, page=1, num_rows=30, deadline_monotonic=None: ["두원공조"],
+        applicant_names=lambda q, page=1, num_rows=30, deadline_monotonic=None: ["Open ALM"],
     )
     monkeypatch.setattr(service, "_client", lambda: fake_client)
 
@@ -1150,7 +1150,7 @@ def test_ai_search_shapes_results_and_tags(monkeypatch: pytest.MonkeyPatch) -> N
     assert result.results[0].relevance == 88
     assert result.results[0].ai_tags == ["냉매"]
     assert result.ai_summary == "검색 요약"
-    assert result.top_applicants[0].name == "두원공조"
+    assert result.top_applicants[0].name == "Open ALM"
 
 
 def test_ai_search_shares_one_short_deadline_across_all_kipris_pages(

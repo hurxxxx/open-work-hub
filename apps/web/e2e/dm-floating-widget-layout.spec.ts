@@ -50,7 +50,7 @@ function dmUser(index: number): DmUserFixture {
 function currentUser(): DmUserFixture {
   return {
     id: CURRENT_USER_ID,
-    email: 'e2e@ai-do.local',
+    email: 'e2e@open-alm.local',
     full_name: 'E2E Tester',
     display_name: 'E2E Tester',
     job_title: null,
@@ -178,7 +178,7 @@ test('keeps the floating DM composer inside the widget viewport', async ({
 
   await page.evaluate((threadId) => {
     window.dispatchEvent(
-      new CustomEvent('ai-do:floating-dm-open', {
+      new CustomEvent('open-alm:floating-dm-open', {
         detail: { threadId },
       }),
     );

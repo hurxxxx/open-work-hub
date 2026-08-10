@@ -1,15 +1,15 @@
 import {
   aiDoDesktopInstallerUrl,
   type AiDoDesktopUpdatePlatform,
-} from '@ai-do/contracts/ai-do-desktop-update-feed';
+} from '@open-alm/contracts/open-alm-desktop-update-feed';
 
 export type DesktopInstallPlatform = AiDoDesktopUpdatePlatform;
 
 export type DesktopInstallerEnv = Partial<{
-  VITE_AI_DO_DESKTOP_INSTALLER_URL: string;
-  VITE_AI_DO_DESKTOP_INSTALLER_URL_WIN: string;
-  VITE_AI_DO_DESKTOP_INSTALLER_URL_MAC: string;
-  VITE_AI_DO_DESKTOP_INSTALLER_URL_LINUX: string;
+  VITE_OPEN_ALM_DESKTOP_INSTALLER_URL: string;
+  VITE_OPEN_ALM_DESKTOP_INSTALLER_URL_WIN: string;
+  VITE_OPEN_ALM_DESKTOP_INSTALLER_URL_MAC: string;
+  VITE_OPEN_ALM_DESKTOP_INSTALLER_URL_LINUX: string;
 }>;
 
 export type DesktopPlatformSignal = {
@@ -98,14 +98,14 @@ export function resolveDesktopInstallerUrls(
 ): Record<DesktopInstallPlatform, string> {
   return {
     win:
-      env.VITE_AI_DO_DESKTOP_INSTALLER_URL_WIN ??
-      env.VITE_AI_DO_DESKTOP_INSTALLER_URL ??
+      env.VITE_OPEN_ALM_DESKTOP_INSTALLER_URL_WIN ??
+      env.VITE_OPEN_ALM_DESKTOP_INSTALLER_URL ??
       DEFAULT_DESKTOP_INSTALLER_URLS.win,
     mac:
-      env.VITE_AI_DO_DESKTOP_INSTALLER_URL_MAC ??
+      env.VITE_OPEN_ALM_DESKTOP_INSTALLER_URL_MAC ??
       DEFAULT_DESKTOP_INSTALLER_URLS.mac,
     linux:
-      env.VITE_AI_DO_DESKTOP_INSTALLER_URL_LINUX ??
+      env.VITE_OPEN_ALM_DESKTOP_INSTALLER_URL_LINUX ??
       DEFAULT_DESKTOP_INSTALLER_URLS.linux,
   };
 }
@@ -139,7 +139,7 @@ export function resolveDesktopInstallerDownload(
   return {
     href: resolvedUrl.href,
     fileName: decodeURIComponent(
-      resolvedUrl.pathname.split('/').pop() ?? 'AI-DO-Desktop',
+      resolvedUrl.pathname.split('/').pop() ?? 'Open ALM-Desktop',
     ),
   };
 }

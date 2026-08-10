@@ -7,28 +7,28 @@ from types import SimpleNamespace
 from fastapi import HTTPException
 import pytest
 
-from ai_do_api.domains.search import service as search_service
-import ai_do_api.domains as domains_package
-from ai_do_api.domains.search.backend_contracts import (
+from open_alm_api.domains.search import service as search_service
+import open_alm_api.domains as domains_package
+from open_alm_api.domains.search.backend_contracts import (
     KeywordAclFilter,
     KeywordSearchHit,
     KeywordSearchQuery,
     KeywordSearchResult,
 )
-from ai_do_api.domains.search.schemas import KeywordSearchRequest
-from ai_do_api.domains.search.default_entity_adapters import (
+from open_alm_api.domains.search.schemas import KeywordSearchRequest
+from open_alm_api.domains.search.default_entity_adapters import (
     ensure_search_entity_adapters_registered,
 )
-from ai_do_api.domains.search.default_index_hook_adapters import (
+from open_alm_api.domains.search.default_index_hook_adapters import (
     ensure_search_index_hooks_registered,
 )
-from ai_do_api.domains.search.entity_adapter_registry import (
+from open_alm_api.domains.search.entity_adapter_registry import (
     SearchEntityAdapter,
     search_entity_adapters,
 )
-from ai_do_api.domains.search.hook_registry import get_search_index_hook_registration
-from ai_do_api.domains.search import projections as search_projections
-from ai_do_api.domains.search.projection_identity import SearchProjectionIdentityError
+from open_alm_api.domains.search.hook_registry import get_search_index_hook_registration
+from open_alm_api.domains.search import projections as search_projections
+from open_alm_api.domains.search.projection_identity import SearchProjectionIdentityError
 
 
 def _request(*, entity_types: list[str] | None = None) -> KeywordSearchRequest:
@@ -48,7 +48,7 @@ def test_app_owned_search_adapters_match_explicit_runtime_composition() -> None:
     discovered: set[tuple[str, str]] = set()
     for projection_path in sorted(domains_root.glob("*/search_projection.py")):
         module = importlib.import_module(
-            f"ai_do_api.domains.{projection_path.parent.name}.search_projection"
+            f"open_alm_api.domains.{projection_path.parent.name}.search_projection"
         )
         discovered.update(
             (value.owner_app_id, value.entity_type)
@@ -174,7 +174,7 @@ def test_workspace_keyword_search_rejects_workspace_without_active_source(
         )
 
     assert error.value.status_code == 403
-    assert error.value.headers["X-AI-DO-Error-Code"] == ("search.workspace_keyword_search_disabled")
+    assert error.value.headers["X-Open ALM-Error-Code"] == ("search.workspace_keyword_search_disabled")
 
 
 def test_workspace_keyword_search_returns_empty_for_disallowed_requested_entities(
@@ -414,7 +414,7 @@ def test_workspace_keyword_search_reports_missing_global_index(
         )
 
     assert error.value.status_code == 503
-    assert error.value.headers["X-AI-DO-Error-Code"] == "search.keyword_backend_unavailable"
+    assert error.value.headers["X-Open ALM-Error-Code"] == "search.keyword_backend_unavailable"
 
 
 def test_disabled_source_retains_indexed_documents_for_reenable(

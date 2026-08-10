@@ -453,7 +453,7 @@ function DesktopRailBusinessSitesMenu({
 
           <a
             className="flex w-full items-center gap-3 px-3 py-3 text-left text-app-ink transition-colors hover:bg-app-surface-hover focus:outline-none focus:ring-2 focus:ring-inset focus:ring-app-accent/35"
-            href="http://gw.dwdcc.co.kr/index.aspx"
+            href="http://gw.example.com/index.aspx"
             onClick={onClose}
             rel="noreferrer"
             role="menuitem"
@@ -480,7 +480,7 @@ function DesktopRailBusinessSitesMenu({
 
           <a
             className="flex w-full items-center gap-3 border-t border-app-border px-3 py-3 text-left text-app-ink transition-colors hover:bg-app-surface-hover focus:outline-none focus:ring-2 focus:ring-inset focus:ring-app-accent/35"
-            href="https://dwdcc.ezwel.com/pc/mypage/auth/login/pc/product/main/welfare-mall"
+            href="https://open-alm.ezwel.com/pc/mypage/auth/login/pc/product/main/welfare-mall"
             onClick={onClose}
             rel="noreferrer"
             role="menuitem"

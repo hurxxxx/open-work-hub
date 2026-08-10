@@ -223,7 +223,7 @@ export interface ApprovalLine {
 
 /**
  * 야근 산정 정책.
- * ⚠ regularEnd 외 수치는 두원공조 취업규칙 확인 필요 — 아래 값은 UI 검증용 임시값.
+ * ⚠ regularEnd 외 수치는 Open ALM 취업규칙 확인 필요 — 아래 값은 UI 검증용 임시값.
  * weeklyLimitMinutes(주 12시간)만 근로기준법 제53조 법정 한도.
  */
 export interface OvertimePolicy {
@@ -652,7 +652,7 @@ export type HolidayWorkCompensation = 'ALLOWANCE' | 'COMP_LEAVE';
 /**
  * 특근(휴일근로) 산정 정책.
  * premium* 은 근로기준법 제56조 제2항 법정 가산율이라 확정값이다.
- * ⚠ 나머지(휴게 기본값·인정 단위·최소 시간·대체휴가 환산 기준)는 두원공조 취업규칙 확인 필요.
+ * ⚠ 나머지(휴게 기본값·인정 단위·최소 시간·대체휴가 환산 기준)는 Open ALM 취업규칙 확인 필요.
  */
 export interface HolidayWorkPolicy {
   premiumWithin8hPercent: number; // 8시간 이내 가산 50%

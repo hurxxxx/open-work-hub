@@ -2,13 +2,13 @@
 
 상태: 현재 정본
 
-이 문서는 AI-DO의 AI Gateway 현재 계약, 구현 상태, 남은 로드맵을 설명하는 단일 정본이다.
+이 문서는 Open ALM의 AI Gateway 현재 계약, 구현 상태, 남은 로드맵을 설명하는 단일 정본이다.
 AI Gateway 관련 역할 경계, LLM 호출 표준, 사용량/비용 집계 계획, throttling 계획은
 다른 문서에 중복 작성하지 않고 이 문서로 링크한다.
 
 ## 범위
 
-AI Gateway는 AI-DO 메인 API 안에서 확정된 LLM 실행 계획을 검증·실행·감사하는
+AI Gateway는 Open ALM 메인 API 안에서 확정된 LLM 실행 계획을 검증·실행·감사하는
 실행 Module이다.
 모델을 직접 서빙하는 GPU 추론 백엔드가 아니다.
 
@@ -117,7 +117,7 @@ API와 worker가 같은 암호화 키와 DB 설정을 사용해야 하므로 일
    `image_execution_profile.v2`만 허용하고, 저장된 provider·Adapter 참조가 현재 활성 설정과
    다르면 fail-closed한다.
 2. API와 worker 양쪽에 동일한 비어 있지 않은
-   `AI_DO_AI_MODEL_CREDENTIAL_ENCRYPTION_KEY`를 설정한다. 이 키는 provider API key 자체가
+   `OPEN_ALM_AI_MODEL_CREDENTIAL_ENCRYPTION_KEY`를 설정한다. 이 키는 provider API key 자체가
    아니며, DB credential 암복호화용 배포 secret이다.
 3. 승인된 배포 절차에서 `cd apps/api && uv run --python 3.12 alembic upgrade head`를 실행한다.
 4. legacy provider 값은 runtime `.env`에 남기지 않고 권한을 제한한 일회성 dotenv 파일로
@@ -131,7 +131,7 @@ API와 worker가 같은 암호화 키와 DB 설정을 사용해야 하므로 일
 6. 운영 배포에서는 `llm_provider_settings_cutover,image_model_settings_cutover` pre-activation
    gate를 사용한다. gate는 worker를 quiesce한 뒤 preview/apply/idempotency, 이미지 broker/DB
    작업 0건, 활성 이미지 설정과 credential 복호화를 확인하고 나서만 restart를 허용한다.
-7. smoke가 끝나면 일회성 dotenv 파일을 제거한다. `AI_DO_IMAGE_ENABLED`와 파일 크기·reference 수·
+7. smoke가 끝나면 일회성 dotenv 파일을 제거한다. `OPEN_ALM_IMAGE_ENABLED`와 파일 크기·reference 수·
    timeout 같은 배포 한도만 runtime 환경변수에 유지한다.
 
 ## 현재 구현
@@ -197,7 +197,7 @@ masking/block enforcement, audit의 기반은 있지만, 일반적인 enterprise
 
 구현된 핵심 경로:
 
-- `apps/api/src/ai_do_api/domains/ai/gateway.py`
+- `apps/api/src/open_alm_api/domains/ai/gateway.py`
   - `AiGatewayRequest`
   - `AiGatewayContextPack`
   - `AiGatewayDecision`
@@ -205,43 +205,43 @@ masking/block enforcement, audit의 기반은 있지만, 일반적인 enterprise
   - `complete_gateway_chat_text`
   - `complete_gateway_chat_stream`
   - `complete_resolved_gateway_chat_stream`
-- `apps/api/src/ai_do_api/domains/ai/boundary_safety.py`
+- `apps/api/src/open_alm_api/domains/ai/boundary_safety.py`
   - 외부 LLM/API 전송 전 PII, 내부 context, 민감 라벨, 보안/credential/기업 민감 엔티티 판정
   - gateway와 external capability envelope가 공유하는 raw-free safety decision
-- `apps/api/src/ai_do_api/domains/ai/masking.py`, `privacy_filter.py`
+- `apps/api/src/open_alm_api/domains/ai/masking.py`, `privacy_filter.py`
   - mask-eligible text span 치환, privacy-filter 연동, post-mask 재검사와 fail-closed 처리
-- `apps/api/src/ai_do_api/domains/ai/external_gateway.py`
+- `apps/api/src/open_alm_api/domains/ai/external_gateway.py`
   - `AiExternalCapabilityRequest`
   - provider SDK/HTTP 호출 전 allowlist, PII, 내부 context, 민감 라벨, 민감 엔티티 검사
   - SDK 고유 기능을 유지하는 sync/async execution envelope
   - raw input을 저장하지 않는 `ai_external_call` audit 기록
-- `apps/api/src/ai_do_api/domains/ai/interactions.py`
+- `apps/api/src/open_alm_api/domains/ai/interactions.py`
   - `ai_interactions` raw-free usage ledger
   - audit보다 조회가 쉬운 token/usage/source/task/provider/conversation metadata 저장
-- `apps/api/src/ai_do_api/core/llm.py`
+- `apps/api/src/open_alm_api/core/llm.py`
   - resolved workload execution의 provider-neutral completion/stream transport
   - external provider allowlist와 pool health
   - local/external pool health
   - provider-neutral completion/stream result
   - `llm_call` audit 기록
-- `apps/api/src/ai_do_api/domains/ai/registry.py`
+- `apps/api/src/open_alm_api/domains/ai/registry.py`
   - domain-owned registered LLM workload/task/tool/capability registry
   - stable workload discovery snapshot과 legacy task compatibility materialization
   - gateway tool adapter registry
   - discoverability predicate와 approval-required tool guard
-- `apps/api/src/ai_do_api/core/llm_model_profiles.py`
+- `apps/api/src/open_alm_api/core/llm_model_profiles.py`
   - provider/model별 payload shaping, reasoning effort, prompt truncation profile
-- `apps/api/src/ai_do_api/domains/images/model_settings_service.py`
+- `apps/api/src/open_alm_api/domains/images/model_settings_service.py`
   - 이미지 provider/credential/model/profile의 DB-only resolution과 readiness
-- `apps/api/src/ai_do_api/domains/admin/router.py`
+- `apps/api/src/open_alm_api/domains/admin/router.py`
   - audit payload 기반 LLM call/token/user/task/model 집계
 - `apps/web/src/platform/admin/admin-console.tsx`
   - 관리자 사용량 화면의 LLM token, task/model breakdown 표시
-- `apps/api/src/ai_do_api/domains/conversations/app_scope_adapters.py`
+- `apps/api/src/open_alm_api/domains/conversations/app_scope_adapters.py`
   - 앱별 대화 scope ref와 서버 소유 `ConversationExperience` 중앙 등록
   - 공용 대화 CRUD의 owner app entitlement와 선택적 generic chat workload 선언
   - Web Search/Q&A/Patent/PPT처럼 앞으로 늘어나는 LLM UX가 동일 conversation 저장 계약을 사용하도록 함
-- `apps/api/src/ai_do_api/domains/conversations/app_persistence.py`
+- `apps/api/src/open_alm_api/domains/conversations/app_persistence.py`
   - 앱 대화 생성/재사용, user/assistant turn append, 최근 turn prompt 재사용 helper
 
 현재 gateway wrapper 사용처:
@@ -382,14 +382,14 @@ throttling key, counter 방식, 차단 audit shape는 승인된 설계가 없으
 현재 범위에서는 LiteLLM을 기본 구성에 넣지 않는다.
 
 현재 provider 범위는 내부 LLM, 직접 운영 vLLM, OpenAI, Anthropic, Gemini다.
-이 범위에서는 AI-DO 내부 gateway에 audit, 비용 집계, 간단한 throttling을 추가하는
+이 범위에서는 Open ALM 내부 gateway에 audit, 비용 집계, 간단한 throttling을 추가하는
 편이 운영 복잡도가 낮다.
 
 LiteLLM 재검토 조건:
 
 - provider 수가 크게 늘어난다.
 - virtual key, per-key budget, provider별 fallback/canary가 운영 요구가 된다.
-- 외부 조직/파트너가 AI-DO 밖에서 gateway API를 직접 소비한다.
+- 외부 조직/파트너가 Open ALM 밖에서 gateway API를 직접 소비한다.
 - 모델 라우팅 정책을 코드 배포 없이 운영자가 자주 바꿔야 한다.
 - 여러 앱/서비스가 같은 외부 LLM proxy를 공유해야 한다.
 
@@ -418,7 +418,7 @@ uv run --python 3.12 --group dev python -m pytest tests/test_ai_external_gateway
 uv run --python 3.12 --group dev python -m pytest tests/test_platform_adapter_registries.py -q
 uv run --python 3.12 --group dev python -m pytest tests/test_ai_gateway_direct_call_guard.py -q
 uv run --python 3.12 --group dev python -m pytest tests/test_admin_usage.py::test_admin_usage_dashboard_aggregates_user_content_and_llm_usage -q
-python -c "from ai_do_api.platform_extensions import initialize_platform_extensions; initialize_platform_extensions()"
+python -c "from open_alm_api.platform_extensions import initialize_platform_extensions; initialize_platform_extensions()"
 ```
 
 문서만 바꿀 때:

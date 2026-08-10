@@ -5,21 +5,21 @@ import os
 from fastapi.testclient import TestClient
 import pytest
 
-from ai_do_api.core.db import get_session_factory
-from ai_do_api.core.settings import get_settings
-from ai_do_api.domains.images.cutover import (
+from open_alm_api.core.db import get_session_factory
+from open_alm_api.core.settings import get_settings
+from open_alm_api.domains.images.cutover import (
     ImageModelCutoverError,
     check_image_model_cutover,
 )
-from ai_do_api.domains.images.legacy_model_settings_import import (
+from open_alm_api.domains.images.legacy_model_settings_import import (
     import_legacy_image_model_settings,
 )
-from ai_do_api.domains.images.model_settings_models import (
+from open_alm_api.domains.images.model_settings_models import (
     IMAGE_MODEL_PROFILE_ID,
     ImageModelProfile,
     ImageModelProviderConfig,
 )
-from ai_do_api.domains.images.model_settings_service import (
+from open_alm_api.domains.images.model_settings_service import (
     IMAGE_EXECUTION_PROFILE_VERSION,
     ImageModelSettingsError,
     resolve_profiled_image_execution,
@@ -28,16 +28,16 @@ from tests.dev_accounts import auth_headers, dev_login
 
 
 LEGACY_IMAGE_ENV_KEYS = (
-    "AI_DO_IMAGE_PROVIDER",
-    "AI_DO_IMAGE_API_KEY",
-    "AI_DO_IMAGE_OPENAI_API_KEY",
-    "AI_DO_IMAGE_PROVIDER_API_KEYS",
-    "AI_DO_IMAGE_BASE_URL",
-    "AI_DO_IMAGE_MODEL",
-    "AI_DO_IMAGE_SUPERVISOR_MODEL",
-    "AI_DO_IMAGE_BRIEF_WEB_SEARCH_ENABLED",
-    "AI_DO_IMAGE_AGENT_WEB_SEARCH_ENABLED",
-    "AI_DO_IMAGE_AGENT_MAX_ITER",
+    "OPEN_ALM_IMAGE_PROVIDER",
+    "OPEN_ALM_IMAGE_API_KEY",
+    "OPEN_ALM_IMAGE_OPENAI_API_KEY",
+    "OPEN_ALM_IMAGE_PROVIDER_API_KEYS",
+    "OPEN_ALM_IMAGE_BASE_URL",
+    "OPEN_ALM_IMAGE_MODEL",
+    "OPEN_ALM_IMAGE_SUPERVISOR_MODEL",
+    "OPEN_ALM_IMAGE_BRIEF_WEB_SEARCH_ENABLED",
+    "OPEN_ALM_IMAGE_AGENT_WEB_SEARCH_ENABLED",
+    "OPEN_ALM_IMAGE_AGENT_MAX_ITER",
 )
 
 
@@ -71,8 +71,8 @@ def test_admin_image_model_settings_are_separate_and_secret_free(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("AI_DO_IMAGE_ENABLED", "1")
-    monkeypatch.setenv("AI_DO_AI_ALLOWED_EXTERNAL_PROVIDERS", "openai")
+    monkeypatch.setenv("OPEN_ALM_IMAGE_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_AI_ALLOWED_EXTERNAL_PROVIDERS", "openai")
     get_settings.cache_clear()
     headers = _admin_headers(client)
 
@@ -185,11 +185,11 @@ def test_legacy_image_settings_import_is_preview_first_and_idempotent(
     del client
     for key in LEGACY_IMAGE_ENV_KEYS:
         monkeypatch.delenv(key, raising=False)
-    monkeypatch.setenv("AI_DO_IMAGE_PROVIDER", "openai")
-    monkeypatch.setenv("AI_DO_IMAGE_API_KEY", "legacy-image-secret")
-    monkeypatch.setenv("AI_DO_IMAGE_MODEL", "legacy-image-model")
-    monkeypatch.setenv("AI_DO_IMAGE_SUPERVISOR_MODEL", "legacy-supervisor-model")
-    monkeypatch.setenv("AI_DO_IMAGE_AGENT_MAX_ITER", "6")
+    monkeypatch.setenv("OPEN_ALM_IMAGE_PROVIDER", "openai")
+    monkeypatch.setenv("OPEN_ALM_IMAGE_API_KEY", "legacy-image-secret")
+    monkeypatch.setenv("OPEN_ALM_IMAGE_MODEL", "legacy-image-model")
+    monkeypatch.setenv("OPEN_ALM_IMAGE_SUPERVISOR_MODEL", "legacy-supervisor-model")
+    monkeypatch.setenv("OPEN_ALM_IMAGE_AGENT_MAX_ITER", "6")
 
     with get_session_factory()() as db:
         preview = import_legacy_image_model_settings(
@@ -238,10 +238,10 @@ def test_legacy_image_settings_import_enables_existing_provider_before_activatio
     del client
     for key in LEGACY_IMAGE_ENV_KEYS:
         monkeypatch.delenv(key, raising=False)
-    monkeypatch.setenv("AI_DO_IMAGE_PROVIDER", "openai")
-    monkeypatch.setenv("AI_DO_IMAGE_API_KEY", "legacy-image-secret")
-    monkeypatch.setenv("AI_DO_IMAGE_MODEL", "legacy-image-model")
-    monkeypatch.setenv("AI_DO_IMAGE_SUPERVISOR_MODEL", "legacy-supervisor-model")
+    monkeypatch.setenv("OPEN_ALM_IMAGE_PROVIDER", "openai")
+    monkeypatch.setenv("OPEN_ALM_IMAGE_API_KEY", "legacy-image-secret")
+    monkeypatch.setenv("OPEN_ALM_IMAGE_MODEL", "legacy-image-model")
+    monkeypatch.setenv("OPEN_ALM_IMAGE_SUPERVISOR_MODEL", "legacy-supervisor-model")
 
     with get_session_factory()() as db:
         db.add(

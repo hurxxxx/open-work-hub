@@ -1,0 +1,23 @@
+[Unit]
+Description=Open ALM Development Worker Beat
+Wants=network-online.target open-alm-dev-worker.service open-alm-dev-worker-realtime.service open-alm-dev-worker-long.service open-alm-dev-worker-patent.service open-alm-dev-worker-ai-graph.service
+After=network-online.target open-alm-dev-worker.service open-alm-dev-worker-realtime.service open-alm-dev-worker-long.service open-alm-dev-worker-patent.service open-alm-dev-worker-ai-graph.service
+
+[Service]
+Type=simple
+WorkingDirectory=__OPEN_ALM_ROOT__/apps/worker
+Environment=PYTHONPATH=__OPEN_ALM_ROOT__/apps/worker/src
+Environment=OPEN_ALM_WORKER_QUEUE_GROUP=beat
+Environment=OPEN_ALM_RUNTIME_REVISION=__OPEN_ALM_RUNTIME_REVISION__
+ExecStart=/usr/bin/env bash -lc 'source "__OPEN_ALM_ROOT__/scripts/dev-env.sh" && cd "__OPEN_ALM_ROOT__/apps/worker" && exec uv run --python 3.12 celery -A open_alm_worker.celery_app:celery_app beat --loglevel=info --schedule "__OPEN_ALM_ROOT__/.runtime/celerybeat-schedule.db"'
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0077
+Restart=always
+RestartSec=10
+TimeoutStartSec=300
+TimeoutStopSec=180
+KillMode=control-group
+
+[Install]
+WantedBy=default.target

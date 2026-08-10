@@ -4,19 +4,19 @@ from types import SimpleNamespace
 
 import pytest
 
-from ai_do_api.domains.rag import application as rag_application
-from ai_do_api.domains.rag.contracts import (
+from open_alm_api.domains.rag import application as rag_application
+from open_alm_api.domains.rag.contracts import (
     RagAnswerMode,
     RagProjection,
     RagQueryRequest,
 )
-from ai_do_api.domains.rag import grounded_answer
-from ai_do_api.domains.rag.grounded_answer import LlmGroundedAnswerSynthesizer
-from ai_do_api.domains.rag.grounded_answer_assembly import GroundedAnswerAssembler
-from ai_do_api.domains.rag.providers import RagProviderTransientError
-from ai_do_api.domains.rag.providers.fake import FakeEmbeddingClient, FakeVectorIndexClient
-from ai_do_api.domains.rag.query_service import RagQueryService
-from ai_do_api.domains.rag.service import RagService
+from open_alm_api.domains.rag import grounded_answer
+from open_alm_api.domains.rag.grounded_answer import LlmGroundedAnswerSynthesizer
+from open_alm_api.domains.rag.grounded_answer_assembly import GroundedAnswerAssembler
+from open_alm_api.domains.rag.providers import RagProviderTransientError
+from open_alm_api.domains.rag.providers.fake import FakeEmbeddingClient, FakeVectorIndexClient
+from open_alm_api.domains.rag.query_service import RagQueryService
+from open_alm_api.domains.rag.service import RagService
 
 
 def test_workspace_rag_query_wraps_provider_failures_as_unavailable(monkeypatch) -> None:

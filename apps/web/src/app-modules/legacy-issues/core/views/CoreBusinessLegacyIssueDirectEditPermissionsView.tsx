@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, RefreshCw, ShieldCheck, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
-import { useToast } from '@ai-do/ui';
+import { useToast } from '@open-alm/ui';
 
 import { listWorkspaceMembers } from '@/src/platform/admin/admin-api';
 import { hasAdminConsoleAccess } from '@/src/platform/auth/auth-api';

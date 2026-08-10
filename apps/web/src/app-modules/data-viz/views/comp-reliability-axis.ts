@@ -3,7 +3,7 @@ import type { Layout } from 'plotly.js';
 import type { DurabilityColSeries } from '../api/dataviz-api';
 import { DATA_VIZ_PLOT_COLORS } from './data-viz-colors';
 
-export const FONT = '현대하모니, Malgun Gothic, sans-serif';
+export const FONT = 'Pretendard, Malgun Gothic, sans-serif';
 export const FONT_SIZE_AXIS = 14;
 export const LINE_WIDTH = 2.5;
 

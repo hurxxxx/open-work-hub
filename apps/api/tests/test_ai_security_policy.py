@@ -5,30 +5,30 @@ from datetime import UTC, datetime, timedelta
 from fastapi.testclient import TestClient
 import pytest
 
-from ai_do_api.core.db import get_session_factory
-from ai_do_api.core.llm import LlmPoolConfig
-from ai_do_api.core.settings import Settings
-from ai_do_api.domains.ai import masking as masking_module
-from ai_do_api.domains.ai import external_gateway
-from ai_do_api.domains.ai.boundary_safety import evaluate_external_payload_safety
-from ai_do_api.domains.ai.external_gateway import (
+from open_alm_api.core.db import get_session_factory
+from open_alm_api.core.llm import LlmPoolConfig
+from open_alm_api.core.settings import Settings
+from open_alm_api.domains.ai import masking as masking_module
+from open_alm_api.domains.ai import external_gateway
+from open_alm_api.domains.ai.boundary_safety import evaluate_external_payload_safety
+from open_alm_api.domains.ai.external_gateway import (
     AiExternalCapabilityPolicyViolation,
     AiExternalCapabilityRequest,
     execute_external_capability,
 )
-from ai_do_api.domains.ai.gateway import (
+from open_alm_api.domains.ai.gateway import (
     AiGatewayPolicyViolation,
     AiGatewayRequest,
     resolve_gateway_execution,
 )
-from ai_do_api.domains.ai.privacy_filter import PrivacyFilterDetection
-from ai_do_api.domains.ai.models import (
+from open_alm_api.domains.ai.privacy_filter import PrivacyFilterDetection
+from open_alm_api.domains.ai.models import (
     AiSecurityDataProtectionSettings,
     AiSecurityDetectedValue,
     AiSecurityExternalTransferException,
     AiSecurityPolicyRule,
 )
-from ai_do_api.domains.ai.security_policy import (
+from open_alm_api.domains.ai.security_policy import (
     DATA_PROTECTION_SETTINGS_ID,
     EXTERNAL_TRANSFER_EXCEPTION_REASON,
     external_transfer_blockers_from_safety,
@@ -36,8 +36,8 @@ from ai_do_api.domains.ai.security_policy import (
     resolve_ai_security_policy,
     AiSecurityPolicyContext,
 )
-from ai_do_api.domains.auth.models import AuditLog
-from ai_do_api.domains.auth.security import new_id
+from open_alm_api.domains.auth.models import AuditLog
+from open_alm_api.domains.auth.security import new_id
 
 
 def _auth_headers(token: str) -> dict[str, str]:
@@ -61,8 +61,8 @@ def _bootstrap_admin_session(client: TestClient) -> dict:
     response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "AI-DO Admin",
-            "email": "admin@ai-do.local",
+            "full_name": "Open ALM Admin",
+            "email": "admin@open-alm.local",
             "password": "supersecret123",
         },
     )

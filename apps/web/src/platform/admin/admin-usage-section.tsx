@@ -28,7 +28,7 @@ import {
   TabsList,
   TabsTrigger,
   Tooltip,
-} from '@ai-do/ui';
+} from '@open-alm/ui';
 
 import type { AuthUser } from '@/src/platform/auth/auth-api';
 import { useAuth } from '@/src/platform/auth/auth-provider';

@@ -7,8 +7,8 @@ import {
   useState,
 } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useConfirm } from '@ai-do/ui/feedback/confirm-dialog';
-import { usePrompt } from '@ai-do/ui/feedback/prompt-dialog';
+import { useConfirm } from '@open-alm/ui/feedback/confirm-dialog';
+import { usePrompt } from '@open-alm/ui/feedback/prompt-dialog';
 import {
   ArrowUpDown,
   ChevronDown,

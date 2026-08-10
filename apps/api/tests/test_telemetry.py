@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from starlette.datastructures import Headers
 
-from ai_do_api.core.telemetry import (
+from open_alm_api.core.telemetry import (
     _build_otlp_metric_exporter,
     _build_otlp_span_exporter,
     bootstrap_telemetry,
@@ -12,7 +12,7 @@ from ai_do_api.core.telemetry import (
 
 
 def test_extract_trace_context_preserves_http_baggage_header() -> None:
-    bootstrap_telemetry(service_name="ai-do-api-test")
+    bootstrap_telemetry(service_name="open-alm-api-test")
 
     headers = Headers(
         {
@@ -40,7 +40,7 @@ def test_extract_trace_context_preserves_http_baggage_header() -> None:
 
 
 def test_start_as_current_span_preserves_ambient_parent_when_no_explicit_context() -> None:
-    bootstrap_telemetry(service_name="ai-do-api-test")
+    bootstrap_telemetry(service_name="open-alm-api-test")
 
     with start_as_current_span(
         tracer_name="tests.telemetry",

@@ -10,12 +10,12 @@ import pytest
 from pydantic import ValidationError
 from qdrant_client import QdrantClient, models
 
-from ai_do_api.domains.document_processing import EvidenceBlock
-from ai_do_api.domains.files.rag_projection import (
+from open_alm_api.domains.document_processing import EvidenceBlock
+from open_alm_api.domains.files.rag_projection import (
     FileExtractionArtifact,
     build_file_rag_projection,
 )
-from ai_do_api.domains.rag.contracts import (
+from open_alm_api.domains.rag.contracts import (
     RagDeleteRequest,
     RagProjection,
     RagQueryRequest,
@@ -25,9 +25,9 @@ from ai_do_api.domains.rag.contracts import (
     RagVectorSearchMode,
     RagVectorSearchRequest,
 )
-from ai_do_api.domains.rag.providers import RagProviderConfigurationError
-from ai_do_api.domains.rag.providers.fake import FakeEmbeddingClient
-from ai_do_api.domains.rag.providers.openai_compatible import (
+from open_alm_api.domains.rag.providers import RagProviderConfigurationError
+from open_alm_api.domains.rag.providers.fake import FakeEmbeddingClient
+from open_alm_api.domains.rag.providers.openai_compatible import (
     InferenceGatewayOcrClient,
     OpenAICompatibleEmbeddingClient,
     OpenAICompatibleRerankClient,
@@ -35,15 +35,15 @@ from ai_do_api.domains.rag.providers.openai_compatible import (
     RagProviderTransientError,
     _clear_inference_gateway_health_cache,
 )
-from ai_do_api.domains.rag.providers.qdrant import QdrantVectorIndexClient
-from ai_do_api.domains.rag.query_service import RagQueryService
-from ai_do_api.domains.rag.runtime import (
+from open_alm_api.domains.rag.providers.qdrant import QdrantVectorIndexClient
+from open_alm_api.domains.rag.query_service import RagQueryService
+from open_alm_api.domains.rag.runtime import (
     PARTITIONED_RAG_GENERATION_SCHEMA_VERSION,
     resolve_partitioned_rag_collection_alias,
     resolve_partitioned_rag_collection_name,
 )
-from ai_do_api.domains.rag.service import RagService
-from ai_do_api.domains.retrieval.projection_identity import canonical_vector_point_id
+from open_alm_api.domains.rag.service import RagService
+from open_alm_api.domains.retrieval.projection_identity import canonical_vector_point_id
 
 pytestmark = pytest.mark.filterwarnings(
     "ignore:Payload indexes have no effect in the local Qdrant.*"
@@ -857,7 +857,7 @@ def test_partitioned_existing_collection_fails_closed_on_payload_schema_drift(
 
 def test_optional_metadata_filters_do_not_change_the_v1_generation_schema() -> None:
     settings = SimpleNamespace(
-        rag_qdrant_collection_prefix="ai-do-test-rag",
+        rag_qdrant_collection_prefix="open-alm-test-rag",
         rag_embedding_provider="fake",
         rag_local_embedding_model="unused-for-fake",
     )

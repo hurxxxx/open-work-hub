@@ -63,7 +63,7 @@ function select(changes, options = {}) {
 
 test('selects declared and convention-owned API tests for an app domain', () => {
   const result = select([
-    { status: 'M', path: 'apps/api/src/ai_do_api/domains/pms/router.py' },
+    { status: 'M', path: 'apps/api/src/open_alm_api/domains/pms/router.py' },
   ]);
   assert.equal(result.scope, 'focused');
   assert.deepEqual(result.paths, [
@@ -74,7 +74,7 @@ test('selects declared and convention-owned API tests for an app domain', () => 
 
 test('deduplicates tests shared by multiple manifests for one domain', () => {
   const result = select([
-    { status: 'M', path: 'apps/api/src/ai_do_api/domains/patent/router.py' },
+    { status: 'M', path: 'apps/api/src/open_alm_api/domains/patent/router.py' },
   ]);
   assert.deepEqual(result.paths, ['apps/api/tests/test_patent.py']);
 });
@@ -82,13 +82,13 @@ test('deduplicates tests shared by multiple manifests for one domain', () => {
 test('falls back to the full suite for core and unregistered API domains', () => {
   assert.equal(
     select([
-      { status: 'M', path: 'apps/api/src/ai_do_api/domains/ai/router.py' },
+      { status: 'M', path: 'apps/api/src/open_alm_api/domains/ai/router.py' },
     ]).scope,
     'full',
   );
   assert.equal(
     select([
-      { status: 'M', path: 'apps/api/src/ai_do_api/domains/unknown/router.py' },
+      { status: 'M', path: 'apps/api/src/open_alm_api/domains/unknown/router.py' },
     ]).scope,
     'full',
   );
@@ -98,7 +98,7 @@ test('falls back to full when a mapped domain declares no API pytest', () => {
   const result = select([
     {
       status: 'M',
-      path: 'apps/api/src/ai_do_api/domains/legacy_issues/router.py',
+      path: 'apps/api/src/open_alm_api/domains/legacy_issues/router.py',
     },
   ]);
   assert.equal(result.scope, 'full');
@@ -107,7 +107,7 @@ test('falls back to full when a mapped domain declares no API pytest', () => {
 
 test('falls back to full when a manifest-declared API pytest path is missing', () => {
   const result = select(
-    [{ status: 'M', path: 'apps/api/src/ai_do_api/domains/pms/router.py' }],
+    [{ status: 'M', path: 'apps/api/src/open_alm_api/domains/pms/router.py' }],
     {
       pathExists: (testPath) =>
         testPath !== 'apps/api/tests/test_pms_issues.py' &&
@@ -120,7 +120,7 @@ test('falls back to full when a manifest-declared API pytest path is missing', (
 
 test('falls back to full when a declared or changed API pytest has no items', () => {
   const result = select(
-    [{ status: 'M', path: 'apps/api/src/ai_do_api/domains/pms/router.py' }],
+    [{ status: 'M', path: 'apps/api/src/open_alm_api/domains/pms/router.py' }],
     {
       pathHasPytestItem: (testPath) =>
         testPath !== 'apps/api/tests/test_pms_issues.py',
@@ -142,8 +142,8 @@ test('selects directly changed tests and both sides of a rename', () => {
     { status: 'M', path: 'apps/api/tests/test_direct.py' },
     {
       status: 'R',
-      previousPath: 'apps/api/src/ai_do_api/domains/patent/old.py',
-      path: 'apps/api/src/ai_do_api/domains/pms/new.py',
+      previousPath: 'apps/api/src/open_alm_api/domains/patent/old.py',
+      path: 'apps/api/src/open_alm_api/domains/pms/new.py',
     },
   ]);
   assert.equal(result.scope, 'focused');
@@ -169,7 +169,7 @@ test('search projection changes include the workspace keyword registry contract'
   const result = select([
     {
       status: 'M',
-      path: 'apps/api/src/ai_do_api/domains/pms/search_projection.py',
+      path: 'apps/api/src/open_alm_api/domains/pms/search_projection.py',
     },
   ]);
 
@@ -186,7 +186,7 @@ test('deleted search registration escalates to the full API suite', () => {
   const result = select([
     {
       status: 'D',
-      path: 'apps/api/src/ai_do_api/domains/pms/search_projection.py',
+      path: 'apps/api/src/open_alm_api/domains/pms/search_projection.py',
     },
   ]);
 
@@ -196,7 +196,7 @@ test('deleted search registration escalates to the full API suite', () => {
 test('domain selection deduplicates a directly changed declared test', () => {
   const result = select([
     { status: 'M', path: 'apps/api/tests/test_pms_issues.py' },
-    { status: 'M', path: 'apps/api/src/ai_do_api/domains/pms/router.py' },
+    { status: 'M', path: 'apps/api/src/open_alm_api/domains/pms/router.py' },
   ]);
   assert.deepEqual(result.paths, [
     'apps/api/tests/test_pms_issues.py',
@@ -206,7 +206,7 @@ test('domain selection deduplicates a directly changed declared test', () => {
 
 test('adds convention and import-discovered tests outside appLocalTests', () => {
   const result = select(
-    [{ status: 'M', path: 'apps/api/src/ai_do_api/domains/pms/router.py' }],
+    [{ status: 'M', path: 'apps/api/src/open_alm_api/domains/pms/router.py' }],
     {
       apiTestsByDomain: {
         pms: ['apps/api/tests/test_endpoint_contract_for_pms.py'],
@@ -225,7 +225,7 @@ test('app registration boundaries and deleted API tests run the full suite', () 
     select([
       {
         status: 'M',
-        path: 'apps/api/src/ai_do_api/domains/pms/app_catalog.py',
+        path: 'apps/api/src/open_alm_api/domains/pms/app_catalog.py',
       },
     ]).scope,
     'full',
@@ -276,7 +276,7 @@ test('full fallback retains directly changed tests for the routine tier', () => 
     },
     {
       status: 'M',
-      path: 'apps/api/src/ai_do_api/core/db.py',
+      path: 'apps/api/src/open_alm_api/core/db.py',
     },
   ]);
 
@@ -508,7 +508,7 @@ test('migration regression expands only for DB and migration-sensitive changes',
     requiresFullMigrationRegression([
       {
         status: 'M',
-        path: 'apps/api/src/ai_do_api/domains/hr/models.py',
+        path: 'apps/api/src/open_alm_api/domains/hr/models.py',
       },
     ]),
     true,
@@ -526,7 +526,7 @@ test('migration regression expands only for DB and migration-sensitive changes',
     requiresFullMigrationRegression([
       {
         status: 'M',
-        path: 'apps/api/src/ai_do_api/domains/hr/service.py',
+        path: 'apps/api/src/open_alm_api/domains/hr/service.py',
       },
     ]),
     false,

@@ -7,18 +7,18 @@ import pytest
 from sqlalchemy import create_engine, event, func, insert, select
 from sqlalchemy.orm import Session
 
-from ai_do_api.core.db import Base
-from ai_do_api.domains.auth.models import (
+from open_alm_api.core.db import Base
+from open_alm_api.domains.auth.models import (
     OrgUnit,
     User,
     UserSystemRole,
     Workspace,
     WorkspaceUserBinding,
 )
-from ai_do_api.domains.files import service as files_service
-from ai_do_api.domains.files import rag_projection as files_rag_projection
-from ai_do_api.domains.files import search_projection as files_search_projection
-from ai_do_api.domains.files.models import (
+from open_alm_api.domains.files import service as files_service
+from open_alm_api.domains.files import rag_projection as files_rag_projection
+from open_alm_api.domains.files import search_projection as files_search_projection
+from open_alm_api.domains.files.models import (
     FileManagerCorpus,
     FileManagerCorpusTransitionAudit,
     FileManagerFile,
@@ -26,20 +26,20 @@ from ai_do_api.domains.files.models import (
     FileManagerFileSourceMetadata,
     FileManagerFolder,
 )
-from ai_do_api.domains.files.source_access import (
+from open_alm_api.domains.files.source_access import (
     FileManagerSourceAccessAdapter,
     can_read_file,
     has_accessible_file,
 )
-from ai_do_api.domains.retrieval.models import RetrievalPartition
-from ai_do_api.domains.retrieval.partitioning import ensure_default_partition
-from ai_do_api.domains.rag.contracts import (
+from open_alm_api.domains.retrieval.models import RetrievalPartition
+from open_alm_api.domains.retrieval.partitioning import ensure_default_partition
+from open_alm_api.domains.rag.contracts import (
     RagProjection,
     RagScopeKind,
     RagVectorSearchHit,
 )
-from ai_do_api.domains.rag.query_projection import to_query_hit
-from ai_do_api.domains.source_access.policy import SourceAclPolicy
+from open_alm_api.domains.rag.query_projection import to_query_hit
+from open_alm_api.domains.source_access.policy import SourceAclPolicy
 
 
 WORKSPACE_A_ID = "workspace-a"

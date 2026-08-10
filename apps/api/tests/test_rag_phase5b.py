@@ -4,28 +4,28 @@ from fastapi.testclient import TestClient
 import pytest
 from sqlalchemy import select
 
-from ai_do_api.core.db import get_session_factory
-from ai_do_api.core.settings import get_settings
-from ai_do_api.domains.ai.registry import reset_ai_capability_registry
-from ai_do_api.domains.auth.access import ensure_dev_login_seed_data, load_user_graph
-from ai_do_api.domains.auth.models import Workspace
-from ai_do_api.domains.auth.workspace_apps import get_workspace_app_catalog_item
-from ai_do_api.domains.docs import service as docs_service
-from ai_do_api.domains.rag import application as rag_application
-from ai_do_api.domains.rag.default_source_adapters import registered_searchable_rag_app_ids
-from ai_do_api.domains.rag.docs_projection import load_native_doc_projection
-import ai_do_api.domains.rag.outbox as rag_outbox
-from ai_do_api.domains.rag.providers.fake import (
+from open_alm_api.core.db import get_session_factory
+from open_alm_api.core.settings import get_settings
+from open_alm_api.domains.ai.registry import reset_ai_capability_registry
+from open_alm_api.domains.auth.access import ensure_dev_login_seed_data, load_user_graph
+from open_alm_api.domains.auth.models import Workspace
+from open_alm_api.domains.auth.workspace_apps import get_workspace_app_catalog_item
+from open_alm_api.domains.docs import service as docs_service
+from open_alm_api.domains.rag import application as rag_application
+from open_alm_api.domains.rag.default_source_adapters import registered_searchable_rag_app_ids
+from open_alm_api.domains.rag.docs_projection import load_native_doc_projection
+import open_alm_api.domains.rag.outbox as rag_outbox
+from open_alm_api.domains.rag.providers.fake import (
     FakeEmbeddingClient,
     FakeRerankClient,
     FakeVectorIndexClient,
 )
-from ai_do_api.domains.rag.query_service import RagQueryService
-from ai_do_api.domains.rag.runtime import (
+from open_alm_api.domains.rag.query_service import RagQueryService
+from open_alm_api.domains.rag.runtime import (
     reset_rag_runtime_caches,
     resolve_default_collection_name,
 )
-from ai_do_api.domains.rag.service import RagService
+from open_alm_api.domains.rag.service import RagService
 
 DELIVERY_WORKSPACE_KEY = "delivery-hub"
 HQ_WORKSPACE_KEY = "hq"
@@ -157,7 +157,7 @@ def test_workspace_rag_query_route_filters_out_foreign_workspace_hits(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "1")
     _reset_settings_and_registry()
     delivery_session, _delivery_workspace_item = _provision_delivery_workspace(client)
     _create_workspace(client, delivery_session["token"], key=HQ_WORKSPACE_KEY, name="HQ")
@@ -240,7 +240,7 @@ def test_workspace_rag_reindex_requires_admin(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "1")
     _reset_settings_and_registry()
     admin_session, workspace_item = _provision_delivery_workspace(client)
     session = _create_user_session(
@@ -265,7 +265,7 @@ def test_workspace_rag_reindex_enforces_cooldown(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "1")
     _reset_settings_and_registry()
     session, _workspace_item = _provision_delivery_workspace(client)
     with get_session_factory()() as db:
@@ -303,7 +303,7 @@ def test_workspace_rag_query_validates_payload(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "1")
     _reset_settings_and_registry()
     session, _workspace_item = _provision_delivery_workspace(client)
 
@@ -341,7 +341,7 @@ def test_workspace_rag_query_rejects_non_member(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "1")
     _reset_settings_and_registry()
     admin_session, _delivery_workspace_item = _provision_delivery_workspace(client)
     hq_workspace = _create_workspace(
@@ -375,7 +375,7 @@ def test_rag_ai_manifest_hides_tools_when_no_searchable_apps_enabled(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "1")
     _reset_settings_and_registry()
     session, workspace_item = _provision_delivery_workspace(client)
     for app_id in sorted(registered_searchable_rag_app_ids()):

@@ -30,7 +30,7 @@ import {
   Upload,
   X,
 } from 'lucide-react';
-import { Dialog, useConfirm, useToast } from '@ai-do/ui';
+import { Dialog, useConfirm, useToast } from '@open-alm/ui';
 
 import { cn } from '@/src/lib/utils';
 import { searchDmUsers, type DmUser } from '@/src/app-modules/dm';

@@ -6,10 +6,10 @@ import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-from ai_do_api.core.db import Base
-from ai_do_api.domains.auth.models import AuditLog, AuthSession, OrgUnit, User, Workspace
-from ai_do_api.domains.auth.security import hash_password, new_id
-from ai_do_api.domains.hr.groupware_sync import (
+from open_alm_api.core.db import Base
+from open_alm_api.domains.auth.models import AuditLog, AuthSession, OrgUnit, User, Workspace
+from open_alm_api.domains.auth.security import hash_password, new_id
+from open_alm_api.domains.hr.groupware_sync import (
     AUTH_PROVIDER_GROUPWARE,
     GROUPWARE_SOURCE_SYSTEM,
     GroupwareOrgRow,

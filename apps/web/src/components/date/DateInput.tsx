@@ -80,7 +80,7 @@ const DATE_CALENDAR_ESTIMATED_HEIGHT = 340;
 const DATE_TIME_CALENDAR_ESTIMATED_HEIGHT = 408;
 const CALENDAR_GUTTER = 4;
 const VIEWPORT_PADDING = 8;
-const DATE_PICKER_LAYER_SELECTOR = '[data-ai-do-date-picker]';
+const DATE_PICKER_LAYER_SELECTOR = '[data-open-alm-date-picker]';
 const DEFAULT_TIME_VALUE = '09:00';
 
 function isDatePickerLayerTarget(target: Node | null): boolean {
@@ -310,7 +310,7 @@ function DatePickerShell({
             <div
               aria-label={pickerLabel}
               className="fixed z-[10000] w-72 rounded-lg border border-app-border bg-app-bg p-3 text-app-ink shadow-xl"
-              data-ai-do-date-picker=""
+              data-open-alm-date-picker=""
               data-ui-floating-layer=""
               ref={calendarRef}
               onKeyDown={(event) => {

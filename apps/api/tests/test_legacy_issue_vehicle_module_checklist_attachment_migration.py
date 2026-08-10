@@ -20,11 +20,11 @@ def checklist_attachment_migration_config(
     monkeypatch: pytest.MonkeyPatch,
     postgres_dsn: str,
 ) -> Iterator[object]:
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", postgres_dsn)
-    monkeypatch.setenv("AI_DO_LLM_HEALTHCHECK_ON_STARTUP", "0")
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", postgres_dsn)
+    monkeypatch.setenv("OPEN_ALM_LLM_HEALTHCHECK_ON_STARTUP", "0")
 
-    from ai_do_api.core.db import _alembic_config
-    from ai_do_api.core.settings import get_settings
+    from open_alm_api.core.db import _alembic_config
+    from open_alm_api.core.settings import get_settings
 
     get_settings.cache_clear()
     engine = create_engine(postgres_dsn)

@@ -62,7 +62,7 @@ export type WhiteboardViewAction =
 
 type LayoutModeStorage = Pick<Storage, 'getItem' | 'setItem'>;
 
-export const VIEW_MODE_STORAGE_KEY = 'ai-do:whiteboard:view-mode';
+export const VIEW_MODE_STORAGE_KEY = 'open-alm:whiteboard:view-mode';
 export const WHITEBOARD_HUB_PAGE_SIZE = 200;
 
 export const VIEW_LABEL_KEYS: Record<WhiteboardHubView, string> = {

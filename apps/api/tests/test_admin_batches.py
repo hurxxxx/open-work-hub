@@ -5,15 +5,15 @@ from datetime import datetime
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from ai_do_api.core.db import get_session_factory
-from ai_do_api.domains.auth.models import AuditLog, PlatformAppVisibility
-from ai_do_api.domains.auth.security import new_id
-from ai_do_api.domains.hr.erp_snapshot import (
+from open_alm_api.core.db import get_session_factory
+from open_alm_api.domains.auth.models import AuditLog, PlatformAppVisibility
+from open_alm_api.domains.auth.security import new_id
+from open_alm_api.domains.hr.erp_snapshot import (
     ERP_EMPLOYEE_SCHEMA_VERSION,
     ERP_EMPLOYEE_SCOPE_KEY,
     ERP_SOURCE_SYSTEM,
 )
-from ai_do_api.domains.hr.models import HrSyncRun
+from open_alm_api.domains.hr.models import HrSyncRun
 from tests.dev_accounts import auth_headers, dev_login
 
 
@@ -25,8 +25,8 @@ def _bootstrap_admin_session(client: TestClient) -> dict:
     response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "AI-DO Admin",
-            "email": "admin@ai-do.local",
+            "full_name": "Open ALM Admin",
+            "email": "admin@open-alm.local",
             "password": "supersecret123",
         },
     )
@@ -98,7 +98,7 @@ def test_admin_can_queue_groupware_hr_batch(client: TestClient, monkeypatch) -> 
     session = _bootstrap_admin_session(client)
 
     monkeypatch.setattr(
-        "ai_do_api.domains.admin.router.dispatch_groupware_hr_sync",
+        "open_alm_api.domains.admin.router.dispatch_groupware_hr_sync",
         lambda *, force: "task-123" if force else None,
     )
 
@@ -121,7 +121,7 @@ def test_admin_can_queue_erp_hr_snapshot_without_exposing_source_rows(
     session = _bootstrap_admin_session(client)
 
     monkeypatch.setattr(
-        "ai_do_api.domains.admin.router.dispatch_erp_hr_snapshot",
+        "open_alm_api.domains.admin.router.dispatch_erp_hr_snapshot",
         lambda *, force: "erp-task-123" if force else None,
     )
 
@@ -220,7 +220,7 @@ def test_admin_can_queue_integrated_hr_master_batch(
 ) -> None:
     session = _bootstrap_admin_session(client)
     monkeypatch.setattr(
-        "ai_do_api.domains.admin.router.dispatch_hr_master_build",
+        "open_alm_api.domains.admin.router.dispatch_hr_master_build",
         lambda *, force: "master-task-123" if force else None,
     )
 
@@ -255,7 +255,7 @@ def test_erp_hr_batch_requires_admin_permission(client: TestClient, monkeypatch)
         raise AssertionError(f"unauthorized ERP batch must not dispatch (force={force})")
 
     monkeypatch.setattr(
-        "ai_do_api.domains.admin.router.dispatch_erp_hr_snapshot",
+        "open_alm_api.domains.admin.router.dispatch_erp_hr_snapshot",
         fail_dispatch,
     )
     headers = auth_headers(dev_login(client, "delivery-hub-member")["token"])
@@ -269,7 +269,7 @@ def test_admin_can_queue_news_batch(client: TestClient, monkeypatch) -> None:
     session = _bootstrap_admin_session(client)
 
     monkeypatch.setattr(
-        "ai_do_api.domains.news.dispatch.dispatch_collect_all",
+        "open_alm_api.domains.news.dispatch.dispatch_collect_all",
         lambda *, force: "news-task-123" if force else None,
     )
 
@@ -288,7 +288,7 @@ def test_admin_can_queue_industry_report_batch(client: TestClient, monkeypatch) 
     session = _bootstrap_admin_session(client)
 
     monkeypatch.setattr(
-        "ai_do_api.domains.industry_report.dispatch.dispatch_collect_all",
+        "open_alm_api.domains.industry_report.dispatch.dispatch_collect_all",
         lambda *, force: "report-task-123" if force else None,
     )
 
@@ -314,11 +314,11 @@ def test_admin_cannot_queue_news_batches_while_app_is_disabled(
         raise AssertionError(f"disabled News batch must not dispatch (force={force})")
 
     monkeypatch.setattr(
-        "ai_do_api.domains.news.dispatch.dispatch_collect_all",
+        "open_alm_api.domains.news.dispatch.dispatch_collect_all",
         fail_dispatch,
     )
     monkeypatch.setattr(
-        "ai_do_api.domains.industry_report.dispatch.dispatch_collect_all",
+        "open_alm_api.domains.industry_report.dispatch.dispatch_collect_all",
         fail_dispatch,
     )
 
@@ -342,7 +342,7 @@ def test_admin_cannot_queue_qna_batch_while_app_is_disabled(
         raise AssertionError("disabled Q&A batch must not dispatch")
 
     monkeypatch.setattr(
-        "ai_do_api.domains.admin.router.dispatch_board_sync",
+        "open_alm_api.domains.admin.router.dispatch_board_sync",
         fail_dispatch,
     )
 

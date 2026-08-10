@@ -1,6 +1,6 @@
 ---
 name: grill-with-docs
-description: Stress-test a plan against AI-DO's current code, tests, owning documentation, and accepted ADRs. Use when the user wants to challenge a plan, sharpen terminology, or record confirmed decisions.
+description: Stress-test a plan against Open ALM's current code, tests, owning documentation, and accepted ADRs. Use when the user wants to challenge a plan, sharpen terminology, or record confirmed decisions.
 ---
 
 # Grill With Docs
@@ -19,7 +19,7 @@ Read sources in this order:
 
 Use `docs/product/` for product intent, `docs/reference/` for background material, and `docs/archive/` only as history. Archived or dated documents do not override current code or owner documentation.
 
-Do not create parallel glossary files or nested ADR directories. AI-DO records domain language in the relevant current/domain/app document and architecture decisions in root `adr/`.
+Do not create parallel glossary files or nested ADR directories. Open ALM records domain language in the relevant current/domain/app document and architecture decisions in root `adr/`.
 
 ## During the session
 

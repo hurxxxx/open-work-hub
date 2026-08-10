@@ -217,14 +217,14 @@ function buildSyntheticMrEnv(context, baseEnv) {
       delete env[key];
     }
   }
-  delete env.AI_DO_ALLOW_REPO_WIDE_REWRITE;
-  delete env.AI_DO_CHANGE_LANE;
-  delete env.AI_DO_GUARDRAILS_BASE;
+  delete env.OPEN_ALM_ALLOW_REPO_WIDE_REWRITE;
+  delete env.OPEN_ALM_CHANGE_LANE;
+  delete env.OPEN_ALM_GUARDRAILS_BASE;
 
   return {
     ...env,
-    AI_DO_CHANGE_LANE: context.lane,
-    AI_DO_GUARDRAILS_BASE: context.diffBaseSha,
+    OPEN_ALM_CHANGE_LANE: context.lane,
+    OPEN_ALM_GUARDRAILS_BASE: context.diffBaseSha,
     CI: 'true',
     CI_COMMIT_BRANCH: context.branch,
     CI_COMMIT_REF_NAME: context.branch,

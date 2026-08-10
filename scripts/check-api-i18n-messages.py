@@ -10,7 +10,7 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
-API_SRC = ROOT / "apps/api/src/ai_do_api"
+API_SRC = ROOT / "apps/api/src/open_alm_api"
 I18N_CATALOG_PATH = API_SRC / "core/i18n_catalog.py"
 
 

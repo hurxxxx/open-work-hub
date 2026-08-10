@@ -1,4 +1,4 @@
-import { Button } from '@ai-do/ui';
+import { Button } from '@open-alm/ui';
 import {
   Component,
   Suspense,

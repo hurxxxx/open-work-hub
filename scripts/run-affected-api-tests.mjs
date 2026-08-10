@@ -136,7 +136,7 @@ function collectApiTestInventory(
         paths.push(relativePath);
         const source = fs.readFileSync(absolutePath, 'utf8');
         for (const match of source.matchAll(
-          /\bai_do_api\.domains\.([a-z][a-z0-9_]*)\b/g,
+          /\bopen_alm_api\.domains\.([a-z][a-z0-9_]*)\b/g,
         )) {
           const domainPaths = byDomain.get(match[1]) ?? new Set();
           domainPaths.add(relativePath);
@@ -281,7 +281,7 @@ const result = spawnSync(
     cwd: repoRoot,
     env:
       executionPlan.scope === 'focused'
-        ? { ...process.env, AI_DO_API_ALLOW_EMPTY: '1' }
+        ? { ...process.env, OPEN_ALM_API_ALLOW_EMPTY: '1' }
         : process.env,
     stdio: 'inherit',
   },

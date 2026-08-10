@@ -1,4 +1,4 @@
-import type { components } from '@ai-do/contracts/openapi';
+import type { components } from '@open-alm/contracts/openapi';
 
 import { apiFetchJson, jsonBodyHeaders, jsonHeaders } from '@/src/platform/api/client';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';

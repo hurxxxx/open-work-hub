@@ -22,7 +22,7 @@ import {
   SearchField,
   useConfirm,
   useToast,
-} from '@ai-do/ui';
+} from '@open-alm/ui';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { hasAnySystemRole } from '@/src/platform/auth/auth-api';

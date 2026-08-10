@@ -8,17 +8,17 @@ from sqlalchemy import select
 
 from dev_accounts import auth_headers, create_workspace_user_session, dev_login
 
-from ai_do_api.core.db import get_session_factory
-from ai_do_api.domains.ai_artifacts.contracts import (
+from open_alm_api.core.db import get_session_factory
+from open_alm_api.domains.ai_artifacts.contracts import (
     AiArtifactCreate,
     AiArtifactQueryCreate,
     AiArtifactSourceCreate,
 )
-from ai_do_api.domains.ai_artifacts.models import AiArtifact
-from ai_do_api.domains.ai_artifacts.repository import AiArtifactRepository
-from ai_do_api.domains.auth.models import AuditLog, User, Workspace
-from ai_do_api.domains.conversations.models import Conversation, ConversationTurn
-from ai_do_api.domains.legacy_issues.app_catalog import (
+from open_alm_api.domains.ai_artifacts.models import AiArtifact
+from open_alm_api.domains.ai_artifacts.repository import AiArtifactRepository
+from open_alm_api.domains.auth.models import AuditLog, User, Workspace
+from open_alm_api.domains.conversations.models import Conversation, ConversationTurn
+from open_alm_api.domains.legacy_issues.app_catalog import (
     LEGACY_ISSUES_WORKSPACE_APP,
 )
 
@@ -273,7 +273,7 @@ def test_list_assistant_reports_returns_only_current_users_successful_report_art
         client,
         workspace_key=workspace_slug,
         login_id="legacyreportpeer",
-        email="legacy-report-peer@ai-do.local",
+        email="legacy-report-peer@open-alm.local",
         full_name="Legacy Report Peer",
     )
     created_at = datetime(2026, 7, 25, 10, 0, 0)
@@ -498,7 +498,7 @@ def test_report_management_preserves_snapshots_and_enforces_share_acl(
         client,
         workspace_key=workspace_slug,
         login_id="reportmanagementpeer",
-        email="report-management-peer@ai-do.local",
+        email="report-management-peer@open-alm.local",
         full_name="Report Management Peer",
     )
     with get_session_factory()() as db:

@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from ai_do_api.domains.images.cutover import (
+from open_alm_api.domains.images.cutover import (
     ImageModelCutoverError,
     check_image_model_cutover,
 )

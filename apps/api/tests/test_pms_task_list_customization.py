@@ -37,7 +37,7 @@ def test_task_templates_crud_and_list_member_permissions(client: TestClient) -> 
         client,
         admin_token=admin["token"],
         task_list_id=task_list["id"],
-        email="template-member@ai-do.local",
+        email="template-member@open-alm.local",
         full_name="Template Member",
         role="member",
     )
@@ -45,7 +45,7 @@ def test_task_templates_crud_and_list_member_permissions(client: TestClient) -> 
         client,
         admin_token=admin["token"],
         task_list_id=task_list["id"],
-        email="template-viewer@ai-do.local",
+        email="template-viewer@open-alm.local",
         full_name="Template Viewer",
         role="viewer",
     )
@@ -133,7 +133,7 @@ def test_custom_fields_values_wrong_list_and_permissions(client: TestClient) -> 
         client,
         admin_token=admin["token"],
         task_list_id=task_list["id"],
-        email="field-member@ai-do.local",
+        email="field-member@open-alm.local",
         full_name="Field Member",
         role="member",
     )
@@ -141,7 +141,7 @@ def test_custom_fields_values_wrong_list_and_permissions(client: TestClient) -> 
         client,
         admin_token=admin["token"],
         task_list_id=task_list["id"],
-        email="field-viewer@ai-do.local",
+        email="field-viewer@open-alm.local",
         full_name="Field Viewer",
         role="viewer",
     )

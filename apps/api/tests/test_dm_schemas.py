@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from ai_do_api.domains.dm.request_normalization import DM_MESSAGE_BODY_MAX_LENGTH
-from ai_do_api.domains.dm.schemas import DmSendMessageRequest
+from open_alm_api.domains.dm.request_normalization import DM_MESSAGE_BODY_MAX_LENGTH
+from open_alm_api.domains.dm.schemas import DmSendMessageRequest
 
 
 def test_dm_send_message_request_accepts_maximum_body_length() -> None:

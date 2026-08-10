@@ -1,4 +1,4 @@
-# AI-DO 문서 색인
+# Open ALM 문서 색인
 
 ## 작업별 진입점
 
@@ -64,5 +64,5 @@
 
 | 대상 | 경로                   | 브랜치 |
 | ---- | ---------------------- | ------ |
-| 운영 | `/projects/ai-do/prod` | `main` |
-| 개발 | `/projects/ai-do/dev`  | `dev`  |
+| 운영 | `/projects/open-alm/prod` | `main` |
+| 개발 | `/projects/open-alm/dev`  | `dev`  |

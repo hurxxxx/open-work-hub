@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from ai_do_worker.tasks import ppt_generator
+from open_alm_worker.tasks import ppt_generator
 
 
 class _FakeSession:
@@ -34,7 +34,7 @@ def test_find_browser_delegates_to_canonical(monkeypatch) -> None:
     # 워커 _find_browser 는 크로스플랫폼 정본(html_to_pptx._find_browser)에 위임한다.
     # (브라우저 경로/명령 상수·탐색 로직은 정본 한 곳에만 둬 워커·API 중복을 없앴다. 실제
     #  env override/PATH 탐색 로직은 api 쪽 test_html_to_pptx_find_browser_* 가 커버한다.)
-    from ai_do_api.domains.ppt_generator.design import html_to_pptx
+    from open_alm_api.domains.ppt_generator.design import html_to_pptx
 
     monkeypatch.setattr(html_to_pptx, "_find_browser", lambda: "/usr/bin/google-chrome")
 
@@ -44,7 +44,7 @@ def test_find_browser_delegates_to_canonical(monkeypatch) -> None:
 def test_finalize_persists_generic_error_and_marks_celery_task_failed(monkeypatch) -> None:
     job = SimpleNamespace(
         id="job-finalize",
-        family="doowon-house",
+        family="corporate-house",
         slides_spec={"slides": [{"layout": "house-report", "data": {}}]},
         message="완료",
         error=None,
@@ -256,10 +256,10 @@ def test_claude_research_releases_probe_after_unexpected_route_exception(monkeyp
     assert auth_gate._state == "ready"
 
 
-def test_doowon_meeting_spec_keeps_missing_meeting_date_blank(monkeypatch) -> None:
+def test_corporate_meeting_spec_keeps_missing_meeting_date_blank(monkeypatch) -> None:
     monkeypatch.setattr(
         ppt_generator.prompts,
-        "build_doowon_meeting_fill_messages",
+        "build_corporate_meeting_fill_messages",
         lambda *_args, **_kwargs: [{"role": "user", "content": "prompt"}],
     )
     monkeypatch.setattr(ppt_generator, "_transcribe_audio_uploads", lambda *_args: "")
@@ -279,8 +279,8 @@ def test_doowon_meeting_spec_keeps_missing_meeting_date_blank(monkeypatch) -> No
         params={},
     )
 
-    spec, slide_count = ppt_generator._generate_doowon_meeting_spec(
-        _FakeSession(), job, "doowon-meeting", {}
+    spec, slide_count = ppt_generator._generate_corporate_meeting_spec(
+        _FakeSession(), job, "corporate-meeting", {}
     )
 
     match = re.search(r">회의일</td><td[^>]*>(.*?)</td>", spec["html"])
@@ -290,11 +290,11 @@ def test_doowon_meeting_spec_keeps_missing_meeting_date_blank(monkeypatch) -> No
     assert match.group(1) == ""
 
 
-def test_doowon_meeting_spec_uses_fixed_author_label_not_personal_name(monkeypatch) -> None:
+def test_corporate_meeting_spec_uses_fixed_author_label_not_personal_name(monkeypatch) -> None:
     # 표지 작성자는 개인 이름 대신 소속 고정 라벨(params["author_name"])로 통일한다.
     monkeypatch.setattr(
         ppt_generator.prompts,
-        "build_doowon_meeting_fill_messages",
+        "build_corporate_meeting_fill_messages",
         lambda *_args, **_kwargs: [{"role": "user", "content": "prompt"}],
     )
     monkeypatch.setattr(ppt_generator, "_transcribe_audio_uploads", lambda *_args: "")
@@ -316,8 +316,8 @@ def test_doowon_meeting_spec_uses_fixed_author_label_not_personal_name(monkeypat
         params={"author_name": "기술연구소"},
     )
 
-    spec, _ = ppt_generator._generate_doowon_meeting_spec(
-        _FakeSession(), job, "doowon-meeting", {"author_name": "기술연구소"}
+    spec, _ = ppt_generator._generate_corporate_meeting_spec(
+        _FakeSession(), job, "corporate-meeting", {"author_name": "기술연구소"}
     )
 
     assert "기술연구소" in spec["html"]
@@ -393,12 +393,12 @@ def test_house_spec_uses_local_design_when_registered_route_is_local(monkeypatch
         params={},
     )
 
-    spec, total = ppt_generator._generate_house_spec(_FakeSession(), job, "doowon-house", {})
+    spec, total = ppt_generator._generate_house_spec(_FakeSession(), job, "corporate-house", {})
 
     assert qwen_calls["n"] == 1  # 내부 Qwen 만 호출
     # _generate_house_spec 는 항상 a4 표지를 앞에 붙이므로 총 장수 = 표지(1) + 본문(1) = 2.
     assert total == 2
-    assert spec["family"] == "doowon-house"
+    assert spec["family"] == "corporate-house"
     assert spec["slides"][0]["layout"] == "a4-cover"
 
 
@@ -416,7 +416,7 @@ def test_enrich_house_passes_scalar_snapshot_to_research_threads(monkeypatch) ->
     monkeypatch.setattr(
         ppt_generator,
         "resolve_family",
-        lambda *_a, **_k: ("doowon-house", {"design": "house"}),
+        lambda *_a, **_k: ("corporate-house", {"design": "house"}),
     )
     monkeypatch.setattr(ppt_generator, "_set", lambda *_a, **_k: None)
     monkeypatch.setattr(ppt_generator.prompts, "build_house_enrich_messages", lambda *_a, **_k: [])
@@ -441,7 +441,7 @@ def test_enrich_house_passes_scalar_snapshot_to_research_threads(monkeypatch) ->
         id="job-enrich",
         workspace_id="ws-1",
         user_id="user-1",
-        family="doowon-house",
+        family="corporate-house",
         params={"language": "Korean"},
     )
 
@@ -458,7 +458,7 @@ def test_enrich_house_passes_scalar_snapshot_to_research_threads(monkeypatch) ->
         assert ref.id == "job-enrich"
         assert ref.workspace_id == "ws-1"
         assert ref.user_id == "user-1"
-        assert ref.family == "doowon-house"
+        assert ref.family == "corporate-house"
 
 
 class _CancelGuardSession:
@@ -609,12 +609,12 @@ def test_seminar_schedule_ole_icon_participates_in_pagination(monkeypatch) -> No
     # slide 에 먼저 심고 paginate 해야 한다.
     monkeypatch.setattr(
         ppt_generator.prompts,
-        "build_doowon_seminar_fill_messages",
+        "build_corporate_seminar_fill_messages",
         lambda *_a, **_k: [{"role": "user", "content": "report"}],
     )
     monkeypatch.setattr(
         ppt_generator.prompts,
-        "build_doowon_seminar_trip_messages",
+        "build_corporate_seminar_trip_messages",
         lambda *_a, **_k: [{"role": "user", "content": "trip"}],
     )
     monkeypatch.setattr(ppt_generator, "_inject_seminar_photos", lambda *_a, **_k: None)
@@ -646,12 +646,12 @@ def test_seminar_schedule_ole_icon_participates_in_pagination(monkeypatch) -> No
         workspace_id="ws-1",
         user_id="u",
         content="세미나 참석함",
-        family="doowon-seminar",
+        family="corporate-seminar",
         params={"schedule_images": [{"key": "sched.png"}]},
     )
 
-    spec, slide_count = ppt_generator._generate_doowon_seminar_spec(
-        _FakeSession(), job, "doowon-seminar", {}
+    spec, slide_count = ppt_generator._generate_corporate_seminar_spec(
+        _FakeSession(), job, "corporate-seminar", {}
     )
 
     joined = " ".join(s.get("inner_html", "") for s in spec["body"])
@@ -730,12 +730,12 @@ def test_seminar_fold_trip_commit_failure_keeps_trip_as_page_without_ghost_ole(
     monkeypatch.setattr(ppt_generator.ole, "make_ole_icon_png", lambda *_a, **_k: b"ICONBYTES")
     monkeypatch.setattr(
         ppt_generator.prompts,
-        "build_doowon_seminar_fill_messages",
+        "build_corporate_seminar_fill_messages",
         lambda *_a, **_k: [{"role": "user", "content": "report"}],
     )
     monkeypatch.setattr(
         ppt_generator.prompts,
-        "build_doowon_seminar_trip_messages",
+        "build_corporate_seminar_trip_messages",
         lambda *_a, **_k: [{"role": "user", "content": "trip"}],
     )
     replies = iter(
@@ -758,11 +758,11 @@ def test_seminar_fold_trip_commit_failure_keeps_trip_as_page_without_ghost_ole(
         workspace_id="ws-1",
         user_id="u",
         content="세미나 참석함",
-        family="doowon-seminar",
+        family="corporate-seminar",
         params={},
     )
 
-    spec, _ = ppt_generator._generate_doowon_seminar_spec(session, job, "doowon-seminar", {})
+    spec, _ = ppt_generator._generate_corporate_seminar_spec(session, job, "corporate-seminar", {})
 
     joined = " ".join(s.get("inner_html", "") for s in spec["body"])
     assert job.params == {}
@@ -778,12 +778,12 @@ def test_seminar_stale_fold_trip_removed_when_current_run_does_not_fold(monkeypa
     monkeypatch.setattr(ppt_generator, "_inject_seminar_photos", lambda *_a, **_k: None)
     monkeypatch.setattr(
         ppt_generator.prompts,
-        "build_doowon_seminar_fill_messages",
+        "build_corporate_seminar_fill_messages",
         lambda *_a, **_k: [{"role": "user", "content": "report"}],
     )
     monkeypatch.setattr(
         ppt_generator.prompts,
-        "build_doowon_seminar_trip_messages",
+        "build_corporate_seminar_trip_messages",
         lambda *_a, **_k: [{"role": "user", "content": "trip"}],
     )
     replies = iter(
@@ -803,11 +803,11 @@ def test_seminar_stale_fold_trip_removed_when_current_run_does_not_fold(monkeypa
         workspace_id="ws-1",
         user_id="u",
         content="세미나 참석함",
-        family="doowon-seminar",
+        family="corporate-seminar",
         params={"fold_trip": {"days": [{"date": "old", "rows": [{"content": ["old"]}]}]}},
     )
 
-    ppt_generator._generate_doowon_seminar_spec(session, job, "doowon-seminar", {})
+    ppt_generator._generate_corporate_seminar_spec(session, job, "corporate-seminar", {})
 
     assert "fold_trip" not in job.params
     assert session.commits == 1
@@ -822,12 +822,12 @@ def test_seminar_schedule_images_remove_stale_fold_before_icon(monkeypatch) -> N
     monkeypatch.setattr(ppt_generator.ole, "make_ole_icon_png", lambda *_a, **_k: b"ICONBYTES")
     monkeypatch.setattr(
         ppt_generator.prompts,
-        "build_doowon_seminar_fill_messages",
+        "build_corporate_seminar_fill_messages",
         lambda *_a, **_k: [{"role": "user", "content": "report"}],
     )
     monkeypatch.setattr(
         ppt_generator.prompts,
-        "build_doowon_seminar_trip_messages",
+        "build_corporate_seminar_trip_messages",
         lambda *_a, **_k: [{"role": "user", "content": "trip"}],
     )
     replies = iter(
@@ -847,14 +847,14 @@ def test_seminar_schedule_images_remove_stale_fold_before_icon(monkeypatch) -> N
         workspace_id="ws-1",
         user_id="u",
         content="세미나 참석함",
-        family="doowon-seminar",
+        family="corporate-seminar",
         params={
             "schedule_images": [{"key": "sched.png"}],
             "fold_trip": {"days": [{"date": "old", "rows": [{"content": ["old"]}]}]},
         },
     )
 
-    spec, _ = ppt_generator._generate_doowon_seminar_spec(session, job, "doowon-seminar", {})
+    spec, _ = ppt_generator._generate_corporate_seminar_spec(session, job, "corporate-seminar", {})
 
     joined = " ".join(s.get("inner_html", "") for s in spec["body"])
     assert "fold_trip" not in job.params
@@ -900,12 +900,12 @@ def test_seminar_spec_omits_empty_trip_schedule_page(monkeypatch) -> None:
     monkeypatch.setattr(ppt_generator, "_research_block", lambda *_a, **_k: "")
     monkeypatch.setattr(
         ppt_generator.prompts,
-        "build_doowon_seminar_fill_messages",
+        "build_corporate_seminar_fill_messages",
         lambda *_a, **_k: [{"role": "user", "content": "x"}],
     )
     monkeypatch.setattr(
         ppt_generator.prompts,
-        "build_doowon_seminar_trip_messages",
+        "build_corporate_seminar_trip_messages",
         lambda *_a, **_k: [{"role": "user", "content": "x"}],
     )
     monkeypatch.setattr(ppt_generator, "_inject_seminar_photos", lambda *_a, **_k: None)
@@ -923,11 +923,11 @@ def test_seminar_spec_omits_empty_trip_schedule_page(monkeypatch) -> None:
         workspace_id="ws-1",
         user_id="u",
         content="세미나 참석함",
-        family="doowon-seminar",
+        family="corporate-seminar",
         params={},
     )
 
-    spec, _ = ppt_generator._generate_doowon_seminar_spec(_FakeSession(), job, "doowon-seminar", {})
+    spec, _ = ppt_generator._generate_corporate_seminar_spec(_FakeSession(), job, "corporate-seminar", {})
 
     joined = " ".join(s.get("inner_html", "") for s in spec["body"])
     # '참석 인원'은 출장 일정 표에만 있는 헤더(본문 표엔 없음) → 빈 출장 페이지가 붙었는지 판별.
@@ -994,7 +994,7 @@ def test_maybe_embed_ole_schedule_images_win_over_stale_fold_trip(monkeypatch) -
     job = SimpleNamespace(
         id="job-sched-finalize",
         workspace_id="ws-1",
-        family="doowon-seminar",
+        family="corporate-seminar",
         params={
             "schedule_images": [{"key": "sched.png"}],
             "fold_trip": {"days": [{"date": "old", "rows": [{"content": ["old"]}]}]},

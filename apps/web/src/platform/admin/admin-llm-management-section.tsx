@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 
-import { Tabs, TabsList, TabsTrigger } from '@ai-do/ui';
+import { Tabs, TabsList, TabsTrigger } from '@open-alm/ui';
 
 import { AdminAiModelSettingsSection } from './admin-ai-model-settings-section';
 import { AdminImageModelSettingsSection } from './admin-image-model-settings-section';

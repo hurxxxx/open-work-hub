@@ -6,13 +6,13 @@ import {
 } from './app-platform-guardrails/classifier.mjs';
 import { CORE_API_DOMAINS } from './app-platform-guardrails/policy.mjs';
 
-const API_DOMAIN_PREFIX = 'apps/api/src/ai_do_api/domains/';
+const API_DOMAIN_PREFIX = 'apps/api/src/open_alm_api/domains/';
 const APP_MANIFEST_PATTERN =
   /^apps\/web\/src\/app-modules\/([^/]+)\/manifest\.ts$/;
 const WORKSPACE_KEYWORD_SEARCH_CONTRACT_TEST =
   'apps/api/tests/test_workspace_keyword_search_registry.py';
 const WORKSPACE_KEYWORD_SEARCH_APP_PATH =
-  /^apps\/api\/src\/ai_do_api\/domains\/[^/]+\/search_(?:hooks|projection|registration)\.py$/;
+  /^apps\/api\/src\/open_alm_api\/domains\/[^/]+\/search_(?:hooks|projection|registration)\.py$/;
 
 function allChangePaths(changes) {
   return changes.flatMap((change) =>
@@ -40,15 +40,15 @@ export function requiresFullMigrationRegression(changes = []) {
       filePath === 'apps/api/project.json' ||
       filePath === 'apps/api/pyproject.toml' ||
       filePath === 'apps/api/uv.lock' ||
-      filePath === 'apps/api/src/ai_do_api/core/db.py' ||
-      filePath === 'apps/api/src/ai_do_api/core/model_registry.py' ||
+      filePath === 'apps/api/src/open_alm_api/core/db.py' ||
+      filePath === 'apps/api/src/open_alm_api/core/model_registry.py' ||
       filePath === 'apps/api/tests/conftest.py' ||
       filePath === 'apps/api/tests/integration_infra.py' ||
       filePath === 'apps/api/tests/test_api_test_runtime.py' ||
       filePath === 'scripts/api-test-selection.mjs' ||
       filePath === 'scripts/run-affected-api-tests.mjs' ||
       /^apps\/api\/alembic\//.test(filePath) ||
-      /^apps\/api\/src\/ai_do_api\/.+\/models\.py$/.test(filePath) ||
+      /^apps\/api\/src\/open_alm_api\/.+\/models\.py$/.test(filePath) ||
       /^scripts\/ci\/run-api-pytest(?:\.test)?\.sh$/.test(filePath) ||
       isMigrationTestPath(filePath),
   );
@@ -83,18 +83,18 @@ function isFullSuitePath(filePath) {
   ) {
     return true;
   }
-  if (filePath.startsWith('apps/api/src/ai_do_api/core/')) {
+  if (filePath.startsWith('apps/api/src/open_alm_api/core/')) {
     return true;
   }
   if (
-    /^apps\/api\/src\/ai_do_api\/domains\/[^/]+\/(?:__init__|app_catalog)\.py$/.test(
+    /^apps\/api\/src\/open_alm_api\/domains\/[^/]+\/(?:__init__|app_catalog)\.py$/.test(
       filePath,
     )
   ) {
     return true;
   }
   if (
-    filePath.startsWith('apps/api/src/ai_do_api/') &&
+    filePath.startsWith('apps/api/src/open_alm_api/') &&
     !filePath.startsWith(API_DOMAIN_PREFIX)
   ) {
     return true;

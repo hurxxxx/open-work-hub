@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from ai_do_worker.tasks import industry_report, news_aggregator
+from open_alm_worker.tasks import industry_report, news_aggregator
 
 
 class _Session:

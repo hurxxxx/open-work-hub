@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 
-from ai_do_worker.tasks import qna_board
+from open_alm_worker.tasks import qna_board
 
 
 class _Response:

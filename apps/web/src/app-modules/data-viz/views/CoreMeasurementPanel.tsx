@@ -3,7 +3,7 @@ import Plot from 'react-plotly.js';
 import type { Data, Layout, Shape, Annotations } from 'plotly.js';
 import { useTranslation } from 'react-i18next';
 import { Loader2 } from 'lucide-react';
-import { EmptyState, InlineNotice, Select } from '@ai-do/ui';
+import { EmptyState, InlineNotice, Select } from '@open-alm/ui';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { useWorkspaceBootstrapContext } from '@/src/platform/workspaces/workspace-bootstrap-context';

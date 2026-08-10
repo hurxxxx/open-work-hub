@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle, CalendarClock, CheckCircle2, TriangleAlert, Users } from 'lucide-react';
 
-import { useConfirm } from '@ai-do/ui';
+import { useConfirm } from '@open-alm/ui';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 

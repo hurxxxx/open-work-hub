@@ -5,4 +5,4 @@ export {
   createCoreMobileShellRouteKey as createMobileShellRouteKey,
   resolveActiveCoreMobileShellMenuState as resolveActiveMobileShellMenuState,
   type CoreMobileShellMenuState as MobileShellMenuState,
-} from '@ai-do/core-web/mobile-shell-menu';
+} from '@open-alm/core-web/mobile-shell-menu';

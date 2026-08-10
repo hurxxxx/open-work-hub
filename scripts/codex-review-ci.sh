@@ -44,7 +44,7 @@ validate_ci_variable_metadata() {
       jq -e '
         type == "array"
         and length == 1
-        and .[0].key == "AI_DO_CI_POSTGRES_DSN"
+        and .[0].key == "OPEN_ALM_CI_POSTGRES_DSN"
         and .[0].environment_scope == "ci-validation"
         and .[0].protected == false
         and .[0].raw == true
@@ -59,7 +59,7 @@ validate_ci_variable_metadata() {
           length == 0
           or (
             length == 1
-            and .[0].key == "AI_DO_CI_POSTGRES_DSN"
+            and .[0].key == "OPEN_ALM_CI_POSTGRES_DSN"
             and .[0].environment_scope == "ci-validation"
             and .[0].protected == false
             and .[0].raw == true
@@ -197,7 +197,7 @@ contracts_tag = (
     '/^contracts-v[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$/'
 )
 validation_image = (
-    "ai-do-validation:node25-python312-pg18-api-a3e8c22a3552-"
+    "open-alm-validation:node25-python312-pg18-api-a3e8c22a3552-"
     "worker-3149583cef20-node-e7c57b3bacf9-484482bced42"
 )
 expected_keys = {
@@ -234,7 +234,7 @@ expected_codex = {
     "rules": [{"if": feature_mr, "when": "always"}],
     "variables": {"GIT_DEPTH": "0"},
     "before_script": [],
-    "script": ["/home/dwdcc/.local/bin/ai-do-codex-review-ci"],
+    "script": ["/home/open-alm/.local/bin/open-alm-codex-review-ci"],
     "after_script": [],
     "artifacts": {
         "when": "always",
@@ -274,13 +274,13 @@ expected_services = [
         "command": ["server", "/data", "--console-address=:9001"],
         "variables": {
             "HEALTHCHECK_TCP_PORT": "9000",
-            "MINIO_ROOT_PASSWORD": "ai_do_ci_minio_job_only",
-            "MINIO_ROOT_USER": "ai_do_ci_minio",
+            "MINIO_ROOT_PASSWORD": "open_alm_ci_minio_job_only",
+            "MINIO_ROOT_USER": "open_alm_ci_minio",
         },
     },
     {
         "name": (
-            "ai-do-opensearch@sha256:"
+            "open-alm-opensearch@sha256:"
             "fa1c515ec9913749d8cc7c76c66ac22c377ba9d4ac22132ee9a1749792f12d6d"
         ),
         "alias": "opensearch",
@@ -294,36 +294,36 @@ expected_services = [
 ]
 expected_variables = {
     "GIT_DEPTH": "0",
-    "AI_DO_API_COLLAB_REDIS_URL": "redis://redis:6379/0",
-    "AI_DO_API_REALTIME_REDIS_URL": "redis://redis:6379/0",
-    "AI_DO_API_TEST_RUN_ID": "$CI_JOB_ID",
-    "AI_DO_ENV_PROFILE": "test",
-    "AI_DO_MINIO_ACCESS_KEY": "ai_do_ci_minio",
-    "AI_DO_MINIO_ENDPOINT": "http://minio:9000",
-    "AI_DO_MINIO_SECRET_KEY": "ai_do_ci_minio_job_only",
-    "AI_DO_OPENSEARCH_URL": "http://opensearch:9200",
-    "AI_DO_POSTGRES_DSN": "$AI_DO_CI_POSTGRES_DSN",
-    "AI_DO_TEST_MINIO_ACCESS_KEY": "ai_do_ci_minio",
-    "AI_DO_TEST_MINIO_ENDPOINT": "http://minio:9000",
-    "AI_DO_TEST_MINIO_SECRET_KEY": "ai_do_ci_minio_job_only",
-    "AI_DO_TEST_NON_PRODUCTION_ACK": "non-production",
-    "AI_DO_TEST_OPENSEARCH_URL": "http://opensearch:9200",
-    "AI_DO_TEST_POSTGRES_TEMPLATE_DSN": "$AI_DO_CI_POSTGRES_DSN",
-    "AI_DO_TEST_REDIS_URL": "redis://redis:6379/0",
+    "OPEN_ALM_API_COLLAB_REDIS_URL": "redis://redis:6379/0",
+    "OPEN_ALM_API_REALTIME_REDIS_URL": "redis://redis:6379/0",
+    "OPEN_ALM_API_TEST_RUN_ID": "$CI_JOB_ID",
+    "OPEN_ALM_ENV_PROFILE": "test",
+    "OPEN_ALM_MINIO_ACCESS_KEY": "open_alm_ci_minio",
+    "OPEN_ALM_MINIO_ENDPOINT": "http://minio:9000",
+    "OPEN_ALM_MINIO_SECRET_KEY": "open_alm_ci_minio_job_only",
+    "OPEN_ALM_OPENSEARCH_URL": "http://opensearch:9200",
+    "OPEN_ALM_POSTGRES_DSN": "$OPEN_ALM_CI_POSTGRES_DSN",
+    "OPEN_ALM_TEST_MINIO_ACCESS_KEY": "open_alm_ci_minio",
+    "OPEN_ALM_TEST_MINIO_ENDPOINT": "http://minio:9000",
+    "OPEN_ALM_TEST_MINIO_SECRET_KEY": "open_alm_ci_minio_job_only",
+    "OPEN_ALM_TEST_NON_PRODUCTION_ACK": "non-production",
+    "OPEN_ALM_TEST_OPENSEARCH_URL": "http://opensearch:9200",
+    "OPEN_ALM_TEST_POSTGRES_TEMPLATE_DSN": "$OPEN_ALM_CI_POSTGRES_DSN",
+    "OPEN_ALM_TEST_REDIS_URL": "redis://redis:6379/0",
 }
 target_ref = "$" + "{CI_MERGE_REQUEST_TARGET_BRANCH_NAME}"
 expected_release_script = [
     "bash scripts/ci/prepare-validation-runtime.sh",
     "cp .env.example .env",
     (
-        "sed -i 's#^AI_DO_WORKER_BROKER_URL=.*#"
-        "AI_DO_WORKER_BROKER_URL=memory://#; "
-        "s#^AI_DO_WORKER_RESULT_BACKEND=.*#"
-        "AI_DO_WORKER_RESULT_BACKEND=cache+memory://#' .env"
+        "sed -i 's#^OPEN_ALM_WORKER_BROKER_URL=.*#"
+        "OPEN_ALM_WORKER_BROKER_URL=memory://#; "
+        "s#^OPEN_ALM_WORKER_RESULT_BACKEND=.*#"
+        "OPEN_ALM_WORKER_RESULT_BACKEND=cache+memory://#' .env"
     ),
     (
-        "grep -qx 'AI_DO_WORKER_BROKER_URL=memory://' .env && "
-        "grep -qx 'AI_DO_WORKER_RESULT_BACKEND=cache+memory://' .env"
+        "grep -qx 'OPEN_ALM_WORKER_BROKER_URL=memory://' .env && "
+        "grep -qx 'OPEN_ALM_WORKER_RESULT_BACKEND=cache+memory://' .env"
     ),
     "node scripts/check-mr-target-policy.mjs",
     (
@@ -350,13 +350,13 @@ expected_release_script = [
     "uv run --python 3.12 python scripts/check-api-i18n-messages.py",
     'export PYTHONPATH="$CI_PROJECT_DIR/apps/api/src:$CI_PROJECT_DIR/apps/worker/src"',
     (
-        "AI_DO_POSTGRES_DSN=postgresql+psycopg://contract:contract@127.0.0.1:1/"
-        "ai_do_ci_contracts AI_DO_WORKER_QUEUE_GROUP=default "
+        "OPEN_ALM_POSTGRES_DSN=postgresql+psycopg://contract:contract@127.0.0.1:1/"
+        "open_alm_ci_contracts OPEN_ALM_WORKER_QUEUE_GROUP=default "
         "pnpm nx run api:ci-contracts --parallel=6 "
         "--outputStyle=static --skip-nx-cache"
     ),
     (
-        "$AI_DO_API_IMAGE_VENV/bin/python "
+        "$OPEN_ALM_API_IMAGE_VENV/bin/python "
         "scripts/check-api-test-budget.py --output api-test-report.json"
     ),
     "node scripts/run-affected-api-tests.mjs migration",
@@ -370,8 +370,8 @@ release_core = {
     "stage": "validate",
     "image": validation_image,
     "services": expected_services,
-    "tags": ["ai-do-validation"],
-    "inherit": {"default": False, "variables": ["AI_DO_CI_POSTGRES_DSN"]},
+    "tags": ["open-alm-validation"],
+    "inherit": {"default": False, "variables": ["OPEN_ALM_CI_POSTGRES_DSN"]},
     "dependencies": [],
     "allow_failure": False,
     "interruptible": True,
@@ -382,7 +382,7 @@ release_core = {
     "before_script": [],
     "script": expected_release_script,
     "after_script": [
-        "AI_DO_API_CLEANUP_ONLY=1 bash scripts/ci/run-api-pytest.sh external"
+        "OPEN_ALM_API_CLEANUP_ONLY=1 bash scripts/ci/run-api-pytest.sh external"
     ],
     "artifacts": {
         "when": "always",
@@ -398,7 +398,7 @@ publish = config["contracts_publish"]
 if (
     publish.get("stage") != "publish"
     or publish.get("image") != validation_image
-    or publish.get("tags") != ["ai-do-validation"]
+    or publish.get("tags") != ["open-alm-validation"]
     or publish.get("rules") != [{"if": contracts_tag}]
     or not isinstance(publish.get("script"), list)
     or "node scripts/check-contracts-publish-tag.mjs" not in publish["script"]
@@ -413,11 +413,11 @@ if desktop != {
     "needs": ["contracts_publish"],
     "rules": [{"if": contracts_tag}],
     "trigger": {
-        "project": "dwdcc/ai-do-desktop",
+        "project": "open-alm/open-alm-desktop",
         "branch": "main",
         "strategy": "depend",
     },
-    "variables": {"AI_DO_CONTRACTS_VERSION": "$CI_COMMIT_TAG"},
+    "variables": {"OPEN_ALM_CONTRACTS_VERSION": "$CI_COMMIT_TAG"},
 }:
     reject("contracts_desktop_compatibility must remain tag-only.")
 
@@ -799,7 +799,7 @@ apply_current_review_job_contract() {
     validation_gate_status="blocked"
     validation_gate_reasons+=("current codex_review job is not an enforced review-stage gate")
   fi
-  if [[ "$review_job_runner" != "ai-do-local-codex-runner" ||
+  if [[ "$review_job_runner" != "open-alm-local-codex-runner" ||
         "$review_job_tags" != '["codex-local"]' ]]; then
     validation_gate_status="blocked"
     validation_gate_reasons+=("current codex_review job is not on the dedicated Codex runner")
@@ -882,7 +882,7 @@ derive_review_profile() {
   fi
 
   if all_changed_paths_match \
-    '^(apps/web/src/platform/i18n/(resources|locales)\.ts|apps/api/src/ai_do_api/core/i18n_catalog\.py)$' \
+    '^(apps/web/src/platform/i18n/(resources|locales)\.ts|apps/api/src/open_alm_api/core/i18n_catalog\.py)$' \
     "$changed_paths_value"; then
     review_profile="localization-only"
     review_profile_reason="only canonical Web or API localization catalogs changed"
@@ -902,7 +902,7 @@ derive_review_profile() {
   fi
 
   if all_changed_paths_match \
-    '^(agents\.md|\.gitlab-ci\.yml|ops/ci/.*|scripts/(codex-review-ci\.sh|install-codex-review-runner\.sh|install-ci-light-validation-runner\.sh|install-ci-validation-runner\.sh|configure-ci-validation-env\.sh|promote-ci-control-plane\.sh|rollback-ci-control-plane\.sh|ci/.*|app-platform-guardrails/.*|check-app-platform-guardrails(\.test)?\.mjs|tests/test_check_codex_review_ci\.py)|docs/agents/(local-codex-review|vibe-coding-harness)\.md|\.agents/skills/ai-do-codex-review-harness/.*)$' \
+    '^(agents\.md|\.gitlab-ci\.yml|ops/ci/.*|scripts/(codex-review-ci\.sh|install-codex-review-runner\.sh|install-ci-light-validation-runner\.sh|install-ci-validation-runner\.sh|configure-ci-validation-env\.sh|promote-ci-control-plane\.sh|rollback-ci-control-plane\.sh|ci/.*|app-platform-guardrails/.*|check-app-platform-guardrails(\.test)?\.mjs|tests/test_check_codex_review_ci\.py)|docs/agents/(local-codex-review|vibe-coding-harness)\.md|\.agents/skills/open-alm-codex-review-harness/.*)$' \
     "$changed_paths_value"; then
     review_profile="harness-ci"
     review_profile_reason="only Codex review, CI, or runner control-plane files changed"
@@ -1106,7 +1106,7 @@ unset \
   GLAB_CONFIG_DIR \
   GITLAB_TOKEN
 
-readonly CODEX_REVIEW_HOME="/home/dwdcc"
+readonly CODEX_REVIEW_HOME="/home/open-alm"
 readonly CODEX_REVIEW_TIMEOUT="25m"
 readonly CODEX_REVIEW_OUTPUT="codex-review.md"
 readonly CODEX_REVIEW_COMMENT="codex-review-comment.md"
@@ -1119,8 +1119,8 @@ readonly CODEX_REVIEW_PROGRESS_COMMENT="codex-review-progress-start.md"
 readonly CODEX_REVIEW_POST_PROGRESS="true"
 readonly glab_host="128.1.253.101"
 readonly glab_cli_host="128.1.253.101"
-readonly gitlab_project_api_path="projects/dwdcc%2Fai-do"
-readonly sanitized_origin_url="http://128.1.253.101:8929/dwdcc/ai-do.git"
+readonly gitlab_project_api_path="projects/open-alm%2Fopen-alm"
+readonly sanitized_origin_url="http://128.1.253.101:8929/open-alm/open-alm.git"
 
 export HOME="$CODEX_REVIEW_HOME"
 export XDG_CONFIG_HOME="${HOME}/.config"
@@ -1309,10 +1309,10 @@ if [[ "$codex_output_path" != /* ]]; then
 fi
 target_head_sha="$(git rev-parse "${base_ref}^{commit}")"
 diff_base_sha="$CI_MERGE_REQUEST_DIFF_BASE_SHA"
-marker="<!-- ai-do-codex-local-review mr=${CI_MERGE_REQUEST_IID} sha=${CI_COMMIT_SHA} target_sha=${target_head_sha} diff_base_sha=${diff_base_sha} pipeline=${CI_PIPELINE_ID} -->"
-progress_marker="<!-- ai-do-codex-local-review-progress mr=${CI_MERGE_REQUEST_IID} sha=${CI_COMMIT_SHA} target_sha=${target_head_sha} diff_base_sha=${diff_base_sha} pipeline=${CI_PIPELINE_ID} -->"
-review_marker_prefix="<!-- ai-do-codex-local-review mr=${CI_MERGE_REQUEST_IID} "
-disposition_marker_prefix="<!-- ai-do-codex-local-review-disposition mr=${CI_MERGE_REQUEST_IID} "
+marker="<!-- open-alm-codex-local-review mr=${CI_MERGE_REQUEST_IID} sha=${CI_COMMIT_SHA} target_sha=${target_head_sha} diff_base_sha=${diff_base_sha} pipeline=${CI_PIPELINE_ID} -->"
+progress_marker="<!-- open-alm-codex-local-review-progress mr=${CI_MERGE_REQUEST_IID} sha=${CI_COMMIT_SHA} target_sha=${target_head_sha} diff_base_sha=${diff_base_sha} pipeline=${CI_PIPELINE_ID} -->"
+review_marker_prefix="<!-- open-alm-codex-local-review mr=${CI_MERGE_REQUEST_IID} "
+disposition_marker_prefix="<!-- open-alm-codex-local-review-disposition mr=${CI_MERGE_REQUEST_IID} "
 notes_file="$(mktemp)"
 disposition_file=""
 codex_runtime_home="$(mktemp -d)"
@@ -1344,8 +1344,8 @@ if ! trusted_project_json="$(
 fi
 trusted_project_id="$(jq -r '.id' <<<"$trusted_project_json")"
 trusted_project_path="$(jq -r '.path_with_namespace // empty' <<<"$trusted_project_json")"
-if [[ "$trusted_project_path" != "dwdcc/ai-do" || "$CI_PROJECT_ID" != "$trusted_project_id" ]]; then
-  echo "Refusing Codex review outside the trusted dwdcc/ai-do project." >&2
+if [[ "$trusted_project_path" != "open-alm/open-alm" || "$CI_PROJECT_ID" != "$trusted_project_id" ]]; then
+  echo "Refusing Codex review outside the trusted open-alm/open-alm project." >&2
   exit 2
 fi
 if [[ "$CI_MERGE_REQUEST_SOURCE_PROJECT_ID" != "$trusted_project_id" ]]; then
@@ -1458,13 +1458,13 @@ resolve_effective_ci_file() {
     effective_ci_file="$review_repo/.gitlab-ci.yml"
     return 0
   fi
-  if [[ ! "$ci_config_path" =~ ^\.gitlab-ci\.yml@dwdcc/ai-do-ci:([0-9a-f]{40})$ ]]; then
+  if [[ ! "$ci_config_path" =~ ^\.gitlab-ci\.yml@open-alm/open-alm-ci:([0-9a-f]{40})$ ]]; then
     return 1
   fi
   external_ci_sha="${BASH_REMATCH[1]}"
   effective_ci_file="$trusted_evidence_dir/effective-gitlab-ci.yml"
   if ! glab api --hostname "$glab_cli_host" \
-    "projects/dwdcc%2Fai-do-ci/repository/files/.gitlab-ci.yml/raw?ref=${external_ci_sha}" \
+    "projects/open-alm%2Fopen-alm-ci/repository/files/.gitlab-ci.yml/raw?ref=${external_ci_sha}" \
     >"$effective_ci_file"; then
     return 1
   fi
@@ -1580,10 +1580,10 @@ apply_project_pipeline_gate() {
       "GitLab project must require all discussions to be resolved before merge"
     )
   fi
-  if [[ ! "$ci_config_path" =~ ^\.gitlab-ci\.yml@dwdcc/ai-do-ci:[0-9a-f]{40}$ ]]; then
+  if [[ ! "$ci_config_path" =~ ^\.gitlab-ci\.yml@open-alm/open-alm-ci:[0-9a-f]{40}$ ]]; then
     validation_gate_status="blocked"
     validation_gate_reasons+=(
-      "GitLab project must use the protected dwdcc/ai-do-ci config pinned to a full commit SHA"
+      "GitLab project must use the protected open-alm/open-alm-ci config pinned to a full commit SHA"
     )
   fi
   if [[ "$shared_runners" != "false" ]]; then
@@ -1600,7 +1600,7 @@ apply_project_pipeline_gate() {
       "GitLab project visibility and skipped/fork pipeline gates are not hardened"
     )
   fi
-  if ! validate_gitlab_ci_variable_sources "dwdcc/ai-do" "$glab_cli_host"; then
+  if ! validate_gitlab_ci_variable_sources "open-alm/open-alm" "$glab_cli_host"; then
     validation_gate_status="blocked"
     validation_gate_reasons+=(
       "GitLab project, ancestor groups, and instance must expose no CI variables except the isolated PostgreSQL validation credential"
@@ -1870,7 +1870,7 @@ case "$review_profile" in
   documentation-only)
     ;;
   localization-only)
-    append_policy_path ".agents/skills/ai-do-i18n/SKILL.md"
+    append_policy_path ".agents/skills/open-alm-i18n/SKILL.md"
     if grep -Eq '^apps/web/' <<<"$changed_paths"; then
       append_policy_path "docs/agents/ui-components.md"
     fi
@@ -1882,7 +1882,7 @@ case "$review_profile" in
     ;;
   harness-ci)
     append_policy_path "docs/agents/local-codex-review.md"
-    append_policy_path ".agents/skills/ai-do-codex-review-harness/SKILL.md"
+    append_policy_path ".agents/skills/open-alm-codex-review-harness/SKILL.md"
     ;;
   app-local)
     append_policy_path "docs/agents/ui-components.md"
@@ -2076,7 +2076,7 @@ else
 fi
 
 cat >"$CODEX_REVIEW_PROMPT" <<PROMPT
-Review GitLab MR !${CI_MERGE_REQUEST_IID} for AI-DO integration safety.
+Review GitLab MR !${CI_MERGE_REQUEST_IID} for Open ALM integration safety.
 
 Trust boundary:
 - Target SHA policy, target code/tests, and runner facts are authoritative.

@@ -14,7 +14,7 @@ API_SRC = WORKSPACE_ROOT / "apps" / "api" / "src"
 if str(API_SRC) not in sys.path:
     sys.path.insert(0, str(API_SRC))
 
-from ai_do_api.domains.hr.erp_snapshot import ERP_EMPLOYEE_COLUMNS  # noqa: E402
+from open_alm_api.domains.hr.erp_snapshot import ERP_EMPLOYEE_COLUMNS  # noqa: E402
 
 
 @pytest.fixture
@@ -22,19 +22,19 @@ def hr_module(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     original_worker_modules = {
         name: module
         for name, module in sys.modules.items()
-        if name == "ai_do_worker" or name.startswith("ai_do_worker.")
+        if name == "open_alm_worker" or name.startswith("open_alm_worker.")
     }
     for name in original_worker_modules:
         sys.modules.pop(name, None)
 
-    monkeypatch.setenv("AI_DO_WORKER_QUEUE_GROUP", "default")
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", "sqlite+pysqlite:///:memory:")
-    module = importlib.import_module("ai_do_worker.tasks.hr")
+    monkeypatch.setenv("OPEN_ALM_WORKER_QUEUE_GROUP", "default")
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", "sqlite+pysqlite:///:memory:")
+    module = importlib.import_module("open_alm_worker.tasks.hr")
     try:
         yield module
     finally:
         for name in list(sys.modules):
-            if name == "ai_do_worker" or name.startswith("ai_do_worker."):
+            if name == "open_alm_worker" or name.startswith("open_alm_worker."):
                 sys.modules.pop(name, None)
         sys.modules.update(original_worker_modules)
 
@@ -381,8 +381,8 @@ def test_missing_erp_settings_report_only_key_names(hr_module: ModuleType) -> No
         hr_module._require_erp_db_settings(settings)
 
     message = str(error.value)
-    assert "AI_DO_ERP_DB_IP" in message
-    assert "AI_DO_ERP_DB_PW" in message
+    assert "OPEN_ALM_ERP_DB_IP" in message
+    assert "OPEN_ALM_ERP_DB_PW" in message
     assert "synthetic-test-password" not in message
 
 

@@ -5,7 +5,7 @@
 
 ## Context
 
-AI-DO의 생성형 LLM 호출은 도메인 gateway, provider SDK, worker, agent runtime에
+Open ALM의 생성형 LLM 호출은 도메인 gateway, provider SDK, worker, agent runtime에
 퍼져 있었다. 이 구조에서는 관리자가 호출 목록을 알기 위해 매번 코드를
 재조사해야 하고, 새 앱이 provider/model, 보안, 예산, audit 계약을 부분적으로만
 적용할 수 있다.

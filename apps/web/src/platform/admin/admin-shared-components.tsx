@@ -2,7 +2,7 @@ import { useEffect, useReducer } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Search, Shield } from 'lucide-react';
 
-import { Button, InlineNotice } from '@ai-do/ui';
+import { Button, InlineNotice } from '@open-alm/ui';
 
 import type { AuthUser } from '@/src/platform/auth/auth-api';
 import { useAuth } from '@/src/platform/auth/auth-provider';

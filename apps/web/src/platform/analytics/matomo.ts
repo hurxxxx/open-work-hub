@@ -1,7 +1,7 @@
-const DEFAULT_MATOMO_URL = 'https://matomo.dwdcc.kr/';
+const DEFAULT_MATOMO_URL = 'https://matomo.open-alm.example/';
 const DEFAULT_MATOMO_SITE_ID = '1';
-const DEFAULT_ALLOWED_HOSTS = ['dwdcc.kr', 'www.dwdcc.kr', 'ext.dwdcc.kr'];
-const MATOMO_SCRIPT_ID = 'ai-do-matomo-tracker';
+const DEFAULT_ALLOWED_HOSTS = ['open-alm.example', 'www.open-alm.example', 'ext.open-alm.example'];
+const MATOMO_SCRIPT_ID = 'open-alm-matomo-tracker';
 const USER_NAME_DIMENSION_ID = 1;
 const APP_ID_DIMENSION_ID = 2;
 const APP_ROUTE_DIMENSION_ID = 3;
@@ -24,10 +24,10 @@ declare global {
 }
 
 export type MatomoEnv = {
-  readonly VITE_AI_DO_MATOMO_ALLOWED_HOSTS?: string;
-  readonly VITE_AI_DO_MATOMO_ENABLED?: string;
-  readonly VITE_AI_DO_MATOMO_SITE_ID?: string;
-  readonly VITE_AI_DO_MATOMO_URL?: string;
+  readonly VITE_OPEN_ALM_MATOMO_ALLOWED_HOSTS?: string;
+  readonly VITE_OPEN_ALM_MATOMO_ENABLED?: string;
+  readonly VITE_OPEN_ALM_MATOMO_SITE_ID?: string;
+  readonly VITE_OPEN_ALM_MATOMO_URL?: string;
 };
 
 type MatomoWindow = Window &
@@ -60,17 +60,17 @@ export function resolveMatomoTrackingConfig(
   env: MatomoEnv,
   location: Pick<Location, 'hostname'>,
 ): MatomoTrackingConfig | null {
-  if (!isEnabled(env.VITE_AI_DO_MATOMO_ENABLED)) {
+  if (!isEnabled(env.VITE_OPEN_ALM_MATOMO_ENABLED)) {
     return null;
   }
 
   const trackerBaseUrl = normalizeMatomoUrl(
-    env.VITE_AI_DO_MATOMO_URL ?? DEFAULT_MATOMO_URL,
+    env.VITE_OPEN_ALM_MATOMO_URL ?? DEFAULT_MATOMO_URL,
   );
   const siteId = normalizeSiteId(
-    env.VITE_AI_DO_MATOMO_SITE_ID ?? DEFAULT_MATOMO_SITE_ID,
+    env.VITE_OPEN_ALM_MATOMO_SITE_ID ?? DEFAULT_MATOMO_SITE_ID,
   );
-  const allowedHosts = parseAllowedHosts(env.VITE_AI_DO_MATOMO_ALLOWED_HOSTS);
+  const allowedHosts = parseAllowedHosts(env.VITE_OPEN_ALM_MATOMO_ALLOWED_HOSTS);
 
   if (
     !trackerBaseUrl ||

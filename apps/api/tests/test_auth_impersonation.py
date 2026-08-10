@@ -12,8 +12,8 @@ def _bootstrap_admin_session(client: TestClient) -> dict:
     response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "AI-DO Admin",
-            "email": "admin@ai-do.local",
+            "full_name": "Open ALM Admin",
+            "email": "admin@open-alm.local",
             "password": "supersecret123",
         },
     )
@@ -45,9 +45,9 @@ def _create_user(
 def test_platform_admin_can_impersonate_active_user_and_audit_context(
     client: TestClient,
 ) -> None:
-    from ai_do_api.core.db import get_session_factory
-    from ai_do_api.domains.auth.models import AuditLog, AuthSession
-    from ai_do_api.domains.auth.security import hash_token
+    from open_alm_api.core.db import get_session_factory
+    from open_alm_api.domains.auth.models import AuditLog, AuthSession
+    from open_alm_api.domains.auth.security import hash_token
 
     admin_session = _bootstrap_admin_session(client)
     admin_token = admin_session["token"]

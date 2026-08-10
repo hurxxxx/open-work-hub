@@ -2,16 +2,16 @@ from __future__ import annotations
 
 import pytest
 
-from ai_do_api.domains.legacy_issues.analysis_graph.contracts import (
+from open_alm_api.domains.legacy_issues.analysis_graph.contracts import (
     AnalysisInterpretation,
 )
-from ai_do_api.domains.legacy_issues.analysis_graph.data_provider import (
+from open_alm_api.domains.legacy_issues.analysis_graph.data_provider import (
     _agent_result_to_bundle,
     _has_query_result,
     _requested_capability_limitations,
     _supplement_required_sources,
 )
-from ai_do_api.domains.legacy_issues.analysis_v2.agent import AnalysisAgentResult
+from open_alm_api.domains.legacy_issues.analysis_v2.agent import AnalysisAgentResult
 
 
 class _EvidenceToolset:
@@ -537,7 +537,7 @@ def test_hotspot_examples_use_exact_supplier_and_part_filters() -> None:
                             "part_number_missing": True,
                         },
                         {
-                            "supplier": "두원공조",
+                            "supplier": "Open ALM",
                             "part_number": "P-1",
                             "supplier_missing": False,
                             "part_number_missing": False,
@@ -572,7 +572,7 @@ def test_hotspot_examples_use_exact_supplier_and_part_filters() -> None:
         },
         {
             "limit": 2,
-            "suppliers": ["두원공조"],
+            "suppliers": ["Open ALM"],
             "part_numbers": ["P-1"],
         },
     ]

@@ -2,17 +2,17 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from ai_do_api.domains.legacy_issues.ai_search import (
+from open_alm_api.domains.legacy_issues.ai_search import (
     LegacyIssueEvidence,
     LegacyIssueSearchProfile,
 )
-from ai_do_api.domains.legacy_issues.analysis_v2.execution import AnalysisSqlScope
-from ai_do_api.domains.legacy_issues.analysis_v2.native_evidence import (
+from open_alm_api.domains.legacy_issues.analysis_v2.execution import AnalysisSqlScope
+from open_alm_api.domains.legacy_issues.analysis_v2.native_evidence import (
     NativeLegacyIssueEvidenceRetriever,
 )
-from ai_do_api.domains.legacy_issues.analysis_v2.retrieval import RetrievalRequest
-from ai_do_api.domains.legacy_issues.models import LegacyIssueRecord
-from ai_do_api.domains.retrieval.partitioning import (
+from open_alm_api.domains.legacy_issues.analysis_v2.retrieval import RetrievalRequest
+from open_alm_api.domains.legacy_issues.models import LegacyIssueRecord
+from open_alm_api.domains.retrieval.partitioning import (
     RetrievalPartitionId,
     RetrievalReadScope,
     RetrievalSourcePartitions,

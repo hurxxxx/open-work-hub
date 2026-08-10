@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from ai_do_api.domains.retrieval.projection_identity import (
+from open_alm_api.domains.retrieval.projection_identity import (
     RetrievalProjectionIdentityError,
     canonical_resource_key,
     canonical_search_document_id,
@@ -14,7 +14,7 @@ def test_canonical_projection_identity_has_fixed_v1_vectors() -> None:
     assert canonical_resource_key(
         resource_type="file_manager_file",
         resource_id="file-123",
-    ) == ("18:ai-do-retrieval-v1|8:resource|17:file_manager_file|8:file-123")
+    ) == ("18:open-alm-retrieval-v1|8:resource|17:file_manager_file|8:file-123")
     assert (
         canonical_search_document_id(
             resource_type="file_manager_file",

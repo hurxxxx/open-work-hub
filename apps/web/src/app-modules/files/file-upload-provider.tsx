@@ -18,7 +18,7 @@ import {
   UploadCloud,
   X,
 } from 'lucide-react';
-import { useToast } from '@ai-do/ui/providers/toast-provider';
+import { useToast } from '@open-alm/ui/providers/toast-provider';
 
 import { cn } from '@/src/lib/utils';
 import { formatByteSize } from '@/src/platform/format/byte-size';

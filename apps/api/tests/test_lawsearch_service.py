@@ -3,9 +3,9 @@ from __future__ import annotations
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from ai_do_api.core.db import Base
-from ai_do_api.domains.lawsearch import schemas, service
-from ai_do_api.domains.lawsearch.models import LawPart, LawPartGroup, LawRegion, LawType
+from open_alm_api.core.db import Base
+from open_alm_api.domains.lawsearch import schemas, service
+from open_alm_api.domains.lawsearch.models import LawPart, LawPartGroup, LawRegion, LawType
 
 
 def _session() -> Session:

@@ -27,7 +27,7 @@
 ## 사전 조건
 
 1. DB migration과 동일 binary가 모든 API/worker instance에 배포되어 있어야 한다.
-2. `AI_DO_FILES_RETRIEVAL_ENABLED=false` 상태여야 한다.
+2. `OPEN_ALM_FILES_RETRIEVAL_ENABLED=false` 상태여야 한다.
 3. OpenSearch는 Nori가 포함된 v3 schema를, Qdrant는 partitioned v1 collection과 payload
    index를 지원해야 한다.
 4. source mutation producer와 workspace membership/user-status/corpus ACL을 바꾸는 모든 writer를
@@ -60,7 +60,7 @@ tombstone에 맞춰 canonical head/event만 갱신한다.
 
 ```bash
 cd apps/api
-AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 \
+OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 \
   python scripts/manage_files_retrieval_generation.py bootstrap-extraction \
   --limit 25 \
   --confirm-writes-quiesced \
@@ -88,7 +88,7 @@ dry-run 확인 후 `--dry-run`을 제거한다. 출력의 `next_file_id`를 다�
 
 ```bash
 cd apps/api
-AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 \
+OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 \
   python scripts/manage_files_retrieval_generation.py reconcile-source \
   --limit 500 \
   --confirm-writes-quiesced \
@@ -107,13 +107,13 @@ dry-run 확인 후 `--dry-run`을 제거한다. 출력의 `next_file_id`를 다�
 일반적인 비어 있지 않은 최초 적재는 `cached-artifacts`를 사용한다.
 
 ```bash
-AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 \
+OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 \
   python scripts/manage_files_retrieval_generation.py prepare \
   --generation release_20260723 \
   --baseline-mode cached-artifacts \
   --dry-run
 
-AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 \
+OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 \
   python scripts/manage_files_retrieval_generation.py prepare \
   --generation release_20260723 \
   --baseline-mode cached-artifacts
@@ -128,7 +128,7 @@ AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 \
 Production empty pair 준비에는 일반 production generation 확인도 함께 사용한다.
 
 ```bash
-AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 \
+OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 \
   python scripts/manage_files_retrieval_generation.py prepare \
   --generation release_empty_20260723 \
   --baseline-mode empty \
@@ -141,7 +141,7 @@ AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 \
 `complete=0`이면 출력의 `next_event_sequence`를 다음 `--after-event-sequence`로 전달한다.
 
 ```bash
-AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 \
+OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 \
   python scripts/manage_files_retrieval_generation.py materialize \
   --generation release_20260723 \
   --after-event-sequence 0 \
@@ -175,8 +175,8 @@ legacy v2 evaluator 결과는 승격 증거로 사용할 수 없다. 다음 read
 평가하고 mode `0600` artifact를 새 파일로 원자 생성한다. 기존 output을 덮어쓰지 않는다.
 
 ```bash
-AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 \
-  python -m ai_do_api.evaluate_files_partitioned_quality \
+OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 \
+  python -m open_alm_api.evaluate_files_partitioned_quality \
   --corpus /secure/path/retrieval-quality-corpus-v1.json \
   --generation release_20260723 \
   --output /secure/path/files-quality-release_20260723.json
@@ -207,7 +207,7 @@ zero-count inventory, secret-free embedding/reranker identity를 고정하고 �
 source mutation과 worker가 계속 중지된 상태에서 current Files watermark를 정확히 전달한다.
 
 ```bash
-AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 \
+OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 \
   python scripts/manage_files_retrieval_generation.py validate \
   --generation release_20260723 \
   --confirm-writes-quiesced \
@@ -226,7 +226,7 @@ physical/embedding/reranker identity와 현재 principal ACL SHA-256을 generati
 확인 문자열이 없거나 다르면 empty validation은 거부된다.
 
 ```bash
-AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 \
+OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 \
   python scripts/manage_files_retrieval_generation.py validate \
   --generation release_empty_20260723 \
   --confirm-production-generation release_empty_20260723 \
@@ -235,7 +235,7 @@ AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 \
   --reconciliation-watermark 0 \
   --dry-run
 
-AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 \
+OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 \
   python scripts/manage_files_retrieval_generation.py validate \
   --generation release_empty_20260723 \
   --confirm-production-generation release_empty_20260723 \
@@ -251,7 +251,7 @@ Dry-run은 mutation 승인을 요구하지 않지만 실제 validation은 두 �
 ## 7. 최초 alias cutover
 
 ```bash
-AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 \
+OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 \
   python scripts/manage_files_retrieval_generation.py cutover \
   --generation release_20260723 \
   --confirm-writes-quiesced \
@@ -259,7 +259,7 @@ AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 \
   --rollback-window-hours 168 \
   --dry-run
 
-AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 \
+OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 \
   python scripts/manage_files_retrieval_generation.py cutover \
   --generation release_20260723 \
   --confirm-writes-quiesced \
@@ -278,7 +278,7 @@ Empty bootstrap pair는 `--quality-corpus` 없이 cutover하되
 성공 직후 writer를 재개하기 전에 full read-only evidence gate를 실행한다.
 
 ```bash
-AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 \
+OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 \
   python scripts/check_files_retrieval_cutover.py
 ```
 
@@ -287,7 +287,7 @@ inventory, queue drain을 확인한다. Activation 뒤 정상 write가 진행되
 watermark가 바뀌므로 steady-state checker는 과거 activation content checksum을 고정하지 않고 현재
 head와 physical inventory의 일치를 검사한다.
 
-마지막으로 표준 production deploy로 `AI_DO_FILES_RETRIEVAL_ENABLED=true` binary를 활성화한다.
+마지막으로 표준 production deploy로 `OPEN_ALM_FILES_RETRIEVAL_ENABLED=true` binary를 활성화한다.
 위의 writer 재개 전 checker는 최초 generation cutover의 필수 증거이므로 생략하지 않는다. 표준
 deploy는 corpus 전체 checker를 다시 실행하지 않는다. checker는 PostgreSQL source, OpenSearch
 document, Qdrant payload·vector를 전수 순회하므로 generation cutover, 인덱스 장애 조사, 승인된
@@ -316,7 +316,7 @@ active source의 실제 scope 집합과 정확히 같지 않으면 기록하지 
 전용 corpus는 다음과 같다.
 
 ```bash
-AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 \
+OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 \
   python scripts/manage_files_retrieval_generation.py attest-active \
   --generation prod-empty-20260723 \
   --confirm-writes-quiesced \
@@ -325,7 +325,7 @@ AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 \
   --scope-coverage workspace \
   --dry-run
 
-AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 \
+OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 \
   python scripts/manage_files_retrieval_generation.py attest-active \
   --generation prod-empty-20260723 \
   --confirm-writes-quiesced \

@@ -31,7 +31,7 @@ export function isLaneOptionalPath(filePath) {
     return true;
   }
   if (
-    /^(?:apps\/web\/src\/platform\/i18n\/(?:resources|locales)\.ts|apps\/api\/src\/ai_do_api\/core\/i18n_catalog\.py)$/.test(
+    /^(?:apps\/web\/src\/platform\/i18n\/(?:resources|locales)\.ts|apps\/api\/src\/open_alm_api\/core\/i18n_catalog\.py)$/.test(
       filePath,
     )
   ) {
@@ -111,14 +111,14 @@ export function checkAppPlatformGuardrails(rawChanges, options = {}) {
     (requireMergeRequestLane
       ? declaredLaneFromLabel
       : (options.declaredLane ??
-        env.AI_DO_CHANGE_LANE ??
+        env.OPEN_ALM_CHANGE_LANE ??
         declaredLaneFromLabel)) ?? null;
   const declaredLane = normalizeLane(rawDeclaredLane);
   const rewriteApprovalFromLabel =
     repoWideRewriteApprovalFromMergeRequestLabels(mergeRequestLabels);
   const allowRepoWideRewrite =
     options.allowRepoWideRewrite === true ||
-    env.AI_DO_ALLOW_REPO_WIDE_REWRITE === '1' ||
+    env.OPEN_ALM_ALLOW_REPO_WIDE_REWRITE === '1' ||
     (rewriteApprovalFromLabel &&
       (declaredLane === LANES.CORE_PLATFORM ||
         declaredLane === LANES.HARNESS_AND_POLICY));
@@ -286,7 +286,7 @@ export function checkAppPlatformGuardrails(rawChanges, options = {}) {
       code: 'mass-delete',
       message: `This change deletes ${deletedFiles.length} files, which exceeds the guardrail threshold of ${maxDeletedFiles}.`,
       nextAction:
-        'Split the deletion into a reviewed cleanup lane, or set AI_DO_ALLOW_REPO_WIDE_REWRITE=1 only for an explicitly approved maintenance change.',
+        'Split the deletion into a reviewed cleanup lane, or set OPEN_ALM_ALLOW_REPO_WIDE_REWRITE=1 only for an explicitly approved maintenance change.',
     });
   }
 
@@ -314,7 +314,7 @@ export function checkAppPlatformGuardrails(rawChanges, options = {}) {
       code: 'migration-escalation',
       message: 'Risky migration changes require the Core Platform lane.',
       nextAction:
-        'Declare AI_DO_CHANGE_LANE=core-platform, or split the migration away from ordinary app work.',
+        'Declare OPEN_ALM_CHANGE_LANE=core-platform, or split the migration away from ordinary app work.',
       details: uncoveredMigrationRisks.map(
         (risk) => `${risk.path}: ${risk.reason} ${risk.nextAction}`,
       ),
@@ -329,8 +329,8 @@ export function checkAppPlatformGuardrails(rawChanges, options = {}) {
     laneDeclarationSource:
       options.declaredLane != null
         ? 'option'
-        : env.AI_DO_CHANGE_LANE
-          ? 'AI_DO_CHANGE_LANE'
+        : env.OPEN_ALM_CHANGE_LANE
+          ? 'OPEN_ALM_CHANGE_LANE'
           : declaredLaneFromLabel
             ? 'CI_MERGE_REQUEST_LABELS'
             : null,

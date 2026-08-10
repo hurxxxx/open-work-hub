@@ -3,18 +3,18 @@ from __future__ import annotations
 import pytest
 from pydantic import BaseModel, ConfigDict
 
-from ai_do_api.core.principal import personal_user_principal
-from ai_do_api.domains.ai.registry import (
+from open_alm_api.core.principal import personal_user_principal
+from open_alm_api.domains.ai.registry import (
     AiCapabilityRegistry,
     WorkspaceContext,
     WorkspaceEntitlementView,
     get_ai_capability_registry,
     reset_ai_capability_registry,
 )
-from ai_do_api.domains.legacy_issues import (
+from open_alm_api.domains.legacy_issues import (
     register_ai_capabilities as register_legacy_issue_ai_capabilities,
 )
-from ai_do_api.domains.legacy_issues.task_kinds import (
+from open_alm_api.domains.legacy_issues.task_kinds import (
     LEGACY_ISSUE_ANALYSIS_PLAN_TASK_KIND,
     LEGACY_ISSUE_ANALYSIS_PLAN_WORKLOAD_ID,
     LEGACY_ISSUE_ANALYSIS_SQL_FALLBACK_TASK_KIND,

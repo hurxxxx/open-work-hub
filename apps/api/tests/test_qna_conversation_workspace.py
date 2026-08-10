@@ -4,9 +4,9 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from ai_do_api.core.db import get_session_factory
-from ai_do_api.domains.auth.models import User
-from ai_do_api.domains.qna.router import _qna_conversation_workspace
+from open_alm_api.core.db import get_session_factory
+from open_alm_api.domains.auth.models import User
+from open_alm_api.domains.qna.router import _qna_conversation_workspace
 from dev_accounts import auth_headers, create_workspace_user_session, dev_login
 
 
@@ -17,7 +17,7 @@ def test_qna_conversation_workspace_uses_payload_workspace_key(
         client,
         workspace_key="qna-history-workspace",
         login_id="qnahistory",
-        email="qna-history@ai-do.local",
+        email="qna-history@open-alm.local",
         full_name="QNA History",
     )
     with get_session_factory()() as db:
@@ -48,7 +48,7 @@ def test_qna_conversation_workspace_rejects_unjoined_workspace(
         client,
         workspace_key="qna-member-workspace",
         login_id="qnamemberonly",
-        email="qna-member-only@ai-do.local",
+        email="qna-member-only@open-alm.local",
         full_name="QNA Member Only",
     )
 

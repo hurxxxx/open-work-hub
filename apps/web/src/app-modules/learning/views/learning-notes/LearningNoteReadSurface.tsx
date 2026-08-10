@@ -1,6 +1,6 @@
 import { useEffect, useEffectEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { BlockViewer, type BlockContent } from '@ai-do/ui';
+import { BlockViewer, type BlockContent } from '@open-alm/ui';
 import { Globe2, Lock, X } from 'lucide-react';
 import { m } from 'motion/react';
 import { useTranslation } from 'react-i18next';

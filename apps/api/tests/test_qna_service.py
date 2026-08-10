@@ -3,9 +3,9 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
-from ai_do_api.core.llm_adapters import StreamChunk
-from ai_do_api.domains.qna import service
-from ai_do_api.domains.rag.contracts import (
+from open_alm_api.core.llm_adapters import StreamChunk
+from open_alm_api.domains.qna import service
+from open_alm_api.domains.rag.contracts import (
     RagAnswerMode,
     RagGroundedAnswer,
     RagQueryHit,
@@ -35,10 +35,10 @@ def test_qna_url_lookup_answer_distinguishes_welfare_mall_urls() -> None:
                 title="복지포인트 제도 도입 [안내]",
                 excerpt=(
                     "※ 복지카드 온라인 신청 URL "
-                    "1) 신한은행 다드림 LOVE카드 : https://shcard.io/DOOWON "
+                    "1) 신한은행 다드림 LOVE카드 : https://shcard.io/OPEN ALM "
                     "2) 신한은행 다드림 RPM+ Platinum# 카드 : "
-                    "https://shcard.io/DOOWONRPM "
-                    "※ 복지몰 URL : https://dwdcc.ezwel.com "
+                    "https://shcard.io/OPEN ALMRPM "
+                    "※ 복지몰 URL : https://open-alm.ezwel.com "
                     "→ 본인인증 완료시 카드 자동 연동"
                 ),
                 score=0.69,
@@ -58,10 +58,10 @@ def test_qna_url_lookup_answer_distinguishes_welfare_mall_urls() -> None:
     )
 
     assert answer is not None
-    assert "복지몰: https://dwdcc.ezwel.com" in answer.text
+    assert "복지몰: https://open-alm.ezwel.com" in answer.text
     assert "LG복지몰: https://well.lglifecare.com/auth/login" in answer.text
-    assert "https://shcard.io/DOOWON" not in answer.text
-    assert "https://shcard.io/DOOWONRPM" not in answer.text
+    assert "https://shcard.io/OPEN ALM" not in answer.text
+    assert "https://shcard.io/OPEN ALMRPM" not in answer.text
     assert "https://shorturl.at/bQXrH" not in answer.text
     assert answer.unsupported_claims == []
     assert [citation.resource_id for citation in answer.citations] == [
@@ -77,7 +77,7 @@ def test_qna_url_lookup_answer_filters_by_specific_url_label() -> None:
             _qna_hit(
                 resource_id="notice-1",
                 title="복지포인트 제도 도입 [안내]",
-                excerpt="※ 복지몰 URL : https://dwdcc.ezwel.com",
+                excerpt="※ 복지몰 URL : https://open-alm.ezwel.com",
                 score=0.69,
             ),
             _qna_hit(
@@ -91,7 +91,7 @@ def test_qna_url_lookup_answer_filters_by_specific_url_label() -> None:
 
     assert answer is not None
     assert "https://well.lglifecare.com/auth/login" in answer.text
-    assert "https://dwdcc.ezwel.com" not in answer.text
+    assert "https://open-alm.ezwel.com" not in answer.text
     assert [citation.resource_id for citation in answer.citations] == ["notice-2"]
 
 

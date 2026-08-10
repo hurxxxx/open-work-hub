@@ -7,7 +7,7 @@ import {
   Terminal,
 } from 'lucide-react';
 
-import { Button } from '@ai-do/ui/primitives/button';
+import { Button } from '@open-alm/ui/primitives/button';
 
 import {
   buildDesktopInstallerRows,

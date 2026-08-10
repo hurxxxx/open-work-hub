@@ -1,8 +1,8 @@
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from ai_do_api.core.db import get_session_factory
-from ai_do_api.domains.pms.models import ChecklistItem, TaskActivityLog
+from open_alm_api.core.db import get_session_factory
+from open_alm_api.domains.pms.models import ChecklistItem, TaskActivityLog
 from test_pms_issues import (
     _auth_headers,
     _bootstrap_admin,

@@ -11,9 +11,9 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException
 
-from ai_do_api.core.db import Base
-from ai_do_api.domains.auth.models import OrgUnit, User, Workspace, utcnow_naive
-from ai_do_api.domains.legacy_issues.models import (
+from open_alm_api.core.db import Base
+from open_alm_api.domains.auth.models import OrgUnit, User, Workspace, utcnow_naive
+from open_alm_api.domains.legacy_issues.models import (
     LegacyIssueDataRevision,
     LegacyIssueRecordHistory,
     LegacyIssueVehicleModel,
@@ -23,7 +23,7 @@ from ai_do_api.domains.legacy_issues.models import (
     LegacyIssueVehicleModuleChecklistRecord,
     LegacyIssueVehicleStage,
 )
-from ai_do_api.domains.legacy_issues.vehicle_module_checklist_attachments import (
+from open_alm_api.domains.legacy_issues.vehicle_module_checklist_attachments import (
     VehicleModuleChecklistAttachmentStorage,
     VehicleModuleChecklistAttachmentUpload,
     delete_vehicle_module_checklist_attachment,
@@ -37,7 +37,7 @@ from ai_do_api.domains.legacy_issues.vehicle_module_checklist_attachments import
     safe_attachment_filename,
     upload_vehicle_module_checklist_attachment,
 )
-from ai_do_api.domains.legacy_issues.vehicle_module_checklists import (
+from open_alm_api.domains.legacy_issues.vehicle_module_checklists import (
     delete_vehicle_module_checklist,
 )
 
@@ -164,7 +164,7 @@ def _prepared_upload(
 def _install_fake_storage(
     monkeypatch: pytest.MonkeyPatch,
 ) -> tuple["_FakeStorageClient", VehicleModuleChecklistAttachmentStorage]:
-    from ai_do_api.domains.legacy_issues import (
+    from open_alm_api.domains.legacy_issues import (
         vehicle_module_checklist_attachments as attachment_service,
     )
 
@@ -185,7 +185,7 @@ def _install_fake_storage(
 def test_attachment_upload_reader_counts_chunks_and_rejects_empty_and_oversize(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from ai_do_api.domains.legacy_issues import (
+    from open_alm_api.domains.legacy_issues import (
         vehicle_module_checklist_attachments as attachment_service,
     )
 
@@ -647,7 +647,7 @@ def test_attachment_upload_database_and_compensation_failure_leaves_stale_orphan
 def test_attachment_upload_commit_failure_rolls_back_and_removes_object(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from ai_do_api.domains.legacy_issues import router as legacy_router
+    from open_alm_api.domains.legacy_issues import router as legacy_router
 
     upload = _prepared_upload(b"commit-orphan-guard")
     row = SimpleNamespace(storage_key="checklists/orphan-guard", id="attachment-1")

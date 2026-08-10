@@ -46,7 +46,7 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-vi.mock('@ai-do/ui', () => ({
+vi.mock('@open-alm/ui', () => ({
   useToast: () => stableToast,
 }));
 

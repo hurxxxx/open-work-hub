@@ -10,7 +10,7 @@ import {
   runCli,
 } from './check-path-hardcoding.mjs';
 
-const legacyBase = '/projects/ai-do-';
+const legacyBase = '/projects/open-alm-';
 const legacyPath = (suffix) => `${legacyBase}${suffix}`;
 
 test('buildLegacyPathPattern detects legacy prod and dev checkouts only at path boundaries', () => {

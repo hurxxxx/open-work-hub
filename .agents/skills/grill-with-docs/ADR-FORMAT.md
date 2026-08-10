@@ -1,6 +1,6 @@
 # ADR Format
 
-AI-DO ADRs live in the repository-root `adr/` directory. Use the next available four-digit number and a descriptive slug, for example `0005-workspace-audit-retention.md`.
+Open ALM ADRs live in the repository-root `adr/` directory. Use the next available four-digit number and a descriptive slug, for example `0005-workspace-audit-retention.md`.
 
 Do not create nested or context-local ADR directories.
 

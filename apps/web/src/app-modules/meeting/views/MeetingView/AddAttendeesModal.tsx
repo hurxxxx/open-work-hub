@@ -4,7 +4,7 @@
 //
 // Backed by POST /meeting/meetings/{id}/attendees which is participant-permissioned.
 import { useEffect, useMemo, useReducer } from 'react';
-import { InlineNotice } from '@ai-do/ui';
+import { InlineNotice } from '@open-alm/ui';
 import { UserPlus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 

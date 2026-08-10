@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Download, Loader2, RefreshCw, Trash2 } from 'lucide-react';
-import { EmptyState, InlineNotice } from '@ai-do/ui';
+import { EmptyState, InlineNotice } from '@open-alm/ui';
 
 import { cn } from '@/src/lib/utils';
 import { downloadBlobAsFile } from '@/src/platform/browser/browser-download';

@@ -1,4 +1,4 @@
-import type { components } from '@ai-do/contracts/openapi';
+import type { components } from '@open-alm/contracts/openapi';
 
 import {
   ApiRequestError,

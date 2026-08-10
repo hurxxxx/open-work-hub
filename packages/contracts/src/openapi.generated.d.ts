@@ -485,7 +485,7 @@ export interface paths {
          * @description Agent-aware SSE stream.
          *
          *     Wire protocol is documented in
-         *     ``apps/api/src/ai_do_api/domains/ai/events_schema.md``. HTTP status is
+         *     ``apps/api/src/open_alm_api/domains/ai/events_schema.md``. HTTP status is
          *     always 200 once the stream opens — failures surface as ``error`` +
          *     ``done(finish_reason=error)`` envelopes.
          */
@@ -15126,7 +15126,7 @@ export interface components {
             visibility: "personal" | "workspace";
             /**
              * Xml
-             * @default <mxfile host="AI-DO"><diagram id="page-1" name="Page-1"><mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0"><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram></mxfile>
+             * @default <mxfile host="Open ALM"><diagram id="page-1" name="Page-1"><mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0"><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram></mxfile>
              */
             xml: string;
             /** Preview Png Data Url */

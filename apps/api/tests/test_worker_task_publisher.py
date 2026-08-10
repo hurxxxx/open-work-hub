@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from ai_do_api.core.worker_task_publisher import create_fail_fast_celery_publisher
+from open_alm_api.core.worker_task_publisher import create_fail_fast_celery_publisher
 
 
 def test_fail_fast_celery_publisher_disables_publish_retries() -> None:
     client = create_fail_fast_celery_publisher(
-        "ai_do_api_test",
+        "open_alm_api_test",
         broker="memory://",
         ignore_result=True,
     )

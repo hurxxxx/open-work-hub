@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 
-import { InlineNotice } from '@ai-do/ui';
+import { InlineNotice } from '@open-alm/ui';
 
 import { UserDateTime } from '@/src/components/date/UserDateTime';
 

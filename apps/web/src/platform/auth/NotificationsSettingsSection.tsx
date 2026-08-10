@@ -1,4 +1,4 @@
-import { InlineNotice } from '@ai-do/ui/feedback/inline-notice';
+import { InlineNotice } from '@open-alm/ui/feedback/inline-notice';
 
 import { SettingsSectionHeader } from './SettingsSectionHeader';
 import type { SettingsTranslator } from './settings-page-model';

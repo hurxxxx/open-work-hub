@@ -43,7 +43,7 @@ export interface UseChatStreamApi {
   upsertPendingApproval: (approval: PendingApproval) => void;
 }
 
-const AI_STREAM_ENABLED_STORAGE_KEY = 'ai-do.ai.streamEnabled';
+const AI_STREAM_ENABLED_STORAGE_KEY = 'open-alm.ai.streamEnabled';
 
 interface ChatStreamRuntime {
   abortController: AbortController | null;

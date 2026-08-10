@@ -5,7 +5,7 @@ import { cn } from '@/src/lib/utils';
 
 // Renders an AI 특허 보고서 (plain text with section markers) into readable
 // cards. Ported from the legacy Flask tool's `_pfFormatResult` (C:\server
-// templates/sections/patent_file.html) so the new ai-do output matches it:
+// templates/sections/patent_file.html) so the new open-alm output matches it:
 // [섹션] headers, 청구항, verdict badges (높음/보통/낮음), numbered subsections,
 // bullet lists, 예: blocks, and inline **bold** / `code`.
 
@@ -466,10 +466,10 @@ function blocksToHtml(blocks: Block[]): string {
 // Exported standalone document strings (Korean is the document's own content,
 // not app UI). Held as constants so they read as data, not display copy.
 const EXPORT_FONT = "'Pretendard','Noto Sans KR','맑은 고딕',sans-serif";
-const EXPORT_SYSTEM_LABEL = '두원공조 · AI 특허 작성';
+const EXPORT_SYSTEM_LABEL = 'Open ALM · AI 특허 작성';
 const EXPORT_DATE_LABEL = '작성일';
 // prettier-ignore
-const EXPORT_FOOTER = '두원공조 기술연구소 — AI 특허 작성 시스템에서 생성된 보고서입니다.';
+const EXPORT_FOOTER = 'Open ALM 기술연구소 — AI 특허 작성 시스템에서 생성된 보고서입니다.';
 
 const EXPORT_CSS = `
   :root {

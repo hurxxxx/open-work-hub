@@ -20,7 +20,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 ANALYSIS_SCHEMA = "legacy_issue_analysis"
-ANALYSIS_READER_ROLE = "ai_do_analysis_reader"
+ANALYSIS_READER_ROLE = "open_alm_analysis_reader"
 VECTOR_TABLE = "data_analysis_nodes_v1"
 VECTOR_DIMENSIONS = 1024
 VECTOR_BACKEND = "llamaindex-pgvector"
@@ -303,7 +303,7 @@ def _create_scoped_issue_function() -> None:
                 WHERE records.workspace_id =
                           NULLIF(
                               current_setting(
-                                  'ai_do.legacy_issue_workspace_id',
+                                  'open_alm.legacy_issue_workspace_id',
                                   true
                               ),
                               ''
@@ -313,7 +313,7 @@ def _create_scoped_issue_function() -> None:
                               string_to_array(
                                   NULLIF(
                                       current_setting(
-                                          'ai_do.legacy_issue_module_keys',
+                                          'open_alm.legacy_issue_module_keys',
                                           true
                                       ),
                                       ''
@@ -328,7 +328,7 @@ def _create_scoped_issue_function() -> None:
                               string_to_array(
                                   NULLIF(
                                       current_setting(
-                                          'ai_do.legacy_issue_revision_ids',
+                                          'open_alm.legacy_issue_revision_ids',
                                           true
                                       ),
                                       ''
@@ -345,7 +345,7 @@ def _create_scoped_issue_function() -> None:
                               string_to_array(
                                   NULLIF(
                                       current_setting(
-                                          'ai_do.legacy_issue_partition_ids',
+                                          'open_alm.legacy_issue_partition_ids',
                                           true
                                       ),
                                       ''
@@ -406,7 +406,7 @@ def _create_scoped_checklist_functions() -> None:
                 WHERE checklists.workspace_id =
                           NULLIF(
                               current_setting(
-                                  'ai_do.legacy_issue_workspace_id',
+                                  'open_alm.legacy_issue_workspace_id',
                                   true
                               ),
                               ''
@@ -416,7 +416,7 @@ def _create_scoped_checklist_functions() -> None:
                               string_to_array(
                                   NULLIF(
                                       current_setting(
-                                          'ai_do.legacy_issue_checklist_ids',
+                                          'open_alm.legacy_issue_checklist_ids',
                                           true
                                       ),
                                       ''
@@ -431,7 +431,7 @@ def _create_scoped_checklist_functions() -> None:
                               string_to_array(
                                   NULLIF(
                                       current_setting(
-                                          'ai_do.legacy_issue_module_keys',
+                                          'open_alm.legacy_issue_module_keys',
                                           true
                                       ),
                                       ''
@@ -663,7 +663,7 @@ def _create_scoped_checklist_functions() -> None:
                 WHERE items.workspace_id =
                           NULLIF(
                               current_setting(
-                                  'ai_do.legacy_issue_workspace_id',
+                                  'open_alm.legacy_issue_workspace_id',
                                   true
                               ),
                               ''
@@ -673,7 +673,7 @@ def _create_scoped_checklist_functions() -> None:
                               string_to_array(
                                   NULLIF(
                                       current_setting(
-                                          'ai_do.legacy_issue_checklist_ids',
+                                          'open_alm.legacy_issue_checklist_ids',
                                           true
                                       ),
                                       ''
@@ -688,7 +688,7 @@ def _create_scoped_checklist_functions() -> None:
                               string_to_array(
                                   NULLIF(
                                       current_setting(
-                                          'ai_do.legacy_issue_module_keys',
+                                          'open_alm.legacy_issue_module_keys',
                                           true
                                       ),
                                       ''

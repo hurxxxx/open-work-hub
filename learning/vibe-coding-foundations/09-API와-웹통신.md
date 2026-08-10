@@ -43,7 +43,7 @@ HTTP(HyperText Transfer Protocol)는 1989년 팀 버너스 리가 설계한 웹�
 
 ```
 POST /ai/chat HTTP/1.1
-Host: portal.doowon.co
+Host: portal.corporate.co
 Authorization: Bearer eyJhbGciOi...
 Content-Type: application/json
 

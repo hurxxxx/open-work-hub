@@ -65,8 +65,8 @@ References 와 `docs/` 트리에서 해당 문서를 찾아 적용한다.
 ## 프로젝트 skill — Claude Code 에서 쓸 수 있게 셋업 후 사용
 
 프로젝트 skill 의 정본은 **git 추적되는 `.agents/skills/<name>/SKILL.md`** 다(거버넌스: `agents.md`
-와 `ai-do-agent-skill-governance` skill). 그러나 Claude Code 는 skill 을 `.claude/skills/` 에서
-발견하므로, **셋업하지 않으면 `ai-do-*` 프로젝트 skill 이 Skill 도구에 보이지 않는다.**
+와 `open-alm-agent-skill-governance` skill). 그러나 Claude Code 는 skill 을 `.claude/skills/` 에서
+발견하므로, **셋업하지 않으면 `open-alm-*` 프로젝트 skill 이 Skill 도구에 보이지 않는다.**
 
 ### 셋업 (없거나 깨졌으면 작업 시작 시 1회)
 
@@ -78,7 +78,7 @@ References 와 `docs/` 트리에서 해당 문서를 찾아 적용한다.
    - 정션이 막히면 per-skill 정션 또는 복사 대신, 정본 경로(`.agents/skills`)를 직접 읽어
      해당 SKILL.md 절차를 수행한다. **`.agents/skills` 를 편집·삭제하지 말고 정본으로만 둔다.**
 2. `.claude/skills/` 는 **머신 로컬 노출물**이므로 커밋하지 않는다(`.gitignore` 의 `.claude/skills/`).
-3. 노출 후 Skill 목록에 `ai-do-*` 가 보이는지 확인한다. 안 보이면 1번을 재실행한다.
+3. 노출 후 Skill 목록에 `open-alm-*` 가 보이는지 확인한다. 안 보이면 1번을 재실행한다.
 
 ### 포맷(변환)
 
@@ -90,11 +90,11 @@ References 와 `docs/` 트리에서 해당 문서를 찾아 적용한다.
 ### 사용
 
 - 작업이 skill 의 `Use when` 트리거에 닿으면 해당 skill 을 Skill 도구로 호출해 그 절차를 따른다.
-  예: 워크트리/브랜치 → `ai-do-worktree-management`, 환경/연결 → `ai-do-development-environment`,
-  i18n → `ai-do-i18n`, MR 리뷰 → `ai-do-mr-review-validation`, 릴리스 → `ai-do-release-promotion`,
-  AI capability → `ai-do-mcp-capability-governance`, 작업 인입 → `ai-do-agent-work-intake`, 도메인 앱
-  생성·포팅·app API/worker/file/AI 변경 → `ai-do-vibe-app-delivery`.
-- 도메인 앱 요청은 코드 작성 전에 `ai-do-vibe-app-delivery`의 scaffold 확인과 contract map을 완료한다.
+  예: 워크트리/브랜치 → `open-alm-worktree-management`, 환경/연결 → `open-alm-development-environment`,
+  i18n → `open-alm-i18n`, MR 리뷰 → `open-alm-mr-review-validation`, 릴리스 → `open-alm-release-promotion`,
+  AI capability → `open-alm-mcp-capability-governance`, 작업 인입 → `open-alm-agent-work-intake`, 도메인 앱
+  생성·포팅·app API/worker/file/AI 변경 → `open-alm-vibe-app-delivery`.
+- 도메인 앱 요청은 코드 작성 전에 `open-alm-vibe-app-delivery`의 scaffold 확인과 contract map을 완료한다.
   protected scaffold가 없으면 core-enablement brief만 작성하고 구현을 중단한다. 기능을 통과시키기 위해
   shell/registry/generated contract/CI/checker/exclusion을 같은 MR에서 편집하거나 lane을 스스로 높이지 않는다.
 - skill 이 다루는 절차를 임의로 우회·재구현하지 않는다. skill 내용과 `agents.md` 가 충돌하면
@@ -103,7 +103,7 @@ References 와 `docs/` 트리에서 해당 문서를 찾아 적용한다.
   등록한다.
 
   ```bash
-  pnpm mr:publish -- --title "<title>" --description-file /tmp/ai-do-mr.md
+  pnpm mr:publish -- --title "<title>" --description-file /tmp/open-alm-mr.md
   ```
 
   이 명령은 현재 `origin/dev`를 포함하는지 확인하고 전체 `origin/dev...HEAD` diff에서 lane을
@@ -117,15 +117,15 @@ References 와 `docs/` 트리에서 해당 문서를 찾아 적용한다.
   gate를 우회하지 않는다. 실패했거나 실행하지 않았으면 push/MR 생성/Ready/auto-merge를 진행하지
   않는다.
 
-- MR 본문을 먼저 완성해 repository 밖의 파일(예: `/tmp/ai-do-mr.md`)에 두어야 한다.
-  `pnpm mr:preflight -- --description-file /tmp/ai-do-mr.md`는 dry run 용도이며,
+- MR 본문을 먼저 완성해 repository 밖의 파일(예: `/tmp/open-alm-mr.md`)에 두어야 한다.
+  `pnpm mr:preflight -- --description-file /tmp/open-alm-mr.md`는 dry run 용도이며,
   `mr:publish`는 publish 직전에 같은 검증 전체를 다시 실행한다. 검증 중 source SHA, target SHA,
   본문, worktree가 바뀌면 결과는 무효이며 처음부터 다시 실행한다.
 - Claude Code 로 MR 을 열거나 ready 상태로 넘기기 전에는 구현과 검증을 마친 뒤 native `/review`
   workflow 를 반드시 실행한다. `/review` 는 target branch 기준 diff 를 보며, release blocker,
   contract/platform 경계, 누락 검증, merge conflict 를 찾는 마지막 gate 로 사용한다.
 - `/review` workflow 가 해당 환경에서 보이지 않으면 MR 전 리뷰를 생략하지 말고
-  `.agents/skills/ai-do-mr-review-validation/SKILL.md` 절차를 직접 수행한 뒤, fallback 으로
+  `.agents/skills/open-alm-mr-review-validation/SKILL.md` 절차를 직접 수행한 뒤, fallback 으로
   수행했다는 사실과 남은 위험을 MR 본문 또는 최종 보고에 적는다.
 - 도메인 앱 MR은 `.gitlab/merge_request_templates/Vibe_Domain_App.md`를 사용하고 Draft로 시작한다.
   `dev` 대상 MR의 lane은 `mr:publish`가 전체 diff에서 계산한다. `pnpm ci:harness`만으로 Ready로 바꾸지 않으며,
@@ -138,8 +138,8 @@ Windows 네이티브 로컬 개발자 머신은 원격 dev 인프라(`128.1.253.
 Postgres/Redis/MinIO/OpenSearch/Qdrant, 내부 LLM)에 **네트워크로** 접속한다.
 인프라는 직접 노출돼 있어 별도 터널 없이 접근 가능하다.
 
-서버 dev checkout(`/projects/ai-do/dev`)에서 하는 Linux 개발·운영 작업은
-`agents.md` 와 `ai-do-development-environment` skill 의 Server Dev 절을 따른다.
+서버 dev checkout(`/projects/open-alm/dev`)에서 하는 Linux 개발·운영 작업은
+`agents.md` 와 `open-alm-development-environment` skill 의 Server Dev 절을 따른다.
 아래 샌드박스 주의사항은 Claude Code 로 Windows 로컬 셋업을 검증하거나 원격 dev
 인프라 연결을 직접 확인할 때만 적용한다.
 

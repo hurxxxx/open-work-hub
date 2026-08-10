@@ -1,7 +1,7 @@
-export const FLOATING_DM_OPEN_EVENT = 'ai-do:floating-dm-open';
-export const FLOATING_PMS_OPEN_EVENT = 'ai-do:floating-pms-open';
+export const FLOATING_DM_OPEN_EVENT = 'open-alm:floating-dm-open';
+export const FLOATING_PMS_OPEN_EVENT = 'open-alm:floating-pms-open';
 export const PERSONAL_TODO_PMS_TASK_CREATED_EVENT =
-  'ai-do:personal-todo-pms-task-created';
+  'open-alm:personal-todo-pms-task-created';
 
 export type FloatingDmOpenEventDetail = {
   threadId?: string | null;

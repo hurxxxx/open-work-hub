@@ -12,7 +12,7 @@
     },
     {
       "status": "A",
-      "path": "apps/api/src/ai_do_api/domains/pms/generated_board.py"
+      "path": "apps/api/src/open_alm_api/domains/pms/generated_board.py"
     },
     {
       "status": "A",

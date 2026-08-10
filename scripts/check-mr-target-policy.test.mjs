@@ -66,8 +66,8 @@ test('MR target policy reports missing MR variables', () => {
 test('MR target policy supports branch-name overrides', () => {
   const result = evaluateMrTargetPolicy(
     mrEnv('develop', 'stable', {
-      AI_DO_DEVELOPMENT_BRANCH: 'develop',
-      AI_DO_PRODUCTION_BRANCH: 'stable',
+      OPEN_ALM_DEVELOPMENT_BRANCH: 'develop',
+      OPEN_ALM_PRODUCTION_BRANCH: 'stable',
     }),
   );
 

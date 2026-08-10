@@ -1,6 +1,6 @@
 # LLM-Friendly Development
 
-이 문서는 AI-DO를 LLM/agent와 함께 변경할 때 코드가 잘 검색되고, 좁게 이해되며, 안전하게 수정되도록 유지하는 개발 구조/추상화/진입점 판단의 정본이다. 루트 `agents.md`에는 핵심 규칙만 두고, 구현 판단이 필요하면 이 문서를 참조한다. `vibe-coding-harness.md`, `composable-abstractions.md`, `ui-components.md`는 각각 검증, 추상화 세부 판단, UI 재사용을 위한 보조 문서이며, 코드 구조 판단이 충돌하면 이 문서를 우선한다.
+이 문서는 Open ALM를 LLM/agent와 함께 변경할 때 코드가 잘 검색되고, 좁게 이해되며, 안전하게 수정되도록 유지하는 개발 구조/추상화/진입점 판단의 정본이다. 루트 `agents.md`에는 핵심 규칙만 두고, 구현 판단이 필요하면 이 문서를 참조한다. `vibe-coding-harness.md`, `composable-abstractions.md`, `ui-components.md`는 각각 검증, 추상화 세부 판단, UI 재사용을 위한 보조 문서이며, 코드 구조 판단이 충돌하면 이 문서를 우선한다.
 
 ## 핵심 원칙
 

@@ -16,8 +16,8 @@ vi.mock('@/src/platform/auth/auth-provider', () => ({
   useAuth: () => ({ user: { time_zone: 'UTC' } }),
 }));
 
-vi.mock('@ai-do/ui', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@ai-do/ui')>()),
+vi.mock('@open-alm/ui', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@open-alm/ui')>()),
   DropdownMenu: ({
     items,
   }: {

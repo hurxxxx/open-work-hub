@@ -18,19 +18,19 @@ from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ai_do_api.domains.industry_report import config_data as cfg
-from ai_do_api.domains.industry_report import crawler, report_curator, service, storage
-from ai_do_api.domains.industry_report.models import (
+from open_alm_api.domains.industry_report import config_data as cfg
+from open_alm_api.domains.industry_report import crawler, report_curator, service, storage
+from open_alm_api.domains.industry_report.models import (
     IndustryReportAiEvaluation,
     IndustryReportFile,
     IndustryReportItem,
     IndustryReportRecommended,
     IndustryReportScrap,
 )
-from ai_do_api.domains.news.models import NewsFilterSetting
+from open_alm_api.domains.news.models import NewsFilterSetting
 
-report_router = importlib.import_module("ai_do_api.domains.industry_report.router")
-report_dispatch = importlib.import_module("ai_do_api.domains.industry_report.dispatch")
+report_router = importlib.import_module("open_alm_api.domains.industry_report.router")
+report_dispatch = importlib.import_module("open_alm_api.domains.industry_report.dispatch")
 
 
 # ── Autojournal parser (offline) ─────────────────────────────

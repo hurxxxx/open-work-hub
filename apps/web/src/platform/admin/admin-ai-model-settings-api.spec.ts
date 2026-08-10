@@ -195,7 +195,7 @@ describe('admin AI model settings model', () => {
           status: 409,
           headers: {
             'Content-Type': 'application/json',
-            'X-AI-DO-Error-Code': 'admin.ai_model_registry_changed',
+            'X-Open ALM-Error-Code': 'admin.ai_model_registry_changed',
           },
         }),
       ),

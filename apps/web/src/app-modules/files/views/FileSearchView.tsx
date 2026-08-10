@@ -9,7 +9,7 @@ import {
   Loader2,
   Search,
 } from 'lucide-react';
-import { InlineNotice } from '@ai-do/ui';
+import { InlineNotice } from '@open-alm/ui';
 
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/platform/auth/auth-provider';

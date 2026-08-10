@@ -9,9 +9,9 @@ function t(key: string, options?: Record<string, unknown>): string {
   if (key === 'apps.settings') return 'Settings';
   if (key === 'workspaceSwitcher.manage') return 'Workspace settings';
   if (key === 'documentTitle.profile') return 'Profile';
-  if (key === 'documentTitle.app') return `${String(options?.app)} | AI-DO`;
+  if (key === 'documentTitle.app') return `${String(options?.app)} | Open ALM`;
   if (key === 'documentTitle.workspaceApp') {
-    return `${String(options?.workspace)} - ${String(options?.app)} | AI-DO`;
+    return `${String(options?.workspace)} - ${String(options?.app)} | Open ALM`;
   }
   return String(options?.defaultValue ?? key);
 }
@@ -52,7 +52,7 @@ describe('document title model', () => {
         activeAppId: 'settings',
         pathname: '/w/hq/settings/members',
       }),
-    ).toBe('HQ - Workspace settings | AI-DO');
+    ).toBe('HQ - Workspace settings | Open ALM');
     expect(
       title({
         activeAppId: 'profile',
@@ -60,7 +60,7 @@ describe('document title model', () => {
         routeWorkspaceSlug: null,
         workspace: null,
       }),
-    ).toBe('Profile | AI-DO');
+    ).toBe('Profile | Open ALM');
   });
 
   it('uses the settings app title outside workspace settings routes', () => {
@@ -71,7 +71,7 @@ describe('document title model', () => {
         routeWorkspaceSlug: null,
         workspace: null,
       }),
-    ).toBe('Settings | AI-DO');
+    ).toBe('Settings | Open ALM');
   });
 
   it('falls back from i18n key to workspace bootstrap title and app registry title', () => {
@@ -80,13 +80,13 @@ describe('document title model', () => {
         activeAppId: 'workspace-app',
         workspaceApps: [{ app_id: 'workspace-app', title: 'Workspace app' }],
       }),
-    ).toBe('HQ - Workspace app | AI-DO');
-    expect(title({ activeAppId: 'docs' })).toBe('HQ - docs | AI-DO');
+    ).toBe('HQ - Workspace app | Open ALM');
+    expect(title({ activeAppId: 'docs' })).toBe('HQ - docs | Open ALM');
   });
 
   it('includes the workspace name only for workspace-scoped and tool routes', () => {
     expect(title({ pathname: '/tool/search', routeWorkspaceSlug: null })).toBe(
-      'HQ - Chatbot | AI-DO',
+      'HQ - Chatbot | Open ALM',
     );
   });
 });

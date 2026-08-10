@@ -46,7 +46,7 @@ type StoredRecordingChunkState = Omit<RecordingChunkState, 'blob'> & {
   blob?: Blob | null;
 };
 
-const DB_NAME = 'ai-do-recording';
+const DB_NAME = 'open-alm-recording';
 const DB_VERSION = 3;
 const SESSION_STORE = 'sessions';
 const CHUNK_STORE = 'chunks';

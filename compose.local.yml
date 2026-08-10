@@ -1,15 +1,15 @@
-name: ai-do-local
+name: open-alm-local
 
 services:
   redis:
     image: redis:7
-    container_name: ai-do-local-redis
+    container_name: open-alm-local-redis
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "127.0.0.1:${AI_DO_LOCAL_REDIS_PORT:-56381}:6379"
+      - "127.0.0.1:${OPEN_ALM_LOCAL_REDIS_PORT:-56381}:6379"
     volumes:
-      - ai-do-local-redis-data:/data
+      - open-alm-local-redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -20,18 +20,18 @@ services:
     build:
       context: .
       dockerfile: ops/opensearch/Dockerfile
-    image: ai-do-opensearch:3.3.2-nori
-    container_name: ai-do-local-opensearch
+    image: open-alm-opensearch:3.3.2-nori
+    container_name: open-alm-local-opensearch
     restart: unless-stopped
     environment:
       discovery.type: single-node
       DISABLE_SECURITY_PLUGIN: "true"
       OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
     ports:
-      - "127.0.0.1:${AI_DO_LOCAL_OPENSEARCH_PORT:-59220}:9200"
-      - "127.0.0.1:${AI_DO_LOCAL_OPENSEARCH_PERF_PORT:-59620}:9600"
+      - "127.0.0.1:${OPEN_ALM_LOCAL_OPENSEARCH_PORT:-59220}:9200"
+      - "127.0.0.1:${OPEN_ALM_LOCAL_OPENSEARCH_PERF_PORT:-59620}:9600"
     volumes:
-      - ai-do-local-opensearch-data:/usr/share/opensearch/data
+      - open-alm-local-opensearch-data:/usr/share/opensearch/data
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9200 >/dev/null || exit 1"]
       interval: 10s
@@ -40,36 +40,36 @@ services:
 
   minio:
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
-    container_name: ai-do-local-minio
+    container_name: open-alm-local-minio
     restart: unless-stopped
     environment:
-      MINIO_ROOT_USER: ${AI_DO_LOCAL_MINIO_ROOT_USER:-ai_do_local_minio}
-      MINIO_ROOT_PASSWORD: ${AI_DO_LOCAL_MINIO_ROOT_PASSWORD:-ai_do_local_minio}
+      MINIO_ROOT_USER: ${OPEN_ALM_LOCAL_MINIO_ROOT_USER:-open_alm_local_minio}
+      MINIO_ROOT_PASSWORD: ${OPEN_ALM_LOCAL_MINIO_ROOT_PASSWORD:-open_alm_local_minio}
     command: server /data --console-address :9001
     ports:
-      - "127.0.0.1:${AI_DO_LOCAL_MINIO_PORT:-59020}:9000"
-      - "127.0.0.1:${AI_DO_LOCAL_MINIO_CONSOLE_PORT:-59021}:9001"
+      - "127.0.0.1:${OPEN_ALM_LOCAL_MINIO_PORT:-59020}:9000"
+      - "127.0.0.1:${OPEN_ALM_LOCAL_MINIO_CONSOLE_PORT:-59021}:9001"
     volumes:
-      - ai-do-local-minio-data:/data
+      - open-alm-local-minio-data:/data
 
   qdrant:
     image: qdrant/qdrant:v1.17.1
-    container_name: ai-do-local-qdrant
+    container_name: open-alm-local-qdrant
     restart: unless-stopped
     environment:
-      QDRANT__SERVICE__API_KEY: ${AI_DO_LOCAL_QDRANT_API_KEY:-ai_do_local_qdrant}
+      QDRANT__SERVICE__API_KEY: ${OPEN_ALM_LOCAL_QDRANT_API_KEY:-open_alm_local_qdrant}
     ports:
-      - "127.0.0.1:${AI_DO_LOCAL_QDRANT_PORT:-16335}:6333"
-      - "127.0.0.1:${AI_DO_LOCAL_QDRANT_GRPC_PORT:-16336}:6334"
+      - "127.0.0.1:${OPEN_ALM_LOCAL_QDRANT_PORT:-16335}:6333"
+      - "127.0.0.1:${OPEN_ALM_LOCAL_QDRANT_GRPC_PORT:-16336}:6334"
     volumes:
-      - ai-do-local-qdrant-data:/qdrant/storage
+      - open-alm-local-qdrant-data:/qdrant/storage
 
 volumes:
-  ai-do-local-redis-data:
-    name: ai-do-local-redis-data
-  ai-do-local-opensearch-data:
-    name: ai-do-local-opensearch-data
-  ai-do-local-minio-data:
-    name: ai-do-local-minio-data
-  ai-do-local-qdrant-data:
-    name: ai-do-local-qdrant-data
+  open-alm-local-redis-data:
+    name: open-alm-local-redis-data
+  open-alm-local-opensearch-data:
+    name: open-alm-local-opensearch-data
+  open-alm-local-minio-data:
+    name: open-alm-local-minio-data
+  open-alm-local-qdrant-data:
+    name: open-alm-local-qdrant-data

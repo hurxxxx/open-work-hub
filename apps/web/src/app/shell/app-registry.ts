@@ -4,7 +4,7 @@ import {
   createCoreAppModuleRegistryApi,
   type CoreAppModuleRegistration,
   type CoreAppModuleRegistry,
-} from '@ai-do/core-web/app-registry';
+} from '@open-alm/core-web/app-registry';
 
 import {
   DEFAULT_APP_MODULES,

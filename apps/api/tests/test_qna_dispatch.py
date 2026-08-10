@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ai_do_api.domains.qna import dispatch
+from open_alm_api.domains.qna import dispatch
 
 
 def test_qna_dispatch_stops_before_broker_when_platform_app_is_disabled(monkeypatch) -> None:

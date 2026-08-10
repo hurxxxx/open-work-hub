@@ -39,7 +39,7 @@ version과 provenance를 공유하는 consumer view 계약의 모음이다. 선�
 | 기준 | 포함 범위 | canonical field와 사용처 |
 | ---- | --------- | ------------------------- |
 | `erp` | 최신 성공 master person 중 ERP snapshot row가 연결된 `matched`, `erp_only`, `identity_conflict`만 포함한다. `groupware_only`와 격리 conflict row는 제외한다. | ERP view v2는 사번, 이름, 부서 코드·명, 직위, 직종, 생년월일, 입사일, 전화번호 9개 field를 반환한다. 종합검진 모집단과 외부 HR 연계가 사용한다. |
-| `groupware` | 검증된 그룹웨어 사용자·조직 중 계정 identity를 안전하게 확정할 수 있는 row를 포함한다. ERP-only person을 포함하지 않는다. | 로그인 ID, 계정 상태, 이메일, 그룹웨어 조직 경로와 계정 연결을 정본으로 사용한다. 기존 `users`, `org_units`, 세션과 AI-DO 사용자·권한 관리가 계속 사용한다. HR sync는 system role이나 workspace/team membership을 부여하지 않는다. |
+| `groupware` | 검증된 그룹웨어 사용자·조직 중 계정 identity를 안전하게 확정할 수 있는 row를 포함한다. ERP-only person을 포함하지 않는다. | 로그인 ID, 계정 상태, 이메일, 그룹웨어 조직 경로와 계정 연결을 정본으로 사용한다. 기존 `users`, `org_units`, 세션과 Open ALM 사용자·권한 관리가 계속 사용한다. HR sync는 system role이나 workspace/team membership을 부여하지 않는다. |
 | `integrated` | 최신 성공 master의 전체 person, source-qualified group와 reconciliation/conflict 상태를 포함한다. | ERP 연결 person의 이름·직위/직종·그룹은 ERP, 로그인·계정 연결·그룹웨어 조직 경로는 그룹웨어가 정본이다. 두 원천의 합집합이나 정합 상태가 필요한 future app만 명시적으로 선택한다. |
 
 HR typed read metadata는 선택한 기준에 필요한 master/source run ID, schema version,
@@ -62,9 +62,9 @@ Source scope는 `(source_system, scope_key)`로 구분하며 baseline, 동시 �
 격리 단위다. 그룹웨어 사용자와 조직의
 원천 행 식별자는 각각 `(source_system, domain_num, user_num)`과
 `(source_system, domain_num, org_code)`다. 원천 행 식별자는 snapshot 행의 출처를 찾는
-주소이고, 사번은 그룹웨어 projection에서 퇴직·재입사 시 같은 AI-DO 계정을 연결하는 생명주기
+주소이고, 사번은 그룹웨어 projection에서 퇴직·재입사 시 같은 Open ALM 계정을 연결하는 생명주기
 식별 기준이다. ERP scope에서는 `EMP_NO`를 snapshot 완전성 identity로 검증한다. 통합 master는
-앞뒤 공백 제거와 대문자 정규화 후 사번만으로 사람을 결합하지만, 이 결합은 AI-DO 계정 identity나
+앞뒤 공백 제거와 대문자 정규화 후 사번만으로 사람을 결합하지만, 이 결합은 Open ALM 계정 identity나
 권한 이전을 의미하지 않는다.
 
 ## 실행과 상태
@@ -149,7 +149,7 @@ source나 scope의 snapshot을 baseline으로 섞지 않는다. `pending`,
 원천이 명시적인 비재직 상태 행을 제공하면 기존 계정은 같은 방식으로 정지하되, 원천 상태 코드의
 업무 명칭은 source interface가 확인한 범위에서만 사용한다.
 
-같은 사번의 재입사는 `user_num`이나 로그인 ID가 바뀌어도 기존 AI-DO 사용자 UUID를 유지한다.
+같은 사번의 재입사는 `user_num`이나 로그인 ID가 바뀌어도 기존 Open ALM 사용자 UUID를 유지한다.
 새 사번은 같은 이름, 이메일 또는 과거 로그인 ID와 닮았더라도 새 사람·새 계정으로 처리하며
 기존 계정과 자동 병합하거나 권한·데이터를 이전하지 않는다. 새 사번이 기존의 고유 로그인 ID와
 충돌하거나 사번이 누락·중복되어 한 계정을 고를 수 없으면 identity conflict로 기록하고 해당
@@ -198,7 +198,7 @@ schema version, 수집 시각, snapshot hash와 집계 행 수만 반환하며 �
 않는다.
 HR 밖의 호출 도메인은 `HrSyncUserSnapshotRow.raw_payload`의 JSON key, snapshot table 또는
 source typed reader를 직접 조회하지 않는다. ERP source의 `succeeded`는 snapshot 수락일 뿐
-consumer용 master가 fresh하거나 AI-DO 계정 identity가 확정됐다는 뜻이 아니다.
+consumer용 master가 fresh하거나 Open ALM 계정 identity가 확정됐다는 뜻이 아니다.
 
 ## 통합 인사 master
 
@@ -246,7 +246,7 @@ Master row는 실행별 불변 데이터이며 최신 `succeeded` master run만 
 선택해 수동 매칭을 생성·해제할 수 있다. 이름은 검색·검토 정보이지 후보 제한이나 자동 identity
 근거가 아니다. 이름이 다른 사용자를 연결할 때는 확인 사유가 필수다. 빈 사번과 `Z0000`,
 `Z00000` external person, 식별 conflict row는 매핑 대상으로 제공하지 않는다. 링크는 그룹웨어
-`source_identity`와 ERP 사번을 연결하며 원천 사번·AI-DO 계정·권한을 변경하지 않는다.
+`source_identity`와 ERP 사번을 연결하며 원천 사번·Open ALM 계정·권한을 변경하지 않는다.
 다음 성공 master에서는 두 source-only row를 하나의 `matched` person으로 materialize하고
 `identity_resolution_kind=manual`로 표시한다. 관리자 목록은 이 값을 필터로 받아 수동 매핑된
 사람만 조회할 수 있으며, 상세에서 링크를 해제하면 다음 성공 master에서 다시 두 source-only

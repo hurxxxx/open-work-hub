@@ -6,7 +6,7 @@ import {
   dmMessagePreviewText as projectDmMessagePreviewText,
   dmUnreadBadge as projectDmUnreadBadge,
   dmUserDisplayName,
-} from '@ai-do/contracts/dm';
+} from '@open-alm/contracts/dm';
 
 import type { DmMessage, DmThread, DmUser } from '../api/dm-api';
 

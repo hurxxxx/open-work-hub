@@ -1,32 +1,32 @@
-name: ai-do-dev
+name: open-alm-dev
 
 services:
   redis:
     image: redis:7
-    container_name: ai-do-dev-redis
+    container_name: open-alm-dev-redis
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "127.0.0.1:${AI_DO_INFRA_REDIS_PORT:-56380}:6379"
+      - "127.0.0.1:${OPEN_ALM_INFRA_REDIS_PORT:-56380}:6379"
     volumes:
-      - ai-do-dev-redis-data:/data
+      - open-alm-dev-redis-data:/data
 
   opensearch:
     build:
       context: .
       dockerfile: ops/opensearch/Dockerfile
-    image: ai-do-opensearch:3.3.2-nori
-    container_name: ai-do-dev-opensearch
+    image: open-alm-opensearch:3.3.2-nori
+    container_name: open-alm-dev-opensearch
     restart: unless-stopped
     environment:
       discovery.type: single-node
       DISABLE_SECURITY_PLUGIN: "true"
       OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
     ports:
-      - "127.0.0.1:${AI_DO_INFRA_OPENSEARCH_PORT:-59210}:9200"
-      - "127.0.0.1:${AI_DO_INFRA_OPENSEARCH_PERF_PORT:-59610}:9600"
+      - "127.0.0.1:${OPEN_ALM_INFRA_OPENSEARCH_PORT:-59210}:9200"
+      - "127.0.0.1:${OPEN_ALM_INFRA_OPENSEARCH_PERF_PORT:-59610}:9600"
     volumes:
-      - ai-do-dev-opensearch-data:/usr/share/opensearch/data
+      - open-alm-dev-opensearch-data:/usr/share/opensearch/data
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9200 >/dev/null || exit 1"]
       interval: 10s
@@ -35,36 +35,36 @@ services:
 
   qdrant:
     image: qdrant/qdrant:v1.17.1
-    container_name: ai-do-dev-qdrant
+    container_name: open-alm-dev-qdrant
     restart: unless-stopped
     environment:
-      QDRANT__SERVICE__API_KEY: ${AI_DO_INFRA_QDRANT_API_KEY:-ai_do_dev_qdrant}
+      QDRANT__SERVICE__API_KEY: ${OPEN_ALM_INFRA_QDRANT_API_KEY:-open_alm_dev_qdrant}
     ports:
-      - "127.0.0.1:${AI_DO_INFRA_QDRANT_PORT:-16333}:6333"
-      - "127.0.0.1:${AI_DO_INFRA_QDRANT_GRPC_PORT:-16334}:6334"
+      - "127.0.0.1:${OPEN_ALM_INFRA_QDRANT_PORT:-16333}:6333"
+      - "127.0.0.1:${OPEN_ALM_INFRA_QDRANT_GRPC_PORT:-16334}:6334"
     volumes:
-      - ai-do-dev-qdrant-data:/qdrant/storage
+      - open-alm-dev-qdrant-data:/qdrant/storage
 
   minio:
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
-    container_name: ai-do-dev-minio
+    container_name: open-alm-dev-minio
     restart: unless-stopped
     environment:
-      MINIO_ROOT_USER: ${AI_DO_INFRA_MINIO_ROOT_USER:-ai_do_dev_minio}
-      MINIO_ROOT_PASSWORD: ${AI_DO_INFRA_MINIO_ROOT_PASSWORD:-ai_do_dev_minio}
+      MINIO_ROOT_USER: ${OPEN_ALM_INFRA_MINIO_ROOT_USER:-open_alm_dev_minio}
+      MINIO_ROOT_PASSWORD: ${OPEN_ALM_INFRA_MINIO_ROOT_PASSWORD:-open_alm_dev_minio}
     command: server /data --console-address :9001
     ports:
-      - "127.0.0.1:${AI_DO_INFRA_MINIO_PORT:-59010}:9000"
-      - "127.0.0.1:${AI_DO_INFRA_MINIO_CONSOLE_PORT:-59011}:9001"
+      - "127.0.0.1:${OPEN_ALM_INFRA_MINIO_PORT:-59010}:9000"
+      - "127.0.0.1:${OPEN_ALM_INFRA_MINIO_CONSOLE_PORT:-59011}:9001"
     volumes:
-      - ai-do-dev-minio-data:/data
+      - open-alm-dev-minio-data:/data
 
   drawio:
-    image: jgraph/drawio:${AI_DO_DRAWIO_IMAGE_TAG:-30.2.5}
-    container_name: ai-do-dev-drawio
+    image: jgraph/drawio:${OPEN_ALM_DRAWIO_IMAGE_TAG:-30.2.5}
+    container_name: open-alm-dev-drawio
     restart: unless-stopped
     ports:
-      - "${AI_DO_DRAWIO_BIND_HOST:-0.0.0.0}:${AI_DO_DRAWIO_PORT:-18082}:8080"
+      - "${OPEN_ALM_DRAWIO_BIND_HOST:-0.0.0.0}:${OPEN_ALM_DRAWIO_PORT:-18082}:8080"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/ >/dev/null"]
       interval: 30s
@@ -74,7 +74,7 @@ services:
 
   nginx:
     image: nginx:1.27-alpine
-    container_name: ai-do-dev-nginx
+    container_name: open-alm-dev-nginx
     restart: unless-stopped
     depends_on:
       redis:
@@ -82,19 +82,19 @@ services:
       drawio:
         condition: service_healthy
     ports:
-      - "${AI_DO_INFRA_NGINX_PORT:-4200}:80"
+      - "${OPEN_ALM_INFRA_NGINX_PORT:-4200}:80"
     extra_hosts:
       - "dev-host:host-gateway"
     volumes:
       - ./dist/apps/web:/usr/share/nginx/html:ro
-      - ${AI_DO_DEV_NGINX_CONF_PATH:-./ops/dev/nginx.conf}:/etc/nginx/conf.d/default.conf:ro
+      - ${OPEN_ALM_DEV_NGINX_CONF_PATH:-./ops/dev/nginx.conf}:/etc/nginx/conf.d/default.conf:ro
 
 volumes:
-  ai-do-dev-redis-data:
-    name: ai-do-dev-redis-data
-  ai-do-dev-opensearch-data:
-    name: ai-do-dev-opensearch-data
-  ai-do-dev-qdrant-data:
-    name: ai-do-dev-qdrant-data
-  ai-do-dev-minio-data:
-    name: ai-do-dev-minio-data
+  open-alm-dev-redis-data:
+    name: open-alm-dev-redis-data
+  open-alm-dev-opensearch-data:
+    name: open-alm-dev-opensearch-data
+  open-alm-dev-qdrant-data:
+    name: open-alm-dev-qdrant-data
+  open-alm-dev-minio-data:
+    name: open-alm-dev-minio-data

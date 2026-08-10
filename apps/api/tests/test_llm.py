@@ -2,31 +2,31 @@ from types import SimpleNamespace
 
 import pytest
 
-from ai_do_api.core import llm, llm_execution_adapters, llm_official_providers
-from ai_do_api.core.settings import get_settings
+from open_alm_api.core import llm, llm_execution_adapters, llm_official_providers
+from open_alm_api.core.settings import get_settings
 
 
 LLM_ENV_KEYS = (
-    "AI_DO_LLM_LOCAL_PROVIDER",
-    "AI_DO_LLM_LOCAL_BASE_URL",
-    "AI_DO_LLM_LOCAL_API_KEY",
-    "AI_DO_LLM_LOCAL_DEFAULT_MODEL",
-    "AI_DO_LLM_LOCAL_CANONICAL_MODEL",
-    "AI_DO_LLM_LOCAL_LONG_GENERATION_TIMEOUT_SECONDS",
-    "AI_DO_LLM_EXTERNAL_ALLOWED_PROVIDERS",
-    "AI_DO_LLM_EXTERNAL_LONG_GENERATION_TIMEOUT_SECONDS",
-    "AI_DO_LLM_OPENAI_BASE_URL",
-    "AI_DO_LLM_OPENAI_DEFAULT_MODEL",
-    "AI_DO_LLM_OPENAI_CANONICAL_MODEL",
-    "AI_DO_LLM_ANTHROPIC_BASE_URL",
-    "AI_DO_LLM_ANTHROPIC_DEFAULT_MODEL",
-    "AI_DO_LLM_ANTHROPIC_CANONICAL_MODEL",
-    "AI_DO_LLM_GEMINI_BASE_URL",
-    "AI_DO_LLM_GEMINI_DEFAULT_MODEL",
-    "AI_DO_LLM_GEMINI_CANONICAL_MODEL",
-    "AI_DO_LLM_REQUEST_TIMEOUT_SECONDS",
-    "AI_DO_LLM_HEALTHCHECK_ON_STARTUP",
-    "AI_DO_LLM_REQUIRED",
+    "OPEN_ALM_LLM_LOCAL_PROVIDER",
+    "OPEN_ALM_LLM_LOCAL_BASE_URL",
+    "OPEN_ALM_LLM_LOCAL_API_KEY",
+    "OPEN_ALM_LLM_LOCAL_DEFAULT_MODEL",
+    "OPEN_ALM_LLM_LOCAL_CANONICAL_MODEL",
+    "OPEN_ALM_LLM_LOCAL_LONG_GENERATION_TIMEOUT_SECONDS",
+    "OPEN_ALM_LLM_EXTERNAL_ALLOWED_PROVIDERS",
+    "OPEN_ALM_LLM_EXTERNAL_LONG_GENERATION_TIMEOUT_SECONDS",
+    "OPEN_ALM_LLM_OPENAI_BASE_URL",
+    "OPEN_ALM_LLM_OPENAI_DEFAULT_MODEL",
+    "OPEN_ALM_LLM_OPENAI_CANONICAL_MODEL",
+    "OPEN_ALM_LLM_ANTHROPIC_BASE_URL",
+    "OPEN_ALM_LLM_ANTHROPIC_DEFAULT_MODEL",
+    "OPEN_ALM_LLM_ANTHROPIC_CANONICAL_MODEL",
+    "OPEN_ALM_LLM_GEMINI_BASE_URL",
+    "OPEN_ALM_LLM_GEMINI_DEFAULT_MODEL",
+    "OPEN_ALM_LLM_GEMINI_CANONICAL_MODEL",
+    "OPEN_ALM_LLM_REQUEST_TIMEOUT_SECONDS",
+    "OPEN_ALM_LLM_HEALTHCHECK_ON_STARTUP",
+    "OPEN_ALM_LLM_REQUIRED",
 )
 
 
@@ -90,8 +90,8 @@ def clear_settings_cache(monkeypatch: pytest.MonkeyPatch) -> None:
     for key in LLM_ENV_KEYS:
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setenv(
-        "AI_DO_POSTGRES_DSN",
-        "postgresql+psycopg://ai_do_test:ai_do_test@127.0.0.1:5432/ai_do_test",
+        "OPEN_ALM_POSTGRES_DSN",
+        "postgresql+psycopg://open_alm_test:open_alm_test@127.0.0.1:5432/open_alm_test",
     )
     get_settings.cache_clear()
     _clear_pool_client_cache()
@@ -147,9 +147,9 @@ def test_pool_config_accepts_header_credentials_without_api_key() -> None:
 def test_local_pool_environment_cannot_select_model(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("AI_DO_LLM_LOCAL_API_KEY", "")
-    monkeypatch.setenv("AI_DO_LLM_LOCAL_DEFAULT_MODEL", "local/current-moe-test-model")
-    monkeypatch.setenv("AI_DO_LLM_LOCAL_CANONICAL_MODEL", "local/current-moe-test-model")
+    monkeypatch.setenv("OPEN_ALM_LLM_LOCAL_API_KEY", "")
+    monkeypatch.setenv("OPEN_ALM_LLM_LOCAL_DEFAULT_MODEL", "local/current-moe-test-model")
+    monkeypatch.setenv("OPEN_ALM_LLM_LOCAL_CANONICAL_MODEL", "local/current-moe-test-model")
     get_settings.cache_clear()
 
     config = llm.get_pool_config("local")
@@ -163,7 +163,7 @@ def test_local_pool_environment_cannot_select_model(
 def test_external_allowed_provider_allowlist_does_not_fallback_to_all(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("AI_DO_LLM_EXTERNAL_ALLOWED_PROVIDERS", "typo-provider")
+    monkeypatch.setenv("OPEN_ALM_LLM_EXTERNAL_ALLOWED_PROVIDERS", "typo-provider")
     get_settings.cache_clear()
 
     assert llm.get_allowed_external_llm_providers() == ()
@@ -175,7 +175,7 @@ def test_legacy_external_api_key_envs_are_not_runtime_credentials(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     for provider in ("OPENAI", "ANTHROPIC", "GEMINI"):
-        monkeypatch.setenv(f"AI_DO_LLM_{provider}_API_KEY", "legacy-secret")
+        monkeypatch.setenv(f"OPEN_ALM_LLM_{provider}_API_KEY", "legacy-secret")
     get_settings.cache_clear()
 
     settings = get_settings()
@@ -206,8 +206,8 @@ def test_resolved_pool_health_reports_missing_admin_model() -> None:
 def test_legacy_external_pool_health_fails_closed_without_db_credential(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("AI_DO_LLM_EXTERNAL_ALLOWED_PROVIDERS", "anthropic")
-    monkeypatch.setenv("AI_DO_LLM_REQUEST_TIMEOUT_SECONDS", "7.5")
+    monkeypatch.setenv("OPEN_ALM_LLM_EXTERNAL_ALLOWED_PROVIDERS", "anthropic")
+    monkeypatch.setenv("OPEN_ALM_LLM_REQUEST_TIMEOUT_SECONDS", "7.5")
     get_settings.cache_clear()
 
     calls: list[tuple[str, str, float]] = []
@@ -261,9 +261,9 @@ def test_legacy_pool_health_does_not_accept_environment_model(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv(
-        "AI_DO_LLM_LOCAL_DEFAULT_MODEL", "local/current-moe-test-model"
+        "OPEN_ALM_LLM_LOCAL_DEFAULT_MODEL", "local/current-moe-test-model"
     )
-    monkeypatch.setenv("AI_DO_LLM_EXTERNAL_ALLOWED_PROVIDERS", "openai")
+    monkeypatch.setenv("OPEN_ALM_LLM_EXTERNAL_ALLOWED_PROVIDERS", "openai")
 
     monkeypatch.setattr(
         llm,
@@ -286,10 +286,10 @@ def test_configured_health_does_not_probe_provider(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv(
-        "AI_DO_LLM_LOCAL_DEFAULT_MODEL", "local/current-moe-test-model"
+        "OPEN_ALM_LLM_LOCAL_DEFAULT_MODEL", "local/current-moe-test-model"
     )
     monkeypatch.setenv(
-        "AI_DO_LLM_LOCAL_CANONICAL_MODEL", "local/current-moe-test-model"
+        "OPEN_ALM_LLM_LOCAL_CANONICAL_MODEL", "local/current-moe-test-model"
     )
     monkeypatch.setattr(
         llm,
@@ -309,7 +309,7 @@ def test_configured_health_does_not_probe_provider(
 def test_choose_pool_defaults_to_local_only_without_policy_row(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from ai_do_api.core.llm import LlmTaskContext, choose_pool
+    from open_alm_api.core.llm import LlmTaskContext, choose_pool
 
     class _FakeDb:
         def execute(self, *_args, **_kwargs):
@@ -337,7 +337,7 @@ def test_choose_pool_defaults_to_local_only_without_policy_row(
 
 
 def test_llm_task_context_requires_app_id() -> None:
-    from ai_do_api.core.llm import LlmTaskContext
+    from open_alm_api.core.llm import LlmTaskContext
 
     with pytest.raises(ValueError, match="LLM app_id is required"):
         LlmTaskContext(
@@ -350,7 +350,7 @@ def test_llm_task_context_requires_app_id() -> None:
 
 
 def test_choose_pool_local_hint_forces_local_even_on_external_policy() -> None:
-    from ai_do_api.core.llm import LlmTaskContext, choose_pool
+    from open_alm_api.core.llm import LlmTaskContext, choose_pool
 
     class _FakeDb:
         def execute(self, *_args, **_kwargs):
@@ -383,7 +383,7 @@ def test_choose_pool_local_hint_forces_local_even_on_external_policy() -> None:
 
 
 def test_choose_pool_does_not_apply_payload_security_in_core_transport() -> None:
-    from ai_do_api.core.llm import LlmTaskContext, choose_pool
+    from open_alm_api.core.llm import LlmTaskContext, choose_pool
 
     class _FakeDb:
         def execute(self, *_args, **_kwargs):
@@ -417,7 +417,7 @@ def test_choose_pool_does_not_apply_payload_security_in_core_transport() -> None
 
 
 def test_choose_pool_does_not_rescan_security_documents_in_core_transport() -> None:
-    from ai_do_api.core.llm import LlmTaskContext, choose_pool
+    from open_alm_api.core.llm import LlmTaskContext, choose_pool
 
     class _FakeDb:
         def execute(self, *_args, **_kwargs):
@@ -450,7 +450,7 @@ def test_choose_pool_does_not_rescan_security_documents_in_core_transport() -> N
 
 
 def test_choose_pool_uses_external_when_policy_external_and_no_pii() -> None:
-    from ai_do_api.core.llm import LlmTaskContext, choose_pool
+    from open_alm_api.core.llm import LlmTaskContext, choose_pool
 
     class _FakeDb:
         def execute(self, *_args, **_kwargs):
@@ -483,7 +483,7 @@ def test_choose_pool_uses_external_when_policy_external_and_no_pii() -> None:
 
 
 def test_scan_pii_matches_space_separated_kr_rrn_and_phone() -> None:
-    from ai_do_api.core.pii import scan_pii
+    from open_alm_api.core.pii import scan_pii
 
     hits = scan_pii(
         [
@@ -496,7 +496,7 @@ def test_scan_pii_matches_space_separated_kr_rrn_and_phone() -> None:
 
 
 def test_scan_pii_matches_overlong_kr_rrn_suffix() -> None:
-    from ai_do_api.core.pii import scan_pii
+    from open_alm_api.core.pii import scan_pii
 
     hits = scan_pii(["주민번호형 식별자는 851212-10456712 입니다."])
 
@@ -504,7 +504,7 @@ def test_scan_pii_matches_overlong_kr_rrn_suffix() -> None:
 
 
 def test_scan_pii_matches_separatorless_kr_phone() -> None:
-    from ai_do_api.core.pii import scan_pii
+    from open_alm_api.core.pii import scan_pii
 
     hits = scan_pii(["연락처는 01012345678 입니다."])
 

@@ -1,6 +1,6 @@
 import { RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Button, InlineNotice, Panel } from '@ai-do/ui';
+import { Button, InlineNotice, Panel } from '@open-alm/ui';
 
 import { UserDateTime } from '@/src/components/date/UserDateTime';
 import type { HealthCheckupSourceStatus } from '../api/health-checkup-api';

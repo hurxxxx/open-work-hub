@@ -1,7 +1,7 @@
 [project]
-name = "ai-do-worker"
+name = "open-alm-worker"
 version = "0.1.1"
-description = "Celery worker scaffold for AI-DO, Doowon's AI work portal."
+description = "Celery worker scaffold for Open ALM, Open ALM's AI work portal."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
@@ -76,4 +76,4 @@ target-version = "py312"
 pythonpath = ["src"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/ai_do_worker"]
+packages = ["src/open_alm_worker"]

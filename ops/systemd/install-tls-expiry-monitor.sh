@@ -40,8 +40,8 @@ fi
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 root_dir="$(cd -- "$script_dir/../.." && pwd)"
 checker="$root_dir/scripts/check_live_tls_expiry.py"
-service="$script_dir/system/ai-do-tls-expiry-check.service"
-timer="$script_dir/system/ai-do-tls-expiry-check.timer"
+service="$script_dir/system/open-alm-tls-expiry-check.service"
+timer="$script_dir/system/open-alm-tls-expiry-check.timer"
 
 for source_file in "$checker" "$service" "$timer"; do
   if [[ ! -f "$source_file" ]]; then
@@ -59,9 +59,9 @@ compile(source.read_text(encoding="utf-8"), str(source), "exec")
 PY
 systemd-analyze verify "$service" "$timer"
 
-checker_target="/usr/local/libexec/ai-do/check_live_tls_expiry.py"
-service_target="/etc/systemd/system/ai-do-tls-expiry-check.service"
-timer_target="/etc/systemd/system/ai-do-tls-expiry-check.timer"
+checker_target="/usr/local/libexec/open-alm/check_live_tls_expiry.py"
+service_target="/etc/systemd/system/open-alm-tls-expiry-check.service"
+timer_target="/etc/systemd/system/open-alm-tls-expiry-check.timer"
 
 if (( ! apply )); then
   cat <<EOF
@@ -70,7 +70,7 @@ if (( ! apply )); then
   $checker_target
   $service_target
   $timer_target
-[tls-expiry-monitor] rerun with --apply to install and enable ai-do-tls-expiry-check.timer.
+[tls-expiry-monitor] rerun with --apply to install and enable open-alm-tls-expiry-check.timer.
 EOF
   exit 0
 fi
@@ -92,7 +92,7 @@ done
 backup_dir=""
 if (( replace )); then
   timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
-  backup_dir="/var/backups/ai-do/tls-expiry-monitor/$timestamp"
+  backup_dir="/var/backups/open-alm/tls-expiry-monitor/$timestamp"
   sudo -n install -d -o root -g root -m 0700 "$backup_dir"
   for index in "${!sources[@]}"; do
     if sudo -n test -e "${targets[$index]}" \
@@ -102,17 +102,17 @@ if (( replace )); then
   done
 fi
 
-sudo -n install -d -o root -g root -m 0755 /usr/local/libexec/ai-do
+sudo -n install -d -o root -g root -m 0755 /usr/local/libexec/open-alm
 sudo -n install -o root -g root -m 0644 "$checker" "$checker_target"
 sudo -n install -o root -g root -m 0644 "$service" "$service_target"
 sudo -n install -o root -g root -m 0644 "$timer" "$timer_target"
 sudo -n systemctl daemon-reload
 sudo -n systemd-analyze verify "$service_target" "$timer_target"
-sudo -n systemctl enable --now ai-do-tls-expiry-check.timer
-sudo -n systemctl start ai-do-tls-expiry-check.service
-sudo -n systemctl is-enabled --quiet ai-do-tls-expiry-check.timer
-sudo -n systemctl is-active --quiet ai-do-tls-expiry-check.timer
-sudo -n systemctl show ai-do-tls-expiry-check.service \
+sudo -n systemctl enable --now open-alm-tls-expiry-check.timer
+sudo -n systemctl start open-alm-tls-expiry-check.service
+sudo -n systemctl is-enabled --quiet open-alm-tls-expiry-check.timer
+sudo -n systemctl is-active --quiet open-alm-tls-expiry-check.timer
+sudo -n systemctl show open-alm-tls-expiry-check.service \
   --property=Result \
   --property=ExecMainStatus \
   --no-pager

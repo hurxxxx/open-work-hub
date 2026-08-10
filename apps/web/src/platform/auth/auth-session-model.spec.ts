@@ -15,9 +15,9 @@ function user(overrides: Partial<AuthUser> = {}): AuthUser {
   return {
     app_bar_layout: { pinned_app_ids: [] },
     date_format: 'korean',
-    display_name: 'AI-DO Member',
-    email: 'member@ai-do.local',
-    full_name: 'AI-DO Member',
+    display_name: 'Open ALM Member',
+    email: 'member@open-alm.local',
+    full_name: 'Open ALM Member',
     id: 'user-1',
     job_title: null,
     last_login_at: null,
@@ -51,7 +51,7 @@ function devAccount(overrides: Partial<DevLoginAccount> = {}): DevLoginAccount {
     account_key: 'platform-admin',
     category: 'Administrators',
     description: 'Platform administrator account.',
-    email: 'platform-admin@ai-do.local',
+    email: 'platform-admin@open-alm.local',
     label: 'Platform Admin',
     ...overrides,
   };
@@ -73,7 +73,7 @@ describe('auth session model', () => {
   it('projects valid stored token recovery as authenticated state with sync metadata', () => {
     const currentUser = user({
       date_format: 'iso',
-      email: 'saved@ai-do.local',
+      email: 'saved@open-alm.local',
       locale: 'en-US',
     });
     const accounts = [devAccount()];
@@ -184,7 +184,7 @@ describe('auth session model', () => {
       devAccount({
         account_key: 'workspace-member',
         category: 'Workspaces',
-        email: 'workspace-member@ai-do.local',
+        email: 'workspace-member@open-alm.local',
         label: 'Workspace Member',
       }),
     ];

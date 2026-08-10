@@ -2,8 +2,8 @@ from fastapi.testclient import TestClient
 
 from dev_accounts import dev_login
 
-from ai_do_api.domains.docs.collab import make_page_ref
-from ai_do_api.domains.docs.content_text import extract_page_text
+from open_alm_api.domains.docs.collab import make_page_ref
+from open_alm_api.domains.docs.content_text import extract_page_text
 
 
 def test_block_doc_rejects_initial_content_text(

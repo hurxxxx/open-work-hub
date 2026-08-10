@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useReducer } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Plus, Loader2, Users, Video, FileText } from 'lucide-react';
-import { Button } from '@ai-do/ui';
+import { Button } from '@open-alm/ui';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { normalizeTimeZone } from '@/src/platform/time/time-utils';

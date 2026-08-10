@@ -4,35 +4,35 @@ import pytest
 from sqlalchemy import create_engine, event, select
 from sqlalchemy.orm import Session
 
-from ai_do_api.core.db import Base
-from ai_do_api.domains.auth.models import (
+from open_alm_api.core.db import Base
+from open_alm_api.domains.auth.models import (
     OrgUnit,
     User,
     Workspace,
     WorkspaceUserBinding,
 )
-from ai_do_api.domains.legacy_issues import ai_search
-from ai_do_api.domains.legacy_issues.ai_search import (
+from open_alm_api.domains.legacy_issues import ai_search
+from open_alm_api.domains.legacy_issues.ai_search import (
     LegacyIssueAssistantSearchPlan,
     _WeightedToken,
     _exact_candidates,
 )
-from ai_do_api.domains.legacy_issues.dataset_records import (
+from open_alm_api.domains.legacy_issues.dataset_records import (
     COMMON_MASTER_DATASET_KEY,
     DATASET_DEFINITIONS,
     copy_dataset_revision_records,
 )
-from ai_do_api.domains.legacy_issues.models import (
+from open_alm_api.domains.legacy_issues.models import (
     LegacyIssueAiChunk,
     LegacyIssueAttachment,
     LegacyIssueAttachmentIndexJob,
     LegacyIssueDataRevision,
     LegacyIssueRecord,
 )
-from ai_do_api.domains.legacy_issues.revisioning import (
+from open_alm_api.domains.legacy_issues.revisioning import (
     legacy_issue_dataset_revision_key,
 )
-from ai_do_api.domains.legacy_issues.partitioning import (
+from open_alm_api.domains.legacy_issues.partitioning import (
     LegacyIssuePartitionMismatch,
     ensure_attachment_job_partition,
     ensure_attachment_partition,
@@ -40,41 +40,41 @@ from ai_do_api.domains.legacy_issues.partitioning import (
     ensure_record_partition,
     ensure_revision_partition,
 )
-from ai_do_api.domains.legacy_issues.source_access import (
+from open_alm_api.domains.legacy_issues.source_access import (
     LegacyIssueRecordSourceAccessAdapter,
 )
-from ai_do_api.domains.rag.default_source_adapters import (
+from open_alm_api.domains.rag.default_source_adapters import (
     ensure_rag_source_adapters_registered,
 )
-from ai_do_api.domains.rag.source_adapter_registry import (
+from open_alm_api.domains.rag.source_adapter_registry import (
     get_rag_resource_adapter,
     reset_rag_source_adapters,
 )
-from ai_do_api.domains.retrieval.default_partition_adapters import (
+from open_alm_api.domains.retrieval.default_partition_adapters import (
     ensure_retrieval_partition_adapters_registered,
 )
-from ai_do_api.domains.retrieval.models import RetrievalPartition
-from ai_do_api.domains.retrieval.partition_adapter_ids import (
+from open_alm_api.domains.retrieval.models import RetrievalPartition
+from open_alm_api.domains.retrieval.partition_adapter_ids import (
     LEGACY_ISSUES_RETRIEVAL_PARTITION_ADAPTER_ID,
 )
-from ai_do_api.domains.retrieval.partition_adapter_registry import (
+from open_alm_api.domains.retrieval.partition_adapter_registry import (
     RetrievalProjectionBinding,
     get_retrieval_partition_adapter,
     reset_retrieval_partition_adapters,
 )
-from ai_do_api.domains.retrieval.partitioning import (
+from open_alm_api.domains.retrieval.partitioning import (
     RetrievalPartitionUnbound,
     ensure_default_partition,
 )
-from ai_do_api.domains.source_access.default_adapters import (
+from open_alm_api.domains.source_access.default_adapters import (
     ensure_builtin_source_access_adapters_registered,
 )
-from ai_do_api.domains.source_access.policy import SourceAclPolicy
-from ai_do_api.domains.source_access.registry import (
+from open_alm_api.domains.source_access.policy import SourceAclPolicy
+from open_alm_api.domains.source_access.registry import (
     get_source_access_adapter,
     reset_source_access_adapters,
 )
-from ai_do_api.domains.source_access.resource_types import (
+from open_alm_api.domains.source_access.resource_types import (
     LEGACY_ISSUE_RECORD_RESOURCE_TYPE,
 )
 
@@ -1191,7 +1191,7 @@ def test_projection_repair_requeues_existing_draft_unindexed_attachments(
         events.append("enqueue")
 
     monkeypatch.setattr(
-        "ai_do_api.domains.legacy_issues.attachment_indexing."
+        "open_alm_api.domains.legacy_issues.attachment_indexing."
         "enqueue_legacy_issue_attachment_index_job",
         fake_enqueue,
     )

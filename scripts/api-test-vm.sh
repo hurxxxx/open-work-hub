@@ -6,16 +6,16 @@ PYTEST_PID=""
 CLEANUP_DONE=0
 CLEANUP_STATUS=0
 
-if [[ -z "${AI_DO_API_TEST_RUN_ID:-}" ]]; then
+if [[ -z "${OPEN_ALM_API_TEST_RUN_ID:-}" ]]; then
   if [[ -n "${CI_JOB_ID:-}" ]]; then
-    AI_DO_API_TEST_RUN_ID="$CI_JOB_ID"
+    OPEN_ALM_API_TEST_RUN_ID="$CI_JOB_ID"
   elif [[ -r /proc/sys/kernel/random/uuid ]]; then
-    read -r AI_DO_API_TEST_RUN_ID </proc/sys/kernel/random/uuid
+    read -r OPEN_ALM_API_TEST_RUN_ID </proc/sys/kernel/random/uuid
   else
-    AI_DO_API_TEST_RUN_ID="$(python3 -c 'import uuid; print(uuid.uuid4())')"
+    OPEN_ALM_API_TEST_RUN_ID="$(python3 -c 'import uuid; print(uuid.uuid4())')"
   fi
 fi
-export AI_DO_API_TEST_RUN_ID
+export OPEN_ALM_API_TEST_RUN_ID
 
 cleanup_test_resources() {
   if [[ "$CLEANUP_DONE" -eq 1 ]]; then
@@ -26,7 +26,7 @@ cleanup_test_resources() {
     cd "$ROOT_DIR/apps/api"
     uv run --python 3.12 python tests/integration_infra.py cleanup-current
   ); then
-    echo "warning: unable to clean shared API integration resources for run ${AI_DO_API_TEST_RUN_ID}" >&2
+    echo "warning: unable to clean shared API integration resources for run ${OPEN_ALM_API_TEST_RUN_ID}" >&2
     CLEANUP_STATUS=1
   fi
   return "$CLEANUP_STATUS"
@@ -66,7 +66,7 @@ if [[ "${1:-}" == "--cleanup-only" ]]; then
   exit 0
 fi
 
-echo "API test run id: ${AI_DO_API_TEST_RUN_ID}" >&2
+echo "API test run id: ${OPEN_ALM_API_TEST_RUN_ID}" >&2
 cd "$ROOT_DIR/apps/api"
 uv run --python 3.12 --group dev python -m pytest "$@" &
 PYTEST_PID=$!

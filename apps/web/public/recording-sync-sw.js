@@ -14,12 +14,12 @@ async function notifyRecordingClients() {
     includeUncontrolled: true,
   });
   await Promise.all(
-    clients.map((client) => client.postMessage({ type: 'ai-do-recording-sync' })),
+    clients.map((client) => client.postMessage({ type: 'open-alm-recording-sync' })),
   );
 }
 
 worker.addEventListener('sync', (event) => {
-  if (event.tag === 'ai-do-recording-upload') {
+  if (event.tag === 'open-alm-recording-upload') {
     event.waitUntil(notifyRecordingClients());
   }
 });

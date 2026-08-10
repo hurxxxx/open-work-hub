@@ -15,28 +15,28 @@ SELF = Path(__file__).resolve()
 MAX_SKILL_BYTES = 8 * 1024
 
 REQUIRED_SKILLS = {
-    "ai-do-runtime-separation-audit",
-    "ai-do-production-operations",
-    "ai-do-development-environment",
-    "ai-do-env-management",
-    "ai-do-release-promotion",
-    "ai-do-agent-work-intake",
-    "ai-do-agent-skill-governance",
-    "ai-do-mcp-capability-governance",
-    "ai-do-i18n",
-    "ai-do-vibe-app-delivery",
-    "ai-do-mr-review-validation",
-    "ai-do-codex-review-harness",
+    "open-alm-runtime-separation-audit",
+    "open-alm-production-operations",
+    "open-alm-development-environment",
+    "open-alm-env-management",
+    "open-alm-release-promotion",
+    "open-alm-agent-work-intake",
+    "open-alm-agent-skill-governance",
+    "open-alm-mcp-capability-governance",
+    "open-alm-i18n",
+    "open-alm-vibe-app-delivery",
+    "open-alm-mr-review-validation",
+    "open-alm-codex-review-harness",
 }
 
 RETIRED_SKILLS = {
-    "ai-do-desktop-release",
+    "open-alm-desktop-release",
     "setup-matt-pocock-skills",
 }
 
 STALE_SKILL_GUIDE_PATTERNS = {
-    r"\bCONTEXT(?:-MAP)?\.md\b": "AI-DO does not use generic context glossary files",
-    r"\bdocs/adr/": "AI-DO ADRs live in root adr/",
+    r"\bCONTEXT(?:-MAP)?\.md\b": "Open ALM does not use generic context glossary files",
+    r"\bdocs/adr/": "Open ALM ADRs live in root adr/",
 }
 
 RETIRED_TRIAGE_PATTERNS = {
@@ -49,7 +49,7 @@ RETIRED_TRIAGE_PATTERNS = {
 }
 
 TRIAGE_GUIDANCE_PATHS = {
-    Path(".agents/skills/ai-do-agent-work-intake/SKILL.md"),
+    Path(".agents/skills/open-alm-agent-work-intake/SKILL.md"),
     Path(".agents/skills/to-issues/SKILL.md"),
     Path(".agents/skills/to-prd/SKILL.md"),
     Path("docs/agents/triage-labels.md"),
@@ -88,7 +88,7 @@ PNPM_BUILTINS = {
 STALE_PATTERNS = {
     r"\bvm:app\b": "preview VM app scripts are retired",
     r"\bvm-app-stack\b": "preview VM app harness is retired",
-    r"\bai-do-preview-deploy\b": "preview deploy skill is retired",
+    r"\bopen-alm-preview-deploy\b": "preview deploy skill is retired",
     r"\.env\.remote-dev\b": "remote-dev profile is retired",
     r"\bremote-dev\b": "remote-dev profile is retired",
 }

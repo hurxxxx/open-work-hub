@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from ai_do_api.domains.legacy_issues.analysis_v2.execution import (
+from open_alm_api.domains.legacy_issues.analysis_v2.execution import (
     MAX_QUERY_PAYLOAD_BYTES,
     MAX_QUERY_ROWS,
     MAX_QUERY_TIMEOUT_MS,
@@ -13,7 +13,7 @@ from ai_do_api.domains.legacy_issues.analysis_v2.execution import (
     SafeAnalysisQueryService,
     postgres_scope_binder,
 )
-from ai_do_api.domains.legacy_issues.analysis_v2.recipes import (
+from open_alm_api.domains.legacy_issues.analysis_v2.recipes import (
     default_recipe_catalog,
 )
 
@@ -68,13 +68,13 @@ def test_postgres_scope_binder_enters_reader_role_before_binding_scope() -> None
 
     binder(connection)  # type: ignore[arg-type]
 
-    assert connection.calls[0] == ("SET LOCAL ROLE ai_do_analysis_reader", None)
+    assert connection.calls[0] == ("SET LOCAL ROLE open_alm_analysis_reader", None)
     assert [call[1]["setting_name"] for call in connection.calls[1:]] == [
-        "ai_do.legacy_issue_workspace_id",
-        "ai_do.legacy_issue_partition_ids",
-        "ai_do.legacy_issue_module_keys",
-        "ai_do.legacy_issue_revision_ids",
-        "ai_do.legacy_issue_checklist_ids",
+        "open_alm.legacy_issue_workspace_id",
+        "open_alm.legacy_issue_partition_ids",
+        "open_alm.legacy_issue_module_keys",
+        "open_alm.legacy_issue_revision_ids",
+        "open_alm.legacy_issue_checklist_ids",
     ]
 
 

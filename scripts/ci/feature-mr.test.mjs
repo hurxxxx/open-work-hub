@@ -170,12 +170,12 @@ test('repository instructions retain the canonical local-first MR publisher cont
   );
 
   const canonicalCommand =
-    'pnpm mr:publish -- --title "<title>" --description-file /tmp/ai-do-mr.md';
+    'pnpm mr:publish -- --title "<title>" --description-file /tmp/open-alm-mr.md';
   for (const relativePath of [
     'CLAUDE.md',
     'agents.md',
     'docs/agents/vibe-coding-harness.md',
-    '.agents/skills/ai-do-vibe-app-delivery/SKILL.md',
+    '.agents/skills/open-alm-vibe-app-delivery/SKILL.md',
   ]) {
     const instructions = fs.readFileSync(
       path.join(repoRoot, relativePath),

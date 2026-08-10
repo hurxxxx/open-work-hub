@@ -26,11 +26,11 @@ const mrEnv = {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const completeChecks = REQUIRED_CHECK_IDS.map(
-  (checkId) => `- [x] <!-- ai-do:check:${checkId} --> checked`,
+  (checkId) => `- [x] <!-- open-alm:check:${checkId} --> checked`,
 ).join('\n');
 const completeFields = REQUIRED_FIELD_IDS.map(
   (fieldId) =>
-    `Field: <!-- ai-do:field:${fieldId} --> ${
+    `Field: <!-- open-alm:field:${fieldId} --> ${
       fieldId === 'workspace-keyword-search'
         ? 'none — this app does not expose workspace keyword search'
         : `evidence for ${fieldId}`
@@ -49,11 +49,11 @@ Source: def45678
 `;
 
 const completeCoreChecks = CORE_REQUIRED_CHECK_IDS.map(
-  (checkId) => `- [x] <!-- ai-do:check:${checkId} --> checked`,
+  (checkId) => `- [x] <!-- open-alm:check:${checkId} --> checked`,
 ).join('\n');
 const completeCoreFields = CORE_REQUIRED_FIELD_IDS.map(
   (fieldId) =>
-    `Field: <!-- ai-do:field:${fieldId} --> ${
+    `Field: <!-- open-alm:field:${fieldId} --> ${
       fieldId === 'workspace-keyword-search'
         ? 'none — this enablement does not change workspace keyword search'
         : `evidence for ${fieldId}`
@@ -76,16 +76,16 @@ test('recognizes app-owned delivery paths without treating API core as an app', 
   );
   assert.equal(
     isDomainAppDeliveryPath(
-      'apps/api/src/ai_do_api/domains/meal_invoice_ocr/router.py',
+      'apps/api/src/open_alm_api/domains/meal_invoice_ocr/router.py',
     ),
     true,
   );
   assert.equal(
-    isDomainAppDeliveryPath('apps/worker/src/ai_do_worker/tasks/ocr.py'),
+    isDomainAppDeliveryPath('apps/worker/src/open_alm_worker/tasks/ocr.py'),
     true,
   );
   assert.equal(
-    isDomainAppDeliveryPath('apps/api/src/ai_do_api/domains/auth/router.py'),
+    isDomainAppDeliveryPath('apps/api/src/open_alm_api/domains/auth/router.py'),
     false,
   );
 });
@@ -104,10 +104,10 @@ test('repository MR template fits inside the GitLab CI description variable', ()
 
   assert.ok(template.length < 2_700, `template length is ${template.length}`);
   for (const checkId of REQUIRED_CHECK_IDS) {
-    assert.ok(template.includes(`<!-- ai-do:check:${checkId} -->`));
+    assert.ok(template.includes(`<!-- open-alm:check:${checkId} -->`));
   }
   for (const fieldId of REQUIRED_FIELD_IDS) {
-    assert.ok(template.includes(`<!-- ai-do:field:${fieldId} -->`));
+    assert.ok(template.includes(`<!-- open-alm:field:${fieldId} -->`));
   }
 });
 
@@ -126,10 +126,10 @@ test('repository Core Enablement template fits CI and retains required evidence 
   assert.ok(template.length < 2_700, `template length is ${template.length}`);
   assert.ok(template.includes(CORE_ENABLEMENT_MARKER));
   for (const checkId of CORE_REQUIRED_CHECK_IDS) {
-    assert.ok(template.includes(`<!-- ai-do:check:${checkId} -->`));
+    assert.ok(template.includes(`<!-- open-alm:check:${checkId} -->`));
   }
   for (const fieldId of CORE_REQUIRED_FIELD_IDS) {
-    assert.ok(template.includes(`<!-- ai-do:field:${fieldId} -->`));
+    assert.ok(template.includes(`<!-- open-alm:field:${fieldId} -->`));
   }
 });
 
@@ -171,7 +171,7 @@ test('does not apply the App Sandbox template to a Core Enablement MR', () => {
 test('mixed app and protected core changes require Core Enablement evidence', () => {
   const changes = [
     { status: 'A', path: 'apps/web/src/app-modules/meal/manifest.ts' },
-    { status: 'M', path: 'apps/api/src/ai_do_api/api_registry.py' },
+    { status: 'M', path: 'apps/api/src/open_alm_api/api_registry.py' },
   ];
   const env = {
     ...mrEnv,
@@ -207,7 +207,7 @@ test('workspace keyword search core changes require Core Enablement evidence', (
     changes: [
       {
         status: 'M',
-        path: 'apps/api/src/ai_do_api/domains/search/service.py',
+        path: 'apps/api/src/open_alm_api/domains/search/service.py',
       },
     ],
     description,
@@ -226,7 +226,7 @@ test('workspace keyword search changes reject none evidence even with a reason',
     changes: [
       {
         status: 'M',
-        path: 'apps/api/src/ai_do_api/domains/search/service.py',
+        path: 'apps/api/src/open_alm_api/domains/search/service.py',
       },
     ],
     description: completeCoreDescription,
@@ -296,7 +296,7 @@ test('app-owned migrations cannot be mixed with harness changes', () => {
 
 test('risky app migration requires Core Enablement evidence', () => {
   const changes = [
-    { status: 'A', path: 'apps/api/src/ai_do_api/domains/meal/service.py' },
+    { status: 'A', path: 'apps/api/src/open_alm_api/domains/meal/service.py' },
     { status: 'A', path: 'apps/api/alembic/versions/meal_destructive.py' },
   ];
   const env = {
@@ -345,7 +345,7 @@ test('requires the template and completed checklist for app delivery MRs', () =>
 test('accepts completed latest-SHA contract evidence', () => {
   const result = checkMergeRequestContractEvidence({
     changes: [
-      { status: 'M', path: 'apps/api/src/ai_do_api/domains/patent/service.py' },
+      { status: 'M', path: 'apps/api/src/open_alm_api/domains/patent/service.py' },
     ],
     description: completeDescription,
     env: mrEnv,
@@ -466,7 +466,7 @@ test('rejects descriptions that delete a required checklist item', () => {
   const result = checkMergeRequestContractEvidence({
     changes: [{ status: 'M', path: 'apps/web/src/app-modules/meal/View.tsx' }],
     description: completeDescription.replace(
-      /^.*ai-do:check:authorization.*\n/m,
+      /^.*open-alm:check:authorization.*\n/m,
       '',
     ),
     env: mrEnv,

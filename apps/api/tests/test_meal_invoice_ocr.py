@@ -19,18 +19,18 @@ from fastapi import HTTPException
 from openpyxl import Workbook, load_workbook
 from pydantic import ValidationError
 
-from ai_do_api.domains.auth.workspace_apps import get_workspace_app_catalog_item
-from ai_do_api.domains.meal_invoice_ocr import APP_ID
-from ai_do_api.domains.meal_invoice_ocr import catalog as catalog_mod
-from ai_do_api.domains.meal_invoice_ocr import service, vocab
-from ai_do_api.domains.meal_invoice_ocr.export import (
+from open_alm_api.domains.auth.workspace_apps import get_workspace_app_catalog_item
+from open_alm_api.domains.meal_invoice_ocr import APP_ID
+from open_alm_api.domains.meal_invoice_ocr import catalog as catalog_mod
+from open_alm_api.domains.meal_invoice_ocr import service, vocab
+from open_alm_api.domains.meal_invoice_ocr.export import (
     _format_date,
     _num,
     _quantity_value,
     _split_qty,
     export_documents_xlsx,
 )
-from ai_do_api.domains.meal_invoice_ocr.schemas import (
+from open_alm_api.domains.meal_invoice_ocr.schemas import (
     _MAX_CORRECTION_ITEMS,
     _MAX_EXPORT_DOCS,
     _MAX_IMAGE_CHARS,
@@ -587,7 +587,7 @@ def test_rescan_skips_when_no_boxes(monkeypatch: "pytest.MonkeyPatch") -> None:
 
 
 def test_rescan_uses_dedicated_workload(monkeypatch: "pytest.MonkeyPatch") -> None:
-    from ai_do_api.domains.meal_invoice_ocr.task_kinds import (
+    from open_alm_api.domains.meal_invoice_ocr.task_kinds import (
         MEAL_INVOICE_OCR_RESCAN_WORKLOAD_ID,
     )
 
@@ -861,7 +861,7 @@ def _patch_extract_pipeline(
     monkeypatch.setattr(service, "_render_page_display_data_url", lambda page: "")
     monkeypatch.setattr(service, "_rescan_band_into_payload", lambda *a, **k: False)
     # 각 작업은 자체 세션을 연다 → get_session_factory 를 더미로.
-    import ai_do_api.core.db as _db
+    import open_alm_api.core.db as _db
 
     monkeypatch.setattr(
         _db, "get_session_factory", lambda: (lambda: SimpleNamespace(close=lambda: None))
@@ -978,7 +978,7 @@ def test_extract_documents_isolates_session_checkout_failure(
     monkeypatch: "pytest.MonkeyPatch",
 ) -> None:
     _patch_extract_pipeline(monkeypatch, {"a.jpg": 2}, fail_on=set())
-    import ai_do_api.core.db as db_module
+    import open_alm_api.core.db as db_module
 
     calls = 0
 
@@ -1003,7 +1003,7 @@ def test_extract_documents_isolates_session_close_failure(
     monkeypatch: "pytest.MonkeyPatch",
 ) -> None:
     _patch_extract_pipeline(monkeypatch, {"a.jpg": 2}, fail_on=set())
-    import ai_do_api.core.db as db_module
+    import open_alm_api.core.db as db_module
 
     calls = 0
 
@@ -1276,7 +1276,7 @@ def test_unit_correction_never_enters_the_ocr_prompt() -> None:
 
     "'1 박스'→'1 10k'" 를 예시로 주면 비전 모델이 다음 명세표의 멀쩡한 단위/숫자까지 바꿔 읽는다.
     """
-    from ai_do_api.domains.meal_invoice_ocr import corrections as corr
+    from open_alm_api.domains.meal_invoice_ocr import corrections as corr
 
     records = [
         {
@@ -1645,7 +1645,7 @@ def test_extract_documents_keeps_confusable_duplicates_as_suggestions_only(
 # 관리자 권한(공유 학습/카탈로그 데이터 변경 보호)
 # --------------------------------------------------------------------------- #
 def _route_admin_map() -> dict[tuple[str, str], bool]:
-    from ai_do_api.domains.meal_invoice_ocr.router import (
+    from open_alm_api.domains.meal_invoice_ocr.router import (
         require_meal_invoice_ocr_admin,
         router,
     )
@@ -1687,8 +1687,8 @@ def test_read_and_extract_routes_are_not_admin_gated() -> None:
 # --------------------------------------------------------------------------- #
 def test_ocr_llm_task_registered_with_token_budget() -> None:
     """추출·재판독 workload가 각각 유일한 토큰 예산을 소유해야 한다."""
-    from ai_do_api.domains.ai.registry import get_ai_capability_registry
-    from ai_do_api.domains.meal_invoice_ocr.task_kinds import (
+    from open_alm_api.domains.ai.registry import get_ai_capability_registry
+    from open_alm_api.domains.meal_invoice_ocr.task_kinds import (
         MEAL_INVOICE_OCR_RESCAN_TASK_KIND,
         MEAL_INVOICE_OCR_RESCAN_WORKLOAD_ID,
         MEAL_INVOICE_OCR_TASK_KIND,
@@ -1764,11 +1764,11 @@ def ws_db(monkeypatch: "pytest.MonkeyPatch") -> str:
     from sqlalchemy.orm import sessionmaker
     from sqlalchemy.pool import StaticPool
 
-    from ai_do_api.core.db import Base
-    from ai_do_api.core.model_registry import import_all_models
-    from ai_do_api.domains.meal_invoice_ocr import corrections as corr
-    from ai_do_api.domains.meal_invoice_ocr import state as state_mod
-    from ai_do_api.domains.meal_invoice_ocr.models import MealInvoiceOcrState
+    from open_alm_api.core.db import Base
+    from open_alm_api.core.model_registry import import_all_models
+    from open_alm_api.domains.meal_invoice_ocr import corrections as corr
+    from open_alm_api.domains.meal_invoice_ocr import state as state_mod
+    from open_alm_api.domains.meal_invoice_ocr.models import MealInvoiceOcrState
 
     import_all_models()  # workspaces 등 FK 대상 테이블 정의를 metadata 에 등록(실제 정의).
     engine = create_engine(
@@ -1839,8 +1839,8 @@ def test_db_state_first_insert_retries_after_unique_race(
     from sqlalchemy.exc import IntegrityError
     from sqlalchemy.orm import Session as OrmSession
 
-    from ai_do_api.domains.meal_invoice_ocr import state as state_mod
-    from ai_do_api.domains.meal_invoice_ocr.models import MealInvoiceOcrState
+    from open_alm_api.domains.meal_invoice_ocr import state as state_mod
+    from open_alm_api.domains.meal_invoice_ocr.models import MealInvoiceOcrState
 
     original_flush = OrmSession.flush
     raised = False
@@ -1864,7 +1864,7 @@ def test_db_state_first_insert_retries_after_unique_race(
 
 
 def test_db_corrections_append_delete_clear(ws_db: str) -> None:
-    from ai_do_api.domains.meal_invoice_ocr import corrections as corr
+    from open_alm_api.domains.meal_invoice_ocr import corrections as corr
 
     assert (
         corr.append_corrections(ws_db, [{"원본": {"품명": "오독"}, "교정": {"품명": "정답"}}]) == 1
@@ -1882,7 +1882,7 @@ def test_db_corrections_share_one_doc_image_across_rows(ws_db: str) -> None:
 
     (리뷰 회귀: 20~30행 명세서에서 행마다 전체 페이지 이미지를 실으면 요청 총량 상한을 넘어 실패했다.)
     """
-    from ai_do_api.domains.meal_invoice_ocr import corrections as corr
+    from open_alm_api.domains.meal_invoice_ocr import corrections as corr
 
     image = "data:image/png;base64,AAAABBBBCCCC"
     records = [
@@ -1907,7 +1907,7 @@ def test_db_corrections_share_one_doc_image_across_rows(ws_db: str) -> None:
 def test_db_correction_delete_keeps_shared_image_until_last_ref(ws_db: str) -> None:
     """같은 페이지 이미지를 공유하는 교정들: 하나를 지워도 다른 참조가 있으면 이미지가 유지되고,
     마지막 참조를 지우면 이미지도 정리된다(삭제는 커밋 성공 후에만 이미지 정리 → 무결성 보존)."""
-    from ai_do_api.domains.meal_invoice_ocr import corrections as corr
+    from open_alm_api.domains.meal_invoice_ocr import corrections as corr
 
     image = "data:image/png;base64,SHAREDPAGE"
     records = [
@@ -1929,7 +1929,7 @@ def test_db_correction_delete_keeps_shared_image_until_last_ref(ws_db: str) -> N
 def test_db_corrections_reject_workspace_image_quota(
     ws_db: str, monkeypatch: "pytest.MonkeyPatch"
 ) -> None:
-    from ai_do_api.domains.meal_invoice_ocr import corrections as corr
+    from open_alm_api.domains.meal_invoice_ocr import corrections as corr
 
     monkeypatch.setattr(corr, "_MAX_WORKSPACE_IMAGE_BYTES", 10)
 
@@ -1946,7 +1946,7 @@ def test_db_corrections_reject_workspace_image_quota(
 
 def test_correction_save_request_doc_image_total_counted() -> None:
     """문서이미지 맵도 요청 전체 이미지 총량 상한에 합산된다(개별 상한은 지켜도 총량 초과면 거절)."""
-    from ai_do_api.domains.meal_invoice_ocr.schemas import (
+    from open_alm_api.domains.meal_invoice_ocr.schemas import (
         _MAX_IMAGE_CHARS,
         _MAX_TOTAL_IMAGE_CHARS,
     )
@@ -1971,7 +1971,7 @@ def test_upload_type_validation_accepts_pdf_and_images_rejects_others() -> None:
 
 def test_content_length_body_limit_predicate() -> None:
     """JSON body 엔드포인트는 파싱 전 content-length 로 과대 요청을 거절한다(프록시 1025MB 허용)."""
-    from ai_do_api.domains.meal_invoice_ocr.router import (
+    from open_alm_api.domains.meal_invoice_ocr.router import (
         _MAX_EXPORT_BODY_BYTES,
         _content_length_exceeds,
         _content_length_missing_or_invalid,
@@ -1996,7 +1996,7 @@ def test_content_length_body_limit_predicate() -> None:
 
 def test_existing_route_app_rejects_unsafe_json_content_length() -> None:
     """APIRoute 생성 후 채워진 endpoint map도 요청 시점에 반영돼야 한다."""
-    from ai_do_api.domains.meal_invoice_ocr.router import (
+    from open_alm_api.domains.meal_invoice_ocr.router import (
         _MAX_EXPORT_BODY_BYTES,
         export_invoices,
         router,
@@ -2061,14 +2061,14 @@ def test_catalog_upload_type_validation() -> None:
 
 
 def test_correction_dict_value_length_rejected() -> None:
-    from ai_do_api.domains.meal_invoice_ocr.schemas import _MAX_TEXT_FIELD_CHARS
+    from open_alm_api.domains.meal_invoice_ocr.schemas import _MAX_TEXT_FIELD_CHARS
 
     with pytest.raises(ValidationError):
         MealInvoiceCorrectionItem(교정={"품명": "가" * (_MAX_TEXT_FIELD_CHARS + 1)})
 
 
 def test_correction_dict_too_many_fields_rejected() -> None:
-    from ai_do_api.domains.meal_invoice_ocr.schemas import _MAX_CORRECTION_FIELDS
+    from open_alm_api.domains.meal_invoice_ocr.schemas import _MAX_CORRECTION_FIELDS
 
     big = {f"k{i}": "v" for i in range(_MAX_CORRECTION_FIELDS + 1)}
     with pytest.raises(ValidationError):
@@ -2076,7 +2076,7 @@ def test_correction_dict_too_many_fields_rejected() -> None:
 
 
 def test_correction_save_request_rejects_total_image_overflow() -> None:
-    from ai_do_api.domains.meal_invoice_ocr.schemas import (
+    from open_alm_api.domains.meal_invoice_ocr.schemas import (
         _MAX_IMAGE_CHARS,
         _MAX_TOTAL_IMAGE_CHARS,
     )
@@ -2090,7 +2090,7 @@ def test_correction_save_request_rejects_total_image_overflow() -> None:
 
 
 def test_build_fewshot_truncates_to_limit() -> None:
-    from ai_do_api.domains.meal_invoice_ocr import corrections as corrections_mod
+    from open_alm_api.domains.meal_invoice_ocr import corrections as corrections_mod
 
     records = [{"원본": {"품명": f"오독{i}"}, "교정": {"품명": f"정답{i}"}} for i in range(100)]
     text = corrections_mod.build_fewshot(records, limit=10)
@@ -2100,7 +2100,7 @@ def test_build_fewshot_truncates_to_limit() -> None:
 
 def test_build_fewshot_omits_real_item_names_as_misreads() -> None:
     """실재 품목을 '잘못 읽은 글자'로 제시하면 모델이 그 이름을 기피하거나 다른 행에 옮겨 쓴다."""
-    from ai_do_api.domains.meal_invoice_ocr import corrections as corrections_mod
+    from open_alm_api.domains.meal_invoice_ocr import corrections as corrections_mod
 
     records = [
         {"원본": {"품명": "깔강자"}, "교정": {"품명": "감자"}},
@@ -2115,7 +2115,7 @@ def test_build_fewshot_omits_real_item_names_as_misreads() -> None:
 
 def test_build_fewshot_omits_names_confirmed_as_correct_elsewhere() -> None:
     """다른 교정에서 정답으로 확정된 이름은 오독 예시로 쓰지 않는다(사전이 비어 있어도)."""
-    from ai_do_api.domains.meal_invoice_ocr import corrections as corrections_mod
+    from open_alm_api.domains.meal_invoice_ocr import corrections as corrections_mod
 
     records = [
         {"원본": {"품명": "쭉파"}, "교정": {"품명": "쑥갓"}},
@@ -2136,7 +2136,7 @@ def test_build_fewshot_omits_server_side_refinement_pairs() -> None:
     읽기 설계와 충돌) 예시 예산도 잠식한다. 실재 품목 필터도 원문 문자열이라 그냥은 걸리지 않는다.
     진짜 오독이 섞인 쌍도 왼쪽을 정제 품명으로 맞춰 규격 제거 지시가 함께 실리지 않게 한다.
     """
-    from ai_do_api.domains.meal_invoice_ocr import corrections as corrections_mod
+    from open_alm_api.domains.meal_invoice_ocr import corrections as corrections_mod
 
     records = [
         {"원본": {"품명": "쇠고기맛냉면육수(면사랑/실온/5kg)EA"}, "교정": {"품명": "쇠고기맛냉면육수"}},
@@ -2151,7 +2151,7 @@ def test_build_fewshot_omits_server_side_refinement_pairs() -> None:
 
 
 def test_export_request_rejects_too_many_rows_per_doc() -> None:
-    from ai_do_api.domains.meal_invoice_ocr.schemas import _MAX_ROWS_PER_DOC
+    from open_alm_api.domains.meal_invoice_ocr.schemas import _MAX_ROWS_PER_DOC
 
     # 문서당 행 수 상한은 품목 필드(max_length)가 문서 생성 시점에 강제한다.
     with pytest.raises(ValidationError):
@@ -2161,7 +2161,7 @@ def test_export_request_rejects_too_many_rows_per_doc() -> None:
 
 
 def test_export_request_rejects_oversized_text_field() -> None:
-    from ai_do_api.domains.meal_invoice_ocr.schemas import _MAX_TEXT_FIELD_CHARS
+    from open_alm_api.domains.meal_invoice_ocr.schemas import _MAX_TEXT_FIELD_CHARS
 
     # 행 텍스트 필드 길이 상한은 각 필드(max_length)가 행 생성 시점에 강제한다.
     with pytest.raises(ValidationError):
@@ -2172,7 +2172,7 @@ def test_clamped_scale_downscales_oversized_page() -> None:
     """거대 MediaBox 는 렌더 픽셀 상한 안으로 다운스케일되고, 정상 페이지는 목표 DPI 를 유지한다."""
     import types
 
-    from ai_do_api.domains.meal_invoice_ocr.service import (
+    from open_alm_api.domains.meal_invoice_ocr.service import (
         MAX_RENDER_PIXELS,
         RENDER_DPI,
         _clamped_scale,
@@ -2264,14 +2264,14 @@ def test_vendor_alias_exact_match_does_not_override_known_real_item() -> None:
     aliases = service.build_vendor_aliases(
         [
             {
-                "거래처": "두원공조",
+                "거래처": "Open ALM",
                 "원본": {"품명": "냉동새우살", "수량": "15 ea", "원산지": "국내산"},
                 "교정": {"품명": "무청시래기", "수량": "15 pk", "원산지": "중국산"},
             }
         ]
     )
     doc = MealInvoiceDocument(
-        거래처="두원공조",
+        거래처="Open ALM",
         품목=[MealInvoiceRow(품명="냉동새우살", 수량="15 ea", 원산지="국내산")],
     )
 
@@ -2315,14 +2315,14 @@ def test_vendor_alias_blocked_learning_overrides_weaker_suggestion() -> None:
     aliases = service.build_vendor_aliases(
         [
             {
-                "거래처": "두원공조",
+                "거래처": "Open ALM",
                 "원본": {"품명": "냉동새우살", "원산지": "국내산"},
                 "교정": {"품명": "무청시래기", "원산지": "중국산"},
             }
         ]
     )
     doc = MealInvoiceDocument(
-        거래처="두원공조",
+        거래처="Open ALM",
         품목=[MealInvoiceRow(품명="냉동새우살", 사전후보="약한추정", 사전점수=0.8)],
     )
 
@@ -2340,14 +2340,14 @@ def test_vendor_alias_exact_match_still_applies_for_unknown_misread() -> None:
     aliases = service.build_vendor_aliases(
         [
             {
-                "거래처": "두원공조",
+                "거래처": "Open ALM",
                 "원본": {"품명": "실근약산건식품", "수량": "6 ea", "원산지": "국내산"},
                 "교정": {"품명": "실곤약", "수량": "6 ea", "원산지": "국내산"},
             }
         ]
     )
     doc = MealInvoiceDocument(
-        거래처="두원공조",
+        거래처="Open ALM",
         품목=[MealInvoiceRow(품명="실근약산건식품", 수량="6 ea", 원산지="국내산")],
     )
 
@@ -2575,7 +2575,7 @@ def test_extract_documents_adds_vendor_alias_suggestions_last(
     monkeypatch.setattr(service, "_render_page_png", lambda page: page.encode())
     monkeypatch.setattr(service, "_render_page_display_data_url", lambda page: "")
     monkeypatch.setattr(service, "_rescan_band_into_payload", lambda *a, **k: False)
-    import ai_do_api.core.db as _db
+    import open_alm_api.core.db as _db
 
     monkeypatch.setattr(
         _db, "get_session_factory", lambda: (lambda: SimpleNamespace(close=lambda: None))

@@ -14,25 +14,25 @@ import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-from ai_do_api.core.db import Base
-from ai_do_api.core.worker_queue_contract import (
+from open_alm_api.core.db import Base
+from open_alm_api.core.worker_queue_contract import (
     LEGACY_PATENT_PRIOR_ART_QUEUE,
     PATENT_PRIOR_ART_QUEUE,
     PATENT_PRIOR_ART_RUN_JOB_TASK_NAME,
 )
-from ai_do_api.domains.auth.models import (
+from open_alm_api.domains.auth.models import (
     User,
     Workspace,
     WorkspaceAppEntitlement,
     WorkspaceUserBinding,
 )
-from ai_do_api.domains.patent_prior_art import (
+from open_alm_api.domains.patent_prior_art import (
     PATENT_PRIOR_ART_APP_ID,
     pipeline,
     router,
     service,
 )
-from ai_do_api.domains.patent_prior_art.artifacts import (
+from open_alm_api.domains.patent_prior_art.artifacts import (
     PatentPriorArtArtifactStore,
     StoredArtifact,
     input_storage_key,
@@ -40,24 +40,24 @@ from ai_do_api.domains.patent_prior_art.artifacts import (
     report_markdown_storage_key,
     result_json_storage_key,
 )
-from ai_do_api.domains.patent_prior_art.models import (
+from open_alm_api.domains.patent_prior_art.models import (
     PatentPriorArtArtifact,
     PatentPriorArtCandidate,
     PatentPriorArtExecutedQuery,
     PatentPriorArtJob,
 )
-from ai_do_api.domains.patent_prior_art.dispatch import PatentPriorArtJobDispatcher
-from ai_do_api.domains.patent_prior_art.planning import (
+from open_alm_api.domains.patent_prior_art.dispatch import PatentPriorArtJobDispatcher
+from open_alm_api.domains.patent_prior_art.planning import (
     build_display_query,
     compile_provider_queries,
 )
-from ai_do_api.domains.patent_prior_art.queue_cutover import (
+from open_alm_api.domains.patent_prior_art.queue_cutover import (
     PATENT_PRIOR_ART_QUEUE_CUTOVER_MARKER,
     PatentPriorArtQueueCutoverError,
     reconcile_patent_prior_art_queue_cutover,
     rollback_patent_prior_art_queue_cutover,
 )
-from ai_do_api.domains.patent_prior_art.schemas import (
+from open_alm_api.domains.patent_prior_art.schemas import (
     PatentPriorArtCandidateOut,
     PatentPriorArtExecutedQueryOut,
     PatentPriorArtFileParseResponse,
@@ -2274,7 +2274,7 @@ def test_preview_passes_vehicle_category_as_plain_planning_context(
 
     monkeypatch.setitem(
         sys.modules,
-        "ai_do_api.domains.patent_prior_art.pipeline",
+        "open_alm_api.domains.patent_prior_art.pipeline",
         SimpleNamespace(preview_patent_prior_art_search=fake_preview),
     )
     request = PatentPriorArtQueryPreviewRequest(

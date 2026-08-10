@@ -1,9 +1,9 @@
-name: ai-do-matomo
+name: open-alm-matomo
 
 services:
   db:
     image: ${MATOMO_DB_IMAGE:-mariadb:11}
-    container_name: ai-do-matomo-db
+    container_name: open-alm-matomo-db
     restart: unless-stopped
     command: ["--max-allowed-packet=64MB"]
     environment:
@@ -14,11 +14,11 @@ services:
       MARIADB_AUTO_UPGRADE: "1"
       MARIADB_INITDB_SKIP_TZINFO: "1"
     volumes:
-      - ai-do-matomo-db-data:/var/lib/mysql
+      - open-alm-matomo-db-data:/var/lib/mysql
 
   matomo:
     image: ${MATOMO_IMAGE:-matomo:5-apache}
-    container_name: ai-do-matomo
+    container_name: open-alm-matomo
     restart: unless-stopped
     depends_on:
       - db
@@ -33,11 +33,11 @@ services:
       MATOMO_DATABASE_DBNAME: ${MATOMO_DATABASE_DBNAME:-matomo}
       PHP_MEMORY_LIMIT: ${MATOMO_PHP_MEMORY_LIMIT:-512M}
     volumes:
-      - ai-do-matomo-app-data:/var/www/html
+      - open-alm-matomo-app-data:/var/www/html
 
   cron:
     image: ${MATOMO_IMAGE:-matomo:5-apache}
-    container_name: ai-do-matomo-cron
+    container_name: open-alm-matomo-cron
     restart: unless-stopped
     depends_on:
       - db
@@ -50,14 +50,14 @@ services:
           sleep "$${MATOMO_ARCHIVE_INTERVAL_SECONDS:-300}"
         done
     environment:
-      MATOMO_PUBLIC_URL: ${MATOMO_PUBLIC_URL:-https://matomo.dwdcc.kr/}
+      MATOMO_PUBLIC_URL: ${MATOMO_PUBLIC_URL:-https://matomo.open-alm.example/}
       MATOMO_ARCHIVE_INTERVAL_SECONDS: ${MATOMO_ARCHIVE_INTERVAL_SECONDS:-300}
       PHP_MEMORY_LIMIT: ${MATOMO_PHP_MEMORY_LIMIT:-512M}
     volumes:
-      - ai-do-matomo-app-data:/var/www/html
+      - open-alm-matomo-app-data:/var/www/html
 
 volumes:
-  ai-do-matomo-db-data:
-    name: ai-do-matomo-db-data
-  ai-do-matomo-app-data:
-    name: ai-do-matomo-app-data
+  open-alm-matomo-db-data:
+    name: open-alm-matomo-db-data
+  open-alm-matomo-app-data:
+    name: open-alm-matomo-app-data

@@ -6,13 +6,13 @@ from typing import Any
 
 import pytest
 
-from ai_do_api.domains.search.backend_contracts import KeywordSearchQuery
-from ai_do_api.domains.search.opensearch import (
+from open_alm_api.domains.search.backend_contracts import KeywordSearchQuery
+from open_alm_api.domains.search.opensearch import (
     OpenSearchError,
     OpenSearchKeywordClient,
     _bulk_document_chunks,
 )
-from ai_do_api.domains.search.index_gateway import (
+from open_alm_api.domains.search.index_gateway import (
     build_partitioned_bulk_index_ndjson,
     keyword_acl_query_field_names,
     keyword_acl_query_properties,
@@ -25,7 +25,7 @@ from ai_do_api.domains.search.index_gateway import (
     keyword_search_partitioned_index_name,
     keyword_search_versioned_index_name,
 )
-from ai_do_api.domains.retrieval.projection_identity import canonical_search_document_id
+from open_alm_api.domains.retrieval.projection_identity import canonical_search_document_id
 
 
 class _Response:

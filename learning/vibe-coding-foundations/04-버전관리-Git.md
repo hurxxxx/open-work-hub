@@ -47,8 +47,8 @@ Git이 하는 일을 한 문장으로 요약하면 이렇습니다.
 
 ### 2.1 저장소(Repository, Repo)
 
-Git이 관리하는 한 덩어리의 프로젝트. 이 서버의 AI-DO는 운영 checkout
-`/projects/ai-do/prod`와 개발 checkout `/projects/ai-do/dev`가 각각 하나의 저장소다.
+Git이 관리하는 한 덩어리의 프로젝트. 이 서버의 Open ALM는 운영 checkout
+`/projects/open-alm/prod`와 개발 checkout `/projects/open-alm/dev`가 각각 하나의 저장소다.
 
 ### 2.2 커밋(Commit)
 

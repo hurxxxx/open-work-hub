@@ -24,7 +24,7 @@ type NavigatorWithOpfs = Navigator & {
   };
 };
 
-const RECORDING_OPFS_ROOT = 'ai-do-recording';
+const RECORDING_OPFS_ROOT = 'open-alm-recording';
 
 function opfsNavigator(): NavigatorWithOpfs | null {
   if (typeof navigator === 'undefined') {

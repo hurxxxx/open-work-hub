@@ -5,24 +5,24 @@ from types import SimpleNamespace
 import pytest
 from sqlalchemy import select
 
-from ai_do_api.core.db import get_session_factory
-from ai_do_api.domains.auth.models import User
-from ai_do_api.domains.docs import partitioning as docs_partitioning
-from ai_do_api.domains.docs import rag_sync as docs_rag_sync
-from ai_do_api.domains.docs.models import NativeDoc
-from ai_do_api.domains.rag.contracts import RagSyncOperation
-from ai_do_api.domains.rag.models import RagSyncJob, RagVisibilityRecomputeJob
-from ai_do_api.domains.retrieval.models import (
+from open_alm_api.core.db import get_session_factory
+from open_alm_api.domains.auth.models import User
+from open_alm_api.domains.docs import partitioning as docs_partitioning
+from open_alm_api.domains.docs import rag_sync as docs_rag_sync
+from open_alm_api.domains.docs.models import NativeDoc
+from open_alm_api.domains.rag.contracts import RagSyncOperation
+from open_alm_api.domains.rag.models import RagSyncJob, RagVisibilityRecomputeJob
+from open_alm_api.domains.retrieval.models import (
     RetrievalPartition,
     RetrievalProjectionEvent,
 )
-from ai_do_api.domains.retrieval.partitioning import (
+from open_alm_api.domains.retrieval.partitioning import (
     RetrievalPartitionConflict,
     RetrievalPartitionUnbound,
 )
-from ai_do_api.domains.retrieval.projection_fencing import ProjectionEventRef
-from ai_do_api.domains.source_access import SourceAclPolicy
-from ai_do_api.domains.source_access.resource_types import NATIVE_DOC_RESOURCE_TYPE
+from open_alm_api.domains.retrieval.projection_fencing import ProjectionEventRef
+from open_alm_api.domains.source_access import SourceAclPolicy
+from open_alm_api.domains.source_access.resource_types import NATIVE_DOC_RESOURCE_TYPE
 
 
 def _job_rows() -> list[RagSyncJob]:
@@ -377,7 +377,7 @@ def test_meeting_doc_acl_changes_enqueue_rag_visibility_recompute_jobs(
     attendee = _create_user_with_workspaces(
         client,
         admin_token,
-        email="meeting-rag-reader@ai-do.local",
+        email="meeting-rag-reader@open-alm.local",
         full_name="Meeting Rag Reader",
         workspace_keys=[workspace_slug],
     )

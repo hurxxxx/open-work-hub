@@ -15,7 +15,7 @@ leading ``YYMMDD`` / ``YYYYMMDD`` prefix when present.
 Idempotent: a file is skipped when a row with the same ``company`` + ``filename``
 already exists, so re-runs only add what is missing.
 
-Usage (load .env.local first so AI_DO_POSTGRES_DSN / MinIO settings resolve;
+Usage (load .env.local first so OPEN_ALM_POSTGRES_DSN / MinIO settings resolve;
 remote infra → run with the Claude Code sandbox disabled)::
 
     python apps/api/scripts/import_industry_report_trend.py \
@@ -36,10 +36,10 @@ if str(_SRC) not in sys.path:
 
 from sqlalchemy import select  # noqa: E402
 
-from ai_do_api.core.db import get_session_factory  # noqa: E402
-from ai_do_api.domains.industry_report import config_data as cfg  # noqa: E402
-from ai_do_api.domains.industry_report import service, storage  # noqa: E402
-from ai_do_api.domains.industry_report.models import IndustryReportFile  # noqa: E402
+from open_alm_api.core.db import get_session_factory  # noqa: E402
+from open_alm_api.domains.industry_report import config_data as cfg  # noqa: E402
+from open_alm_api.domains.industry_report import service, storage  # noqa: E402
+from open_alm_api.domains.industry_report.models import IndustryReportFile  # noqa: E402
 
 _DEFAULT_SOURCE = r"C:\server\static\trend"
 _DATE_PREFIX_RE = re.compile(r"^(\d{6}|\d{8})[ _]")

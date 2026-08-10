@@ -14,8 +14,8 @@ import {
 import { migrationRiskForChange } from './app-platform-guardrails/migrations.mjs';
 import { CORE_API_DOMAINS, LANES } from './app-platform-guardrails/policy.mjs';
 
-export const CONTRACT_EVIDENCE_MARKER = '<!-- ai-do:vibe-app-contract:v1 -->';
-export const CORE_ENABLEMENT_MARKER = '<!-- ai-do:core-enablement:v1 -->';
+export const CONTRACT_EVIDENCE_MARKER = '<!-- open-alm:vibe-app-contract:v1 -->';
+export const CORE_ENABLEMENT_MARKER = '<!-- open-alm:core-enablement:v1 -->';
 
 const VIBE_REQUIRED_HEADINGS = [
   'Contract Map',
@@ -87,7 +87,7 @@ export const CORE_REQUIRED_FIELD_IDS = Object.freeze([
 ]);
 
 function apiDomainForPath(filePath) {
-  const match = /^apps\/api\/src\/ai_do_api\/domains\/([^/]+)(?:\/|$)/.exec(
+  const match = /^apps\/api\/src\/open_alm_api\/domains\/([^/]+)(?:\/|$)/.exec(
     filePath,
   );
   return match?.[1] ?? null;
@@ -100,7 +100,7 @@ export function isDomainAppDeliveryPath(filePath) {
   if (/^apps\/api\/alembic\/versions\/[^/]+\.py$/.test(filePath)) {
     return true;
   }
-  if (/^apps\/worker\/src\/ai_do_worker\/tasks\//.test(filePath)) {
+  if (/^apps\/worker\/src\/open_alm_worker\/tasks\//.test(filePath)) {
     return true;
   }
   const apiDomain = apiDomainForPath(filePath);
@@ -112,7 +112,7 @@ export function isPrimaryAppOwnedDeliveryPath(filePath) {
     return true;
   }
   if (
-    /^apps\/worker\/src\/ai_do_worker\/tasks\/apps\/[a-z0-9_-]+\//.test(
+    /^apps\/worker\/src\/open_alm_worker\/tasks\/apps\/[a-z0-9_-]+\//.test(
       filePath,
     )
   ) {
@@ -167,11 +167,11 @@ function isHarnessPolicyPath(filePath) {
 
 export function isWorkspaceKeywordSearchContractPath(filePath) {
   return (
-    /^apps\/api\/src\/ai_do_api\/domains\/search\//.test(filePath) ||
-    /^apps\/api\/src\/ai_do_api\/domains\/[^/]+\/search_(?:hooks|projection|registration)\.py$/.test(
+    /^apps\/api\/src\/open_alm_api\/domains\/search\//.test(filePath) ||
+    /^apps\/api\/src\/open_alm_api\/domains\/[^/]+\/search_(?:hooks|projection|registration)\.py$/.test(
       filePath,
     ) ||
-    /^apps\/api\/src\/ai_do_api\/domains\/auth\/(?:access|workspace_bootstrap_schemas)\.py$/.test(
+    /^apps\/api\/src\/open_alm_api\/domains\/auth\/(?:access|workspace_bootstrap_schemas)\.py$/.test(
       filePath,
     ) ||
     /^apps\/web\/src\/app\/shell\/(?:AppContent|tool-view-wrapper|tool-view-route-model)\.(?:ts|tsx)$/.test(
@@ -321,7 +321,7 @@ export function checkMergeRequestContractEvidence({
 
   const descriptionLines = description.split(/\r?\n/);
   for (const checkId of requiredCheckIds) {
-    const marker = `<!-- ai-do:check:${checkId} -->`;
+    const marker = `<!-- open-alm:check:${checkId} -->`;
     const matchingLines = descriptionLines.filter((line) =>
       line.includes(marker),
     );
@@ -337,7 +337,7 @@ export function checkMergeRequestContractEvidence({
   }
   const fieldValues = new Map();
   for (const fieldId of requiredFieldIds) {
-    const marker = `<!-- ai-do:field:${fieldId} -->`;
+    const marker = `<!-- open-alm:field:${fieldId} -->`;
     const matchingLines = descriptionLines.filter((line) =>
       line.includes(marker),
     );

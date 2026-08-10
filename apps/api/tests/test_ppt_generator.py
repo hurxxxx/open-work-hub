@@ -13,14 +13,14 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 import pytest
 
-from ai_do_api.core.db import get_db_session
-from ai_do_api.domains.auth.dependencies import require_current_workspace
-from ai_do_api.domains.document_processing.pptx import archive_exceeds_limits
-from ai_do_api.domains.media.models import MediaFile  # noqa: F401
-from ai_do_api.domains.ppt_generator.families import FAMILIES
-from ai_do_api.domains.ppt_generator import router, service, source_images
-from ai_do_api.domains.ppt_generator.design import doowon_templates, html_to_pptx
-from ai_do_api.domains.ppt_generator.models import PptJob, PptTemplatePreviewImage
+from open_alm_api.core.db import get_db_session
+from open_alm_api.domains.auth.dependencies import require_current_workspace
+from open_alm_api.domains.document_processing.pptx import archive_exceeds_limits
+from open_alm_api.domains.media.models import MediaFile  # noqa: F401
+from open_alm_api.domains.ppt_generator.families import FAMILIES
+from open_alm_api.domains.ppt_generator import router, service, source_images
+from open_alm_api.domains.ppt_generator.design import corporate_templates, html_to_pptx
+from open_alm_api.domains.ppt_generator.models import PptJob, PptTemplatePreviewImage
 
 
 def _zip_info(name: str, *, size: int, compressed: int) -> zipfile.ZipInfo:
@@ -71,13 +71,13 @@ def test_archive_exceeds_limits_rejects_suspicious_expansion_ratio() -> None:
     assert archive_exceeds_limits(infos) is True
 
 
-def test_family_catalog_exposes_doowon_report_templates() -> None:
-    assert FAMILIES["doowon-seminar"]["design"] == "doowon-seminar"
-    assert FAMILIES["doowon-education"]["design"] == "doowon-education"
+def test_family_catalog_exposes_corporate_report_templates() -> None:
+    assert FAMILIES["corporate-seminar"]["design"] == "corporate-seminar"
+    assert FAMILIES["corporate-education"]["design"] == "corporate-education"
 
 
 def test_meeting_minutes_renderer_keeps_missing_date_blank() -> None:
-    html = doowon_templates.render_meeting_minutes_deck(
+    html = corporate_templates.render_meeting_minutes_deck(
         {
             "title": "품질 회의",
             "team": "품질팀",
@@ -95,14 +95,14 @@ def test_meeting_minutes_renderer_keeps_missing_date_blank() -> None:
 def test_html_to_pptx_find_browser_prefers_configured_path(monkeypatch, tmp_path) -> None:
     browser = tmp_path / "chrome"
     browser.write_text("", encoding="utf-8")
-    monkeypatch.setenv("AI_DO_PPT_BROWSER_PATH", str(browser))
+    monkeypatch.setenv("OPEN_ALM_PPT_BROWSER_PATH", str(browser))
     monkeypatch.setattr(html_to_pptx.shutil, "which", lambda _name: None)
 
     assert html_to_pptx._find_browser() == str(browser)
 
 
 def test_html_to_pptx_find_browser_uses_path_commands(monkeypatch) -> None:
-    monkeypatch.delenv("AI_DO_PPT_BROWSER_PATH", raising=False)
+    monkeypatch.delenv("OPEN_ALM_PPT_BROWSER_PATH", raising=False)
     monkeypatch.setattr(html_to_pptx, "_BROWSER_PATHS", ())
 
     def fake_which(name: str) -> str | None:
@@ -116,7 +116,7 @@ def test_html_to_pptx_find_browser_uses_path_commands(monkeypatch) -> None:
 def test_html_to_pptx_find_browser_prefers_system_chrome_over_snap_wrapper(
     monkeypatch,
 ) -> None:
-    monkeypatch.delenv("AI_DO_PPT_BROWSER_PATH", raising=False)
+    monkeypatch.delenv("OPEN_ALM_PPT_BROWSER_PATH", raising=False)
     monkeypatch.setattr(
         html_to_pptx,
         "_BROWSER_PATHS",
@@ -217,8 +217,8 @@ def test_editable_pptx_cleans_temporary_html_directory_on_failure(
 def test_ppt_generator_router_blocks_disabled_app() -> None:
     from starlette.exceptions import HTTPException as StarletteHTTPException
 
-    from ai_do_api.app import localized_http_exception_handler
-    from ai_do_api.core.i18n import localized_http_exception
+    from open_alm_api.app import localized_http_exception_handler
+    from open_alm_api.core.i18n import localized_http_exception
 
     app = FastAPI()
     app.include_router(router.router, prefix="/api/v1/workspaces/{workspace_slug}")
@@ -241,7 +241,7 @@ def test_template_preview_without_media_is_not_renderable() -> None:
     preview = PptTemplatePreviewImage(
         id="preview-1",
         workspace_id="workspace-1",
-        family_id="doowon-house",
+        family_id="corporate-house",
         media_id="media-1",
         sort_order=1,
         uploaded_by_id="user-1",
@@ -273,7 +273,7 @@ def test_generate_form_topic_limit_is_enforced_server_side() -> None:
         )
 
     assert exc_info.value.status_code == 422
-    assert exc_info.value.headers["X-AI-DO-Error-Code"] == "ppt_generator.topic_too_long"
+    assert exc_info.value.headers["X-Open ALM-Error-Code"] == "ppt_generator.topic_too_long"
 
 
 def test_generate_form_reference_url_limit_is_enforced_server_side() -> None:
@@ -286,7 +286,7 @@ def test_generate_form_reference_url_limit_is_enforced_server_side() -> None:
 
     assert exc_info.value.status_code == 422
     assert (
-        exc_info.value.headers["X-AI-DO-Error-Code"]
+        exc_info.value.headers["X-Open ALM-Error-Code"]
         == "ppt_generator.form_field_too_long"
     )
 
@@ -310,7 +310,7 @@ def test_create_job_stores_external_context_in_params(
         content="주제\n\n[기타 참고사항]\n비공개 매출 수치",
         topic="주제",
         external_context=external_context,
-        family="doowon-house",
+        family="corporate-house",
         slide_range=None,
         language="Korean",
         tone="default",
@@ -339,7 +339,7 @@ def test_create_job_sets_fixed_cover_author_label(monkeypatch: pytest.MonkeyPatc
         content="주제",
         topic="주제",
         external_context=None,
-        family="doowon-house",
+        family="corporate-house",
         slide_range=None,
         language="Korean",
         tone="default",
@@ -368,7 +368,7 @@ def test_create_job_marks_error_when_enqueue_fails(monkeypatch: pytest.MonkeyPat
             SimpleNamespace(id="workspace-1"),
             content="주제",
             topic="주제",
-            family="doowon-house",
+            family="corporate-house",
             slide_range=None,
             language="Korean",
             tone="default",
@@ -408,7 +408,7 @@ def test_create_job_stores_bounded_template_preview_references(
         SimpleNamespace(id="workspace-1"),
         content="주제",
         topic="주제",
-        family="doowon-house",
+        family="corporate-house",
         slide_range=None,
         language="Korean",
         tone="default",
@@ -431,7 +431,7 @@ def test_public_job_title_uses_topic_only() -> None:
         user_id="user-1",
         status="completed",
         message="완료",
-        family="doowon-house",
+        family="corporate-house",
         aspect="A4",
         n_slides=2,
         content="[첨부 문서 내용]\n[secret.docx]\n대외비 본문",
@@ -448,7 +448,7 @@ def test_public_job_title_does_not_fallback_to_attachment_text() -> None:
         user_id="user-1",
         status="completed",
         message="완료",
-        family="doowon-house",
+        family="corporate-house",
         aspect="A4",
         n_slides=2,
         content="[첨부 문서 내용]\n[secret.docx]\n대외비 본문",
@@ -465,7 +465,7 @@ def test_get_job_ignores_soft_deleted_jobs() -> None:
         user_id="user-1",
         status="completed",
         message="완료",
-        family="doowon-house",
+        family="corporate-house",
         aspect="A4",
         n_slides=2,
         deleted_at=service.utcnow_naive(),
@@ -496,12 +496,12 @@ def test_start_finalize_restores_previous_pptx_key_when_enqueue_fails(
         user_id="user-1",
         status="completed",
         message="완료",
-        family="doowon-house",
+        family="corporate-house",
         aspect="A4",
         n_slides=2,
         content="주제",
         params={},
-        slides_spec={"family": "doowon-house", "slides": []},
+        slides_spec={"family": "corporate-house", "slides": []},
         pptx_key="ppt-generator/workspace-1/job-1/output.pptx",
     )
 
@@ -534,7 +534,7 @@ def test_request_cancel_revokes_task_and_marks_cancelled(
         user_id="user-1",
         status="running",
         message="슬라이드 구조 생성 중...",
-        family="doowon-house",
+        family="corporate-house",
         aspect="A4",
         n_slides=0,
         content="주제",
@@ -564,7 +564,7 @@ def test_request_cancel_without_task_id_still_marks_cancelled(
         user_id="user-1",
         status="pending",
         message="작업 큐 등록됨",
-        family="doowon-house",
+        family="corporate-house",
         aspect="A4",
         n_slides=0,
         content="주제",
@@ -591,12 +591,12 @@ def test_start_chat_edit_marks_chat_error_when_enqueue_fails(
         user_id="user-1",
         status="completed",
         message="완료",
-        family="doowon-house",
+        family="corporate-house",
         aspect="A4",
         n_slides=2,
         content="주제",
         params={},
-        slides_spec={"family": "doowon-house", "slides": []},
+        slides_spec={"family": "corporate-house", "slides": []},
         chat_result={"rev": 4},
     )
 
@@ -645,9 +645,9 @@ def test_find_browser_returns_none_when_no_browser_anywhere(
     import os as _os
     import shutil
 
-    from ai_do_api.domains.ppt_generator.design import html_to_pptx
+    from open_alm_api.domains.ppt_generator.design import html_to_pptx
 
-    monkeypatch.delenv("AI_DO_PPT_BROWSER_PATH", raising=False)
+    monkeypatch.delenv("OPEN_ALM_PPT_BROWSER_PATH", raising=False)
     monkeypatch.setattr(shutil, "which", lambda _name: None)
     monkeypatch.setattr(_os.path, "exists", lambda _p: False)
 
@@ -656,7 +656,7 @@ def test_find_browser_returns_none_when_no_browser_anywhere(
 
 def test_render_seminar_report_appends_merged_trip() -> None:
     # 출장 일정 병합: slide["trip"] 이 있으면 report 본문 하단에 '■ 출장 일정' + 표를 이어 붙인다.
-    from ai_do_api.domains.ppt_generator.design import doowon_templates
+    from open_alm_api.domains.ppt_generator.design import corporate_templates
 
     slide = {
         "pattern": "seminar_report",
@@ -671,14 +671,14 @@ def test_render_seminar_report_appends_merged_trip() -> None:
         },
     }
 
-    html = doowon_templates.render_seminar_report(slide)
+    html = corporate_templates.render_seminar_report(slide)
 
     assert "출장 일정" in html
     assert "인천→상해" in html
 
 
 def test_render_seminar_report_without_trip_has_no_trip_heading() -> None:
-    from ai_do_api.domains.ppt_generator.design import doowon_templates
+    from open_alm_api.domains.ppt_generator.design import corporate_templates
 
     slide = {
         "pattern": "seminar_report",
@@ -688,7 +688,7 @@ def test_render_seminar_report_without_trip_has_no_trip_heading() -> None:
         "conclusion": ["소감"],
     }
 
-    html = doowon_templates.render_seminar_report(slide)
+    html = corporate_templates.render_seminar_report(slide)
 
     assert "출장 일정" not in html
 
@@ -710,7 +710,7 @@ def test_seminar_remark_renders_ole_icon_when_ole_src_present() -> None:
         "conclusion": ["소감"],
     }
 
-    html = doowon_templates.render_seminar_report(slide)
+    html = corporate_templates.render_seminar_report(slide)
 
     assert '<img src="data:image/png;base64,IC"' in html
     assert "첨부 일정표" in html
@@ -777,7 +777,7 @@ def test_render_schedule_images_skips_workbook_when_sheet_surgery_fails(monkeypa
 def test_resolve_family_keeps_legacy_a4_resolvable() -> None:
     # 회귀(Codex): 카탈로그에서 뺀 레거시 A4 양식도 finalize/build 가 계속 해석해야 한다.
     # (안 그러면 옛 a4-exec-kpi 작업이 house 빌더로 잘못 빌드돼 깨짐.) 목록엔 안 보이되 resolve 됨.
-    from ai_do_api.domains.ppt_generator.families import resolve_family
+    from open_alm_api.domains.ppt_generator.families import resolve_family
 
     for legacy in ("a4-exec-kpi", "a4-scorecard", "a4-minutes"):
         assert legacy not in FAMILIES  # 카탈로그(템플릿 목록)엔 노출 안 됨
@@ -786,7 +786,7 @@ def test_resolve_family_keeps_legacy_a4_resolvable() -> None:
         assert fam["build_fn"].__name__ == "build_slide_a4"
         assert fam.get("hidden") is True
     # 알 수 없는 값은 여전히 기본 양식으로 보정.
-    assert resolve_family("no-such-family")[0] == "doowon-house"
+    assert resolve_family("no-such-family")[0] == "corporate-house"
 
 
 def test_render_schedule_images_skips_archive_bomb(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -833,7 +833,7 @@ def test_create_job_stores_schedule_images(monkeypatch: pytest.MonkeyPatch) -> N
         content="주제",
         topic="주제",
         external_context=None,
-        family="doowon-seminar",
+        family="corporate-seminar",
         slide_range=None,
         language="Korean",
         tone="default",

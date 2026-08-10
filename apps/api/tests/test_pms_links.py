@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from ai_do_api.domains.auth.workspace_apps import iter_workspace_app_catalog
-from ai_do_api.domains.pms.links import (
+from open_alm_api.domains.auth.workspace_apps import iter_workspace_app_catalog
+from open_alm_api.domains.pms.links import (
     normalize_pms_deep_link,
     pms_root_path,
     pms_space_docs_path,
@@ -55,7 +55,7 @@ def test_normalize_pms_deep_link_rewrites_legacy_tool_urls() -> None:
     )
     assert (
         normalize_pms_deep_link(
-            "https://dwdcc.kr/tool/pms-list-list-1?workspace=hq&task=task-1"
+            "https://open-alm.example/tool/pms-list-list-1?workspace=hq&task=task-1"
         )
         == "/w/hq/pms/lists/list-1?task=task-1"
     )
@@ -84,7 +84,7 @@ def test_normalize_pms_deep_link_rewrites_duplicate_workspace_app_route_bases() 
     )
     assert normalize_pms_deep_link("/w/hq/docs/docs?view=mine") == "/w/hq/docs?view=mine"
     assert (
-        normalize_pms_deep_link("https://dwdcc.kr/w/hq/planner/planner?view=timeline")
+        normalize_pms_deep_link("https://open-alm.example/w/hq/planner/planner?view=timeline")
         == "/w/hq/planner?view=timeline"
     )
     assert normalize_pms_deep_link("/w/hq/pms/pms/lists/list-1?task=task-1") == (

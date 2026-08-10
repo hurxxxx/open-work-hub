@@ -3,7 +3,7 @@ import { Download, ExternalLink, FileJson, FileText } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-import { Button, EmptyState, InlineNotice } from '@ai-do/ui';
+import { Button, EmptyState, InlineNotice } from '@open-alm/ui';
 
 import type {
   PatentPriorArtArtifact,

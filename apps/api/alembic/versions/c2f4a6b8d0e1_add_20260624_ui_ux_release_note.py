@@ -46,7 +46,7 @@ def upgrade() -> None:
                 "release_key": RELEASE_KEY,
                 "title": "2026년 6월 24일 UI/UX 개선 업데이트",
                 "summary": (
-                    "AI-DO의 주요 업무 화면, 앱 탐색, AI 도구 사용 흐름을 "
+                    "Open ALM의 주요 업무 화면, 앱 탐색, AI 도구 사용 흐름을 "
                     "더 찾기 쉽고 읽기 편하게 개선했습니다."
                 ),
                 "body": "\n".join(

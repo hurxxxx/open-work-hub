@@ -8,14 +8,14 @@ from fastapi.testclient import TestClient
 import openpyxl
 import pytest
 
-from ai_do_api.domains.auth.dependencies import (
+from open_alm_api.domains.auth.dependencies import (
     require_current_user,
     require_current_workspace,
 )
-from ai_do_api.domains.imds_minerals import parser
-from ai_do_api.domains.imds_minerals.router import require_imds_minerals_app_enabled, router
-from ai_do_api.domains.imds_minerals.target_list import match_oem
-from ai_do_api.domains.imds_minerals.workbook import ImdsMeta, write_workbook
+from open_alm_api.domains.imds_minerals import parser
+from open_alm_api.domains.imds_minerals.router import require_imds_minerals_app_enabled, router
+from open_alm_api.domains.imds_minerals.target_list import match_oem
+from open_alm_api.domains.imds_minerals.workbook import ImdsMeta, write_workbook
 
 
 _WS_PREFIX = "/api/v1/workspaces/acme/imds-minerals"
@@ -56,7 +56,7 @@ def _target_list_bytes() -> bytes:
 def _make_client() -> TestClient:
     from starlette.exceptions import HTTPException as StarletteHTTPException
 
-    from ai_do_api.app import localized_http_exception_handler
+    from open_alm_api.app import localized_http_exception_handler
 
     app = FastAPI()
     app.include_router(router, prefix="/api/v1/workspaces/{workspace_slug}")
@@ -143,14 +143,14 @@ def test_analyze_rejects_non_pdf_extension() -> None:
 def test_imds_router_blocks_disabled_app() -> None:
     from starlette.exceptions import HTTPException as StarletteHTTPException
 
-    from ai_do_api.app import localized_http_exception_handler
+    from open_alm_api.app import localized_http_exception_handler
 
     app = FastAPI()
     app.include_router(router, prefix="/api/v1/workspaces/{workspace_slug}")
     app.add_exception_handler(StarletteHTTPException, localized_http_exception_handler)
 
     def disabled() -> None:
-        from ai_do_api.core.i18n import localized_http_exception
+        from open_alm_api.core.i18n import localized_http_exception
 
         raise localized_http_exception(status_code=403, code="imds_minerals.app_disabled")
 
@@ -228,7 +228,7 @@ def test_generate_rejects_corrupt_template_as_localized_400(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "ai_do_api.domains.imds_minerals.service.parse_pdf",
+        "open_alm_api.domains.imds_minerals.service.parse_pdf",
         lambda _content: SimpleNamespace(rows=[], relevant=[]),
     )
 

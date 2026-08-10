@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-target="${CODEX_REVIEW_RUNNER_SCRIPT:-/home/dwdcc/.local/bin/ai-do-codex-review-ci}"
+target="${CODEX_REVIEW_RUNNER_SCRIPT:-/home/open-alm/.local/bin/open-alm-codex-review-ci}"
 current_branch="$(git -C "$repo_root" branch --show-current)"
 
 if [[ "$current_branch" != "dev" ]]; then
@@ -14,7 +14,7 @@ if [[ -n "$(git -C "$repo_root" status --porcelain)" ]]; then
   exit 2
 fi
 source "$repo_root/scripts/ci/control-plane-lock.sh"
-acquire_ai_do_ci_control_plane_lock
+acquire_open_alm_ci_control_plane_lock
 
 git -C "$repo_root" fetch --quiet origin dev
 local_head="$(git -C "$repo_root" rev-parse HEAD)"
@@ -50,9 +50,9 @@ cleanup() {
   rm -rf "$probe_dir"
 }
 trap cleanup EXIT
-sensitive_path="/home/dwdcc/.codex/auth.json"
+sensitive_path="/home/open-alm/.codex/auth.json"
 if [[ ! -r "$sensitive_path" ]]; then
-  sensitive_path="/home/dwdcc/.config/glab-cli/config.yml"
+  sensitive_path="/home/open-alm/.config/glab-cli/config.yml"
 fi
 if [[ ! -r "$sensitive_path" ]]; then
   echo "Refusing to install Codex review runner: no readable credential file is available for the isolation probe." >&2

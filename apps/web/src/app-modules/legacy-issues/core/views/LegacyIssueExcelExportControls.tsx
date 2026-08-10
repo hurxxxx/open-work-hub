@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Download, FileSpreadsheet, Loader2, Paperclip } from 'lucide-react';
-import { Dialog } from '@ai-do/ui';
+import { Dialog } from '@open-alm/ui';
 
 import type { LegacyIssueExcelExportJobWorkflow } from './useLegacyIssueExcelExportJob';
 import { LegacyIssueToolbarButton } from './LegacyIssuePageParts';

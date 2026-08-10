@@ -11,28 +11,28 @@ from pydantic import BaseModel
 import pytest
 from sqlalchemy import select
 
-from ai_do_api.core.db import get_session_factory
-from ai_do_api.core.i18n import LocalizedApiMessage
-from ai_do_api.core.principal import user_principal
-from ai_do_api.domains.ai import agent as ai_agent
-from ai_do_api.domains.ai import approvals as ai_approvals
-from ai_do_api.domains.ai import mcp as ai_mcp
-from ai_do_api.domains.ai import router as ai_router
-from ai_do_api.domains.ai.tool_contracts import AgentToolSpec
-from ai_do_api.domains.ai.runtime.models import AgentInvocation, AgentRun
-from ai_do_api.domains.ai.runtime.persistence import append_trace_event
-from ai_do_api.domains.ai import tool_service as ai_tool_service
-from ai_do_api.domains.ai.tool_runtime import ToolCallExecution
-from ai_do_api.core.llm_adapters import StreamChunk
-from ai_do_api.domains.ai.registry import (
+from open_alm_api.core.db import get_session_factory
+from open_alm_api.core.i18n import LocalizedApiMessage
+from open_alm_api.core.principal import user_principal
+from open_alm_api.domains.ai import agent as ai_agent
+from open_alm_api.domains.ai import approvals as ai_approvals
+from open_alm_api.domains.ai import mcp as ai_mcp
+from open_alm_api.domains.ai import router as ai_router
+from open_alm_api.domains.ai.tool_contracts import AgentToolSpec
+from open_alm_api.domains.ai.runtime.models import AgentInvocation, AgentRun
+from open_alm_api.domains.ai.runtime.persistence import append_trace_event
+from open_alm_api.domains.ai import tool_service as ai_tool_service
+from open_alm_api.domains.ai.tool_runtime import ToolCallExecution
+from open_alm_api.core.llm_adapters import StreamChunk
+from open_alm_api.domains.ai.registry import (
     AiCapabilityRegistry,
     ApprovalPreview,
     PreviewField,
 )
-from ai_do_api.domains.auth.access import ensure_dev_login_seed_data
-from ai_do_api.domains.auth.access import load_user_graph
-from ai_do_api.domains.auth.models import Workspace
-from ai_do_api.domains.conversations import service as conversations_service
+from open_alm_api.domains.auth.access import ensure_dev_login_seed_data
+from open_alm_api.domains.auth.access import load_user_graph
+from open_alm_api.domains.auth.models import Workspace
+from open_alm_api.domains.conversations import service as conversations_service
 from test_meeting import _auth_headers, _dev_login
 
 

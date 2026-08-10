@@ -25,7 +25,7 @@ ACL 계약을 검증한다. named gate와 generation control plane은 다음처�
   처리 중에는 `pending`/`processing`, 지원하지 않는 형식은 `unsupported`, terminal failure는
   `failed`로 반환하며 raw worker 오류는 노출하지 않는다.
 
-환경별 동작은 `apps/api/src/ai_do_api/domains/files/retrieval_contract.py`의 named gate가
+환경별 동작은 `apps/api/src/open_alm_api/domains/files/retrieval_contract.py`의 named gate가
 소유한다. 별도 임시 환경변수로 우회하지 않는다. Gate가 닫혀도 Files source transaction은
 canonical projection event/head를 항상 기록한다.
 중단되는 것은 Search/RAG job 발행과 backend mutation뿐이다. 이미 대기 중이던 Files job은
@@ -176,11 +176,11 @@ Company corpus로의 전환과 이후 file/folder ingest는 platform admin만 �
 ```bash
 uv run --project apps/api python \
   apps/api/scripts/files_rag_readonly_harness.py \
-  --source '/home/dwdcc/Documents/전장 RAG' \
+  --source '/home/open-alm/Documents/전장 RAG' \
   --dry-run \
   --workers 4 \
   --canaries-per-stratum 2 \
-  --manifest-out /tmp/ai-do-files-rag-canaries.json
+  --manifest-out /tmp/open-alm-files-rag-canaries.json
 ```
 
 Live E2E는 loopback development API와 dev 전용 DB·bucket·index/collection prefix가 아니면
@@ -189,17 +189,17 @@ fail-closed한다. 서로 다른 actor와 두 Workspace observer token을 환경
 workspace A→company→A→B ACL 전환과 cleanup을 검증한다.
 
 ```bash
-AI_DO_FILES_E2E_ACTOR_TOKEN='...' \
-AI_DO_FILES_E2E_A_TOKEN='...' \
-AI_DO_FILES_E2E_B_TOKEN='...' \
+OPEN_ALM_FILES_E2E_ACTOR_TOKEN='...' \
+OPEN_ALM_FILES_E2E_A_TOKEN='...' \
+OPEN_ALM_FILES_E2E_B_TOKEN='...' \
 uv run --project apps/api python apps/api/scripts/files_rag_live_e2e.py \
-  --source '/home/dwdcc/Documents/전장 RAG' \
-  --report-out /tmp/ai-do-files-rag-live-e2e.json \
+  --source '/home/open-alm/Documents/전장 RAG' \
+  --report-out /tmp/open-alm-files-rag-live-e2e.json \
   --workspace-a ai-tft \
   --workspace-b administrator \
-  --actor-token-env AI_DO_FILES_E2E_ACTOR_TOKEN \
-  --workspace-a-observer-token-env AI_DO_FILES_E2E_A_TOKEN \
-  --workspace-b-observer-token-env AI_DO_FILES_E2E_B_TOKEN \
+  --actor-token-env OPEN_ALM_FILES_E2E_ACTOR_TOKEN \
+  --workspace-a-observer-token-env OPEN_ALM_FILES_E2E_A_TOKEN \
+  --workspace-b-observer-token-env OPEN_ALM_FILES_E2E_B_TOKEN \
   --max-canaries 6 \
   --max-total-mib 50 \
   --execute-live-e2e \
@@ -230,7 +230,7 @@ Inventory는 위 read-only harness의 동일 eligibility를 사용한다. 확장
 ```bash
 cd apps/api
 uv run --python 3.12 scripts/manage_files_bulk_ingest.py inventory \
-  --source-root '/home/dwdcc/Documents/전장 RAG' \
+  --source-root '/home/open-alm/Documents/전장 RAG' \
   --manifest /secure/path/technical-research-files-manifest.json \
   --max-file-bytes 125829120 \
   --workers 8 \
@@ -246,7 +246,7 @@ Manifest 집계와 SHA-256을 승인한 뒤 운영 workspace와 actor를 명시�
 새 값으로 바꾼다.
 
 ```bash
-AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 \
+OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 \
   scripts/manage_files_bulk_ingest.py create-run \
   --manifest /secure/path/technical-research-files-manifest.json \
   --workspace-key '기술연구소' \
@@ -264,7 +264,7 @@ Files extraction 상태, Search/RAG queue drain, keyword/semantic/hybrid, ACL과
 한다. 성공 entry는 다시 업로드하지 않고 실패 entry의 동일 예약 ID만 재시도한다.
 
 ```bash
-AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 \
+OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 \
   scripts/manage_files_bulk_ingest.py ingest \
   --manifest /secure/path/technical-research-files-manifest.json \
   --run-id '<run-id>' \
@@ -272,7 +272,7 @@ AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 \
   --limit 25 \
   --confirm-production 'run:<run-id>'
 
-AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 \
+OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 \
   scripts/manage_files_bulk_ingest.py status --run-id '<run-id>'
 ```
 
@@ -284,14 +284,14 @@ cleanup worker가 5분 lease, bounded retry/backoff와 dead-letter로 object를 
 worker queue를 drain한 뒤 `verify-clean`을 실행한다.
 
 ```bash
-AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 \
+OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 \
   scripts/manage_files_bulk_ingest.py purge \
   --run-id '<run-id>' \
   --actor-login-id '<workspace-admin-login>' \
   --limit 100 \
   --confirm-production 'run:<run-id>'
 
-AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 \
+OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 \
   scripts/manage_files_bulk_ingest.py verify-clean --run-id '<run-id>'
 ```
 

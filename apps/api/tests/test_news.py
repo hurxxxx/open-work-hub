@@ -16,25 +16,25 @@ from sqlalchemy.orm import Session
 
 import importlib
 
-from ai_do_api.domains.industry_report import service as report_service
-from ai_do_api.domains.industry_report.models import (
+from open_alm_api.domains.industry_report import service as report_service
+from open_alm_api.domains.industry_report.models import (
     IndustryReportAiEvaluation,
     IndustryReportRecommended,
 )
-from ai_do_api.domains.news import config_data as cfg
-from ai_do_api.domains.news import ai_curator, crawler, service
-from ai_do_api.domains.news.models import (
+from open_alm_api.domains.news import config_data as cfg
+from open_alm_api.domains.news import ai_curator, crawler, service
+from open_alm_api.domains.news.models import (
     NewsArticle,
     NewsArticleScrap,
     NewsFilterSetting,
     NewsRecommendedArticle,
 )
-from ai_do_api.domains.news.schemas import NewsSnapshotRequest
+from open_alm_api.domains.news.schemas import NewsSnapshotRequest
 
 # Import the router module explicitly so API architecture rules stay focused on
 # the composition registry's router import.
-news_router = importlib.import_module("ai_do_api.domains.news.router")
-news_dispatch = importlib.import_module("ai_do_api.domains.news.dispatch")
+news_router = importlib.import_module("open_alm_api.domains.news.router")
+news_dispatch = importlib.import_module("open_alm_api.domains.news.dispatch")
 
 
 # ── Crawler / parser (offline) ───────────────────────────────

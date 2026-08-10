@@ -5,13 +5,13 @@ from types import SimpleNamespace
 import pytest
 from celery.exceptions import Ignore
 
-from ai_do_worker.queue_contract import (
+from open_alm_worker.queue_contract import (
     PATENT_PRIOR_ART_QUEUE,
     PATENT_PRIOR_ART_RECOVER_TASK_NAME,
     PATENT_PRIOR_ART_REPUBLISH_TASK_NAME,
     PATENT_PRIOR_ART_RUN_JOB_TASK_NAME,
 )
-from ai_do_worker.tasks.apps.patent_prior_art import task as task_module
+from open_alm_worker.tasks.apps.patent_prior_art import task as task_module
 
 
 class _Session:

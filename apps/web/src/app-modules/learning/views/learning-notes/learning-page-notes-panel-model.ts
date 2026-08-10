@@ -1,4 +1,4 @@
-import type { BlockContent } from '@ai-do/ui';
+import type { BlockContent } from '@open-alm/ui';
 
 import { formatRelativeTime } from '@/src/platform/time/time-utils';
 import { LearningNotesApiError } from '../../api/learning-notes-api';

@@ -2,16 +2,16 @@ from __future__ import annotations
 
 import pytest
 
-from ai_do_api.domains.legacy_issues.analysis_generated_sql import (
+from open_alm_api.domains.legacy_issues.analysis_generated_sql import (
     GeneratedSqlPolicyError,
     validate_generated_counting_unit,
     validate_generated_sql,
 )
-from ai_do_api.domains.legacy_issues.analysis_contracts import (
+from open_alm_api.domains.legacy_issues.analysis_contracts import (
     AnalysisCountingUnit,
     AnalysisDataSource,
 )
-from ai_do_api.domains.legacy_issues.analysis_sql_fallback import _messages
+from open_alm_api.domains.legacy_issues.analysis_sql_fallback import _messages
 
 
 ALLOWED_COLUMNS = frozenset(

@@ -11,7 +11,7 @@ import pytest
 from openpyxl import Workbook, load_workbook
 from openpyxl.comments import Comment
 
-from ai_do_api.domains.legacy_issues.excel_ole_package import (
+from open_alm_api.domains.legacy_issues.excel_ole_package import (
     OleAttachmentPlacement,
     _compound_file_header,
     _plan_compound_file,

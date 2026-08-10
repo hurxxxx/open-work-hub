@@ -3,16 +3,16 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from ai_do_api.core.db import get_session_factory
-from ai_do_api.domains.qna.constants import (
+from open_alm_api.core.db import get_session_factory
+from open_alm_api.domains.qna.constants import (
     QNA_KIND_NOTICE,
     QNA_NOTICE_CATEGORY,
     QNA_SCOPE_KIND,
 )
-from ai_do_api.domains.qna.models import QnaDocument
-from ai_do_api.domains.qna import service
-from ai_do_api.domains.rag.models import RagSyncJob
-from ai_do_api.domains.retrieval.models import (
+from open_alm_api.domains.qna.models import QnaDocument
+from open_alm_api.domains.qna import service
+from open_alm_api.domains.rag.models import RagSyncJob
+from open_alm_api.domains.retrieval.models import (
     RetrievalProjectionEvent,
     RetrievalProjectionHead,
 )

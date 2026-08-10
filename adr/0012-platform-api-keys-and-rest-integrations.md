@@ -5,7 +5,7 @@
 
 ## Context
 
-AI-DO의 기존 Bearer token은 로그인한 사용자의 `AuthSession`을 나타낸다. 외부 시스템이
+Open ALM의 기존 Bearer token은 로그인한 사용자의 `AuthSession`을 나타낸다. 외부 시스템이
 통합 인사정보 같은 회사 범위 데이터를 주기적으로 읽을 때 사람의 로그인 세션을 재사용하면
 세션 만료, 사용자 권한, 감사 주체가 기계 연계와 섞인다.
 
@@ -23,7 +23,7 @@ AI-DO의 기존 Bearer token은 로그인한 사용자의 `AuthSession`을 나�
 
 - 플랫폼 API 키는 회사 tenant 전체의 기계 호출자다. 현재 tenant는 배포·DB 경계로
   식별하므로 키 row에 `workspace_id`를 넣지 않는다.
-- 키 형식은 AI-DO가 발급한 opaque `aido_pk_...` 문자열이다.
+- 키 형식은 Open ALM가 발급한 opaque `aido_pk_...` 문자열이다.
 - DB에는 검증용 SHA-256 hash, 목록 표시용 prefix, 활성 키의 재조회용 암호문, 이름, scope
   집합, 생성·폐기 주체와 시각, 최근 사용 시각을 저장한다.
 - 원문 키와 관리자 비밀번호는 로그·감사 payload·일반 목록 응답에 저장하거나 반환하지

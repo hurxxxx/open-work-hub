@@ -1,0 +1,23 @@
+[Unit]
+Description=Open ALM Development Worker - Default Queues
+Wants=network-online.target open-alm-dev-app.service
+After=network-online.target open-alm-dev-app.service
+
+[Service]
+Type=simple
+WorkingDirectory=__OPEN_ALM_ROOT__/apps/worker
+Environment=PYTHONPATH=__OPEN_ALM_ROOT__/apps/worker/src
+Environment=OPEN_ALM_WORKER_QUEUE_GROUP=default
+Environment=OPEN_ALM_RUNTIME_REVISION=__OPEN_ALM_RUNTIME_REVISION__
+ExecStart=/usr/bin/env bash -lc 'source "__OPEN_ALM_ROOT__/scripts/dev-env.sh" && cd "__OPEN_ALM_ROOT__/apps/worker" && exec uv run --python 3.12 celery -A open_alm_worker.celery_app:celery_app worker --loglevel=info --hostname=open-alm-dev-worker-default@%H -Q __OPEN_ALM_WORKER_DEFAULT_QUEUE_NAMES__ --concurrency __OPEN_ALM_WORKER_DEFAULT_CONCURRENCY__ --prefetch-multiplier 1'
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0077
+Restart=always
+RestartSec=10
+TimeoutStartSec=300
+TimeoutStopSec=3900
+KillMode=mixed
+
+[Install]
+WantedBy=default.target

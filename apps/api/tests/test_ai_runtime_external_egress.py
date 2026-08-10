@@ -3,39 +3,39 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ai_do_api.core.settings import Settings
-from ai_do_api.domains.ai.router import _attach_external_egress_trace_metadata
-from ai_do_api.domains.ai.runtime.external_adapters import (
+from open_alm_api.core.settings import Settings
+from open_alm_api.domains.ai.router import _attach_external_egress_trace_metadata
+from open_alm_api.domains.ai.runtime.external_adapters import (
     register_external_planner_execution_adapter,
     register_external_search_execution_adapter,
     reset_external_execution_adapters,
 )
-from ai_do_api.domains.ai.runtime.external_egress import (
+from open_alm_api.domains.ai.runtime.external_egress import (
     allowed_external_providers,
     evaluate_external_egress,
     normalize_external_provider,
 )
-from ai_do_api.domains.ai.runtime.external_planner import (
+from open_alm_api.domains.ai.runtime.external_planner import (
     ExternalPlannerExecutionResult,
 )
-from ai_do_api.domains.ai.runtime.external_search import ExternalSearchExecutionResult
-from ai_do_api.domains.ai.runtime.routing import RuntimeRoutingDecision
+from open_alm_api.domains.ai.runtime.external_search import ExternalSearchExecutionResult
+from open_alm_api.domains.ai.runtime.routing import RuntimeRoutingDecision
 
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "ai_runtime"
 SETTING_ALIASES = {
-    "ai_external_llm_enabled": "AI_DO_AI_EXTERNAL_LLM_ENABLED",
-    "ai_external_planning_enabled": "AI_DO_AI_EXTERNAL_PLANNING_ENABLED",
-    "ai_external_reasoning_enabled": "AI_DO_AI_EXTERNAL_REASONING_ENABLED",
-    "ai_external_quality_review_enabled": "AI_DO_AI_EXTERNAL_QUALITY_REVIEW_ENABLED",
-    "ai_external_search_enabled": "AI_DO_AI_EXTERNAL_SEARCH_ENABLED",
-    "ai_external_planner_execution_enabled": "AI_DO_AI_EXTERNAL_PLANNER_EXECUTION_ENABLED",
-    "ai_external_planner_execution_adapter": "AI_DO_AI_EXTERNAL_PLANNER_EXECUTION_ADAPTER",
-    "ai_external_search_execution_enabled": "AI_DO_AI_EXTERNAL_SEARCH_EXECUTION_ENABLED",
-    "ai_external_search_execution_adapter": "AI_DO_AI_EXTERNAL_SEARCH_EXECUTION_ADAPTER",
-    "ai_allowed_external_providers": "AI_DO_AI_ALLOWED_EXTERNAL_PROVIDERS",
-    "ai_default_external_llm_provider": "AI_DO_AI_DEFAULT_EXTERNAL_LLM_PROVIDER",
-    "ai_default_external_search_provider": "AI_DO_AI_DEFAULT_EXTERNAL_SEARCH_PROVIDER",
+    "ai_external_llm_enabled": "OPEN_ALM_AI_EXTERNAL_LLM_ENABLED",
+    "ai_external_planning_enabled": "OPEN_ALM_AI_EXTERNAL_PLANNING_ENABLED",
+    "ai_external_reasoning_enabled": "OPEN_ALM_AI_EXTERNAL_REASONING_ENABLED",
+    "ai_external_quality_review_enabled": "OPEN_ALM_AI_EXTERNAL_QUALITY_REVIEW_ENABLED",
+    "ai_external_search_enabled": "OPEN_ALM_AI_EXTERNAL_SEARCH_ENABLED",
+    "ai_external_planner_execution_enabled": "OPEN_ALM_AI_EXTERNAL_PLANNER_EXECUTION_ENABLED",
+    "ai_external_planner_execution_adapter": "OPEN_ALM_AI_EXTERNAL_PLANNER_EXECUTION_ADAPTER",
+    "ai_external_search_execution_enabled": "OPEN_ALM_AI_EXTERNAL_SEARCH_EXECUTION_ENABLED",
+    "ai_external_search_execution_adapter": "OPEN_ALM_AI_EXTERNAL_SEARCH_EXECUTION_ADAPTER",
+    "ai_allowed_external_providers": "OPEN_ALM_AI_ALLOWED_EXTERNAL_PROVIDERS",
+    "ai_default_external_llm_provider": "OPEN_ALM_AI_DEFAULT_EXTERNAL_LLM_PROVIDER",
+    "ai_default_external_search_provider": "OPEN_ALM_AI_DEFAULT_EXTERNAL_SEARCH_PROVIDER",
 }
 
 
@@ -44,7 +44,7 @@ def _settings(**overrides):
         SETTING_ALIASES.get(key, key): value for key, value in overrides.items()
     }
     return Settings(
-        postgres_dsn="postgresql+psycopg://ai_do_test:ai_do_test@127.0.0.1:5432/ai_do_test",
+        postgres_dsn="postgresql+psycopg://open_alm_test:open_alm_test@127.0.0.1:5432/open_alm_test",
         **aliased_overrides,
     )
 

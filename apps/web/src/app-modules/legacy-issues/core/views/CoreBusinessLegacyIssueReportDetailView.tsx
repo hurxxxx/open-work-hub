@@ -1,4 +1,4 @@
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@ai-do/ui';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@open-alm/ui';
 import {
   ArrowLeft,
   Database,

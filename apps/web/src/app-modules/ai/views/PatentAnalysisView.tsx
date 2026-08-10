@@ -53,7 +53,7 @@ interface HistoryEntry {
 
 function historyStorageKey(workspaceSlug: string | null): string | null {
   return workspaceSlug
-    ? `ai-do.patent.analysis.history.${workspaceSlug}`
+    ? `open-alm.patent.analysis.history.${workspaceSlug}`
     : null;
 }
 
@@ -802,7 +802,7 @@ export function PatentAnalysisView() {
 // ── Shared pieces ─────────────────────────────────────────────────────────────
 // Draggable left/right split width — shared across all analysis tabs and
 // persisted so it survives tab switches and revisits.
-const LEFT_WIDTH_KEY = 'ai-do.patent.analysis.leftWidth';
+const LEFT_WIDTH_KEY = 'open-alm.patent.analysis.leftWidth';
 const LEFT_WIDTH_MIN = 220;
 const RIGHT_WIDTH_MIN = 280;
 

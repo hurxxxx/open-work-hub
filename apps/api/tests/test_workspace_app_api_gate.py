@@ -8,16 +8,16 @@ from sqlalchemy import select
 
 from dev_accounts import create_workspace_user_session, dev_login
 
-from ai_do_api.core.db import get_session_factory
-from ai_do_api.core.settings import get_settings
-from ai_do_api.domains.ai import router as ai_router
-from ai_do_api.domains.auth.models import (
+from open_alm_api.core.db import get_session_factory
+from open_alm_api.core.settings import get_settings
+from open_alm_api.domains.ai import router as ai_router
+from open_alm_api.domains.auth.models import (
     PlatformAppVisibility,
     Workspace,
     WorkspaceAppEntitlement,
 )
-from ai_do_api.domains.writing_assistant import router as writing_assistant_router
-from ai_do_api.domains.writing_assistant.schemas import WritingResult
+from open_alm_api.domains.writing_assistant import router as writing_assistant_router
+from open_alm_api.domains.writing_assistant.schemas import WritingResult
 
 
 @dataclass(frozen=True)
@@ -141,7 +141,7 @@ def test_management_health_checkup_requires_workspace_membership_and_activation(
         client,
         workspace_key="ai-tft",
         login_id="management-task-member",
-        email="management-task-member@ai-do.local",
+        email="management-task-member@open-alm.local",
         full_name="Management Task Member",
     )
     member_headers = {"Authorization": f"Bearer {member['token']}"}
@@ -248,7 +248,7 @@ def test_image_api_requires_enabled_image_wizard_app(
 ) -> None:
     headers = _auth_headers(client)
     path = "/api/v1/workspaces/ai-tft/images/generations"
-    monkeypatch.setenv("AI_DO_IMAGE_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_IMAGE_ENABLED", "1")
     get_settings.cache_clear()
 
     allowed = client.get(path, headers=headers)

@@ -24,7 +24,7 @@ vi.mock('@/src/platform/auth/auth-provider', () => ({
   useAuth: () => ({ token: 'token-1' }),
 }));
 
-vi.mock('@ai-do/ui', () => ({
+vi.mock('@open-alm/ui', () => ({
   useConfirm: () => ({
     confirm: vi.fn(),
     confirmDialog: null,

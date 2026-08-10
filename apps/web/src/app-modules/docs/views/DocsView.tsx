@@ -36,7 +36,7 @@ import {
   type BlockContent,
   useConfirm,
   usePrompt,
-} from '@ai-do/ui';
+} from '@open-alm/ui';
 import {
   DndContext,
   DragOverlay,
@@ -57,7 +57,7 @@ import {
 import {
   REALTIME_TOPIC_EVENT_TYPES,
   createDocsPagesRealtimeSubscriptionMessage,
-} from '@ai-do/contracts/realtime';
+} from '@open-alm/contracts/realtime';
 
 import { useMediaUpload } from '@/src/platform/media/use-media-upload';
 import { useAuth } from '@/src/platform/auth/auth-provider';

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from ai_do_api.domains.qna import source_access
+from open_alm_api.domains.qna import source_access
 
 
 def test_qna_source_access_fails_closed_when_platform_app_is_disabled(monkeypatch) -> None:

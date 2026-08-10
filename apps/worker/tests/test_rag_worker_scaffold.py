@@ -21,20 +21,20 @@ API_SRC = WORKSPACE_ROOT / "apps" / "api" / "src"
 if str(API_SRC) not in sys.path:
     sys.path.insert(0, str(API_SRC))
 
-from ai_do_api.core.db import Base  # noqa: E402
-from ai_do_api.core.telemetry import (
+from open_alm_api.core.db import Base  # noqa: E402
+from open_alm_api.core.telemetry import (
     bootstrap_telemetry,
     get_tracer_provider,
     start_as_current_span,
 )  # noqa: E402
-from ai_do_api.domains.auth.models import (  # noqa: E402
+from open_alm_api.domains.auth.models import (  # noqa: E402
     PlatformAppVisibility,
     Team,
     User,
     Workspace,
 )
-from ai_do_api.domains.qna.constants import QNA_DOCUMENT_RESOURCE_TYPE  # noqa: E402
-from ai_do_api.domains.docs.models import (  # noqa: E402
+from open_alm_api.domains.qna.constants import QNA_DOCUMENT_RESOURCE_TYPE  # noqa: E402
+from open_alm_api.domains.docs.models import (  # noqa: E402
     DocMeetingAccess,
     NativeDoc,
     NativeDocTarget,
@@ -42,20 +42,20 @@ from ai_do_api.domains.docs.models import (  # noqa: E402
     NativeDocPage,
     NativeDocUserShare,
 )
-from ai_do_api.domains.files import search_hooks as file_search_hooks  # noqa: E402
-from ai_do_api.domains.files import storage_adapter as file_storage  # noqa: E402
-from ai_do_api.domains.files.models import (  # noqa: E402
+from open_alm_api.domains.files import search_hooks as file_search_hooks  # noqa: E402
+from open_alm_api.domains.files import storage_adapter as file_storage  # noqa: E402
+from open_alm_api.domains.files.models import (  # noqa: E402
     FileManagerFile,
     FileManagerFileSourceMetadata,
 )
-from ai_do_api.domains.meeting.models import (  # noqa: E402
+from open_alm_api.domains.meeting.models import (  # noqa: E402
     Meeting,
     MeetingAttendee,
     MeetingDocLink,
     MeetingRecording,
     MeetingTaskLink,
 )
-from ai_do_api.domains.pms.models import (  # noqa: E402
+from open_alm_api.domains.pms.models import (  # noqa: E402
     Folder,
     Label,
     Milestone,
@@ -67,60 +67,60 @@ from ai_do_api.domains.pms.models import (  # noqa: E402
     TaskList,
     TaskUserAccess,
 )
-from ai_do_api.domains.planner.models import PlannerEvent  # noqa: E402
-from ai_do_api.domains.rag.contracts import (  # noqa: E402
+from open_alm_api.domains.planner.models import PlannerEvent  # noqa: E402
+from open_alm_api.domains.rag.contracts import (  # noqa: E402
     RagJobStatus,
     RagProjection,
     RagSyncLane,
     RagSyncOperation,
 )
-from ai_do_api.domains.rag.docs_projection import NATIVE_DOC_RESOURCE_TYPE  # noqa: E402
-from ai_do_api.domains.rag.meeting_projection import MEETING_RESOURCE_TYPE  # noqa: E402
-from ai_do_api.domains.rag.pms_projection import PMS_TASK_RESOURCE_TYPE  # noqa: E402
-from ai_do_api.domains.rag.providers import (  # noqa: E402
+from open_alm_api.domains.rag.docs_projection import NATIVE_DOC_RESOURCE_TYPE  # noqa: E402
+from open_alm_api.domains.rag.meeting_projection import MEETING_RESOURCE_TYPE  # noqa: E402
+from open_alm_api.domains.rag.pms_projection import PMS_TASK_RESOURCE_TYPE  # noqa: E402
+from open_alm_api.domains.rag.providers import (  # noqa: E402
     RagProviderConfigurationError,
     RagProviderTransientError,
 )
-from ai_do_api.domains.rag.models import RagSyncJob, RagVisibilityRecomputeJob  # noqa: E402
-from ai_do_api.domains.rag.outbox import (  # noqa: E402
+from open_alm_api.domains.rag.models import RagSyncJob, RagVisibilityRecomputeJob  # noqa: E402
+from open_alm_api.domains.rag.outbox import (  # noqa: E402
     enqueue_rag_sync_job,
     enqueue_rag_visibility_recompute_job,
 )
-from ai_do_api.domains.retrieval.models import (  # noqa: E402
+from open_alm_api.domains.retrieval.models import (  # noqa: E402
     RetrievalPartition,
     RetrievalProjectionEvent,
     RetrievalProjectionHead,
 )
-from ai_do_api.domains.retrieval.projection_fencing import (  # noqa: E402
+from open_alm_api.domains.retrieval.projection_fencing import (  # noqa: E402
     ProjectionEventRef,
     record_projection_event,
 )
-from ai_do_api.domains.retrieval.partition_adapter_registry import (  # noqa: E402
+from open_alm_api.domains.retrieval.partition_adapter_registry import (  # noqa: E402
     RetrievalProjectionBinding,
     register_retrieval_partition_adapter,
     reset_retrieval_partition_adapters,
 )
-from ai_do_api.domains.rag.source_adapter_registry import (  # noqa: E402
+from open_alm_api.domains.rag.source_adapter_registry import (  # noqa: E402
     RagResourceAdapter,
     RagVisibilityScopeAdapter,
     register_rag_resource_adapter,
     register_rag_visibility_scope_adapter,
     reset_rag_source_adapters,
 )
-from ai_do_api.domains.source_access.registry import (  # noqa: E402
+from open_alm_api.domains.source_access.registry import (  # noqa: E402
     register_source_access_adapter,
     reset_source_access_adapters,
 )
-from ai_do_api.domains.source_access.resource_types import (  # noqa: E402
+from open_alm_api.domains.source_access.resource_types import (  # noqa: E402
     FILE_MANAGER_FILE_RESOURCE_TYPE,
     PLANNER_EVENT_RESOURCE_TYPE,
 )
-from ai_do_api.domains.search.models import SearchIndexJob  # noqa: E402
-from ai_do_api.domains.pms.rag_sync import (  # noqa: E402
+from open_alm_api.domains.search.models import SearchIndexJob  # noqa: E402
+from open_alm_api.domains.pms.rag_sync import (  # noqa: E402
     PMS_LABEL_RECOMPUTE_SCOPE,
     PMS_MEETING_VISIBILITY_SCOPE,
 )
-from ai_do_worker.queue_contract import (  # noqa: E402
+from open_alm_worker.queue_contract import (  # noqa: E402
     DEFAULT_QUEUE,
     ERP_HR_SNAPSHOT_QUEUE,
     ERP_HR_SNAPSHOT_TASK_NAME,
@@ -193,18 +193,18 @@ def _init_worker_db(
 
 def _reload_worker_module(module_name: str):
     for cached_name in list(sys.modules):
-        if cached_name == "ai_do_worker" or cached_name.startswith("ai_do_worker."):
+        if cached_name == "open_alm_worker" or cached_name.startswith("open_alm_worker."):
             sys.modules.pop(cached_name, None)
     return importlib.import_module(module_name)
 
 
 @pytest.fixture(autouse=True)
 def _default_worker_rag_disabled(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("AI_DO_RAG_ENABLED", "0")
-    monkeypatch.setenv("AI_DO_RAG_VECTOR_INDEX_PROVIDER", "fake")
-    monkeypatch.setenv("AI_DO_RAG_EMBEDDING_PROVIDER", "fake")
-    monkeypatch.setenv("AI_DO_RAG_RERANK_PROVIDER", "fake")
-    monkeypatch.setenv("AI_DO_RAG_OCR_PROVIDER", "fake")
+    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "0")
+    monkeypatch.setenv("OPEN_ALM_RAG_VECTOR_INDEX_PROVIDER", "fake")
+    monkeypatch.setenv("OPEN_ALM_RAG_EMBEDDING_PROVIDER", "fake")
+    monkeypatch.setenv("OPEN_ALM_RAG_RERANK_PROVIDER", "fake")
+    monkeypatch.setenv("OPEN_ALM_RAG_OCR_PROVIDER", "fake")
     reset_rag_source_adapters()
     reset_source_access_adapters()
     reset_retrieval_partition_adapters()
@@ -338,53 +338,53 @@ def test_worker_queue_contract_drives_dev_and_prod_worker_surfaces() -> None:
 
     project = json.loads((WORKSPACE_ROOT / "apps/worker/project.json").read_text())
     worker_command = project["targets"]["dev"]["options"]["commands"][0]
-    assert "ai_do_worker.queue_contract --celery-queues" in worker_command
+    assert "open_alm_worker.queue_contract --celery-queues" in worker_command
     assert celery_worker_queue_argument() not in worker_command
 
     default_template = (
-        WORKSPACE_ROOT / "ops/systemd/user/ai-do-prod-worker.service.template"
+        WORKSPACE_ROOT / "ops/systemd/user/open-alm-prod-worker.service.template"
     ).read_text()
     realtime_template = (
-        WORKSPACE_ROOT / "ops/systemd/user/ai-do-prod-worker-realtime.service.template"
+        WORKSPACE_ROOT / "ops/systemd/user/open-alm-prod-worker-realtime.service.template"
     ).read_text()
     long_template = (
-        WORKSPACE_ROOT / "ops/systemd/user/ai-do-prod-worker-long.service.template"
+        WORKSPACE_ROOT / "ops/systemd/user/open-alm-prod-worker-long.service.template"
     ).read_text()
     ai_graph_template = (
-        WORKSPACE_ROOT / "ops/systemd/user/ai-do-prod-worker-ai-graph.service.template"
+        WORKSPACE_ROOT / "ops/systemd/user/open-alm-prod-worker-ai-graph.service.template"
     ).read_text()
     ppt_template = (
-        WORKSPACE_ROOT / "ops/systemd/user/ai-do-prod-worker-ppt.service.template"
+        WORKSPACE_ROOT / "ops/systemd/user/open-alm-prod-worker-ppt.service.template"
     ).read_text()
     patent_template = (
-        WORKSPACE_ROOT / "ops/systemd/user/ai-do-prod-worker-patent.service.template"
+        WORKSPACE_ROOT / "ops/systemd/user/open-alm-prod-worker-patent.service.template"
     ).read_text()
     beat_template = (
-        WORKSPACE_ROOT / "ops/systemd/user/ai-do-prod-worker-beat.service.template"
+        WORKSPACE_ROOT / "ops/systemd/user/open-alm-prod-worker-beat.service.template"
     ).read_text()
     prod_systemd_script = (WORKSPACE_ROOT / "scripts/prod-systemd.sh").read_text()
-    assert "__AI_DO_WORKER_DEFAULT_QUEUE_NAMES__" in default_template
-    assert "__AI_DO_WORKER_REALTIME_QUEUE_NAMES__" in realtime_template
-    assert "__AI_DO_WORKER_LONG_QUEUE_NAMES__" in long_template
-    assert "__AI_DO_WORKER_AI_GRAPH_QUEUE_NAMES__" in ai_graph_template
-    assert "__AI_DO_WORKER_PPT_QUEUE_NAMES__" in ppt_template
-    assert "__AI_DO_WORKER_PATENT_QUEUE_NAMES__" in patent_template
-    assert "Environment=AI_DO_WORKER_QUEUE_GROUP=default" in default_template
-    assert "Environment=AI_DO_WORKER_QUEUE_GROUP=realtime" in realtime_template
-    assert "Environment=AI_DO_WORKER_QUEUE_GROUP=long" in long_template
-    assert "Environment=AI_DO_WORKER_QUEUE_GROUP=ai_graph" in ai_graph_template
-    assert "Environment=AI_DO_WORKER_QUEUE_GROUP=ppt" in ppt_template
-    assert "Environment=AI_DO_WORKER_QUEUE_GROUP=patent" in patent_template
-    assert "Environment=AI_DO_WORKER_QUEUE_GROUP=beat" in beat_template
+    assert "__OPEN_ALM_WORKER_DEFAULT_QUEUE_NAMES__" in default_template
+    assert "__OPEN_ALM_WORKER_REALTIME_QUEUE_NAMES__" in realtime_template
+    assert "__OPEN_ALM_WORKER_LONG_QUEUE_NAMES__" in long_template
+    assert "__OPEN_ALM_WORKER_AI_GRAPH_QUEUE_NAMES__" in ai_graph_template
+    assert "__OPEN_ALM_WORKER_PPT_QUEUE_NAMES__" in ppt_template
+    assert "__OPEN_ALM_WORKER_PATENT_QUEUE_NAMES__" in patent_template
+    assert "Environment=OPEN_ALM_WORKER_QUEUE_GROUP=default" in default_template
+    assert "Environment=OPEN_ALM_WORKER_QUEUE_GROUP=realtime" in realtime_template
+    assert "Environment=OPEN_ALM_WORKER_QUEUE_GROUP=long" in long_template
+    assert "Environment=OPEN_ALM_WORKER_QUEUE_GROUP=ai_graph" in ai_graph_template
+    assert "Environment=OPEN_ALM_WORKER_QUEUE_GROUP=ppt" in ppt_template
+    assert "Environment=OPEN_ALM_WORKER_QUEUE_GROUP=patent" in patent_template
+    assert "Environment=OPEN_ALM_WORKER_QUEUE_GROUP=beat" in beat_template
     assert "TimeoutStopSec=3900" in default_template
     assert "TimeoutStopSec=3900" in realtime_template
     assert "TimeoutStopSec=3900" in long_template
     assert "TimeoutStopSec=3900" in ppt_template
     assert "TimeoutStopSec=3900" in patent_template
-    assert "--hostname=ai-do-prod-worker-patent@" in patent_template
-    assert "--concurrency __AI_DO_WORKER_PATENT_CONCURRENCY__" in patent_template
+    assert "--hostname=open-alm-prod-worker-patent@" in patent_template
+    assert "--concurrency __OPEN_ALM_WORKER_PATENT_CONCURRENCY__" in patent_template
     assert (
-        "ExecStartPre=__AI_DO_ROOT__/apps/worker/.venv/bin/python -m ai_do_worker.ppt_browser_smoke"
+        "ExecStartPre=__OPEN_ALM_ROOT__/apps/worker/.venv/bin/python -m open_alm_worker.ppt_browser_smoke"
         in ppt_template
     )
     assert "KillMode=mixed" in default_template
@@ -394,64 +394,64 @@ def test_worker_queue_contract_drives_dev_and_prod_worker_surfaces() -> None:
     assert "KillMode=mixed" in ppt_template
     assert "KillMode=mixed" in patent_template
     assert "celery_worker_queue_argument" in prod_systemd_script
-    assert "ai-do-prod-worker-realtime.service" in prod_systemd_script
-    assert "ai-do-prod-worker-long.service" in prod_systemd_script
-    assert "ai-do-prod-worker-ai-graph.service" in prod_systemd_script
-    assert "ai-do-prod-worker-ppt.service" in prod_systemd_script
-    assert "ai-do-prod-worker-patent.service" in prod_systemd_script
+    assert "open-alm-prod-worker-realtime.service" in prod_systemd_script
+    assert "open-alm-prod-worker-long.service" in prod_systemd_script
+    assert "open-alm-prod-worker-ai-graph.service" in prod_systemd_script
+    assert "open-alm-prod-worker-ppt.service" in prod_systemd_script
+    assert "open-alm-prod-worker-patent.service" in prod_systemd_script
 
     dev_default_template = (
-        WORKSPACE_ROOT / "ops/systemd/user/ai-do-dev-worker.service.template"
+        WORKSPACE_ROOT / "ops/systemd/user/open-alm-dev-worker.service.template"
     ).read_text()
     dev_realtime_template = (
-        WORKSPACE_ROOT / "ops/systemd/user/ai-do-dev-worker-realtime.service.template"
+        WORKSPACE_ROOT / "ops/systemd/user/open-alm-dev-worker-realtime.service.template"
     ).read_text()
     dev_ppt_template = (
-        WORKSPACE_ROOT / "ops/systemd/user/ai-do-dev-worker-ppt.service.template"
+        WORKSPACE_ROOT / "ops/systemd/user/open-alm-dev-worker-ppt.service.template"
     ).read_text()
     dev_patent_template = (
-        WORKSPACE_ROOT / "ops/systemd/user/ai-do-dev-worker-patent.service.template"
+        WORKSPACE_ROOT / "ops/systemd/user/open-alm-dev-worker-patent.service.template"
     ).read_text()
     dev_ai_graph_template = (
-        WORKSPACE_ROOT / "ops/systemd/user/ai-do-dev-worker-ai-graph.service.template"
+        WORKSPACE_ROOT / "ops/systemd/user/open-alm-dev-worker-ai-graph.service.template"
     ).read_text()
     dev_beat_template = (
-        WORKSPACE_ROOT / "ops/systemd/user/ai-do-dev-worker-beat.service.template"
+        WORKSPACE_ROOT / "ops/systemd/user/open-alm-dev-worker-beat.service.template"
     ).read_text()
-    assert "__AI_DO_WORKER_DEFAULT_QUEUE_NAMES__" in dev_default_template
-    assert "Environment=AI_DO_WORKER_QUEUE_GROUP=default" in dev_default_template
-    assert "__AI_DO_WORKER_REALTIME_QUEUE_NAMES__" in dev_realtime_template
-    assert "Environment=AI_DO_WORKER_QUEUE_GROUP=realtime" in dev_realtime_template
-    assert "__AI_DO_WORKER_PPT_QUEUE_NAMES__" in dev_ppt_template
-    assert "__AI_DO_WORKER_PATENT_QUEUE_NAMES__" in dev_patent_template
-    assert "__AI_DO_WORKER_AI_GRAPH_QUEUE_NAMES__" in dev_ai_graph_template
-    assert "Environment=AI_DO_WORKER_QUEUE_GROUP=ai_graph" in dev_ai_graph_template
-    assert "Environment=AI_DO_WORKER_QUEUE_GROUP=ppt" in dev_ppt_template
-    assert "Environment=AI_DO_WORKER_QUEUE_GROUP=patent" in dev_patent_template
-    assert "--hostname=ai-do-dev-worker-ppt@" in dev_ppt_template
-    assert "--hostname=ai-do-dev-worker-patent@" in dev_patent_template
-    assert "--concurrency __AI_DO_WORKER_PATENT_CONCURRENCY__" in dev_patent_template
-    assert "python -m ai_do_worker.ppt_browser_smoke" in dev_ppt_template
+    assert "__OPEN_ALM_WORKER_DEFAULT_QUEUE_NAMES__" in dev_default_template
+    assert "Environment=OPEN_ALM_WORKER_QUEUE_GROUP=default" in dev_default_template
+    assert "__OPEN_ALM_WORKER_REALTIME_QUEUE_NAMES__" in dev_realtime_template
+    assert "Environment=OPEN_ALM_WORKER_QUEUE_GROUP=realtime" in dev_realtime_template
+    assert "__OPEN_ALM_WORKER_PPT_QUEUE_NAMES__" in dev_ppt_template
+    assert "__OPEN_ALM_WORKER_PATENT_QUEUE_NAMES__" in dev_patent_template
+    assert "__OPEN_ALM_WORKER_AI_GRAPH_QUEUE_NAMES__" in dev_ai_graph_template
+    assert "Environment=OPEN_ALM_WORKER_QUEUE_GROUP=ai_graph" in dev_ai_graph_template
+    assert "Environment=OPEN_ALM_WORKER_QUEUE_GROUP=ppt" in dev_ppt_template
+    assert "Environment=OPEN_ALM_WORKER_QUEUE_GROUP=patent" in dev_patent_template
+    assert "--hostname=open-alm-dev-worker-ppt@" in dev_ppt_template
+    assert "--hostname=open-alm-dev-worker-patent@" in dev_patent_template
+    assert "--concurrency __OPEN_ALM_WORKER_PATENT_CONCURRENCY__" in dev_patent_template
+    assert "python -m open_alm_worker.ppt_browser_smoke" in dev_ppt_template
     assert "KillMode=mixed" in dev_ppt_template
     assert "KillMode=mixed" in dev_patent_template
-    assert "Environment=AI_DO_WORKER_QUEUE_GROUP=beat" in dev_beat_template
+    assert "Environment=OPEN_ALM_WORKER_QUEUE_GROUP=beat" in dev_beat_template
     assert "celerybeat-schedule.db" in dev_beat_template
     dev_systemd_script = (WORKSPACE_ROOT / "scripts/dev-systemd.sh").read_text()
-    assert "ai-do-dev-worker.service" in dev_systemd_script
-    assert "ai-do-dev-worker-realtime.service" in dev_systemd_script
-    assert "ai-do-dev-worker-ai-graph.service" in dev_systemd_script
-    assert "ai-do-dev-worker-ppt.service" in dev_systemd_script
-    assert "ai-do-dev-worker-patent.service" in dev_systemd_script
-    assert "ai-do-dev-worker-beat.service" in dev_systemd_script
-    assert "__AI_DO_WORKER_DEFAULT_QUEUE_NAMES__" in dev_systemd_script
-    assert "__AI_DO_WORKER_REALTIME_QUEUE_NAMES__" in dev_systemd_script
-    assert "__AI_DO_WORKER_AI_GRAPH_QUEUE_NAMES__" in dev_systemd_script
-    assert "__AI_DO_WORKER_PPT_QUEUE_NAMES__" in dev_systemd_script
-    assert "__AI_DO_WORKER_PATENT_QUEUE_NAMES__" in dev_systemd_script
+    assert "open-alm-dev-worker.service" in dev_systemd_script
+    assert "open-alm-dev-worker-realtime.service" in dev_systemd_script
+    assert "open-alm-dev-worker-ai-graph.service" in dev_systemd_script
+    assert "open-alm-dev-worker-ppt.service" in dev_systemd_script
+    assert "open-alm-dev-worker-patent.service" in dev_systemd_script
+    assert "open-alm-dev-worker-beat.service" in dev_systemd_script
+    assert "__OPEN_ALM_WORKER_DEFAULT_QUEUE_NAMES__" in dev_systemd_script
+    assert "__OPEN_ALM_WORKER_REALTIME_QUEUE_NAMES__" in dev_systemd_script
+    assert "__OPEN_ALM_WORKER_AI_GRAPH_QUEUE_NAMES__" in dev_systemd_script
+    assert "__OPEN_ALM_WORKER_PPT_QUEUE_NAMES__" in dev_systemd_script
+    assert "__OPEN_ALM_WORKER_PATENT_QUEUE_NAMES__" in dev_systemd_script
 
 
 def test_server_managed_patent_queue_rejects_general_or_unmanaged_workers() -> None:
-    managed_dev_root = Path("/projects/ai-do/dev")
+    managed_dev_root = Path("/projects/open-alm/dev")
 
     with pytest.raises(RuntimeError, match="dedicated patent worker"):
         assert_worker_queue_access(
@@ -492,10 +492,10 @@ def test_celery_routes_rag_tasks_to_dedicated_queues(
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
 
-    celery_module = _reload_worker_module("ai_do_worker.celery_app")
+    celery_module = _reload_worker_module("open_alm_worker.celery_app")
     routes = celery_module.celery_app.conf.task_routes
 
     assert routes == celery_task_routes()
@@ -533,7 +533,7 @@ def test_celery_routes_rag_tasks_to_dedicated_queues(
         assert entry["options"]["queue"] == routes[task_name]["queue"]
     assert beat["republish-pending-rag-jobs"]["task"] == "rag.republish_pending_jobs"
     patent_recovery_available = (
-        importlib.util.find_spec("ai_do_worker.tasks.apps.patent_prior_art.task") is not None
+        importlib.util.find_spec("open_alm_worker.tasks.apps.patent_prior_art.task") is not None
     )
     assert ("recover-patent-prior-art-jobs" in beat) is patent_recovery_available
     if patent_recovery_available:
@@ -587,7 +587,7 @@ def test_rag_republisher_publishes_due_pending_jobs(
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -700,7 +700,7 @@ def test_rag_republisher_publishes_due_pending_jobs(
             assert immutable is True
             return _FakeSignature(task_name, args)
 
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     monkeypatch.setattr(tasks_module, "celery_app", _FakeCeleryApp())
 
     assert tasks_module.republish_pending_rag_jobs.run(limit=10) == 4
@@ -734,8 +734,8 @@ def test_sync_resource_worker_span_inherits_outbox_trace_context(
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -746,7 +746,7 @@ def test_sync_resource_worker_span_inherits_outbox_trace_context(
         ],
     )
 
-    bootstrap_telemetry(service_name="ai-do-worker-test")
+    bootstrap_telemetry(service_name="open-alm-worker-test")
     exporter = InMemorySpanExporter()
     provider = get_tracer_provider()
     assert provider is not None
@@ -776,7 +776,7 @@ def test_sync_resource_worker_span_inherits_outbox_trace_context(
                 )
                 job_id = job.id
 
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     result = tasks_module.sync_resource.run(job_id)
 
     assert result == "disabled"
@@ -805,8 +805,8 @@ def test_platform_disabled_qna_rag_job_stays_pending_before_provider_io(
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "1")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -839,7 +839,7 @@ def test_platform_disabled_qna_rag_job_stays_pending_before_provider_io(
         )
         session.commit()
 
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     original_process_sync_job = tasks_module._process_sync_job
 
     def fail_provider_io(*_args, **_kwargs):
@@ -881,9 +881,9 @@ def test_sync_resource_worker_marks_legacy_unsupported_resource_failed(
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "1")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -918,7 +918,7 @@ def test_sync_resource_worker_marks_legacy_unsupported_resource_failed(
             session.add(job)
             job_id = job.id
 
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     assert tasks_module.sync_resource.run(job_id) == "unsupported_resource_type"
 
     with Session(engine) as session:
@@ -939,8 +939,8 @@ def test_recompute_visibility_worker_marks_terminal_statuses(
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -973,7 +973,7 @@ def test_recompute_visibility_worker_marks_terminal_statuses(
             session.add(disabled_job)
             disabled_job_id = disabled_job.id
 
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     assert tasks_module.recompute_visibility.run(disabled_job_id) == "disabled"
 
     with Session(engine) as session:
@@ -996,8 +996,8 @@ def test_recompute_visibility_worker_marks_terminal_statuses(
             session.add(enabled_job)
             enabled_job_id = enabled_job.id
 
-    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "1")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     assert tasks_module.recompute_visibility.run(enabled_job_id) == "unsupported_scope_type"
 
     with Session(engine) as session:
@@ -1018,10 +1018,10 @@ def test_sync_resource_worker_ignores_already_closed_job(
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
-    monkeypatch.setenv("AI_DO_RAG_QDRANT_COLLECTION_PREFIX", "worker-rag-test")
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_RAG_QDRANT_COLLECTION_PREFIX", "worker-rag-test")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -1054,7 +1054,7 @@ def test_sync_resource_worker_ignores_already_closed_job(
                 User(
                     id="user-1",
                     login_id="user-1",
-                    email="worker-doc-owner@ai-do.local",
+                    email="worker-doc-owner@open-alm.local",
                     full_name="Worker Doc Owner",
                     password_hash="hash",
                     status="active",
@@ -1090,7 +1090,7 @@ def test_sync_resource_worker_ignores_already_closed_job(
             )
             job_id = job.id
 
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     assert tasks_module.sync_resource.run(job_id) == "succeeded"
     assert tasks_module.sync_resource.run(job_id) == "ignored"
 
@@ -1104,8 +1104,8 @@ def test_sync_resource_worker_ignores_already_closed_job(
 def test_sync_resource_worker_loads_projection_through_registered_resource_adapter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("AI_DO_WORKER_QUEUE_GROUP", "default")
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    monkeypatch.setenv("OPEN_ALM_WORKER_QUEUE_GROUP", "default")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     calls: list[tuple[str, str]] = []
     reset_rag_source_adapters()
     try:
@@ -1134,7 +1134,7 @@ def test_sync_resource_worker_loads_projection_through_registered_resource_adapt
 def test_rag_worker_routes_files_only_to_the_active_partitioned_collection(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     settings = SimpleNamespace(files_retrieval_enabled=True)
     pair = SimpleNamespace(qdrant_physical_name="files-v1-release")
     expected_providers = object()
@@ -1188,7 +1188,7 @@ def test_rag_worker_routes_files_only_to_the_active_partitioned_collection(
 def test_rag_worker_keeps_non_file_jobs_on_the_legacy_collection(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     expected_service = object()
     monkeypatch.setattr(tasks_module, "_rag_service", lambda: expected_service)
     monkeypatch.setattr(tasks_module, "collection_name", lambda: "legacy-collection")
@@ -1212,7 +1212,7 @@ def test_rag_worker_keeps_non_file_jobs_on_the_legacy_collection(
 def test_rag_worker_fails_closed_when_files_operator_gate_is_disabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     monkeypatch.setattr(
         tasks_module,
         "get_settings",
@@ -1300,11 +1300,11 @@ def test_rag_worker_pauses_files_job_without_consuming_retry_budget_when_gate_is
         )
         session.commit()
 
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
-    monkeypatch.setenv("AI_DO_FILES_RETRIEVAL_ENABLED", "0")
-    monkeypatch.setenv("AI_DO_RAG_JOB_MAX_ATTEMPTS", "3")
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_FILES_RETRIEVAL_ENABLED", "0")
+    monkeypatch.setenv("OPEN_ALM_RAG_JOB_MAX_ATTEMPTS", "3")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     monkeypatch.setattr(
         tasks_module.sync_resource,
         "retry",
@@ -1326,7 +1326,7 @@ def test_rag_worker_pauses_files_job_without_consuming_retry_budget_when_gate_is
 def test_rag_worker_rejects_unfenced_file_job_before_backend_resolution(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     monkeypatch.setattr(
         tasks_module,
         "get_settings",
@@ -1359,8 +1359,8 @@ def test_rag_worker_rejects_unfenced_file_job_before_backend_resolution(
 def test_sync_resource_worker_rejects_mismatched_projection_identity(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("AI_DO_WORKER_QUEUE_GROUP", "default")
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    monkeypatch.setenv("OPEN_ALM_WORKER_QUEUE_GROUP", "default")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
 
     class _FakeRagService:
         def sync_projection(self, projection, *, collection):
@@ -1408,8 +1408,8 @@ def test_sync_resource_worker_rejects_mismatched_projection_identity(
 def test_sync_resource_worker_enriches_versioned_projection_with_job_fence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("AI_DO_WORKER_QUEUE_GROUP", "default")
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    monkeypatch.setenv("OPEN_ALM_WORKER_QUEUE_GROUP", "default")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     partition_id = "11111111-1111-1111-1111-111111111111"
     source_projection = RagProjection(
         workspace_id="ws-1",
@@ -1464,8 +1464,8 @@ def test_sync_resource_worker_enriches_versioned_projection_with_job_fence(
 def test_sync_resource_commits_prepared_projection_before_vector_sync(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("AI_DO_WORKER_QUEUE_GROUP", "default")
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    monkeypatch.setenv("OPEN_ALM_WORKER_QUEUE_GROUP", "default")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     calls: list[str] = []
     projection = RagProjection(
         workspace_id="ws-1",
@@ -1516,8 +1516,8 @@ def test_sync_resource_commits_prepared_projection_before_vector_sync(
 def test_sync_resource_stops_before_embedding_when_prepared_event_advances_head(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("AI_DO_WORKER_QUEUE_GROUP", "default")
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    monkeypatch.setenv("OPEN_ALM_WORKER_QUEUE_GROUP", "default")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     calls: list[str] = []
     partition_id = "7eb7f076-a8a8-40f1-8153-4f692124bc4e"
     projection = RagProjection(
@@ -1593,8 +1593,8 @@ def test_sync_resource_stops_before_embedding_when_prepared_event_advances_head(
 def test_recompute_visibility_worker_queues_through_registered_scope_adapter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("AI_DO_WORKER_QUEUE_GROUP", "default")
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    monkeypatch.setenv("OPEN_ALM_WORKER_QUEUE_GROUP", "default")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     enqueued: list[dict[str, object]] = []
     reset_rag_source_adapters()
     try:
@@ -1645,8 +1645,8 @@ def test_recompute_visibility_worker_ignores_already_closed_job(
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -1679,7 +1679,7 @@ def test_recompute_visibility_worker_ignores_already_closed_job(
             session.add(job)
             job_id = job.id
 
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     assert tasks_module.recompute_visibility.run(job_id) == "disabled"
     assert tasks_module.recompute_visibility.run(job_id) == "ignored"
 
@@ -1700,9 +1700,9 @@ def test_recompute_visibility_worker_queues_docs_sync_jobs_for_meeting_scope(
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "1")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -1735,7 +1735,7 @@ def test_recompute_visibility_worker_queues_docs_sync_jobs_for_meeting_scope(
                     User(
                         id="user-1",
                         login_id="user-1",
-                        email="worker-doc-owner@ai-do.local",
+                        email="worker-doc-owner@open-alm.local",
                         full_name="Worker Doc Owner",
                         password_hash="hash",
                         status="active",
@@ -1743,7 +1743,7 @@ def test_recompute_visibility_worker_queues_docs_sync_jobs_for_meeting_scope(
                     User(
                         id="user-2",
                         login_id="user-2",
-                        email="worker-attendee@ai-do.local",
+                        email="worker-attendee@open-alm.local",
                         full_name="Worker Attendee",
                         password_hash="hash",
                         status="active",
@@ -1802,7 +1802,7 @@ def test_recompute_visibility_worker_queues_docs_sync_jobs_for_meeting_scope(
             )
             visibility_job_id = visibility_job.id
 
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     assert tasks_module.recompute_visibility.run(visibility_job_id) == "queued"
 
     with Session(engine) as session:
@@ -1832,9 +1832,9 @@ def test_recompute_visibility_worker_uses_cursor_doc_ids_when_meeting_is_missing
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "1")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -1866,7 +1866,7 @@ def test_recompute_visibility_worker_uses_cursor_doc_ids_when_meeting_is_missing
                 User(
                     id="user-1",
                     login_id="user-1",
-                    email="worker-doc-owner@ai-do.local",
+                    email="worker-doc-owner@open-alm.local",
                     full_name="Worker Doc Owner",
                     password_hash="hash",
                     status="active",
@@ -1892,7 +1892,7 @@ def test_recompute_visibility_worker_uses_cursor_doc_ids_when_meeting_is_missing
             )
             visibility_job_id = visibility_job.id
 
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     assert tasks_module.recompute_visibility.run(visibility_job_id) == "queued"
 
     with Session(engine) as session:
@@ -1918,9 +1918,9 @@ def test_recompute_visibility_worker_queues_pms_visibility_updates_for_meeting_s
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "1")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -1956,7 +1956,7 @@ def test_recompute_visibility_worker_queues_pms_visibility_updates_for_meeting_s
                     User(
                         id="user-1",
                         login_id="user-1",
-                        email="worker-owner@ai-do.local",
+                        email="worker-owner@open-alm.local",
                         full_name="Worker Owner",
                         password_hash="hash",
                         status="active",
@@ -1964,7 +1964,7 @@ def test_recompute_visibility_worker_queues_pms_visibility_updates_for_meeting_s
                     User(
                         id="user-2",
                         login_id="user-2",
-                        email="worker-reader@ai-do.local",
+                        email="worker-reader@open-alm.local",
                         full_name="Worker Reader",
                         password_hash="hash",
                         status="active",
@@ -2072,7 +2072,7 @@ def test_recompute_visibility_worker_queues_pms_visibility_updates_for_meeting_s
             )
             visibility_job_id = visibility_job.id
 
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     assert tasks_module.recompute_visibility.run(visibility_job_id) == "queued"
 
     with Session(engine) as session:
@@ -2098,9 +2098,9 @@ def test_recompute_visibility_worker_uses_cursor_issue_ids_when_pms_meeting_is_m
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "1")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -2135,7 +2135,7 @@ def test_recompute_visibility_worker_uses_cursor_issue_ids_when_pms_meeting_is_m
                 User(
                     id="user-1",
                     login_id="user-1",
-                    email="worker-owner@ai-do.local",
+                    email="worker-owner@open-alm.local",
                     full_name="Worker Owner",
                     password_hash="hash",
                     status="active",
@@ -2187,7 +2187,7 @@ def test_recompute_visibility_worker_uses_cursor_issue_ids_when_pms_meeting_is_m
             )
             visibility_job_id = visibility_job.id
 
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     assert tasks_module.recompute_visibility.run(visibility_job_id) == "queued"
 
     with Session(engine) as session:
@@ -2213,9 +2213,9 @@ def test_recompute_visibility_worker_uses_cursor_issue_ids_for_deleted_pms_label
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "1")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -2249,7 +2249,7 @@ def test_recompute_visibility_worker_uses_cursor_issue_ids_for_deleted_pms_label
                 User(
                     id="user-1",
                     login_id="user-1",
-                    email="worker-owner@ai-do.local",
+                    email="worker-owner@open-alm.local",
                     full_name="Worker Owner",
                     password_hash="hash",
                     status="active",
@@ -2301,7 +2301,7 @@ def test_recompute_visibility_worker_uses_cursor_issue_ids_for_deleted_pms_label
             )
             visibility_job_id = visibility_job.id
 
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     assert tasks_module.recompute_visibility.run(visibility_job_id) == "queued"
 
     with Session(engine) as session:
@@ -2327,10 +2327,10 @@ def test_sync_resource_worker_upserts_docs_projection_with_fake_provider(
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
-    monkeypatch.setenv("AI_DO_RAG_QDRANT_COLLECTION_PREFIX", "worker-rag-test")
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_RAG_QDRANT_COLLECTION_PREFIX", "worker-rag-test")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -2363,7 +2363,7 @@ def test_sync_resource_worker_upserts_docs_projection_with_fake_provider(
                 User(
                     id="user-1",
                     login_id="user-1",
-                    email="worker-doc-owner@ai-do.local",
+                    email="worker-doc-owner@open-alm.local",
                     full_name="Worker Doc Owner",
                     password_hash="hash",
                     status="active",
@@ -2399,7 +2399,7 @@ def test_sync_resource_worker_upserts_docs_projection_with_fake_provider(
             )
             job_id = job.id
 
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     result = tasks_module.sync_resource.run(job_id)
 
     assert result == "succeeded"
@@ -2428,9 +2428,9 @@ def test_sync_resource_worker_processes_files_upsert_and_delete_lifecycle(
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
-    monkeypatch.setenv("AI_DO_RAG_QDRANT_COLLECTION_PREFIX", "worker-rag-files-test")
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_RAG_QDRANT_COLLECTION_PREFIX", "worker-rag-files-test")
     monkeypatch.setattr(file_search_hooks, "FILES_RETRIEVAL_ACTIVE", True)
 
     class StoredObject:
@@ -2472,7 +2472,7 @@ def test_sync_resource_worker_processes_files_upsert_and_delete_lifecycle(
                 User(
                     id="user-1",
                     login_id="user-1",
-                    email="worker-file-owner@ai-do.local",
+                    email="worker-file-owner@open-alm.local",
                     full_name="Worker File Owner",
                     password_hash="hash",
                     status="active",
@@ -2498,7 +2498,7 @@ def test_sync_resource_worker_processes_files_upsert_and_delete_lifecycle(
             )
             upsert_job_id = job.id
 
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     bundle = tasks_module.provider_bundle()
     collection = tasks_module.collection_name()
     monkeypatch.setattr(
@@ -2567,9 +2567,9 @@ def test_files_keyword_job_survives_vector_provider_failure(
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
-    monkeypatch.setenv("AI_DO_RAG_QDRANT_COLLECTION_PREFIX", "worker-rag-files-failure")
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_RAG_QDRANT_COLLECTION_PREFIX", "worker-rag-files-failure")
     monkeypatch.setattr(file_search_hooks, "FILES_RETRIEVAL_ACTIVE", True)
 
     class StoredObject:
@@ -2615,7 +2615,7 @@ def test_files_keyword_job_survives_vector_provider_failure(
                 User(
                     id="user-1",
                     login_id="user-1",
-                    email="worker-file-failure@ai-do.local",
+                    email="worker-file-failure@open-alm.local",
                     full_name="Worker File Owner",
                     password_hash="hash",
                     status="active",
@@ -2634,7 +2634,7 @@ def test_files_keyword_job_survives_vector_provider_failure(
                 )
             )
 
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     monkeypatch.setattr(
         tasks_module,
         "_rag_runtime_for_job",
@@ -2676,10 +2676,10 @@ def test_sync_resource_worker_deletes_docs_projection_with_fake_provider(
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
-    monkeypatch.setenv("AI_DO_RAG_QDRANT_COLLECTION_PREFIX", "worker-rag-test")
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_RAG_QDRANT_COLLECTION_PREFIX", "worker-rag-test")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -2712,7 +2712,7 @@ def test_sync_resource_worker_deletes_docs_projection_with_fake_provider(
                 User(
                     id="user-1",
                     login_id="user-1",
-                    email="worker-doc-owner@ai-do.local",
+                    email="worker-doc-owner@open-alm.local",
                     full_name="Worker Doc Owner",
                     password_hash="hash",
                     status="active",
@@ -2748,7 +2748,7 @@ def test_sync_resource_worker_deletes_docs_projection_with_fake_provider(
             )
             upsert_job_id = upsert_job.id
 
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     assert tasks_module.sync_resource.run(upsert_job_id) == "succeeded"
 
     with Session(engine) as session:
@@ -2787,9 +2787,9 @@ def test_sync_resource_worker_deletes_personal_planner_projection_with_fake_prov
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
-    monkeypatch.setenv("AI_DO_RAG_QDRANT_COLLECTION_PREFIX", "worker-rag-test")
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_RAG_QDRANT_COLLECTION_PREFIX", "worker-rag-test")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -2817,7 +2817,7 @@ def test_sync_resource_worker_deletes_personal_planner_projection_with_fake_prov
                 User(
                     id="user-1",
                     login_id="user-1",
-                    email="worker-planner-owner@ai-do.local",
+                    email="worker-planner-owner@open-alm.local",
                     full_name="Worker Planner Owner",
                     password_hash="hash",
                     status="active",
@@ -2845,7 +2845,7 @@ def test_sync_resource_worker_deletes_personal_planner_projection_with_fake_prov
             )
             job_id = job.id
 
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     result = tasks_module.sync_resource.run(job_id)
 
     assert result == "deleted_missing_projection"
@@ -2871,10 +2871,10 @@ def test_sync_resource_worker_upserts_meeting_projection_with_fake_provider(
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
-    monkeypatch.setenv("AI_DO_RAG_QDRANT_COLLECTION_PREFIX", "worker-rag-test")
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_RAG_QDRANT_COLLECTION_PREFIX", "worker-rag-test")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -2907,7 +2907,7 @@ def test_sync_resource_worker_upserts_meeting_projection_with_fake_provider(
                     User(
                         id="user-1",
                         login_id="user-1",
-                        email="worker-meeting-organizer@ai-do.local",
+                        email="worker-meeting-organizer@open-alm.local",
                         full_name="Worker Meeting Organizer",
                         password_hash="hash",
                         status="active",
@@ -2915,7 +2915,7 @@ def test_sync_resource_worker_upserts_meeting_projection_with_fake_provider(
                     User(
                         id="user-2",
                         login_id="user-2",
-                        email="worker-meeting-attendee@ai-do.local",
+                        email="worker-meeting-attendee@open-alm.local",
                         full_name="Worker Meeting Attendee",
                         password_hash="hash",
                         status="active",
@@ -2967,7 +2967,7 @@ def test_sync_resource_worker_upserts_meeting_projection_with_fake_provider(
             )
             job_id = job.id
 
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     result = tasks_module.sync_resource.run(job_id)
 
     assert result == "succeeded"
@@ -3001,10 +3001,10 @@ def test_sync_resource_worker_upserts_pms_issue_projection_with_fake_provider(
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
-    monkeypatch.setenv("AI_DO_RAG_QDRANT_COLLECTION_PREFIX", "worker-rag-test")
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_RAG_QDRANT_COLLECTION_PREFIX", "worker-rag-test")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -3043,7 +3043,7 @@ def test_sync_resource_worker_upserts_pms_issue_projection_with_fake_provider(
                     User(
                         id="user-1",
                         login_id="user-1",
-                        email="worker-pms-reporter@ai-do.local",
+                        email="worker-pms-reporter@open-alm.local",
                         full_name="Worker PMS Reporter",
                         password_hash="hash",
                         status="active",
@@ -3051,7 +3051,7 @@ def test_sync_resource_worker_upserts_pms_issue_projection_with_fake_provider(
                     User(
                         id="user-2",
                         login_id="user-2",
-                        email="worker-pms-grantee@ai-do.local",
+                        email="worker-pms-grantee@open-alm.local",
                         full_name="Worker PMS Grantee",
                         password_hash="hash",
                         status="active",
@@ -3136,7 +3136,7 @@ def test_sync_resource_worker_upserts_pms_issue_projection_with_fake_provider(
             )
             job_id = job.id
 
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     result = tasks_module.sync_resource.run(job_id)
 
     assert result == "succeeded"
@@ -3168,15 +3168,15 @@ def test_provider_bundle_uses_qdrant_vector_index_when_configured(
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_RAG_VECTOR_INDEX_PROVIDER", "qdrant")
-    monkeypatch.setenv("AI_DO_RAG_QDRANT_URL", "http://qdrant.test:6333")
-    monkeypatch.setenv("AI_DO_RAG_QDRANT_API_KEY", "secret")
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_RAG_VECTOR_INDEX_PROVIDER", "qdrant")
+    monkeypatch.setenv("OPEN_ALM_RAG_QDRANT_URL", "http://qdrant.test:6333")
+    monkeypatch.setenv("OPEN_ALM_RAG_QDRANT_API_KEY", "secret")
 
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     tasks_module.provider_bundle.cache_clear()
-    provider_factory = importlib.import_module("ai_do_api.domains.rag.provider_factory")
+    provider_factory = importlib.import_module("open_alm_api.domains.rag.provider_factory")
 
     created: dict[str, str | None] = {}
 
@@ -3210,19 +3210,19 @@ def test_collection_name_matches_model_scoped_runtime_resolution(
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_RAG_EMBEDDING_PROVIDER", "local_sentence_transformers")
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_RAG_EMBEDDING_PROVIDER", "local_sentence_transformers")
     monkeypatch.setenv(
-        "AI_DO_RAG_EMBEDDING_MODEL",
+        "OPEN_ALM_RAG_EMBEDDING_MODEL",
         "dragonkue/snowflake-arctic-embed-l-v2.0-ko",
     )
 
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
 
     collection = tasks_module.collection_name()
 
-    assert collection == "ai-do-dev-rag-dragonkue-snowflake-arctic-embed-l-v2-0-ko"
+    assert collection == "open-alm-dev-rag-dragonkue-snowflake-arctic-embed-l-v2-0-ko"
 
 
 def test_sync_resource_worker_schedules_retry_with_backoff(
@@ -3238,11 +3238,11 @@ def test_sync_resource_worker_schedules_retry_with_backoff(
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
-    monkeypatch.setenv("AI_DO_RAG_JOB_MAX_ATTEMPTS", "3")
-    monkeypatch.setenv("AI_DO_RAG_JOB_RETRY_BACKOFF_SECONDS", "7")
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_RAG_JOB_MAX_ATTEMPTS", "3")
+    monkeypatch.setenv("OPEN_ALM_RAG_JOB_RETRY_BACKOFF_SECONDS", "7")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -3272,7 +3272,7 @@ def test_sync_resource_worker_schedules_retry_with_backoff(
             )
             job_id = job.id
 
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     monkeypatch.setattr(
         tasks_module,
         "_process_sync_job",
@@ -3311,11 +3311,11 @@ def test_sync_resource_worker_merges_retry_when_duplicate_pending_job_exists(
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
-    monkeypatch.setenv("AI_DO_RAG_JOB_MAX_ATTEMPTS", "3")
-    monkeypatch.setenv("AI_DO_RAG_JOB_RETRY_BACKOFF_SECONDS", "7")
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_RAG_JOB_MAX_ATTEMPTS", "3")
+    monkeypatch.setenv("OPEN_ALM_RAG_JOB_RETRY_BACKOFF_SECONDS", "7")
 
     class _FakeSignature:
         def apply_async(self, *, queue: str, retry: bool) -> None:
@@ -3327,7 +3327,7 @@ def test_sync_resource_worker_merges_retry_when_duplicate_pending_job_exists(
             return _FakeSignature()
 
     monkeypatch.setattr(
-        "ai_do_api.domains.rag.outbox.get_celery_client",
+        "open_alm_api.domains.rag.outbox.get_celery_client",
         lambda: _FakeCeleryClient(),
     )
 
@@ -3358,7 +3358,7 @@ def test_sync_resource_worker_merges_retry_when_duplicate_pending_job_exists(
                 resource_id="doc-retry-merge",
             ).id
 
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     merged_pending_id: str | None = None
 
     def _inject_duplicate_pending(_session, job):
@@ -3410,10 +3410,10 @@ def test_recompute_visibility_worker_merges_retry_when_duplicate_pending_job_exi
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
-    monkeypatch.setenv("AI_DO_RAG_JOB_MAX_ATTEMPTS", "3")
-    monkeypatch.setenv("AI_DO_RAG_JOB_RETRY_BACKOFF_SECONDS", "7")
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_RAG_JOB_MAX_ATTEMPTS", "3")
+    monkeypatch.setenv("OPEN_ALM_RAG_JOB_RETRY_BACKOFF_SECONDS", "7")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -3446,7 +3446,7 @@ def test_recompute_visibility_worker_merges_retry_when_duplicate_pending_job_exi
             )
             session.add(original_job)
 
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     merged_pending_id = "visibility-retry-merged"
 
     def _inject_duplicate_pending(_session, job):
@@ -3497,8 +3497,8 @@ def test_sync_resource_worker_cancels_superseded_processing_job_before_mutation(
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "1")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -3551,7 +3551,7 @@ def test_sync_resource_worker_cancels_superseded_processing_job_before_mutation(
         )
         session.commit()
 
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     monkeypatch.setattr(
         tasks_module,
         "_process_sync_job",
@@ -3581,8 +3581,8 @@ def test_sync_resource_worker_rejects_stale_projection_head_before_mutation(
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "1")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -3664,7 +3664,7 @@ def test_sync_resource_worker_rejects_stale_projection_head_before_mutation(
         )
         session.commit()
 
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     monkeypatch.setattr(
         tasks_module,
         "_process_sync_job",
@@ -3698,11 +3698,11 @@ def test_sync_resource_worker_uses_retry_after_for_transient_provider_errors(
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
-    monkeypatch.setenv("AI_DO_RAG_JOB_MAX_ATTEMPTS", "3")
-    monkeypatch.setenv("AI_DO_RAG_JOB_RETRY_BACKOFF_SECONDS", "7")
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_RAG_JOB_MAX_ATTEMPTS", "3")
+    monkeypatch.setenv("OPEN_ALM_RAG_JOB_RETRY_BACKOFF_SECONDS", "7")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -3732,7 +3732,7 @@ def test_sync_resource_worker_uses_retry_after_for_transient_provider_errors(
             )
             job_id = job.id
 
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     monkeypatch.setattr(
         tasks_module,
         "_process_sync_job",
@@ -3766,10 +3766,10 @@ def test_sync_resource_worker_cancels_non_retryable_provider_configuration_error
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
-    monkeypatch.setenv("AI_DO_RAG_JOB_MAX_ATTEMPTS", "3")
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_RAG_JOB_MAX_ATTEMPTS", "3")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -3799,7 +3799,7 @@ def test_sync_resource_worker_cancels_non_retryable_provider_configuration_error
             )
             job_id = job.id
 
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     monkeypatch.setattr(
         tasks_module,
         "_process_sync_job",
@@ -3834,10 +3834,10 @@ def test_sync_resource_worker_dead_letters_poison_message_after_max_attempts(
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
-    monkeypatch.setenv("AI_DO_RAG_JOB_MAX_ATTEMPTS", "1")
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_RAG_JOB_MAX_ATTEMPTS", "1")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -3867,7 +3867,7 @@ def test_sync_resource_worker_dead_letters_poison_message_after_max_attempts(
             )
             job_id = job.id
 
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     monkeypatch.setattr(
         tasks_module,
         "_process_sync_job",
@@ -3901,11 +3901,11 @@ def test_sync_backfill_worker_drains_chunked_batch_with_throttle(
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("AI_DO_RAG_ENABLED", "1")
-    monkeypatch.setenv("AI_DO_RAG_BACKFILL_BATCH_SIZE", "2")
-    monkeypatch.setenv("AI_DO_RAG_BACKFILL_THROTTLE_MS", "50")
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "1")
+    monkeypatch.setenv("OPEN_ALM_RAG_BACKFILL_BATCH_SIZE", "2")
+    monkeypatch.setenv("OPEN_ALM_RAG_BACKFILL_THROTTLE_MS", "50")
 
     engine = create_engine(_worker_dsn(db_path))
     Base.metadata.create_all(
@@ -3945,7 +3945,7 @@ def test_sync_backfill_worker_drains_chunked_batch_with_throttle(
                 lane=RagSyncLane.REALTIME,
             ).id
 
-    tasks_module = _reload_worker_module("ai_do_worker.tasks.rag_sync")
+    tasks_module = _reload_worker_module("open_alm_worker.tasks.rag_sync")
     processed: list[str] = []
     sleeps: list[float] = []
     monkeypatch.setattr(

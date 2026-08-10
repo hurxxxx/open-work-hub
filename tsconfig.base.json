@@ -13,20 +13,20 @@
     "forceConsistentCasingInFileNames": true,
     "types": ["node"],
     "paths": {
-      "@ai-do/contracts": ["./packages/contracts/src/index.ts"],
-      "@ai-do/contracts/openapi": [
+      "@open-alm/contracts": ["./packages/contracts/src/index.ts"],
+      "@open-alm/contracts/openapi": [
         "./packages/contracts/src/openapi.generated.d.ts"
       ],
-      "@ai-do/contracts/*": ["./packages/contracts/src/*"],
-      "@ai-do/core-web": ["./packages/core-web/src/index.ts"],
-      "@ai-do/core-web/*": ["./packages/core-web/src/*"],
-      "@ai-do/web-shell": ["./apps/web/src/app/shell/AppContent.tsx"],
-      "@ai-do/web/styles.css": ["./apps/web/src/index.css"],
-      "@ai-do/web/fullcalendar-theme.css": [
+      "@open-alm/contracts/*": ["./packages/contracts/src/*"],
+      "@open-alm/core-web": ["./packages/core-web/src/index.ts"],
+      "@open-alm/core-web/*": ["./packages/core-web/src/*"],
+      "@open-alm/web-shell": ["./apps/web/src/app/shell/AppContent.tsx"],
+      "@open-alm/web/styles.css": ["./apps/web/src/index.css"],
+      "@open-alm/web/fullcalendar-theme.css": [
         "./apps/web/src/styles/fullcalendar-theme.css"
       ],
-      "@ai-do/ui": ["./packages/ui/src/index.ts"],
-      "@ai-do/ui/*": ["./packages/ui/src/lib/*"]
+      "@open-alm/ui": ["./packages/ui/src/index.ts"],
+      "@open-alm/ui/*": ["./packages/ui/src/lib/*"]
     }
   },
   "exclude": ["node_modules", "dist"]

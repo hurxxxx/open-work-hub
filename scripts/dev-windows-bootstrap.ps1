@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  One-time Windows-native setup for AI-DO local development (no WSL).
+  One-time Windows-native setup for Open ALM local development (no WSL).
 
 .DESCRIPTION
   Installs JS + Python dependencies and builds the y-py CRDT extension, which

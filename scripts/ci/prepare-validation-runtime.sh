@@ -77,12 +77,12 @@ worker_dependency_sha256="$(
   combined_sha256 "$worker_root/pyproject.toml" "$worker_root/uv.lock"
 )"
 
-node_marker="${AI_DO_NODE_IMAGE_DEPENDENCY_FILE:-/opt/ai-do/node-runtime/dependency.sha256}"
-api_marker="${AI_DO_API_IMAGE_DEPENDENCY_FILE:-/opt/ai-do/locks/api/dependency.sha256}"
-worker_marker="${AI_DO_WORKER_IMAGE_DEPENDENCY_FILE:-/opt/ai-do/locks/worker/dependency.sha256}"
-node_runtime="${AI_DO_NODE_IMAGE_MODULES:-/opt/ai-do/node-runtime/node_modules}"
-api_runtime="${AI_DO_API_IMAGE_VENV:-/opt/ai-do/venvs/api}"
-worker_runtime="${AI_DO_WORKER_IMAGE_VENV:-/opt/ai-do/venvs/worker}"
+node_marker="${OPEN_ALM_NODE_IMAGE_DEPENDENCY_FILE:-/opt/open-alm/node-runtime/dependency.sha256}"
+api_marker="${OPEN_ALM_API_IMAGE_DEPENDENCY_FILE:-/opt/open-alm/locks/api/dependency.sha256}"
+worker_marker="${OPEN_ALM_WORKER_IMAGE_DEPENDENCY_FILE:-/opt/open-alm/locks/worker/dependency.sha256}"
+node_runtime="${OPEN_ALM_NODE_IMAGE_MODULES:-/opt/open-alm/node-runtime/node_modules}"
+api_runtime="${OPEN_ALM_API_IMAGE_VENV:-/opt/open-alm/venvs/api}"
+worker_runtime="${OPEN_ALM_WORKER_IMAGE_VENV:-/opt/open-alm/venvs/worker}"
 
 verify_identity "Node" "$node_marker" "$node_dependency_sha256"
 verify_identity "API" "$api_marker" "$api_dependency_sha256"
@@ -90,15 +90,15 @@ verify_identity "worker" "$worker_marker" "$worker_dependency_sha256"
 link_runtime \
   "Node" \
   "$node_runtime" \
-  "${AI_DO_NODE_CHECKOUT_MODULES_LINK:-$repo_root/node_modules}"
+  "${OPEN_ALM_NODE_CHECKOUT_MODULES_LINK:-$repo_root/node_modules}"
 link_runtime \
   "API" \
   "$api_runtime" \
-  "${AI_DO_API_CHECKOUT_VENV_LINK:-$repo_root/.runtime/ci-api-venv}"
+  "${OPEN_ALM_API_CHECKOUT_VENV_LINK:-$repo_root/.runtime/ci-api-venv}"
 link_runtime \
   "worker" \
   "$worker_runtime" \
-  "${AI_DO_WORKER_CHECKOUT_VENV_LINK:-$repo_root/.runtime/ci-worker-venv}"
+  "${OPEN_ALM_WORKER_CHECKOUT_VENV_LINK:-$repo_root/.runtime/ci-worker-venv}"
 
 echo \
   "[validation-runtime] ready node=${node_dependency_sha256} api=${api_dependency_sha256} worker=${worker_dependency_sha256}"

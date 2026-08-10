@@ -8,7 +8,7 @@ import {
   Loader2,
   MapPin,
 } from 'lucide-react';
-import { Button, InlineNotice } from '@ai-do/ui';
+import { Button, InlineNotice } from '@open-alm/ui';
 
 import { cn } from '@/src/lib/utils';
 import type {

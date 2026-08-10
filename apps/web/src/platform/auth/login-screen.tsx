@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import { InlineNotice } from '@ai-do/ui/feedback/inline-notice';
+import { InlineNotice } from '@open-alm/ui/feedback/inline-notice';
 
 import { useAuth } from './auth-context';
 import {

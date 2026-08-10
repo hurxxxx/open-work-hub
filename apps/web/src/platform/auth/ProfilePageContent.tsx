@@ -1,5 +1,5 @@
 import { LogOut } from 'lucide-react';
-import { InlineNotice } from '@ai-do/ui/feedback/inline-notice';
+import { InlineNotice } from '@open-alm/ui/feedback/inline-notice';
 
 import { AiDoDesktopSettingsSection } from './AiDoDesktopSettingsSection';
 import { AppearanceSettingsSection } from './AppearanceSettingsSection';

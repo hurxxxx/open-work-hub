@@ -11,13 +11,13 @@ FastAPI 기반의 조립 계층이다. 현재 API는 아래를 제공한다.
 서버 dev checkout 실행:
 
 ```bash
-cd /projects/ai-do/dev
+cd /projects/open-alm/dev
 ./dev.sh --api-only
 ```
 
 로컬 개발자 머신은 루트 `.env`를 만들거나 공유 dev DB를 자동 migration하지 않는다.
 GitLab Secure File의 `.env.local`과 플랫폼별 launcher를 사용하는
-[`ai-do-development-environment`](../../.agents/skills/ai-do-development-environment/SKILL.md)
+[`open-alm-development-environment`](../../.agents/skills/open-alm-development-environment/SKILL.md)
 절차를 따른다.
 
 LLM 설정은 **로컬 풀**(DGX Spark vLLM 또는 Apple Silicon mlx-lm)과
@@ -46,26 +46,26 @@ bash scripts/mlx-serve.sh
 
 ```env
 # Local pool (mlx-lm alternative)
-AI_DO_LLM_LOCAL_PROVIDER=mlx-lm
-AI_DO_LLM_LOCAL_BASE_URL=http://127.0.0.1:8080/v1
-AI_DO_LLM_LOCAL_API_KEY=mlx
-AI_DO_LLM_LOCAL_LONG_GENERATION_TIMEOUT_SECONDS=1200
+OPEN_ALM_LLM_LOCAL_PROVIDER=mlx-lm
+OPEN_ALM_LLM_LOCAL_BASE_URL=http://127.0.0.1:8080/v1
+OPEN_ALM_LLM_LOCAL_API_KEY=mlx
+OPEN_ALM_LLM_LOCAL_LONG_GENERATION_TIMEOUT_SECONDS=1200
 
 # External pool
-AI_DO_LLM_EXTERNAL_ALLOWED_PROVIDERS=openai,anthropic,gemini
-AI_DO_LLM_EXTERNAL_LONG_GENERATION_TIMEOUT_SECONDS=900
+OPEN_ALM_LLM_EXTERNAL_ALLOWED_PROVIDERS=openai,anthropic,gemini
+OPEN_ALM_LLM_EXTERNAL_LONG_GENERATION_TIMEOUT_SECONDS=900
 ```
 
 외부 LLM provider API key는 환경 변수로 전달하지 않는다. 관리자가 Admin의
 AI 모델 설정에서 provider별 credential을 입력하면 DB에 암호화해 저장한다.
 환경에는 저장 credential을 암복호화하는
-`AI_DO_AI_MODEL_CREDENTIAL_ENCRYPTION_KEY`만 설정한다.
+`OPEN_ALM_AI_MODEL_CREDENTIAL_ENCRYPTION_KEY`만 설정한다.
 
 이미지 생성 provider와 LLM provider는 서로 다른 제어면을 사용한다. 관리자는
 Admin의 `LLM 관리 > 이미지 모델`에서 이미지 provider endpoint, API key,
 supervisor 모델, generation 모델과 실행 프로필을 명시적으로 설정한다. 이미지
 provider API key와 모델명은 환경 변수에 두지 않으며, 같은 credential 암호화 키만
-재사용한다. `AI_DO_IMAGE_ENABLED`는 배포 kill switch이고 파일 크기·reference 수·
+재사용한다. `OPEN_ALM_IMAGE_ENABLED`는 배포 kill switch이고 파일 크기·reference 수·
 timeout은 운영 한도로 유지한다. 모델 설정이 없으면 이미지 실행은 fail-closed 한다.
 
 준비 상태 확인:
@@ -109,8 +109,8 @@ uv run --python 3.12 alembic downgrade -1
 
 | 환경                                    | 방법                                                                                                                                                                                                                                                                         |
 | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 서버 dev checkout | `./dev.sh`의 migration 검증과 현재 dev 환경 계약을 따른다. 공유 DB drift를 발견하면 stamp하지 말고 `ai-do-development-environment` 절차로 조사한다. |
-| 로컬 개발자 머신 | 공유 dev DB에 auto-migrate하지 않는다. 공식 launcher가 `AI_DO_API_AUTO_MIGRATE=0`을 강제한다. |
+| 서버 dev checkout | `./dev.sh`의 migration 검증과 현재 dev 환경 계약을 따른다. 공유 DB drift를 발견하면 stamp하지 말고 `open-alm-development-environment` 절차로 조사한다. |
+| 로컬 개발자 머신 | 공유 dev DB에 auto-migrate하지 않는다. 공식 launcher가 `OPEN_ALM_API_AUTO_MIGRATE=0`을 강제한다. |
 | 테스트 | run/worker별 임시 DB에 Alembic과 runtime seed를 한 번 적용하고, 일반 API 테스트는 application-ready baseline과 worker별 앱 조립을 재사용한다. 실제 startup/migration 계약만 전용 테스트에서 다시 실행한다. |
 | 스테이징 / 프로덕션 | **자동 실행 금지.** 배포 스크립트에서 명시적으로 `alembic upgrade head`를 실행한 뒤 앱을 기동한다. |
 | Alembic 도입 이전 DB | 현재 revision, 실제 schema, migration chain을 비교한 승인된 전환 계획 없이 `alembic stamp`하거나 수동 DROP하지 않는다. |

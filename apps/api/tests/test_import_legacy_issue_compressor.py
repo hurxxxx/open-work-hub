@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from ai_do_api.domains.legacy_issues.dataset_records import (
+from open_alm_api.domains.legacy_issues.dataset_records import (
     build_dataset_import_rows,
     get_dataset_definition,
     validate_mapping,

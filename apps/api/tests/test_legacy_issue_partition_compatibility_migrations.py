@@ -4,21 +4,21 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from ai_do_api.domains.auth.models import Workspace
-from ai_do_api.domains.legacy_issues.ai_search import (
+from open_alm_api.domains.auth.models import Workspace
+from open_alm_api.domains.legacy_issues.ai_search import (
     LegacyIssueAssistantSearchPlan,
     _full_text_candidates,
     _pgvector_candidates,
     _term_index_candidates,
     _trigram_candidates,
 )
-from ai_do_api.domains.legacy_issues.models import (
+from open_alm_api.domains.legacy_issues.models import (
     LegacyIssueAiChunk,
     LegacyIssueDataRevision,
     LegacyIssueRecord,
 )
-from ai_do_api.domains.retrieval.models import RetrievalPartition
-from ai_do_api.domains.retrieval.partitioning import ensure_default_partition
+from open_alm_api.domains.retrieval.models import RetrievalPartition
+from open_alm_api.domains.retrieval.partitioning import ensure_default_partition
 
 
 pytestmark = pytest.mark.migration

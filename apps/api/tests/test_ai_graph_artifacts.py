@@ -16,64 +16,64 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from ai_do_api.domains.ai_artifacts.contracts import (
+from open_alm_api.domains.ai_artifacts.contracts import (
     AiArtifactCreate,
     AiArtifactIndexGenerationCreate,
     AiArtifactQueryCreate,
     AiArtifactSourceCreate,
     AiIndexGenerationCreate,
 )
-from ai_do_api.domains.ai_artifacts.models import (
+from open_alm_api.domains.ai_artifacts.models import (
     AiArtifact,
     AiArtifactIndexGeneration,
     AiArtifactQuery,
     AiArtifactSource,
     AiIndexGeneration,
 )
-from ai_do_api.domains.ai_artifacts.repository import (
+from open_alm_api.domains.ai_artifacts.repository import (
     AiArtifactImmutableError,
     AiArtifactNotFoundError,
     AiArtifactRepository,
     AiIndexGenerationRepository,
 )
-from ai_do_api.domains.ai_artifacts.router import _query_source_response
-from ai_do_api.domains.ai_graph.contracts import (
+from open_alm_api.domains.ai_artifacts.router import _query_source_response
+from open_alm_api.domains.ai_graph.contracts import (
     AiGraphLlmRequest,
     AiGraphNodeResult,
     AiGraphNodeSpec,
     AiGraphRunRequest,
     AiGraphSpec,
 )
-from ai_do_api.domains.ai_graph.gateway_adapter import AiGatewayGraphAdapter
-from ai_do_api.domains.ai_graph.dispatch import stage_graph_dispatch
-from ai_do_api.domains.ai_graph.execution_registry import (
+from open_alm_api.domains.ai_graph.gateway_adapter import AiGatewayGraphAdapter
+from open_alm_api.domains.ai_graph.dispatch import stage_graph_dispatch
+from open_alm_api.domains.ai_graph.execution_registry import (
     execute_registered_ai_graph,
     register_ai_graph_executor,
     reset_ai_graph_executors,
 )
-from ai_do_api.domains.ai_graph.models import (
+from open_alm_api.domains.ai_graph.models import (
     AiGraphDispatchOutbox,
     AiGraphRun,
     AiGraphRunInput,
     AiGraphRunNodeProgress,
 )
-from ai_do_api.domains.ai_graph.repository import (
+from open_alm_api.domains.ai_graph.repository import (
     AiGraphDispatchRepository,
     AiGraphExecutionLeaseLostError,
     AiGraphRunInputRepository,
     AiGraphRunRepository,
 )
-from ai_do_api.domains.ai_graph.router import _artifact_ids_by_run
-from ai_do_api.domains.ai_graph.runtime import (
+from open_alm_api.domains.ai_graph.router import _artifact_ids_by_run
+from open_alm_api.domains.ai_graph.runtime import (
     AiGraphRuntimeContext,
     compile_graph,
     run_graph,
 )
-from ai_do_api.domains.conversations.models import Conversation, ConversationTurn
-from ai_do_api.domains.legacy_issues.analysis_graph.contracts import (
+from open_alm_api.domains.conversations.models import Conversation, ConversationTurn
+from open_alm_api.domains.legacy_issues.analysis_graph.contracts import (
     AnalysisDataBundle,
 )
-from ai_do_api.domains.legacy_issues.analysis_graph.persistence import (
+from open_alm_api.domains.legacy_issues.analysis_graph.persistence import (
     AiArtifactAnalysisWriter,
     _artifact_payload,
 )
@@ -234,7 +234,7 @@ def test_langgraph_conditional_route_executes_only_selected_branch() -> None:
 
 
 def test_graph_llm_adapter_uses_registered_gateway_only(monkeypatch) -> None:
-    import ai_do_api.domains.ai_graph.gateway_adapter as adapter_module
+    import open_alm_api.domains.ai_graph.gateway_adapter as adapter_module
 
     observed: dict[str, object] = {}
 
@@ -520,7 +520,7 @@ def test_graph_executor_registry_resolves_exact_graph_version(
     monkeypatch,
     session_factory: sessionmaker[Session],
 ) -> None:
-    import ai_do_api.domains.ai_graph.execution_registry as registry_module
+    import open_alm_api.domains.ai_graph.execution_registry as registry_module
 
     calls: list[str] = []
     request_v1 = _run_request()
@@ -590,7 +590,7 @@ def test_run_graph_renews_execution_lease_while_node_is_running(
     monkeypatch,
     session_factory: sessionmaker[Session],
 ) -> None:
-    import ai_do_api.domains.ai_graph.runtime as runtime_module
+    import open_alm_api.domains.ai_graph.runtime as runtime_module
 
     renewals: list[str] = []
     original = AiGraphRunRepository.renew_execution_lease
@@ -689,7 +689,7 @@ def test_run_graph_logs_terminal_failure_with_run_context(
         log_records.append((message, extra))
 
     monkeypatch.setattr(
-        "ai_do_api.domains.ai_graph.runtime.logger.error",
+        "open_alm_api.domains.ai_graph.runtime.logger.error",
         record_error,
     )
 

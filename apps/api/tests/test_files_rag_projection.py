@@ -7,14 +7,14 @@ from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 import pytest
 
-from ai_do_api.domains.document_processing import DocumentExtractBundle, EvidenceBlock
-from ai_do_api.domains.files.models import (
+from open_alm_api.domains.document_processing import DocumentExtractBundle, EvidenceBlock
+from open_alm_api.domains.files.models import (
     FileManagerCorpus,
     FileManagerFile,
     FileManagerFileSourceMetadata,
 )
-from ai_do_api.domains.files import rag_projection, rag_sync
-from ai_do_api.domains.files.rag_projection import (
+from open_alm_api.domains.files import rag_projection, rag_sync
+from open_alm_api.domains.files.rag_projection import (
     FILES_MIN_STRUCTURED_TEXT_CHARS,
     FILES_OCR_POLICY_VERSION,
     MAX_FILES_RAG_SOURCE_BYTES,
@@ -25,15 +25,15 @@ from ai_do_api.domains.files.rag_projection import (
     read_file_content,
     validate_office_archive,
 )
-from ai_do_api.domains.files.retrieval_contract import (
+from open_alm_api.domains.files.retrieval_contract import (
     files_retrieval_active_for_environment,
 )
-from ai_do_api.domains.files.source_access import FileManagerSourceAccessAdapter
-from ai_do_api.domains.files.search_projection import build_file_search_document
-from ai_do_api.domains.files.service import purge_file_retrieval_artifact
-from ai_do_api.domains.rag.contracts import RagScopeKind, RagSyncOperation
-from ai_do_api.domains.retrieval.projection_fencing import ProjectionEventRef
-from ai_do_api.domains.search.projection_identity import ensure_search_document_identity
+from open_alm_api.domains.files.source_access import FileManagerSourceAccessAdapter
+from open_alm_api.domains.files.search_projection import build_file_search_document
+from open_alm_api.domains.files.service import purge_file_retrieval_artifact
+from open_alm_api.domains.rag.contracts import RagScopeKind, RagSyncOperation
+from open_alm_api.domains.retrieval.projection_fencing import ProjectionEventRef
+from open_alm_api.domains.search.projection_identity import ensure_search_document_identity
 
 
 _FIXED_ZIP_TIMESTAMP = (2020, 1, 1, 0, 0, 0)

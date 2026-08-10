@@ -5,15 +5,15 @@ import zipfile
 
 import pytest
 
-from ai_do_api.domains.document_processing import extract_document
-from ai_do_api.domains.document_processing import extractors as extractors_module
-from ai_do_api.domains.document_processing import html_extractor as html_extractor_module
-from ai_do_api.domains.document_processing.extractors import (
+from open_alm_api.domains.document_processing import extract_document
+from open_alm_api.domains.document_processing import extractors as extractors_module
+from open_alm_api.domains.document_processing import html_extractor as html_extractor_module
+from open_alm_api.domains.document_processing.extractors import (
     DocumentExtractBundle,
     EvidenceBlock,
     UnsupportedDocumentType,
 )
-from ai_do_api.domains.document_processing.html_extractor import extract_html_stream
+from open_alm_api.domains.document_processing.html_extractor import extract_html_stream
 
 
 def _pptx_bytes(entries: dict[str, str]) -> bytes:
@@ -205,7 +205,7 @@ def test_docx_extractor_skips_one_malformed_vertical_merge_row() -> None:
 
 
 def test_pptx_extractor_stops_at_char_budget(monkeypatch: pytest.MonkeyPatch) -> None:
-    from ai_do_api.domains.document_processing import pptx as pptx_module
+    from open_alm_api.domains.document_processing import pptx as pptx_module
 
     monkeypatch.setattr(pptx_module, "_MAX_EXTRACTED_CHARS", 5)
 
@@ -227,7 +227,7 @@ def test_pptx_extractor_stops_at_char_budget(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_extract_embedded_office_documents_reads_nested_pptx() -> None:
-    from ai_do_api.domains.document_processing.extractors import (
+    from open_alm_api.domains.document_processing.extractors import (
         extract_embedded_office_documents,
     )
 
@@ -245,7 +245,7 @@ def test_extract_embedded_office_documents_reads_nested_pptx() -> None:
 
 
 def test_extract_embedded_office_documents_skips_decompression_bomb() -> None:
-    from ai_do_api.domains.document_processing.extractors import (
+    from open_alm_api.domains.document_processing.extractors import (
         extract_embedded_office_documents,
     )
 
@@ -263,7 +263,7 @@ def test_extract_embedded_office_documents_skips_decompression_bomb() -> None:
 
 
 def test_extract_embedded_office_documents_ignores_non_zip() -> None:
-    from ai_do_api.domains.document_processing.extractors import (
+    from open_alm_api.domains.document_processing.extractors import (
         extract_embedded_office_documents,
     )
 

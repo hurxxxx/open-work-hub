@@ -1,4 +1,4 @@
-from ai_do_ops.cli import list_scenarios
+from open_alm_ops.cli import list_scenarios
 
 
 def test_list_scenarios_prints_catalog_results(tmp_path, capsys):

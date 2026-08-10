@@ -5,9 +5,9 @@ import sys
 from redis import Redis
 from sqlalchemy.orm import Session
 
-from ai_do_api.core.db import get_engine
-from ai_do_api.core.settings import get_settings
-from ai_do_api.domains.patent_prior_art.queue_cutover import (
+from open_alm_api.core.db import get_engine
+from open_alm_api.core.settings import get_settings
+from open_alm_api.domains.patent_prior_art.queue_cutover import (
     PatentPriorArtQueueCutoverError,
     reconcile_patent_prior_art_queue_cutover,
 )

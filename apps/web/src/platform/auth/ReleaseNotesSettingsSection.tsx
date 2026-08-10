@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { InlineNotice } from '@ai-do/ui/feedback/inline-notice';
+import { InlineNotice } from '@open-alm/ui/feedback/inline-notice';
 
 import {
   listReleaseNotes,

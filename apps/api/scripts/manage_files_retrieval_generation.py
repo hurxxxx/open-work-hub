@@ -13,26 +13,26 @@ _SRC = Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from ai_do_api.core.db import get_session_factory  # noqa: E402
-from ai_do_api.core.settings import get_settings, is_production_environment  # noqa: E402
-from ai_do_api.domains.files.extraction_bootstrap import (  # noqa: E402
+from open_alm_api.core.db import get_session_factory  # noqa: E402
+from open_alm_api.core.settings import get_settings, is_production_environment  # noqa: E402
+from open_alm_api.domains.files.extraction_bootstrap import (  # noqa: E402
     OcrOnlyFileExtractionRuntime,
     bootstrap_file_extraction_artifacts,
 )
-from ai_do_api.domains.files.rag_sync import (  # noqa: E402
+from open_alm_api.domains.files.rag_sync import (  # noqa: E402
     adopt_legacy_file_retrieval_heads,
 )
-from ai_do_api.domains.rag.provider_factory import RagProviderFactory  # noqa: E402
-from ai_do_api.domains.retrieval.evaluation import (  # noqa: E402
+from open_alm_api.domains.rag.provider_factory import RagProviderFactory  # noqa: E402
+from open_alm_api.domains.retrieval.evaluation import (  # noqa: E402
     RetrievalQualityGateArtifact,
 )
-from ai_do_api.domains.retrieval.files_generation_backends import (  # noqa: E402
+from open_alm_api.domains.retrieval.files_generation_backends import (  # noqa: E402
     FilesPhysicalGenerationBackends,
 )
-from ai_do_api.domains.retrieval.files_generation_materializer import (  # noqa: E402
+from open_alm_api.domains.retrieval.files_generation_materializer import (  # noqa: E402
     FilesCachedProjectionMaterializer,
 )
-from ai_do_api.domains.retrieval.files_generation_runner import (  # noqa: E402
+from open_alm_api.domains.retrieval.files_generation_runner import (  # noqa: E402
     FilesGenerationBaselineMode,
     FilesGenerationError,
     FilesGenerationRunner,

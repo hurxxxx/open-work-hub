@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from ai_do_api.core.realtime_relay import (
+from open_alm_api.core.realtime_relay import (
     RealtimeRelayPayload,
     build_realtime_event_envelope,
     decode_realtime_relay_payload,
@@ -127,6 +127,6 @@ def test_decode_realtime_relay_payload_ignores_malformed_or_incomplete_payloads(
 
 
 def test_realtime_channel_name_joins_prefix_and_topic() -> None:
-    assert realtime_channel_name("ai-do:app-realtime", "user:user-1") == (
-        "ai-do:app-realtime:user:user-1"
+    assert realtime_channel_name("open-alm:app-realtime", "user:user-1") == (
+        "open-alm:app-realtime:user:user-1"
     )

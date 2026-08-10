@@ -1,5 +1,5 @@
 import type { Dispatch, FormEvent } from 'react';
-import { Button } from '@ai-do/ui/primitives/button';
+import { Button } from '@open-alm/ui/primitives/button';
 import { cn } from '@/src/lib/utils';
 
 import type { AuthUser } from './auth-api';

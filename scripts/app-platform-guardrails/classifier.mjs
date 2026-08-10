@@ -21,7 +21,7 @@ export function isAppTestPath(rawPath) {
 }
 
 export function apiDomainForPath(filePath) {
-  const match = /^apps\/api\/src\/ai_do_api\/domains\/([^/]+)(?:\/|$)/.exec(
+  const match = /^apps\/api\/src\/open_alm_api\/domains\/([^/]+)(?:\/|$)/.exec(
     filePath,
   );
   return match?.[1] ?? null;
@@ -92,7 +92,7 @@ export function classifyPath(rawPath) {
   }
 
   if (
-    /^apps\/worker\/src\/ai_do_worker\/tasks\/apps\/[a-z0-9_-]+\//.test(
+    /^apps\/worker\/src\/open_alm_worker\/tasks\/apps\/[a-z0-9_-]+\//.test(
       filePath,
     )
   ) {
@@ -103,7 +103,7 @@ export function classifyPath(rawPath) {
     };
   }
 
-  if (/^apps\/api\/src\/ai_do_api\/core\//.test(filePath)) {
+  if (/^apps\/api\/src\/open_alm_api\/core\//.test(filePath)) {
     return {
       lane: LANES.CORE_PLATFORM,
       protectedSurface: 'api-core',

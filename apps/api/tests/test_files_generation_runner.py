@@ -12,15 +12,15 @@ import pytest
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from ai_do_api.core.db import Base
-from ai_do_api.domains.auth.models import OrgUnit, User, Workspace
-from ai_do_api.domains.files.models import (
+from open_alm_api.core.db import Base
+from open_alm_api.domains.auth.models import OrgUnit, User, Workspace
+from open_alm_api.domains.files.models import (
     FileManagerCorpus,
     FileManagerFile,
     FileManagerFileSourceMetadata,
     FileManagerFolder,
 )
-from ai_do_api.domains.retrieval.files_generation_runner import (
+from open_alm_api.domains.retrieval.files_generation_runner import (
     FilesBackendPairInspection,
     FilesGenerationBaselineMode,
     FilesGenerationError,
@@ -31,24 +31,24 @@ from ai_do_api.domains.retrieval.files_generation_runner import (
     FilesSourceProjectionSnapshot,
     load_files_source_snapshot,
 )
-from ai_do_api.domains.retrieval.files_quality_judgments import (
+from open_alm_api.domains.retrieval.files_quality_judgments import (
     FilesQualityJudgmentSnapshot,
 )
-from ai_do_api.domains.retrieval.evaluation import (
+from open_alm_api.domains.retrieval.evaluation import (
     RetrievalEvaluationReport,
     RetrievalQualityGateArtifact,
     retrieval_embedding_generation_identity,
     retrieval_quality_corpus_sha256,
     retrieval_reranker_generation_identity,
 )
-from ai_do_api.domains.retrieval.files_generation_backends import (
+from open_alm_api.domains.retrieval.files_generation_backends import (
     FilesPhysicalGenerationBackends,
 )
-from ai_do_api.domains.retrieval.files_generation_materializer import (
+from open_alm_api.domains.retrieval.files_generation_materializer import (
     FilesCachedProjectionMaterializer,
 )
-from ai_do_api.domains.rag.models import RagSyncJob
-from ai_do_api.domains.retrieval.models import (
+from open_alm_api.domains.rag.models import RagSyncJob
+from open_alm_api.domains.retrieval.models import (
     RetrievalPartition,
     RetrievalProjectionEvent,
     RetrievalProjectionGeneration,
@@ -56,20 +56,20 @@ from ai_do_api.domains.retrieval.models import (
     RetrievalProjectionGenerationState,
     RetrievalProjectionHead,
 )
-from ai_do_api.domains.retrieval.projection_identity import (
+from open_alm_api.domains.retrieval.projection_identity import (
     canonical_search_document_id,
     canonical_vector_point_id,
 )
-from ai_do_api.domains.rag.runtime import (
+from open_alm_api.domains.rag.runtime import (
     resolve_default_collection_name,
     resolve_partitioned_rag_collection_alias,
 )
-from ai_do_api.domains.search.index_gateway import (
+from open_alm_api.domains.search.index_gateway import (
     keyword_search_index_alias,
     keyword_search_partitioned_index_alias,
 )
-from ai_do_api.domains.search.models import SearchIndexJob
-from ai_do_api.domains.source_access.resource_types import (
+from open_alm_api.domains.search.models import SearchIndexJob
+from open_alm_api.domains.source_access.resource_types import (
     FILE_MANAGER_FILE_RESOURCE_TYPE,
     NATIVE_DOC_RESOURCE_TYPE,
 )

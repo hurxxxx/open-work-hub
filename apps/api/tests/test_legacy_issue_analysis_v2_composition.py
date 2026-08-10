@@ -7,17 +7,17 @@ import pytest
 from pydantic import SecretStr
 from sqlalchemy import create_engine
 
-from ai_do_api.domains.legacy_issues.analysis_v2.composition import (
+from open_alm_api.domains.legacy_issues.analysis_v2.composition import (
     AnalysisCompositionDependencies,
     build_analysis_toolset,
     compose_analysis_toolset,
 )
-from ai_do_api.domains.legacy_issues.analysis_v2.execution import AnalysisSqlScope
-from ai_do_api.domains.legacy_issues.analysis_v2.vector_index import (
+from open_alm_api.domains.legacy_issues.analysis_v2.execution import AnalysisSqlScope
+from open_alm_api.domains.legacy_issues.analysis_v2.vector_index import (
     GenerationQueryScope,
     PGVectorStoreConfig,
 )
-from ai_do_api.domains.retrieval.partitioning import (
+from open_alm_api.domains.retrieval.partitioning import (
     RetrievalPartitionId,
     RetrievalReadScope,
     RetrievalSourcePartitions,

@@ -29,7 +29,7 @@ import {
   Upload,
   X,
 } from 'lucide-react';
-import { useConfirm, useToast } from '@ai-do/ui';
+import { useConfirm, useToast } from '@open-alm/ui';
 
 import { UserDateTime } from '@/src/components/date/UserDateTime';
 import { FormDialog } from '@/src/components/form/FormDialog';

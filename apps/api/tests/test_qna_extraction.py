@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from ai_do_api.domains.qna import extraction
+from open_alm_api.domains.qna import extraction
 
 
 # --- pure helpers ---------------------------------------------------------

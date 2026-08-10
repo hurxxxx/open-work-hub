@@ -103,14 +103,14 @@ class EnvContractScannerTest(unittest.TestCase):
             report = self.evaluate(
                 root,
                 env_texts={
-                    "dev": "AI_DO_ONE=secret-one\nAI_DO_ONE=secret-two\n",
-                    "example": "AI_DO_ONE=example\n",
+                    "dev": "OPEN_ALM_ONE=secret-one\nOPEN_ALM_ONE=secret-two\n",
+                    "example": "OPEN_ALM_ONE=example\n",
                 },
             )
 
         self.assertIn("duplicate_env_key", self.codes(report))
         messages = self.messages(report)
-        self.assertIn("dev: duplicate keys: AI_DO_ONE", messages)
+        self.assertIn("dev: duplicate keys: OPEN_ALM_ONE", messages)
         self.assertNotIn("secret-one", messages)
         self.assertNotIn("secret-two", messages)
 
@@ -120,8 +120,8 @@ class EnvContractScannerTest(unittest.TestCase):
             report = self.evaluate(
                 root,
                 env_texts={
-                    "dev": "AI_DO_ONE=1\nAI_DO_TWO=2\n",
-                    "example": "AI_DO_ONE=1\nAI_DO_THREE=3\n",
+                    "dev": "OPEN_ALM_ONE=1\nOPEN_ALM_TWO=2\n",
+                    "example": "OPEN_ALM_ONE=1\nOPEN_ALM_THREE=3\n",
                 },
             )
 
@@ -137,8 +137,8 @@ class EnvContractScannerTest(unittest.TestCase):
             report = self.evaluate(
                 root,
                 env_texts={
-                    "dev": "AI_DO_ONE=secret-one\nAI_DO_TWO=secret-two\n",
-                    "example": "AI_DO_TWO=example-two\nAI_DO_ONE=example-one\n",
+                    "dev": "OPEN_ALM_ONE=secret-one\nOPEN_ALM_TWO=secret-two\n",
+                    "example": "OPEN_ALM_TWO=example-two\nOPEN_ALM_ONE=example-one\n",
                 },
             )
 
@@ -149,14 +149,14 @@ class EnvContractScannerTest(unittest.TestCase):
         self.assertNotIn("example-one", messages)
 
     def test_reports_retired_or_externally_owned_env_keys(self) -> None:
-        retired_key = "AI_DO_RETIRED"
+        retired_key = "OPEN_ALM_RETIRED"
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             report = self.evaluate(
                 root,
                 env_texts={
-                    "dev": f"AI_DO_PRESENT=1\n{retired_key}=secret\n",
-                    "example": f"AI_DO_PRESENT=1\n{retired_key}=example\n",
+                    "dev": f"OPEN_ALM_PRESENT=1\n{retired_key}=secret\n",
+                    "example": f"OPEN_ALM_PRESENT=1\n{retired_key}=example\n",
                 },
                 forbidden_env_keys=(retired_key,),
             )
@@ -169,7 +169,7 @@ class EnvContractScannerTest(unittest.TestCase):
     def test_env_file_paths_include_optional_local_profile(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / ".env.local").write_text("AI_DO_PRESENT=1\n", encoding="utf-8")
+            (root / ".env.local").write_text("OPEN_ALM_PRESENT=1\n", encoding="utf-8")
 
             paths = env_contract.env_file_paths(root, "dev")
 
@@ -178,23 +178,23 @@ class EnvContractScannerTest(unittest.TestCase):
     def test_reports_settings_keys_missing_from_env(self) -> None:
         settings = """
 class Settings:
-    present: str = Field(validation_alias="AI_DO_PRESENT")
-    missing: str = Field(validation_alias="AI_DO_MISSING")
+    present: str = Field(validation_alias="OPEN_ALM_PRESENT")
+    missing: str = Field(validation_alias="OPEN_ALM_MISSING")
 """
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             report = self.evaluate(
                 root,
                 env_texts={
-                    "dev": "AI_DO_PRESENT=1\n",
-                    "example": "AI_DO_PRESENT=1\n",
+                    "dev": "OPEN_ALM_PRESENT=1\n",
+                    "example": "OPEN_ALM_PRESENT=1\n",
                 },
                 settings_texts={"settings.py": settings},
             )
 
         self.assertIn("missing_settings_key", self.codes(report))
         self.assertIn(
-            "env files are missing settings keys: AI_DO_MISSING",
+            "env files are missing settings keys: OPEN_ALM_MISSING",
             self.messages(report),
         )
 
@@ -206,8 +206,8 @@ class Settings:
             report = self.evaluate(
                 root,
                 env_texts={
-                    "dev": "AI_DO_PRESENT=1\n",
-                    "example": "AI_DO_PRESENT=1\n",
+                    "dev": "OPEN_ALM_PRESENT=1\n",
+                    "example": "OPEN_ALM_PRESENT=1\n",
                 },
                 source_texts={"app.py": f"api_key = {token!r}\n"},
                 forbidden_patterns=(pattern,),
@@ -217,20 +217,20 @@ class Settings:
         self.assertIn("app.py: forbidden env token", self.messages(report))
 
     def test_forbids_exact_legacy_redis_alias_without_matching_scoped_keys(self) -> None:
-        legacy_token = "AI_DO_" + "REDIS_URL"
+        legacy_token = "OPEN_ALM_" + "REDIS_URL"
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             report = self.evaluate(
                 root,
                 env_texts={
-                    "dev": "AI_DO_PRESENT=1\n",
-                    "example": "AI_DO_PRESENT=1\n",
+                    "dev": "OPEN_ALM_PRESENT=1\n",
+                    "example": "OPEN_ALM_PRESENT=1\n",
                 },
                 source_texts={
                     "legacy.py": f"redis_url = os.getenv({legacy_token!r})\n",
                     "scoped.py": (
-                        "collab = os.getenv('AI_DO_API_COLLAB_REDIS_URL')\n"
-                        "realtime = os.getenv('AI_DO_API_REALTIME_REDIS_URL')\n"
+                        "collab = os.getenv('OPEN_ALM_API_COLLAB_REDIS_URL')\n"
+                        "realtime = os.getenv('OPEN_ALM_API_REALTIME_REDIS_URL')\n"
                     ),
                 },
                 forbidden_patterns=tuple(env_contract.FORBIDDEN_ENV_PATTERNS),

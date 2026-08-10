@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from urllib.parse import parse_qs, urlparse
 
-from ai_do_api.domains.media.models import MediaFile
-from ai_do_api.domains.media.proxy_urls import (
+from open_alm_api.domains.media.models import MediaFile
+from open_alm_api.domains.media.proxy_urls import (
     build_media_proxy_url,
     is_media_proxy_url_expired,
     is_valid_media_proxy_signature,

@@ -2,18 +2,18 @@ from __future__ import annotations
 
 import pytest
 
-from ai_do_api.core.workspace_app_registry import (
+from open_alm_api.core.workspace_app_registry import (
     WorkspaceAppRegistration,
     WorkspaceNavRegistration,
     compile_workspace_app_registry,
 )
-from ai_do_api.domains.auth.workspace_apps import (
+from open_alm_api.domains.auth.workspace_apps import (
     get_workspace_app_catalog_item,
     iter_workspace_app_catalog,
 )
-from ai_do_api.domains.auth.app_bar_preferences import normalize_app_bar_pinned_app_ids
-from ai_do_api.domains.management_tasks.app_catalog import MANAGEMENT_TASKS_WORKSPACE_APP
-from ai_do_api.domains.files.app_catalog import FILES_WORKSPACE_APP
+from open_alm_api.domains.auth.app_bar_preferences import normalize_app_bar_pinned_app_ids
+from open_alm_api.domains.management_tasks.app_catalog import MANAGEMENT_TASKS_WORKSPACE_APP
+from open_alm_api.domains.files.app_catalog import FILES_WORKSPACE_APP
 
 
 def _registration(

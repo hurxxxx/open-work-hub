@@ -9,8 +9,8 @@ from pathlib import Path
 
 
 DEFAULT_SOURCE_ROOTS = (
-    Path("apps/api/src/ai_do_api"),
-    Path("apps/worker/src/ai_do_worker"),
+    Path("apps/api/src/open_alm_api"),
+    Path("apps/worker/src/open_alm_worker"),
 )
 
 FORBIDDEN_DIRECT_LLM_IMPORTS = {
@@ -147,10 +147,10 @@ def _direct_core_llm_imports(tree: ast.Module, path: Path) -> list[Finding]:
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
             module = node.module or ""
-            imports_core_llm_module = module == "ai_do_api.core.llm" or (
+            imports_core_llm_module = module == "open_alm_api.core.llm" or (
                 node.level > 0 and module == "core.llm"
             )
-            imports_core_package = module == "ai_do_api.core" or (
+            imports_core_package = module == "open_alm_api.core" or (
                 node.level > 0 and module == "core"
             )
             for imported in node.names:
@@ -179,7 +179,7 @@ def _direct_core_llm_imports(tree: ast.Module, path: Path) -> list[Finding]:
                     )
         elif isinstance(node, ast.Import):
             for imported in node.names:
-                if imported.name == "ai_do_api.core.llm":
+                if imported.name == "open_alm_api.core.llm":
                     findings.append(
                         Finding(
                             path=path,

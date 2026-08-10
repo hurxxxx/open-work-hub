@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-GATEWAY_ROOT="${AI_DO_INFERENCE_GATEWAY_ROOT:-/projects/ai-do/ai-do-inference-gateway}"
+GATEWAY_ROOT="${OPEN_ALM_INFERENCE_GATEWAY_ROOT:-/projects/open-alm/open-alm-inference-gateway}"
 COMMAND="${1:-status}"
 
 if [[ ! -x "$GATEWAY_ROOT/scripts/inference-gateway-service.sh" ]]; then

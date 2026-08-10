@@ -117,7 +117,7 @@ interface ChatMessage {
   intent?: 'edit' | 'chat' | null;
 }
 
-// 다중 본문 양식(자유/두원)에서 사용자가 고르는 본문 페이지 수.
+// 다중 본문 양식(자유/Open ALM)에서 사용자가 고르는 본문 페이지 수.
 const PAGE_COUNTS = [1, 2, 3, 4, 5] as const;
 const MAX_INSTRUCTIONS_CHARS = 2000;
 const LANGUAGES: { value: string; labelKey: string }[] = [
@@ -187,7 +187,7 @@ export function PptGeneratorView({ appId }: { appId: string }) {
   const [referenceUrl, setReferenceUrl] = useState('');
   // 우측(내부/VLLM) 기밀 컨텍스트
   const [extraNotes, setExtraNotes] = useState('');
-  const [family, setFamily] = useState('doowon-house');
+  const [family, setFamily] = useState('corporate-house');
   const [pageCount, setPageCount] = useState<number | 'auto'>(3);
   const [language, setLanguage] = useState('Korean');
   const [tone, setTone] = useState('default');
@@ -231,8 +231,8 @@ export function PptGeneratorView({ appId }: { appId: string }) {
   const selectedFamily = families.find((f) => f.id === family);
   const isA4 = (selectedFamily?.aspect ?? '16:9') !== '16:9';
   const inputSection = resolveInputSection(searchParams.get('tab'));
-  // 본문 슬라이드 수를 사용자가 정할 수 있는 양식(자유/두원/doowon-v2). multi_body 미제공(구 API)이면
-  // 16:9(doowon-v2)만 다중 본문으로 간주.
+  // 본문 슬라이드 수를 사용자가 정할 수 있는 양식(자유/Open ALM/corporate-v2). multi_body 미제공(구 API)이면
+  // 16:9(corporate-v2)만 다중 본문으로 간주.
   const isMultiBody =
     selectedFamily?.multi_body ?? (selectedFamily?.aspect ?? '16:9') === '16:9';
 
@@ -284,10 +284,10 @@ export function PptGeneratorView({ appId }: { appId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, workspaceSlug]);
 
-  // TEST(doowon-house)는 '긴 자료를 짧게 요약'하는 용도라 페이지 수 기본값을 '자유'로 둔다.
+  // TEST(corporate-house)는 '긴 자료를 짧게 요약'하는 용도라 페이지 수 기본값을 '자유'로 둔다.
   // (양식을 house 로 바꿀 때만 적용 — 이후 사용자가 직접 고른 값은 유지된다.)
   useEffect(() => {
-    if (family === 'doowon-house') setPageCount('auto');
+    if (family === 'corporate-house') setPageCount('auto');
   }, [family]);
 
   // 진행 중인 폴링 중단 (언마운트/리셋/재요청 시 호출)
@@ -357,7 +357,7 @@ export function PptGeneratorView({ appId }: { appId: string }) {
         jobRef.current = status;
         setJobId(status.job_id);
         setContent(status.title ?? '');
-        setFamily(status.family || 'doowon-house');
+        setFamily(status.family || 'corporate-house');
         setSlidesSpec(status.slides_spec ?? null);
         setChatConversationId(status.chat_result?.conversation_id ?? null);
         setFinalizeState(status.pptx_ready ? 'ready' : 'idle');
@@ -969,7 +969,7 @@ function InputForm(props: {
   const previewFamilyInfo = props.families.find((f) => f.id === previewFamily);
   const previewItems = previewFamilyInfo?.preview_images ?? [];
   // 미리보기 이미지 우선순위: 관리자 업로드 → 번들 정적 이미지(표지+본문 여러 장).
-  // 정적 이미지는 HTML 경로(doowon-*) 양식의 본문까지 보여줘 좌우 화살표로 넘겨볼 수 있게 한다.
+  // 정적 이미지는 HTML 경로(corporate-*) 양식의 본문까지 보여줘 좌우 화살표로 넘겨볼 수 있게 한다.
   const previewImages =
     previewItems.length > 0
       ? previewItems.map((item) => item.url)

@@ -2,7 +2,7 @@ import React from 'react';
 import type { TFunction } from 'i18next';
 import { Search } from 'lucide-react';
 
-import { Button, type ChartSeries, Dialog, InlineNotice } from '@ai-do/ui';
+import { Button, type ChartSeries, Dialog, InlineNotice } from '@open-alm/ui';
 
 import { formatDateTime } from '@/src/platform/time/time-utils';
 

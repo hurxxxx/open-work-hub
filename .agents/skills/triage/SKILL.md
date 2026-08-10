@@ -1,11 +1,11 @@
 ---
 name: triage
-description: Triage AI-DO GitLab issues using the live needs-triage and ready-for-agent state contract. Use when the user wants to create or inspect an issue, review incoming work, prepare an AFK agent brief, or change issue state.
+description: Triage Open ALM GitLab issues using the live needs-triage and ready-for-agent state contract. Use when the user wants to create or inspect an issue, review incoming work, prepare an AFK agent brief, or change issue state.
 ---
 
 # Triage
 
-Use GitLab Issues for `dwdcc/ai-do` and the contract in `docs/agents/triage-labels.md`. Use `glab`; do not substitute GitHub commands or invent labels.
+Use GitLab Issues for `open-alm/open-alm` and the contract in `docs/agents/triage-labels.md`. Use `glab`; do not substitute GitHub commands or invent labels.
 
 Every triage or agent-brief comment posted to an issue must start with:
 

@@ -17,7 +17,7 @@ function state(overrides: Partial<ProfilePageState> = {}): ProfilePageState {
     defaultWorkspaceId: 'workspace-a',
     displayName: 'Member',
     error: 'previous error',
-    fullName: 'AI-DO Member',
+    fullName: 'Open ALM Member',
     jobTitle: '',
     loadingSessions: false,
     locale: 'ko-KR',
@@ -146,8 +146,8 @@ describe('settings page model', () => {
   it('plans full profile detail saves with trimmed identity fields', () => {
     const plan = prepareProfileDetailsSave(
       state({
-        displayName: '  Doowon  ',
-        fullName: '  Doowon Member  ',
+        displayName: '  Open ALM  ',
+        fullName: '  Open ALM Member  ',
         jobTitle: '  Builder  ',
         submitting: false,
       }),
@@ -160,8 +160,8 @@ describe('settings page model', () => {
     });
     expect(plan.payload).toEqual({
       date_format: 'korean',
-      display_name: 'Doowon',
-      full_name: 'Doowon Member',
+      display_name: 'Open ALM',
+      full_name: 'Open ALM Member',
       job_title: 'Builder',
       locale: 'ko-KR',
       theme_preference: 'system',

@@ -4,8 +4,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
 
-from ai_do_api.domains.pms.projections import serialize_task_summary
-from ai_do_api.domains.pms.workflow import (
+from open_alm_api.domains.pms.projections import serialize_task_summary
+from open_alm_api.domains.pms.workflow import (
     calculate_progress,
     closed_status_count,
     incompatible_statuses_for_inherit,

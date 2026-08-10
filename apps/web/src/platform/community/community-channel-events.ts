@@ -1,5 +1,5 @@
 export const COMMUNITY_CHANNELS_CHANGED_EVENT =
-  'ai-do:community-channels-changed';
+  'open-alm:community-channels-changed';
 
 export function emitCommunityChannelsChanged(): void {
   if (typeof window === 'undefined') {

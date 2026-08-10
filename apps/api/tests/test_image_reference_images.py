@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ai_do_api.domains.images.reference_images import (
+from open_alm_api.domains.images.reference_images import (
     REFERENCE_ORIGINAL_NAME_MAX_LENGTH,
     ReferenceImagePolicy,
     build_reference_entry,

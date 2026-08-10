@@ -141,7 +141,7 @@ app-modules/<appId>/
 Backend 는 frontend module 과 1:1 파일명을 맞추기보다 domain 책임으로 나눈다.
 
 ```txt
-apps/api/src/ai_do_api/domains/<domain>/
+apps/api/src/open_alm_api/domains/<domain>/
   router.py
   schemas.py
   service.py

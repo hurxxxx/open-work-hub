@@ -1,4 +1,4 @@
-from ai_do_api.domains.legacy_issues.analysis_graph.report_guard import (
+from open_alm_api.domains.legacy_issues.analysis_graph.report_guard import (
     build_source_markdown_fallback,
     sanitize_report_markdown,
     validate_report_markdown,

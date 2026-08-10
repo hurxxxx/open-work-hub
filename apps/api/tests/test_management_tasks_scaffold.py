@@ -4,10 +4,10 @@ import pytest
 from fastapi.responses import StreamingResponse
 from fastapi.routing import APIRoute
 
-from ai_do_api.core.db import Base
-from ai_do_api.domains.management_tasks import router as health_router
-from ai_do_api.domains.management_tasks.app_catalog import MANAGEMENT_TASKS_WORKSPACE_APP
-from ai_do_api.domains.management_tasks.xlsx import XLSX_MEDIA_TYPE
+from open_alm_api.core.db import Base
+from open_alm_api.domains.management_tasks import router as health_router
+from open_alm_api.domains.management_tasks.app_catalog import MANAGEMENT_TASKS_WORKSPACE_APP
+from open_alm_api.domains.management_tasks.xlsx import XLSX_MEDIA_TYPE
 
 
 def test_app_is_ready_but_disabled_until_enabled_for_a_workspace() -> None:
