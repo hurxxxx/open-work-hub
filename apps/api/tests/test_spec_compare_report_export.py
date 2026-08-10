@@ -5,9 +5,9 @@ from types import SimpleNamespace
 from fastapi import HTTPException
 import pytest
 
-from open_alm_api.domains.spec_compare import report_export, service
-from open_alm_api.domains.spec_compare import router as spec_compare_router
-from open_alm_api.domains.spec_compare.models import SpecCompareJob
+from open_work_hub_api.domains.spec_compare import report_export, service
+from open_work_hub_api.domains.spec_compare import router as spec_compare_router
+from open_work_hub_api.domains.spec_compare.models import SpecCompareJob
 
 
 SAMPLE_PAYLOAD: dict[str, object] = {

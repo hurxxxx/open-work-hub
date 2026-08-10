@@ -1,4 +1,4 @@
-import { createCoreAdminSectionRegistry } from '@open-alm/core-web/admin';
+import { createCoreAdminSectionRegistry } from '@open-work-hub/core-web/admin';
 
 import { ADMIN_SECTION_DEFINITIONS, type AdminSection } from './admin-sections';
 

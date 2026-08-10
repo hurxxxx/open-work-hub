@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import { InlineNotice } from '@open-alm/ui/feedback/inline-notice';
+import { InlineNotice } from '@open-work-hub/ui/feedback/inline-notice';
 
 import { useAuth } from './auth-context';
 import {
@@ -199,6 +199,14 @@ export function LoginScreen() {
           email: form.email.trim(),
           password: form.password,
         });
+      } else if (isSignupMode) {
+        await auth.signup({
+          full_name: form.fullName.trim(),
+          login_id: form.loginId.trim(),
+          email: form.email.trim(),
+          password: form.password,
+          password_confirm: form.passwordConfirm,
+        });
       } else {
         await auth.login({
           login_id: form.loginId.trim(),
@@ -283,6 +291,7 @@ export function LoginScreen() {
               onFieldChange={(field, value) =>
                 dispatch({ type: 'fieldChanged', field, value })
               }
+              onModeChange={(mode) => dispatch({ type: 'modeChanged', mode })}
               onSubmit={handleSubmit}
             />
           </div>
@@ -298,6 +307,7 @@ function LoginFormCard({
   modeFlags,
   onDevAdminLogin,
   onFieldChange,
+  onModeChange,
   onSubmit,
 }: {
   auth: ReturnType<typeof useAuth>;
@@ -305,6 +315,7 @@ function LoginFormCard({
   modeFlags: LoginModeFlags;
   onDevAdminLogin: () => Promise<void>;
   onFieldChange: (field: LoginTextField, value: string) => void;
+  onModeChange: (mode: 'login' | 'signup') => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
 }) {
   const { t } = useTranslation('auth');
@@ -438,10 +449,10 @@ function LoginFormCard({
             ) : null}
           </div>
           <PasswordField
-            autoComplete={isSetupMode ? 'new-password' : 'current-password'}
+            autoComplete={isSetupMode || isSignupMode ? 'new-password' : 'current-password'}
             id="auth-password"
             label={t('login.password')}
-            minLength={isSetupMode ? 8 : 1}
+            minLength={isSetupMode || isSignupMode ? 8 : 1}
             onChange={(value) => onFieldChange('password', value)}
             value={form.password}
           />
@@ -485,6 +496,19 @@ function LoginFormCard({
           )}
         </button>
       </form>
+
+      {!isSetupMode ? (
+        <p className="mt-6 text-center app-text-caption text-app-ink/55">
+          {isSignupMode ? t('login.alreadyHaveAccount') : t('login.noAccount')}{' '}
+          <button
+            className="font-medium text-app-accent hover:underline"
+            onClick={() => onModeChange(isSignupMode ? 'login' : 'signup')}
+            type="button"
+          >
+            {isSignupMode ? t('login.goToSignIn') : t('login.goToSignup')}
+          </button>
+        </p>
+      ) : null}
 
       {!hasDevAccountButtons &&
       !isSetupMode &&

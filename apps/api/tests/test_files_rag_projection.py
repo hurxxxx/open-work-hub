@@ -7,14 +7,14 @@ from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 import pytest
 
-from open_alm_api.domains.document_processing import DocumentExtractBundle, EvidenceBlock
-from open_alm_api.domains.files.models import (
+from open_work_hub_api.domains.document_processing import DocumentExtractBundle, EvidenceBlock
+from open_work_hub_api.domains.files.models import (
     FileManagerCorpus,
     FileManagerFile,
     FileManagerFileSourceMetadata,
 )
-from open_alm_api.domains.files import rag_projection, rag_sync
-from open_alm_api.domains.files.rag_projection import (
+from open_work_hub_api.domains.files import rag_projection, rag_sync
+from open_work_hub_api.domains.files.rag_projection import (
     FILES_MIN_STRUCTURED_TEXT_CHARS,
     FILES_OCR_POLICY_VERSION,
     MAX_FILES_RAG_SOURCE_BYTES,
@@ -25,15 +25,15 @@ from open_alm_api.domains.files.rag_projection import (
     read_file_content,
     validate_office_archive,
 )
-from open_alm_api.domains.files.retrieval_contract import (
+from open_work_hub_api.domains.files.retrieval_contract import (
     files_retrieval_active_for_environment,
 )
-from open_alm_api.domains.files.source_access import FileManagerSourceAccessAdapter
-from open_alm_api.domains.files.search_projection import build_file_search_document
-from open_alm_api.domains.files.service import purge_file_retrieval_artifact
-from open_alm_api.domains.rag.contracts import RagScopeKind, RagSyncOperation
-from open_alm_api.domains.retrieval.projection_fencing import ProjectionEventRef
-from open_alm_api.domains.search.projection_identity import ensure_search_document_identity
+from open_work_hub_api.domains.files.source_access import FileManagerSourceAccessAdapter
+from open_work_hub_api.domains.files.search_projection import build_file_search_document
+from open_work_hub_api.domains.files.service import purge_file_retrieval_artifact
+from open_work_hub_api.domains.rag.contracts import RagScopeKind, RagSyncOperation
+from open_work_hub_api.domains.retrieval.projection_fencing import ProjectionEventRef
+from open_work_hub_api.domains.search.projection_identity import ensure_search_document_identity
 
 
 _FIXED_ZIP_TIMESTAMP = (2020, 1, 1, 0, 0, 0)
@@ -744,7 +744,7 @@ def test_external_source_typed_metadata_is_searchable_without_private_source_fie
         corpus_id="corpus-1",
         external_id="private-upstream-id",
         external_id_sha256="b" * 64,
-        source_kind="mcloudoc",
+        source_kind="external_repository",
         source_id="private-source-id",
         source_id_sha256="c" * 64,
         source_version="private-revision",
@@ -783,19 +783,19 @@ def test_external_source_typed_metadata_is_searchable_without_private_source_fie
     vector = build_file_rag_projection(file=file, artifact=artifact)
 
     assert keyword["title"] == "냉각 성능 기술 보고서"
-    assert keyword["metadata"]["origin_source_kind"] == "mcloudoc"
+    assert keyword["metadata"]["origin_source_kind"] == "external_repository"
     assert keyword["metadata"]["author"] == "홍길동"
     assert keyword["metadata"]["department"] == "연구개발팀"
     assert keyword["metadata"]["document_type"] == "기술보고서"
     assert keyword["date_markers"]["authored_at"] == "2026-08-01T00:00:00"
     assert {target["label"] for target in keyword["targets"]} >= {
-        "mcloudoc",
+        "external_repository",
         "홍길동",
         "연구개발팀",
         "기술보고서",
     }
     assert vector.title == "냉각 성능 기술 보고서"
-    assert vector.metadata["origin_source_kind"] == "mcloudoc"
+    assert vector.metadata["origin_source_kind"] == "external_repository"
     assert "냉각 성능 기술 보고서" in vector.chunks[0].index_text
     projected = repr({"keyword": keyword, "vector": vector.model_dump(mode="json")})
     assert "private-upstream-id" not in projected

@@ -16,7 +16,7 @@ function workspace(
 ): WorkspaceSummary {
   return {
     id: 'workspace-hq',
-    name: 'Open ALM HQ',
+    name: 'Open Work Hub HQ',
     role: 'admin',
     slug: 'hq',
     ...overrides,
@@ -26,14 +26,13 @@ function workspace(
 function user(overrides: Partial<AuthUser> = {}): AuthUser {
   return {
     date_format: 'korean',
-    display_name: 'Open ALM Member',
-    email: 'member@open-alm.local',
-    full_name: 'Open ALM Member',
+    display_name: 'Open Work Hub Member',
+    email: 'member@open-work-hub.local',
+    full_name: 'Open Work Hub Member',
     id: 'user-1',
     locale: 'ko-KR',
     login_id: 'member',
     must_change_password: false,
-    primary_org_unit: null,
     status: 'active',
     system_roles: [],
     theme_preference: 'system',
@@ -46,7 +45,7 @@ function user(overrides: Partial<AuthUser> = {}): AuthUser {
 
 const LAUNCHER_GLOBAL_PATHS: LauncherGlobalPaths = new Map([
   ['community', '/community'],
-  ['qa-assistant', '/qa-assistant'],
+  ['docs', '/docs'],
 ]);
 
 describe('shell ui model', () => {
@@ -58,7 +57,7 @@ describe('shell ui model', () => {
   });
 
   it('builds compact initials with a fallback', () => {
-    expect(getInitials('Open ALM HQ', 'WS')).toBe('AD');
+    expect(getInitials('Open Work Hub HQ', 'WS')).toBe('OW');
     expect(getInitials('Delivery', 'WS')).toBe('D');
     expect(getInitials('   ', 'WS')).toBe('WS');
   });
@@ -114,12 +113,12 @@ describe('shell ui model', () => {
 
     expect(
       resolveMobileAppLink(
-        'qa-assistant',
+        'docs',
         currentUser,
         'hq',
         LAUNCHER_GLOBAL_PATHS,
       ),
-    ).toBe('/qa-assistant');
+    ).toBe('/docs');
     expect(
       resolveMobileAppLink(
         'community',

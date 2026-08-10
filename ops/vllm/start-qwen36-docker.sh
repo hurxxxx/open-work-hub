@@ -15,8 +15,8 @@ fi
 : "${MAX_MODEL_LEN:=131328}"
 : "${GPU_MEMORY_UTILIZATION:=0.80}"
 : "${MAX_NUM_SEQS:=64}"
-: "${HF_CACHE:=/home/open-alm/.cache/huggingface}"
-: "${VLLM_CACHE:=/home/open-alm/.cache/vllm}"
+: "${HF_CACHE:=/home/open-work-hub/.cache/huggingface}"
+: "${VLLM_CACHE:=/home/open-work-hub/.cache/vllm}"
 : "${VLLM_IMAGE:=vllm/vllm-openai:cu130-nightly}"
 : "${VLLM_CONTAINER_NAME:=vllm-local}"
 

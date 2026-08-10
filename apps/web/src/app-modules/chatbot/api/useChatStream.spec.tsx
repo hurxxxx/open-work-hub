@@ -33,7 +33,7 @@ describe('useChatStream', () => {
     });
 
     const rendered = renderHook(() =>
-      useChatStream('token-1', 'workspace-1', 'user-1:legacy-issues'),
+      useChatStream('token-1', 'workspace-1', 'user-1:docs'),
     );
     let sendPromise: Promise<void> | null = null;
 
@@ -53,7 +53,7 @@ describe('useChatStream', () => {
     expect(capturedSignal?.aborted).toBe(false);
 
     const resumed = renderHook(() =>
-      useChatStream('token-1', 'workspace-1', 'user-1:legacy-issues'),
+      useChatStream('token-1', 'workspace-1', 'user-1:docs'),
     );
     expect(resumed.result.current.state.status).toBe('streaming');
     expect(resumed.result.current.state.streamOpened).toBe(true);
@@ -81,28 +81,28 @@ describe('useChatStream', () => {
       );
     });
 
-    const legacyIssues = renderHook(() =>
-      useChatStream('token-1', 'workspace-1', 'user-1:legacy-issues-isolated'),
+    const firstRequest = renderHook(() =>
+      useChatStream('token-1', 'workspace-1', 'user-1:docs-isolated'),
     );
     const generalChat = renderHook(() =>
       useChatStream('token-1', 'workspace-1', 'user-1:chatbot'),
     );
 
     act(() => {
-      void legacyIssues.result.current.send({
+      void firstRequest.result.current.send({
         messages: [{ role: 'user', content: 'hi' }],
       });
     });
 
     await waitFor(() => {
-      expect(legacyIssues.result.current.state.streamOpened).toBe(true);
+      expect(firstRequest.result.current.state.streamOpened).toBe(true);
     });
     expect(generalChat.result.current.state.status).toBe('idle');
 
     act(() => {
-      legacyIssues.result.current.abort();
+      firstRequest.result.current.abort();
     });
-    legacyIssues.unmount();
+    firstRequest.unmount();
     generalChat.unmount();
   });
 

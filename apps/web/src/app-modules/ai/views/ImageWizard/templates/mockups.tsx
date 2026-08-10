@@ -406,47 +406,6 @@ const swimlane = () => (
   </Card>
 );
 
-const org_chart = () => (
-  <Card>
-    <rect
-      x="64"
-      y="10"
-      width="32"
-      height="14"
-      rx="2"
-      fill={ACC}
-      opacity="0.85"
-    />
-    <line x1="80" y1="24" x2="80" y2="36" stroke={STROKE} strokeWidth="1" />
-    <line x1="22" y1="36" x2="138" y2="36" stroke={STROKE} strokeWidth="1" />
-    {[0, 1, 2, 3].map((i) => {
-      const x = 14 + i * 36;
-      return (
-        <g key={i}>
-          <line
-            x1={x + 12}
-            y1="36"
-            x2={x + 12}
-            y2="48"
-            stroke={STROKE}
-            strokeWidth="1"
-          />
-          <rect x={x} y="48" width="24" height="14" rx="2" fill={FILL_DEEP} />
-          <line
-            x1={x + 12}
-            y1="62"
-            x2={x + 12}
-            y2="74"
-            stroke={STROKE}
-            strokeWidth="1"
-          />
-          <rect x={x + 4} y="74" width="16" height="10" rx="1.5" fill={FILL} />
-        </g>
-      );
-    })}
-  </Card>
-);
-
 const mindmap = () => (
   <Card>
     <circle cx="80" cy="50" r="16" fill={ACC} opacity="0.85" />
@@ -760,7 +719,6 @@ export const TEMPLATE_MOCKUPS = {
   weekly_brief,
   process_flow,
   swimlane,
-  org_chart,
   mindmap,
   data_pipeline,
   quote_card,

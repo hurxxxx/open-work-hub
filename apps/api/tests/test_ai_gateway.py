@@ -5,12 +5,12 @@ from typing import Any
 
 import pytest
 
-from open_alm_api.core.llm import LlmPoolConfig
-from open_alm_api.core.settings import get_settings
-from open_alm_api.domains.ai import audit as audit_module
-from open_alm_api.domains.ai import gateway as gateway_module
-from open_alm_api.domains.ai import masking as masking_module
-from open_alm_api.domains.ai.gateway import (
+from open_work_hub_api.core.llm import LlmPoolConfig
+from open_work_hub_api.core.settings import get_settings
+from open_work_hub_api.domains.ai import audit as audit_module
+from open_work_hub_api.domains.ai import gateway as gateway_module
+from open_work_hub_api.domains.ai import masking as masking_module
+from open_work_hub_api.domains.ai.gateway import (
     AiGatewayContextPack,
     AiGatewayPolicyViolation,
     AiGatewayRequest,
@@ -19,12 +19,12 @@ from open_alm_api.domains.ai.gateway import (
     execute_llm,
     resolve_gateway_execution,
 )
-from open_alm_api.domains.ai.privacy_filter import PrivacyFilterDetection, PrivacyFilterSpan
-from open_alm_api.domains.ai.registry import (
+from open_work_hub_api.domains.ai.privacy_filter import PrivacyFilterDetection, PrivacyFilterSpan
+from open_work_hub_api.domains.ai.registry import (
     get_ai_capability_registry,
     reset_ai_capability_registry,
 )
-from open_alm_api.domains.ai.security_policy import (
+from open_work_hub_api.domains.ai.security_policy import (
     POLICY_MASK_AND_SEND_REASON,
     AiSecurityPolicyDecision,
 )
@@ -70,10 +70,16 @@ class _FakePolicyDb:
 
 
 def _request(task_kind: str, **overrides: Any) -> AiGatewayRequest:
-    workload = get_ai_capability_registry().get_llm_workload(task_kind)
+    registry = get_ai_capability_registry()
+    workload = registry.get_llm_workload(task_kind)
+    if workload is None:
+        workload = registry.resolve_llm_workload_for_task(
+            app_id="files",
+            task_kind=task_kind,
+        )
     route = overrides.pop(
         "workload_route",
-        "external" if task_kind == "patent_analysis" else "local",
+        "external" if task_kind == "files_grounded_chat" else "local",
     )
     config = LlmPoolConfig(
         pool=route,
@@ -133,12 +139,12 @@ def test_gateway_unknown_task_kind_does_not_route_external() -> None:
 def test_registered_external_provider_is_blocked_by_egress_allowlist_even_when_security_is_off(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("OPEN_ALM_LLM_EXTERNAL_ALLOWED_PROVIDERS", "openai")
+    monkeypatch.setenv("OPEN_WORK_HUB_LLM_EXTERNAL_ALLOWED_PROVIDERS", "openai")
     get_settings.cache_clear()
     try:
         with pytest.raises(AiGatewayPolicyViolation) as exc_info:
             resolve_gateway_execution(
-                _request("patent_analysis", requested_provider="anthropic"),
+                _request("files_grounded_chat", requested_provider="anthropic"),
                 _FakePolicyDb("external", ai_security_enabled=False),
             )
     finally:
@@ -206,7 +212,7 @@ def test_gateway_forces_local_for_internal_context_pack_on_external_policy() -> 
 
     with pytest.raises(AiGatewayPolicyViolation) as exc_info:
         resolve_gateway_execution(
-            _request("patent_analysis", context_pack=context_pack),
+            _request("files_grounded_chat", context_pack=context_pack),
             _FakePolicyDb("external"),
         )
     assert exc_info.value.reason_code == "external_transfer_blocked"
@@ -220,7 +226,7 @@ def test_gateway_context_pack_without_provenance_fails_closed() -> None:
 
     with pytest.raises(AiGatewayPolicyViolation) as exc_info:
         resolve_gateway_execution(
-            _request("patent_analysis", context_pack=context_pack),
+            _request("files_grounded_chat", context_pack=context_pack),
             _FakePolicyDb("external"),
         )
     assert exc_info.value.reason_code == "external_transfer_blocked"
@@ -238,7 +244,7 @@ def test_gateway_rejects_requested_provider_for_internal_context_pack() -> None:
     with pytest.raises(AiGatewayPolicyViolation) as exc_info:
         resolve_gateway_execution(
             _request(
-                "patent_analysis",
+                "files_grounded_chat",
                 context_pack=context_pack,
                 requested_provider="openai",
             ),
@@ -246,7 +252,7 @@ def test_gateway_rejects_requested_provider_for_internal_context_pack() -> None:
         )
 
     assert exc_info.value.reason_code == "external_transfer_blocked"
-    assert exc_info.value.task_kind == "patent_analysis"
+    assert exc_info.value.task_kind == "files_grounded_chat"
     assert exc_info.value.requested_provider == "openai"
 
 
@@ -254,7 +260,7 @@ def test_gateway_forces_local_for_security_document_prompt() -> None:
     with pytest.raises(AiGatewayPolicyViolation) as exc_info:
         resolve_gateway_execution(
             _request(
-                "patent_analysis",
+                "files_grounded_chat",
                 messages=[{"role": "user", "content": "보안 문서 VPN 접근 제어 정책 요약"}],
             ),
             _FakePolicyDb("external"),
@@ -271,7 +277,7 @@ def test_gateway_audits_external_block_without_invoking_provider(
     with pytest.raises(AiGatewayPolicyViolation):
         resolve_gateway_execution(
             _request(
-                "patent_analysis",
+                "files_grounded_chat",
                 messages=[{"role": "user", "content": "Contact owner@example.com"}],
             ),
             _FakePolicyDb("external"),
@@ -315,7 +321,7 @@ def test_gateway_fails_closed_before_provider_in_production_like_environment_whe
 
     with pytest.raises(AiGatewayPolicyViolation) as error:
         complete_gateway_chat(
-            _request("patent_analysis"),
+            _request("files_grounded_chat"),
             _FakePolicyDb("external", ai_security_enabled=False),
         )
 
@@ -342,7 +348,7 @@ def test_gateway_allows_provider_execution_in_production_when_security_is_on(
     monkeypatch.setattr(gateway_module, "_complete_chat", fake_complete_chat)
 
     result = complete_gateway_chat(
-        _request("patent_analysis"),
+        _request("files_grounded_chat"),
         _FakePolicyDb("external", ai_security_enabled=True),
     )
 
@@ -358,7 +364,7 @@ def test_gateway_keeps_external_route_in_development_when_security_enforcement_d
 
     execution = resolve_gateway_execution(
         _request(
-            "patent_analysis",
+            "files_grounded_chat",
             messages=[{"role": "user", "content": "Contact owner@example.com"}],
         ),
         _FakePolicyDb("external", ai_security_enabled=False),
@@ -409,7 +415,7 @@ def test_gateway_mask_and_send_masks_regex_pii_before_external(
 
     execution = resolve_gateway_execution(
         _request(
-            "patent_analysis",
+            "files_grounded_chat",
             messages=[{"role": "user", "content": "Contact owner@example.com for review"}],
         ),
         _FakePolicyDb("external"),
@@ -463,7 +469,7 @@ def test_gateway_mask_and_send_hard_blocks_privacy_filter_secret(
     with pytest.raises(AiGatewayPolicyViolation) as exc_info:
         resolve_gateway_execution(
             _request(
-                "patent_analysis",
+                "files_grounded_chat",
                 messages=[{"role": "user", "content": "Review token fragment"}],
             ),
             _FakePolicyDb("external"),
@@ -495,7 +501,7 @@ def test_gateway_mask_and_send_fails_closed_when_privacy_filter_disabled(
     with pytest.raises(AiGatewayPolicyViolation) as exc_info:
         resolve_gateway_execution(
             _request(
-                "patent_analysis",
+                "files_grounded_chat",
                 messages=[{"role": "user", "content": "public prompt"}],
             ),
             _FakePolicyDb("external"),
@@ -528,7 +534,7 @@ def test_gateway_global_mask_action_masks_pii_when_no_policy_rule(
 
     execution = resolve_gateway_execution(
         _request(
-            "patent_analysis",
+            "files_grounded_chat",
             messages=[{"role": "user", "content": "Contact owner@example.com"}],
         ),
         _FakePolicyDb("external"),
@@ -566,7 +572,7 @@ def test_gateway_policy_block_external_does_not_reroute_local(
     with pytest.raises(AiGatewayPolicyViolation) as exc_info:
         resolve_gateway_execution(
             _request(
-                "patent_analysis",
+                "files_grounded_chat",
                 messages=[{"role": "user", "content": "Contact owner@example.com"}],
             ),
             _FakePolicyDb("external"),
@@ -600,7 +606,7 @@ def test_gateway_inherit_cannot_override_global_block_action(
     with pytest.raises(AiGatewayPolicyViolation) as exc_info:
         resolve_gateway_execution(
             _request(
-                "patent_analysis",
+                "files_grounded_chat",
                 messages=[{"role": "user", "content": "Contact owner@example.com"}],
             ),
             _FakePolicyDb("external"),

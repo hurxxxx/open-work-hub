@@ -7,10 +7,10 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from open_alm_api.core.db import get_engine
-from open_alm_api.domains.recording import blob_store
-from open_alm_api.domains.recording import service as canonical_recording_service
-from open_alm_api.domains.recording.models import Recording, RecordingTarget, RecordingStaging
+from open_work_hub_api.core.db import get_engine
+from open_work_hub_api.domains.recording import blob_store
+from open_work_hub_api.domains.recording import service as canonical_recording_service
+from open_work_hub_api.domains.recording.models import Recording, RecordingTarget, RecordingStaging
 
 from test_meeting import _auth_headers, _bootstrap_admin_session, _create_meeting
 
@@ -227,7 +227,7 @@ def test_only_one_user_can_record_at_a_time(client, monkeypatch, tmp_path) -> No
     second = _create_user_with_workspaces(
         client,
         admin_token,
-        email="second-recorder@open-alm.local",
+        email="second-recorder@open-work-hub.local",
         full_name="Second Recorder",
         workspace_keys=["administrator"],
     )
@@ -322,7 +322,7 @@ def test_delete_recording_permission_and_cleanup(client, monkeypatch, tmp_path) 
     other = _create_user_with_workspaces(
         client,
         admin_token,
-        email="other-recording@open-alm.local",
+        email="other-recording@open-work-hub.local",
         full_name="Other Recording",
         workspace_keys=["administrator"],
     )

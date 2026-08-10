@@ -8,9 +8,6 @@ const DEFAULT_EXCLUDE_FILE_RE =
 const DEFAULT_EXCLUDE_PATH_PARTS = [
   `${path.sep}platform${path.sep}i18n${path.sep}`,
   `${path.sep}app-modules${path.sep}learning${path.sep}model${path.sep}`,
-  // 이 legacy view는 API 계약의 한글 field/value를 UI wiring과 함께 보유한다.
-  // 새 meal-invoice-ocr 파일까지 제외하지 않으며, 후속 분리 시 이 예외를 삭제한다.
-  `${path.sep}app-modules${path.sep}meal-invoice-ocr${path.sep}views${path.sep}MealInvoiceOcrView.tsx`,
 ];
 
 const DEFAULT_PATTERNS = [

@@ -5,8 +5,8 @@
 
 ## Context
 
-Open ALM has several search-like paths: Generic RAG, keyword search, Q&A RAG,
-legacy issue AI search, fixture document search, and AI graph evidence packing.
+Open Work Hub has several search-like paths: Generic RAG, keyword search,
+fixture document search, and AI graph evidence packing.
 They share user intent but do not share one backend. Treating all of them as
 one deep abstraction hides important differences in ownership, permissions,
 index lifecycle, and evidence quality.
@@ -45,7 +45,7 @@ tool remains available for hidden-tool and feature-flag fallback.
 The active RAG scope is intentionally narrow:
 
 - workspace: Docs native official documents
-- company: Q&A documents and notices
+- workspace: approved Files sources behind their source activation gate
 
 Knowledge source documents, Meeting, PMS, Planner, and Learning Notes personal
 documents are not active RAG sources. They can be reconsidered only with
@@ -68,14 +68,10 @@ or relationship indexing.
 
 Real Graph RAG requires a separate design and migration plan.
 
-### 5. Demo and legacy searches are named by what they are
+### 5. Demo searches are named by what they are
 
 Fixture document search is a demo surface, not RAG. Its public scenario id is
 `documents-demo`.
-
-Legacy Issue AI Search is a user-facing evidence search, but it is not Generic
-RAG. It owns its PostgreSQL FTS/trigram/JSONB/pgvector flow and app-specific
-conversation artifacts.
 
 ### 6. Retrieval owns cross-backend ranking and final grounding
 
@@ -113,7 +109,7 @@ under the `filters.keyword` and `filters.rag` namespaces.
 - Domain backends keep clear ownership of ingestion, ACL, indexing, and quality.
 - RAG source growth requires explicit policy and tests instead of filename
   inference.
-- Demo and legacy paths stop looking like hidden Generic RAG implementations.
+- Demo paths stop looking like hidden Generic RAG implementations.
 
 ### Negative
 

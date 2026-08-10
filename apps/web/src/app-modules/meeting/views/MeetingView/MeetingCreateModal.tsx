@@ -1,5 +1,5 @@
 import { useRef, type ChangeEvent } from 'react';
-import { InlineNotice } from '@open-alm/ui';
+import { InlineNotice } from '@open-work-hub/ui';
 
 import { FormDialog } from '@/src/components/form/FormDialog';
 import { TaskPickerModal } from './TaskPickerModal';

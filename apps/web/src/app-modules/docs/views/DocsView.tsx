@@ -36,7 +36,7 @@ import {
   type BlockContent,
   useConfirm,
   usePrompt,
-} from '@open-alm/ui';
+} from '@open-work-hub/ui';
 import {
   DndContext,
   DragOverlay,
@@ -57,7 +57,7 @@ import {
 import {
   REALTIME_TOPIC_EVENT_TYPES,
   createDocsPagesRealtimeSubscriptionMessage,
-} from '@open-alm/contracts/realtime';
+} from '@open-work-hub/contracts/realtime';
 
 import { useMediaUpload } from '@/src/platform/media/use-media-upload';
 import { useAuth } from '@/src/platform/auth/auth-provider';

@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from open_alm_api.domains.learning_notes.note_document import (
+from open_work_hub_api.domains.learning_notes.note_document import (
     SOURCE_KIND_PRIVATE,
     SOURCE_KIND_PUBLIC,
     build_source_ref,
@@ -18,7 +18,7 @@ from open_alm_api.domains.learning_notes.note_document import (
     validate_content_blocks,
     visibility_from_kind,
 )
-from open_alm_api.domains.learning_notes.schemas import MAX_CONTENT_BLOCKS_BYTES
+from open_work_hub_api.domains.learning_notes.schemas import MAX_CONTENT_BLOCKS_BYTES
 
 
 def _assert_http_error(
@@ -26,7 +26,7 @@ def _assert_http_error(
 ) -> None:
     assert exc_info.value.status_code == status_code
     assert exc_info.value.headers is not None
-    assert exc_info.value.headers["X-Open ALM-Error-Code"] == code
+    assert exc_info.value.headers["X-Open-Work-Hub-Error-Code"] == code
 
 
 def test_source_ref_build_and_parse() -> None:

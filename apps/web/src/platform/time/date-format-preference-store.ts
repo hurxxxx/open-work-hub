@@ -4,7 +4,7 @@ import {
   normalizeDateFormatPreference,
 } from './zoned-date-formatter';
 
-export const DATE_FORMAT_STORAGE_KEY = 'open-alm:date-format';
+export const DATE_FORMAT_STORAGE_KEY = 'open-work-hub:date-format';
 
 export function readStoredDateFormatPreference(): DateFormatPreference {
   if (typeof window === 'undefined') return DEFAULT_DATE_FORMAT;

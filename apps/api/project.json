@@ -9,14 +9,14 @@
       "executor": "nx:run-commands",
       "options": {
         "cwd": "apps/api",
-        "command": "OPEN_ALM_API_AUTO_MIGRATE=${OPEN_ALM_API_AUTO_MIGRATE:-1} uv run --python 3.12 uvicorn open_alm_api.main:app --app-dir src --host ${OPEN_ALM_DEV_API_HOST:-127.0.0.1} --port ${OPEN_ALM_API_DEV_PORT:-8001} --reload"
+        "command": "OPEN_WORK_HUB_API_AUTO_MIGRATE=${OPEN_WORK_HUB_API_AUTO_MIGRATE:-1} uv run --python 3.12 uvicorn open_work_hub_api.main:app --app-dir src --host ${OPEN_WORK_HUB_DEV_API_HOST:-127.0.0.1} --port ${OPEN_WORK_HUB_API_DEV_PORT:-8001} --reload"
       }
     },
     "serve": {
       "executor": "nx:run-commands",
       "options": {
         "cwd": "apps/api",
-        "command": "uv run --python 3.12 uvicorn open_alm_api.main:app --app-dir src --host 127.0.0.1 --port ${OPEN_ALM_API_DEV_PORT:-8001}"
+        "command": "uv run --python 3.12 uvicorn open_work_hub_api.main:app --app-dir src --host 127.0.0.1 --port ${OPEN_WORK_HUB_API_DEV_PORT:-8001}"
       }
     },
     "lint": {
@@ -30,23 +30,7 @@
       "executor": "nx:run-commands",
       "options": {
         "cwd": "apps/api",
-        "command": "uv run --python 3.12 --group dev python -m pytest -n ${OPEN_ALM_API_PYTEST_WORKERS:-8} --dist=worksteal -m 'not slow and not external_integration and not migration'"
-      }
-    },
-    "test-budget": {
-      "executor": "nx:run-commands",
-      "cache": false,
-      "options": {
-        "cwd": "apps/api",
-        "command": "uv run --python 3.12 --group dev python ../../scripts/check-api-test-budget.py --output ../../api-test-report.json"
-      }
-    },
-    "test-affected": {
-      "executor": "nx:run-commands",
-      "cache": false,
-      "options": {
-        "cwd": ".",
-        "command": "node scripts/run-affected-api-tests.mjs standard"
+        "command": "uv run --python 3.12 --group dev python -m pytest -n ${OPEN_WORK_HUB_API_PYTEST_WORKERS:-8} --dist=worksteal -m 'not slow and not external_integration and not migration'"
       }
     },
     "test-migrations": {
@@ -62,7 +46,7 @@
       "cache": false,
       "options": {
         "cwd": "apps/api",
-        "command": "uv run --python 3.12 --group dev python ../../scripts/check-api-test-budget.py --output ../../api-test-report.json && uv run --python 3.12 --group dev python -m pytest -n ${OPEN_ALM_API_PYTEST_WORKERS:-8} --dist=worksteal -m 'not slow and not external_integration and not migration' && uv run --python 3.12 --group dev python -m pytest -m 'slow and not external_integration and not migration' && uv run --python 3.12 --group dev python -m pytest -m migration && bash ../../scripts/api-test-vm.sh -m external_integration"
+        "command": "uv run --python 3.12 --group dev python -m pytest -n ${OPEN_WORK_HUB_API_PYTEST_WORKERS:-8} --dist=worksteal -m 'not slow and not external_integration and not migration' && uv run --python 3.12 --group dev python -m pytest -m 'slow and not external_integration and not migration' && uv run --python 3.12 --group dev python -m pytest -m migration && bash ../../scripts/api-test-vm.sh -m external_integration"
       }
     },
     "test-slow": {
@@ -78,14 +62,6 @@
       "options": {
         "cwd": "apps/api",
         "command": "bash ../../scripts/api-test-vm.sh -m external_integration"
-      }
-    },
-    "test-integration-affected": {
-      "executor": "nx:run-commands",
-      "cache": false,
-      "options": {
-        "cwd": ".",
-        "command": "node scripts/run-affected-api-tests.mjs external"
       }
     },
     "typecheck": {

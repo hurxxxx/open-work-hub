@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from open_alm_api.domains.retrieval.evaluation import (
+from open_work_hub_api.domains.retrieval.evaluation import (
     RetrievalEvaluationCase,
     RetrievalEvaluationReport,
     RetrievalQualityGateArtifact,

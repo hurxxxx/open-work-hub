@@ -73,7 +73,7 @@ describe('login screen model', () => {
     ]);
   });
 
-  it('derives login mode flags with sign-up closed', () => {
+  it('derives setup, sign-up, and login mode flags', () => {
     expect(
       getLoginModeFlags({
         devAccountGroupCount: 2,
@@ -94,8 +94,8 @@ describe('login screen model', () => {
       }),
     ).toEqual({
       isSetupMode: false,
-      isSignupMode: false,
-      hasDevAccountButtons: true,
+      isSignupMode: true,
+      hasDevAccountButtons: false,
     });
 
     expect(

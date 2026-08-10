@@ -4,17 +4,14 @@ import {
   AppWindow,
   BarChart3,
   BrainCircuit,
-  Clock3,
   Database,
   FileSearch,
   Home,
-  IdCard,
   MessagesSquare,
   Search,
   Server,
   Settings,
   ShieldCheck,
-  User,
 } from 'lucide-react';
 
 import type { NavItem } from '@/src/app/shell/navigation-types';
@@ -51,22 +48,6 @@ const navItems: NavItem[] = [
     category: 'Platform',
     appId: 'settings',
     absolutePath: '/admin/general',
-  },
-  {
-    id: 'settings-people',
-    title: 'settings-people',
-    icon: User,
-    category: 'Organization',
-    appId: 'settings',
-    absolutePath: '/admin/people',
-  },
-  {
-    id: 'settings-hr',
-    title: 'settings-hr',
-    icon: IdCard,
-    category: 'Organization',
-    appId: 'settings',
-    absolutePath: '/admin/hr',
   },
   {
     id: 'settings-apps-platform',
@@ -128,7 +109,7 @@ const navItems: NavItem[] = [
     id: 'settings-workspaces',
     title: 'settings-workspaces',
     icon: Database,
-    category: 'Organization',
+    category: 'Workspaces',
     appId: 'settings',
     absolutePath: '/admin/workspaces',
   },
@@ -139,14 +120,6 @@ const navItems: NavItem[] = [
     category: 'Platform',
     appId: 'settings',
     absolutePath: '/admin/community',
-  },
-  {
-    id: 'settings-batches',
-    title: 'settings-batches',
-    icon: Clock3,
-    category: 'Operations',
-    appId: 'settings',
-    absolutePath: '/admin/batches',
   },
   {
     id: 'settings-usage',
@@ -173,21 +146,21 @@ const navItems: NavItem[] = [
     comingSoon: true,
   },
   {
-    id: 'legacy-issues-common-master',
-    title: 'Legacy common master',
+    id: 'docs-library',
+    title: 'Document library',
     icon: Database,
-    category: 'Legacy',
+    category: 'Documents',
     appId: 'business',
-    linkAppId: 'legacy-issues',
+    linkAppId: 'docs',
     pathSuffix: '/default',
   },
   {
-    id: 'legacy-issues-assistant',
-    title: 'Legacy assistant',
+    id: 'docs-assistant',
+    title: 'Document assistant',
     icon: Search,
-    category: 'Legacy',
+    category: 'Documents',
     appId: 'business',
-    linkAppId: 'legacy-issues',
+    linkAppId: 'docs',
   },
 ];
 
@@ -207,7 +180,7 @@ describe('sub-sidebar navigation model', () => {
           category: 'Tools',
           path_suffix: '?q=1',
           absolute_path: '/tool/search',
-          link_app_id: 'plm',
+          link_app_id: 'docs',
           coming_soon: true,
         }),
         workspaceNavItem({ id: 'home', app_id: 'home' }),
@@ -223,7 +196,7 @@ describe('sub-sidebar navigation model', () => {
       category: 'Translated tools',
       pathSuffix: '?q=1',
       absolutePath: '/tool/search',
-      linkAppId: 'plm',
+      linkAppId: 'docs',
       comingSoon: true,
     });
   });
@@ -298,24 +271,24 @@ describe('sub-sidebar navigation model', () => {
   it('projects leaf app nav items and ignores aggregate owner ids', () => {
     const projection = buildSubSidebarNavigationProjection({
       activeAppId: 'business',
-      activeFeatureAppId: 'legacy-issues',
+      activeFeatureAppId: 'docs',
       canReadWorkspace: true,
       navItems,
       systemRoles: [],
       translate: t,
       workspaceNavItems: [
         workspaceNavItem({
-          id: 'legacy-issues-common-master',
-          app_id: 'legacy-issues',
-          title: 'Common master from bootstrap',
-          category: 'legacy-issues',
-          path_suffix: '/common-master',
+          id: 'docs-library',
+          app_id: 'docs',
+          title: 'Document library from bootstrap',
+          category: 'docs',
+          path_suffix: '/library',
         }),
         workspaceNavItem({
-          id: 'legacy-issues-assistant',
+          id: 'docs-assistant',
           app_id: 'business',
           title: 'Aggregate owner item',
-          category: 'legacy-issues',
+          category: 'docs',
         }),
         workspaceNavItem({
           id: 'search',
@@ -326,12 +299,12 @@ describe('sub-sidebar navigation model', () => {
 
     expect(projection.filteredItems).toHaveLength(1);
     expect(projection.filteredItems[0]).toMatchObject({
-      id: 'legacy-issues-common-master',
+      id: 'docs-library',
       appId: 'business',
-      linkAppId: 'legacy-issues',
-      title: 'Common master from bootstrap',
-      category: 'legacy-issues',
-      pathSuffix: '/common-master',
+      linkAppId: 'docs',
+      title: 'Document library from bootstrap',
+      category: 'docs',
+      pathSuffix: '/library',
     });
   });
 
@@ -368,8 +341,6 @@ describe('sub-sidebar navigation model', () => {
 
     expect(projection.filteredItems.map((item) => item.id)).toEqual([
       'settings-general',
-      'settings-people',
-      'settings-hr',
       'settings-apps-platform',
       'settings-apps-workspace',
       'settings-apps-app-bar',
@@ -379,16 +350,15 @@ describe('sub-sidebar navigation model', () => {
       'settings-ai-security',
       'settings-workspaces',
       'settings-community',
-      'settings-batches',
       'settings-usage',
       'settings-audit',
     ]);
     expect(projection.categories).toEqual([
       'Platform',
-      'Organization',
       'AIPlatform',
       'Operations',
       'SecurityAudit',
+      'Workspaces',
     ]);
     expect(
       buildSubSidebarNavigationProjection({
@@ -407,7 +377,7 @@ describe('sub-sidebar navigation model', () => {
       activeAppId: 'settings',
       canReadWorkspace: false,
       hasAdminSectionAccess: (_systemRoles, section) =>
-        ['apps', 'workspaces', 'batches', 'usage', 'audit'].includes(section),
+        ['apps', 'workspaces', 'usage', 'audit'].includes(section),
       navItems,
       systemRoles: ['platform_admin'],
       translate: t,
@@ -419,13 +389,12 @@ describe('sub-sidebar navigation model', () => {
       'settings-apps-workspace',
       'settings-apps-app-bar',
       'settings-workspaces',
-      'settings-batches',
       'settings-usage',
       'settings-audit',
     ]);
     expect(projection.categories).toEqual([
       'Platform',
-      'Organization',
+      'Workspaces',
       'Operations',
       'SecurityAudit',
     ]);

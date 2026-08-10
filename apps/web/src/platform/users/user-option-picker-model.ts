@@ -1,37 +1,16 @@
 export type UserOptionLike = {
   id: string;
   display_name?: string | null;
-  department?: string | null;
   full_name?: string | null;
-  job_title?: string | null;
   email: string;
-  primary_org_unit?: { name?: string | null } | null;
-  primary_org_unit_name?: string | null;
 };
 
 export function userOptionDisplayName(user: UserOptionLike): string {
   return user.full_name || user.display_name || user.email || user.id;
 }
 
-export function userOptionDepartmentName(user: UserOptionLike): string | null {
-  return (
-    user.department ||
-    user.primary_org_unit_name ||
-    user.primary_org_unit?.name ||
-    null
-  );
-}
-
-export function userOptionNameWithDepartment(user: UserOptionLike): string {
-  const name = userOptionDisplayName(user);
-  const department = userOptionDepartmentName(user);
-  return department ? `${name} - ${department}` : name;
-}
-
 export function userOptionMetaParts(user: UserOptionLike): string[] {
-  return [userOptionDepartmentName(user), user.email].filter(
-    (part): part is string => Boolean(part),
-  );
+  return [user.email].filter((part): part is string => Boolean(part));
 }
 
 export function userOptionAvatarInitials(user: UserOptionLike): string {
@@ -71,17 +50,13 @@ export function userOptionMatchesQuery(
   const normalizedQuery = query.trim().toLowerCase();
   if (!normalizedQuery) return true;
 
-  const department = userOptionDepartmentName(user)?.toLowerCase() ?? '';
   const displayName = user.display_name?.toLowerCase() ?? '';
-  const jobTitle = user.job_title?.toLowerCase() ?? '';
   const name = user.full_name?.toLowerCase() ?? '';
   const email = user.email.toLowerCase();
   return (
     name.includes(normalizedQuery) ||
     displayName.includes(normalizedQuery) ||
-    email.includes(normalizedQuery) ||
-    department.includes(normalizedQuery) ||
-    jobTitle.includes(normalizedQuery)
+    email.includes(normalizedQuery)
   );
 }
 

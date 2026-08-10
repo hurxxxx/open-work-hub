@@ -3,7 +3,6 @@ import { User2 } from 'lucide-react';
 import { UserOptionAvatar } from '@/src/platform/users/UserSearchMultiSelect';
 import {
   userOptionDisplayName,
-  userOptionNameWithDepartment,
   type UserOptionLike,
 } from '@/src/platform/users/user-option-picker-model';
 import type { PmsTask, PmsTaskListMember } from '../api/pms-api';
@@ -64,7 +63,7 @@ export function resolveTaskAssigneeTitle({
   task,
 }: Pick<TaskAssigneeStackProps, 'members' | 'task'>): string {
   return taskAssigneeOptions(task, members)
-    .map((option) => userOptionNameWithDepartment(option))
+    .map((option) => userOptionDisplayName(option))
     .join(', ');
 }
 
@@ -94,7 +93,7 @@ export function TaskAssigneeStack({
   const visible = assignees.slice(0, visibleCount);
   const hiddenCount = Math.max(0, assignees.length - visible.length);
   const title = assignees
-    .map((option) => userOptionNameWithDepartment(option))
+    .map((option) => userOptionDisplayName(option))
     .join(', ');
   const primaryAssignee = assignees[0] as TaskAssigneeOption;
 

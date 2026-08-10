@@ -5,14 +5,14 @@ from types import SimpleNamespace
 
 import httpx
 
-from open_alm_api.core import asr
-from open_alm_api.core.asr_backend_registry import (
+from open_work_hub_api.core import asr
+from open_work_hub_api.core.asr_backend_registry import (
     ASRBackendDescriptor,
     register_asr_backend,
     reset_asr_backends,
 )
-from open_alm_api.core.asr_payloads import parse_transcript_payload
-from open_alm_api.core.settings import Settings
+from open_work_hub_api.core.asr_payloads import parse_transcript_payload
+from open_work_hub_api.core.settings import Settings
 
 
 def test_get_asr_backend_builds_inference_gateway(monkeypatch) -> None:
@@ -79,10 +79,10 @@ def test_build_asr_backend_uses_registered_backend_adapter() -> None:
 
 
 def test_asr_settings_follow_inference_gateway_env_names(monkeypatch) -> None:
-    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", "postgresql://user:pass@localhost/db")
-    monkeypatch.setenv("OPEN_ALM_API_ASR_INFERENCE_GATEWAY_MODEL", "local-transcribe")
-    monkeypatch.setenv("OPEN_ALM_API_ASR_COHERE_MODEL", "custom-transcribe")
-    monkeypatch.setenv("OPEN_ALM_API_ASR_COHERE_BASE_URL", "https://cohere.example/v2")
+    monkeypatch.setenv("OPEN_WORK_HUB_POSTGRES_DSN", "postgresql://user:pass@localhost/db")
+    monkeypatch.setenv("OPEN_WORK_HUB_API_ASR_INFERENCE_GATEWAY_MODEL", "local-transcribe")
+    monkeypatch.setenv("OPEN_WORK_HUB_API_ASR_COHERE_MODEL", "custom-transcribe")
+    monkeypatch.setenv("OPEN_WORK_HUB_API_ASR_COHERE_BASE_URL", "https://cohere.example/v2")
 
     settings = Settings(_env_file=None)
 

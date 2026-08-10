@@ -12,12 +12,12 @@ API_SRC = WORKSPACE_ROOT / "apps" / "api" / "src"
 if str(API_SRC) not in sys.path:
     sys.path.insert(0, str(API_SRC))
 
-from open_alm_api.domains.images.agent_runtime import (
+from open_work_hub_api.domains.images.agent_runtime import (
     ImageGenerationRuntimeResult,
     register_image_agent_runtime_adapter,
     reset_image_agent_runtime_adapters,
 )
-from open_alm_worker.tasks import images
+from open_work_hub_worker.tasks import images
 
 
 def test_run_agent_gives_illustrator_autonomous_web_and_image_tools(monkeypatch) -> None:

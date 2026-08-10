@@ -5,23 +5,13 @@ import type {
   NavItem,
 } from '@/src/app/shell/navigation-types';
 import type { CompiledFeatureShellRegistration } from '@/src/app/shell/feature-module-registry';
-import { dataVizManifest } from '@/src/app-modules/data-viz/manifest';
 import { learningManifest } from '@/src/app-modules/learning/manifest';
-import { legacyIssuesManifest } from '@/src/app-modules/legacy-issues/manifest';
-import { mealInvoiceOcrManifest } from '@/src/app-modules/meal-invoice-ocr/manifest';
-import { patentAutomationManifest } from '@/src/app-modules/patent-automation/manifest';
-import { plmManifest } from '@/src/app-modules/plm/manifest';
 import { businessFeatureShellRegistrations } from './feature-modules';
 
 const BUSINESS_APP_ID = 'business' as const;
 
 const BUSINESS_FEATURE_MANIFESTS = [
-  plmManifest,
   learningManifest,
-  dataVizManifest,
-  patentAutomationManifest,
-  legacyIssuesManifest,
-  mealInvoiceOcrManifest,
 ] as const;
 
 function rewriteNavItem(item: NavItem, manifest: AppModuleManifest): NavItem {
@@ -76,7 +66,6 @@ export const businessManifest: AppModuleManifest = {
     aiCapabilities: [],
     writeAuditActions: [],
     appLocalTests: [
-      'apps/api/tests/test_plm_query_policy.py',
       'apps/api/tests/test_ai.py',
       'apps/api/tests/test_retrieval.py',
     ],

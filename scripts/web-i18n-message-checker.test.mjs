@@ -220,23 +220,19 @@ test('walk excludes paths that own i18n resources or learning model data', () =>
   );
 });
 
-test('legacy meal OCR exemption does not hide new app files', () => {
+test('scanner reports messages in ordinary app views', () => {
   const root = path.join(path.sep, 'repo');
   const findings = scanMemoryFiles({
     [path.join(
       root,
-      'apps/web/src/app-modules/meal-invoice-ocr/views/MealInvoiceOcrView.tsx',
-    )]: 'export const schema = { 품명: "품명" };\n',
-    [path.join(
-      root,
-      'apps/web/src/app-modules/meal-invoice-ocr/views/NewPanel.tsx',
+      'apps/web/src/app-modules/docs/views/NewPanel.tsx',
     )]:
-      'export function NewPanel() { return <button>Save invoice</button>; }\n',
+      'export function NewPanel() { return <button>Save document</button>; }\n',
   });
 
   assert.deepEqual(
     findings.map((finding) => finding.file),
-    ['apps/web/src/app-modules/meal-invoice-ocr/views/NewPanel.tsx'],
+    ['apps/web/src/app-modules/docs/views/NewPanel.tsx'],
   );
 });
 

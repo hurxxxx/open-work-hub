@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import { Button, InlineNotice } from '@open-alm/ui';
+import { Button, InlineNotice } from '@open-work-hub/ui';
 
 import {
   getAdminDocumentProcessingSnapshot,
@@ -375,73 +375,12 @@ export function AdminDocumentProcessingSection({ token }: { token: string }) {
                   OpenSearch
                 </td>
               </tr>
-              <tr>
-                <td className="app-text-body-sm py-2 pr-4 text-app-ink">
-                  {t('admin.console.documentProcessing.functions.legacyVector')}
-                </td>
-                <td className="app-text-body-sm py-2 pr-4 text-app-ink">
-                  PostgreSQL
-                </td>
-                <td className="app-text-body-sm py-2 pr-4 text-app-ink">
-                  pgvector
-                </td>
-                <td className="app-text-body-sm py-2 text-app-ink/65">
-                  {t('admin.console.documentProcessing.values.dimensions', {
-                    count: snapshot.legacy_issues.embedding_dimensions,
-                  })}
-                </td>
-              </tr>
             </tbody>
           </table>
         </div>
       </SurfaceCard>
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <SurfaceCard
-          description={t('admin.console.documentProcessing.legacy.description')}
-          title={t('admin.console.documentProcessing.legacy.title')}
-        >
-          <DetailRows
-            rows={[
-              {
-                label: t(
-                  'admin.console.documentProcessing.fields.attachmentIndex',
-                ),
-                value: (
-                  <BooleanText
-                    value={snapshot.legacy_issues.attachment_index_enabled}
-                  />
-                ),
-              },
-              {
-                label: t(
-                  'admin.console.documentProcessing.fields.alwaysVision',
-                ),
-                value: (
-                  <BooleanText
-                    value={snapshot.legacy_issues.always_use_vision}
-                  />
-                ),
-              },
-              {
-                label: t(
-                  'admin.console.documentProcessing.fields.semanticSearch',
-                ),
-                value: (
-                  <BooleanText
-                    value={snapshot.legacy_issues.semantic_search_enabled}
-                  />
-                ),
-              },
-              {
-                label: t(
-                  'admin.console.documentProcessing.fields.maximumChunks',
-                ),
-                value: snapshot.legacy_issues.maximum_chunks,
-              },
-            ]}
-          />
-        </SurfaceCard>
         <SurfaceCard
           description={t(
             'admin.console.documentProcessing.chunking.description',

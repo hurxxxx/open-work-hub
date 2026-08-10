@@ -1,7 +1,7 @@
 """Build a privacy-preserving, read-only Files RAG canary manifest.
 
 The harness inventories an existing directory without uploading files or
-calling Open ALM services.  Standard output and optional manifests contain only
+calling Open Work Hub services.  Standard output and optional manifests contain only
 aggregate statistics and SHA-256 identifiers; source names and bodies are
 never serialized.
 
@@ -29,12 +29,12 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import BinaryIO, Sequence
 
-from open_alm_api.domains.document_processing.html_extractor import (
+from open_work_hub_api.domains.document_processing.html_extractor import (
     HtmlExtractionError,
     extract_html_stream,
 )
 
-SCHEMA_VERSION = "open-alm.files-rag-readonly-manifest.v2"
+SCHEMA_VERSION = "open-work-hub.files-rag-readonly-manifest.v2"
 MAX_SOURCE_BYTES = 120 * 1024 * 1024
 MAX_OFFICE_ARCHIVE_ENTRIES = 1_000
 MAX_OFFICE_ARCHIVE_UNCOMPRESSED_BYTES = 240 * 1024 * 1024
@@ -130,12 +130,12 @@ def _canonical_json(value: object) -> str:
 
 def _source_id(relative_path: Path) -> str:
     encoded = relative_path.as_posix().encode("utf-8", errors="surrogateescape")
-    return _sha256_bytes(b"open-alm-files-source-v1\0" + encoded)
+    return _sha256_bytes(b"open-work-hub-files-source-v1\0" + encoded)
 
 
 def _source_root_id(source_root: Path) -> str:
     encoded = os.fsencode(str(source_root))
-    return _sha256_bytes(b"open-alm-files-source-root-v1\0" + encoded)
+    return _sha256_bytes(b"open-work-hub-files-source-root-v1\0" + encoded)
 
 
 def _public_extension(path: Path) -> str:
@@ -646,7 +646,7 @@ def _query_id(query: str) -> str:
     normalized = " ".join(query.split()).casefold()
     if not normalized:
         raise HarnessContractError("invalid_evaluation_input")
-    return _sha256_bytes(b"open-alm-retrieval-eval-query-v1\0" + normalized.encode("utf-8"))
+    return _sha256_bytes(b"open-work-hub-retrieval-eval-query-v1\0" + normalized.encode("utf-8"))
 
 
 def _load_json(path: Path, error_code: str) -> object:
@@ -830,7 +830,7 @@ def build_manifest(
         ranked = sorted(
             items,
             key=lambda item: _sha256_bytes(
-                b"open-alm-files-canary-v1\0"
+                b"open-work-hub-files-canary-v1\0"
                 + item.candidate.source_id.encode("ascii")
                 + (item.content_sha256 or "").encode("ascii")
             ),

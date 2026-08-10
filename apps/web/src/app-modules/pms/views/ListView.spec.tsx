@@ -53,7 +53,6 @@ function member(overrides: Partial<PmsTaskListMember> = {}): PmsTaskListMember {
     full_name: 'Riley Park',
     is_admin: false,
     joined_at: '2026-06-10T00:00:00.000Z',
-    primary_org_unit_name: 'Product',
     role: 'member',
     user_id: 'reporter-1',
     ...overrides,

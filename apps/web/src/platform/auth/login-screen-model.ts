@@ -113,9 +113,8 @@ export function getLoginModeFlags({
   mode: LoginMode;
   requiresSetup: boolean;
 }): LoginModeFlags {
-  void mode;
   const isSetupMode = requiresSetup;
-  const isSignupMode = false;
+  const isSignupMode = !requiresSetup && mode === 'signup';
   return {
     isSetupMode,
     isSignupMode,

@@ -6,7 +6,7 @@ import {
   CornerDownRight,
   GitBranch,
 } from 'lucide-react';
-import { Badge, Button } from '@open-alm/ui';
+import { Badge, Button } from '@open-work-hub/ui';
 import { useTranslation } from 'react-i18next';
 import { DateInput } from '@/src/components/date/DateInput';
 import type { PmsTask, PmsTaskListStatus } from '../api/pms-api';

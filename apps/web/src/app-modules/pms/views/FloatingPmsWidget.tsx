@@ -10,7 +10,7 @@ import {
   Loader2,
   Plus,
 } from 'lucide-react';
-import { Button, InlineNotice } from '@open-alm/ui';
+import { Button, InlineNotice } from '@open-work-hub/ui';
 
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/platform/auth/auth-provider';

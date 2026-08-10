@@ -60,7 +60,7 @@ export function ChatComposer(props: ChatComposerProps) {
       event.preventDefault();
       // Guard mouse/button submit paths so slash mode never leaks into the
       // chat stream while a slash command is being composed
-      // must not send the raw "/fmea" buffer as a message.
+      // must not send the raw slash-command buffer as a message.
       if (!shouldSubmitChatForm({ isSlashOpen })) {
         return;
       }

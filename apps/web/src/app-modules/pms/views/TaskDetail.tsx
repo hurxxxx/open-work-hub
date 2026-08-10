@@ -20,8 +20,8 @@ import {
   Plus,
   ExternalLink,
 } from 'lucide-react';
-import { Badge, Button, BlockEditor, BlockViewer } from '@open-alm/ui';
-import type { BlockContent } from '@open-alm/ui';
+import { Badge, Button, BlockEditor, BlockViewer } from '@open-work-hub/ui';
+import type { BlockContent } from '@open-work-hub/ui';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '@/src/platform/auth/auth-provider';

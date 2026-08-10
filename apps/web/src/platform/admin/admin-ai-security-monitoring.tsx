@@ -2,7 +2,7 @@ import React from 'react';
 import type { TFunction } from 'i18next';
 import { Search } from 'lucide-react';
 
-import { Button, type ChartSeries, Dialog, InlineNotice } from '@open-alm/ui';
+import { Button, type ChartSeries, Dialog, InlineNotice } from '@open-work-hub/ui';
 
 import { formatDateTime } from '@/src/platform/time/time-utils';
 
@@ -773,7 +773,6 @@ export function AiSecurityMonitoringUserTable({
                     </div>
                     <div className="truncate text-app-ink/55">{item.email}</div>
                     <div className="truncate text-app-ink/55">
-                      {item.org_unit_name ?? t('admin.console.usage.noOrg')}
                     </div>
                   </div>
                 </BodyCell>

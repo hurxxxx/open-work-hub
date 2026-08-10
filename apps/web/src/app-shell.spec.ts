@@ -19,13 +19,12 @@ function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
   return {
     id: 'user-1',
     login_id: 'member',
-    email: 'member@open-alm.local',
-    full_name: 'Open ALM Member',
-    display_name: 'Open ALM Member',
+    email: 'member@open-work-hub.local',
+    full_name: 'Open Work Hub Member',
+    display_name: 'Open Work Hub Member',
     status: 'active',
     theme_preference: 'system',
     locale: 'ko-KR',
-    primary_org_unit: null,
     workspaces: [buildWorkspace()],
     workspace_roles: [],
     system_roles: [],
@@ -148,46 +147,6 @@ describe('resolveShellState', () => {
     });
   });
 
-  it('uses news query channels for the active news navigation item', () => {
-    expect(resolveShellState('/news', buildUser(), ['news'])).toEqual({
-      activeAppId: 'news',
-      activeNavItemId: 'news-home',
-    });
-    expect(
-      resolveShellState('/news?channel=keyword', buildUser(), ['news']),
-    ).toEqual({
-      activeAppId: 'news',
-      activeNavItemId: 'news-keyword',
-    });
-    expect(
-      resolveShellState('/news?channel=car', buildUser(), ['news']),
-    ).toEqual({
-      activeAppId: 'news',
-      activeNavItemId: 'news-car',
-    });
-    expect(
-      resolveShellState('/news?channel=front', buildUser(), ['news']),
-    ).toEqual({
-      activeAppId: 'news',
-      activeNavItemId: 'news-front',
-    });
-    expect(
-      resolveShellState('/news?view=report&tab=kdi', buildUser(), ['news']),
-    ).toEqual({
-      activeAppId: 'news',
-      activeNavItemId: 'industry-report-kdi',
-    });
-    expect(
-      resolveShellState(
-        '/w/retired-workspace/news?channel=keyword',
-        buildUser({ workspaces: [] }),
-        ['news'],
-      ),
-    ).toEqual({
-      activeAppId: 'news',
-      activeNavItemId: 'news-keyword',
-    });
-  });
 
   it('routes community paths to the company-wide community shell', () => {
     expect(
@@ -211,25 +170,6 @@ describe('resolveShellState', () => {
     ).toEqual({
       activeAppId: 'community',
       activeNavItemId: '',
-    });
-  });
-
-  it('routes company-wide Q&A paths to the global AI shell', () => {
-    expect(
-      resolveShellState('/qa-assistant', buildUser({ workspaces: [] }), [
-        'qa-assistant',
-      ]),
-    ).toEqual({
-      activeAppId: 'ai',
-      activeNavItemId: 'qa-assistant',
-    });
-    expect(
-      resolveShellState('/qa-assistant?tab=documents', buildUser(), [
-        'qa-assistant',
-      ]),
-    ).toEqual({
-      activeAppId: 'ai',
-      activeNavItemId: 'qa-assistant',
     });
   });
 
@@ -338,14 +278,6 @@ describe('resolveShellState', () => {
     expect(resolveShellState('/admin', adminUser)).toEqual({
       activeAppId: 'settings',
       activeNavItemId: 'settings-general',
-    });
-    expect(resolveShellState('/admin/users', adminUser)).toEqual({
-      activeAppId: 'settings',
-      activeNavItemId: 'settings-people',
-    });
-    expect(resolveShellState('/admin/hr', adminUser)).toEqual({
-      activeAppId: 'settings',
-      activeNavItemId: 'settings-hr',
     });
     expect(resolveShellState('/admin/teams', adminUser)).toEqual({
       activeAppId: 'settings',

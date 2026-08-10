@@ -38,8 +38,8 @@ export function SettingsNavigation({
       icon: Newspaper,
     },
     {
-      id: 'aiDoDesktop' as const,
-      label: t('auth:settings.aiDoDesktop'),
+      id: 'openWorkHubDesktop' as const,
+      label: t('auth:settings.openWorkHubDesktop'),
       icon: Monitor,
     },
   ];

@@ -71,7 +71,7 @@ Celery 워커: 1234 작업 처리 → 결과 저장
 # apps/api/src/.../tasks.py
 from celery import Celery
 
-app = Celery("open-alm", broker="redis://redis:6379/0", backend="redis://redis:6379/1")
+app = Celery("open-work-hub", broker="redis://redis:6379/0", backend="redis://redis:6379/1")
 
 @app.task
 def send_welcome_email(user_id: int):
@@ -199,7 +199,7 @@ def sync_with_openai(self, prompt: str):
 - **비동기(async)** (파이썬 문법): 한 프로세스 안에서 I/O를 기다리는 동안 다른 일을 하는 **동시성**. 여전히 같은 요청 안.
 - **백그라운드 작업(Celery)**: 요청과 **분리된 프로세스**에서 나중에 돌리는 방식.
 
-이 세 가지는 다른 층위입니다. Open ALM는 FastAPI의 `async` + Celery의 백그라운드를 같이 씁니다.
+이 세 가지는 다른 층위입니다. Open Work Hub는 FastAPI의 `async` + Celery의 백그라운드를 같이 씁니다.
 
 ---
 
@@ -225,12 +225,12 @@ services:
   api:
     ...               # FastAPI
   worker:
-    command: celery -A open_alm_api worker --loglevel=info
+    command: celery -A open_work_hub_api worker --loglevel=info
   beat:
-    command: celery -A open_alm_api beat --loglevel=info
+    command: celery -A open_work_hub_api beat --loglevel=info
 ```
 
-워커 코드는 `apps/worker` 아래에 위치하며, 실행 엔트리포인트와 태스크 정의는 `apps/worker/src/open_alm_worker/` 아래에서 관리합니다. 태스크 정의는 `apps/worker/src/open_alm_worker/tasks/`에 도메인별로 나뉩니다.
+워커 코드는 `apps/worker` 아래에 위치하며, 실행 엔트리포인트와 태스크 정의는 `apps/worker/src/open_work_hub_worker/` 아래에서 관리합니다. 태스크 정의는 `apps/worker/src/open_work_hub_worker/tasks/`에 도메인별로 나뉩니다.
 
 ### 8.1 🏢 업무 시나리오
 

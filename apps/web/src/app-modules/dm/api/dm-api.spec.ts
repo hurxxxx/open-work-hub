@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiRequestError } from '@/src/platform/api/client';
-import { DM_MAX_ATTACHMENT_BYTES } from '@open-alm/contracts/dm';
+import { DM_MAX_ATTACHMENT_BYTES } from '@open-work-hub/contracts/dm';
 
 import {
   createDirectDmConversation,

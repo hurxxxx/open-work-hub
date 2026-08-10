@@ -6,7 +6,7 @@ import hashlib
 import pytest
 from cryptography.fernet import Fernet
 
-from open_alm_api.domains.mail.crypto import (
+from open_work_hub_api.domains.mail.crypto import (
     MailCredentialError,
     resolve_mail_credential_key,
 )

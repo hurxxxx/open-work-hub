@@ -1,5 +1,5 @@
 export const COMMUNITY_CHANNELS_CHANGED_EVENT =
-  'open-alm:community-channels-changed';
+  'open-work-hub:community-channels-changed';
 
 export function emitCommunityChannelsChanged(): void {
   if (typeof window === 'undefined') {

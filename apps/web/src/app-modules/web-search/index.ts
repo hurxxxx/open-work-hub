@@ -1,10 +1,2 @@
-export {
-  researchTrendsManifest,
-  standardsMonitorManifest,
-  webSearchManifest,
-} from './manifest';
-export {
-  researchTrendsWorkspaceRoutes,
-  standardsMonitorWorkspaceRoutes,
-  webSearchWorkspaceRoutes,
-} from './routes';
+export { webSearchManifest } from './manifest';
+export { webSearchWorkspaceRoutes } from './routes';

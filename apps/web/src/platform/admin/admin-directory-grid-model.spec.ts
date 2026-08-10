@@ -23,7 +23,6 @@ function user(overrides: Partial<AuthUser> = {}): AuthUser {
     locale: 'ko-KR',
     time_zone: 'Asia/Seoul',
     date_format: 'korean',
-    primary_org_unit: null,
     system_roles: [],
     workspaces: [],
     workspace_roles: [],
@@ -170,7 +169,6 @@ describe('admin directory grid model', () => {
       user: user({
         display_name: '',
         full_name: 'Ada Lovelace',
-        primary_org_unit: null,
         status: 'suspended',
       }),
       selection,
@@ -182,7 +180,6 @@ describe('admin directory grid model', () => {
       id: 'user-1',
       name: 'Ada Lovelace',
       email: 'ada@example.test',
-      orgName: '-',
       checkboxLabel: 'Ada Lovelace',
       checked: true,
       disabled: true,

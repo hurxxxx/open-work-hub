@@ -9,9 +9,9 @@ BEGIN
     IF NOT EXISTS (
         SELECT 1
         FROM pg_catalog.pg_roles
-        WHERE rolname = 'open_alm_analysis_reader'
+        WHERE rolname = 'open_work_hub_analysis_reader'
     ) THEN
-        CREATE ROLE open_alm_analysis_reader
+        CREATE ROLE open_work_hub_analysis_reader
             NOLOGIN
             NOINHERIT
             NOSUPERUSER
@@ -23,4 +23,4 @@ BEGIN
 END;
 $bootstrap$;
 
-GRANT open_alm_analysis_reader TO :"app_role";
+GRANT open_work_hub_analysis_reader TO :"app_role";

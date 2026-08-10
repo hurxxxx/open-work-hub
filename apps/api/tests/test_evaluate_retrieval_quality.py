@@ -6,16 +6,16 @@ from types import SimpleNamespace
 
 import pytest
 
-from open_alm_api import evaluate_retrieval_quality
-from open_alm_api.evaluate_retrieval_quality import _evaluation_case, _retrieval_request
-from open_alm_api.domains.retrieval.contracts import (
+from open_work_hub_api import evaluate_retrieval_quality
+from open_work_hub_api.evaluate_retrieval_quality import _evaluation_case, _retrieval_request
+from open_work_hub_api.domains.retrieval.contracts import (
     RetrievalHit,
     RetrievalProfile,
     RetrievalQueryResponse,
     RetrievalStrategy,
 )
-from open_alm_api.domains.retrieval.evaluation import RetrievalQualityCorpusCase
-from open_alm_api.domains.retrieval.evaluation import RetrievalEvaluationCase
+from open_work_hub_api.domains.retrieval.evaluation import RetrievalQualityCorpusCase
+from open_work_hub_api.domains.retrieval.evaluation import RetrievalEvaluationCase
 
 
 def _corpus_case() -> RetrievalQualityCorpusCase:

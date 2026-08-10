@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import { Button, InlineNotice } from '@open-alm/ui';
+import { Button, InlineNotice } from '@open-work-hub/ui';
 
 import { UserDateTime } from '@/src/components/date/UserDateTime';
 

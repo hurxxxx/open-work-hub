@@ -6,10 +6,10 @@
 //     transcription / attendees)
 //
 // The modal stays mounted on the calendar — the user can deep-edit the meeting
-// + notes without losing their place. `embedded` mode on the @open-alm/ui Dialog
+// + notes without losing their place. `embedded` mode on the @open-work-hub/ui Dialog
 // suppresses the built-in header / padding / scroll wrapper so the layout's
 // own chrome fills the surface cleanly.
-import { Dialog } from '@open-alm/ui';
+import { Dialog } from '@open-work-hub/ui';
 import { useTranslation } from 'react-i18next';
 
 import { MeetingWorkspaceLayout } from '@/src/app-modules/meeting';

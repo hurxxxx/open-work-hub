@@ -23,7 +23,7 @@ export type DiagramsHubAction =
   | { type: 'remove'; id: string };
 
 export const DIAGRAM_HUB_PAGE_SIZE = 200;
-export const DIAGRAM_VIEW_MODE_STORAGE_KEY = 'open-alm:diagrams:view-mode';
+export const DIAGRAM_VIEW_MODE_STORAGE_KEY = 'open-work-hub:diagrams:view-mode';
 
 export const VIEW_LABEL_KEYS: Record<DiagramHubView, string> = {
   all: 'shell:nav.diagrams-all',

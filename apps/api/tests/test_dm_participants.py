@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from fastapi import HTTPException
 import pytest
 
-from open_alm_api.domains.dm import participants
+from open_work_hub_api.domains.dm import participants
 
 
 def test_active_participant_helpers_ignore_left_participants() -> None:

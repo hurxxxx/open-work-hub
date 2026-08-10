@@ -7,7 +7,7 @@ import {
   stubWorkspaceAppDataBackend,
 } from './helpers';
 
-const LOCALE_STORAGE_KEY = 'open-alm:locale';
+const LOCALE_STORAGE_KEY = 'open-work-hub:locale';
 
 async function stubFullShell(
   page: Page,
@@ -125,7 +125,7 @@ test.describe('i18n locale smoke', () => {
         path: '/w/hq/chatbot',
         assert: async (current) => {
           await expect(
-            current.getByRole('heading', { name: 'I-Do Chatbot' }),
+            current.getByRole('heading', { name: 'AI Assistant Chatbot' }),
           ).toBeVisible();
         },
       },
@@ -194,7 +194,7 @@ test.describe('i18n locale smoke', () => {
         path: '/tool/search?workspace=hq',
         assert: async (current) => {
           await expect(
-            current.getByRole('heading', { name: 'Open ALM Search' }),
+            current.getByRole('heading', { name: 'Open Work Hub Search' }),
           ).toBeVisible();
           await expect(
             current.getByPlaceholder(

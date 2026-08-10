@@ -158,7 +158,7 @@ async def get_user(user_id: str):
 
 ### 3.5 Pydantic Settings
 
-`pydantic-settings 2.8` (Pydantic과 동일한 v2 계열)은 환경 변수를 Pydantic 모델로 읽는 도구. 우리 프로젝트의 `apps/api/src/open_alm_api/core/settings.py` 같은 곳에서 이런 식으로 쓰입니다.
+`pydantic-settings 2.8` (Pydantic과 동일한 v2 계열)은 환경 변수를 Pydantic 모델로 읽는 도구. 우리 프로젝트의 `apps/api/src/open_work_hub_api/core/settings.py` 같은 곳에서 이런 식으로 쓰입니다.
 
 ```python
 from pydantic_settings import BaseSettings
@@ -259,7 +259,7 @@ apps/api/
 ├── alembic/                 DB 마이그레이션 (29장)
 ├── alembic.ini
 ├── pyproject.toml           의존성 선언
-├── src/open_alm_api/
+├── src/open_work_hub_api/
 │   ├── core/
 │   │   ├── settings.py      환경변수 → Pydantic Settings
 │   │   ├── security.py      암호화·토큰
@@ -301,7 +301,7 @@ apps/api/
 ### 7.2 예시 흐름 (가상)
 
 ```python
-# apps/api/src/open_alm_api/domains/pms/router.py
+# apps/api/src/open_work_hub_api/domains/pms/router.py
 class IssueCreate(BaseModel):
     title: str
     board_id: str
@@ -313,7 +313,7 @@ class IssueRead(BaseModel):
     status: IssueStatus
     # ...
 
-# apps/api/src/open_alm_api/domains/pms/service.py
+# apps/api/src/open_work_hub_api/domains/pms/service.py
 async def create_issue(db, workspace_id: str, data: IssueCreate) -> Issue:
     issue = Issue(
         workspace_id=workspace_id,
@@ -324,7 +324,7 @@ async def create_issue(db, workspace_id: str, data: IssueCreate) -> Issue:
     await db.commit()
     return issue
 
-# apps/api/src/open_alm_api/domains/pms/router.py
+# apps/api/src/open_work_hub_api/domains/pms/router.py
 @router.post("/issues", response_model=IssueRead)
 async def post_issue(
     body: IssueCreate,

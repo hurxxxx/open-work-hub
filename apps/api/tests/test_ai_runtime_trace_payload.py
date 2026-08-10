@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from open_alm_api.domains.ai.runtime.trace_payload import (
+from open_work_hub_api.domains.ai.runtime.trace_payload import (
     prepare_trace_payload,
     scrub_trace_payload,
 )

@@ -13,13 +13,13 @@ from conftest import (
     _teardown_client_state,
 )
 from dev_accounts import create_workspace_user_session, dev_login
-from open_alm_api.core.db import get_session_factory
-from open_alm_api.domains.auth.access import ensure_dev_login_seed_data
-from open_alm_api.domains.auth.models import Workspace
-from open_alm_api.domains.docs import service as docs_service
-from open_alm_api.domains.pms.access_grants import grant_task_access, revoke_task_access
-from open_alm_api.domains.search.indexing import process_search_index_job
-from open_alm_api.domains.search.models import SearchIndexJob
+from open_work_hub_api.core.db import get_session_factory
+from open_work_hub_api.domains.auth.access import ensure_dev_login_seed_data
+from open_work_hub_api.domains.auth.models import Workspace
+from open_work_hub_api.domains.docs import service as docs_service
+from open_work_hub_api.domains.pms.access_grants import grant_task_access, revoke_task_access
+from open_work_hub_api.domains.search.indexing import process_search_index_job
+from open_work_hub_api.domains.search.models import SearchIndexJob
 
 
 pytestmark = pytest.mark.external_integration("opensearch")
@@ -40,8 +40,8 @@ def search_client(
     integration_infra: _IntegrationInfra,
 ) -> Iterator[TestClient]:
     index_prefix = integration_infra.new_opensearch_index_prefix()
-    monkeypatch.setenv("OPEN_ALM_OPENSEARCH_URL", integration_infra.opensearch_url)
-    monkeypatch.setenv("OPEN_ALM_OPENSEARCH_INDEX_PREFIX", index_prefix)
+    monkeypatch.setenv("OPEN_WORK_HUB_OPENSEARCH_URL", integration_infra.opensearch_url)
+    monkeypatch.setenv("OPEN_WORK_HUB_OPENSEARCH_INDEX_PREFIX", index_prefix)
     try:
         test_client = _build_client(
             monkeypatch,
@@ -238,7 +238,7 @@ def test_keyword_search_filters_private_docs_by_acl(search_client: TestClient) -
         search_client,
         workspace_key="administrator",
         login_id="searchviewer",
-        email="search-viewer@open-alm.local",
+        email="search-viewer@open-work-hub.local",
         full_name="Search Viewer",
     )
     owner_token = owner_session["token"]

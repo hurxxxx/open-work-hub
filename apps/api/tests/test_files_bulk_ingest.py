@@ -12,16 +12,15 @@ import pytest
 from sqlalchemy import create_engine, event, func, select
 from sqlalchemy.orm import Session
 
-from open_alm_api.core.db import Base
-from open_alm_api.domains.auth.models import (
-    OrgUnit,
+from open_work_hub_api.core.db import Base
+from open_work_hub_api.domains.auth.models import (
     User,
     UserSystemRole,
     Workspace,
     WorkspaceUserBinding,
 )
-from open_alm_api.domains.files import bulk_ingest, service as files_service
-from open_alm_api.domains.files.models import (
+from open_work_hub_api.domains.files import bulk_ingest, service as files_service
+from open_work_hub_api.domains.files.models import (
     FileManagerBulkIngestEntry,
     FileManagerBulkIngestRun,
     FileManagerCorpus,
@@ -29,13 +28,13 @@ from open_alm_api.domains.files.models import (
     FileManagerFolder,
     FileManagerStorageCleanupJob,
 )
-from open_alm_api.domains.rag.models import RagSyncJob
-from open_alm_api.domains.retrieval.models import (
+from open_work_hub_api.domains.rag.models import RagSyncJob
+from open_work_hub_api.domains.retrieval.models import (
     RetrievalPartition,
     RetrievalProjectionEvent,
     RetrievalProjectionHead,
 )
-from open_alm_api.domains.search.models import SearchIndexJob
+from open_work_hub_api.domains.search.models import SearchIndexJob
 
 
 WORKSPACE_ID = "workspace-a"
@@ -57,7 +56,6 @@ def db() -> Session:
     Base.metadata.create_all(
         engine,
         tables=[
-            OrgUnit.__table__,
             Workspace.__table__,
             User.__table__,
             UserSystemRole.__table__,

@@ -11,12 +11,7 @@ export {
   documentTranslateToolElement,
   draftingToolElement,
   emailAssistantToolElement,
-  fmeaCompareToolElement,
-  imdsMineralsToolElement,
   imageWizardToolElement,
-  lawSearchToolElement,
-  patentAnalysisToolElement,
-  patentComposeToolElement,
   ragSearchToolElement,
   specCompareToolElement,
 } from './routes';

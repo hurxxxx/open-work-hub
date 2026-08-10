@@ -8,16 +8,16 @@ from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from open_alm_api.core.db import Base
-from open_alm_api.domains.auth.models import User
-from open_alm_api.domains.notifications.read_service import (
+from open_work_hub_api.core.db import Base
+from open_work_hub_api.domains.auth.models import User
+from open_work_hub_api.domains.notifications.read_service import (
     list_user_notifications,
     mark_all_read_and_publish,
     mark_one_read_and_publish,
     mark_all_read,
     mark_one_read,
 )
-from open_alm_api.domains.pms.models import Notification
+from open_work_hub_api.domains.pms.models import Notification
 
 
 def _session() -> Session:
@@ -31,7 +31,7 @@ def _add_user(session: Session, user_id: str) -> None:
         User(
             id=user_id,
             login_id=user_id,
-            email=f"{user_id}@open-alm.local",
+            email=f"{user_id}@open-work-hub.local",
             full_name=user_id.title(),
             password_hash="hash",
             status="active",
@@ -161,16 +161,16 @@ def test_list_user_notifications_normalizes_duplicate_workspace_app_action_urls(
         _add_user(session, "user-1")
         _add_notification(
             session,
-            notification_id="legacy-issues-notification",
+            notification_id="docs-notification",
             user_id="user-1",
             created_at=datetime(2026, 1, 1, tzinfo=UTC).replace(tzinfo=None),
-            action_url="/w/hq/legacy-issues/legacy-issues/cooling-module",
+            action_url="/w/hq/docs/docs/cooling-module",
         )
         session.commit()
 
         response = list_user_notifications(session, user_id="user-1", page=1, page_size=20)
 
-        assert response.items[0].action_url == "/w/hq/legacy-issues/cooling-module"
+        assert response.items[0].action_url == "/w/hq/docs/cooling-module"
     finally:
         session.close()
 

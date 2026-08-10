@@ -1,4 +1,4 @@
-import { resolveDmAttachmentUrl } from '@open-alm/contracts/dm';
+import { resolveDmAttachmentUrl } from '@open-work-hub/contracts/dm';
 
 import type { DmMessageAttachment } from '../api/dm-api';
 

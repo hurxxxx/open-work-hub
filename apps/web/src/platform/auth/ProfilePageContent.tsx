@@ -1,7 +1,7 @@
 import { LogOut } from 'lucide-react';
-import { InlineNotice } from '@open-alm/ui/feedback/inline-notice';
+import { InlineNotice } from '@open-work-hub/ui/feedback/inline-notice';
 
-import { AiDoDesktopSettingsSection } from './AiDoDesktopSettingsSection';
+import { OpenWorkHubDesktopSettingsSection } from './OpenWorkHubDesktopSettingsSection';
 import { AppearanceSettingsSection } from './AppearanceSettingsSection';
 import { NotificationsSettingsSection } from './NotificationsSettingsSection';
 import { ProfileSettingsSection } from './ProfileSettingsSection';
@@ -131,8 +131,8 @@ export function ProfilePageContent({
                 token={auth.token}
               />
             ) : null}
-            {state.activeSection === 'aiDoDesktop' ? (
-              <AiDoDesktopSettingsSection t={t} />
+            {state.activeSection === 'openWorkHubDesktop' ? (
+              <OpenWorkHubDesktopSettingsSection t={t} />
             ) : null}
           </div>
         </div>

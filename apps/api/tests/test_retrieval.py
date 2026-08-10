@@ -12,30 +12,30 @@ from sqlalchemy.orm import Session
 
 from dev_accounts import dev_login
 
-from open_alm_api.core.db import get_engine
-from open_alm_api.domains.ai.registry import (
+from open_work_hub_api.core.db import get_engine
+from open_work_hub_api.domains.ai.registry import (
     WorkspaceEntitlementView,
     get_ai_capability_registry,
     reset_ai_capability_registry,
 )
-from open_alm_api.domains.auth.models import (
+from open_work_hub_api.domains.auth.models import (
     PlatformAppVisibility,
     Workspace,
     WorkspaceAppEntitlement,
 )
-from open_alm_api.domains.auth.security import new_id
-from open_alm_api.domains.auth.workspace_apps import get_workspace_app_catalog_item
-from open_alm_api.domains.conversations.app_catalog import CHATBOT_WORKSPACE_APP
-from open_alm_api.domains.rag.contracts import (
+from open_work_hub_api.domains.auth.security import new_id
+from open_work_hub_api.domains.auth.workspace_apps import get_workspace_app_catalog_item
+from open_work_hub_api.domains.conversations.app_catalog import CHATBOT_WORKSPACE_APP
+from open_work_hub_api.domains.rag.contracts import (
     RagAnswerMode,
     RagQueryHit,
     RagQueryResponse,
 )
-from open_alm_api.domains.rag.default_source_adapters import registered_rag_app_ids
-from open_alm_api.domains.rag.providers.fake import FakeRerankClient
-from open_alm_api.domains.retrieval import application as retrieval_application
-from open_alm_api.domains.retrieval import tools as retrieval_tools
-from open_alm_api.domains.retrieval.contracts import (
+from open_work_hub_api.domains.rag.default_source_adapters import registered_rag_app_ids
+from open_work_hub_api.domains.rag.providers.fake import FakeRerankClient
+from open_work_hub_api.domains.retrieval import application as retrieval_application
+from open_work_hub_api.domains.retrieval import tools as retrieval_tools
+from open_work_hub_api.domains.retrieval.contracts import (
     RetrievalAnswerMode,
     RetrievalCitation,
     RetrievalGroundedAnswer,
@@ -43,19 +43,19 @@ from open_alm_api.domains.retrieval.contracts import (
     RetrievalQueryRequest,
     RetrievalStrategy,
 )
-from open_alm_api.domains.retrieval.grounding import RetrievalGroundingResult
-from open_alm_api.domains.retrieval.source_catalog import (
+from open_work_hub_api.domains.retrieval.grounding import RetrievalGroundingResult
+from open_work_hub_api.domains.retrieval.source_catalog import (
     default_sources_for_strategy,
     iter_retrieval_source_catalog,
     registered_retrieval_source_app_ids,
     source_catalog_item,
 )
-from open_alm_api.domains.retrieval.tools import retrieval_discoverable_app_ids
-from open_alm_api.domains.search.backend_contracts import (
+from open_work_hub_api.domains.retrieval.tools import retrieval_discoverable_app_ids
+from open_work_hub_api.domains.search.backend_contracts import (
     KeywordSearchQuery,
     KeywordSearchResult,
 )
-from open_alm_api.domains.search.schemas import (
+from open_work_hub_api.domains.search.schemas import (
     KeywordSearchResponse,
     SearchFacets,
     SearchHit,
@@ -196,7 +196,7 @@ def test_retrieval_source_catalog_exposes_active_and_audited_sources() -> None:
     assert sources["generic_rag"].active is True
     assert sources["keyword"].active is True
     assert sources["qna"].scope == "company"
-    assert sources["legacy_issues"].backend == "postgres_pgvector"
+    assert sources["docs"].backend == "postgres_pgvector"
     assert sources["documents_demo"].active is False
     assert sources["learning_notes_personal"].active is False
     assert source_catalog_item("missing") is None
@@ -235,7 +235,7 @@ def test_retrieval_contract_rejects_unknown_request_fields() -> None:
         )
 
 
-def test_unified_legacy_issue_retrieval_filters_disabled_compressor_modules(
+def test_unified_document_retrieval_filters_disabled_compressor_modules(
     monkeypatch,
 ) -> None:
     captured: dict[str, object] = {}
@@ -245,22 +245,22 @@ def test_unified_legacy_issue_retrieval_filters_disabled_compressor_modules(
         return [], SimpleNamespace(methods=())
 
     monkeypatch.setattr(
-        "open_alm_api.domains.legacy_issues.ai_search.search_legacy_issue_evidence",
+        "open_work_hub_api.domains.docs.ai_search.search_document_evidence",
         fake_search,
     )
     monkeypatch.setattr(
         retrieval_application,
         "get_settings",
-        lambda: SimpleNamespace(legacy_issue_compressor_enabled=False),
+        lambda: SimpleNamespace(document_compressor_enabled=False),
     )
 
-    retrieval_application._search_legacy_issue_evidence(
+    retrieval_application._search_document_evidence(
         object(),
         workspace=SimpleNamespace(id="workspace-1"),
         request=RetrievalQueryRequest(
             query="compressor evidence",
             strategy=RetrievalStrategy.HYBRID,
-            sources=["legacy_issues"],
+            sources=["docs"],
             top_k=5,
         ),
     )
@@ -314,7 +314,7 @@ def test_retrieval_tool_is_discoverable_for_platform_qna_only(monkeypatch) -> No
         None,
         WorkspaceEntitlementView(
             enabled_app_ids=frozenset(),
-            platform_enabled_app_ids=frozenset({"qa-assistant"}),
+            platform_enabled_app_ids=frozenset({"docs"}),
         ),
     )
 
@@ -333,7 +333,7 @@ def test_retrieval_rest_routes_expose_sources_and_keyword_query(
     )
     assert sources_response.status_code == 200, sources_response.text
     sources = {item["source"]: item for item in sources_response.json()["sources"]}
-    assert {"generic_rag", "keyword", "qna", "legacy_issues"} <= set(sources)
+    assert {"generic_rag", "keyword", "qna", "docs"} <= set(sources)
     assert sources["keyword"]["active"] is True
     assert isinstance(sources["keyword"]["available"], bool)
     assert sources["qna"]["available"] is True
@@ -642,7 +642,7 @@ def test_explicit_source_selection_fails_closed() -> None:
 
     with pytest.raises(HTTPException) as unavailable:
         retrieval_application._resolve_request_sources(
-            RetrievalQueryRequest(query="x", sources=["legacy_issues"]),
+            RetrievalQueryRequest(query="x", sources=["docs"]),
             enabled_app_ids=set(),
         )
     assert unavailable.value.status_code == 403

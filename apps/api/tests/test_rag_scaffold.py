@@ -5,11 +5,11 @@ from types import SimpleNamespace
 import pytest
 from pydantic import ValidationError
 
-from open_alm_api.core.settings import Settings, get_settings
-from open_alm_api.domains.rag import application as rag_application
-from open_alm_api.domains.rag import access_filter as rag_access_filter
-from open_alm_api.domains.rag import provider_factory, runtime as rag_runtime
-from open_alm_api.domains.rag.contracts import (
+from open_work_hub_api.core.settings import Settings, get_settings
+from open_work_hub_api.domains.rag import application as rag_application
+from open_work_hub_api.domains.rag import access_filter as rag_access_filter
+from open_work_hub_api.domains.rag import provider_factory, runtime as rag_runtime
+from open_work_hub_api.domains.rag.contracts import (
     RagAnswerMode,
     RagProjection,
     RagQueryRequest,
@@ -18,17 +18,17 @@ from open_alm_api.domains.rag.contracts import (
     RagSyncLane,
     RagVectorSearchHit,
 )
-from open_alm_api.domains.rag.providers.fake import (
+from open_work_hub_api.domains.rag.providers.fake import (
     FakeEmbeddingClient,
     FakeRerankClient,
     FakeVectorIndexClient,
 )
-from open_alm_api.domains.rag.filters import RagQueryFilters
-from open_alm_api.domains.rag.provider_factory import RagProviderFactory
-from open_alm_api.domains.rag.provider_registry import RagProviderDescriptor
-from open_alm_api.domains.rag.providers.base import RagProviderConfigurationError
-from open_alm_api.domains.rag.query_service import RagQueryService
-from open_alm_api.domains.rag.service import RagService
+from open_work_hub_api.domains.rag.filters import RagQueryFilters
+from open_work_hub_api.domains.rag.provider_factory import RagProviderFactory
+from open_work_hub_api.domains.rag.provider_registry import RagProviderDescriptor
+from open_work_hub_api.domains.rag.providers.base import RagProviderConfigurationError
+from open_work_hub_api.domains.rag.query_service import RagQueryService
+from open_work_hub_api.domains.rag.service import RagService
 
 
 def _reset_settings() -> None:
@@ -115,8 +115,8 @@ def test_rag_query_service_forwards_explicit_partition_candidate_scope() -> None
 def test_ensure_rag_enabled_raises_domain_error(monkeypatch) -> None:
     settings = Settings(
         _env_file=None,
-        OPEN_ALM_POSTGRES_DSN="postgresql+psycopg://test:test@127.0.0.1:5432/test",
-        OPEN_ALM_RAG_ENABLED=False,
+        OPEN_WORK_HUB_POSTGRES_DSN="postgresql+psycopg://test:test@127.0.0.1:5432/test",
+        OPEN_WORK_HUB_RAG_ENABLED=False,
     )
 
     with pytest.raises(rag_application.RagUnavailableError) as exc_info:
@@ -229,7 +229,7 @@ def test_workspace_rag_query_propagates_relaxed_app_gate_to_source_listing(
 def test_workspace_rag_query_allows_explicit_rag_app_gate(monkeypatch) -> None:
     class StubPolicy:
         def has_accessible_source(self, resource_type):
-            return resource_type == "qna_document"
+            return resource_type == "docs_native_doc"
 
     class StubQueryService:
         def query(self, request, *, post_filter, grounded_answer_synthesizer=None):
@@ -246,7 +246,7 @@ def test_workspace_rag_query_allows_explicit_rag_app_gate(monkeypatch) -> None:
     monkeypatch.setattr(
         rag_application,
         "resolve_workspace_runtime_enabled_app_ids",
-        lambda db, workspace_id: {"qa-assistant"},
+        lambda db, workspace_id: {"docs"},
     )
     monkeypatch.setattr(
         rag_application.SourceAclPolicy,
@@ -261,7 +261,7 @@ def test_workspace_rag_query_allows_explicit_rag_app_gate(monkeypatch) -> None:
     monkeypatch.setattr(
         rag_application,
         "resolve_rag_resource_types_for_source_kinds",
-        lambda source_kinds: ("qna_document",) if source_kinds == ["qna_doc"] else (),
+        lambda source_kinds: ("docs_native_doc",) if source_kinds == ["docs_native_doc"] else (),
     )
     monkeypatch.setattr(
         rag_application, "ensure_default_collection_ready", lambda *args, **kwargs: "rag-test"
@@ -281,19 +281,19 @@ def test_workspace_rag_query_allows_explicit_rag_app_gate(monkeypatch) -> None:
         user=SimpleNamespace(id="user-1"),
         query="benefit points",
         answer_mode=RagAnswerMode.SEARCH_ONLY,
-        source_kinds=["qna_doc"],
+        source_kinds=["docs_native_doc"],
         filters={},
         top_k=5,
         include_binary_hits=False,
         settings=SimpleNamespace(rag_enabled=True),
         query_service=StubQueryService(),
         require_searchable_app=False,
-        allowed_unlisted_source_kinds=frozenset({"qna_doc"}),
-        required_app_ids=frozenset({"qa-assistant"}),
+        allowed_unlisted_source_kinds=frozenset({"docs_native_doc"}),
+        required_app_ids=frozenset({"docs"}),
     )
 
     assert response.sources_used == []
-    assert response.query_profile == {"source_kinds": ["qna_doc"]}
+    assert response.query_profile == {"source_kinds": ["docs_native_doc"]}
 
 
 def test_rag_query_filters_accept_storage_width_resource_ids() -> None:
@@ -323,7 +323,7 @@ def test_workspace_rag_reindex_requires_ai_enablement(monkeypatch) -> None:
 def test_company_rag_reindex_enqueues_company_scope_jobs(monkeypatch) -> None:
     captured: list[dict] = []
     adapter = SimpleNamespace(
-        resource_type="qna_document",
+        resource_type="docs_native_doc",
         company_resource_ids=lambda db: ["doc-1", "doc-2"],
     )
 
@@ -350,27 +350,27 @@ def test_company_rag_reindex_enqueues_company_scope_jobs(monkeypatch) -> None:
     result = rag_application.enqueue_company_rag_reindex(
         db=object(),
         settings=SimpleNamespace(rag_enabled=True),
-        app_ids={"qa-assistant"},
+        app_ids={"docs"},
     )
 
     assert result == {
         "lane": "backfill",
         "scope_kind": "company",
         "queued_count": 2,
-        "resource_counts": {"qna_document": 2},
+        "resource_counts": {"docs_native_doc": 2},
     }
     assert captured == [
         {
             "scope_kind": RagScopeKind.COMPANY,
             "workspace_id": None,
-            "resource_type": "qna_document",
+            "resource_type": "docs_native_doc",
             "resource_id": "doc-1",
             "lane": RagSyncLane.BACKFILL,
         },
         {
             "scope_kind": RagScopeKind.COMPANY,
             "workspace_id": None,
-            "resource_type": "qna_document",
+            "resource_type": "docs_native_doc",
             "resource_id": "doc-2",
             "lane": RagSyncLane.BACKFILL,
         },
@@ -381,8 +381,8 @@ def test_company_rag_reindex_skips_disabled_platform_app_before_provider_io(
     monkeypatch,
 ) -> None:
     adapter = SimpleNamespace(
-        app_id="qa-assistant",
-        resource_type="qna_document",
+        app_id="docs",
+        resource_type="docs_native_doc",
         company_resource_ids=lambda db: (_ for _ in ()).throw(
             AssertionError("disabled Q&A reindex must not enumerate resources")
         ),
@@ -406,7 +406,7 @@ def test_company_rag_reindex_skips_disabled_platform_app_before_provider_io(
     assert rag_application.enqueue_company_rag_reindex(
         db=object(),
         settings=SimpleNamespace(rag_enabled=True),
-        app_ids={"qa-assistant"},
+        app_ids={"docs"},
     ) == {
         "lane": "backfill",
         "scope_kind": "company",
@@ -759,7 +759,7 @@ def test_provider_factory_rejects_qdrant_without_url() -> None:
         )
     )
 
-    with pytest.raises(RagProviderConfigurationError, match="OPEN_ALM_RAG_QDRANT_URL"):
+    with pytest.raises(RagProviderConfigurationError, match="OPEN_WORK_HUB_RAG_QDRANT_URL"):
         factory.build_vector_index()
 
 
@@ -1074,7 +1074,7 @@ def test_company_rag_filter_requires_source_owned_acl(monkeypatch) -> None:
         def authorize_many_rag_resources(self, resources):
             requested = set(resources)
             calls.append(requested)
-            return {("qna_document", "allowed")}
+            return {("docs_native_doc", "allowed")}
 
     monkeypatch.setattr(
         rag_access_filter.SourceAclPolicy,
@@ -1095,7 +1095,7 @@ def test_company_rag_filter_requires_source_owned_acl(monkeypatch) -> None:
             projection=RagProjection(
                 scope_kind=RagScopeKind.COMPANY,
                 workspace_id=None,
-                resource_type="qna_document",
+                resource_type="docs_native_doc",
                 resource_id=resource_id,
                 source_kind="qna",
                 visibility_refs=["company_public"],
@@ -1106,7 +1106,7 @@ def test_company_rag_filter_requires_source_owned_acl(monkeypatch) -> None:
         item.projection.resource_id
         for item in post_filter.filter_many([hit("allowed"), hit("denied")])
     ] == ["allowed"]
-    assert calls == [{("qna_document", "allowed"), ("qna_document", "denied")}]
+    assert calls == [{("docs_native_doc", "allowed"), ("docs_native_doc", "denied")}]
 
 
 def test_partition_authorized_rag_filters_ignore_stale_scope_payload(monkeypatch) -> None:

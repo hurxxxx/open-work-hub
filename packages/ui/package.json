@@ -1,5 +1,5 @@
 {
-  "name": "@open-alm/ui",
+  "name": "@open-work-hub/ui",
   "version": "0.0.1",
   "main": "./index.js",
   "types": "./index.d.ts",

@@ -30,7 +30,7 @@ def test_pms_view_preference_defaults_and_persists_per_user_and_workspace(
         client,
         workspace_key="pref-workspace-a",
         login_id="pref-user-a",
-        email="pref-user-a@open-alm.local",
+        email="pref-user-a@open-work-hub.local",
     )
     path = "/api/v1/workspaces/pref-workspace-a/pms/view-preferences"
 
@@ -63,7 +63,7 @@ def test_pms_view_preference_defaults_and_persists_per_user_and_workspace(
         client,
         workspace_key="pref-workspace-a",
         login_id="pref-user-b",
-        email="pref-user-b@open-alm.local",
+        email="pref-user-b@open-work-hub.local",
     )
     second_response = client.get(path, headers=_headers(second["token"]))
     assert second_response.status_code == 200, second_response.text
@@ -73,7 +73,7 @@ def test_pms_view_preference_defaults_and_persists_per_user_and_workspace(
         client,
         workspace_key="pref-workspace-b",
         login_id="pref-user-a",
-        email="pref-user-a@open-alm.local",
+        email="pref-user-a@open-work-hub.local",
     )
     other_workspace_response = client.get(
         "/api/v1/workspaces/pref-workspace-b/pms/view-preferences",
@@ -90,7 +90,7 @@ def test_pms_view_preference_rejects_invalid_or_inaccessible_requests(
         client,
         workspace_key="pref-guard-workspace",
         login_id="pref-guard-user",
-        email="pref-guard-user@open-alm.local",
+        email="pref-guard-user@open-work-hub.local",
     )
     path = "/api/v1/workspaces/pref-guard-workspace/pms/view-preferences"
 

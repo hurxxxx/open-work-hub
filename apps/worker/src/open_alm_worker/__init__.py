@@ -1,1 +1,0 @@
-"""Open ALM worker package."""

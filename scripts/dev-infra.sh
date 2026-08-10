@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-if [[ "$(basename "$ROOT_DIR")" == "prod" && "${OPEN_ALM_ALLOW_PROD_CHECKOUT_DEV_COMMANDS:-0}" != "1" ]]; then
+if [[ "$(basename "$ROOT_DIR")" == "prod" && "${OPEN_WORK_HUB_ALLOW_PROD_CHECKOUT_DEV_COMMANDS:-0}" != "1" ]]; then
   echo "Refusing to manage development infra from the production checkout." >&2
   exit 1
 fi
@@ -16,7 +16,7 @@ case "$COMMAND" in
   up|start)
     dev_render_nginx_conf
     services=(redis opensearch qdrant nginx)
-    if [[ "$(printf '%s' "${OPEN_ALM_API_VIDEO_CHAT_ENABLED:-true}" | tr '[:upper:]' '[:lower:]')" != "false" ]]; then
+    if [[ "$(printf '%s' "${OPEN_WORK_HUB_API_VIDEO_CHAT_ENABLED:-true}" | tr '[:upper:]' '[:lower:]')" != "false" ]]; then
       services+=(livekit)
     fi
     if dev_use_local_minio; then

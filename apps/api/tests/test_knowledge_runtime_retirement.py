@@ -16,8 +16,8 @@ import sys
 
 sys.path.insert(0, "src")
 
-from open_alm_api.core.db import Base
-from open_alm_api.core.model_registry import import_all_models
+from open_work_hub_api.core.db import Base
+from open_work_hub_api.core.model_registry import import_all_models
 
 import_all_models()
 retired = {
@@ -31,8 +31,8 @@ print(json.dumps({
     "knowledge_model_modules": sorted(
         name
         for name in sys.modules
-        if name == "open_alm_api.domains.knowledge.models"
-        or name.startswith("open_alm_api.domains.knowledge.models.")
+        if name == "open_work_hub_api.domains.knowledge.models"
+        or name.startswith("open_work_hub_api.domains.knowledge.models.")
     ),
 }))
 """

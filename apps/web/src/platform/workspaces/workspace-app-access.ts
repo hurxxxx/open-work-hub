@@ -5,4 +5,4 @@ export {
   resolveCoreWorkspaceAppGate as resolveWorkspaceAppGate,
   type CoreWorkspaceAppGateResult as WorkspaceAppGateResult,
   type CoreWorkspaceAppGateStatus as WorkspaceAppGateStatus,
-} from '@open-alm/core-web/workspace-access';
+} from '@open-work-hub/core-web/workspace-access';

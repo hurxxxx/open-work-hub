@@ -1,7 +1,7 @@
-const DEFAULT_MATOMO_URL = 'https://matomo.open-alm.example/';
+const DEFAULT_MATOMO_URL = 'https://matomo.open-work-hub.example/';
 const DEFAULT_MATOMO_SITE_ID = '1';
-const DEFAULT_ALLOWED_HOSTS = ['open-alm.example', 'www.open-alm.example', 'ext.open-alm.example'];
-const MATOMO_SCRIPT_ID = 'open-alm-matomo-tracker';
+const DEFAULT_ALLOWED_HOSTS = ['open-work-hub.example', 'www.open-work-hub.example', 'ext.open-work-hub.example'];
+const MATOMO_SCRIPT_ID = 'open-work-hub-matomo-tracker';
 const USER_NAME_DIMENSION_ID = 1;
 const APP_ID_DIMENSION_ID = 2;
 const APP_ROUTE_DIMENSION_ID = 3;
@@ -13,21 +13,21 @@ type MatomoCommand = [string, ...MatomoCommandValue[]];
 
 declare global {
   interface Window {
-    __aiDoMatomoLastTrackedUrl?: string;
-    __aiDoMatomoLastTrackedPageKey?: string;
-    __aiDoMatomoTrackingInstalled?: boolean;
-    __aiDoMatomoUserId?: string;
-    __aiDoMatomoUserLoginId?: string;
-    __aiDoMatomoUserName?: string;
+    __openWorkHubMatomoLastTrackedUrl?: string;
+    __openWorkHubMatomoLastTrackedPageKey?: string;
+    __openWorkHubMatomoTrackingInstalled?: boolean;
+    __openWorkHubMatomoUserId?: string;
+    __openWorkHubMatomoUserLoginId?: string;
+    __openWorkHubMatomoUserName?: string;
     _paq?: MatomoCommand[];
   }
 }
 
 export type MatomoEnv = {
-  readonly VITE_OPEN_ALM_MATOMO_ALLOWED_HOSTS?: string;
-  readonly VITE_OPEN_ALM_MATOMO_ENABLED?: string;
-  readonly VITE_OPEN_ALM_MATOMO_SITE_ID?: string;
-  readonly VITE_OPEN_ALM_MATOMO_URL?: string;
+  readonly VITE_OPEN_WORK_HUB_MATOMO_ALLOWED_HOSTS?: string;
+  readonly VITE_OPEN_WORK_HUB_MATOMO_ENABLED?: string;
+  readonly VITE_OPEN_WORK_HUB_MATOMO_SITE_ID?: string;
+  readonly VITE_OPEN_WORK_HUB_MATOMO_URL?: string;
 };
 
 type MatomoWindow = Window &
@@ -60,17 +60,17 @@ export function resolveMatomoTrackingConfig(
   env: MatomoEnv,
   location: Pick<Location, 'hostname'>,
 ): MatomoTrackingConfig | null {
-  if (!isEnabled(env.VITE_OPEN_ALM_MATOMO_ENABLED)) {
+  if (!isEnabled(env.VITE_OPEN_WORK_HUB_MATOMO_ENABLED)) {
     return null;
   }
 
   const trackerBaseUrl = normalizeMatomoUrl(
-    env.VITE_OPEN_ALM_MATOMO_URL ?? DEFAULT_MATOMO_URL,
+    env.VITE_OPEN_WORK_HUB_MATOMO_URL ?? DEFAULT_MATOMO_URL,
   );
   const siteId = normalizeSiteId(
-    env.VITE_OPEN_ALM_MATOMO_SITE_ID ?? DEFAULT_MATOMO_SITE_ID,
+    env.VITE_OPEN_WORK_HUB_MATOMO_SITE_ID ?? DEFAULT_MATOMO_SITE_ID,
   );
-  const allowedHosts = parseAllowedHosts(env.VITE_OPEN_ALM_MATOMO_ALLOWED_HOSTS);
+  const allowedHosts = parseAllowedHosts(env.VITE_OPEN_WORK_HUB_MATOMO_ALLOWED_HOSTS);
 
   if (
     !trackerBaseUrl ||
@@ -91,7 +91,7 @@ export function installMatomoTracking(
   env: MatomoEnv = import.meta.env as MatomoEnv,
   win: MatomoWindow = window as MatomoWindow,
 ): InstalledMatomoTracking | null {
-  if (win.__aiDoMatomoTrackingInstalled) {
+  if (win.__openWorkHubMatomoTrackingInstalled) {
     return null;
   }
 
@@ -101,7 +101,7 @@ export function installMatomoTracking(
   }
 
   const queue = getMatomoQueue(win);
-  win.__aiDoMatomoTrackingInstalled = true;
+  win.__openWorkHubMatomoTrackingInstalled = true;
 
   queue.push(['setTrackerUrl', `${config.trackerBaseUrl}matomo.php`]);
   queue.push(['setSiteId', config.siteId]);
@@ -111,12 +111,12 @@ export function installMatomoTracking(
 
   return {
     cleanup: () => {
-      delete win.__aiDoMatomoTrackingInstalled;
-      delete win.__aiDoMatomoLastTrackedUrl;
-      delete win.__aiDoMatomoLastTrackedPageKey;
-      delete win.__aiDoMatomoUserId;
-      delete win.__aiDoMatomoUserLoginId;
-      delete win.__aiDoMatomoUserName;
+      delete win.__openWorkHubMatomoTrackingInstalled;
+      delete win.__openWorkHubMatomoLastTrackedUrl;
+      delete win.__openWorkHubMatomoLastTrackedPageKey;
+      delete win.__openWorkHubMatomoUserId;
+      delete win.__openWorkHubMatomoUserLoginId;
+      delete win.__openWorkHubMatomoUserName;
     },
   };
 }
@@ -140,17 +140,17 @@ export function identifyMatomoUser(
     return;
   }
 
-  if (win.__aiDoMatomoUserId !== userId) {
+  if (win.__openWorkHubMatomoUserId !== userId) {
     queue.push(['setUserId', userId]);
-    win.__aiDoMatomoUserId = userId;
+    win.__openWorkHubMatomoUserId = userId;
   }
-  if (userLoginId && win.__aiDoMatomoUserLoginId !== userLoginId) {
+  if (userLoginId && win.__openWorkHubMatomoUserLoginId !== userLoginId) {
     queue.push(['setCustomDimension', USER_LOGIN_ID_DIMENSION_ID, userLoginId]);
-    win.__aiDoMatomoUserLoginId = userLoginId;
+    win.__openWorkHubMatomoUserLoginId = userLoginId;
   }
-  if (userName && win.__aiDoMatomoUserName !== userName) {
+  if (userName && win.__openWorkHubMatomoUserName !== userName) {
     queue.push(['setCustomDimension', USER_NAME_DIMENSION_ID, userName]);
-    win.__aiDoMatomoUserName = userName;
+    win.__openWorkHubMatomoUserName = userName;
   }
 }
 
@@ -165,9 +165,9 @@ export function clearMatomoUser(
   queue.push(['resetUserId']);
   queue.push(['deleteCustomDimension', USER_NAME_DIMENSION_ID]);
   queue.push(['deleteCustomDimension', USER_LOGIN_ID_DIMENSION_ID]);
-  delete win.__aiDoMatomoUserId;
-  delete win.__aiDoMatomoUserLoginId;
-  delete win.__aiDoMatomoUserName;
+  delete win.__openWorkHubMatomoUserId;
+  delete win.__openWorkHubMatomoUserLoginId;
+  delete win.__openWorkHubMatomoUserName;
 }
 
 export function trackMatomoPageView(
@@ -183,12 +183,12 @@ export function trackMatomoPageView(
   const appId = normalizeDimensionValue(context.appId ?? '');
   const appRoute = normalizeDimensionValue(context.appRoute ?? '');
   const pageKey = [currentUrl, win.document.title, appId, appRoute].join('|');
-  if (win.__aiDoMatomoLastTrackedPageKey === pageKey) {
+  if (win.__openWorkHubMatomoLastTrackedPageKey === pageKey) {
     return;
   }
 
-  win.__aiDoMatomoLastTrackedUrl = currentUrl;
-  win.__aiDoMatomoLastTrackedPageKey = pageKey;
+  win.__openWorkHubMatomoLastTrackedUrl = currentUrl;
+  win.__openWorkHubMatomoLastTrackedPageKey = pageKey;
   queue.push(['setCustomUrl', currentUrl]);
   queue.push(['setDocumentTitle', win.document.title]);
 
@@ -270,7 +270,7 @@ function getMatomoQueue(win: MatomoWindow): MatomoCommand[] {
 }
 
 function getActiveMatomoQueue(win: MatomoWindow): MatomoCommand[] | null {
-  if (!win.__aiDoMatomoTrackingInstalled) {
+  if (!win.__openWorkHubMatomoTrackingInstalled) {
     return null;
   }
   return getMatomoQueue(win);

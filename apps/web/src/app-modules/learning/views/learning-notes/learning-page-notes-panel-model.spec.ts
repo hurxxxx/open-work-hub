@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { BlockContent } from '@open-alm/ui';
+import type { BlockContent } from '@open-work-hub/ui';
 import type { LearningPageNoteDetail } from '../../api/types';
 import {
   EMPTY_NOTE_BLOCKS,

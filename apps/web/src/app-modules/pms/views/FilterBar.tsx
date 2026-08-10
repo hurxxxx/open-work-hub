@@ -7,7 +7,7 @@ import {
   BookmarkCheck,
   Search,
 } from 'lucide-react';
-import { DetailDrawer } from '@open-alm/ui';
+import { DetailDrawer } from '@open-work-hub/ui';
 import { useTranslation } from 'react-i18next';
 import { DateInput } from '@/src/components/date/DateInput';
 import { UserOptionRow } from '@/src/platform/users/UserSearchMultiSelect';

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from open_alm_api.domains.ai.runtime import (
+from open_work_hub_api.domains.ai.runtime import (
     AgentDefinitionResolver,
     AgentInvocationSpec,
     ExecutionGraph,

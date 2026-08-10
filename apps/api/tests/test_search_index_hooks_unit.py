@@ -5,11 +5,11 @@ from typing import Any, cast
 
 from sqlalchemy.orm import Session
 
-from open_alm_api.domains.meeting import search_hooks as meeting_search_hooks
-from open_alm_api.domains.pms import search_hooks as pms_search_hooks
-from open_alm_api.domains.pms.models import Label
-from open_alm_api.domains.retrieval.projection_fencing import ProjectionEventRef
-from open_alm_api.domains.search.schemas import SearchEntityType
+from open_work_hub_api.domains.meeting import search_hooks as meeting_search_hooks
+from open_work_hub_api.domains.pms import search_hooks as pms_search_hooks
+from open_work_hub_api.domains.pms.models import Label
+from open_work_hub_api.domains.retrieval.projection_fencing import ProjectionEventRef
+from open_work_hub_api.domains.search.schemas import SearchEntityType
 
 
 def _projection_event(

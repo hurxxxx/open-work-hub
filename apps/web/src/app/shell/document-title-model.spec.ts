@@ -9,9 +9,9 @@ function t(key: string, options?: Record<string, unknown>): string {
   if (key === 'apps.settings') return 'Settings';
   if (key === 'workspaceSwitcher.manage') return 'Workspace settings';
   if (key === 'documentTitle.profile') return 'Profile';
-  if (key === 'documentTitle.app') return `${String(options?.app)} | Open ALM`;
+  if (key === 'documentTitle.app') return `${String(options?.app)} | Open Work Hub`;
   if (key === 'documentTitle.workspaceApp') {
-    return `${String(options?.workspace)} - ${String(options?.app)} | Open ALM`;
+    return `${String(options?.workspace)} - ${String(options?.app)} | Open Work Hub`;
   }
   return String(options?.defaultValue ?? key);
 }
@@ -52,7 +52,7 @@ describe('document title model', () => {
         activeAppId: 'settings',
         pathname: '/w/hq/settings/members',
       }),
-    ).toBe('HQ - Workspace settings | Open ALM');
+    ).toBe('HQ - Workspace settings | Open Work Hub');
     expect(
       title({
         activeAppId: 'profile',
@@ -60,7 +60,7 @@ describe('document title model', () => {
         routeWorkspaceSlug: null,
         workspace: null,
       }),
-    ).toBe('Profile | Open ALM');
+    ).toBe('Profile | Open Work Hub');
   });
 
   it('uses the settings app title outside workspace settings routes', () => {
@@ -71,7 +71,7 @@ describe('document title model', () => {
         routeWorkspaceSlug: null,
         workspace: null,
       }),
-    ).toBe('Settings | Open ALM');
+    ).toBe('Settings | Open Work Hub');
   });
 
   it('falls back from i18n key to workspace bootstrap title and app registry title', () => {
@@ -80,13 +80,13 @@ describe('document title model', () => {
         activeAppId: 'workspace-app',
         workspaceApps: [{ app_id: 'workspace-app', title: 'Workspace app' }],
       }),
-    ).toBe('HQ - Workspace app | Open ALM');
-    expect(title({ activeAppId: 'docs' })).toBe('HQ - docs | Open ALM');
+    ).toBe('HQ - Workspace app | Open Work Hub');
+    expect(title({ activeAppId: 'docs' })).toBe('HQ - docs | Open Work Hub');
   });
 
   it('includes the workspace name only for workspace-scoped and tool routes', () => {
     expect(title({ pathname: '/tool/search', routeWorkspaceSlug: null })).toBe(
-      'HQ - Chatbot | Open ALM',
+      'HQ - Chatbot | Open Work Hub',
     );
   });
 });

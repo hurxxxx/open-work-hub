@@ -7,7 +7,7 @@ import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import { useTranslation } from 'react-i18next';
-import { Tooltip } from '@open-alm/ui';
+import { Tooltip } from '@open-work-hub/ui';
 import 'highlight.js/styles/github.css';
 import 'katex/dist/katex.min.css';
 

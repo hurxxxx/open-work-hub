@@ -110,7 +110,7 @@ def test_diagrams_requires_workspace_membership(client: TestClient) -> None:
     session = dev_login(client, "delivery-hub-member")
 
     response = client.get(
-        "/api/v1/workspaces/ai-tft/diagrams/hub",
+        "/api/v1/workspaces/general/diagrams/hub",
         headers=_auth_headers(session["token"]),
     )
 

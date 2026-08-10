@@ -1,6 +1,6 @@
 import {StrictMode, useEffect} from 'react';
 import {createRoot} from 'react-dom/client';
-import '@open-alm/ui/styles.css';
+import '@open-work-hub/ui/styles.css';
 import { i18n } from '@/src/platform/i18n';
 import { installMatomoTracking } from '@/src/platform/analytics/matomo';
 import { installClientBuildGuards } from '@/src/platform/deployment/client-build-guard';

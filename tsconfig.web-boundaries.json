@@ -3,13 +3,13 @@
   "compilerOptions": {
     "paths": {
       "@/src/*": ["./apps/web/src/*"],
-      "@open-alm/contracts": ["./packages/contracts/src/index.ts"],
-      "@open-alm/contracts/openapi": [
+      "@open-work-hub/contracts": ["./packages/contracts/src/index.ts"],
+      "@open-work-hub/contracts/openapi": [
         "./packages/contracts/src/openapi.generated.d.ts"
       ],
-      "@open-alm/contracts/*": ["./packages/contracts/src/*"],
-      "@open-alm/ui": ["./packages/ui/src/index.ts"],
-      "@open-alm/ui/styles.css": ["./packages/ui/styles.css"]
+      "@open-work-hub/contracts/*": ["./packages/contracts/src/*"],
+      "@open-work-hub/ui": ["./packages/ui/src/index.ts"],
+      "@open-work-hub/ui/styles.css": ["./packages/ui/styles.css"]
     }
   },
   "include": ["apps/web/src/**/*.ts", "apps/web/src/**/*.tsx"]

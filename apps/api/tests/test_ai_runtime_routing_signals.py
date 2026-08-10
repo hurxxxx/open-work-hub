@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from open_alm_api.domains.ai.runtime.routing_signals import (
+from open_work_hub_api.domains.ai.runtime.routing_signals import (
     LONG_DOC_MAX_TOKENS_THRESHOLD,
     select_runtime_profile_signal,
 )

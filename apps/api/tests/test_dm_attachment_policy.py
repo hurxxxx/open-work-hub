@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from open_alm_api.domains.dm.attachment_policy import (
+from open_work_hub_api.domains.dm.attachment_policy import (
     DEFAULT_ATTACHMENT_CONTENT_TYPE,
     DM_MAX_ATTACHMENT_SIZE,
     DmAttachmentPolicy,
@@ -28,11 +28,11 @@ def test_attachment_size_limit_matches_shared_dm_contract() -> None:
     manifest_path = (
         Path(__file__).resolve().parents[3]
         / "apps"
-        / "open-alm-desktop"
+        / "open-work-hub-desktop"
         / "desktop-dm-api.manifest.json"
     )
     if not manifest_path.exists():
-        pytest.skip("Open ALM desktop DM manifest is not present in this checkout.")
+        pytest.skip("Open Work Hub desktop DM manifest is not present in this checkout.")
 
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 

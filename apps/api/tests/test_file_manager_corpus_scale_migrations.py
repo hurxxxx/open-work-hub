@@ -9,31 +9,31 @@ import pytest
 from sqlalchemy import create_engine, event, func, insert, select, text
 from sqlalchemy.orm import Session
 
-from open_alm_api.domains.auth.models import (
+from open_work_hub_api.domains.auth.models import (
     User,
     UserSystemRole,
     Workspace,
     WorkspaceUserBinding,
 )
-from open_alm_api.domains.files import service as files_service
-from open_alm_api.domains.files.models import (
+from open_work_hub_api.domains.files import service as files_service
+from open_work_hub_api.domains.files.models import (
     FileManagerCorpus,
     FileManagerCorpusTransitionAudit,
     FileManagerFile,
 )
-from open_alm_api.domains.files.source_access import (
+from open_work_hub_api.domains.files.source_access import (
     FileManagerSourceAccessAdapter,
     can_read_file,
 )
-from open_alm_api.domains.rag.models import RagSyncJob
-from open_alm_api.domains.retrieval.models import (
+from open_work_hub_api.domains.rag.models import RagSyncJob
+from open_work_hub_api.domains.retrieval.models import (
     RetrievalPartition,
     RetrievalProjectionEvent,
     RetrievalProjectionHead,
 )
-from open_alm_api.domains.search.models import SearchIndexJob
-from open_alm_api.domains.source_access.policy import SourceAclPolicy
-from open_alm_api.domains.source_access.resource_types import (
+from open_work_hub_api.domains.search.models import SearchIndexJob
+from open_work_hub_api.domains.source_access.policy import SourceAclPolicy
+from open_work_hub_api.domains.source_access.resource_types import (
     FILE_MANAGER_FILE_RESOURCE_TYPE,
 )
 

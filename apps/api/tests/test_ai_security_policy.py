@@ -5,30 +5,30 @@ from datetime import UTC, datetime, timedelta
 from fastapi.testclient import TestClient
 import pytest
 
-from open_alm_api.core.db import get_session_factory
-from open_alm_api.core.llm import LlmPoolConfig
-from open_alm_api.core.settings import Settings
-from open_alm_api.domains.ai import masking as masking_module
-from open_alm_api.domains.ai import external_gateway
-from open_alm_api.domains.ai.boundary_safety import evaluate_external_payload_safety
-from open_alm_api.domains.ai.external_gateway import (
+from open_work_hub_api.core.db import get_session_factory
+from open_work_hub_api.core.llm import LlmPoolConfig
+from open_work_hub_api.core.settings import Settings
+from open_work_hub_api.domains.ai import masking as masking_module
+from open_work_hub_api.domains.ai import external_gateway
+from open_work_hub_api.domains.ai.boundary_safety import evaluate_external_payload_safety
+from open_work_hub_api.domains.ai.external_gateway import (
     AiExternalCapabilityPolicyViolation,
     AiExternalCapabilityRequest,
     execute_external_capability,
 )
-from open_alm_api.domains.ai.gateway import (
+from open_work_hub_api.domains.ai.gateway import (
     AiGatewayPolicyViolation,
     AiGatewayRequest,
     resolve_gateway_execution,
 )
-from open_alm_api.domains.ai.privacy_filter import PrivacyFilterDetection
-from open_alm_api.domains.ai.models import (
+from open_work_hub_api.domains.ai.privacy_filter import PrivacyFilterDetection
+from open_work_hub_api.domains.ai.models import (
     AiSecurityDataProtectionSettings,
     AiSecurityDetectedValue,
     AiSecurityExternalTransferException,
     AiSecurityPolicyRule,
 )
-from open_alm_api.domains.ai.security_policy import (
+from open_work_hub_api.domains.ai.security_policy import (
     DATA_PROTECTION_SETTINGS_ID,
     EXTERNAL_TRANSFER_EXCEPTION_REASON,
     external_transfer_blockers_from_safety,
@@ -36,8 +36,8 @@ from open_alm_api.domains.ai.security_policy import (
     resolve_ai_security_policy,
     AiSecurityPolicyContext,
 )
-from open_alm_api.domains.auth.models import AuditLog
-from open_alm_api.domains.auth.security import new_id
+from open_work_hub_api.domains.auth.models import AuditLog
+from open_work_hub_api.domains.auth.security import new_id
 
 
 def _auth_headers(token: str) -> dict[str, str]:
@@ -61,8 +61,8 @@ def _bootstrap_admin_session(client: TestClient) -> dict:
     response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "Open ALM Admin",
-            "email": "admin@open-alm.local",
+            "full_name": "Open Work Hub Admin",
+            "email": "admin@open-work-hub.local",
             "password": "supersecret123",
         },
     )
@@ -172,12 +172,10 @@ def test_admin_ai_security_policy_crud_simulation_and_audit_payload(
     assert "task_policy_apps" not in summary
     assert client.get("/api/v1/admin/ai-security/task-policies", headers=headers).status_code == 404
     external_candidate_ids = {item["app_id"] for item in summary["external_app_candidates"]}
-    assert {"web-search", "research-trends", "standards-monitor"}.issubset(external_candidate_ids)
+    assert "web-search" in external_candidate_ids
     assert summary["condition_options"]["apps"]
-    assert {option["value"] for option in summary["condition_options"]["external_apps"]} >= {
-        "web-search",
-        "research-trends",
-        "standards-monitor",
+    assert "web-search" in {
+        option["value"] for option in summary["condition_options"]["external_apps"]
     }
     assert any(option["value"] == "llm" for option in summary["condition_options"]["capabilities"])
     assert any(
@@ -383,12 +381,12 @@ def test_admin_ai_security_monitoring_and_blocked_audit_filter(
                     actor_user_id=actor_id,
                     action="llm_call",
                     entity_kind="llm_task",
-                    entity_id="ppt-generate",
+                    entity_id="document-translate",
                     summary="Local LLM call by routing hint",
                     payload={
                         "status": "ok",
-                        "app_id": "ppt-assistant",
-                        "task_kind": "ppt_generate",
+                        "app_id": "document-translate",
+                        "task_kind": "document_translate",
                         "chosen_pool": "local",
                         "forced_local": True,
                         "decision_reason": "local_hint",
@@ -589,7 +587,7 @@ def test_admin_ai_security_simulation_returns_masked_external_preview(
             "name": "Mask PII before external LLM",
             "description": "mask eligible blockers",
             "enabled": True,
-            "task_kind": "patent_analysis",
+            "task_kind": "files_grounded_chat",
             "capability": "llm",
             "effect": "mask_and_send",
             "custom_block_terms": [],
@@ -601,7 +599,7 @@ def test_admin_ai_security_simulation_returns_masked_external_preview(
         "/api/v1/admin/ai-security/simulate",
         headers=headers,
         json={
-            "task_kind": "patent_analysis",
+            "task_kind": "files_grounded_chat",
             "capability": "llm",
             "content_origin": "user_prompt",
             "sample_text": "Contact owner@example.com for review",
@@ -651,7 +649,7 @@ def test_admin_ai_security_simulation_uses_global_mask_action(
         "/api/v1/admin/ai-security/simulate",
         headers=headers,
         json={
-            "task_kind": "patent_analysis",
+            "task_kind": "files_grounded_chat",
             "capability": "llm",
             "content_origin": "user_prompt",
             "sample_text": "Contact owner@example.com for review",
@@ -768,8 +766,8 @@ def test_admin_ai_security_simulation_scopes_external_app_action_to_app(
     simulation = _simulate_ai_security(
         client,
         headers,
-        app_id="research-trends",
-        task_kind="research_trends",
+        app_id="other-app",
+        task_kind="web_search",
         sample_text="Contact owner@example.com for public research news",
     )
 
@@ -897,7 +895,7 @@ def test_external_transfer_exception_allows_soft_blocker(client: TestClient) -> 
             name="Internal context exception",
             description="",
             enabled=True,
-            task_kind="patent_analysis",
+            task_kind="files_grounded_chat",
             capability="llm",
             allowed_blocker_types_json=["internal_context"],
             reason="approved",
@@ -915,7 +913,7 @@ def test_external_transfer_exception_allows_soft_blocker(client: TestClient) -> 
             db,
             AiSecurityPolicyContext(
                 workspace_id="workspace-1",
-                task_kind="patent_analysis",
+                task_kind="files_grounded_chat",
                 capability="llm",
             ),
             external_transfer_blockers_from_safety(safety),
@@ -935,7 +933,7 @@ def test_external_transfer_exception_can_approve_block_external_rule(
             name="Approved external policy override",
             description="",
             enabled=True,
-            task_kind="patent_analysis",
+            task_kind="files_grounded_chat",
             capability="llm",
             allowed_blocker_types_json=["policy_block_external"],
             reason="approved",
@@ -944,11 +942,11 @@ def test_external_transfer_exception_can_approve_block_external_rule(
         db.add(exception)
         db.commit()
 
-        safety = evaluate_external_payload_safety(["public patent abstract"])
+        safety = evaluate_external_payload_safety(["public research abstract"])
         decision = resolve_ai_security_external_transfer_exception(
             db,
             AiSecurityPolicyContext(
-                task_kind="patent_analysis",
+                task_kind="files_grounded_chat",
                 capability="llm",
             ),
             external_transfer_blockers_from_safety(
@@ -974,7 +972,7 @@ def test_policy_rule_matches_any_configured_task_kind(client: TestClient) -> Non
             description="",
             enabled=True,
             app_id="web-search",
-            task_kinds_json=["web_search", "research_trends"],
+            task_kinds_json=["web_search", "web_search_answer"],
             capability="web_search",
             effect="block_external",
             custom_block_terms_json=[],
@@ -986,7 +984,7 @@ def test_policy_rule_matches_any_configured_task_kind(client: TestClient) -> Non
             db,
             AiSecurityPolicyContext(
                 app_id="web-search",
-                task_kind="research_trends",
+                task_kind="web_search_answer",
                 capability="web_search",
             ),
         )
@@ -994,7 +992,7 @@ def test_policy_rule_matches_any_configured_task_kind(client: TestClient) -> Non
             db,
             AiSecurityPolicyContext(
                 app_id="web-search",
-                task_kind="patent_analysis",
+                task_kind="files_grounded_chat",
                 capability="web_search",
             ),
         )
@@ -1016,7 +1014,7 @@ def test_external_transfer_exception_matches_any_configured_task_kind(
             description="",
             enabled=True,
             app_id="web-search",
-            task_kinds_json=["web_search", "research_trends"],
+            task_kinds_json=["web_search", "web_search_answer"],
             capability="web_search",
             allowed_blocker_types_json=["internal_context"],
             reason="approved",
@@ -1034,7 +1032,7 @@ def test_external_transfer_exception_matches_any_configured_task_kind(
             db,
             AiSecurityPolicyContext(
                 app_id="web-search",
-                task_kind="research_trends",
+                task_kind="web_search_answer",
                 capability="web_search",
             ),
             external_transfer_blockers_from_safety(safety),
@@ -1043,7 +1041,7 @@ def test_external_transfer_exception_matches_any_configured_task_kind(
             db,
             AiSecurityPolicyContext(
                 app_id="web-search",
-                task_kind="patent_analysis",
+                task_kind="files_grounded_chat",
                 capability="web_search",
             ),
             external_transfer_blockers_from_safety(safety),
@@ -1064,7 +1062,7 @@ def test_external_transfer_exception_allows_approved_pii_internal_url_and_securi
             name="Approved security review export",
             description="",
             enabled=True,
-            task_kind="patent_analysis",
+            task_kind="files_grounded_chat",
             capability="llm",
             allowed_blocker_types_json=[
                 "internal_context",
@@ -1086,7 +1084,7 @@ def test_external_transfer_exception_allows_approved_pii_internal_url_and_securi
             db,
             AiSecurityPolicyContext(
                 workspace_id="workspace-1",
-                task_kind="patent_analysis",
+                task_kind="files_grounded_chat",
                 capability="llm",
             ),
             external_transfer_blockers_from_safety(safety),
@@ -1108,7 +1106,7 @@ def test_external_transfer_exception_cannot_bypass_absolute_blocker(
                 name="Internal context exception",
                 description="",
                 enabled=True,
-                task_kind="patent_analysis",
+                task_kind="files_grounded_chat",
                 capability="llm",
                 allowed_blocker_types_json=["internal_context"],
                 reason="approved",
@@ -1125,7 +1123,7 @@ def test_external_transfer_exception_cannot_bypass_absolute_blocker(
             db,
             AiSecurityPolicyContext(
                 workspace_id="workspace-1",
-                task_kind="patent_analysis",
+                task_kind="files_grounded_chat",
                 capability="llm",
             ),
             external_transfer_blockers_from_safety(safety),
@@ -1146,7 +1144,7 @@ def test_gateway_external_transfer_exception_allows_company_sensitive_entity(
             name="Order summary export",
             description="",
             enabled=True,
-            task_kind="patent_analysis",
+            task_kind="files_grounded_chat",
             capability="llm",
             allowed_blocker_types_json=["company_sensitive_entity"],
             reason="approved",
@@ -1157,12 +1155,12 @@ def test_gateway_external_transfer_exception_allows_company_sensitive_entity(
 
         execution = resolve_gateway_execution(
             AiGatewayRequest(
-                task_kind="patent_analysis",
+                task_kind="files_grounded_chat",
                 workspace_id="workspace-1",
                 actor_user_id="user-1",
                 source="tests.ai_security",
-                app="patent-analysis",
-                workload_id="patent_analysis",
+                app="files",
+                workload_id="files.grounded_chat",
                 workload_route="external",
                 workload_config=_external_test_llm_config(),
                 requested_model="claude-test",
@@ -1201,12 +1199,12 @@ def test_gateway_blocks_external_when_global_custom_block_term_matches(
         with pytest.raises(AiGatewayPolicyViolation) as error:
             resolve_gateway_execution(
                 AiGatewayRequest(
-                    task_kind="patent_analysis",
+                    task_kind="files_grounded_chat",
                     workspace_id="workspace-1",
                     actor_user_id="user-1",
                     source="tests.ai_security",
-                    app="patent-analysis",
-                    workload_id="patent_analysis",
+                    app="files",
+                    workload_id="files.grounded_chat",
                     workload_route="external",
                     workload_config=_external_test_llm_config(),
                     requested_model="claude-test",
@@ -1232,12 +1230,12 @@ def test_gateway_uses_llm_routing_when_ai_security_enforcement_disabled(
 
         execution = resolve_gateway_execution(
             AiGatewayRequest(
-                task_kind="patent_analysis",
+                task_kind="files_grounded_chat",
                 workspace_id="workspace-1",
                 actor_user_id="user-1",
                 source="tests.ai_security",
-                app="patent-analysis",
-                workload_id="patent_analysis",
+                app="files",
+                workload_id="files.grounded_chat",
                 workload_route="external",
                 workload_config=_external_test_llm_config(),
                 requested_model="claude-test",
@@ -1471,7 +1469,7 @@ def test_external_capability_mask_action_is_scoped_to_app(
                     task_kind="web_search",
                     capability="web_search",
                     provider="anthropic",
-                    app="research-trends",
+                    app="other-app",
                     input_texts=["Contact owner@example.com for latest public news"],
                 ),
                 lambda execution: execution.sanitized_text(fallback="fallback"),

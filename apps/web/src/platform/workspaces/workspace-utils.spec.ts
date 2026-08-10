@@ -1,11 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import {
-  AlertTriangle,
-  FileSearch,
-  FileText,
-  Mic,
-  Settings,
-} from 'lucide-react';
+import { FileSearch, FileText, Mic, Settings } from 'lucide-react';
 
 import type { AuthUser } from '../auth/auth-api';
 import type { NavItem } from '@/src/app/shell/navigation-types';
@@ -30,18 +24,17 @@ function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
   return {
     id: 'user-1',
     login_id: 'member',
-    email: 'member@open-alm.local',
-    full_name: 'Open ALM Member',
-    display_name: 'Open ALM Member',
+    email: 'member@open-work-hub.local',
+    full_name: 'Open Work Hub Member',
+    display_name: 'Open Work Hub Member',
     status: 'active',
     theme_preference: 'system',
     locale: 'ko-KR',
-    primary_org_unit: null,
     workspaces: [
       {
         id: 'workspace-hq',
         slug: 'hq',
-        name: 'Open ALM HQ',
+        name: 'Open Work Hub HQ',
         role: 'admin',
       },
     ],
@@ -62,7 +55,7 @@ describe('resolveRootEntryPath', () => {
   });
 
   it('prefers the user default workspace over the stored last workspace', () => {
-    window.localStorage.setItem('open-alm:last-workspace-slug', 'hq');
+    window.localStorage.setItem('open-work-hub:last-workspace-slug', 'hq');
 
     expect(
       resolveRootEntryPath(
@@ -72,13 +65,13 @@ describe('resolveRootEntryPath', () => {
             {
               id: 'workspace-hq',
               slug: 'hq',
-              name: 'Open ALM HQ',
+              name: 'Open Work Hub HQ',
               role: 'admin',
             },
             {
               id: 'workspace-demo',
               slug: 'demo',
-              name: 'Open ALM Demo',
+              name: 'Open Work Hub Demo',
               role: 'member',
             },
           ],
@@ -116,13 +109,17 @@ describe('stored workspace selection', () => {
   });
 
   it('clears the last workspace and app together', () => {
-    window.localStorage.setItem('open-alm:last-workspace-slug', 'hq');
-    window.localStorage.setItem('open-alm:last-workspace-app', 'chatbot');
+    window.localStorage.setItem('open-work-hub:last-workspace-slug', 'hq');
+    window.localStorage.setItem('open-work-hub:last-workspace-app', 'chatbot');
 
     clearStoredWorkspaceSelection();
 
-    expect(window.localStorage.getItem('open-alm:last-workspace-slug')).toBeNull();
-    expect(window.localStorage.getItem('open-alm:last-workspace-app')).toBeNull();
+    expect(
+      window.localStorage.getItem('open-work-hub:last-workspace-slug'),
+    ).toBeNull();
+    expect(
+      window.localStorage.getItem('open-work-hub:last-workspace-app'),
+    ).toBeNull();
   });
 
   it('switches workspaces only with enabled bootstrap app ids', () => {
@@ -131,13 +128,13 @@ describe('stored workspace selection', () => {
         {
           id: 'workspace-hq',
           slug: 'hq',
-          name: 'Open ALM HQ',
+          name: 'Open Work Hub HQ',
           role: 'admin',
         },
         {
           id: 'workspace-demo',
           slug: 'demo',
-          name: 'Open ALM Demo',
+          name: 'Open Work Hub Demo',
           role: 'member',
         },
       ],
@@ -147,12 +144,12 @@ describe('stored workspace selection', () => {
       resolveWorkspaceSwitchPath(user, '/w/hq/docs', 'demo', ['docs']),
     ).toBe('/w/demo/docs');
 
-    window.localStorage.setItem('open-alm:last-workspace-app', 'typo-app');
+    window.localStorage.setItem('open-work-hub:last-workspace-app', 'typo-app');
     expect(
       resolveWorkspaceSwitchPath(user, '/w/hq/typo-app', 'demo', ['docs']),
     ).toBe('/');
 
-    window.localStorage.setItem('open-alm:last-workspace-app', 'docs');
+    window.localStorage.setItem('open-work-hub:last-workspace-app', 'docs');
     expect(
       resolveWorkspaceSwitchPath(user, '/w/hq/typo-app', 'demo', ['docs']),
     ).toBe('/w/demo/docs');
@@ -161,14 +158,12 @@ describe('stored workspace selection', () => {
 
 describe('buildWorkspaceAppPath', () => {
   it('uses the registered leaf app id as the canonical workspace segment', () => {
-    expect(buildWorkspaceAppPath('hq', 'qa-assistant')).toBe(
-      '/w/hq/qa-assistant',
+    expect(buildWorkspaceAppPath('hq', 'docs')).toBe('/w/hq/docs');
+    expect(buildWorkspaceAppPath('hq', 'docs', '?tab=documents')).toBe(
+      '/w/hq/docs?tab=documents',
     );
-    expect(buildWorkspaceAppPath('hq', 'qa-assistant', '?tab=documents')).toBe(
-      '/w/hq/qa-assistant?tab=documents',
-    );
-    expect(resolveDefaultWorkspaceAppPath(buildUser(), 'qa-assistant')).toBe(
-      '/w/hq/qa-assistant',
+    expect(resolveDefaultWorkspaceAppPath(buildUser(), 'docs')).toBe(
+      '/w/hq/docs',
     );
     expect(buildWorkspaceAppPath('hq', 'docs')).toBe('/w/hq/docs');
     expect(buildWorkspaceAppPath('hq', 'retrieval-search')).toBe(
@@ -201,13 +196,9 @@ describe('buildWorkspaceAppPath', () => {
   });
 
   it('does not duplicate the route base when a suffix is already workspace-relative', () => {
-    expect(
-      buildWorkspaceAppPath(
-        'hq',
-        'legacy-issues',
-        '/legacy-issues/cooling-module',
-      ),
-    ).toBe('/w/hq/legacy-issues/cooling-module');
+    expect(buildWorkspaceAppPath('hq', 'docs', '/docs/cooling-module')).toBe(
+      '/w/hq/docs/cooling-module',
+    );
     expect(buildWorkspaceAppPath('hq', 'docs', '/docs?view=mine')).toBe(
       '/w/hq/docs?view=mine',
     );
@@ -245,18 +236,6 @@ describe('resolveNavItemHref', () => {
     });
     expect(resolveNavItemHref(item, 'hq', buildUser())).toBe(
       '/tool/spec-compare?workspace=hq',
-    );
-  });
-
-  it('routes the sidebar FMEA compare item to the workspace-scoped tool', () => {
-    const item = aiItem({
-      id: 'fmea-compare',
-      title: 'FMEA 비교',
-      icon: AlertTriangle,
-      workspaceScopedTool: true,
-    });
-    expect(resolveNavItemHref(item, 'hq', buildUser())).toBe(
-      '/tool/fmea-compare?workspace=hq',
     );
   });
 
@@ -298,15 +277,15 @@ describe('resolveNavItemHref', () => {
 
   it('normalizes workspace-relative pathSuffix values for category sidebar links', () => {
     const item = aiItem({
-      id: 'legacy-issues-cooling-module',
+      id: 'docs-cooling-module',
       title: '쿨링모듈',
       icon: FileText,
       appId: 'business',
-      linkAppId: 'legacy-issues',
-      pathSuffix: '/legacy-issues/cooling-module',
+      linkAppId: 'docs',
+      pathSuffix: '/docs/cooling-module',
     });
     expect(resolveNavItemHref(item, 'hq', buildUser())).toBe(
-      '/w/hq/legacy-issues/cooling-module',
+      '/w/hq/docs/cooling-module',
     );
   });
 
@@ -324,10 +303,10 @@ describe('resolveNavItemHref', () => {
 
   it('routes global app navigation through its launcher path without a workspace slug', () => {
     const item = aiItem({
-      appId: 'news',
-      id: 'news-keyword',
-      pathSuffix: '?channel=keyword',
-      title: 'Keyword news',
+      appId: 'community',
+      id: 'community-general',
+      pathSuffix: '?channel=general',
+      title: 'Community',
     });
 
     expect(
@@ -335,9 +314,9 @@ describe('resolveNavItemHref', () => {
         item,
         null,
         buildUser({ workspaces: [] }),
-        new Map([['news', '/news']]),
+        new Map([['community', '/community']]),
       ),
-    ).toBe('/news?channel=keyword');
+    ).toBe('/community?channel=general');
   });
 
   it('returns absolutePath verbatim when set (admin items)', () => {
@@ -424,15 +403,6 @@ describe('resolveToolInvocationHref', () => {
     });
     expect(resolveToolInvocationHref(chatbot, 'hq', buildUser())).toBe(
       '/tool/chatbot',
-    );
-    const fmea = aiItem({
-      id: 'fmea-compare',
-      title: 'FMEA 비교',
-      icon: AlertTriangle,
-      workspaceScopedTool: true,
-    });
-    expect(resolveToolInvocationHref(fmea, 'hq', buildUser())).toBe(
-      '/tool/fmea-compare?workspace=hq',
     );
     const specCompare = aiItem({
       id: 'spec-compare',
@@ -599,7 +569,7 @@ describe('rewriteWorkspaceApiPath', () => {
   });
 
   it('rewrites workspace-scoped rag endpoints with the active workspace slug', () => {
-    window.localStorage.setItem('open-alm:last-workspace-slug', 'hq');
+    window.localStorage.setItem('open-work-hub:last-workspace-slug', 'hq');
 
     expect(rewriteWorkspaceApiPath('/api/v1/rag/query')).toBe(
       '/api/v1/workspaces/hq/rag/query',
@@ -607,7 +577,7 @@ describe('rewriteWorkspaceApiPath', () => {
   });
 
   it('prefers the explicit tool workspace query over the last workspace slug', () => {
-    window.localStorage.setItem('open-alm:last-workspace-slug', 'hq');
+    window.localStorage.setItem('open-work-hub:last-workspace-slug', 'hq');
     window.history.replaceState(
       {},
       '',
@@ -620,7 +590,7 @@ describe('rewriteWorkspaceApiPath', () => {
   });
 
   it('does not fall back to browser state when the explicit workspace slug is empty', () => {
-    window.localStorage.setItem('open-alm:last-workspace-slug', 'hq');
+    window.localStorage.setItem('open-work-hub:last-workspace-slug', 'hq');
 
     expect(rewriteWorkspaceApiPath('/api/v1/docs/hub', '')).toBe(
       '/api/v1/docs/hub',

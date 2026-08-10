@@ -14,23 +14,23 @@ from openai import OpenAIError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from open_alm_api.core import llm as llm_core
-from open_alm_api.core import llm_execution_adapters
-from open_alm_api.core.db import get_engine
-from open_alm_api.core.llm import (
+from open_work_hub_api.core import llm as llm_core
+from open_work_hub_api.core import llm_execution_adapters
+from open_work_hub_api.core.db import get_engine
+from open_work_hub_api.core.llm import (
     LlmProviderError,
     LlmTaskContext,
     ResolvedLlmExecution,
     complete_chat_stream,
     resolve_registered_chat_execution,
 )
-from open_alm_api.core.llm_adapters import StreamChunk, _close_stream
-from open_alm_api.domains.ai.gateway import (
+from open_work_hub_api.core.llm_adapters import StreamChunk, _close_stream
+from open_work_hub_api.domains.ai.gateway import (
     LlmWorkloadContext,
     build_llm_workload_request,
     resolve_gateway_execution,
 )
-from open_alm_api.domains.auth.models import AuditLog
+from open_work_hub_api.domains.auth.models import AuditLog
 
 
 pytestmark = pytest.mark.anyio

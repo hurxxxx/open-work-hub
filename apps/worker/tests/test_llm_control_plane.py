@@ -16,7 +16,7 @@ API_SRC = WORKSPACE_ROOT / "apps" / "api" / "src"
 if str(API_SRC) not in sys.path:
     sys.path.insert(0, str(API_SRC))
 
-import open_alm_api.platform_extensions as platform_extensions  # noqa: E402
+import open_work_hub_api.platform_extensions as platform_extensions  # noqa: E402
 
 
 REQUIRED_PROVIDER_IDS = ("anthropic", "gemini", "local", "openai")
@@ -68,7 +68,7 @@ def _init_worker_db(
 
 def _reload_worker_module(module_name: str):
     for cached_name in list(sys.modules):
-        if cached_name == "open_alm_worker" or cached_name.startswith("open_alm_worker."):
+        if cached_name == "open_work_hub_worker" or cached_name.startswith("open_work_hub_worker."):
             sys.modules.pop(cached_name, None)
     return importlib.import_module(module_name)
 
@@ -83,11 +83,11 @@ def test_celery_app_fails_fast_when_llm_routing_tables_are_missing(
         create_routing_tables=False,
         seed_provider_rows=False,
     )
-    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("OPEN_ALM_WORKER_QUEUE_GROUP", "all")
+    monkeypatch.setenv("OPEN_WORK_HUB_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_WORK_HUB_WORKER_QUEUE_GROUP", "all")
 
     with pytest.raises(RuntimeError, match="Run API migrations before starting the worker"):
-        _reload_worker_module("open_alm_worker.celery_app")
+        _reload_worker_module("open_work_hub_worker.celery_app")
 
 
 def test_celery_app_skips_llm_routing_precheck_for_non_llm_queue_group(
@@ -100,13 +100,13 @@ def test_celery_app_skips_llm_routing_precheck_for_non_llm_queue_group(
         create_routing_tables=False,
         seed_provider_rows=False,
     )
-    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("OPEN_ALM_WORKER_QUEUE_GROUP", "default")
+    monkeypatch.setenv("OPEN_WORK_HUB_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_WORK_HUB_WORKER_QUEUE_GROUP", "default")
 
-    celery_module = _reload_worker_module("open_alm_worker.celery_app")
+    celery_module = _reload_worker_module("open_work_hub_worker.celery_app")
 
     assert celery_module.settings.queue_group == "default"
-    assert celery_module.celery_app.main == "open_alm_worker"
+    assert celery_module.celery_app.main == "open_work_hub_worker"
 
 
 def test_meeting_summarize_uses_complete_chat_without_local_precheck(
@@ -119,10 +119,10 @@ def test_meeting_summarize_uses_complete_chat_without_local_precheck(
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_WORK_HUB_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_WORK_HUB_POSTGRES_DSN", _worker_dsn(db_path))
 
-    meeting_module = _reload_worker_module("open_alm_worker.tasks.meeting")
+    meeting_module = _reload_worker_module("open_work_hub_worker.tasks.meeting")
 
     recording = SimpleNamespace(
         id="rec-1",
@@ -196,10 +196,10 @@ def test_mail_sync_task_imports_after_control_plane_ready(
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_WORK_HUB_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_WORK_HUB_POSTGRES_DSN", _worker_dsn(db_path))
 
-    mail_module = _reload_worker_module("open_alm_worker.tasks.mail")
+    mail_module = _reload_worker_module("open_work_hub_worker.tasks.mail")
 
     assert mail_module.sync_mail_job.name == "mail.sync_job"
     assert mail_module.sync_mail_account.name == "mail.sync_account"
@@ -216,8 +216,8 @@ def test_celery_app_initializes_platform_extensions_with_worker_settings(
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("OPEN_ALM_AI_DEFAULT_EXTERNAL_LLM_PROVIDER", "openai")
+    monkeypatch.setenv("OPEN_WORK_HUB_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_WORK_HUB_AI_DEFAULT_EXTERNAL_LLM_PROVIDER", "openai")
 
     captured: dict[str, Any] = {}
 
@@ -231,10 +231,10 @@ def test_celery_app_initializes_platform_extensions_with_worker_settings(
         fake_initialize_platform_extensions,
     )
 
-    _reload_worker_module("open_alm_worker.celery_app")
+    _reload_worker_module("open_work_hub_worker.celery_app")
 
     settings = captured["settings"]
-    assert settings.__class__.__module__ == "open_alm_worker.settings"
+    assert settings.__class__.__module__ == "open_work_hub_worker.settings"
     assert settings.ai_default_external_llm_provider == "openai"
 
 
@@ -248,10 +248,10 @@ def test_meeting_extract_insights_invokes_worker_service_without_stopping_pipeli
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_WORK_HUB_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_WORK_HUB_POSTGRES_DSN", _worker_dsn(db_path))
 
-    meeting_module = _reload_worker_module("open_alm_worker.tasks.meeting")
+    meeting_module = _reload_worker_module("open_work_hub_worker.tasks.meeting")
 
     recording = SimpleNamespace(
         id="rec-2",
@@ -327,14 +327,14 @@ def test_meeting_insights_module_imports_under_worker_env(
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_WORK_HUB_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_WORK_HUB_POSTGRES_DSN", _worker_dsn(db_path))
 
-    meeting_module = _reload_worker_module("open_alm_worker.tasks.meeting")
+    meeting_module = _reload_worker_module("open_work_hub_worker.tasks.meeting")
 
     imported = meeting_module.meeting_insights_module()
 
-    assert imported.__name__ == "open_alm_api.domains.meeting.insights"
+    assert imported.__name__ == "open_work_hub_api.domains.meeting.insights"
 
 
 def test_meeting_mark_failed_rolls_back_pending_transaction(
@@ -347,9 +347,9 @@ def test_meeting_mark_failed_rolls_back_pending_transaction(
         create_routing_tables=True,
         seed_provider_rows=True,
     )
-    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_WORK_HUB_POSTGRES_DSN", _worker_dsn(db_path))
 
-    meeting_module = _reload_worker_module("open_alm_worker.tasks.meeting")
+    meeting_module = _reload_worker_module("open_work_hub_worker.tasks.meeting")
     recording = SimpleNamespace(
         transcription_status="summarizing",
         failure_reason=None,

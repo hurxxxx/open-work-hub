@@ -1,5 +1,5 @@
 import type { Dispatch, FormEvent } from 'react';
-import { Button } from '@open-alm/ui/primitives/button';
+import { Button } from '@open-work-hub/ui/primitives/button';
 import { cn } from '@/src/lib/utils';
 
 import type { AuthUser } from './auth-api';
@@ -100,31 +100,6 @@ export function ProfileSettingsSection({
               disabled
               readOnly
               value={user.email}
-            />
-          </SettingsFieldRow>
-
-          <SettingsFieldRow label={t('auth:settings.jobTitle')}>
-            <input
-              aria-label={t('auth:settings.jobTitle')}
-              className={fieldClassName}
-              onChange={(event) =>
-                dispatch({
-                  type: 'patch',
-                  patch: { jobTitle: event.target.value },
-                })
-              }
-              placeholder={t('auth:settings.jobTitlePlaceholder')}
-              value={state.jobTitle}
-            />
-          </SettingsFieldRow>
-
-          <SettingsFieldRow label={t('auth:settings.organization')}>
-            <input
-              aria-label={t('auth:settings.organization')}
-              className={cn(fieldClassName, 'opacity-60')}
-              disabled
-              readOnly
-              value={user.primary_org_unit?.name ?? t('common:empty.none')}
             />
           </SettingsFieldRow>
 

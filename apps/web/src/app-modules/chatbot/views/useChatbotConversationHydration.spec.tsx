@@ -25,7 +25,7 @@ describe('useChatbotConversationHydration', () => {
     vi.mocked(getConversation).mockResolvedValue({
       id: 'conversation-1',
       livePendingApproval: null,
-      scopeRef: 'legacy_issues',
+      scopeRef: 'docs',
       scopeResourceId: 'workspace',
       turns: [],
     } as ConversationDetail);

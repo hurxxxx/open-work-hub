@@ -7,18 +7,17 @@ import pytest
 from sqlalchemy import create_engine, event, func, insert, select
 from sqlalchemy.orm import Session
 
-from open_alm_api.core.db import Base
-from open_alm_api.domains.auth.models import (
-    OrgUnit,
+from open_work_hub_api.core.db import Base
+from open_work_hub_api.domains.auth.models import (
     User,
     UserSystemRole,
     Workspace,
     WorkspaceUserBinding,
 )
-from open_alm_api.domains.files import service as files_service
-from open_alm_api.domains.files import rag_projection as files_rag_projection
-from open_alm_api.domains.files import search_projection as files_search_projection
-from open_alm_api.domains.files.models import (
+from open_work_hub_api.domains.files import service as files_service
+from open_work_hub_api.domains.files import rag_projection as files_rag_projection
+from open_work_hub_api.domains.files import search_projection as files_search_projection
+from open_work_hub_api.domains.files.models import (
     FileManagerCorpus,
     FileManagerCorpusTransitionAudit,
     FileManagerFile,
@@ -26,20 +25,20 @@ from open_alm_api.domains.files.models import (
     FileManagerFileSourceMetadata,
     FileManagerFolder,
 )
-from open_alm_api.domains.files.source_access import (
+from open_work_hub_api.domains.files.source_access import (
     FileManagerSourceAccessAdapter,
     can_read_file,
     has_accessible_file,
 )
-from open_alm_api.domains.retrieval.models import RetrievalPartition
-from open_alm_api.domains.retrieval.partitioning import ensure_default_partition
-from open_alm_api.domains.rag.contracts import (
+from open_work_hub_api.domains.retrieval.models import RetrievalPartition
+from open_work_hub_api.domains.retrieval.partitioning import ensure_default_partition
+from open_work_hub_api.domains.rag.contracts import (
     RagProjection,
     RagScopeKind,
     RagVectorSearchHit,
 )
-from open_alm_api.domains.rag.query_projection import to_query_hit
-from open_alm_api.domains.source_access.policy import SourceAclPolicy
+from open_work_hub_api.domains.rag.query_projection import to_query_hit
+from open_work_hub_api.domains.source_access.policy import SourceAclPolicy
 
 
 WORKSPACE_A_ID = "workspace-a"
@@ -63,7 +62,6 @@ def db() -> Session:
     Base.metadata.create_all(
         engine,
         tables=[
-            OrgUnit.__table__,
             Workspace.__table__,
             User.__table__,
             UserSystemRole.__table__,
@@ -119,7 +117,7 @@ def test_corpus_creation_uses_unique_non_default_managed_partitions(db: Session)
         db,
         workspace=workspace,
         user=admin,
-        name="AI TFT archive",
+        name="General Workspace archive",
     )
     second = files_service.create_file_corpus(
         db,

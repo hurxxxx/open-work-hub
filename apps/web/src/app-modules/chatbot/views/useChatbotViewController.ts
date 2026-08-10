@@ -6,7 +6,7 @@ import {
   useParams,
   useSearchParams,
 } from 'react-router-dom';
-import { useConfirm } from '@open-alm/ui';
+import { useConfirm } from '@open-work-hub/ui';
 
 import type { NavItem } from '@/src/app/shell/navigation-types';
 import { useAuth } from '@/src/platform/auth/auth-provider';

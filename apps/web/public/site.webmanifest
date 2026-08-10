@@ -1,7 +1,7 @@
 {
-  "name": "Open ALM",
-  "short_name": "Open ALM",
-  "description": "Open ALM",
+  "name": "Open Work Hub",
+  "short_name": "Open Work Hub",
+  "description": "Open Work Hub",
   "id": "/",
   "start_url": "/",
   "display": "standalone",

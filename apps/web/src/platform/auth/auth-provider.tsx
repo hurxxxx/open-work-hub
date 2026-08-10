@@ -62,8 +62,6 @@ const PERMISSION_ROLE_MAP: Record<string, string[]> = {
   'admin.access': ['platform_admin'],
   'user.read': ['platform_admin'],
   'user.write': ['platform_admin'],
-  'org_unit.read': ['platform_admin'],
-  'org_unit.write': ['platform_admin'],
   'workspace.read': ['platform_admin'],
   'workspace.write': ['platform_admin'],
   'team.read': ['platform_admin'],

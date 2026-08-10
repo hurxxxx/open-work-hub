@@ -60,7 +60,7 @@ packages:
   - 'packages/*'
 ```
 
-이 설정으로 `apps/web`, `apps/api`(※ 파이썬은 제외), `packages/ui` 등이 모두 같은 워크스페이스의 "내부 패키지"가 됩니다. 서로를 `@open-alm/ui` 같은 이름으로 import 할 수 있습니다.
+이 설정으로 `apps/web`, `apps/api`(※ 파이썬은 제외), `packages/ui` 등이 모두 같은 워크스페이스의 "내부 패키지"가 됩니다. 서로를 `@open-work-hub/ui` 같은 이름으로 import 할 수 있습니다.
 
 ### 2.2 package.json의 `packageManager`
 
@@ -152,18 +152,18 @@ apps/api/         Python FastAPI
   ├── pyproject.toml   (Python 의존성)
   ├── project.json     (Nx에서는 Python도 관리 가능)
   ├── alembic/
-  └── src/open_alm_api/
+  └── src/open_work_hub_api/
       └── domains/...
 
 apps/worker/      Python Celery 워커
   ├── pyproject.toml
-  └── src/open_alm_worker/
+  └── src/open_work_hub_worker/
       └── tasks/
 
 apps/ops/         운영성 도구와 평가 CLI
 
 packages/ui/      공통 UI 컴포넌트
-  ├── package.json  (name: "@open-alm/ui")
+  ├── package.json  (name: "@open-work-hub/ui")
   ├── src/index.tsx
   └── src/styles.css
 
@@ -179,10 +179,10 @@ Python 앱 두 개는 pnpm-workspace에 넣지 않고(파이썬은 자체 패키
 `apps/web/src/App.tsx` 안에서 공통 UI를 쓸 때:
 
 ```ts
-import { AppShell } from '@open-alm/ui';
+import { AppShell } from '@open-work-hub/ui';
 ```
 
-이렇게 되려면 `packages/ui/package.json`의 `name` 이 `@open-alm/ui`여야 하고, 루트 `tsconfig.base.json`과 Vite alias가 `@open-alm/ui`를 `packages/ui/src`로 연결해야 합니다. pnpm 워크스페이스와 TypeScript path alias가 이 연결을 함께 처리합니다.
+이렇게 되려면 `packages/ui/package.json`의 `name` 이 `@open-work-hub/ui`여야 하고, 루트 `tsconfig.base.json`과 Vite alias가 `@open-work-hub/ui`를 `packages/ui/src`로 연결해야 합니다. pnpm 워크스페이스와 TypeScript path alias가 이 연결을 함께 처리합니다.
 
 ---
 

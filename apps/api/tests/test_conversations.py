@@ -86,7 +86,7 @@ def test_ai_create_rejects_meeting_scope_for_non_participant(client: TestClient)
     outsider = _create_user_with_workspaces(
         client,
         admin_token,
-        email="conversation-outsider@open-alm.local",
+        email="conversation-outsider@open-work-hub.local",
         full_name="Conversation Outsider",
         workspace_keys=[slug],
     )

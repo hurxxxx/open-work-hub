@@ -1,6 +1,6 @@
 import pytest
 
-from open_alm_ops.scenario_catalog import (
+from open_work_hub_ops.scenario_catalog import (
     ScenarioDirectoryNotFoundError,
     ScenarioManifestIdError,
     ScenarioManifestJsonError,

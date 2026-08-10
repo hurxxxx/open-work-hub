@@ -1,23 +1,23 @@
 [importlinter]
-root_package = open_alm_api
+root_package = open_work_hub_api
 
 [importlinter:contract:routers_are_composition_only]
 name = Router modules are imported only by the API composition registry
 type = protected
 protected_modules =
-    open_alm_api.domains.*.router
-    open_alm_api.domains.auth.workspace_router
+    open_work_hub_api.domains.*.router
+    open_work_hub_api.domains.auth.workspace_router
 allowed_importers =
-    open_alm_api.api_registry
-    open_alm_api.installed_extension_apps
+    open_work_hub_api.api_registry
+    open_work_hub_api.installed_extension_apps
 as_packages = false
 
 [importlinter:contract:domains_do_not_import_composition_roots]
 name = Domain modules do not import API composition roots
 type = forbidden
 source_modules =
-    open_alm_api.domains
+    open_work_hub_api.domains
 forbidden_modules =
-    open_alm_api.app
-    open_alm_api.main
-    open_alm_api.api_registry
+    open_work_hub_api.app
+    open_work_hub_api.main
+    open_work_hub_api.api_registry

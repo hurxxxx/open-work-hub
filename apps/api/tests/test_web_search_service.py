@@ -6,11 +6,11 @@ from types import SimpleNamespace
 import pytest
 from pydantic import SecretStr
 
-from open_alm_api.core.settings import Settings
-from open_alm_api.domains.ai.external_gateway import AiExternalCapabilityRequest
-from open_alm_api.domains.ai import external_gateway
-from open_alm_api.domains.ai.model_settings_service import AiModelSettingsError
-from open_alm_api.domains.web_search import router, service
+from open_work_hub_api.core.settings import Settings
+from open_work_hub_api.domains.ai.external_gateway import AiExternalCapabilityRequest
+from open_work_hub_api.domains.ai import external_gateway
+from open_work_hub_api.domains.ai.model_settings_service import AiModelSettingsError
+from open_work_hub_api.domains.web_search import router, service
 
 
 class _AsyncTextStream:
@@ -280,31 +280,6 @@ async def test_stream_web_search_answer_blocks_pii_before_client_factory(
     assert audit_records[0]["status"] == "blocked"
     assert audit_records[0]["policy_reason"] == "pii_detected"
     assert audit_records[0]["pii_hits"] == ["email"]
-
-
-def test_anthropic_web_search_request_uses_profile_prompts() -> None:
-    research_request = service._anthropic_web_search_request(
-        question="전고체 배터리 논문 동향",
-        max_uses=8,
-        profile_id="research-trends",
-        model="claude-research-db",
-        max_tokens=4096,
-    )
-    standards_request = service._anthropic_web_search_request(
-        question="UNECE R155 변경사항",
-        max_uses=8,
-        profile_id="standards-monitor",
-        model="claude-standards-db",
-        max_tokens=2048,
-    )
-
-    assert "research and technology trend analyst" in research_request["system"]
-    assert "standards and regulatory monitoring analyst" in standards_request["system"]
-    assert research_request["model"] == "claude-research-db"
-    assert standards_request["model"] == "claude-standards-db"
-    assert research_request["max_tokens"] == 4096
-    assert standards_request["max_tokens"] == 2048
-    assert standards_request["tools"][0]["max_uses"] == 8
 
 
 def test_anthropic_client_uses_resolved_database_route(monkeypatch) -> None:

@@ -1,12 +1,12 @@
 {
-  "name": "@open-alm/contracts",
+  "name": "@open-work-hub/contracts",
   "version": "0.0.3",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
     "README.md",
-    "open-alm-desktop-update-feed.manifest.json",
+    "open-work-hub-desktop-update-feed.manifest.json",
     "dist"
   ],
   "exports": {
@@ -22,11 +22,11 @@
       "types": "./dist/auth.d.ts",
       "import": "./dist/auth.js"
     },
-    "./open-alm-desktop-update-feed": {
-      "types": "./dist/open-alm-desktop-update-feed.d.ts",
-      "import": "./dist/open-alm-desktop-update-feed.js"
+    "./open-work-hub-desktop-update-feed": {
+      "types": "./dist/open-work-hub-desktop-update-feed.d.ts",
+      "import": "./dist/open-work-hub-desktop-update-feed.js"
     },
-    "./open-alm-desktop-update-feed.manifest.json": "./open-alm-desktop-update-feed.manifest.json",
+    "./open-work-hub-desktop-update-feed.manifest.json": "./open-work-hub-desktop-update-feed.manifest.json",
     "./openapi": "./dist/openapi.generated.d.ts",
     "./dm": {
       "types": "./dist/dm.d.ts",

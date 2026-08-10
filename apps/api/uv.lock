@@ -26,152 +26,6 @@ wheels = [
 ]
 
 [[package]]
-name = "open-alm-api"
-version = "0.1.1"
-source = { editable = "." }
-dependencies = [
-    { name = "alembic" },
-    { name = "anthropic" },
-    { name = "beautifulsoup4" },
-    { name = "celery" },
-    { name = "claude-agent-sdk" },
-    { name = "coolprop" },
-    { name = "cryptography" },
-    { name = "fastapi" },
-    { name = "google-auth", extra = ["requests"] },
-    { name = "google-genai" },
-    { name = "httpx" },
-    { name = "langchain" },
-    { name = "langgraph" },
-    { name = "langgraph-checkpoint-postgres" },
-    { name = "llama-index-core" },
-    { name = "llama-index-vector-stores-postgres" },
-    { name = "minio" },
-    { name = "numpy" },
-    { name = "olefile" },
-    { name = "openai" },
-    { name = "openai-agents" },
-    { name = "openpyxl" },
-    { name = "opentelemetry-api" },
-    { name = "opentelemetry-exporter-otlp-proto-grpc" },
-    { name = "opentelemetry-exporter-otlp-proto-http" },
-    { name = "opentelemetry-sdk" },
-    { name = "opf" },
-    { name = "pandas" },
-    { name = "pdfplumber" },
-    { name = "pillow" },
-    { name = "psycopg", extra = ["binary"] },
-    { name = "pydantic-settings" },
-    { name = "pymupdf" },
-    { name = "python-docx" },
-    { name = "python-dotenv" },
-    { name = "python-multipart" },
-    { name = "python-pptx" },
-    { name = "qdrant-client" },
-    { name = "redis" },
-    { name = "reportlab" },
-    { name = "requests" },
-    { name = "sqlalchemy" },
-    { name = "sqlglot" },
-    { name = "sse-starlette" },
-    { name = "uvicorn", extra = ["standard"] },
-    { name = "xlrd" },
-    { name = "y-py" },
-    { name = "ypy-websocket" },
-]
-
-[package.optional-dependencies]
-asr-local = [
-    { name = "faster-whisper" },
-]
-privacy-filter = [
-    { name = "opf" },
-]
-rag-local = [
-    { name = "docling" },
-    { name = "easyocr" },
-    { name = "sentence-transformers" },
-    { name = "torch" },
-    { name = "transformers" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "import-linter" },
-    { name = "pytest" },
-    { name = "pytest-xdist" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "alembic", specifier = ">=1.16.0,<2.0.0" },
-    { name = "anthropic", specifier = ">=0.52.0,<1.0.0" },
-    { name = "beautifulsoup4", specifier = ">=4.12.0,<5.0.0" },
-    { name = "celery", specifier = ">=5.5.0,<6.0.0" },
-    { name = "claude-agent-sdk", specifier = ">=0.2.110,<1.0.0" },
-    { name = "coolprop", specifier = ">=7.0,<8.0.0" },
-    { name = "cryptography", specifier = ">=44.0.0,<48.0.0" },
-    { name = "docling", marker = "extra == 'rag-local'", specifier = ">=2.0.0" },
-    { name = "easyocr", marker = "extra == 'rag-local'", specifier = ">=1.7.0" },
-    { name = "fastapi", specifier = ">=0.115.0,<1.0.0" },
-    { name = "faster-whisper", marker = "extra == 'asr-local'", specifier = ">=1.1.0,<2.0.0" },
-    { name = "google-auth", extras = ["requests"], specifier = ">=2.30.0,<3.0.0" },
-    { name = "google-genai", specifier = ">=1.0.0,<2.0.0" },
-    { name = "httpx", specifier = ">=0.28.0,<0.29.0" },
-    { name = "langchain", specifier = "==1.3.14" },
-    { name = "langgraph", specifier = "==1.2.9" },
-    { name = "langgraph-checkpoint-postgres", specifier = "==3.1.0" },
-    { name = "llama-index-core", specifier = "==0.14.23" },
-    { name = "llama-index-vector-stores-postgres", specifier = "==0.8.1" },
-    { name = "minio", specifier = ">=7.2.0,<8.0.0" },
-    { name = "numpy", specifier = ">=1.26,<3.0" },
-    { name = "olefile", specifier = ">=0.47,<1.0" },
-    { name = "openai", specifier = ">=2.0.0,<3.0.0" },
-    { name = "openai-agents", specifier = ">=0.3.0,<1.0.0" },
-    { name = "openpyxl", specifier = ">=3.1.0,<4.0" },
-    { name = "opentelemetry-api", specifier = ">=1.32.0,<2.0.0" },
-    { name = "opentelemetry-exporter-otlp-proto-grpc", specifier = ">=1.32.0,<2.0.0" },
-    { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.32.0,<2.0.0" },
-    { name = "opentelemetry-sdk", specifier = ">=1.32.0,<2.0.0" },
-    { name = "opf", git = "https://github.com/openai/privacy-filter.git?rev=f7f00ca7fb869683eb732c010299d901457f19c3" },
-    { name = "opf", marker = "extra == 'privacy-filter'", git = "https://github.com/openai/privacy-filter.git?rev=f7f00ca7fb869683eb732c010299d901457f19c3" },
-    { name = "pandas", specifier = ">=2.0,<3.0.0" },
-    { name = "pdfplumber", specifier = ">=0.11.0,<1.0" },
-    { name = "pillow", specifier = ">=10.0.0,<12.0.0" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.2.0,<4.0.0" },
-    { name = "pydantic-settings", specifier = ">=2.8.0,<3.0.0" },
-    { name = "pymupdf", specifier = ">=1.24.0,<2.0" },
-    { name = "python-docx", specifier = ">=1.1.0,<2.0" },
-    { name = "python-dotenv", specifier = ">=1.2.0,<2.0.0" },
-    { name = "python-multipart", specifier = ">=0.0.18,<1.0.0" },
-    { name = "python-pptx", specifier = ">=1.0.0,<2.0" },
-    { name = "qdrant-client", specifier = "==1.17.1" },
-    { name = "redis", specifier = ">=5.2.0,<6.0.0" },
-    { name = "reportlab", specifier = ">=4.5.1" },
-    { name = "requests", specifier = ">=2.31.0,<3.0.0" },
-    { name = "sentence-transformers", marker = "extra == 'rag-local'", specifier = ">=3.3.0" },
-    { name = "sqlalchemy", specifier = ">=2.0.0,<3.0.0" },
-    { name = "sqlglot", specifier = ">=26.0.0,<30.0.0" },
-    { name = "sse-starlette", specifier = ">=2.1,<3.0" },
-    { name = "torch", marker = "extra == 'rag-local'", specifier = ">=2.4.0" },
-    { name = "transformers", marker = "extra == 'rag-local'", specifier = ">=4.45.0" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0,<1.0.0" },
-    { name = "xlrd", specifier = ">=2.0.1,<3.0.0" },
-    { name = "y-py", specifier = ">=0.6.2" },
-    { name = "ypy-websocket", specifier = ">=0.12.4" },
-]
-provides-extras = ["rag-local", "asr-local", "privacy-filter"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "import-linter", specifier = ">=2.11" },
-    { name = "pytest", specifier = ">=8.3.0,<9.0.0" },
-    { name = "pytest-xdist", specifier = ">=3.6.0,<4.0.0" },
-    { name = "ruff", specifier = ">=0.11.0,<0.12.0" },
-]
-
-[[package]]
 name = "aiohappyeyeballs"
 version = "2.7.1"
 source = { registry = "https://pypi.org/simple" }
@@ -596,24 +450,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/a2/61/f083b5ac52e505dfc1c624eafbf8c7589a0d7f32daa398d2e7590efa5fda/colorlog-6.10.1.tar.gz", hash = "sha256:eb4ae5cb65fe7fec7773c2306061a8e63e02efc2c72eba9d27b0fa23c94f1321", size = 17162, upload-time = "2025-10-16T16:14:11.978Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/6d/c1/e419ef3723a074172b68aaa89c9f3de486ed4c2399e2dbd8113a4fdcaf9e/colorlog-6.10.1-py3-none-any.whl", hash = "sha256:2d7e8348291948af66122cff006c9f8da6255d224e7cf8e37d8de2df3bad8c9c", size = 11743, upload-time = "2025-10-16T16:14:10.512Z" },
-]
-
-[[package]]
-name = "coolprop"
-version = "7.2.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "numpy" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/9f/5f/6b82cda1078c7abf70151c33ecb6a5a72f40facac0952e1c72ae3daabe5e/coolprop-7.2.0.tar.gz", hash = "sha256:b1e205d67e7f4f38e26d2ed0abb815e7a0f643b069407c238f3d1b3631791b75", size = 25517639, upload-time = "2025-11-01T18:49:38.448Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/7c/ca/123fee5043b8d3e028f2cd2d565c518fc70434eb4f54e0cf0e1f03ab2dd0/coolprop-7.2.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:8a75b223336ceb6ddda6da372f037569d719484274b18fc484b0da46bd9fed29", size = 5624858, upload-time = "2025-11-01T18:48:53.479Z" },
-    { url = "https://files.pythonhosted.org/packages/ff/bb/fddc66dc554052c033e66d5c675476948375f2049136a6a79ca63178c29e/coolprop-7.2.0-cp312-cp312-macosx_11_0_x86_64.whl", hash = "sha256:548fb14497f7132db54f0b09b4ded948075665b173ac5d4acd0f4be9b96a32c6", size = 5752754, upload-time = "2025-11-01T18:48:54.849Z" },
-    { url = "https://files.pythonhosted.org/packages/7f/45/0c1f3a4cea3f81d977785ba650f1600c98ecda306dc7a16fd676b9d4dac0/coolprop-7.2.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:78d7ebbcee40c8b30d647861d90cba63a59b6beee0f23c7a8ca04abd83ee0441", size = 6266075, upload-time = "2025-11-01T18:48:56.287Z" },
-    { url = "https://files.pythonhosted.org/packages/19/ef/c4ec7193022118adf262e066515b9c48ca25098f41796fb412931f54d22a/coolprop-7.2.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:e88ef42e81b42e42fdd3bd5b8dc541c729e16cf104f08f7a7a8ed354f65fa418", size = 6478127, upload-time = "2025-11-01T18:48:57.957Z" },
-    { url = "https://files.pythonhosted.org/packages/f5/ff/a639e4392bcdb264e8f71ef3ed66749782fef53e2c4cbcc51200e0808ab6/coolprop-7.2.0-cp312-cp312-win32.whl", hash = "sha256:1cd780de217f4359d4d65ab854a9691e6c955aea2eac59ca92c437c6d11033bb", size = 5290343, upload-time = "2025-11-01T18:48:59.301Z" },
-    { url = "https://files.pythonhosted.org/packages/79/48/a66ad32de177b5e512238ff659f05052ae1ff5667d8a555bb876a6e52054/coolprop-7.2.0-cp312-cp312-win_amd64.whl", hash = "sha256:eeb609eb6c284d480fe749b3ea576d70e8bd30fec3dc96775f93d5f51e615bc8", size = 5474925, upload-time = "2025-11-01T18:49:00.856Z" },
-    { url = "https://files.pythonhosted.org/packages/72/f8/64d6f5ae311d105ce30b972cf60d17015ede96b979b04eca9af8d0182be5/coolprop-7.2.0-cp312-cp312-win_arm64.whl", hash = "sha256:259809cdc8bc47e55d915ff5ddaebb49246d37fde1ad272066b5fe1273723af5", size = 5371485, upload-time = "2025-11-01T18:49:02.385Z" },
 ]
 
 [[package]]
@@ -2291,6 +2127,144 @@ wheels = [
 ]
 
 [[package]]
+name = "open-work-hub-api"
+version = "0.1.1"
+source = { editable = "." }
+dependencies = [
+    { name = "alembic" },
+    { name = "anthropic" },
+    { name = "beautifulsoup4" },
+    { name = "celery" },
+    { name = "claude-agent-sdk" },
+    { name = "cryptography" },
+    { name = "fastapi" },
+    { name = "google-auth", extra = ["requests"] },
+    { name = "google-genai" },
+    { name = "httpx" },
+    { name = "langchain" },
+    { name = "langgraph" },
+    { name = "langgraph-checkpoint-postgres" },
+    { name = "llama-index-core" },
+    { name = "llama-index-vector-stores-postgres" },
+    { name = "minio" },
+    { name = "numpy" },
+    { name = "olefile" },
+    { name = "openai" },
+    { name = "openai-agents" },
+    { name = "openpyxl" },
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-exporter-otlp-proto-grpc" },
+    { name = "opentelemetry-exporter-otlp-proto-http" },
+    { name = "opentelemetry-sdk" },
+    { name = "opf" },
+    { name = "pdfplumber" },
+    { name = "pillow" },
+    { name = "psycopg", extra = ["binary"] },
+    { name = "pydantic-settings" },
+    { name = "pymupdf" },
+    { name = "python-docx" },
+    { name = "python-dotenv" },
+    { name = "python-multipart" },
+    { name = "qdrant-client" },
+    { name = "redis" },
+    { name = "reportlab" },
+    { name = "requests" },
+    { name = "sqlalchemy" },
+    { name = "sse-starlette" },
+    { name = "uvicorn", extra = ["standard"] },
+    { name = "xlrd" },
+    { name = "y-py" },
+    { name = "ypy-websocket" },
+]
+
+[package.optional-dependencies]
+asr-local = [
+    { name = "faster-whisper" },
+]
+privacy-filter = [
+    { name = "opf" },
+]
+rag-local = [
+    { name = "docling" },
+    { name = "easyocr" },
+    { name = "sentence-transformers" },
+    { name = "torch" },
+    { name = "transformers" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "import-linter" },
+    { name = "pytest" },
+    { name = "pytest-xdist" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "alembic", specifier = ">=1.16.0,<2.0.0" },
+    { name = "anthropic", specifier = ">=0.52.0,<1.0.0" },
+    { name = "beautifulsoup4", specifier = ">=4.12.0,<5.0.0" },
+    { name = "celery", specifier = ">=5.5.0,<6.0.0" },
+    { name = "claude-agent-sdk", specifier = ">=0.2.110,<1.0.0" },
+    { name = "cryptography", specifier = ">=44.0.0,<48.0.0" },
+    { name = "docling", marker = "extra == 'rag-local'", specifier = ">=2.0.0" },
+    { name = "easyocr", marker = "extra == 'rag-local'", specifier = ">=1.7.0" },
+    { name = "fastapi", specifier = ">=0.115.0,<1.0.0" },
+    { name = "faster-whisper", marker = "extra == 'asr-local'", specifier = ">=1.1.0,<2.0.0" },
+    { name = "google-auth", extras = ["requests"], specifier = ">=2.30.0,<3.0.0" },
+    { name = "google-genai", specifier = ">=1.0.0,<2.0.0" },
+    { name = "httpx", specifier = ">=0.28.0,<0.29.0" },
+    { name = "langchain", specifier = "==1.3.14" },
+    { name = "langgraph", specifier = "==1.2.9" },
+    { name = "langgraph-checkpoint-postgres", specifier = "==3.1.0" },
+    { name = "llama-index-core", specifier = "==0.14.23" },
+    { name = "llama-index-vector-stores-postgres", specifier = "==0.8.1" },
+    { name = "minio", specifier = ">=7.2.0,<8.0.0" },
+    { name = "numpy", specifier = ">=1.26,<3.0" },
+    { name = "olefile", specifier = ">=0.47,<1.0" },
+    { name = "openai", specifier = ">=2.0.0,<3.0.0" },
+    { name = "openai-agents", specifier = ">=0.3.0,<1.0.0" },
+    { name = "openpyxl", specifier = ">=3.1.0,<4.0" },
+    { name = "opentelemetry-api", specifier = ">=1.32.0,<2.0.0" },
+    { name = "opentelemetry-exporter-otlp-proto-grpc", specifier = ">=1.32.0,<2.0.0" },
+    { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.32.0,<2.0.0" },
+    { name = "opentelemetry-sdk", specifier = ">=1.32.0,<2.0.0" },
+    { name = "opf", git = "https://github.com/openai/privacy-filter.git?rev=f7f00ca7fb869683eb732c010299d901457f19c3" },
+    { name = "opf", marker = "extra == 'privacy-filter'", git = "https://github.com/openai/privacy-filter.git?rev=f7f00ca7fb869683eb732c010299d901457f19c3" },
+    { name = "pdfplumber", specifier = ">=0.11.0,<1.0" },
+    { name = "pillow", specifier = ">=10.0.0,<12.0.0" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.2.0,<4.0.0" },
+    { name = "pydantic-settings", specifier = ">=2.8.0,<3.0.0" },
+    { name = "pymupdf", specifier = ">=1.24.0,<2.0" },
+    { name = "python-docx", specifier = ">=1.1.0,<2.0" },
+    { name = "python-dotenv", specifier = ">=1.2.0,<2.0.0" },
+    { name = "python-multipart", specifier = ">=0.0.18,<1.0.0" },
+    { name = "qdrant-client", specifier = "==1.17.1" },
+    { name = "redis", specifier = ">=5.2.0,<6.0.0" },
+    { name = "reportlab", specifier = ">=4.5.1" },
+    { name = "requests", specifier = ">=2.31.0,<3.0.0" },
+    { name = "sentence-transformers", marker = "extra == 'rag-local'", specifier = ">=3.3.0" },
+    { name = "sqlalchemy", specifier = ">=2.0.0,<3.0.0" },
+    { name = "sse-starlette", specifier = ">=2.1,<3.0" },
+    { name = "torch", marker = "extra == 'rag-local'", specifier = ">=2.4.0" },
+    { name = "transformers", marker = "extra == 'rag-local'", specifier = ">=4.45.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0,<1.0.0" },
+    { name = "xlrd", specifier = ">=2.0.1,<3.0.0" },
+    { name = "y-py", specifier = ">=0.6.2" },
+    { name = "ypy-websocket", specifier = ">=0.12.4" },
+]
+provides-extras = ["rag-local", "asr-local", "privacy-filter"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "import-linter", specifier = ">=2.11" },
+    { name = "pytest", specifier = ">=8.3.0,<9.0.0" },
+    { name = "pytest-xdist", specifier = ">=3.6.0,<4.0.0" },
+    { name = "ruff", specifier = ">=0.11.0,<0.12.0" },
+]
+
+[[package]]
 name = "openai"
 version = "2.31.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3554,15 +3528,6 @@ wheels = [
 [package.optional-dependencies]
 asyncio = [
     { name = "greenlet" },
-]
-
-[[package]]
-name = "sqlglot"
-version = "29.0.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/61/12/c3f7533fde302fcd59bebcd4c2e46d5bf0eef21f183c67995bbb010fb578/sqlglot-29.0.1.tar.gz", hash = "sha256:0010b4f77fb996c8d25dd4b16f3654e6da163ff1866ceabc70b24e791c203048", size = 5760786, upload-time = "2026-02-23T21:41:20.178Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/ad/c9/f58c3a17beb650700f9d2eccd410726b6d96df8953663700764ca48636c7/sqlglot-29.0.1-py3-none-any.whl", hash = "sha256:06a473ea6c2b3632ac67bd38e687a6860265bf4156e66b54adeda15d07f00c65", size = 611448, upload-time = "2026-02-23T21:41:18.008Z" },
 ]
 
 [[package]]

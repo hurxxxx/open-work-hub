@@ -5,7 +5,7 @@
 
 ## Context
 
-Open ALM는 같은 회사의 여러 부서가 각자 workspace를 만들고, 회사 전체에서 사용하는 앱과
+Open Work Hub는 같은 회사의 여러 부서가 각자 workspace를 만들고, 회사 전체에서 사용하는 앱과
 workspace별 협업 앱을 함께 제공한다. 현재 배포 전략은 동일 코드베이스를 계열사 또는 고객사별
 데이터베이스와 설정으로 분리하는 방식이다.
 
@@ -17,7 +17,7 @@ availability, 데이터 소유권, 실행 principal과 접근 권한이 하나�
 
 ### 회사가 최상위 tenant다
 
-현재 Open ALM 배포 하나와 그 데이터베이스·설정 묶음은 회사 tenant 하나를 나타낸다. 회사 tenant는
+현재 Open Work Hub 배포 하나와 그 데이터베이스·설정 묶음은 회사 tenant 하나를 나타낸다. 회사 tenant는
 현재 별도 DB row가 아닌 배포 경계로 암묵적으로 식별한다. 따라서 모든 canonical URL에 회사
 slug를 넣거나 모든 테이블에 `company_id`를 추가하지 않는다.
 
@@ -70,7 +70,7 @@ Launcher category, 정렬과 개인 pin은 표시 구성일 뿐 접근 권한을
 
 ## Consequences
 
-- 회사 공용 Q&A, 뉴스·리포트와 platform AI 도구는 workspace를 먼저 선택하지 않고도 제공할 수
+- 회사 공용 콘텐츠와 platform AI 도구는 workspace를 먼저 선택하지 않고도 제공할 수
   있다.
 - Workspace slug 유무만으로 앱 availability나 데이터 권한을 판단할 수 없으며 모든 실행 면에서
   server-side gate가 필요하다.

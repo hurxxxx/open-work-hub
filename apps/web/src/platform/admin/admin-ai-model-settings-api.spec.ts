@@ -89,16 +89,16 @@ describe('admin AI model settings model', () => {
   it('groups registered workloads by every owning app and keeps stable ordering', () => {
     const groups = groupAiModelWorkloadsByApp([
       workload('mail.summarize', ['mail']),
-      workload('shared.answer', ['news', 'mail']),
+      workload('shared.answer', ['docs', 'mail']),
       workload('platform.health', []),
     ]);
 
     expect(groups.map((group) => group.appId)).toEqual([
+      'docs',
       'mail',
-      'news',
       'platform',
     ]);
-    expect(groups[0]?.workloads.map((item) => item.workload_id)).toEqual([
+    expect(groups[1]?.workloads.map((item) => item.workload_id)).toEqual([
       'mail.summarize',
       'shared.answer',
     ]);
@@ -129,7 +129,7 @@ describe('admin AI model settings model', () => {
     );
     expect(
       isConfigurableModelRoutingWorkload(
-        workload('legacy_issues.attachment_vision', ['legacy-issues'], {
+        workload('docs.attachment_vision', ['docs'], {
           management_surface: 'document_processing',
           required_capabilities: ['vision'],
         }),
@@ -195,7 +195,7 @@ describe('admin AI model settings model', () => {
           status: 409,
           headers: {
             'Content-Type': 'application/json',
-            'X-Open ALM-Error-Code': 'admin.ai_model_registry_changed',
+            'X-Open-Work-Hub-Error-Code': 'admin.ai_model_registry_changed',
           },
         }),
       ),
@@ -286,7 +286,7 @@ describe('admin AI model settings model', () => {
     );
     vi.stubGlobal('fetch', fetchMock);
 
-    await updateAdminAiModelWorkloadRoute('token', 'ppt.design', {
+    await updateAdminAiModelWorkloadRoute('token', 'web-search.answer', {
       expected_registry_digest: 'a'.repeat(64),
       expected_version: null,
       route_mode: 'external',

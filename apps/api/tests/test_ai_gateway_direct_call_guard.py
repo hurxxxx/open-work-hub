@@ -4,8 +4,8 @@ import re
 from pathlib import Path
 
 
-SRC_ROOT = Path(__file__).parents[1] / "src" / "open_alm_api"
-WORKER_SRC_ROOT = Path(__file__).parents[2] / "worker" / "src" / "open_alm_worker"
+SRC_ROOT = Path(__file__).parents[1] / "src" / "open_work_hub_api"
+WORKER_SRC_ROOT = Path(__file__).parents[2] / "worker" / "src" / "open_work_hub_worker"
 ALLOWED_DIRECT_LLM_CALL_FILES = {
     Path("core/llm.py"),
     Path("core/llm_execution_adapters.py"),
@@ -32,7 +32,6 @@ ALLOWED_PROVIDER_ADAPTER_FILES = {
     Path("core/llm_execution_adapters.py"),
     Path("core/llm_official_providers.py"),
     Path("domains/ai/model_discovery.py"),
-    Path("domains/ppt_generator/anthropic_search_adapter.py"),
     Path("domains/images/agent_runtime.py"),
     Path("domains/rag/providers/local.py"),
     Path("domains/rag/providers/openai_compatible.py"),

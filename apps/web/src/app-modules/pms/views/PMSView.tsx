@@ -17,9 +17,9 @@ import {
 } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { LazyMotion, domAnimation, m, AnimatePresence } from 'motion/react';
-import { useConfirm } from '@open-alm/ui/feedback/confirm-dialog';
-import { usePrompt } from '@open-alm/ui/feedback/prompt-dialog';
-import { useToast } from '@open-alm/ui/providers/toast-provider';
+import { useConfirm } from '@open-work-hub/ui/feedback/confirm-dialog';
+import { usePrompt } from '@open-work-hub/ui/feedback/prompt-dialog';
+import { useToast } from '@open-work-hub/ui/providers/toast-provider';
 import {
   Archive,
   ArchiveRestore,

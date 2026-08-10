@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useReducer } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
-import { InlineNotice } from '@open-alm/ui';
+import { InlineNotice } from '@open-work-hub/ui';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { AccessDeniedView } from '@/src/platform/auth/settings-pages';

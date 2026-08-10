@@ -17,8 +17,8 @@ describe('draw.io embed protocol', () => {
     const config = buildDrawioEmbedConfig({
       env: {
         DEV: true,
-        VITE_OPEN_ALM_DRAWIO_PORT: '18082',
-        VITE_OPEN_ALM_DRAWIO_URL: '/drawio/',
+        VITE_OPEN_WORK_HUB_DRAWIO_PORT: '18082',
+        VITE_OPEN_WORK_HUB_DRAWIO_URL: '/drawio/',
       },
       location: testLocation('http://100.87.48.58:4200/w/lab/diagrams'),
     });
@@ -33,21 +33,21 @@ describe('draw.io embed protocol', () => {
     const config = buildDrawioEmbedConfig({
       env: {
         DEV: false,
-        VITE_OPEN_ALM_DRAWIO_URL: 'https://drawio.open-alm.example/',
+        VITE_OPEN_WORK_HUB_DRAWIO_URL: 'https://drawio.open-work-hub.example/',
       },
-      location: testLocation('https://open-alm.example/w/lab/diagrams'),
+      location: testLocation('https://open-work-hub.example/w/lab/diagrams'),
     });
 
-    expect(config.origin).toBe('https://drawio.open-alm.example');
-    expect(config.src).toContain('https://drawio.open-alm.example/');
+    expect(config.origin).toBe('https://drawio.open-work-hub.example');
+    expect(config.src).toContain('https://drawio.open-work-hub.example/');
   });
 
   it('builds a static dev iframe URL from the current private host when no URL is configured', () => {
     const config = buildDrawioEmbedConfig({
       env: {
         DEV: false,
-        VITE_OPEN_ALM_DRAWIO_PORT: '18082',
-        VITE_OPEN_ALM_DRAWIO_URL: '',
+        VITE_OPEN_WORK_HUB_DRAWIO_PORT: '18082',
+        VITE_OPEN_WORK_HUB_DRAWIO_URL: '',
       },
       location: testLocation('http://100.87.48.58:4200/w/lab/diagrams'),
     });
@@ -60,25 +60,25 @@ describe('draw.io embed protocol', () => {
     const config = buildDrawioEmbedConfig({
       env: {
         DEV: true,
-        VITE_OPEN_ALM_DRAWIO_PORT: '18082',
-        VITE_OPEN_ALM_DRAWIO_URL: '',
+        VITE_OPEN_WORK_HUB_DRAWIO_PORT: '18082',
+        VITE_OPEN_WORK_HUB_DRAWIO_URL: '',
       },
-      location: testLocation('https://dev.open-alm.example/w/lab/diagrams'),
+      location: testLocation('https://dev.open-work-hub.example/w/lab/diagrams'),
     });
 
-    expect(config.origin).toBe('https://dev.open-alm.example');
-    expect(config.src).toContain('https://dev.open-alm.example/drawio/');
+    expect(config.origin).toBe('https://dev.open-work-hub.example');
+    expect(config.src).toContain('https://dev.open-work-hub.example/drawio/');
     expect(config.src).not.toContain(':18082');
   });
 
   it('falls back to the legacy same-origin path when no absolute production URL is configured', () => {
     const config = buildDrawioEmbedConfig({
-      env: { DEV: false, VITE_OPEN_ALM_DRAWIO_URL: '/drawio/' },
-      location: testLocation('https://open-alm.example/w/lab/diagrams'),
+      env: { DEV: false, VITE_OPEN_WORK_HUB_DRAWIO_URL: '/drawio/' },
+      location: testLocation('https://open-work-hub.example/w/lab/diagrams'),
     });
 
-    expect(config.origin).toBe('https://open-alm.example');
-    expect(config.src).toContain('https://open-alm.example/drawio/');
+    expect(config.origin).toBe('https://open-work-hub.example');
+    expect(config.src).toContain('https://open-work-hub.example/drawio/');
   });
 
   it('accepts messages only from the configured draw.io origin', () => {

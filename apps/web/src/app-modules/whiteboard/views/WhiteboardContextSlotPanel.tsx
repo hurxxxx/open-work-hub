@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer } from 'react';
-import { Button, InlineNotice } from '@open-alm/ui';
+import { Button, InlineNotice } from '@open-work-hub/ui';
 import { Loader2, PencilRuler, Plus, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 

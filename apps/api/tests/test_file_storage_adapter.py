@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from open_alm_api.domains.files import storage_adapter
+from open_work_hub_api.domains.files import storage_adapter
 
 
 def test_put_file_object_writes_to_configured_bucket(monkeypatch) -> None:

@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 
-from open_alm_api.core.realtime import AppRealtimeHub, realtime_user_topic
+from open_work_hub_api.core.realtime import AppRealtimeHub, realtime_user_topic
 
 
 async def _wait_for_redis_available(*hubs: AppRealtimeHub) -> None:
@@ -21,7 +21,7 @@ async def _wait_for_redis_available(*hubs: AppRealtimeHub) -> None:
 @pytest.mark.external_integration("redis")
 def test_app_realtime_hub_relays_between_publishers_with_same_instance_id(redis_url: str) -> None:
     async def exercise_hubs() -> None:
-        channel_prefix = f"open-alm:test-realtime:{uuid4().hex}"
+        channel_prefix = f"open-work-hub:test-realtime:{uuid4().hex}"
         first_hub = AppRealtimeHub(redis_url, instance_id="api", channel_prefix=channel_prefix)
         second_hub = AppRealtimeHub(redis_url, instance_id="api", channel_prefix=channel_prefix)
         await first_hub.startup()

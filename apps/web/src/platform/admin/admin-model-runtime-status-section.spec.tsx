@@ -43,8 +43,8 @@ describe('AdminModelRuntimeStatusSection', () => {
           ],
         },
         {
-          id: 'dgx-spark-102',
-          display_name: 'DGX Spark 102',
+          id: 'local-model-a',
+          display_name: 'Local Model A',
           kind: 'llm',
           role: 'redundancy',
           provider_id: 'local',

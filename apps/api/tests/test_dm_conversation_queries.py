@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from fastapi import HTTPException
 import pytest
 
-from open_alm_api.domains.dm import conversation_queries
+from open_work_hub_api.domains.dm import conversation_queries
 
 
 NOW = datetime(2026, 5, 21, 12, 0, 0)

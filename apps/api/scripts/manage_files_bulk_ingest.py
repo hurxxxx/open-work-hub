@@ -24,22 +24,22 @@ if str(_SCRIPTS) not in sys.path:
 from sqlalchemy import select  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
-from open_alm_api.core.db import get_session_factory  # noqa: E402
-from open_alm_api.core.settings import get_settings, is_production_environment  # noqa: E402
-from open_alm_api.core.storage import get_minio_client  # noqa: E402
-from open_alm_api.domains.auth.models import User, Workspace  # noqa: E402
-from open_alm_api.domains.files import bulk_ingest  # noqa: E402
-from open_alm_api.domains.files.models import (  # noqa: E402
+from open_work_hub_api.core.db import get_session_factory  # noqa: E402
+from open_work_hub_api.core.settings import get_settings, is_production_environment  # noqa: E402
+from open_work_hub_api.core.storage import get_minio_client  # noqa: E402
+from open_work_hub_api.domains.auth.models import User, Workspace  # noqa: E402
+from open_work_hub_api.domains.files import bulk_ingest  # noqa: E402
+from open_work_hub_api.domains.files.models import (  # noqa: E402
     FileManagerBulkIngestEntry,
     FileManagerFile,
 )
-from open_alm_api.domains.retrieval.files_generation_backends import (  # noqa: E402
+from open_work_hub_api.domains.retrieval.files_generation_backends import (  # noqa: E402
     FilesPhysicalGenerationBackends,
 )
-from open_alm_api.domains.retrieval.files_generation_runner import (  # noqa: E402
+from open_work_hub_api.domains.retrieval.files_generation_runner import (  # noqa: E402
     FilesGenerationPairSpec,
 )
-from open_alm_api.domains.retrieval.models import (  # noqa: E402
+from open_work_hub_api.domains.retrieval.models import (  # noqa: E402
     RetrievalProjectionBackend,
     RetrievalProjectionGeneration,
 )

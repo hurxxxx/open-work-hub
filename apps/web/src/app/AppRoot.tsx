@@ -4,8 +4,8 @@ import { BrowserRouter as Router } from 'react-router-dom';
 import {
   ToastProvider,
   ToastViewport,
-} from '@open-alm/ui/providers/toast-provider';
-import { NOTIFICATION_REALTIME_EVENT_TYPE_VALUES } from '@open-alm/contracts/notifications';
+} from '@open-work-hub/ui/providers/toast-provider';
+import { NOTIFICATION_REALTIME_EVENT_TYPE_VALUES } from '@open-work-hub/contracts/notifications';
 
 import { AppContent } from './shell/AppContent';
 import { NotificationPanel } from '../components/layout/NotificationPanel';

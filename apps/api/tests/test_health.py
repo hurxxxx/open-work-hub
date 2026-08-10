@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from open_alm_api.version import RUNTIME_REVISION, VERSION
+from open_work_hub_api.version import RUNTIME_REVISION, VERSION
 
 
 def test_healthz(client: TestClient) -> None:
@@ -19,7 +19,7 @@ def test_healthz_preserves_inbound_trace_id(client: TestClient) -> None:
         headers={"traceparent": f"00-{trace_id}-1234567890abcdef-01"},
     )
     assert response.status_code == 200
-    assert response.headers["X-Open ALM-Trace-Id"] == trace_id
+    assert response.headers["X-Open-Work-Hub-Trace-Id"] == trace_id
 
 
 def test_auth_bootstrap_and_protected_search(client: TestClient) -> None:
@@ -40,8 +40,8 @@ def test_auth_bootstrap_and_protected_search(client: TestClient) -> None:
     setup_response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "Open ALM Admin",
-            "email": "admin@open-alm.local",
+            "full_name": "Open Work Hub Admin",
+            "email": "admin@open-work-hub.local",
             "password": "supersecret123",
         },
     )
@@ -53,7 +53,7 @@ def test_auth_bootstrap_and_protected_search(client: TestClient) -> None:
     assert auth_payload["user"]["time_zone"] == "Asia/Seoul"
     assert auth_payload["user"]["date_format"] == "korean"
     assert auth_payload["user"]["app_bar_layout"] == {
-        "pinned_app_ids": ["pms", "docs", "whiteboard", "qa-assistant"],
+        "pinned_app_ids": ["pms", "docs", "whiteboard"],
     }
     assert auth_payload["user"]["default_workspace_id"] is None
     assert auth_payload["user"]["login_id"] == "admin"
@@ -68,7 +68,7 @@ def test_auth_bootstrap_and_protected_search(client: TestClient) -> None:
         headers={"Authorization": f"Bearer {token}"},
     )
     assert me_response.status_code == 200
-    assert me_response.json()["email"] == "admin@open-alm.local"
+    assert me_response.json()["email"] == "admin@open-work-hub.local"
 
     search_response = client.post(
         "/api/v1/workspaces/administrator/search/documents",
@@ -97,9 +97,9 @@ def test_auth_login_success_and_invalid_password(client: TestClient) -> None:
     setup_response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "Open ALM Admin",
+            "full_name": "Open Work Hub Admin",
             "login_id": "admin",
-            "email": "admin@open-alm.local",
+            "email": "admin@open-work-hub.local",
             "password": "supersecret123",
         },
     )
@@ -113,7 +113,7 @@ def test_auth_login_success_and_invalid_password(client: TestClient) -> None:
         },
     )
     assert login_response.status_code == 200
-    assert login_response.json()["user"]["email"] == "admin@open-alm.local"
+    assert login_response.json()["user"]["email"] == "admin@open-work-hub.local"
     assert "platform_admin" in login_response.json()["user"]["system_roles"]
     assert login_response.json()["token"]
 
@@ -131,9 +131,9 @@ def test_auth_preferences_manage_default_workspace(client: TestClient) -> None:
     setup_response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "Open ALM Admin",
+            "full_name": "Open Work Hub Admin",
             "login_id": "admin",
-            "email": "admin@open-alm.local",
+            "email": "admin@open-work-hub.local",
             "password": "supersecret123",
         },
     )
@@ -163,7 +163,7 @@ def test_auth_preferences_manage_default_workspace(client: TestClient) -> None:
         json={
             "full_name": "Pending Member",
             "login_id": "pending-member",
-            "email": "pending@open-alm.local",
+            "email": "pending@open-work-hub.local",
             "temporary_password": "memberpass123",
         },
     )
@@ -200,13 +200,13 @@ def test_auth_preferences_manage_app_bar_layout(client: TestClient) -> None:
         headers={"Authorization": f"Bearer {token}"},
         json={
             "app_bar_layout": {
-                "pinned_app_ids": ["home", "plm", "docs", "docs", "pms"],
+                "pinned_app_ids": ["home", "files", "docs", "docs", "pms"],
             },
         },
     )
     assert update_response.status_code == 200, update_response.text
     assert update_response.json()["app_bar_layout"] == {
-        "pinned_app_ids": ["plm", "docs", "pms"],
+        "pinned_app_ids": ["files", "docs", "pms"],
     }
 
     me_response = client.get(
@@ -215,7 +215,7 @@ def test_auth_preferences_manage_app_bar_layout(client: TestClient) -> None:
     )
     assert me_response.status_code == 200
     assert me_response.json()["app_bar_layout"] == {
-        "pinned_app_ids": ["plm", "docs", "pms"],
+        "pinned_app_ids": ["files", "docs", "pms"],
     }
 
     custom_feature_response = client.patch(
@@ -223,13 +223,13 @@ def test_auth_preferences_manage_app_bar_layout(client: TestClient) -> None:
         headers={"Authorization": f"Bearer {token}"},
         json={
             "app_bar_layout": {
-                "pinned_app_ids": ["data-viz", "qa-assistant", "legacy-issues"],
+                "pinned_app_ids": ["diagrams", "docs", "docs"],
             },
         },
     )
     assert custom_feature_response.status_code == 200, custom_feature_response.text
     assert custom_feature_response.json()["app_bar_layout"] == {
-        "pinned_app_ids": ["data-viz", "qa-assistant", "legacy-issues"],
+        "pinned_app_ids": ["diagrams", "docs"],
     }
 
     overflow_response = client.patch(
@@ -245,8 +245,8 @@ def test_auth_preferences_manage_app_bar_layout(client: TestClient) -> None:
                     "whiteboard",
                     "video-chat",
                     "recording",
-                    "plm",
-                    "news",
+                    "diagrams",
+                    "files",
                 ],
             },
         },
@@ -259,8 +259,8 @@ def test_auth_preferences_manage_app_bar_layout(client: TestClient) -> None:
             "whiteboard",
             "video-chat",
             "recording",
-            "plm",
-            "news",
+            "diagrams",
+            "files",
         ],
     }
 
@@ -288,16 +288,16 @@ def test_auth_preferences_manage_app_bar_layout(client: TestClient) -> None:
     )
     assert reset_response.status_code == 200
     assert reset_response.json()["app_bar_layout"] == {
-        "pinned_app_ids": ["pms", "docs", "whiteboard", "qa-assistant"],
+        "pinned_app_ids": ["pms", "docs", "whiteboard"],
     }
 
 
-def test_auth_signup_is_disabled_after_setup(client: TestClient) -> None:
+def test_auth_signup_creates_local_member_after_setup(client: TestClient) -> None:
     setup_response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "Open ALM Admin",
-            "email": "admin@open-alm.local",
+            "full_name": "Open Work Hub Admin",
+            "email": "admin@open-work-hub.local",
             "password": "supersecret123",
         },
     )
@@ -308,16 +308,26 @@ def test_auth_signup_is_disabled_after_setup(client: TestClient) -> None:
         json={
             "full_name": "New Member",
             "login_id": "new-member",
-            "email": "NEW@Open ALM.LOCAL",
+            "email": "NEW@open-work-hub.local",
             "password": "memberpass123",
             "password_confirm": "memberpass123",
         },
     )
-    assert signup_response.status_code == 403, signup_response.text
-    assert signup_response.json()["code"] == "auth.signup_disabled"
+    assert signup_response.status_code == 201, signup_response.text
+    signup_body = signup_response.json()
+    assert signup_body["user"]["login_id"] == "new-member"
+    assert signup_body["user"]["email"] == "new@open-work-hub.local"
+    assert signup_body["user"]["system_roles"] == []
+    assert signup_body["user"]["workspaces"][0]["slug"] == "general"
+
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={"login_id": "new-member", "password": "memberpass123"},
+    )
+    assert login_response.status_code == 200, login_response.text
 
 
-def test_auth_signup_validates_payload_then_returns_disabled(
+def test_auth_signup_requires_setup_and_validates_duplicates_and_passwords(
     client: TestClient,
 ) -> None:
     disabled_before_setup_response = client.post(
@@ -325,19 +335,19 @@ def test_auth_signup_validates_payload_then_returns_disabled(
         json={
             "full_name": "Early Member",
             "login_id": "early",
-            "email": "early@open-alm.local",
+            "email": "early@open-work-hub.local",
             "password": "memberpass123",
             "password_confirm": "memberpass123",
         },
     )
-    assert disabled_before_setup_response.status_code == 403
-    assert disabled_before_setup_response.json()["code"] == "auth.signup_disabled"
+    assert disabled_before_setup_response.status_code == 409
+    assert disabled_before_setup_response.json()["code"] == "auth.setup_required"
 
     setup_response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "Open ALM Admin",
-            "email": "admin@open-alm.local",
+            "full_name": "Open Work Hub Admin",
+            "email": "admin@open-work-hub.local",
             "password": "supersecret123",
         },
     )
@@ -348,13 +358,13 @@ def test_auth_signup_validates_payload_then_returns_disabled(
         json={
             "full_name": "Duplicate Admin",
             "login_id": "duplicate-admin",
-            "email": "ADMIN@Open ALM.LOCAL",
+            "email": "ADMIN@open-work-hub.local",
             "password": "memberpass123",
             "password_confirm": "memberpass123",
         },
     )
-    assert disabled_after_setup_response.status_code == 403
-    assert disabled_after_setup_response.json()["code"] == "auth.signup_disabled"
+    assert disabled_after_setup_response.status_code == 409
+    assert disabled_after_setup_response.json()["code"] == "auth.user_already_exists"
 
     mismatch_response = client.post(
         "/api/v1/auth/signup",
@@ -362,7 +372,7 @@ def test_auth_signup_validates_payload_then_returns_disabled(
         json={
             "full_name": "Mismatch Member",
             "login_id": "mismatch",
-            "email": "mismatch@open-alm.local",
+            "email": "mismatch@open-work-hub.local",
             "password": "memberpass123",
             "password_confirm": "different123",
         },
@@ -376,8 +386,8 @@ def test_auth_error_messages_are_localized(client: TestClient) -> None:
     setup_response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "Open ALM Admin",
-            "email": "admin@open-alm.local",
+            "full_name": "Open Work Hub Admin",
+            "email": "admin@open-work-hub.local",
             "password": "supersecret123",
         },
     )
@@ -394,7 +404,7 @@ def test_auth_error_messages_are_localized(client: TestClient) -> None:
     assert english_response.status_code == 401
     assert english_response.json()["detail"] == "ID or password is invalid."
     assert english_response.json()["code"] == "auth.invalid_credentials"
-    assert english_response.headers["X-Open ALM-Error-Code"] == "auth.invalid_credentials"
+    assert english_response.headers["X-Open-Work-Hub-Error-Code"] == "auth.invalid_credentials"
 
     korean_response = client.post(
         "/api/v1/auth/login",
@@ -412,7 +422,7 @@ def test_auth_error_messages_are_localized(client: TestClient) -> None:
         "/api/v1/auth/me",
         headers={
             "Accept-Language": "en-US",
-            "X-Open ALM-Locale": "ko-KR",
+            "X-Open-Work-Hub-Locale": "ko-KR",
         },
     )
     assert explicit_locale_response.status_code == 401
@@ -483,7 +493,6 @@ def test_auth_preferences_password_and_sessions(client: TestClient) -> None:
         headers={"Authorization": f"Bearer {token}"},
         json={
             "display_name": "Portal Admin",
-            "job_title": "Platform Owner",
             "theme_preference": "light",
             "locale": "en-US",
             "time_zone": "America/New_York",
@@ -587,8 +596,8 @@ def _bootstrap_admin(client: TestClient) -> str:
     setup_response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "Open ALM Admin",
-            "email": "admin@open-alm.local",
+            "full_name": "Open Work Hub Admin",
+            "email": "admin@open-work-hub.local",
             "password": "supersecret123",
         },
     )
@@ -650,15 +659,15 @@ def _create_direct_user(
 ) -> tuple[str, str]:
     from sqlalchemy import select
 
-    from open_alm_api.core.db import get_session_factory
-    from open_alm_api.domains.auth.models import (
+    from open_work_hub_api.core.db import get_session_factory
+    from open_work_hub_api.domains.auth.models import (
         AuthSession,
         User,
         UserSystemRole,
         Workspace,
         WorkspaceUserBinding,
     )
-    from open_alm_api.domains.auth.security import (
+    from open_work_hub_api.domains.auth.security import (
         hash_password,
         issue_session_token,
         new_id,
@@ -767,10 +776,6 @@ def test_admin_identity_management_endpoints(client: TestClient) -> None:
     admin_token = _bootstrap_admin(client)
     headers = {"Authorization": f"Bearer {admin_token}"}
 
-    org_units_response = client.get("/api/v1/admin/org-units", headers=headers)
-    assert org_units_response.status_code == 200
-    root_org_unit_id = org_units_response.json()[0]["id"]
-
     removed_groups_response = client.get("/api/v1/admin/groups", headers=headers)
     assert removed_groups_response.status_code == 404
 
@@ -778,7 +783,7 @@ def test_admin_identity_management_endpoints(client: TestClient) -> None:
         "/api/v1/admin/users",
         headers=headers,
         json={
-            "email": "legacy-group-field@open-alm.local",
+            "email": "legacy-group-field@open-work-hub.local",
             "full_name": "Legacy Group Field",
             "group_ids": [],
         },
@@ -789,19 +794,16 @@ def test_admin_identity_management_endpoints(client: TestClient) -> None:
         "/api/v1/admin/users",
         headers=headers,
         json={
-            "email": "member@open-alm.local",
-            "full_name": "Open ALM Member",
+            "email": "member@open-work-hub.local",
+            "full_name": "Open Work Hub Member",
             "display_name": "Member",
-            "employee_code": "E-100",
-            "primary_org_unit_id": root_org_unit_id,
             "system_roles": ["platform_admin"],
         },
     )
     assert create_user_response.status_code == 201
     created_user = create_user_response.json()["user"]
     temporary_password = create_user_response.json()["temporary_password"]
-    assert created_user["email"] == "member@open-alm.local"
-    assert created_user["employee_code"] == "E-100"
+    assert created_user["email"] == "member@open-work-hub.local"
     assert created_user["must_change_password"] is True
     assert temporary_password
 
@@ -815,7 +817,7 @@ def test_admin_identity_management_endpoints(client: TestClient) -> None:
     listed_user = next(
         item for item in list_users_payload["items"] if item["id"] == created_user["id"]
     )
-    assert listed_user["employee_code"] == "E-100"
+    assert listed_user["display_name"] == "Member"
 
     paged_users_response = client.get(
         "/api/v1/admin/users",
@@ -837,41 +839,28 @@ def test_admin_identity_management_endpoints(client: TestClient) -> None:
     assert len(searched_users_payload["items"]) == 1
     assert searched_users_payload["total"] == 1
 
-    searched_by_employee_code_response = client.get(
-        "/api/v1/admin/users",
-        headers=headers,
-        params={"q": "E-100"},
-    )
-    assert searched_by_employee_code_response.status_code == 200
-    searched_by_employee_code_payload = searched_by_employee_code_response.json()
-    assert len(searched_by_employee_code_payload["items"]) == 1
-    assert searched_by_employee_code_payload["items"][0]["id"] == created_user["id"]
-
     update_user_response = client.patch(
         f"/api/v1/admin/users/{created_user['id']}",
         headers=headers,
         json={
-            "full_name": "Open ALM Member Updated",
+            "full_name": "Open Work Hub Member Updated",
             "display_name": "Updated Member",
-            "employee_code": "E-101",
             "status": "active",
             "system_roles": ["platform_admin"],
         },
     )
     assert update_user_response.status_code == 200
-    assert update_user_response.json()["full_name"] == "Open ALM Member Updated"
+    assert update_user_response.json()["full_name"] == "Open Work Hub Member Updated"
     assert update_user_response.json()["display_name"] == "Updated Member"
-    assert update_user_response.json()["employee_code"] == "E-101"
     assert update_user_response.json()["system_roles"] == ["platform_admin"]
 
     delete_user_response = client.post(
         "/api/v1/admin/users",
         headers=headers,
         json={
-            "email": "delete-me@open-alm.local",
+            "email": "delete-me@open-work-hub.local",
             "full_name": "Delete Me",
             "display_name": "Delete Me",
-            "primary_org_unit_id": root_org_unit_id,
         },
     )
     assert delete_user_response.status_code == 201
@@ -879,7 +868,7 @@ def test_admin_identity_management_endpoints(client: TestClient) -> None:
 
     me_response = client.get("/api/v1/auth/me", headers=headers)
     assert me_response.status_code == 200
-    assert "employee_code" in me_response.json()
+    assert me_response.json()["login_id"] == "admin"
     self_delete_response = client.delete(
         f"/api/v1/admin/users/{me_response.json()['id']}",
         headers=headers,
@@ -945,7 +934,7 @@ def test_admin_identity_management_endpoints(client: TestClient) -> None:
         json={"user_ids": [created_user["id"]]},
     )
     assert team_members_response.status_code == 200
-    assert team_members_response.json()[0]["email"] == "member@open-alm.local"
+    assert team_members_response.json()[0]["email"] == "member@open-work-hub.local"
 
     audit_logs_response = client.get("/api/v1/admin/audit-logs", headers=headers)
     assert audit_logs_response.status_code == 200
@@ -982,7 +971,7 @@ def test_workspace_scoped_team_management_requires_workspace_admin_role(client: 
         "/api/v1/admin/users",
         headers=admin_headers,
         json={
-            "email": "scoped-manager@open-alm.local",
+            "email": "scoped-manager@open-work-hub.local",
             "full_name": "Scoped Manager",
         },
     )
@@ -1059,7 +1048,7 @@ def test_non_workspace_routes_require_workspace_membership(client: TestClient) -
         "/api/v1/admin/users",
         headers=admin_headers,
         json={
-            "email": "docs-user@open-alm.local",
+            "email": "docs-user@open-work-hub.local",
             "full_name": "Docs User",
         },
     )
@@ -1084,13 +1073,6 @@ def test_non_workspace_routes_require_workspace_membership(client: TestClient) -
         "/api/v1/workspaces/administrator/wiki/pages", headers=user_headers
     )
     assert wiki_forbidden_response.status_code == 403
-
-    plm_forbidden_response = client.post(
-        "/api/v1/workspaces/administrator/search/plm",
-        headers=user_headers,
-        json={"query": "release delay"},
-    )
-    assert plm_forbidden_response.status_code == 403
 
     ocr_forbidden_response = client.post(
         "/api/v1/workspaces/administrator/connectors/ocr/route",
@@ -1124,13 +1106,6 @@ def test_non_workspace_routes_require_workspace_membership(client: TestClient) -
     )
     assert wiki_allowed_response.status_code == 200
 
-    plm_allowed_response = client.post(
-        "/api/v1/workspaces/administrator/search/plm",
-        headers=user_headers,
-        json={"query": "release delay"},
-    )
-    assert plm_allowed_response.status_code == 200
-
     ocr_allowed_response = client.post(
         "/api/v1/workspaces/administrator/connectors/ocr/route",
         headers=user_headers,
@@ -1142,7 +1117,7 @@ def test_non_workspace_routes_require_workspace_membership(client: TestClient) -
 def test_pms_membership_permissions(client: TestClient) -> None:
     admin_token = _bootstrap_admin(client)
     outsider_id, outsider_token = _create_direct_user(
-        email="member@open-alm.local",
+        email="member@open-work-hub.local",
         full_name="List Member",
         workspace_keys=("administrator",),
     )
@@ -1185,7 +1160,7 @@ def test_pms_membership_permissions(client: TestClient) -> None:
 def test_pms_space_members_still_need_workspace_membership(client: TestClient) -> None:
     admin_token = _bootstrap_admin(client)
     member_id, member_token = _create_direct_user(
-        email="space-only@open-alm.local",
+        email="space-only@open-work-hub.local",
         full_name="Space Only Member",
     )
 
@@ -1220,7 +1195,7 @@ def test_pms_space_members_still_need_workspace_membership(client: TestClient) -
 def test_pms_space_creator_becomes_owner_and_last_manager_is_protected(client: TestClient) -> None:
     _bootstrap_admin(client)
     creator_id, creator_token = _create_direct_user(
-        email="space-creator@open-alm.local",
+        email="space-creator@open-work-hub.local",
         full_name="Space Creator",
         workspace_keys=("administrator",),
     )
@@ -1267,7 +1242,7 @@ def test_platform_admin_without_workspace_membership_cannot_view_pms_spaces(
     assert task_list_response.status_code == 201
 
     _, platform_admin_token = _create_direct_user(
-        email="platform-admin@open-alm.local",
+        email="platform-admin@open-work-hub.local",
         full_name="Platform Admin",
         system_roles=("platform_admin",),
     )
@@ -1308,7 +1283,7 @@ def test_workspace_bindings_grant_and_revoke_effective_workspace_access(
         "/api/v1/admin/users",
         headers=admin_headers,
         json={
-            "email": "workspace-operator@open-alm.local",
+            "email": "workspace-operator@open-work-hub.local",
             "full_name": "Workspace Operator",
         },
     )

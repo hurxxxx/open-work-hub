@@ -2,12 +2,6 @@ import { createElement, lazy, type ReactNode } from 'react';
 
 import { chatbotWorkspaceRoutes } from '@/src/app-modules/chatbot';
 import {
-  qaAssistantGlobalRoutes,
-  qaAssistantToolViewRoutes,
-} from '@/src/app-modules/qa-assistant';
-import {
-  researchTrendsWorkspaceRoutes,
-  standardsMonitorWorkspaceRoutes,
   webSearchWorkspaceRoutes,
 } from '@/src/app-modules/web-search';
 import { WorkspaceFeatureAppGate } from '@/src/app/shell/gates';
@@ -38,16 +32,6 @@ const DocumentTranslateView = lazy(() =>
     default: module.DocumentTranslateView,
   })),
 );
-const FmeaCompareView = lazy(() =>
-  import('./views/FmeaCompareView').then((module) => ({
-    default: module.FmeaCompareView,
-  })),
-);
-const ImdsMineralsView = lazy(() =>
-  import('./views/ImdsMineralsView').then((module) => ({
-    default: module.ImdsMineralsView,
-  })),
-);
 const DraftingView = lazy(() =>
   import('./views/DraftingView').then((module) => ({
     default: module.DraftingView,
@@ -56,21 +40,6 @@ const DraftingView = lazy(() =>
 const EmailAssistantView = lazy(() =>
   import('./views/EmailAssistantView').then((module) => ({
     default: module.EmailAssistantView,
-  })),
-);
-const PatentComposeView = lazy(() =>
-  import('./views/PatentComposeView').then((module) => ({
-    default: module.PatentComposeView,
-  })),
-);
-const PatentAnalysisView = lazy(() =>
-  import('./views/PatentAnalysisView').then((module) => ({
-    default: module.PatentAnalysisView,
-  })),
-);
-const LawSearchView = lazy(() =>
-  import('./views/lawsearch/LawSearchView').then((module) => ({
-    default: module.LawSearchView,
   })),
 );
 
@@ -82,40 +51,10 @@ export const specCompareToolElement = lazyRoute(createElement(SpecCompareView));
 export const documentTranslateToolElement = lazyRoute(
   createElement(DocumentTranslateView),
 );
-export const fmeaCompareToolElement = lazyRoute(createElement(FmeaCompareView));
-export const imdsMineralsToolElement = lazyRoute(
-  createElement(ImdsMineralsView),
-);
 export const draftingToolElement = lazyRoute(createElement(DraftingView));
 export const emailAssistantToolElement = lazyRoute(
   createElement(EmailAssistantView),
 );
-export const patentComposeToolElement = lazyRoute(
-  createElement(PatentComposeView),
-);
-export const patentAnalysisToolElement = lazyRoute(
-  createElement(PatentAnalysisView),
-);
-export const lawSearchToolElement = lazyRoute(createElement(LawSearchView));
-
-function rewriteAiToolRoute(
-  route: ToolViewRouteDefinition,
-): ToolViewRouteDefinition {
-  return {
-    ...route,
-    appId: 'ai',
-    bootstrapAppId: route.bootstrapAppId ?? route.appId,
-    gates: [
-      ...(route.type === 'element' ? (route.gates ?? []) : []),
-      {
-        deniedReason: 'app_disabled',
-        navItemId: 'qa-assistant',
-        type: 'bootstrap_nav_item',
-      },
-    ],
-  } as ToolViewRouteDefinition;
-}
-
 export const aiToolViewRoutes: ToolViewRouteDefinition[] = [
   {
     appId: 'ai',
@@ -126,7 +65,6 @@ export const aiToolViewRoutes: ToolViewRouteDefinition[] = [
     toolIds: ['search'],
     type: 'element',
   },
-  ...qaAssistantToolViewRoutes.map(rewriteAiToolRoute),
 ];
 
 function withFeatureAppGate(
@@ -157,18 +95,6 @@ function rewriteWebSearchWorkspaceRoute(
   return rewriteAiFeatureWorkspaceRoute(route, 'web-search');
 }
 
-function rewriteResearchTrendsWorkspaceRoute(
-  route: WorkspaceRouteDefinition,
-): WorkspaceRouteDefinition {
-  return rewriteAiFeatureWorkspaceRoute(route, 'research-trends');
-}
-
-function rewriteStandardsMonitorWorkspaceRoute(
-  route: WorkspaceRouteDefinition,
-): WorkspaceRouteDefinition {
-  return rewriteAiFeatureWorkspaceRoute(route, 'standards-monitor');
-}
-
 function rewriteAiFeatureWorkspaceRoute(
   route: WorkspaceRouteDefinition,
   featureAppId: WorkspaceRouteDefinition['appId'],
@@ -182,13 +108,9 @@ function rewriteAiFeatureWorkspaceRoute(
   };
 }
 
-export const aiGlobalRoutes: StaticRouteDefinition[] = [
-  ...qaAssistantGlobalRoutes,
-];
+export const aiGlobalRoutes: StaticRouteDefinition[] = [];
 
 export const aiWorkspaceRoutes: WorkspaceRouteDefinition[] = [
   ...chatbotWorkspaceRoutes.map(rewriteChatbotWorkspaceRoute),
   ...webSearchWorkspaceRoutes.map(rewriteWebSearchWorkspaceRoute),
-  ...researchTrendsWorkspaceRoutes.map(rewriteResearchTrendsWorkspaceRoute),
-  ...standardsMonitorWorkspaceRoutes.map(rewriteStandardsMonitorWorkspaceRoute),
 ];

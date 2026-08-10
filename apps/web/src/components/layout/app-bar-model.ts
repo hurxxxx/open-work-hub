@@ -53,7 +53,6 @@ export type AppBarState = {
   appBarEditorOpen: boolean;
   appBarLayoutError: string | null;
   appBarLayoutSaving: boolean;
-  businessSitesOpen: boolean;
   categoryMenuId: string | null;
   defaultWorkspaceSaving: boolean;
   draftPinnedAppIds: WorkspaceAppId[];
@@ -69,8 +68,6 @@ export type AppBarState = {
 
 export type AppBarAction =
   | { type: 'patch'; patch: Partial<AppBarState> }
-  | { type: 'toggleBusinessSites' }
-  | { type: 'closeBusinessSites' }
   | { type: 'toggleNotifications' }
   | { type: 'toggleWorkspaceSwitcher' }
   | { type: 'toggleFavorites' }
@@ -83,7 +80,6 @@ export const INITIAL_APP_BAR_STATE: AppBarState = {
   appBarEditorOpen: false,
   appBarLayoutError: null,
   appBarLayoutSaving: false,
-  businessSitesOpen: false,
   categoryMenuId: null,
   defaultWorkspaceSaving: false,
   draftPinnedAppIds: [],
@@ -146,31 +142,15 @@ export function appBarReducer(
   switch (action.type) {
     case 'patch':
       return { ...state, ...action.patch };
-    case 'toggleBusinessSites':
-      return {
-        ...state,
-        appBarEditorOpen: false,
-        businessSitesOpen: !state.businessSitesOpen,
-        categoryMenuId: null,
-        favoritesOpen: false,
-        workspaceSwitcherOpen: false,
-      };
-    case 'closeBusinessSites':
-      return {
-        ...state,
-        businessSitesOpen: false,
-      };
     case 'toggleNotifications':
       return {
         ...state,
-        businessSitesOpen: false,
         notifOpen: !state.notifOpen,
       };
     case 'toggleWorkspaceSwitcher':
       return {
         ...state,
         appBarEditorOpen: false,
-        businessSitesOpen: false,
         categoryMenuId: null,
         favoritesOpen: false,
         workspaceSwitcherOpen: !state.workspaceSwitcherOpen,
@@ -179,7 +159,6 @@ export function appBarReducer(
       return {
         ...state,
         appBarEditorOpen: false,
-        businessSitesOpen: false,
         categoryMenuId: null,
         favoritesOpen: !state.favoritesOpen,
         workspaceSwitcherOpen: false,
@@ -188,7 +167,6 @@ export function appBarReducer(
       return {
         ...state,
         appBarEditorOpen: false,
-        businessSitesOpen: false,
         categoryMenuId:
           state.categoryMenuId === action.categoryId ? null : action.categoryId,
         favoritesOpen: false,
@@ -534,7 +512,7 @@ export function buildAppBarItemsProjection({
             translate(`shell:apps.${activeAppId}`, {
               defaultValue:
                 appBarItemById.get(activeAppId as AppBarItem['id'])?.title ??
-                'Open ALM',
+                'Open Work Hub',
             })),
     draftItems,
     fixedItems,

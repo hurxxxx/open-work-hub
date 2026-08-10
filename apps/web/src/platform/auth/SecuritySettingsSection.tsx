@@ -1,6 +1,6 @@
 import type { Dispatch, FormEvent } from 'react';
-import { Button } from '@open-alm/ui/primitives/button';
-import { InlineNotice } from '@open-alm/ui/feedback/inline-notice';
+import { Button } from '@open-work-hub/ui/primitives/button';
+import { InlineNotice } from '@open-work-hub/ui/feedback/inline-notice';
 
 import { normalizeTimeZone } from '@/src/platform/time/time-utils';
 import { SettingsFieldRow } from './SettingsFieldRow';
@@ -35,21 +35,14 @@ export function SecuritySettingsSection({
   const { hiddenCount, shownSessions } = selectVisibleAuthSessions(
     state.sessions,
   );
-  const passwordChangeAvailable = user.auth_provider !== 'groupware';
-
   return (
     <div>
       <SettingsSectionHeader
         title={t('auth:settings.security')}
-        description={t(
-          passwordChangeAvailable
-            ? 'auth:settings.managePassword'
-            : 'auth:settings.reviewSessions',
-        )}
+        description={t('auth:settings.managePassword')}
       />
 
-      {passwordChangeAvailable ? (
-        <div className="border-t border-app-border">
+      <div className="border-t border-app-border">
           {user.must_change_password ? (
             <div className="py-4">
               <InlineNotice tone="warning">
@@ -97,8 +90,7 @@ export function SecuritySettingsSection({
               </Button>
             </div>
           </form>
-        </div>
-      ) : null}
+      </div>
 
       <div className="mt-8">
         <h3 className="app-text-title-md mb-1 text-app-ink">

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from open_alm_api.domains.rag.providers.operation import (
+from open_work_hub_api.domains.rag.providers.operation import (
     ProviderCircuitBreaker,
 )
 

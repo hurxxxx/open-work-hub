@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from open_alm_api.domains.ai.tool_approval_gate import (
+from open_work_hub_api.domains.ai.tool_approval_gate import (
     validate_replayed_approval,
 )
 

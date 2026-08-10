@@ -30,7 +30,7 @@ from integration_infra import (
     stale_resource_cutoff,
 )
 
-TEST_POSTGRES_DSN = "postgresql+psycopg://open_alm_test:open_alm_test@127.0.0.1:5432/open_alm_test"
+TEST_POSTGRES_DSN = "postgresql+psycopg://open_work_hub_test:open_work_hub_test@127.0.0.1:5432/open_work_hub_test"
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -81,7 +81,7 @@ def _dispose_cached_engine(engine_factory) -> None:
 
 def _reset_test_database(engine) -> None:
     configured_database = engine.url.database or ""
-    if not configured_database.startswith("open_alm_test_"):
+    if not configured_database.startswith("open_work_hub_test_"):
         raise RuntimeError(
             f"Refusing to reset non-test database {configured_database!r}."
         )
@@ -90,7 +90,7 @@ def _reset_test_database(engine) -> None:
         connection.exec_driver_sql("SET LOCAL lock_timeout = '5s'")
         connection.exec_driver_sql("SET LOCAL statement_timeout = '30s'")
         database = connection.exec_driver_sql("SELECT current_database()").scalar_one()
-        if database != configured_database or not database.startswith("open_alm_test_"):
+        if database != configured_database or not database.startswith("open_work_hub_test_"):
             raise RuntimeError(f"Refusing to reset non-test database {database!r}.")
 
         preparer = connection.dialect.identifier_preparer
@@ -104,7 +104,7 @@ def _reset_test_database(engine) -> None:
 def _truncate_test_database(engine) -> None:
     """Clear application data while preserving the migrated schema."""
     configured_database = engine.url.database or ""
-    if not configured_database.startswith("open_alm_test_"):
+    if not configured_database.startswith("open_work_hub_test_"):
         raise RuntimeError(
             f"Refusing to truncate non-test database {configured_database!r}."
         )
@@ -113,7 +113,7 @@ def _truncate_test_database(engine) -> None:
         connection.exec_driver_sql("SET LOCAL lock_timeout = '5s'")
         connection.exec_driver_sql("SET LOCAL statement_timeout = '30s'")
         database = connection.exec_driver_sql("SELECT current_database()").scalar_one()
-        if database != configured_database or not database.startswith("open_alm_test_"):
+        if database != configured_database or not database.startswith("open_work_hub_test_"):
             raise RuntimeError(f"Refusing to truncate non-test database {database!r}.")
 
         preparer = connection.dialect.identifier_preparer
@@ -185,19 +185,19 @@ def _env_file_value_in_order(name: str, env_files: tuple[Path, ...]) -> str | No
 
 def _native_postgres_template_dsn() -> str:
     root = _workspace_root()
-    configured = _env_file_value("OPEN_ALM_TEST_POSTGRES_TEMPLATE_DSN")
+    configured = _env_file_value("OPEN_WORK_HUB_TEST_POSTGRES_TEMPLATE_DSN")
     if not configured:
         # Nx loads .env.local into the process. That file intentionally points
         # developer apps at published dev infrastructure, while server-side tests
         # must prefer the checkout's native PostgreSQL from .env.
         configured = _env_file_value_in_order(
-            "OPEN_ALM_POSTGRES_DSN",
+            "OPEN_WORK_HUB_POSTGRES_DSN",
             (root / ".env", root / ".env.local"),
         )
     if not configured:
         raise RuntimeError(
-            "Native PostgreSQL tests require OPEN_ALM_POSTGRES_DSN or "
-            "OPEN_ALM_TEST_POSTGRES_TEMPLATE_DSN."
+            "Native PostgreSQL tests require OPEN_WORK_HUB_POSTGRES_DSN or "
+            "OPEN_WORK_HUB_TEST_POSTGRES_TEMPLATE_DSN."
         )
     assert_non_production_postgres_dsn(configured)
     return configured
@@ -221,7 +221,7 @@ def _create_native_test_database(template_dsn: str, database: str) -> str:
         conn.autocommit = True
         with conn.cursor() as cursor:
             cursor.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(database)))
-            marker = f"open-alm-test-created-at={datetime.now(timezone.utc).isoformat()}"
+            marker = f"open-work-hub-test-created-at={datetime.now(timezone.utc).isoformat()}"
             cursor.execute(
                 sql.SQL("COMMENT ON DATABASE {} IS {}").format(
                     sql.Identifier(database),
@@ -269,7 +269,7 @@ def _drop_native_test_database(template_dsn: str, database: str) -> None:
 
 @contextmanager
 def _native_test_database(template_dsn: str, *, role: str) -> Iterator[str]:
-    database = f"open_alm_test_{TEST_RUN_TOKEN}_{role}_{uuid.uuid4().hex[:8]}"
+    database = f"open_work_hub_test_{TEST_RUN_TOKEN}_{role}_{uuid.uuid4().hex[:8]}"
     dsn = _create_native_test_database(template_dsn, database)
     try:
         yield dsn
@@ -280,13 +280,13 @@ def _native_test_database(template_dsn: str, *, role: str) -> Iterator[str]:
 def _migrate_application_test_database(dsn: str) -> None:
     from alembic import command
 
-    from open_alm_api.core.db import _alembic_config
-    from open_alm_api.core.settings import get_settings
+    from open_work_hub_api.core.db import _alembic_config
+    from open_work_hub_api.core.settings import get_settings
 
     with pytest.MonkeyPatch.context() as monkeypatch:
-        monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", dsn)
-        monkeypatch.setenv("OPEN_ALM_API_AUTO_MIGRATE", "0")
-        monkeypatch.setenv("OPEN_ALM_LLM_HEALTHCHECK_ON_STARTUP", "0")
+        monkeypatch.setenv("OPEN_WORK_HUB_POSTGRES_DSN", dsn)
+        monkeypatch.setenv("OPEN_WORK_HUB_API_AUTO_MIGRATE", "0")
+        monkeypatch.setenv("OPEN_WORK_HUB_LLM_HEALTHCHECK_ON_STARTUP", "0")
         get_settings.cache_clear()
         try:
             command.upgrade(_alembic_config(), "head")
@@ -296,15 +296,15 @@ def _migrate_application_test_database(dsn: str) -> None:
 
 def _initialize_application_test_database(dsn: str) -> None:
     """Add canonical runtime seed data before the worker baseline is captured."""
-    from open_alm_api.core.db import get_engine, get_session_factory, init_db
-    from open_alm_api.core.settings import get_settings
+    from open_work_hub_api.core.db import get_engine, get_session_factory, init_db
+    from open_work_hub_api.core.settings import get_settings
 
     with pytest.MonkeyPatch.context() as monkeypatch:
-        monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", dsn)
-        monkeypatch.setenv("OPEN_ALM_API_AUTO_MIGRATE", "0")
-        monkeypatch.setenv("OPEN_ALM_MAIL_CREDENTIAL_ENCRYPTION_KEY", "test-mail-credential-key")
+        monkeypatch.setenv("OPEN_WORK_HUB_POSTGRES_DSN", dsn)
+        monkeypatch.setenv("OPEN_WORK_HUB_API_AUTO_MIGRATE", "0")
+        monkeypatch.setenv("OPEN_WORK_HUB_MAIL_CREDENTIAL_ENCRYPTION_KEY", "test-mail-credential-key")
         monkeypatch.setenv(
-            "OPEN_ALM_AI_MODEL_CREDENTIAL_ENCRYPTION_KEY",
+            "OPEN_WORK_HUB_AI_MODEL_CREDENTIAL_ENCRYPTION_KEY",
             "test-ai-model-credential-key",
         )
         _clear_cache(get_session_factory)
@@ -496,7 +496,7 @@ def _ensure_ai_analysis_reader_role(dsn: str) -> None:
         with psycopg.connect(plain_dsn) as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    "SELECT pg_has_role(current_user, 'open_alm_analysis_reader', 'MEMBER')"
+                    "SELECT pg_has_role(current_user, 'open_work_hub_analysis_reader', 'MEMBER')"
                 )
                 if cursor.fetchone() == (True,):
                     return
@@ -534,12 +534,12 @@ def _ensure_ai_analysis_reader_role(dsn: str) -> None:
 
 @pytest.fixture(autouse=True)
 def _required_settings_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    from open_alm_api.core.settings import get_settings
+    from open_work_hub_api.core.settings import get_settings
 
-    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", TEST_POSTGRES_DSN)
-    monkeypatch.setenv("OPEN_ALM_MAIL_CREDENTIAL_ENCRYPTION_KEY", "test-mail-credential-key")
+    monkeypatch.setenv("OPEN_WORK_HUB_POSTGRES_DSN", TEST_POSTGRES_DSN)
+    monkeypatch.setenv("OPEN_WORK_HUB_MAIL_CREDENTIAL_ENCRYPTION_KEY", "test-mail-credential-key")
     monkeypatch.setenv(
-        "OPEN_ALM_AI_MODEL_CREDENTIAL_ENCRYPTION_KEY",
+        "OPEN_WORK_HUB_AI_MODEL_CREDENTIAL_ENCRYPTION_KEY",
         "test-ai-model-credential-key",
     )
     get_settings.cache_clear()
@@ -652,9 +652,9 @@ class _InMemoryObjectStorageClient:
 
 @pytest.fixture
 def in_memory_object_storage(monkeypatch: pytest.MonkeyPatch) -> None:
-    from open_alm_api.domains.diagrams import storage as diagram_storage
-    from open_alm_api.domains.dm import attachment_storage
-    from open_alm_api.domains.files import storage_adapter
+    from open_work_hub_api.domains.diagrams import storage as diagram_storage
+    from open_work_hub_api.domains.dm import attachment_storage
+    from open_work_hub_api.domains.files import storage_adapter
 
     client = _InMemoryObjectStorageClient()
     monkeypatch.setattr(storage_adapter, "get_minio_client", lambda: client)
@@ -670,50 +670,50 @@ def _configure_test_application_environment(
     minio_endpoint: str = "http://127.0.0.1:1",
     minio_access_key: str = "unused",
     minio_secret_key: str = "unused",
-    minio_bucket: str = "open-alm-test-unused",
+    minio_bucket: str = "open-work-hub-test-unused",
 ) -> None:
-    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", postgres_dsn)
-    monkeypatch.setenv("OPEN_ALM_API_SESSION_TTL_HOURS", "1")
-    monkeypatch.setenv("OPEN_ALM_API_ALLOW_DEV_ADMIN_LOGIN", "1")
-    monkeypatch.setenv("OPEN_ALM_LLM_HEALTHCHECK_ON_STARTUP", "0")
-    monkeypatch.setenv("OPEN_ALM_OPF_HEALTHCHECK_ON_STARTUP", "0")
-    monkeypatch.setenv("OPEN_ALM_OPF_REQUIRED", "0")
-    monkeypatch.setenv("OPEN_ALM_OPF_SERVICE_BASE_URL", "")
-    monkeypatch.setenv("OPEN_ALM_API_AUTO_MIGRATE", "0")
-    monkeypatch.setenv("OPEN_ALM_API_COLLAB_REDIS_URL", "redis://127.0.0.1:1/0")
-    monkeypatch.setenv("OPEN_ALM_API_REALTIME_REDIS_URL", "redis://127.0.0.1:1/0")
-    monkeypatch.setenv("OPEN_ALM_MINIO_ENDPOINT", minio_endpoint)
-    monkeypatch.setenv("OPEN_ALM_MINIO_ACCESS_KEY", minio_access_key)
-    monkeypatch.setenv("OPEN_ALM_MINIO_SECRET_KEY", minio_secret_key)
-    monkeypatch.setenv("OPEN_ALM_MINIO_BUCKET", minio_bucket)
-    monkeypatch.setenv("OPEN_ALM_MAIL_CREDENTIAL_ENCRYPTION_KEY", "test-mail-credential-key")
+    monkeypatch.setenv("OPEN_WORK_HUB_POSTGRES_DSN", postgres_dsn)
+    monkeypatch.setenv("OPEN_WORK_HUB_API_SESSION_TTL_HOURS", "1")
+    monkeypatch.setenv("OPEN_WORK_HUB_API_ALLOW_DEV_ADMIN_LOGIN", "1")
+    monkeypatch.setenv("OPEN_WORK_HUB_LLM_HEALTHCHECK_ON_STARTUP", "0")
+    monkeypatch.setenv("OPEN_WORK_HUB_OPF_HEALTHCHECK_ON_STARTUP", "0")
+    monkeypatch.setenv("OPEN_WORK_HUB_OPF_REQUIRED", "0")
+    monkeypatch.setenv("OPEN_WORK_HUB_OPF_SERVICE_BASE_URL", "")
+    monkeypatch.setenv("OPEN_WORK_HUB_API_AUTO_MIGRATE", "0")
+    monkeypatch.setenv("OPEN_WORK_HUB_API_COLLAB_REDIS_URL", "redis://127.0.0.1:1/0")
+    monkeypatch.setenv("OPEN_WORK_HUB_API_REALTIME_REDIS_URL", "redis://127.0.0.1:1/0")
+    monkeypatch.setenv("OPEN_WORK_HUB_MINIO_ENDPOINT", minio_endpoint)
+    monkeypatch.setenv("OPEN_WORK_HUB_MINIO_ACCESS_KEY", minio_access_key)
+    monkeypatch.setenv("OPEN_WORK_HUB_MINIO_SECRET_KEY", minio_secret_key)
+    monkeypatch.setenv("OPEN_WORK_HUB_MINIO_BUCKET", minio_bucket)
+    monkeypatch.setenv("OPEN_WORK_HUB_MAIL_CREDENTIAL_ENCRYPTION_KEY", "test-mail-credential-key")
     monkeypatch.setenv(
-        "OPEN_ALM_AI_MODEL_CREDENTIAL_ENCRYPTION_KEY",
+        "OPEN_WORK_HUB_AI_MODEL_CREDENTIAL_ENCRYPTION_KEY",
         "test-ai-model-credential-key",
     )
-    monkeypatch.setenv("OPEN_ALM_AI_MCP_BRIDGE_ENABLED", "1")
+    monkeypatch.setenv("OPEN_WORK_HUB_AI_MCP_BRIDGE_ENABLED", "1")
     # Keep tests independent of the developer's local `.env`: fake pool clients
     # are still gated by pool configuration before they are invoked.
-    monkeypatch.setenv("OPEN_ALM_LLM_LOCAL_PROVIDER", "mlx-lm")
-    monkeypatch.setenv("OPEN_ALM_RAG_ENABLED", "1")
-    monkeypatch.setenv("OPEN_ALM_RAG_VECTOR_INDEX_PROVIDER", "fake")
-    monkeypatch.setenv("OPEN_ALM_RAG_EMBEDDING_PROVIDER", "fake")
-    monkeypatch.setenv("OPEN_ALM_RAG_RERANK_PROVIDER", "fake")
-    monkeypatch.setenv("OPEN_ALM_RAG_OCR_PROVIDER", "fake")
-    monkeypatch.setenv("OPEN_ALM_IMAGE_ENABLED", "0")
+    monkeypatch.setenv("OPEN_WORK_HUB_LLM_LOCAL_PROVIDER", "mlx-lm")
+    monkeypatch.setenv("OPEN_WORK_HUB_RAG_ENABLED", "1")
+    monkeypatch.setenv("OPEN_WORK_HUB_RAG_VECTOR_INDEX_PROVIDER", "fake")
+    monkeypatch.setenv("OPEN_WORK_HUB_RAG_EMBEDDING_PROVIDER", "fake")
+    monkeypatch.setenv("OPEN_WORK_HUB_RAG_RERANK_PROVIDER", "fake")
+    monkeypatch.setenv("OPEN_WORK_HUB_RAG_OCR_PROVIDER", "fake")
+    monkeypatch.setenv("OPEN_WORK_HUB_IMAGE_ENABLED", "0")
 
 
 def _prepare_client_process_state() -> None:
-    from open_alm_api.core.db import get_engine, get_session_factory
-    from open_alm_api.core.llm import (
+    from open_work_hub_api.core.db import get_engine, get_session_factory
+    from open_work_hub_api.core.llm import (
         get_async_pool_client,
         get_pool_client,
     )
-    from open_alm_api.core.model_registry import import_all_models
-    from open_alm_api.core.settings import get_settings
-    from open_alm_api.core.storage import get_minio_client
-    from open_alm_api.domains.ai.registry import reset_ai_capability_registry
-    from open_alm_api.domains.rag.runtime import reset_rag_runtime_caches
+    from open_work_hub_api.core.model_registry import import_all_models
+    from open_work_hub_api.core.settings import get_settings
+    from open_work_hub_api.core.storage import get_minio_client
+    from open_work_hub_api.domains.ai.registry import reset_ai_capability_registry
+    from open_work_hub_api.domains.rag.runtime import reset_rag_runtime_caches
 
     import_all_models()
 
@@ -735,7 +735,7 @@ def _build_test_application(
     minio_endpoint: str = "http://127.0.0.1:1",
     minio_access_key: str = "unused",
     minio_secret_key: str = "unused",
-    minio_bucket: str = "open-alm-test-unused",
+    minio_bucket: str = "open-work-hub-test-unused",
 ) -> FastAPI:
     _configure_test_application_environment(
         monkeypatch,
@@ -747,9 +747,9 @@ def _build_test_application(
     )
     _prepare_client_process_state()
 
-    from open_alm_api.app import create_app
-    from open_alm_api.core.storage import ensure_bucket
-    from open_alm_api.external_runtime import (
+    from open_work_hub_api.app import create_app
+    from open_work_hub_api.core.storage import ensure_bucket
+    from open_work_hub_api.external_runtime import (
         InProcessApiExternalRuntime,
         UnavailableCollaborationApiExternalRuntime,
     )
@@ -772,7 +772,7 @@ def _build_client(
     minio_endpoint: str = "http://127.0.0.1:1",
     minio_access_key: str = "unused",
     minio_secret_key: str = "unused",
-    minio_bucket: str = "open-alm-test-unused",
+    minio_bucket: str = "open-work-hub-test-unused",
 ) -> TestClient:
     return TestClient(
         _build_test_application(
@@ -788,15 +788,15 @@ def _build_client(
 
 
 def _teardown_client_state() -> None:
-    from open_alm_api.core.db import get_engine, get_session_factory
-    from open_alm_api.core.llm import (
+    from open_work_hub_api.core.db import get_engine, get_session_factory
+    from open_work_hub_api.core.llm import (
         get_async_pool_client,
         get_pool_client,
     )
-    from open_alm_api.core.settings import get_settings
-    from open_alm_api.core.storage import get_minio_client
-    from open_alm_api.domains.ai.registry import reset_ai_capability_registry
-    from open_alm_api.domains.rag.runtime import reset_rag_runtime_caches
+    from open_work_hub_api.core.settings import get_settings
+    from open_work_hub_api.core.storage import get_minio_client
+    from open_work_hub_api.domains.ai.registry import reset_ai_capability_registry
+    from open_work_hub_api.domains.rag.runtime import reset_rag_runtime_caches
 
     try:
         _dispose_cached_engine(get_engine)
@@ -867,8 +867,8 @@ def client(
                 postgres_dsn=application_postgres_dsn,
             )
             _prepare_client_process_state()
-            from open_alm_api.core.settings import get_settings
-            from open_alm_api.platform_extensions import initialize_platform_extensions
+            from open_work_hub_api.core.settings import get_settings
+            from open_work_hub_api.platform_extensions import initialize_platform_extensions
 
             initialize_platform_extensions(get_settings())
             application_test_app.dependency_overrides.clear()
@@ -882,7 +882,7 @@ def client(
                 minio_endpoint=minio.endpoint if minio else "http://127.0.0.1:1",
                 minio_access_key=minio.access_key if minio else "unused",
                 minio_secret_key=minio.secret_key if minio else "unused",
-                minio_bucket=minio.bucket if minio else "open-alm-test-unused",
+                minio_bucket=minio.bucket if minio else "open-work-hub-test-unused",
             )
         with test_client:
             yield test_client
@@ -900,9 +900,9 @@ def configured_local_llm_control_plane(client: TestClient) -> None:
     """Select the explicit local test model for suites that exercise LLM execution."""
 
     del client
-    from open_alm_api.core.db import get_session_factory
-    from open_alm_api.core.settings import get_settings
-    from open_alm_api.domains.ai.model_settings_models import (
+    from open_work_hub_api.core.db import get_session_factory
+    from open_work_hub_api.core.settings import get_settings
+    from open_work_hub_api.domains.ai.model_settings_models import (
         AiModelCatalogEntry,
         AiModelProviderConfig,
     )

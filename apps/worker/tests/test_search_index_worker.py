@@ -18,28 +18,28 @@ API_SRC = WORKSPACE_ROOT / "apps" / "api" / "src"
 if str(API_SRC) not in sys.path:
     sys.path.insert(0, str(API_SRC))
 
-from open_alm_api.core.db import Base  # noqa: E402
-from open_alm_api.domains.auth.models import Workspace  # noqa: E402
-from open_alm_api.domains.docs.app_catalog import DOCS_WORKSPACE_APP  # noqa: E402
-from open_alm_api.domains.search.entity_adapter_registry import (  # noqa: E402
+from open_work_hub_api.core.db import Base  # noqa: E402
+from open_work_hub_api.domains.auth.models import Workspace  # noqa: E402
+from open_work_hub_api.domains.docs.app_catalog import DOCS_WORKSPACE_APP  # noqa: E402
+from open_work_hub_api.domains.search.entity_adapter_registry import (  # noqa: E402
     SearchEntityAdapter,
     register_search_entity_adapter,
     reset_search_entity_adapters,
 )
-from open_alm_api.domains.search.entity_registry import reset_search_entity_descriptors  # noqa: E402
-from open_alm_api.domains.search.models import SearchIndexJob  # noqa: E402
-from open_alm_api.domains.retrieval.models import (  # noqa: E402
+from open_work_hub_api.domains.search.entity_registry import reset_search_entity_descriptors  # noqa: E402
+from open_work_hub_api.domains.search.models import SearchIndexJob  # noqa: E402
+from open_work_hub_api.domains.retrieval.models import (  # noqa: E402
     RetrievalPartition,
     RetrievalProjectionEvent,
     RetrievalProjectionHead,
 )
-from open_alm_api.domains.retrieval.projection_fencing import (  # noqa: E402
+from open_work_hub_api.domains.retrieval.projection_fencing import (  # noqa: E402
     record_projection_event,
 )
 
 
 _PROJECTION_PARTITION_ID = "e1ada2fd-9ba0-4426-bd09-61e1a6c18e80"
-from open_alm_api.domains.search.projection_registry import (  # noqa: E402
+from open_work_hub_api.domains.search.projection_registry import (  # noqa: E402
     reset_search_projection_adapters,
 )
 
@@ -50,7 +50,7 @@ def _worker_dsn(db_path: Path) -> str:
 
 def _reload_worker_module(module_name: str):
     for cached_name in list(sys.modules):
-        if cached_name == "open_alm_worker" or cached_name.startswith("open_alm_worker."):
+        if cached_name == "open_work_hub_worker" or cached_name.startswith("open_work_hub_worker."):
             sys.modules.pop(cached_name, None)
     return importlib.import_module(module_name)
 
@@ -89,7 +89,7 @@ def _seed_llm_routing_control_plane(db_path: Path) -> None:
 def test_search_worker_routes_files_only_to_the_active_partitioned_index(
     monkeypatch,
 ) -> None:
-    tasks_module = _reload_worker_module("open_alm_worker.tasks.search_index")
+    tasks_module = _reload_worker_module("open_work_hub_worker.tasks.search_index")
     settings = SimpleNamespace(files_retrieval_enabled=True)
     pair = SimpleNamespace(opensearch_physical_name="files-v3-release")
     expected_client = object()
@@ -138,7 +138,7 @@ def test_search_worker_routes_files_only_to_the_active_partitioned_index(
 
 
 def test_search_worker_keeps_non_file_jobs_on_the_legacy_index(monkeypatch) -> None:
-    tasks_module = _reload_worker_module("open_alm_worker.tasks.search_index")
+    tasks_module = _reload_worker_module("open_work_hub_worker.tasks.search_index")
     expected_client = object()
     monkeypatch.setattr(tasks_module, "_search_client", lambda: expected_client)
     monkeypatch.setattr(
@@ -160,7 +160,7 @@ def test_search_worker_keeps_non_file_jobs_on_the_legacy_index(monkeypatch) -> N
 def test_search_worker_fails_closed_when_files_operator_gate_is_disabled(
     monkeypatch,
 ) -> None:
-    tasks_module = _reload_worker_module("open_alm_worker.tasks.search_index")
+    tasks_module = _reload_worker_module("open_work_hub_worker.tasks.search_index")
     monkeypatch.setattr(
         tasks_module,
         "get_settings",
@@ -243,10 +243,10 @@ def test_search_worker_pauses_files_job_without_consuming_retry_budget_when_gate
         )
         session.commit()
 
-    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("OPEN_ALM_FILES_RETRIEVAL_ENABLED", "0")
-    monkeypatch.setenv("OPEN_ALM_RAG_JOB_MAX_ATTEMPTS", "3")
-    tasks_module = _reload_worker_module("open_alm_worker.tasks.search_index")
+    monkeypatch.setenv("OPEN_WORK_HUB_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_WORK_HUB_FILES_RETRIEVAL_ENABLED", "0")
+    monkeypatch.setenv("OPEN_WORK_HUB_RAG_JOB_MAX_ATTEMPTS", "3")
+    tasks_module = _reload_worker_module("open_work_hub_worker.tasks.search_index")
     monkeypatch.setattr(
         tasks_module.index_resource,
         "retry",
@@ -268,7 +268,7 @@ def test_search_worker_pauses_files_job_without_consuming_retry_budget_when_gate
 def test_search_worker_rejects_unfenced_file_job_before_backend_resolution(
     monkeypatch,
 ) -> None:
-    tasks_module = _reload_worker_module("open_alm_worker.tasks.search_index")
+    tasks_module = _reload_worker_module("open_work_hub_worker.tasks.search_index")
     monkeypatch.setattr(
         tasks_module,
         "get_settings",
@@ -334,10 +334,10 @@ def test_search_worker_fails_unsupported_entity_without_retry(monkeypatch, tmp_p
         )
         session.commit()
 
-    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_WORK_HUB_POSTGRES_DSN", _worker_dsn(db_path))
     _reset_search_registries()
     try:
-        tasks_module = _reload_worker_module("open_alm_worker.tasks.search_index")
+        tasks_module = _reload_worker_module("open_work_hub_worker.tasks.search_index")
         monkeypatch.setattr(
             tasks_module.index_resource,
             "retry",
@@ -450,8 +450,8 @@ def test_search_worker_cancels_stale_versioned_job_before_backend_mutation(
             del workspace_id, entity_type, entity_id
             raise AssertionError("stale versioned job must not delete")
 
-    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
-    tasks_module = _reload_worker_module("open_alm_worker.tasks.search_index")
+    monkeypatch.setenv("OPEN_WORK_HUB_POSTGRES_DSN", _worker_dsn(db_path))
+    tasks_module = _reload_worker_module("open_work_hub_worker.tasks.search_index")
     monkeypatch.setattr(tasks_module, "_search_client", lambda: _FailingSearchClient())
 
     result = tasks_module.index_resource.run("job-stale-versioned")
@@ -545,8 +545,8 @@ def test_search_worker_processes_fenced_non_file_job_with_legacy_mutation(
             del kwargs
             raise AssertionError("fenced non-Files jobs must keep the legacy mutation path")
 
-    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
-    tasks_module = _reload_worker_module("open_alm_worker.tasks.search_index")
+    monkeypatch.setenv("OPEN_WORK_HUB_POSTGRES_DSN", _worker_dsn(db_path))
+    tasks_module = _reload_worker_module("open_work_hub_worker.tasks.search_index")
     monkeypatch.setattr(
         tasks_module,
         "_search_client",
@@ -601,10 +601,10 @@ def test_search_worker_fails_projection_identity_mismatch_without_retry(
         )
         session.commit()
 
-    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("OPEN_WORK_HUB_POSTGRES_DSN", _worker_dsn(db_path))
     _reset_search_registries()
     try:
-        tasks_module = _reload_worker_module("open_alm_worker.tasks.search_index")
+        tasks_module = _reload_worker_module("open_work_hub_worker.tasks.search_index")
         register_search_entity_adapter(
             SearchEntityAdapter(
                 owner_app=DOCS_WORKSPACE_APP,
@@ -699,8 +699,8 @@ def test_search_worker_cancels_superseded_processing_job_before_mutation(
         )
         session.commit()
 
-    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
-    tasks_module = _reload_worker_module("open_alm_worker.tasks.search_index")
+    monkeypatch.setenv("OPEN_WORK_HUB_POSTGRES_DSN", _worker_dsn(db_path))
+    tasks_module = _reload_worker_module("open_work_hub_worker.tasks.search_index")
 
     class _FailingSearchClient:
         def upsert_document(self, document):
@@ -781,8 +781,8 @@ def test_search_worker_does_not_treat_older_pending_job_as_superseding(
         )
         session.commit()
 
-    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
-    tasks_module = _reload_worker_module("open_alm_worker.tasks.search_index")
+    monkeypatch.setenv("OPEN_WORK_HUB_POSTGRES_DSN", _worker_dsn(db_path))
+    tasks_module = _reload_worker_module("open_work_hub_worker.tasks.search_index")
     with Session(engine) as session:
         older = session.get(SearchIndexJob, "job-older-pending")
         current = session.get(SearchIndexJob, "job-current-processing")
@@ -848,8 +848,8 @@ def test_search_worker_cancels_older_pending_job_before_retry(
         )
         session.commit()
 
-    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
-    tasks_module = _reload_worker_module("open_alm_worker.tasks.search_index")
+    monkeypatch.setenv("OPEN_WORK_HUB_POSTGRES_DSN", _worker_dsn(db_path))
+    tasks_module = _reload_worker_module("open_work_hub_worker.tasks.search_index")
     with Session(engine) as session:
         current = session.get(SearchIndexJob, "job-current-processing")
         assert current is not None
@@ -941,8 +941,8 @@ def test_search_republisher_publishes_due_pending_jobs(monkeypatch, tmp_path) ->
             assert immutable is True
             return _FakeSignature(task_name, args)
 
-    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", _worker_dsn(db_path))
-    tasks_module = _reload_worker_module("open_alm_worker.tasks.search_index")
+    monkeypatch.setenv("OPEN_WORK_HUB_POSTGRES_DSN", _worker_dsn(db_path))
+    tasks_module = _reload_worker_module("open_work_hub_worker.tasks.search_index")
     monkeypatch.setattr(tasks_module, "celery_app", _FakeCeleryApp())
 
     assert tasks_module.republish_pending_index_jobs.run(limit=10) == 1

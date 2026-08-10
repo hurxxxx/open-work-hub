@@ -1,7 +1,7 @@
 import type { Page, Route } from '@playwright/test';
 
 const FAKE_TOKEN = 'e2e-test-token';
-const AUTH_TOKEN_STORAGE_KEY = 'open-alm.auth.token';
+const AUTH_TOKEN_STORAGE_KEY = 'open-work-hub.auth.token';
 
 type E2EUser = {
   id: string;
@@ -12,7 +12,6 @@ type E2EUser = {
   theme_preference: string;
   locale: 'ko-KR' | 'en-US';
   time_zone: string;
-  primary_org_unit: null;
   workspaces: Array<{
     id: string;
     slug: string;
@@ -66,16 +65,15 @@ type WorkspaceBootstrapKeywordSearchEntityTypeFixture = {
 // provider treats the seeded token as a live session.
 export const FAKE_WORKSPACE_USER: E2EUser = {
   id: 'user-e2e',
-  email: 'e2e@open-alm.local',
+  email: 'e2e@open-work-hub.local',
   full_name: 'E2E Tester',
   display_name: 'E2E Tester',
   status: 'active',
   theme_preference: 'system',
   locale: 'ko-KR',
   time_zone: 'Asia/Seoul',
-  primary_org_unit: null,
   workspaces: [
-    { id: 'workspace-hq', slug: 'hq', name: 'Open ALM HQ', role: 'admin' },
+    { id: 'workspace-hq', slug: 'hq', name: 'Open Work Hub HQ', role: 'admin' },
   ],
   workspace_roles: [],
   system_roles: [],
@@ -86,7 +84,7 @@ export const FAKE_WORKSPACE_USER: E2EUser = {
 
 export const FAKE_PLATFORM_ADMIN_USER: E2EUser = {
   ...FAKE_WORKSPACE_USER,
-  email: 'platform-admin@open-alm.local',
+  email: 'platform-admin@open-work-hub.local',
   full_name: 'Platform Admin',
   display_name: 'Platform Admin',
   system_roles: ['platform_admin'],
@@ -139,14 +137,14 @@ const NAV_ITEMS_BY_APP: Record<string, WorkspaceBootstrapNavFixture[]> = {
       icon_key: 'message-square',
     }),
   ],
-  'qa-assistant': [
+  docs: [
     navItem({
-      id: 'qa-assistant',
-      app_id: 'qa-assistant',
-      title: '사내 관리팀 Q&A',
+      id: 'docs',
+      app_id: 'docs',
+      title: '문서 AI',
       category: 'AI 앱',
       icon_key: 'message-circle-question',
-      absolute_path: '/qa-assistant',
+      absolute_path: '/docs',
     }),
   ],
   'web-search': [
@@ -192,15 +190,6 @@ const NAV_ITEMS_BY_APP: Record<string, WorkspaceBootstrapNavFixture[]> = {
       title: '규격서 비교',
       category: 'Business AI',
       icon_key: 'file-search',
-    }),
-  ],
-  'fmea-compare': [
-    navItem({
-      id: 'fmea-compare',
-      app_id: 'fmea-compare',
-      title: 'FMEA 비교',
-      category: 'Business AI',
-      icon_key: 'alert-triangle',
     }),
   ],
   pms: [
@@ -341,14 +330,14 @@ const APP_BAR_CATEGORIES: WorkspaceBootstrapAppBarCategoryFixture[] = [
     items: [
       categoryItem({
         app_id: 'chatbot',
-        title: '아이두 챗봇',
+        title: 'AI 어시스턴트 챗봇',
         route_base: '/chatbot',
         icon_key: 'message-square',
       }),
       categoryItem({
-        app_id: 'qa-assistant',
-        title: '사내 관리팀 Q&A',
-        route_base: '/qa-assistant',
+        app_id: 'docs',
+        title: '문서 AI',
+        route_base: '/docs',
         icon_key: 'message-circle-question',
       }),
       categoryItem({
@@ -389,12 +378,6 @@ const APP_BAR_CATEGORIES: WorkspaceBootstrapAppBarCategoryFixture[] = [
         title: '규격서 비교',
         route_base: '/spec-compare',
         icon_key: 'file-search',
-      }),
-      categoryItem({
-        app_id: 'fmea-compare',
-        title: 'FMEA 비교',
-        route_base: '/fmea-compare',
-        icon_key: 'alert-triangle',
       }),
     ],
   },
@@ -553,7 +536,7 @@ function buildWorkspaceBootstrap(
     workspace: {
       id: 'workspace-hq',
       slug: 'hq',
-      name: 'Open ALM HQ',
+      name: 'Open Work Hub HQ',
       role: 'admin',
     },
     apps,
@@ -571,7 +554,7 @@ function buildWorkspaceBootstrap(
 const WORKSPACE_FIXTURE = {
   id: 'workspace-hq',
   key: 'hq',
-  name: 'Open ALM HQ',
+  name: 'Open Work Hub HQ',
   description: 'E2E workspace',
   active: true,
   team_count: 0,

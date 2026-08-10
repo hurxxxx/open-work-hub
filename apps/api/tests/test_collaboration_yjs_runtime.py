@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 from starlette.websockets import WebSocketState
 
-from open_alm_api.domains.collaboration import FastAPIYjsWebsocket
+from open_work_hub_api.domains.collaboration import FastAPIYjsWebsocket
 
 
 class _ConcurrentSendProbeWebSocket:

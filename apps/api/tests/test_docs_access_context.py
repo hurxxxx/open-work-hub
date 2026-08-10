@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from fastapi import HTTPException
 import pytest
 
-from open_alm_api.domains.docs import access_context
+from open_work_hub_api.domains.docs import access_context
 
 
 def test_native_doc_and_page_refs_normalize_raw_and_prefixed_ids() -> None:

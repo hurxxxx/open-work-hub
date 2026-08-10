@@ -4,18 +4,18 @@ map $http_upgrade $connection_upgrade {
 }
 
 upstream corporate_api_cluster {
-  server __OPEN_ALM_DEV_API_UPSTREAM_HOST__:8001;
-  server __OPEN_ALM_DEV_API_UPSTREAM_HOST__:8002;
-  server __OPEN_ALM_DEV_API_UPSTREAM_HOST__:8003;
-  server __OPEN_ALM_DEV_API_UPSTREAM_HOST__:8004;
-  server __OPEN_ALM_DEV_API_UPSTREAM_HOST__:8005;
-  server __OPEN_ALM_DEV_API_UPSTREAM_HOST__:8006;
-  server __OPEN_ALM_DEV_API_UPSTREAM_HOST__:8007;
-  server __OPEN_ALM_DEV_API_UPSTREAM_HOST__:8008;
+  server __OPEN_WORK_HUB_DEV_API_UPSTREAM_HOST__:8001;
+  server __OPEN_WORK_HUB_DEV_API_UPSTREAM_HOST__:8002;
+  server __OPEN_WORK_HUB_DEV_API_UPSTREAM_HOST__:8003;
+  server __OPEN_WORK_HUB_DEV_API_UPSTREAM_HOST__:8004;
+  server __OPEN_WORK_HUB_DEV_API_UPSTREAM_HOST__:8005;
+  server __OPEN_WORK_HUB_DEV_API_UPSTREAM_HOST__:8006;
+  server __OPEN_WORK_HUB_DEV_API_UPSTREAM_HOST__:8007;
+  server __OPEN_WORK_HUB_DEV_API_UPSTREAM_HOST__:8008;
 }
 
 server {
-  listen __OPEN_ALM_DEV_NGINX_LISTEN_PORT__;
+  listen __OPEN_WORK_HUB_DEV_NGINX_LISTEN_PORT__;
   server_name _;
 
   root /usr/share/nginx/html;

@@ -18,7 +18,7 @@ describe('ArtifactPanel', () => {
     };
     const relatedSource: ArtifactBuffer = {
       id: 'source-1',
-      type: 'legacy-issue-analysis',
+      type: 'analysis',
       title: 'Source',
       content: '{}',
       status: 'closed',

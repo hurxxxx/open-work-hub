@@ -4,7 +4,6 @@ import { Check, Search, X } from 'lucide-react';
 import {
   userOptionAvatarColorClass,
   userOptionAvatarInitials,
-  userOptionDepartmentName,
   userOptionDisplayName,
   userOptionMetaParts,
   type UserOptionLike,
@@ -149,7 +148,6 @@ export function UserSearchMultiSelect<TUser extends UserOptionLike>({
         <div className="flex flex-wrap gap-1.5">
           {selectedUsers.map((user) => {
             const name = userOptionDisplayName(user);
-            const department = userOptionDepartmentName(user);
             const locked = lockedUserIds?.has(user.id) ?? false;
             return (
               <span
@@ -162,11 +160,6 @@ export function UserSearchMultiSelect<TUser extends UserOptionLike>({
                   user={user}
                 />
                 <span className="max-w-[10rem] truncate">{name}</span>
-                {department ? (
-                  <span className="max-w-[8rem] truncate text-app-ink/40">
-                    · {department}
-                  </span>
-                ) : null}
                 {locked ? (
                   labels.lockedLabel ? (
                     <span className="text-app-ink/40">

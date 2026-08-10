@@ -33,7 +33,7 @@ import {
   Check,
   RotateCcw,
 } from 'lucide-react';
-import { Button } from '@open-alm/ui';
+import { Button } from '@open-work-hub/ui';
 import { useTranslation } from 'react-i18next';
 import { DateInput } from '@/src/components/date/DateInput';
 import {
@@ -43,7 +43,6 @@ import {
 import {
   selectUserOptionsForPicker,
   userOptionDisplayName,
-  userOptionNameWithDepartment,
   type UserOptionLike,
 } from '@/src/platform/users/user-option-picker-model';
 import type {
@@ -981,7 +980,7 @@ function useListViewContent({
     return (
       <span
         className="inline-flex min-w-0 items-center gap-1.5"
-        title={userOptionNameWithDepartment(reporter)}
+        title={userOptionDisplayName(reporter)}
       >
         <UserOptionAvatar sizeClassName="size-5" user={reporter} />
         <span className="min-w-0 truncate text-app-ink/60">

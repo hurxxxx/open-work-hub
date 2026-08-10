@@ -3,7 +3,7 @@ from datetime import datetime
 import pytest
 from fastapi import HTTPException
 
-from open_alm_api.domains.planner.event_time import (
+from open_work_hub_api.domains.planner.event_time import (
     local_date_string,
     parse_event_bounds,
     parse_iso_or_date,

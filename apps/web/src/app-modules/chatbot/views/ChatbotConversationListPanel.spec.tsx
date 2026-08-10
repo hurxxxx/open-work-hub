@@ -24,7 +24,7 @@ vi.mock('@/src/platform/auth/auth-provider', () => ({
   useAuth: () => ({ token: 'token-1' }),
 }));
 
-vi.mock('@open-alm/ui', () => ({
+vi.mock('@open-work-hub/ui', () => ({
   useConfirm: () => ({
     confirm: vi.fn(),
     confirmDialog: null,
@@ -51,7 +51,7 @@ describe('ChatbotConversationListPanel', () => {
         {
           createdAt: '2026-07-25T10:00:00Z',
           id: 'conversation-1',
-          scopeRef: 'legacy_issues',
+          scopeRef: 'docs',
           scopeResourceId: 'workspace',
           title: '진행 중인 분석',
           updatedAt: '2026-07-25T10:00:00Z',
@@ -59,7 +59,7 @@ describe('ChatbotConversationListPanel', () => {
         {
           createdAt: '2026-07-25T09:00:00Z',
           id: 'conversation-2',
-          scopeRef: 'legacy_issues',
+          scopeRef: 'docs',
           scopeResourceId: 'workspace',
           title: '다른 분석',
           updatedAt: '2026-07-25T09:00:00Z',
@@ -76,9 +76,9 @@ describe('ChatbotConversationListPanel', () => {
           activeConversationId="conversation-1"
           currentWorkspaceSlug="research"
           navigationDisabled
-          routeAppId="legacy-issues"
+          routeAppId="docs"
           routePathSuffix="assistant"
-          scopeRef="legacy_issues"
+          scopeRef="docs"
           scopeResourceId="workspace"
         />
       </MemoryRouter>,
@@ -109,9 +109,9 @@ describe('ChatbotConversationListPanel', () => {
           currentWorkspaceSlug="research"
           navigationDisabled
           pendingConversationTitle="권역별 발생 건수를 비교해줘"
-          routeAppId="legacy-issues"
+          routeAppId="docs"
           routePathSuffix="assistant"
-          scopeRef="legacy_issues"
+          scopeRef="docs"
           scopeResourceId="workspace"
         />
       </MemoryRouter>,

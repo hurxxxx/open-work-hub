@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { KeyRound, RefreshCw, Save } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import { Button, InlineNotice, useToast } from '@open-alm/ui';
+import { Button, InlineNotice, useToast } from '@open-work-hub/ui';
 
 import {
   AdminImageModelSettingsApiError,

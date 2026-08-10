@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Button } from '@open-alm/ui';
+import { Button } from '@open-work-hub/ui';
 import {
   CalendarDays,
   ChevronLeft,

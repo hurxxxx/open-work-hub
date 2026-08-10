@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from open_alm_api.domains.ai.runtime.external_egress_sanitizer import (
+from open_work_hub_api.domains.ai.runtime.external_egress_sanitizer import (
     build_external_egress_sanitization,
     detect_enterprise_entity_types,
     explicitly_disallows_external_search,

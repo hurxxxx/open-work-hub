@@ -7,14 +7,14 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from open_alm_api.core.db import get_db_session
-from open_alm_api.core.llm import LlmTaskContext
-from open_alm_api.domains.auth.dependencies import (
+from open_work_hub_api.core.db import get_db_session
+from open_work_hub_api.core.llm import LlmTaskContext
+from open_work_hub_api.domains.auth.dependencies import (
     require_current_user,
     require_current_workspace,
 )
-from open_alm_api.domains.document_translate import prompts, router as dt_router, service
-from open_alm_api.domains.document_translate.service import DocumentTranslateError
+from open_work_hub_api.domains.document_translate import prompts, router as dt_router, service
+from open_work_hub_api.domains.document_translate.service import DocumentTranslateError
 
 
 def _context() -> LlmTaskContext:
@@ -75,7 +75,7 @@ def test_prompts_use_minimal_grounded_contract_without_personas_or_han_examples(
         assert "원문에 없는 내용을 추가하거나 추측하지 마세요." in prompt
         assert "수치와 고유명사는 원문을 정확히 반영하세요." in prompt
         assert "당신은" not in prompt
-        assert "Open ALM" not in prompt
+        assert "Open Work Hub" not in prompt
         assert "한자" not in prompt
         assert not _contains_han(prompt)
 
@@ -219,7 +219,7 @@ def _make_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
     from starlette.exceptions import HTTPException as StarletteHTTPException
 
-    from open_alm_api.app import localized_http_exception_handler
+    from open_work_hub_api.app import localized_http_exception_handler
 
     app = FastAPI()
     app.include_router(dt_router.router, prefix="/api/v1/workspaces/{workspace_slug}")

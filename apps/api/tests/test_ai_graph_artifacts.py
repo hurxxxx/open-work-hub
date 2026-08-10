@@ -1,82 +1,70 @@
 from __future__ import annotations
-
 import asyncio
-import importlib.util
 import re
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from alembic.migration import MigrationContext
-from alembic.operations import Operations
 from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import ValidationError
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from open_alm_api.domains.ai_artifacts.contracts import (
+from open_work_hub_api.domains.ai_artifacts.contracts import (
     AiArtifactCreate,
     AiArtifactIndexGenerationCreate,
     AiArtifactQueryCreate,
     AiArtifactSourceCreate,
     AiIndexGenerationCreate,
 )
-from open_alm_api.domains.ai_artifacts.models import (
+from open_work_hub_api.domains.ai_artifacts.models import (
     AiArtifact,
     AiArtifactIndexGeneration,
     AiArtifactQuery,
     AiArtifactSource,
     AiIndexGeneration,
 )
-from open_alm_api.domains.ai_artifacts.repository import (
+from open_work_hub_api.domains.ai_artifacts.repository import (
     AiArtifactImmutableError,
     AiArtifactNotFoundError,
     AiArtifactRepository,
     AiIndexGenerationRepository,
 )
-from open_alm_api.domains.ai_artifacts.router import _query_source_response
-from open_alm_api.domains.ai_graph.contracts import (
+from open_work_hub_api.domains.ai_artifacts.router import _query_source_response
+from open_work_hub_api.domains.ai_graph.contracts import (
     AiGraphLlmRequest,
     AiGraphNodeResult,
     AiGraphNodeSpec,
     AiGraphRunRequest,
     AiGraphSpec,
 )
-from open_alm_api.domains.ai_graph.gateway_adapter import AiGatewayGraphAdapter
-from open_alm_api.domains.ai_graph.dispatch import stage_graph_dispatch
-from open_alm_api.domains.ai_graph.execution_registry import (
+from open_work_hub_api.domains.ai_graph.gateway_adapter import AiGatewayGraphAdapter
+from open_work_hub_api.domains.ai_graph.dispatch import stage_graph_dispatch
+from open_work_hub_api.domains.ai_graph.execution_registry import (
     execute_registered_ai_graph,
     register_ai_graph_executor,
     reset_ai_graph_executors,
 )
-from open_alm_api.domains.ai_graph.models import (
+from open_work_hub_api.domains.ai_graph.models import (
     AiGraphDispatchOutbox,
     AiGraphRun,
     AiGraphRunInput,
     AiGraphRunNodeProgress,
 )
-from open_alm_api.domains.ai_graph.repository import (
+from open_work_hub_api.domains.ai_graph.repository import (
     AiGraphDispatchRepository,
     AiGraphExecutionLeaseLostError,
     AiGraphRunInputRepository,
     AiGraphRunRepository,
 )
-from open_alm_api.domains.ai_graph.router import _artifact_ids_by_run
-from open_alm_api.domains.ai_graph.runtime import (
+from open_work_hub_api.domains.ai_graph.router import _artifact_ids_by_run
+from open_work_hub_api.domains.ai_graph.runtime import (
     AiGraphRuntimeContext,
     compile_graph,
     run_graph,
 )
-from open_alm_api.domains.conversations.models import Conversation, ConversationTurn
-from open_alm_api.domains.legacy_issues.analysis_graph.contracts import (
-    AnalysisDataBundle,
-)
-from open_alm_api.domains.legacy_issues.analysis_graph.persistence import (
-    AiArtifactAnalysisWriter,
-    _artifact_payload,
-)
+from open_work_hub_api.domains.conversations.models import Conversation, ConversationTurn
 
 
 @pytest.fixture
@@ -122,7 +110,7 @@ def _run_request(*, inputs: dict | None = None) -> AiGraphRunRequest:
     return AiGraphRunRequest(
         workspace_id="workspace-1",
         requested_by_user_id="user-1",
-        app_id="legacy-issues",
+        app_id="docs",
         graph=_linear_spec(),
         inputs=inputs or {"question": "결빙 문제를 보고해줘"},
         conversation_id="conversation-1",
@@ -138,7 +126,7 @@ def _artifact_create(
     return AiArtifactCreate(
         workspace_id="workspace-1",
         owner_user_id="user-1",
-        app_id="legacy-issues",
+        app_id="docs",
         artifact_type=artifact_type,
         title="결빙 문제 분석",
         content_text=content_text,
@@ -219,7 +207,7 @@ def test_langgraph_conditional_route_executes_only_selected_branch() -> None:
                 run_id="run-1",
                 workspace_id="workspace-1",
                 requested_by_user_id="user-1",
-                app_id="legacy-issues",
+                app_id="docs",
                 conversation_id=None,
                 progress_callback=progress,
             ),
@@ -234,7 +222,7 @@ def test_langgraph_conditional_route_executes_only_selected_branch() -> None:
 
 
 def test_graph_llm_adapter_uses_registered_gateway_only(monkeypatch) -> None:
-    import open_alm_api.domains.ai_graph.gateway_adapter as adapter_module
+    import open_work_hub_api.domains.ai_graph.gateway_adapter as adapter_module
 
     observed: dict[str, object] = {}
 
@@ -270,7 +258,7 @@ def test_graph_llm_adapter_uses_registered_gateway_only(monkeypatch) -> None:
         "resolve_llm_workload",
         lambda _workload_id: SimpleNamespace(
             workload_id="legacy.report",
-            app_ids=("legacy-issues",),
+            app_ids=("docs",),
         ),
     )
     monkeypatch.setattr(adapter_module, "execute_llm", execute)
@@ -278,7 +266,7 @@ def test_graph_llm_adapter_uses_registered_gateway_only(monkeypatch) -> None:
     result = adapter.invoke(
         AiGraphLlmRequest(
             workload_id="legacy.report",
-            app_id="legacy-issues",
+            app_id="docs",
             workspace_id="workspace-1",
             source="worker.test",
             messages=[{"role": "user", "content": "report"}],
@@ -520,7 +508,7 @@ def test_graph_executor_registry_resolves_exact_graph_version(
     monkeypatch,
     session_factory: sessionmaker[Session],
 ) -> None:
-    import open_alm_api.domains.ai_graph.execution_registry as registry_module
+    import open_work_hub_api.domains.ai_graph.execution_registry as registry_module
 
     calls: list[str] = []
     request_v1 = _run_request()
@@ -590,7 +578,7 @@ def test_run_graph_renews_execution_lease_while_node_is_running(
     monkeypatch,
     session_factory: sessionmaker[Session],
 ) -> None:
-    import open_alm_api.domains.ai_graph.runtime as runtime_module
+    import open_work_hub_api.domains.ai_graph.runtime as runtime_module
 
     renewals: list[str] = []
     original = AiGraphRunRepository.renew_execution_lease
@@ -689,7 +677,7 @@ def test_run_graph_logs_terminal_failure_with_run_context(
         log_records.append((message, extra))
 
     monkeypatch.setattr(
-        "open_alm_api.domains.ai_graph.runtime.logger.error",
+        "open_work_hub_api.domains.ai_graph.runtime.logger.error",
         record_error,
     )
 
@@ -816,10 +804,10 @@ def test_artifact_persists_grid_query_lineage_and_becomes_immutable(
         generation = AiIndexGenerationRepository(db).create_staging(
             AiIndexGenerationCreate(
                 workspace_id="workspace-1",
-                app_id="legacy-issues",
-                generation_key="legacy-issues-20260726",
+                app_id="docs",
+                generation_key="docs-20260726",
                 backend="pgvector",
-                source_namespace="legacy-issues",
+                source_namespace="docs",
                 embedding_provider="local",
                 embedding_model="bge-m3",
                 embedding_dimensions=1024,
@@ -840,7 +828,7 @@ def test_artifact_persists_grid_query_lineage_and_becomes_immutable(
             _artifact_create(),
             sources=(
                 AiArtifactSourceCreate(
-                    source_kind="legacy_issue",
+                    source_kind="document",
                     source_ref="issue:42",
                     grid_columns=[
                         {"key": "vehicle", "label": "차종"},
@@ -890,7 +878,7 @@ def test_artifact_persists_grid_query_lineage_and_becomes_immutable(
         with pytest.raises(AiArtifactImmutableError):
             repository.add_source(
                 loaded,
-                AiArtifactSourceCreate(source_kind="legacy_issue", source_ref="issue:99"),
+                AiArtifactSourceCreate(source_kind="document", source_ref="issue:99"),
             )
 
 
@@ -898,7 +886,7 @@ def test_ownerless_artifacts_must_be_workspace_visible() -> None:
     with pytest.raises(ValidationError, match="workspace visibility"):
         AiArtifactCreate(
             workspace_id="workspace-1",
-            app_id="legacy-issues",
+            app_id="docs",
             artifact_type="analysis",
             title="system analysis",
             content_text="analysis",
@@ -920,7 +908,7 @@ def test_completed_artifact_owner_can_change_only_visibility(
             workspace_id="workspace-1",
             owner_user_id="user-1",
             visibility="workspace",
-            expected_app_id="legacy-issues",
+            expected_app_id="docs",
             expected_artifact_type="report",
         )
         db.commit()
@@ -990,215 +978,3 @@ def test_artifact_visibility_change_requires_completed_owned_artifact(
                 visibility="workspace",
                 expected_artifact_type="analysis",
             )
-
-
-def test_completed_graph_artifact_persistence_is_idempotent(
-    session_factory: sessionmaker[Session],
-) -> None:
-    with session_factory() as db:
-        artifact = AiArtifactRepository(db).create_completed(
-            _artifact_create().model_copy(
-                update={
-                    "graph_run_id": "run-1",
-                    "conversation_turn_id": "turn-1",
-                }
-            )
-        )
-        db.commit()
-        artifact_id = artifact.id
-        artifact_number = artifact.artifact_number
-
-    result = AiArtifactAnalysisWriter(session_factory).persist(
-        context=AiGraphRuntimeContext(
-            run_id="run-1",
-            workspace_id="workspace-1",
-            requested_by_user_id="user-1",
-            app_id="legacy-issues",
-            conversation_id="conversation-1",
-            progress_callback=lambda _node_id: asyncio.sleep(0),
-        ),
-        artifact_type="report",
-        title="재실행된 보고서",
-        markdown="# 중복 본문",
-        data=AnalysisDataBundle(),
-        input_payload={"assistant_turn_id": "turn-1"},
-    )
-
-    assert result == {
-        "artifact_id": artifact_id,
-        "artifact_number": artifact_number,
-        "artifact_type": "report",
-    }
-    with session_factory() as db:
-        artifacts = db.query(AiArtifact).all()
-        assert len(artifacts) == 1
-        assert artifacts[0].content_text == "# 보고서"
-
-
-def test_graph_artifact_persists_originating_question_snapshot(
-    session_factory: sessionmaker[Session],
-) -> None:
-    with session_factory() as db:
-        db.add(
-            Conversation(
-                id="conversation-1",
-                workspace_id="workspace-1",
-                user_id="user-1",
-                title="결빙 분석",
-            )
-        )
-        db.add(
-            ConversationTurn(
-                id="turn-question",
-                conversation_id="conversation-1",
-                seq=0,
-                role="assistant",
-                content="분석 중",
-            )
-        )
-        pending = AiArtifactRepository(db).create_pending(
-            _artifact_create().model_copy(
-                update={
-                    "graph_run_id": "run-question",
-                    "conversation_turn_id": "turn-question",
-                    "content_text": None,
-                    "payload": None,
-                }
-            )
-        )
-        db.commit()
-        artifact_id = pending.id
-
-    AiArtifactAnalysisWriter(session_factory).persist(
-        context=AiGraphRuntimeContext(
-            run_id="run-question",
-            workspace_id="workspace-1",
-            requested_by_user_id="user-1",
-            app_id="legacy-issues",
-            conversation_id="conversation-1",
-            progress_callback=lambda _node_id: asyncio.sleep(0),
-        ),
-        artifact_type="report",
-        title="질문 연결 보고서",
-        markdown="# 보고서",
-        data=AnalysisDataBundle.model_validate(
-            {
-                "source_revisions": [
-                    {
-                        "revision_id": "revision-draft",
-                        "status": "draft",
-                        "module_key": "aircon",
-                    }
-                ]
-            }
-        ),
-        input_payload={
-            "assistant_turn_id": "turn-question",
-            "question": "결빙 관련 문제를 보고해줘",
-        },
-    )
-
-    with session_factory() as db:
-        artifact = db.get(AiArtifact, artifact_id)
-        assert artifact is not None
-        assert artifact.payload_json == {
-            "schema_version": 2,
-            "request": {
-                "kind": "user_question",
-                "text": "결빙 관련 문제를 보고해줘",
-            },
-            "analysis_health": {
-                "status": "complete",
-                "limitations": [],
-                "capability_limitations": [],
-                "execution_warnings": [],
-                "source_revisions": [
-                    {
-                        "revision_id": "revision-draft",
-                        "status": "draft",
-                        "module_key": "aircon",
-                    }
-                ],
-            },
-        }
-
-
-def test_graph_artifact_payload_preserves_recovered_execution_warning() -> None:
-    payload = _artifact_payload(
-        {"question": "에바 동결 이력과 대책은?"},
-        data=AnalysisDataBundle(
-            execution_warnings=["analysis_agent:max_steps"],
-        ),
-    )
-
-    assert payload["analysis_health"] == {
-        "status": "degraded",
-        "limitations": [],
-        "capability_limitations": [],
-        "execution_warnings": ["analysis_agent:max_steps"],
-        "source_revisions": [],
-    }
-
-
-def test_graph_artifact_writer_refuses_incomplete_analysis(
-    session_factory: sessionmaker[Session],
-) -> None:
-    with pytest.raises(
-        RuntimeError,
-        match="legacy_issue_analysis_data_incomplete",
-    ):
-        AiArtifactAnalysisWriter(session_factory).persist(
-            context=AiGraphRuntimeContext(
-                run_id="run-incomplete",
-                workspace_id="workspace-1",
-                requested_by_user_id="user-1",
-                app_id="legacy-issues",
-                conversation_id="conversation-1",
-                progress_callback=lambda _node_id: asyncio.sleep(0),
-            ),
-            artifact_type="analysis",
-            title="저장 금지",
-            markdown="# 불완전 분석",
-            data=AnalysisDataBundle(
-                limitations=["one_or_more_queries_failed"]
-            ),
-            input_payload={
-                "assistant_turn_id": "turn-incomplete",
-                "question": "결빙 이력이 있어?",
-            },
-        )
-
-
-def test_schema_migration_upgrades_and_downgrades_on_sqlite() -> None:
-    migration_path = (
-        Path(__file__).parents[1]
-        / "alembic"
-        / "versions"
-        / "a4e7c2f9d1b6_add_ai_graph_and_artifact_control_plane.py"
-    )
-    spec = importlib.util.spec_from_file_location("ai_graph_artifact_migration", migration_path)
-    assert spec is not None and spec.loader is not None
-    migration = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(migration)
-
-    engine = create_engine("sqlite+pysqlite:///:memory:")
-    with engine.begin() as connection:
-        context = MigrationContext.configure(connection)
-        with Operations.context(context):
-            migration.upgrade()
-        tables = set(inspect(connection).get_table_names())
-        assert {
-            "checkpoints",
-            "checkpoint_blobs",
-            "checkpoint_writes",
-            "ai_graph_runs",
-            "ai_graph_run_inputs",
-            "ai_graph_dispatch_outbox",
-            "ai_index_generations",
-            "ai_artifacts",
-            "ai_artifact_queries",
-        } <= tables
-        assert connection.scalar(text("SELECT count(*) FROM checkpoint_migrations")) == 10
-        with Operations.context(context):
-            migration.downgrade()
-        assert "ai_graph_runs" not in inspect(connection).get_table_names()

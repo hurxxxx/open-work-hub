@@ -35,7 +35,6 @@ export function AppBar(props: AppBarProps) {
     buildAppLink(appId, currentUser, shellWorkspaceSlug, launcherGlobalPaths);
   const {
     activeAppTitle,
-    businessSitesMenuRef,
     canCreateWorkspace,
     canManageCurrentWorkspace,
     canOpenWorkspaceSearch,
@@ -51,7 +50,6 @@ export function AppBar(props: AppBarProps) {
     moreMenuRef,
     normalizedDefaultWorkspaceId,
     onCloseEditor,
-    onCloseBusinessSites,
     onCloseLauncherMenus,
     onCreateWorkspace,
     onManageCurrentWorkspace,
@@ -61,7 +59,6 @@ export function AppBar(props: AppBarProps) {
     onResetDraft,
     onSaveLayout,
     onSearchQueryChange,
-    onToggleBusinessSites,
     onToggleCategoryMenu,
     onToggleFavorites,
     onToggleNotifications,
@@ -78,8 +75,7 @@ export function AppBar(props: AppBarProps) {
   const desktopMenuOpen =
     state.favoritesOpen ||
     Boolean(state.categoryMenuId) ||
-    state.appBarEditorOpen ||
-    state.businessSitesOpen;
+    state.appBarEditorOpen;
 
   useEffect(() => {
     onDesktopMenuOpenChange?.(desktopMenuOpen);
@@ -118,8 +114,6 @@ export function AppBar(props: AppBarProps) {
         appBarLayoutError={state.appBarLayoutError}
         appBarLayoutSaving={state.appBarLayoutSaving}
         appBarItems={props.appBarItems}
-        businessSitesMenuRef={businessSitesMenuRef}
-        businessSitesOpen={state.businessSitesOpen}
         canCreateWorkspace={canCreateWorkspace}
         canManageCurrentWorkspace={canManageCurrentWorkspace}
         canOpenWorkspaceSearch={canOpenWorkspaceSearch}
@@ -136,7 +130,6 @@ export function AppBar(props: AppBarProps) {
         favoritesOpen={state.favoritesOpen}
         moreMenuRef={moreMenuRef}
         normalizedDefaultWorkspaceId={normalizedDefaultWorkspaceId}
-        onCloseBusinessSites={onCloseBusinessSites}
         onCloseEditor={onCloseEditor}
         onCloseLauncherMenus={onCloseLauncherMenus}
         onCreateWorkspace={onCreateWorkspace}
@@ -154,7 +147,6 @@ export function AppBar(props: AppBarProps) {
         onResetDraft={onResetDraft}
         onSaveLayout={onSaveLayout}
         onSearchQueryChange={onSearchQueryChange}
-        onToggleBusinessSites={onToggleBusinessSites}
         onToggleCategoryMenu={onToggleCategoryMenu}
         onToggleFavorites={onToggleFavorites}
         onSelectWorkspace={handleWorkspaceSelect}

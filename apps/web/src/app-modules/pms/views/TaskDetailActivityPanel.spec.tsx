@@ -10,7 +10,6 @@ function member(
     user_id: 'user-1',
     email: 'member@example.test',
     full_name: 'Member One',
-    primary_org_unit_name: 'Product',
     is_admin: false,
     role: 'member',
     joined_at: '2026-06-10T00:00:00.000Z',
@@ -22,7 +21,7 @@ describe('TaskDetailActivityPanel comment body rendering', () => {
   it('renders a mention-only block without a leading text segment', () => {
     expect(
       getTaskCommentBodySegments(
-        '@Member One - Product',
+        '@Member One',
         [
           {
             type: 'paragraph',
@@ -31,7 +30,7 @@ describe('TaskDetailActivityPanel comment body rendering', () => {
                 type: 'mention',
                 props: {
                   userId: 'user-1',
-                  displayName: 'Member One - Product',
+                  displayName: 'Member One',
                 },
               },
             ],
@@ -44,7 +43,7 @@ describe('TaskDetailActivityPanel comment body rendering', () => {
         type: 'mention',
         key: '0-0-user-1',
         userId: 'user-1',
-        displayName: 'Member One - Product',
+        displayName: 'Member One',
       },
     ]);
   });
@@ -67,7 +66,7 @@ describe('TaskDetailActivityPanel comment body rendering', () => {
         type: 'mention',
         key: '1-00000000-0000-0000-0000-000000000001',
         userId: '00000000-0000-0000-0000-000000000001',
-        displayName: 'Member One - Product',
+        displayName: 'Member One',
       },
     ]);
   });

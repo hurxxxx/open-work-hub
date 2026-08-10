@@ -7,15 +7,15 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from open_alm_api.core.settings import Settings
-from open_alm_api.domains.admin import model_runtime_status_router
-from open_alm_api.domains.admin import model_runtime_status_service
-from open_alm_api.domains.admin.model_runtime_status_schemas import (
+from open_work_hub_api.core.settings import Settings
+from open_work_hub_api.domains.admin import model_runtime_status_router
+from open_work_hub_api.domains.admin import model_runtime_status_service
+from open_work_hub_api.domains.admin.model_runtime_status_schemas import (
     AdminModelRuntimeStatusResponse,
     ModelRuntimeModelResponse,
     ModelRuntimeTargetResponse,
 )
-from open_alm_api.domains.admin.model_runtime_status_service import (
+from open_work_hub_api.domains.admin.model_runtime_status_service import (
     collect_model_runtime_status,
 )
 from tests.dev_accounts import auth_headers, dev_login
@@ -23,24 +23,24 @@ from tests.dev_accounts import auth_headers, dev_login
 
 def _settings(**overrides: object) -> Settings:
     values = {
-        "postgres_dsn": ("postgresql+psycopg://open_alm_test:open_alm_test@127.0.0.1:5432/open_alm_test"),
+        "postgres_dsn": ("postgresql+psycopg://open_work_hub_test:open_work_hub_test@127.0.0.1:5432/open_work_hub_test"),
         "inference_gateway_base_url": "http://current-server:18080",
         "inference_gateway_api_key": "gateway-secret",
-        "llm_local_base_url": "http://dgx-lb:8000/v1",
+        "llm_local_base_url": "http://local-llm:8000/v1",
         "llm_local_api_key": "llm-secret",
         "model_status_diagnostic_targets_json": json.dumps(
             [
                 {
-                    "id": "dgx-spark-102",
-                    "display_name": "DGX Spark 102",
-                    "endpoint_url": "http://dgx-102:8000/v1",
+                    "id": "local-model-a",
+                    "display_name": "Local Model A",
+                    "endpoint_url": "http://local-model-a:8000/v1",
                     "provider_id": "local",
                     "role": "redundancy",
                 },
                 {
-                    "id": "dgx-spark-103",
-                    "display_name": "DGX Spark 103",
-                    "endpoint_url": "http://dgx-103:8001/v1",
+                    "id": "local-model-b",
+                    "display_name": "Local Model B",
+                    "endpoint_url": "http://local-model-b:8001/v1",
                     "provider_id": "local",
                     "role": "redundancy",
                 },
@@ -77,7 +77,7 @@ def _llm_models() -> dict[str, object]:
 
 
 @pytest.mark.anyio
-async def test_model_runtime_status_collects_current_server_and_dgx_targets() -> None:
+async def test_model_runtime_status_collects_current_server_and_local_targets() -> None:
     seen_authorization: list[str] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -95,8 +95,8 @@ async def test_model_runtime_status_collects_current_server_and_dgx_targets() ->
     assert [target.id for target in snapshot.targets] == [
         "inference-gateway",
         "local-llm",
-        "dgx-spark-102",
-        "dgx-spark-103",
+        "local-model-a",
+        "local-model-b",
     ]
     assert snapshot.targets[0].models == [
         ModelRuntimeModelResponse(

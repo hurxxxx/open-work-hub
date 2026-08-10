@@ -11,7 +11,7 @@ import React, {
 import { useTranslation } from 'react-i18next';
 import { CircleHelp, Search, X } from 'lucide-react';
 
-import { Tooltip } from '@open-alm/ui';
+import { Tooltip } from '@open-work-hub/ui';
 
 import type { AuthUser } from '@/src/platform/auth/auth-api';
 import { UserSearchMultiSelect } from '@/src/platform/users/UserSearchMultiSelect';
@@ -20,7 +20,6 @@ import {
   listAdminUsers,
   type AiSecurityExternalTransferException,
   type AiSecurityPolicyRule,
-  type OrgUnitItem,
   type WorkspaceItem,
 } from './admin-api';
 import {
@@ -33,15 +32,12 @@ import {
   parseAiSecurityTerms,
 } from './admin-ai-security-model';
 import { Badge, FORM_FIELD_CLASS as fieldClassName } from './admin-shared';
-import { OrgSourceBadge } from './admin-org-tree-panel';
 
 export type AiSecuritySelectedUser = {
   id: string;
   full_name?: string | null;
   display_name?: string | null;
   email: string;
-  primary_org_unit?: { name?: string | null } | null;
-  primary_org_unit_name?: string | null;
 };
 
 function aiSecuritySelectedUserFromAuthUser(
@@ -52,7 +48,6 @@ function aiSecuritySelectedUserFromAuthUser(
     full_name: user.full_name,
     display_name: user.display_name,
     email: user.email,
-    primary_org_unit: user.primary_org_unit,
   };
 }
 
@@ -432,141 +427,6 @@ export function AiSecurityFormSection({
       </div>
       {children}
     </section>
-  );
-}
-
-function aiSecurityOrgPath(
-  orgUnit: OrgUnitItem,
-  orgUnitsById: ReadonlyMap<string, OrgUnitItem>,
-): string {
-  const names: string[] = [];
-  const visited = new Set<string>();
-  let current: OrgUnitItem | undefined = orgUnit;
-  while (current && !visited.has(current.id)) {
-    visited.add(current.id);
-    names.unshift(current.name);
-    current = current.parent_id
-      ? orgUnitsById.get(current.parent_id)
-      : undefined;
-  }
-  return names.join(' / ');
-}
-
-export function AiSecurityOrgUnitPicker({
-  allLabel,
-  clearLabel,
-  help,
-  label,
-  noResultsLabel,
-  onChange,
-  orgUnits,
-  searchPlaceholder,
-  value,
-}: {
-  allLabel: string;
-  clearLabel: string;
-  help: string;
-  label: string;
-  noResultsLabel: string;
-  onChange: (value: string | null) => void;
-  orgUnits: readonly OrgUnitItem[];
-  searchPlaceholder: string;
-  value: string | null | undefined;
-}) {
-  const [query, setQuery] = useState('');
-  const [focused, setFocused] = useState(false);
-  const orgUnitsById = useMemo(
-    () => new Map(orgUnits.map((item) => [item.id, item])),
-    [orgUnits],
-  );
-  const selectedOrgUnit = value ? orgUnitsById.get(value) : undefined;
-  const candidates = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
-    return orgUnits
-      .filter((item) => {
-        if (!normalized) return true;
-        const path = aiSecurityOrgPath(item, orgUnitsById).toLowerCase();
-        return (
-          path.includes(normalized) ||
-          item.slug.toLowerCase().includes(normalized)
-        );
-      })
-      .slice(0, 24);
-  }, [orgUnits, orgUnitsById, query]);
-
-  return (
-    <div className="space-y-1">
-      <AiSecurityFieldLabel help={help} label={label} />
-      {selectedOrgUnit ? (
-        <div className="app-text-caption flex items-center gap-2 rounded-md border border-app-border bg-app-surface-sidebar px-2 py-1 text-app-ink">
-          <span className="min-w-0 flex-1 truncate">
-            {aiSecurityOrgPath(selectedOrgUnit, orgUnitsById)}
-          </span>
-          <OrgSourceBadge sourceType={selectedOrgUnit.source_type} />
-          <button
-            aria-label={clearLabel}
-            className="text-app-ink/45 hover:text-app-ink"
-            onClick={() => onChange(null)}
-            type="button"
-          >
-            <X size={13} />
-          </button>
-        </div>
-      ) : (
-        <div className="app-text-caption rounded-md border border-dashed border-app-border px-2 py-1 text-app-ink/45">
-          {allLabel}
-        </div>
-      )}
-      <div className="relative">
-        <Search
-          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-app-ink/35"
-          size={14}
-        />
-        <input
-          className={`${fieldClassName} py-1.5 pl-9 pr-3`}
-          onBlur={() => {
-            window.setTimeout(() => setFocused(false), 150);
-          }}
-          onChange={(event) => setQuery(event.target.value)}
-          onFocus={() => setFocused(true)}
-          placeholder={searchPlaceholder}
-          value={query}
-        />
-      </div>
-      {focused ? (
-        <div className="max-h-52 overflow-y-auto rounded-md border border-app-border bg-app-surface">
-          {candidates.length === 0 ? (
-            <div className="app-text-caption px-3 py-2 text-app-ink/45">
-              {noResultsLabel}
-            </div>
-          ) : (
-            candidates.map((item) => (
-              <button
-                className="app-text-body-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover"
-                key={item.id}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => {
-                  onChange(item.id);
-                  setQuery('');
-                  setFocused(false);
-                }}
-                type="button"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-medium">
-                    {item.name}
-                  </span>
-                  <span className="app-text-caption block truncate text-app-ink/45">
-                    {aiSecurityOrgPath(item, orgUnitsById)}
-                  </span>
-                </span>
-                <OrgSourceBadge sourceType={item.source_type} />
-              </button>
-            ))
-          )}
-        </div>
-      ) : null}
-    </div>
   );
 }
 

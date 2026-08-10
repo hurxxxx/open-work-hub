@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from open_alm_api.domains.conversations.turn_rewrite import (
+from open_work_hub_api.domains.conversations.turn_rewrite import (
     ConversationTailRewriteError,
     auto_title_preview,
     plan_conversation_tail_rewrite,

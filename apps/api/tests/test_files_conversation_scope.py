@@ -5,22 +5,22 @@ from types import SimpleNamespace
 
 import pytest
 
-from open_alm_api.core.llm_errors import LlmProviderError
-from open_alm_api.domains.ai.gateway import AiGatewayPolicyViolation
-from open_alm_api.domains.conversations.default_scope_adapters import (
+from open_work_hub_api.core.llm_errors import LlmProviderError
+from open_work_hub_api.domains.ai.gateway import AiGatewayPolicyViolation
+from open_work_hub_api.domains.conversations.default_scope_adapters import (
     ensure_conversation_scope_adapters_registered,
 )
-from open_alm_api.domains.conversations.scope_registry import (
+from open_work_hub_api.domains.conversations.scope_registry import (
     get_conversation_scope_adapter,
     reset_conversation_scope_adapters,
 )
-from open_alm_api.domains.files import conversation_scope
-from open_alm_api.domains.files.chat_retrieval import (
+from open_work_hub_api.domains.files import conversation_scope
+from open_work_hub_api.domains.files.chat_retrieval import (
     FileChatEvidenceItem,
     FileChatEvidenceResult,
     FileSearchUnavailable,
 )
-from open_alm_api.domains.files.conversation_scope import (
+from open_work_hub_api.domains.files.conversation_scope import (
     FILES_RAG_SOURCES_ARTIFACT_TYPE,
     FilesConversationScopeAdapter,
 )

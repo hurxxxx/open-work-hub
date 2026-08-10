@@ -1,4 +1,4 @@
-import type { BlockContent } from '@open-alm/ui';
+import type { BlockContent } from '@open-work-hub/ui';
 
 import { formatRelativeTime } from '@/src/platform/time/time-utils';
 import { LearningNotesApiError } from '../../api/learning-notes-api';

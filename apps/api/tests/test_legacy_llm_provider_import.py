@@ -7,28 +7,28 @@ import pytest
 from sqlalchemy import create_engine, delete, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from open_alm_api.core.settings import get_settings
-from open_alm_api.domains.ai.legacy_provider_import import (
+from open_work_hub_api.core.settings import get_settings
+from open_work_hub_api.domains.ai.legacy_provider_import import (
     LegacyProviderImportError,
     import_legacy_external_llm_providers,
 )
-from open_alm_api.domains.ai.model_credentials import decrypt_api_key, encrypt_api_key
-from open_alm_api.domains.ai.model_settings_models import (
+from open_work_hub_api.domains.ai.model_credentials import decrypt_api_key, encrypt_api_key
+from open_work_hub_api.domains.ai.model_settings_models import (
     AiModelCatalogEntry,
     AiModelProviderConfig,
 )
 
 
 _LEGACY_FIELDS = (
-    "OPEN_ALM_LLM_OPENAI_API_KEY",
-    "OPEN_ALM_LLM_OPENAI_BASE_URL",
-    "OPEN_ALM_LLM_OPENAI_DEFAULT_MODEL",
-    "OPEN_ALM_LLM_ANTHROPIC_API_KEY",
-    "OPEN_ALM_LLM_ANTHROPIC_BASE_URL",
-    "OPEN_ALM_LLM_ANTHROPIC_DEFAULT_MODEL",
-    "OPEN_ALM_LLM_GEMINI_API_KEY",
-    "OPEN_ALM_LLM_GEMINI_BASE_URL",
-    "OPEN_ALM_LLM_GEMINI_DEFAULT_MODEL",
+    "OPEN_WORK_HUB_LLM_OPENAI_API_KEY",
+    "OPEN_WORK_HUB_LLM_OPENAI_BASE_URL",
+    "OPEN_WORK_HUB_LLM_OPENAI_DEFAULT_MODEL",
+    "OPEN_WORK_HUB_LLM_ANTHROPIC_API_KEY",
+    "OPEN_WORK_HUB_LLM_ANTHROPIC_BASE_URL",
+    "OPEN_WORK_HUB_LLM_ANTHROPIC_DEFAULT_MODEL",
+    "OPEN_WORK_HUB_LLM_GEMINI_API_KEY",
+    "OPEN_WORK_HUB_LLM_GEMINI_BASE_URL",
+    "OPEN_WORK_HUB_LLM_GEMINI_DEFAULT_MODEL",
 )
 
 
@@ -68,8 +68,8 @@ def test_preview_reports_changes_without_writing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _remove_provider(db_factory, "openai")
-    monkeypatch.setenv("OPEN_ALM_LLM_OPENAI_API_KEY", "preview-secret")
-    monkeypatch.setenv("OPEN_ALM_LLM_OPENAI_DEFAULT_MODEL", "preview-model")
+    monkeypatch.setenv("OPEN_WORK_HUB_LLM_OPENAI_API_KEY", "preview-secret")
+    monkeypatch.setenv("OPEN_WORK_HUB_LLM_OPENAI_DEFAULT_MODEL", "preview-model")
 
     with db_factory() as db:
         result = import_legacy_external_llm_providers(
@@ -94,8 +94,8 @@ def test_apply_uses_descriptor_endpoint_and_is_idempotent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _remove_provider(db_factory, "openai")
-    monkeypatch.setenv("OPEN_ALM_LLM_OPENAI_API_KEY", "apply-secret")
-    monkeypatch.setenv("OPEN_ALM_LLM_OPENAI_DEFAULT_MODEL", "imported-chat-model")
+    monkeypatch.setenv("OPEN_WORK_HUB_LLM_OPENAI_API_KEY", "apply-secret")
+    monkeypatch.setenv("OPEN_WORK_HUB_LLM_OPENAI_DEFAULT_MODEL", "imported-chat-model")
 
     with db_factory() as db:
         first = import_legacy_external_llm_providers(
@@ -168,9 +168,9 @@ def test_apply_never_overwrites_existing_database_values(
         provider.enabled = False
         original_default_model_id = provider.default_model_id
 
-    monkeypatch.setenv("OPEN_ALM_LLM_ANTHROPIC_API_KEY", "environment-secret")
-    monkeypatch.setenv("OPEN_ALM_LLM_ANTHROPIC_BASE_URL", "https://environment.example.test")
-    monkeypatch.setenv("OPEN_ALM_LLM_ANTHROPIC_DEFAULT_MODEL", "environment-model")
+    monkeypatch.setenv("OPEN_WORK_HUB_LLM_ANTHROPIC_API_KEY", "environment-secret")
+    monkeypatch.setenv("OPEN_WORK_HUB_LLM_ANTHROPIC_BASE_URL", "https://environment.example.test")
+    monkeypatch.setenv("OPEN_WORK_HUB_LLM_ANTHROPIC_DEFAULT_MODEL", "environment-model")
 
     with db_factory() as db:
         result = import_legacy_external_llm_providers(
@@ -194,9 +194,9 @@ def test_missing_encryption_root_rolls_back_the_transaction(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _remove_provider(db_factory, "openai")
-    monkeypatch.setenv("OPEN_ALM_LLM_OPENAI_API_KEY", "rollback-secret")
-    monkeypatch.setenv("OPEN_ALM_LLM_OPENAI_DEFAULT_MODEL", "rollback-model")
-    monkeypatch.setenv("OPEN_ALM_AI_MODEL_CREDENTIAL_ENCRYPTION_KEY", "")
+    monkeypatch.setenv("OPEN_WORK_HUB_LLM_OPENAI_API_KEY", "rollback-secret")
+    monkeypatch.setenv("OPEN_WORK_HUB_LLM_OPENAI_DEFAULT_MODEL", "rollback-model")
+    monkeypatch.setenv("OPEN_WORK_HUB_AI_MODEL_CREDENTIAL_ENCRYPTION_KEY", "")
     get_settings.cache_clear()
     try:
         with db_factory() as db:

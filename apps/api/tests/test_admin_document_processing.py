@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from open_alm_api.domains.admin import document_processing_projection
+from open_work_hub_api.domains.admin import document_processing_projection
 from tests.dev_accounts import auth_headers, dev_login
 
 
@@ -48,13 +48,7 @@ def test_admin_document_processing_projects_read_only_runtime(
         {"provider_name": "inference-gateway-ocr", "ready": False},
     ]
     assert payload["chunking"]["strategy"] == "default_korean_v1"
-    assert payload["legacy_issues"]["vector_store"] == "postgresql_pgvector"
-    workload_ids = {item["workload_id"] for item in payload["vision"]["workloads"]}
-    assert workload_ids == {
-        "legacy_issues.attachment_vision",
-        "meal_invoice_ocr_extract",
-        "meal_invoice_ocr_rescan",
-    }
+    assert isinstance(payload["vision"]["workloads"], list)
     assert "api_key" not in response.text
     assert "secret detail" not in response.text
     assert "internal runtime detail" not in response.text

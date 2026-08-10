@@ -55,12 +55,6 @@ const specCompareRoute = {
   type: 'element',
 } as const;
 
-const fmeaCompareRoute = {
-  appId: 'chatbot',
-  id: 'chatbot.fmea-compare',
-  type: 'element',
-} as const;
-
 const enabledApps = [
   { app_id: 'chatbot', enabled: true },
   { app_id: 'docs', enabled: true },
@@ -401,11 +395,11 @@ describe('tool view route model', () => {
     expect(
       decision({
         item: betaItem,
-        matchedToolRoute: fmeaCompareRoute,
-        toolId: 'fmea-compare',
+        matchedToolRoute: specCompareRoute,
+        toolId: 'spec-compare',
       }),
     ).toEqual({
-      routeId: 'chatbot.fmea-compare',
+      routeId: 'chatbot.spec-compare',
       type: 'tool_element',
     });
   });

@@ -156,16 +156,6 @@ export const TEMPLATE_PRESETS: TemplatePreset[] = [
     },
   },
   {
-    id: 'org_chart',
-    category: 'diagram',
-    mockupId: 'org_chart',
-    preset: {
-      use_case: 'process_flow',
-      style: { chips: ['orgchart', 'corporate'], palette: 'brand', background: 'white', quality: 'high' },
-      layout: { layout_id: 'top_title_grid', aspect: '1536x1024' },
-    },
-  },
-  {
     id: 'mindmap',
     category: 'diagram',
     mockupId: 'mindmap',

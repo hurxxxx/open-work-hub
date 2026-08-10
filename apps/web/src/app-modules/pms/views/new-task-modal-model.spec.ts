@@ -1,4 +1,4 @@
-import type { BlockContent } from '@open-alm/ui';
+import type { BlockContent } from '@open-work-hub/ui';
 import { describe, expect, it } from 'vitest';
 
 import type { PmsTaskListStatus, PmsTaskTemplate } from '../api/pms-api';

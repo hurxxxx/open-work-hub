@@ -1,8 +1,7 @@
 # 앱 플랫폼 등록 계약
 
-이 문서는 Open ALM 앱의 identity, 등록, 조합, launcher 노출과 tenant/workspace 접근 게이트의
-현재 정본이다. 앱 구현 구조와 검증 깊이는
-[바이브 코딩 하네스](../../agents/vibe-coding-harness.md)를 함께 따른다.
+이 문서는 Open Work Hub 앱의 identity, 등록, 조합, launcher 노출과 tenant/workspace 접근 게이트의
+현재 정본이다.
 
 ## 핵심 모델
 
@@ -23,7 +22,7 @@ composition root의 명시적인 객체 목록은 의도된 구조다. 앱을 �
 
 ## Tenant와 앱 scope
 
-Open ALM의 최상위 tenant는 회사이며, 현재는 회사별 배포·데이터베이스·설정 묶음으로 암묵적으로
+Open Work Hub의 최상위 tenant는 회사이며, 현재는 회사별 배포·데이터베이스·설정 묶음으로 암묵적으로
 식별한다. Workspace는 회사 tenant 아래의 부서·팀·프로젝트 협업 범위다. 전체 범위 계약은
 [ADR 0007](../../../adr/0007-company-tenant-workspace-scope.md)을 따른다.
 
@@ -37,12 +36,12 @@ Workspace 앱의 canonical route에는 `/w/:workspaceSlug/...`를 사용한다. 
 실행 시점에 검사한다. Global 앱은 canonical route에서 workspace slug를 생략하지만 인증과
 platform visibility hard gate를 그대로 적용한다.
 
-Launcher category, 정렬과 개인 pin은 표시 구성일 뿐 앱 접근 권한을 부여하지 않는다. 사용자·조직·
-팀별 audience targeting은 현재 app-platform 계약에 포함하지 않으며 별도 결정이 필요하다.
+Launcher category, 정렬과 개인 pin은 표시 구성일 뿐 앱 접근 권한을 부여하지 않는다. 사용자·팀별
+audience targeting은 현재 app-platform 계약에 포함하지 않으며 별도 결정이 필요하다.
 
 ## Backend 등록
 
-앱을 소유한 API domain은 `apps/api/src/open_alm_api/domains/<domain>/app_catalog.py`에서
+앱을 소유한 API domain은 `apps/api/src/open_work_hub_api/domains/<domain>/app_catalog.py`에서
 불변 `WorkspaceAppRegistration`을 내보낸다.
 
 ```python
@@ -69,7 +68,7 @@ Frontend manifest의 `resourceScope`는 데이터 소유권을 나타낸다. 현
 resource다. availability scope와 resource scope를 같은 개념으로 취급하지 않는다.
 
 Core Enablement 단계에서 이 객체를
-`apps/api/src/open_alm_api/domains/auth/workspace_apps.py`의 조합 tuple에 import한다.
+`apps/api/src/open_work_hub_api/domains/auth/workspace_apps.py`의 조합 tuple에 import한다.
 `compile_workspace_app_registry()`는 다음 값을 검증하고 파생한다.
 
 - kebab-case app/nav ID와 workspace route base
@@ -120,25 +119,6 @@ Global bootstrap은 인증 사용자에게 선택된 workspace 없이도 다음�
 
 workspace bootstrap은 workspace availability 앱만 소유한다. Global route/API/worker/AI tool은
 UI 노출과 별개로 platform visibility를 실행 시점에 다시 검사해야 한다.
-
-### 현재 global 앱 승격 적용
-
-뉴스·리포트(`news`)는 이 계약을 처음 적용한 platform 앱이다. Canonical route는 `/news`이며,
-기존 `/w/:workspaceSlug/news`는 query와 hash를 보존해 canonical route로 이동하는 호환 alias다.
-회사 공용 피드와 사용자별 스크랩을 함께 다루므로 frontend `resourceScope`는 `hybrid`다.
-
-News visibility는 global bootstrap에서 제공하고, UI route뿐 아니라 News·Industry Report API,
-관리자 수동 batch, API dispatch와 worker 실행 직전에도 같은 platform hard gate를 적용한다. 기존
-AI curation workload identity인 `news_curate`는 유지한다.
-
-사내 관리팀 Q&A(`qa-assistant`)도 platform availability 앱이다. Canonical route는
-`/qa-assistant`이고 데이터와 RAG corpus는 계속 company scope를 사용한다. 인증 사용자는 활성화된
-Q&A를 조회·질문할 수 있고, 문서 및 동기화 mutation은 기존 관리자 권한을 유지한다. `/api/v1/qna`,
-관리자 수동 batch, API dispatch와 worker의 외부 provider 호출 직전에 같은 platform hard gate를
-적용한다.
-
-웹 검색, 논문·기술동향, 규격·법규 모니터링 등 나머지 AI 앱은 이번 승격 범위에 포함하지 않는다.
-이 앱들은 별도 결정 전까지 현재 availability와 route 계약을 유지한다.
 
 관리 UI는 `/admin/apps/platform`에서 platform 앱과 개인 도구를 관리하고,
 `/admin/apps/workspace`에서 workspace 앱을 관리한다. Workspace 앱 화면의 `앱 기본 설정` 탭은
@@ -201,7 +181,7 @@ Frontend manifest가 아니라 Backend의 app-owned `SearchEntityAdapter`가 정
 
 `SearchEntityAdapter` 선언을 다른 파일에 두거나 저수준 descriptor/projection registry를 앱에서
 직접 호출하면 하네스가 실패한다. Search projection/hook/registration 변경은 Core Platform lane과
-workspace keyword search MR 증거가 필요하다.
+workspace keyword search 계약 테스트가 필요하다.
 
 검색 Core Enablement 검증은 `test_platform_adapter_registries.py`,
 `test_workspace_keyword_search_registry.py`, `test_search_index_hooks.py`,

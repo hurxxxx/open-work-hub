@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from open_alm_worker.tasks import ai_graph as ai_graph_tasks
+from open_work_hub_worker.tasks import ai_graph as ai_graph_tasks
 
 
 def test_terminal_graph_failure_marks_celery_task_failed(monkeypatch) -> None:

@@ -79,16 +79,6 @@ export interface AdminDocumentProcessingSnapshot {
     minimum_chars: number;
     index_text_max_chars: number;
   };
-  legacy_issues: {
-    attachment_index_enabled: boolean;
-    always_use_vision: boolean;
-    vision_max_pages: number;
-    maximum_chunks: number;
-    semantic_search_enabled: boolean;
-    write_embeddings_enabled: boolean;
-    embedding_dimensions: number;
-    vector_store: 'postgresql_pgvector';
-  };
 }
 
 export async function getAdminDocumentProcessingSnapshot(

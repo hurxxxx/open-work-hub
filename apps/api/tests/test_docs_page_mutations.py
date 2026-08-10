@@ -5,13 +5,13 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from open_alm_api.core.db import get_session_factory
-from open_alm_api.core.principal import user_principal
-from open_alm_api.domains.auth.access import load_user_graph
-from open_alm_api.domains.auth.models import Workspace
-from open_alm_api.domains.docs import service as docs_service
-from open_alm_api.domains.docs.models import NativeDocPage
-from open_alm_api.domains.docs.page_mutations import (
+from open_work_hub_api.core.db import get_session_factory
+from open_work_hub_api.core.principal import user_principal
+from open_work_hub_api.domains.auth.access import load_user_graph
+from open_work_hub_api.domains.auth.models import Workspace
+from open_work_hub_api.domains.docs import service as docs_service
+from open_work_hub_api.domains.docs.models import NativeDocPage
+from open_work_hub_api.domains.docs.page_mutations import (
     CreateNativePageCommand,
     DeleteNativePageCommand,
     UpdateNativePageCommand,

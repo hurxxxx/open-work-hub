@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { BlockContent } from '@open-alm/ui';
+import type { BlockContent } from '@open-work-hub/ui';
 
 import type { LearningPageNoteDetail } from '../../api/types';
 import { useLearningPageNotesController } from './useLearningPageNotesController';

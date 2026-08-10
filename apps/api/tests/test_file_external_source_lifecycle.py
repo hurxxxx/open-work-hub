@@ -10,9 +10,8 @@ from sqlalchemy import create_engine, event, func, select
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException
 
-from open_alm_api.core.db import Base
-from open_alm_api.domains.auth.models import (
-    OrgUnit,
+from open_work_hub_api.core.db import Base
+from open_work_hub_api.domains.auth.models import (
     Team,
     TeamMember,
     User,
@@ -20,10 +19,10 @@ from open_alm_api.domains.auth.models import (
     Workspace,
     WorkspaceUserBinding,
 )
-from open_alm_api.domains.files import external_lifecycle, service as files_service
-from open_alm_api.domains.files.external_access import authorize_explicit_file_ids
-from open_alm_api.domains.files.external_lifecycle import ExternalFileGrant
-from open_alm_api.domains.files.models import (
+from open_work_hub_api.domains.files import external_lifecycle, service as files_service
+from open_work_hub_api.domains.files.external_access import authorize_explicit_file_ids
+from open_work_hub_api.domains.files.external_lifecycle import ExternalFileGrant
+from open_work_hub_api.domains.files.models import (
     FileManagerCorpus,
     FileManagerFile,
     FileManagerFileAccessGrant,
@@ -31,13 +30,13 @@ from open_alm_api.domains.files.models import (
     FileManagerFolder,
     FileManagerStorageCleanupJob,
 )
-from open_alm_api.domains.files.source_access import (
+from open_work_hub_api.domains.files.source_access import (
     authorize_many_files,
     can_read_file,
     has_accessible_file,
 )
-from open_alm_api.domains.rag.contracts import RagSyncOperation
-from open_alm_api.domains.retrieval.models import RetrievalPartition
+from open_work_hub_api.domains.rag.contracts import RagSyncOperation
+from open_work_hub_api.domains.retrieval.models import RetrievalPartition
 
 
 WORKSPACE_ID = "workspace-source"
@@ -48,9 +47,7 @@ PLATFORM_ADMIN_ID = "platform-admin"
 WORKSPACE_ADMIN_ID = "workspace-admin"
 MEMBER_ID = "member"
 OTHER_ID = "other-user"
-ORG_MEMBER_ID = "org-member"
 TEAM_MEMBER_ID = "team-member"
-ORG_ID = "org-engineering"
 TEAM_ID = "team-search"
 OTHER_TEAM_ID = "team-other"
 
@@ -68,7 +65,6 @@ def db() -> Session:
     Base.metadata.create_all(
         engine,
         tables=[
-            OrgUnit.__table__,
             Workspace.__table__,
             User.__table__,
             UserSystemRole.__table__,
@@ -89,12 +85,6 @@ def db() -> Session:
             [
                 Workspace(id=WORKSPACE_ID, key="source", name="Source"),
                 Workspace(id=OTHER_WORKSPACE_ID, key="other", name="Other"),
-                OrgUnit(
-                    id=ORG_ID,
-                    name="Engineering",
-                    slug="engineering",
-                    unit_type="division",
-                ),
             ]
         )
         session.flush()
@@ -104,7 +94,6 @@ def db() -> Session:
                 _user(WORKSPACE_ADMIN_ID),
                 _user(MEMBER_ID),
                 _user(OTHER_ID),
-                _user(ORG_MEMBER_ID, primary_org_unit_id=ORG_ID),
                 _user(TEAM_MEMBER_ID),
             ]
         )
@@ -118,7 +107,6 @@ def db() -> Session:
                 ),
                 _binding("workspace-admin-binding", WORKSPACE_ADMIN_ID, role="admin"),
                 _binding("member-binding", MEMBER_ID),
-                _binding("org-member-binding", ORG_MEMBER_ID),
                 _binding("team-member-binding", TEAM_MEMBER_ID),
                 Team(
                     id=TEAM_ID,
@@ -348,7 +336,6 @@ def test_explicit_acl_denies_workspace_admin_and_allows_platform_admin(
         (ExternalFileGrant("company"), OTHER_ID, WORKSPACE_ID),
         (ExternalFileGrant("workspace", WORKSPACE_ID), MEMBER_ID, WORKSPACE_ID),
         (ExternalFileGrant("user", MEMBER_ID), MEMBER_ID, WORKSPACE_ID),
-        (ExternalFileGrant("org_unit", ORG_ID), ORG_MEMBER_ID, WORKSPACE_ID),
         (ExternalFileGrant("team", TEAM_ID), TEAM_MEMBER_ID, WORKSPACE_ID),
     ],
 )
@@ -829,7 +816,7 @@ def _binding(binding_id: str, user_id: str, *, role: str = "member"):
     )
 
 
-def _user(user_id: str, *, primary_org_unit_id: str | None = None) -> User:
+def _user(user_id: str) -> User:
     return User(
         id=user_id,
         login_id=user_id,
@@ -838,5 +825,4 @@ def _user(user_id: str, *, primary_org_unit_id: str | None = None) -> User:
         password_hash="unused",
         status="active",
         login_blocked=False,
-        primary_org_unit_id=primary_org_unit_id,
     )

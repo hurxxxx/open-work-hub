@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from open_alm_api.domains.ai.registry import (
+from open_work_hub_api.domains.ai.registry import (
     AiCapabilityRegistry,
     get_ai_capability_registry,
     reset_ai_capability_registry,
 )
-from open_alm_api.domains.files import (
+from open_work_hub_api.domains.files import (
     FILES_APP_ID,
     FILES_GROUNDED_CHAT_TASK_KIND,
     FILES_GROUNDED_CHAT_WORKLOAD_ID,

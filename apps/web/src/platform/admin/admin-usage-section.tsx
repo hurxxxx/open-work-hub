@@ -28,7 +28,7 @@ import {
   TabsList,
   TabsTrigger,
   Tooltip,
-} from '@open-alm/ui';
+} from '@open-work-hub/ui';
 
 import type { AuthUser } from '@/src/platform/auth/auth-api';
 import { useAuth } from '@/src/platform/auth/auth-provider';
@@ -43,14 +43,12 @@ import {
   listAdminUsageExcludedUsers,
   listAdminUsers,
   listAuditLogs,
-  listOrgUnits,
   replaceAdminUsageExcludedUsers,
   replaceAdminUsageTargets,
   type AdminUsageDashboard,
   type AdminUsageExcludedUserItem,
   type AdminUsageTargetsResponse,
   type AuditLogItem,
-  type OrgUnitItem,
 } from './admin-api';
 import {
   AUDIT_LOG_PAGE_SIZE,
@@ -62,11 +60,6 @@ import {
   ADMIN_CHART_SERIES_COLORS,
 } from './admin-chart-colors';
 import { buildPeopleDirectoryPagination } from './admin-directory-grid-model';
-import {
-  isDecorativeOrgName,
-  OrgSourceBadge,
-  OrgTreePanel,
-} from './admin-org-tree-panel';
 import {
   BodyCell,
   EmptyRow,
@@ -97,7 +90,7 @@ import {
 } from './usage-exclusions-model';
 
 type UsageDashboardTab = 'dashboard' | 'users' | 'audit';
-type UsageRankingMode = 'department' | 'feature' | 'tokens';
+type UsageRankingMode = 'feature' | 'tokens';
 type UsageUserItem = AdminUsageDashboard['users'][number];
 type UsageBreakdownItem = AdminUsageDashboard['llm_by_model'][number];
 
@@ -105,7 +98,6 @@ interface UsageUserListRow {
   user_id: string;
   full_name: string;
   email: string;
-  org_unit_name?: string | null;
   last_login_at?: string | null;
   login_count: number;
   audit_event_count: number;
@@ -118,7 +110,6 @@ interface UsageUserListRow {
   whiteboards_view_count: number;
   whiteboards_owned_count: number;
   whiteboards_created_count: number;
-  news_article_view_count: number;
   meetings_created_count: number;
   pms_tasks_created_count: number;
   images_created_count: number;
@@ -130,71 +121,6 @@ interface UsageUserListRow {
 
 function usageUserRowFromUsage(item: UsageUserItem): UsageUserListRow {
   return { ...item };
-}
-
-function usageUserRowFromUser(
-  user: AuthUser,
-  usage?: UsageUserItem,
-): UsageUserListRow {
-  if (usage) {
-    return usageUserRowFromUsage(usage);
-  }
-
-  return {
-    user_id: user.id,
-    full_name: user.full_name,
-    email: user.email,
-    org_unit_name: user.primary_org_unit?.name ?? null,
-    last_login_at: user.last_login_at ?? null,
-    login_count: 0,
-    audit_event_count: 0,
-    app_open_count: 0,
-    content_view_count: 0,
-    search_query_count: 0,
-    docs_view_count: 0,
-    docs_owned_count: 0,
-    docs_created_count: 0,
-    whiteboards_view_count: 0,
-    whiteboards_owned_count: 0,
-    whiteboards_created_count: 0,
-    news_article_view_count: 0,
-    meetings_created_count: 0,
-    pms_tasks_created_count: 0,
-    images_created_count: 0,
-    llm_call_count: 0,
-    llm_total_tokens: 0,
-    llm_average_latency_ms: null,
-    activity_score: 0,
-  };
-}
-
-async function collectAdminUsageDirectoryUsers({
-  includeDescendants,
-  orgUnitId,
-  token,
-}: {
-  includeDescendants: boolean;
-  orgUnitId: string;
-  token: string;
-}): Promise<{ items: AuthUser[]; total: number }> {
-  const pageSize = 100;
-  let page = 1;
-  let total = 0;
-  const items: AuthUser[] = [];
-
-  do {
-    const response = await listAdminUsers(token, {
-      page,
-      page_size: pageSize,
-      org_unit_id: orgUnitId,
-      include_descendants: includeDescendants,
-    });
-    total = response.total;
-    items.push(...response.items);
-    page += 1;
-  } while (items.length < total);
-
-  return { items, total };
 }
 
 function buildUsageTrendChart(
@@ -243,7 +169,6 @@ function buildUsageRankingItems(
   dashboard: AdminUsageDashboard,
   rankingMode: UsageRankingMode,
   usageByApp: UsageBreakdownItem[],
-  t: TFunction,
 ): UsageBreakdownItem[] {
   if (rankingMode === 'feature') {
     return usageByApp;
@@ -256,12 +181,7 @@ function buildUsageRankingItems(
       total_tokens: item.llm_total_tokens,
     }));
   }
-  return (dashboard.org_rankings ?? []).map((item, index) => ({
-    key: item.org_unit_name ?? `__no_org_${index}`,
-    label: item.org_unit_name ?? t('admin.console.usage.noOrg'),
-    count: item.activity_score,
-    total_tokens: item.llm_total_tokens,
-  }));
+  return [];
 }
 
 function buildUsageRankingChart(
@@ -272,9 +192,7 @@ function buildUsageRankingChart(
   const color =
     rankingMode === 'tokens'
       ? ADMIN_CHART_COLORS.accent
-      : rankingMode === 'feature'
-        ? ADMIN_CHART_COLORS.primary
-        : ADMIN_CHART_COLORS.success;
+      : ADMIN_CHART_COLORS.primary;
   return {
     categories: items.map((item) => item.label),
     series: [
@@ -617,13 +535,6 @@ interface UsageExcludedSelectionItem {
   user_id: string;
   full_name: string;
   email: string;
-  org_unit_name?: string | null;
-}
-
-interface UsageTargetOrgSelectionItem {
-  org_unit_id: string;
-  name: string;
-  parent_id?: string | null;
 }
 
 function usageExcludedSelectionFromUser(
@@ -633,7 +544,6 @@ function usageExcludedSelectionFromUser(
     user_id: user.id,
     full_name: user.full_name,
     email: user.email,
-    org_unit_name: user.primary_org_unit?.name ?? null,
   };
 }
 
@@ -644,7 +554,6 @@ function usageExcludedSelectionFromItem(
     user_id: item.user_id,
     full_name: item.full_name,
     email: item.email,
-    org_unit_name: item.org_unit_name,
   };
 }
 
@@ -655,27 +564,6 @@ function usageTargetUserSelectionFromItem(
     user_id: item.user_id,
     full_name: item.full_name,
     email: item.email,
-    org_unit_name: item.org_unit_name,
-  };
-}
-
-function usageTargetOrgSelectionFromOrgUnit(
-  item: OrgUnitItem,
-): UsageTargetOrgSelectionItem {
-  return {
-    org_unit_id: item.id,
-    name: item.name,
-    parent_id: item.parent_id,
-  };
-}
-
-function usageTargetOrgSelectionFromItem(
-  item: AdminUsageTargetsResponse['org_units'][number],
-): UsageTargetOrgSelectionItem {
-  return {
-    org_unit_id: item.org_unit_id,
-    name: item.name,
-    parent_id: item.parent_id,
   };
 }
 
@@ -690,35 +578,22 @@ function sortUsageExcludedUsers<T extends UsageExcludedSelectionItem>(
     return left.email.localeCompare(right.email);
   });
 }
-
-function sortUsageTargetOrgs<T extends UsageTargetOrgSelectionItem>(
-  items: T[],
-): T[] {
-  return [...items].sort((left, right) => left.name.localeCompare(right.name));
-}
-
 function UsageTargetsDialog({
   onOpenChange,
   onSaved,
   open,
-  orgUnits,
   token,
 }: {
   onOpenChange: (open: boolean) => void;
   onSaved: () => void;
   open: boolean;
-  orgUnits: readonly OrgUnitItem[];
   token: string;
 }) {
   const { t } = useTranslation('apps');
   const [selectedUsersById, setSelectedUsersById] = useState<
     Record<string, UsageExcludedSelectionItem>
   >({});
-  const [selectedOrgsById, setSelectedOrgsById] = useState<
-    Record<string, UsageTargetOrgSelectionItem>
-  >({});
   const [query, setQuery] = useState('');
-  const [orgQuery, setOrgQuery] = useState('');
   const [candidates, setCandidates] = useState<AuthUser[]>([]);
   const [candidatePage, setCandidatePage] = useState(1);
   const [candidateTotal, setCandidateTotal] = useState(0);
@@ -727,27 +602,10 @@ function UsageTargetsDialog({
   const [searching, setSearching] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
   const selectedUsers = useMemo(
     () => sortUsageExcludedUsers(Object.values(selectedUsersById)),
     [selectedUsersById],
   );
-  const selectedOrgs = useMemo(
-    () => sortUsageTargetOrgs(Object.values(selectedOrgsById)),
-    [selectedOrgsById],
-  );
-  const orgCandidates = useMemo(() => {
-    const normalized = orgQuery.trim().toLowerCase();
-    return orgUnits
-      .filter((item) => !isDecorativeOrgName(item.name))
-      .filter((item) => {
-        if (!normalized) {
-          return true;
-        }
-        return item.name.toLowerCase().includes(normalized);
-      })
-      .sort((left, right) => left.name.localeCompare(right.name));
-  }, [orgQuery, orgUnits]);
   const candidatePagination = useMemo(
     () =>
       buildPeopleDirectoryPagination({
@@ -760,35 +618,20 @@ function UsageTargetsDialog({
   );
 
   useEffect(() => {
-    if (!open) {
-      return;
-    }
+    if (!open) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
     setQuery('');
-    setOrgQuery('');
     setCandidatePage(1);
-    setCandidateTotal(0);
-    setCandidates([]);
     void getAdminUsageTargets(token)
       .then((targets) => {
-        if (cancelled) {
-          return;
-        }
+        if (cancelled) return;
         setSelectedUsersById(
           Object.fromEntries(
             targets.users.map((item) => [
               item.user_id,
               usageTargetUserSelectionFromItem(item),
-            ]),
-          ),
-        );
-        setSelectedOrgsById(
-          Object.fromEntries(
-            targets.org_units.map((item) => [
-              item.org_unit_id,
-              usageTargetOrgSelectionFromItem(item),
             ]),
           ),
         );
@@ -805,9 +648,7 @@ function UsageTargetsDialog({
         }
       })
       .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
@@ -815,15 +656,7 @@ function UsageTargetsDialog({
   }, [open, t, token]);
 
   useEffect(() => {
-    if (open) {
-      setCandidatePage(1);
-    }
-  }, [open, query]);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
+    if (!open) return;
     let cancelled = false;
     const timer = window.setTimeout(() => {
       setSearching(true);
@@ -851,9 +684,7 @@ function UsageTargetsDialog({
           }
         })
         .finally(() => {
-          if (!cancelled) {
-            setSearching(false);
-          }
+          if (!cancelled) setSearching(false);
         });
     }, 250);
     return () => {
@@ -862,62 +693,13 @@ function UsageTargetsDialog({
     };
   }, [candidatePage, open, query, t, token]);
 
-  const addUser = (user: AuthUser) => {
-    setSelectedUsersById((current) => ({
-      ...current,
-      [user.id]: usageExcludedSelectionFromUser(user),
-    }));
-  };
-  const removeUser = (userId: string) => {
-    setSelectedUsersById((current) => {
-      const next = { ...current };
-      delete next[userId];
-      return next;
-    });
-  };
-  const toggleOrg = (orgUnit: OrgUnitItem) => {
-    setSelectedOrgsById((current) => {
-      const next = { ...current };
-      if (next[orgUnit.id]) {
-        delete next[orgUnit.id];
-      } else {
-        next[orgUnit.id] = usageTargetOrgSelectionFromOrgUnit(orgUnit);
-      }
-      return next;
-    });
-  };
-  const removeOrg = (orgUnitId: string) => {
-    setSelectedOrgsById((current) => {
-      const next = { ...current };
-      delete next[orgUnitId];
-      return next;
-    });
-  };
-
   const save = async () => {
     setSaving(true);
     setError(null);
     try {
       const response = await replaceAdminUsageTargets(token, {
         user_ids: selectedUsers.map((item) => item.user_id),
-        org_unit_ids: selectedOrgs.map((item) => item.org_unit_id),
       });
-      setSelectedUsersById(
-        Object.fromEntries(
-          response.users.map((item) => [
-            item.user_id,
-            usageTargetUserSelectionFromItem(item),
-          ]),
-        ),
-      );
-      setSelectedOrgsById(
-        Object.fromEntries(
-          response.org_units.map((item) => [
-            item.org_unit_id,
-            usageTargetOrgSelectionFromItem(item),
-          ]),
-        ),
-      );
       setResolvedUserCount(response.resolved_user_count);
       onSaved();
       onOpenChange(false);
@@ -935,13 +717,6 @@ function UsageTargetsDialog({
 
   return (
     <Dialog
-      closeLabel={t('common:actions.close')}
-      description={t('admin.console.usage.targets.description')}
-      dismissOnInteractOutside={false}
-      maxWidth="max-w-[1180px] h-[min(760px,calc(100vh-2rem))]"
-      onOpenChange={onOpenChange}
-      open={open}
-      title={t('admin.console.usage.targets.title')}
       actions={
         <>
           <Button
@@ -958,6 +733,13 @@ function UsageTargetsDialog({
           </Button>
         </>
       }
+      closeLabel={t('common:actions.close')}
+      description={t('admin.console.usage.targets.description')}
+      dismissOnInteractOutside={false}
+      maxWidth="max-w-[920px] h-[min(720px,calc(100vh-2rem))]"
+      onOpenChange={onOpenChange}
+      open={open}
+      title={t('admin.console.usage.targets.title')}
     >
       <div className="flex h-full min-h-0 flex-col gap-4">
         {error ? <InlineNotice tone="danger">{error}</InlineNotice> : null}
@@ -966,56 +748,7 @@ function UsageTargetsDialog({
             count: resolvedUserCount,
           })}
         </div>
-        <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-3">
-          <section className="flex min-h-0 flex-col rounded-md border border-app-border">
-            <div className="shrink-0 border-b border-app-border px-4 py-3">
-              <h3 className="app-text-control text-app-ink">
-                {t('admin.console.usage.targets.orgUnits')}
-              </h3>
-            </div>
-            <label className="m-3 mb-0 flex items-center gap-2 rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2">
-              <Search size={14} className="shrink-0 text-app-ink/50" />
-              <input
-                className="app-text-body-sm min-w-0 flex-1 bg-transparent text-app-ink outline-none placeholder:text-app-ink/40"
-                onChange={(event) => setOrgQuery(event.target.value)}
-                placeholder={t(
-                  'admin.console.usage.targets.orgSearchPlaceholder',
-                )}
-                value={orgQuery}
-              />
-            </label>
-            <div className="min-h-0 flex-1 overflow-y-auto p-3">
-              {orgCandidates.length === 0 ? (
-                <div className="app-text-body-sm rounded-md border border-dashed border-app-border px-3 py-8 text-center text-app-ink/55">
-                  {t('admin.console.usage.targets.noOrgResults')}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {orgCandidates.map((orgUnit) => {
-                    const selected = Boolean(selectedOrgsById[orgUnit.id]);
-                    return (
-                      <label
-                        className="flex items-center gap-2 rounded-md border border-app-border bg-app-bg px-2 py-1.5 text-[12px] text-app-ink"
-                        key={orgUnit.id}
-                      >
-                        <input
-                          checked={selected}
-                          className="h-3.5 w-3.5 accent-app-accent"
-                          onChange={() => toggleOrg(orgUnit)}
-                          type="checkbox"
-                        />
-                        <span className="min-w-0 flex-1 truncate font-semibold">
-                          {orgUnit.name}
-                        </span>
-                        <OrgSourceBadge sourceType={orgUnit.source_type} />
-                      </label>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </section>
-
+        <div className="grid min-h-0 flex-1 gap-4 md:grid-cols-2">
           <section className="flex min-h-0 flex-col rounded-md border border-app-border">
             <div className="shrink-0 border-b border-app-border px-4 py-3">
               <h3 className="app-text-control text-app-ink">
@@ -1023,63 +756,67 @@ function UsageTargetsDialog({
               </h3>
             </div>
             <label className="m-3 mb-0 flex items-center gap-2 rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2">
-              <Search size={14} className="shrink-0 text-app-ink/50" />
+              <Search className="shrink-0 text-app-ink/50" size={14} />
               <input
                 className="app-text-body-sm min-w-0 flex-1 bg-transparent text-app-ink outline-none placeholder:text-app-ink/40"
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setCandidatePage(1);
+                }}
                 placeholder={t(
                   'admin.console.usage.targets.userSearchPlaceholder',
                 )}
                 value={query}
               />
             </label>
-            <div className="min-h-0 flex-1 overflow-y-auto p-3">
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
               {loading || searching ? (
-                <div className="app-text-body-sm rounded-md border border-dashed border-app-border px-3 py-8 text-center text-app-ink/55">
+                <div className="app-text-body-sm py-8 text-center text-app-ink/55">
                   {t('admin.console.usage.targets.loading')}
                 </div>
               ) : candidates.length === 0 ? (
-                <div className="app-text-body-sm rounded-md border border-dashed border-app-border px-3 py-8 text-center text-app-ink/55">
+                <div className="app-text-body-sm py-8 text-center text-app-ink/55">
                   {t('admin.console.usage.targets.noSearchResults')}
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {candidates.map((candidate) => {
-                    const selected = Boolean(selectedUsersById[candidate.id]);
-                    return (
-                      <div
-                        className="flex items-center justify-between gap-2 rounded-md border border-app-border bg-app-bg px-2 py-1.5 text-[12px]"
-                        key={candidate.id}
-                      >
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate font-semibold text-app-ink">
-                            {candidate.full_name}
-                          </div>
-                          <div className="truncate text-app-ink/55">
-                            {candidate.email}
-                            {' · '}
-                            {candidate.primary_org_unit?.name ??
-                              t('admin.console.usage.noOrg')}
-                          </div>
+                candidates.map((candidate) => {
+                  const selected = Boolean(selectedUsersById[candidate.id]);
+                  return (
+                    <div
+                      className="flex items-center justify-between gap-2 rounded-md border border-app-border bg-app-bg px-2 py-1.5 text-[12px]"
+                      key={candidate.id}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-semibold text-app-ink">
+                          {candidate.full_name}
                         </div>
-                        <Button
-                          disabled={selected}
-                          onClick={() => addUser(candidate)}
-                          size="dense"
-                          variant="secondary"
-                        >
-                          <Plus size={14} />
-                          {selected
-                            ? t('admin.console.usage.targets.added')
-                            : t('admin.console.usage.targets.add')}
-                        </Button>
+                        <div className="truncate text-app-ink/55">
+                          {candidate.email}
+                        </div>
                       </div>
-                    );
-                  })}
-                </div>
+                      <Button
+                        disabled={selected}
+                        onClick={() =>
+                          setSelectedUsersById((current) => ({
+                            ...current,
+                            [candidate.id]:
+                              usageExcludedSelectionFromUser(candidate),
+                          }))
+                        }
+                        size="dense"
+                        variant="secondary"
+                      >
+                        <Plus size={14} />
+                        {selected
+                          ? t('admin.console.usage.targets.added')
+                          : t('admin.console.usage.targets.add')}
+                      </Button>
+                    </div>
+                  );
+                })
               )}
             </div>
-            <div className="flex shrink-0 items-center justify-between gap-2 border-t border-app-border px-3 py-2">
+            <div className="flex shrink-0 items-center justify-between border-t border-app-border px-3 py-2">
               <span className="app-text-caption text-app-ink/55">
                 {candidatePagination.rangeText}
               </span>
@@ -1094,9 +831,6 @@ function UsageTargetsDialog({
                 >
                   {t('admin.shared.pagination.previous')}
                 </Button>
-                <span className="app-text-caption px-2 text-app-ink/55">
-                  {candidatePagination.page} / {candidatePagination.totalPages}
-                </span>
                 <Button
                   disabled={candidatePagination.nextDisabled}
                   onClick={() => setCandidatePage((current) => current + 1)}
@@ -1108,82 +842,51 @@ function UsageTargetsDialog({
               </div>
             </div>
           </section>
-
           <section className="flex min-h-0 flex-col rounded-md border border-app-border">
-            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-app-border px-4 py-3">
+            <div className="flex items-center justify-between border-b border-app-border px-4 py-3">
               <h3 className="app-text-control text-app-ink">
-                {t('admin.console.usage.targets.selectedTitle')}
+                {t('admin.console.usage.targets.selectedUsers')}
               </h3>
               <span className="app-text-caption text-app-ink/55">
-                {t('admin.console.usage.targets.selectedCount', {
-                  count: selectedOrgs.length + selectedUsers.length,
-                })}
+                {selectedUsers.length}
               </span>
             </div>
-            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-3">
-              <div className="space-y-2">
-                <h4 className="app-text-overline text-app-ink/55">
-                  {t('admin.console.usage.targets.selectedOrgUnits')}
-                </h4>
-                {selectedOrgs.length === 0 ? (
-                  <div className="app-text-body-sm rounded-md border border-dashed border-app-border px-3 py-5 text-center text-app-ink/55">
-                    {t('admin.console.usage.targets.noSelectedOrgUnits')}
-                  </div>
-                ) : (
-                  selectedOrgs.map((item) => (
-                    <div
-                      className="flex items-center justify-between gap-2 rounded-md border border-app-border bg-app-bg px-2 py-1.5 text-[12px]"
-                      key={item.org_unit_id}
-                    >
-                      <span className="min-w-0 flex-1 truncate font-semibold text-app-ink">
-                        {item.name}
-                      </span>
-                      <Button
-                        onClick={() => removeOrg(item.org_unit_id)}
-                        size="dense"
-                        variant="ghost"
-                      >
-                        <Trash2 size={14} />
-                        {t('admin.console.usage.targets.remove')}
-                      </Button>
-                    </div>
-                  ))
-                )}
-              </div>
-              <div className="space-y-2">
-                <h4 className="app-text-overline text-app-ink/55">
-                  {t('admin.console.usage.targets.selectedUsers')}
-                </h4>
-                {selectedUsers.length === 0 ? (
-                  <div className="app-text-body-sm rounded-md border border-dashed border-app-border px-3 py-5 text-center text-app-ink/55">
-                    {t('admin.console.usage.targets.noSelectedUsers')}
-                  </div>
-                ) : (
-                  selectedUsers.map((item) => (
-                    <div
-                      className="flex items-center justify-between gap-2 rounded-md border border-app-border bg-app-bg px-2 py-1.5 text-[12px]"
-                      key={item.user_id}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate font-semibold text-app-ink">
-                          {item.full_name}
-                        </div>
-                        <div className="truncate text-app-ink/55">
-                          {item.email}
-                        </div>
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+              {selectedUsers.length === 0 ? (
+                <div className="app-text-body-sm py-8 text-center text-app-ink/55">
+                  {t('admin.console.usage.targets.noSelectedUsers')}
+                </div>
+              ) : (
+                selectedUsers.map((item) => (
+                  <div
+                    className="flex items-center justify-between gap-2 rounded-md border border-app-border bg-app-bg px-2 py-1.5 text-[12px]"
+                    key={item.user_id}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-semibold text-app-ink">
+                        {item.full_name}
                       </div>
-                      <Button
-                        onClick={() => removeUser(item.user_id)}
-                        size="dense"
-                        variant="ghost"
-                      >
-                        <Trash2 size={14} />
-                        {t('admin.console.usage.targets.remove')}
-                      </Button>
+                      <div className="truncate text-app-ink/55">
+                        {item.email}
+                      </div>
                     </div>
-                  ))
-                )}
-              </div>
+                    <Button
+                      onClick={() =>
+                        setSelectedUsersById((current) => {
+                          const next = { ...current };
+                          delete next[item.user_id];
+                          return next;
+                        })
+                      }
+                      size="dense"
+                      variant="ghost"
+                    >
+                      <Trash2 size={14} />
+                      {t('admin.console.usage.targets.remove')}
+                    </Button>
+                  </div>
+                ))
+              )}
             </div>
           </section>
         </div>
@@ -1191,6 +894,7 @@ function UsageTargetsDialog({
     </Dialog>
   );
 }
+
 
 function UsageExcludedUsersDialog({
   onOpenChange,
@@ -1439,16 +1143,12 @@ function UsageExcludedUsersDialog({
                         className="flex items-center justify-between gap-2 rounded-md border border-app-border bg-app-bg px-2 py-1.5 text-[12px]"
                         key={candidate.id}
                       >
-                        <div className="grid min-w-0 flex-1 grid-cols-[7.5rem_minmax(0,1fr)_5.5rem] items-center gap-2">
+                        <div className="grid min-w-0 flex-1 grid-cols-[7.5rem_minmax(0,1fr)] items-center gap-2">
                           <span className="truncate font-semibold text-app-ink">
                             {candidate.full_name}
                           </span>
                           <span className="min-w-0 truncate text-app-ink/55">
                             {candidate.email}
-                          </span>
-                          <span className="truncate text-app-ink/55">
-                            {candidate.primary_org_unit?.name ??
-                              t('admin.console.usage.noOrg')}
                           </span>
                         </div>
                         <Button
@@ -1521,15 +1221,12 @@ function UsageExcludedUsersDialog({
                       className="flex items-center justify-between gap-2 rounded-md border border-app-border bg-app-bg px-2 py-1.5 text-[12px]"
                       key={item.user_id}
                     >
-                      <div className="grid min-w-0 flex-1 grid-cols-[7.5rem_minmax(0,1fr)_5.5rem] items-center gap-2">
+                      <div className="grid min-w-0 flex-1 grid-cols-[7.5rem_minmax(0,1fr)] items-center gap-2">
                         <span className="truncate font-semibold text-app-ink">
                           {item.full_name}
                         </span>
                         <span className="min-w-0 truncate text-app-ink/55">
                           {item.email}
-                        </span>
-                        <span className="truncate text-app-ink/55">
-                          {item.org_unit_name ?? t('admin.console.usage.noOrg')}
                         </span>
                       </div>
                       <Button
@@ -1684,287 +1381,104 @@ function UsageUserAuditDialog({
     </Dialog>
   );
 }
-
 function UsageUsersTab({
   dashboard,
   dashboardLoading,
   dateRange,
-  excludedUserIds,
-  includeDescendants,
-  includeInactiveOrgUnits,
   locale,
-  onError,
-  onIncludeDescendantsChange,
-  onIncludeInactiveOrgUnitsChange,
-  onSelectOrgUnit,
-  orgUnits,
-  reloadKey,
-  selectedOrgUnitId,
   timeZone,
   token,
 }: {
   dashboard: AdminUsageDashboard | null;
   dashboardLoading: boolean;
   dateRange: UsageDateRange;
-  excludedUserIds: Set<string>;
-  includeDescendants: boolean;
-  includeInactiveOrgUnits: boolean;
   locale: string;
-  onError: (message: string) => void;
-  onIncludeDescendantsChange: (includeDescendants: boolean) => void;
-  onIncludeInactiveOrgUnitsChange: (includeInactiveOrgUnits: boolean) => void;
-  onSelectOrgUnit: (orgUnitId: string) => void;
-  orgUnits: readonly OrgUnitItem[];
-  reloadKey: number;
-  selectedOrgUnitId: string;
   timeZone: string;
   token: string;
 }) {
   const { t } = useTranslation('apps');
-  const [directoryUsers, setDirectoryUsers] = useState<AuthUser[]>([]);
-  const [directoryTotal, setDirectoryTotal] = useState(0);
-  const [directoryLoading, setDirectoryLoading] = useState(false);
   const [auditUser, setAuditUser] = useState<UsageUserListRow | null>(null);
-
-  const usageByUserId = useMemo(() => {
-    const items = new Map<string, UsageUserItem>();
-    for (const item of dashboard?.users ?? []) {
-      items.set(item.user_id, item);
-    }
-    return items;
-  }, [dashboard]);
-
-  useEffect(() => {
-    if (!selectedOrgUnitId) {
-      setDirectoryUsers([]);
-      setDirectoryTotal(0);
-      setDirectoryLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    setDirectoryLoading(true);
-    void collectAdminUsageDirectoryUsers({
-      includeDescendants,
-      orgUnitId: selectedOrgUnitId,
-      token,
-    })
-      .then((response) => {
-        if (!cancelled) {
-          setDirectoryUsers(response.items);
-          setDirectoryTotal(response.total);
-        }
-      })
-      .catch((caughtError) => {
-        if (!cancelled) {
-          setDirectoryUsers([]);
-          setDirectoryTotal(0);
-          onError(
-            getErrorMessage(
-              caughtError,
-              t('admin.console.usage.userListLoadFailed'),
-            ),
-          );
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setDirectoryLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [includeDescendants, onError, reloadKey, selectedOrgUnitId, t, token]);
-
-  const rows = useMemo<UsageUserListRow[]>(() => {
-    if (!dashboard) {
-      return [];
-    }
-    if (!selectedOrgUnitId) {
-      return dashboard.users.map(usageUserRowFromUsage);
-    }
-
-    return directoryUsers
-      .filter((item) => !excludedUserIds.has(item.id))
-      .map((item) => usageUserRowFromUser(item, usageByUserId.get(item.id)))
-      .sort((left, right) => {
-        const scoreDelta = right.activity_score - left.activity_score;
-        if (scoreDelta !== 0) {
-          return scoreDelta;
-        }
-        return left.full_name.localeCompare(right.full_name);
-      });
-  }, [
-    dashboard,
-    directoryUsers,
-    excludedUserIds,
-    selectedOrgUnitId,
-    usageByUserId,
-  ]);
-
-  const loading = dashboardLoading || directoryLoading;
+  const rows = useMemo(
+    () => (dashboard?.users ?? []).map(usageUserRowFromUsage),
+    [dashboard],
+  );
 
   return (
-    <div className="grid items-start gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
-      <OrgTreePanel
-        includeDescendants={includeDescendants}
-        includeInactiveOrgUnits={includeInactiveOrgUnits}
-        onIncludeDescendantsChange={onIncludeDescendantsChange}
-        onIncludeInactiveOrgUnitsChange={onIncludeInactiveOrgUnitsChange}
-        onSelectOrgUnit={onSelectOrgUnit}
-        orgUnits={orgUnits}
-        selectedOrgUnitId={selectedOrgUnitId}
-        totalUsers={dashboard?.totals.user_count ?? 0}
-      />
-
-      <div className="flex h-[calc(100vh-210px)] min-h-[520px] min-w-0 flex-col overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-2 py-2">
-          <div className="app-text-control text-app-ink">
-            {t('admin.console.usage.usersTabCount', {
-              count: selectedOrgUnitId
-                ? rows.length
-                : (dashboard?.users.length ?? 0),
-            })}
-          </div>
-          {selectedOrgUnitId ? (
-            <div className="app-text-caption text-app-ink/55">
-              {t('admin.console.usage.usersTabDirectoryCount', {
-                count: directoryTotal,
-              })}
-            </div>
-          ) : null}
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-auto border-t border-app-border">
-          <table className="app-text-body-sm w-full min-w-[1120px] table-fixed border-collapse">
-            <thead>
-              <tr className="sticky top-0 z-10 bg-app-surface-sidebar">
-                <HeadCell className="w-[240px]" dense>
-                  {t('admin.console.usage.columns.user')}
-                </HeadCell>
-                <HeadCell className="w-[92px]" dense>
-                  {t('admin.console.usage.columns.logins')}
-                </HeadCell>
-                <HeadCell className="w-[120px]" dense>
-                  {t('admin.console.usage.columns.content')}
-                </HeadCell>
-                <HeadCell className="w-[120px]" dense>
-                  {t('admin.console.usage.columns.owned')}
-                </HeadCell>
-                <HeadCell className="w-[140px]" dense>
-                  {t('admin.console.usage.columns.consumption')}
-                </HeadCell>
-                <HeadCell className="w-[140px]" dense>
-                  {t('admin.console.usage.columns.llm')}
-                </HeadCell>
-                <HeadCell className="w-[150px]" dense>
-                  {t('admin.console.usage.columns.lastLogin')}
-                </HeadCell>
-                <HeadCell className="w-[100px] text-right" dense>
-                  {t('admin.console.usage.columns.actions')}
-                </HeadCell>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && rows.length === 0 ? (
-                <EmptyRow
-                  colSpan={8}
-                  description={t('admin.console.usage.loading')}
-                  title={t('admin.console.usage.usersLoadingTitle')}
-                />
-              ) : rows.length === 0 ? (
-                <EmptyRow
-                  colSpan={8}
-                  description={t('admin.console.usage.usersEmptyDescription')}
-                  title={t('admin.console.usage.usersEmptyTitle')}
-                />
-              ) : (
-                rows.map((item) => (
-                  <tr
-                    className="transition-colors hover:bg-app-surface-hover/40"
-                    key={item.user_id}
-                  >
-                    <BodyCell dense>
-                      <div className="min-w-0">
-                        <div className="truncate font-medium text-app-ink">
-                          {item.full_name}
-                        </div>
-                        <div className="truncate text-app-ink/55">
-                          {item.email}
-                        </div>
-                        <div className="truncate text-app-ink/55">
-                          {item.org_unit_name ?? t('admin.console.usage.noOrg')}
-                        </div>
-                      </div>
-                    </BodyCell>
-                    <BodyCell dense>
-                      {formatUsageNumber(item.login_count, locale)}
-                    </BodyCell>
-                    <BodyCell dense>
-                      {formatUsageNumber(usageContentCreated(item), locale)}
-                    </BodyCell>
-                    <BodyCell dense>
-                      {formatUsageNumber(usageContentOwned(item), locale)}
-                    </BodyCell>
-                    <BodyCell dense>
-                      <div>
-                        {formatUsageNumber(item.content_view_count, locale)}
-                      </div>
-                      <div className="text-app-ink/55">
-                        {t('admin.console.usage.consumption.userDetail', {
-                          apps: formatUsageNumber(item.app_open_count, locale),
-                          searches: formatUsageNumber(
-                            item.search_query_count,
-                            locale,
-                          ),
-                        })}
-                      </div>
-                    </BodyCell>
-                    <BodyCell dense>
-                      <div>
-                        {formatUsageNumber(item.llm_call_count, locale)}
-                      </div>
-                      <div className="text-app-ink/55">
-                        {formatUsageNumber(item.llm_total_tokens, locale)}
-                      </div>
-                    </BodyCell>
-                    <BodyCell dense>
-                      {item.last_login_at
-                        ? formatDateTime(item.last_login_at, {
-                            dateStyle: 'medium',
-                            locale,
-                            timeStyle: 'short',
-                            timeZone,
-                          })
-                        : t('admin.console.usage.never')}
-                    </BodyCell>
-                    <BodyCell className="text-right" dense>
-                      <Button
-                        onClick={() => setAuditUser(item)}
-                        size="dense"
-                        variant="secondary"
-                      >
-                        <FileSearch size={14} />
-                        {t('admin.console.usage.userDetail')}
-                      </Button>
-                    </BodyCell>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+    <div className="flex h-[calc(100vh-210px)] min-h-[520px] min-w-0 flex-col overflow-hidden">
+      <div className="app-text-control py-2 text-app-ink">
+        {t('admin.console.usage.usersTabCount', { count: rows.length })}
       </div>
-
+      <div className="min-h-0 flex-1 overflow-auto border-t border-app-border">
+        <table className="app-text-body-sm w-full min-w-[1120px] table-fixed border-collapse">
+          <thead>
+            <tr className="sticky top-0 z-10 bg-app-surface-sidebar">
+              <HeadCell className="w-[240px]" dense>{t('admin.console.usage.columns.user')}</HeadCell>
+              <HeadCell className="w-[92px]" dense>{t('admin.console.usage.columns.logins')}</HeadCell>
+              <HeadCell className="w-[120px]" dense>{t('admin.console.usage.columns.content')}</HeadCell>
+              <HeadCell className="w-[120px]" dense>{t('admin.console.usage.columns.owned')}</HeadCell>
+              <HeadCell className="w-[140px]" dense>{t('admin.console.usage.columns.consumption')}</HeadCell>
+              <HeadCell className="w-[140px]" dense>{t('admin.console.usage.columns.llm')}</HeadCell>
+              <HeadCell className="w-[150px]" dense>{t('admin.console.usage.columns.lastLogin')}</HeadCell>
+              <HeadCell className="w-[100px] text-right" dense>{t('admin.console.usage.columns.actions')}</HeadCell>
+            </tr>
+          </thead>
+          <tbody>
+            {dashboardLoading && rows.length === 0 ? (
+              <EmptyRow colSpan={8} description={t('admin.console.usage.loading')} title={t('admin.console.usage.usersLoadingTitle')} />
+            ) : rows.length === 0 ? (
+              <EmptyRow colSpan={8} description={t('admin.console.usage.usersEmptyDescription')} title={t('admin.console.usage.usersEmptyTitle')} />
+            ) : (
+              rows.map((item) => (
+                <tr className="transition-colors hover:bg-app-surface-hover/40" key={item.user_id}>
+                  <BodyCell dense>
+                    <div className="min-w-0">
+                      <div className="truncate font-medium text-app-ink">{item.full_name}</div>
+                      <div className="truncate text-app-ink/55">{item.email}</div>
+                    </div>
+                  </BodyCell>
+                  <BodyCell dense>{formatUsageNumber(item.login_count, locale)}</BodyCell>
+                  <BodyCell dense>{formatUsageNumber(usageContentCreated(item), locale)}</BodyCell>
+                  <BodyCell dense>{formatUsageNumber(usageContentOwned(item), locale)}</BodyCell>
+                  <BodyCell dense>
+                    <div>{formatUsageNumber(item.content_view_count, locale)}</div>
+                    <div className="text-app-ink/55">
+                      {t('admin.console.usage.consumption.userDetail', {
+                        apps: formatUsageNumber(item.app_open_count, locale),
+                        searches: formatUsageNumber(item.search_query_count, locale),
+                      })}
+                    </div>
+                  </BodyCell>
+                  <BodyCell dense>
+                    <div>{formatUsageNumber(item.llm_call_count, locale)}</div>
+                    <div className="text-app-ink/55">{formatUsageNumber(item.llm_total_tokens, locale)}</div>
+                  </BodyCell>
+                  <BodyCell dense>
+                    {item.last_login_at
+                      ? formatDateTime(item.last_login_at, {
+                          dateStyle: 'medium',
+                          locale,
+                          timeStyle: 'short',
+                          timeZone,
+                        })
+                      : t('admin.console.usage.never')}
+                  </BodyCell>
+                  <BodyCell className="text-right" dense>
+                    <Button onClick={() => setAuditUser(item)} size="dense" variant="secondary">
+                      <FileSearch size={14} />
+                      {t('admin.console.usage.userDetail')}
+                    </Button>
+                  </BodyCell>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
       <UsageUserAuditDialog
         dateRange={dateRange}
         locale={locale}
         onOpenChange={(open) => {
-          if (!open) {
-            setAuditUser(null);
-          }
+          if (!open) setAuditUser(null);
         }}
         open={Boolean(auditUser)}
         timeZone={timeZone}
@@ -1974,6 +1488,7 @@ function UsageUsersTab({
     </div>
   );
 }
+
 
 export function UsageSection({ token }: { token: string }) {
   const { t, i18n } = useTranslation('apps');
@@ -1991,8 +1506,7 @@ export function UsageSection({ token }: { token: string }) {
   const [draftDateRange, setDraftDateRange] = useState<UsageDateRange>(() =>
     buildUsageDateRangePreset(DEFAULT_USAGE_PERIOD_PRESET, todayDate),
   );
-  const [rankingMode, setRankingMode] =
-    useState<UsageRankingMode>('department');
+  const [rankingMode, setRankingMode] = useState<UsageRankingMode>('feature');
   const [dashboard, setDashboard] = useState<AdminUsageDashboard | null>(null);
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [auditItems, setAuditItems] = useState<AuditLogItem[]>([]);
@@ -2003,14 +1517,6 @@ export function UsageSection({ token }: { token: string }) {
   const [auditAction, setAuditAction] = useState('');
   const [appliedAuditSearch, setAppliedAuditSearch] = useState('');
   const [appliedAuditAction, setAppliedAuditAction] = useState('');
-  const [orgUnits, setOrgUnits] = useState<OrgUnitItem[]>([]);
-  const [selectedOrgUnitId, setSelectedOrgUnitId] = useState('');
-  const [includeDescendants, setIncludeDescendants] = useState(true);
-  const [includeInactiveOrgUnits, setIncludeInactiveOrgUnits] = useState(false);
-  const [excludedUserIds, setExcludedUserIds] = useState<Set<string>>(
-    () => new Set(),
-  );
-  const [usageUsersReloadKey, setUsageUsersReloadKey] = useState(0);
   const [targetsOpen, setTargetsOpen] = useState(false);
   const [exclusionsOpen, setExclusionsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -2038,49 +1544,6 @@ export function UsageSection({ token }: { token: string }) {
       setDashboardLoading(false);
     }
   }, [dateRange.fromDate, dateRange.toDate, t, token]);
-
-  const loadUsageExcludedUserIds = useCallback(async () => {
-    try {
-      const response = await listAdminUsageExcludedUsers(token);
-      setExcludedUserIds(new Set(response.map((item) => item.user_id)));
-    } catch (caughtError) {
-      setError(
-        getErrorMessage(
-          caughtError,
-          t('admin.console.usage.exclusions.loadFailed'),
-        ),
-      );
-    }
-  }, [t, token]);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function loadOrgUnits() {
-      try {
-        const response = await listOrgUnits(token, {
-          includeInactive: includeInactiveOrgUnits,
-        });
-        if (!cancelled) {
-          setOrgUnits(response);
-        }
-      } catch (caughtError) {
-        if (!cancelled) {
-          setError(
-            getErrorMessage(
-              caughtError,
-              t('admin.console.people.directoryLoadFailed'),
-            ),
-          );
-        }
-      }
-    }
-
-    void loadOrgUnits();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [includeInactiveOrgUnits, t, token]);
 
   const loadAuditItems = useCallback(async () => {
     setAuditLoading(true);
@@ -2120,10 +1583,6 @@ export function UsageSection({ token }: { token: string }) {
   useEffect(() => {
     void loadAuditItems();
   }, [loadAuditItems]);
-
-  useEffect(() => {
-    void loadUsageExcludedUserIds();
-  }, [loadUsageExcludedUserIds]);
 
   const totals = dashboard?.totals;
   const endDateActiveUserCount =
@@ -2172,9 +1631,9 @@ export function UsageSection({ token }: { token: string }) {
   const usageRankingItems = useMemo(
     () =>
       dashboard
-        ? buildUsageRankingItems(dashboard, rankingMode, usageByApp, t)
+        ? buildUsageRankingItems(dashboard, rankingMode, usageByApp)
         : [],
-    [dashboard, rankingMode, t, usageByApp],
+    [dashboard, rankingMode, usageByApp],
   );
   const usageRankingChart = useMemo(
     () => buildUsageRankingChart(usageRankingItems, rankingMode, t),
@@ -2199,7 +1658,6 @@ export function UsageSection({ token }: { token: string }) {
       });
   const targetScopeDetail = dashboard?.target_scope.configured
     ? t('admin.console.usage.metrics.targetScopeConfigured', {
-        orgs: formatUsageNumber(dashboard.target_scope.org_unit_count, locale),
         users: formatUsageNumber(
           dashboard.target_scope.explicit_user_count,
           locale,
@@ -2244,7 +1702,6 @@ export function UsageSection({ token }: { token: string }) {
     ? totals.app_open_count +
       totals.search_query_count +
       totals.docs_view_count +
-      totals.news_article_view_count +
       totals.whiteboards_view_count
     : 0;
   const contentConsumptionItems: UsageVisualItem[] = totals
@@ -2266,12 +1723,6 @@ export function UsageSection({ token }: { token: string }) {
           label: t('admin.console.usage.consumption.docs'),
           value: totals.docs_view_count,
           help: t('admin.console.usage.help.consumption.docs'),
-        },
-        {
-          key: 'news',
-          label: t('admin.console.usage.consumption.news'),
-          value: totals.news_article_view_count,
-          help: t('admin.console.usage.help.consumption.news'),
         },
         {
           key: 'whiteboards',
@@ -2478,9 +1929,6 @@ export function UsageSection({ token }: { token: string }) {
                 return;
               }
               void loadDashboard();
-              if (tab === 'users') {
-                setUsageUsersReloadKey((current) => current + 1);
-              }
             }}
             variant="secondary"
           >
@@ -2648,7 +2096,7 @@ export function UsageSection({ token }: { token: string }) {
                     role="group"
                   >
                     {(
-                      ['department', 'feature', 'tokens'] as UsageRankingMode[]
+                      ['feature', 'tokens'] as UsageRankingMode[]
                     ).map((mode) => (
                       <Button
                         key={mode}
@@ -2936,17 +2384,7 @@ export function UsageSection({ token }: { token: string }) {
           dashboard={dashboard}
           dashboardLoading={dashboardLoading}
           dateRange={dateRange}
-          excludedUserIds={excludedUserIds}
-          includeDescendants={includeDescendants}
-          includeInactiveOrgUnits={includeInactiveOrgUnits}
           locale={locale}
-          onError={setError}
-          onIncludeDescendantsChange={setIncludeDescendants}
-          onIncludeInactiveOrgUnitsChange={setIncludeInactiveOrgUnits}
-          onSelectOrgUnit={setSelectedOrgUnitId}
-          orgUnits={orgUnits}
-          reloadKey={usageUsersReloadKey}
-          selectedOrgUnitId={selectedOrgUnitId}
           timeZone={timeZone}
           token={token}
         />
@@ -3012,18 +2450,14 @@ export function UsageSection({ token }: { token: string }) {
         onOpenChange={setTargetsOpen}
         onSaved={() => {
           void loadDashboard();
-          setUsageUsersReloadKey((current) => current + 1);
         }}
         open={targetsOpen}
-        orgUnits={orgUnits}
         token={token}
       />
       <UsageExcludedUsersDialog
         onOpenChange={setExclusionsOpen}
         onSaved={() => {
           void loadDashboard();
-          void loadUsageExcludedUserIds();
-          setUsageUsersReloadKey((current) => current + 1);
         }}
         open={exclusionsOpen}
         token={token}

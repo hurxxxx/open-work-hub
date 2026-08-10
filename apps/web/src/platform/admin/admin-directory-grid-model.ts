@@ -58,7 +58,6 @@ export interface PeopleDirectoryUserRow {
   id: string;
   name: string;
   email: string;
-  orgName: string;
   checkboxLabel: string;
   checked: boolean;
   disabled: boolean;
@@ -185,7 +184,6 @@ export function buildPeopleDirectoryUserRow({
     id: user.id,
     name,
     email: user.email,
-    orgName: user.primary_org_unit?.name ?? '-',
     checkboxLabel: name,
     checked: selection.users.has(user.id),
     disabled,

@@ -11,36 +11,36 @@ from sqlalchemy import delete, select
 
 from dev_accounts import create_workspace_user_session, dev_login
 
-from open_alm_api.core.db import get_session_factory
-from open_alm_api.core.settings import get_settings
-from open_alm_api.domains.auth.models import User, Workspace, WorkspaceUserBinding
-from open_alm_api.domains.files import (
+from open_work_hub_api.core.db import get_session_factory
+from open_work_hub_api.core.settings import get_settings
+from open_work_hub_api.domains.auth.models import User, Workspace, WorkspaceUserBinding
+from open_work_hub_api.domains.files import (
     rag_projection,
     rag_status,
     rag_sync,
     search_hooks,
     service as files_service,
 )
-from open_alm_api.domains.files.models import FileManagerFile, FileManagerStorageCleanupJob
-from open_alm_api.domains.files.rag_projection import FileExtractionArtifact
-from open_alm_api.domains.rag.models import RagSyncJob
-from open_alm_api.domains.rag.runtime import (
+from open_work_hub_api.domains.files.models import FileManagerFile, FileManagerStorageCleanupJob
+from open_work_hub_api.domains.files.rag_projection import FileExtractionArtifact
+from open_work_hub_api.domains.rag.models import RagSyncJob
+from open_work_hub_api.domains.rag.runtime import (
     PARTITIONED_RAG_GENERATION_SCHEMA_VERSION,
     resolve_partitioned_rag_collection_alias,
     resolve_partitioned_rag_collection_name,
 )
-from open_alm_api.domains.retrieval.models import (
+from open_work_hub_api.domains.retrieval.models import (
     RetrievalProjectionEvent,
     RetrievalProjectionGeneration,
 )
-from open_alm_api.domains.retrieval.projection_fencing import record_projection_event
-from open_alm_api.domains.search.models import SearchIndexJob
-from open_alm_api.domains.search.index_gateway import (
+from open_work_hub_api.domains.retrieval.projection_fencing import record_projection_event
+from open_work_hub_api.domains.search.models import SearchIndexJob
+from open_work_hub_api.domains.search.index_gateway import (
     RETRIEVAL_PARTITIONED_INDEX_SCHEMA_VERSION,
     keyword_search_partitioned_index_alias,
     keyword_search_partitioned_index_name,
 )
-from open_alm_api.domains.source_access.resource_types import FILE_MANAGER_FILE_RESOURCE_TYPE
+from open_work_hub_api.domains.source_access.resource_types import FILE_MANAGER_FILE_RESOURCE_TYPE
 
 
 def _auth_headers(token: str) -> dict[str, str]:
@@ -52,7 +52,7 @@ def _administrator_member_session(client: TestClient, login_id: str) -> dict:
         client,
         workspace_key="administrator",
         login_id=login_id,
-        email=f"{login_id}@open-alm.local",
+        email=f"{login_id}@open-work-hub.local",
         full_name="Administrator Workspace Member",
     )
 

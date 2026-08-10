@@ -73,7 +73,7 @@ test.describe('AI-friendly app boundary smoke', () => {
         path: '/w/hq/chatbot',
         assert: async (current) => {
           await expect(
-            current.getByRole('heading', { name: /아이두 챗봇|I-Do Chatbot/ }),
+            current.getByRole('heading', { name: /AI 어시스턴트 챗봇|AI Assistant Chatbot/ }),
           ).toBeVisible();
         },
       },
@@ -155,7 +155,7 @@ test.describe('AI-friendly app boundary smoke', () => {
             current.getByText(/Workspace Settings|워크스페이스 설정/),
           ).toBeVisible();
           await expect(
-            current.getByRole('heading', { level: 1, name: 'Open ALM HQ' }),
+            current.getByRole('heading', { level: 1, name: 'Open Work Hub HQ' }),
           ).toBeVisible();
         },
       },
@@ -163,7 +163,7 @@ test.describe('AI-friendly app boundary smoke', () => {
         path: '/tool/search?workspace=hq',
         assert: async (current) => {
           await expect(
-            current.getByRole('heading', { name: 'Open ALM 통합검색' }),
+            current.getByRole('heading', { name: 'Open Work Hub 통합검색' }),
           ).toBeVisible();
         },
       },
@@ -210,29 +210,6 @@ test.describe('AI-friendly app boundary smoke', () => {
     errors.expectClean();
   });
 
-  test('shows the business sites menu outside the desktop rail', async ({
-    page,
-  }) => {
-    await stubFullShell(page);
-    await page.setViewportSize({ width: 1280, height: 720 });
-    const errors = collectBrowserErrors(page);
-
-    await page.goto('/w/hq/home');
-    await page
-      .getByRole('button', { name: /Business site links|업무 사이트 링크/ })
-      .click();
-
-    const groupwareLink = page.getByRole('menuitem', {
-      name: /Groupware|Open ALM 그룹웨어/,
-    });
-    await expect(groupwareLink).toHaveAttribute(
-      'href',
-      'http://gw.example.com/index.aspx',
-    );
-    await expect(groupwareLink).toBeInViewport();
-    errors.expectClean();
-  });
-
   test('keeps legacy top-level app paths on NotFoundView', async ({ page }) => {
     await stubFullShell(page);
     const errors = collectBrowserErrors(page);
@@ -264,7 +241,7 @@ test.describe('AI-friendly app boundary smoke', () => {
     await expect(
       page.locator('main').getByRole('heading', { level: 1 }),
     ).toBeVisible();
-    await expect(page.getByRole('button', { name: /Open ALM HQ/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Open Work Hub HQ/ })).toBeVisible();
 
     errors.expectClean();
   });

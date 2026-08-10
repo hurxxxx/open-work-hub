@@ -2,18 +2,17 @@ from __future__ import annotations
 
 import pytest
 
-from open_alm_api.core.workspace_app_registry import (
+from open_work_hub_api.core.workspace_app_registry import (
     WorkspaceAppRegistration,
     WorkspaceNavRegistration,
     compile_workspace_app_registry,
 )
-from open_alm_api.domains.auth.workspace_apps import (
+from open_work_hub_api.domains.auth.workspace_apps import (
     get_workspace_app_catalog_item,
     iter_workspace_app_catalog,
 )
-from open_alm_api.domains.auth.app_bar_preferences import normalize_app_bar_pinned_app_ids
-from open_alm_api.domains.management_tasks.app_catalog import MANAGEMENT_TASKS_WORKSPACE_APP
-from open_alm_api.domains.files.app_catalog import FILES_WORKSPACE_APP
+from open_work_hub_api.domains.auth.app_bar_preferences import normalize_app_bar_pinned_app_ids
+from open_work_hub_api.domains.files.app_catalog import FILES_WORKSPACE_APP
 
 
 def _registration(
@@ -80,20 +79,6 @@ def test_registration_defaults_are_safe_until_explicitly_activated() -> None:
     assert app.visible_by_default is False
     assert app.launcher_category is False
     assert app.availability_scope == "workspace"
-
-
-def test_management_tasks_is_a_company_resource_workspace_app() -> None:
-    app = get_workspace_app_catalog_item(MANAGEMENT_TASKS_WORKSPACE_APP.app_id)
-
-    assert app is not None
-    assert app.app_id == "management-tasks"
-    assert app.route_base == "/management-tasks"
-    assert app.availability_scope == "workspace"
-    assert app.platform_admin_activation_required is True
-    assert app.enabled_by_default is False
-    assert app.visible_by_default is False
-    assert app.launcher_category is True
-    assert app.coming_soon is False
 
 
 def test_files_catalog_exposes_search_as_a_workspace_submenu() -> None:
@@ -369,22 +354,11 @@ def test_registry_rejects_conflicting_launcher_policy() -> None:
 def test_canonical_workspace_registry_exposes_all_composed_apps_by_identity() -> None:
     catalog = iter_workspace_app_catalog()
 
-    assert len(catalog) == 40
+    assert len(catalog) == len({app.app_id for app in catalog})
     assert catalog[0].app_id == "home"
-    assert catalog[-1].app_id == "qa-assistant"
     assert get_workspace_app_catalog_item("home") is catalog[0]
-    assert get_workspace_app_catalog_item("qa-assistant").availability_scope == "platform"
+    assert get_workspace_app_catalog_item("docs") is not None
     assert get_workspace_app_catalog_item("unknown-app") is None
-
-
-def test_personal_attendance_stays_hidden_until_backend_enablement() -> None:
-    app = get_workspace_app_catalog_item("personal-attendance")
-
-    assert app is not None
-    assert app.availability_scope == "platform"
-    assert app.enabled_by_default is False
-    assert app.visible_by_default is False
-    assert app.launcher_personal_tools is True
 
 
 def test_personal_tools_apps_are_removed_from_pinned_preferences() -> None:

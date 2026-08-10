@@ -19,21 +19,21 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 import uvicorn
 
-from open_alm_api.core import llm as llm_core
-from open_alm_api.core.db import get_engine
-from open_alm_api.core.llm_adapters import StreamChunk
-from open_alm_api.core.settings import get_settings
-from open_alm_api.domains.ai.model_credentials import encrypt_api_key
-from open_alm_api.domains.ai.model_settings_models import (
+from open_work_hub_api.core import llm as llm_core
+from open_work_hub_api.core.db import get_engine
+from open_work_hub_api.core.llm_adapters import StreamChunk
+from open_work_hub_api.core.settings import get_settings
+from open_work_hub_api.domains.ai.model_credentials import encrypt_api_key
+from open_work_hub_api.domains.ai.model_settings_models import (
     AiModelCatalogEntry,
     AiModelProviderConfig,
 )
-from open_alm_api.domains.ai.registry import get_ai_capability_registry
-from open_alm_api.domains.ai import agent as ai_agent
-from open_alm_api.domains.ai import approvals as ai_approvals
-from open_alm_api.domains.ai import router as ai_router
-from open_alm_api.domains.auth.models import AuditLog, User, Workspace
-from open_alm_api.domains.conversations.scope_registry import (
+from open_work_hub_api.domains.ai.registry import get_ai_capability_registry
+from open_work_hub_api.domains.ai import agent as ai_agent
+from open_work_hub_api.domains.ai import approvals as ai_approvals
+from open_work_hub_api.domains.ai import router as ai_router
+from open_work_hub_api.domains.auth.models import AuditLog, User, Workspace
+from open_work_hub_api.domains.conversations.scope_registry import (
     ConversationScopeArtifact,
     ConversationScopeTurnContext,
 )
@@ -416,14 +416,14 @@ def _chat_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [event for event in events if event.get("type") != "conversation_attached"]
 
 
-def _assert_open_alm_identity_system_message(messages: list[dict[str, Any]]) -> None:
+def _assert_open_work_hub_identity_system_message(messages: list[dict[str, Any]]) -> None:
     assert messages[0]["role"] == "system"
     system_prompt = messages[0]["content"]
-    assert "Open ALM의 업무용 챗봇 아이두(AI-Do)" in system_prompt
+    assert "Open Work Hub의 업무용 챗봇 AI 어시스턴트(Open Work Hub)" in system_prompt
     assert "Qwen, Tongyi, OpenAI" in system_prompt
 
 
-def test_chat_sync_injects_open_alm_identity_prompt_for_plain_business_chat(
+def test_chat_sync_injects_open_work_hub_identity_prompt_for_plain_business_chat(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
@@ -440,7 +440,7 @@ def test_chat_sync_injects_open_alm_identity_prompt_for_plain_business_chat(
         class _Msg:
             role = "assistant"
             reasoning_content = None
-            content = "저는 Open ALM의 업무용 챗봇 아이두(AI-Do)입니다."
+            content = "저는 Open Work Hub의 업무용 챗봇 AI 어시스턴트(Open Work Hub)입니다."
 
         class _Choice:
             finish_reason = "stop"
@@ -481,10 +481,10 @@ def test_chat_sync_injects_open_alm_identity_prompt_for_plain_business_chat(
     )
 
     assert response.status_code == 200
-    _assert_open_alm_identity_system_message(captured_messages)
+    _assert_open_work_hub_identity_system_message(captured_messages)
 
 
-def test_chat_stream_injects_open_alm_identity_prompt_for_plain_business_chat(
+def test_chat_stream_injects_open_work_hub_identity_prompt_for_plain_business_chat(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
@@ -515,7 +515,7 @@ def test_chat_stream_injects_open_alm_identity_prompt_for_plain_business_chat(
 
     assert status_code == 200
     assert any(event["type"] == "done" for event in _chat_events(events))
-    _assert_open_alm_identity_system_message(captured_messages)
+    _assert_open_work_hub_identity_system_message(captured_messages)
 
 
 def _find_free_port() -> int:
@@ -855,7 +855,7 @@ def test_chat_stream_requires_workspace_membership(client: TestClient) -> None:
     outsider = _create_user_with_workspaces(
         client,
         admin["token"],
-        email="stream-outsider@open-alm.local",
+        email="stream-outsider@open-work-hub.local",
         full_name="Stream Outsider",
         workspace_keys=[],
     )
@@ -2989,4 +2989,4 @@ def test_chat_stream_business_context_question_reaches_llm_call(
     assert pool_client.chat.completions.calls
     messages = _messages_in_first_call(pool_client)
     assert [message["role"] for message in messages] == ["system", "user"]
-    _assert_open_alm_identity_system_message(messages)
+    _assert_open_work_hub_identity_system_message(messages)

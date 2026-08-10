@@ -29,7 +29,7 @@ function workspace(overrides: Partial<Workspace>): Workspace {
   return {
     id: 'workspace-hq',
     slug: 'hq',
-    name: 'Open ALM HQ',
+    name: 'Open Work Hub HQ',
     role: 'owner',
     ...overrides,
   };
@@ -56,12 +56,12 @@ const APP_BAR_ITEMS: readonly AppBarItem[] = [
 
 const LAUNCHER_POLICY = {
   fixedAppIds: new Set(['home']),
-  pinnedByDefaultAppIds: ['pms', 'docs', 'whiteboard', 'qa-assistant'],
+  pinnedByDefaultAppIds: ['pms', 'docs', 'whiteboard'],
 } as const;
 
 const LAUNCHER_GLOBAL_PATHS: LauncherGlobalPaths = new Map([
   ['community', '/community'],
-  ['qa-assistant', '/qa-assistant'],
+  ['docs', '/docs'],
 ]);
 
 const APP_BAR_CATEGORIES: WorkspaceBootstrapAppBarCategory[] = [
@@ -74,16 +74,9 @@ const APP_BAR_CATEGORIES: WorkspaceBootstrapAppBarCategory[] = [
     items: [
       {
         app_id: 'chatbot',
-        title: '아이두 챗봇',
+        title: 'AI 어시스턴트 챗봇',
         route_base: '/chatbot',
         icon_key: 'chat',
-        enabled: true,
-      },
-      {
-        app_id: 'qa-assistant',
-        title: '사내 관리 QNA',
-        route_base: '/qa-assistant',
-        icon_key: 'message-square',
         enabled: true,
       },
       {
@@ -91,20 +84,6 @@ const APP_BAR_CATEGORIES: WorkspaceBootstrapAppBarCategory[] = [
         title: '웹 검색 봇',
         route_base: '/web-search',
         icon_key: 'globe-2',
-        enabled: true,
-      },
-      {
-        app_id: 'research-trends',
-        title: '논문·기술동향',
-        route_base: '/research-trends',
-        icon_key: 'book-open',
-        enabled: true,
-      },
-      {
-        app_id: 'standards-monitor',
-        title: '규격·법규 모니터링',
-        route_base: '/standards-monitor',
-        icon_key: 'scale',
         enabled: true,
       },
     ],
@@ -154,24 +133,17 @@ const APP_BAR_CATEGORIES: WorkspaceBootstrapAppBarCategory[] = [
     position: 2,
     items: [
       {
-        app_id: 'plm',
-        title: 'PLM',
-        route_base: '/plm',
-        icon_key: 'database',
+        app_id: 'workspace-tool',
+        title: 'Workspace Tool',
+        route_base: '/workspace-tool',
+        icon_key: 'wrench',
         enabled: true,
       },
       {
-        app_id: 'data-viz',
+        app_id: 'diagrams',
         title: '데이터 시각화',
-        route_base: '/data-viz',
+        route_base: '/diagrams',
         icon_key: 'bar-chart-3',
-        enabled: true,
-      },
-      {
-        app_id: 'legacy-issues',
-        title: '과거차문제점',
-        route_base: '/legacy-issues',
-        icon_key: 'history',
         enabled: true,
       },
     ],
@@ -181,7 +153,7 @@ const APP_BAR_CATEGORIES: WorkspaceBootstrapAppBarCategory[] = [
 describe('app-bar model', () => {
   it('projects workspace switcher options with query filtering and default normalization', () => {
     const workspaces = [
-      workspace({ id: 'workspace-hq', slug: 'hq', name: 'Open ALM HQ' }),
+      workspace({ id: 'workspace-hq', slug: 'hq', name: 'Open Work Hub HQ' }),
       workspace({ id: 'workspace-bravo', slug: 'bravo', name: 'Bravo Team' }),
       workspace({ id: 'workspace-alpha', slug: 'alpha', name: 'Alpha Team' }),
     ];
@@ -196,14 +168,14 @@ describe('app-bar model', () => {
     });
 
     expect(projection.currentWorkspace?.slug).toBe('hq');
-    expect(projection.currentWorkspaceName).toBe('Open ALM HQ');
+    expect(projection.currentWorkspaceName).toBe('Open Work Hub HQ');
     expect(projection.pinnedWorkspace).toBeNull();
     expect(projection.otherWorkspaces.map((item) => item.slug)).toEqual([
       'alpha',
       'bravo',
     ]);
     expect(projection.defaultWorkspaceOptions.map((item) => item.slug)).toEqual(
-      ['hq', 'alpha', 'bravo'],
+      ['alpha', 'bravo', 'hq'],
     );
     expect(projection.normalizedDefaultWorkspaceId).toBeNull();
   });
@@ -216,7 +188,7 @@ describe('app-bar model', () => {
       workspaceFallbackLabel: 'Workspace',
       workspaceQuery: 'hq',
       workspaces: [
-        workspace({ id: 'workspace-hq', slug: 'hq', name: 'Open ALM HQ' }),
+        workspace({ id: 'workspace-hq', slug: 'hq', name: 'Open Work Hub HQ' }),
         workspace({ id: 'workspace-other', slug: 'other', name: 'Other' }),
       ],
     });
@@ -229,7 +201,7 @@ describe('app-bar model', () => {
     const visibleItems = buildVisibleAppBarItems(
       [
         app({ app_id: 'home', title: 'Home' }),
-        app({ app_id: 'plm', title: 'PLM' }),
+        app({ app_id: 'workspace-tool', title: 'Workspace Tool' }),
         app({ app_id: 'chatbot', title: 'Chatbot', enabled: false }),
         app({
           app_id: 'unknown-app',
@@ -245,23 +217,19 @@ describe('app-bar model', () => {
     expect(visibleItems.map((item) => item.id)).toEqual([
       'home',
       'chatbot',
-      'qa-assistant',
       'web-search',
-      'research-trends',
-      'standards-monitor',
       'pms',
       'docs',
       'mail',
       'whiteboard',
-      'plm',
-      'data-viz',
-      'legacy-issues',
+      'workspace-tool',
+      'diagrams',
     ]);
 
     const projection = buildAppBarItemsProjection({
-      activeAppId: 'plm',
+      activeAppId: 'workspace-tool',
       appBarItems: APP_BAR_ITEMS,
-      draftPinnedAppIds: ['plm', 'pms'],
+      draftPinnedAppIds: ['workspace-tool', 'pms'],
       launcherPolicy: LAUNCHER_POLICY,
       pinnedAppIds: ['home', 'pms'],
       translate,
@@ -270,7 +238,7 @@ describe('app-bar model', () => {
 
     expect(projection.fixedItems.map((item) => item.id)).toEqual(['home']);
     expect(projection.pinnedItems.map((item) => item.id)).toEqual(['pms']);
-    expect(projection.activeAppTitle).toBe('PLM');
+    expect(projection.activeAppTitle).toBe('Workspace Tool');
   });
 
   it('uses company-wide links for global app bar entries', () => {
@@ -280,13 +248,10 @@ describe('app-bar model', () => {
     } as AuthUser;
 
     expect(
-      buildAppLink('qa-assistant', user, 'hq', LAUNCHER_GLOBAL_PATHS),
-    ).toBe('/qa-assistant');
+      buildAppLink('docs', user, 'hq', LAUNCHER_GLOBAL_PATHS),
+    ).toBe('/docs');
     expect(buildAppLink('community', user, 'hq', LAUNCHER_GLOBAL_PATHS)).toBe(
       '/community',
-    );
-    expect(buildAppLink('docs', user, 'hq', LAUNCHER_GLOBAL_PATHS)).toBe(
-      '/w/hq/docs',
     );
     expect(buildAppLink('community', user, 'hq', new Map())).toBe(
       '/w/hq/community',
@@ -371,7 +336,7 @@ describe('app-bar model', () => {
         app({ app_id: 'home', title: 'Home' }),
         app({ app_id: 'chatbot', title: 'Chatbot' }),
         app({ app_id: 'pms', title: 'PMS' }),
-        app({ app_id: 'plm', title: 'PLM' }),
+        app({ app_id: 'workspace-tool', title: 'Workspace Tool' }),
       ],
       APP_BAR_CATEGORIES,
       translate,
@@ -382,36 +347,34 @@ describe('app-bar model', () => {
     expect(
       resolvePinnedAppIds(
         {
-          pinned_app_ids: ['home', 'plm', 'home', 'docs'],
+          pinned_app_ids: ['home', 'workspace-tool', 'home', 'docs'],
         },
         visibleItems,
         LAUNCHER_POLICY,
       ),
-    ).toEqual(['plm', 'docs']);
+    ).toEqual(['workspace-tool', 'docs']);
     expect(
       resolvePinnedAppIds(
         {
-          pinned_app_ids: ['data-viz', 'qa-assistant', 'pms'],
+          pinned_app_ids: ['diagrams', 'docs', 'pms'],
         },
         visibleItems,
         LAUNCHER_POLICY,
       ),
-    ).toEqual(['data-viz', 'qa-assistant', 'pms']);
+    ).toEqual(['diagrams', 'docs', 'pms']);
     expect(
       resolvePinnedAppIds(
         {
           pinned_app_ids: [
             'chatbot',
-            'qa-assistant',
+            'docs',
             'web-search',
-            'research-trends',
-            'standards-monitor',
             'pms',
             'docs',
             'mail',
             'whiteboard',
-            'plm',
-            'data-viz',
+            'workspace-tool',
+            'diagrams',
           ],
         },
         visibleItems,
@@ -419,26 +382,23 @@ describe('app-bar model', () => {
       ),
     ).toEqual([
       'chatbot',
-      'qa-assistant',
-      'web-search',
-      'research-trends',
-      'standards-monitor',
-      'pms',
       'docs',
+      'web-search',
+      'pms',
       'mail',
       'whiteboard',
-      'plm',
-      'data-viz',
+      'workspace-tool',
+      'diagrams',
     ]);
     expect(
       resolvePinnedAppIds(
         {
-          pinned_app_ids: ['unknown-app', 'qa-assistant'],
+          pinned_app_ids: ['unknown-app', 'docs'],
         },
         visibleItems,
         LAUNCHER_POLICY,
       ),
-    ).toEqual(['qa-assistant']);
+    ).toEqual(['docs']);
     expect(
       resolvePinnedAppIds(
         {
@@ -506,7 +466,6 @@ describe('app-bar model', () => {
     const opened = appBarReducer(
       {
         ...INITIAL_APP_BAR_STATE,
-        businessSitesOpen: true,
         workspaceSwitcherOpen: true,
       },
       { type: 'toggleFavorites' },
@@ -515,7 +474,6 @@ describe('app-bar model', () => {
     expect(opened.favoritesOpen).toBe(true);
     expect(opened.categoryMenuId).toBeNull();
     expect(opened.appBarEditorOpen).toBe(false);
-    expect(opened.businessSitesOpen).toBe(false);
     expect(opened.workspaceSwitcherOpen).toBe(false);
     expect(
       appBarReducer(opened, {
@@ -543,31 +501,9 @@ describe('app-bar model', () => {
     ).toBeNull();
   });
 
-  it('opens the business sites menu exclusively from other desktop menus', () => {
-    const opened = appBarReducer(
-      {
-        ...INITIAL_APP_BAR_STATE,
-        appBarEditorOpen: true,
-        categoryMenuId: 'category-operations',
-        favoritesOpen: true,
-        workspaceSwitcherOpen: true,
-      },
-      { type: 'toggleBusinessSites' },
-    );
-
-    expect(opened.businessSitesOpen).toBe(true);
-    expect(opened.appBarEditorOpen).toBe(false);
-    expect(opened.categoryMenuId).toBeNull();
-    expect(opened.favoritesOpen).toBe(false);
-    expect(opened.workspaceSwitcherOpen).toBe(false);
-    expect(
-      appBarReducer(opened, { type: 'closeBusinessSites' }).businessSitesOpen,
-    ).toBe(false);
-  });
-
   it('builds workspace search hrefs', () => {
-    expect(buildWorkspaceSearchHref('ai do')).toBe(
-      '/tool/search?workspace=ai%20do',
+    expect(buildWorkspaceSearchHref('project docs')).toBe(
+      '/tool/search?workspace=project%20docs',
     );
     expect(buildWorkspaceSearchHref(null)).toBe('/tool/search');
   });

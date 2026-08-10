@@ -25,7 +25,7 @@ import {
   TabsTrigger,
   Tooltip,
   useToast,
-} from '@open-alm/ui';
+} from '@open-work-hub/ui';
 
 import { IconPickerDialog } from '@/src/components/picker/IconPickerDialog';
 import type { IconPickerGroup } from '@/src/components/picker/icon-picker-model';

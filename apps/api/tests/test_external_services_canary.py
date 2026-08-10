@@ -5,14 +5,14 @@ from io import BytesIO
 import pytest
 
 from integration_infra import IntegrationInfra, MinioTestTarget
-from open_alm_api.core.settings import get_settings
-from open_alm_api.core.storage import ensure_bucket, get_minio_client
-from open_alm_api.domains.files.storage_adapter import (
+from open_work_hub_api.core.settings import get_settings
+from open_work_hub_api.core.storage import ensure_bucket, get_minio_client
+from open_work_hub_api.domains.files.storage_adapter import (
     open_file_object,
     put_file_object,
     remove_file_object,
 )
-from open_alm_api.domains.search.opensearch import OpenSearchKeywordClient
+from open_work_hub_api.domains.search.opensearch import OpenSearchKeywordClient
 
 
 pytestmark = pytest.mark.external_integration
@@ -24,10 +24,10 @@ def test_minio_file_storage_round_trip(
 ) -> None:
     payload = b"release validation minio canary"
     storage_key = "canary/round-trip.txt"
-    monkeypatch.setenv("OPEN_ALM_MINIO_ENDPOINT", minio_target.endpoint)
-    monkeypatch.setenv("OPEN_ALM_MINIO_ACCESS_KEY", minio_target.access_key)
-    monkeypatch.setenv("OPEN_ALM_MINIO_SECRET_KEY", minio_target.secret_key)
-    monkeypatch.setenv("OPEN_ALM_MINIO_BUCKET", minio_target.bucket)
+    monkeypatch.setenv("OPEN_WORK_HUB_MINIO_ENDPOINT", minio_target.endpoint)
+    monkeypatch.setenv("OPEN_WORK_HUB_MINIO_ACCESS_KEY", minio_target.access_key)
+    monkeypatch.setenv("OPEN_WORK_HUB_MINIO_SECRET_KEY", minio_target.secret_key)
+    monkeypatch.setenv("OPEN_WORK_HUB_MINIO_BUCKET", minio_target.bucket)
     get_settings.cache_clear()
     get_minio_client.cache_clear()
     try:

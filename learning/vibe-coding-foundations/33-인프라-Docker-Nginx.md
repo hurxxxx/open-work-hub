@@ -33,7 +33,7 @@
 
 ## 2. 이 프로젝트의 컨테이너 구성
 
-현재 개발/운영 인프라 Compose 파일은 `ops/compose/open-alm-dev.infra.yml`, `ops/compose/open-alm-prod.infra.yml`이 기준입니다. PostgreSQL은 Docker 컨테이너가 아니라 서버 native PostgreSQL service로 실행합니다.
+현재 개발/운영 인프라 Compose 파일은 `ops/compose/open-work-hub-dev.infra.yml`, `ops/compose/open-work-hub-prod.infra.yml`이 기준입니다. PostgreSQL은 Docker 컨테이너가 아니라 서버 native PostgreSQL service로 실행합니다.
 
 | 서비스 | 이미지 | 역할 |
 |---|---|---|
@@ -46,7 +46,7 @@
 | `nginx` | `nginx:1.27` | 리버스 프록시 · TLS |
 | `collab` | 자체 빌드 | `packages/docs-collab-hub` y-websocket 서버 |
 
-컨테이너 서비스는 **같은 Docker 네트워크**를 공유해 `redis:6379` 처럼 **서비스 이름**으로 서로를 찾습니다. 애플리케이션은 PostgreSQL만 `.env`의 `OPEN_ALM_POSTGRES_DSN`을 통해 host native DB(`127.0.0.1:5432`)에 접속합니다.
+컨테이너 서비스는 **같은 Docker 네트워크**를 공유해 `redis:6379` 처럼 **서비스 이름**으로 서로를 찾습니다. 애플리케이션은 PostgreSQL만 `.env`의 `OPEN_WORK_HUB_POSTGRES_DSN`을 통해 host native DB(`127.0.0.1:5432`)에 접속합니다.
 
 ---
 
@@ -80,7 +80,7 @@ RUN pip install uv
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen
 COPY . .
-CMD ["uv", "run", "uvicorn", "open_alm_api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uv", "run", "uvicorn", "open_work_hub_api.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
 ### 3.3 .dockerignore
@@ -182,10 +182,10 @@ Compose가 "옛 도구"라는 건 오해입니다. 단일 호스트 배포는 Co
 ```nginx
 server {
   listen 443 ssl http2;
-  server_name open-alm.example.com;
+  server_name open-work-hub.example.com;
 
-  ssl_certificate     /etc/letsencrypt/live/open-alm/fullchain.pem;
-  ssl_certificate_key /etc/letsencrypt/live/open-alm/privkey.pem;
+  ssl_certificate     /etc/letsencrypt/live/open-work-hub/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/open-work-hub/privkey.pem;
 
   # 정적 SPA
   root /usr/share/nginx/html;
@@ -244,7 +244,7 @@ Nginx는 가장 보편적이고 자료가 풍부해 장기 유지에 유리합�
 4. DB 덤프 복원, Alembic 마이그레이션.
 5. DNS를 새 서버 IP로 변경.
 
-**이게 왜 Open ALM에 중요한가**: 클라우드 비용 최적화로 인스턴스 사이즈를 바꾸거나, 리전 이전을 해야 할 때 **반나절에 끝낼 수 있는 루틴**이 된다는 뜻입니다. 수동 서버 구축이었다면 며칠이 걸립니다.
+**이게 왜 Open Work Hub에 중요한가**: 클라우드 비용 최적화로 인스턴스 사이즈를 바꾸거나, 리전 이전을 해야 할 때 **반나절에 끝낼 수 있는 루틴**이 된다는 뜻입니다. 수동 서버 구축이었다면 며칠이 걸립니다.
 
 ### 🛠️ 5분 실습 — 컨테이너 안 탐험
 

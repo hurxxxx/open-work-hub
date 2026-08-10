@@ -4,19 +4,19 @@ from types import SimpleNamespace
 
 import pytest
 
-from open_alm_api.domains.rag import application as rag_application
-from open_alm_api.domains.rag.contracts import (
+from open_work_hub_api.domains.rag import application as rag_application
+from open_work_hub_api.domains.rag.contracts import (
     RagAnswerMode,
     RagProjection,
     RagQueryRequest,
 )
-from open_alm_api.domains.rag import grounded_answer
-from open_alm_api.domains.rag.grounded_answer import LlmGroundedAnswerSynthesizer
-from open_alm_api.domains.rag.grounded_answer_assembly import GroundedAnswerAssembler
-from open_alm_api.domains.rag.providers import RagProviderTransientError
-from open_alm_api.domains.rag.providers.fake import FakeEmbeddingClient, FakeVectorIndexClient
-from open_alm_api.domains.rag.query_service import RagQueryService
-from open_alm_api.domains.rag.service import RagService
+from open_work_hub_api.domains.rag import grounded_answer
+from open_work_hub_api.domains.rag.grounded_answer import LlmGroundedAnswerSynthesizer
+from open_work_hub_api.domains.rag.grounded_answer_assembly import GroundedAnswerAssembler
+from open_work_hub_api.domains.rag.providers import RagProviderTransientError
+from open_work_hub_api.domains.rag.providers.fake import FakeEmbeddingClient, FakeVectorIndexClient
+from open_work_hub_api.domains.rag.query_service import RagQueryService
+from open_work_hub_api.domains.rag.service import RagService
 
 
 def test_workspace_rag_query_wraps_provider_failures_as_unavailable(monkeypatch) -> None:
@@ -182,7 +182,7 @@ def test_llm_grounded_answer_uses_task_token_budget(monkeypatch) -> None:
     assert captured["context"].app_id == "rag"
     context_pack = captured["kwargs"]["context_pack"]
     assert context_pack.context_strategy == "rag_grounded_answer_evidence"
-    assert context_pack.source_kinds == ("qna_doc",)
+    assert context_pack.source_kinds == ("docs_native_doc",)
     assert context_pack.sensitivity_labels == ("internal",)
     assert context_pack.content_origin == "internal_context"
     assert captured["kwargs"].get("max_tokens") is None
@@ -222,8 +222,8 @@ def _llm_synthesizer() -> LlmGroundedAnswerSynthesizer:
 
 def _hit():
     return SimpleNamespace(
-        source_kind="qna_doc",
-        resource_type="qna_document",
+        source_kind="docs_native_doc",
+        resource_type="docs_native_doc",
         resource_id="doc-1",
         workspace_id="ws-1",
         title="복지제도 기준",

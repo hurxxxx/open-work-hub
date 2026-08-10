@@ -76,7 +76,7 @@ class CheckPythonSourceIntegrityTest(unittest.TestCase):
         self.assertIn(
             "direct-core-llm-import",
             self.codes(
-                "from open_alm_api.core.llm import complete_chat_text as run_chat\n"
+                "from open_work_hub_api.core.llm import complete_chat_text as run_chat\n"
                 "run_chat(context, db)\n"
             ),
         )
@@ -94,7 +94,7 @@ class CheckPythonSourceIntegrityTest(unittest.TestCase):
         self.assertIn(
             "direct-core-llm-import",
             self.codes(
-                "from open_alm_api.core import llm\n"
+                "from open_work_hub_api.core import llm\n"
                 "run_chat = llm.complete_chat_text\n"
                 "run_chat(context, db)\n"
             ),

@@ -45,7 +45,7 @@ describe('desktop installer URL resolution', () => {
   it('uses generic Windows env fallback without affecting macOS or Linux', () => {
     expect(
       resolveDesktopInstallerUrls({
-        VITE_OPEN_ALM_DESKTOP_INSTALLER_URL:
+        VITE_OPEN_WORK_HUB_DESKTOP_INSTALLER_URL:
           'https://downloads.example.com/windows.exe',
       }),
     ).toEqual({
@@ -57,13 +57,13 @@ describe('desktop installer URL resolution', () => {
   it('uses platform-specific env overrides before defaults', () => {
     expect(
       resolveDesktopInstallerUrls({
-        VITE_OPEN_ALM_DESKTOP_INSTALLER_URL:
+        VITE_OPEN_WORK_HUB_DESKTOP_INSTALLER_URL:
           'https://downloads.example.com/windows-fallback.exe',
-        VITE_OPEN_ALM_DESKTOP_INSTALLER_URL_WIN:
+        VITE_OPEN_WORK_HUB_DESKTOP_INSTALLER_URL_WIN:
           'https://downloads.example.com/windows.exe',
-        VITE_OPEN_ALM_DESKTOP_INSTALLER_URL_MAC:
+        VITE_OPEN_WORK_HUB_DESKTOP_INSTALLER_URL_MAC:
           'https://downloads.example.com/mac.dmg',
-        VITE_OPEN_ALM_DESKTOP_INSTALLER_URL_LINUX:
+        VITE_OPEN_WORK_HUB_DESKTOP_INSTALLER_URL_LINUX:
           'https://downloads.example.com/linux.deb',
       }),
     ).toEqual({
@@ -100,12 +100,12 @@ describe('desktop installer download', () => {
   it('resolves relative installer URLs against the current page', () => {
     expect(
       resolveDesktopInstallerDownload(
-        '/api/v1/open-alm-desktop/updates/win/Open ALM%20Desktop%20Setup.exe',
+        '/api/v1/open-work-hub-desktop/updates/win/Open Work Hub%20Desktop%20Setup.exe',
         'https://app.example.com/settings',
       ),
     ).toEqual({
-      href: 'https://app.example.com/api/v1/open-alm-desktop/updates/win/Open ALM%20Desktop%20Setup.exe',
-      fileName: 'Open ALM Desktop Setup.exe',
+      href: 'https://app.example.com/api/v1/open-work-hub-desktop/updates/win/Open%20Work%20Hub%20Desktop%20Setup.exe',
+      fileName: 'Open Work Hub Desktop Setup.exe',
     });
   });
 
@@ -115,7 +115,7 @@ describe('desktop installer download', () => {
       .mockImplementation(() => undefined);
 
     downloadDesktopInstaller(
-      '/api/v1/open-alm-desktop/updates/linux/Open ALM-Desktop-latest.deb',
+      '/api/v1/open-work-hub-desktop/updates/linux/Open Work Hub-Desktop-latest.deb',
       document,
       'https://app.example.com/settings',
     );

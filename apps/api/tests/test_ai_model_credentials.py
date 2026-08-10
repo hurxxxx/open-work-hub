@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 from pydantic import SecretStr
 
-from open_alm_api.core.settings import get_settings
-from open_alm_api.domains.ai.model_credentials import (
+from open_work_hub_api.core.settings import get_settings
+from open_work_hub_api.domains.ai.model_credentials import (
     AiModelCredentialError,
     decrypt_api_key,
     encrypt_api_key,
@@ -13,7 +13,7 @@ from open_alm_api.domains.ai.model_credentials import (
 
 def test_ai_model_api_key_round_trip_is_write_only(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(
-        "OPEN_ALM_AI_MODEL_CREDENTIAL_ENCRYPTION_KEY",
+        "OPEN_WORK_HUB_AI_MODEL_CREDENTIAL_ENCRYPTION_KEY",
         "unit-test-ai-model-key",
     )
     get_settings.cache_clear()
@@ -29,7 +29,7 @@ def test_ai_model_api_key_round_trip_is_write_only(monkeypatch: pytest.MonkeyPat
 
 
 def test_ai_model_api_key_requires_encryption_root(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OPEN_ALM_AI_MODEL_CREDENTIAL_ENCRYPTION_KEY", "")
+    monkeypatch.setenv("OPEN_WORK_HUB_AI_MODEL_CREDENTIAL_ENCRYPTION_KEY", "")
     get_settings.cache_clear()
     try:
         with pytest.raises(AiModelCredentialError, match="not configured"):

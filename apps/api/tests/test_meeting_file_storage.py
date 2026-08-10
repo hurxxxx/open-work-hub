@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from open_alm_api.domains.meeting import file_storage
+from open_work_hub_api.domains.meeting import file_storage
 
 
 def test_attachment_storage_key_preserves_existing_layout() -> None:

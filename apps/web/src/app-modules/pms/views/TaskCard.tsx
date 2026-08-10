@@ -7,7 +7,7 @@ import {
   GitBranch,
   MessageSquare,
 } from 'lucide-react';
-import { Badge } from '@open-alm/ui';
+import { Badge } from '@open-work-hub/ui';
 
 import type {
   PmsTask,

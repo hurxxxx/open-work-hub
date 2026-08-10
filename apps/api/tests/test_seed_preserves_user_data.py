@@ -21,8 +21,8 @@ def _seed_dev_accounts() -> None:
     """Run the full dev-login seed loop so the /auth/dev-login route can
     find the seeded fixtures (ensure_dev_login_seed_data delegates to
     ensure_seed_data internally)."""
-    from open_alm_api.core.db import get_session_factory
-    from open_alm_api.domains.auth.access import ensure_dev_login_seed_data
+    from open_work_hub_api.core.db import get_session_factory
+    from open_work_hub_api.domains.auth.access import ensure_dev_login_seed_data
 
     session_factory = get_session_factory()
     with session_factory() as db:
@@ -31,9 +31,9 @@ def _seed_dev_accounts() -> None:
 
 
 def test_seed_preserves_user_created_space_membership(client: TestClient) -> None:
-    from open_alm_api.core.db import get_session_factory
-    from open_alm_api.domains.auth.access import ensure_seed_data
-    from open_alm_api.domains.auth.models import TeamMember
+    from open_work_hub_api.core.db import get_session_factory
+    from open_work_hub_api.domains.auth.access import ensure_seed_data
+    from open_work_hub_api.domains.auth.models import TeamMember
 
     _seed_dev_accounts()
 
@@ -48,7 +48,7 @@ def test_seed_preserves_user_created_space_membership(client: TestClient) -> Non
     user_id = session["user"]["id"]
 
     create_response = client.post(
-        "/api/v1/workspaces/ai-tft/pms/spaces",
+        "/api/v1/workspaces/general/pms/spaces",
         headers=_auth_headers(token),
         json={"name": "My Private Space", "description": ""},
     )
@@ -88,7 +88,7 @@ def test_seed_preserves_user_created_space_membership(client: TestClient) -> Non
 
     # And the user should still be able to list the space.
     list_response = client.get(
-        "/api/v1/workspaces/ai-tft/pms/spaces",
+        "/api/v1/workspaces/general/pms/spaces",
         headers=_auth_headers(token),
     )
     assert list_response.status_code == 200
@@ -106,8 +106,8 @@ def test_dev_login_is_idempotent_and_preserves_user_spaces(
     Before the guard landed, each of those requests walked every seed user's
     TeamMember rows and wiped out anything outside the default PMS space,
     destroying user-created spaces on every login."""
-    from open_alm_api.core.db import get_session_factory
-    from open_alm_api.domains.auth.models import TeamMember
+    from open_work_hub_api.core.db import get_session_factory
+    from open_work_hub_api.domains.auth.models import TeamMember
     from sqlalchemy import select
 
     _seed_dev_accounts()
@@ -122,7 +122,7 @@ def test_dev_login_is_idempotent_and_preserves_user_spaces(
     user_id = login.json()["user"]["id"]
 
     create = client.post(
-        "/api/v1/workspaces/ai-tft/pms/spaces",
+        "/api/v1/workspaces/general/pms/spaces",
         headers=_auth_headers(token),
         json={"name": "Private Space", "description": ""},
     )
@@ -163,7 +163,7 @@ def test_dev_login_is_idempotent_and_preserves_user_spaces(
 
     # The user-created space should also still be listed.
     list_response = client.get(
-        "/api/v1/workspaces/ai-tft/pms/spaces",
+        "/api/v1/workspaces/general/pms/spaces",
         headers=_auth_headers(token),
     )
     assert list_response.status_code == 200
@@ -179,9 +179,9 @@ def test_dev_login_seed_syncs_new_workspace_app_catalog_rows(
     visibility rows are additive product metadata and need to be inserted when
     a new app such as web-search is added after a DB already exists.
     """
-    from open_alm_api.core.db import get_session_factory
-    from open_alm_api.domains.auth.access import ensure_dev_login_seed_data
-    from open_alm_api.domains.auth.models import (
+    from open_work_hub_api.core.db import get_session_factory
+    from open_work_hub_api.domains.auth.access import ensure_dev_login_seed_data
+    from open_work_hub_api.domains.auth.models import (
         PlatformAppVisibility,
         Workspace,
         WorkspaceAppEntitlement,
@@ -233,14 +233,14 @@ def test_ensure_seed_data_does_not_overwrite_workspace_renames(
     canonical defaults every time it ran, which made admin-console renames
     silently revert on the next server restart. The guard should skip the
     reconcile entirely once the infrastructure is in place."""
-    from open_alm_api.core.db import get_session_factory
-    from open_alm_api.domains.auth.access import ensure_seed_data
-    from open_alm_api.domains.auth.models import Workspace
+    from open_work_hub_api.core.db import get_session_factory
+    from open_work_hub_api.domains.auth.access import ensure_seed_data
+    from open_work_hub_api.domains.auth.models import Workspace
     from sqlalchemy import select
 
     _seed_dev_accounts()
     session_factory = get_session_factory()
-    workspace_key = "ai-tft"
+    workspace_key = "general"
 
     with session_factory() as db:
         ws = db.scalar(select(Workspace).where(Workspace.key == workspace_key))
@@ -269,11 +269,11 @@ def test_seed_still_reconciles_default_space_membership(
 ) -> None:
     """The seed loop should still enforce the team_role declared in
     DEV_LOGIN_ACCOUNTS against the default PMS spaces for Administrator and
-    AI TFT."""
+    General Workspace."""
     _seed_dev_accounts()
 
-    from open_alm_api.core.db import get_session_factory
-    from open_alm_api.domains.auth.models import Team, TeamMember, User, Workspace
+    from open_work_hub_api.core.db import get_session_factory
+    from open_work_hub_api.domains.auth.models import Team, TeamMember, User, Workspace
 
     session_factory = get_session_factory()
     with session_factory() as db:
@@ -293,15 +293,15 @@ def test_seed_still_reconciles_default_space_membership(
                 )
             )
 
-        administrator_space_ms = membership_for("admin@open-alm.local", "administrator")
-        ai_tft_space_ms = membership_for("admin@open-alm.local", "ai-tft")
+        administrator_space_ms = membership_for("admin@open-work-hub.local", "administrator")
+        general_space_ms = membership_for("admin@open-work-hub.local", "general")
 
         assert administrator_space_ms is not None, (
             "administrator should own the Administrator default space"
         )
         assert administrator_space_ms.role == "owner"
-        assert ai_tft_space_ms is not None, "administrator should own the AI TFT default space"
-        assert ai_tft_space_ms.role == "owner"
+        assert general_space_ms is not None, "administrator should own the General Workspace default space"
+        assert general_space_ms.role == "owner"
 
 
 def test_dev_login_recreates_missing_dev_workspace_seeds(
@@ -309,23 +309,23 @@ def test_dev_login_recreates_missing_dev_workspace_seeds(
 ) -> None:
     from sqlalchemy.orm import selectinload
 
-    from open_alm_api.core.db import get_session_factory
-    from open_alm_api.domains.auth.models import Team, Workspace
+    from open_work_hub_api.core.db import get_session_factory
+    from open_work_hub_api.domains.auth.models import Team, Workspace
 
     _seed_dev_accounts()
     session_factory = get_session_factory()
 
     with session_factory() as db:
-        ai_tft_workspace = db.scalar(
+        general_workspace = db.scalar(
             select(Workspace)
             .options(
                 selectinload(Workspace.user_bindings),
                 selectinload(Workspace.teams).selectinload(Team.members),
             )
-            .where(Workspace.key == "ai-tft")
+            .where(Workspace.key == "general")
         )
-        assert ai_tft_workspace is not None
-        db.delete(ai_tft_workspace)
+        assert general_workspace is not None
+        db.delete(general_workspace)
         db.commit()
 
     login_response = client.post(
@@ -334,9 +334,9 @@ def test_dev_login_recreates_missing_dev_workspace_seeds(
     )
     assert login_response.status_code == 200, login_response.text
     assert any(
-        workspace["slug"] == "ai-tft" for workspace in login_response.json()["user"]["workspaces"]
+        workspace["slug"] == "general" for workspace in login_response.json()["user"]["workspaces"]
     )
 
     with session_factory() as db:
-        restored_workspace = db.scalar(select(Workspace).where(Workspace.key == "ai-tft"))
+        restored_workspace = db.scalar(select(Workspace).where(Workspace.key == "general"))
         assert restored_workspace is not None

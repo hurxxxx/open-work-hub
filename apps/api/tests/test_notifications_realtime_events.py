@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from open_alm_api.domains.notifications import realtime_event_types, realtime_events
+from open_work_hub_api.domains.notifications import realtime_event_types, realtime_events
 
 
 def test_build_notification_realtime_event_uses_shared_payload_contract() -> None:

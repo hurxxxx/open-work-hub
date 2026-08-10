@@ -3,11 +3,11 @@ from __future__ import annotations
 import pytest
 from types import SimpleNamespace
 
-from open_alm_api.domains.rag.contracts import RagGroundedAnswer, RagGroundedCitation
-from open_alm_api.domains.rag.providers.fake import FakeRerankClient
-from open_alm_api.domains.retrieval.contracts import RetrievalHit
-from open_alm_api.domains.retrieval import grounding
-from open_alm_api.domains.retrieval.ranking import (
+from open_work_hub_api.domains.rag.contracts import RagGroundedAnswer, RagGroundedCitation
+from open_work_hub_api.domains.rag.providers.fake import FakeRerankClient
+from open_work_hub_api.domains.retrieval.contracts import RetrievalHit
+from open_work_hub_api.domains.retrieval import grounding
+from open_work_hub_api.domains.retrieval.ranking import (
     candidate_limit,
     canonical_resource_identity,
     dedupe_ranked_hits,
@@ -190,7 +190,7 @@ def test_identity_keeps_different_resource_types_separate() -> None:
         excerpt="one",
         methods=["bm25"],
     )
-    other_type = base.model_copy(update={"resource_type": "qna_document"})
+    other_type = base.model_copy(update={"resource_type": "docs_native_doc"})
 
     assert canonical_resource_identity(base) != canonical_resource_identity(other_type)
     assert len(dedupe_ranked_hits([base, other_type]).hits) == 2
@@ -448,7 +448,7 @@ def test_grounding_keeps_collision_safe_citation_source_and_fused_provenance(
         ),
         _hit(
             source="qna",
-            source_kind="qna_document",
+            source_kind="docs_native_doc",
             resource_id="same-id",
             score=0.1,
             excerpt="qna evidence",
@@ -466,7 +466,7 @@ def test_grounding_keeps_collision_safe_citation_source_and_fused_provenance(
                 citations=[
                     RagGroundedCitation(
                         resource_id="same-id",
-                        source_kind="qna_document",
+                        source_kind="docs_native_doc",
                         quote="qna evidence",
                     )
                 ],

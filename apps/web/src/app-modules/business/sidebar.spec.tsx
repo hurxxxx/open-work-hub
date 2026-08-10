@@ -5,36 +5,20 @@ import type { AppSidebarRenderContext } from '@/src/app/shell/sidebar-types';
 import { businessSidebarConfig } from './sidebar';
 
 describe('businessSidebarConfig', () => {
-  it('keeps normal business feature categories outside legacy issues', () => {
+  it('keeps ordinary feature categories unchanged', () => {
     expect(
       businessSidebarConfig.extendCategories?.(['Analytics'], {
-        activeFeatureAppId: 'data-viz',
+        activeFeatureAppId: 'diagrams',
         canReadWorkspace: true,
       }),
     ).toEqual(['Analytics']);
 
     expect(
       businessSidebarConfig.renderCategory?.(
-        'legacy-issues-root',
-        renderContext({ activeFeatureAppId: 'data-viz' }),
+        'docs-root',
+        renderContext({ activeFeatureAppId: 'diagrams' }),
       ),
     ).toBeUndefined();
-  });
-
-  it('uses the legacy issues sidebar only for the legacy issues feature', () => {
-    expect(
-      businessSidebarConfig.extendCategories?.(['legacy-issues'], {
-        activeFeatureAppId: 'legacy-issues',
-        canReadWorkspace: true,
-      }),
-    ).toEqual(['legacy-issues-root']);
-
-    expect(
-      businessSidebarConfig.renderCategory?.(
-        'legacy-issues-root',
-        renderContext({ activeFeatureAppId: 'legacy-issues' }),
-      ),
-    ).not.toBeUndefined();
   });
 
   it('delegates learning sidebar extensions for the learning feature', () => {
@@ -56,17 +40,17 @@ function renderContext({
     activeFeatureAppId,
     activeNavItemId: '',
     canReadWorkspace: true,
-    currentPathname: '/w/ai-tft/data-viz',
-    currentWorkspaceSlug: 'ai-tft',
+    currentPathname: '/w/general/diagrams',
+    currentWorkspaceSlug: 'general',
     enabledWorkspaceAppIds: ['business', activeFeatureAppId],
     filteredItems: [
       {
         appId: 'business',
         category: 'Analytics',
         icon: Home,
-        id: 'data-viz',
-        linkAppId: 'data-viz',
-        pathSuffix: '/data-viz',
+        id: 'diagrams',
+        linkAppId: 'diagrams',
+        pathSuffix: '/diagrams',
         title: '데이터 시각화',
       },
     ],

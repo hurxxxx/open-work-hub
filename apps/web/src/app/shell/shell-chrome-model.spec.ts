@@ -15,14 +15,13 @@ import {
 function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
   return {
     date_format: 'korean',
-    display_name: 'Open ALM Member',
-    email: 'member@open-alm.local',
-    full_name: 'Open ALM Member',
+    display_name: 'Open Work Hub Member',
+    email: 'member@open-work-hub.local',
+    full_name: 'Open Work Hub Member',
     id: 'user-1',
     locale: 'ko-KR',
     login_id: 'member',
     must_change_password: false,
-    primary_org_unit: null,
     status: 'active',
     system_roles: [],
     theme_preference: 'system',
@@ -31,7 +30,7 @@ function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
     workspaces: [
       {
         id: 'workspace-hq',
-        name: 'Open ALM HQ',
+        name: 'Open Work Hub HQ',
         role: 'admin',
         slug: 'hq',
       },
@@ -51,9 +50,7 @@ function resolveChrome(
       'docs',
       'planner',
       'pms',
-      'qa-assistant',
-      'research-trends',
-      'standards-monitor',
+      'docs',
       'web-search',
       'whiteboard',
     ],
@@ -85,13 +82,13 @@ describe('shell chrome model', () => {
           workspaces: [
             {
               id: 'workspace-hq',
-              name: 'Open ALM HQ',
+              name: 'Open Work Hub HQ',
               role: 'admin',
               slug: 'hq',
             },
             {
               id: 'workspace-demo',
-              name: 'Open ALM Demo',
+              name: 'Open Work Hub Demo',
               role: 'member',
               slug: 'demo',
             },
@@ -149,41 +146,9 @@ describe('shell chrome model', () => {
       showSubSidebar: false,
     });
 
-    expect(resolveChrome('/qa-assistant')).toMatchObject({
-      activeAppId: 'ai',
-      activeNavItemId: 'qa-assistant',
-      canOpenMobileAppMenu: false,
-      mainClassName: 'flex-1 overflow-hidden relative',
-      showSubSidebar: false,
-    });
-
-    expect(resolveChrome('/qa-assistant')).toMatchObject({
-      activeAppId: 'ai',
-      activeNavItemId: 'qa-assistant',
-      canOpenMobileAppMenu: false,
-      mainClassName: 'flex-1 overflow-hidden relative',
-      showSubSidebar: false,
-    });
-
     expect(resolveChrome('/w/hq/web-search')).toMatchObject({
       activeAppId: 'ai',
       activeNavItemId: 'web-search',
-      canOpenMobileAppMenu: false,
-      mainClassName: 'flex-1 overflow-hidden relative',
-      showSubSidebar: false,
-    });
-
-    expect(resolveChrome('/w/hq/research-trends')).toMatchObject({
-      activeAppId: 'ai',
-      activeNavItemId: 'research-trends',
-      canOpenMobileAppMenu: false,
-      mainClassName: 'flex-1 overflow-hidden relative',
-      showSubSidebar: false,
-    });
-
-    expect(resolveChrome('/w/hq/standards-monitor')).toMatchObject({
-      activeAppId: 'ai',
-      activeNavItemId: 'standards-monitor',
       canOpenMobileAppMenu: false,
       mainClassName: 'flex-1 overflow-hidden relative',
       showSubSidebar: false,

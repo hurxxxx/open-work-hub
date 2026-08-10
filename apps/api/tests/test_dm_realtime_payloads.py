@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from open_alm_api.domains.dm import realtime_payloads
+from open_work_hub_api.domains.dm import realtime_payloads
 
 
 def test_conversation_snapshot_payload_keeps_thread_aliases_and_optional_message() -> None:

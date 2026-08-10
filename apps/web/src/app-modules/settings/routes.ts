@@ -33,10 +33,6 @@ export const adminRedirectRoutes = [
     }),
   },
   {
-    path: '/admin/users',
-    element: createElement(Navigate, { replace: true, to: '/admin/people' }),
-  },
-  {
     path: '/admin/teams',
     element: createElement(Navigate, {
       replace: true,

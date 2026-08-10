@@ -8,7 +8,7 @@ import {
 } from '../api/pms-api';
 import {
   userOptionMatchesQuery,
-  userOptionNameWithDepartment,
+  userOptionDisplayName,
 } from '@/src/platform/users/user-option-picker-model';
 import {
   getTaskDetailMutationErrorMessage,
@@ -34,7 +34,6 @@ export function getTaskDetailMentionState(value: string): {
 
 export function getTaskDetailMentionCandidates<
   TMember extends Pick<PmsTaskListMember, 'email' | 'full_name'> & {
-    primary_org_unit_name?: string | null;
     user_id?: string;
   },
 >(
@@ -48,7 +47,6 @@ export function getTaskDetailMentionCandidates<
         id: member.user_id ?? member.email,
         email: member.email,
         full_name: member.full_name,
-        primary_org_unit_name: member.primary_org_unit_name,
       },
       mentionQuery,
     ),
@@ -153,11 +151,10 @@ export function useTaskDetailComments({
   }, []);
 
   const handleMentionPick = useCallback((member: PmsTaskListMember) => {
-    const displayName = userOptionNameWithDepartment({
+    const displayName = userOptionDisplayName({
       id: member.user_id,
       email: member.email,
       full_name: member.full_name,
-      primary_org_unit_name: member.primary_org_unit_name,
     });
     setCommentDraft((current) =>
       applyTaskDetailMentionPick(current, displayName),

@@ -5,14 +5,9 @@ export const aiShellNavResolver: AppShellNavResolver = ({ pathname }) => {
   const workspaceAppId = workspaceAppMatch?.[1];
   if (
     workspaceAppId === 'chatbot' ||
-    workspaceAppId === 'web-search' ||
-    workspaceAppId === 'research-trends' ||
-    workspaceAppId === 'standards-monitor'
+    workspaceAppId === 'web-search'
   ) {
     return workspaceAppId;
-  }
-  if (pathname === '/qa-assistant') {
-    return 'qa-assistant';
   }
   return null;
 };

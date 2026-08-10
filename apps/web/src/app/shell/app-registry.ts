@@ -4,7 +4,7 @@ import {
   createCoreAppModuleRegistryApi,
   type CoreAppModuleRegistration,
   type CoreAppModuleRegistry,
-} from '@open-alm/core-web/app-registry';
+} from '@open-work-hub/core-web/app-registry';
 
 import {
   DEFAULT_APP_MODULES,

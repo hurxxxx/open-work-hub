@@ -1,0 +1,125 @@
+name: open-work-hub-prod
+
+services:
+  redis:
+    image: redis:7
+    container_name: open-work-hub-prod-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${OPEN_WORK_HUB_INFRA_BIND_HOST:-0.0.0.0}:${OPEN_WORK_HUB_INFRA_REDIS_PORT:-56379}:6379"
+    volumes:
+      - open-work-hub-prod-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - open-work-hub-prod-infra
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    container_name: open-work-hub-prod-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${OPEN_WORK_HUB_INFRA_MINIO_ROOT_USER:-open_work_hub_prod_minio}
+      MINIO_ROOT_PASSWORD: ${OPEN_WORK_HUB_INFRA_MINIO_ROOT_PASSWORD:-open_work_hub_prod_minio}
+    command: server /data --console-address :9001
+    ports:
+      - "${OPEN_WORK_HUB_INFRA_BIND_HOST:-0.0.0.0}:${OPEN_WORK_HUB_INFRA_MINIO_PORT:-59000}:9000"
+      - "${OPEN_WORK_HUB_INFRA_BIND_HOST:-0.0.0.0}:${OPEN_WORK_HUB_INFRA_MINIO_CONSOLE_PORT:-59001}:9001"
+    volumes:
+      - open-work-hub-prod-minio-data:/data
+    networks:
+      - open-work-hub-prod-infra
+
+  opensearch:
+    build:
+      context: ../..
+      dockerfile: ops/opensearch/Dockerfile
+    image: open-work-hub-opensearch:3.3.2-nori
+    container_name: open-work-hub-prod-opensearch
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      DISABLE_SECURITY_PLUGIN: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "${OPEN_WORK_HUB_INFRA_BIND_HOST:-0.0.0.0}:${OPEN_WORK_HUB_INFRA_OPENSEARCH_PORT:-59200}:9200"
+      - "${OPEN_WORK_HUB_INFRA_BIND_HOST:-0.0.0.0}:${OPEN_WORK_HUB_INFRA_OPENSEARCH_PERF_PORT:-59600}:9600"
+    volumes:
+      - open-work-hub-prod-opensearch-data:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9200 >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks:
+      - open-work-hub-prod-infra
+
+  qdrant:
+    image: qdrant/qdrant:v1.17.1
+    container_name: open-work-hub-prod-qdrant
+    restart: unless-stopped
+    environment:
+      QDRANT__SERVICE__API_KEY: ${OPEN_WORK_HUB_INFRA_QDRANT_API_KEY:-open_work_hub_prod_qdrant}
+    ports:
+      - "${OPEN_WORK_HUB_INFRA_BIND_HOST:-0.0.0.0}:${OPEN_WORK_HUB_INFRA_QDRANT_PORT:-6333}:6333"
+      - "${OPEN_WORK_HUB_INFRA_BIND_HOST:-0.0.0.0}:${OPEN_WORK_HUB_INFRA_QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - open-work-hub-prod-qdrant-data:/qdrant/storage
+    networks:
+      - open-work-hub-prod-infra
+
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: open-work-hub-prod-livekit
+    profiles: ["video-chat"]
+    restart: unless-stopped
+    environment:
+      LIVEKIT_CONFIG: |
+        port: 7880
+        log_level: info
+        rtc:
+          tcp_port: ${OPEN_WORK_HUB_LIVEKIT_RTC_TCP_PORT:-7881}
+          port_range_start: ${OPEN_WORK_HUB_LIVEKIT_RTC_PORT_RANGE_START:-52000}
+          port_range_end: ${OPEN_WORK_HUB_LIVEKIT_RTC_PORT_RANGE_END:-52100}
+          use_external_ip: true
+        keys:
+          ${OPEN_WORK_HUB_LIVEKIT_API_KEY}: ${OPEN_WORK_HUB_LIVEKIT_API_SECRET}
+    ports:
+      - "${OPEN_WORK_HUB_INFRA_BIND_HOST:-0.0.0.0}:${OPEN_WORK_HUB_LIVEKIT_PORT:-7880}:7880"
+      - "${OPEN_WORK_HUB_INFRA_BIND_HOST:-0.0.0.0}:${OPEN_WORK_HUB_LIVEKIT_RTC_TCP_PORT:-7881}:${OPEN_WORK_HUB_LIVEKIT_RTC_TCP_PORT:-7881}/tcp"
+      - "${OPEN_WORK_HUB_INFRA_BIND_HOST:-0.0.0.0}:${OPEN_WORK_HUB_LIVEKIT_RTC_PORT_RANGE_START:-52000}-${OPEN_WORK_HUB_LIVEKIT_RTC_PORT_RANGE_END:-52100}:${OPEN_WORK_HUB_LIVEKIT_RTC_PORT_RANGE_START:-52000}-${OPEN_WORK_HUB_LIVEKIT_RTC_PORT_RANGE_END:-52100}/udp"
+    networks:
+      - open-work-hub-prod-infra
+
+  drawio:
+    image: jgraph/drawio:${OPEN_WORK_HUB_DRAWIO_IMAGE_TAG:-30.2.5}
+    container_name: open-work-hub-prod-drawio
+    restart: unless-stopped
+    ports:
+      - "${OPEN_WORK_HUB_DRAWIO_BIND_HOST:-127.0.0.1}:${OPEN_WORK_HUB_DRAWIO_PORT:-18083}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/ >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks:
+      - open-work-hub-prod-infra
+
+networks:
+  open-work-hub-prod-infra:
+    name: open-work-hub-prod-infra
+
+volumes:
+  open-work-hub-prod-redis-data:
+    name: open-work-hub-prod-redis-data
+  open-work-hub-prod-minio-data:
+    name: open-work-hub-prod-minio-data
+  open-work-hub-prod-opensearch-data:
+    name: open-work-hub-prod-opensearch-data
+  open-work-hub-prod-qdrant-data:
+    name: open-work-hub-prod-qdrant-data

@@ -3,16 +3,16 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 import pytest
 
-from open_alm_api.core.db import get_session_factory
-from open_alm_api.core.llm_provider_registry import (
+from open_work_hub_api.core.db import get_session_factory
+from open_work_hub_api.core.llm_provider_registry import (
     ExternalLlmProviderDescriptor,
     ensure_default_external_llm_providers_registered,
     register_external_llm_provider,
     reset_external_llm_providers,
 )
-from open_alm_api.domains.ai import model_settings_service
-from open_alm_api.domains.ai.model_discovery import DiscoveredProviderModel
-from open_alm_api.domains.ai.model_settings_service import (
+from open_work_hub_api.domains.ai import model_settings_service
+from open_work_hub_api.domains.ai.model_discovery import DiscoveredProviderModel
+from open_work_hub_api.domains.ai.model_settings_service import (
     AiModelSettingsError,
     get_ai_model_provider_default_model_key,
     resolve_ai_model_workload_route,
@@ -116,19 +116,6 @@ def test_admin_ai_model_settings_projects_registry_and_default_catalog(
     assert chatbot["external_max_output_tokens"] == 65_536
     assert chatbot["readiness_code"] == "admin.ai_model_selection_required"
     assert chatbot["resolved_routes"] == []
-
-    document_workloads = {
-        item["workload_id"]: item
-        for item in payload["workloads"]
-        if item["management_surface"] == "document_processing"
-    }
-    assert set(document_workloads) == {
-        "legacy_issues.attachment_vision",
-        "meal_invoice_ocr_extract",
-        "meal_invoice_ocr_rescan",
-    }
-    assert all(item["allowed_routes"] == ["local"] for item in document_workloads.values())
-    assert all(item["required_capabilities"] == ["vision"] for item in document_workloads.values())
 
     with get_session_factory()() as db:
         with pytest.raises(AiModelSettingsError) as error:
@@ -380,7 +367,7 @@ def test_admin_ai_model_settings_rejects_stale_registry_digest(client: TestClien
     )
 
     assert response.status_code == 409
-    assert response.headers["X-Open ALM-Error-Code"] == "admin.ai_model_registry_changed"
+    assert response.headers["X-Open-Work-Hub-Error-Code"] == "admin.ai_model_registry_changed"
 
 
 def test_admin_ai_model_settings_rejects_output_token_caps_outside_bounds(
@@ -461,7 +448,7 @@ def test_admin_ai_model_settings_rejects_private_external_endpoint(
     )
 
     assert response.status_code == 422
-    assert response.headers["X-Open ALM-Error-Code"] == "admin.ai_model_endpoint_public_https_required"
+    assert response.headers["X-Open-Work-Hub-Error-Code"] == "admin.ai_model_endpoint_public_https_required"
 
 
 def test_admin_ai_model_discovery_requires_key_then_creates_unapproved_models(
@@ -482,7 +469,7 @@ def test_admin_ai_model_discovery_requires_key_then_creates_unapproved_models(
         json={"expected_registry_digest": digest},
     )
     assert missing_key.status_code == 422
-    assert missing_key.headers["X-Open ALM-Error-Code"] == "admin.ai_model_provider_key_required"
+    assert missing_key.headers["X-Open-Work-Hub-Error-Code"] == "admin.ai_model_provider_key_required"
 
     configured = client.put(
         "/api/v1/admin/ai-model-settings/providers/anthropic",
@@ -541,7 +528,7 @@ def test_admin_ai_model_discovery_requires_key_then_creates_unapproved_models(
     )
     assert changed_provider_key.status_code == 422
     assert (
-        changed_provider_key.headers["X-Open ALM-Error-Code"]
+        changed_provider_key.headers["X-Open-Work-Hub-Error-Code"]
         == "admin.ai_model_discovered_key_read_only"
     )
 
@@ -560,7 +547,7 @@ def test_admin_ai_model_discovery_requires_key_then_creates_unapproved_models(
     )
     assert rejected_route.status_code == 422
     assert (
-        rejected_route.headers["X-Open ALM-Error-Code"]
+        rejected_route.headers["X-Open-Work-Hub-Error-Code"]
         == "admin.ai_model_catalog_invalid_for_provider"
     )
 

@@ -3,16 +3,16 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
-from open_alm_api.domains.ai import external_gateway
-from open_alm_api.domains.images import service
-from open_alm_api.domains.images.agent_runtime import (
+from open_work_hub_api.domains.ai import external_gateway
+from open_work_hub_api.domains.images import service
+from open_work_hub_api.domains.images.agent_runtime import (
     ImageBriefRuntimeResult,
     register_image_agent_runtime_adapter,
     reset_image_agent_runtime_adapters,
 )
-from open_alm_api.domains.images.execution_profile import build_image_execution_profile
-from open_alm_api.domains.images.template_catalog import BUILTIN_IMAGE_TEMPLATES
-from open_alm_api.domains.images.prompt import (
+from open_work_hub_api.domains.images.execution_profile import build_image_execution_profile
+from open_work_hub_api.domains.images.template_catalog import BUILTIN_IMAGE_TEMPLATES
+from open_work_hub_api.domains.images.prompt import (
     build_agent_prompt,
     sanitize_image_plan_text,
 )
@@ -78,7 +78,7 @@ def test_run_brief_agent_uses_agents_sdk_provider(monkeypatch) -> None:
     assert captured["input"] == "brief context"
     assert captured["max_turns"] == 10
     assert type(captured["run_config"].model_provider).__name__ == "OpenAIProvider"
-    assert captured["run_config"].workflow_name == "Open ALM Image Plan"
+    assert captured["run_config"].workflow_name == "Open Work Hub Image Plan"
     assert audit_records[0]["status"] == "ok"
     assert audit_records[0]["capability"] == "image_brief"
 

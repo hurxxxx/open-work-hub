@@ -94,13 +94,6 @@ describe('app shell navigation model', () => {
     );
     expect(resolveManifestNavItem('mail', '/mail')).toBe('mail-inbox');
 
-    expect(
-      resolveManifestNavItem('business', '/w/delivery-hub/plm?tab=sql'),
-    ).toBe('plm-raw-sql');
-    expect(resolveManifestNavItem('business', '/w/delivery-hub/plm')).toBe(
-      'plm-raw-tables',
-    );
-
     expect(resolveManifestNavItem('planner', '/planner?view=timeline')).toBe(
       'planner-timeline',
     );
@@ -176,12 +169,6 @@ describe('app shell navigation model', () => {
         pathname: '/community/posts/post-1',
       }),
     ).toBe('community');
-    expect(
-      resolveGlobalRouteAppId({
-        manifests: APP_MODULE_MANIFESTS,
-        pathname: '/admin/users',
-      }),
-    ).toBe('settings');
     expect(
       resolveGlobalRouteAppId({
         manifests: APP_MODULE_MANIFESTS,

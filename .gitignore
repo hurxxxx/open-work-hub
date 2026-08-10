@@ -36,15 +36,13 @@ tmp/
 .rag-validation/
 .local-sysperf/
 .dm-*-updates/
-.open-alm-desktop-updates/
+.open-work-hub-desktop-updates/
 app-platform-guardrails.json
 data/
 backups/local/
 samples/
-interfaces/plm/*.xlsx
-interfaces/plm/.~lock.*.xlsx#
 *.png
-!apps/web/public/open-alm-1024x1024.png
+!apps/web/public/open-work-hub-1024x1024.png
 !apps/web/public/android-chrome-192x192.png
 !apps/web/public/android-chrome-512x512.png
 !apps/web/public/apple-touch-icon.png
@@ -61,8 +59,7 @@ interfaces/plm/.~lock.*.xlsx#
 !apps/web/public/ppt-templates/corporate-seminar/*.png
 !apps/web/public/ppt-templates/corporate-education/*.png
 !apps/web/public/ppt-templates/corporate-meeting/*.png
-!apps/api/src/open_alm_api/domains/ppt_generator/design/assets/*.png
-!learning/open-alm-business-ai-curriculum/assets/diagrams/*.png
+!learning/open-work-hub-business-ai-curriculum/assets/diagrams/*.png
 
 # Playwright E2E run artifacts
 test-results/

@@ -137,14 +137,14 @@ describe('AppBarEditor', () => {
     renderEditor({
       draftPinnedAppIds: [
         'chatbot',
-        'docs',
+        'whiteboard',
         'web-search',
         'pms',
         'files',
         'mail',
-        'plm',
-        'data-viz',
-        'qa-assistant',
+        'recording',
+        'diagrams',
+        'docs',
       ] as WorkspaceAppId[],
     });
 

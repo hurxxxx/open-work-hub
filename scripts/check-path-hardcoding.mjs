@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const LEGACY_CHECKOUT_BASE = '/projects/open-alm-';
+const LEGACY_CHECKOUT_BASE = '/projects/open-work-hub-';
 
 const DEFAULT_LEGACY_PATHS = ['prod', 'dev'].map(
   (suffix) => `${LEGACY_CHECKOUT_BASE}${suffix}`,

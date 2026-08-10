@@ -3,7 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
-from open_alm_api.domains.dm import realtime_events
+from open_work_hub_api.domains.dm import realtime_events
 
 
 def test_publish_conversation_snapshot_sends_viewer_specific_payloads(monkeypatch) -> None:

@@ -3,11 +3,11 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from open_alm_api.core.db import get_session_factory
-from open_alm_api.domains.ai.audit import log_ai_external_call, log_llm_call
-from open_alm_api.domains.ai.interactions import AiInteraction
-from open_alm_api.domains.ai.models import AiSecurityDetectedValue
-from open_alm_api.domains.auth.models import AuditLog
+from open_work_hub_api.core.db import get_session_factory
+from open_work_hub_api.domains.ai.audit import log_ai_external_call, log_llm_call
+from open_work_hub_api.domains.ai.interactions import AiInteraction
+from open_work_hub_api.domains.ai.models import AiSecurityDetectedValue
+from open_work_hub_api.domains.auth.models import AuditLog
 
 
 def test_llm_audit_writes_raw_free_ai_interaction(client: TestClient) -> None:

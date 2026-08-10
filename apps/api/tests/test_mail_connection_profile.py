@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from open_alm_api.domains.mail.clients import MailConnectionSettings
-from open_alm_api.domains.mail.connection_profile import (
+from open_work_hub_api.domains.mail.clients import MailConnectionSettings
+from open_work_hub_api.domains.mail.connection_profile import (
     encrypt_connection_secrets,
     incoming_identity,
     settings_from_account,
@@ -9,8 +9,8 @@ from open_alm_api.domains.mail.connection_profile import (
     settings_from_payload,
     validate_connection_profile,
 )
-from open_alm_api.domains.mail.models import MailAccount
-from open_alm_api.domains.mail.schemas import (
+from open_work_hub_api.domains.mail.models import MailAccount
+from open_work_hub_api.domains.mail.schemas import (
     MailAccountConnectionRequest,
     MailAccountUpdateRequest,
 )

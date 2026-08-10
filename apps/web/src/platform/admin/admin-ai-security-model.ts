@@ -132,7 +132,6 @@ export function aiSecuritySubjectSummary(
   item: {
     user_id?: string | null;
     user_name?: string | null;
-    org_unit_name?: string | null;
     workspace_name?: string | null;
   },
 ): string {
@@ -143,11 +142,6 @@ export function aiSecuritySubjectSummary(
           name: userName,
         })
       : t('admin.console.aiSecurity.rules.scopeParts.allUsers'),
-    item.org_unit_name
-      ? t('admin.console.aiSecurity.rules.scopeParts.orgUnit', {
-          name: item.org_unit_name,
-        })
-      : t('admin.console.aiSecurity.rules.scopeParts.allOrgUnits'),
     item.workspace_name
       ? t('admin.console.aiSecurity.rules.scopeParts.workspace', {
           name: item.workspace_name,
@@ -201,7 +195,6 @@ export function emptyAiSecurityRuleDraft(): AiSecurityRulePayload {
     description: '',
     enabled: true,
     user_id: null,
-    org_unit_id: null,
     workspace_id: null,
     app_id: null,
     task_kind: null,
@@ -221,7 +214,6 @@ export function aiSecurityRuleDraftFromRule(
     description: rule.description,
     enabled: rule.enabled,
     user_id: rule.user_id ?? null,
-    org_unit_id: rule.org_unit_id ?? null,
     workspace_id: rule.workspace_id ?? null,
     app_id: rule.app_id ?? null,
     task_kind: rule.task_kind ?? null,
@@ -264,7 +256,6 @@ export function emptyAiSecurityExceptionDraft(): AiSecurityExternalTransferExcep
     description: '',
     enabled: true,
     user_id: null,
-    org_unit_id: null,
     workspace_id: null,
     app_id: null,
     task_kind: null,
@@ -285,7 +276,6 @@ export function aiSecurityExceptionDraftFromException(
     description: exception.description,
     enabled: exception.enabled,
     user_id: exception.user_id ?? null,
-    org_unit_id: exception.org_unit_id ?? null,
     workspace_id: exception.workspace_id ?? null,
     app_id: exception.app_id ?? null,
     task_kind: exception.task_kind ?? null,

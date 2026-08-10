@@ -4,8 +4,8 @@ from fastapi.testclient import TestClient
 
 from dev_accounts import auth_headers, create_workspace_user_session, dev_login
 
-from open_alm_api.core.db import get_session_factory
-from open_alm_api.domains.files.models import (
+from open_work_hub_api.core.db import get_session_factory
+from open_work_hub_api.domains.files.models import (
     FileManagerCorpus,
     FileManagerFile,
     FileManagerFolder,
@@ -19,7 +19,7 @@ def test_file_corpus_admin_can_create_list_and_transition(client: TestClient) ->
     admin = dev_login(client, "administrator")
     headers = auth_headers(admin["token"])
 
-    created = _create_corpus(client, headers=headers, name="AI TFT migration corpus")
+    created = _create_corpus(client, headers=headers, name="General Workspace migration corpus")
 
     listed_response = client.get(f"{_FILES_BASE}/corpora", headers=headers)
     assert listed_response.status_code == 200, listed_response.text
@@ -55,7 +55,7 @@ def test_file_corpus_management_denies_non_admin_workspace_member(
         client,
         workspace_key="administrator",
         login_id="filecorpusmember",
-        email="file-corpus-member@open-alm.local",
+        email="file-corpus-member@open-work-hub.local",
         full_name="File Corpus Member",
         role="member",
     )

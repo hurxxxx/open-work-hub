@@ -1,4 +1,4 @@
-import { Button } from '@open-alm/ui';
+import { Button } from '@open-work-hub/ui';
 import {
   Component,
   Suspense,

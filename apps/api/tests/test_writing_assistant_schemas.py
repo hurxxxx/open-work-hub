@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from open_alm_api.domains.writing_assistant.schemas import (
+from open_work_hub_api.domains.writing_assistant.schemas import (
     MAX_DOWNLOAD_CONTENT,
     MAX_FILENAME,
     MAX_ORIGINAL_MAIL,

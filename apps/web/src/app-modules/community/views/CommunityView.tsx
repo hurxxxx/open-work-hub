@@ -22,7 +22,7 @@ import {
   Input,
   Select,
   useConfirm,
-} from '@open-alm/ui';
+} from '@open-work-hub/ui';
 
 import { UserDateTime } from '@/src/components/date/UserDateTime';
 import { hasAdminConsoleAccess } from '@/src/platform/auth/auth-api';

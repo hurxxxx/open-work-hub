@@ -1,6 +1,6 @@
-# Open ALM
+# Open Work Hub
 
-Open ALM is a modular application lifecycle management platform. It brings planning,
+Open Work Hub is a modular application lifecycle management platform. It brings planning,
 workspaces, tasks, documents, meetings, files, search, and AI-assisted workflows into
 one extensible product.
 
@@ -33,7 +33,7 @@ pnpm dev
 ```
 
 The web application listens on `http://127.0.0.1:4200` by default. Runtime settings
-use the `OPEN_ALM_*` prefix; adjust `.env` for services that are not running locally.
+use the `OPEN_WORK_HUB_*` prefix; adjust `.env` for services that are not running locally.
 
 Useful checks:
 
@@ -54,5 +54,5 @@ privately to the repository owner.
 
 ## Status
 
-Open ALM is being generalized from an internal application into an independent ALM
+Open Work Hub is being generalized from an internal application into an independent ALM
 project. Interfaces and deployment contracts may change while this work is in progress.

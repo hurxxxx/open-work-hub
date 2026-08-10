@@ -2,7 +2,7 @@ import { useEffect, useReducer } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Search, Shield } from 'lucide-react';
 
-import { Button, InlineNotice } from '@open-alm/ui';
+import { Button, InlineNotice } from '@open-work-hub/ui';
 
 import type { AuthUser } from '@/src/platform/auth/auth-api';
 import { useAuth } from '@/src/platform/auth/auth-provider';
@@ -369,9 +369,6 @@ export function PeopleDirectoryGrid({
                 {t('admin.shared.directory.user')}
               </th>
               <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">
-                {t('admin.shared.directory.org')}
-              </th>
-              <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">
                 {t('admin.shared.directory.workspace')}
               </th>
               <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">
@@ -386,7 +383,7 @@ export function PeopleDirectoryGrid({
             {users.length === 0 && !loading ? (
               <tr>
                 <td
-                  colSpan={6}
+                  colSpan={5}
                   className="px-2 py-8 text-center text-app-ink/60"
                 >
                   {t('common:empty.noResults')}
@@ -421,9 +418,6 @@ export function PeopleDirectoryGrid({
                           {row.email}
                         </span>
                       </div>
-                    </td>
-                    <td className="max-w-[140px] truncate px-2 py-1 text-app-ink/60">
-                      {row.orgName}
                     </td>
                     <td className="px-2 py-1">
                       <UserWorkspaceChips user={row.user} />

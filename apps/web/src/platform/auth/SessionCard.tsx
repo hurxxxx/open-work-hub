@@ -1,4 +1,4 @@
-import { Button } from '@open-alm/ui/primitives/button';
+import { Button } from '@open-work-hub/ui/primitives/button';
 import { formatDateTime } from '@/src/platform/time/time-utils';
 
 import type { AuthSessionItem } from './auth-api';

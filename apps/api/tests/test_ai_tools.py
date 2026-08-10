@@ -6,11 +6,11 @@ from dev_accounts import dev_login
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from open_alm_api.core.settings import get_settings
-from open_alm_api.domains.ai.registry import reset_ai_capability_registry
-from open_alm_api.domains.ai.tool_service import _extract_resource_ids
-from open_alm_api.core.db import get_engine
-from open_alm_api.domains.auth.models import (
+from open_work_hub_api.core.settings import get_settings
+from open_work_hub_api.domains.ai.registry import reset_ai_capability_registry
+from open_work_hub_api.domains.ai.tool_service import _extract_resource_ids
+from open_work_hub_api.core.db import get_engine
+from open_work_hub_api.domains.auth.models import (
     AuditLog,
     PlatformAppVisibility,
 )
@@ -153,7 +153,7 @@ def test_ai_tool_invoke_pms_write_tool_requires_approval_when_enabled(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("OPEN_ALM_AI_WRITE_TOOLS_ENABLED", "1")
+    monkeypatch.setenv("OPEN_WORK_HUB_AI_WRITE_TOOLS_ENABLED", "1")
     _reset_settings_and_registry()
     try:
         session = _dev_login(client, "delivery-hub-admin")
@@ -191,7 +191,7 @@ def test_ai_tool_invoke_pms_write_tool_requires_approval_when_enabled(
         assert delete_audit_payload["tool_name"] == "pms.delete_task"
         assert delete_audit_payload["status"] == "blocked"
     finally:
-        monkeypatch.delenv("OPEN_ALM_AI_WRITE_TOOLS_ENABLED", raising=False)
+        monkeypatch.delenv("OPEN_WORK_HUB_AI_WRITE_TOOLS_ENABLED", raising=False)
         _reset_settings_and_registry()
 
 
@@ -199,7 +199,7 @@ def test_ai_tool_invoke_meeting_and_planner_write_tools_require_approval_when_en
     client: TestClient,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("OPEN_ALM_AI_WRITE_TOOLS_ENABLED", "1")
+    monkeypatch.setenv("OPEN_WORK_HUB_AI_WRITE_TOOLS_ENABLED", "1")
     _reset_settings_and_registry()
     try:
         session = _dev_login(client, "delivery-hub-admin")
@@ -251,5 +251,5 @@ def test_ai_tool_invoke_meeting_and_planner_write_tools_require_approval_when_en
         )
         assert planner_delete_response.status_code == 409, planner_delete_response.text
     finally:
-        monkeypatch.delenv("OPEN_ALM_AI_WRITE_TOOLS_ENABLED", raising=False)
+        monkeypatch.delenv("OPEN_WORK_HUB_AI_WRITE_TOOLS_ENABLED", raising=False)
         _reset_settings_and_registry()

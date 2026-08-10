@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from open_alm_api.domains.ai.artifact_parser import (
+from open_work_hub_api.domains.ai.artifact_parser import (
     ArtifactStreamParser,
     ParsedArtifactBody,
     ParsedArtifactEnd,
@@ -339,11 +339,11 @@ def test_inline_backtick_wrapped_artifact_stays_plain_text() -> None:
 
 def test_closed_inline_code_span_before_artifact_still_activates() -> None:
     # Regression: a naive "last char was a backtick" check would
-    # suppress this artifact because `FMEA` closes with a backtick
+    # suppress this artifact because `spec` closes with a backtick
     # immediately before `<artifact`. The span is already closed, so
     # the tag is real content and must open the panel.
     events = _collect([
-        '요약은 `FMEA`<artifact type="document" title="Draft">본문</artifact> 참고.',
+        '요약은 `spec`<artifact type="document" title="Draft">본문</artifact> 참고.',
     ])
     starts = [e for e in events if isinstance(e, ParsedArtifactStart)]
     assert len(starts) == 1

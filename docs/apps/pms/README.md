@@ -1,6 +1,6 @@
 # PMS App Docs
 
-PMS는 Open ALM가 직접 소유하는 업무 추적 앱이다. 스페이스, 폴더, 리스트, 태스크를 기준으로 팀 업무를 운영하고 Docs, Whiteboard, Planner, Meeting, AI 보조 흐름과 연결된다.
+PMS는 Open Work Hub가 직접 소유하는 업무 추적 앱이다. 스페이스, 폴더, 리스트, 태스크를 기준으로 팀 업무를 운영하고 Docs, Whiteboard, Planner, Meeting, AI 보조 흐름과 연결된다.
 
 ## 문서
 

@@ -10,18 +10,12 @@ API_SRC = WORKSPACE_ROOT / "apps" / "api" / "src"
 if str(API_SRC) not in sys.path:
     sys.path.insert(0, str(API_SRC))
 
-from open_alm_api.core.settings import Settings as ApiSettings  # noqa: E402
-from open_alm_worker.settings import Settings as WorkerSettings  # noqa: E402
+from open_work_hub_api.core.settings import Settings as ApiSettings  # noqa: E402
+from open_work_hub_worker.settings import Settings as WorkerSettings  # noqa: E402
 
 
 SHARED_RUNTIME_SETTING_FIELDS = (
     "asr_backend",
-    "erp_hr_snapshot_enabled",
-    "erp_hr_snapshot_hour",
-    "erp_hr_snapshot_minute",
-    "hr_master_sync_enabled",
-    "hr_master_sync_hour",
-    "hr_master_sync_minute",
     "llm_external_allowed_providers",
     "ai_allowed_external_providers",
     "ai_default_external_llm_provider",
@@ -108,19 +102,3 @@ def test_api_worker_shared_runtime_settings_contracts_match() -> None:
             )
 
     assert not mismatches, "\n".join(mismatches)
-
-
-def test_worker_erp_database_settings_use_the_existing_env_contract() -> None:
-    expected_aliases = {
-        "erp_db_ip": "OPEN_ALM_ERP_DB_IP",
-        "erp_db_port": "OPEN_ALM_ERP_DB_PORT",
-        "erp_db_name": "OPEN_ALM_ERP_DB_NAME",
-        "erp_db_id": "OPEN_ALM_ERP_DB_ID",
-        "erp_db_pw": "OPEN_ALM_ERP_DB_PW",
-        "erp_db_timeout_seconds": "OPEN_ALM_ERP_DB_TIMEOUT_SECONDS",
-    }
-
-    assert {
-        field_name: WorkerSettings.model_fields[field_name].validation_alias
-        for field_name in expected_aliases
-    } == expected_aliases

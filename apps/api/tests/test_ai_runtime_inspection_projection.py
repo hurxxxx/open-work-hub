@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
-from open_alm_api.domains.ai.runtime.inspection_projection import (
+from open_work_hub_api.domains.ai.runtime.inspection_projection import (
     RuntimeRunInspectionResponse,
     runtime_run_inspection_response,
 )

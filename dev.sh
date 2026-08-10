@@ -13,9 +13,9 @@ if [[ -n "${HOME:-}" && -d "$HOME/.local/bin" ]]; then
   esac
 fi
 
-if [[ "$(basename "$ROOT_DIR")" == "prod" && "${OPEN_ALM_ALLOW_PROD_DEV_SH:-0}" != "1" ]]; then
+if [[ "$(basename "$ROOT_DIR")" == "prod" && "${OPEN_WORK_HUB_ALLOW_PROD_DEV_SH:-0}" != "1" ]]; then
   echo "Refusing to run dev.sh from the production checkout." >&2
-  echo "Use ./prod.sh for production, or set OPEN_ALM_ALLOW_PROD_DEV_SH=1 explicitly for one-off diagnostics." >&2
+  echo "Use ./prod.sh for production, or set OPEN_WORK_HUB_ALLOW_PROD_DEV_SH=1 explicitly for one-off diagnostics." >&2
   exit 1
 fi
 
@@ -24,10 +24,10 @@ export NX_DAEMON=false
 # dev-env.sh already loads the checkout .env. Letting Nx load .env.local again
 # can make the API process disagree with scripts/dev-smoke.sh.
 export NX_LOAD_DOT_ENV_FILES=false
-WEB_DEV_PORT="${OPEN_ALM_WEB_DEV_PORT:-4200}"
-API_DEV_PORT="${OPEN_ALM_API_DEV_PORT:-8001}"
-export OPEN_ALM_WEB_DEV_PORT="$WEB_DEV_PORT"
-export OPEN_ALM_WEB_API_PROXY_TARGET="${OPEN_ALM_WEB_API_PROXY_TARGET:-http://127.0.0.1:${API_DEV_PORT}}"
+WEB_DEV_PORT="${OPEN_WORK_HUB_WEB_DEV_PORT:-4200}"
+API_DEV_PORT="${OPEN_WORK_HUB_API_DEV_PORT:-8001}"
+export OPEN_WORK_HUB_WEB_DEV_PORT="$WEB_DEV_PORT"
+export OPEN_WORK_HUB_WEB_API_PROXY_TARGET="${OPEN_WORK_HUB_WEB_API_PROXY_TARGET:-http://127.0.0.1:${API_DEV_PORT}}"
 
 usage() {
   cat <<'EOF'
@@ -47,7 +47,7 @@ Options:
 
 Defaults:
   - Starts `web` and `api`
-  - Boots the dev docker infra (redis/search/vector; postgres/minio when OPEN_ALM_INFRA_USE_LOCAL_* is on)
+  - Boots the dev docker infra (redis/search/vector; postgres/minio when OPEN_WORK_HUB_INFRA_USE_LOCAL_* is on)
     so features like the docs collab relay can reach redis at 127.0.0.1:56380
   - Uses `dynamic-legacy` Nx output for readable local logs
   - Stops all child servers when you press Ctrl+C or close the session
@@ -143,7 +143,7 @@ show_project_status() {
       fi
       ;;
     worker)
-      process_lines="$(pgrep -af "celery -A open_alm_worker.celery_app:celery_app worker" || true)"
+      process_lines="$(pgrep -af "celery -A open_work_hub_worker.celery_app:celery_app worker" || true)"
       if [[ -n "$process_lines" ]]; then
         echo "worker running"
         echo "$process_lines"
@@ -182,12 +182,12 @@ require_free_port() {
 }
 
 run_api_migration_preflight() {
-  if [[ "${OPEN_ALM_DEV_API_MIGRATION_PREFLIGHT:-1}" == "0" ]]; then
+  if [[ "${OPEN_WORK_HUB_DEV_API_MIGRATION_PREFLIGHT:-1}" == "0" ]]; then
     return 0
   fi
 
   local auto_migrate
-  auto_migrate="$(printf '%s' "${OPEN_ALM_API_AUTO_MIGRATE:-1}" | tr '[:upper:]' '[:lower:]')"
+  auto_migrate="$(printf '%s' "${OPEN_WORK_HUB_API_AUTO_MIGRATE:-1}" | tr '[:upper:]' '[:lower:]')"
   case "$auto_migrate" in
     1|true|yes) ;;
     *) return 0 ;;
@@ -196,9 +196,9 @@ run_api_migration_preflight() {
   echo "Checking API migrations before starting dev server..."
   (
     cd "$ROOT_DIR/apps/api"
-    OPEN_ALM_API_AUTO_MIGRATE=0 uv run --python 3.12 alembic upgrade head
+    OPEN_WORK_HUB_API_AUTO_MIGRATE=0 uv run --python 3.12 alembic upgrade head
   )
-  export OPEN_ALM_API_AUTO_MIGRATE=0
+  export OPEN_WORK_HUB_API_AUTO_MIGRATE=0
 }
 
 kill_if_running() {
@@ -220,7 +220,7 @@ start_dev_infra() {
 
   local desired=(redis)
   desired+=(opensearch qdrant)
-  if [[ "$(printf '%s' "${OPEN_ALM_API_VIDEO_CHAT_ENABLED:-true}" | tr '[:upper:]' '[:lower:]')" != "false" ]]; then
+  if [[ "$(printf '%s' "${OPEN_WORK_HUB_API_VIDEO_CHAT_ENABLED:-true}" | tr '[:upper:]' '[:lower:]')" != "false" ]]; then
     desired+=(livekit)
   fi
   if dev_use_local_postgres; then
@@ -231,8 +231,8 @@ start_dev_infra() {
   fi
 
   # Stop dev-nginx only when it is configured to collide with the web dev server.
-  local dev_nginx_container="${OPEN_ALM_INFRA_CONTAINER_PREFIX:-open-alm-dev}-nginx"
-  local dev_nginx_port="${OPEN_ALM_INFRA_NGINX_PORT:-14200}"
+  local dev_nginx_container="${OPEN_WORK_HUB_INFRA_CONTAINER_PREFIX:-open-work-hub-dev}-nginx"
+  local dev_nginx_port="${OPEN_WORK_HUB_INFRA_NGINX_PORT:-14200}"
   local web_in_projects=0
   local project
   for project in "${projects[@]}"; do
@@ -252,12 +252,12 @@ start_dev_infra() {
   # If a service's host port is already bound (e.g., a sibling repo's compose
   # project started redis under the same fixed container name), reuse it
   # instead of colliding on `docker compose up`.
-  local redis_port="${OPEN_ALM_INFRA_REDIS_PORT:-56380}"
-  local postgres_port="${OPEN_ALM_INFRA_POSTGRES_PORT:-55433}"
-  local minio_port="${OPEN_ALM_INFRA_MINIO_PORT:-59010}"
-  local opensearch_port="${OPEN_ALM_INFRA_OPENSEARCH_PORT:-59210}"
-  local qdrant_port="${OPEN_ALM_INFRA_QDRANT_PORT:-16333}"
-  local livekit_port="${OPEN_ALM_LIVEKIT_PORT:-7880}"
+  local redis_port="${OPEN_WORK_HUB_INFRA_REDIS_PORT:-56380}"
+  local postgres_port="${OPEN_WORK_HUB_INFRA_POSTGRES_PORT:-55433}"
+  local minio_port="${OPEN_WORK_HUB_INFRA_MINIO_PORT:-59010}"
+  local opensearch_port="${OPEN_WORK_HUB_INFRA_OPENSEARCH_PORT:-59210}"
+  local qdrant_port="${OPEN_WORK_HUB_INFRA_QDRANT_PORT:-16333}"
+  local livekit_port="${OPEN_WORK_HUB_LIVEKIT_PORT:-7880}"
   local services=()
   local skipped=()
   local svc
@@ -336,7 +336,7 @@ stop_project_processes() {
       fi
       ;;
     worker)
-      pgrep -af "celery -A open_alm_worker.celery_app:celery_app" 2>/dev/null | while read -r pid args; do
+      pgrep -af "celery -A open_work_hub_worker.celery_app:celery_app" 2>/dev/null | while read -r pid args; do
         if [[ "$args" == *"$ROOT_DIR/apps/worker"* ]]; then
           kill_if_running "$pid"
           stopped=1
@@ -374,7 +374,7 @@ if (( stop_only )); then
 fi
 
 if (( status_only )); then
-  echo "Open ALM dev server status"
+  echo "Open Work Hub dev server status"
   echo "  projects : ${project_csv}"
   echo
   for project in "${projects[@]}"; do
@@ -404,7 +404,7 @@ if project_selected api; then
 fi
 
 cat <<EOF
-Starting Open ALM development servers
+Starting Open Work Hub development servers
   projects : ${project_csv}
   web      : http://localhost:${WEB_DEV_PORT}
   api      : http://127.0.0.1:${API_DEV_PORT}/docs

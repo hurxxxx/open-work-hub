@@ -5,7 +5,7 @@
 
 ## Context
 
-Open ALM의 생성형 LLM 호출은 도메인 gateway, provider SDK, worker, agent runtime에
+Open Work Hub의 생성형 LLM 호출은 도메인 gateway, provider SDK, worker, agent runtime에
 퍼져 있었다. 이 구조에서는 관리자가 호출 목록을 알기 위해 매번 코드를
 재조사해야 하고, 새 앱이 provider/model, 보안, 예산, audit 계약을 부분적으로만
 적용할 수 있다.
@@ -107,14 +107,14 @@ Open ALM의 생성형 LLM 호출은 도메인 gateway, provider SDK, worker, age
 - local route는 외부 전송 검사를 받지 않지만 workload 등록, 모델 준비 상태, 토큰
   상한, audit/usage 계약은 동일하게 적용한다.
 
-### 6. Web search workloads are external-only
+### 6. Web search workload is external-only
 
-- Web Search, Research Trends, Standards Monitor는 각각 안정적인 workload로 등록하고
-  기존 Anthropic native `web_search` tool 구현을 승인된 external Adapter로 사용한다.
-- 이 workload들은 local route를 제공하지 않으며 관리자는 승인된 외부 provider/model만
+- Web Search는 안정적인 workload로 등록하고 기존 Anthropic native `web_search` tool
+  구현을 승인된 external Adapter로 사용한다.
+- 이 workload는 local route를 제공하지 않으며 관리자는 승인된 외부 provider/model만
   선택한다. 외부 검색 실패 시 local route로 자동 fallback하지 않는다.
 
-### 7. Future additions are enforced by instructions and CI
+### 7. Future additions are enforced by code contracts
 
 새 LLM workload는 다음을 하나의 변경으로 제공한다.
 
@@ -125,9 +125,8 @@ Open ALM의 생성형 LLM 호출은 도메인 gateway, provider SDK, worker, age
 5. registry bootstrap·duplicate·Adapter/default-route 검증
 6. provider/core LLM direct-call guard 테스트
 
-Root agent rules, app delivery skill, AI capability governance skill, Core Enablement/App Sandbox
-MR template은 이 체크리스트를 같이 강제한다. 가드 예외 추가는 앱 기능 MR에서
-할 수 없고 독립 플랫폼 정책 검토를 받아야 한다.
+Registry bootstrap과 계약 테스트가 이 체크리스트를 검증한다. 예외는 호출부에
+추가하지 않고 공통 실행 정책에서 명시적으로 검토한다.
 
 ## Consequences
 
@@ -147,7 +146,7 @@ MR template은 이 체크리스트를 같이 강제한다. 가드 예외 추가�
 
 - Legacy `register_llm_task(...)`는 호환 workload를 materialize하되 신규 코드는
   `register_llm_workload(...)`를 사용한다.
-- 기존 Web Search와 PPT 외부 구현을 제거하지 않고 workload Adapter 안에 보존한 뒤
+- 기존 Web Search 외부 구현을 workload Adapter 안에 보존한 뒤
   direct-call guard를 필수 CI로 고정한다. Images는 별도 Image Model Settings resolver와
   image Adapter를 사용한다.
 - Provider-native Adapter도 provider/model/output cap을 환경 변수에서 다시 고르지

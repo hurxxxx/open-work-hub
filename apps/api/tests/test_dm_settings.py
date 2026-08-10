@@ -3,16 +3,16 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from open_alm_api.core.settings import DEFAULT_DM_ATTACHMENT_SIGNING_KEY, Settings
+from open_work_hub_api.core.settings import DEFAULT_DM_ATTACHMENT_SIGNING_KEY, Settings
 
 
-POSTGRES_DSN = "postgresql+psycopg://open_alm_test:open_alm_test@127.0.0.1:5432/open_alm_test"
+POSTGRES_DSN = "postgresql+psycopg://open_work_hub_test:open_work_hub_test@127.0.0.1:5432/open_work_hub_test"
 
 
 @pytest.fixture(autouse=True)
 def clear_dm_attachment_signing_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("OPEN_ALM_DM_ATTACHMENT_SIGNING_KEY", raising=False)
-    monkeypatch.delenv("OPEN_ALM_API_DM_ATTACHMENT_SIGNING_KEY", raising=False)
+    monkeypatch.delenv("OPEN_WORK_HUB_DM_ATTACHMENT_SIGNING_KEY", raising=False)
+    monkeypatch.delenv("OPEN_WORK_HUB_API_DM_ATTACHMENT_SIGNING_KEY", raising=False)
 
 
 def test_dm_attachment_signing_key_defaults_for_development() -> None:
@@ -25,14 +25,14 @@ def test_dm_attachment_signing_key_accepts_legacy_alias() -> None:
     settings = Settings(
         _env_file=None,
         postgres_dsn=POSTGRES_DSN,
-        OPEN_ALM_DM_ATTACHMENT_SIGNING_KEY="custom-signing-secret",
+        OPEN_WORK_HUB_DM_ATTACHMENT_SIGNING_KEY="custom-signing-secret",
     )
 
     assert settings.dm_attachment_signing_key == "custom-signing-secret"
 
 
 def test_dm_attachment_signing_key_rejects_default_in_production() -> None:
-    with pytest.raises(ValidationError, match="OPEN_ALM_DM_ATTACHMENT_SIGNING_KEY"):
+    with pytest.raises(ValidationError, match="OPEN_WORK_HUB_DM_ATTACHMENT_SIGNING_KEY"):
         Settings(
             _env_file=None,
             postgres_dsn=POSTGRES_DSN,
@@ -41,7 +41,7 @@ def test_dm_attachment_signing_key_rejects_default_in_production() -> None:
 
 
 def test_dm_attachment_signing_key_is_required_in_production() -> None:
-    with pytest.raises(ValidationError, match="OPEN_ALM_DM_ATTACHMENT_SIGNING_KEY"):
+    with pytest.raises(ValidationError, match="OPEN_WORK_HUB_DM_ATTACHMENT_SIGNING_KEY"):
         Settings(
             _env_file=None,
             postgres_dsn=POSTGRES_DSN,
@@ -51,7 +51,7 @@ def test_dm_attachment_signing_key_is_required_in_production() -> None:
 
 
 def test_dm_attachment_signing_key_rejects_default_in_preview() -> None:
-    with pytest.raises(ValidationError, match="OPEN_ALM_DM_ATTACHMENT_SIGNING_KEY"):
+    with pytest.raises(ValidationError, match="OPEN_WORK_HUB_DM_ATTACHMENT_SIGNING_KEY"):
         Settings(
             _env_file=None,
             postgres_dsn=POSTGRES_DSN,

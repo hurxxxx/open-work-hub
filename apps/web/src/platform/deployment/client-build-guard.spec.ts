@@ -62,7 +62,7 @@ describe('client build fetch guard', () => {
 
   it('does not honor reload headers from external fetch responses', async () => {
     const response = new Response('{}', {
-      headers: { 'X-Open ALM-Reload-Required': '1' },
+      headers: { 'X-Open-Work-Hub-Reload-Required': '1' },
     });
     const { replace, runtime } = makeRuntime(response);
     installClientBuildFetchGuard(runtime, { buildId: 'build-current' });
@@ -77,7 +77,7 @@ describe('client build fetch guard', () => {
       JSON.stringify({ code: 'CLIENT_BUILD_MISMATCH' }),
       {
         status: 409,
-        headers: { 'X-Open ALM-Reload-Required': '1' },
+        headers: { 'X-Open-Work-Hub-Reload-Required': '1' },
       },
     );
     const { replace, runtime } = makeRuntime(response);
@@ -132,7 +132,7 @@ describe('client build fetch guard', () => {
     request.send();
     expect(request.headers.get(CLIENT_BUILD_HEADER)).toBe('build-current');
 
-    request.responseHeaders.set('X-Open ALM-Reload-Required', '1');
+    request.responseHeaders.set('X-Open-Work-Hub-Reload-Required', '1');
     request.dispatchEvent(new Event('load'));
     expect(replace).toHaveBeenCalledWith(
       'https://app.test/w/hq/pms?__reload=4000',

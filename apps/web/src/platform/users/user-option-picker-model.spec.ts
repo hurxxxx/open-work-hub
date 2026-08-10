@@ -2,10 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   selectUserOptionsForPicker,
-  userOptionDepartmentName,
   userOptionDisplayName,
   userOptionAvatarInitials,
-  userOptionNameWithDepartment,
   userOptionMetaParts,
   type UserOptionLike,
 } from './user-option-picker-model';
@@ -43,40 +41,20 @@ describe('user option picker model', () => {
     ).toEqual(['ada', 'grace']);
   });
 
-  it('matches department, display name, and job title fields', () => {
+  it('matches display names', () => {
     const users = [
-      user({
-        id: 'dept',
-        full_name: 'Kim Mina',
-        primary_org_unit_name: 'AI Platform',
-      }),
       user({
         id: 'display',
         display_name: 'Mason',
         full_name: 'Lee Minseok',
       }),
-      user({
-        id: 'job',
-        full_name: 'Park Hana',
-        job_title: 'Product Owner',
-      }),
     ];
 
-    expect(
-      selectUserOptionsForPicker({ users, query: 'platform' }).map(
-        (candidate) => candidate.id,
-      ),
-    ).toEqual(['dept']);
     expect(
       selectUserOptionsForPicker({ users, query: 'mason' }).map(
         (candidate) => candidate.id,
       ),
     ).toEqual(['display']);
-    expect(
-      selectUserOptionsForPicker({ users, query: 'owner' }).map(
-        (candidate) => candidate.id,
-      ),
-    ).toEqual(['job']);
   });
 
   it('excludes before applying the limit and preserves input order', () => {
@@ -145,22 +123,14 @@ describe('user option picker model', () => {
 
   it('formats display and meta labels for picker rows', () => {
     const candidate = user({
-      id: 'dept',
+      id: 'display',
       full_name: null,
       display_name: 'Display Name',
-      primary_org_unit_name: 'Design Ops',
       email: 'design@example.test',
     });
 
     expect(userOptionDisplayName(candidate)).toBe('Display Name');
-    expect(userOptionNameWithDepartment(candidate)).toBe(
-      'Display Name - Design Ops',
-    );
-    expect(userOptionDepartmentName(candidate)).toBe('Design Ops');
-    expect(userOptionMetaParts(candidate)).toEqual([
-      'Design Ops',
-      'design@example.test',
-    ]);
+    expect(userOptionMetaParts(candidate)).toEqual(['design@example.test']);
   });
 
   it('uses a single leading character for compact avatars', () => {

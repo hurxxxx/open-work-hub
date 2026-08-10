@@ -238,13 +238,7 @@ export function normalizeDmUser(value: unknown): DmUser | null {
     return null;
   }
   const displayName = optionalNullableString(value.display_name);
-  const jobTitle = optionalNullableString(value.job_title);
-  const primaryOrgUnitName = optionalNullableString(value.primary_org_unit_name);
-  if (
-    displayName === undefined ||
-    jobTitle === undefined ||
-    primaryOrgUnitName === undefined
-  ) {
+  if (displayName === undefined) {
     return null;
   }
   return {
@@ -252,8 +246,6 @@ export function normalizeDmUser(value: unknown): DmUser | null {
     email: value.email,
     full_name: value.full_name,
     display_name: displayName,
-    job_title: jobTitle,
-    primary_org_unit_name: primaryOrgUnitName,
   };
 }
 

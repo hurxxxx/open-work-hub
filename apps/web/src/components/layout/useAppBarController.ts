@@ -56,7 +56,6 @@ export function useAppBarController({
   const { t, i18n } = useTranslation(['common', 'shell', 'auth']);
   const navigate = useNavigate();
   const [state, dispatch] = useReducer(appBarReducer, INITIAL_APP_BAR_STATE);
-  const businessSitesMenuRef = useRef<HTMLDivElement>(null);
   const workspaceSwitcherRef = useRef<HTMLDivElement>(null);
   const moreMenuRef = useRef<HTMLDivElement>(null);
   const previousPathnameRef = useRef(currentPathname);
@@ -185,14 +184,12 @@ export function useAppBarController({
     if (
       state.favoritesOpen ||
       state.categoryMenuId ||
-      state.appBarEditorOpen ||
-      state.businessSitesOpen
+      state.appBarEditorOpen
     ) {
       dispatch({
         type: 'patch',
         patch: {
           appBarEditorOpen: false,
-          businessSitesOpen: false,
           categoryMenuId: null,
           favoritesOpen: false,
         },
@@ -201,7 +198,6 @@ export function useAppBarController({
   }, [
     currentPathname,
     state.appBarEditorOpen,
-    state.businessSitesOpen,
     state.categoryMenuId,
     state.favoritesOpen,
   ]);
@@ -259,26 +255,6 @@ export function useAppBarController({
       document.removeEventListener('mousedown', handlePointerDown);
     };
   }, [state.appBarEditorOpen, state.categoryMenuId, state.favoritesOpen]);
-
-  useEffect(() => {
-    if (!state.businessSitesOpen) {
-      return;
-    }
-
-    function handlePointerDown(event: MouseEvent) {
-      if (
-        businessSitesMenuRef.current &&
-        !businessSitesMenuRef.current.contains(event.target as Node)
-      ) {
-        dispatch({ type: 'closeBusinessSites' });
-      }
-    }
-
-    document.addEventListener('mousedown', handlePointerDown);
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown);
-    };
-  }, [state.businessSitesOpen]);
 
   const handleCountChange = useCallback(
     (delta: number) => {
@@ -454,7 +430,6 @@ export function useAppBarController({
       patch: {
         appBarEditorOpen: true,
         appBarLayoutError: null,
-        businessSitesOpen: false,
         draftPinnedAppIds: resolveEditorDraftPinnedAppIds(
           pinnedAppIds,
           pinnedEligibleAppIds,
@@ -526,7 +501,6 @@ export function useAppBarController({
 
   return {
     activeAppTitle,
-    businessSitesMenuRef,
     canCreateWorkspace,
     canManageCurrentWorkspace,
     canOpenWorkspaceSearch,
@@ -543,13 +517,11 @@ export function useAppBarController({
     normalizedDefaultWorkspaceId,
     onCloseEditor: () =>
       dispatch({ type: 'patch', patch: { appBarEditorOpen: false } }),
-    onCloseBusinessSites: () => dispatch({ type: 'closeBusinessSites' }),
     onCloseLauncherMenus: () => dispatch({ type: 'closeLauncherMenus' }),
     onCreateWorkspace: () => {
       dispatch({
         type: 'patch',
         patch: {
-          businessSitesOpen: false,
           categoryMenuId: null,
           favoritesOpen: false,
           workspaceSwitcherOpen: false,
@@ -564,7 +536,6 @@ export function useAppBarController({
       dispatch({
         type: 'patch',
         patch: {
-          businessSitesOpen: false,
           categoryMenuId: null,
           favoritesOpen: false,
           workspaceSwitcherOpen: false,
@@ -579,7 +550,6 @@ export function useAppBarController({
       dispatch({
         type: 'patch',
         patch: {
-          businessSitesOpen: false,
           categoryMenuId: null,
           favoritesOpen: false,
           workspaceSwitcherOpen: false,
@@ -593,7 +563,6 @@ export function useAppBarController({
     },
     onSearchQueryChange: (workspaceQuery: string) =>
       dispatch({ type: 'patch', patch: { workspaceQuery } }),
-    onToggleBusinessSites: () => dispatch({ type: 'toggleBusinessSites' }),
     onToggleCategoryMenu: (categoryId: string) =>
       dispatch({ type: 'toggleCategoryMenu', categoryId }),
     onToggleFavorites: () => dispatch({ type: 'toggleFavorites' }),

@@ -26,124 +26,6 @@ wheels = [
 ]
 
 [[package]]
-name = "open-alm-worker"
-version = "0.1.1"
-source = { editable = "." }
-dependencies = [
-    { name = "beautifulsoup4" },
-    { name = "celery" },
-    { name = "claude-agent-sdk" },
-    { name = "cryptography" },
-    { name = "fastapi" },
-    { name = "httpx" },
-    { name = "langchain" },
-    { name = "langgraph" },
-    { name = "langgraph-checkpoint-postgres" },
-    { name = "llama-index-core" },
-    { name = "llama-index-vector-stores-postgres" },
-    { name = "minio" },
-    { name = "openai" },
-    { name = "openai-agents" },
-    { name = "openpyxl" },
-    { name = "opentelemetry-api" },
-    { name = "opentelemetry-exporter-otlp-proto-grpc" },
-    { name = "opentelemetry-exporter-otlp-proto-http" },
-    { name = "opentelemetry-sdk" },
-    { name = "pandas" },
-    { name = "pdfplumber" },
-    { name = "pillow" },
-    { name = "psycopg", extra = ["binary"] },
-    { name = "pydantic-settings" },
-    { name = "pymupdf" },
-    { name = "python-docx" },
-    { name = "python-pptx" },
-    { name = "python-tds" },
-    { name = "qdrant-client" },
-    { name = "redis" },
-    { name = "requests" },
-    { name = "sqlalchemy" },
-    { name = "sqlglot" },
-]
-
-[package.optional-dependencies]
-asr-qwen = [
-    { name = "torch" },
-    { name = "torchaudio" },
-    { name = "transformers" },
-]
-asr-whisper = [
-    { name = "ctranslate2" },
-    { name = "faster-whisper" },
-]
-rag-local = [
-    { name = "docling" },
-    { name = "easyocr" },
-    { name = "sentence-transformers" },
-    { name = "torch" },
-    { name = "transformers" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "beautifulsoup4", specifier = ">=4.12.0,<5.0.0" },
-    { name = "celery", specifier = ">=5.5.0,<6.0.0" },
-    { name = "claude-agent-sdk", specifier = ">=0.1.0,<1.0.0" },
-    { name = "cryptography", specifier = ">=44.0.0,<48.0.0" },
-    { name = "ctranslate2", marker = "extra == 'asr-whisper'", specifier = ">=4.0.0" },
-    { name = "docling", marker = "extra == 'rag-local'", specifier = ">=2.0.0" },
-    { name = "easyocr", marker = "extra == 'rag-local'", specifier = ">=1.7.0" },
-    { name = "fastapi", specifier = ">=0.115.0,<1.0.0" },
-    { name = "faster-whisper", marker = "extra == 'asr-whisper'", specifier = ">=1.0.0" },
-    { name = "httpx", specifier = ">=0.28.0,<0.29.0" },
-    { name = "langchain", specifier = "==1.3.14" },
-    { name = "langgraph", specifier = "==1.2.9" },
-    { name = "langgraph-checkpoint-postgres", specifier = "==3.1.0" },
-    { name = "llama-index-core", specifier = "==0.14.23" },
-    { name = "llama-index-vector-stores-postgres", specifier = "==0.8.1" },
-    { name = "minio", specifier = ">=7.2.0" },
-    { name = "openai", specifier = ">=2.0.0,<3.0.0" },
-    { name = "openai-agents", specifier = ">=0.3.0,<1.0.0" },
-    { name = "openpyxl", specifier = ">=3.1.0,<4.0" },
-    { name = "opentelemetry-api", specifier = ">=1.32.0,<2.0.0" },
-    { name = "opentelemetry-exporter-otlp-proto-grpc", specifier = ">=1.32.0,<2.0.0" },
-    { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.32.0,<2.0.0" },
-    { name = "opentelemetry-sdk", specifier = ">=1.32.0,<2.0.0" },
-    { name = "pandas", specifier = ">=2.0,<3.0.0" },
-    { name = "pdfplumber", specifier = ">=0.11.0,<1.0" },
-    { name = "pillow", specifier = ">=10.0.0,<12.0.0" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.2.0" },
-    { name = "pydantic-settings", specifier = ">=2.8.0,<3.0.0" },
-    { name = "pymupdf", specifier = ">=1.24.0,<2.0" },
-    { name = "python-docx", specifier = ">=1.1.0,<2.0" },
-    { name = "python-pptx", specifier = ">=1.0.0,<2.0" },
-    { name = "python-tds", specifier = ">=1.16.0,<2.0.0" },
-    { name = "qdrant-client", specifier = "==1.17.1" },
-    { name = "redis", specifier = ">=5.2.0,<6.0.0" },
-    { name = "requests", specifier = ">=2.31.0,<3.0.0" },
-    { name = "sentence-transformers", marker = "extra == 'rag-local'", specifier = ">=3.3.0" },
-    { name = "sqlalchemy", specifier = ">=2.0.0" },
-    { name = "sqlglot", specifier = ">=26.0.0,<30.0.0" },
-    { name = "torch", marker = "extra == 'asr-qwen'", specifier = ">=2.4.0" },
-    { name = "torch", marker = "extra == 'rag-local'", specifier = ">=2.4.0" },
-    { name = "torchaudio", marker = "extra == 'asr-qwen'", specifier = ">=2.4.0" },
-    { name = "transformers", marker = "extra == 'asr-qwen'", specifier = ">=4.45.0" },
-    { name = "transformers", marker = "extra == 'rag-local'", specifier = ">=4.45.0" },
-]
-provides-extras = ["rag-local", "asr-qwen", "asr-whisper"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=8.3.0,<9.0.0" },
-    { name = "ruff", specifier = ">=0.11.0,<0.12.0" },
-]
-
-[[package]]
 name = "aiohappyeyeballs"
 version = "2.7.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2083,6 +1965,116 @@ wheels = [
 ]
 
 [[package]]
+name = "open-work-hub-worker"
+version = "0.1.1"
+source = { editable = "." }
+dependencies = [
+    { name = "beautifulsoup4" },
+    { name = "celery" },
+    { name = "claude-agent-sdk" },
+    { name = "cryptography" },
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "langchain" },
+    { name = "langgraph" },
+    { name = "langgraph-checkpoint-postgres" },
+    { name = "llama-index-core" },
+    { name = "llama-index-vector-stores-postgres" },
+    { name = "minio" },
+    { name = "openai" },
+    { name = "openai-agents" },
+    { name = "openpyxl" },
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-exporter-otlp-proto-grpc" },
+    { name = "opentelemetry-exporter-otlp-proto-http" },
+    { name = "opentelemetry-sdk" },
+    { name = "pdfplumber" },
+    { name = "pillow" },
+    { name = "psycopg", extra = ["binary"] },
+    { name = "pydantic-settings" },
+    { name = "pymupdf" },
+    { name = "python-docx" },
+    { name = "qdrant-client" },
+    { name = "redis" },
+    { name = "requests" },
+    { name = "sqlalchemy" },
+]
+
+[package.optional-dependencies]
+asr-qwen = [
+    { name = "torch" },
+    { name = "torchaudio" },
+    { name = "transformers" },
+]
+asr-whisper = [
+    { name = "ctranslate2" },
+    { name = "faster-whisper" },
+]
+rag-local = [
+    { name = "docling" },
+    { name = "easyocr" },
+    { name = "sentence-transformers" },
+    { name = "torch" },
+    { name = "transformers" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "beautifulsoup4", specifier = ">=4.12.0,<5.0.0" },
+    { name = "celery", specifier = ">=5.5.0,<6.0.0" },
+    { name = "claude-agent-sdk", specifier = ">=0.1.0,<1.0.0" },
+    { name = "cryptography", specifier = ">=44.0.0,<48.0.0" },
+    { name = "ctranslate2", marker = "extra == 'asr-whisper'", specifier = ">=4.0.0" },
+    { name = "docling", marker = "extra == 'rag-local'", specifier = ">=2.0.0" },
+    { name = "easyocr", marker = "extra == 'rag-local'", specifier = ">=1.7.0" },
+    { name = "fastapi", specifier = ">=0.115.0,<1.0.0" },
+    { name = "faster-whisper", marker = "extra == 'asr-whisper'", specifier = ">=1.0.0" },
+    { name = "httpx", specifier = ">=0.28.0,<0.29.0" },
+    { name = "langchain", specifier = "==1.3.14" },
+    { name = "langgraph", specifier = "==1.2.9" },
+    { name = "langgraph-checkpoint-postgres", specifier = "==3.1.0" },
+    { name = "llama-index-core", specifier = "==0.14.23" },
+    { name = "llama-index-vector-stores-postgres", specifier = "==0.8.1" },
+    { name = "minio", specifier = ">=7.2.0" },
+    { name = "openai", specifier = ">=2.0.0,<3.0.0" },
+    { name = "openai-agents", specifier = ">=0.3.0,<1.0.0" },
+    { name = "openpyxl", specifier = ">=3.1.0,<4.0" },
+    { name = "opentelemetry-api", specifier = ">=1.32.0,<2.0.0" },
+    { name = "opentelemetry-exporter-otlp-proto-grpc", specifier = ">=1.32.0,<2.0.0" },
+    { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.32.0,<2.0.0" },
+    { name = "opentelemetry-sdk", specifier = ">=1.32.0,<2.0.0" },
+    { name = "pdfplumber", specifier = ">=0.11.0,<1.0" },
+    { name = "pillow", specifier = ">=10.0.0,<12.0.0" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.2.0" },
+    { name = "pydantic-settings", specifier = ">=2.8.0,<3.0.0" },
+    { name = "pymupdf", specifier = ">=1.24.0,<2.0" },
+    { name = "python-docx", specifier = ">=1.1.0,<2.0" },
+    { name = "qdrant-client", specifier = "==1.17.1" },
+    { name = "redis", specifier = ">=5.2.0,<6.0.0" },
+    { name = "requests", specifier = ">=2.31.0,<3.0.0" },
+    { name = "sentence-transformers", marker = "extra == 'rag-local'", specifier = ">=3.3.0" },
+    { name = "sqlalchemy", specifier = ">=2.0.0" },
+    { name = "torch", marker = "extra == 'asr-qwen'", specifier = ">=2.4.0" },
+    { name = "torch", marker = "extra == 'rag-local'", specifier = ">=2.4.0" },
+    { name = "torchaudio", marker = "extra == 'asr-qwen'", specifier = ">=2.4.0" },
+    { name = "transformers", marker = "extra == 'asr-qwen'", specifier = ">=4.45.0" },
+    { name = "transformers", marker = "extra == 'rag-local'", specifier = ">=4.45.0" },
+]
+provides-extras = ["rag-local", "asr-qwen", "asr-whisper"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8.3.0,<9.0.0" },
+    { name = "ruff", specifier = ">=0.11.0,<0.12.0" },
+]
+
+[[package]]
 name = "openai"
 version = "2.31.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2842,15 +2834,6 @@ wheels = [
 ]
 
 [[package]]
-name = "python-tds"
-version = "1.17.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/ae/8a/cf778bd80d142d4b3c39f9879485e2e93e4ace2ae9aabae77e07e8117f41/python_tds-1.17.1.tar.gz", hash = "sha256:c97483a9adf1dcab8bee66e83429acc502753f389d134553edd818348b94ced0", size = 82208, upload-time = "2025-09-13T12:57:37.909Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/bf/8f/c7344075a9ea4458e5d52cf2e16dc7e70777807c96ba9d429f16f27b1acc/python_tds-1.17.1-py3-none-any.whl", hash = "sha256:35cb210b1a54e5ccc91570a83d4e9a2a16682cbeb00bede06fd6cdf9afa9762f", size = 86635, upload-time = "2025-09-13T12:57:36.877Z" },
-]
-
-[[package]]
 name = "pytz"
 version = "2026.2"
 source = { registry = "https://pypi.org/simple" }
@@ -3295,15 +3278,6 @@ wheels = [
 [package.optional-dependencies]
 asyncio = [
     { name = "greenlet" },
-]
-
-[[package]]
-name = "sqlglot"
-version = "29.0.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/61/12/c3f7533fde302fcd59bebcd4c2e46d5bf0eef21f183c67995bbb010fb578/sqlglot-29.0.1.tar.gz", hash = "sha256:0010b4f77fb996c8d25dd4b16f3654e6da163ff1866ceabc70b24e791c203048", size = 5760786, upload-time = "2026-02-23T21:41:20.178Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/ad/c9/f58c3a17beb650700f9d2eccd410726b6d96df8953663700764ca48636c7/sqlglot-29.0.1-py3-none-any.whl", hash = "sha256:06a473ea6c2b3632ac67bd38e687a6860265bf4156e66b54adeda15d07f00c65", size = 611448, upload-time = "2026-02-23T21:41:18.008Z" },
 ]
 
 [[package]]

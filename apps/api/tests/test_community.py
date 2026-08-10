@@ -10,27 +10,27 @@ from pydantic import ValidationError
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 
-from open_alm_api.core.db import get_session_factory
-from open_alm_api.domains.auth.models import User
-from open_alm_api.domains.auth.security import new_id
-from open_alm_api.domains.community import service
-from open_alm_api.domains.community.models import (
+from open_work_hub_api.core.db import get_session_factory
+from open_work_hub_api.domains.auth.models import User
+from open_work_hub_api.domains.auth.security import new_id
+from open_work_hub_api.domains.community import service
+from open_work_hub_api.domains.community.models import (
     CommunityChannel,
     CommunityComment,
     CommunityPost,
     CommunityPostRead,
 )
-from open_alm_api.domains.dm.models import (
+from open_work_hub_api.domains.dm.models import (
     DmConversation,
     DmConversationParticipant,
     DmMessage,
     DmMessageAttachment,
 )
-from open_alm_api.domains.community.router import _require_author_or_admin
-from open_alm_api.domains.community.schemas import CommunityChannelCreateRequest
-from open_alm_api.domains.media.models import MediaFile
-from open_alm_api.domains.notifications.models import NotificationDmDelivery
-from open_alm_api.domains.pms.models import Notification
+from open_work_hub_api.domains.community.router import _require_author_or_admin
+from open_work_hub_api.domains.community.schemas import CommunityChannelCreateRequest
+from open_work_hub_api.domains.media.models import MediaFile
+from open_work_hub_api.domains.notifications.models import NotificationDmDelivery
+from open_work_hub_api.domains.pms.models import Notification
 from dev_accounts import auth_headers, dev_login
 
 
@@ -60,7 +60,7 @@ def _make_user(db: Session, name: str) -> User:
     user = User(
         id=new_id(),
         login_id=name,
-        email=f"{name}@open-alm.local",
+        email=f"{name}@open-work-hub.local",
         full_name=name,
         display_name=name,
         password_hash="x",
@@ -327,7 +327,7 @@ def test_comment_on_my_community_post_creates_notification_and_bot_dm(
     bot_conversation = next(
         item
         for item in conversations_response.json()["items"]
-        if item["display_name"] == "Open ALM Bot"
+        if item["display_name"] == "Open Work Hub Bot"
     )
     assert bot_conversation["unread_count"] == 1
 
@@ -337,7 +337,7 @@ def test_comment_on_my_community_post_creates_notification_and_bot_dm(
     )
     assert messages_response.status_code == 200, messages_response.text
     message = messages_response.json()["items"][0]
-    assert message["sender_name"] == "Open ALM Bot"
+    assert message["sender_name"] == "Open Work Hub Bot"
     assert "내 커뮤니티 글에 댓글이 달렸습니다" in message["body"]
     assert "확인했습니다" in message["body"]
     assert f"/community/posts/{post['id']}" in message["body"]
@@ -345,7 +345,7 @@ def test_comment_on_my_community_post_creates_notification_and_bot_dm(
     dm_search_response = client.get(
         "/api/v1/dm/users",
         headers=auth_headers(author["token"]),
-        params={"q": "Open ALM Bot"},
+        params={"q": "Open Work Hub Bot"},
     )
     assert dm_search_response.status_code == 200, dm_search_response.text
     assert dm_search_response.json() == []
@@ -353,7 +353,7 @@ def test_comment_on_my_community_post_creates_notification_and_bot_dm(
     admin_users_response = client.get(
         "/api/v1/admin/users",
         headers=auth_headers(author["token"]),
-        params={"q": "Open ALM Bot"},
+        params={"q": "Open Work Hub Bot"},
     )
     assert admin_users_response.status_code == 200, admin_users_response.text
     assert admin_users_response.json()["items"] == []

@@ -1,4 +1,4 @@
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@open-alm/ui';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@open-work-hub/ui';
 import { Download } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';

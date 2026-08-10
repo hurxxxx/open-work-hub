@@ -105,7 +105,7 @@ DB의 `files` 테이블엔 `{id, filename, mime, size, object_key, uploaded_by, 
 
 ## 5. 버킷(bucket)과 키(key)
 
-- **버킷**: 최상위 컨테이너. `open-alm-uploads`, `open-alm-avatars` 등.
+- **버킷**: 최상위 컨테이너. `open-work-hub-uploads`, `open-work-hub-avatars` 등.
 - **키**: 버킷 내 객체를 식별하는 전체 경로 문자열. 예: `documents/2026/04/abc123.pdf`.
 
 버킷은 평면 구조이며 키 전체를 기준으로 저장됩니다. 조회 시에는 접두어(prefix) 조건으로 그룹화합니다.
@@ -139,8 +139,8 @@ client = Minio(
     secret_key="...",
     secure=False
 )
-client.put_object("open-alm-uploads", "documents/abc.pdf", file_stream, length)
-url = client.presigned_get_object("open-alm-uploads", "documents/abc.pdf", expires=600)
+client.put_object("open-work-hub-uploads", "documents/abc.pdf", file_stream, length)
+url = client.presigned_get_object("open-work-hub-uploads", "documents/abc.pdf", expires=600)
 ```
 
 ### 7.1 🛠️ 5분 실습 — MinIO 웹 콘솔 둘러보기

@@ -28,7 +28,7 @@ from urllib.parse import quote, urljoin, urlparse
 
 import httpx
 
-from open_alm_api.core.settings import is_production_like_environment
+from open_work_hub_api.core.settings import is_production_like_environment
 
 
 EXECUTION_ACK = "live-e2e-development"
@@ -69,7 +69,7 @@ def _sha256_bytes(value: bytes) -> str:
 
 def _load_readonly_harness():
     path = Path(__file__).with_name("files_rag_readonly_harness.py")
-    module_name = "open_alm_files_rag_readonly_harness_for_live_e2e"
+    module_name = "open_work_hub_files_rag_readonly_harness_for_live_e2e"
     existing = sys.modules.get(module_name)
     if existing is not None:
         return existing
@@ -135,7 +135,7 @@ def select_live_canaries(
             sorted(
                 strata[key],
                 key=lambda item: _sha256_bytes(
-                    b"open-alm-files-live-canary-v1\0"
+                    b"open-work-hub-files-live-canary-v1\0"
                     + item.candidate.source_id.encode("ascii")
                     + item.content_sha256.encode("ascii")
                 ),
@@ -143,7 +143,7 @@ def select_live_canaries(
         )
 
     nonce = run_nonce if run_nonce is not None else secrets.token_bytes(32)
-    run_tag = _sha256_bytes(b"open-alm-files-live-run-tag-v1\0" + nonce)[:16]
+    run_tag = _sha256_bytes(b"open-work-hub-files-live-run-tag-v1\0" + nonce)[:16]
     selected: list[LiveCanary] = []
     total_bytes = 0
     round_index = 0
@@ -157,7 +157,7 @@ def select_live_canaries(
             if total_bytes + candidate.size_bytes > max_total_bytes:
                 continue
             item_digest = _sha256_bytes(
-                b"open-alm-files-live-upload-name-v1\0"
+                b"open-work-hub-files-live-upload-name-v1\0"
                 + nonce
                 + candidate.source_id.encode("ascii")
                 + inspection.content_sha256.encode("ascii")
@@ -466,7 +466,7 @@ class HttpFilesApi:
         )
         if not isinstance(browse, dict) or not isinstance(browse.get("files"), list):
             raise LiveE2EContractError("files_workspace_preflight_failed")
-        query = _sha256_bytes(b"open-alm-files-live-preflight-v1\0" + secrets.token_bytes(16))[:16]
+        query = _sha256_bytes(b"open-work-hub-files-live-preflight-v1\0" + secrets.token_bytes(16))[:16]
         search = self._json_request(
             "POST",
             self._workspace_path(workspace_slug, "/search"),
@@ -708,8 +708,8 @@ class DevelopmentProjectionInspector:
     def __init__(self, settings: object) -> None:
         from qdrant_client import QdrantClient
 
-        from open_alm_api.core.db import get_session_factory
-        from open_alm_api.core.storage import get_minio_client
+        from open_work_hub_api.core.db import get_session_factory
+        from open_work_hub_api.core.storage import get_minio_client
 
         self._settings = settings
         self._session_factory = get_session_factory()
@@ -732,7 +732,7 @@ class DevelopmentProjectionInspector:
     def _active_physical_names(self, db: Any) -> tuple[str, str]:
         from sqlalchemy import select
 
-        from open_alm_api.domains.retrieval.models import RetrievalProjectionGeneration
+        from open_work_hub_api.domains.retrieval.models import RetrievalProjectionGeneration
 
         rows = tuple(
             db.scalars(
@@ -757,8 +757,8 @@ class DevelopmentProjectionInspector:
         return names["opensearch"], names["qdrant"]
 
     def _opensearch_records(self, physical_name: str, file_ids: Sequence[str]) -> list[Any]:
-        from open_alm_api.domains.retrieval.projection_identity import canonical_search_document_id
-        from open_alm_api.domains.source_access.resource_types import (
+        from open_work_hub_api.domains.retrieval.projection_identity import canonical_search_document_id
+        from open_work_hub_api.domains.source_access.resource_types import (
             FILE_MANAGER_FILE_RESOURCE_TYPE,
         )
 
@@ -801,7 +801,7 @@ class DevelopmentProjectionInspector:
     def _qdrant_records(self, physical_name: str, file_ids: Sequence[str]) -> list[Any]:
         from qdrant_client import models
 
-        from open_alm_api.domains.source_access.resource_types import (
+        from open_work_hub_api.domains.source_access.resource_types import (
             FILE_MANAGER_FILE_RESOURCE_TYPE,
         )
 
@@ -847,14 +847,14 @@ class DevelopmentProjectionInspector:
     def _state(self, *, corpus_id: str, file_ids: Sequence[str]) -> dict[str, object]:
         from sqlalchemy import select
 
-        from open_alm_api.domains.files.models import FileManagerCorpus, FileManagerFile
-        from open_alm_api.domains.rag.models import RagSyncJob
-        from open_alm_api.domains.retrieval.models import (
+        from open_work_hub_api.domains.files.models import FileManagerCorpus, FileManagerFile
+        from open_work_hub_api.domains.rag.models import RagSyncJob
+        from open_work_hub_api.domains.retrieval.models import (
             RetrievalProjectionEvent,
             RetrievalProjectionHead,
         )
-        from open_alm_api.domains.search.models import SearchIndexJob
-        from open_alm_api.domains.source_access.resource_types import (
+        from open_work_hub_api.domains.search.models import SearchIndexJob
+        from open_work_hub_api.domains.source_access.resource_types import (
             FILE_MANAGER_FILE_RESOURCE_TYPE,
         )
 
@@ -1037,7 +1037,7 @@ class DevelopmentProjectionInspector:
     def content_probe(self, *, file_ids: Sequence[str]) -> tuple[str, str]:
         from sqlalchemy import select
 
-        from open_alm_api.domains.files.models import FileManagerFile
+        from open_work_hub_api.domains.files.models import FileManagerFile
 
         expected_ids = tuple(dict.fromkeys(file_ids))
         with self._session_factory() as db:
@@ -1063,8 +1063,8 @@ class DevelopmentProjectionInspector:
 
         from sqlalchemy import select
 
-        from open_alm_api.domains.auth.models import Workspace
-        from open_alm_api.domains.files.models import FileManagerCorpus, FileManagerFile
+        from open_work_hub_api.domains.auth.models import Workspace
+        from open_work_hub_api.domains.files.models import FileManagerCorpus, FileManagerFile
 
         with self._session_factory() as db:
             corpus = db.get(FileManagerCorpus, corpus_id)
@@ -1106,11 +1106,11 @@ class DevelopmentProjectionInspector:
         from minio.error import S3Error
         from sqlalchemy import select
 
-        from open_alm_api.domains.files.models import FileManagerFile
-        from open_alm_api.domains.rag.models import RagSyncJob
-        from open_alm_api.domains.retrieval.models import RetrievalProjectionHead
-        from open_alm_api.domains.search.models import SearchIndexJob
-        from open_alm_api.domains.source_access.resource_types import (
+        from open_work_hub_api.domains.files.models import FileManagerFile
+        from open_work_hub_api.domains.rag.models import RagSyncJob
+        from open_work_hub_api.domains.retrieval.models import RetrievalProjectionHead
+        from open_work_hub_api.domains.search.models import SearchIndexJob
+        from open_work_hub_api.domains.source_access.resource_types import (
             FILE_MANAGER_FILE_RESOURCE_TYPE,
         )
 
@@ -1478,7 +1478,7 @@ def run_live_e2e(
     workspace_b_observer_api.preflight(workspace_b)
 
     query = canaries[0].upload_name.split(".", 1)[0][:16]
-    query_id = _sha256_bytes(b"open-alm-files-live-query-v1\0" + query.encode("ascii"))
+    query_id = _sha256_bytes(b"open-work-hub-files-live-query-v1\0" + query.encode("ascii"))
     corpus_name = f"rag-e2e-{_sha256_bytes(query.encode('ascii'))[:16]}"
     corpus = actor_api.create_corpus(workspace_a, corpus_name)
     corpus_id = str(corpus.get("id") or "")
@@ -1525,7 +1525,7 @@ def run_live_e2e(
         if content_target_file_id not in expected_file_ids:
             raise LiveE2EContractError("content_probe_unavailable")
         content_query_id = _sha256_bytes(
-            b"open-alm-files-live-content-query-v1\0" + content_query.encode("utf-8")
+            b"open-work-hub-files-live-content-query-v1\0" + content_query.encode("utf-8")
         )
 
         search_metrics: dict[str, object] = {}
@@ -1738,10 +1738,10 @@ def run_live_e2e(
         )
         cleanup_complete = True
         return {
-            "schema_version": "open-alm.files-rag-live-e2e.v1",
+            "schema_version": "open-work-hub.files-rag-live-e2e.v1",
             "status": "passed",
             "source_root_id": _sha256_bytes(
-                b"open-alm-files-live-source-root-v1\0"
+                b"open-work-hub-files-live-source-root-v1\0"
                 + os.fsencode(str(_resolve_source_root(source)))
             ),
             "query_id": query_id,
@@ -1816,16 +1816,16 @@ def assert_development_data_plane(settings: object) -> None:
         database_url = make_url(str(getattr(settings, "postgres_dsn", "") or ""))
     except Exception as error:
         raise LiveE2EContractError("development_data_plane_required") from error
-    if database_url.database != "open_alm_dev":
+    if database_url.database != "open_work_hub_dev":
         raise LiveE2EContractError("development_data_plane_required")
     require_loopback(database_url.host)
     require_loopback(getattr(settings, "opensearch_url", ""))
     require_loopback(getattr(settings, "rag_qdrant_url", ""))
     require_loopback(getattr(settings, "minio_endpoint", ""))
     expected_names = {
-        "minio_bucket": "open-alm-dev",
-        "opensearch_index_prefix": "open-alm-dev",
-        "rag_qdrant_collection_prefix": "open-alm-dev-rag",
+        "minio_bucket": "open-work-hub-dev",
+        "opensearch_index_prefix": "open-work-hub-dev",
+        "rag_qdrant_collection_prefix": "open-work-hub-dev-rag",
     }
     if any(
         str(getattr(settings, attribute, "") or "").strip() != expected
@@ -1839,10 +1839,10 @@ def assert_development_data_plane(settings: object) -> None:
         return
     values = dotenv_values(production_env)
     bindings = (
-        ("OPEN_ALM_POSTGRES_DSN", "postgres_dsn"),
-        ("OPEN_ALM_OPENSEARCH_URL", "opensearch_url"),
-        ("OPEN_ALM_RAG_QDRANT_URL", "rag_qdrant_url"),
-        ("OPEN_ALM_MINIO_ENDPOINT", "minio_endpoint"),
+        ("OPEN_WORK_HUB_POSTGRES_DSN", "postgres_dsn"),
+        ("OPEN_WORK_HUB_OPENSEARCH_URL", "opensearch_url"),
+        ("OPEN_WORK_HUB_RAG_QDRANT_URL", "rag_qdrant_url"),
+        ("OPEN_WORK_HUB_MINIO_ENDPOINT", "minio_endpoint"),
     )
     for environment_key, attribute in bindings:
         production_value = str(values.get(environment_key) or "").rstrip("/")
@@ -1883,7 +1883,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         # Authorization-bearing request metadata in an operator terminal.
         logging.getLogger("httpx").disabled = True
         logging.getLogger("httpcore").disabled = True
-        from open_alm_api.core.settings import get_settings
+        from open_work_hub_api.core.settings import get_settings
 
         settings = get_settings()
         assert_development_runtime(settings)
@@ -1957,7 +1957,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     source=args.source,
                     output=args.report_out,
                     report={
-                        "schema_version": "open-alm.files-rag-live-e2e.v1",
+                        "schema_version": "open-work-hub.files-rag-live-e2e.v1",
                         "status": "failed",
                         "code": error.code,
                     },
@@ -1973,7 +1973,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     source=args.source,
                     output=args.report_out,
                     report={
-                        "schema_version": "open-alm.files-rag-live-e2e.v1",
+                        "schema_version": "open-work-hub.files-rag-live-e2e.v1",
                         "status": "failed",
                         "code": "unexpected_error",
                     },

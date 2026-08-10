@@ -7,7 +7,6 @@ const messages: Record<string, string> = {
   'admin.console.audit.actionGroups.admin': '관리',
   'admin.console.audit.actionGroups.ai': 'AI',
   'admin.console.audit.actionGroups.auth': '인증',
-  'admin.console.audit.actions.adminPlatformApiKeyReveal': '플랫폼 API 키 조회',
   'admin.console.audit.actions.authLogin': '로그인',
   'admin.console.audit.actions.llmToolCall': 'AI 도구 호출',
   'admin.console.audit.moreItems': '외 {{count}}개',
@@ -35,7 +34,7 @@ function auditItem(overrides: Partial<AuditLogItem> = {}): AuditLogItem {
   return {
     id: 'audit-1',
     action: 'auth.login',
-    actor_name: 'Open ALM Admin',
+    actor_name: 'Open Work Hub Admin',
     actor_user_id: 'user-1',
     created_at: '2026-06-18T09:00:00',
     entity_id: 'session-1',
@@ -52,18 +51,8 @@ describe('admin audit log model', () => {
 
     expect(display.actionLabel).toBe('로그인');
     expect(display.groupLabel).toBe('인증');
-    expect(display.actorLabel).toBe('Open ALM Admin');
+    expect(display.actorLabel).toBe('Open Work Hub Admin');
     expect(display.entityLabel).toBe('auth_session / session-1');
-  });
-
-  it('labels platform API key security actions', () => {
-    const display = buildAuditLogDisplay(
-      auditItem({ action: 'admin.platform_api_key.reveal' }),
-      t,
-    );
-
-    expect(display.actionLabel).toBe('플랫폼 API 키 조회');
-    expect(display.groupLabel).toBe('관리');
   });
 
   it('turns payload JSON into priority details', () => {

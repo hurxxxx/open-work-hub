@@ -12,19 +12,18 @@ function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
   return {
     id: 'user-1',
     login_id: 'user',
-    email: 'user@open-alm.local',
-    full_name: 'Open ALM User',
-    display_name: 'Open ALM User',
+    email: 'user@open-work-hub.local',
+    full_name: 'Open Work Hub User',
+    display_name: 'Open Work Hub User',
     status: 'active',
     theme_preference: 'system',
     locale: 'ko-KR',
     time_zone: 'Asia/Seoul',
-    primary_org_unit: null,
     workspaces: [
       {
         id: 'workspace-hq',
         slug: 'hq',
-        name: 'Open ALM HQ',
+        name: 'Open Work Hub HQ',
         role: 'admin',
       },
     ],

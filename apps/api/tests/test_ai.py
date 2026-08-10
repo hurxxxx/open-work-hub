@@ -9,17 +9,17 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from open_alm_api.core import llm as llm_core
-from open_alm_api.core.db import get_engine
-from open_alm_api.core.settings import get_settings
-from open_alm_api.domains.ai.model_credentials import encrypt_api_key
-from open_alm_api.domains.ai.model_settings_models import (
+from open_work_hub_api.core import llm as llm_core
+from open_work_hub_api.core.db import get_engine
+from open_work_hub_api.core.settings import get_settings
+from open_work_hub_api.domains.ai.model_credentials import encrypt_api_key
+from open_work_hub_api.domains.ai.model_settings_models import (
     AiModelCatalogEntry,
     AiModelProviderConfig,
 )
-from open_alm_api.domains.ai.registry import get_ai_capability_registry
-from open_alm_api.domains.auth.models import AuditLog
-from open_alm_api.domains.meeting import conversation_scope as meeting_conversation_scope
+from open_work_hub_api.domains.ai.registry import get_ai_capability_registry
+from open_work_hub_api.domains.auth.models import AuditLog
+from open_work_hub_api.domains.meeting import conversation_scope as meeting_conversation_scope
 from test_meeting import _auth_headers, _bootstrap_admin_session, _create_meeting, _dev_login
 
 
@@ -527,7 +527,7 @@ def test_readyz_uses_configured_readiness_while_ai_health_stays_live(
     monkeypatch.setattr(llm_core, "_new_pool_client", fake_pool_client)
     health_response = client.get(
         _workspace_ai_path(workspace_slug, "/health"),
-        headers={**_auth_headers(auth["token"]), "x-open-alm-locale": "en-US"},
+        headers={**_auth_headers(auth["token"]), "x-open-work-hub-locale": "en-US"},
     )
     assert health_response.status_code == 200, health_response.text
     health_payload = health_response.json()

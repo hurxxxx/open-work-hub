@@ -45,7 +45,7 @@ export default [
     rules: {},
   },
   // Prevent direct imports of wrapped libraries in app code.
-  // These should only be imported via @open-alm/ui wrappers.
+  // These should only be imported via @open-work-hub/ui wrappers.
   {
     files: ['apps/**/*.ts', 'apps/**/*.tsx'],
     rules: {
@@ -55,17 +55,17 @@ export default [
           paths: [
             {
               name: 'recharts',
-              message: 'Use chart components from @open-alm/ui instead.',
+              message: 'Use chart components from @open-work-hub/ui instead.',
             },
             {
               name: '@tanstack/react-table',
-              message: 'Use DataTable from @open-alm/ui instead.',
+              message: 'Use DataTable from @open-work-hub/ui instead.',
             },
           ],
           patterns: [
             {
               group: ['@radix-ui/*'],
-              message: 'Use primitives from @open-alm/ui instead.',
+              message: 'Use primitives from @open-work-hub/ui instead.',
             },
             {
               group: [

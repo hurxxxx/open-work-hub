@@ -1,9 +1,9 @@
-import { Button } from '@open-alm/ui';
+import { Button } from '@open-work-hub/ui';
 import { Loader2, Send } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { UserOptionRow } from '@/src/platform/users/UserSearchMultiSelect';
-import { userOptionNameWithDepartment } from '@/src/platform/users/user-option-picker-model';
+import { userOptionDisplayName } from '@/src/platform/users/user-option-picker-model';
 import type {
   PmsActivityLog,
   PmsComment,
@@ -45,11 +45,10 @@ function mentionDisplayName(
   if (displayName) return displayName;
   const member = userId ? membersById.get(userId) : undefined;
   if (!member) return 'Unknown';
-  return userOptionNameWithDepartment({
+  return userOptionDisplayName({
     id: member.user_id,
     email: member.email,
     full_name: member.full_name,
-    primary_org_unit_name: member.primary_org_unit_name,
   });
 }
 

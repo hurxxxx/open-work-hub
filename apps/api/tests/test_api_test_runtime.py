@@ -155,7 +155,7 @@ def test_application_database_reset_restores_migration_owned_seed(
                 )
                 for table_name in (
                     "release_notes",
-                    "lawsearch_items",
+                    "web_search_items",
                     "ai_model_catalog_entries",
                     "community_channels",
                 )
@@ -167,7 +167,7 @@ def test_application_database_reset_restores_migration_owned_seed(
                 if table_name != "ai_model_catalog_entries"
             )
             connection.execute(text("DELETE FROM release_notes"))
-            connection.execute(text("DELETE FROM lawsearch_items"))
+            connection.execute(text("DELETE FROM web_search_items"))
             connection.execute(
                 text("UPDATE community_channels SET name = 'corrupted'")
             )
@@ -195,18 +195,18 @@ def test_test_resource_names_are_scoped_to_the_run() -> None:
     minio_target = infra.new_minio_target()
     index_prefix = infra.new_opensearch_index_prefix()
 
-    assert minio_target.bucket.startswith("open-alm-api-test-abc123-")
-    assert index_prefix.startswith("open_alm_api_test_abc123_")
-    assert infra.postgres_run_prefix == "open_alm_test_abc123_"
+    assert minio_target.bucket.startswith("open-work-hub-api-test-abc123-")
+    assert index_prefix.startswith("open_work_hub_api_test_abc123_")
+    assert infra.postgres_run_prefix == "open_work_hub_test_abc123_"
 
 
 def test_cleanup_refuses_resources_outside_the_current_run() -> None:
     infra = _infra()
 
     with pytest.raises(RuntimeError, match="outside this test run"):
-        infra.cleanup_minio_bucket("open-alm-dev")
+        infra.cleanup_minio_bucket("open-work-hub-dev")
     with pytest.raises(RuntimeError, match="outside this test run"):
-        infra.cleanup_opensearch_indices("open-alm-dev")
+        infra.cleanup_opensearch_indices("open-work-hub-dev")
 
 
 def test_opensearch_cleanup_deletes_and_verifies_run_prefix(monkeypatch) -> None:
@@ -233,25 +233,25 @@ def test_opensearch_cleanup_deletes_and_verifies_run_prefix(monkeypatch) -> None
         lambda url, **_kwargs: calls.append(("get", url)) or Response(),
     )
 
-    infra.cleanup_opensearch_indices("open_alm_api_test_abc123_case")
+    infra.cleanup_opensearch_indices("open_work_hub_api_test_abc123_case")
 
     assert calls == [
-        ("delete", "http://127.0.0.1:59210/open_alm_api_test_abc123_case*"),
+        ("delete", "http://127.0.0.1:59210/open_work_hub_api_test_abc123_case*"),
         (
             "get",
-            "http://127.0.0.1:59210/_cat/indices/open_alm_api_test_abc123_case*",
+            "http://127.0.0.1:59210/_cat/indices/open_work_hub_api_test_abc123_case*",
         ),
     ]
 
 
 def test_load_refuses_production_profile(monkeypatch) -> None:
     values = {
-        "OPEN_ALM_TEST_REDIS_URL": "redis://127.0.0.1:56380/0",
-        "OPEN_ALM_TEST_MINIO_ENDPOINT": "http://127.0.0.1:59010",
-        "OPEN_ALM_TEST_MINIO_ACCESS_KEY": "test-access",
-        "OPEN_ALM_TEST_MINIO_SECRET_KEY": "test-secret",
-        "OPEN_ALM_TEST_OPENSEARCH_URL": "http://127.0.0.1:59210",
-        "OPEN_ALM_ENV_PROFILE": "production",
+        "OPEN_WORK_HUB_TEST_REDIS_URL": "redis://127.0.0.1:56380/0",
+        "OPEN_WORK_HUB_TEST_MINIO_ENDPOINT": "http://127.0.0.1:59010",
+        "OPEN_WORK_HUB_TEST_MINIO_ACCESS_KEY": "test-access",
+        "OPEN_WORK_HUB_TEST_MINIO_SECRET_KEY": "test-secret",
+        "OPEN_WORK_HUB_TEST_OPENSEARCH_URL": "http://127.0.0.1:59210",
+        "OPEN_WORK_HUB_ENV_PROFILE": "production",
     }
     monkeypatch.setattr(
         infra_module.os,
@@ -266,11 +266,11 @@ def test_load_refuses_production_profile(monkeypatch) -> None:
 
 def test_load_refuses_missing_environment_profile(monkeypatch) -> None:
     values = {
-        "OPEN_ALM_TEST_REDIS_URL": "redis://127.0.0.1:56380/0",
-        "OPEN_ALM_TEST_MINIO_ENDPOINT": "http://127.0.0.1:59010",
-        "OPEN_ALM_TEST_MINIO_ACCESS_KEY": "test-access",
-        "OPEN_ALM_TEST_MINIO_SECRET_KEY": "test-secret",
-        "OPEN_ALM_TEST_OPENSEARCH_URL": "http://127.0.0.1:59210",
+        "OPEN_WORK_HUB_TEST_REDIS_URL": "redis://127.0.0.1:56380/0",
+        "OPEN_WORK_HUB_TEST_MINIO_ENDPOINT": "http://127.0.0.1:59010",
+        "OPEN_WORK_HUB_TEST_MINIO_ACCESS_KEY": "test-access",
+        "OPEN_WORK_HUB_TEST_MINIO_SECRET_KEY": "test-secret",
+        "OPEN_WORK_HUB_TEST_OPENSEARCH_URL": "http://127.0.0.1:59210",
     }
     monkeypatch.setattr(
         infra_module.os,
@@ -313,7 +313,7 @@ def test_minio_cleanup_verifies_bucket_absence(monkeypatch) -> None:
         lambda _self: fake_client,
     )
 
-    bucket = "open-alm-api-test-abc123-case"
+    bucket = "open-work-hub-api-test-abc123-case"
     infra.cleanup_minio_bucket(bucket)
 
     assert removed == [f"{bucket}/item", bucket]
@@ -323,12 +323,12 @@ def test_unrecognized_test_endpoint_requires_explicit_non_production_ack(
     monkeypatch,
 ) -> None:
     values = {
-        "OPEN_ALM_TEST_REDIS_URL": "redis://production-alias.invalid:6379/0",
-        "OPEN_ALM_TEST_MINIO_ENDPOINT": "https://production-alias.invalid:9000",
-        "OPEN_ALM_TEST_MINIO_ACCESS_KEY": "test-access",
-        "OPEN_ALM_TEST_MINIO_SECRET_KEY": "test-secret",
-        "OPEN_ALM_TEST_OPENSEARCH_URL": "https://production-alias.invalid:9200",
-        "OPEN_ALM_ENV_PROFILE": "development",
+        "OPEN_WORK_HUB_TEST_REDIS_URL": "redis://production-alias.invalid:6379/0",
+        "OPEN_WORK_HUB_TEST_MINIO_ENDPOINT": "https://production-alias.invalid:9000",
+        "OPEN_WORK_HUB_TEST_MINIO_ACCESS_KEY": "test-access",
+        "OPEN_WORK_HUB_TEST_MINIO_SECRET_KEY": "test-secret",
+        "OPEN_WORK_HUB_TEST_OPENSEARCH_URL": "https://production-alias.invalid:9200",
+        "OPEN_WORK_HUB_ENV_PROFILE": "development",
     }
     monkeypatch.setattr(
         infra_module.os,
@@ -348,7 +348,7 @@ def test_unrecognized_postgres_template_is_rejected_without_ack(monkeypatch) -> 
         infra_module.os,
         "getenv",
         lambda name, default=None: (
-            "development" if name == "OPEN_ALM_ENV_PROFILE" else default
+            "development" if name == "OPEN_WORK_HUB_ENV_PROFILE" else default
         ),
     )
     monkeypatch.setattr(infra_module, "_approved_dev_values", lambda _name: set())

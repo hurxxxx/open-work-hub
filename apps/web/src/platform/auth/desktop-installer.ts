@@ -1,15 +1,15 @@
 import {
-  aiDoDesktopInstallerUrl,
-  type AiDoDesktopUpdatePlatform,
-} from '@open-alm/contracts/open-alm-desktop-update-feed';
+  openWorkHubDesktopInstallerUrl,
+  type OpenWorkHubDesktopUpdatePlatform,
+} from '@open-work-hub/contracts/open-work-hub-desktop-update-feed';
 
-export type DesktopInstallPlatform = AiDoDesktopUpdatePlatform;
+export type DesktopInstallPlatform = OpenWorkHubDesktopUpdatePlatform;
 
 export type DesktopInstallerEnv = Partial<{
-  VITE_OPEN_ALM_DESKTOP_INSTALLER_URL: string;
-  VITE_OPEN_ALM_DESKTOP_INSTALLER_URL_WIN: string;
-  VITE_OPEN_ALM_DESKTOP_INSTALLER_URL_MAC: string;
-  VITE_OPEN_ALM_DESKTOP_INSTALLER_URL_LINUX: string;
+  VITE_OPEN_WORK_HUB_DESKTOP_INSTALLER_URL: string;
+  VITE_OPEN_WORK_HUB_DESKTOP_INSTALLER_URL_WIN: string;
+  VITE_OPEN_WORK_HUB_DESKTOP_INSTALLER_URL_MAC: string;
+  VITE_OPEN_WORK_HUB_DESKTOP_INSTALLER_URL_LINUX: string;
 }>;
 
 export type DesktopPlatformSignal = {
@@ -41,9 +41,9 @@ export const DEFAULT_DESKTOP_INSTALLER_URLS: Record<
   DesktopInstallPlatform,
   string
 > = {
-  win: aiDoDesktopInstallerUrl('win'),
-  mac: aiDoDesktopInstallerUrl('mac'),
-  linux: aiDoDesktopInstallerUrl('linux'),
+  win: openWorkHubDesktopInstallerUrl('win'),
+  mac: openWorkHubDesktopInstallerUrl('mac'),
+  linux: openWorkHubDesktopInstallerUrl('linux'),
 };
 
 export const DESKTOP_INSTALLER_PLATFORMS: DesktopInstallerPlatformDefinition[] =
@@ -51,23 +51,23 @@ export const DESKTOP_INSTALLER_PLATFORMS: DesktopInstallerPlatformDefinition[] =
     {
       platform: 'win',
       icon: 'monitor',
-      titleKey: 'settings.aiDoDesktopWindowsTitle',
-      descriptionKey: 'settings.aiDoDesktopWindowsDescription',
-      guideKey: 'settings.aiDoDesktopWindowsGuide',
+      titleKey: 'settings.openWorkHubDesktopWindowsTitle',
+      descriptionKey: 'settings.openWorkHubDesktopWindowsDescription',
+      guideKey: 'settings.openWorkHubDesktopWindowsGuide',
     },
     {
       platform: 'mac',
       icon: 'apple',
-      titleKey: 'settings.aiDoDesktopMacTitle',
-      descriptionKey: 'settings.aiDoDesktopMacDescription',
-      guideKey: 'settings.aiDoDesktopMacGuide',
+      titleKey: 'settings.openWorkHubDesktopMacTitle',
+      descriptionKey: 'settings.openWorkHubDesktopMacDescription',
+      guideKey: 'settings.openWorkHubDesktopMacGuide',
     },
     {
       platform: 'linux',
       icon: 'terminal',
-      titleKey: 'settings.aiDoDesktopLinuxTitle',
-      descriptionKey: 'settings.aiDoDesktopLinuxDescription',
-      guideKey: 'settings.aiDoDesktopLinuxGuide',
+      titleKey: 'settings.openWorkHubDesktopLinuxTitle',
+      descriptionKey: 'settings.openWorkHubDesktopLinuxDescription',
+      guideKey: 'settings.openWorkHubDesktopLinuxGuide',
     },
   ];
 
@@ -98,14 +98,14 @@ export function resolveDesktopInstallerUrls(
 ): Record<DesktopInstallPlatform, string> {
   return {
     win:
-      env.VITE_OPEN_ALM_DESKTOP_INSTALLER_URL_WIN ??
-      env.VITE_OPEN_ALM_DESKTOP_INSTALLER_URL ??
+      env.VITE_OPEN_WORK_HUB_DESKTOP_INSTALLER_URL_WIN ??
+      env.VITE_OPEN_WORK_HUB_DESKTOP_INSTALLER_URL ??
       DEFAULT_DESKTOP_INSTALLER_URLS.win,
     mac:
-      env.VITE_OPEN_ALM_DESKTOP_INSTALLER_URL_MAC ??
+      env.VITE_OPEN_WORK_HUB_DESKTOP_INSTALLER_URL_MAC ??
       DEFAULT_DESKTOP_INSTALLER_URLS.mac,
     linux:
-      env.VITE_OPEN_ALM_DESKTOP_INSTALLER_URL_LINUX ??
+      env.VITE_OPEN_WORK_HUB_DESKTOP_INSTALLER_URL_LINUX ??
       DEFAULT_DESKTOP_INSTALLER_URLS.linux,
   };
 }
@@ -139,7 +139,7 @@ export function resolveDesktopInstallerDownload(
   return {
     href: resolvedUrl.href,
     fileName: decodeURIComponent(
-      resolvedUrl.pathname.split('/').pop() ?? 'Open ALM-Desktop',
+      resolvedUrl.pathname.split('/').pop() ?? 'Open Work Hub-Desktop',
     ),
   };
 }

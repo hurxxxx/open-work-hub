@@ -9,33 +9,33 @@ from sqlalchemy import event, select
 
 from dev_accounts import auth_headers, dev_login
 
-from open_alm_api.core.db import get_engine, get_session_factory
-from open_alm_api.domains.auth.models import User, Workspace
-from open_alm_api.domains.files import service as files_service
-from open_alm_api.domains.files.models import (
+from open_work_hub_api.core.db import get_engine, get_session_factory
+from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.files import service as files_service
+from open_work_hub_api.domains.files.models import (
     FileManagerCorpus,
     FileManagerFile,
     FileManagerFileSourceMetadata,
 )
-from open_alm_api.domains.files import search as file_search
-from open_alm_api.domains.files.external_projection import safe_external_source_metadata
-from open_alm_api.domains.files.router import require_file_search_runtime
-from open_alm_api.domains.files.search import FileSearchRuntime
-from open_alm_api.domains.files.search_projection import build_file_search_document
-from open_alm_api.domains.rag.contracts import RagChunk, RagProjection, RagScopeKind
-from open_alm_api.domains.rag.providers.fake import (
+from open_work_hub_api.domains.files import search as file_search
+from open_work_hub_api.domains.files.external_projection import safe_external_source_metadata
+from open_work_hub_api.domains.files.router import require_file_search_runtime
+from open_work_hub_api.domains.files.search import FileSearchRuntime
+from open_work_hub_api.domains.files.search_projection import build_file_search_document
+from open_work_hub_api.domains.rag.contracts import RagChunk, RagProjection, RagScopeKind
+from open_work_hub_api.domains.rag.providers.fake import (
     FakeEmbeddingClient,
     FakeVectorIndexClient,
 )
-from open_alm_api.domains.rag.query_service import RagQueryService
-from open_alm_api.domains.rag.service import RagService
-from open_alm_api.domains.source_access.resource_types import FILE_MANAGER_FILE_RESOURCE_TYPE
-from open_alm_api.domains.search.backend_contracts import (
+from open_work_hub_api.domains.rag.query_service import RagQueryService
+from open_work_hub_api.domains.rag.service import RagService
+from open_work_hub_api.domains.source_access.resource_types import FILE_MANAGER_FILE_RESOURCE_TYPE
+from open_work_hub_api.domains.search.backend_contracts import (
     KeywordSearchHit,
     KeywordSearchQuery,
     KeywordSearchResult,
 )
-from open_alm_api.domains.retrieval.runtime_binding import (
+from open_work_hub_api.domains.retrieval.runtime_binding import (
     PartitionedRetrievalRuntimeUnavailable,
 )
 
@@ -242,7 +242,7 @@ def test_low_confidence_fallback_loads_source_text_for_only_filtered_page_hits()
 def test_file_search_metadata_filters_use_indexes_and_authoritative_source_state() -> None:
     request = file_search.FileSearchRequest(
         query="냉각",
-        source_kind=" mcloudoc ",
+        source_kind=" external_repository ",
         author="홍길동",
         department="연구 개발팀",
         document_type="기술보고서",
@@ -255,7 +255,7 @@ def test_file_search_metadata_filters_use_indexes_and_authoritative_source_state
     assert filters["keyword"]["target_ref_match"] == "all"
     assert filters["keyword"]["date_filters"][0]["field"] == "authored_at"
     assert filters["rag"] == {
-        "metadata.origin_source_kind_filter": "mcloudoc",
+        "metadata.origin_source_kind_filter": "external_repository",
         "metadata.author_filter": "홍길동",
         "metadata.department_filter": "연구 개발팀",
         "metadata.document_type_filter": "기술보고서",
@@ -280,7 +280,7 @@ def test_file_search_metadata_filters_use_indexes_and_authoritative_source_state
         corpus_id="corpus-1",
         external_id="external-1",
         external_id_sha256="a" * 64,
-        source_kind="mcloudoc",
+        source_kind="external_repository",
         source_id="document-1",
         source_id_sha256="b" * 64,
         content_checksum="c" * 64,
@@ -1149,7 +1149,7 @@ def test_external_authored_range_reaches_fake_semantic_and_hybrid_backends(
             corpus_id=corpus["id"],
             external_id="external-report",
             external_id_sha256="b" * 64,
-            source_kind="mcloudoc",
+            source_kind="external_repository",
             source_id="document-1",
             source_id_sha256="c" * 64,
             title="External thermal report",
@@ -1216,7 +1216,7 @@ def test_external_authored_range_reaches_fake_semantic_and_hybrid_backends(
     base_request = {
         "query": "thermal source filter evidence",
         "strategy": strategy,
-        "source_kind": "mcloudoc",
+        "source_kind": "external_repository",
         "author": "홍길동",
         "department": "연구개발팀",
         "document_type": "기술보고서",

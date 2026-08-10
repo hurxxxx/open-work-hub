@@ -10,8 +10,8 @@
       "options": {
         "cwd": "apps/worker",
         "commands": [
-          "queues=\"$(uv run --python 3.12 python -m open_alm_worker.queue_contract --celery-queues)\" && OPEN_ALM_WORKER_QUEUE_GROUP=all uv run --python 3.12 celery -A open_alm_worker.celery_app:celery_app worker --loglevel=info -Q \"$queues\"",
-          "OPEN_ALM_WORKER_QUEUE_GROUP=beat uv run --python 3.12 celery -A open_alm_worker.celery_app:celery_app beat --loglevel=info"
+          "queues=\"$(uv run --python 3.12 python -m open_work_hub_worker.queue_contract --celery-queues)\" && OPEN_WORK_HUB_WORKER_QUEUE_GROUP=all uv run --python 3.12 celery -A open_work_hub_worker.celery_app:celery_app worker --loglevel=info -Q \"$queues\"",
+          "OPEN_WORK_HUB_WORKER_QUEUE_GROUP=beat uv run --python 3.12 celery -A open_work_hub_worker.celery_app:celery_app beat --loglevel=info"
         ],
         "parallel": true
       }
@@ -35,7 +35,7 @@
       "cache": false,
       "options": {
         "cwd": "apps/worker",
-        "command": "OPEN_ALM_WORKER_BROKER_URL=memory:// OPEN_ALM_WORKER_RESULT_BACKEND=cache+memory:// UV_PROJECT_ENVIRONMENT=../../.runtime/ci-worker-venv uv run --no-sync --frozen --python 3.12 --group dev python -m pytest tests -q"
+        "command": "OPEN_WORK_HUB_WORKER_BROKER_URL=memory:// OPEN_WORK_HUB_WORKER_RESULT_BACKEND=cache+memory:// UV_PROJECT_ENVIRONMENT=../../.runtime/ci-worker-venv uv run --no-sync --frozen --python 3.12 --group dev python -m pytest tests -q"
       }
     }
   }

@@ -6,24 +6,24 @@ from zoneinfo import ZoneInfo
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from open_alm_api.core.db import get_session_factory
-from open_alm_api.domains.auth.access import record_audit_log
-from open_alm_api.domains.auth.models import AuthSession, utcnow_naive
-from open_alm_api.domains.auth.security import new_id
-from open_alm_api.domains.community.models import CommunityChannel, CommunityComment, CommunityPost
-from open_alm_api.domains.community.service import DEFAULT_CHANNEL_KEY, ensure_default_channels
-from open_alm_api.domains.docs.models import NativeDoc
-from open_alm_api.domains.images.models import ImageGeneration
-from open_alm_api.domains.meeting.models import Meeting
-from open_alm_api.domains.pms.models import Attachment, Task, TaskList
-from open_alm_api.domains.usage.models import UsageEvent, UsageExcludedUser
-from open_alm_api.domains.usage.service import (
+from open_work_hub_api.core.db import get_session_factory
+from open_work_hub_api.domains.auth.access import record_audit_log
+from open_work_hub_api.domains.auth.models import AuthSession, utcnow_naive
+from open_work_hub_api.domains.auth.security import new_id
+from open_work_hub_api.domains.community.models import CommunityChannel, CommunityComment, CommunityPost
+from open_work_hub_api.domains.community.service import DEFAULT_CHANNEL_KEY, ensure_default_channels
+from open_work_hub_api.domains.docs.models import NativeDoc
+from open_work_hub_api.domains.images.models import ImageGeneration
+from open_work_hub_api.domains.meeting.models import Meeting
+from open_work_hub_api.domains.pms.models import Attachment, Task, TaskList
+from open_work_hub_api.domains.usage.models import UsageEvent, UsageExcludedUser
+from open_work_hub_api.domains.usage.service import (
     USAGE_EVENT_APP_OPEN,
     USAGE_EVENT_CONTENT_VIEW,
     USAGE_EVENT_SEARCH_QUERY,
     record_usage_event,
 )
-from open_alm_api.domains.whiteboard.models import Whiteboard
+from open_work_hub_api.domains.whiteboard.models import Whiteboard
 
 
 def _auth_headers(token: str) -> dict[str, str]:
@@ -34,8 +34,8 @@ def _bootstrap_admin_session(client: TestClient) -> dict:
     response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "Open ALM Admin",
-            "email": "admin@open-alm.local",
+            "full_name": "Open Work Hub Admin",
+            "email": "admin@open-work-hub.local",
             "password": "supersecret123",
         },
     )
@@ -73,11 +73,10 @@ def test_admin_usage_dashboard_aggregates_user_content_and_llm_usage(
     assert totals["pms_tasks_created_count"] == 1
     assert totals["images_created_count"] == 1
     assert totals["app_open_count"] == 1
-    assert totals["content_view_count"] == 4
+    assert totals["content_view_count"] == 3
     assert totals["search_query_count"] == 1
     assert totals["docs_view_count"] == 2
     assert totals["whiteboards_view_count"] == 1
-    assert totals["news_article_view_count"] == 1
     assert totals["llm_call_count"] == 1
     assert totals["llm_success_count"] == 1
     assert totals["llm_total_tokens"] == 15
@@ -87,13 +86,12 @@ def test_admin_usage_dashboard_aggregates_user_content_and_llm_usage(
     assert user_item["docs_owned_count"] == 1
     assert user_item["whiteboards_owned_count"] == 1
     assert user_item["app_open_count"] == 1
-    assert user_item["content_view_count"] == 4
+    assert user_item["content_view_count"] == 3
     assert user_item["search_query_count"] == 1
     assert user_item["docs_view_count"] == 2
-    assert user_item["news_article_view_count"] == 1
     assert user_item["llm_call_count"] == 1
     assert user_item["llm_total_tokens"] == 15
-    assert user_item["activity_score"] >= 13
+    assert user_item["activity_score"] >= 12
     assert payload["usage_by_app"][0]["key"] == "docs"
     assert payload["usage_by_route"][0]["key"] == "/w/:workspace/docs"
     assert payload["content_views_by_kind"][0]["key"] == "doc"
@@ -105,7 +103,6 @@ def test_admin_usage_dashboard_aggregates_user_content_and_llm_usage(
     assert payload["daily_trends"][-1]["active_user_count"] >= 1
     assert len(payload["hourly_access"]) == 24
     assert "average_visitor_count" in payload["hourly_access"][-1]
-    assert payload["org_rankings"][0]["activity_score"] >= user_item["activity_score"]
     assert payload["token_rankings"][0]["user_id"] == user_id
     assert payload["token_rankings"][0]["llm_total_tokens"] == 15
     assert payload["pms_summary"]["project_count"] >= 1
@@ -241,10 +238,10 @@ def test_usage_event_endpoint_dedupes_repeated_events(client: TestClient) -> Non
     user_id = admin["user"]["id"]
 
     payload = {
-        "app_id": "news",
+        "app_id": "community",
         "event_type": "app.open",
-        "route_path": "/news",
-        "source": "shell.nav.news",
+        "route_path": "/community",
+        "source": "shell.nav.community",
         "metadata": {"has_workspace_route": False},
     }
     first_response = client.post(
@@ -263,9 +260,9 @@ def test_usage_event_endpoint_dedupes_repeated_events(client: TestClient) -> Non
     with get_session_factory()() as db:
         rows = db.query(UsageEvent).filter(UsageEvent.actor_user_id == user_id).all()
     assert len(rows) == 1
-    assert rows[0].app_id == "news"
+    assert rows[0].app_id == "community"
     assert rows[0].event_type == "app.open"
-    assert rows[0].route_path == "/news"
+    assert rows[0].route_path == "/community"
     assert rows[0].count == 2
 
 
@@ -339,32 +336,12 @@ def test_admin_usage_targets_limit_dashboard_scope_and_keep_exclusions(
     admin = _bootstrap_admin_session(client)
     token = admin["token"]
 
-    parent_response = client.post(
-        "/api/v1/admin/org-units",
-        headers=_auth_headers(token),
-        json={"name": "Usage Target Lab", "slug": "usage-target-lab"},
-    )
-    assert parent_response.status_code == 201, parent_response.text
-    parent_org_id = parent_response.json()["id"]
-    child_response = client.post(
-        "/api/v1/admin/org-units",
-        headers=_auth_headers(token),
-        json={
-            "name": "Usage Target Child",
-            "slug": "usage-target-child",
-            "parent_id": parent_org_id,
-        },
-    )
-    assert child_response.status_code == 201, child_response.text
-    child_org_id = child_response.json()["id"]
-
     included_response = client.post(
         "/api/v1/admin/users",
         headers=_auth_headers(token),
         json={
             "email": "usage-target-included@example.com",
             "full_name": "Usage Target Included",
-            "primary_org_unit_id": child_org_id,
             "temporary_password": "supersecret123",
         },
     )
@@ -374,7 +351,6 @@ def test_admin_usage_targets_limit_dashboard_scope_and_keep_exclusions(
         json={
             "email": "usage-target-excluded@example.com",
             "full_name": "Usage Target Excluded",
-            "primary_org_unit_id": child_org_id,
             "temporary_password": "supersecret123",
         },
     )
@@ -393,7 +369,6 @@ def test_admin_usage_targets_limit_dashboard_scope_and_keep_exclusions(
         json={
             "email": "usage-target-activity@example.com",
             "full_name": "Usage Target Activity",
-            "primary_org_unit_id": child_org_id,
             "temporary_password": "supersecret123",
         },
     )
@@ -451,12 +426,15 @@ def test_admin_usage_targets_limit_dashboard_scope_and_keep_exclusions(
     replace_response = client.put(
         "/api/v1/admin/usage/targets",
         headers=_auth_headers(token),
-        json={"org_unit_ids": [parent_org_id], "user_ids": []},
+        json={"user_ids": [included_user_id, activity_user_id]},
     )
     assert replace_response.status_code == 200, replace_response.text
     target_payload = replace_response.json()
-    assert [item["org_unit_id"] for item in target_payload["org_units"]] == [parent_org_id]
-    assert target_payload["resolved_user_count"] == 3
+    assert {item["user_id"] for item in target_payload["users"]} == {
+        included_user_id,
+        activity_user_id,
+    }
+    assert target_payload["resolved_user_count"] == 2
 
     dashboard_response = client.get(
         "/api/v1/admin/usage/dashboard?days=30&limit=10",
@@ -466,7 +444,6 @@ def test_admin_usage_targets_limit_dashboard_scope_and_keep_exclusions(
     payload = dashboard_response.json()
     assert payload["target_scope"]["configured"] is True
     assert payload["target_scope"]["user_count"] == 2
-    assert payload["target_scope"]["org_unit_count"] == 1
     assert payload["totals"]["user_count"] == 2
     assert payload["totals"]["app_open_count"] == 1
     assert payload["totals"]["active_user_count"] == 2
@@ -479,7 +456,7 @@ def test_admin_usage_targets_limit_dashboard_scope_and_keep_exclusions(
     clear_response = client.put(
         "/api/v1/admin/usage/targets",
         headers=_auth_headers(token),
-        json={"org_unit_ids": [], "user_ids": []},
+        json={"user_ids": []},
     )
     assert clear_response.status_code == 200, clear_response.text
     assert clear_response.json()["resolved_user_count"] == 0
@@ -740,19 +717,11 @@ def _seed_usage_rows(*, user_id: str, workspace_id: str) -> None:
         record_usage_event(
             db,
             actor_user_id=user_id,
-            app_id="news",
-            event_type=USAGE_EVENT_CONTENT_VIEW,
-            content_kind="news_article",
-            content_id="https://example.com/news/usage",
-            source="news.article",
-        )
-        record_usage_event(
-            db,
-            actor_user_id=user_id,
-            app_id="news",
+            workspace_id=workspace_id,
+            app_id="docs",
             event_type=USAGE_EVENT_SEARCH_QUERY,
-            content_kind="news_article",
-            source="news.search",
+            content_kind="doc",
+            source="docs.search",
             metadata={"query_hash": "usage-test", "query_length": 5},
         )
         record_audit_log(

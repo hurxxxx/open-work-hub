@@ -42,7 +42,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { Button, Dialog, DropdownMenu } from '@open-alm/ui';
+import { Button, Dialog, DropdownMenu } from '@open-work-hub/ui';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/src/lib/utils';

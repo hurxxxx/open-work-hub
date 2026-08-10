@@ -5,7 +5,7 @@ import {
   type SetStateAction,
 } from 'react';
 import type { TFunction } from 'i18next';
-import type { BlockContent } from '@open-alm/ui';
+import type { BlockContent } from '@open-work-hub/ui';
 
 import {
   createNativeDoc,

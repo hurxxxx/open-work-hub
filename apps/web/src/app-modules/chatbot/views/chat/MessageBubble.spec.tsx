@@ -257,21 +257,21 @@ describe('MessageBubble', () => {
             },
             {
               id: 'analysis-1',
-              type: 'legacy-issue-analysis',
+              type: 'analysis',
               title: '정형 집계',
               content: '{"queries":[]}',
               status: 'closed',
             },
             {
               id: 'evidence-1',
-              type: 'legacy-issue-evidence',
+              type: 'evidence',
               title: '근거 데이터',
               content: '{"evidence":[]}',
               status: 'closed',
             },
           ],
         })}
-        sourceArtifactTypes={['legacy-issue-analysis', 'legacy-issue-evidence']}
+        sourceArtifactTypes={['analysis', 'evidence']}
       />,
     );
 
@@ -284,7 +284,7 @@ describe('MessageBubble', () => {
     const persistedReference = {
       id: 'report-1',
       type: 'document',
-      title: '과거차 문제점 분석 보고서',
+      title: '문서 분석 보고서',
       content: '',
       status: 'closed' as const,
     };

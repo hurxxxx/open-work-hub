@@ -12,7 +12,6 @@ type UserRolePickerOption = {
   id: string;
   email: string;
   full_name: string;
-  primary_org_unit_name?: string | null;
 };
 
 export function UserRolePicker({
@@ -56,7 +55,6 @@ export function UserRolePicker({
         id: member.user_id,
         email: member.email,
         full_name: member.full_name,
-        primary_org_unit_name: member.primary_org_unit_name ?? null,
       })),
     [members],
   );
@@ -72,7 +70,6 @@ export function UserRolePicker({
             id: userId,
             email: '',
             full_name: selectedNames[index] ?? userId,
-            primary_org_unit_name: null,
           },
       ),
     [memberOptionsById, selectedIds, selectedNames],

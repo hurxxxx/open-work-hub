@@ -204,13 +204,13 @@ const provider = new WebsocketProvider(
 
 ### 5.4 멀티 인스턴스 문제
 
-API 서버를 여러 개 띄우면(예: `pnpm dev:api:1`, `:2`) 서로 다른 서버에 붙은 사용자들 사이에서 동기화가 안 될 수 있습니다. 해법: **Redis pub/sub**로 서버끼리 업데이트를 중계. `.env.example` 의 `OPEN_ALM_API_COLLAB_REDIS_URL` 이 이 경로의 기준 변수입니다.
+API 서버를 여러 개 띄우면(예: `pnpm dev:api:1`, `:2`) 서로 다른 서버에 붙은 사용자들 사이에서 동기화가 안 될 수 있습니다. 해법: **Redis pub/sub**로 서버끼리 업데이트를 중계. `.env.example` 의 `OPEN_WORK_HUB_API_COLLAB_REDIS_URL` 이 이 경로의 기준 변수입니다.
 
 ---
 
 ## 6. DocsCollabHub — 프로젝트 구현의 중심
 
-백엔드 쪽의 `apps/api/src/open_alm_api/domains/docs/collab.py`가 **DocsCollabHub**라는 클래스로 이 전체 릴레이를 관리합니다. 주요 책임:
+백엔드 쪽의 `apps/api/src/open_work_hub_api/domains/docs/collab.py`가 **DocsCollabHub**라는 클래스로 이 전체 릴레이를 관리합니다. 주요 책임:
 
 - WebSocket 연결 수락/정리
 - 방(room)별 Yjs 상태 유지

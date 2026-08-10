@@ -1,4 +1,4 @@
-import { InlineNotice } from '@open-alm/ui';
+import { InlineNotice } from '@open-work-hub/ui';
 
 import { FormDialog } from '@/src/components/form/FormDialog';
 import type { MeetingDetail } from '../../api/meeting-api';

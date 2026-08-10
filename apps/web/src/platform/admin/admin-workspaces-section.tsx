@@ -11,7 +11,7 @@ import {
   Tabs,
   TabsList,
   TabsTrigger,
-} from '@open-alm/ui';
+} from '@open-work-hub/ui';
 
 import { createWorkspace, listWorkspaces, type WorkspaceItem } from './admin-api';
 import { useAuth } from '@/src/platform/auth/auth-provider';

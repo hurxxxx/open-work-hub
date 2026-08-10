@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from open_alm_api.domains.images import generation_jobs
+from open_work_hub_api.domains.images import generation_jobs
 
 
 def test_dispatch_image_generation_uses_configured_task_and_queue(monkeypatch) -> None:

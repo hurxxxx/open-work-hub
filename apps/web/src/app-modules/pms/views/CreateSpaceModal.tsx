@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useReducer } from 'react';
 import { Layout, UserPlus } from 'lucide-react';
-import { InlineNotice } from '@open-alm/ui';
+import { InlineNotice } from '@open-work-hub/ui';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { hasWorkspaceMembership } from '@/src/platform/auth/auth-api';

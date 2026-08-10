@@ -6,15 +6,15 @@ from sqlalchemy.orm import Session
 
 from dev_accounts import dev_login
 
-from open_alm_api.core.db import get_engine, get_session_factory
-from open_alm_api.core.principal import CallerPrincipal, user_principal
-from open_alm_api.domains.ai.registry import get_ai_capability_registry
-from open_alm_api.domains.ai.tool_surface import (
+from open_work_hub_api.core.db import get_engine, get_session_factory
+from open_work_hub_api.core.principal import CallerPrincipal, user_principal
+from open_work_hub_api.domains.ai.registry import get_ai_capability_registry
+from open_work_hub_api.domains.ai.tool_surface import (
     resolve_agent_tool_surface,
     resolve_filtered_capability_tools,
 )
-from open_alm_api.domains.auth.access import load_user_graph
-from open_alm_api.domains.auth.models import (
+from open_work_hub_api.domains.auth.access import load_user_graph
+from open_work_hub_api.domains.auth.models import (
     PlatformAppVisibility,
     Workspace,
 )

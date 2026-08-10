@@ -4,14 +4,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from open_alm_api.core.llm_provider_registry import (
+from open_work_hub_api.core.llm_provider_registry import (
     ExternalLlmProviderDescriptor,
     ensure_default_external_llm_providers_registered,
     register_external_llm_provider,
     reset_external_llm_providers,
 )
-from open_alm_api.domains.ai import model_discovery
-from open_alm_api.domains.ai.model_discovery import (
+from open_work_hub_api.domains.ai import model_discovery
+from open_work_hub_api.domains.ai.model_discovery import (
     ProviderModelDiscoveryError,
     discover_provider_models,
 )

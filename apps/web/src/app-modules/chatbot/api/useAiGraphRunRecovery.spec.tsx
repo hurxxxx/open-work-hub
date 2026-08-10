@@ -66,7 +66,7 @@ describe('useAiGraphRunRecovery', () => {
 
     const rendered = renderHook(() =>
       useAiGraphRunRecovery({
-        appId: 'legacy-issues',
+        appId: 'docs',
         conversationId: 'conversation-1',
         enabled: true,
         token: 'token',
@@ -88,7 +88,7 @@ describe('useAiGraphRunRecovery', () => {
     ]);
     expect(mocks.listAiArtifacts).toHaveBeenCalledWith(
       expect.objectContaining({
-        appId: 'legacy-issues',
+        appId: 'docs',
         conversationId: 'conversation-1',
         kind: 'report',
         status: 'completed',
@@ -99,7 +99,7 @@ describe('useAiGraphRunRecovery', () => {
   it('does not query durable endpoints when recovery is disabled', () => {
     renderHook(() =>
       useAiGraphRunRecovery({
-        appId: 'legacy-issues',
+        appId: 'docs',
         conversationId: 'conversation-1',
         enabled: false,
         token: 'token',
@@ -119,7 +119,7 @@ describe('useAiGraphRunRecovery', () => {
     const rendered = renderHook(
       ({ refreshKey }) =>
         useAiGraphRunRecovery({
-          appId: 'legacy-issues',
+          appId: 'docs',
           conversationId: 'conversation-1',
           enabled: true,
           refreshKey,

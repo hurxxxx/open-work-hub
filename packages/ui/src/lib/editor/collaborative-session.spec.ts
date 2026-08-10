@@ -70,15 +70,15 @@ describe('collaborative session', () => {
 
   it('converts websocket paths against the current origin', () => {
     expect(
-      toCollaborativeWebSocketUrl('/collab/room-1', 'https://open-alm.local'),
-    ).toBe('wss://open-alm.local/collab/room-1');
+      toCollaborativeWebSocketUrl('/collab/room-1', 'https://open-work-hub.local'),
+    ).toBe('wss://open-work-hub.local/collab/room-1');
     expect(
       toCollaborativeWebSocketUrl('/collab/room-1', 'http://localhost:3000'),
     ).toBe('ws://localhost:3000/collab/room-1');
     expect(
       toCollaborativeWebSocketUrl(
         'wss://relay.example.test/ws',
-        'https://open-alm.local',
+        'https://open-work-hub.local',
       ),
     ).toBe('ws://relay.example.test/ws');
   });

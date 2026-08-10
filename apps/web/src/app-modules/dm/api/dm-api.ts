@@ -13,7 +13,7 @@ import {
   normalizeDmSendMessageRequest,
   normalizeDmUpdateConversationRequest,
   normalizeDmUserListResponse,
-} from '@open-alm/contracts/dm';
+} from '@open-work-hub/contracts/dm';
 import type {
   DmAddParticipantsRequest,
   DmAttachmentUrlResponse,
@@ -26,7 +26,7 @@ import type {
   DmUpdateConversationRequest,
   DmUser,
   DmCreateConversationRequest,
-} from '@open-alm/contracts/dm';
+} from '@open-work-hub/contracts/dm';
 
 import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
 
@@ -40,7 +40,7 @@ export type {
   DmMessageListResponse,
   DmRealtimeEvent,
   DmUser,
-} from '@open-alm/contracts/dm';
+} from '@open-work-hub/contracts/dm';
 
 export type DmThread = DmConversation;
 export type DmThreadListResponse = DmConversationListResponse;

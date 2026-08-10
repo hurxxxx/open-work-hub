@@ -3,24 +3,13 @@ from __future__ import annotations
 import pytest
 from pydantic import BaseModel, ConfigDict
 
-from open_alm_api.core.principal import personal_user_principal
-from open_alm_api.domains.ai.registry import (
+from open_work_hub_api.core.principal import personal_user_principal
+from open_work_hub_api.domains.ai.registry import (
     AiCapabilityRegistry,
     WorkspaceContext,
     WorkspaceEntitlementView,
     get_ai_capability_registry,
     reset_ai_capability_registry,
-)
-from open_alm_api.domains.legacy_issues import (
-    register_ai_capabilities as register_legacy_issue_ai_capabilities,
-)
-from open_alm_api.domains.legacy_issues.task_kinds import (
-    LEGACY_ISSUE_ANALYSIS_PLAN_TASK_KIND,
-    LEGACY_ISSUE_ANALYSIS_PLAN_WORKLOAD_ID,
-    LEGACY_ISSUE_ANALYSIS_SQL_FALLBACK_TASK_KIND,
-    LEGACY_ISSUE_ANALYSIS_SQL_FALLBACK_WORKLOAD_ID,
-    LEGACY_ISSUE_INTENT_ROUTER_TASK_KIND,
-    LEGACY_ISSUE_INTENT_ROUTER_WORKLOAD_ID,
 )
 
 
@@ -32,38 +21,6 @@ def test_all_registered_capabilities_compile_successfully() -> None:
 
     assert compiled
     assert set(compiled.keys()) == set(registry.tools.keys())
-
-
-def test_legacy_issue_analysis_workloads_register_independently() -> None:
-    registry = AiCapabilityRegistry()
-    register_legacy_issue_ai_capabilities(registry)
-
-    expected = {
-        LEGACY_ISSUE_ANALYSIS_PLAN_WORKLOAD_ID: LEGACY_ISSUE_ANALYSIS_PLAN_TASK_KIND,
-        LEGACY_ISSUE_ANALYSIS_SQL_FALLBACK_WORKLOAD_ID: (
-            LEGACY_ISSUE_ANALYSIS_SQL_FALLBACK_TASK_KIND
-        ),
-        LEGACY_ISSUE_INTENT_ROUTER_WORKLOAD_ID: LEGACY_ISSUE_INTENT_ROUTER_TASK_KIND,
-    }
-    assert {"legacy_issues.conversation_answer", "legacy_issues.attachment_vision"}.issubset(
-        registry.llm_workloads
-    )
-    for workload_id, task_kind in expected.items():
-        workload = registry.resolve_llm_workload(workload_id)
-
-        assert workload.task_kind == task_kind
-        assert workload.owner_domain == "legacy-issues"
-        assert workload.app_ids == ("legacy-issues",)
-        assert workload.default_route == "local"
-        assert workload.execution_kind == "chat"
-        assert workload.allowed_routes == ("local", "external")
-        assert workload.required_capabilities == ("chat",)
-        assert workload.external_data is True
-        expected_max_tokens = (
-            1_024 if workload_id == LEGACY_ISSUE_INTENT_ROUTER_WORKLOAD_ID else 8_192
-        )
-        assert workload.local_max_output_tokens == expected_max_tokens
-        assert workload.external_max_output_tokens == expected_max_tokens
 
 
 def test_compile_rejects_non_nullable_union_schema() -> None:

@@ -14,7 +14,7 @@ type TestLocale = 'ko-KR' | 'en-US';
 const config = {
   defaultLocale: 'ko-KR',
   supportedLocales: ['ko-KR', 'en-US'],
-  storageKey: 'open-alm:locale',
+  storageKey: 'open-work-hub:locale',
 } satisfies LocaleSessionConfig<TestLocale>;
 
 function createStore(initial: Record<string, string> = {}): {

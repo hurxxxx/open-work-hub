@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from open_alm_api.domains.spec_compare.artifacts import (
+from open_work_hub_api.domains.spec_compare.artifacts import (
     DEFAULT_CONTENT_TYPE,
     SpecCompareArtifactStore,
     SpecCompareUpload,
@@ -11,7 +11,7 @@ from open_alm_api.domains.spec_compare.artifacts import (
     result_markdown_key,
     safe_artifact_filename,
 )
-from open_alm_api.domains.spec_compare.dispatch import (
+from open_work_hub_api.domains.spec_compare.dispatch import (
     RUN_JOB_QUEUE,
     RUN_JOB_TASK_NAME,
     SpecCompareJobDispatcher,

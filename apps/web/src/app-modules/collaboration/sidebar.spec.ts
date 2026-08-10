@@ -36,8 +36,8 @@ function actionContext({
   return {
     activeAppId: 'collaboration',
     activeFeatureAppId,
-    currentPathname: `/w/ai-tft/${activeFeatureAppId}`,
-    currentWorkspaceSlug: 'ai-tft',
+    currentPathname: `/w/general/${activeFeatureAppId}`,
+    currentWorkspaceSlug: 'general',
     enabledWorkspaceAppIds: ['collaboration', activeFeatureAppId],
     navigate: vi.fn(),
     user: null,

@@ -7,7 +7,7 @@ export const CORE_SUB_SIDEBAR_CREATE_MENU_WIDTH = 208;
 export const CORE_SUB_SIDEBAR_CREATE_MENU_INSET = 8;
 export const CORE_SUB_SIDEBAR_CREATE_MENU_GAP = 4;
 export const CORE_SUB_SIDEBAR_MAIN_NAV_WIDTH = 64;
-export const CORE_SUB_SIDEBAR_PINNED_STORAGE_KEY = 'open-alm:sub-sidebar-pinned';
+export const CORE_SUB_SIDEBAR_PINNED_STORAGE_KEY = 'open-work-hub:sub-sidebar-pinned';
 
 export interface CoreSubSidebarCreateMenuState {
   appId: string;

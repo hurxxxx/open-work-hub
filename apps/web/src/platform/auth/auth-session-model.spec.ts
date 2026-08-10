@@ -15,16 +15,14 @@ function user(overrides: Partial<AuthUser> = {}): AuthUser {
   return {
     app_bar_layout: { pinned_app_ids: [] },
     date_format: 'korean',
-    display_name: 'Open ALM Member',
-    email: 'member@open-alm.local',
-    full_name: 'Open ALM Member',
+    display_name: 'Open Work Hub Member',
+    email: 'member@open-work-hub.local',
+    full_name: 'Open Work Hub Member',
     id: 'user-1',
-    job_title: null,
     last_login_at: null,
     locale: 'ko-KR',
     login_id: 'member',
     must_change_password: false,
-    primary_org_unit: null,
     status: 'active',
     system_roles: [],
     theme_preference: 'system',
@@ -51,7 +49,7 @@ function devAccount(overrides: Partial<DevLoginAccount> = {}): DevLoginAccount {
     account_key: 'platform-admin',
     category: 'Administrators',
     description: 'Platform administrator account.',
-    email: 'platform-admin@open-alm.local',
+    email: 'platform-admin@open-work-hub.local',
     label: 'Platform Admin',
     ...overrides,
   };
@@ -73,7 +71,7 @@ describe('auth session model', () => {
   it('projects valid stored token recovery as authenticated state with sync metadata', () => {
     const currentUser = user({
       date_format: 'iso',
-      email: 'saved@open-alm.local',
+      email: 'saved@open-work-hub.local',
       locale: 'en-US',
     });
     const accounts = [devAccount()];
@@ -184,7 +182,7 @@ describe('auth session model', () => {
       devAccount({
         account_key: 'workspace-member',
         category: 'Workspaces',
-        email: 'workspace-member@open-alm.local',
+        email: 'workspace-member@open-work-hub.local',
         label: 'Workspace Member',
       }),
     ];

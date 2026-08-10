@@ -23,7 +23,6 @@ describe('admin document processing API', () => {
       vector_index: {},
       keyword_index: {},
       chunking: {},
-      legacy_issues: {},
     };
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(snapshot), {

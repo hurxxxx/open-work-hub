@@ -1,4 +1,4 @@
-import { authRoutes } from '@open-alm/contracts/auth';
+import { authRoutes } from '@open-work-hub/contracts/auth';
 import { apiFetchJsonWithMappedError } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
 import type {
@@ -7,9 +7,6 @@ import type {
 } from '@/src/platform/auth/auth-api';
 import { emitCommunityChannelsChanged } from '@/src/platform/community/community-channel-events';
 import { i18n } from '@/src/platform/i18n';
-
-export type OrgUnitItem = ApiSchema<'OrgUnitItemResponse'>;
-export const UNASSIGNED_ORG_UNIT_ID = '__unassigned__';
 
 export type WorkspaceItem = ApiSchema<'WorkspaceItemResponse'>;
 export type WorkspaceBindingItem = ApiSchema<'WorkspaceBindingItemResponse'>;
@@ -44,171 +41,9 @@ export interface AdminUsageExcludedUserItem {
   user_id: string;
   full_name: string;
   email: string;
-  org_unit_name?: string | null;
   excluded_at: string;
 }
 export type AdminUsageTargetsResponse = ApiSchema<'AdminUsageTargetsResponse'>;
-export type AdminBatchItem = ApiSchema<'AdminBatchItemResponse'>;
-export type AdminBatchesResponse = ApiSchema<'AdminBatchesResponse'>;
-export type AdminBatchRunResponse = ApiSchema<'AdminBatchRunResponse'>;
-export type AdminHrReconciliationStatus =
-  | 'matched'
-  | 'erp_only'
-  | 'groupware_only'
-  | 'identity_conflict';
-export type AdminHrGroupSource = 'erp' | 'groupware';
-export type AdminHrWorkforceCategory = string;
-export type AdminHrIdentityResolutionKind = 'employee_code' | 'manual' | 'none';
-export type AdminHrWorkforceCategoryResolutionKind = 'inferred' | 'manual';
-
-export interface AdminHrMasterRunSummary {
-  id: string;
-  status: 'building' | 'succeeded' | 'failed';
-  completed_at: string | null;
-  source_erp_run_id: string;
-  source_groupware_run_id: string;
-  identity_resolution_revision: number;
-  error_code?: string | null;
-}
-
-export interface AdminHrMasterStatusResponse {
-  latest_succeeded: AdminHrMasterRunSummary | null;
-  latest_attempt: AdminHrMasterRunSummary | null;
-}
-
-export interface AdminHrGroupOption {
-  code: string;
-  name: string;
-  source: AdminHrGroupSource;
-}
-
-export interface AdminHrEmployeeItem {
-  record_id: string;
-  record_kind: 'person' | 'external' | 'conflict';
-  employee_code: string | null;
-  name: string;
-  group_code?: string | null;
-  group_name?: string | null;
-  group_source?: AdminHrGroupSource | null;
-  position?: string | null;
-  occupation?: string | null;
-  email?: string | null;
-  has_erp: boolean;
-  has_groupware: boolean;
-  reconciliation_status: AdminHrReconciliationStatus;
-  inferred_workforce_category: AdminHrWorkforceCategory;
-  workforce_category: AdminHrWorkforceCategory;
-  workforce_category_resolution_kind: AdminHrWorkforceCategoryResolutionKind;
-  workforce_assignment_id?: string | null;
-  identity_resolution_kind: AdminHrIdentityResolutionKind;
-  applied_at: string | null;
-}
-
-export interface AdminHrSourceEmployee {
-  employee_code?: string | null;
-  name?: string | null;
-  group_code?: string | null;
-  group_name?: string | null;
-  position?: string | null;
-  occupation?: string | null;
-  email?: string | null;
-  login_id?: string | null;
-  organization_path?: string | null;
-  source_identity?: string | null;
-}
-
-export interface AdminHrEmployeeProvenance {
-  master_run_id: string;
-  erp_run_id: string;
-  groupware_run_id: string;
-  erp_snapshot_row_id?: string | null;
-  groupware_snapshot_row_id?: string | null;
-}
-
-export interface AdminHrEmployeeDetail extends AdminHrEmployeeItem {
-  erp: AdminHrSourceEmployee | null;
-  groupware: AdminHrSourceEmployee | null;
-  conflict_reasons: string[];
-  manual_identity_link_id?: string | null;
-  match_candidates: AdminHrManualMatchCandidate[];
-  provenance: AdminHrEmployeeProvenance;
-}
-
-export interface AdminHrEmployeesResponse {
-  latest_run: AdminHrMasterRunSummary | null;
-  status_counts: Partial<Record<AdminHrReconciliationStatus, number>>;
-  workforce_counts: Partial<Record<AdminHrWorkforceCategory, number>>;
-  items: AdminHrEmployeeItem[];
-  total: number;
-  page: number;
-  page_size: number;
-  groups: AdminHrGroupOption[];
-}
-
-export interface AdminHrEmployeesQuery {
-  page?: number;
-  page_size?: number;
-  q?: string;
-  reconciliation_status?: AdminHrReconciliationStatus;
-  workforce_category?: AdminHrWorkforceCategory;
-  identity_resolution_kind?: AdminHrIdentityResolutionKind;
-  group_code?: string;
-  group_source?: AdminHrGroupSource;
-}
-
-export interface AdminHrManualMatchCandidate {
-  erp_record_id: string;
-  employee_code: string;
-  name: string;
-  group_code?: string | null;
-  group_name?: string | null;
-  position?: string | null;
-}
-
-export interface AdminHrManualMatchMutationResponse {
-  link_id: string;
-  identity_resolution_revision: number;
-  rebuild_queued: boolean;
-  rebuild_task_id?: string | null;
-}
-export interface AdminHrManualMatchDirectoryItem {
-  record_id: string;
-  employee_code: string;
-  name: string;
-  group_code?: string | null;
-  group_name?: string | null;
-  position?: string | null;
-  email?: string | null;
-  login_id?: string | null;
-}
-export interface AdminHrManualMatchDirectoryResponse {
-  master_run_id: string;
-  source: AdminHrGroupSource;
-  items: AdminHrManualMatchDirectoryItem[];
-  total: number;
-  page: number;
-  page_size: number;
-}
-export interface AdminHrWorkforceCategoryItem {
-  code: string;
-  name: string;
-  description?: string | null;
-  is_system: boolean;
-  is_active: boolean;
-  sort_order: number;
-  created_at: string;
-  updated_at: string;
-}
-export interface AdminHrWorkforceCategoriesResponse {
-  items: AdminHrWorkforceCategoryItem[];
-}
-export interface AdminHrWorkforceAssignmentMutationResponse {
-  assignment_id?: string | null;
-  identity_resolution_revision: number;
-  changed: boolean;
-  rebuild_queued: boolean;
-  rebuild_task_id?: string | null;
-}
 export type AdminUsersResponse = Omit<
   ApiSchema<'AdminUsersResponse'>,
   'items'
@@ -326,8 +161,6 @@ export interface AiSecurityPolicyRule {
   enabled: boolean;
   user_id?: string | null;
   user_name?: string | null;
-  org_unit_id?: string | null;
-  org_unit_name?: string | null;
   workspace_id?: string | null;
   workspace_name?: string | null;
   app_id?: string | null;
@@ -348,8 +181,6 @@ export interface AiSecurityExternalTransferException {
   enabled: boolean;
   user_id?: string | null;
   user_name?: string | null;
-  org_unit_id?: string | null;
-  org_unit_name?: string | null;
   workspace_id?: string | null;
   workspace_name?: string | null;
   app_id?: string | null;
@@ -416,7 +247,6 @@ export interface AiSecurityMonitoringUserItem {
   user_id: string;
   full_name: string;
   email: string;
-  org_unit_name?: string | null;
   blocked_count: number;
   forced_local_count: number;
   masked_count: number;
@@ -481,7 +311,6 @@ export interface AiSecurityRulePayload {
   description: string;
   enabled: boolean;
   user_id?: string | null;
-  org_unit_id?: string | null;
   workspace_id?: string | null;
   app_id?: string | null;
   task_kind?: string | null;
@@ -497,7 +326,6 @@ export interface AiSecurityExternalTransferExceptionPayload {
   description: string;
   enabled: boolean;
   user_id?: string | null;
-  org_unit_id?: string | null;
   workspace_id?: string | null;
   app_id?: string | null;
   task_kind?: string | null;
@@ -512,7 +340,6 @@ export interface AiSecurityExternalTransferExceptionPayload {
 export interface AiSecuritySimulationPayload {
   workspace_id?: string | null;
   actor_user_id?: string | null;
-  org_unit_id?: string | null;
   app_id?: string | null;
   task_kind?: string | null;
   capability?: string | null;
@@ -559,8 +386,6 @@ export interface AdminUsersQuery {
   page?: number;
   page_size?: number;
   q?: string;
-  org_unit_id?: string;
-  include_descendants?: boolean;
 }
 
 export interface AdminAuditLogsQuery {
@@ -665,225 +490,9 @@ export function listAdminUsers(
   if (query.q?.trim()) {
     params.set('q', query.q.trim());
   }
-  if (query.org_unit_id) {
-    params.set('org_unit_id', query.org_unit_id);
-    params.set(
-      'include_descendants',
-      String(query.include_descendants ?? true),
-    );
-  }
-
   const queryString = params.toString();
   const suffix = queryString ? `?${queryString}` : '';
   return request<AdminUsersResponse>(token, `/api/v1/admin/users${suffix}`);
-}
-
-export function listAdminHrEmployees(
-  token: string,
-  query: AdminHrEmployeesQuery = {},
-): Promise<AdminHrEmployeesResponse> {
-  const params = new URLSearchParams();
-  if (query.page !== undefined) {
-    params.set('page', String(query.page));
-  }
-  if (query.page_size !== undefined) {
-    params.set('page_size', String(query.page_size));
-  }
-  if (query.q?.trim()) {
-    params.set('q', query.q.trim());
-  }
-  if (query.reconciliation_status) {
-    params.set('reconciliation_status', query.reconciliation_status);
-  }
-  if (query.workforce_category) {
-    params.set('workforce_category', query.workforce_category);
-  }
-  if (query.identity_resolution_kind) {
-    params.set('identity_resolution_kind', query.identity_resolution_kind);
-  }
-  if (query.group_code?.trim()) {
-    params.set('group_code', query.group_code.trim());
-  }
-  if (query.group_source) {
-    params.set('group_source', query.group_source);
-  }
-
-  const queryString = params.toString();
-  const suffix = queryString ? `?${queryString}` : '';
-  return request<AdminHrEmployeesResponse>(
-    token,
-    `/api/v1/admin/hr/employees${suffix}`,
-  );
-}
-
-export function getAdminHrMasterStatus(
-  token: string,
-): Promise<AdminHrMasterStatusResponse> {
-  return request<AdminHrMasterStatusResponse>(
-    token,
-    '/api/v1/admin/hr/master-status',
-  );
-}
-
-export function getAdminHrEmployee(
-  token: string,
-  recordId: string,
-): Promise<AdminHrEmployeeDetail> {
-  return request<AdminHrEmployeeDetail>(
-    token,
-    `/api/v1/admin/hr/employees/${encodeURIComponent(recordId)}`,
-  );
-}
-
-export function listAdminHrWorkforceCategories(
-  token: string,
-  includeInactive = true,
-): Promise<AdminHrWorkforceCategoriesResponse> {
-  return request<AdminHrWorkforceCategoriesResponse>(
-    token,
-    `/api/v1/admin/hr/workforce-categories?include_inactive=${String(includeInactive)}`,
-  );
-}
-
-export function createAdminHrWorkforceCategory(
-  token: string,
-  payload: { name: string; description?: string },
-): Promise<AdminHrWorkforceCategoryItem> {
-  return request<AdminHrWorkforceCategoryItem>(
-    token,
-    '/api/v1/admin/hr/workforce-categories',
-    {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    },
-  );
-}
-
-export function updateAdminHrWorkforceCategory(
-  token: string,
-  categoryCode: string,
-  payload: {
-    name?: string;
-    description?: string | null;
-    sort_order?: number;
-    is_active?: boolean;
-  },
-): Promise<AdminHrWorkforceCategoryItem> {
-  return request<AdminHrWorkforceCategoryItem>(
-    token,
-    `/api/v1/admin/hr/workforce-categories/${encodeURIComponent(categoryCode)}`,
-    {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
-    },
-  );
-}
-
-export function archiveAdminHrWorkforceCategory(
-  token: string,
-  categoryCode: string,
-): Promise<AdminHrWorkforceCategoryItem> {
-  return request<AdminHrWorkforceCategoryItem>(
-    token,
-    `/api/v1/admin/hr/workforce-categories/${encodeURIComponent(categoryCode)}`,
-    { method: 'DELETE' },
-  );
-}
-
-export function setAdminHrEmployeeWorkforceCategory(
-  token: string,
-  recordId: string,
-  payload: {
-    master_run_id: string;
-    category_code: string;
-    reason?: string;
-  },
-): Promise<AdminHrWorkforceAssignmentMutationResponse> {
-  return request<AdminHrWorkforceAssignmentMutationResponse>(
-    token,
-    `/api/v1/admin/hr/employees/${encodeURIComponent(recordId)}/workforce-category`,
-    {
-      method: 'PUT',
-      body: JSON.stringify(payload),
-    },
-  );
-}
-
-export function resetAdminHrEmployeeWorkforceCategory(
-  token: string,
-  recordId: string,
-  payload: { master_run_id: string; reason?: string },
-): Promise<AdminHrWorkforceAssignmentMutationResponse> {
-  return request<AdminHrWorkforceAssignmentMutationResponse>(
-    token,
-    `/api/v1/admin/hr/employees/${encodeURIComponent(recordId)}/workforce-category`,
-    {
-      method: 'DELETE',
-      body: JSON.stringify(payload),
-    },
-  );
-}
-
-export function listAdminHrManualMatchCandidates(
-  token: string,
-  query: {
-    source: AdminHrGroupSource;
-    page?: number;
-    page_size?: number;
-    q?: string;
-  },
-): Promise<AdminHrManualMatchDirectoryResponse> {
-  const params = new URLSearchParams({ source: query.source });
-  if (query.page !== undefined) {
-    params.set('page', String(query.page));
-  }
-  if (query.page_size !== undefined) {
-    params.set('page_size', String(query.page_size));
-  }
-  if (query.q?.trim()) {
-    params.set('q', query.q.trim());
-  }
-  return request<AdminHrManualMatchDirectoryResponse>(
-    token,
-    `/api/v1/admin/hr/manual-match-candidates?${params.toString()}`,
-  );
-}
-
-export function createAdminHrManualMatch(
-  token: string,
-  payload: {
-    master_run_id: string;
-    groupware_record_id: string;
-    erp_record_id: string;
-    reason?: string;
-  },
-): Promise<AdminHrManualMatchMutationResponse> {
-  return request<AdminHrManualMatchMutationResponse>(
-    token,
-    '/api/v1/admin/hr/manual-matches',
-    {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    },
-  );
-}
-
-export function revokeAdminHrManualMatch(
-  token: string,
-  linkId: string,
-  payload: {
-    master_run_id: string;
-    reason?: string;
-  },
-): Promise<AdminHrManualMatchMutationResponse> {
-  return request<AdminHrManualMatchMutationResponse>(
-    token,
-    `/api/v1/admin/hr/manual-matches/${encodeURIComponent(linkId)}/revoke`,
-    {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    },
-  );
 }
 
 export function createAdminUser(
@@ -893,8 +502,6 @@ export function createAdminUser(
     email: string;
     full_name: string;
     display_name?: string;
-    employee_code?: string | null;
-    primary_org_unit_id?: string | null;
     system_roles?: string[];
   },
 ): Promise<CreatedUserResponse> {
@@ -910,8 +517,6 @@ export function updateAdminUser(
   payload: {
     full_name?: string;
     display_name?: string;
-    employee_code?: string | null;
-    primary_org_unit_id?: string | null;
     system_roles?: string[];
     status?: 'active' | 'invited' | 'suspended';
     login_blocked?: boolean;
@@ -927,14 +532,6 @@ export function deleteAdminUser(token: string, userId: string): Promise<void> {
   return request<void>(token, `/api/v1/admin/users/${userId}`, {
     method: 'DELETE',
   });
-}
-
-export function listOrgUnits(
-  token: string,
-  options: { includeInactive?: boolean } = {},
-): Promise<OrgUnitItem[]> {
-  const suffix = options.includeInactive ? '?include_inactive=true' : '';
-  return request<OrgUnitItem[]>(token, `/api/v1/admin/org-units${suffix}`);
 }
 
 export function listWorkspaces(
@@ -1433,7 +1030,7 @@ export function getAdminUsageTargets(
 
 export function replaceAdminUsageTargets(
   token: string,
-  payload: { user_ids: string[]; org_unit_ids: string[] },
+  payload: { user_ids: string[] },
 ): Promise<AdminUsageTargetsResponse> {
   return request<AdminUsageTargetsResponse>(
     token,
@@ -1442,21 +1039,6 @@ export function replaceAdminUsageTargets(
       method: 'PUT',
       body: JSON.stringify(payload),
     },
-  );
-}
-
-export function listAdminBatches(token: string): Promise<AdminBatchesResponse> {
-  return request<AdminBatchesResponse>(token, '/api/v1/admin/batches');
-}
-
-export function runAdminBatch(
-  token: string,
-  batchId: AdminBatchItem['id'],
-): Promise<AdminBatchRunResponse> {
-  return request<AdminBatchRunResponse>(
-    token,
-    `/api/v1/admin/batches/${batchId}/run`,
-    { method: 'POST' },
   );
 }
 

@@ -70,10 +70,10 @@ describe('buildAppVisibilityGroups', () => {
         item('ai', 'AI'),
         item('business', 'Business'),
         item('retrieval-search', 'Retrieval', 'launcher_app'),
-        item('law-search', 'Law search', 'launcher_app'),
+        item('web-search', 'Web search', 'launcher_app'),
       ],
       [
-        category('business-tools', 'Business tools', ['law-search']),
+        category('business-tools', 'Business tools', ['web-search']),
         category('lab', 'Lab', ['retrieval-search']),
         category('empty', 'Empty category', []),
       ],

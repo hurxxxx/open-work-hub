@@ -8,7 +8,7 @@ import {
   Search,
   X,
 } from 'lucide-react';
-import { Dialog, Button, BlockEditor, InlineNotice } from '@open-alm/ui';
+import { Dialog, Button, BlockEditor, InlineNotice } from '@open-work-hub/ui';
 import { useTranslation } from 'react-i18next';
 import { DateInput } from '@/src/components/date/DateInput';
 import { useAuth } from '@/src/platform/auth/auth-provider';

@@ -18,7 +18,6 @@ export type StyleShape =
   | 'isometric'
   | 'flow'
   | 'mindmap'
-  | 'orgchart'
   | 'flat'
   | 'doodle'
   | 'watercolor'
@@ -52,7 +51,6 @@ const IMAGE_STYLE_PALETTES = {
   isometric: ['#7C3AED', '#22D3EE', '#FACC15', '#0F172A'],
   flow: ['#2563EB', '#0EA5E9', '#E2E8F0', '#1E293B'],
   mindmap: ['#9333EA', '#EC4899', '#22C55E', '#F59E0B'],
-  orgchart: ['#1E40AF', '#64748B', '#F8FAFC', '#0F172A'],
   flat: ['#3B82F6', '#F472B6', '#FACC15', '#1F2937'],
   doodle: ['#0F172A', '#FFFFFF', '#FACC15', '#EF4444'],
   watercolor: ['#FCA5A5', '#A5F3FC', '#FCD34D', '#C4B5FD'],
@@ -113,11 +111,6 @@ const STYLE_PRESETS: StylePreset[] = [
     id: 'mindmap',
     group: 'diagrammatic',
     palette: IMAGE_STYLE_PALETTES.mindmap,
-  },
-  {
-    id: 'orgchart',
-    group: 'diagrammatic',
-    palette: IMAGE_STYLE_PALETTES.orgchart,
   },
 
   // Illustrative

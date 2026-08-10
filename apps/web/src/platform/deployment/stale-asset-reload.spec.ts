@@ -85,7 +85,7 @@ describe('stale asset reload recovery', () => {
       'https://app.test/w/hq/pms?tab=board&__reload=1000#panel',
     );
     expect(storage.setItem).toHaveBeenCalledWith(
-      'open-alm:stale-asset-reload-at',
+      'open-work-hub:stale-asset-reload-at',
       '1000',
     );
   });

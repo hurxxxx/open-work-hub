@@ -12,15 +12,15 @@ import pytest
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from open_alm_api.core.db import Base
-from open_alm_api.domains.auth.models import OrgUnit, User, Workspace
-from open_alm_api.domains.files.models import (
+from open_work_hub_api.core.db import Base
+from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.files.models import (
     FileManagerCorpus,
     FileManagerFile,
     FileManagerFileSourceMetadata,
     FileManagerFolder,
 )
-from open_alm_api.domains.retrieval.files_generation_runner import (
+from open_work_hub_api.domains.retrieval.files_generation_runner import (
     FilesBackendPairInspection,
     FilesGenerationBaselineMode,
     FilesGenerationError,
@@ -31,24 +31,24 @@ from open_alm_api.domains.retrieval.files_generation_runner import (
     FilesSourceProjectionSnapshot,
     load_files_source_snapshot,
 )
-from open_alm_api.domains.retrieval.files_quality_judgments import (
+from open_work_hub_api.domains.retrieval.files_quality_judgments import (
     FilesQualityJudgmentSnapshot,
 )
-from open_alm_api.domains.retrieval.evaluation import (
+from open_work_hub_api.domains.retrieval.evaluation import (
     RetrievalEvaluationReport,
     RetrievalQualityGateArtifact,
     retrieval_embedding_generation_identity,
     retrieval_quality_corpus_sha256,
     retrieval_reranker_generation_identity,
 )
-from open_alm_api.domains.retrieval.files_generation_backends import (
+from open_work_hub_api.domains.retrieval.files_generation_backends import (
     FilesPhysicalGenerationBackends,
 )
-from open_alm_api.domains.retrieval.files_generation_materializer import (
+from open_work_hub_api.domains.retrieval.files_generation_materializer import (
     FilesCachedProjectionMaterializer,
 )
-from open_alm_api.domains.rag.models import RagSyncJob
-from open_alm_api.domains.retrieval.models import (
+from open_work_hub_api.domains.rag.models import RagSyncJob
+from open_work_hub_api.domains.retrieval.models import (
     RetrievalPartition,
     RetrievalProjectionEvent,
     RetrievalProjectionGeneration,
@@ -56,20 +56,20 @@ from open_alm_api.domains.retrieval.models import (
     RetrievalProjectionGenerationState,
     RetrievalProjectionHead,
 )
-from open_alm_api.domains.retrieval.projection_identity import (
+from open_work_hub_api.domains.retrieval.projection_identity import (
     canonical_search_document_id,
     canonical_vector_point_id,
 )
-from open_alm_api.domains.rag.runtime import (
+from open_work_hub_api.domains.rag.runtime import (
     resolve_default_collection_name,
     resolve_partitioned_rag_collection_alias,
 )
-from open_alm_api.domains.search.index_gateway import (
+from open_work_hub_api.domains.search.index_gateway import (
     keyword_search_index_alias,
     keyword_search_partitioned_index_alias,
 )
-from open_alm_api.domains.search.models import SearchIndexJob
-from open_alm_api.domains.source_access.resource_types import (
+from open_work_hub_api.domains.search.models import SearchIndexJob
+from open_work_hub_api.domains.source_access.resource_types import (
     FILE_MANAGER_FILE_RESOURCE_TYPE,
     NATIVE_DOC_RESOURCE_TYPE,
 )
@@ -220,7 +220,7 @@ def _loaded_source_snapshot(
         corpus_metadata_version=metadata_version,
         corpus_source_managed=external,
         corpus_authorization_mode="explicit_grants" if external else "cohort",
-        source_metadata_source_kind="mcloudoc" if external else None,
+        source_metadata_source_kind="external_repository" if external else None,
         source_metadata_source_updated_at=(datetime(2026, 1, 2, tzinfo=UTC) if external else None),
         source_metadata_title=source_title,
         source_metadata_author="Source Author" if external else None,
@@ -739,7 +739,6 @@ def test_materializer_refreshes_delayed_opensearch_before_runner_reconciliation(
     Base.metadata.create_all(
         engine,
         tables=[
-            OrgUnit.__table__,
             Workspace.__table__,
             User.__table__,
             RetrievalPartition.__table__,

@@ -1,12 +1,4 @@
-import {
-  Building2,
-  ExternalLink,
-  Gift,
-  HelpCircle,
-  Link2,
-  Search,
-  Settings as SettingsIcon,
-} from 'lucide-react';
+import { HelpCircle, Search, Settings as SettingsIcon } from 'lucide-react';
 import { useMemo, type MouseEventHandler, type RefObject } from 'react';
 
 import {
@@ -43,8 +35,6 @@ export function AppBarDesktopRail({
   appBarLayoutError,
   appBarLayoutSaving,
   appBarItems = [],
-  businessSitesMenuRef,
-  businessSitesOpen,
   canCreateWorkspace,
   canManageCurrentWorkspace,
   canOpenWorkspaceSearch,
@@ -61,7 +51,6 @@ export function AppBarDesktopRail({
   favoritesOpen,
   moreMenuRef,
   normalizedDefaultWorkspaceId,
-  onCloseBusinessSites,
   onCloseEditor,
   onCloseLauncherMenus,
   onCreateWorkspace,
@@ -78,7 +67,6 @@ export function AppBarDesktopRail({
   onSaveLayout,
   onSearchQueryChange,
   onSelectWorkspace,
-  onToggleBusinessSites,
   onToggleCategoryMenu,
   onToggleFavorites,
   onToggleNotifications,
@@ -103,8 +91,6 @@ export function AppBarDesktopRail({
   appBarLayoutError: string | null;
   appBarLayoutSaving: boolean;
   appBarItems?: readonly AppBarItem[];
-  businessSitesMenuRef: RefObject<HTMLDivElement | null>;
-  businessSitesOpen: boolean;
   canCreateWorkspace: boolean;
   canManageCurrentWorkspace: boolean;
   canOpenWorkspaceSearch: boolean;
@@ -121,7 +107,6 @@ export function AppBarDesktopRail({
   favoritesOpen: boolean;
   moreMenuRef: RefObject<HTMLDivElement | null>;
   normalizedDefaultWorkspaceId: string | null;
-  onCloseBusinessSites: () => void;
   onCloseEditor: () => void;
   onCloseLauncherMenus: () => void;
   onCreateWorkspace: () => void;
@@ -138,7 +123,6 @@ export function AppBarDesktopRail({
   onSaveLayout: () => void;
   onSearchQueryChange: (query: string) => void;
   onSelectWorkspace: (workspaceSlug: string) => void;
-  onToggleBusinessSites: () => void;
   onToggleCategoryMenu: (categoryId: string) => void;
   onToggleFavorites: () => void;
   onToggleNotifications: () => void;
@@ -258,13 +242,9 @@ export function AppBarDesktopRail({
       ) : null}
 
       <DesktopRailAccountControls
-        businessSitesMenuRef={businessSitesMenuRef}
-        businessSitesOpen={businessSitesOpen}
         currentUser={currentUser}
-        onCloseBusinessSites={onCloseBusinessSites}
         onOpenAccount={onOpenAccount}
         onOpenHelp={onOpenHelp}
-        onToggleBusinessSites={onToggleBusinessSites}
         onToggleNotifications={onToggleNotifications}
         notificationsEnabled={notificationsEnabled}
         t={t}
@@ -332,25 +312,17 @@ function DesktopRailSettingsLink({
 }
 
 function DesktopRailAccountControls({
-  businessSitesMenuRef,
-  businessSitesOpen,
   currentUser,
-  onCloseBusinessSites,
   onOpenAccount,
   onOpenHelp,
-  onToggleBusinessSites,
   onToggleNotifications,
   notificationsEnabled,
   t,
   unreadCount,
 }: {
-  businessSitesMenuRef: RefObject<HTMLDivElement | null>;
-  businessSitesOpen: boolean;
   currentUser: AuthUser;
-  onCloseBusinessSites: () => void;
   onOpenAccount: () => void;
   onOpenHelp: () => void;
-  onToggleBusinessSites: () => void;
   onToggleNotifications: () => void;
   notificationsEnabled: boolean;
   t: AppBarTranslator;
@@ -363,14 +335,6 @@ function DesktopRailAccountControls({
   return (
     <div className="relative flex shrink-0 flex-col items-center gap-2">
       <div aria-hidden className="h-px w-8 shrink-0 bg-white/20" />
-
-      <DesktopRailBusinessSitesMenu
-        menuRef={businessSitesMenuRef}
-        onClose={onCloseBusinessSites}
-        onToggle={onToggleBusinessSites}
-        open={businessSitesOpen}
-        t={t}
-      />
 
       {notificationsEnabled ? (
         <AppBarNotificationButton
@@ -402,110 +366,6 @@ function DesktopRailAccountControls({
       >
         {getInitials(displayName, 'ID')}
       </button>
-    </div>
-  );
-}
-
-function DesktopRailBusinessSitesMenu({
-  menuRef,
-  onClose,
-  onToggle,
-  open,
-  t,
-}: {
-  menuRef: RefObject<HTMLDivElement | null>;
-  onClose: () => void;
-  onToggle: () => void;
-  open: boolean;
-  t: AppBarTranslator;
-}) {
-  const label = t('shell:businessSites.open');
-
-  return (
-    <div ref={menuRef} className="relative">
-      <button
-        aria-expanded={open}
-        aria-haspopup="menu"
-        aria-label={label}
-        className={appBarRailControlClassName(open, undefined, 'fixed')}
-        onClick={onToggle}
-        title={label}
-        type="button"
-      >
-        <Link2 aria-hidden size={22} strokeWidth={2.25} />
-        <AppBarRailTooltip title={label} />
-        {open ? <AppBarRailActiveIndicator /> : null}
-      </button>
-
-      {open ? (
-        <div
-          className="absolute bottom-0 left-full z-50 ml-3 w-72 overflow-hidden rounded-xl border border-app-border bg-app-surface shadow-2xl"
-          role="menu"
-        >
-          <div className="border-b border-app-border px-3 py-3">
-            <div className="app-text-body-sm font-semibold text-app-ink">
-              {t('shell:businessSites.title')}
-            </div>
-            <div className="app-text-caption mt-0.5 text-app-ink/55">
-              {t('shell:businessSites.description')}
-            </div>
-          </div>
-
-          <a
-            className="flex w-full items-center gap-3 px-3 py-3 text-left text-app-ink transition-colors hover:bg-app-surface-hover focus:outline-none focus:ring-2 focus:ring-inset focus:ring-app-accent/35"
-            href="http://gw.example.com/index.aspx"
-            onClick={onClose}
-            rel="noreferrer"
-            role="menuitem"
-            target="_blank"
-          >
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-app-bg text-app-accent">
-              <Building2 aria-hidden size={18} strokeWidth={2.1} />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="app-text-body-sm block font-medium">
-                {t('shell:businessSites.groupwareTitle')}
-              </span>
-              <span className="app-text-caption block truncate text-app-ink/55">
-                {t('shell:businessSites.groupwareDescription')}
-              </span>
-            </span>
-            <ExternalLink
-              aria-hidden
-              className="shrink-0 text-app-ink/55"
-              size={15}
-              strokeWidth={2.1}
-            />
-          </a>
-
-          <a
-            className="flex w-full items-center gap-3 border-t border-app-border px-3 py-3 text-left text-app-ink transition-colors hover:bg-app-surface-hover focus:outline-none focus:ring-2 focus:ring-inset focus:ring-app-accent/35"
-            href="https://open-alm.ezwel.com/pc/mypage/auth/login/pc/product/main/welfare-mall"
-            onClick={onClose}
-            rel="noreferrer"
-            role="menuitem"
-            target="_blank"
-          >
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-app-bg text-app-accent">
-              <Gift aria-hidden size={18} strokeWidth={2.1} />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="app-text-body-sm block font-medium">
-                {t('shell:businessSites.welfareMallTitle')}
-              </span>
-              <span className="app-text-caption block truncate text-app-ink/55">
-                {t('shell:businessSites.welfareMallDescription')}
-              </span>
-            </span>
-            <ExternalLink
-              aria-hidden
-              className="shrink-0 text-app-ink/55"
-              size={15}
-              strokeWidth={2.1}
-            />
-          </a>
-        </div>
-      ) : null}
     </div>
   );
 }

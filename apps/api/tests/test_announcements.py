@@ -71,7 +71,7 @@ def test_announcement_requires_admin_to_write(client: TestClient) -> None:
     member = _create_user_with_workspaces(
         client,
         admin_token,
-        email="ann-member@open-alm.local",
+        email="ann-member@open-work-hub.local",
         full_name="Announcement Member",
         workspace_keys=["administrator"],
     )
@@ -99,9 +99,9 @@ def test_announcement_company_scope_visibility(client: TestClient) -> None:
     other = _create_user_with_workspaces(
         client,
         token,
-        email="ann-other-workspace@open-alm.local",
+        email="ann-other-workspace@open-work-hub.local",
         full_name="Other Workspace User",
-        workspace_keys=["ai-tft"],
+        workspace_keys=["general"],
     )
     other_token = _login(
         client,
@@ -144,7 +144,7 @@ def test_announcement_company_scope_visibility(client: TestClient) -> None:
     assert company_id not in {item["id"] for item in workspace_list.json()["items"]}
 
     visible_from_other_workspace = client.get(
-        "/api/v1/workspaces/ai-tft/announcements",
+        "/api/v1/workspaces/general/announcements",
         headers=_auth_headers(other_token),
         params={"scope": "company"},
     )
@@ -156,7 +156,7 @@ def test_announcement_company_scope_visibility(client: TestClient) -> None:
     }
 
     detail_from_other_workspace = client.get(
-        f"/api/v1/workspaces/ai-tft/announcements/{company_id}",
+        f"/api/v1/workspaces/general/announcements/{company_id}",
         headers=_auth_headers(other_token),
     )
     assert detail_from_other_workspace.status_code == 200, (
@@ -170,7 +170,7 @@ def test_company_announcement_requires_platform_admin(client: TestClient) -> Non
     member = _create_user_with_workspaces(
         client,
         admin_token,
-        email="ann-company-member@open-alm.local",
+        email="ann-company-member@open-work-hub.local",
         full_name="Company Member",
         workspace_keys=["administrator"],
     )

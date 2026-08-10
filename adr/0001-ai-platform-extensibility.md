@@ -5,7 +5,7 @@
 
 ## Context
 
-Open ALM은 앞으로 AppBar에 여러 업무 앱이 늘어나고, AI는 각 앱을 지원하는 agent로 동작해야 한다. 동시에 백엔드는 특정 프론트 구현에 종속되지 않고 OpenAPI 기반의 AI hub로 확장 가능해야 한다.
+Open Work Hub은 앞으로 AppBar에 여러 업무 앱이 늘어나고, AI는 각 앱을 지원하는 agent로 동작해야 한다. 동시에 백엔드는 특정 프론트 구현에 종속되지 않고 OpenAPI 기반의 AI hub로 확장 가능해야 한다.
 
 지금 이 계약을 먼저 고정하지 않으면 다음 문제가 반복된다.
 
@@ -83,6 +83,4 @@ Open ALM은 앞으로 AppBar에 여러 업무 앱이 늘어나고, AI는 각 앱
 ## Follow-up
 
 - Read tool 대상 도메인의 service layer 추출을 계속 진행한다.
-- Company-scoped external REST integration의 공통 API key 발급·scope·회수 정책은
-  [ADR 0012](0012-platform-api-keys-and-rest-integrations.md)에서 구체화한다.
 - `workspace_apps.py`를 실제 구현 capability registry와 관리자 DB catalog projection으로 분리한다.

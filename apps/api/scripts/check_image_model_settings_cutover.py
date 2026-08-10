@@ -11,8 +11,8 @@ _SRC = Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from open_alm_api.core.db import get_session_factory  # noqa: E402
-from open_alm_api.domains.images.cutover import (  # noqa: E402
+from open_work_hub_api.core.db import get_session_factory  # noqa: E402
+from open_work_hub_api.domains.images.cutover import (  # noqa: E402
     ImageModelCutoverError,
     check_image_model_cutover,
 )

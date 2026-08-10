@@ -23,31 +23,6 @@ const ACTION_LABEL_KEYS: Record<string, string> = {
     'admin.console.audit.actions.adminAiRuntimeRetentionScrub',
   'admin.app_visibility.update':
     'admin.console.audit.actions.adminAppVisibilityUpdate',
-  'admin.batch.run': 'admin.console.audit.actions.adminBatchRun',
-  'admin.hr_identity_link.create':
-    'admin.console.audit.actions.adminHrIdentityLinkCreate',
-  'admin.hr_identity_link.revoke':
-    'admin.console.audit.actions.adminHrIdentityLinkRevoke',
-  'admin.hr_workforce_assignment.reset':
-    'admin.console.audit.actions.adminHrWorkforceAssignmentReset',
-  'admin.hr_workforce_assignment.set':
-    'admin.console.audit.actions.adminHrWorkforceAssignmentSet',
-  'admin.hr_workforce_category.archive':
-    'admin.console.audit.actions.adminHrWorkforceCategoryArchive',
-  'admin.hr_workforce_category.create':
-    'admin.console.audit.actions.adminHrWorkforceCategoryCreate',
-  'admin.hr_workforce_category.update':
-    'admin.console.audit.actions.adminHrWorkforceCategoryUpdate',
-  'admin.org-unit.create': 'admin.console.audit.actions.adminOrgUnitCreate',
-  'admin.org-unit.update': 'admin.console.audit.actions.adminOrgUnitUpdate',
-  'admin.platform_api_key.issue':
-    'admin.console.audit.actions.adminPlatformApiKeyIssue',
-  'admin.platform_api_key.list':
-    'admin.console.audit.actions.adminPlatformApiKeyList',
-  'admin.platform_api_key.reveal':
-    'admin.console.audit.actions.adminPlatformApiKeyReveal',
-  'admin.platform_api_key.revoke':
-    'admin.console.audit.actions.adminPlatformApiKeyRevoke',
   'admin.team.create': 'admin.console.audit.actions.adminTeamCreate',
   'admin.team.delete': 'admin.console.audit.actions.adminTeamDelete',
   'admin.team.members.replace':

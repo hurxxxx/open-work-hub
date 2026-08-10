@@ -5,8 +5,8 @@ from datetime import UTC, datetime
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from open_alm_api.core.db import get_session_factory
-from open_alm_api.domains.auth.models import PlatformAppVisibility
+from open_work_hub_api.core.db import get_session_factory
+from open_work_hub_api.domains.auth.models import PlatformAppVisibility
 
 from test_meeting import (
     _auth_headers,
@@ -166,7 +166,7 @@ def test_planner_event_owner_only_access(client: TestClient) -> None:
     member = _create_user_with_workspaces(
         client,
         admin_token,
-        email="planner-member@open-alm.local",
+        email="planner-member@open-work-hub.local",
         full_name="Planner Member",
         workspace_keys=["administrator"],
     )
@@ -205,7 +205,7 @@ def test_calendar_events_include_only_current_user_planner_events(client: TestCl
     member = _create_user_with_workspaces(
         client,
         admin_token,
-        email="planner-public@open-alm.local",
+        email="planner-public@open-work-hub.local",
         full_name="Planner Public",
         workspace_keys=["administrator"],
     )
@@ -318,7 +318,7 @@ def test_meeting_availability_masks_other_users_personal_events(client: TestClie
     attendee = _create_user_with_workspaces(
         client,
         admin_token,
-        email="availability-user@open-alm.local",
+        email="availability-user@open-work-hub.local",
         full_name="Availability User",
         workspace_keys=["administrator"],
     )
@@ -404,7 +404,7 @@ def test_meeting_availability_rejects_users_outside_workspace(client: TestClient
     outsider = _create_user_with_workspaces(
         client,
         admin_token,
-        email="availability-outsider@open-alm.local",
+        email="availability-outsider@open-work-hub.local",
         full_name="Availability Outsider",
         workspace_keys=[],
     )

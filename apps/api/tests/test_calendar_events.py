@@ -25,8 +25,8 @@ def _bootstrap_admin_session(client: TestClient) -> dict:
     response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "Open ALM Admin",
-            "email": "admin@open-alm.local",
+            "full_name": "Open Work Hub Admin",
+            "email": "admin@open-work-hub.local",
             "password": "supersecret123",
         },
     )

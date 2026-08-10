@@ -6,7 +6,7 @@ export type TimelineRangeDays = (typeof TIMELINE_RANGE_OPTIONS)[number];
 
 export const DEFAULT_TIMELINE_RANGE_DAYS: TimelineRangeDays = 28;
 
-const TIMELINE_RANGE_STORAGE_KEY = 'open-alm:planner-timeline-range-days';
+const TIMELINE_RANGE_STORAGE_KEY = 'open-work-hub:planner-timeline-range-days';
 type PlannerDateFormatterKind =
   | 'timelineStartSameYear'
   | 'timelineStartWithYear'

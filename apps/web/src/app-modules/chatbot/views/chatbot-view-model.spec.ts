@@ -123,7 +123,7 @@ describe('resolveAutoOpenArtifactId', () => {
       id: 'artifact-evidence',
       status: 'closed',
       title: 'Evidence',
-      type: 'legacy-issue-evidence',
+      type: 'evidence',
     };
 
     expect(

@@ -1,5 +1,5 @@
-import { authRoutes } from '@open-alm/contracts/auth';
-import { hasCoreWorkspaceMembership } from '@open-alm/core-web/workspace-access';
+import { authRoutes } from '@open-work-hub/contracts/auth';
+import { hasCoreWorkspaceMembership } from '@open-work-hub/core-web/workspace-access';
 
 import { apiFetchJsonWithMappedError } from '@/src/platform/api/client';
 import type { WorkspaceShellAppId } from '@/src/app/shell/navigation-types';
@@ -19,8 +19,6 @@ export type AppBarAppId = WorkspaceShellAppId;
 export interface AppBarLayoutPreference {
   pinned_app_ids: AppBarAppId[];
 }
-
-export type OrgUnitSummary = ApiSchema<'OrgUnitSummaryResponse'>;
 
 export interface WorkspaceRole {
   workspace_id: string;
@@ -47,12 +45,8 @@ export type AuthUser = Omit<
   ApiSchema<'AuthUserResponse'>,
   | 'created_at'
   | 'default_workspace_id'
-  | 'employee_code'
-  | 'job_title'
   | 'last_login_at'
-  | 'auth_provider'
   | 'login_blocked'
-  | 'primary_org_unit'
   | 'theme_preference'
   | 'locale'
   | 'time_zone'
@@ -61,15 +55,11 @@ export type AuthUser = Omit<
 > & {
   default_workspace_id?: string | null;
   app_bar_layout?: AppBarLayoutPreference | null;
-  employee_code?: string | null;
-  job_title?: string | null;
-  auth_provider?: string;
   login_blocked?: boolean;
   theme_preference: ThemePreference;
   locale: LocalePreference;
   time_zone: string;
   date_format: DateFormatPreference;
-  primary_org_unit: OrgUnitSummary | null;
   workspaces: WorkspaceSummary[];
   workspace_roles?: WorkspaceRole[];
   last_login_at?: string | null;

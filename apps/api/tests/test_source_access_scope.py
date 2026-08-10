@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy import Column, MetaData, String, Table, create_engine, select
 
-from open_alm_api.domains.source_access.access_scope import AccessScopeRules
+from open_work_hub_api.domains.source_access.access_scope import AccessScopeRules
 
 
 def _member_rules() -> AccessScopeRules:
@@ -10,7 +10,6 @@ def _member_rules() -> AccessScopeRules:
         workspace_id="workspace-1",
         workspace_role="member",
         user_id="user-1",
-        org_unit_ids=("division-1", "group-1"),
         team_ids=("team-1",),
     )
 
@@ -20,12 +19,11 @@ def test_access_scope_rules_admin_allows_any_scope() -> None:
         workspace_id="workspace-1",
         workspace_role="admin",
         user_id="user-1",
-        org_unit_ids=(),
         team_ids=(),
     )
 
     assert rules.can_access("workspace", "other-workspace") is True
-    assert rules.can_access("org_unit", None) is True
+    assert rules.can_access("team", None) is True
     assert rules.can_access("unknown", "scope-1") is True
 
 
@@ -34,12 +32,10 @@ def test_access_scope_rules_without_workspace_role_blocks_all_scopes() -> None:
         workspace_id="workspace-1",
         workspace_role=None,
         user_id="user-1",
-        org_unit_ids=("division-1",),
         team_ids=("team-1",),
     )
 
     assert rules.can_access("workspace", "workspace-1") is False
-    assert rules.can_access("org_unit", "division-1") is False
     assert rules.can_access("team", "team-1") is False
     assert rules.can_access("user", "user-1") is False
 
@@ -50,15 +46,6 @@ def test_access_scope_rules_workspace_scope_matches_workspace_or_null_id() -> No
     assert rules.can_access("workspace", "workspace-1") is True
     assert rules.can_access("workspace", None) is True
     assert rules.can_access("workspace", "workspace-2") is False
-
-
-def test_access_scope_rules_org_unit_scope_matches_accessible_units() -> None:
-    rules = _member_rules()
-
-    assert rules.can_access("org_unit", "division-1") is True
-    assert rules.can_access("org_unit", "group-1") is True
-    assert rules.can_access("org_unit", "division-2") is False
-    assert rules.can_access("org_unit", None) is False
 
 
 def test_access_scope_rules_team_scope_matches_accessible_teams() -> None:
@@ -81,7 +68,6 @@ def test_access_scope_rules_predicate_matches_member_accessible_rows() -> None:
     rules = _member_rules()
 
     assert _matching_predicate_labels(rules) == [
-        "org-unit",
         "team",
         "user",
         "workspace-id",
@@ -99,12 +85,10 @@ def test_access_scope_rules_predicate_handles_admin_and_no_workspace_role() -> N
         workspace_id="workspace-1",
         workspace_role=None,
         user_id="user-1",
-        org_unit_ids=("division-1",),
         team_ids=("team-1",),
     )
 
     assert _matching_predicate_labels(admin_rules) == [
-        "org-unit",
         "team",
         "unknown",
         "user",
@@ -138,11 +122,6 @@ def _matching_predicate_labels(rules: AccessScopeRules) -> list[str]:
                     "label": "workspace-null",
                     "scope_kind": "workspace",
                     "scope_id": None,
-                },
-                {
-                    "label": "org-unit",
-                    "scope_kind": "org_unit",
-                    "scope_id": "division-1",
                 },
                 {"label": "team", "scope_kind": "team", "scope_id": "team-1"},
                 {"label": "user", "scope_kind": "user", "scope_id": "user-1"},

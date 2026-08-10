@@ -15,7 +15,7 @@ describe('workspace API path policy', () => {
     configureWorkspaceApiRoutePolicy(APP_WORKSPACE_API_ROUTE_POLICY);
   });
 
-  it('rewrites known legacy app API prefixes into workspace-scoped paths', () => {
+  it('rewrites configured app API prefixes into workspace-scoped paths', () => {
     expect(rewriteWorkspaceApiPathForWorkspace('/api/v1/rag/query', 'hq')).toBe(
       '/api/v1/workspaces/hq/rag/query',
     );
@@ -24,10 +24,10 @@ describe('workspace API path policy', () => {
     ).toBe('/api/v1/workspaces/hq/retrieval/query');
     expect(
       rewriteWorkspaceApiPathForWorkspace(
-        '/api/v1/patent-prior-art/jobs',
+        '/api/v1/writing-assistant/jobs',
         'hq',
       ),
-    ).toBe('/api/v1/workspaces/hq/patent-prior-art/jobs');
+    ).toBe('/api/v1/workspaces/hq/writing-assistant/jobs');
     expect(
       rewriteWorkspaceApiPathForWorkspace('/api/v1/meeting/meetings', 'hq'),
     ).toBe('/api/v1/workspaces/hq/meeting/meetings');
@@ -75,42 +75,16 @@ describe('workspace API path policy', () => {
     ).toBe('/api/v1/workspaces/hq/web-search/ask/stream');
     expect(
       rewriteWorkspaceApiPathForWorkspace(
-        '/api/v1/research-trends/ask/stream',
+        '/api/v1/writing-assistant/records',
         'hq',
       ),
-    ).toBe('/api/v1/workspaces/hq/research-trends/ask/stream');
+    ).toBe('/api/v1/workspaces/hq/writing-assistant/records');
     expect(
       rewriteWorkspaceApiPathForWorkspace(
-        '/api/v1/standards-monitor/ask/stream',
+        '/api/v1/spec-compare/analyze',
         'hq',
       ),
-    ).toBe('/api/v1/workspaces/hq/standards-monitor/ask/stream');
-    expect(
-      rewriteWorkspaceApiPathForWorkspace(
-        '/api/v1/ppt-generator/families',
-        'hq',
-      ),
-    ).toBe('/api/v1/workspaces/hq/ppt-generator/families');
-    expect(
-      rewriteWorkspaceApiPathForWorkspace(
-        '/api/v1/patent-automation/records',
-        'hq',
-      ),
-    ).toBe('/api/v1/workspaces/hq/patent-automation/records');
-    expect(
-      rewriteWorkspaceApiPathForWorkspace(
-        '/api/v1/imds-minerals/analyze',
-        'hq',
-      ),
-    ).toBe('/api/v1/workspaces/hq/imds-minerals/analyze');
-    expect(
-      rewriteWorkspaceApiPathForWorkspace(
-        '/api/v1/management-tasks/health-checkup/source/status',
-        'hq',
-      ),
-    ).toBe(
-      '/api/v1/workspaces/hq/management-tasks/health-checkup/source/status',
-    );
+    ).toBe('/api/v1/workspaces/hq/spec-compare/analyze');
   });
 
   it('collects workspace API prefixes from app manifests and platform route policy', () => {
@@ -122,16 +96,11 @@ describe('workspace API path policy', () => {
         '/api/v1/document-translate',
         '/api/v1/docs',
         '/api/v1/diagrams',
-        '/api/v1/imds-minerals',
-        '/api/v1/management-tasks',
+        '/api/v1/spec-compare',
         '/api/v1/pms',
-        '/api/v1/patent-automation',
-        '/api/v1/patent-prior-art',
-        '/api/v1/ppt-generator',
-        '/api/v1/research-trends',
+        '/api/v1/writing-assistant',
         '/api/v1/retrieval',
         '/api/v1/search',
-        '/api/v1/standards-monitor',
         '/api/v1/web-search',
         '/api/v1/wiki',
       ]),

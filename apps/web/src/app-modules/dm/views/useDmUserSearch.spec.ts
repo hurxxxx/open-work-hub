@@ -26,7 +26,6 @@ function user(overrides: Partial<DmUser> = {}): DmUser {
     email: 'user@example.test',
     full_name: 'User One',
     display_name: null,
-    job_title: null,
     ...overrides,
   };
 }

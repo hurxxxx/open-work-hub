@@ -89,7 +89,7 @@ export function resolveDmNotificationThreadId(
   if (!actionUrl?.startsWith('/')) {
     return undefined;
   }
-  const parsed = new URL(actionUrl, 'https://open-alm.local');
+  const parsed = new URL(actionUrl, 'https://open-work-hub.local');
   if (parsed.pathname === '/dm') {
     return parsed.searchParams.get('thread');
   }

@@ -5,9 +5,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from open_alm_api.domains.mail import connection_policy
-from open_alm_api.domains.mail.clients import MailConnectionSettings
-from open_alm_api.domains.mail.connection_policy import (
+from open_work_hub_api.domains.mail import connection_policy
+from open_work_hub_api.domains.mail.clients import MailConnectionSettings
+from open_work_hub_api.domains.mail.connection_policy import (
     MailConnectionPolicyError,
     validate_connection_settings,
 )

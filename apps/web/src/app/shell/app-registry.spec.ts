@@ -3,8 +3,6 @@ import { Home } from 'lucide-react';
 
 import { aiGlobalRoutes } from '@/src/app-modules/ai';
 import { communityGlobalRoutes } from '@/src/app-modules/community';
-import { newsGlobalRoutes } from '@/src/app-modules/news';
-import { personalAttendanceGlobalRoutes } from '@/src/app-modules/personal-attendance';
 import {
   APP_BACKGROUND_WORK_SOURCES,
   APP_BAR_FIXED_APP_IDS,
@@ -120,7 +118,6 @@ describe('app module registry', () => {
     expect(settingsManifest?.staticGlobalRoutePaths).toContain(
       '/admin/document-processing',
     );
-    expect(settingsManifest?.staticGlobalRoutePaths).toContain('/admin/hr');
     expect(getAppModuleWorkspaceRoutes('settings')).toEqual([]);
   });
 
@@ -140,7 +137,7 @@ describe('app module registry', () => {
     ).toContain('/w/:workspaceSlug/retrieval-search');
     expect(
       getAppModuleWorkspaceRoutes('business').map((route) => route.path),
-    ).toContain('/w/:workspaceSlug/patent-prior-art');
+    ).toContain('/w/:workspaceSlug/drafting');
   });
 
   it('derives app-owned global route definitions from the app registry', () => {
@@ -148,9 +145,6 @@ describe('app module registry', () => {
     expect(getAppModuleGlobalRoutes('ai')).toEqual(aiGlobalRoutes);
     expect(getAppModuleGlobalRoutes('community')).toEqual(
       communityGlobalRoutes.map((route) => ({ ...route, appId: 'community' })),
-    );
-    expect(getAppModuleGlobalRoutes('news')).toEqual(
-      newsGlobalRoutes.map((route) => ({ ...route, appId: 'news' })),
     );
     expect(getAppModuleGlobalRoutes('collaboration')).toEqual(
       staticAppGlobalRoutes.filter((route) => route.appId === 'collaboration'),
@@ -178,7 +172,6 @@ describe('app module registry', () => {
 
     expect(APP_TOOL_VIEW_ROUTES.map((route) => route.id)).toEqual([
       'ai.workspace-search',
-      'qa-assistant.main',
       'pms.main',
       'docs.main',
       'whiteboard.main',
@@ -186,18 +179,9 @@ describe('app module registry', () => {
       'drafting.main',
       'document-translate.main',
       'spec-compare.main',
-      'fmea-compare.main',
-      'imds-minerals.main',
       'image-wizard.main',
       'email-assistant.main',
-      'ppt-assistant.main',
       'retrieval-search.main',
-      'law-search.main',
-      'patent-compose.main',
-      'patent-analysis.main',
-      'patent-report.main',
-      'patent-prior-art.main',
-      'data-viz.main',
     ]);
     const translateItem = getNavItem('translate');
     const pmsItem = getNavItem('pms-inbox');
@@ -224,8 +208,8 @@ describe('app module registry', () => {
       getToolViewRoute({ item: null, toolId: 'retrieval-search' })?.id,
     ).toBe('retrieval-search.main');
     expect(
-      getToolViewRoute({ item: null, toolId: 'patent-prior-art' })?.id,
-    ).toBe('patent-prior-art.main');
+      getToolViewRoute({ item: null, toolId: 'drafting' })?.id,
+    ).toBe('drafting.main');
     expect(
       pmsItem
         ? getToolViewRoute({ item: pmsItem, toolId: 'pms-inbox' })?.id
@@ -253,14 +237,7 @@ describe('app module registry', () => {
       'document-translate',
       'drafting',
       'email-assistant',
-      'fmea-compare',
       'image-wizard',
-      'law-search',
-      'patent-analysis',
-      'patent-compose',
-      'patent-prior-art',
-      'patent-report',
-      'ppt-assistant',
       'spec-compare',
     ]);
     expect(WORKSPACE_AI_TOOL_APP_IDS).not.toContain('docs');
@@ -274,32 +251,22 @@ describe('app module registry', () => {
       'drafting',
       'translate',
       'spec-compare',
-      'fmea-compare',
       'image-wizard',
       'email-assistant',
-      'law-search',
-      'patent-interpret',
-      'patent-apply',
     ]);
-    expect(APP_FEATURE_GUIDE_TOOL_IDS.has('data-viz')).toBe(false);
-    expect(APP_FEATURE_GUIDE_TOOL_IDS.has('qa-assistant')).toBe(false);
   });
 
   it('derives launcher policy from app-owned manifests', () => {
     expect([...APP_LAUNCHER_GLOBAL_PATHS]).toEqual([
       ['community', '/community'],
-      ['personal-attendance', '/personal-attendance'],
       ['mail', '/mail'],
       ['planner', '/planner'],
-      ['news', '/news'],
-      ['qa-assistant', '/qa-assistant'],
     ]);
     expect(APP_BAR_FIXED_APP_IDS).toEqual(['home']);
     expect(APP_BAR_PINNED_BY_DEFAULT_APP_IDS).toEqual([
       'pms',
       'docs',
       'whiteboard',
-      'qa-assistant',
     ]);
   });
 
@@ -350,8 +317,6 @@ describe('app module registry', () => {
         ...staticWhiteboardGlobalRoutes,
       ],
       community: communityGlobalRoutes,
-      news: newsGlobalRoutes,
-      'personal-attendance': personalAttendanceGlobalRoutes,
     } as const;
 
     for (const [appId, routes] of Object.entries(globalRoutesByAppId)) {

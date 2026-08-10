@@ -13,7 +13,7 @@ const forbiddenSpecifiers = [
       'core-web must not import the web application source alias. Move shared code into packages instead.',
   },
   {
-    pattern: /^@open-alm\/web-shell(?:\/|$)/,
+    pattern: /^@open-work-hub\/web-shell(?:\/|$)/,
     reason: 'core-web must be below the web shell boundary, not depend on it.',
   },
 ];

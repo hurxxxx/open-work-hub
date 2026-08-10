@@ -89,7 +89,7 @@ async function request(
         typeof payload.detail === 'string'
           ? payload.detail
           : 'Image model settings request failed.',
-        response.headers.get('X-Open ALM-Error-Code'),
+        response.headers.get('X-Open-Work-Hub-Error-Code'),
       );
     }
     return payload as AdminImageModelSettings;

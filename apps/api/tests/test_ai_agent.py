@@ -6,14 +6,14 @@ from typing import Any
 
 import pytest
 
-from open_alm_api.core.llm import LlmPoolConfig, LlmTaskContext, PolicyDecision, ResolvedLlmExecution
-from open_alm_api.core.llm_errors import LlmProviderError
-from open_alm_api.core.principal import user_principal
-from open_alm_api.core.llm_adapters import StreamChunk
-from open_alm_api.domains.ai import agent as agent_module
-from open_alm_api.domains.ai.events import EnvelopeEncoder
-from open_alm_api.domains.ai.tool_contracts import AgentToolSpec
-from open_alm_api.domains.ai.tool_runtime import ToolCallExecution
+from open_work_hub_api.core.llm import LlmPoolConfig, LlmTaskContext, PolicyDecision, ResolvedLlmExecution
+from open_work_hub_api.core.llm_errors import LlmProviderError
+from open_work_hub_api.core.principal import user_principal
+from open_work_hub_api.core.llm_adapters import StreamChunk
+from open_work_hub_api.domains.ai import agent as agent_module
+from open_work_hub_api.domains.ai.events import EnvelopeEncoder
+from open_work_hub_api.domains.ai.tool_contracts import AgentToolSpec
+from open_work_hub_api.domains.ai.tool_runtime import ToolCallExecution
 
 
 pytestmark = pytest.mark.anyio
@@ -234,7 +234,7 @@ async def _collect_events(
     ]
 
 
-async def test_run_agent_turn_stream_uses_open_alm_identity_prompt(
+async def test_run_agent_turn_stream_uses_open_work_hub_identity_prompt(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured_stream_kwargs: list[dict[str, Any]] = []
@@ -254,8 +254,8 @@ async def test_run_agent_turn_stream_uses_open_alm_identity_prompt(
     messages = captured_stream_kwargs[0]["messages"]
     system_prompt = messages[0]["content"]
     assert messages[0]["role"] == "system"
-    assert "Open ALM의 업무용 챗봇 아이두(AI-Do)" in system_prompt
-    assert "저는 Open ALM의 업무용 챗봇 아이두(AI-Do)입니다." in system_prompt
+    assert "Open Work Hub의 업무용 챗봇 AI 어시스턴트(Open Work Hub)" in system_prompt
+    assert "저는 Open Work Hub의 업무용 챗봇 AI 어시스턴트(Open Work Hub)입니다." in system_prompt
     assert "기반 모델명이나 개발사를 너의 정체성처럼 말하지 않는다" in system_prompt
 
 

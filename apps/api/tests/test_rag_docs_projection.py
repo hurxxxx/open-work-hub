@@ -8,25 +8,25 @@ import pytest
 from dev_accounts import create_workspace_user_session, dev_login
 from sqlalchemy import select
 
-from open_alm_api.core.db import get_session_factory
-from open_alm_api.domains.auth.access import load_user_graph
-from open_alm_api.domains.auth.models import User, Workspace
-from open_alm_api.domains.auth.security import new_id
-from open_alm_api.domains.docs import service as docs_service
-from open_alm_api.domains.docs.access_grants import grant_doc_access
-from open_alm_api.domains.docs.models import NativeDocLinkShare, NativeDocPage, NativeDocUserShare
-from open_alm_api.domains.rag.contracts import RagQueryRequest, RagVectorSearchHit
-from open_alm_api.domains.rag.access_filter import build_user_rag_post_filter
-from open_alm_api.domains.rag.docs_projection import (
+from open_work_hub_api.core.db import get_session_factory
+from open_work_hub_api.domains.auth.access import load_user_graph
+from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.security import new_id
+from open_work_hub_api.domains.docs import service as docs_service
+from open_work_hub_api.domains.docs.access_grants import grant_doc_access
+from open_work_hub_api.domains.docs.models import NativeDocLinkShare, NativeDocPage, NativeDocUserShare
+from open_work_hub_api.domains.rag.contracts import RagQueryRequest, RagVectorSearchHit
+from open_work_hub_api.domains.rag.access_filter import build_user_rag_post_filter
+from open_work_hub_api.domains.rag.docs_projection import (
     NATIVE_DOC_RESOURCE_TYPE,
     load_native_doc_projection,
 )
-from open_alm_api.domains.rag.providers.fake import (
+from open_work_hub_api.domains.rag.providers.fake import (
     FakeEmbeddingClient,
     FakeVectorIndexClient,
 )
-from open_alm_api.domains.rag.query_service import RagQueryService
-from open_alm_api.domains.rag.service import RagService
+from open_work_hub_api.domains.rag.query_service import RagQueryService
+from open_work_hub_api.domains.rag.service import RagService
 
 
 def _dev_login(client: TestClient, account_key: str) -> dict:
@@ -42,7 +42,7 @@ def test_native_doc_projection_preserves_grants_for_query_time_expiry_checks(
         client,
         workspace_key="delivery-hub",
         login_id="docsragexpiredprojection",
-        email="docs-rag-expired-projection@open-alm.local",
+        email="docs-rag-expired-projection@open-work-hub.local",
         full_name="Docs RAG Expired Projection",
     )
     revoked_session = _dev_login(client, "delivery-hub-member")
@@ -168,7 +168,7 @@ def test_native_doc_query_post_filter_rejects_expired_grant_hits(client: TestCli
         client,
         workspace_key="delivery-hub",
         login_id="docsragexpiredquery",
-        email="docs-rag-expired-query@open-alm.local",
+        email="docs-rag-expired-query@open-work-hub.local",
         full_name="Docs RAG Expired Query",
     )
     vector_index = FakeVectorIndexClient()

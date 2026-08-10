@@ -42,7 +42,7 @@ describe('useDocsCollabSnapshotSaveController', () => {
   it('debounces collaboration snapshot saves and persists the latest blocks', async () => {
     vi.useFakeTimers();
     const { result, saveSnapshot, onSavedSnapshot, snapshot } = renderController({
-      workspaceSlug: 'ai-tft',
+      workspaceSlug: 'general',
     });
     const oldBlocks = [{ type: 'paragraph', content: [{ text: 'Old' }] }];
     const latestBlocks = [{ type: 'paragraph', content: [{ text: 'Latest' }] }];
@@ -61,7 +61,7 @@ describe('useDocsCollabSnapshotSaveController', () => {
       'token-1',
       'native_doc_page__page-1',
       { content_blocks: latestBlocks },
-      'ai-tft',
+      'general',
     );
     expect(onSavedSnapshot).toHaveBeenCalledWith(snapshot);
   });

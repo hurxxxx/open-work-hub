@@ -7,7 +7,7 @@ import {
   Terminal,
 } from 'lucide-react';
 
-import { Button } from '@open-alm/ui/primitives/button';
+import { Button } from '@open-work-hub/ui/primitives/button';
 
 import {
   buildDesktopInstallerRows,
@@ -52,10 +52,10 @@ export function DesktopInstallerPanel() {
     <div className="mt-4 rounded-md border border-app-border bg-app-surface-subtle p-4">
       <div>
         <div className="app-text-body font-medium text-app-ink">
-          {t('settings.aiDoDesktopTitle')}
+          {t('settings.openWorkHubDesktopTitle')}
         </div>
         <div className="app-text-caption mt-0.5 text-app-ink/55">
-          {t('settings.aiDoDesktopDescription')}
+          {t('settings.openWorkHubDesktopDescription')}
         </div>
       </div>
 
@@ -78,7 +78,7 @@ export function DesktopInstallerPanel() {
                     {item.isCurrent ? (
                       <span className="app-text-caption inline-flex items-center gap-1 rounded-md border border-app-accent/30 bg-app-accent/10 px-2 py-0.5 text-app-accent">
                         <BadgeCheck size={12} />
-                        {t('settings.aiDoDesktopCurrentOs')}
+                        {t('settings.openWorkHubDesktopCurrentOs')}
                       </span>
                     ) : null}
                   </div>
@@ -102,10 +102,10 @@ export function DesktopInstallerPanel() {
               >
                 <Download size={14} />
                 {item.installerUrl
-                  ? t('settings.aiDoDesktopDownload', {
+                  ? t('settings.openWorkHubDesktopDownload', {
                       platform: platformName,
                     })
-                  : t('settings.aiDoDesktopUnavailable')}
+                  : t('settings.openWorkHubDesktopUnavailable')}
               </Button>
             </div>
           );

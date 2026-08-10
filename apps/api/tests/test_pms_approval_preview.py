@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from datetime import date
 
-from open_alm_api.domains.ai.registry import PreviewField, WorkspaceContext
-from open_alm_api.domains.pms.approval_preview import (
+from open_work_hub_api.domains.ai.registry import PreviewField, WorkspaceContext
+from open_work_hub_api.domains.pms.approval_preview import (
     build_add_comment_preview,
     build_create_task_preview,
     build_delete_task_preview,
     build_update_task_preview,
 )
-from open_alm_api.domains.pms.tools import PmsCreateTaskAiInput, PmsUpdateTaskAiInput
+from open_work_hub_api.domains.pms.tools import PmsCreateTaskAiInput, PmsUpdateTaskAiInput
 
 
 def _workspace_context() -> WorkspaceContext:

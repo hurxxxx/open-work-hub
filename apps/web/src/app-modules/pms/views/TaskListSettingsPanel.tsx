@@ -9,7 +9,7 @@ import {
   MoreHorizontal,
   Info,
 } from 'lucide-react';
-import { Button, Dialog, InlineNotice } from '@open-alm/ui';
+import { Button, Dialog, InlineNotice } from '@open-work-hub/ui';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { UserSearchMultiSelect } from '@/src/platform/users/UserSearchMultiSelect';

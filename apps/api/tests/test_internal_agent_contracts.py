@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from open_alm_api.domains.ai.internal_agent_contracts import LocalAgentResult, LocalAgentTask
-from open_alm_api.domains.ai.local_gateway_request import build_gateway_tool_request
+from open_work_hub_api.domains.ai.internal_agent_contracts import LocalAgentResult, LocalAgentTask
+from open_work_hub_api.domains.ai.local_gateway_request import build_gateway_tool_request
 
 
 def _task(**overrides) -> LocalAgentTask:

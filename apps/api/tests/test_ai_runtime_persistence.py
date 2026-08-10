@@ -11,22 +11,22 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
-from open_alm_api.domains.ai import approvals as ai_approvals
-from open_alm_api.domains.ai.runtime.models import (
+from open_work_hub_api.domains.ai import approvals as ai_approvals
+from open_work_hub_api.domains.ai.runtime.models import (
     AgentInvocation,
     AgentRun,
     AgentTraceEvent,
 )
-from open_alm_api.domains.ai.runtime.persistence import (
+from open_work_hub_api.domains.ai.runtime.persistence import (
     append_trace_event,
     prepare_trace_payload,
     scrub_trace_payload,
 )
-from open_alm_api.domains.ai.runtime.retention import scrub_completed_runtime_records
-from open_alm_api.domains.auth.models import User, Workspace
-from open_alm_api.domains.auth.security import new_id
-from open_alm_api.domains.conversations.models import Conversation
-from open_alm_api.domains.meeting.models import utcnow_naive
+from open_work_hub_api.domains.ai.runtime.retention import scrub_completed_runtime_records
+from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.security import new_id
+from open_work_hub_api.domains.conversations.models import Conversation
+from open_work_hub_api.domains.meeting.models import utcnow_naive
 
 
 @pytest.fixture
@@ -34,11 +34,11 @@ def runtime_session_factory(
     monkeypatch: pytest.MonkeyPatch,
     application_postgres_dsn: str,
 ) -> Iterator[sessionmaker[Session]]:
-    monkeypatch.setenv("OPEN_ALM_POSTGRES_DSN", application_postgres_dsn)
-    monkeypatch.setenv("OPEN_ALM_LLM_HEALTHCHECK_ON_STARTUP", "0")
+    monkeypatch.setenv("OPEN_WORK_HUB_POSTGRES_DSN", application_postgres_dsn)
+    monkeypatch.setenv("OPEN_WORK_HUB_LLM_HEALTHCHECK_ON_STARTUP", "0")
 
-    from open_alm_api.core.db import get_engine, get_session_factory
-    from open_alm_api.core.settings import get_settings
+    from open_work_hub_api.core.db import get_engine, get_session_factory
+    from open_work_hub_api.core.settings import get_settings
 
     get_settings.cache_clear()
     get_engine.cache_clear()
@@ -66,7 +66,7 @@ def _seed_scope(db: Session) -> tuple[Workspace, User, Conversation]:
     user = User(
         id=new_id(),
         login_id=f"runtime-{suffix}",
-        email=f"runtime-{suffix}@open-alm.local",
+        email=f"runtime-{suffix}@open-work-hub.local",
         full_name="Runtime Test User",
         password_hash="test",
     )

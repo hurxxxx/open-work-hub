@@ -4,10 +4,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from open_alm_api import reset_dev_db
+from open_work_hub_api import reset_dev_db
 
 
-POSTGRES_DSN = "postgresql+psycopg://open_alm_test:open_alm_test@127.0.0.1:5432/open_alm_test"
+POSTGRES_DSN = "postgresql+psycopg://open_work_hub_test:open_work_hub_test@127.0.0.1:5432/open_work_hub_test"
 
 
 def test_reset_dev_db_refuses_preview_environment(monkeypatch: pytest.MonkeyPatch) -> None:

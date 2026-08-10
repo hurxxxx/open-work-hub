@@ -15,8 +15,6 @@ type DmUserFixture = {
   email: string;
   full_name: string;
   display_name: string | null;
-  job_title: string | null;
-  primary_org_unit_name: string | null;
 };
 
 type DmMessageFixture = {
@@ -42,19 +40,15 @@ function dmUser(index: number): DmUserFixture {
     email: `dm-user-${index}@example.test`,
     full_name: `DM User ${index}`,
     display_name: `DM User ${index}`,
-    job_title: null,
-    primary_org_unit_name: null,
   };
 }
 
 function currentUser(): DmUserFixture {
   return {
     id: CURRENT_USER_ID,
-    email: 'e2e@open-alm.local',
+    email: 'e2e@open-work-hub.local',
     full_name: 'E2E Tester',
     display_name: 'E2E Tester',
-    job_title: null,
-    primary_org_unit_name: null,
   };
 }
 
@@ -178,7 +172,7 @@ test('keeps the floating DM composer inside the widget viewport', async ({
 
   await page.evaluate((threadId) => {
     window.dispatchEvent(
-      new CustomEvent('open-alm:floating-dm-open', {
+      new CustomEvent('open-work-hub:floating-dm-open', {
         detail: { threadId },
       }),
     );

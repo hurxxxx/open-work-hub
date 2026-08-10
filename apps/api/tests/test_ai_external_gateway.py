@@ -4,9 +4,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from open_alm_api.core.settings import Settings
-from open_alm_api.domains.ai import external_gateway
-from open_alm_api.domains.ai.external_gateway import (
+from open_work_hub_api.core.settings import Settings
+from open_work_hub_api.domains.ai import external_gateway
+from open_work_hub_api.domains.ai.external_gateway import (
     AiExternalCapabilityPolicyViolation,
     AiExternalCapabilityRequest,
     execute_external_capability,

@@ -5,15 +5,15 @@ from datetime import date
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from open_alm_api.core.db import get_session_factory
-from open_alm_api.domains.auth.security import new_id
-from open_alm_api.domains.auth.models import Workspace
-from open_alm_api.domains.pms.models import TaskUserAccess
-from open_alm_api.domains.pms.search_projection import (
+from open_work_hub_api.core.db import get_session_factory
+from open_work_hub_api.domains.auth.security import new_id
+from open_work_hub_api.domains.auth.models import Workspace
+from open_work_hub_api.domains.pms.models import TaskUserAccess
+from open_work_hub_api.domains.pms.search_projection import (
     load_pms_task_search_document,
     load_workspace_pms_task_search_documents,
 )
-from open_alm_api.domains.rag.pms_projection import load_task_projection
+from open_work_hub_api.domains.rag.pms_projection import load_task_projection
 from test_pms_issues import (
     _add_task_list_member,
     _auth_headers,
@@ -260,7 +260,7 @@ def test_list_archive_permissions_and_workspace_isolation(client: TestClient) ->
         account = _create_user(
             client,
             owner["token"],
-            email=f"archive-{role}@open-alm.local",
+            email=f"archive-{role}@open-work-hub.local",
             full_name=f"Archive {role.title()}",
         )
         _add_task_list_member(
@@ -313,19 +313,19 @@ def test_list_archive_permissions_and_workspace_isolation(client: TestClient) ->
         owner["token"],
         key="ARISO",
         name="Archive isolated workspace",
-        workspace_slug="ai-tft",
+        workspace_slug="general",
     )
     other_workspace_task = _create_issue(
         client,
         owner["token"],
         other_workspace_list["id"],
         title="Cross-workspace link guard",
-        workspace_slug="ai-tft",
+        workspace_slug="general",
     )
     grant_reader = _create_user(
         client,
         owner["token"],
-        email="archive-grant-reader@open-alm.local",
+        email="archive-grant-reader@open-work-hub.local",
         full_name="Archive Grant Reader",
     )
     _grant_workspace_access(
@@ -384,7 +384,7 @@ def test_list_archive_permissions_and_workspace_isolation(client: TestClient) ->
             owner["token"],
             other_workspace_list["id"],
             {"archived": True},
-            workspace_slug="ai-tft",
+            workspace_slug="general",
         ).status_code
         == 200
     )

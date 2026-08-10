@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { InlineNotice } from '@open-alm/ui';
+import { InlineNotice } from '@open-work-hub/ui';
 
 import {
   listAdminUsers,
@@ -12,14 +12,10 @@ import {
 import { AiSecuritySection } from './admin-ai-security-section';
 import { AppsSection, type AdminAppsPage } from './admin-apps-section';
 import { AuditSection } from './admin-audit-section';
-import { BatchesSection } from './admin-batches-section';
 import { CommunitySection } from './admin-community-section';
 import { AdminDocumentProcessingSection } from './admin-document-processing-section';
 import { AdminLlmManagementSection } from './admin-llm-management-section';
 import { AdminModelRuntimeStatusSection } from './admin-model-runtime-status-section';
-import { AdminPlatformApiKeysSection } from './admin-platform-api-keys-section';
-import { AdminHrMasterSection } from './admin-hr-master-section';
-import { PeopleSection } from './admin-people-section';
 import { SurfaceCard, getErrorMessage, isAdminUser } from './admin-shared';
 import {
   hasAnyAdminReadPermission,
@@ -59,13 +55,6 @@ const sectionMeta: Record<
     titleKey: 'admin.console.sections.aiSecurity.title',
     descriptionKey: 'admin.console.sections.aiSecurity.description',
   },
-  people: {
-    titleKey: 'admin.console.sections.people.title',
-  },
-  hr: {
-    titleKey: 'admin.console.sections.hr.title',
-    descriptionKey: 'admin.console.sections.hr.description',
-  },
   workspaces: {
     titleKey: 'admin.console.sections.workspaces.title',
     descriptionKey: 'admin.console.sections.workspaces.description',
@@ -73,14 +62,6 @@ const sectionMeta: Record<
   community: {
     titleKey: 'admin.console.sections.community.title',
     descriptionKey: 'admin.console.sections.community.description',
-  },
-  'api-keys': {
-    titleKey: 'admin.console.sections.apiKeys.title',
-    descriptionKey: 'admin.console.sections.apiKeys.description',
-  },
-  batches: {
-    titleKey: 'admin.console.sections.batches.title',
-    descriptionKey: 'admin.console.sections.batches.description',
   },
   usage: {
     titleKey: 'admin.console.sections.usage.title',
@@ -331,23 +312,11 @@ export function AdminConsoleView({
     case 'ai-security':
       content = <AiSecuritySection token={token} />;
       break;
-    case 'people':
-      content = <PeopleSection token={token} />;
-      break;
-    case 'hr':
-      content = <AdminHrMasterSection token={token} />;
-      break;
     case 'workspaces':
       content = <WorkspacesSection token={token} />;
       break;
     case 'community':
       content = <CommunitySection token={token} />;
-      break;
-    case 'api-keys':
-      content = <AdminPlatformApiKeysSection token={token} />;
-      break;
-    case 'batches':
-      content = <BatchesSection token={token} />;
       break;
     case 'usage':
       content = <UsageSection token={token} />;

@@ -10,9 +10,9 @@ describe('resolveWorkspaceChatbotApiPath', () => {
     expect(
       resolveWorkspaceChatbotApiPath(
         '/api/v1/chatbot/conversations?limit=50',
-        'ai-tft',
+        'general',
       ),
-    ).toBe('/api/v1/workspaces/ai-tft/chatbot/conversations?limit=50');
+    ).toBe('/api/v1/workspaces/general/chatbot/conversations?limit=50');
   });
 
   it('leaves chatbot paths unchanged when there is no workspace slug', () => {

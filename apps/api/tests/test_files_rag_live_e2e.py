@@ -61,25 +61,25 @@ def test_live_e2e_requires_explicit_execution_and_refuses_production_like(
 def test_live_e2e_requires_positive_loopback_development_data_plane_identity() -> None:
     live = _load_script_module()
     settings = SimpleNamespace(
-        postgres_dsn="postgresql+psycopg://dev:dev@127.0.0.1:5432/open_alm_dev",
+        postgres_dsn="postgresql+psycopg://dev:dev@127.0.0.1:5432/open_work_hub_dev",
         opensearch_url="http://127.0.0.1:59210",
         rag_qdrant_url="http://localhost:16333",
         minio_endpoint="127.0.0.1:59000",
-        minio_bucket="open-alm-dev",
-        opensearch_index_prefix="open-alm-dev",
-        rag_qdrant_collection_prefix="open-alm-dev-rag",
+        minio_bucket="open-work-hub-dev",
+        opensearch_index_prefix="open-work-hub-dev",
+        rag_qdrant_collection_prefix="open-work-hub-dev-rag",
     )
 
     live.assert_development_data_plane(settings)
 
     for attribute, unsafe in (
-        ("postgres_dsn", "postgresql+psycopg://dev:dev@db.example:5432/open_alm_prod"),
+        ("postgres_dsn", "postgresql+psycopg://dev:dev@db.example:5432/open_work_hub_prod"),
         ("opensearch_url", "https://search.example"),
         ("rag_qdrant_url", "https://vectors.example"),
         ("minio_endpoint", "objects.example:9000"),
-        ("minio_bucket", "open-alm-prod"),
-        ("opensearch_index_prefix", "open-alm-prod"),
-        ("rag_qdrant_collection_prefix", "open-alm-prod-rag"),
+        ("minio_bucket", "open-work-hub-prod"),
+        ("opensearch_index_prefix", "open-work-hub-prod"),
+        ("rag_qdrant_collection_prefix", "open-work-hub-prod-rag"),
     ):
         changed = SimpleNamespace(**{**vars(settings), attribute: unsafe})
         try:

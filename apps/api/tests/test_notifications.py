@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from open_alm_api.core.db import get_session_factory
-from open_alm_api.domains.auth.security import new_id
-from open_alm_api.domains.pms.models import Notification
+from open_work_hub_api.core.db import get_session_factory
+from open_work_hub_api.domains.auth.security import new_id
+from open_work_hub_api.domains.pms.models import Notification
 from dev_accounts import auth_headers, dev_login
 
 

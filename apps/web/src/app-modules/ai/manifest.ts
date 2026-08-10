@@ -1,11 +1,4 @@
-import {
-  BookOpen,
-  Globe2,
-  HelpCircle,
-  MessageSquare,
-  Scale,
-  Sparkles,
-} from 'lucide-react';
+import { Globe2, MessageSquare, Sparkles } from 'lucide-react';
 
 import type { AppModuleManifest } from '@/src/app/shell/navigation-types';
 
@@ -33,14 +26,6 @@ export const aiManifest: AppModuleManifest = {
       linkAppId: 'chatbot',
     },
     {
-      id: 'qa-assistant',
-      title: 'qa-assistant',
-      icon: HelpCircle,
-      category: 'AI 앱',
-      appId: 'ai',
-      absolutePath: '/qa-assistant',
-    },
-    {
       id: 'web-search',
       title: 'web-search',
       icon: Globe2,
@@ -48,28 +33,10 @@ export const aiManifest: AppModuleManifest = {
       appId: 'ai',
       linkAppId: 'web-search',
     },
-    {
-      id: 'research-trends',
-      title: 'research-trends',
-      icon: BookOpen,
-      category: 'AI 앱',
-      appId: 'ai',
-      linkAppId: 'research-trends',
-    },
-    {
-      id: 'standards-monitor',
-      title: 'standards-monitor',
-      icon: Scale,
-      category: 'AI 앱',
-      appId: 'ai',
-      linkAppId: 'standards-monitor',
-    },
   ],
   workspaceRoutePaths: [
     '/w/:workspaceSlug/chatbot',
     '/w/:workspaceSlug/web-search',
-    '/w/:workspaceSlug/research-trends',
-    '/w/:workspaceSlug/standards-monitor',
   ],
-  globalRoutePaths: ['/qa-assistant'],
+  globalRoutePaths: [],
 };

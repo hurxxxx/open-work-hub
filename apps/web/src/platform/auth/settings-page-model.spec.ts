@@ -17,8 +17,7 @@ function state(overrides: Partial<ProfilePageState> = {}): ProfilePageState {
     defaultWorkspaceId: 'workspace-a',
     displayName: 'Member',
     error: 'previous error',
-    fullName: 'Open ALM Member',
-    jobTitle: '',
+    fullName: 'Open Work Hub Member',
     loadingSessions: false,
     locale: 'ko-KR',
     message: 'previous message',
@@ -146,9 +145,8 @@ describe('settings page model', () => {
   it('plans full profile detail saves with trimmed identity fields', () => {
     const plan = prepareProfileDetailsSave(
       state({
-        displayName: '  Open ALM  ',
-        fullName: '  Open ALM Member  ',
-        jobTitle: '  Builder  ',
+        displayName: '  Open Work Hub  ',
+        fullName: '  Open Work Hub Member  ',
         submitting: false,
       }),
     );
@@ -160,9 +158,8 @@ describe('settings page model', () => {
     });
     expect(plan.payload).toEqual({
       date_format: 'korean',
-      display_name: 'Open ALM',
-      full_name: 'Open ALM Member',
-      job_title: 'Builder',
+      display_name: 'Open Work Hub',
+      full_name: 'Open Work Hub Member',
       locale: 'ko-KR',
       theme_preference: 'system',
       time_zone: 'Asia/Seoul',

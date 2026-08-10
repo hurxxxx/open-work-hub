@@ -6,19 +6,19 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from dev_accounts import dev_login
-from open_alm_api.core.db import get_session_factory
-from open_alm_api.domains.auth.models import Team, TeamMember, User, Workspace, WorkspaceUserBinding
-from open_alm_api.domains.auth.security import new_id
-from open_alm_api.domains.docs.models import (
+from open_work_hub_api.core.db import get_session_factory
+from open_work_hub_api.domains.auth.models import Team, TeamMember, User, Workspace, WorkspaceUserBinding
+from open_work_hub_api.domains.auth.security import new_id
+from open_work_hub_api.domains.docs.models import (
     DocMeetingAccess,
     NativeDoc,
     NativeDocTarget,
     NativeDocUserShare,
 )
-from open_alm_api.domains.meeting.models import Meeting, MeetingAttendee
-from open_alm_api.domains.pms.models import Task, TaskUserAccess, TaskList
-from open_alm_api.domains.source_access import SourceAclPolicy
-from open_alm_api.domains.source_access.resource_types import (
+from open_work_hub_api.domains.meeting.models import Meeting, MeetingAttendee
+from open_work_hub_api.domains.pms.models import Task, TaskUserAccess, TaskList
+from open_work_hub_api.domains.source_access import SourceAclPolicy
+from open_work_hub_api.domains.source_access.resource_types import (
     MEETING_RESOURCE_TYPE,
     NATIVE_DOC_RESOURCE_TYPE,
     PLANNER_EVENT_RESOURCE_TYPE,
@@ -62,8 +62,8 @@ def test_source_acl_policy_blocks_inactive_resources(client: TestClient) -> None
 
     with get_session_factory()() as db:
         workspace = _workspace(db, "delivery-hub")
-        admin = _user(db, "delivery-hub-admin@open-alm.local")
-        member = _user(db, "delivery-hub-member@open-alm.local")
+        admin = _user(db, "delivery-hub-admin@open-work-hub.local")
+        member = _user(db, "delivery-hub-member@open-work-hub.local")
         team = _team_for_workspace(db, workspace)
         _ensure_team_member(db, team=team, user=member)
 
@@ -116,8 +116,8 @@ def test_source_acl_policy_matches_searchable_resource_matrix(client: TestClient
 
     with get_session_factory()() as db:
         workspace = _workspace(db, "delivery-hub")
-        admin = _user(db, "delivery-hub-admin@open-alm.local")
-        member = _user(db, "delivery-hub-member@open-alm.local")
+        admin = _user(db, "delivery-hub-admin@open-work-hub.local")
+        member = _user(db, "delivery-hub-member@open-work-hub.local")
         team = _team_for_workspace(db, workspace)
         _ensure_team_member(db, team=team, user=member)
 
@@ -360,7 +360,7 @@ def test_pms_source_acl_uses_direct_space_membership_for_workspace_admin(
         workspace_admin = User(
             id=new_id(),
             login_id="pms-source-workspace-admin",
-            email="pms-source-workspace-admin@open-alm.local",
+            email="pms-source-workspace-admin@open-work-hub.local",
             full_name="PMS Source Workspace Admin",
             password_hash="hash",
             status="active",

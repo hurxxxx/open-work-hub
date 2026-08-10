@@ -29,7 +29,7 @@ import {
   CollaborativeBlockEditor,
   DetailDrawer,
   InlineNotice,
-} from '@open-alm/ui';
+} from '@open-work-hub/ui';
 import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';

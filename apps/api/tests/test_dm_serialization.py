@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from fastapi import HTTPException
 import pytest
 
-from open_alm_api.domains.dm import serialization
+from open_work_hub_api.domains.dm import serialization
 
 
 NOW = datetime(2026, 5, 21, 12, 0, 0)
@@ -236,5 +236,4 @@ def _user(
         email=email or f"{user_id}@example.test",
         full_name=full_name,
         display_name=display_name,
-        job_title=None,
     )

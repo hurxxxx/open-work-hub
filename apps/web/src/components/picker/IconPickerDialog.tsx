@@ -9,7 +9,7 @@ import {
   TabsList,
   TabsTrigger,
   Tooltip,
-} from '@open-alm/ui';
+} from '@open-work-hub/ui';
 
 import {
   filterIconPickerKeys,

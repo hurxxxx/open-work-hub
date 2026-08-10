@@ -1,0 +1,85 @@
+{
+  "feedPathPrefix": "/api/v1/open-work-hub-desktop/updates",
+  "updateBaseUrlEnv": "OPEN_WORK_HUB_DESKTOP_UPDATE_BASE_URL",
+  "trustedUpdateOriginsEnv": "OPEN_WORK_HUB_DESKTOP_TRUSTED_UPDATE_ORIGINS",
+  "servedArtifactContentTypes": {
+    ".deb": "application/vnd.debian.binary-package",
+    ".dmg": "application/x-apple-diskimage",
+    ".exe": "application/octet-stream",
+    ".zip": "application/zip"
+  },
+  "platformOrder": ["win", "mac", "linux"],
+  "platforms": {
+    "win": {
+      "packageName": "open-work-hub-desktop-win",
+      "installerUrlEnv": "VITE_OPEN_WORK_HUB_DESKTOP_INSTALLER_URL_WIN",
+      "installerStableCopy": "Open Work Hub-Desktop-Setup-latest.exe",
+      "updateDirEnv": "OPEN_WORK_HUB_DESKTOP_UPDATE_WIN_DIR",
+      "defaultDir": ".open-work-hub-desktop-updates/win",
+      "updateFile": "latest.yml",
+      "servedArtifactSuffixes": [".exe", ".blockmap"],
+      "packagedArtifacts": [
+        {
+          "template": "Open Work Hub Desktop Setup ${version}.exe"
+        },
+        {
+          "template": "Open Work Hub Desktop Setup ${version}.exe.blockmap"
+        }
+      ],
+      "stableCopies": [
+        {
+          "template": "Open Work Hub Desktop Setup ${version}.exe",
+          "to": "Open Work Hub-Desktop-Setup-latest.exe"
+        }
+      ]
+    },
+    "mac": {
+      "packageName": "open-work-hub-desktop-mac",
+      "installerUrlEnv": "VITE_OPEN_WORK_HUB_DESKTOP_INSTALLER_URL_MAC",
+      "installerStableCopy": "Open Work Hub-Desktop-latest.dmg",
+      "updateDirEnv": "OPEN_WORK_HUB_DESKTOP_UPDATE_MAC_DIR",
+      "defaultDir": ".open-work-hub-desktop-updates/mac",
+      "updateFile": "latest-mac.yml",
+      "servedArtifactSuffixes": [".dmg", ".zip", ".blockmap"],
+      "packagedArtifacts": [
+        {
+          "prefixTemplate": "Open Work Hub-Desktop-${version}-mac-"
+        }
+      ],
+      "stableCopies": [
+        {
+          "prefixTemplate": "Open Work Hub-Desktop-${version}-mac-",
+          "suffix": ".dmg",
+          "to": "Open Work Hub-Desktop-latest.dmg"
+        },
+        {
+          "prefixTemplate": "Open Work Hub-Desktop-${version}-mac-",
+          "suffix": ".zip",
+          "to": "Open Work Hub-Desktop-latest-mac.zip"
+        }
+      ]
+    },
+    "linux": {
+      "packageName": "open-work-hub-desktop-linux",
+      "installerUrlEnv": "VITE_OPEN_WORK_HUB_DESKTOP_INSTALLER_URL_LINUX",
+      "installerStableCopy": "Open Work Hub-Desktop-latest.deb",
+      "updateDirEnv": "OPEN_WORK_HUB_DESKTOP_UPDATE_LINUX_DIR",
+      "defaultDir": ".open-work-hub-desktop-updates/linux",
+      "updateFile": "latest-linux.yml",
+      "servedArtifactSuffixes": [".deb", ".blockmap"],
+      "packagedArtifacts": [
+        {
+          "prefixTemplate": "Open Work Hub-Desktop-${version}-linux-",
+          "suffix": ".deb"
+        }
+      ],
+      "stableCopies": [
+        {
+          "prefixTemplate": "Open Work Hub-Desktop-${version}-linux-",
+          "suffix": ".deb",
+          "to": "Open Work Hub-Desktop-latest.deb"
+        }
+      ]
+    }
+  }
+}

@@ -10,27 +10,27 @@ import pytest
 from sqlalchemy import create_engine, event, func, select
 from sqlalchemy.orm import Session
 
-from open_alm_api.core.db import Base
-from open_alm_api.domains.auth.models import OrgUnit, User, Workspace
-from open_alm_api.domains.files import rag_projection, rag_sync
-from open_alm_api.domains.files.extraction_bootstrap import (
+from open_work_hub_api.core.db import Base
+from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.files import rag_projection, rag_sync
+from open_work_hub_api.domains.files.extraction_bootstrap import (
     bootstrap_file_extraction_artifacts,
 )
-from open_alm_api.domains.files.models import (
+from open_work_hub_api.domains.files.models import (
     FileManagerCorpus,
     FileManagerFile,
     FileManagerFileSourceMetadata,
     FileManagerFolder,
 )
-from open_alm_api.domains.rag.contracts import RagSyncOperation
-from open_alm_api.domains.rag.models import RagSyncJob
-from open_alm_api.domains.retrieval.models import (
+from open_work_hub_api.domains.rag.contracts import RagSyncOperation
+from open_work_hub_api.domains.rag.models import RagSyncJob
+from open_work_hub_api.domains.retrieval.models import (
     RetrievalPartition,
     RetrievalProjectionEvent,
     RetrievalProjectionHead,
 )
-from open_alm_api.domains.search.models import SearchIndexJob
-from open_alm_api.domains.source_access.resource_types import (
+from open_work_hub_api.domains.search.models import SearchIndexJob
+from open_work_hub_api.domains.source_access.resource_types import (
     FILE_MANAGER_FILE_RESOURCE_TYPE,
 )
 
@@ -71,7 +71,6 @@ def _session() -> Session:
     Base.metadata.create_all(
         engine,
         tables=[
-            OrgUnit.__table__,
             Workspace.__table__,
             User.__table__,
             RetrievalPartition.__table__,

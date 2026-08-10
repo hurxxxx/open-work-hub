@@ -8,16 +8,16 @@ import pytest
 
 from dev_accounts import auth_headers, dev_login
 
-from open_alm_api.core.db import get_session_factory
-from open_alm_api.domains.mail import clients as mail_clients
-from open_alm_api.domains.mail.clients import (
+from open_work_hub_api.core.db import get_session_factory
+from open_work_hub_api.domains.mail import clients as mail_clients
+from open_work_hub_api.domains.mail.clients import (
     FetchedAttachment,
     FetchedMessage,
     MailboxInfo,
     MailboxSyncBatch,
     MailConnectionSettings,
 )
-from open_alm_api.domains.mail.models import (
+from open_work_hub_api.domains.mail.models import (
     MailAccount,
     MailAttachment,
     MailDraft,
@@ -27,7 +27,7 @@ from open_alm_api.domains.mail.models import (
     MailSyncJob,
     MailSyncState,
 )
-from open_alm_api.domains.mail import service as mail_service
+from open_work_hub_api.domains.mail import service as mail_service
 
 
 class FakeMailClient:

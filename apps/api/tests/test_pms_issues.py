@@ -6,10 +6,10 @@ from fastapi.testclient import TestClient
 import pytest
 from sqlalchemy import select
 
-from open_alm_api.core.db import get_session_factory
-from open_alm_api.domains.pms.models import CustomFieldValue, TaskActivityLog
-from open_alm_api.domains.pms import service as pms_service
-from open_alm_api.domains.search import outbox as search_outbox
+from open_work_hub_api.core.db import get_session_factory
+from open_work_hub_api.domains.pms.models import CustomFieldValue, TaskActivityLog
+from open_work_hub_api.domains.pms import service as pms_service
+from open_work_hub_api.domains.search import outbox as search_outbox
 from dev_accounts import create_workspace_user_session, dev_login
 from test_docs_hub import (
     _create_doc_page,
@@ -160,7 +160,7 @@ def test_bulk_update_assigns_and_updates_labels_with_activity(client: TestClient
     teammate = _create_user(
         client,
         token,
-        email="bulk-assignee@open-alm.local",
+        email="bulk-assignee@open-work-hub.local",
         full_name="Bulk Assignee",
     )
     _add_task_list_member(client, token, task_list["id"], teammate["user"]["id"], "member")
@@ -259,7 +259,7 @@ def test_task_update_logs_more_than_six_assignees(client: TestClient) -> None:
         teammate = _create_user(
             client,
             token,
-            email=f"many-assignees-{index}@open-alm.local",
+            email=f"many-assignees-{index}@open-work-hub.local",
             full_name=f"Many Assignees {index}",
         )
         assignee_id = teammate["user"]["id"]
@@ -295,7 +295,7 @@ def test_concurrent_assignee_updates_are_idempotent(
     teammate = _create_user(
         client,
         token,
-        email="concurrent-assignee@open-alm.local",
+        email="concurrent-assignee@open-work-hub.local",
         full_name="Concurrent Assignee",
     )
     assignee_id = teammate["user"]["id"]
@@ -668,7 +668,7 @@ def test_viewer_cannot_modify_issue_comment_or_folder(client: TestClient) -> Non
     issue = _create_issue(client, admin_session["token"], task_list["id"], title="Protected issue")
 
     viewer = _create_user(
-        client, admin_session["token"], email="viewer@open-alm.local", full_name="Viewer User"
+        client, admin_session["token"], email="viewer@open-work-hub.local", full_name="Viewer User"
     )
     _add_task_list_member(
         client, admin_session["token"], task_list["id"], viewer["user"]["id"], "viewer"
@@ -725,7 +725,7 @@ def test_task_comment_mention_notification_identifies_task(client: TestClient) -
     mentioned = _create_user(
         client,
         admin_session["token"],
-        email="mentioned-pms-member@open-alm.local",
+        email="mentioned-pms-member@open-work-hub.local",
         full_name="Mentioned Member",
     )
     _add_task_list_member(
@@ -781,7 +781,7 @@ def test_task_comment_notification_identifies_task_by_title(client: TestClient) 
     assignee = _create_user(
         client,
         admin_session["token"],
-        email="comment-notification-member@open-alm.local",
+        email="comment-notification-member@open-work-hub.local",
         full_name="Comment Notification Member",
     )
     _add_task_list_member(
@@ -821,7 +821,7 @@ def test_task_assignment_notification_identifies_task_by_title(client: TestClien
     assignee = _create_user(
         client,
         admin_session["token"],
-        email="assignment-notification-member@open-alm.local",
+        email="assignment-notification-member@open-work-hub.local",
         full_name="Assignment Notification Member",
     )
     _add_task_list_member(
@@ -850,7 +850,7 @@ def test_task_assignment_notification_identifies_task_by_title(client: TestClien
     assert notification["type"] == "assigned"
     assert notification["title"] == "AI 서버 근크림 그리기 assigned to you"
     assert issue["reference"] not in notification["title"]
-    assert notification["body"].startswith("Open ALM Admin assigned AI 서버 근크림 그리기")
+    assert notification["body"].startswith("Open Work Hub Admin assigned AI 서버 근크림 그리기")
     assert notification["reference_id"] == issue["id"]
 
 
@@ -891,7 +891,7 @@ def test_issue_assignees_reject_non_members(client: TestClient) -> None:
     task_list = _create_task_list(client, admin_session["token"])
     issue = _create_issue(client, admin_session["token"], task_list["id"], title="Assignee guard")
     outsider = _create_user(
-        client, admin_session["token"], email="outsider@open-alm.local", full_name="Outsider User"
+        client, admin_session["token"], email="outsider@open-work-hub.local", full_name="Outsider User"
     )
 
     response = client.put(
@@ -910,19 +910,19 @@ def test_issue_user_roles_support_assignees_and_followers(client: TestClient) ->
     teammate = _create_user(
         client,
         admin_session["token"],
-        email="role-assignee@open-alm.local",
+        email="role-assignee@open-work-hub.local",
         full_name="Role Assignee",
     )
     follower = _create_user(
         client,
         admin_session["token"],
-        email="role-follower@open-alm.local",
+        email="role-follower@open-work-hub.local",
         full_name="Role Follower",
     )
     outsider = _create_user(
         client,
         admin_session["token"],
-        email="role-outsider@open-alm.local",
+        email="role-outsider@open-work-hub.local",
         full_name="Role Outsider",
     )
     _add_task_list_member(
@@ -998,14 +998,14 @@ def test_pms_user_directory_only_returns_workspace_members(client: TestClient) -
     teammate = _create_user(
         client,
         admin_session["token"],
-        email="pms-scope-member@open-alm.local",
+        email="pms-scope-member@open-work-hub.local",
         full_name="PMS Scoped Same Workspace",
     )
     outsider = create_workspace_user_session(
         client,
         workspace_key="pms-other-workspace",
         login_id="pmsotherscope",
-        email="pms-other-scope@open-alm.local",
+        email="pms-other-scope@open-work-hub.local",
         full_name="PMS Scoped Other Workspace",
     )
 
@@ -1028,7 +1028,7 @@ def test_workspace_scoped_default_pms_space_stays_inside_requested_workspace(
     workspace_admin = _create_workspace_admin(
         client,
         admin_session["token"],
-        email="administrator-context-admin@open-alm.local",
+        email="administrator-context-admin@open-work-hub.local",
         full_name="Administrator Context Admin",
     )
 
@@ -1087,7 +1087,7 @@ def test_workspace_admin_needs_direct_pms_space_membership(
     workspace_admin = _create_workspace_admin(
         client,
         admin_session["token"],
-        email="administrator-pms-admin@open-alm.local",
+        email="administrator-pms-admin@open-work-hub.local",
         full_name="Administrator PMS Admin",
     )
     workspace_admin_token = _login(
@@ -1098,7 +1098,7 @@ def test_workspace_admin_needs_direct_pms_space_membership(
     workspace_member = _create_user(
         client,
         admin_session["token"],
-        email="administrator-pms-member@open-alm.local",
+        email="administrator-pms-member@open-work-hub.local",
         full_name="Administrator PMS Member",
     )
 
@@ -1258,7 +1258,7 @@ def test_task_list_member_cannot_delete_task_list(client: TestClient) -> None:
     member = _create_user(
         client,
         token,
-        email="list-delete-member@open-alm.local",
+        email="list-delete-member@open-work-hub.local",
         full_name="List Delete Member",
     )
     _grant_workspace_access(client, token, member["user"]["id"], "administrator")
@@ -1309,7 +1309,7 @@ def test_space_docs_collection_permissions_and_soft_delete(client: TestClient) -
     outsider = _create_user(
         client,
         admin_session["token"],
-        email="space-outsider@open-alm.local",
+        email="space-outsider@open-work-hub.local",
         full_name="Space Outsider",
     )
     outsider_token = _login(client, outsider["user"]["email"], outsider["temporary_password"])
@@ -1337,7 +1337,7 @@ def test_space_docs_collection_permissions_and_soft_delete(client: TestClient) -
     task_list_editor = _create_user(
         client,
         admin_session["token"],
-        email="space-editor@open-alm.local",
+        email="space-editor@open-work-hub.local",
         full_name="Task List Editor",
     )
     _add_task_list_member(
@@ -1442,7 +1442,7 @@ def test_task_list_member_api_grants_space_scope_for_task_list_resources(
     task_list_member = _create_user(
         client,
         admin_session["token"],
-        email="task-list-member@open-alm.local",
+        email="task-list-member@open-work-hub.local",
         full_name="Task List Member",
     )
     _add_task_list_member(
@@ -1512,7 +1512,7 @@ def test_media_linking_follows_parent_resource_acl(client: TestClient) -> None:
     project_member = _create_user(
         client,
         admin_session["token"],
-        email="media-task-list-member@open-alm.local",
+        email="media-task-list-member@open-work-hub.local",
         full_name="Media Task List Member",
     )
     _add_task_list_member(
@@ -1563,7 +1563,7 @@ def test_media_linking_follows_parent_resource_acl(client: TestClient) -> None:
     space_member = _create_user(
         client,
         admin_session["token"],
-        email="media-space-member@open-alm.local",
+        email="media-space-member@open-work-hub.local",
         full_name="Media Space Member",
     )
     _add_team_member(client, admin_session["token"], space_id, space_member["user"]["id"])
@@ -1721,7 +1721,7 @@ def test_assigned_issues_returns_only_current_users_open_issues(client: TestClie
     task_list = _create_task_list(client, admin["token"], key="ASGN", name="Assigned List")
 
     teammate = _create_user(
-        client, admin["token"], email="assigned-teammate@open-alm.local", full_name="Teammate"
+        client, admin["token"], email="assigned-teammate@open-work-hub.local", full_name="Teammate"
     )
     _add_task_list_member(client, admin["token"], task_list["id"], teammate["user"]["id"], "member")
 
@@ -1849,12 +1849,12 @@ def test_personal_pms_widget_aggregates_open_tasks_across_workspaces(
         key="PWADMIN",
         name="Personal Widget Administrator",
     )
-    ai_tft_list = _create_task_list(
+    general_list = _create_task_list(
         client,
         admin["token"],
         key="PWAI",
-        name="Personal Widget AI TFT",
-        workspace_slug="ai-tft",
+        name="Personal Widget General Workspace",
+        workspace_slug="general",
     )
     administrator_task = _create_issue(
         client,
@@ -1863,13 +1863,13 @@ def test_personal_pms_widget_aggregates_open_tasks_across_workspaces(
         title="Administrator widget task",
         assignee_id=admin["user"]["id"],
     )
-    ai_tft_task = _create_issue(
+    general_task = _create_issue(
         client,
         admin["token"],
-        ai_tft_list["id"],
-        title="AI TFT widget task",
+        general_list["id"],
+        title="General Workspace widget task",
         assignee_id=admin["user"]["id"],
-        workspace_slug="ai-tft",
+        workspace_slug="general",
     )
 
     response = client.get(
@@ -1881,10 +1881,10 @@ def test_personal_pms_widget_aggregates_open_tasks_across_workspaces(
     payload = response.json()
     tasks_by_id = {item["id"]: item for item in payload["items"]}
     assert tasks_by_id[administrator_task["id"]]["workspace"]["slug"] == "administrator"
-    assert tasks_by_id[ai_tft_task["id"]]["workspace"]["slug"] == "ai-tft"
+    assert tasks_by_id[general_task["id"]]["workspace"]["slug"] == "general"
     assert {item["slug"] for item in payload["workspaces"]} >= {
         "administrator",
-        "ai-tft",
+        "general",
     }
 
 
@@ -1897,7 +1897,7 @@ def test_today_overdue_tasks_return_only_current_users_due_open_tasks(
     teammate = _create_user(
         client,
         admin["token"],
-        email="today-overdue-teammate@open-alm.local",
+        email="today-overdue-teammate@open-work-hub.local",
         full_name="Today Overdue Teammate",
     )
     _add_task_list_member(client, admin["token"], task_list["id"], teammate["user"]["id"], "member")
@@ -2008,7 +2008,7 @@ def test_assigned_issues_honors_workspace_scoped_route(client: TestClient) -> No
     workspace_admin = _create_workspace_admin(
         client,
         admin_session["token"],
-        email="administrator-assigned-admin@open-alm.local",
+        email="administrator-assigned-admin@open-work-hub.local",
         full_name="Administrator Assigned Admin",
     )
     workspace_admin_token = _login(
@@ -2133,8 +2133,8 @@ def _bootstrap_admin_session(client: TestClient) -> dict:
     response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "Open ALM Admin",
-            "email": "admin@open-alm.local",
+            "full_name": "Open Work Hub Admin",
+            "email": "admin@open-work-hub.local",
             "password": "supersecret123",
         },
     )
@@ -2308,9 +2308,9 @@ def _grant_workspace_access(
 
 
 def _create_unlinked_media(uploaded_by_id: str) -> dict[str, str]:
-    from open_alm_api.core.db import get_session_factory
-    from open_alm_api.domains.media.models import MediaFile
-    from open_alm_api.domains.auth.security import new_id
+    from open_work_hub_api.core.db import get_session_factory
+    from open_work_hub_api.domains.media.models import MediaFile
+    from open_work_hub_api.domains.auth.security import new_id
 
     media_id = new_id()
     db = get_session_factory()()

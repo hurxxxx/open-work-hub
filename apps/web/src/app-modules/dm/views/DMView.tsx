@@ -38,9 +38,9 @@ import {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { DM_REALTIME_EVENT_TYPES } from '@open-alm/contracts/dm';
-import { InlineNotice } from '@open-alm/ui/feedback/inline-notice';
-import { Dialog } from '@open-alm/ui/primitives/dialog';
+import { DM_REALTIME_EVENT_TYPES } from '@open-work-hub/contracts/dm';
+import { InlineNotice } from '@open-work-hub/ui/feedback/inline-notice';
+import { Dialog } from '@open-work-hub/ui/primitives/dialog';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {

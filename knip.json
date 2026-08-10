@@ -31,19 +31,19 @@
         "@/src/*": [
           "apps/web/src/*"
         ],
-        "@open-alm/ui": [
+        "@open-work-hub/ui": [
           "packages/ui/src/index.ts"
         ],
-        "@open-alm/ui/styles.css": [
+        "@open-work-hub/ui/styles.css": [
           "packages/ui/styles.css"
         ],
-        "@open-alm/web-shell": [
+        "@open-work-hub/web-shell": [
           "apps/web/src/app/shell/AppContent.tsx"
         ],
-        "@open-alm/web/styles.css": [
+        "@open-work-hub/web/styles.css": [
           "apps/web/src/index.css"
         ],
-        "@open-alm/web/fullcalendar-theme.css": [
+        "@open-work-hub/web/fullcalendar-theme.css": [
           "apps/web/src/styles/fullcalendar-theme.css"
         ]
       },
@@ -71,19 +71,19 @@
         "@/src/*": [
           "src/*"
         ],
-        "@open-alm/ui": [
+        "@open-work-hub/ui": [
           "../../packages/ui/src/index.ts"
         ],
-        "@open-alm/ui/styles.css": [
+        "@open-work-hub/ui/styles.css": [
           "../../packages/ui/styles.css"
         ],
-        "@open-alm/web-shell": [
+        "@open-work-hub/web-shell": [
           "../web/src/app/shell/AppContent.tsx"
         ],
-        "@open-alm/web/styles.css": [
+        "@open-work-hub/web/styles.css": [
           "../web/src/index.css"
         ],
-        "@open-alm/web/fullcalendar-theme.css": [
+        "@open-work-hub/web/fullcalendar-theme.css": [
           "../web/src/styles/fullcalendar-theme.css"
         ]
       },

@@ -24,7 +24,7 @@ import {
   RangeSliderRange,
   RangeSliderThumb,
   RangeSliderTrack,
-} from '@open-alm/ui';
+} from '@open-work-hub/ui';
 import { cn } from '@/src/lib/utils';
 import type { PmsTask, PmsTaskListStatus } from '../api/pms-api';
 import {

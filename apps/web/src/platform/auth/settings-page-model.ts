@@ -20,7 +20,7 @@ export type SettingsSection =
   | 'security'
   | 'notifications'
   | 'releaseNotes'
-  | 'aiDoDesktop';
+  | 'openWorkHubDesktop';
 
 export type SettingsTranslator = (
   key: string,
@@ -31,7 +31,6 @@ export interface ProfilePageState {
   activeSection: SettingsSection;
   displayName: string;
   fullName: string;
-  jobTitle: string;
   themePreference: ThemePreference;
   timeZone: string;
   locale: LocalePreference;
@@ -125,7 +124,6 @@ export function createInitialProfilePageState(
     activeSection: initialTab,
     displayName: user.display_name,
     fullName: user.full_name,
-    jobTitle: user.job_title ?? '',
     themePreference: user.theme_preference,
     timeZone: normalizeTimeZone(user.time_zone),
     locale: normalizeLocale(user.locale),
@@ -153,7 +151,6 @@ export function profilePageReducer(
         ...state,
         displayName: action.user.display_name,
         fullName: action.user.full_name,
-        jobTitle: action.user.job_title ?? '',
         timeZone: normalizeTimeZone(action.user.time_zone),
         locale: normalizeLocale(action.user.locale),
         dateFormat: normalizeDateFormatPreference(action.user.date_format),
@@ -253,7 +250,6 @@ export function prepareProfileDetailsSave(
       date_format: state.dateFormat,
       display_name: state.displayName.trim(),
       full_name: state.fullName.trim(),
-      job_title: state.jobTitle.trim(),
       locale: state.locale,
       theme_preference: state.themePreference,
       time_zone: state.timeZone,

@@ -9,32 +9,32 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from open_alm_api.core.db import Base
-from open_alm_api.domains.auth.models import Workspace
-from open_alm_api.domains.docs import search_hooks as docs_search_hooks
-from open_alm_api.domains.meeting import search_hooks as meeting_search_hooks
-from open_alm_api.domains.retrieval.models import (
+from open_work_hub_api.core.db import Base
+from open_work_hub_api.domains.auth.models import Workspace
+from open_work_hub_api.domains.docs import search_hooks as docs_search_hooks
+from open_work_hub_api.domains.meeting import search_hooks as meeting_search_hooks
+from open_work_hub_api.domains.retrieval.models import (
     RetrievalPartition,
     RetrievalProjectionEvent,
     RetrievalProjectionHead,
 )
-from open_alm_api.domains.retrieval.projection_fencing import (
+from open_work_hub_api.domains.retrieval.projection_fencing import (
     ProjectionEventRef,
     record_projection_event,
 )
-from open_alm_api.domains.search import indexing as search_indexing
-from open_alm_api.domains.search import outbox as search_outbox
-from open_alm_api.domains.search.indexing import process_search_index_job
-from open_alm_api.domains.search.entity_adapter_registry import (
+from open_work_hub_api.domains.search import indexing as search_indexing
+from open_work_hub_api.domains.search import outbox as search_outbox
+from open_work_hub_api.domains.search.indexing import process_search_index_job
+from open_work_hub_api.domains.search.entity_adapter_registry import (
     SearchEntityAdapter,
     register_search_entity_adapter,
     reset_search_entity_adapters,
 )
-from open_alm_api.domains.docs.app_catalog import DOCS_WORKSPACE_APP
-from open_alm_api.domains.search.entity_registry import reset_search_entity_descriptors
-from open_alm_api.domains.search.models import SearchIndexJob
-from open_alm_api.domains.search.outbox import enqueue_search_index_job
-from open_alm_api.domains.search.projection_registry import reset_search_projection_adapters
+from open_work_hub_api.domains.docs.app_catalog import DOCS_WORKSPACE_APP
+from open_work_hub_api.domains.search.entity_registry import reset_search_entity_descriptors
+from open_work_hub_api.domains.search.models import SearchIndexJob
+from open_work_hub_api.domains.search.outbox import enqueue_search_index_job
+from open_work_hub_api.domains.search.projection_registry import reset_search_projection_adapters
 
 
 _PROJECTION_PARTITION_ID = "722c2043-fc6f-4446-9811-dc35c263d445"

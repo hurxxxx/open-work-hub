@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { Dialog } from '@open-alm/ui/primitives/dialog';
-import { Button } from '@open-alm/ui/primitives/button';
+import { Dialog } from '@open-work-hub/ui/primitives/dialog';
+import { Button } from '@open-work-hub/ui/primitives/button';
 import {
   ArrowDown,
   ArrowUp,

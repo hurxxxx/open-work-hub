@@ -21,21 +21,4 @@ describe('settings admin app routes', () => {
     );
   });
 
-  it('publishes unified HR as a platform-admin section', () => {
-    expect(
-      adminSectionRoutes.find((route) => route.section === 'hr'),
-    ).toMatchObject({
-      path: '/admin/hr',
-      section: 'hr',
-    });
-  });
-
-  it('publishes platform API key management as an admin section', () => {
-    expect(
-      adminSectionRoutes.find((route) => route.section === 'api-keys'),
-    ).toMatchObject({
-      path: '/admin/api-keys',
-      section: 'api-keys',
-    });
-  });
 });

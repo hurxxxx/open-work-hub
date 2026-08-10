@@ -7,13 +7,13 @@ def test_openapi_schema_exports_without_runtime_initialization(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv(
-        "OPEN_ALM_POSTGRES_DSN",
+        "OPEN_WORK_HUB_POSTGRES_DSN",
         "postgresql+psycopg://openapi:openapi@127.0.0.1:1/openapi",
     )
 
-    from open_alm_api.core.settings import get_settings
-    from open_alm_api import app as app_module
-    from open_alm_api.openapi_contract import assert_openapi_contract
+    from open_work_hub_api.core.settings import get_settings
+    from open_work_hub_api import app as app_module
+    from open_work_hub_api.openapi_contract import assert_openapi_contract
 
     get_settings.cache_clear()
     monkeypatch.setattr(

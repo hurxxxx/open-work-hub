@@ -12,7 +12,7 @@ export interface PersonalWidgetTodoLike {
   sortOrder: number;
 }
 
-export const PERSONAL_WIDGET_STORAGE_KEY = 'open-alm.personalWidget.v1';
+export const PERSONAL_WIDGET_STORAGE_KEY = 'open-work-hub.personalWidget.v1';
 
 export const DEFAULT_PERSONAL_WIDGET_PREFERENCES: PersonalWidgetPreferences = {
   activeWidget: 'todo',

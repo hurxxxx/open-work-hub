@@ -6,17 +6,17 @@ from typing import Literal
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from open_alm_api.core.db import get_session_factory
-from open_alm_api.domains.files import rag_sync as file_rag_sync
-from open_alm_api.domains.files import search_projection as file_search_projection
-from open_alm_api.domains.files import search_hooks as file_search_hooks
-from open_alm_api.domains.files.models import FileManagerFile
-from open_alm_api.domains.pms.access_grants import grant_task_access, revoke_task_access
-from open_alm_api.domains.search import outbox as search_outbox
-from open_alm_api.domains.search import indexing as search_indexing
-from open_alm_api.domains.search import projections as search_projections
-from open_alm_api.domains.search.indexing import process_search_index_job
-from open_alm_api.domains.search.models import SearchIndexJob
+from open_work_hub_api.core.db import get_session_factory
+from open_work_hub_api.domains.files import rag_sync as file_rag_sync
+from open_work_hub_api.domains.files import search_projection as file_search_projection
+from open_work_hub_api.domains.files import search_hooks as file_search_hooks
+from open_work_hub_api.domains.files.models import FileManagerFile
+from open_work_hub_api.domains.pms.access_grants import grant_task_access, revoke_task_access
+from open_work_hub_api.domains.search import outbox as search_outbox
+from open_work_hub_api.domains.search import indexing as search_indexing
+from open_work_hub_api.domains.search import projections as search_projections
+from open_work_hub_api.domains.search.indexing import process_search_index_job
+from open_work_hub_api.domains.search.models import SearchIndexJob
 
 from test_meeting import (
     _auth_headers,
@@ -328,14 +328,14 @@ def test_doc_user_share_grant_and_revoke_refresh_search_acl_projection(
     owner = _create_user_with_workspaces(
         client,
         admin["token"],
-        email="search-doc-owner@open-alm.local",
+        email="search-doc-owner@open-work-hub.local",
         full_name="Search Doc Owner",
         workspace_keys=["administrator"],
     )
     recipient = _create_user_with_workspaces(
         client,
         admin["token"],
-        email="search-doc-recipient@open-alm.local",
+        email="search-doc-recipient@open-work-hub.local",
         full_name="Search Doc Recipient",
         workspace_keys=["administrator"],
     )
@@ -409,7 +409,7 @@ def test_meeting_attendee_add_and_remove_refresh_search_acl_projection(
     attendee = _create_user_with_workspaces(
         client,
         admin["token"],
-        email="search-meeting-attendee@open-alm.local",
+        email="search-meeting-attendee@open-work-hub.local",
         full_name="Search Meeting Attendee",
         workspace_keys=["administrator"],
     )
@@ -470,7 +470,7 @@ def test_meeting_delete_detaches_access_grant_foreign_keys_and_deletes_search_do
     attendee = _create_user_with_workspaces(
         client,
         admin["token"],
-        email="search-meeting-delete-attendee@open-alm.local",
+        email="search-meeting-delete-attendee@open-work-hub.local",
         full_name="Search Meeting Delete Attendee",
         workspace_keys=["administrator"],
     )
@@ -543,7 +543,7 @@ def test_pms_task_user_access_grant_and_revoke_refresh_search_acl_projection(
     recipient = _create_user_with_workspaces(
         client,
         admin["token"],
-        email="search-pms-recipient@open-alm.local",
+        email="search-pms-recipient@open-work-hub.local",
         full_name="Search PMS Recipient",
         workspace_keys=["administrator"],
     )

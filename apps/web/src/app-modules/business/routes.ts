@@ -1,14 +1,6 @@
 import { createElement, type ReactNode } from 'react';
 
-import {
-  dataVizToolViewRoutes,
-  dataVizWorkspaceRoutes,
-} from '@/src/app-modules/data-viz';
 import { learningWorkspaceRoutes } from '@/src/app-modules/learning';
-import { legacyIssuesWorkspaceRoutes } from '@/src/app-modules/legacy-issues';
-import { mealInvoiceOcrWorkspaceRoutes } from '@/src/app-modules/meal-invoice-ocr';
-import { patentAutomationWorkspaceRoutes } from '@/src/app-modules/patent-automation';
-import { plmWorkspaceRoutes } from '@/src/app-modules/plm';
 import type { CompiledFeatureShellRegistration } from '@/src/app/shell/feature-module-registry';
 import { WorkspaceFeatureAppGate } from '@/src/app/shell/gates';
 import type {
@@ -80,29 +72,6 @@ function rewriteFeatureShellWorkspaceRoute(
   };
 }
 
-function rewriteBusinessToolRoute(
-  route: ToolViewRouteDefinition,
-): ToolViewRouteDefinition {
-  const navItemId = route.toolIds?.[0];
-  return {
-    ...route,
-    appId: BUSINESS_APP_ID,
-    bootstrapAppId: route.bootstrapAppId ?? route.appId,
-    gates: [
-      ...(route.type === 'element' ? (route.gates ?? []) : []),
-      ...(navItemId
-        ? [
-            {
-              deniedReason: 'app_disabled' as const,
-              navItemId,
-              type: 'bootstrap_nav_item' as const,
-            },
-          ]
-        : []),
-    ],
-  } as ToolViewRouteDefinition;
-}
-
 const businessToolRoutes = businessFeatureShellRegistrations.map(
   rewriteFeatureShellToolRoute,
 );
@@ -115,17 +84,11 @@ const businessFeatureWorkspaceRoutes =
   );
 
 export const businessWorkspaceRoutes: WorkspaceRouteDefinition[] = [
-  ...plmWorkspaceRoutes.map(rewriteWorkspaceRoute),
   ...learningWorkspaceRoutes.map(rewriteWorkspaceRoute),
-  ...dataVizWorkspaceRoutes.map(rewriteWorkspaceRoute),
-  ...patentAutomationWorkspaceRoutes.map(rewriteWorkspaceRoute),
-  ...legacyIssuesWorkspaceRoutes.map(rewriteWorkspaceRoute),
-  ...mealInvoiceOcrWorkspaceRoutes.map(rewriteWorkspaceRoute),
   ...businessToolRoutes,
   ...businessFeatureWorkspaceRoutes,
 ];
 
 export const businessToolViewRoutes: ToolViewRouteDefinition[] = [
   ...businessToolRoutes,
-  ...dataVizToolViewRoutes.map(rewriteBusinessToolRoute),
 ];

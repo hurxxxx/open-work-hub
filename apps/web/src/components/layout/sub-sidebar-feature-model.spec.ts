@@ -27,7 +27,7 @@ describe('sub sidebar feature model', () => {
         activeAppId: 'collaboration',
         activeNavItemId: 'pms-inbox',
         navItems,
-        pathname: '/w/ai-tft/pms',
+        pathname: '/w/general/pms',
       }),
     ).toBe('pms');
   });
@@ -38,7 +38,7 @@ describe('sub sidebar feature model', () => {
         activeAppId: 'collaboration',
         activeNavItemId: 'pms-list-a5c123fe-b403-4d88-92b6-ed7ebbcf7607',
         navItems,
-        pathname: '/w/ai-tft/pms/lists/a5c123fe-b403-4d88-92b6-ed7ebbcf7607',
+        pathname: '/w/general/pms/lists/a5c123fe-b403-4d88-92b6-ed7ebbcf7607',
       }),
     ).toBe('pms');
   });
@@ -49,7 +49,7 @@ describe('sub sidebar feature model', () => {
         activeAppId: 'collaboration',
         activeNavItemId: 'docs-all',
         navItems,
-        pathname: '/tool/docs-all/doc-1?workspace=ai-tft',
+        pathname: '/tool/docs-all/doc-1?workspace=general',
       }),
     ).toBe('docs');
     expect(
@@ -57,7 +57,7 @@ describe('sub sidebar feature model', () => {
         activeAppId: 'collaboration',
         activeNavItemId: 'whiteboard-all',
         navItems,
-        pathname: '/tool/whiteboard-all/board-1?workspace=ai-tft',
+        pathname: '/tool/whiteboard-all/board-1?workspace=general',
       }),
     ).toBe('whiteboard');
   });
@@ -68,7 +68,7 @@ describe('sub sidebar feature model', () => {
         activeAppId: 'business',
         activeNavItemId: 'pms-list-a5c123fe',
         navItems,
-        pathname: '/tool/business-tool?workspace=ai-tft',
+        pathname: '/tool/business-tool?workspace=general',
       }),
     ).toBeNull();
   });

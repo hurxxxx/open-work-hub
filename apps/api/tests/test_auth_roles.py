@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from open_alm_api.domains.auth.roles import (
+from open_work_hub_api.domains.auth.roles import (
     SYSTEM_PLATFORM_ADMIN,
     _higher_team_role,
     _higher_workspace_role,
@@ -47,10 +47,6 @@ def test_system_role_aliases_collapse_legacy_names_to_platform_admin() -> None:
     for role in (
         "platform_admin",
         "platform-admin",
-        "org_admin",
-        "org-admin",
-        "people_admin",
-        "people-admin",
         "workspace_admin",
         "workspace-admin",
         "audit_viewer",

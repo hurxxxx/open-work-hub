@@ -1,5 +1,5 @@
 import { useId, type ReactNode } from 'react';
-import { Button, Dialog, InlineNotice } from '@open-alm/ui';
+import { Button, Dialog, InlineNotice } from '@open-work-hub/ui';
 import { Loader2 } from 'lucide-react';
 
 type ResourcePickerSearch = {

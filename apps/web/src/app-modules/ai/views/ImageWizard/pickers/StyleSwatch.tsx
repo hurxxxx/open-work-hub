@@ -273,21 +273,6 @@ function ShapeArt({ shape, palette }: ShapeArtProps) {
           <line x1="33" y1="31" x2="26" y2="25" stroke={a} strokeWidth="0.6" />
         </svg>
       );
-    case 'orgchart':
-      return (
-        <svg viewBox="0 0 44 44" width="44" height="44" aria-hidden>
-          <rect width="44" height="44" fill={c} />
-          <rect x="17" y="6" width="10" height="6" fill={a} />
-          <line x1="22" y1="12" x2="22" y2="18" stroke={a} strokeWidth="0.8" />
-          <line x1="10" y1="18" x2="34" y2="18" stroke={a} strokeWidth="0.8" />
-          <line x1="10" y1="18" x2="10" y2="22" stroke={a} strokeWidth="0.8" />
-          <line x1="22" y1="18" x2="22" y2="22" stroke={a} strokeWidth="0.8" />
-          <line x1="34" y1="18" x2="34" y2="22" stroke={a} strokeWidth="0.8" />
-          <rect x="6" y="22" width="8" height="6" fill={b} />
-          <rect x="18" y="22" width="8" height="6" fill={b} />
-          <rect x="30" y="22" width="8" height="6" fill={b} />
-        </svg>
-      );
     case 'flat':
       return (
         <svg viewBox="0 0 44 44" width="44" height="44" aria-hidden>

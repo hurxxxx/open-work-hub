@@ -5,8 +5,8 @@ const DRAWIO_FALLBACK_PATH = '/drawio/';
 
 interface DrawioBrowserEnv {
   DEV?: boolean;
-  VITE_OPEN_ALM_DRAWIO_PORT?: string;
-  VITE_OPEN_ALM_DRAWIO_URL?: string;
+  VITE_OPEN_WORK_HUB_DRAWIO_PORT?: string;
+  VITE_OPEN_WORK_HUB_DRAWIO_URL?: string;
 }
 
 export interface DrawioEmbedConfig {
@@ -80,7 +80,7 @@ export function resolveDrawioServerUrl({
   env: DrawioBrowserEnv;
   location: Location;
 }): string {
-  const configuredUrl = env.VITE_OPEN_ALM_DRAWIO_URL?.trim() ?? '';
+  const configuredUrl = env.VITE_OPEN_WORK_HUB_DRAWIO_URL?.trim() ?? '';
   const configuredIsAbsolute = /^https?:\/\//i.test(configuredUrl);
   if (configuredIsAbsolute) return configuredUrl;
 
@@ -91,7 +91,7 @@ export function resolveDrawioServerUrl({
   if (env.DEV || (!configuredUrl && isDevelopmentHost(location.hostname))) {
     return drawioDevUrlFromLocation(
       location,
-      env.VITE_OPEN_ALM_DRAWIO_PORT?.trim() || DRAWIO_DEV_DEFAULT_PORT,
+      env.VITE_OPEN_WORK_HUB_DRAWIO_PORT?.trim() || DRAWIO_DEV_DEFAULT_PORT,
     );
   }
 

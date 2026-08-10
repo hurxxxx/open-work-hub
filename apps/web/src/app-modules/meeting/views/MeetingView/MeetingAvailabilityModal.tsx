@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Dialog } from '@open-alm/ui';
+import { Dialog } from '@open-work-hub/ui';
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 

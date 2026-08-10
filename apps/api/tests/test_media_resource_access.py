@@ -7,9 +7,9 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from open_alm_api.core.db import Base
-from open_alm_api.core.i18n import ERROR_CODE_HEADER
-from open_alm_api.domains.auth.models import (
+from open_work_hub_api.core.db import Base
+from open_work_hub_api.core.i18n import ERROR_CODE_HEADER
+from open_work_hub_api.domains.auth.models import (
     Team,
     TeamMember,
     User,
@@ -17,7 +17,7 @@ from open_alm_api.domains.auth.models import (
     Workspace,
     WorkspaceUserBinding,
 )
-from open_alm_api.domains.docs.models import (
+from open_work_hub_api.domains.docs.models import (
     DocMeetingAccess,
     DocsCollection,
     NativeDoc,
@@ -25,13 +25,13 @@ from open_alm_api.domains.docs.models import (
     NativeDocPage,
     NativeDocUserShare,
 )
-from open_alm_api.domains.community.models import (
+from open_work_hub_api.domains.community.models import (
     CommunityChannel,
     CommunityComment,
     CommunityPost,
 )
-from open_alm_api.domains.media.models import MediaFile
-from open_alm_api.domains.media.resource_access import (
+from open_work_hub_api.domains.media.models import MediaFile
+from open_work_hub_api.domains.media.resource_access import (
     MEDIA_RESOURCE_COMMUNITY_COMMENT,
     MEDIA_RESOURCE_COMMUNITY_POST,
     can_access_docs_native_page,
@@ -39,8 +39,8 @@ from open_alm_api.domains.media.resource_access import (
     ensure_media_link_resource_access,
     media_ids_from_urls,
 )
-from open_alm_api.domains.meeting.models import Meeting
-from open_alm_api.domains.pms.models import Folder, Milestone, Task, TaskList
+from open_work_hub_api.domains.meeting.models import Meeting
+from open_work_hub_api.domains.pms.models import Folder, Milestone, Task, TaskList
 
 
 def _session() -> Session:
@@ -78,7 +78,7 @@ def _user(user_id: str) -> User:
     return User(
         id=user_id,
         login_id=user_id,
-        email=f"{user_id}@open-alm.local",
+        email=f"{user_id}@open-work-hub.local",
         full_name=user_id.title(),
         password_hash="hash",
         status="active",

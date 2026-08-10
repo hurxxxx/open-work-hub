@@ -14,7 +14,7 @@ export function jsonHeaders(token?: string | null, headers?: HeadersInit): Heade
   const locale = i18n.resolvedLanguage || i18n.language;
   return {
     Accept: 'application/json',
-    ...(locale ? { 'Accept-Language': locale, 'X-Open ALM-Locale': locale } : {}),
+    ...(locale ? { 'Accept-Language': locale, 'X-Open-Work-Hub-Locale': locale } : {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(headers ?? {}),
   };

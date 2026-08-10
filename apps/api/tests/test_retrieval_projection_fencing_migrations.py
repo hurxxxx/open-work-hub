@@ -8,12 +8,12 @@ from sqlalchemy import create_engine, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
-from open_alm_api.domains.retrieval.models import (
+from open_work_hub_api.domains.retrieval.models import (
     RetrievalPartition,
     RetrievalProjectionEvent,
     RetrievalProjectionHead,
 )
-from open_alm_api.domains.retrieval.projection_fencing import record_projection_event
+from open_work_hub_api.domains.retrieval.projection_fencing import record_projection_event
 
 
 pytestmark = pytest.mark.migration
@@ -151,7 +151,7 @@ def test_projection_event_participates_in_outer_transaction_rollback(
         with factory.begin() as db:
             record_projection_event(
                 db,
-                resource_type="qna_document",
+                resource_type="docs_native_doc",
                 resource_id="qna-rollback",
                 retrieval_partition_id=_PARTITION_ID,
                 change_kind="content",
@@ -160,10 +160,10 @@ def test_projection_event_participates_in_outer_transaction_rollback(
             raise RuntimeError("rollback projection mutation")
 
     with factory() as db:
-        head = db.get(RetrievalProjectionHead, ("qna_document", "qna-rollback"))
+        head = db.get(RetrievalProjectionHead, ("docs_native_doc", "qna-rollback"))
         events = db.scalars(
             select(RetrievalProjectionEvent).where(
-                RetrievalProjectionEvent.resource_type == "qna_document",
+                RetrievalProjectionEvent.resource_type == "docs_native_doc",
                 RetrievalProjectionEvent.resource_id == "qna-rollback",
             )
         ).all()

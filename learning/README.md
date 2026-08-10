@@ -75,8 +75,8 @@ learning/
 
 | 슬러그 | 제목 | 설명 |
 | --- | --- | --- |
-| `open-alm-business-ai-curriculum` | Open ALM LLM/RAG 운영 전문 교육 | 기존 코스와 중복되는 AI 협업·저장소·출시 교재는 원본 코스를 사용하고, Open ALM PoC에 필요한 LLM/RAG 모델 지형, 검색, 승인, 평가 운영만 깊게 다룹니다. |
-| `vibe-coding-foundations` | 바이브 코딩 입문 | 소프트웨어·프로그래밍 기본부터 Open ALM 스택, 실전 워크플로까지. 전 구성원 공용 온보딩 트랙. |
+| `open-work-hub-business-ai-curriculum` | Open Work Hub LLM/RAG 운영 전문 교육 | 기존 코스와 중복되는 AI 협업·저장소·출시 교재는 원본 코스를 사용하고, Open Work Hub PoC에 필요한 LLM/RAG 모델 지형, 검색, 승인, 평가 운영만 깊게 다룹니다. |
+| `vibe-coding-foundations` | 바이브 코딩 입문 | 소프트웨어·프로그래밍 기본부터 Open Work Hub 스택, 실전 워크플로까지. 전 구성원 공용 온보딩 트랙. |
 | `database-storage-basics` | 데이터베이스 입문 — 저장소를 고르는 법 | SQL, NoSQL, 캐시, 검색, 벡터 DB, 객체 저장소까지 초보자 눈높이로 비교하는 저장소 선택 트랙. |
 
 ## 스타일 팁

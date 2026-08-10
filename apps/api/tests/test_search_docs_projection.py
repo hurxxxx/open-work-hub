@@ -5,9 +5,9 @@ from datetime import UTC, datetime
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from open_alm_api.core.db import Base
-from open_alm_api.domains.auth.models import Team, User, Workspace
-from open_alm_api.domains.docs.models import (
+from open_work_hub_api.core.db import Base
+from open_work_hub_api.domains.auth.models import Team, User, Workspace
+from open_work_hub_api.domains.docs.models import (
     DocMeetingAccess,
     DocsCollection,
     NativeDoc,
@@ -16,12 +16,12 @@ from open_alm_api.domains.docs.models import (
     NativeDocPage,
     NativeDocUserShare,
 )
-from open_alm_api.domains.meeting.models import Meeting
-from open_alm_api.domains.pms.models import Folder, TaskList
-from open_alm_api.domains.retrieval.models import RetrievalPartition
-from open_alm_api.domains.search.docs_projection import load_docs_search_document
-from open_alm_api.domains.search.projections import load_search_document
-from open_alm_api.domains.search.schemas import SearchEntityType
+from open_work_hub_api.domains.meeting.models import Meeting
+from open_work_hub_api.domains.pms.models import Folder, TaskList
+from open_work_hub_api.domains.retrieval.models import RetrievalPartition
+from open_work_hub_api.domains.search.docs_projection import load_docs_search_document
+from open_work_hub_api.domains.search.projections import load_search_document
+from open_work_hub_api.domains.search.schemas import SearchEntityType
 
 
 def _session() -> Session:
@@ -62,7 +62,7 @@ def _add_workspace_user(session: Session, *, workspace_active: bool = True) -> N
         User(
             id="user-1",
             login_id="docs-owner",
-            email="docs-owner@open-alm.local",
+            email="docs-owner@open-work-hub.local",
             full_name="Docs Owner",
             password_hash="hash",
             status="active",

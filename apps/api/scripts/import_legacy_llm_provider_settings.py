@@ -11,12 +11,12 @@ _SRC = Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from open_alm_api.core.db import get_session_factory  # noqa: E402
-from open_alm_api.core.explicit_env_file import (  # noqa: E402
+from open_work_hub_api.core.db import get_session_factory  # noqa: E402
+from open_work_hub_api.core.explicit_env_file import (  # noqa: E402
     ExplicitEnvFileError,
     load_explicit_env_file,
 )
-from open_alm_api.domains.ai.legacy_provider_import import (  # noqa: E402
+from open_work_hub_api.domains.ai.legacy_provider_import import (  # noqa: E402
     LEGACY_EXTERNAL_LLM_ENV_FIELDS,
     LegacyProviderImportError,
     import_legacy_external_llm_providers,

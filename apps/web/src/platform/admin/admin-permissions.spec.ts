@@ -16,11 +16,8 @@ describe('admin-permissions', () => {
       'model-monitoring',
       'document-processing',
       'ai-security',
-      'people',
-      'hr',
       'workspaces',
       'community',
-      'batches',
       'usage',
       'audit',
     ];

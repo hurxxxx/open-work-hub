@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from open_alm_api.domains.ai.registry import AiCapabilityRegistry
-from open_alm_api.domains.document_processing import DocumentExtractBundle, EvidenceBlock
-from open_alm_api.domains.spec_compare import (
+from open_work_hub_api.domains.ai.registry import AiCapabilityRegistry
+from open_work_hub_api.domains.document_processing import DocumentExtractBundle, EvidenceBlock
+from open_work_hub_api.domains.spec_compare import (
     SPEC_COMPARE_APP_ID,
     SPEC_COMPARE_COMPARE_TASK_KIND,
     SPEC_COMPARE_COMPARE_WORKLOAD_ID,
@@ -14,9 +14,9 @@ from open_alm_api.domains.spec_compare import (
     SPEC_COMPARE_REPORT_WORKLOAD_ID,
     register_ai_capabilities,
 )
-from open_alm_api.domains.spec_compare import pipeline, reporting
-from open_alm_api.domains.spec_compare.contracts import ComparisonRow
-from open_alm_api.domains.spec_compare.extraction import DocumentMarkdownChunk, SpecCandidate
+from open_work_hub_api.domains.spec_compare import pipeline, reporting
+from open_work_hub_api.domains.spec_compare.contracts import ComparisonRow
+from open_work_hub_api.domains.spec_compare.extraction import DocumentMarkdownChunk, SpecCandidate
 
 
 def test_registers_independent_spec_compare_workloads() -> None:

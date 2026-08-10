@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
-TASKS_DIR = WORKSPACE_ROOT / "apps" / "worker" / "src" / "open_alm_worker" / "tasks"
+TASKS_DIR = WORKSPACE_ROOT / "apps" / "worker" / "src" / "open_work_hub_worker" / "tasks"
 
 
 def _qualified_name(node: ast.AST) -> str | None:
@@ -36,7 +36,7 @@ def _registered_task_modules() -> set[str]:
     tree = ast.parse(init_path.read_text(encoding="utf-8"), filename=str(init_path))
     registered: set[str] = set()
     for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module == "open_alm_worker.tasks":
+        if isinstance(node, ast.ImportFrom) and node.module == "open_work_hub_worker.tasks":
             registered.update(alias.name for alias in node.names)
     return registered
 

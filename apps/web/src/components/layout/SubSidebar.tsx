@@ -435,7 +435,7 @@ function useSubSidebarFrameState(activeAppId: string): SubSidebarFrameState {
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     if (typeof window === 'undefined') return SUB_SIDEBAR_DEFAULT_WIDTH;
     return restoreSubSidebarWidth(
-      window.localStorage.getItem('open-alm:sub-sidebar-width'),
+      window.localStorage.getItem('open-work-hub:sub-sidebar-width'),
     );
   });
   const [isResizing, setIsResizing] = useState(false);
@@ -463,7 +463,7 @@ function useSubSidebarFrameState(activeAppId: string): SubSidebarFrameState {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     window.localStorage.setItem(
-      'open-alm:sub-sidebar-width',
+      'open-work-hub:sub-sidebar-width',
       String(sidebarWidth),
     );
   }, [sidebarWidth]);

@@ -6,14 +6,14 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 from starlette.exceptions import HTTPException
 
-from open_alm_api.domains.files import content_access
-from open_alm_api.domains.files.content_access import (
+from open_work_hub_api.domains.files import content_access
+from open_work_hub_api.domains.files.content_access import (
     build_file_content_url,
     is_previewable_image,
     open_file_content,
     sign_file_content_url,
 )
-from open_alm_api.domains.files.models import FileManagerCorpus, FileManagerFile
+from open_work_hub_api.domains.files.models import FileManagerCorpus, FileManagerFile
 
 
 _ISSUER_USER_ID = "user-1"

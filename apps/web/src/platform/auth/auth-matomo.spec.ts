@@ -7,16 +7,14 @@ function user(overrides: Partial<AuthUser> = {}): AuthUser {
   return {
     app_bar_layout: { pinned_app_ids: [] },
     date_format: 'korean',
-    display_name: 'Open ALM Member',
-    email: 'member@open-alm.local',
-    full_name: 'Open ALM Member',
+    display_name: 'Open Work Hub Member',
+    email: 'member@open-work-hub.local',
+    full_name: 'Open Work Hub Member',
     id: 'internal-user-1',
-    job_title: null,
     last_login_at: null,
     locale: 'ko-KR',
     login_id: 'member',
     must_change_password: false,
-    primary_org_unit: null,
     status: 'active',
     system_roles: [],
     theme_preference: 'system',
@@ -32,7 +30,7 @@ describe('resolveMatomoUserIdentity', () => {
     expect(resolveMatomoUserIdentity(user())).toEqual({
       userId: 'member',
       userLoginId: 'member',
-      userName: 'Open ALM Member',
+      userName: 'Open Work Hub Member',
     });
   });
 

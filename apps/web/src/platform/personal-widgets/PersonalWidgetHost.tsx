@@ -24,8 +24,8 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { Button } from '@open-alm/ui/primitives/button';
-import { Input } from '@open-alm/ui/primitives/input';
+import { Button } from '@open-work-hub/ui/primitives/button';
+import { Input } from '@open-work-hub/ui/primitives/input';
 
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/platform/auth/auth-provider';

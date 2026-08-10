@@ -34,14 +34,14 @@ export interface LearningCourse {
 const VCF = 'vibe-coding-foundations';
 const DSB = 'database-storage-basics';
 const SLJ = 'service-launch-journey';
-const ABC = 'open-alm-business-ai-curriculum';
+const ABC = 'open-work-hub-business-ai-curriculum';
 
 export const LEARNING_COURSES: LearningCourse[] = [
   {
     slug: ABC,
-    title: 'Open ALM LLM/RAG 운영 전문 교육',
+    title: 'Open Work Hub LLM/RAG 운영 전문 교육',
     description:
-      '기존 교재와 중복되는 AI 협업·저장소·서비스 출시 내용은 원본 코스로 연결하고, Open ALM PoC에 필요한 LLM/RAG 모델 지형, 검색, 승인, 평가 운영을 깊게 다룹니다.',
+      '기존 교재와 중복되는 AI 협업·저장소·서비스 출시 내용은 원본 코스로 연결하고, Open Work Hub PoC에 필요한 LLM/RAG 모델 지형, 검색, 승인, 평가 운영을 깊게 다룹니다.',
     parts: [
       {
         slug: 'intro',
@@ -68,7 +68,7 @@ export const LEARNING_COURSES: LearningCourse[] = [
     slug: VCF,
     title: '바이브 코딩 입문',
     description:
-      '소프트웨어·프로그래밍 기본 개념부터 Open ALM 스택, 실전 바이브 코딩 워크플로까지. 전 구성원 공용 온보딩 트랙입니다.',
+      '소프트웨어·프로그래밍 기본 개념부터 Open Work Hub 스택, 실전 바이브 코딩 워크플로까지. 전 구성원 공용 온보딩 트랙입니다.',
     parts: [
       {
         slug: 'intro',
@@ -104,7 +104,7 @@ export const LEARNING_COURSES: LearningCourse[] = [
       },
       {
         slug: 'stack',
-        title: 'Open ALM 기술 스택',
+        title: 'Open Work Hub 기술 스택',
         lessons: [
           { id: 'vcf-020-system-overview', slug: '20-system-overview', title: '시스템 조감도', file: `${VCF}/20-시스템-조감도.md` },
           { id: 'vcf-021-monorepo', slug: '21-monorepo', title: '모노레포 · Nx · pnpm', file: `${VCF}/21-모노레포-Nx-pnpm.md` },

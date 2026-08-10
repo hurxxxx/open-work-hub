@@ -47,7 +47,6 @@ export function MeetingCreateAttendeesSection({
       id: attendee.user_id,
       email: user?.email ?? '',
       full_name: user?.full_name ?? attendee.user_id,
-      primary_org_unit_name: user?.primary_org_unit_name ?? null,
     };
   });
 

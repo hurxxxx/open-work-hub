@@ -11,8 +11,8 @@ describe('AI feature guides', () => {
     const featureGuideToolIds = new Set(['drafting']);
 
     expect(hasAiFeatureGuide('drafting', featureGuideToolIds)).toBe(true);
-    expect(hasAiFeatureGuide('data-viz', featureGuideToolIds)).toBe(false);
-    expect(hasAiFeatureGuide('qa-assistant', featureGuideToolIds)).toBe(false);
+    expect(hasAiFeatureGuide('diagrams', featureGuideToolIds)).toBe(false);
+    expect(hasAiFeatureGuide('docs', featureGuideToolIds)).toBe(false);
   });
 
   it('derives guide metadata from an accepted tool id', () => {

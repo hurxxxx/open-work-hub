@@ -10,15 +10,15 @@ _SRC = Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from open_alm_api.core.db import get_session_factory  # noqa: E402
-from open_alm_api.core.settings import get_settings  # noqa: E402
-from open_alm_api.domains.retrieval.files_generation_backends import (  # noqa: E402
+from open_work_hub_api.core.db import get_session_factory  # noqa: E402
+from open_work_hub_api.core.settings import get_settings  # noqa: E402
+from open_work_hub_api.domains.retrieval.files_generation_backends import (  # noqa: E402
     FilesPhysicalGenerationBackends,
 )
-from open_alm_api.domains.retrieval.files_generation_materializer import (  # noqa: E402
+from open_work_hub_api.domains.retrieval.files_generation_materializer import (  # noqa: E402
     FilesCachedProjectionMaterializer,
 )
-from open_alm_api.domains.retrieval.files_generation_runner import (  # noqa: E402
+from open_work_hub_api.domains.retrieval.files_generation_runner import (  # noqa: E402
     FilesGenerationError,
     FilesGenerationRunner,
 )

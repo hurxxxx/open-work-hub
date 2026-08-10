@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from open_alm_api.domains.docs import realtime_protocol
+from open_work_hub_api.domains.docs import realtime_protocol
 
 
 def test_docs_realtime_protocol_constants_match_client_contract() -> None:

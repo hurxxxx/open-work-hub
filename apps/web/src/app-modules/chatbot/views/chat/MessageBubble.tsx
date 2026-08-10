@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Bot, Check, Copy, Pencil, RotateCcw, User, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Tooltip } from '@open-alm/ui';
+import { Tooltip } from '@open-work-hub/ui';
 
 import { MarkdownContent } from '@/src/components/artifacts/MarkdownContent';
 import type { ChatbotArtifactRenderer } from '../chatbot-experience';

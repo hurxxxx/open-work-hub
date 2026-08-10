@@ -6,7 +6,7 @@ import {
   dmMessagePreviewText as projectDmMessagePreviewText,
   dmUnreadBadge as projectDmUnreadBadge,
   dmUserDisplayName,
-} from '@open-alm/contracts/dm';
+} from '@open-work-hub/contracts/dm';
 
 import type { DmMessage, DmThread, DmUser } from '../api/dm-api';
 

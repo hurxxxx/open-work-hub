@@ -12,7 +12,7 @@ import {
 import {
   isDocsPagesRealtimeSubscriptionMessage,
   resolveRealtimeWebSocketUrl,
-} from '@open-alm/contracts/realtime';
+} from '@open-work-hub/contracts/realtime';
 
 import {
   createRealtimeRuntime,

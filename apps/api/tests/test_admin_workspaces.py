@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from open_alm_api.core.settings import get_settings
-from open_alm_api.domains.docs.app_catalog import DOCS_WORKSPACE_APP
+from open_work_hub_api.core.settings import get_settings
+from open_work_hub_api.domains.docs.app_catalog import DOCS_WORKSPACE_APP
 
 
 def _auth_headers(token: str) -> dict[str, str]:
@@ -14,8 +14,8 @@ def _bootstrap_admin_session(client: TestClient) -> dict:
     response = client.post(
         "/api/v1/auth/setup",
         json={
-            "full_name": "Open ALM Admin",
-            "email": "admin@open-alm.local",
+            "full_name": "Open Work Hub Admin",
+            "email": "admin@open-work-hub.local",
             "password": "supersecret123",
         },
     )
@@ -156,7 +156,7 @@ def test_replace_workspace_bindings_rejects_unknown_user_atomically(
     member = _create_user(
         client,
         token,
-        email="known@open-alm.local",
+        email="known@open-work-hub.local",
         full_name="Known Member",
     )
     added = client.post(
@@ -208,9 +208,9 @@ def test_replace_workspace_bindings_rejects_all_admin_removal_atomically(
     second_platform_admin = _create_user_with_password(
         client,
         token,
-        email="second-platform@open-alm.local",
+        email="second-platform@open-work-hub.local",
         full_name="Second Platform Admin",
-        password="Open ALM!platform2",
+        password="Open Work Hub!platform2",
     )
     promoted = client.patch(
         f"/api/v1/admin/users/{second_platform_admin['user']['id']}",
@@ -222,7 +222,7 @@ def test_replace_workspace_bindings_rejects_all_admin_removal_atomically(
         "/api/v1/auth/login",
         json={
             "login_id": "second-platform",
-            "password": "Open ALM!platform2",
+            "password": "Open Work Hub!platform2",
         },
     )
     assert login.status_code == 200, login.text
@@ -258,13 +258,13 @@ def test_replace_workspace_bindings_keeps_valid_replace_behavior(
     existing_member = _create_user(
         client,
         token,
-        email="existing@open-alm.local",
+        email="existing@open-work-hub.local",
         full_name="Existing Member",
     )
     new_member = _create_user(
         client,
         token,
-        email="new@open-alm.local",
+        email="new@open-work-hub.local",
         full_name="New Member",
     )
     added = client.post(
@@ -338,7 +338,7 @@ def test_app_bar_categories_are_admin_managed_presentation_groups(
     payload = list_response.json()
     assert payload["categories"] == []
     available_app_ids = {item["app_id"] for item in payload["available_apps"]}
-    assert {DOCS_WORKSPACE_APP.app_id, "qa-assistant", "legacy-issues"} <= available_app_ids
+    assert {DOCS_WORKSPACE_APP.app_id, "docs", "docs"} <= available_app_ids
     assert {"home", "extensions"}.isdisjoint(available_app_ids)
 
     create_response = client.post(
@@ -362,7 +362,7 @@ def test_app_bar_categories_are_admin_managed_presentation_groups(
                     "id": created["id"],
                     "title": "Field tools",
                     "icon_key": "history",
-                    "app_ids": ["legacy-issues", DOCS_WORKSPACE_APP.app_id],
+                    "app_ids": ["docs", DOCS_WORKSPACE_APP.app_id],
                 }
             ]
         },
@@ -374,7 +374,7 @@ def test_app_bar_categories_are_admin_managed_presentation_groups(
     assert updated["title"] == "Field tools"
     assert updated["icon_key"] == "history"
     assert [item["app_id"] for item in updated["items"]] == [
-        "legacy-issues",
+        "docs",
         DOCS_WORKSPACE_APP.app_id,
     ]
 
@@ -398,7 +398,7 @@ def test_app_bar_categories_are_admin_managed_presentation_groups(
         "icon_key": "history",
     }
     assert [item["app_id"] for item in bootstrap_category["items"]] == [
-        "legacy-issues",
+        "docs",
         DOCS_WORKSPACE_APP.app_id,
     ]
 
@@ -548,9 +548,9 @@ def test_sensitive_workspace_app_activation_requires_platform_admin(
     workspace_admin_payload = _create_user_with_password(
         client,
         platform_token,
-        email="workspaceadmin@open-alm.local",
+        email="workspaceadmin@open-work-hub.local",
         full_name="Workspace Admin",
-        password="Open ALM!workspace1",
+        password="Open Work Hub!workspace1",
     )
     add_response = client.post(
         f"/api/v1/admin/workspaces/{workspace['id']}/members",
@@ -565,7 +565,7 @@ def test_sensitive_workspace_app_activation_requires_platform_admin(
 
     login = client.post(
         "/api/v1/auth/login",
-        json={"login_id": "workspaceadmin", "password": "Open ALM!workspace1"},
+        json={"login_id": "workspaceadmin", "password": "Open Work Hub!workspace1"},
     )
     assert login.status_code == 200, login.text
     workspace_admin_response = client.patch(
@@ -573,7 +573,7 @@ def test_sensitive_workspace_app_activation_requires_platform_admin(
         headers=_auth_headers(login.json()["token"]),
         json={
             "items": [
-                {"app_id": "management-tasks", "visibility_override": True}
+                {"app_id": "planner", "visibility_override": True}
             ]
         },
     )
@@ -585,7 +585,7 @@ def test_sensitive_workspace_app_activation_requires_platform_admin(
         headers=_auth_headers(platform_token),
         json={
             "items": [
-                {"app_id": "management-tasks", "visibility_override": True}
+                {"app_id": "planner", "visibility_override": True}
             ]
         },
     )
@@ -593,7 +593,7 @@ def test_sensitive_workspace_app_activation_requires_platform_admin(
     app = next(
         item
         for item in platform_admin_response.json()["items"]
-        if item["app_id"] == "management-tasks"
+        if item["app_id"] == "planner"
     )
     assert app["effective_visible"] is True
 
@@ -628,19 +628,19 @@ def test_platform_apps_are_excluded_from_workspace_and_category_admin(
         "community",
         "mail",
         "planner",
-        "qa-assistant",
+        "docs",
     } <= platform_items.keys()
     assert all(
         platform_items[app_id]["availability_scope"] == "platform"
-        for app_id in ("community", "mail", "planner", "qa-assistant")
+        for app_id in ("community", "mail", "planner", "docs")
     )
     assert platform_items["community"]["launcher_personal_tools"] is False
     assert all(
         platform_items[app_id]["launcher_personal_tools"] is True for app_id in ("mail", "planner")
     )
-    assert {"community", "mail", "planner", "qa-assistant"}.isdisjoint(workspace_app_ids)
+    assert {"community", "mail", "planner", "docs"}.isdisjoint(workspace_app_ids)
     assert {"mail", "planner"}.isdisjoint(category_app_ids)
-    assert {"community", "qa-assistant"} <= category_app_ids
+    assert {"community", "docs"} <= category_app_ids
 
 
 def test_workspace_app_visibility_override_can_return_to_platform_default(
@@ -673,7 +673,7 @@ def test_add_remove_member_endpoints(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
     token = admin["token"]
     workspace = _create_workspace(client, token, name="People Hub")
-    other_user = _create_user(client, token, email="alice@open-alm.local", full_name="Alice")
+    other_user = _create_user(client, token, email="alice@open-work-hub.local", full_name="Alice")
 
     add_response = client.post(
         f"/api/v1/admin/workspaces/{workspace['id']}/members",
@@ -748,15 +748,15 @@ def test_member_endpoints_require_workspace_admin(client: TestClient) -> None:
     intruder_payload = _create_user_with_password(
         client,
         admin_token,
-        email="intruder@open-alm.local",
+        email="intruder@open-work-hub.local",
         full_name="Intruder",
-        password="Open ALM!intruder1",
+        password="Open Work Hub!intruder1",
     )
     intruder = intruder_payload["user"]
 
     login = client.post(
         "/api/v1/auth/login",
-        json={"login_id": "intruder", "password": "Open ALM!intruder1"},
+        json={"login_id": "intruder", "password": "Open Work Hub!intruder1"},
     )
     assert login.status_code == 200, login.text
     intruder_token = login.json()["token"]
@@ -816,7 +816,7 @@ def test_paginated_members_endpoint_filter_search_and_role_counts(client: TestCl
         u = _create_user(
             client,
             token,
-            email=f"user{i}@open-alm.local",
+            email=f"user{i}@open-work-hub.local",
             full_name=f"User {i}",
         )
         user_ids.append(u["id"])
@@ -859,7 +859,7 @@ def test_paginated_members_endpoint_filter_search_and_role_counts(client: TestCl
         headers=_auth_headers(token),
     ).json()
     assert search_filter["total"] == 1
-    assert search_filter["items"][0]["subject_secondary"] == "user2@open-alm.local"
+    assert search_filter["items"][0]["subject_secondary"] == "user2@open-work-hub.local"
 
 
 def test_bulk_member_endpoint_partial_failure(client: TestClient) -> None:
@@ -867,8 +867,8 @@ def test_bulk_member_endpoint_partial_failure(client: TestClient) -> None:
     token = admin["token"]
     workspace = _create_workspace(client, token, name="Bulk Lab")
 
-    user_a = _create_user(client, token, email="alice@open-alm.local", full_name="Alice")
-    user_b = _create_user(client, token, email="bob@open-alm.local", full_name="Bob")
+    user_a = _create_user(client, token, email="alice@open-work-hub.local", full_name="Alice")
+    user_b = _create_user(client, token, email="bob@open-work-hub.local", full_name="Bob")
 
     response = client.post(
         f"/api/v1/admin/workspaces/{workspace['id']}/members/bulk",
@@ -924,9 +924,9 @@ def test_other_admin_can_demote_and_remove_admin(client: TestClient) -> None:
     second_payload = _create_user_with_password(
         client,
         token,
-        email="second@open-alm.local",
+        email="second@open-work-hub.local",
         full_name="Second Admin",
-        password="Open ALM!second12",
+        password="Open Work Hub!second12",
     )
     second_id = second_payload["user"]["id"]
 
@@ -940,7 +940,7 @@ def test_other_admin_can_demote_and_remove_admin(client: TestClient) -> None:
     # Login as the second admin and try to remove the only owner.
     login = client.post(
         "/api/v1/auth/login",
-        json={"login_id": "second", "password": "Open ALM!second12"},
+        json={"login_id": "second", "password": "Open Work Hub!second12"},
     )
     assert login.status_code == 200, login.text
     second_token = login.json()["token"]
