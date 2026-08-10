@@ -20,12 +20,13 @@ Doowon은 앞으로 AppBar에 여러 업무 앱이 늘어나고, AI는 각 앱�
 
 - `GET /api/v1/auth/me`는 identity-only 계약을 유지한다.
 - `GET /api/v1/workspaces/{workspace_slug}/bootstrap`를 workspace별 앱 활성화와 nav 메타데이터의 단일 진실원으로 사용한다.
-- 서버는 앱 메타데이터와 entitlement만 반환한다.
-- 실제 화면 컴포넌트와 route element 매핑은 프론트 로컬 registry가 유지한다.
-- 전역 앱 카탈로그는 코드에 둔다.
-- workspace별 활성화 여부는 `WorkspaceAppEntitlement`가 담당한다.
+- 서버는 관리자 DB의 앱 표시 메타데이터, workspace별 entitlement, 그리고 코드에 존재하는 구현 capability 상태를 조합해 반환한다.
+- 앱 표시명, 아이콘, 앱바 노출, 앱바 카테고리, 메뉴 배치, workspace별 활성화 여부는 관리자 DB가 정본이다.
+- 실제 화면 컴포넌트와 route element 매핑, backend route, AI task, 권한 gate 같은 구현 capability는 코드 registry가 유지한다.
+- 관리자 DB에 앱 row가 존재해도 대응 구현 capability가 없으면 bootstrap은 해당 앱을 노출하지 않거나 disabled로 반환해야 한다.
 
-이 결정으로 새 앱 추가 시 서버는 카탈로그/entitlement만, 프론트는 로컬 컴포넌트 registry만 수정하면 된다.
+이 결정으로 새 앱 추가 시 운영자는 관리자 메뉴에서 표시/노출/배치를 관리하고,
+개발자는 프론트 route/component registry와 백엔드 구현 capability만 추가하면 된다.
 
 ### 2. AI capability는 도메인이 소유한다
 
@@ -68,7 +69,7 @@ Doowon은 앞으로 AppBar에 여러 업무 앱이 늘어나고, AI는 각 앱�
 
 ### Negative
 
-- 코드 소유 카탈로그와 DB entitlement를 함께 유지해야 한다.
+- 관리자 DB 카탈로그와 코드 capability registry 간 정합성 검증이 필요하다.
 - 도메인 capability 등록 누락 시 bootstrap 또는 readiness에서 바로 드러나므로 등록 discipline이 필요하다.
 - service layer 전환은 단계적 리팩토링이 필요하며, 단기적으로 router/service가 공존한다.
 
@@ -76,9 +77,12 @@ Doowon은 앞으로 AppBar에 여러 업무 앱이 늘어나고, AI는 각 앱�
 
 - 이번 결정은 service account/API key의 실제 발급/회전/폐기 구현을 포함하지 않는다.
 - 서버가 프론트 컴포넌트를 동적으로 주입하는 구조는 도입하지 않는다.
+- 관리자가 새 앱 row를 만든다고 route/component/backend 구현이 자동 생성되는 것은 아니다.
 - 자동 import 스캔 기반 plugin architecture는 도입하지 않는다.
 
 ## Follow-up
 
-- Phase 3에서 read tool 대상 도메인의 service layer 추출을 우선 진행한다.
-- Phase 7에서 external integration을 구현한다.
+- Read tool 대상 도메인의 service layer 추출을 계속 진행한다.
+- Company-scoped external REST integration의 공통 API key 발급·scope·회수 정책은
+  [ADR 0012](0012-platform-api-keys-and-rest-integrations.md)에서 구체화한다.
+- `workspace_apps.py`를 실제 구현 capability registry와 관리자 DB catalog projection으로 분리한다.

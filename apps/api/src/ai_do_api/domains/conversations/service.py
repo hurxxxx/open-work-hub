@@ -13,22 +13,29 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import status
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ai_do_api.core.i18n import localized_http_exception
-from ai_do_api.domains.auth.models import User, Workspace
-from ai_do_api.domains.meeting.models import utcnow_naive
+from ai_do_api.domains.auth.models import User, Workspace, utcnow_naive
+from ai_do_api.domains.conversations.default_scope_adapters import (
+    is_supported_conversation_scope_ref,
+)
+from ai_do_api.domains.conversations.scope_contract import (
+    SCOPE_REF_MAX_LEN,
+    SCOPE_RESOURCE_ID_MAX_LEN,
+)
 
 from .models import Conversation, ConversationTurn
+from .turn_rewrite import (
+    ConversationTailRewriteError,
+    auto_title_preview,
+    plan_conversation_tail_rewrite,
+)
 
 
 TITLE_MAX_LEN = 200
-TITLE_AUTO_PREVIEW_LEN = 30
-SCOPE_REF_MAX_LEN = 24
-SCOPE_RESOURCE_ID_MAX_LEN = 36
-SUPPORTED_SCOPE_REFS = {"meeting"}
 
 
 def _generate_id() -> str:
@@ -54,15 +61,18 @@ def create_conversation(
             status_code=status.HTTP_400_BAD_REQUEST,
             code="conversations.scope_pair_required",
         )
-    if (
-        normalized_scope_ref is not None
-        and normalized_scope_ref not in SUPPORTED_SCOPE_REFS
+    if normalized_scope_ref is not None and not is_supported_conversation_scope_ref(
+        normalized_scope_ref
     ):
         raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
             code="conversations.unsupported_scope",
             scope_ref=normalized_scope_ref,
         )
+    _validate_scope_lengths(
+        scope_ref=normalized_scope_ref,
+        scope_resource_id=normalized_scope_resource_id,
+    )
     if normalized_scope_ref is not None and not normalized_title:
         reusable = db.scalar(
             select(Conversation)
@@ -86,12 +96,8 @@ def create_conversation(
         workspace_id=workspace.id,
         user_id=user.id,
         title=normalized_title,
-        scope_ref=normalized_scope_ref[:SCOPE_REF_MAX_LEN] if normalized_scope_ref else None,
-        scope_resource_id=(
-            normalized_scope_resource_id[:SCOPE_RESOURCE_ID_MAX_LEN]
-            if normalized_scope_resource_id
-            else None
-        ),
+        scope_ref=normalized_scope_ref,
+        scope_resource_id=normalized_scope_resource_id,
         created_at=now,
         updated_at=now,
     )
@@ -99,6 +105,27 @@ def create_conversation(
     db.commit()
     db.refresh(conversation)
     return conversation
+
+
+def _validate_scope_lengths(
+    *,
+    scope_ref: str | None,
+    scope_resource_id: str | None,
+) -> None:
+    if scope_ref is not None and len(scope_ref) > SCOPE_REF_MAX_LEN:
+        raise localized_http_exception(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="validation.value_invalid",
+            field="scope_ref",
+            max_length=SCOPE_REF_MAX_LEN,
+        )
+    if scope_resource_id is not None and len(scope_resource_id) > SCOPE_RESOURCE_ID_MAX_LEN:
+        raise localized_http_exception(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="validation.value_invalid",
+            field="scope_resource_id",
+            max_length=SCOPE_RESOURCE_ID_MAX_LEN,
+        )
 
 
 _CURSOR_SEPARATOR = "|"
@@ -141,6 +168,9 @@ def list_conversations(
     user: User,
     limit: int = 20,
     cursor: str | None = None,
+    scope_ref: str | None = None,
+    scope_resource_id: str | None = None,
+    allowed_scope_refs: frozenset[str] | None = None,
 ) -> tuple[list[Conversation], str | None]:
     """Return the user's conversations in this workspace, newest first.
 
@@ -172,6 +202,30 @@ def list_conversations(
                     Conversation.updated_at == cursor_ts,
                     Conversation.id < cursor_id,
                 ),
+            )
+        )
+    normalized_scope_ref = (scope_ref or "").strip() or None
+    normalized_scope_resource_id = (scope_resource_id or "").strip() or None
+    if normalized_scope_resource_id is not None and normalized_scope_ref is None:
+        raise localized_http_exception(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="conversations.scope_pair_required",
+        )
+    if normalized_scope_ref is not None:
+        if not is_supported_conversation_scope_ref(normalized_scope_ref):
+            raise localized_http_exception(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                code="conversations.unsupported_scope",
+                scope_ref=normalized_scope_ref,
+            )
+        stmt = stmt.where(Conversation.scope_ref == normalized_scope_ref)
+        if normalized_scope_resource_id is not None:
+            stmt = stmt.where(Conversation.scope_resource_id == normalized_scope_resource_id)
+    elif allowed_scope_refs is not None:
+        stmt = stmt.where(
+            or_(
+                Conversation.scope_ref.is_(None),
+                Conversation.scope_ref.in_(allowed_scope_refs),
             )
         )
 
@@ -248,6 +302,123 @@ def soft_delete_conversation(
     db.commit()
 
 
+def truncate_turns_from_seq(
+    db: Session,
+    *,
+    conversation: Conversation,
+    from_seq: int,
+) -> int:
+    """Delete every turn at or after ``from_seq`` in one conversation."""
+    result = db.execute(
+        delete(ConversationTurn).where(
+            ConversationTurn.conversation_id == conversation.id,
+            ConversationTurn.seq >= from_seq,
+        )
+    )
+    deleted_count = int(result.rowcount or 0)
+    if deleted_count > 0:
+        conversation.updated_at = utcnow_naive()
+    db.commit()
+    db.expire(conversation, ["turns"])
+    db.refresh(conversation)
+    return deleted_count
+
+
+def rewrite_turns_from_target(
+    db: Session,
+    *,
+    workspace: Workspace,
+    user: User,
+    conversation_id: str,
+    target_turn_id: str,
+    from_seq: int,
+    expected_tail_turn_id: str,
+    expected_tail_seq: int,
+    persist_user_turn: bool,
+    replacement_user_content: str | None,
+    expected_retry_user_content: str | None,
+) -> Conversation:
+    """Atomically rewrite a conversation tail from a specific persisted turn.
+
+    The target id + seq pair acts as an optimistic version check: if another
+    tab already rewrote the tail, the target row disappears or moves and this
+    request must fail before appending a duplicate assistant turn.
+    """
+    conversation = db.scalar(
+        select(Conversation)
+        .where(
+            Conversation.id == conversation_id,
+            Conversation.workspace_id == workspace.id,
+            Conversation.user_id == user.id,
+            Conversation.deleted_at.is_(None),
+        )
+        .with_for_update()
+    )
+    if conversation is None:
+        raise localized_http_exception(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="conversations.not_found",
+        )
+
+    turns = list(
+        db.scalars(
+            select(ConversationTurn)
+            .where(ConversationTurn.conversation_id == conversation.id)
+            .order_by(ConversationTurn.seq.asc())
+            .with_for_update()
+        )
+    )
+    try:
+        rewrite_plan = plan_conversation_tail_rewrite(
+            turns=turns,
+            target_turn_id=target_turn_id,
+            from_seq=from_seq,
+            expected_tail_turn_id=expected_tail_turn_id,
+            expected_tail_seq=expected_tail_seq,
+            persist_user_turn=persist_user_turn,
+            replacement_user_content=replacement_user_content,
+            expected_retry_user_content=expected_retry_user_content,
+            current_title=conversation.title,
+        )
+    except ConversationTailRewriteError as exc:
+        raise localized_http_exception(
+            status_code=status.HTTP_409_CONFLICT,
+            code=exc.code,
+        ) from exc
+
+    result = db.execute(
+        delete(ConversationTurn).where(
+            ConversationTurn.conversation_id == conversation.id,
+            ConversationTurn.seq >= rewrite_plan.from_seq,
+        )
+    )
+    if int(result.rowcount or 0) <= 0:
+        raise localized_http_exception(
+            status_code=status.HTTP_409_CONFLICT,
+            code="ai.conversation_rewrite_seq_missing",
+        )
+
+    now = utcnow_naive()
+    if rewrite_plan.replacement_user_turn is not None:
+        replacement = rewrite_plan.replacement_user_turn
+        db.add(
+            ConversationTurn(
+                id=replacement.id,
+                conversation_id=conversation.id,
+                seq=replacement.seq,
+                role="user",
+                content=replacement.content,
+            )
+        )
+        if replacement.next_title is not None:
+            conversation.title = replacement.next_title
+    conversation.updated_at = now
+    db.commit()
+    db.expire(conversation, ["turns"])
+    db.refresh(conversation)
+    return conversation
+
+
 _MAX_APPEND_RETRIES = 3
 
 
@@ -299,6 +470,74 @@ def append_turn(
     raise last_error
 
 
+def stage_turn(
+    db: Session,
+    *,
+    conversation: Conversation,
+    role: str,
+    content: str,
+    meta: dict[str, Any] | None = None,
+    turn_id: str | None = None,
+) -> ConversationTurn:
+    """Stage a turn without committing the surrounding transaction.
+
+    This is reserved for workflows that must atomically create a conversation
+    placeholder together with their durable run/outbox records. Callers must
+    already hold the conversation live-run lock and own commit/rollback.
+    """
+
+    db.execute(
+        select(Conversation.id)
+        .where(Conversation.id == conversation.id)
+        .with_for_update()
+    ).scalar_one()
+    next_seq = db.execute(
+        select(func.coalesce(func.max(ConversationTurn.seq), -1) + 1).where(
+            ConversationTurn.conversation_id == conversation.id
+        )
+    ).scalar_one()
+    turn = ConversationTurn(
+        id=turn_id or _generate_id(),
+        conversation_id=conversation.id,
+        seq=int(next_seq),
+        role=role,
+        content=content,
+        meta=meta,
+    )
+    db.add(turn)
+    conversation.updated_at = utcnow_naive()
+    db.add(conversation)
+    db.flush()
+    return turn
+
+
+def update_staged_or_persisted_turn(
+    db: Session,
+    *,
+    turn_id: str,
+    content: str,
+    meta: dict[str, Any] | None,
+) -> ConversationTurn:
+    """Update the server-owned placeholder for a durable background run."""
+
+    turn = db.scalar(
+        select(ConversationTurn)
+        .where(ConversationTurn.id == turn_id)
+        .with_for_update()
+    )
+    if turn is None or turn.role != "assistant":
+        raise LookupError(f"assistant conversation turn not found: {turn_id}")
+    turn.content = content
+    turn.meta = meta
+    conversation = db.get(Conversation, turn.conversation_id)
+    if conversation is not None:
+        conversation.updated_at = utcnow_naive()
+        db.add(conversation)
+    db.add(turn)
+    db.flush()
+    return turn
+
+
 def autotitle_from_turn(
     db: Session,
     *,
@@ -313,8 +552,8 @@ def autotitle_from_turn(
     """
     if conversation.title.strip():
         return
-    snippet = first_user_content.strip().replace("\n", " ")
+    snippet = auto_title_preview(first_user_content)
     if not snippet:
         return
-    conversation.title = snippet[:TITLE_AUTO_PREVIEW_LEN]
+    conversation.title = snippet
     db.commit()

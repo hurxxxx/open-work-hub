@@ -3,30 +3,62 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from io import BytesIO
+import logging
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Query, Response, UploadFile, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 
 from ai_do_api.core.db import get_db_session
 from ai_do_api.core.i18n import localized_http_exception
 from ai_do_api.core.settings import get_settings
 from ai_do_api.core.storage import get_minio_client
-from ai_do_api.domains.auth.access import resolve_team_role
 from ai_do_api.domains.auth.dependencies import require_admin_context, require_current_user
-from ai_do_api.domains.auth.models import Team, User, Workspace
+from ai_do_api.domains.auth.models import User
 from ai_do_api.domains.auth.security import new_id
-from ai_do_api.domains.docs.models import DocMeetingAccess, NativeDocPage, NativeDocUserShare
-from ai_do_api.domains.docs.registry import ContainerRef, project_container_access
+from ai_do_api.domains.media.lifecycle import (
+    apply_media_links,
+    build_media_upload_record,
+    media_upload_response_payload,
+    plan_orphan_media_cleanup,
+)
 from ai_do_api.domains.media.models import MediaFile
-from ai_do_api.domains.media.service import MEDIA_ID_PATTERN, can_link_unlinked_media
+from ai_do_api.domains.media.object_storage import (
+    MEDIA_OBJECT_STREAM_CHUNK_SIZE,
+    MediaObjectNotFoundError,
+    MediaObjectReadError,
+    MediaObjectStorage,
+)
+from ai_do_api.domains.media.resource_access import (
+    can_resolve_media,
+    ensure_media_link_resource_access,
+    media_ids_from_urls,
+)
+from ai_do_api.domains.media.proxy_urls import (
+    build_media_proxy_url,
+    is_media_proxy_url_expired,
+    is_valid_media_proxy_signature,
+)
 
 MAX_MEDIA_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
 ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml"}
 
 router = APIRouter(prefix="/media", tags=["media"])
+public_router = APIRouter(prefix="/media", tags=["media"])
+MEDIA_PROXY_CHUNK_SIZE = MEDIA_OBJECT_STREAM_CHUNK_SIZE
+logger = logging.getLogger(__name__)
+
+
+def _media_object_storage() -> MediaObjectStorage:
+    settings = get_settings()
+    return MediaObjectStorage(
+        bucket_name=settings.minio_bucket,
+        client=get_minio_client(),
+    )
+
 
 # ── Upload ────────────────────────────────────────────────────────────
 
@@ -58,20 +90,18 @@ async def upload_media(
             limit_mb=10,
         )
 
-    settings = get_settings()
-    client = get_minio_client()
+    storage = _media_object_storage()
     media_id = new_id()
-    filename = file.filename or "unnamed"
-    storage_key = f"media/{current_user.id}/{media_id}/{filename}"
 
     # DB first, then MinIO — avoids permanently uncleanable orphans
-    media = MediaFile(
-        id=media_id,
-        storage_key=storage_key,
-        filename=filename,
-        content_type=file.content_type or "application/octet-stream",
-        size_bytes=len(data),
-        uploaded_by_id=current_user.id,
+    media = build_media_upload_record(
+        {
+            "media_id": media_id,
+            "user_id": current_user.id,
+            "filename": file.filename,
+            "content_type": file.content_type,
+            "size_bytes": len(data),
+        }
     )
     db.add(media)
     try:
@@ -84,12 +114,10 @@ async def upload_media(
         )
 
     try:
-        client.put_object(
-            settings.minio_bucket,
-            storage_key,
-            BytesIO(data),
-            length=len(data),
-            content_type=file.content_type or "application/octet-stream",
+        storage.put_bytes(
+            storage_key=media.storage_key,
+            data=data,
+            content_type=file.content_type,
         )
     except Exception:
         db.rollback()
@@ -103,14 +131,14 @@ async def upload_media(
     except Exception:
         db.rollback()
         try:
-            client.remove_object(settings.minio_bucket, storage_key)
+            storage.remove(storage_key=media.storage_key)
         except Exception:
             pass
         raise localized_http_exception(
             status_code=500,
             code="media.save_metadata_failed",
         )
-    return MediaUploadResponse(id=media_id, url=f"media:{media_id}")
+    return MediaUploadResponse(**media_upload_response_payload(media_id))
 
 
 # ── Resolve ───────────────────────────────────────────────────────────
@@ -130,73 +158,80 @@ def resolve_media_urls(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> MediaResolveResponse:
-    """Resolve media:{id} URLs to presigned GET URLs for rendering."""
-    media_ids: list[str] = []
-    for url in payload.urls:
-        m = MEDIA_ID_PATTERN.fullmatch(url)
-        if m:
-            media_ids.append(m.group(1))
+    """Resolve media:{id} URLs to same-origin proxy URLs for rendering."""
+    media_ids = media_ids_from_urls(payload.urls)
 
     if not media_ids:
         return MediaResolveResponse(resolved={})
 
-    media_files = db.scalars(
-        select(MediaFile).where(MediaFile.id.in_(media_ids))
-    ).all()
+    media_files = db.scalars(select(MediaFile).where(MediaFile.id.in_(media_ids))).all()
 
-    settings = get_settings()
-    client = get_minio_client()
     resolved: dict[str, str] = {}
+    settings = get_settings()
 
     for media in media_files:
-        if not _can_resolve(db, current_user, media):
+        if not can_resolve_media(db, current_user, media):
             continue
-        presigned = client.presigned_get_object(
-            settings.minio_bucket,
-            media.storage_key,
-            expires=timedelta(hours=1),
+        resolved[f"media:{media.id}"] = build_media_proxy_url(
+            media,
+            api_prefix=settings.api_prefix,
+            secret=settings.minio_secret_key,
         )
-        resolved[f"media:{media.id}"] = presigned
 
     return MediaResolveResponse(resolved=resolved)
 
 
-def _can_resolve(db: Session, user: User, media: MediaFile) -> bool:
-    """Check if the user is allowed to resolve this media file."""
-    # Unlinked media: only the uploader can resolve
-    if media.resource_type is None:
-        return media.uploaded_by_id == user.id
-    # Linked to an issue: check task list membership
-    if media.resource_type == "issue":
-        from ai_do_api.domains.pms.models import Issue, TaskList
+@public_router.get("/content/{media_id}")
+def proxy_media_content(
+    media_id: str,
+    expires: int = Query(..., ge=1),
+    signature: str = Query(..., min_length=1),
+    db: Session = Depends(get_db_session),
+) -> StreamingResponse:
+    """Serve a short-lived resolved media URL through the API origin."""
+    media = db.scalar(select(MediaFile).where(MediaFile.id == media_id))
+    if media is None:
+        raise localized_http_exception(status_code=404, code="media.not_found")
+    if is_media_proxy_url_expired(expires):
+        raise localized_http_exception(status_code=403, code="media.proxy_url_expired")
+    if not is_valid_media_proxy_signature(
+        media,
+        expires=expires,
+        signature=signature,
+        secret=get_settings().minio_secret_key,
+    ):
+        raise localized_http_exception(status_code=403, code="media.proxy_url_invalid")
 
-        issue = db.scalar(select(Issue).where(Issue.id == media.resource_id))
-        if issue is None:
-            return False
-        task_list = db.scalar(select(TaskList).where(TaskList.id == issue.list_id))
-        return _has_space_access(db, user, task_list.team_id if task_list else None)
-    if media.resource_type == "docs_native_page":
-        return _can_access_docs_native_page(db, user, media.resource_id, require_edit=False)
-    # Unknown resource type: allow uploader only
-    return media.uploaded_by_id == user.id
-
-
-def _has_space_access(db: Session, user: User, team_id: str | None) -> bool:
-    if team_id is None:
-        return False
-    team = db.scalar(
-        select(Team)
-        .options(joinedload(Team.workspace))
-        .where(
-            Team.id == team_id,
-            Team.active.is_(True),
-            Team.trashed_at.is_(None),
-            Team.workspace.has(Workspace.active.is_(True)),
+    storage = _media_object_storage()
+    try:
+        stream = storage.open_stream(
+            storage_key=media.storage_key,
+            chunk_size=MEDIA_PROXY_CHUNK_SIZE,
         )
+    except MediaObjectNotFoundError as exc:
+        logger.warning(
+            "media_storage_object_missing",
+            extra={"media_id": media.id, "storage_key": media.storage_key},
+        )
+        raise localized_http_exception(status_code=404, code="media.not_found") from exc
+    except MediaObjectReadError as exc:
+        logger.warning(
+            "media_storage_download_failed",
+            extra={"media_id": media.id, "storage_key": media.storage_key},
+            exc_info=True,
+        )
+        raise localized_http_exception(
+            status_code=502, code="media.storage_download_failed"
+        ) from exc
+
+    return StreamingResponse(
+        stream,
+        media_type=media.content_type or "application/octet-stream",
+        headers={
+            "Cache-Control": "private, max-age=300",
+            "Content-Disposition": f"inline; filename*=UTF-8''{quote(media.filename, safe='')}",
+        },
     )
-    if team is None:
-        return False
-    return resolve_team_role(db, user, team) is not None
 
 
 # ── Link ──────────────────────────────────────────────────────────────
@@ -217,16 +252,12 @@ def link_media(
     if not payload.media_ids:
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
-    # Validate resource access
-    if payload.resource_type == "issue":
-        _ensure_issue_access(db, current_user, payload.resource_id)
-    elif payload.resource_type == "docs_native_page":
-        _ensure_docs_native_page_access(db, current_user, payload.resource_id)
-    else:
-        raise localized_http_exception(
-            status_code=400,
-            code="media.unsupported_resource_type",
-        )
+    ensure_media_link_resource_access(
+        db,
+        current_user,
+        payload.resource_type,
+        payload.resource_id,
+    )
 
     media_files = db.scalars(
         select(MediaFile).where(
@@ -235,109 +266,10 @@ def link_media(
         )
     ).all()
 
-    for media in media_files:
-        if not can_link_unlinked_media(current_user, media):
-            continue
-        media.resource_type = payload.resource_type
-        media.resource_id = payload.resource_id
+    apply_media_links(media_files, current_user, payload.resource_type, payload.resource_id)
 
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-def _ensure_issue_access(db: Session, user: User, issue_id: str) -> None:
-    """Verify the user has access to the issue's task list."""
-    from ai_do_api.domains.pms.models import Issue, TaskList
-
-    issue = db.scalar(select(Issue).where(Issue.id == issue_id))
-    if issue is None:
-        raise localized_http_exception(status_code=404, code="pms.issue_not_found")
-    task_list = db.scalar(select(TaskList).where(TaskList.id == issue.list_id))
-    if not _has_space_access(db, user, task_list.team_id if task_list else None):
-        raise localized_http_exception(
-            status_code=403,
-            code="media.task_list_space_access_required",
-        )
-
-
-def _can_access_docs_native_page(
-    db: Session,
-    user: User,
-    page_id: str,
-    *,
-    require_edit: bool,
-) -> bool:
-    page = db.scalar(
-        select(NativeDocPage)
-        .options(joinedload(NativeDocPage.doc))
-        .where(NativeDocPage.id == page_id)
-    )
-    if page is None or page.doc is None or page.trashed_at is not None or page.doc.trashed_at is not None:
-        return False
-    if page.doc.owner_id == user.id:
-        return True
-
-    direct_share = db.scalar(
-        select(NativeDocUserShare).where(
-            NativeDocUserShare.doc_id == page.doc_id,
-            NativeDocUserShare.user_id == user.id,
-        )
-    )
-    meeting_grant = db.scalar(
-        select(DocMeetingAccess).where(
-            DocMeetingAccess.doc_id == page.doc_id,
-            DocMeetingAccess.user_id == user.id,
-            DocMeetingAccess.revoked_at.is_(None),
-            (
-                DocMeetingAccess.expires_at.is_(None)
-                | (DocMeetingAccess.expires_at > datetime.now(UTC).replace(tzinfo=None))
-            ),
-        )
-    )
-
-    access_levels = [
-        level
-        for level in (
-            getattr(direct_share, "access_level", None),
-            getattr(meeting_grant, "access_level", None),
-        )
-        if level in {"read", "edit"}
-    ]
-    workspace = db.scalar(
-        select(Workspace).where(
-            Workspace.id == page.doc.workspace_id,
-            Workspace.active.is_(True),
-        )
-    )
-    if workspace is not None:
-        for container in page.doc.containers:
-            projection = project_container_access(
-                db=db,
-                user=user,
-                workspace=workspace,
-                ref=ContainerRef(
-                    app=container.container_app,
-                    type=container.container_type,
-                    id=container.container_id,
-                ),
-            )
-            if projection.can_manage or projection.can_edit:
-                access_levels.append("edit")
-            elif projection.can_view:
-                access_levels.append("read")
-    if not access_levels:
-        return False
-    if require_edit:
-        return "edit" in access_levels
-    return True
-
-
-def _ensure_docs_native_page_access(db: Session, user: User, page_id: str) -> None:
-    if not _can_access_docs_native_page(db, user, page_id, require_edit=True):
-        raise localized_http_exception(
-            status_code=403,
-            code="docs.doc_edit_access_required",
-        )
 
 
 # ── Cleanup ───────────────────────────────────────────────────────────
@@ -361,19 +293,16 @@ def cleanup_orphan_media(
         .limit(500)
     ).all()
 
-    settings = get_settings()
-    client = get_minio_client()
-    deleted = 0
-    failed = 0
+    removal_result = _media_object_storage().remove_many(
+        orphan.storage_key for orphan in orphans
+    )
+    cleanup_plan = plan_orphan_media_cleanup(orphans, removal_result)
 
-    for orphan in orphans:
-        try:
-            client.remove_object(settings.minio_bucket, orphan.storage_key)
-        except Exception:
-            failed += 1
-            continue  # Keep DB row so we can retry later
+    for orphan in cleanup_plan.rows_to_delete:
         db.delete(orphan)
-        deleted += 1
 
     db.commit()
-    return CleanupResponse(deleted_count=deleted, failed_count=failed)
+    return CleanupResponse(
+        deleted_count=cleanup_plan.deleted_count,
+        failed_count=cleanup_plan.failed_count,
+    )

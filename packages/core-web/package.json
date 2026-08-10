@@ -1,0 +1,49 @@
+{
+  "name": "@ai-do/core-web",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./app-registry": {
+      "types": "./dist/app-registry.d.ts",
+      "import": "./dist/app-registry.js"
+    },
+    "./admin": {
+      "types": "./dist/admin.d.ts",
+      "import": "./dist/admin.js"
+    },
+    "./background-work": {
+      "types": "./dist/background-work.d.ts",
+      "import": "./dist/background-work.js"
+    },
+    "./mobile-shell-menu": {
+      "types": "./dist/mobile-shell-menu.d.ts",
+      "import": "./dist/mobile-shell-menu.js"
+    },
+    "./shell-navigation": {
+      "types": "./dist/shell-navigation.d.ts",
+      "import": "./dist/shell-navigation.js"
+    },
+    "./sub-sidebar-frame": {
+      "types": "./dist/sub-sidebar-frame.d.ts",
+      "import": "./dist/sub-sidebar-frame.js"
+    },
+    "./workspace-access": {
+      "types": "./dist/workspace-access.d.ts",
+      "import": "./dist/workspace-access.js"
+    }
+  },
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "pnpm run clean && tsc -p tsconfig.package.json",
+    "prepack": "pnpm run build"
+  }
+}

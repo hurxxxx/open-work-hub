@@ -1,0 +1,1 @@
+export const WHITEBOARD_PREVIEW_BACKGROUND_COLOR = '#ffffff';

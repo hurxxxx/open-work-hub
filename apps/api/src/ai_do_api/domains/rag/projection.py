@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-from ai_do_api.domains.rag.contracts import RagChunk, RagProjection
+from ai_do_api.domains.rag.chunking import DEFAULT_TARGET_CHARS, default_korean_aware_chunks
+from ai_do_api.domains.rag.contracts import RagChunk, RagProjection, RagScopeKind
+from ai_do_api.domains.rag.projection_builders import build_projection_record
 
 
 def build_projection(
     *,
-    workspace_id: str,
+    workspace_id: str | None,
+    scope_kind: RagScopeKind = RagScopeKind.WORKSPACE,
     resource_type: str,
     resource_id: str,
     source_kind: str,
@@ -15,11 +18,11 @@ def build_projection(
     owner_label: str | None = None,
     visibility_refs: list[str] | None = None,
     metadata: dict[str, object] | None = None,
+    chunks: list[RagChunk] | None = None,
 ) -> RagProjection:
-    resolved_metadata = dict(metadata or {})
-    resolved_metadata.setdefault("content_modality", "text")
-    return RagProjection(
+    return build_projection_record(
         workspace_id=workspace_id,
+        scope_kind=scope_kind,
         resource_type=resource_type,
         resource_id=resource_id,
         source_kind=source_kind,
@@ -27,57 +30,17 @@ def build_projection(
         summary=summary,
         text_content=text_content,
         owner_label=owner_label,
-        visibility_refs=list(visibility_refs or []),
-        metadata=resolved_metadata,
+        visibility_refs=visibility_refs,
+        metadata=metadata,
+        chunks=chunks,
     )
 
 
 def projection_to_chunks(
     projection: RagProjection,
     *,
-    max_chars: int = 800,
+    max_chars: int = DEFAULT_TARGET_CHARS,
 ) -> list[RagChunk]:
-    raw_text = projection.text_content.strip() or (projection.summary or "").strip()
-    if not raw_text:
-        raw_text = projection.title or projection.resource_id
-
-    chunks: list[RagChunk] = []
-    cursor = 0
-    index = 0
-    while cursor < len(raw_text):
-        piece = raw_text[cursor : cursor + max_chars].strip()
-        if piece:
-            chunks.append(
-                RagChunk(
-                    chunk_id=f"{projection.resource_id}:{index}",
-                    text=piece,
-                    summary=(piece[:160] + "...") if len(piece) > 160 else piece,
-                    metadata={
-                        "resource_type": projection.resource_type,
-                        "resource_id": projection.resource_id,
-                        "source_kind": projection.source_kind,
-                        "workspace_id": projection.workspace_id,
-                        "chunk_index": index,
-                    },
-                )
-            )
-            index += 1
-        cursor += max_chars
-
-    if chunks:
-        return chunks
-
-    return [
-        RagChunk(
-            chunk_id=f"{projection.resource_id}:0",
-            text=projection.resource_id,
-            summary=projection.title or projection.resource_id,
-            metadata={
-                "resource_type": projection.resource_type,
-                "resource_id": projection.resource_id,
-                "source_kind": projection.source_kind,
-                "workspace_id": projection.workspace_id,
-                "chunk_index": 0,
-            },
-        )
-    ]
+    if projection.chunks:
+        return list(projection.chunks)
+    return default_korean_aware_chunks(projection, target_chars=max_chars)

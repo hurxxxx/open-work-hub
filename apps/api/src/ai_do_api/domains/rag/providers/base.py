@@ -28,6 +28,8 @@ class VectorIndexClient(Protocol):
         sparse_enabled: bool = True,
     ) -> None: ...
 
+    def delete_collection(self, *, collection: str) -> bool: ...
+
     def upsert_chunks(
         self,
         *,
@@ -44,15 +46,28 @@ class VectorIndexClient(Protocol):
         chunk_index: int,
     ) -> int: ...
 
-    def query(self, *, request: RagVectorSearchRequest) -> list[RagVectorSearchHit]: ...
+    def query(
+        self,
+        *,
+        request: RagVectorSearchRequest,
+        timeout_seconds: float | None = None,
+    ) -> list[RagVectorSearchHit]: ...
 
 
 class EmbeddingClient(Protocol):
     def healthcheck(self) -> RagProviderHealth: ...
 
-    def embed_texts(self, texts: list[str]) -> list[list[float]]: ...
+    def embed_texts(
+        self,
+        texts: list[str],
+        timeout_seconds: float | None = None,
+    ) -> list[list[float]]: ...
 
-    def embed_query(self, text: str) -> list[float]: ...
+    def embed_query(
+        self,
+        text: str,
+        timeout_seconds: float | None = None,
+    ) -> list[float]: ...
 
 
 class OcrClient(Protocol):
@@ -75,6 +90,7 @@ class RerankClient(Protocol):
         *,
         query: str,
         hits: list[RagVectorSearchHit],
+        timeout_seconds: float | None = None,
     ) -> list[RagVectorSearchHit]: ...
 
 

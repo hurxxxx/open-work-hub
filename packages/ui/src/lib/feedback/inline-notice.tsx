@@ -1,24 +1,22 @@
-import type { ReactNode } from 'react';
+import type { HTMLAttributes, ReactNode } from 'react';
 
+import { uiToneClasses } from '../tone-classes';
 import { cn } from '../utils/cn';
 
 type NoticeTone = 'info' | 'success' | 'warning' | 'danger';
 
 const toneClasses: Record<NoticeTone, string> = {
-  info: 'border-[var(--ui-color-border)] bg-ui-surface-subtle text-[var(--ui-color-ink-muted)]',
-  success:
-    'border-transparent bg-[color-mix(in_oklab,var(--ui-color-success)_12%,white)] text-[var(--ui-color-success)]',
-  warning:
-    'border-transparent bg-[color-mix(in_oklab,var(--ui-color-warning)_14%,white)] text-[var(--ui-color-warning)]',
-  danger:
-    'border-transparent bg-[color-mix(in_oklab,var(--ui-color-danger)_14%,white)] text-[var(--ui-color-danger)]',
+  info: uiToneClasses.neutral,
+  success: uiToneClasses.success,
+  warning: uiToneClasses.warning,
+  danger: uiToneClasses.danger,
 };
 
-export interface InlineNoticeProps {
+export interface InlineNoticeProps
+  extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
   title?: ReactNode;
   children: ReactNode;
   tone?: NoticeTone;
-  className?: string;
 }
 
 export function InlineNotice({
@@ -26,11 +24,13 @@ export function InlineNotice({
   children,
   tone = 'info',
   className,
+  ...props
 }: InlineNoticeProps) {
   return (
     <div
+      {...props}
       className={cn(
-        'grid gap-1 rounded-[var(--ui-radius-md)] border px-3 py-2 text-sm',
+        'grid gap-1 rounded-[var(--ui-radius-md)] border px-3 py-2 text-[length:var(--ui-text-body)]',
         toneClasses[tone],
         className,
       )}

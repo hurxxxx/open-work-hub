@@ -6,49 +6,58 @@ import { ExternalLink, Loader2, Square } from 'lucide-react';
 import { useToast } from '@ai-do/ui/providers/toast-provider';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
+import {
+  addCancellingBackgroundWorkKey,
+  backgroundWorkItemKey,
+  buildBackgroundWorkSessionSnapshot,
+  mergeBackgroundWorkSourceListResults,
+  removeCancellingBackgroundWorkKey,
+  resolveBackgroundWorkCadence,
+  selectActiveBackgroundWorkItems,
+} from './background-work-session';
+import type {
+  BackgroundWorkItem,
+  BackgroundWorkSource,
+  BackgroundWorkStatus,
+  BackgroundWorkToastEvent,
+} from './background-work-session';
 
-export type BackgroundWorkStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+export type { BackgroundWorkItem, BackgroundWorkSource, BackgroundWorkStatus };
 
-export interface BackgroundWorkItem {
-  id: string;
-  sourceId: string;
-  kind: string;
-  title: string;
-  description?: string;
-  status: BackgroundWorkStatus;
-  href?: string;
-  cancellable?: boolean;
-  updatedAt: string;
-}
-
-export interface BackgroundWorkSource {
-  id: string;
-  pollIntervalMs?: number;
-  list: (context: {
-    token: string;
-    workspaceSlug: string;
+function publishBackgroundWorkToast(
+  event: BackgroundWorkToastEvent,
+  {
+    t,
+    toast,
+  }: {
     t: TFunction;
-  }) => Promise<BackgroundWorkItem[]>;
-  cancel?: (context: {
-    token: string;
-    workspaceSlug: string;
-    item: BackgroundWorkItem;
-  }) => Promise<void>;
-}
-
-function isActiveStatus(status: BackgroundWorkStatus): boolean {
-  return status === 'queued' || status === 'running';
-}
-
-function itemKey(item: BackgroundWorkItem): string {
-  return `${item.sourceId}:${item.id}`;
+    toast: ReturnType<typeof useToast>;
+  },
+) {
+  if (event.type === 'completed') {
+    toast.success(
+      t('shell:backgroundWork.completedTitle'),
+      t('shell:backgroundWork.completedDescription', { title: event.item.title }),
+    );
+  } else if (event.type === 'failed') {
+    toast.error(
+      t('shell:backgroundWork.failedTitle'),
+      event.item.description ||
+        t('shell:backgroundWork.failedDescription', { title: event.item.title }),
+    );
+  } else {
+    toast.info(
+      t('shell:backgroundWork.cancelledTitle'),
+      t('shell:backgroundWork.cancelledDescription', { title: event.item.title }),
+    );
+  }
 }
 
 export function BackgroundWorkProvider({
   sources,
   workspaceSlug,
 }: {
-  sources: BackgroundWorkSource[];
+  sources: readonly BackgroundWorkSource[];
   workspaceSlug: string | null;
 }) {
   const { token } = useAuth();
@@ -57,26 +66,42 @@ export function BackgroundWorkProvider({
   const navigate = useNavigate();
   const [items, setItems] = useState<BackgroundWorkItem[]>([]);
   const [cancellingKeys, setCancellingKeys] = useState<Set<string>>(() => new Set());
-  const previousStatuses = useRef<Map<string, BackgroundWorkStatus>>(new Map());
+  const previousStatuses =
+    useRef<Map<string, BackgroundWorkStatus> | null>(null);
+  const previousItemsBySource =
+    useRef<Map<string, BackgroundWorkItem[]> | null>(null);
+  if (previousStatuses.current === null) {
+    previousStatuses.current = new Map();
+  }
+  if (previousItemsBySource.current === null) {
+    previousItemsBySource.current = new Map();
+  }
   const sourceById = useMemo(
     () => new Map(sources.map((source) => [source.id, source])),
     [sources],
   );
-  const pollIntervalMs = useMemo(
-    () => Math.min(...sources.map((source) => source.pollIntervalMs ?? 5000), 5000),
-    [sources],
-  );
+  const cadence = useMemo(() => resolveBackgroundWorkCadence(sources), [sources]);
+  const canSync = Boolean(token && workspaceSlug && sources.length > 0);
 
   useEffect(() => {
     if (!token || !workspaceSlug || sources.length === 0) {
+      previousStatuses.current?.clear();
+      previousItemsBySource.current?.clear();
       setItems([]);
-      previousStatuses.current.clear();
       return;
     }
 
     let active = true;
+    let timeoutId: number | null = null;
     const activeToken = token;
     const activeWorkspaceSlug = workspaceSlug;
+
+    function scheduleNext(delayMs: number) {
+      if (!active) return;
+      timeoutId = window.setTimeout(() => {
+        void sync();
+      }, delayMs);
+    }
 
     async function sync() {
       const settled = await Promise.allSettled(
@@ -89,66 +114,46 @@ export function BackgroundWorkProvider({
         ),
       );
       if (!active) return;
-      const nextItems = settled.flatMap((result) =>
-        result.status === 'fulfilled' ? result.value : [],
-      );
-      const nextStatuses = new Map<string, BackgroundWorkStatus>();
-      for (const item of nextItems) {
-        const key = itemKey(item);
-        const previous = previousStatuses.current.get(key);
-        if (previous && isActiveStatus(previous) && !isActiveStatus(item.status)) {
-          if (item.status === 'succeeded') {
-            toast.success(
-              t('shell:backgroundWork.completedTitle'),
-              t('shell:backgroundWork.completedDescription', { title: item.title }),
-            );
-          } else if (item.status === 'failed') {
-            toast.error(
-              t('shell:backgroundWork.failedTitle'),
-              item.description || t('shell:backgroundWork.failedDescription', { title: item.title }),
-            );
-          } else if (item.status === 'cancelled') {
-            toast.info(
-              t('shell:backgroundWork.cancelledTitle'),
-              t('shell:backgroundWork.cancelledDescription', { title: item.title }),
-            );
-          }
-        }
-        nextStatuses.set(key, item.status);
+      const sourceItems = mergeBackgroundWorkSourceListResults({
+        previousItemsBySource: previousItemsBySource.current ?? new Map(),
+        settled,
+        sources,
+      });
+      const snapshot = buildBackgroundWorkSessionSnapshot({
+        items: sourceItems.items,
+        previousStatuses: previousStatuses.current ?? new Map(),
+        cadence,
+      });
+      for (const event of snapshot.toastEvents) {
+        publishBackgroundWorkToast(event, { t, toast });
       }
-      previousStatuses.current = nextStatuses;
-      setItems(nextItems);
+      previousItemsBySource.current = sourceItems.itemsBySource;
+      previousStatuses.current = snapshot.nextStatuses;
+      setItems(snapshot.items);
+      scheduleNext(snapshot.nextPollDelayMs);
     }
 
     void sync();
-    const interval = window.setInterval(() => {
-      void sync();
-    }, pollIntervalMs);
 
     return () => {
       active = false;
-      window.clearInterval(interval);
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
     };
-  }, [pollIntervalMs, sources, t, toast, token, workspaceSlug]);
+  }, [cadence, sources, t, toast, token, workspaceSlug]);
 
-  const activeItems = items
-    .filter((item) => isActiveStatus(item.status))
-    .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime());
+  const activeItems = canSync ? selectActiveBackgroundWorkItems(items) : [];
 
   async function cancelItem(item: BackgroundWorkItem) {
     if (!token || !workspaceSlug) return;
     const source = sourceById.get(item.sourceId);
     if (!source?.cancel) return;
-    const key = itemKey(item);
-    setCancellingKeys((current) => new Set(current).add(key));
+    setCancellingKeys((current) => addCancellingBackgroundWorkKey(current, item));
     try {
       await source.cancel({ token, workspaceSlug, item });
     } finally {
-      setCancellingKeys((current) => {
-        const next = new Set(current);
-        next.delete(key);
-        return next;
-      });
+      setCancellingKeys((current) => removeCancellingBackgroundWorkKey(current, item));
     }
   }
 
@@ -169,10 +174,10 @@ export function BackgroundWorkProvider({
       </header>
       <div className="max-h-72 overflow-y-auto">
         {activeItems.map((item) => {
-          const key = itemKey(item);
+          const key = backgroundWorkItemKey(item);
           const cancelling = cancellingKeys.has(key);
           return (
-            <div key={key} className="flex items-start gap-2 border-b border-app-border px-3 py-3 last:border-b-0">
+            <div key={key} className="flex items-start gap-2 border-b border-app-border p-3 last:border-b-0">
               <Loader2 size={15} className="mt-0.5 shrink-0 animate-spin text-app-accent" />
               <button
                 type="button"

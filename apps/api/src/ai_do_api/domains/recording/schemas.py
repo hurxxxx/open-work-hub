@@ -12,15 +12,15 @@ RecordingDocStatus = Literal["pending", "creating", "done", "failed"]
 RecordingMeetingInsightStatus = Literal["none", "pending", "extracting", "done", "failed"]
 
 
-class RecordingContainerOut(BaseModel):
+class RecordingTargetOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
     recording_id: str
-    container_app: str
-    container_type: str
-    container_id: str
-    container_title: str | None = None
+    target_app: str
+    target_type: str
+    target_id: str
+    target_title: str | None = None
     is_primary: bool
     sort_order: int
     added_by_id: str
@@ -55,7 +55,7 @@ class RecordingOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     trashed_at: datetime | None
-    containers: list[RecordingContainerOut] = Field(default_factory=list)
+    targets: list[RecordingTargetOut] = Field(default_factory=list)
 
 
 class RecordingListResponse(BaseModel):
@@ -68,9 +68,9 @@ class RecordingUploadInitRequest(BaseModel):
     idempotency_key: str = Field(..., min_length=1, max_length=80)
     mime_type: str = Field(..., min_length=1, max_length=120)
     title: str | None = Field(default=None, max_length=200)
-    initial_container_app: str | None = Field(default=None, min_length=1, max_length=64)
-    initial_container_type: str | None = Field(default=None, min_length=1, max_length=64)
-    initial_container_id: str | None = Field(default=None, min_length=1, max_length=128)
+    initial_target_app: str | None = Field(default=None, min_length=1, max_length=64)
+    initial_target_type: str | None = Field(default=None, min_length=1, max_length=64)
+    initial_target_id: str | None = Field(default=None, min_length=1, max_length=128)
     linked_task_id: str | None = Field(default=None, max_length=36)
 
 
@@ -84,9 +84,9 @@ class RecordingUploadOut(BaseModel):
     bytes_received: int
     chunk_count: int
     highest_seq: int
-    initial_container_app: str | None
-    initial_container_type: str | None
-    initial_container_id: str | None
+    initial_target_app: str | None
+    initial_target_type: str | None
+    initial_target_id: str | None
     linked_task_id: str | None = None
     started_at: datetime
     last_chunk_at: datetime
@@ -118,11 +118,11 @@ class RecordingPlaybackResponse(BaseModel):
     expires_at: datetime
 
 
-class RecordingContainerCreateRequest(BaseModel):
+class RecordingTargetCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    container_app: str = Field(..., min_length=1, max_length=64)
-    container_type: str = Field(..., min_length=1, max_length=64)
-    container_id: str = Field(..., min_length=1, max_length=128)
+    target_app: str = Field(..., min_length=1, max_length=64)
+    target_type: str = Field(..., min_length=1, max_length=64)
+    target_id: str = Field(..., min_length=1, max_length=128)
     is_primary: bool = False
     sort_order: int | None = None

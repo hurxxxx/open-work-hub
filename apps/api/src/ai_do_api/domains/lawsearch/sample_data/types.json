@@ -1,0 +1,6 @@
+[
+  { "id": "law",        "name_ko": "법규",        "name_en": "Law",                  "icon": "", "order": 1, "desc": "정부 제정 법령, 강제력 있음" },
+  { "id": "regulation", "name_ko": "규제",        "name_en": "Regulation",           "icon": "", "order": 2, "desc": "정부 기관 규제·고시" },
+  { "id": "standard",   "name_ko": "자동차 표준", "name_en": "Industry Standard",    "icon": "", "order": 3, "desc": "산업 표준 (SAE·ISO·JIS·GB 등), 자발적 준수" },
+  { "id": "oem",        "name_ko": "OEM 규격",    "name_en": "OEM Specification",    "icon": "", "order": 4, "desc": "자동차 제조사 자체 표준 (납품 시 강제)" }
+]

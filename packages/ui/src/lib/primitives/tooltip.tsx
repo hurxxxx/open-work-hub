@@ -12,7 +12,10 @@ export function Tooltip({ content, children }: TooltipProps) {
       <TooltipPrimitive.Root>
         <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
         <TooltipPrimitive.Portal>
-          <TooltipPrimitive.Content className="z-[var(--ui-z-toast)] rounded-[var(--ui-radius-sm)] bg-ui-ink px-2 py-1 text-xs text-white shadow-[var(--ui-shadow-lg)]">
+          <TooltipPrimitive.Content
+            className="z-[var(--ui-z-toast)] max-w-[min(22rem,calc(100vw-2rem))] rounded-[var(--ui-radius-sm)] border border-white/10 bg-[var(--ui-color-bg-strong)] px-2.5 py-1.5 text-[length:var(--ui-text-caption)] leading-snug text-white shadow-[var(--ui-shadow-lg)]"
+            sideOffset={6}
+          >
             {content}
           </TooltipPrimitive.Content>
         </TooltipPrimitive.Portal>

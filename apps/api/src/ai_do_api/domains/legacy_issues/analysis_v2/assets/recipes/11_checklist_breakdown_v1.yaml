@@ -1,0 +1,18 @@
+{
+  "recipe_id": "checklist_breakdown",
+  "version": 1,
+  "title": "차량 체크리스트 문서 분포",
+  "description": "선택한 차종·모듈·상태·원본 revision 기준별 체크리스트 문서 수를 집계한다.",
+  "result_shape": "table",
+  "counting_unit": "checklists",
+  "source_views": ["legacy_issue_analysis.vehicle_checklists_v1"],
+  "sql_template": "SELECT c.{{dimension}} AS dimension_value, COUNT(DISTINCT c.checklist_id) AS checklist_count, SUM(c.item_count) AS item_count FROM legacy_issue_analysis.vehicle_checklists_v1 AS c WHERE {{filters}} GROUP BY c.{{dimension}} ORDER BY checklist_count DESC, dimension_value LIMIT :limit",
+  "parameters": [
+    {"name": "dimension", "value_type": "string", "placement": "identifier", "description": "체크리스트 문서 집계 차원", "default": "vehicle_model", "allowed_values": ["vehicle_model", "vehicle_code", "module_key", "checklist_status", "source_revision_no"]},
+    {"name": "limit", "value_type": "integer", "placement": "bind", "description": "표시할 최대 그룹 수", "default": 100, "minimum": 1, "maximum": 500},
+    {"name": "vehicle_models", "value_type": "string_list", "placement": "filter", "description": "차종 목록", "column": "c.vehicle_model", "operator": "in"},
+    {"name": "module_keys", "value_type": "string_list", "placement": "filter", "description": "모듈 목록", "column": "c.module_key", "operator": "in"},
+    {"name": "statuses", "value_type": "string_list", "placement": "filter", "description": "체크리스트 상태 목록", "column": "c.checklist_status", "operator": "in"}
+  ],
+  "tags": ["checklist", "document", "group", "distribution"]
+}

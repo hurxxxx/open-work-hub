@@ -1,12 +1,30 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
-import { motion, AnimatePresence } from 'motion/react';
 import {
+  type ReactNode,
+  type SetStateAction,
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from 'react';
+import {
+  useParams,
+  Link,
+  Navigate,
+  useSearchParams,
+  useNavigate,
+  useLocation,
+} from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { LazyMotion, domAnimation, m, AnimatePresence } from 'motion/react';
+import { useConfirm } from '@ai-do/ui/feedback/confirm-dialog';
+import { usePrompt } from '@ai-do/ui/feedback/prompt-dialog';
+import { useToast } from '@ai-do/ui/providers/toast-provider';
+import {
+  Archive,
+  ArchiveRestore,
   Layout,
   Star,
-  Lock,
-  Settings,
   Plus,
   PencilRuler,
   List as ListIcon,
@@ -14,55 +32,65 @@ import {
   Calendar,
   Activity,
   Table,
-  Loader2,
   Download,
-  ChevronDown,
   MoreHorizontal,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
+  buildWorkspaceAppPath,
   getWorkspaceBySlug,
   getCurrentOrLastWorkspaceSlug,
   resolveDefaultWorkspaceAppPath,
 } from '@/src/platform/workspaces/workspace-utils';
 import {
   getPmsTaskList,
-  listPmsTaskLists,
+  listAllPmsTaskLists,
   listSpaces,
   listSpaceMembers,
-  listTaskListIssues,
+  listAllTaskListTasks,
   listTaskListMilestones,
   listTaskListLabels,
   listTaskListStatuses,
-  getIssueDetail,
-  updateIssue,
+  getTaskDetail,
+  createTaskListTask,
+  deletePmsTaskList,
+  deleteTask,
+  reorderTaskListTasks,
+  updateTask,
+  updatePmsTaskList,
   exportTaskListCsv,
-  type IssueFilterParams,
+  DEFAULT_PMS_TASK_SORT,
+  type TaskFilterParams,
   type PmsTaskList,
-  type PmsIssue,
+  type PmsTask,
   type PmsTaskListMember,
   type PmsSpace,
   type PmsMilestone,
   type PmsLabel,
   type PmsTaskListStatus,
+  type PmsTaskSort,
 } from '../api/pms-api';
 import {
-  createDefaultIssueFilterParams,
-  reconcileSelectedIssueIds,
+  createDefaultTaskFilterParams,
+  filterDefaultVisibleTasks,
+  hasSelectedCompletionStatus,
+  reconcileSelectedTaskIds,
+  setCompletionStatusesVisible,
+  withEffectiveTaskStatusFilter,
 } from '../api/pms-filters';
 
-import { OverviewView } from './OverviewView';
+import { SpaceTasksView } from './SpaceTasksView';
 import { ListView } from './ListView';
 import { BoardView } from './BoardView';
 import { CalendarView } from './CalendarView';
 import { GanttView } from './GanttView';
 import { TableView } from './TableView';
 import { TaskDetail } from './TaskDetail';
+import { TaskDetailModal } from './TaskDetailModal';
 import { NewTaskModal } from './NewTaskModal';
 import { AssignedToMeView } from './AssignedToMeView';
 import { TodayOverdueView } from './TodayOverdueView';
-import { PersonalListView } from './PersonalListView';
 import { TaskListSettingsPanel } from './TaskListSettingsPanel';
 import { CreateSpaceModal } from './CreateSpaceModal';
 import { FilterBar } from './FilterBar';
@@ -70,10 +98,62 @@ import { BulkActionBar } from './BulkActionBar';
 import { SpaceDocsView } from './SpaceDocsView';
 import { SpaceWhiteboardsView } from './SpaceWhiteboardsView';
 import { SpaceOverviewView } from './SpaceOverviewView';
+import { ListContextMenu } from '../sidebar/ListContextMenu';
+import {
+  PmsCenteredLoadingState,
+  PmsCenteredStateBlock,
+} from './PmsCenteredStateBlock';
+import {
+  EMPTY_SELECTED_TASK_IDS,
+  buildInlineTaskCreatePayload,
+  createDefaultTaskFilterParamsForList,
+  resolveScopedTaskFilterState,
+  resolveScopedTaskSelectionState,
+  selectScopedTaskFilterParams,
+  selectScopedTaskSelectionIds,
+  type ScopedTaskFilterState,
+  type ScopedTaskSelectionState,
+} from './pms-view-scoped-state-model';
+import {
+  buildPmsSpaceToolPath,
+  clearPmsCreateTaskSearchParams,
+  readPmsCreateTaskRequest,
+  resolvePmsViewRoute,
+} from './pms-view-route';
+import {
+  findPmsTaskById,
+  getRequestedPmsTaskId,
+  resolvePmsTaskClosedTransition,
+  resolvePmsTaskSelectedTransition,
+  resolveReloadedPmsTaskSelection,
+  resolveRequestedPmsTaskTransition,
+  resolveSingleListPmsTaskSelection,
+  resolveSingleListPmsTaskDetailTransition,
+} from './pms-task-selection-workflow';
+import type { TaskBoardPositionUpdate } from './pms-task-hierarchy';
 import { taskListRoleAllows } from '../api/pms-permissions';
 import { WhiteboardContextSlotPanel } from '@/src/app-modules/whiteboard/public-api';
+import {
+  PERSONAL_TODO_PMS_TASK_CREATED_EVENT,
+  type PersonalTodoPmsTaskCreatedEventDetail,
+} from '@/src/platform/personal-widgets/floating-panel-events';
+import {
+  PMS_SPACE_MEMBERS_CHANGED_EVENT,
+  PMS_TASK_LIST_CHANGED_EVENT,
+  dispatchPmsTaskListChanged,
+  type PmsSpaceMembersChangedDetail,
+  type PmsTaskListChangedDetail,
+} from './pms-events';
+import { usePmsTaskListGroupPreference } from './usePmsTaskListGroupPreference';
+import { reconcilePmsTaskListCatalog } from './pms-task-list-catalog-model';
 
-type PmsViewTab = 'List' | 'Board' | 'Calendar' | 'Gantt' | 'Table' | 'Whiteboard';
+type PmsViewTab =
+  | 'List'
+  | 'Board'
+  | 'Calendar'
+  | 'Gantt'
+  | 'Table'
+  | 'Whiteboard';
 
 const PMS_VIEW_TAB_LABEL_KEYS: Record<PmsViewTab, string> = {
   List: 'pms.viewTabs.list',
@@ -84,71 +164,136 @@ const PMS_VIEW_TAB_LABEL_KEYS: Record<PmsViewTab, string> = {
   Whiteboard: 'pms.viewTabs.whiteboard',
 };
 
-function isSameListCollection(left: PmsTaskList[], right: PmsTaskList[]): boolean {
-  if (left.length !== right.length) {
-    return false;
-  }
+const PMS_VIEW_TABS = [
+  'List',
+  'Board',
+  'Calendar',
+  'Gantt',
+  'Table',
+  'Whiteboard',
+] as const satisfies readonly PmsViewTab[];
 
-  return left.every((item, index) => {
-    const other = right[index];
-    return (
-      item?.id === other?.id
-      && item?.updated_at === other?.updated_at
-      && item?.team_id === other?.team_id
-      && item?.folder_id === other?.folder_id
-    );
-  });
+const PMS_MOBILE_PRIMARY_TABS = [
+  'List',
+  'Board',
+  'Calendar',
+] as const satisfies readonly PmsViewTab[];
+
+const PMS_MOBILE_MORE_TABS = [
+  'Gantt',
+  'Table',
+  'Whiteboard',
+] as const satisfies readonly PmsViewTab[];
+
+const PMS_VIEW_TAB_QUERY: Record<string, PmsViewTab> = {
+  board: 'Board',
+  calendar: 'Calendar',
+  gantt: 'Gantt',
+  list: 'List',
+  table: 'Table',
+  whiteboard: 'Whiteboard',
+};
+
+function isSameListCollection(
+  left: PmsTaskList[],
+  right: PmsTaskList[],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((item, index) => {
+      const other = right[index];
+      return (
+        item?.id === other?.id &&
+        item?.updated_at === other?.updated_at &&
+        item?.archived === other?.archived &&
+        item?.name === other?.name &&
+        item?.team_id === other?.team_id &&
+        item?.folder_id === other?.folder_id
+      );
+    })
+  );
 }
 
-export const PMSView = () => {
+function resolveLoadedSpaceName(
+  spaces: PmsSpace[],
+  taskLists: PmsTaskList[],
+  spaceId: string,
+): string | null {
+  return (
+    spaces.find((space) => space.id === spaceId)?.name ??
+    taskLists.find((taskList) => taskList.team_id === spaceId)?.team_name ??
+    null
+  );
+}
+
+export const PMSView = () => <>{usePMSViewElement()}</>;
+
+function usePMSViewElement(): ReactNode {
   const { t } = useTranslation('apps');
   const { toolId } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { token, user } = useAuth();
+  const { confirm, confirmDialog } = useConfirm();
+  const { prompt, promptDialog } = usePrompt();
+  const toast = useToast();
   const pmsRoot = resolveDefaultWorkspaceAppPath(user, 'pms');
-  const currentWorkspaceSlug = getWorkspaceBySlug(user, searchParams.get('workspace'))?.slug
-    ?? getCurrentOrLastWorkspaceSlug();
-  const [activeTab, setActiveTab] = useState<PmsViewTab>('List');
-  const [selectedIssue, setSelectedIssue] = useState<PmsIssue | null>(null);
+  const currentWorkspaceSlug =
+    getWorkspaceBySlug(user, searchParams.get('workspace'))?.slug ??
+    getCurrentOrLastWorkspaceSlug();
+  const pmsListRootPath = currentWorkspaceSlug
+    ? buildWorkspaceAppPath(currentWorkspaceSlug, 'pms')
+    : pmsRoot;
+  const [selectedIssueDraft, setSelectedIssueDraft] = useState<PmsTask | null>(
+    null,
+  );
   const [isNewTaskModalOpen, setIsNewTaskModalOpen] = useState(false);
+  const [newTaskModalKey, setNewTaskModalKey] = useState(0);
+  const [newTaskContext, setNewTaskContext] = useState<{
+    initialTitle: string;
+    sourceTodoId: string | null;
+  }>({ initialTitle: '', sourceTodoId: null });
 
   const [taskLists, setTaskLists] = useState<PmsTaskList[]>([]);
   const [spaces, setSpaces] = useState<PmsSpace[]>([]);
   const [selectedTaskListId, setSelectedTaskListId] = useState<string>('');
-  const [issues, setIssues] = useState<PmsIssue[]>([]);
+  const [tasks, setIssues] = useState<PmsTask[]>([]);
   const [members, setMembers] = useState<PmsTaskListMember[]>([]);
   const [milestones, setMilestones] = useState<PmsMilestone[]>([]);
   const [labels, setLabels] = useState<PmsLabel[]>([]);
-  const [taskListStatuses, setTaskListStatuses] = useState<PmsTaskListStatus[]>([]);
+  const [taskListStatusState, setTaskListStatusState] = useState<{
+    taskListId: string;
+    items: PmsTaskListStatus[];
+  }>({ taskListId: '', items: [] });
+  const [taskSort, setTaskSort] = useState<PmsTaskSort>(DEFAULT_PMS_TASK_SORT);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filterParams, setFilterParams] = useState<IssueFilterParams>(createDefaultIssueFilterParams());
-  const [selectedIssueIds, setSelectedIssueIds] = useState<Set<string>>(new Set());
+  const [filterParamsState, setFilterParamsState] =
+    useState<ScopedTaskFilterState>(() => ({
+      taskListId: '',
+      params: createDefaultTaskFilterParams(),
+    }));
+  const [selectedTaskIdsState, setSelectedTaskIdsState] =
+    useState<ScopedTaskSelectionState>({
+      taskListId: '',
+      ids: EMPTY_SELECTED_TASK_IDS,
+    });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [createSpaceOpen, setCreateSpaceOpen] = useState(false);
-  const [taskListSwitcherOpen, setTaskListSwitcherOpen] = useState(false);
+  const [taskListMenuOpen, setTaskListMenuOpen] = useState(false);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
 
-
-  const taskListSwitcherRef = useRef<HTMLDivElement>(null);
+  const taskListMenuButtonRef = useRef<HTMLButtonElement>(null);
   const mobileMoreRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!taskListSwitcherOpen) return;
-    function onClick(e: MouseEvent) {
-      if (taskListSwitcherRef.current && !taskListSwitcherRef.current.contains(e.target as Node)) {
-        setTaskListSwitcherOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', onClick);
-    return () => document.removeEventListener('mousedown', onClick);
-  }, [taskListSwitcherOpen]);
 
   useEffect(() => {
     if (!mobileMoreOpen) return;
     function onClick(e: MouseEvent) {
-      if (mobileMoreRef.current && !mobileMoreRef.current.contains(e.target as Node)) {
+      if (
+        mobileMoreRef.current &&
+        !mobileMoreRef.current.contains(e.target as Node)
+      ) {
         setMobileMoreOpen(false);
       }
     }
@@ -157,99 +302,481 @@ export const PMSView = () => {
   }, [mobileMoreOpen]);
 
   const createTaskRequested = searchParams.get('create') === '1';
-  const isAssignedTasksView = toolId === 'pms-tasks' || toolId === 'pms-tasks-assigned';
-  const isTodayView = toolId === 'pms-tasks-today';
-  const isPersonalView = toolId === 'pms-tasks-personal';
-  const routeTaskListId = toolId?.startsWith('pms-list-')
-    ? toolId.replace('pms-list-', '')
-    : null;
-  const spaceDocsMatch = toolId?.match(/^pms-space-([0-9a-f-]+)-docs(?:-([0-9a-f-]+))?$/);
-  const spaceDocsSpaceId = spaceDocsMatch?.[1] ?? null;
-  const spaceDocsDocId = spaceDocsMatch?.[2] ?? null;
-  const spaceWhiteboardsMatch = toolId?.match(/^pms-space-([0-9a-f-]+)-whiteboards(?:-([0-9a-f-]+))?$/);
-  const spaceWhiteboardsSpaceId = spaceWhiteboardsMatch?.[1] ?? null;
-  const spaceWhiteboardsWhiteboardId = spaceWhiteboardsMatch?.[2] ?? null;
-  const spaceOverviewId = (
-    toolId
-    && /^pms-space-.+$/.test(toolId)
-    && !spaceDocsMatch
-    && !spaceWhiteboardsMatch
-  ) ? toolId.replace('pms-space-', '') : null;
-  const isOverviewRoute = !toolId && !createTaskRequested && !isNewTaskModalOpen;
-  const selectedTaskList = taskLists.find((taskList) => taskList.id === selectedTaskListId);
+  const createTaskRequest = useMemo(
+    () => readPmsCreateTaskRequest(searchParams),
+    [searchParams],
+  );
+  const pmsRoute = resolvePmsViewRoute({
+    createTaskRequested,
+    isNewTaskModalOpen,
+    requestedTab: searchParams.get('tab'),
+    routePathname: location.pathname,
+    toolId,
+  });
+  const isAssignedTasksView = pmsRoute.kind === 'assigned';
+  const isTodayView = pmsRoute.kind === 'today';
+  const routeTaskListId = pmsRoute.kind === 'list' ? pmsRoute.taskListId : null;
+  const spaceDocsSpaceId =
+    pmsRoute.kind === 'spaceDocs' ? pmsRoute.spaceId : null;
+  const spaceDocsDocId = pmsRoute.kind === 'spaceDocs' ? pmsRoute.docId : null;
+  const spaceWhiteboardsSpaceId =
+    pmsRoute.kind === 'spaceWhiteboards' ? pmsRoute.spaceId : null;
+  const spaceWhiteboardsWhiteboardId =
+    pmsRoute.kind === 'spaceWhiteboards' ? pmsRoute.whiteboardId : null;
+  const spaceOverviewId =
+    pmsRoute.kind === 'spaceOverview' ? pmsRoute.spaceId : null;
+  const spaceTasksSpaceId =
+    pmsRoute.kind === 'spaceTasks' ? pmsRoute.spaceId : null;
+  const spaceTasksTab = pmsRoute.kind === 'spaceTasks' ? pmsRoute.tab : null;
+  const isOverviewRoute = pmsRoute.kind === 'overview';
+  const shouldLoadSingleTaskList =
+    pmsRoute.kind === 'list' || pmsRoute.kind === 'taskCreateFallback';
+  const selectedTaskList = taskLists.find(
+    (taskList) => taskList.id === selectedTaskListId,
+  );
+  const selectedIssue = resolveSingleListPmsTaskSelection({
+    selectedTaskListId,
+    task: selectedIssueDraft,
+  });
   const taskListName = selectedTaskList?.name || 'List';
-  const canEditTaskList = taskListRoleAllows(selectedTaskList?.role, 'member');
+  const isArchivedTaskList = selectedTaskList?.archived === true;
+  const canEditTaskList =
+    !isArchivedTaskList && taskListRoleAllows(selectedTaskList?.role, 'member');
   const canManageTaskList = taskListRoleAllows(selectedTaskList?.role, 'admin');
-  const requestedIssueId = searchParams.get('issue');
-  const selectedTaskListWhiteboardContext = useMemo(
-    () => (selectedTaskListId ? { app: 'pms', type: 'task_list', id: selectedTaskListId } : null),
+  const createTaskContextRef = useRef({
+    canEditTaskList: false,
+    selectedTaskListId: '',
+  });
+  createTaskContextRef.current = { canEditTaskList, selectedTaskListId };
+  const requestedTaskId = getRequestedPmsTaskId(searchParams);
+  const requestedTab = searchParams.get('tab');
+  const taskListSettingsRequested = searchParams.get('settings') === '1';
+  const activeTab = PMS_VIEW_TAB_QUERY[requestedTab ?? ''] ?? 'List';
+  const { groupBy: taskListGroupBy, setGroupBy: setTaskListGroupBy } =
+    usePmsTaskListGroupPreference({
+      enabled: pmsRoute.kind === 'list' && activeTab === 'List',
+      workspaceSlug: currentWorkspaceSlug,
+    });
+  const defaultFilterParams = useMemo(
+    () => createDefaultTaskFilterParamsForList(),
+    [],
+  );
+  const filterParams = selectScopedTaskFilterParams(
+    filterParamsState,
+    selectedTaskListId,
+    defaultFilterParams,
+  );
+  const taskListStatuses = useMemo(
+    () =>
+      taskListStatusState.taskListId === selectedTaskListId
+        ? taskListStatusState.items
+        : [],
+    [selectedTaskListId, taskListStatusState],
+  );
+  const taskListStatusesReady =
+    taskListStatusState.taskListId === selectedTaskListId;
+  const setFilterParams = useCallback(
+    (next: SetStateAction<TaskFilterParams>) => {
+      setFilterParamsState((current) =>
+        resolveScopedTaskFilterState(current, selectedTaskListId, next),
+      );
+    },
     [selectedTaskListId],
   );
-  const viewTabs = ['List', 'Board', 'Calendar', 'Gantt', 'Table', 'Whiteboard'] as const satisfies readonly PmsViewTab[];
-  const mobilePrimaryTabs = ['List', 'Board', 'Calendar'] as const satisfies readonly PmsViewTab[];
-  const mobileMoreTabs = ['Gantt', 'Table', 'Whiteboard'] as const satisfies readonly PmsViewTab[];
-  const mobileMoreActive = mobileMoreTabs.includes(activeTab as (typeof mobileMoreTabs)[number]);
+  const selectedTaskIds = selectScopedTaskSelectionIds(
+    selectedTaskIdsState,
+    selectedTaskListId,
+  );
+  const setSelectedTaskIds = useCallback(
+    (next: SetStateAction<Set<string>>) => {
+      setSelectedTaskIdsState((current) =>
+        resolveScopedTaskSelectionState(current, selectedTaskListId, next),
+      );
+    },
+    [selectedTaskListId],
+  );
+  const visibleTasks = useMemo(
+    () =>
+      filterDefaultVisibleTasks(tasks, taskListStatuses, {
+        status: filterParams.status,
+      }),
+    [filterParams.status, taskListStatuses, tasks],
+  );
+  const showCompletedItems = hasSelectedCompletionStatus(
+    filterParams.status,
+    taskListStatuses,
+  );
+  const handleShowCompletedItemsChange = useCallback(
+    (showCompleted: boolean) => {
+      setFilterParams((current) => ({
+        ...current,
+        status: setCompletionStatusesVisible(
+          current.status,
+          taskListStatuses,
+          showCompleted,
+        ),
+      }));
+    },
+    [setFilterParams, taskListStatuses],
+  );
+  useEffect(() => {
+    setSelectedTaskIds((current) =>
+      reconcileSelectedTaskIds(current, visibleTasks),
+    );
+  }, [setSelectedTaskIds, visibleTasks]);
+  const selectedTaskListWhiteboardContext = useMemo(
+    () =>
+      selectedTaskListId
+        ? { app: 'pms', type: 'task_list', id: selectedTaskListId }
+        : null,
+    [selectedTaskListId],
+  );
+  const mobileMoreActive = PMS_MOBILE_MORE_TABS.includes(
+    activeTab as (typeof PMS_MOBILE_MORE_TABS)[number],
+  );
+
+  const openNewTaskModal = useCallback(
+    ({
+      initialTitle = '',
+      sourceTodoId = null,
+    }: {
+      initialTitle?: string | null;
+      sourceTodoId?: string | null;
+    } = {}) => {
+      setNewTaskContext({
+        initialTitle: initialTitle?.trim() ?? '',
+        sourceTodoId,
+      });
+      setNewTaskModalKey((current) => current + 1);
+      setIsNewTaskModalOpen(true);
+    },
+    [],
+  );
+
+  const closeNewTaskModal = useCallback(() => {
+    setIsNewTaskModalOpen(false);
+    setNewTaskContext({ initialTitle: '', sourceTodoId: null });
+  }, []);
 
   const selectViewTab = (tab: typeof activeTab) => {
-    setActiveTab(tab);
     setMobileMoreOpen(false);
     const nextParams = new URLSearchParams(searchParams);
-    if (tab === 'Whiteboard') {
-      nextParams.set('tab', 'whiteboard');
-    } else {
+    if (tab === 'List') {
       nextParams.delete('tab');
+    } else {
+      nextParams.set('tab', tab.toLowerCase());
     }
     setSearchParams(nextParams, { replace: true });
   };
 
   useEffect(() => {
-    if (searchParams.get('tab') === 'whiteboard') {
-      setActiveTab('Whiteboard');
-    }
-  }, [searchParams]);
+    if (!token || !selectedTaskList?.team_id) return;
+    let cancelled = false;
+    const selectedSpaceId = selectedTaskList.team_id;
 
-  // Listen for the SubSidebar header "+" button (and any future quick-create
-  // entry points) so they can pop the New Task modal without needing a
-  // direct ref into this component. Only respond when a list is selected
-  // and the user can edit it — otherwise the modal would mount without a
-  // valid taskListId.
-  const newTaskTriggerRef = useRef<{ enabled: boolean }>({ enabled: false });
-  newTaskTriggerRef.current.enabled = Boolean(selectedTaskListId && canEditTaskList);
-  useEffect(() => {
-    const handler = () => {
-      if (newTaskTriggerRef.current.enabled) setIsNewTaskModalOpen(true);
+    const reloadSpaceMembers = async () => {
+      try {
+        const response = await listSpaceMembers(
+          token,
+          selectedSpaceId,
+          currentWorkspaceSlug,
+        );
+        if (!cancelled) {
+          setMembers(response.items);
+        }
+      } catch {
+        // Keep the current assignee candidates if a cross-panel refresh fails.
+      }
     };
-    window.addEventListener('pms:create-task', handler);
-    return () => window.removeEventListener('pms:create-task', handler);
-  }, []);
+
+    const handleSpaceMembersChanged = (event: Event) => {
+      const detail = (event as CustomEvent<PmsSpaceMembersChangedDetail>)
+        .detail;
+      if (detail?.spaceId !== selectedSpaceId) return;
+      void reloadSpaceMembers();
+    };
+
+    window.addEventListener(
+      PMS_SPACE_MEMBERS_CHANGED_EVENT,
+      handleSpaceMembersChanged,
+    );
+    return () => {
+      cancelled = true;
+      window.removeEventListener(
+        PMS_SPACE_MEMBERS_CHANGED_EVENT,
+        handleSpaceMembersChanged,
+      );
+    };
+  }, [currentWorkspaceSlug, selectedTaskList?.team_id, token]);
+
+  useEffect(() => {
+    if (
+      !taskListSettingsRequested ||
+      !selectedTaskListId ||
+      loading ||
+      isArchivedTaskList
+    )
+      return;
+    setSettingsOpen(true);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('settings');
+    setSearchParams(nextParams, { replace: true });
+  }, [
+    loading,
+    searchParams,
+    isArchivedTaskList,
+    selectedTaskListId,
+    setSearchParams,
+    taskListSettingsRequested,
+  ]);
 
   const getErrorMessage = useCallback(
-    (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback),
+    (error: unknown, fallback: string) =>
+      error instanceof Error ? error.message : fallback,
     [],
   );
 
-  const applyIssueCollection = useCallback((nextIssues: PmsIssue[]) => {
-    setIssues(nextIssues);
-    setSelectedIssueIds((current) => reconcileSelectedIssueIds(current, nextIssues));
-    setSelectedIssue((current) => {
-      if (!current) {
-        return null;
-      }
+  const applyIssueCollection = useCallback(
+    (nextIssues: PmsTask[]) => {
+      setIssues(nextIssues);
+      setSelectedTaskIds((current) =>
+        reconcileSelectedTaskIds(current, nextIssues),
+      );
+      setSelectedIssueDraft((current) => {
+        return resolveReloadedPmsTaskSelection({
+          currentTask: current,
+          missingPolicy: 'clear',
+          tasks: nextIssues,
+        });
+      });
+    },
+    [setSelectedTaskIds],
+  );
 
-      return nextIssues.find((item) => item.id === current.id) ?? null;
-    });
-  }, []);
+  const handleSelectIssue = useCallback(
+    (task: PmsTask) => {
+      const transition = resolvePmsTaskSelectedTransition({
+        searchParams,
+        task,
+      });
+      setSelectedIssueDraft(transition.selectedTask);
+      if (transition.searchParams) {
+        setSearchParams(transition.searchParams, { replace: true });
+      }
+    },
+    [searchParams, setSearchParams],
+  );
 
   const clearSelectedIssue = useCallback(() => {
-    setSelectedIssue(null);
-    if (!requestedIssueId) {
+    setSelectedIssueDraft(null);
+    if (!requestedTaskId) {
       return;
     }
 
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.delete('issue');
-    setSearchParams(nextParams, { replace: true });
-  }, [requestedIssueId, searchParams, setSearchParams]);
+    const transition = resolvePmsTaskClosedTransition<PmsTask>({
+      searchParams,
+    });
+    setSelectedIssueDraft(transition.selectedTask);
+    if (transition.searchParams) {
+      setSearchParams(transition.searchParams, { replace: true });
+    }
+  }, [requestedTaskId, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    const handleTaskListChanged = (event: Event) => {
+      const detail = (event as CustomEvent<PmsTaskListChangedDetail>).detail;
+      if (!detail) return;
+      if (detail.type === 'updated') {
+        setTaskLists((current) =>
+          reconcilePmsTaskListCatalog(current, detail.taskList, 'active'),
+        );
+        return;
+      }
+
+      setTaskLists((current) =>
+        current.filter((taskList) => taskList.id !== detail.taskListId),
+      );
+      if (selectedTaskListId === detail.taskListId) {
+        clearSelectedIssue();
+        setSelectedTaskListId('');
+        navigate(pmsListRootPath);
+      }
+    };
+
+    window.addEventListener(PMS_TASK_LIST_CHANGED_EVENT, handleTaskListChanged);
+    return () => {
+      window.removeEventListener(
+        PMS_TASK_LIST_CHANGED_EVENT,
+        handleTaskListChanged,
+      );
+    };
+  }, [clearSelectedIssue, navigate, pmsListRootPath, selectedTaskListId]);
+
+  const handleRenameSelectedTaskList = useCallback(async () => {
+    if (
+      !token ||
+      !selectedTaskList ||
+      !canManageTaskList ||
+      selectedTaskList.archived
+    )
+      return;
+    const newName = await prompt({
+      title: t('pms.sidebar.renameList'),
+      defaultValue: selectedTaskList.name,
+      placeholder: t('pms.listName'),
+      submitLabel: t('common:actions.save'),
+      cancelLabel: t('common:actions.cancel'),
+    });
+    const trimmedName = newName?.trim() ?? '';
+    if (!trimmedName || trimmedName === selectedTaskList.name) return;
+    setError(null);
+    try {
+      const updated = await updatePmsTaskList(token, selectedTaskList.id, {
+        name: trimmedName,
+      });
+      setTaskLists((current) =>
+        reconcilePmsTaskListCatalog(current, updated, 'active'),
+      );
+      dispatchPmsTaskListChanged({ type: 'updated', taskList: updated });
+    } catch (error) {
+      setError(getErrorMessage(error, t('pms.sidebar.renameListFailed')));
+    }
+  }, [canManageTaskList, getErrorMessage, prompt, selectedTaskList, t, token]);
+
+  const handleArchiveSelectedTaskList = useCallback(async () => {
+    if (
+      !token ||
+      !selectedTaskList ||
+      !canManageTaskList ||
+      selectedTaskList.archived
+    )
+      return;
+    const confirmed = await confirm({
+      title: t('pms.archive.confirmTitle'),
+      description: t('pms.archive.confirmDescription', {
+        name: selectedTaskList.name,
+      }),
+      confirmLabel: t('pms.archive.action'),
+      cancelLabel: t('common:actions.cancel'),
+    });
+    if (!confirmed) return;
+
+    setError(null);
+    try {
+      const updated = await updatePmsTaskList(token, selectedTaskList.id, {
+        archived: true,
+      });
+      setTaskLists((current) =>
+        reconcilePmsTaskListCatalog(current, updated, 'active'),
+      );
+      dispatchPmsTaskListChanged({ type: 'updated', taskList: updated });
+      toast.success(
+        t('pms.archive.archivedToast', { name: selectedTaskList.name }),
+      );
+      clearSelectedIssue();
+      setSelectedTaskListId('');
+      navigate(
+        updated.team_id
+          ? buildPmsSpaceToolPath(updated.team_id, {
+              workspaceSlug: currentWorkspaceSlug,
+            })
+          : pmsListRootPath,
+      );
+    } catch (caughtError) {
+      toast.error(getErrorMessage(caughtError, t('pms.archive.archiveFailed')));
+    }
+  }, [
+    canManageTaskList,
+    clearSelectedIssue,
+    confirm,
+    currentWorkspaceSlug,
+    getErrorMessage,
+    navigate,
+    pmsListRootPath,
+    selectedTaskList,
+    t,
+    toast,
+    token,
+  ]);
+
+  const handleRestoreSelectedTaskList = useCallback(async () => {
+    if (
+      !token ||
+      !selectedTaskList ||
+      !canManageTaskList ||
+      !selectedTaskList.archived
+    )
+      return;
+
+    setError(null);
+    try {
+      const updated = await updatePmsTaskList(token, selectedTaskList.id, {
+        archived: false,
+      });
+      setTaskLists((current) =>
+        reconcilePmsTaskListCatalog(current, updated, 'active'),
+      );
+      dispatchPmsTaskListChanged({ type: 'updated', taskList: updated });
+      toast.success(
+        t('pms.archive.restoredToast', { name: selectedTaskList.name }),
+      );
+    } catch (caughtError) {
+      toast.error(getErrorMessage(caughtError, t('pms.archive.restoreFailed')));
+    }
+  }, [canManageTaskList, getErrorMessage, selectedTaskList, t, toast, token]);
+
+  const handleDeleteSelectedTaskList = useCallback(async () => {
+    if (
+      !token ||
+      !selectedTaskList ||
+      !canManageTaskList ||
+      !selectedTaskList.archived
+    )
+      return;
+    const confirmed = await confirm({
+      title: t('pms.sidebar.deleteList'),
+      description: t('pms.sidebar.deleteListDescription', {
+        name: selectedTaskList.name,
+      }),
+      confirmLabel: t('common:actions.delete'),
+      cancelLabel: t('common:actions.cancel'),
+      variant: 'danger',
+    });
+    if (!confirmed) return;
+    setError(null);
+    try {
+      await deletePmsTaskList(token, selectedTaskList.id);
+      setTaskLists((current) =>
+        current.filter((taskList) => taskList.id !== selectedTaskList.id),
+      );
+      dispatchPmsTaskListChanged({
+        type: 'deleted',
+        taskListId: selectedTaskList.id,
+      });
+      clearSelectedIssue();
+      setSelectedTaskListId('');
+      navigate(
+        selectedTaskList.team_id
+          ? buildPmsSpaceToolPath(selectedTaskList.team_id, {
+              workspaceSlug: currentWorkspaceSlug,
+            })
+          : pmsListRootPath,
+      );
+    } catch (error) {
+      setError(getErrorMessage(error, t('pms.sidebar.deleteListFailed')));
+    }
+  }, [
+    canManageTaskList,
+    clearSelectedIssue,
+    confirm,
+    currentWorkspaceSlug,
+    getErrorMessage,
+    navigate,
+    pmsListRootPath,
+    selectedTaskList,
+    t,
+    token,
+  ]);
 
   // Keep the task list catalog in sync with the route so newly created lists open immediately.
   useEffect(() => {
@@ -263,7 +790,7 @@ export const PMSView = () => {
 
       try {
         const [response, spaceItems] = await Promise.all([
-          listPmsTaskLists(activeToken, undefined, currentWorkspaceSlug),
+          listAllPmsTaskLists(activeToken, undefined, currentWorkspaceSlug),
           listSpaces(activeToken, currentWorkspaceSlug),
         ]);
         if (cancelled) {
@@ -275,9 +802,14 @@ export const PMSView = () => {
         let requestedTaskListResolved = false;
 
         if (routeTaskListId) {
-          requestedTaskListResolved = response.items.some((taskList) => taskList.id === routeTaskListId);
+          requestedTaskListResolved = response.items.some(
+            (taskList) => taskList.id === routeTaskListId,
+          );
           if (!requestedTaskListResolved) {
-            const requestedTaskList = await getPmsTaskList(activeToken, routeTaskListId);
+            const requestedTaskList = await getPmsTaskList(
+              activeToken,
+              routeTaskListId,
+            );
             if (cancelled) {
               return;
             }
@@ -286,23 +818,39 @@ export const PMSView = () => {
           }
         }
 
-        setTaskLists((current) => (isSameListCollection(current, nextTaskLists) ? current : nextTaskLists));
+        setTaskLists((current) =>
+          isSameListCollection(current, nextTaskLists)
+            ? current
+            : nextTaskLists,
+        );
         setSelectedTaskListId((current) => {
+          if (!shouldLoadSingleTaskList) {
+            return '';
+          }
           if (routeTaskListId) {
             return requestedTaskListResolved ? routeTaskListId : '';
           }
           if (createTaskRequested) {
             if (
-              current
-              && nextTaskLists.some(
-                (taskList) => taskList.id === current && taskListRoleAllows(taskList.role, 'member'),
+              current &&
+              nextTaskLists.some(
+                (taskList) =>
+                  taskList.id === current &&
+                  taskListRoleAllows(taskList.role, 'member'),
               )
             ) {
               return current;
             }
-            return nextTaskLists.find((taskList) => taskListRoleAllows(taskList.role, 'member'))?.id ?? '';
+            return (
+              nextTaskLists.find((taskList) =>
+                taskListRoleAllows(taskList.role, 'member'),
+              )?.id ?? ''
+            );
           }
-          if (current && nextTaskLists.some((taskList) => taskList.id === current)) {
+          if (
+            current &&
+            nextTaskLists.some((taskList) => taskList.id === current)
+          ) {
             return current;
           }
           return nextTaskLists[0]?.id || '';
@@ -325,48 +873,124 @@ export const PMSView = () => {
     return () => {
       cancelled = true;
     };
-  }, [createTaskRequested, currentWorkspaceSlug, getErrorMessage, routeTaskListId, token]);
+  }, [
+    createTaskRequested,
+    currentWorkspaceSlug,
+    getErrorMessage,
+    routeTaskListId,
+    shouldLoadSingleTaskList,
+    token,
+    t,
+  ]);
 
-  const reloadIssues = useCallback(async () => {
-    if (!token || !selectedTaskListId) return;
+  const reloadIssues = useCallback(
+    async (statuses: PmsTaskListStatus[] = taskListStatuses) => {
+      if (!token || !selectedTaskListId) return;
 
-    try {
-      setError(null);
-      const res = await listTaskListIssues(token, selectedTaskListId, filterParams);
-      applyIssueCollection(res.items);
-    } catch (err) {
-      setError(getErrorMessage(err, t('pms.errors.issueLoadFailed')));
-    }
-  }, [applyIssueCollection, getErrorMessage, filterParams, selectedTaskListId, token]);
+      try {
+        setError(null);
+        const res = await listAllTaskListTasks(
+          token,
+          selectedTaskListId,
+          withEffectiveTaskStatusFilter(filterParams, statuses),
+          undefined,
+          { sort: taskSort },
+        );
+        applyIssueCollection(res.items);
+      } catch (err) {
+        setError(getErrorMessage(err, t('pms.errors.issueLoadFailed')));
+      }
+    },
+    [
+      applyIssueCollection,
+      getErrorMessage,
+      filterParams,
+      selectedTaskListId,
+      taskListStatuses,
+      taskSort,
+      token,
+      t,
+    ],
+  );
 
-  // Load issues, members, milestones, labels, and statuses when the selected list changes.
-  useEffect(() => {
-    if (!token || !selectedTaskListId) return;
-    let cancelled = false;
-    const selectedList = taskLists.find((taskList) => taskList.id === selectedTaskListId);
-    const selectedSpaceId = selectedList?.team_id;
+  const startTaskListDataLoad = useCallback(() => {
     setLoading(true);
     setError(null);
+  }, []);
+
+  const applyTaskListDataLoad = useCallback(
+    ({
+      issues,
+      nextMembers,
+      nextMilestones,
+      nextLabels,
+      nextStatuses,
+    }: {
+      issues: PmsTask[];
+      nextMembers: PmsTaskListMember[];
+      nextMilestones: PmsMilestone[];
+      nextLabels: PmsLabel[];
+      nextStatuses: PmsTaskListStatus[];
+    }) => {
+      applyIssueCollection(issues);
+      setMembers(nextMembers);
+      setMilestones(nextMilestones);
+      setLabels(nextLabels);
+      setTaskListStatusState({
+        taskListId: selectedTaskListId,
+        items: nextStatuses,
+      });
+    },
+    [applyIssueCollection, selectedTaskListId],
+  );
+
+  const failTaskListDataLoad = useCallback(
+    (err: unknown) => {
+      setError(getErrorMessage(err, t('pms.errors.listDataFailed')));
+    },
+    [getErrorMessage, t],
+  );
+
+  // Load tasks, members, milestones, labels, and statuses when the selected list changes.
+  useEffect(() => {
+    if (!token || !selectedTaskListId || !shouldLoadSingleTaskList) return;
+    let cancelled = false;
+    const selectedList = taskLists.find(
+      (taskList) => taskList.id === selectedTaskListId,
+    );
+    const selectedSpaceId = selectedList?.team_id;
+    const statusRequest = listTaskListStatuses(token, selectedTaskListId);
+    startTaskListDataLoad();
     Promise.all([
-      listTaskListIssues(token, selectedTaskListId, filterParams),
+      statusRequest.then((statusResponse) =>
+        listAllTaskListTasks(
+          token,
+          selectedTaskListId,
+          withEffectiveTaskStatusFilter(filterParams, statusResponse.items),
+          undefined,
+          { sort: taskSort },
+        ),
+      ),
       selectedSpaceId
         ? listSpaceMembers(token, selectedSpaceId, currentWorkspaceSlug)
         : Promise.resolve({ items: [], total: 0, page: 1, page_size: 20 }),
       listTaskListMilestones(token, selectedTaskListId),
       listTaskListLabels(token, selectedTaskListId),
-      listTaskListStatuses(token, selectedTaskListId),
+      statusRequest,
     ])
       .then(([issueRes, memberRes, milestoneRes, labelRes, statusRes]) => {
         if (cancelled) return;
-        applyIssueCollection(issueRes.items);
-        setMembers(memberRes.items);
-        setMilestones(milestoneRes.items);
-        setLabels(labelRes.items);
-        setTaskListStatuses(statusRes.items);
+        applyTaskListDataLoad({
+          issues: issueRes.items,
+          nextMembers: memberRes.items,
+          nextMilestones: milestoneRes.items,
+          nextLabels: labelRes.items,
+          nextStatuses: statusRes.items,
+        });
       })
-      .catch(err => {
+      .catch((err) => {
         if (cancelled) return;
-        setError(getErrorMessage(err, t('pms.errors.listDataFailed')));
+        failTaskListDataLoad(err);
       })
       .finally(() => {
         if (!cancelled) {
@@ -377,546 +1001,940 @@ export const PMSView = () => {
     return () => {
       cancelled = true;
     };
-  }, [applyIssueCollection, currentWorkspaceSlug, getErrorMessage, taskLists, token, selectedTaskListId, filterParams]);
+  }, [
+    applyTaskListDataLoad,
+    currentWorkspaceSlug,
+    failTaskListDataLoad,
+    taskLists,
+    token,
+    selectedTaskListId,
+    shouldLoadSingleTaskList,
+    filterParams,
+    startTaskListDataLoad,
+    taskSort,
+  ]);
 
-  const toggleIssueSelection = useCallback((issueId: string) => {
-    setSelectedIssueIds(prev => {
-      const next = new Set(prev);
-      if (next.has(issueId)) next.delete(issueId);
-      else next.add(issueId);
-      return next;
-    });
-  }, []);
+  const toggleIssueSelection = useCallback(
+    (taskId: string) => {
+      setSelectedTaskIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(taskId)) next.delete(taskId);
+        else next.add(taskId);
+        return next;
+      });
+    },
+    [setSelectedTaskIds],
+  );
 
   const handleBulkDone = useCallback(async () => {
-    setSelectedIssueIds(new Set());
+    setSelectedTaskIds(new Set());
     await reloadIssues();
-  }, [reloadIssues]);
+  }, [reloadIssues, setSelectedTaskIds]);
+
+  const handleLabelsChanged = useCallback((updated: PmsLabel[]) => {
+    setLabels(updated);
+  }, []);
+
+  const handleMembersChanged = useCallback((updated: PmsTaskListMember[]) => {
+    setMembers(updated);
+  }, []);
+
+  const handleStatusesChanged = useCallback(
+    (updated: PmsTaskListStatus[]) => {
+      setTaskListStatusState({
+        taskListId: selectedTaskListId,
+        items: updated,
+      });
+      void reloadIssues(updated);
+    },
+    [reloadIssues, selectedTaskListId],
+  );
+
+  const handleReorderIssues = useCallback(
+    async (updates: TaskBoardPositionUpdate[]) => {
+      if (
+        !token ||
+        !selectedTaskListId ||
+        !canEditTaskList ||
+        updates.length === 0
+      ) {
+        return;
+      }
+      const result = await reorderTaskListTasks(
+        token,
+        selectedTaskListId,
+        {
+          items: updates.map((update) => {
+            const item: {
+              board_position: number;
+              parent_id?: string | null;
+              task_id: string;
+            } = {
+              board_position: update.boardPosition,
+              task_id: update.taskId,
+            };
+            if (update.parentId !== undefined) item.parent_id = update.parentId;
+            return item;
+          }),
+        },
+        currentWorkspaceSlug,
+      );
+      if (result.items.length === 0) return;
+      const updatedById = new Map(
+        result.items.map((item) => [item.id, item] as const),
+      );
+      applyIssueCollection(
+        tasks.map((item) => updatedById.get(item.id) ?? item),
+      );
+    },
+    [
+      applyIssueCollection,
+      canEditTaskList,
+      currentWorkspaceSlug,
+      selectedTaskListId,
+      tasks,
+      token,
+    ],
+  );
 
   const handleUpdateIssue = useCallback(
-    async (issueId: string, payload: Record<string, unknown>) => {
-      if (!token) return;
-      const updatedIssue = await updateIssue(token, issueId, payload);
+    async (taskId: string, payload: Record<string, unknown>) => {
+      if (!token || !canEditTaskList) return;
+      const updatedIssue = await updateTask(token, taskId, payload);
       applyIssueCollection(
-        issues.map((item) => (item.id === updatedIssue.id ? updatedIssue : item)),
+        tasks.map((item) =>
+          item.id === updatedIssue.id ? updatedIssue : item,
+        ),
       );
       await reloadIssues();
     },
-    [applyIssueCollection, issues, reloadIssues, token],
+    [applyIssueCollection, canEditTaskList, tasks, reloadIssues, token],
   );
 
-  useEffect(() => {
-    setActiveTab('List');
-  }, [toolId]);
+  const handleCreateIssueInline = useCallback(
+    async (title: string, parentId: string | null) => {
+      if (!token || !selectedTaskListId || !canEditTaskList) return;
+      const createdIssue = await createTaskListTask(
+        token,
+        selectedTaskListId,
+        buildInlineTaskCreatePayload(title, taskListStatuses, parentId),
+      );
+      applyIssueCollection([...tasks, createdIssue]);
+      await reloadIssues();
+    },
+    [
+      applyIssueCollection,
+      canEditTaskList,
+      tasks,
+      reloadIssues,
+      selectedTaskListId,
+      taskListStatuses,
+      token,
+    ],
+  );
 
-  useEffect(() => {
-    setSelectedIssue((current) => {
-      if (!current) {
-        return null;
-      }
+  const handleDeleteIssueInline = useCallback(
+    async (taskId: string) => {
+      if (!token || !canEditTaskList) return;
+      await deleteTask(token, taskId);
+      applyIssueCollection(tasks.filter((task) => task.id !== taskId));
+      await reloadIssues();
+    },
+    [applyIssueCollection, canEditTaskList, tasks, reloadIssues, token],
+  );
 
-      return current.list_id === selectedTaskListId ? current : null;
+  const prepareRequestedTaskLoad = useCallback(() => {
+    setError(null);
+    setSelectedTaskIds(new Set());
+  }, [setSelectedTaskIds]);
+
+  const applyRequestedTaskDetail = useCallback((task: PmsTask) => {
+    const transition = resolveSingleListPmsTaskDetailTransition(task);
+    const { listState } = transition;
+    setFilterParamsState({
+      taskListId: listState.taskListId,
+      params: listState.filterParams,
     });
-    setSelectedIssueIds(new Set());
-    setFilterParams(createDefaultIssueFilterParams());
-  }, [selectedTaskListId]);
+    setSelectedTaskIdsState({
+      taskListId: listState.taskListId,
+      ids: listState.selectedIds,
+    });
+    setSelectedTaskListId(listState.taskListId);
+    setSelectedIssueDraft(transition.selectedTask);
+  }, []);
 
   useEffect(() => {
-    if (!token || !requestedIssueId) {
+    const transition = resolveRequestedPmsTaskTransition({
+      requestedTaskId,
+      visibleTask: findPmsTaskById(tasks, requestedTaskId),
+    });
+    if (transition.selectedTask) {
+      setSelectedIssueDraft(transition.selectedTask);
+      return;
+    }
+    if (!token || !transition.detailRequest) {
       return;
     }
 
     let cancelled = false;
-    setError(null);
-    setActiveTab('List');
-    setSelectedIssueIds(new Set());
+    prepareRequestedTaskLoad();
 
-    getIssueDetail(token, requestedIssueId, currentWorkspaceSlug)
+    getTaskDetail(token, transition.detailRequest.taskId, currentWorkspaceSlug)
       .then((detail) => {
         if (cancelled) {
           return;
         }
 
-        setFilterParams(
-          createDefaultIssueFilterParams({
-            archived_state: detail.issue.archived ? 'archived' : 'active',
-          }),
-        );
-        setSelectedTaskListId(detail.issue.list_id);
-        setSelectedIssue(detail.issue);
+        applyRequestedTaskDetail(detail.task);
       })
       .catch((caughtError) => {
         if (cancelled) {
           return;
         }
 
-        setError(getErrorMessage(caughtError, t('pms.errors.requestedIssueFailed')));
+        setError(
+          getErrorMessage(caughtError, t('pms.errors.requestedIssueFailed')),
+        );
       });
 
     return () => {
       cancelled = true;
     };
-  }, [currentWorkspaceSlug, getErrorMessage, requestedIssueId, token]);
+  }, [
+    applyRequestedTaskDetail,
+    currentWorkspaceSlug,
+    getErrorMessage,
+    prepareRequestedTaskLoad,
+    requestedTaskId,
+    tasks,
+    token,
+    t,
+  ]);
+
+  const consumeCreateTaskRequest = useCallback(
+    (
+      nextParams: URLSearchParams,
+      request: { sourceTodoId: string | null; title: string },
+    ) => {
+      const createTaskContext = createTaskContextRef.current;
+      if (
+        !createTaskContext.selectedTaskListId ||
+        !createTaskContext.canEditTaskList
+      ) {
+        setSearchParams(nextParams, { replace: true });
+        queueMicrotask(() => setError(t('pms.errors.createTaskNoList')));
+        return;
+      }
+
+      setSearchParams(nextParams, { replace: true });
+      queueMicrotask(() =>
+        openNewTaskModal({
+          initialTitle: request.title,
+          sourceTodoId: request.sourceTodoId,
+        }),
+      );
+    },
+    [openNewTaskModal, setSearchParams, t],
+  );
 
   useEffect(() => {
     if (!createTaskRequested || loading) {
       return;
     }
 
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.delete('create');
+    const nextParams = clearPmsCreateTaskSearchParams(searchParams);
 
-    if (!selectedTaskListId || !canEditTaskList) {
-      setError(t('pms.errors.createTaskNoList'));
-      setSearchParams(nextParams, { replace: true });
-      return;
-    }
+    queueMicrotask(() =>
+      consumeCreateTaskRequest(nextParams, createTaskRequest),
+    );
+  }, [
+    consumeCreateTaskRequest,
+    createTaskRequest,
+    createTaskRequested,
+    loading,
+    searchParams,
+  ]);
 
-    setIsNewTaskModalOpen(true);
-    setSearchParams(nextParams, { replace: true });
-  }, [canEditTaskList, createTaskRequested, loading, searchParams, selectedTaskListId, setSearchParams]);
+  const handleNewTaskCreated = useCallback(
+    (createdTask: PmsTask) => {
+      void reloadIssues();
+      if (!newTaskContext.sourceTodoId) {
+        return;
+      }
+      window.dispatchEvent(
+        new CustomEvent<PersonalTodoPmsTaskCreatedEventDetail>(
+          PERSONAL_TODO_PMS_TASK_CREATED_EVENT,
+          {
+            detail: {
+              taskId: createdTask.id,
+              title: createdTask.title,
+              todoId: newTaskContext.sourceTodoId,
+            },
+          },
+        ),
+      );
+    },
+    [newTaskContext.sourceTodoId, reloadIssues],
+  );
 
-  if (isAssignedTasksView) return <AssignedToMeView />;
-  if (isTodayView) return <TodayOverdueView />;
-  if (isPersonalView) return <PersonalListView />;
+  if (isAssignedTasksView) {
+    return <AssignedToMeView workspaceSlug={currentWorkspaceSlug} />;
+  }
+  if (isTodayView) {
+    return <TodayOverdueView workspaceSlug={currentWorkspaceSlug} />;
+  }
   if (spaceDocsSpaceId) {
-    const spaceName = taskLists.find((taskList) => taskList.team_id === spaceDocsSpaceId)?.team_name ?? null;
-    return <SpaceDocsView spaceId={spaceDocsSpaceId} spaceName={spaceName} docId={spaceDocsDocId} />;
+    const spaceName = resolveLoadedSpaceName(
+      spaces,
+      taskLists,
+      spaceDocsSpaceId,
+    );
+    return (
+      <SpaceDocsView
+        spaceId={spaceDocsSpaceId}
+        spaceName={spaceName}
+        docId={spaceDocsDocId}
+        workspaceSlug={currentWorkspaceSlug}
+      />
+    );
   }
   if (spaceWhiteboardsSpaceId) {
-    const spaceName = taskLists.find((taskList) => taskList.team_id === spaceWhiteboardsSpaceId)?.team_name ?? null;
+    const spaceName = resolveLoadedSpaceName(
+      spaces,
+      taskLists,
+      spaceWhiteboardsSpaceId,
+    );
     return (
       <SpaceWhiteboardsView
         spaceId={spaceWhiteboardsSpaceId}
         spaceName={spaceName}
         whiteboardId={spaceWhiteboardsWhiteboardId}
+        workspaceSlug={currentWorkspaceSlug}
+      />
+    );
+  }
+  if (spaceTasksSpaceId && spaceTasksTab) {
+    const spaceName = resolveLoadedSpaceName(
+      spaces,
+      taskLists,
+      spaceTasksSpaceId,
+    );
+    return (
+      <SpaceTasksView
+        activeTab={spaceTasksTab}
+        spaceId={spaceTasksSpaceId}
+        spaceName={spaceName}
+        workspaceSlug={currentWorkspaceSlug}
       />
     );
   }
   if (spaceOverviewId) {
-    const spaceName = taskLists.find((taskList) => taskList.team_id === spaceOverviewId)?.team_name ?? null;
-    return <SpaceOverviewView spaceId={spaceOverviewId} spaceName={spaceName} />;
+    const spaceName = resolveLoadedSpaceName(
+      spaces,
+      taskLists,
+      spaceOverviewId,
+    );
+    return (
+      <SpaceOverviewView
+        spaceId={spaceOverviewId}
+        spaceName={spaceName}
+        workspaceSlug={currentWorkspaceSlug}
+      />
+    );
   }
   if (isOverviewRoute) {
-    if (!loading && spaces.length === 0) {
+    if (loading) {
+      return <PmsCenteredLoadingState minHeightClassName="h-full" />;
+    }
+    if (error) {
       return (
-        <>
-          <div className="flex h-full items-center justify-center px-8">
-            <div className="w-full max-w-xl rounded-2xl border border-app-border bg-app-surface p-8 text-center">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-app-accent text-app-bg">
-                <Layout size={22} />
-              </div>
-              <h1 className="app-text-title-lg text-app-ink">{t('pms.noSpacesTitle')}</h1>
-              <p className="app-text-body mt-3 text-app-ink/60">
-                {t('pms.noSpacesDescription')}
-              </p>
-              <div className="mt-6 flex justify-center">
-                <button
-                  className="app-text-control-sm rounded-lg bg-app-accent px-4 py-2 text-app-bg transition-colors hover:bg-app-accent/90"
-                  onClick={() => setCreateSpaceOpen(true)}
-                  type="button"
-                >
-                  {t('pms.createSpace')}
-                </button>
-              </div>
-            </div>
-          </div>
-          <CreateSpaceModal
-            isOpen={createSpaceOpen}
-            onClose={() => setCreateSpaceOpen(false)}
-            onCreated={(space) => {
-              setSpaces((current) => [space, ...current.filter((item) => item.id !== space.id)]);
-              navigate(`/tool/pms-space-${space.id}`);
-            }}
-          />
-        </>
+        <PmsCenteredStateBlock minHeightClassName="h-full" tone="danger">
+          {error}
+        </PmsCenteredStateBlock>
+      );
+    }
+    if (spaces.length > 0) {
+      return (
+        <Navigate
+          replace
+          to={buildPmsSpaceToolPath(spaces[0].id, {
+            workspaceSlug: currentWorkspaceSlug,
+          })}
+        />
       );
     }
     return (
-      <div className="h-full flex flex-col relative">
-        <header className="bg-app-bg border-b border-app-border px-8 pt-6 transition-colors">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-8 h-8 bg-app-accent rounded flex items-center justify-center text-app-bg">
-              <Layout size={20} />
+      <>
+        <div className="flex h-full items-center justify-center px-8">
+          <div className="w-full max-w-xl rounded-2xl border border-app-border bg-app-surface p-8 text-center">
+            <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-xl bg-app-accent text-app-accent-fg">
+              <Layout size={22} />
             </div>
-            <div>
-              <h1 className="app-text-title-lg text-app-ink">{t('pms.overview')}</h1>
-              <div className="app-text-caption flex items-center gap-2 text-gray-500">
-                <Lock size={10} />
-                <span>{t('pms.spacesListsDocs')}</span>
-              </div>
+            <h1 className="app-text-title-lg text-app-ink">
+              {t('pms.noSpacesTitle')}
+            </h1>
+            <p className="app-text-body mt-3 text-app-ink/60">
+              {t('pms.noSpacesDescription')}
+            </p>
+            <div className="mt-6 flex justify-center">
+              <button
+                className="app-text-control-sm rounded-lg bg-app-accent px-4 py-2 text-app-accent-fg transition-colors hover:bg-app-accent/90"
+                onClick={() => setCreateSpaceOpen(true)}
+                type="button"
+              >
+                {t('pms.createSpace')}
+              </button>
             </div>
           </div>
-        </header>
-        <main className="flex-1 overflow-y-auto p-8 custom-scrollbar">
-          <OverviewView />
-        </main>
-      </div>
+        </div>
+        <CreateSpaceModal
+          isOpen={createSpaceOpen}
+          onClose={() => setCreateSpaceOpen(false)}
+          workspaceSlug={currentWorkspaceSlug}
+          onCreated={(space) => {
+            setSpaces((current) => [
+              space,
+              ...current.filter((item) => item.id !== space.id),
+            ]);
+            navigate(
+              buildPmsSpaceToolPath(space.id, {
+                workspaceSlug: currentWorkspaceSlug,
+              }),
+            );
+          }}
+        />
+      </>
     );
   }
   if (error && !loading && !selectedTaskListId) {
     return (
-      <div className="app-text-body flex h-full items-center justify-center text-red-400">
+      <div className="app-text-body flex h-full items-center justify-center text-app-danger-text">
         {error}
       </div>
     );
   }
   if (!selectedTaskListId && !loading) {
     return (
-      <div className="app-text-body flex h-full items-center justify-center text-gray-500">
+      <div className="app-text-body flex h-full items-center justify-center text-app-ink/55">
         {t('pms.overviewPage.noLists')}
       </div>
     );
   }
 
   return (
-    <div className="relative flex h-full min-w-0 flex-col">
-      <header className="border-b border-app-border bg-app-bg px-4 pt-4 transition-colors lg:px-6 lg:pt-3">
-        {/* Row 1: breadcrumb */}
-        <nav className="app-text-caption mb-1.5 hidden min-w-0 items-center gap-1.5 text-gray-500 lg:flex">
-          <Link to={currentWorkspaceSlug ? `/w/${encodeURIComponent(currentWorkspaceSlug)}/pms` : pmsRoot} className="hover:text-app-ink transition-colors shrink-0">{t('pms.title')}</Link>
-          {selectedTaskList?.team_name ? (
-            <>
-              <span className="text-gray-600 shrink-0">/</span>
-              <span className="truncate max-w-[160px]">{selectedTaskList.team_name}</span>
-            </>
-          ) : null}
-          {selectedTaskList?.folder_name ? (
-            <>
-              <span className="text-gray-600 shrink-0">/</span>
-              <span className="truncate max-w-[160px]">{selectedTaskList.folder_name}</span>
-            </>
-          ) : null}
-        </nav>
-
-        {/* Row 2: title + actions */}
-        <div className="mb-3 flex min-w-0 items-start justify-between gap-3 lg:items-center lg:gap-4">
-          <div className="flex min-w-0 flex-1 items-center gap-2.5">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-app-accent text-app-bg lg:h-7 lg:w-7">
-              <Layout size={16} />
-            </div>
-            <div className="min-w-0">
-              <h1 className="app-text-title-md min-w-0 truncate text-app-ink">
-                {selectedTaskList?.name || taskListName}
-              </h1>
-              {selectedTaskList?.team_name ? (
-                <p className="app-text-caption mt-0.5 truncate text-app-ink/45 lg:hidden">
-                  {selectedTaskList.team_name}
-                </p>
-              ) : null}
-            </div>
-            <button
-              type="button"
-              className="shrink-0 text-gray-600 hover:text-yellow-500 transition-colors"
-              title={t('pms.actions.favorite')}
+    <LazyMotion features={domAnimation}>
+      <div className="relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+        <header className="border-b border-app-border bg-app-bg px-4 pt-4 transition-colors lg:px-6 lg:pt-3">
+          {/* Row 1: breadcrumb */}
+          <nav className="app-text-caption mb-1.5 hidden min-w-0 items-center gap-1.5 text-app-ink/55 lg:flex">
+            <Link
+              to={
+                currentWorkspaceSlug
+                  ? `/w/${encodeURIComponent(currentWorkspaceSlug)}/pms`
+                  : pmsRoot
+              }
+              className="hover:text-app-ink transition-colors shrink-0"
             >
-              <Star size={14} />
-            </button>
-            {taskLists.length > 1 && (
-              <div ref={taskListSwitcherRef} className="relative shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setTaskListSwitcherOpen((open) => !open)}
-                  className="flex h-7 w-7 items-center justify-center rounded text-gray-500 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
-                  title={t('pms.actions.switchList')}
-                >
-                  <ChevronDown size={14} />
-                </button>
-                {taskListSwitcherOpen && (
-                  <div className="absolute top-full left-0 mt-1 z-30 min-w-[220px] max-h-72 overflow-y-auto custom-scrollbar bg-app-bg border border-app-border rounded-lg shadow-xl py-1">
-                    {taskLists.map((taskList) => (
-                      <button
-                        key={taskList.id}
-                        type="button"
-                        onClick={() => {
-                          setTaskListSwitcherOpen(false);
-                          clearSelectedIssue();
-                          navigate(`/tool/pms-list-${taskList.id}`);
-                        }}
-                        className={cn(
-                          'app-text-body-sm w-full px-3 py-1.5 text-left hover:bg-app-surface-hover truncate',
-                          taskList.id === selectedTaskListId ? 'text-app-accent font-medium' : 'text-app-ink'
-                        )}
-                      >
-                        {taskList.name}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-          <div className="flex shrink-0 items-center gap-1">
-            {selectedTaskListId && (
-              <button
-                onClick={() => { if (token) void exportTaskListCsv(token, selectedTaskListId); }}
-                className="flex h-8 w-8 items-center justify-center rounded text-gray-500 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
-                title={t('pms.actions.exportCsv')}
-              >
-                <Download size={15} />
-              </button>
-            )}
-            {canManageTaskList ? (
-              <button
-                onClick={() => setSettingsOpen(true)}
-                className="flex h-8 w-8 items-center justify-center rounded text-gray-500 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
-                title={t('pms.actions.settings')}
-              >
-                <Settings size={15} />
-              </button>
-            ) : null}
-            {canEditTaskList ? (
+              {t('pms.title')}
+            </Link>
+            {selectedTaskList?.team_name ? (
               <>
-                <div className="w-px h-5 bg-app-border mx-1" />
-                <button
-                  onClick={() => setIsNewTaskModalOpen(true)}
-                  className="app-text-body-sm flex h-9 w-9 items-center justify-center gap-1.5 rounded-md bg-app-accent font-semibold text-app-accent-fg shadow-sm sm:w-auto sm:px-3 lg:h-8"
-                  aria-label={t('pms.newTask')}
-                >
-                  <Plus size={14} />
-                  <span className="hidden sm:inline">{t('pms.newTask')}</span>
-                </button>
+                <span className="text-app-ink/70 shrink-0">/</span>
+                <span className="truncate max-w-[160px]">
+                  {selectedTaskList.team_name}
+                </span>
               </>
             ) : null}
-          </div>
-        </div>
+            {selectedTaskList?.folder_name ? (
+              <>
+                <span className="text-app-ink/70 shrink-0">/</span>
+                <span className="truncate max-w-[160px]">
+                  {selectedTaskList.folder_name}
+                </span>
+              </>
+            ) : null}
+          </nav>
 
-        <div className="hidden items-center gap-6 lg:flex">
-          {viewTabs.map(tab => (
-            <button
-              key={tab}
-              onClick={() => selectViewTab(tab)}
-              className={cn(
-                'app-text-body-sm relative pb-3 font-medium transition-all',
-                activeTab === tab ? 'text-app-ink' : 'text-gray-500 hover:text-app-ink'
-              )}
-            >
-              <div className="flex items-center gap-2">
-                {tab === 'List' && <ListIcon size={14} />}
-                {tab === 'Board' && <Grid size={14} />}
-                {tab === 'Calendar' && <Calendar size={14} />}
-                {tab === 'Gantt' && <Activity size={14} />}
-                {tab === 'Table' && <Table size={14} />}
-                {tab === 'Whiteboard' && <PencilRuler size={14} />}
-                {t(PMS_VIEW_TAB_LABEL_KEYS[tab])}
+          {/* Row 2: title + actions */}
+          <div className="mb-3 flex min-w-0 items-start justify-between gap-3 lg:items-center lg:gap-4">
+            <div className="flex min-w-0 flex-1 items-center gap-2.5">
+              <div className="flex size-8 shrink-0 items-center justify-center rounded bg-app-accent text-app-accent-fg lg:size-7">
+                <Layout size={16} />
               </div>
-              {activeTab === tab && (
-                <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-app-accent" />
-              )}
-            </button>
-          ))}
-          <button className="app-text-body-sm pb-3 text-gray-500 hover:text-gray-300">
-            <Plus size={14} />
-          </button>
-        </div>
-
-        <div className="flex items-center gap-1 pb-3 lg:hidden">
-          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-            {mobilePrimaryTabs.map(tab => (
+              <div className="min-w-0">
+                <h1 className="app-text-title-md min-w-0 truncate text-app-ink">
+                  {selectedTaskList?.name || taskListName}
+                </h1>
+                {selectedTaskList?.team_name ? (
+                  <p className="app-text-caption mt-0.5 truncate text-app-ink/45 lg:hidden">
+                    {selectedTaskList.team_name}
+                  </p>
+                ) : null}
+              </div>
+              {isArchivedTaskList ? (
+                <span className="app-text-caption inline-flex shrink-0 items-center gap-1 rounded-full border border-app-border bg-app-surface-sidebar px-2 py-1 text-app-ink/60">
+                  <Archive size={12} />
+                  {t('pms.archive.archivedBadge')}
+                </span>
+              ) : null}
+              {canManageTaskList ? (
+                <div className="relative shrink-0">
+                  <button
+                    ref={taskListMenuButtonRef}
+                    type="button"
+                    onClick={() => setTaskListMenuOpen((open) => !open)}
+                    className="flex size-7 items-center justify-center rounded text-app-ink/55 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
+                    title={t('pms.spaceTree.listManagement')}
+                    aria-label={t('pms.spaceTree.listManagement')}
+                    aria-expanded={taskListMenuOpen}
+                    aria-haspopup="menu"
+                  >
+                    <MoreHorizontal size={14} />
+                  </button>
+                  <ListContextMenu
+                    open={taskListMenuOpen}
+                    anchorRef={taskListMenuButtonRef}
+                    onClose={() => setTaskListMenuOpen(false)}
+                    onSettings={
+                      isArchivedTaskList
+                        ? undefined
+                        : () => setSettingsOpen(true)
+                    }
+                    onRename={
+                      isArchivedTaskList
+                        ? undefined
+                        : handleRenameSelectedTaskList
+                    }
+                    onArchive={
+                      isArchivedTaskList
+                        ? undefined
+                        : handleArchiveSelectedTaskList
+                    }
+                    onRestore={
+                      isArchivedTaskList
+                        ? handleRestoreSelectedTaskList
+                        : undefined
+                    }
+                    onDelete={
+                      isArchivedTaskList
+                        ? handleDeleteSelectedTaskList
+                        : undefined
+                    }
+                  />
+                </div>
+              ) : null}
               <button
+                type="button"
+                className="shrink-0 text-app-ink/70 hover:text-yellow-500 transition-colors"
+                title={t('pms.actions.favorite')}
+              >
+                <Star size={14} />
+              </button>
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+              {canManageTaskList && !isArchivedTaskList ? (
+                <button
+                  type="button"
+                  onClick={() => void handleArchiveSelectedTaskList()}
+                  className="app-text-control-sm hidden h-8 items-center gap-1.5 rounded px-2.5 text-app-ink/55 transition-colors hover:bg-app-surface-hover hover:text-app-ink lg:inline-flex"
+                >
+                  <Archive size={14} />
+                  {t('pms.archive.action')}
+                </button>
+              ) : null}
+              {canManageTaskList && isArchivedTaskList ? (
+                <button
+                  type="button"
+                  onClick={() => void handleRestoreSelectedTaskList()}
+                  className="app-text-control-sm hidden h-8 items-center gap-1.5 rounded border border-app-border px-2.5 text-app-ink/70 transition-colors hover:bg-app-surface-hover hover:text-app-ink lg:inline-flex"
+                >
+                  <ArchiveRestore size={14} />
+                  {t('pms.archive.restore')}
+                </button>
+              ) : null}
+              {selectedTaskListId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (token)
+                      void exportTaskListCsv(token, selectedTaskListId);
+                  }}
+                  className="flex size-8 items-center justify-center rounded text-app-ink/55 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
+                  title={t('pms.actions.exportCsv')}
+                >
+                  <Download size={15} />
+                </button>
+              )}
+              {canEditTaskList ? (
+                <>
+                  <div className="w-px h-5 bg-app-border mx-1" />
+                  <button
+                    type="button"
+                    onClick={() => openNewTaskModal()}
+                    className="app-control-primary h-9 w-9 shadow-sm sm:w-auto sm:px-3 lg:h-8"
+                    aria-label={t('pms.newTask')}
+                  >
+                    <Plus size={14} />
+                    <span className="hidden sm:inline">{t('pms.newTask')}</span>
+                  </button>
+                </>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="hidden items-center gap-6 lg:flex">
+            {PMS_VIEW_TABS.map((tab) => (
+              <button
+                type="button"
                 key={tab}
                 onClick={() => selectViewTab(tab)}
                 className={cn(
-                  'app-text-control-sm flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-2 transition-colors',
+                  'app-text-control-sm relative pb-3 transition-all',
                   activeTab === tab
-                    ? 'border-app-accent bg-app-accent/10 text-app-accent'
-                    : 'border-app-border text-app-ink/65 hover:bg-app-surface-hover hover:text-app-ink',
+                    ? 'text-app-ink'
+                    : 'text-app-ink/55 hover:text-app-ink',
                 )}
               >
-                {tab === 'List' && <ListIcon size={14} />}
-                {tab === 'Board' && <Grid size={14} />}
-                {tab === 'Calendar' && <Calendar size={14} />}
-                {t(PMS_VIEW_TAB_LABEL_KEYS[tab])}
+                <div className="flex items-center gap-2">
+                  {tab === 'List' && <ListIcon size={14} />}
+                  {tab === 'Board' && <Grid size={14} />}
+                  {tab === 'Calendar' && <Calendar size={14} />}
+                  {tab === 'Gantt' && <Activity size={14} />}
+                  {tab === 'Table' && <Table size={14} />}
+                  {tab === 'Whiteboard' && <PencilRuler size={14} />}
+                  {t(PMS_VIEW_TAB_LABEL_KEYS[tab])}
+                </div>
+                {activeTab === tab && (
+                  <m.div
+                    layoutId="activeTab"
+                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-app-accent"
+                  />
+                )}
               </button>
             ))}
           </div>
 
-          <div ref={mobileMoreRef} className="relative shrink-0">
-            <button
-              type="button"
-              onClick={() => setMobileMoreOpen((open) => !open)}
-              className={cn(
-                'app-text-control-sm flex items-center gap-1.5 rounded-md border px-3 py-2 transition-colors',
-                mobileMoreActive
-                  ? 'border-app-accent bg-app-accent/10 text-app-accent'
-                  : 'border-app-border text-app-ink/65 hover:bg-app-surface-hover hover:text-app-ink',
-              )}
-            >
-              <MoreHorizontal size={14} />
-              {t('pms.actions.more')}
-            </button>
-            {mobileMoreOpen ? (
-              <div className="absolute right-0 top-full z-30 mt-1 w-44 rounded-lg border border-app-border bg-app-bg py-1 shadow-xl">
-                {mobileMoreTabs.map(tab => (
-                  <button
-                    key={tab}
-                    type="button"
-                    onClick={() => selectViewTab(tab)}
-                    className={cn(
-                      'app-text-body-sm flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-app-surface-hover',
-                      activeTab === tab ? 'text-app-accent' : 'text-app-ink',
-                    )}
-                  >
-                    {tab === 'Gantt' && <Activity size={14} />}
-                    {tab === 'Table' && <Table size={14} />}
-                    {tab === 'Whiteboard' && <PencilRuler size={14} />}
-                    {t(PMS_VIEW_TAB_LABEL_KEYS[tab])}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </header>
+          <div className="flex items-center gap-1 pb-3 lg:hidden">
+            <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+              {PMS_MOBILE_PRIMARY_TABS.map((tab) => (
+                <button
+                  type="button"
+                  key={tab}
+                  onClick={() => selectViewTab(tab)}
+                  className={cn(
+                    'app-control shrink-0 px-3',
+                    activeTab === tab
+                      ? 'app-control-active'
+                      : 'border-app-border text-app-ink/65 hover:bg-app-surface-hover hover:text-app-ink',
+                  )}
+                >
+                  {tab === 'List' && <ListIcon size={14} />}
+                  {tab === 'Board' && <Grid size={14} />}
+                  {tab === 'Calendar' && <Calendar size={14} />}
+                  {t(PMS_VIEW_TAB_LABEL_KEYS[tab])}
+                </button>
+              ))}
+            </div>
 
-      {selectedTaskListId && activeTab !== 'Whiteboard' && (
-        <FilterBar
-          taskListId={selectedTaskListId}
-          filterParams={filterParams}
-          setFilterParams={setFilterParams}
-          members={members}
-          milestones={milestones}
-          labels={labels}
-          taskListStatuses={taskListStatuses}
-        />
-      )}
-
-      <main className={cn(
-        'flex-1 custom-scrollbar',
-        activeTab === 'Whiteboard' ? 'overflow-hidden p-2 lg:p-4' : 'overflow-y-auto p-4 lg:p-8',
-      )}>
-        {loading && issues.length === 0 ? (
-          <div className="flex items-center justify-center h-64">
-            <Loader2 size={24} className="animate-spin text-app-accent" />
+            <div ref={mobileMoreRef} className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setMobileMoreOpen((open) => !open)}
+                className={cn(
+                  'app-control px-3',
+                  mobileMoreActive
+                    ? 'app-control-active'
+                    : 'border-app-border text-app-ink/65 hover:bg-app-surface-hover hover:text-app-ink',
+                )}
+              >
+                <MoreHorizontal size={14} />
+                {t('pms.actions.more')}
+              </button>
+              {mobileMoreOpen ? (
+                <div className="absolute right-0 top-full z-30 mt-1 w-44 rounded-lg border border-app-border bg-app-bg py-1 shadow-xl">
+                  {PMS_MOBILE_MORE_TABS.map((tab) => (
+                    <button
+                      key={tab}
+                      type="button"
+                      onClick={() => selectViewTab(tab)}
+                      className={cn(
+                        'app-text-control-sm flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-app-surface-hover',
+                        activeTab === tab ? 'text-app-accent' : 'text-app-ink',
+                      )}
+                    >
+                      {tab === 'Gantt' && <Activity size={14} />}
+                      {tab === 'Table' && <Table size={14} />}
+                      {tab === 'Whiteboard' && <PencilRuler size={14} />}
+                      {t(PMS_VIEW_TAB_LABEL_KEYS[tab])}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
           </div>
-        ) : error ? (
-          <div className="app-text-body flex h-64 items-center justify-center text-red-400">{error}</div>
-        ) : (
-          <AnimatePresence mode="wait">
-            {activeTab === 'List' && (
-              <motion.div key="list" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-                <ListView issues={issues} onSelectIssue={setSelectedIssue} selectedIds={selectedIssueIds} onToggleSelect={toggleIssueSelection} taskListStatuses={taskListStatuses} />
-              </motion.div>
-            )}
-            {activeTab === 'Board' && (
-              <motion.div key="board" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="h-full">
-                <BoardView issues={issues} onSelectIssue={setSelectedIssue} onUpdateIssue={handleUpdateIssue} selectedIds={selectedIssueIds} onToggleSelect={toggleIssueSelection} taskListStatuses={taskListStatuses} />
-              </motion.div>
-            )}
-            {activeTab === 'Calendar' && (
-              <motion.div key="calendar" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="h-full">
-                <CalendarView issues={issues} taskListStatuses={taskListStatuses} />
-              </motion.div>
-            )}
-            {activeTab === 'Gantt' && (
-              <motion.div key="gantt" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="h-full">
-                <GanttView issues={issues} taskListStatuses={taskListStatuses} />
-              </motion.div>
-            )}
-            {activeTab === 'Table' && (
-              <motion.div key="table" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="h-full">
-                <TableView issues={issues} onSelectIssue={setSelectedIssue} selectedIds={selectedIssueIds} onToggleSelect={toggleIssueSelection} taskListStatuses={taskListStatuses} />
-              </motion.div>
-            )}
-            {activeTab === 'Whiteboard' && selectedTaskListWhiteboardContext && (
-              <motion.div key="whiteboard" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="flex h-full min-h-0">
-                <WhiteboardContextSlotPanel
-                  context={selectedTaskListWhiteboardContext}
-                  workspaceSlug={currentWorkspaceSlug}
-                  defaultTitle={`${taskListName} Whiteboard`}
-                  canEditContext={canEditTaskList}
-                  className="min-h-[calc(100vh-220px)] w-full overflow-hidden"
-                  editorClassName="min-h-[calc(100vh-220px)]"
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
+        </header>
+
+        {isArchivedTaskList ? (
+          <div className="app-text-caption flex items-center gap-2 border-b border-app-border bg-app-surface-sidebar px-4 py-2 text-app-ink/60 lg:px-6">
+            <Archive size={13} className="shrink-0" />
+            <span>{t('pms.archive.readOnlyNotice')}</span>
+          </div>
+        ) : null}
+
+        {selectedTaskListId && activeTab !== 'Whiteboard' && (
+          <FilterBar
+            taskListId={selectedTaskListId}
+            filterParams={filterParams}
+            setFilterParams={setFilterParams}
+            members={members}
+            currentUserId={user?.id}
+            milestones={milestones}
+            labels={labels}
+            taskListStatuses={taskListStatuses}
+          />
         )}
-      </main>
 
-      {/* Task detail — full-size modal overlay (ClickUp style) */}
-      <AnimatePresence>
-        {selectedIssue && (
-          <motion.div
-            key="task-modal"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-stretch"
-          >
-            <div className="absolute inset-0 bg-black/40" onClick={clearSelectedIssue} />
-            <motion.div
-              initial={{ y: 30, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 30, opacity: 0 }}
-              transition={{ type: 'spring', damping: 28, stiffness: 350 }}
-              className="relative z-10 flex h-full w-full flex-col overflow-hidden border-app-border bg-app-bg shadow-2xl lg:my-6 lg:mx-auto lg:h-auto lg:w-[80%] lg:rounded-xl lg:border"
+        <main
+          className={cn(
+            'min-h-0 min-w-0 flex-1 custom-scrollbar',
+            activeTab === 'Whiteboard'
+              ? 'overflow-hidden p-2 lg:p-4'
+              : activeTab === 'List'
+                ? 'overflow-hidden p-4 lg:p-8'
+                : 'overflow-y-auto p-4 lg:p-8',
+          )}
+        >
+          {loading && tasks.length === 0 ? (
+            <PmsCenteredLoadingState />
+          ) : error ? (
+            <PmsCenteredStateBlock tone="danger">{error}</PmsCenteredStateBlock>
+          ) : (
+            <AnimatePresence mode="wait">
+              {activeTab === 'List' && (
+                <m.div
+                  key="list"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="h-full min-h-0 min-w-0"
+                >
+                  <ListView
+                    completedItemsControlDisabled={!taskListStatusesReady}
+                    groupBy={taskListGroupBy}
+                    tasks={visibleTasks}
+                    onGroupByChange={setTaskListGroupBy}
+                    onSortChange={setTaskSort}
+                    onShowCompletedItemsChange={handleShowCompletedItemsChange}
+                    showCompletedItems={showCompletedItems}
+                    sort={taskSort}
+                    onSelectIssue={handleSelectIssue}
+                    selectedIds={selectedTaskIds}
+                    onToggleSelect={toggleIssueSelection}
+                    taskListStatuses={taskListStatuses}
+                    members={members}
+                    currentUserId={user?.id}
+                    canEdit={canEditTaskList}
+                    onUpdateIssue={handleUpdateIssue}
+                    onReorderIssues={handleReorderIssues}
+                    onCreateIssue={handleCreateIssueInline}
+                    onDeleteIssue={handleDeleteIssueInline}
+                  />
+                </m.div>
+              )}
+              {activeTab === 'Board' && (
+                <m.div
+                  key="board"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="h-full"
+                >
+                  <BoardView
+                    tasks={visibleTasks}
+                    onSelectIssue={handleSelectIssue}
+                    onUpdateIssue={
+                      canEditTaskList ? handleUpdateIssue : undefined
+                    }
+                    selectedIds={selectedTaskIds}
+                    onToggleSelect={
+                      canEditTaskList ? toggleIssueSelection : undefined
+                    }
+                    members={members}
+                    taskListStatuses={taskListStatuses}
+                  />
+                </m.div>
+              )}
+              {activeTab === 'Calendar' && (
+                <m.div
+                  key="calendar"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="h-full"
+                >
+                  <CalendarView
+                    tasks={visibleTasks}
+                    taskListStatuses={taskListStatuses}
+                  />
+                </m.div>
+              )}
+              {activeTab === 'Gantt' && (
+                <m.div
+                  key="gantt"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="h-full"
+                >
+                  <GanttView
+                    tasks={visibleTasks}
+                    taskListStatuses={taskListStatuses}
+                    onSelectIssue={handleSelectIssue}
+                    onUpdateIssue={handleUpdateIssue}
+                    canEdit={canEditTaskList}
+                    onOpenStatusSettings={
+                      canManageTaskList && !isArchivedTaskList
+                        ? () => setSettingsOpen(true)
+                        : undefined
+                    }
+                  />
+                </m.div>
+              )}
+              {activeTab === 'Table' && (
+                <m.div
+                  key="table"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="h-full"
+                >
+                  <TableView
+                    canEdit={canEditTaskList}
+                    tasks={visibleTasks}
+                    onSelectIssue={handleSelectIssue}
+                    onUpdateIssue={handleUpdateIssue}
+                    selectedIds={selectedTaskIds}
+                    onToggleSelect={toggleIssueSelection}
+                    members={members}
+                    taskListStatuses={taskListStatuses}
+                  />
+                </m.div>
+              )}
+              {activeTab === 'Whiteboard' &&
+                selectedTaskListWhiteboardContext && (
+                  <m.div
+                    key="whiteboard"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    className="flex h-full min-h-0"
+                  >
+                    <WhiteboardContextSlotPanel
+                      context={selectedTaskListWhiteboardContext}
+                      workspaceSlug={currentWorkspaceSlug}
+                      defaultTitle={`${taskListName} Whiteboard`}
+                      canEditContext={canEditTaskList}
+                      className="min-h-[calc(100vh-220px)] w-full overflow-hidden"
+                      editorClassName="min-h-[calc(100vh-220px)]"
+                    />
+                  </m.div>
+                )}
+            </AnimatePresence>
+          )}
+        </main>
+
+        {/* Task detail — full-size modal overlay (ClickUp style) */}
+        <AnimatePresence>
+          {selectedIssue && (
+            <TaskDetailModal
+              closeLabel={t('common:actions.close')}
+              onClose={clearSelectedIssue}
             >
               <TaskDetail
-                issue={selectedIssue}
+                task={selectedIssue}
                 members={members}
                 milestones={milestones}
                 taskListLabels={labels}
                 taskListStatuses={taskListStatuses}
                 spaceName={selectedTaskList?.team_name}
+                spaceId={selectedTaskList?.team_id ?? null}
                 workspaceSlug={currentWorkspaceSlug}
                 canEdit={canEditTaskList}
                 onClose={clearSelectedIssue}
                 onUpdate={reloadIssues}
               />
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            </TaskDetailModal>
+          )}
+        </AnimatePresence>
 
-      <AnimatePresence>
-        {isNewTaskModalOpen && (
-          <NewTaskModal
-            isOpen={isNewTaskModalOpen}
-            onClose={() => setIsNewTaskModalOpen(false)}
+        <AnimatePresence>
+          {isNewTaskModalOpen && (
+            <NewTaskModal
+              key={newTaskModalKey}
+              isOpen={isNewTaskModalOpen}
+              initialTitle={newTaskContext.initialTitle}
+              onClose={closeNewTaskModal}
+              taskListId={selectedTaskListId}
+              taskListSpaceId={selectedTaskList?.team_id ?? null}
+              onCreated={handleNewTaskCreated}
+              taskListStatuses={taskListStatuses}
+              canCreate={canEditTaskList}
+              workspaceSlug={currentWorkspaceSlug}
+            />
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {settingsOpen && selectedTaskListId && !isArchivedTaskList && (
+            <TaskListSettingsPanel
+              taskListId={selectedTaskListId}
+              taskListName={selectedTaskList?.name ?? null}
+              teamId={selectedTaskList?.team_id ?? null}
+              workspaceSlug={currentWorkspaceSlug}
+              currentUserRole={selectedTaskList?.role ?? null}
+              onClose={() => setSettingsOpen(false)}
+              onLabelsChanged={handleLabelsChanged}
+              onMembersChanged={handleMembersChanged}
+              onStatusesChanged={handleStatusesChanged}
+            />
+          )}
+        </AnimatePresence>
+
+        {canEditTaskList && selectedTaskIds.size > 0 && selectedTaskListId && (
+          <BulkActionBar
             taskListId={selectedTaskListId}
-            onCreated={reloadIssues}
+            selectedIds={selectedTaskIds}
+            totalCount={visibleTasks.length}
+            onSelectAll={() =>
+              setSelectedTaskIds(new Set(visibleTasks.map((task) => task.id)))
+            }
+            onDeselectAll={() => setSelectedTaskIds(new Set())}
+            onDone={handleBulkDone}
+            members={members}
+            labels={labels}
             taskListStatuses={taskListStatuses}
-            canCreate={canEditTaskList}
           />
         )}
-      </AnimatePresence>
 
-      <AnimatePresence>
-        {settingsOpen && selectedTaskListId && (
-          <TaskListSettingsPanel
-            taskListId={selectedTaskListId}
-            teamId={selectedTaskList?.team_id ?? null}
-            currentUserRole={selectedTaskList?.role ?? null}
-            onClose={() => setSettingsOpen(false)}
-            onLabelsChanged={(updated) => setLabels(updated)}
-            onStatusesChanged={(updated) => setTaskListStatuses(updated)}
-          />
-        )}
-      </AnimatePresence>
-
-      {selectedIssueIds.size > 0 && selectedTaskListId && (
-        <BulkActionBar
-          taskListId={selectedTaskListId}
-          selectedIds={selectedIssueIds}
-          totalCount={issues.length}
-          onSelectAll={() => setSelectedIssueIds(new Set(issues.map(i => i.id)))}
-          onDeselectAll={() => setSelectedIssueIds(new Set())}
-          onDone={handleBulkDone}
-          members={members}
-          labels={labels}
-          taskListStatuses={taskListStatuses}
+        <CreateSpaceModal
+          isOpen={createSpaceOpen}
+          onClose={() => setCreateSpaceOpen(false)}
+          workspaceSlug={currentWorkspaceSlug}
+          onCreated={(space) => {
+            setSpaces((current) => [
+              space,
+              ...current.filter((item) => item.id !== space.id),
+            ]);
+            navigate(
+              buildPmsSpaceToolPath(space.id, {
+                workspaceSlug: currentWorkspaceSlug,
+              }),
+            );
+          }}
         />
-      )}
-
-      <CreateSpaceModal
-        isOpen={createSpaceOpen}
-        onClose={() => setCreateSpaceOpen(false)}
-        onCreated={(space) => {
-          setSpaces((current) => [space, ...current.filter((item) => item.id !== space.id)]);
-          navigate(`/tool/pms-space-${space.id}`);
-        }}
-      />
-    </div>
+        {promptDialog}
+        {confirmDialog}
+      </div>
+    </LazyMotion>
   );
-};
+}

@@ -1,0 +1,49 @@
+{
+  "name": "@ai-do/contracts",
+  "version": "0.0.3",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "README.md",
+    "ai-do-desktop-update-feed.manifest.json",
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./api": {
+      "types": "./dist/api.d.ts",
+      "import": "./dist/api.js"
+    },
+    "./auth": {
+      "types": "./dist/auth.d.ts",
+      "import": "./dist/auth.js"
+    },
+    "./ai-do-desktop-update-feed": {
+      "types": "./dist/ai-do-desktop-update-feed.d.ts",
+      "import": "./dist/ai-do-desktop-update-feed.js"
+    },
+    "./ai-do-desktop-update-feed.manifest.json": "./ai-do-desktop-update-feed.manifest.json",
+    "./openapi": "./dist/openapi.generated.d.ts",
+    "./dm": {
+      "types": "./dist/dm.d.ts",
+      "import": "./dist/dm.js"
+    },
+    "./notifications": {
+      "types": "./dist/notifications.d.ts",
+      "import": "./dist/notifications.js"
+    },
+    "./realtime": {
+      "types": "./dist/realtime.d.ts",
+      "import": "./dist/realtime.js"
+    }
+  },
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "pnpm run clean && tsc -p tsconfig.package.json && cp src/openapi.generated.d.ts dist/openapi.generated.d.ts",
+    "prepack": "pnpm run build"
+  }
+}

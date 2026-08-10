@@ -4,20 +4,22 @@ from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 import logging
 import os
-import urllib.parse
 
 from opentelemetry import metrics, propagate, trace
-from opentelemetry.baggage.propagation import W3CBaggagePropagator
-from opentelemetry.context import Context, attach, detach
-from opentelemetry.propagators.composite import CompositePropagator
-from opentelemetry.propagators.textmap import default_getter, default_setter
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import ConsoleMetricExporter, PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import SERVICE_NAME, SERVICE_VERSION, Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 from opentelemetry.trace import Span, SpanKind
-from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
+
+from ai_do_api.core.trace_context import (
+    build_trace_context_propagator,
+    extract_trace_context as extract_trace_context,
+    serialize_current_trace_context as serialize_current_trace_context,
+    start_span_with_trace_context,
+)
+from ai_do_api.version import VERSION as APP_VERSION
 
 
 logger = logging.getLogger(__name__)
@@ -31,7 +33,7 @@ _BOOTSTRAP_MISMATCH_WARNED = False
 def bootstrap_telemetry(
     *,
     service_name: str,
-    service_version: str = "0.1.0",
+    service_version: str = APP_VERSION,
     enabled: bool = True,
     enable_console_exporter: bool = False,
     enable_otlp_exporter: bool = False,
@@ -98,14 +100,7 @@ def bootstrap_telemetry(
             MeterProvider(resource=resource, metric_readers=metric_readers)
         )
 
-    propagate.set_global_textmap(
-        CompositePropagator(
-            [
-                TraceContextTextMapPropagator(),
-                W3CBaggagePropagator(),
-            ]
-        )
-    )
+    propagate.set_global_textmap(build_trace_context_propagator())
     return True
 
 
@@ -138,41 +133,6 @@ def current_trace_id() -> str | None:
     return format(span_context.trace_id, "032x")
 
 
-def serialize_current_trace_context() -> dict[str, object] | None:
-    carrier: dict[str, str] = {}
-    propagate.inject(carrier=carrier, setter=default_setter)
-    traceparent = carrier.get("traceparent")
-    if not traceparent:
-        return None
-    baggage_header = carrier.get("baggage")
-    return {
-        "traceparent": traceparent,
-        "tracestate": carrier.get("tracestate"),
-        "baggage": _decode_baggage_header(baggage_header),
-    }
-
-
-def extract_trace_context(trace_context: Mapping[str, object] | None) -> Context:
-    if not trace_context:
-        return Context()
-
-    carrier: dict[str, str] = {}
-    traceparent = trace_context.get("traceparent")
-    tracestate = trace_context.get("tracestate")
-    baggage_items = trace_context.get("baggage")
-    if isinstance(traceparent, str) and traceparent:
-        carrier["traceparent"] = traceparent
-    if isinstance(tracestate, str) and tracestate:
-        carrier["tracestate"] = tracestate
-    if isinstance(baggage_items, str) and baggage_items:
-        baggage_header = baggage_items
-    else:
-        baggage_header = _encode_baggage_header(baggage_items)
-    if baggage_header:
-        carrier["baggage"] = baggage_header
-    return propagate.extract(carrier=carrier, getter=default_getter)
-
-
 @contextmanager
 def start_as_current_span(
     *,
@@ -183,56 +143,14 @@ def start_as_current_span(
     attributes: Mapping[str, object] | None = None,
 ) -> Iterator[Span]:
     tracer = get_tracer(tracer_name)
-    if parent_trace_context is None:
-        with tracer.start_as_current_span(
-            span_name,
-            kind=kind,
-            attributes=dict(attributes or {}),
-        ) as span:
-            yield span
-        return
-
-    context = extract_trace_context(parent_trace_context)
-    token = attach(context)
-    try:
-        with tracer.start_as_current_span(
-            span_name,
-            context=context,
-            kind=kind,
-            attributes=dict(attributes or {}),
-        ) as span:
-            yield span
-    finally:
-        detach(token)
-
-
-def _decode_baggage_header(header: str | None) -> dict[str, str]:
-    if not header:
-        return {}
-
-    baggage: dict[str, str] = {}
-    for item in header.split(","):
-        member = item.strip()
-        if not member or "=" not in member:
-            continue
-        key, value = member.split("=", 1)
-        baggage[key.strip()] = urllib.parse.unquote_plus(value.strip())
-    return baggage
-
-
-def _encode_baggage_header(value: object) -> str | None:
-    if not isinstance(value, Mapping):
-        return None
-    encoded_items = []
-    for key, raw_value in value.items():
-        if not isinstance(key, str) or not key:
-            continue
-        if not isinstance(raw_value, str):
-            continue
-        encoded_items.append(f"{key}={urllib.parse.quote(raw_value, safe='')}")
-    if not encoded_items:
-        return None
-    return ",".join(encoded_items)
+    with start_span_with_trace_context(
+        tracer=tracer,
+        span_name=span_name,
+        kind=kind,
+        parent_trace_context=parent_trace_context,
+        attributes=attributes,
+    ) as span:
+        yield span
 
 
 def _build_otlp_span_exporter():

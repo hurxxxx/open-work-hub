@@ -23,6 +23,7 @@ def utcnow_naive() -> datetime:
 class ImageGeneration(Base):
     __tablename__ = "image_generations"
     __table_args__ = (
+        Index("ix_image_generations_owner_created", "owner_id", "created_at"),
         Index(
             "ix_image_generations_workspace_owner_created",
             "workspace_id",
@@ -70,6 +71,7 @@ class ImageGeneration(Base):
 
     image_storage_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
     image_model: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    image_execution_profile: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     agent_trace_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 

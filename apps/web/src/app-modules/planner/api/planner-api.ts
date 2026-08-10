@@ -1,12 +1,36 @@
-import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
-import type { ApiSchema } from '@/src/platform/api/types';
-import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
+import { apiFetchJsonWithMappedError } from '@/src/platform/api/client';
 
-export type PlannerEvent = ApiSchema<'PlannerEventOut'>;
-export type PlannerEventVisibility = PlannerEvent['visibility'];
-export type PlannerEventsResponse = ApiSchema<'PlannerEventsResponse'>;
-export type PlannerEventCreateInput = ApiSchema<'PlannerEventCreateRequest'>;
-export type PlannerEventUpdateInput = ApiSchema<'PlannerEventUpdateRequest'>;
+export interface PlannerEvent {
+  id: string;
+  ownerId: string;
+  ownerName: string;
+  title: string;
+  description: string;
+  location: string;
+  timeZone: string;
+  allDay: boolean;
+  startHasTime: boolean;
+  endHasTime: boolean;
+  start: string;
+  end: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PlannerEventsResponse {
+  items: PlannerEvent[];
+}
+
+export interface PlannerEventCreateInput {
+  title: string;
+  description?: string;
+  location?: string;
+  allDay?: boolean;
+  start: string;
+  end: string;
+}
+
+export type PlannerEventUpdateInput = Partial<PlannerEventCreateInput>;
 
 export class PlannerApiError extends Error {
   status: number;
@@ -21,27 +45,29 @@ export class PlannerApiError extends Error {
 async function request<T>(
   path: string,
   token: string,
-  workspaceSlug: string,
   init: RequestInit = {},
 ): Promise<T> {
-  try {
-    return await apiFetchJson<T>(rewriteWorkspaceApiPath(path, workspaceSlug), token, init);
-  } catch (error) {
-    if (error instanceof ApiRequestError) {
-      throw new PlannerApiError(
+  return apiFetchJsonWithMappedError<T>(
+    path,
+    token,
+    init,
+    (error) =>
+      new PlannerApiError(
         error.status,
         error.message || `Planner request failed with ${error.status}.`,
-      );
-    }
-    throw error;
-  }
+      ),
+  );
 }
 
 export function listPlannerEvents(
   token: string,
-  workspaceSlug: string,
-  options: { from?: string; to?: string } = {},
+  optionsOrLegacyWorkspace: { from?: string; to?: string } | string = {},
+  legacyOptions: { from?: string; to?: string } = {},
 ): Promise<PlannerEventsResponse> {
+  const options =
+    typeof optionsOrLegacyWorkspace === 'string'
+      ? legacyOptions
+      : optionsOrLegacyWorkspace;
   const params = new URLSearchParams();
   if (options.from) params.set('from', options.from);
   if (options.to) params.set('to', options.to);
@@ -49,66 +75,42 @@ export function listPlannerEvents(
   return request<PlannerEventsResponse>(
     `/api/v1/planner/events${query ? `?${query}` : ''}`,
     token,
-    workspaceSlug,
   );
 }
 
 export function getPlannerEvent(
   token: string,
-  workspaceSlug: string,
   eventId: string,
 ): Promise<PlannerEvent> {
-  return request<PlannerEvent>(
-    `/api/v1/planner/events/${eventId}`,
-    token,
-    workspaceSlug,
-  );
+  return request<PlannerEvent>(`/api/v1/planner/events/${eventId}`, token);
 }
 
 export function createPlannerEvent(
   token: string,
-  workspaceSlug: string,
   payload: PlannerEventCreateInput,
 ): Promise<PlannerEvent> {
-  return request<PlannerEvent>(
-    '/api/v1/planner/events',
-    token,
-    workspaceSlug,
-    {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    },
-  );
+  return request<PlannerEvent>('/api/v1/planner/events', token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 export function updatePlannerEvent(
   token: string,
-  workspaceSlug: string,
   eventId: string,
   payload: PlannerEventUpdateInput,
 ): Promise<PlannerEvent> {
-  return request<PlannerEvent>(
-    `/api/v1/planner/events/${eventId}`,
-    token,
-    workspaceSlug,
-    {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
-    },
-  );
+  return request<PlannerEvent>(`/api/v1/planner/events/${eventId}`, token, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
 }
 
 export function deletePlannerEvent(
   token: string,
-  workspaceSlug: string,
   eventId: string,
 ): Promise<void> {
-  return request<void>(
-    `/api/v1/planner/events/${eventId}`,
-    token,
-    workspaceSlug,
-    {
-      method: 'DELETE',
-    },
-  );
+  return request<void>(`/api/v1/planner/events/${eventId}`, token, {
+    method: 'DELETE',
+  });
 }

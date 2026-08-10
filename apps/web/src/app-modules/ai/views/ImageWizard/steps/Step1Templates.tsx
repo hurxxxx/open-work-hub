@@ -1,14 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { TemplateGrid } from '../templates/TemplateGrid';
+import type { TemplatePreset } from '../templates/template-presets';
 import {
-  TEMPLATES_BY_CATEGORY,
-  TEMPLATE_CATEGORIES,
-  TEMPLATE_PRESETS,
-  type TemplateCategoryId,
-  type TemplatePreset,
-} from '../templates/template-presets';
+  buildStep1TemplatesProjection,
+  type Step1TemplateCategory,
+} from './step1-templates-model';
 
 interface Step1TemplatesProps {
   selectedTemplateId: string | null;
@@ -20,9 +18,11 @@ interface Step1TemplatesProps {
   onPickBlank: () => void;
 }
 
+const EMPTY_USER_TEMPLATES: TemplatePreset[] = [];
+
 export function Step1Templates({
   selectedTemplateId,
-  userTemplates = [],
+  userTemplates = EMPTY_USER_TEMPLATES,
   removingUserTemplateIds,
   templateActionError,
   onPickTemplate,
@@ -30,12 +30,8 @@ export function Step1Templates({
   onPickBlank,
 }: Step1TemplatesProps) {
   const { t } = useTranslation('apps');
-  const [category, setCategory] = useState<TemplateCategoryId | 'all'>('all');
-
-  const visibleTemplates = useMemo(() => {
-    if (category === 'all') return TEMPLATE_PRESETS;
-    return TEMPLATES_BY_CATEGORY[category] ?? [];
-  }, [category]);
+  const [category, setCategory] = useState<Step1TemplateCategory>('all');
+  const projection = buildStep1TemplatesProjection(category, userTemplates);
 
   return (
     <div className="space-y-6">
@@ -49,19 +45,13 @@ export function Step1Templates({
       </header>
 
       <div className="flex flex-wrap items-center gap-2">
-        <CategoryChip
-          label={t('ai.imageWizard.gallery.categories.all')}
-          count={TEMPLATE_PRESETS.length}
-          active={category === 'all'}
-          onClick={() => setCategory('all')}
-        />
-        {TEMPLATE_CATEGORIES.map((id) => (
+        {projection.categoryOptions.map((option) => (
           <CategoryChip
-            key={id}
-            label={t(`ai.imageWizard.gallery.categories.${id}`)}
-            count={TEMPLATES_BY_CATEGORY[id].length}
-            active={category === id}
-            onClick={() => setCategory(id)}
+            key={option.id}
+            label={t(option.labelKey)}
+            count={option.count}
+            active={option.active}
+            onClick={() => setCategory(option.id)}
           />
         ))}
       </div>
@@ -75,7 +65,7 @@ export function Step1Templates({
         </div>
       ) : null}
 
-      {category === 'all' && userTemplates.length > 0 ? (
+      {projection.showUserTemplates ? (
         <section className="space-y-3">
           <h3 className="app-text-control-sm text-app-ink/70">
             {t('ai.imageWizard.gallery.myTemplates')}
@@ -93,12 +83,10 @@ export function Step1Templates({
 
       <section className="space-y-3">
         <h3 className="app-text-control-sm text-app-ink/70">
-          {category === 'all'
-            ? t('ai.imageWizard.gallery.allHeading')
-            : t(`ai.imageWizard.gallery.categories.${category}`)}
+          {t(projection.sectionHeadingKey)}
         </h3>
         <TemplateGrid
-          templates={visibleTemplates}
+          templates={projection.visibleTemplates}
           selectedId={selectedTemplateId}
           onPick={onPickTemplate}
         />
@@ -136,11 +124,9 @@ function CategoryChip({ label, count, active, onClick }: CategoryChipProps) {
       }`}
     >
       <span>{label}</span>
-      <span className={`text-[10px] ${active ? 'text-app-accent/70' : 'text-app-ink/40'}`}>
+      <span className={`text-[12px] ${active ? 'text-app-accent/70' : 'text-app-ink/40'}`}>
         {count}
       </span>
     </button>
   );
 }
-
-export default Step1Templates;

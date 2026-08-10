@@ -1,38 +1,47 @@
-"""Service layer for the image-wizard feature.
-
-Owns CRUD on `ImageGeneration`, brief composition via the OpenAI Agents SDK,
-reference-image upload to MinIO, and Celery dispatch of the actual image
-generation task.
-"""
+"""Service layer for the image-wizard feature."""
 
 from __future__ import annotations
 
 import logging
-import os
 from datetime import UTC, datetime, timedelta
-from functools import lru_cache
-from io import BytesIO
-from typing import Any
-from uuid import uuid4
 
-from celery import Celery
-from openai import OpenAIError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ai_do_api.core.i18n import localized_http_exception
 from ai_do_api.core.settings import get_settings
-from ai_do_api.core.storage import ensure_bucket, get_minio_client
-from ai_do_api.domains.auth.models import Team, User, Workspace
+from ai_do_api.domains.auth.models import User, Workspace
 from ai_do_api.domains.auth.security import new_id
-from ai_do_api.domains.docs.models import NativeDoc, NativeDocPage
-from ai_do_api.domains.docs.service import can_read_native_doc_for_rag
+from ai_do_api.domains.images.agent_runtime import (
+    ImageBriefRuntimeResult,
+    ImageRuntimeConfigurationError,
+    ImageRuntimeProviderError,
+    select_image_agent_runtime_adapter,
+)
+from ai_do_api.domains.images.context_ref_hydration import hydrate_context_refs
+from ai_do_api.domains.images.execution_profile import (
+    build_image_execution_profile as build_image_execution_profile_payload,
+)
+from ai_do_api.domains.images.model_settings_service import (
+    ImageModelSettingsError,
+    ResolvedImageExecution,
+    resolve_active_image_execution,
+)
+from ai_do_api.domains.images.generation_jobs import (
+    dispatch_image_generation,
+    revoke_image_generation,
+)
 from ai_do_api.domains.images.models import ImageGeneration, utcnow_naive
 from ai_do_api.domains.images.prompt import (
-    BRIEF_SYSTEM_PROMPT,
     build_direct_edit_prompt,
     build_brief_messages,
     sanitize_image_plan_text,
+)
+from ai_do_api.domains.images.reference_images import (
+    ReferenceImagePolicy,
+    VALID_REFERENCE_ROLES,
+    detect_reference_content_type,
+    is_allowed_declared_reference_content_type,
 )
 from ai_do_api.domains.images.schemas import (
     BriefRequest,
@@ -45,24 +54,16 @@ from ai_do_api.domains.images.schemas import (
     ReferenceImageRole,
     ReferenceImageUploadOut,
 )
-from ai_do_api.domains.meeting.models import Meeting
-from ai_do_api.domains.meeting.service import can_read_meeting_for_rag
-from ai_do_api.domains.pms.access import can_read_issue_for_rag, has_list_access
-from ai_do_api.domains.pms.models import Issue, TaskList
+from ai_do_api.domains.images.storage import (
+    RESULT_IMAGE_CONTENT_TYPE,
+    presign_image_object,
+    put_reference_image_object,
+    read_image_object,
+    remove_image_objects,
+)
 
 
 logger = logging.getLogger(__name__)
-
-
-_VALID_ROLES: tuple[str, ...] = ("style", "composition", "content")
-_VALID_KINDS: tuple[str, ...] = ("meeting", "task", "doc")
-_IMAGE_GENERATION_QUEUE = "image_generation"
-_ALLOWED_REFERENCE_CONTENT_TYPES: tuple[str, ...] = (
-    "image/png",
-    "image/jpeg",
-    "image/webp",
-)
-_GENERATE_IMAGE_TASK_NAME = "images.generate_image"
 
 
 # --- Helpers ---------------------------------------------------------------
@@ -102,34 +103,22 @@ def _serialize(row: ImageGeneration) -> ImageGenerationOut:
     return ImageGenerationOut.model_validate(row, from_attributes=True)
 
 
-@lru_cache(maxsize=1)
-def _get_celery_client() -> Celery:
+def build_image_execution_profile(
+    db: Session,
+    row: ImageGeneration,
+    *,
+    resolved: ResolvedImageExecution | None = None,
+) -> dict[str, object]:
     settings = get_settings()
-    celery_client = Celery(
-        "ai_do_api_images",
-        broker=settings.worker_broker_url,
-        backend=settings.worker_result_backend,
+    execution = resolved or resolve_active_image_execution(db, settings=settings)
+    return build_image_execution_profile_payload(
+        row,
+        execution,
+        max_reference_uploads=settings.image_max_reference_uploads,
     )
-    celery_client.conf.update(
-        broker_connection_retry=False,
-        broker_connection_retry_on_startup=False,
-        broker_connection_max_retries=0,
-        task_publish_retry=False,
-        broker_transport_options={
-            "socket_connect_timeout": 1,
-            "socket_timeout": 1,
-            "retry_on_timeout": False,
-        },
-    )
-    return celery_client
 
 
-def _image_api_key() -> str:
-    settings = get_settings()
-    return settings.image_api_key.strip() or os.environ.get("OPENAI_API_KEY", "").strip()
-
-
-def _brief_input_from_messages(messages: list[dict[str, str]]) -> str:
+def brief_input_from_messages(messages: list[dict[str, str]]) -> str:
     blocks: list[str] = []
     for message in messages:
         if message.get("role") == "system":
@@ -140,17 +129,10 @@ def _brief_input_from_messages(messages: list[dict[str, str]]) -> str:
     return "\n\n".join(blocks).strip()
 
 
-def _extract_agent_text(result: Any) -> str:
-    final_output = getattr(result, "final_output", None)
-    if isinstance(final_output, str):
-        return final_output.strip()
-    if final_output is not None:
-        return str(final_output).strip()
-    return ""
-
-
-def _run_brief_agent(
+def run_brief_agent(
     *,
+    provider_id: str,
+    adapter_id: str | None = None,
     input_text: str,
     model: str,
     api_key: str,
@@ -159,237 +141,26 @@ def _run_brief_agent(
     user_id: str,
     generation_id: str,
     enable_web_search: bool,
-) -> Any:
-    # Local import so DB-only tests can import the service without initializing
-    # the SDK until the image feature is actually used.
-    from agents import (
-        Agent,
-        ModelSettings,
-        OpenAIProvider,
-        RunConfig,
-        Runner,
-        WebSearchTool,
-    )
-
-    agent = Agent(
-        name="image-brief-designer",
-        instructions=BRIEF_SYSTEM_PROMPT,
+    execution_profile: dict[str, object] | None = None,
+    db: Session | None = None,
+) -> ImageBriefRuntimeResult:
+    adapter = select_image_agent_runtime_adapter(provider_id, adapter_id=adapter_id)
+    return adapter.run_brief(
+        input_text=input_text,
         model=model,
-        model_settings=ModelSettings(max_tokens=2600, tool_choice="auto"),
-        tools=[WebSearchTool(search_context_size="high")] if enable_web_search else [],
-    )
-    run_config = RunConfig(
-        model_provider=OpenAIProvider(api_key=api_key, base_url=base_url),
-        workflow_name="AI-DO Image Plan",
-        trace_metadata={
-            "source": "images.brief",
-            "workspace_id": workspace_id,
-            "actor_user_id": user_id,
-            "generation_id": generation_id,
-        },
-    )
-    return Runner.run_sync(
-        agent,
-        input=input_text,
-        max_turns=10,
-        run_config=run_config,
+        api_key=api_key,
+        base_url=base_url,
+        workspace_id=workspace_id,
+        user_id=user_id,
+        generation_id=generation_id,
+        enable_web_search=enable_web_search,
+        execution_profile=execution_profile,
+        db=db,
     )
 
 
-def _flatten_doc_text(pages: list[NativeDocPage], *, max_chars: int = 1500) -> str:
-    """Flatten a doc's page blocks into plain text up to ``max_chars``."""
-    parts: list[str] = []
-    used = 0
-    for page in pages:
-        title = (page.title or "").strip()
-        if title:
-            parts.append(title)
-            used += len(title) + 1
-        for block in page.content_blocks or []:
-            if not isinstance(block, dict):
-                continue
-            content = block.get("content")
-            if not isinstance(content, list):
-                continue
-            for piece in content:
-                if not isinstance(piece, dict):
-                    continue
-                text = piece.get("text")
-                if isinstance(text, str) and text.strip():
-                    parts.append(text.strip())
-                    used += len(text) + 1
-                    if used >= max_chars:
-                        return "\n".join(parts)[:max_chars]
-    return "\n".join(parts)[:max_chars]
-
-
-def _hydrate_context_refs(
-    db: Session,
-    *,
-    workspace: Workspace,
-    user: User,
-    raw_refs: list[Any],
-) -> list[dict[str, Any]]:
-    """Refresh snapshot fields by re-loading the referenced entities."""
-    hydrated: list[dict[str, Any]] = []
-    for ref in raw_refs or []:
-        if not isinstance(ref, dict):
-            continue
-        kind = str(ref.get("kind") or "").lower()
-        ref_id = str(ref.get("id") or "")
-        if kind not in _VALID_KINDS or not ref_id:
-            continue
-        accessible = False
-        snapshot: dict[str, Any] = {}
-        if kind == "meeting":
-            if not can_read_meeting_for_rag(
-                db,
-                user=user,
-                workspace_id=workspace.id,
-                meeting_id=ref_id,
-            ):
-                continue
-            meeting = db.scalar(
-                select(Meeting).where(
-                    Meeting.id == ref_id,
-                    Meeting.workspace_id == workspace.id,
-                )
-            )
-            if meeting is not None:
-                accessible = True
-                snapshot = {
-                    "title": meeting.title,
-                    "agenda": meeting.agenda,
-                    "summary": meeting.agenda,
-                }
-        elif kind == "doc":
-            if not can_read_native_doc_for_rag(db, user=user, doc_id=ref_id):
-                continue
-            doc = db.scalar(
-                select(NativeDoc).where(
-                    NativeDoc.id == ref_id,
-                    NativeDoc.workspace_id == workspace.id,
-                    NativeDoc.trashed_at.is_(None),
-                )
-            )
-            if doc is not None:
-                accessible = True
-                pages = list(
-                    db.scalars(
-                        select(NativeDocPage)
-                        .where(
-                            NativeDocPage.doc_id == doc.id,
-                            NativeDocPage.trashed_at.is_(None),
-                        )
-                        .order_by(NativeDocPage.sort_order.asc())
-                        .limit(5)
-                    )
-                )
-                snapshot = {
-                    "title": doc.title,
-                    "body": _flatten_doc_text(pages),
-                }
-        elif kind == "task":
-            # ref_id may target either a TaskList or an Issue. Try TaskList
-            # first; fall back to Issue.
-            tlist = db.scalar(
-                select(TaskList)
-                .join(Team, Team.id == TaskList.team_id)
-                .where(
-                    TaskList.id == ref_id,
-                    Team.workspace_id == workspace.id,
-                    Team.active.is_(True),
-                    Team.trashed_at.is_(None),
-                )
-            )
-            if tlist is not None:
-                if not has_list_access(db, user, tlist.id):
-                    continue
-                accessible = True
-                issues = list(
-                    db.scalars(
-                        select(Issue)
-                        .where(Issue.list_id == tlist.id, Issue.archived.is_(False))
-                        .order_by(Issue.created_at.desc())
-                        .limit(15)
-                    )
-                )
-                snapshot = {
-                    "title": tlist.name,
-                    "description": tlist.description,
-                    "status": tlist.status,
-                    "issues": [
-                        f"[{issue.status}] {issue.title}" for issue in issues
-                    ],
-                }
-            else:
-                issue = db.scalar(
-                    select(Issue)
-                    .join(TaskList, TaskList.id == Issue.list_id)
-                    .join(Team, Team.id == TaskList.team_id)
-                    .where(
-                        Issue.id == ref_id,
-                        Issue.archived.is_(False),
-                        Team.workspace_id == workspace.id,
-                        Team.active.is_(True),
-                        Team.trashed_at.is_(None),
-                    )
-                )
-                if issue is not None:
-                    if not can_read_issue_for_rag(db, user=user, issue_id=issue.id):
-                        continue
-                    accessible = True
-                    snapshot = {
-                        "title": issue.title,
-                        "status": issue.status,
-                        "description": issue.description,
-                    }
-
-        if not accessible:
-            continue
-
-        # Merge user-supplied snapshot values in case the user already passed
-        # title/summary fields the LLM should see.
-        user_snapshot = ref.get("snapshot") or {}
-        if isinstance(user_snapshot, dict):
-            for key in ("title", "summary"):
-                value = user_snapshot.get(key)
-                if isinstance(value, str) and value.strip() and not snapshot.get(key):
-                    snapshot[key] = value.strip()
-        hydrated.append({"kind": kind, "id": ref_id, "snapshot": snapshot})
-    return hydrated
-
-
-def _ref_storage_key(generation_id: str) -> str:
-    return f"images/refs/{generation_id}/{uuid4().hex}"
-
-
-def _is_owned_ref_key(row: ImageGeneration, key: str) -> bool:
-    return key.startswith(f"images/refs/{row.id}/")
-
-
-def _is_owned_result_key(row: ImageGeneration, key: str) -> bool:
-    return key == f"images/results/{row.workspace_id}/{row.id}.png"
-
-
-def _detect_reference_content_type(data: bytes) -> str:
-    if data.startswith(b"\x89PNG\r\n\x1a\n"):
-        return "image/png"
-    if data.startswith(b"\xff\xd8\xff"):
-        return "image/jpeg"
-    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
-        return "image/webp"
-    raise localized_http_exception(status_code=422, code="images.invalid_content_type")
-
-
-def _owned_reference_count(row: ImageGeneration) -> int:
-    return sum(
-        1
-        for ref in row.reference_image_keys or []
-        if isinstance(ref, dict)
-        and isinstance(ref.get("storage_key"), str)
-        and _is_owned_ref_key(row, ref["storage_key"])
-    )
+def _reference_policy(row: ImageGeneration) -> ReferenceImagePolicy:
+    return ReferenceImagePolicy(generation_id=row.id, workspace_id=row.workspace_id)
 
 
 def _mark_brief_drafting(row: ImageGeneration) -> None:
@@ -560,21 +331,16 @@ def delete_generation(
 ) -> None:
     _require_enabled()
     row = _load(db, workspace=workspace, user=user, generation_id=generation_id)
-    settings = get_settings()
-    client = get_minio_client()
-    keys: list[str] = []
-    for ref in row.reference_image_keys or []:
-        if isinstance(ref, dict):
-            key = ref.get("storage_key")
-            if isinstance(key, str) and _is_owned_ref_key(row, key):
-                keys.append(key)
-    if row.image_storage_key and _is_owned_result_key(row, row.image_storage_key):
-        keys.append(row.image_storage_key)
-    for key in keys:
-        try:
-            client.remove_object(settings.minio_bucket, key)
-        except Exception:
-            logger.warning("images.delete: failed to remove object %s", key, exc_info=True)
+    keys = _reference_policy(row).owned_object_keys(
+        row.reference_image_keys,
+        row.image_storage_key,
+    )
+    for failure in remove_image_objects(keys):
+        logger.warning(
+            "images.delete: failed to remove object %s",
+            failure.storage_key,
+            exc_info=failure.exc,
+        )
     row.trashed_at = utcnow_naive()
     db.add(row)
     db.commit()
@@ -605,7 +371,7 @@ def cancel_generation(
 
     if celery_task_id:
         try:
-            _get_celery_client().control.revoke(celery_task_id, terminate=False)
+            revoke_image_generation(celery_task_id)
         except Exception:
             logger.warning(
                 "images.cancel: failed to revoke celery task generation=%s task=%s",
@@ -634,55 +400,44 @@ def upload_reference_image(
 ) -> ReferenceImageUploadOut:
     _require_enabled()
     settings = get_settings()
-    if role not in _VALID_ROLES:
+    if role not in VALID_REFERENCE_ROLES:
         raise localized_http_exception(status_code=422, code="images.invalid_role")
     if len(data) <= 0:
         raise localized_http_exception(status_code=422, code="images.empty_upload")
     if len(data) > settings.image_reference_max_bytes:
         raise localized_http_exception(status_code=413, code="images.upload_too_large")
-    detected_content_type = _detect_reference_content_type(data)
-    declared_content_type = (content_type or "").split(";", 1)[0].strip().lower()
-    if (
-        declared_content_type
-        and declared_content_type != "application/octet-stream"
-        and declared_content_type not in _ALLOWED_REFERENCE_CONTENT_TYPES
-    ):
+    detected_content_type = detect_reference_content_type(data)
+    if detected_content_type is None:
+        raise localized_http_exception(status_code=422, code="images.invalid_content_type")
+    if not is_allowed_declared_reference_content_type(content_type):
         raise localized_http_exception(status_code=422, code="images.invalid_content_type")
 
     row = _load(db, workspace=workspace, user=user, generation_id=generation_id)
     if row.brief_status == "approved":
         raise localized_http_exception(status_code=409, code="images.locked_after_approval")
-    refs = [
-        ref
-        for ref in row.reference_image_keys or []
-        if isinstance(ref, dict)
-        and isinstance(ref.get("storage_key"), str)
-        and _is_owned_ref_key(row, ref["storage_key"])
-    ]
-    if _owned_reference_count(row) >= settings.image_max_reference_uploads:
+    policy = _reference_policy(row)
+    refs = policy.owned_reference_entries(row.reference_image_keys)
+    if len(refs) >= settings.image_max_reference_uploads:
         raise localized_http_exception(status_code=409, code="images.too_many_refs")
 
-    ensure_bucket()
-    storage_key = _ref_storage_key(row.id)
+    storage_key = policy.reference_storage_key()
     try:
-        get_minio_client().put_object(
-            settings.minio_bucket,
-            storage_key,
-            BytesIO(data),
-            length=len(data),
+        put_reference_image_object(
+            storage_key=storage_key,
+            data=data,
             content_type=detected_content_type,
         )
     except Exception as exc:
         logger.exception("images.upload_reference: storage put failed")
         raise localized_http_exception(status_code=502, code="images.upload_failed") from exc
 
-    entry = {
-        "storage_key": storage_key,
-        "role": role,
-        "content_type": detected_content_type,
-        "size_bytes": len(data),
-        "original_name": original_name[:200],
-    }
+    entry = policy.reference_entry(
+        storage_key=storage_key,
+        role=role,
+        content_type=detected_content_type,
+        size_bytes=len(data),
+        original_name=original_name,
+    )
     refs.append(entry)
     row.reference_image_keys = refs
     _mark_brief_drafting(row)
@@ -715,13 +470,13 @@ def delete_reference_image(
     row.updated_at = utcnow_naive()
     db.add(row)
     db.commit()
-    settings = get_settings()
-    if _is_owned_ref_key(row, storage_key):
-        try:
-            get_minio_client().remove_object(settings.minio_bucket, storage_key)
-        except Exception:
+    if _reference_policy(row).is_owned_reference_key(storage_key):
+        failures = remove_image_objects([storage_key])
+        if failures:
             logger.warning(
-                "images.delete_reference: failed to remove object %s", storage_key, exc_info=True
+                "images.delete_reference: failed to remove object %s",
+                storage_key,
+                exc_info=failures[0].exc,
             )
 
 
@@ -749,7 +504,7 @@ def generate_brief(
         if isinstance(last, dict):
             prior_brief = str(last.get("text") or "").strip() or None
 
-    hydrated = _hydrate_context_refs(
+    hydrated = hydrate_context_refs(
         db, workspace=workspace, user=user, raw_refs=row.context_refs or []
     )
     reference_image_count = len(row.reference_image_keys or [])
@@ -768,23 +523,39 @@ def generate_brief(
     )
 
     settings = get_settings()
-    api_key = _image_api_key()
-    if not api_key:
-        raise localized_http_exception(status_code=502, code="images.brief_failed")
 
     try:
-        response = _run_brief_agent(
-            input_text=_brief_input_from_messages(messages),
-            model=settings.image_supervisor_model,
-            api_key=api_key,
-            base_url=settings.image_base_url,
+        resolved = resolve_active_image_execution(db, settings=settings)
+        execution_profile = build_image_execution_profile(db, row, resolved=resolved)
+        response = run_brief_agent(
+            provider_id=resolved.provider_id,
+            adapter_id=resolved.adapter_id,
+            input_text=brief_input_from_messages(messages),
+            model=resolved.supervisor_model_id,
+            api_key=(resolved.api_key.get_secret_value() if resolved.api_key else ""),
+            base_url=resolved.endpoint_url,
             workspace_id=workspace.id,
             user_id=user.id,
             generation_id=row.id,
-            enable_web_search=settings.image_brief_web_search_enabled,
+            enable_web_search=resolved.brief_web_search_enabled,
+            execution_profile=execution_profile,
+            db=db,
         )
-    except OpenAIError as exc:
-        logger.warning("images.brief: OpenAI SDK error: %s", exc)
+    except ImageModelSettingsError as exc:
+        logger.warning("images.brief: image model settings error: %s", exc.code)
+        raise localized_http_exception(
+            status_code=503,
+            code=exc.code,
+            **exc.context,
+        ) from exc
+    except ImageRuntimeConfigurationError as exc:
+        logger.warning("images.brief: image runtime configuration error: %s", exc)
+        raise localized_http_exception(
+            status_code=502,
+            code="images.brief_failed",
+        ) from exc
+    except ImageRuntimeProviderError as exc:
+        logger.warning("images.brief: provider runtime error: %s", exc)
         raise localized_http_exception(
             status_code=502,
             code="images.brief_failed",
@@ -796,7 +567,7 @@ def generate_brief(
             code="images.brief_failed",
         ) from exc
 
-    text = sanitize_image_plan_text(_extract_agent_text(response))
+    text = sanitize_image_plan_text(response.text)
     if not text:
         raise localized_http_exception(status_code=502, code="images.brief_empty")
 
@@ -874,6 +645,14 @@ def approve_and_dispatch(
 
     row.brief_status = "approved"
     row.image_status = "queued"
+    try:
+        row.image_execution_profile = build_image_execution_profile(db, row)
+    except ImageModelSettingsError as exc:
+        raise localized_http_exception(
+            status_code=503,
+            code=exc.code,
+            **exc.context,
+        ) from exc
     row.failure_reason = None
     row.approved_at = utcnow_naive()
     row.updated_at = utcnow_naive()
@@ -881,12 +660,7 @@ def approve_and_dispatch(
     db.commit()
 
     try:
-        async_result = _get_celery_client().send_task(
-            _GENERATE_IMAGE_TASK_NAME,
-            args=[row.id],
-            queue=_IMAGE_GENERATION_QUEUE,
-        )
-        row.celery_task_id = getattr(async_result, "id", None)
+        row.celery_task_id = dispatch_image_generation(row.id)
         db.add(row)
         db.commit()
     except Exception as exc:
@@ -918,20 +692,15 @@ def presign_download(
     row = _load(db, workspace=workspace, user=user, generation_id=generation_id)
     if row.image_status != "succeeded" or not row.image_storage_key:
         raise localized_http_exception(status_code=409, code="images.not_ready")
-    if not _is_owned_result_key(row, row.image_storage_key):
+    if not _reference_policy(row).is_owned_result_key(row.image_storage_key):
         logger.warning(
             "images.download: refusing unexpected result key generation=%s key=%s",
             row.id,
             row.image_storage_key,
         )
         raise localized_http_exception(status_code=409, code="images.not_ready")
-    settings = get_settings()
     expires = timedelta(minutes=15)
-    url = get_minio_client().presigned_get_object(
-        settings.minio_bucket,
-        row.image_storage_key,
-        expires=expires,
-    )
+    url = presign_image_object(storage_key=row.image_storage_key, expires=expires)
     return ImageDownloadResponse(
         url=url,
         expires_at=utcnow_naive() + expires,
@@ -949,7 +718,7 @@ def read_result_image(
     row = _load(db, workspace=workspace, user=user, generation_id=generation_id)
     if row.image_status != "succeeded" or not row.image_storage_key:
         raise localized_http_exception(status_code=409, code="images.not_ready")
-    if not _is_owned_result_key(row, row.image_storage_key):
+    if not _reference_policy(row).is_owned_result_key(row.image_storage_key):
         logger.warning(
             "images.download: refusing unexpected result key generation=%s key=%s",
             row.id,
@@ -957,20 +726,8 @@ def read_result_image(
         )
         raise localized_http_exception(status_code=409, code="images.not_ready")
 
-    settings = get_settings()
     try:
-        response = get_minio_client().get_object(
-            settings.minio_bucket,
-            row.image_storage_key,
-        )
-        try:
-            return response.read(), "image/png"
-        finally:
-            try:
-                response.close()
-                response.release_conn()
-            except Exception:
-                pass
+        return read_image_object(row.image_storage_key), RESULT_IMAGE_CONTENT_TYPE
     except Exception as exc:
         logger.warning("images.download: storage read failed for %s", row.id, exc_info=True)
         raise localized_http_exception(status_code=409, code="images.not_ready") from exc

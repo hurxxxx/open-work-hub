@@ -1,6 +1,6 @@
-# 32. AI 레이어 — OpenAI · SSE 스트리밍 · MCP
+# 32. AI 레이어 — LLM provider · SSE 스트리밍 · MCP
 
-> **한 줄 요약.** 이 프로젝트의 "AI"는 OpenAI API 호출을 감싸 **스트리밍으로 사용자에게 전달**하고, **MCP(Model Context Protocol)** 로 외부 도구(시스템 데이터, 사내 DB)를 AI가 쓸 수 있게 하는 층이다.
+> **한 줄 요약.** 이 프로젝트의 "AI"는 외부 OpenAI API와 OpenAI-compatible 로컬 LLM endpoint를 같은 실행 계층에서 감싸 **스트리밍으로 사용자에게 전달**하고, **MCP(Model Context Protocol)** 로 외부 도구(시스템 데이터, 사내 DB)를 AI가 쓸 수 있게 하는 층이다.
 
 > 🔑 **한 마디로.** AI 레이어는 모델 호출, 컨텍스트 주입, 도구 연동(MCP), 스트리밍 전달(SSE)을 조합해 조직 맥락에 맞는 응답을 제공하는 실행 계층이다.
 
@@ -34,11 +34,13 @@
 
 ---
 
-## 2. OpenAI SDK — LLM 호출을 위한 파이썬 SDK
+## 2. OpenAI SDK — OpenAI-compatible LLM 호출을 위한 파이썬 SDK
 
 ### 2.1 무엇인가
 
-OpenAI에서 공식 제공하는 파이썬 SDK(`openai` v2). HTTP 호출의 저수준 디테일을 감춥니다.
+OpenAI에서 공식 제공하는 파이썬 SDK(`openai` v2)는 공식 OpenAI API뿐 아니라
+vLLM 같은 OpenAI-compatible endpoint에도 같은 클라이언트 패턴을 적용할 수 있습니다.
+HTTP 호출의 저수준 디테일을 감춥니다.
 
 ```python
 from openai import OpenAI
@@ -151,7 +153,7 @@ SSE는 **전송 레이어 표준**(HTTP 이벤트 스트림)일 뿐입니다. �
 | **멀티모달 벤더** | SSE, gRPC 등 전송 방식과 페이로드 스키마가 다를 수 있음. |
 | **OpenAI Responses API** | `response.output_item.added` 같은 구조화 이벤트. 에이전트 실행 추적이 쉽다. |
 
-공식 SDK가 이 차이를 감싸 주지만, **브라우저에서 직접 파싱**할 때는 각 포맷을 의식해야 합니다. 이 프로젝트의 `apps/web/src/domains/ai/stream/`은 이 차이를 흡수하는 어댑터 역할을 합니다.
+공식 SDK가 이 차이를 감싸 주지만, **브라우저에서 직접 파싱**할 때는 각 포맷을 의식해야 합니다. 이 프로젝트의 `apps/web/src/app-modules/ai/api/`는 이 차이를 흡수하는 어댑터 역할을 합니다.
 
 ---
 
@@ -284,7 +286,7 @@ AX TF에서 "AI 도구에서 직접 AI-DO 회의를 잡게 해 주세요"라는 
 
 ## 7. 에이전트 패턴 확장 — 실무 기준
 
-12장에서 본 기본 루프는 출발점이지, 종착점이 아닙니다. AI-DO Portal 관점에서 자주 쓰는 패턴을 정리합니다.
+12장에서 본 기본 루프는 출발점이지, 종착점이 아닙니다. AI-DO 관점에서 자주 쓰는 패턴을 정리합니다.
 
 ### 7.1 ReAct — 생각·행동·관찰
 
@@ -389,13 +391,12 @@ AI API 벤더는 초당/분당 요청 수 제한이 있습니다. 재시도 + �
 
 ## 10. 이 프로젝트의 AI 도메인 구조
 
-`apps/web/src/domains/ai/` (25장 참조) 의 구성:
+`apps/web/src/app-modules/ai/` (25장 참조) 의 구성:
 
 - `ai/`
-  - `pages/` — 채팅 페이지, 히스토리 페이지
-  - `components/` — 메시지 버블, 프롬프트 바, 툴 호출 블록
-      - `stream/` — SSE 스트림 파싱 (벤더별 포맷 어댑터)
-  - `hooks/` — `useChatStream`, `useToolInvocation`
+  - `api/` — SSE 파서, 대화 API, 이미지/스펙 비교 API
+  - `views/` — AI 화면과 도구 화면
+  - `views/chat/` — 메시지, 툴 호출, 승인, artifact UI
   - `types.ts`
 
 백엔드는 `apps/api/src/ai_do_api/domains/ai/`:
@@ -425,7 +426,7 @@ AI API 벤더는 초당/분당 요청 수 제한이 있습니다. 재시도 + �
 
 ## 11. 핵심 요약
 
-- 이 프로젝트의 AI 레이어는 **OpenAI SDK + SSE 스트리밍 + MCP** 로 구성.
+- 이 프로젝트의 AI 레이어는 **OpenAI-compatible client + SSE 스트리밍 + MCP** 로 구성.
 - SSE는 한 방향 실시간 전송에 최적 — WebSocket보다 가볍고 AI 응답 스트림에 적합.
 - RAG와 MCP로 **회사 데이터와 도구**를 AI에 안전히 연결.
 - 비용·관측·보안은 AI 기능의 **삼각대**. 하나라도 빠지면 실패.

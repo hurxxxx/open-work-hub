@@ -26,7 +26,20 @@ import re
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
+from html import unescape
 from typing import Iterable
+
+from ai_do_api.domains.ai.artifact_syntax import (
+    ARTIFACT_CLOSE_PREFIX,
+    ARTIFACT_OPEN_PREFIX,
+    advance_line_prefix,
+    classify_artifact_tag_candidate,
+    find_artifact_tag_end_index,
+    is_indented_code_prefix,
+    looks_like_inline_example_prefix,
+    parse_artifact_attrs,
+    trailing_backtick_run,
+)
 
 
 @dataclass(frozen=True)
@@ -64,26 +77,13 @@ ArtifactParseEvent = (
     ParsedText | ParsedArtifactStart | ParsedArtifactBody | ParsedArtifactEnd
 )
 
+_HTML_TITLE_RE = re.compile(r"<title[^>]*>([\s\S]*?)</title>", re.IGNORECASE)
+
 
 class _State(Enum):
     OUTSIDE = "outside"
     INSIDE = "inside"
-
-
-# `<artifact` and `</artifact` prefixes are the only `<` sequences this
-# parser treats specially. Other tags flow through as plain text so a model
-# that spits out markdown HTML (`<br>`, `<span>`, etc.) doesn't surprise us.
-_OPEN_PREFIX = "<artifact"
-_CLOSE_PREFIX = "</artifact"
-_ATTR_RE = re.compile(
-    r'([a-zA-Z_][a-zA-Z0-9_-]*)\s*=\s*"((?:\\.|[^"\\])*)"'
-)
-# Characters that can legally follow `<artifact` / `</artifact` in a valid
-# tag (whitespace, self-close, tag-end). Anything else — letters, digits,
-# `-`, `_` — means we're looking at a different tag name that happens to
-# share the prefix (e.g. `<artifacts>`). Those must pass through as plain
-# text rather than get rerouted into the artifact channel.
-_TAG_BOUNDARY_CHARS = frozenset(" \t\n\r\f\v>/")
+    HTML_FENCE = "html_fence"
 
 
 @dataclass
@@ -95,6 +95,7 @@ class ArtifactStreamParser:
     emitted as plain text so nothing is silently dropped.
     """
 
+    server_owned_artifact_types: frozenset[str] = field(default_factory=frozenset)
     _state: _State = _State.OUTSIDE
     _buffer: str = ""
     _current_artifact_id: str | None = None
@@ -102,6 +103,7 @@ class ArtifactStreamParser:
     # but not yet its end. If the stream ends in this state, ``flush()``
     # synthesizes a close so the client isn't stuck waiting.
     _open_artifact_ids: list[str] = field(default_factory=list)
+    _suppressed_artifact_ids: set[str] = field(default_factory=set)
     # Markdown awareness: when the model shows the `<artifact>` syntax as
     # literal example text (fenced code block or inline backticks), the
     # markup must flow through as plain text instead of being rerouted
@@ -140,7 +142,9 @@ class ArtifactStreamParser:
         if self._buffer:
             if self._state is _State.OUTSIDE:
                 self._emit_text(events, self._buffer)
-            elif self._state is _State.INSIDE and self._current_artifact_id:
+            elif self._state in {_State.INSIDE, _State.HTML_FENCE} and (
+                self._current_artifact_id
+            ):
                 self._emit_body(events, self._buffer)
             self._buffer = ""
 
@@ -148,7 +152,9 @@ class ArtifactStreamParser:
         # client needs a terminal event per id to finalize its buffer.
         while self._open_artifact_ids:
             artifact_id = self._open_artifact_ids.pop()
-            events.append(ParsedArtifactEnd(artifact_id))
+            if artifact_id not in self._suppressed_artifact_ids:
+                events.append(ParsedArtifactEnd(artifact_id))
+            self._suppressed_artifact_ids.discard(artifact_id)
         self._current_artifact_id = None
         self._state = _State.OUTSIDE
         self._in_fence = False
@@ -174,7 +180,7 @@ class ArtifactStreamParser:
         if not text:
             return
         events.append(ParsedText(text))
-        self._outside_line_prefix = _advance_line_prefix(
+        self._outside_line_prefix = advance_line_prefix(
             self._outside_line_prefix, text
         )
         if not track_inline_code or self._in_fence:
@@ -195,8 +201,10 @@ class ArtifactStreamParser:
         while self._buffer:
             if self._state is _State.OUTSIDE:
                 progressed = self._drain_outside(events)
-            else:
+            elif self._state is _State.INSIDE:
                 progressed = self._drain_inside(events)
+            else:
+                progressed = self._drain_html_fence_artifact(events)
             if not progressed:
                 # Cannot decide yet — keep the residual buffer for the next
                 # feed() call (e.g. partial `<artifac` at a chunk boundary).
@@ -217,7 +225,7 @@ class ArtifactStreamParser:
         # Nothing interesting found — but a trailing 1-2 backtick run could
         # still become a fence, so hold those for the next chunk.
         if idx_lt == -1 and idx_fence == -1:
-            partial = _trailing_backtick_run(self._buffer)
+            partial = trailing_backtick_run(self._buffer)
             if partial == 0:
                 self._emit_text(events, self._buffer)
                 self._buffer = ""
@@ -236,15 +244,7 @@ class ArtifactStreamParser:
             if idx_fence > 0:
                 self._emit_text(events, self._buffer[:idx_fence])
                 self._buffer = self._buffer[idx_fence:]
-            # Emit the opening ``` verbatim without touching inline-code
-            # state — this is a fence delimiter, not three inline toggles.
-            self._emit_text(events, self._buffer[:3], track_inline_code=False)
-            self._buffer = self._buffer[3:]
-            # A fence supersedes any pending inline span that might have
-            # opened on the prior line (rare but possible).
-            self._inline_code_open = False
-            self._in_fence = True
-            return True
+            return self._drain_outside_fence_open(events)
 
         # `<` comes first (or is the only trigger). Emit any preceding
         # text so `_last_emitted_char` reflects what sits just before `<`.
@@ -268,14 +268,14 @@ class ArtifactStreamParser:
         # Buffer starts with `<artifact` followed by a boundary char. Look
         # for the terminating `>` while respecting quoted attribute values
         # so `<artifact title="A > B">` parses correctly.
-        gt_idx = _find_tag_end_index(self._buffer, len(_OPEN_PREFIX))
+        gt_idx = find_artifact_tag_end_index(self._buffer, len(ARTIFACT_OPEN_PREFIX))
         if gt_idx is None:
             # Open tag body still streaming — wait.
             return False
 
         open_tag = self._buffer[: gt_idx + 1]
         self._buffer = self._buffer[gt_idx + 1 :]
-        attrs = _parse_attrs(open_tag)
+        attrs = parse_artifact_attrs(open_tag)
 
         # Escape hatch 1: without a `type` attribute the markup is almost
         # certainly the model quoting the syntax itself — emit as plain.
@@ -292,10 +292,10 @@ class ArtifactStreamParser:
         if (
             "type" not in attrs
             or self._inline_code_open
-            or _is_indented_code_prefix(self._outside_line_prefix)
+            or is_indented_code_prefix(self._outside_line_prefix)
             or (
                 "title" not in attrs
-                and _looks_like_inline_example_prefix(self._outside_line_prefix)
+                and looks_like_inline_example_prefix(self._outside_line_prefix)
             )
         ):
             self._emit_text(events, open_tag)
@@ -307,12 +307,17 @@ class ArtifactStreamParser:
         is_self_closing = open_tag[:-1].rstrip().endswith("/")
 
         artifact_id = str(uuid.uuid4())
-        events.append(ParsedArtifactStart(artifact_id=artifact_id, attrs=attrs))
+        suppressed = attrs.get("type") in self.server_owned_artifact_types
+        if not suppressed:
+            events.append(ParsedArtifactStart(artifact_id=artifact_id, attrs=attrs))
         if is_self_closing:
-            events.append(ParsedArtifactEnd(artifact_id))
+            if not suppressed:
+                events.append(ParsedArtifactEnd(artifact_id))
             return True
         self._current_artifact_id = artifact_id
         self._open_artifact_ids.append(artifact_id)
+        if suppressed:
+            self._suppressed_artifact_ids.add(artifact_id)
         self._state = _State.INSIDE
         self._body_line_prefix = ""
         return True
@@ -325,7 +330,7 @@ class ArtifactStreamParser:
         if close_idx == -1:
             # No close visible yet — emit what we can and hold back any
             # trailing partial backticks (could be the start of the close).
-            partial = _trailing_backtick_run(self._buffer)
+            partial = trailing_backtick_run(self._buffer)
             if partial == len(self._buffer):
                 return False
             if partial == 0:
@@ -350,6 +355,98 @@ class ArtifactStreamParser:
         self._inline_code_open = False
         return True
 
+    def _drain_outside_fence_open(self, events: list[ArtifactParseEvent]) -> bool:
+        """Handle a top-level fenced code block opener.
+
+        Most fenced blocks stay plain text so the chat bubble can render
+        source. The exception is a complete fenced HTML document: models
+        frequently answer runnable-HTML requests this way despite the
+        artifact prompt, so promote those blocks into html artifacts.
+        """
+        info_end = self._buffer.find("\n", 3)
+        if info_end == -1:
+            return False
+
+        info = self._buffer[3:info_end].strip().lower()
+        if not _is_html_fence_info(info):
+            # Emit the opening ``` verbatim without touching inline-code
+            # state — this is a fence delimiter, not three inline toggles.
+            self._emit_text(events, self._buffer[:3], track_inline_code=False)
+            self._buffer = self._buffer[3:]
+            # A fence supersedes any pending inline span that might have
+            # opened on the prior line (rare but possible).
+            self._inline_code_open = False
+            self._in_fence = True
+            return True
+
+        body_prefix = self._buffer[info_end + 1 :]
+        body_classification = _classify_html_document_start(body_prefix)
+        if body_classification == "wait":
+            return False
+        if body_classification == "reject":
+            self._emit_text(events, self._buffer[:3], track_inline_code=False)
+            self._buffer = self._buffer[3:]
+            self._inline_code_open = False
+            self._in_fence = True
+            return True
+
+        artifact_id = str(uuid.uuid4())
+        attrs = {"type": "html", "title": _extract_html_title(body_prefix) or "HTML"}
+        events.append(ParsedArtifactStart(artifact_id=artifact_id, attrs=attrs))
+        self._current_artifact_id = artifact_id
+        self._open_artifact_ids.append(artifact_id)
+        self._state = _State.HTML_FENCE
+        self._buffer = body_prefix
+        self._inline_code_open = False
+        self._in_fence = False
+        self._body_line_prefix = ""
+        return self._drain_html_fence_artifact(events)
+
+    def _drain_html_fence_artifact(
+        self,
+        events: list[ArtifactParseEvent],
+    ) -> bool:
+        close_idx = self._buffer.find("```")
+        if close_idx == -1:
+            partial = trailing_backtick_run(self._buffer)
+            if partial == len(self._buffer):
+                return False
+            if partial == 0:
+                self._emit_body(events, self._buffer, track_inline_code=False)
+                self._buffer = ""
+                return True
+            self._emit_body(
+                events,
+                self._buffer[:-partial],
+                track_inline_code=False,
+            )
+            self._buffer = self._buffer[-partial:]
+            return False
+
+        body_text = self._buffer[:close_idx]
+        if body_text.endswith("\n"):
+            body_text = body_text[:-1]
+        if body_text:
+            self._emit_body(events, body_text, track_inline_code=False)
+
+        end = close_idx + 3
+        artifact_id = self._current_artifact_id
+        if artifact_id is not None:
+            if artifact_id in self._open_artifact_ids:
+                self._open_artifact_ids.remove(artifact_id)
+            if artifact_id not in self._suppressed_artifact_ids:
+                events.append(ParsedArtifactEnd(artifact_id))
+            self._suppressed_artifact_ids.discard(artifact_id)
+
+        if self._outside_line_prefix == "" and self._buffer[end : end + 1] == "\n":
+            end += 1
+        self._buffer = self._buffer[end:]
+        self._current_artifact_id = None
+        self._state = _State.OUTSIDE
+        self._inline_code_open = False
+        self._body_line_prefix = ""
+        return True
+
     def _classify_open_candidate(self) -> str:
         """Return ``"accept"``, ``"wait"``, or ``"reject"`` for the `<`
         prefix sitting at the head of the buffer. ``accept`` means it's an
@@ -359,18 +456,7 @@ class ArtifactStreamParser:
         ``<artifact`` is an identifier character (e.g. ``<artifacts>``) or
         the prefix doesn't match at all, so the ``<`` is plain text.
         """
-        buffer = self._buffer
-        if buffer.startswith(_OPEN_PREFIX):
-            if len(buffer) == len(_OPEN_PREFIX):
-                return "wait"
-            return (
-                "accept"
-                if buffer[len(_OPEN_PREFIX)] in _TAG_BOUNDARY_CHARS
-                else "reject"
-            )
-        if len(buffer) < len(_OPEN_PREFIX) and _OPEN_PREFIX.startswith(buffer):
-            return "wait"
-        return "reject"
+        return classify_artifact_tag_candidate(self._buffer, ARTIFACT_OPEN_PREFIX)
 
     def _emit_body(
         self,
@@ -388,8 +474,9 @@ class ArtifactStreamParser:
         """
         if not text or self._current_artifact_id is None:
             return
-        events.append(ParsedArtifactBody(self._current_artifact_id, text))
-        self._body_line_prefix = _advance_line_prefix(self._body_line_prefix, text)
+        if self._current_artifact_id not in self._suppressed_artifact_ids:
+            events.append(ParsedArtifactBody(self._current_artifact_id, text))
+        self._body_line_prefix = advance_line_prefix(self._body_line_prefix, text)
         if not track_inline_code or self._in_fence:
             return
         for ch in text:
@@ -413,7 +500,7 @@ class ArtifactStreamParser:
             # No triggers visible. Hold back a trailing 1-2 backtick run —
             # the next chunk could grow it into a fence opener we must
             # detect before any following `</artifact>`.
-            partial = _trailing_backtick_run(self._buffer)
+            partial = trailing_backtick_run(self._buffer)
             if partial == 0:
                 self._emit_body(events, self._buffer)
                 self._buffer = ""
@@ -443,7 +530,7 @@ class ArtifactStreamParser:
             self._buffer = self._buffer[idx_lt:]
 
         # Now buffer starts with `<`. Could it be the close tag?
-        if _is_indented_code_prefix(self._body_line_prefix):
+        if is_indented_code_prefix(self._body_line_prefix):
             self._emit_body(events, self._buffer[0])
             self._buffer = self._buffer[1:]
             return True
@@ -467,7 +554,7 @@ class ArtifactStreamParser:
             self._buffer = self._buffer[1:]
             return True
 
-        gt_idx = _find_tag_end_index(self._buffer, len(_CLOSE_PREFIX))
+        gt_idx = find_artifact_tag_end_index(self._buffer, len(ARTIFACT_CLOSE_PREFIX))
         if gt_idx is None:
             return False
 
@@ -477,7 +564,9 @@ class ArtifactStreamParser:
         if artifact_id is not None:
             if artifact_id in self._open_artifact_ids:
                 self._open_artifact_ids.remove(artifact_id)
-            events.append(ParsedArtifactEnd(artifact_id))
+            if artifact_id not in self._suppressed_artifact_ids:
+                events.append(ParsedArtifactEnd(artifact_id))
+            self._suppressed_artifact_ids.discard(artifact_id)
         self._current_artifact_id = None
         self._state = _State.OUTSIDE
         # Fence/inline state shouldn't bleed across the artifact boundary.
@@ -492,7 +581,7 @@ class ArtifactStreamParser:
         """
         close_idx = self._buffer.find("```")
         if close_idx == -1:
-            partial = _trailing_backtick_run(self._buffer)
+            partial = trailing_backtick_run(self._buffer)
             if partial == len(self._buffer):
                 return False
             if partial == 0:
@@ -514,109 +603,7 @@ class ArtifactStreamParser:
 
     def _classify_close_candidate(self) -> str:
         """Mirror of :meth:`_classify_open_candidate` for the close tag."""
-        buffer = self._buffer
-        if buffer.startswith(_CLOSE_PREFIX):
-            if len(buffer) == len(_CLOSE_PREFIX):
-                return "wait"
-            return (
-                "accept"
-                if buffer[len(_CLOSE_PREFIX)] in _TAG_BOUNDARY_CHARS
-                else "reject"
-            )
-        if len(buffer) < len(_CLOSE_PREFIX) and _CLOSE_PREFIX.startswith(buffer):
-            return "wait"
-        return "reject"
-
-
-def _trailing_backtick_run(buffer: str) -> int:
-    """Count how many backticks end the buffer. Used to hold back 1-2
-    trailing ``` `` `` chars that could still grow into a ```` ``` ````
-    fence marker on the next chunk without emitting them prematurely.
-    Returns 0 when the last char isn't a backtick.
-    """
-    count = 0
-    for ch in reversed(buffer):
-        if ch == "`":
-            count += 1
-        else:
-            break
-    return count
-
-
-def _advance_line_prefix(prefix: str, text: str) -> str:
-    for ch in text:
-        if ch == "\n":
-            prefix = ""
-        else:
-            prefix += ch
-    return prefix
-
-
-def _is_indented_code_prefix(prefix: str) -> bool:
-    if not prefix or any(ch not in {" ", "\t"} for ch in prefix):
-        return False
-    indent = 0
-    for ch in prefix:
-        indent += 4 if ch == "\t" else 1
-    return indent >= 4
-
-
-def _looks_like_inline_example_prefix(prefix: str) -> bool:
-    return prefix.rstrip().endswith((":", "："))
-
-
-def _find_tag_end_index(buffer: str, start: int) -> int | None:
-    """Return the index of the terminating ``>`` for an open/close tag,
-    honoring double-quoted attribute values. Returns ``None`` when the
-    tag isn't fully present yet (caller should wait for more chars).
-
-    Artifact tag grammar only uses double quotes for attribute values;
-    unquoted or single-quoted attrs are treated as plain characters so a
-    stray ``"`` inside the body doesn't poison the scanner.
-    """
-    in_quotes = False
-    i = start
-    length = len(buffer)
-    while i < length:
-        ch = buffer[i]
-        if in_quotes and ch == "\\":
-            i += 2
-            continue
-        if ch == '"':
-            in_quotes = not in_quotes
-        elif ch == ">" and not in_quotes:
-            return i
-        i += 1
-    return None
-
-
-def _parse_attrs(open_tag: str) -> dict[str, str]:
-    """Pull ``key="value"`` pairs out of an open tag.
-
-    Only understands double-quoted string values — matches the contract we
-    teach the model via the system prompt. Unquoted or single-quoted attrs
-    are ignored rather than coerced, to keep the grammar strict and the
-    failure mode obvious.
-    """
-
-    return {
-        match.group(1): _unescape_attr_value(match.group(2))
-        for match in _ATTR_RE.finditer(open_tag)
-    }
-
-
-def _unescape_attr_value(value: str) -> str:
-    out: list[str] = []
-    i = 0
-    while i < len(value):
-        ch = value[i]
-        if ch == "\\" and i + 1 < len(value) and value[i + 1] in {'"', "\\"}:
-            out.append(value[i + 1])
-            i += 2
-            continue
-        out.append(ch)
-        i += 1
-    return "".join(out)
+        return classify_artifact_tag_candidate(self._buffer, ARTIFACT_CLOSE_PREFIX)
 
 
 def iter_feed(
@@ -628,3 +615,30 @@ def iter_feed(
         events.extend(parser.feed(chunk))
     events.extend(parser.flush())
     return events
+
+
+def _is_html_fence_info(info: str) -> bool:
+    first_word = info.split(maxsplit=1)[0] if info else ""
+    return first_word in {"html", "htm"}
+
+
+def _classify_html_document_start(code: str) -> str:
+    lower = code.lstrip().lower()
+    if not lower:
+        return "wait"
+    candidates = ("<!doctype html", "<html")
+    if any(lower.startswith(candidate) for candidate in candidates):
+        return "accept"
+    if any(candidate.startswith(lower) for candidate in candidates):
+        return "wait"
+    return "reject"
+
+
+def _extract_html_title(code: str) -> str | None:
+    match = _HTML_TITLE_RE.search(code)
+    if not match:
+        return None
+    title = re.sub(r"\s+", " ", unescape(match.group(1))).strip()
+    if not title:
+        return None
+    return title[:80]

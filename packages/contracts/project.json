@@ -1,0 +1,33 @@
+{
+  "name": "contracts",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/contracts/src",
+  "projectType": "library",
+  "tags": ["scope:shared", "type:lib", "domain:contracts"],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "options": {
+        "command": "pnpm exec tsc -p packages/contracts/tsconfig.lib.json --noEmit",
+        "cwd": "."
+      }
+    },
+    "check-sources": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "options": {
+        "command": "node scripts/check-contract-source-artifacts.mjs",
+        "cwd": "."
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "options": {
+        "command": "pnpm exec vitest run packages/contracts/src",
+        "cwd": "."
+      }
+    }
+  }
+}

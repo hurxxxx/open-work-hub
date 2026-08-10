@@ -1,0 +1,65 @@
+# AI-DO protected surface owner routing.
+# GitLab requests owner review on these shared/core/harness surfaces.
+
+[Harness And Policy]
+/.gitlab-ci.yml @dwdcc
+/.gitignore @dwdcc
+/CODEOWNERS @dwdcc
+/agents.md @dwdcc
+/CLAUDE.md @dwdcc
+/.gitlab/merge_request_templates/ @dwdcc
+/.agents/ @dwdcc
+/adr/ @dwdcc
+/docs/agents/ @dwdcc
+/scripts/check-* @dwdcc
+/scripts/tests/test_check_*.py @dwdcc
+/scripts/app-platform-guardrails/ @dwdcc
+/scripts/fixtures/app-platform-guardrails/ @dwdcc
+/scripts/ci/ @dwdcc
+/scripts/api-test-selection*.mjs @dwdcc
+/scripts/run-affected-api-tests.mjs @dwdcc
+/scripts/configure-ci-validation-env.sh @dwdcc
+/scripts/install-ci-validation-runner.sh @dwdcc
+/scripts/install-ci-light-validation-runner.sh @dwdcc
+/scripts/promote-ci-control-plane.sh @dwdcc
+/scripts/web-i18n-message-checker.mjs @dwdcc
+/ops/ci/ @dwdcc
+/apps/api/tests/test_ai_gateway_direct_call_guard.py @dwdcc
+/apps/api/tests/test_ai_*contract*.py @dwdcc
+/apps/api/tests/test_ai_registry.py @dwdcc
+/apps/api/tests/test_ai_runtime_settings.py @dwdcc
+/apps/api/tests/test_openapi_contract*.py @dwdcc
+/apps/api/tests/test_platform_adapter_registries.py @dwdcc
+/apps/api/tests/test_workspace_bootstrap.py @dwdcc
+/apps/api/tests/test_workspace_keyword_search_registry.py @dwdcc
+/apps/worker/tests/test_runtime_settings_contract.py @dwdcc
+/apps/worker/tests/test_worker_task_registration.py @dwdcc
+
+[Core Platform]
+/apps/web/src/app/ @dwdcc
+/apps/web/src/platform/ @dwdcc
+/apps/api/src/ai_do_api/core/ @dwdcc
+/apps/api/src/ai_do_api/domains/auth/ @dwdcc
+/apps/api/src/ai_do_api/domains/ai/ @dwdcc
+/apps/api/src/ai_do_api/domains/search/ @dwdcc
+/apps/api/src/ai_do_api/api_registry.py @dwdcc
+/apps/api/src/ai_do_api/platform_extensions.py @dwdcc
+/apps/api/src/ai_do_api/domains/*/search_*.py @dwdcc
+/apps/worker/src/ai_do_worker/ @dwdcc
+/packages/contracts/ @dwdcc
+/packages/ui/ @dwdcc
+/package.json @dwdcc
+/pnpm-lock.yaml @dwdcc
+/pnpm-workspace.yaml @dwdcc
+/nx.json @dwdcc
+/.env.example @dwdcc
+/compose.*.yml @dwdcc
+/ops/ @dwdcc
+/scripts/prod-* @dwdcc
+/scripts/infra-stack.sh @dwdcc
+/scripts/dev-infra.sh @dwdcc
+/scripts/check-runtime-separation.py @dwdcc
+
+[Windows Admin Dev Env]
+/scripts/dev-windows*.ps1 @dwdcc
+/docs/reference/setup-windows.md @dwdcc

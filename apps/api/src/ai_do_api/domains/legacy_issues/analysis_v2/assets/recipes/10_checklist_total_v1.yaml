@@ -1,0 +1,18 @@
+{
+  "recipe_id": "checklist_total",
+  "version": 1,
+  "title": "차량 체크리스트 문서 수",
+  "description": "차종·모듈·상태 범위에 해당하는 고유 차량 체크리스트 문서 수를 계산한다.",
+  "result_shape": "scalar",
+  "counting_unit": "checklists",
+  "source_views": ["legacy_issue_analysis.vehicle_checklists_v1"],
+  "sql_template": "SELECT COUNT(DISTINCT c.checklist_id) AS checklist_count FROM legacy_issue_analysis.vehicle_checklists_v1 AS c WHERE {{filters}}",
+  "parameters": [
+    {"name": "vehicle_models", "value_type": "string_list", "placement": "filter", "description": "차종 목록", "column": "c.vehicle_model", "operator": "in"},
+    {"name": "module_keys", "value_type": "string_list", "placement": "filter", "description": "모듈 목록", "column": "c.module_key", "operator": "in"},
+    {"name": "statuses", "value_type": "string_list", "placement": "filter", "description": "체크리스트 상태 목록", "column": "c.checklist_status", "operator": "in"},
+    {"name": "created_from", "value_type": "date", "placement": "filter", "description": "체크리스트 생성 시작일", "column": "c.created_at", "operator": "gte"},
+    {"name": "created_to", "value_type": "date", "placement": "filter", "description": "체크리스트 생성 종료일", "column": "c.created_at", "operator": "lte"}
+  ],
+  "tags": ["checklist", "document", "count", "vehicle"]
+}

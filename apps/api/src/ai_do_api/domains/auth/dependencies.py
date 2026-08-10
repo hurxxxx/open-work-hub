@@ -34,6 +34,7 @@ class AuthContext:
     user: User
     session: AuthSession
     system_roles: frozenset[str]
+    impersonator_user_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -77,7 +78,7 @@ def resolve_auth_context_from_token(
             status_code=status.HTTP_401_UNAUTHORIZED,
             code="auth.user_not_found",
         )
-    if user.status != "active":
+    if user.status != "active" or user.login_blocked:
         raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
             code="auth.user_inactive",
@@ -89,10 +90,20 @@ def resolve_auth_context_from_token(
         db.commit()
         db.refresh(auth_session)
 
+    if auth_session.impersonator_user_id:
+        db.info["impersonator_user_id"] = auth_session.impersonator_user_id
+        db.info["impersonated_user_id"] = auth_session.user_id
+        db.info["impersonation_session_id"] = auth_session.id
+    else:
+        db.info.pop("impersonator_user_id", None)
+        db.info.pop("impersonated_user_id", None)
+        db.info.pop("impersonation_session_id", None)
+
     return AuthContext(
         user=user,
         session=auth_session,
         system_roles=frozenset(resolve_system_roles(db, user)),
+        impersonator_user_id=auth_session.impersonator_user_id,
     )
 
 
@@ -136,8 +147,6 @@ PERMISSION_COMPAT_ROLE_MAP = {
     "admin.access": (("platform_admin",)),
     "user.read": (("platform_admin",)),
     "user.write": (("platform_admin",)),
-    "group.read": (("platform_admin",)),
-    "group.write": (("platform_admin",)),
     "org_unit.read": (("platform_admin",)),
     "org_unit.write": (("platform_admin",)),
     "workspace.read": (("platform_admin",)),
@@ -146,6 +155,7 @@ PERMISSION_COMPAT_ROLE_MAP = {
     "team.write": (("platform_admin",)),
     "audit.read": (("platform_admin",)),
     "session.revoke": (("platform_admin",)),
+    "user.impersonate": (("platform_admin",)),
 }
 
 

@@ -1,6 +1,11 @@
 import * as Dialog from '@radix-ui/react-dialog';
 
 import type { DetailDrawerProps } from '../types';
+import {
+  drawerModeClass,
+  drawerSideClass,
+  isFloatingLayerOutsideEvent,
+} from '../overlay/dialog-surface-model';
 import { Button } from '../primitives/button';
 import { cn } from '../utils/cn';
 
@@ -16,25 +21,30 @@ export function DetailDrawer({
   embedded = false,
   side = 'right',
 }: DetailDrawerProps) {
+  const handleOutsideInteraction = (event: Event) => {
+    if (isFloatingLayerOutsideEvent(event)) {
+      event.preventDefault();
+    }
+  };
+
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-[calc(var(--ui-z-drawer)-1)] bg-slate-950/32" />
+        <Dialog.Overlay className="fixed inset-0 z-[calc(var(--ui-z-drawer)-1)] bg-ui-static-black/32" />
         <Dialog.Content
           className={cn(
             'fixed top-0 z-[var(--ui-z-drawer)] flex h-screen w-[min(420px,100vw)] flex-col bg-ui-surface-raised shadow-[var(--ui-shadow-lg)] outline-none',
-            side === 'left'
-              ? 'left-0 border-r border-r-[var(--ui-color-border)]'
-              : 'right-0 border-l border-l-[var(--ui-color-border)]',
-            embedded ? 'overflow-hidden' : 'gap-3 p-4',
+            drawerSideClass(side),
+            drawerModeClass(embedded),
             contentClassName,
           )}
+          onFocusOutside={handleOutsideInteraction}
+          onPointerDownOutside={handleOutsideInteraction}
+          onInteractOutside={handleOutsideInteraction}
         >
           {embedded ? (
             <>
-              <Dialog.Title className="sr-only">
-                {title}
-              </Dialog.Title>
+              <Dialog.Title className="sr-only">{title}</Dialog.Title>
               {description ? (
                 <Dialog.Description className="sr-only">
                   {description}
@@ -46,11 +56,11 @@ export function DetailDrawer({
             <>
               <div className="flex items-start justify-between gap-3 border-b border-b-[var(--ui-color-border)] pb-3">
                 <div className="grid gap-1">
-                  <Dialog.Title className="m-0 text-[1rem] font-semibold tracking-[-0.02em] text-[var(--ui-color-ink)]">
+                  <Dialog.Title className="m-0 text-[length:var(--ui-text-h3)] font-semibold tracking-[-0.02em] text-[var(--ui-color-ink)]">
                     {title}
                   </Dialog.Title>
                   {description ? (
-                    <Dialog.Description className="m-0 text-[0.84rem] text-[var(--ui-color-ink-muted)]">
+                    <Dialog.Description className="m-0 text-[length:var(--ui-text-body-sm)] text-[var(--ui-color-ink-muted)]">
                       {description}
                     </Dialog.Description>
                   ) : null}
@@ -62,9 +72,13 @@ export function DetailDrawer({
                 </Dialog.Close>
               </div>
 
-              <div className="ui-scrollbar min-h-0 flex-1 overflow-y-auto">{children}</div>
+              <div className="ui-scrollbar min-h-0 flex-1 overflow-y-auto">
+                {children}
+              </div>
 
-              {actions ? <div className="flex flex-col gap-2">{actions}</div> : null}
+              {actions ? (
+                <div className="flex flex-col gap-2">{actions}</div>
+              ) : null}
             </>
           )}
         </Dialog.Content>

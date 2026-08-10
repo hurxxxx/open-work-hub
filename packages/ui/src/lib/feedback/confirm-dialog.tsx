@@ -3,6 +3,17 @@ import * as DialogPrimitive from '@radix-ui/react-dialog';
 
 import { Button } from '../primitives/button';
 import { cn } from '../utils/cn';
+import {
+  cancelCurrentDialog,
+  confirmCurrentDialog,
+  openConfirmDialog,
+  type ConfirmDialogState,
+  type ConfirmDialogTransition,
+  type ConfirmDialogVariant,
+  type ConfirmOptions,
+} from './confirm-dialog-state';
+
+export type { ConfirmOptions } from './confirm-dialog-state';
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
@@ -15,7 +26,7 @@ export interface ConfirmDialogProps {
   confirmLabel: string;
   cancelLabel: string;
   /** "danger" renders the confirm button in red. */
-  variant?: 'default' | 'danger';
+  variant?: ConfirmDialogVariant;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -31,9 +42,14 @@ export function ConfirmDialog({
   onCancel,
 }: ConfirmDialogProps) {
   return (
-    <DialogPrimitive.Root open={open} onOpenChange={(v) => { if (!v) onCancel(); }}>
+    <DialogPrimitive.Root
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) onCancel();
+      }}
+    >
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-[calc(var(--ui-z-drawer)-1)] bg-slate-950/32 backdrop-blur-sm" />
+        <DialogPrimitive.Overlay className="fixed inset-0 z-[calc(var(--ui-z-drawer)-1)] bg-ui-static-black/32 backdrop-blur-sm" />
         <DialogPrimitive.Content
           className={cn(
             'fixed left-1/2 top-1/2 z-[var(--ui-z-drawer)] w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2',
@@ -41,10 +57,10 @@ export function ConfirmDialog({
           )}
         >
           <div className="px-5 pt-5 pb-3">
-            <DialogPrimitive.Title className="m-0 text-[1rem] font-semibold tracking-[-0.02em] text-[var(--ui-color-ink)]">
+            <DialogPrimitive.Title className="m-0 text-[length:var(--ui-text-h3)] font-semibold tracking-[-0.02em] text-[var(--ui-color-ink)]">
               {title}
             </DialogPrimitive.Title>
-            <DialogPrimitive.Description className="mt-2 text-[0.84rem] leading-relaxed text-[var(--ui-color-ink-muted)]">
+            <DialogPrimitive.Description className="mt-2 text-[length:var(--ui-text-body-sm)] leading-relaxed text-[var(--ui-color-ink-muted)]">
               {description}
             </DialogPrimitive.Description>
           </div>
@@ -55,7 +71,11 @@ export function ConfirmDialog({
             </Button>
             <Button
               variant="primary"
-              className={variant === 'danger' ? 'border-red-600 bg-red-600 hover:bg-red-700' : undefined}
+              className={
+                variant === 'danger'
+                  ? 'border-ui-danger bg-ui-danger hover:bg-ui-danger/90'
+                  : undefined
+              }
               onClick={onConfirm}
             >
               {confirmLabel}
@@ -71,16 +91,6 @@ export function ConfirmDialog({
 /*  Hook – drop-in replacement for window.confirm                      */
 /* ------------------------------------------------------------------ */
 
-type ConfirmOptions = {
-  title: string;
-  description: string;
-  confirmLabel: string;
-  cancelLabel: string;
-  variant?: 'default' | 'danger';
-};
-
-type ConfirmState = ConfirmOptions & { resolve: (value: boolean) => void };
-
 /**
  * Returns an async `confirm()` function and a `<ConfirmDialog />` element.
  * Render the element somewhere in your component tree.
@@ -94,27 +104,34 @@ type ConfirmState = ConfirmOptions & { resolve: (value: boolean) => void };
  * ```
  */
 export function useConfirm() {
-  const [state, setState] = useState<ConfirmState | null>(null);
+  const [state, setState] = useState<ConfirmDialogState>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
 
-  const confirm = useCallback((options: ConfirmOptions) => {
-    // If a dialog is already open, resolve it as cancelled
-    if (stateRef.current) stateRef.current.resolve(false);
-    return new Promise<boolean>((resolve) => {
-      setState({ ...options, resolve });
-    });
+  const applyTransition = useCallback((transition: ConfirmDialogTransition) => {
+    stateRef.current = transition.state;
+    transition.completion?.resolve(transition.completion.value);
+    setState(transition.state);
   }, []);
 
+  const confirm = useCallback(
+    (options: ConfirmOptions) => {
+      return new Promise<boolean>((resolve) => {
+        applyTransition(
+          openConfirmDialog(stateRef.current, { ...options, resolve }),
+        );
+      });
+    },
+    [applyTransition],
+  );
+
   const handleConfirm = useCallback(() => {
-    state?.resolve(true);
-    setState(null);
-  }, [state]);
+    applyTransition(confirmCurrentDialog(stateRef.current));
+  }, [applyTransition]);
 
   const handleCancel = useCallback(() => {
-    state?.resolve(false);
-    setState(null);
-  }, [state]);
+    applyTransition(cancelCurrentDialog(stateRef.current));
+  }, [applyTransition]);
 
   const confirmDialog = state ? (
     <ConfirmDialog

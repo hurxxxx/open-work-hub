@@ -7,7 +7,7 @@
  *
  * The package only contains data for years it has been published with. When
  * a new year's holidays are gazetted, the maintainer publishes a new minor
- * version (e.g. `4.2027.0`) and we need to bump the package — see the upgrade
+ * version (e.g. `5.2028.0`) and we need to bump the package — see the upgrade
  * notes in `docs/product/korean-holidays.md`.
  *
  * Synchronous by design so that calendar grids can call it cell-by-cell
@@ -25,7 +25,8 @@ import {
   y2024,
   y2025,
   y2026,
-} from '@hyunbinseo/holidays-kr';
+  y2027,
+} from '@hyunbinseo/holidays-kr/all';
 
 type HolidayYearMap = Readonly<Record<string, readonly string[]>>;
 
@@ -42,10 +43,11 @@ const HOLIDAYS_BY_YEAR: Readonly<Record<number, HolidayYearMap>> = {
   2024: y2024,
   2025: y2025,
   2026: y2026,
+  2027: y2027,
 };
 
-export const KOREAN_HOLIDAY_MIN_YEAR = 2018;
-export const KOREAN_HOLIDAY_MAX_YEAR = 2026;
+const KOREAN_HOLIDAY_MIN_YEAR = 2018;
+const KOREAN_HOLIDAY_MAX_YEAR = 2027;
 
 function pad2(value: number): string {
   return value.toString().padStart(2, '0');
@@ -88,9 +90,4 @@ export function getKoreanHolidayNames(
   }
   const key = `${year}-${pad2(month + 1)}-${pad2(day)}`;
   return yearMap[key] ?? null;
-}
-
-/** True when the supplied date is a Korean public holiday. */
-export function isKoreanHoliday(year: number, month: number, day: number): boolean {
-  return getKoreanHolidayNames(year, month, day) !== null;
 }

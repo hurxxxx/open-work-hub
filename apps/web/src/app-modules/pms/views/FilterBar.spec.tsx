@@ -1,36 +1,123 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createDefaultIssueFilterParams } from '../api/pms-filters';
+import { i18n } from '@/src/platform/i18n/i18n';
+import type { PmsTaskListStatus } from '../api/pms-api';
 import { FilterBar } from './FilterBar';
 
-describe('FilterBar', () => {
-  it('opens mobile filters in a drawer and applies selected values', () => {
-    const setFilterParams = vi.fn();
-    const filterParams = createDefaultIssueFilterParams();
+const statuses = [
+  {
+    id: 'status-todo',
+    category: 'not_started',
+    name: '할 일',
+    position: 0,
+    slug: 'todo',
+  },
+  {
+    id: 'status-doing',
+    category: 'active',
+    name: '진행 중',
+    position: 1,
+    slug: 'doing',
+  },
+  {
+    id: 'status-done',
+    category: 'done',
+    name: '완료됨',
+    position: 2,
+    slug: 'done',
+  },
+  {
+    id: 'status-closed',
+    category: 'closed',
+    name: '종료됨',
+    position: 3,
+    slug: 'closed',
+  },
+] as PmsTaskListStatus[];
 
+describe('FilterBar', () => {
+  beforeEach(async () => {
+    localStorage.clear();
+    await i18n.changeLanguage('ko-KR');
+  });
+
+  it('checks non-completion statuses on the initial screen', () => {
     render(
       <FilterBar
-        taskListId="list-1"
-        filterParams={filterParams}
-        setFilterParams={setFilterParams}
+        filterParams={{ archived_state: 'active' }}
+        labels={[]}
         members={[]}
         milestones={[]}
-        labels={[]}
+        setFilterParams={vi.fn()}
+        taskListId="list-1"
+        taskListStatuses={statuses}
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /필터/ }));
+    fireEvent.click(screen.getByRole('button', { name: '상태' }));
 
-    const dialog = screen.getByRole('dialog');
-    expect(within(dialog).getByText('필터')).toBeTruthy();
+    expect(
+      (screen.getByRole('checkbox', { name: '할 일' }) as HTMLInputElement)
+        .checked,
+    ).toBe(true);
+    expect(
+      (screen.getByRole('checkbox', { name: '진행 중' }) as HTMLInputElement)
+        .checked,
+    ).toBe(true);
+    expect(
+      (screen.getByRole('checkbox', { name: '완료됨' }) as HTMLInputElement)
+        .checked,
+    ).toBe(false);
+    expect(
+      (screen.getByRole('checkbox', { name: '종료됨' }) as HTMLInputElement)
+        .checked,
+    ).toBe(false);
+  });
 
-    fireEvent.click(within(dialog).getByRole('button', { name: '우선순위' }));
-    fireEvent.click(within(dialog).getByRole('button', { name: '높음' }));
+  it('starts a direct status edit from the effective default selection', () => {
+    const setFilterParams = vi.fn();
+    render(
+      <FilterBar
+        filterParams={{ archived_state: 'active' }}
+        labels={[]}
+        members={[]}
+        milestones={[]}
+        setFilterParams={setFilterParams}
+        taskListId="list-1"
+        taskListStatuses={statuses}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '상태' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: '완료됨' }));
 
     expect(setFilterParams).toHaveBeenCalledWith({
-      ...filterParams,
-      priority: 'high',
+      archived_state: 'active',
+      status: ['todo', 'doing', 'done'],
     });
+  });
+
+  it('layers the assignee menu above sticky gantt headers', () => {
+    render(
+      <FilterBar
+        filterParams={{ archived_state: 'active' }}
+        labels={[]}
+        members={[]}
+        milestones={[]}
+        setFilterParams={vi.fn()}
+        taskListId="list-1"
+        taskListStatuses={statuses}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '담당자' }));
+
+    const menu = screen
+      .getByRole('textbox', {
+        name: '이름, 이메일 또는 부서로 사용자 검색',
+      })
+      .closest('.absolute');
+    expect(menu?.classList.contains('z-[var(--ui-z-popover)]')).toBe(true);
   });
 });

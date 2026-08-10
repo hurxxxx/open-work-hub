@@ -59,5 +59,3 @@ export function WizardFooter({
     </div>
   );
 }
-
-export default WizardFooter;

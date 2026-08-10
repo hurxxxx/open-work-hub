@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { FileText } from 'lucide-react';
+import { ChevronDown, ChevronRight, FileText } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { AnimatePresence, LazyMotion, domAnimation, m } from 'motion/react';
 
-import type { AppSidebarConfig } from '@/src/app/shell/sidebar-types';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   listFavoriteDocs,
@@ -11,6 +12,13 @@ import {
   type FavoriteDocItem,
   type RecentPageItem,
 } from './api/docs-api';
+import { appendDocPageQuery } from './api/docs-url-state';
+import {
+  getInitialDocsSidebarExpandedSections,
+  isDocsSidebarSectionExpanded,
+  toggleDocsSidebarSection,
+  type DocsSidebarSectionId,
+} from './docs-sidebar-model';
 import {
   buildWorkspaceAppPath,
   resolveDefaultWorkspaceAppPath,
@@ -21,46 +29,128 @@ interface DocsSidebarExtrasProps {
   currentWorkspaceSlug: string | null;
 }
 
-export function DocsSidebarExtras({ currentWorkspaceSlug }: DocsSidebarExtrasProps) {
+interface DocsSidebarData {
+  favorites: FavoriteDocItem[];
+  recentPages: RecentPageItem[];
+}
+
+function DocsSidebarSection({
+  children,
+  expanded,
+  id,
+  title,
+  onToggle,
+}: {
+  children: ReactNode;
+  expanded: boolean;
+  id: DocsSidebarSectionId;
+  title: string;
+  onToggle: (id: DocsSidebarSectionId) => void;
+}) {
+  const contentId = `docs-sidebar-section-${id}`;
+
+  return (
+    <div className="space-y-1 border-t border-app-border pt-2">
+      <button
+        type="button"
+        aria-controls={contentId}
+        aria-expanded={expanded}
+        onClick={() => onToggle(id)}
+        className="sidebar-section-label sidebar-section-header group/section flex w-full items-center gap-1 px-3 py-1"
+      >
+        {expanded ? (
+          <ChevronDown
+            size={11}
+            className="text-app-ink/55 dark:text-app-ink/65 transition-colors group-hover/section:text-app-ink dark:group-hover/section:text-white"
+          />
+        ) : (
+          <ChevronRight
+            size={11}
+            className="text-app-ink/55 dark:text-app-ink/65 transition-colors group-hover/section:text-app-ink dark:group-hover/section:text-white"
+          />
+        )}
+        <span>{title}</span>
+      </button>
+
+      <LazyMotion features={domAnimation}>
+        <AnimatePresence initial={false}>
+          {expanded ? (
+            <m.div
+              id={contentId}
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden"
+            >
+              {children}
+            </m.div>
+          ) : null}
+        </AnimatePresence>
+      </LazyMotion>
+    </div>
+  );
+}
+
+export function DocsSidebarExtras({
+  currentWorkspaceSlug,
+}: DocsSidebarExtrasProps) {
   const { t } = useTranslation('apps');
   const { token, user } = useAuth();
   const location = useLocation();
-  const [favorites, setFavorites] = useState<FavoriteDocItem[]>([]);
-  const [recentPages, setRecentPages] = useState<RecentPageItem[]>([]);
+  const [sidebarData, setSidebarData] = useState<DocsSidebarData>({
+    favorites: [],
+    recentPages: [],
+  });
+  const [expandedSections, setExpandedSections] = useState<
+    DocsSidebarSectionId[]
+  >(getInitialDocsSidebarExpandedSections);
+  const { favorites, recentPages } = sidebarData;
 
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
-    listFavoriteDocs(token)
-      .then((items) => {
-        if (!cancelled) setFavorites(items);
-      })
-      .catch(() => {
-        if (!cancelled) setFavorites([]);
+    Promise.all([
+      listFavoriteDocs(token, currentWorkspaceSlug).catch(() => []),
+      listRecentPages(token, 5, currentWorkspaceSlug).catch(() => []),
+    ]).then(([nextFavorites, nextRecentPages]) => {
+      if (cancelled) return;
+      setSidebarData({
+        favorites: nextFavorites,
+        recentPages: nextRecentPages,
       });
-    listRecentPages(token, 5)
-      .then((items) => {
-        if (!cancelled) setRecentPages(items);
-      })
-      .catch(() => {
-        if (!cancelled) setRecentPages([]);
-      });
+    });
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [currentWorkspaceSlug, token]);
+
+  const toggleSection = useCallback((sectionId: DocsSidebarSectionId) => {
+    setExpandedSections((current) =>
+      toggleDocsSidebarSection(current, sectionId),
+    );
+  }, []);
 
   return (
-    <>
-      <div className="space-y-1 pt-2 border-t border-app-border mt-2">
-        <span className="sidebar-section-label block px-3 py-1 text-gray-500">
-          {t('docs.sidebar.favorites')}
-        </span>
+    <div className="space-y-2">
+      <DocsSidebarSection
+        id="favorites"
+        title={t('docs.sidebar.favorites')}
+        expanded={isDocsSidebarSectionExpanded(expandedSections, 'favorites')}
+        onToggle={toggleSection}
+      >
         {favorites.length > 0 ? (
           favorites.map((favorite) => {
             const docPath = currentWorkspaceSlug
-              ? buildWorkspaceAppPath(currentWorkspaceSlug, 'docs', `/${favorite.id}`)
-              : resolveDefaultWorkspaceAppPath(user, 'docs', `/${favorite.id}`);
+              ? buildWorkspaceAppPath(
+                  currentWorkspaceSlug,
+                  'docs',
+                  `/${favorite.id}`,
+                )
+              : resolveDefaultWorkspaceAppPath(
+                  user,
+                  'docs',
+                  `/${favorite.id}`,
+                );
             return (
               <Link
                 key={favorite.id}
@@ -71,35 +161,54 @@ export function DocsSidebarExtras({ currentWorkspaceSlug }: DocsSidebarExtrasPro
                 )}
               >
                 <FileText size={14} className="text-yellow-500" />
-                <span className="sidebar-submenu-label truncate">{favorite.title}</span>
+                <span className="sidebar-submenu-label truncate">
+                  {favorite.title}
+                </span>
               </Link>
             );
           })
         ) : (
           <div className="px-3 py-2 text-center">
-            <span className="app-text-micro text-gray-600">
+            <span className="app-text-micro text-app-ink/70">
               {t('docs.sidebar.noFavorites')}
             </span>
           </div>
         )}
-      </div>
+      </DocsSidebarSection>
 
-      <div className="space-y-1 pt-2 border-t border-app-border mt-2">
-        <span className="sidebar-section-label block px-3 py-1 text-gray-500">
-          {t('docs.sidebar.recentPages')}
-        </span>
+      <DocsSidebarSection
+        id="recentPages"
+        title={t('docs.sidebar.recentPages')}
+        expanded={isDocsSidebarSectionExpanded(
+          expandedSections,
+          'recentPages',
+        )}
+        onToggle={toggleSection}
+      >
         {recentPages.length > 0 ? (
           recentPages.map((recentPage) => {
-            const docPath = currentWorkspaceSlug
-              ? buildWorkspaceAppPath(currentWorkspaceSlug, 'docs', `/${recentPage.doc_id}`)
-              : resolveDefaultWorkspaceAppPath(user, 'docs', `/${recentPage.doc_id}`);
+            const docPathWithoutPage = currentWorkspaceSlug
+              ? buildWorkspaceAppPath(
+                  currentWorkspaceSlug,
+                  'docs',
+                  `/${recentPage.doc_id}`,
+                )
+              : resolveDefaultWorkspaceAppPath(
+                  user,
+                  'docs',
+                  `/${recentPage.doc_id}`,
+                );
+            const docPath = appendDocPageQuery(
+              docPathWithoutPage,
+              recentPage.page_id,
+            );
             return (
               <Link
                 key={recentPage.page_id}
                 to={docPath}
                 className="sidebar-submenu-item ml-1"
               >
-                <FileText size={14} className="text-gray-500" />
+                <FileText size={14} className="text-app-ink/55" />
                 <span className="sidebar-submenu-label truncate">
                   {recentPage.page_title}
                 </span>
@@ -108,29 +217,12 @@ export function DocsSidebarExtras({ currentWorkspaceSlug }: DocsSidebarExtrasPro
           })
         ) : (
           <div className="px-3 py-2 text-center">
-            <span className="app-text-micro text-gray-600">
+            <span className="app-text-micro text-app-ink/70">
               {t('docs.sidebar.noRecentPages')}
             </span>
           </div>
         )}
-      </div>
-    </>
+      </DocsSidebarSection>
+    </div>
   );
 }
-
-export const docsSidebarConfig: AppSidebarConfig = {
-  createActions: () => [
-    {
-      id: 'docs-create-doc',
-      label: 'docs-create-doc',
-      labelKey: 'sidebarActions.docs-create-doc',
-      icon: FileText,
-      run: () => {
-        window.dispatchEvent(new CustomEvent('docs:create'));
-      },
-    },
-  ],
-  afterCategories: ({ currentWorkspaceSlug }) => (
-    <DocsSidebarExtras currentWorkspaceSlug={currentWorkspaceSlug} />
-  ),
-};

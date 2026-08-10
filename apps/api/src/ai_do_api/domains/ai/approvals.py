@@ -4,7 +4,7 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Callable, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from fastapi import status
 from sqlalchemy import (
@@ -12,34 +12,29 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    JSON,
     String,
     Text,
-    func,
+    delete,
     select,
     text,
-    update,
 )
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from ai_do_api.core.db import Base
 from ai_do_api.core.i18n import localized_http_exception
 from ai_do_api.core.settings import get_settings
+from ai_do_api.domains.ai import approval_runtime_shadow as runtime_shadow
 from ai_do_api.domains.ai.audit import log_llm_tool_approval_resolved
-from ai_do_api.domains.ai.runtime.models import AgentInvocation, AgentRun
-from ai_do_api.domains.ai.runtime.persistence import (
-    append_graph_candidate_trace_events,
-    append_graph_execution_trace_events,
-    append_graph_schedule_trace_events,
-    append_trace_event,
-    persist_graph_schedule_invocation_skeletons,
-)
-from ai_do_api.domains.ai.runtime.contracts import RUNTIME_PROFILE_VALUES
-from ai_do_api.domains.ai.runtime.metrics import record_shadow_write_failure
-from ai_do_api.domains.auth.models import User, Workspace
+from ai_do_api.domains.ai.tool_contracts import AgentToolSpec, agent_tool_names
+from ai_do_api.domains.auth.models import utcnow_naive
 from ai_do_api.domains.auth.security import new_id
-from ai_do_api.domains.conversations.models import Conversation
-from ai_do_api.domains.meeting.models import utcnow_naive
+
+if TYPE_CHECKING:
+    from ai_do_api.domains.auth.models import User, Workspace
+    from ai_do_api.domains.conversations.models import Conversation
 
 
 ApprovalStatus = Literal[
@@ -66,6 +61,7 @@ LIVE_PENDING_APPROVAL_STATUSES = {"pending", "approved", "rejected"}
 SNAPSHOT_SCOPE_META_KEY = "scope"
 
 logger = logging.getLogger(__name__)
+JSONB_COMPAT = JSONB(astext_type=Text()).with_variant(JSON(), "sqlite")
 
 
 class AgentRunSnapshot(Base):
@@ -117,10 +113,66 @@ class AgentRunSnapshot(Base):
         default="awaiting_approval",
         server_default=text("'awaiting_approval'"),
     )
-    messages_json: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB, nullable=True)
+    messages_json: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB_COMPAT, nullable=True)
     blocked_call_id: Mapped[str] = mapped_column(String(80), nullable=False)
-    model_meta: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    model_meta: Mapped[dict[str, Any] | None] = mapped_column(JSONB_COMPAT, nullable=True)
     scrubbed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        onupdate=utcnow_naive,
+        nullable=False,
+    )
+
+
+class ConversationRunLock(Base):
+    __tablename__ = "ai_conversation_run_locks"
+    __table_args__ = (
+        CheckConstraint(
+            "lock_kind IN ('chat')",
+            name="ck_ai_conversation_run_locks_kind",
+        ),
+        Index(
+            "uq_ai_conversation_run_locks_conversation",
+            "conversation_id",
+            unique=True,
+        ),
+        Index(
+            "ix_ai_conversation_run_locks_workspace_expires",
+            "workspace_id",
+            "expires_at",
+        ),
+        Index(
+            "ix_ai_conversation_run_locks_expires_at",
+            "expires_at",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    conversation_id: Mapped[str] = mapped_column(
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id"),
+        nullable=False,
+        index=True,
+    )
+    requested_by_user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
+    owner_id: Mapped[str] = mapped_column(String(80), nullable=False)
+    lock_kind: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="chat",
+        server_default=text("'chat'"),
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
@@ -375,6 +427,136 @@ def get_live_pending_approval(
     }
 
 
+def has_live_conversation_run(
+    db: Session,
+    *,
+    workspace: Workspace,
+    user: User,
+    conversation_id: str,
+    for_update: bool = False,
+) -> bool:
+    # Lazily expire stale approvals before using snapshots as rewrite locks;
+    # otherwise an expired pending approval can leave its awaiting snapshot
+    # looking live until some other read path happens to touch it.
+    get_live_pending_approval(
+        db,
+        workspace=workspace,
+        user=user,
+        conversation_id=conversation_id,
+    )
+    expire_stale_conversation_run_locks(db)
+    snapshot_stmt = (
+        select(AgentRunSnapshot.id)
+        .where(
+            AgentRunSnapshot.conversation_id == conversation_id,
+            AgentRunSnapshot.workspace_id == workspace.id,
+            AgentRunSnapshot.requested_by_user_id == user.id,
+            AgentRunSnapshot.status.in_(LIVE_SNAPSHOT_STATUSES),
+        )
+        .limit(1)
+    )
+    if for_update:
+        snapshot_stmt = snapshot_stmt.with_for_update()
+    if db.scalar(snapshot_stmt) is not None:
+        return True
+
+    lock_stmt = (
+        select(ConversationRunLock.id)
+        .where(
+            ConversationRunLock.conversation_id == conversation_id,
+            ConversationRunLock.workspace_id == workspace.id,
+            ConversationRunLock.requested_by_user_id == user.id,
+        )
+        .limit(1)
+    )
+    if for_update:
+        lock_stmt = lock_stmt.with_for_update()
+    return db.scalar(lock_stmt) is not None
+
+
+def _conversation_run_lock_expires_at() -> datetime:
+    ttl_seconds = get_settings().ai_conversation_run_lock_ttl_seconds
+    return utcnow_naive() + timedelta(seconds=ttl_seconds)
+
+
+def expire_stale_conversation_run_locks(
+    db: Session,
+    *,
+    now: datetime | None = None,
+) -> int:
+    result = db.execute(
+        delete(ConversationRunLock).where(ConversationRunLock.expires_at <= (now or utcnow_naive()))
+    )
+    return int(result.rowcount or 0)
+
+
+def acquire_conversation_run_lock(
+    db: Session,
+    *,
+    workspace: Workspace,
+    conversation: Conversation,
+    requested_by_user: User,
+    lock_kind: Literal["chat"] = "chat",
+) -> ConversationRunLock:
+    get_live_pending_approval(
+        db,
+        workspace=workspace,
+        user=requested_by_user,
+        conversation_id=conversation.id,
+    )
+    expire_stale_conversation_run_locks(db)
+    live_snapshot_id = db.scalar(
+        select(AgentRunSnapshot.id)
+        .where(
+            AgentRunSnapshot.conversation_id == conversation.id,
+            AgentRunSnapshot.workspace_id == workspace.id,
+            AgentRunSnapshot.requested_by_user_id == requested_by_user.id,
+            AgentRunSnapshot.status.in_(LIVE_SNAPSHOT_STATUSES),
+        )
+        .limit(1)
+        .with_for_update()
+    )
+    if live_snapshot_id is not None:
+        raise localized_http_exception(
+            status_code=status.HTTP_409_CONFLICT,
+            code="ai.conversation_run_active",
+        )
+
+    lock = ConversationRunLock(
+        id=new_id(),
+        conversation_id=conversation.id,
+        workspace_id=workspace.id,
+        requested_by_user_id=requested_by_user.id,
+        owner_id=new_id(),
+        lock_kind=lock_kind,
+        expires_at=_conversation_run_lock_expires_at(),
+    )
+    db.add(lock)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise localized_http_exception(
+            status_code=status.HTTP_409_CONFLICT,
+            code="ai.conversation_run_active",
+        ) from exc
+    db.refresh(lock)
+    return lock
+
+
+def release_conversation_run_lock(
+    db: Session,
+    lock: ConversationRunLock,
+) -> None:
+    db.execute(
+        delete(ConversationRunLock).where(
+            ConversationRunLock.id == lock.id,
+            ConversationRunLock.owner_id == lock.owner_id,
+        )
+    )
+    db.commit()
+
+
 def create_pending_approval(
     db: Session,
     *,
@@ -464,14 +646,22 @@ def persist_snapshot_on_halt(
     )
     db.add(snapshot)
     db.flush()
-    _safe_runtime_shadow_write(db, snapshot=snapshot, operation=_persist_runtime_shadow_on_halt)
+    runtime_shadow.safe_runtime_shadow_write(
+        db,
+        snapshot=snapshot,
+        operation=runtime_shadow.persist_runtime_shadow_on_halt,
+    )
     return snapshot
 
 
 def mark_snapshot_completed(db: Session, snapshot: AgentRunSnapshot) -> None:
     snapshot.status = "completed"
     db.add(snapshot)
-    _safe_runtime_shadow_write(db, snapshot=snapshot, operation=_mark_runtime_shadow_completed)
+    runtime_shadow.safe_runtime_shadow_write(
+        db,
+        snapshot=snapshot,
+        operation=runtime_shadow.mark_runtime_shadow_completed,
+    )
 
 
 def mark_snapshot_resumed(db: Session, snapshot: AgentRunSnapshot) -> None:
@@ -482,16 +672,20 @@ def mark_snapshot_resumed(db: Session, snapshot: AgentRunSnapshot) -> None:
         )
     snapshot.status = "resumed"
     db.add(snapshot)
-    _safe_runtime_shadow_write(db, snapshot=snapshot, operation=_mark_runtime_shadow_resumed)
+    runtime_shadow.safe_runtime_shadow_write(
+        db,
+        snapshot=snapshot,
+        operation=runtime_shadow.mark_runtime_shadow_resumed,
+    )
 
 
 def rewind_snapshot_to_awaiting_approval(db: Session, snapshot: AgentRunSnapshot) -> None:
     snapshot.status = "awaiting_approval"
     db.add(snapshot)
-    _safe_runtime_shadow_write(
+    runtime_shadow.safe_runtime_shadow_write(
         db,
         snapshot=snapshot,
-        operation=_mark_runtime_shadow_awaiting_approval,
+        operation=runtime_shadow.mark_runtime_shadow_awaiting_approval,
     )
 
 
@@ -503,10 +697,10 @@ def abandon_stale_snapshot(
 ) -> None:
     snapshot.status = "abandoned"
     db.add(snapshot)
-    _safe_runtime_shadow_write(
+    runtime_shadow.safe_runtime_shadow_write(
         db,
         snapshot=snapshot,
-        operation=lambda session, *, snapshot: _mark_runtime_shadow_abandoned(
+        operation=lambda session, *, snapshot: runtime_shadow.mark_runtime_shadow_abandoned(
             session,
             snapshot=snapshot,
             cause=cause,
@@ -716,16 +910,12 @@ def ensure_resume_approved_tool_scope(
 
 def filter_resume_tool_specs(
     snapshot: AgentRunSnapshot,
-    tool_specs: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
+    tool_specs: list[AgentToolSpec],
+) -> list[AgentToolSpec]:
     frozen_tool_names = _frozen_resume_tool_names(snapshot)
     if not frozen_tool_names:
         return tool_specs
-    return [
-        spec
-        for spec in tool_specs
-        if _tool_name_from_spec(spec) in frozen_tool_names
-    ]
+    return [spec for spec in tool_specs if spec.name in frozen_tool_names]
 
 
 def get_resume_context(
@@ -803,356 +993,9 @@ def _normalize_scope_list(value: Any) -> list[str]:
     return normalized
 
 
-def _tool_names_from_specs(tool_specs: list[dict[str, Any]]) -> set[str]:
-    names: set[str] = set()
-    for spec in tool_specs:
-        name = _tool_name_from_spec(spec)
-        if name is not None:
-            names.add(name)
-    return names
+def _tool_names_from_specs(tool_specs: list[AgentToolSpec]) -> set[str]:
+    return set(agent_tool_names(tool_specs))
 
 
 def _frozen_resume_tool_names(snapshot: AgentRunSnapshot) -> set[str]:
     return set(_normalize_scope_list(_snapshot_scope_meta(snapshot).get("resolved_tool_names")))
-
-
-def _tool_name_from_spec(spec: dict[str, Any]) -> str | None:
-    function_spec = spec.get("function")
-    if not isinstance(function_spec, dict):
-        return None
-    name = function_spec.get("name")
-    return name if isinstance(name, str) else None
-
-
-def _next_runtime_invocation_seq(db: Session, agent_run_id: str) -> int:
-    current = db.scalar(
-        select(func.max(AgentInvocation.invocation_seq)).where(
-            AgentInvocation.agent_run_id == agent_run_id
-        )
-    )
-    return int(current if current is not None else -1) + 1
-
-
-def _safe_runtime_shadow_write(
-    db: Session,
-    *,
-    snapshot: AgentRunSnapshot,
-    operation: Callable[..., None],
-) -> None:
-    if not get_settings().ai_runtime_shadow_write_enabled:
-        return
-    try:
-        with db.begin_nested():
-            operation(db, snapshot=snapshot)
-    except Exception:
-        operation_name = getattr(operation, "__name__", "anonymous")
-        record_shadow_write_failure(operation=operation_name)
-        logger.exception(
-            "ai_runtime.shadow_write_failed",
-            extra={
-                "agent_run_id": snapshot.id,
-                "conversation_id": snapshot.conversation_id,
-                "workspace_id": snapshot.workspace_id,
-                "operation": operation_name,
-            },
-        )
-
-
-def _persist_runtime_shadow_on_halt(
-    db: Session,
-    *,
-    snapshot: AgentRunSnapshot,
-) -> None:
-    model_meta = dict(snapshot.model_meta or {})
-    runtime_run = AgentRun(
-        id=snapshot.id,
-        workspace_id=snapshot.workspace_id,
-        conversation_id=snapshot.conversation_id,
-        requested_by_user_id=snapshot.requested_by_user_id,
-        legacy_snapshot_id=snapshot.id,
-        status="awaiting_approval",
-        runtime_profile=_runtime_profile_from_model_meta(model_meta),
-        graph_enabled=model_meta.get("graph_gate") == "eligible",
-        model_profile_id=str(model_meta.get("model") or model_meta.get("chosen_model") or "")
-        or None,
-        metadata_json={
-            "source": "approval_snapshot_shadow",
-            "blocked_call_id": snapshot.blocked_call_id,
-            "runtime_routing_reason_codes": model_meta.get("runtime_routing_reason_codes"),
-            SNAPSHOT_SCOPE_META_KEY: model_meta.get(SNAPSHOT_SCOPE_META_KEY),
-            "graph_gate": model_meta.get("graph_gate"),
-            "graph_fallback_reason": model_meta.get("graph_fallback_reason"),
-            "graph_used": bool(model_meta.get("graph_used")),
-            "graph_validation_status": model_meta.get("graph_validation_status"),
-            "graph_validation_fallback_reason": model_meta.get(
-                "graph_validation_fallback_reason"
-            ),
-            "graph_candidate_summary": model_meta.get("graph_candidate_summary"),
-            "graph_schedule_summary": model_meta.get("graph_schedule_summary"),
-            "external_egress_summary": model_meta.get("external_egress_summary"),
-            "external_planner_summary": model_meta.get("external_planner_summary"),
-            "external_search_summary": model_meta.get("external_search_summary"),
-            "external_planner_execution_summary": model_meta.get(
-                "external_planner_execution_summary"
-            ),
-            "external_search_execution_summary": model_meta.get(
-                "external_search_execution_summary"
-            ),
-            "graph_execution_status": model_meta.get("graph_execution_status"),
-            "graph_execution_fallback_reason": model_meta.get(
-                "graph_execution_fallback_reason"
-            ),
-            "graph_execution_fallback_policy": model_meta.get(
-                "graph_execution_fallback_policy"
-            ),
-            "graph_execution_adapter": model_meta.get("graph_execution_adapter"),
-        },
-    )
-    db.add(runtime_run)
-    db.flush()
-    graph_invocations_by_seq = persist_graph_schedule_invocation_skeletons(
-        db,
-        agent_run_id=runtime_run.id,
-        workspace_id=snapshot.workspace_id,
-        conversation_id=snapshot.conversation_id,
-        runtime_metadata=model_meta,
-    )
-    invocation = next(
-        (
-            graph_invocation
-            for graph_invocation in graph_invocations_by_seq.values()
-            if graph_invocation.agent_id == "approval.proposal_preview"
-        ),
-        None,
-    )
-    if invocation is None:
-        invocation = AgentInvocation(
-            id=new_id(),
-            agent_run_id=runtime_run.id,
-            workspace_id=snapshot.workspace_id,
-            conversation_id=snapshot.conversation_id,
-            invocation_seq=_next_runtime_invocation_seq(db, runtime_run.id),
-            agent_id="approval.proposal_preview",
-            status="awaiting_approval",
-            purpose="approval required",
-            input_ref=snapshot.blocked_call_id,
-        )
-    else:
-        invocation.status = "awaiting_approval"
-        invocation.purpose = "approval required"
-        invocation.input_ref = snapshot.blocked_call_id
-    db.add(invocation)
-    db.flush()
-    append_trace_event(
-        db,
-        agent_run_id=runtime_run.id,
-        workspace_id=snapshot.workspace_id,
-        conversation_id=snapshot.conversation_id,
-        event_type="run_created",
-        payload={
-            "source": "approval_snapshot_shadow",
-            "legacy_snapshot_id": snapshot.id,
-        },
-    )
-    append_graph_candidate_trace_events(
-        db,
-        agent_run_id=runtime_run.id,
-        workspace_id=snapshot.workspace_id,
-        conversation_id=snapshot.conversation_id,
-        runtime_metadata=model_meta,
-    )
-    append_graph_schedule_trace_events(
-        db,
-        agent_run_id=runtime_run.id,
-        workspace_id=snapshot.workspace_id,
-        conversation_id=snapshot.conversation_id,
-        runtime_metadata=model_meta,
-        graph_invocations_by_seq=graph_invocations_by_seq,
-    )
-    append_graph_execution_trace_events(
-        db,
-        agent_run_id=runtime_run.id,
-        workspace_id=snapshot.workspace_id,
-        conversation_id=snapshot.conversation_id,
-        runtime_metadata=model_meta,
-    )
-    append_trace_event(
-        db,
-        agent_run_id=runtime_run.id,
-        agent_invocation_id=invocation.id,
-        workspace_id=snapshot.workspace_id,
-        conversation_id=snapshot.conversation_id,
-        invocation_seq=invocation.invocation_seq,
-        event_type="invocation_started",
-        payload={"agent_id": invocation.agent_id},
-    )
-    append_trace_event(
-        db,
-        agent_run_id=runtime_run.id,
-        agent_invocation_id=invocation.id,
-        workspace_id=snapshot.workspace_id,
-        conversation_id=snapshot.conversation_id,
-        invocation_seq=invocation.invocation_seq,
-        event_type="approval_required",
-        payload={
-            "blocked_call_id": snapshot.blocked_call_id,
-            "scope": model_meta.get(SNAPSHOT_SCOPE_META_KEY),
-            "runtime_profile": runtime_run.runtime_profile,
-            "runtime_routing_reason_codes": model_meta.get("runtime_routing_reason_codes"),
-        },
-    )
-
-def _mark_runtime_shadow_completed(
-    db: Session,
-    *,
-    snapshot: AgentRunSnapshot,
-) -> None:
-    now = utcnow_naive()
-    runtime_run = db.get(AgentRun, snapshot.id)
-    if runtime_run is None:
-        return
-    runtime_run.status = "completed"
-    runtime_run.updated_at = now
-    db.add(runtime_run)
-    db.execute(
-        update(AgentInvocation)
-        .where(
-            AgentInvocation.agent_run_id == snapshot.id,
-            AgentInvocation.status.in_(("pending", "running", "awaiting_approval", "resumed")),
-        )
-        .values(status="completed", updated_at=now)
-    )
-    append_trace_event(
-        db,
-        agent_run_id=snapshot.id,
-        workspace_id=snapshot.workspace_id,
-        conversation_id=snapshot.conversation_id,
-        event_type="run_completed",
-        payload={"legacy_snapshot_id": snapshot.id},
-    )
-
-
-def _mark_runtime_shadow_abandoned(
-    db: Session,
-    *,
-    snapshot: AgentRunSnapshot,
-    cause: str,
-) -> None:
-    now = utcnow_naive()
-    runtime_run = db.get(AgentRun, snapshot.id)
-    if runtime_run is None:
-        return
-    runtime_run.status = "abandoned"
-    runtime_run.updated_at = now
-    db.add(runtime_run)
-    db.execute(
-        update(AgentInvocation)
-        .where(
-            AgentInvocation.agent_run_id == snapshot.id,
-            AgentInvocation.status.in_(("pending", "running", "awaiting_approval", "resumed")),
-        )
-        .values(status="abandoned", updated_at=now)
-    )
-    append_trace_event(
-        db,
-        agent_run_id=snapshot.id,
-        workspace_id=snapshot.workspace_id,
-        conversation_id=snapshot.conversation_id,
-        event_type="run_abandoned",
-        payload={"legacy_snapshot_id": snapshot.id, "cause": cause},
-    )
-
-
-def _mark_runtime_shadow_awaiting_approval(
-    db: Session,
-    *,
-    snapshot: AgentRunSnapshot,
-) -> None:
-    now = utcnow_naive()
-    runtime_run = db.get(AgentRun, snapshot.id)
-    if runtime_run is None:
-        return
-    runtime_run.status = "awaiting_approval"
-    runtime_run.updated_at = now
-    db.add(runtime_run)
-    invocation = db.scalar(
-        select(AgentInvocation)
-        .where(
-            AgentInvocation.agent_run_id == snapshot.id,
-            AgentInvocation.status == "resumed",
-        )
-        .order_by(AgentInvocation.invocation_seq.desc())
-        .limit(1)
-    )
-    if invocation is not None:
-        invocation.status = "awaiting_approval"
-        invocation.updated_at = now
-        db.add(invocation)
-    append_trace_event(
-        db,
-        agent_run_id=snapshot.id,
-        agent_invocation_id=invocation.id if invocation is not None else None,
-        workspace_id=snapshot.workspace_id,
-        conversation_id=snapshot.conversation_id,
-        invocation_seq=invocation.invocation_seq if invocation is not None else 0,
-        event_type="approval_resume_rewound",
-        payload={
-            "blocked_call_id": snapshot.blocked_call_id,
-            "legacy_snapshot_id": snapshot.id,
-        },
-    )
-
-
-def _runtime_profile_from_model_meta(model_meta: dict[str, Any]) -> str:
-    runtime_profile = model_meta.get("runtime_profile")
-    if isinstance(runtime_profile, str) and runtime_profile in RUNTIME_PROFILE_VALUES:
-        return runtime_profile
-    return "interactive_read"
-
-
-def _mark_runtime_shadow_resumed(
-    db: Session,
-    *,
-    snapshot: AgentRunSnapshot,
-) -> None:
-    now = utcnow_naive()
-    runtime_run = db.get(AgentRun, snapshot.id)
-    if runtime_run is None:
-        return
-    runtime_run.status = "running"
-    runtime_run.updated_at = now
-    db.add(runtime_run)
-    db.execute(
-        update(AgentInvocation)
-        .where(
-            AgentInvocation.agent_run_id == snapshot.id,
-            AgentInvocation.status == "awaiting_approval",
-        )
-        .values(status="resumed", updated_at=now)
-    )
-    invocation = AgentInvocation(
-        id=new_id(),
-        agent_run_id=snapshot.id,
-        workspace_id=snapshot.workspace_id,
-        conversation_id=snapshot.conversation_id,
-        invocation_seq=_next_runtime_invocation_seq(db, snapshot.id),
-        agent_id="approval.proposal_preview",
-        status="resumed",
-        purpose="approval resumed",
-        input_ref=snapshot.blocked_call_id,
-    )
-    db.add(invocation)
-    db.flush()
-    append_trace_event(
-        db,
-        agent_run_id=snapshot.id,
-        agent_invocation_id=invocation.id,
-        workspace_id=snapshot.workspace_id,
-        conversation_id=snapshot.conversation_id,
-        invocation_seq=invocation.invocation_seq,
-        event_type="approval_resumed",
-        payload={
-            "blocked_call_id": snapshot.blocked_call_id,
-            "legacy_snapshot_id": snapshot.id,
-        },
-    )

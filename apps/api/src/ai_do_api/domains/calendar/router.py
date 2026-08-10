@@ -1,7 +1,6 @@
 """Calendar events HTTP router."""
-from __future__ import annotations
 
-from datetime import timedelta
+from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
@@ -10,19 +9,27 @@ from ai_do_api.core.db import get_db_session
 from ai_do_api.core.i18n import localized_http_exception
 from ai_do_api.domains.auth.dependencies import (
     require_current_user,
-    require_current_workspace,
 )
-from ai_do_api.domains.auth.models import User, Workspace
+from ai_do_api.domains.auth.models import User
+from ai_do_api.domains.auth.workspace_app_gate import require_platform_app_enabled
+from ai_do_api.domains.planner.app_catalog import PLANNER_WORKSPACE_APP
 
-from .schemas import CalendarEventsResponse, CalendarSourceType
-from .service import list_calendar_events, parse_iso_or_date
+from .query_policy import CalendarQueryPolicyError, parse_calendar_events_query
+from .schemas import CalendarEventsResponse
+from .service import list_calendar_events
+from .source_catalog import DEFAULT_CALENDAR_SOURCES_PARAM
 
 
-router = APIRouter(prefix="/calendar", tags=["calendar"])
+require_planner_app_enabled = require_platform_app_enabled(
+    PLANNER_WORKSPACE_APP.app_id,
+    error_code="platform.app_disabled",
+)
 
-
-_VALID_SOURCES: set[CalendarSourceType] = {"meeting", "pms_due", "pms_block", "planner_event"}
-_MAX_RANGE_DAYS = 366
+router = APIRouter(
+    prefix="/calendar",
+    tags=["calendar"],
+    dependencies=[Depends(require_planner_app_enabled)],
+)
 
 
 @router.get("/events", response_model=CalendarEventsResponse)
@@ -30,12 +37,11 @@ def list_events(
     from_param: str = Query(..., alias="from", description="ISO date or datetime"),
     to_param: str = Query(..., alias="to", description="Exclusive end (ISO)"),
     sources: str = Query(
-        default="meeting,pms_due,pms_block,planner_event",
+        default=DEFAULT_CALENDAR_SOURCES_PARAM,
         description="Comma-separated source types to include.",
     ),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> CalendarEventsResponse:
     """Return unified calendar events for the **current authenticated user**.
 
@@ -43,46 +49,26 @@ def list_events(
     sharing across users is not supported in this round (ENG-CRIT-1).
     """
     try:
-        from_at = parse_iso_or_date(from_param)
-        to_at = parse_iso_or_date(to_param)
-    except ValueError as exc:
+        query = parse_calendar_events_query(
+            from_param=from_param,
+            to_param=to_param,
+            sources_param=sources,
+            time_zone=current_user.time_zone,
+        )
+    except CalendarQueryPolicyError as exc:
         raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            code="calendar.invalid_iso_datetime",
-            error=str(exc),
+            code=exc.code,
+            **exc.params,
         ) from exc
 
-    if to_at <= from_at:
-        raise localized_http_exception(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            code="calendar.range_to_after_from",
-        )
-
-    # ENG-HIGH-4: bound the range to prevent unbounded queries (e.g. 1970→2099).
-    if (to_at - from_at) > timedelta(days=_MAX_RANGE_DAYS):
-        raise localized_http_exception(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            code="calendar.range_too_large",
-            days=_MAX_RANGE_DAYS,
-        )
-
-    requested_sources = {s.strip() for s in sources.split(",") if s.strip()}
-    invalid = requested_sources - _VALID_SOURCES
-    if invalid:
-        raise localized_http_exception(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            code="calendar.unknown_source_types",
-            source_types=", ".join(sorted(invalid)),
-        )
-    if not requested_sources:
-        # Empty filter → return empty result (per Phase 2 design D1: explicit empty).
+    if query.is_empty_source_filter:
         return CalendarEventsResponse(items=[])
 
     return list_calendar_events(
         db,
-        workspace=workspace,
         user=current_user,
-        from_at=from_at,
-        to_at=to_at,
-        sources=tuple(requested_sources),  # type: ignore[arg-type]
+        from_at=query.from_at,
+        to_at=query.to_at,
+        sources=query.sources,
     )

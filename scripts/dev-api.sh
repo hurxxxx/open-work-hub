@@ -16,15 +16,15 @@ fi
 
 INSTANCE_ID="${2:-$(dev_api_name "$INSTANCE_INDEX")}"
 
-export DOOWON_API_INSTANCE_ID="$INSTANCE_ID"
+export AI_DO_API_INSTANCE_ID="$INSTANCE_ID"
 
-if [[ "${DOOWON_API_AUTO_MIGRATE:-}" == "" ]]; then
+if [[ "${AI_DO_API_AUTO_MIGRATE:-}" == "" ]]; then
   if [[ "$PORT" == "8001" ]]; then
-    export DOOWON_API_AUTO_MIGRATE=1
+    export AI_DO_API_AUTO_MIGRATE=1
   else
-    export DOOWON_API_AUTO_MIGRATE=0
+    export AI_DO_API_AUTO_MIGRATE=0
   fi
 fi
 
 cd "$ROOT_DIR/apps/api"
-exec "$ROOT_DIR/apps/api/.venv/bin/python" -m uvicorn ai_do_api.main:app --app-dir src --host 127.0.0.1 --port "$PORT"
+exec "$ROOT_DIR/apps/api/.venv/bin/python" -m uvicorn ai_do_api.main:app --app-dir src --host "$AI_DO_DEV_API_HOST" --port "$PORT"

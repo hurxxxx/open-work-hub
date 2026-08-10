@@ -1,0 +1,11 @@
+[
+  { "id": "kr",     "name_ko": "한국",   "name_en": "Korea",       "flag": "🇰🇷", "order": 1 },
+  { "id": "us",     "name_ko": "미국",   "name_en": "USA",         "flag": "🇺🇸", "order": 2 },
+  { "id": "jp",     "name_ko": "일본",   "name_en": "Japan",       "flag": "🇯🇵", "order": 3 },
+  { "id": "cn",     "name_ko": "중국",   "name_en": "China",       "flag": "🇨🇳", "order": 4 },
+  { "id": "eu",     "name_ko": "EU",     "name_en": "European Union","flag": "🇪🇺", "order": 5 },
+  { "id": "in",     "name_ko": "인도",   "name_en": "India",       "flag": "🇮🇳", "order": 6 },
+  { "id": "ru",     "name_ko": "러시아", "name_en": "Russia",      "flag": "🇷🇺", "order": 7 },
+  { "id": "br",     "name_ko": "브라질", "name_en": "Brazil",      "flag": "🇧🇷", "order": 8 },
+  { "id": "mx",     "name_ko": "멕시코", "name_en": "Mexico",      "flag": "🇲🇽", "order": 9 }
+]

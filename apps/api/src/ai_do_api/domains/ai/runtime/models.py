@@ -10,6 +10,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    JSON,
     String,
     Text,
     text,
@@ -18,7 +19,10 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ai_do_api.core.db import Base
-from ai_do_api.domains.meeting.models import utcnow_naive
+from ai_do_api.domains.auth.models import utcnow_naive
+
+
+JSONB_COMPAT = JSONB(astext_type=Text()).with_variant(JSON(), "sqlite")
 
 
 RUN_STATUSES = (
@@ -49,15 +53,20 @@ RUNTIME_PROFILES = (
 )
 
 
+def _sql_in_clause(column_name: str, values: tuple[str, ...]) -> str:
+    quoted_values = ",".join(f"'{value}'" for value in values)
+    return f"{column_name} IN ({quoted_values})"
+
+
 class AgentRun(Base):
     __tablename__ = "ai_agent_runs"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('pending','running','awaiting_approval','completed','failed','cancelled','abandoned')",
+            _sql_in_clause("status", RUN_STATUSES),
             name="ck_ai_agent_runs_status",
         ),
         CheckConstraint(
-            "runtime_profile IN ('interactive_read','grounded_report','long_doc','high_risk_action')",
+            _sql_in_clause("runtime_profile", RUNTIME_PROFILES),
             name="ck_ai_agent_runs_runtime_profile",
         ),
         Index(
@@ -76,7 +85,7 @@ class AgentRun(Base):
             "uq_ai_agent_runs_live_conversation",
             "conversation_id",
             unique=True,
-            postgresql_where=text("status IN ('pending','running','awaiting_approval')"),
+            postgresql_where=text(_sql_in_clause("status", LIVE_RUN_STATUSES)),
         ),
     )
 
@@ -121,7 +130,7 @@ class AgentRun(Base):
     )
     model_profile_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     fallback_reason: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB_COMPAT, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
@@ -135,7 +144,7 @@ class AgentInvocation(Base):
     __tablename__ = "ai_agent_invocations"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('pending','running','awaiting_approval','resumed','completed','failed','cancelled','abandoned')",
+            _sql_in_clause("status", INVOCATION_STATUSES),
             name="ck_ai_agent_invocations_status",
         ),
         CheckConstraint(
@@ -195,7 +204,7 @@ class AgentInvocation(Base):
     purpose: Mapped[str] = mapped_column(String(128), nullable=False)
     input_ref: Mapped[str | None] = mapped_column(String(256), nullable=True)
     output_ref: Mapped[str | None] = mapped_column(String(256), nullable=True)
-    usage_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    usage_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB_COMPAT, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
@@ -267,7 +276,7 @@ class AgentTraceEvent(Base):
     )
     event_seq: Mapped[int] = mapped_column(Integer, nullable=False)
     event_type: Mapped[str] = mapped_column(String(80), nullable=False)
-    payload_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    payload_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB_COMPAT, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
 
 

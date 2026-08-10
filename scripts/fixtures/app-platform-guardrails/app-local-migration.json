@@ -1,0 +1,21 @@
+{
+  "name": "valid app-local migration",
+  "declaredLane": "app-sandbox",
+  "changes": [
+    {
+      "status": "A",
+      "path": "apps/api/alembic/versions/abcd1234ef56_add_pms_widget_table.py"
+    },
+    {
+      "status": "A",
+      "path": "apps/api/src/ai_do_api/domains/pms/widget.py"
+    }
+  ],
+  "sources": {
+    "apps/api/alembic/versions/abcd1234ef56_add_pms_widget_table.py": "from alembic import op\nimport sqlalchemy as sa\n\ndef upgrade() -> None:\n    op.create_table('pms_widget', sa.Column('id', sa.String(), primary_key=True))\n\ndef downgrade() -> None:\n    op.drop_table('pms_widget')\n"
+  },
+  "expect": {
+    "ok": true
+  }
+}
+

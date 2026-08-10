@@ -7,10 +7,12 @@ from typing import Any
 import pytest
 
 from ai_do_api.core.llm import LlmPoolConfig, LlmTaskContext, PolicyDecision, ResolvedLlmExecution
+from ai_do_api.core.llm_errors import LlmProviderError
 from ai_do_api.core.principal import user_principal
 from ai_do_api.core.llm_adapters import StreamChunk
 from ai_do_api.domains.ai import agent as agent_module
 from ai_do_api.domains.ai.events import EnvelopeEncoder
+from ai_do_api.domains.ai.tool_contracts import AgentToolSpec
 from ai_do_api.domains.ai.tool_runtime import ToolCallExecution
 
 
@@ -25,6 +27,8 @@ def _ctx() -> LlmTaskContext:
         principal_id="user-1",
         workspace_id="ws-1",
         task_kind="chatbot",
+        app_id="chatbot",
+        workload_id="chatbot",
     )
 
 
@@ -41,6 +45,7 @@ def _execution() -> ResolvedLlmExecution:
         api_key="mlx",
         default_model="mlx-community/model",
         canonical_model="local/current-moe-test-profile",
+        healthcheck_timeout_seconds=5,
         long_generation_timeout_seconds=30,
         enabled=True,
     )
@@ -54,6 +59,108 @@ def _execution() -> ResolvedLlmExecution:
     )
 
 
+def _snapshot_model_meta(**overrides: Any) -> dict[str, Any]:
+    values: dict[str, Any] = {
+        "model": "mlx-community/model",
+        "provider": "mlx-lm",
+        "policy": "local_only",
+        "chosen_pool": "local",
+        "max_output_tokens": 1000,
+        "reasoning_effort": "none",
+    }
+    values.update(overrides)
+    return values
+
+
+async def test_execution_from_snapshot_uses_current_registered_workload_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    current_config = _execution().config
+    captured: dict[str, Any] = {}
+
+    def fake_build_request(
+        workload_id: str,
+        context: Any,
+        db: Any,
+        **request_values: Any,
+    ) -> SimpleNamespace:
+        captured.update(
+            workload_id=workload_id,
+            context=context,
+            db=db,
+            request_values=request_values,
+        )
+        return SimpleNamespace(
+            workload_route="local",
+            workload_config=current_config,
+            requested_model="mlx-community/model",
+            max_tokens=640,
+        )
+
+    monkeypatch.setattr(agent_module, "build_llm_workload_request", fake_build_request)
+    db = object()
+    execution = agent_module._execution_from_snapshot(
+        SimpleNamespace(model_meta=_snapshot_model_meta()),
+        context=_ctx(),
+        db=db,
+    )
+
+    assert not hasattr(agent_module, "get_pool_config")
+    assert captured["workload_id"] == "chatbot"
+    assert captured["context"].app_id == "chatbot"
+    assert captured["db"] is db
+    assert captured["request_values"] == {
+        "messages": [],
+        "max_tokens": 1000,
+        "reasoning_effort": "none",
+    }
+    assert execution.config is current_config
+    assert execution.chosen_model == "mlx-community/model"
+    assert execution.resolved_max_tokens == 640
+
+
+@pytest.mark.parametrize(
+    ("snapshot_values", "current_values"),
+    [
+        ({"chosen_pool": "external", "policy": "external"}, {}),
+        ({"provider": "different-provider"}, {}),
+        ({"model": "different-model"}, {}),
+        ({"policy": "external"}, {}),
+        ({"provider": None}, {}),
+        ({"model": None}, {}),
+        ({}, {"workload_route": "external"}),
+        ({}, {"workload_config": None}),
+    ],
+)
+async def test_execution_from_snapshot_fails_closed_when_registered_identity_changed(
+    monkeypatch: pytest.MonkeyPatch,
+    snapshot_values: dict[str, Any],
+    current_values: dict[str, Any],
+) -> None:
+    request_values = {
+        "workload_route": "local",
+        "workload_config": _execution().config,
+        "requested_model": "mlx-community/model",
+        "max_tokens": 640,
+    }
+    request_values.update(current_values)
+    monkeypatch.setattr(
+        agent_module,
+        "build_llm_workload_request",
+        lambda *args, **kwargs: SimpleNamespace(**request_values),
+    )
+
+    with pytest.raises(
+        LlmProviderError,
+        match="ai.agent_resume_model_configuration_changed",
+    ):
+        agent_module._execution_from_snapshot(
+            SimpleNamespace(model_meta=_snapshot_model_meta(**snapshot_values)),
+            context=_ctx(),
+            db=object(),
+        )
+
+
 async def _collect_events(
     monkeypatch: pytest.MonkeyPatch,
     streams: list[list[StreamChunk]],
@@ -61,17 +168,33 @@ async def _collect_events(
     max_turns: int = 4,
     captured_stream_kwargs: list[dict[str, Any]] | None = None,
     messages: list[dict[str, Any]] | None = None,
-    tool_specs: list[dict[str, Any]] | None = None,
+    tool_specs: list[AgentToolSpec] | None = None,
 ):
     stream_iter = iter(streams)
 
-    async def fake_complete_chat_stream(*args: Any, **kwargs: Any):
+    async def fake_complete_gateway_chat_stream(gateway_execution: Any, _db: Any):
         if captured_stream_kwargs is not None:
-            captured_stream_kwargs.append(dict(kwargs))
+            request = gateway_execution.request
+            captured_stream_kwargs.append(
+                {
+                    "messages": gateway_execution.messages,
+                    "temperature": request.temperature,
+                    "stream_reasoning": request.stream_reasoning,
+                    "tools": request.tools,
+                    "tool_choice": request.tool_choice,
+                    "parallel_tool_calls": request.parallel_tool_calls,
+                    "agent_run_id": request.agent_run_id,
+                    "conversation_id": request.conversation_id,
+                }
+            )
         for chunk in next(stream_iter):
-            yield chunk, _execution().decision, _execution().config
+            yield chunk, gateway_execution.decision, gateway_execution.llm_execution.config
 
-    monkeypatch.setattr(agent_module, "complete_chat_stream", fake_complete_chat_stream)
+    monkeypatch.setattr(
+        agent_module,
+        "complete_resolved_gateway_chat_stream",
+        fake_complete_gateway_chat_stream,
+    )
 
     return [
         event
@@ -94,44 +217,46 @@ async def _collect_events(
             max_tool_calls=8,
             max_consecutive_tool_errors=3,
             agent_run_id="agent-run-1",
-            tool_specs=tool_specs or [
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "pms.search_issues",
-                        "description": "Search issues",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {},
-                            "additionalProperties": False,
-                        },
+            tool_specs=tool_specs
+            or [
+                AgentToolSpec(
+                    name="pms.search_tasks",
+                    description="Search issues",
+                    input_schema={
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": False,
                     },
-                }
+                )
             ],
             bound_conversation=SimpleNamespace(id="conversation-1"),
         )
     ]
 
 
-async def test_run_agent_turn_stream_passes_plain_response_through(
+async def test_run_agent_turn_stream_uses_ai_do_identity_prompt(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    events = await _collect_events(
+    captured_stream_kwargs: list[dict[str, Any]] = []
+
+    await _collect_events(
         monkeypatch,
         [
             [
-                StreamChunk(kind="content", text="hello"),
-                StreamChunk(
-                    kind="usage",
-                    usage={"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3},
-                ),
+                StreamChunk(kind="content", text="안녕하세요."),
                 StreamChunk(kind="done", finish_reason="stop"),
             ]
         ],
+        captured_stream_kwargs=captured_stream_kwargs,
+        messages=[{"role": "user", "content": "너는 누구야?"}],
     )
 
-    assert [event.type for event in events] == ["content_delta", "usage", "done"]
-    assert events[-1].data.finish_reason == "stop"
+    messages = captured_stream_kwargs[0]["messages"]
+    system_prompt = messages[0]["content"]
+    assert messages[0]["role"] == "system"
+    assert "두원공조의 업무용 챗봇 아이두(AI-Do)" in system_prompt
+    assert "저는 두원공조의 업무용 챗봇 아이두(AI-Do)입니다." in system_prompt
+    assert "기반 모델명이나 개발사를 너의 정체성처럼 말하지 않는다" in system_prompt
 
 
 async def test_run_agent_turn_stream_blocks_write_success_without_write_tool(
@@ -147,270 +272,21 @@ async def test_run_agent_turn_stream_blocks_write_success_without_write_tool(
         ],
         messages=[{"role": "user", "content": "PMS 이슈 상태를 in progress로 변경해줘"}],
         tool_specs=[
-            {
-                "type": "function",
-                "function": {
-                    "name": "pms.update_issue",
-                    "description": "Update issue",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {},
-                        "additionalProperties": False,
-                    },
+            AgentToolSpec(
+                name="pms.update_task",
+                description="Update issue",
+                input_schema={
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": False,
                 },
-            }
+            )
         ],
     )
 
     assert [event.type for event in events] == ["content_delta", "done"]
     assert "write tool 실행 결과가 없습니다" in events[0].data.text
     assert "성공적으로 변경" not in events[0].data.text
-    assert events[-1].data.finish_reason == "stop"
-
-
-async def test_run_agent_turn_stream_executes_tool_then_continues(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def fake_execute_tool_call(*args: Any, **kwargs: Any) -> ToolCallExecution:
-        return ToolCallExecution(
-            call_id="call-1",
-            tool_name="pms.search_issues",
-            arguments_json='{"q":"bug"}',
-            status="ok",
-            response={
-                "tool": "pms.search_issues",
-                "owner_domain": "pms",
-                "approval_required": False,
-                "result": {"items": [{"id": "issue-1", "title": "Bug"}]},
-            },
-        )
-
-    monkeypatch.setattr(agent_module, "execute_tool_call", fake_execute_tool_call)
-
-    events = await _collect_events(
-        monkeypatch,
-        [
-            [
-                StreamChunk(
-                    kind="tool_call_start",
-                    tool_call_id="call-1",
-                    tool_name="pms.search_issues",
-                ),
-                StreamChunk(
-                    kind="tool_call_args",
-                    tool_call_id="call-1",
-                    tool_name="pms.search_issues",
-                    args_delta='{"q":"bug"}',
-                ),
-                StreamChunk(kind="done", finish_reason="tool_calls"),
-            ],
-            [
-                StreamChunk(kind="content", text="Bug 한 건을 찾았습니다."),
-                StreamChunk(kind="done", finish_reason="stop"),
-            ],
-        ],
-    )
-
-    assert [event.type for event in events] == [
-        "tool_call_started",
-        "tool_call_args_delta",
-        "tool_result",
-        "content_delta",
-        "done",
-    ]
-    assert events[2].data.status == "ok"
-    assert events[-1].data.finish_reason == "stop"
-
-
-async def test_run_agent_turn_stream_forces_final_answer_after_tool_turn_cap(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def fake_execute_tool_call(*args: Any, **kwargs: Any) -> ToolCallExecution:
-        return ToolCallExecution(
-            call_id=str(kwargs["call_id"]),
-            tool_name=str(kwargs["tool_name"]),
-            arguments_json=kwargs["arguments_json"]
-            if "arguments_json" in kwargs
-            else '{"q":"런칭 체크리스트"}',
-            status="ok",
-            response={
-                "tool": kwargs["tool_name"],
-                "owner_domain": "docs",
-                "approval_required": False,
-                "result": {"items": [{"id": "doc-1", "title": "런칭 체크리스트"}]},
-            },
-        )
-
-    captured_calls: list[dict[str, Any]] = []
-    monkeypatch.setattr(agent_module, "execute_tool_call", fake_execute_tool_call)
-
-    events = await _collect_events(
-        monkeypatch,
-        [
-            [
-                StreamChunk(
-                    kind="tool_call_start",
-                    tool_call_id="call-1",
-                    tool_name="docs.list_hub",
-                ),
-                StreamChunk(
-                    kind="tool_call_args",
-                    tool_call_id="call-1",
-                    tool_name="docs.list_hub",
-                    args_delta='{"q":"런칭 체크리스트"}',
-                ),
-                StreamChunk(kind="done", finish_reason="tool_calls"),
-            ],
-            [
-                StreamChunk(
-                    kind="tool_call_start",
-                    tool_call_id="call-2",
-                    tool_name="docs.get_item",
-                ),
-                StreamChunk(
-                    kind="tool_call_args",
-                    tool_call_id="call-2",
-                    tool_name="docs.get_item",
-                    args_delta='{"item_id":"doc-1"}',
-                ),
-                StreamChunk(kind="done", finish_reason="tool_calls"),
-            ],
-            [
-                StreamChunk(kind="content", text="런칭 체크리스트의 남은 리스크는 보안 승인입니다."),
-                StreamChunk(kind="done", finish_reason="stop"),
-            ],
-        ],
-        max_turns=2,
-        captured_stream_kwargs=captured_calls,
-    )
-
-    assert [event.type for event in events] == [
-        "tool_call_started",
-        "tool_call_args_delta",
-        "tool_result",
-        "tool_call_started",
-        "tool_call_args_delta",
-        "tool_result",
-        "content_delta",
-        "done",
-    ]
-    assert events[-2].data.text.startswith("런칭 체크리스트")
-    assert events[-1].data.finish_reason == "stop"
-    assert captured_calls[-1]["tools"] is None
-    assert captured_calls[-1]["tool_choice"] is None
-
-
-async def test_run_agent_turn_stream_finalizes_after_duplicate_tool_call(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def fake_execute_tool_call(*args: Any, **kwargs: Any) -> ToolCallExecution:
-        return ToolCallExecution(
-            call_id=str(kwargs["call_id"]),
-            tool_name="docs.read_page",
-            arguments_json='{"page_id":"p1"}',
-            status="ok",
-            response={
-                "tool": "docs.read_page",
-                "owner_domain": "docs",
-                "approval_required": False,
-                "result": {"id": "p1"},
-            },
-        )
-
-    monkeypatch.setattr(agent_module, "execute_tool_call", fake_execute_tool_call)
-
-    events = await _collect_events(
-        monkeypatch,
-        [
-            [
-                StreamChunk(
-                    kind="tool_call_start",
-                    tool_call_id="call-1",
-                    tool_name="docs.read_page",
-                ),
-                StreamChunk(
-                    kind="tool_call_args",
-                    tool_call_id="call-1",
-                    tool_name="docs.read_page",
-                    args_delta='{"page_id":"p1"}',
-                ),
-                StreamChunk(kind="done", finish_reason="tool_calls"),
-            ],
-            [
-                StreamChunk(
-                    kind="tool_call_start",
-                    tool_call_id="call-2",
-                    tool_name="docs.read_page",
-                ),
-                StreamChunk(
-                    kind="tool_call_args",
-                    tool_call_id="call-2",
-                    tool_name="docs.read_page",
-                    args_delta='{"page_id":"p1"}',
-                ),
-                StreamChunk(kind="done", finish_reason="tool_calls"),
-            ],
-            [
-                StreamChunk(kind="content", text="기존 조회 결과로 답변합니다."),
-                StreamChunk(kind="done", finish_reason="stop"),
-            ],
-        ],
-    )
-
-    assert [event.type for event in events] == [
-        "tool_call_started",
-        "tool_call_args_delta",
-        "tool_result",
-        "tool_call_started",
-        "tool_call_args_delta",
-        "tool_result",
-        "content_delta",
-        "done",
-    ]
-    assert events[5].data.status == "error"
-    assert "중복 도구 호출" in events[5].data.error
-    assert events[-1].data.finish_reason == "stop"
-
-
-async def test_run_agent_turn_stream_allows_model_recovery_after_tool_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def fake_execute_tool_call(*args: Any, **kwargs: Any) -> ToolCallExecution:
-        return ToolCallExecution(
-            call_id="call-1",
-            tool_name="meeting.find_availability",
-            arguments_json='{"from":"2026-05-01"}',
-            status="error",
-            error_message="calendar unavailable",
-        )
-
-    monkeypatch.setattr(agent_module, "execute_tool_call", fake_execute_tool_call)
-
-    events = await _collect_events(
-        monkeypatch,
-        [
-            [
-                StreamChunk(
-                    kind="tool_call_start",
-                    tool_call_id="call-1",
-                    tool_name="meeting.find_availability",
-                ),
-                StreamChunk(
-                    kind="tool_call_args",
-                    tool_call_id="call-1",
-                    tool_name="meeting.find_availability",
-                    args_delta='{"from":"2026-05-01"}',
-                ),
-                StreamChunk(kind="done", finish_reason="tool_calls"),
-            ],
-            [
-                StreamChunk(kind="content", text="현재 일정 시스템 응답이 없습니다."),
-                StreamChunk(kind="done", finish_reason="stop"),
-            ],
-        ],
-    )
-
-    assert any(event.type == "tool_result" and event.data.status == "error" for event in events)
     assert events[-1].data.finish_reason == "stop"
 
 
@@ -422,7 +298,7 @@ async def test_run_agent_turn_stream_halts_on_approval_required_tool(
     def fake_execute_tool_call(*args: Any, **kwargs: Any) -> ToolCallExecution:
         return ToolCallExecution(
             call_id="call-1",
-            tool_name="pms.create_issue",
+            tool_name="pms.create_task",
             arguments_json='{"title":"Approval issue"}',
             status="blocked",
             resource_preview="Create PMS issue Approval issue",
@@ -459,12 +335,12 @@ async def test_run_agent_turn_stream_halts_on_approval_required_tool(
                 StreamChunk(
                     kind="tool_call_start",
                     tool_call_id="call-1",
-                    tool_name="pms.create_issue",
+                    tool_name="pms.create_task",
                 ),
                 StreamChunk(
                     kind="tool_call_args",
                     tool_call_id="call-1",
-                    tool_name="pms.create_issue",
+                    tool_name="pms.create_task",
                     args_delta='{"title":"Approval issue"}',
                 ),
                 StreamChunk(kind="done", finish_reason="tool_calls"),

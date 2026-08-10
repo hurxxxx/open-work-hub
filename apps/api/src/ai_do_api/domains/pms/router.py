@@ -1,84 +1,103 @@
 from __future__ import annotations
 
 import csv
-from io import BytesIO, StringIO
-from datetime import UTC, date, datetime, timedelta
+from dataclasses import asdict
+from io import StringIO
+from datetime import UTC, date, datetime
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query, Response, UploadFile, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy import func, or_, select
+from sqlalchemy.orm import Session, selectinload
 
 from ai_do_api.core.db import get_db_session
 from ai_do_api.core.i18n import localized_http_exception
 from ai_do_api.core.principal import user_principal
 from ai_do_api.domains.auth.access import (
-    get_current_workspace,
     get_or_create_default_pms_space,
     has_system_role,
-    resolve_team_role,
     slugify,
 )
 from ai_do_api.domains.auth.dependencies import require_current_user, require_current_workspace
-from ai_do_api.domains.auth.models import Team, TeamMember, User, Workspace
+from ai_do_api.domains.auth.models import Team, TeamMember, User, Workspace, WorkspaceUserBinding
 from ai_do_api.domains.auth.security import new_id
-from ai_do_api.core.settings import get_settings
-from ai_do_api.core.storage import get_minio_client
-from ai_do_api.domains.media.service import cleanup_media_for_resource
+from ai_do_api.domains.auth.workspace_app_gate import require_workspace_app_enabled
+from ai_do_api.domains.pms.attachments import (
+    TaskAttachmentDisposition,
+    TaskAttachmentUpload,
+    delete_task_attachment,
+    get_task_attachment_download_url,
+    open_task_attachment_content,
+    upload_task_attachment,
+)
+from ai_do_api.domains.pms import task_doc_links as pms_task_doc_links
 from ai_do_api.domains.pms.models import (
-    Attachment,
-    ChecklistItem,
-    CustomField,
-    CustomFieldValue,
     Folder,
-    Issue,
-    IssueActivityLog,
-    IssueAssignee,
-    IssueComment,
-    IssueLabel,
+    Task,
+    TaskActivityLog,
+    TaskAssignee,
+    TaskComment,
+    TaskFollower,
+    TaskLabel,
     Label,
     Milestone,
     Notification,
+    SpaceStatus,
     TaskList,
     TaskListStatus,
-    ScheduleDependency,
-    TaskTemplate,
-    TimeEntry,
 )
 from ai_do_api.domains.pms.access import (
-    _ensure_issue_readable,
+    _active_accessible_task_lists_query,
+    _accessible_space_ids,
+    _ensure_space_access,
+    _ensure_space_editor,
+    _ensure_space_manager,
     _ensure_list_editor,
     _ensure_list_member,
     _ensure_list_owner,
+    _ensure_task_list_active,
+    _get_pms_workspace,
+    _load_active_space,
+    resolve_pms_space_role,
+    _space_member_ids,
 )
 from ai_do_api.domains.pms.rag_sync import (
-    collect_label_issue_ids,
-    enqueue_issue_rag_sync,
-    enqueue_label_issue_recompute,
-    enqueue_milestone_issue_recompute,
-    enqueue_task_list_issue_recompute,
+    collect_label_task_ids,
+    enqueue_task_rag_sync,
+    enqueue_label_task_recompute,
+    enqueue_milestone_task_recompute,
 )
+from ai_do_api.domains.pms import board_configuration as pms_board_configuration
 from ai_do_api.domains.pms import service as pms_service
+from ai_do_api.domains.pms import task_list_customization as pms_task_list_customization
+from ai_do_api.domains.pms import view_preferences as pms_view_preferences
+from ai_do_api.domains.pms import task_work_items as pms_task_work_items
+from ai_do_api.domains.pms.dashboard_summary import dashboard_summary_payload
+from ai_do_api.domains.pms.links import normalize_pms_deep_link
+from ai_do_api.domains.pms.app_catalog import PMS_WORKSPACE_APP
+from ai_do_api.domains.pms.projections import (
+    serialize_task_summary,
+    task_reference as _task_reference,
+)
+from ai_do_api.domains.pms.status_lifecycle import (
+    create_default_task_list_statuses as _create_default_statuses,
+)
+from ai_do_api.domains.pms.status_router import router as status_router
 from ai_do_api.domains.rag.contracts import RagSyncOperation
-from ai_do_api.domains.search.hooks import enqueue_task_list_status_issue_search_recompute
+from ai_do_api.domains.pms.workflow import (
+    calculate_progress,
+    is_closed_status,
+    is_done_status,
+    is_overdue_exempt_status,
+    normalize_status_category,
+    status_category,
+    status_definitions,
+    status_label,
+)
 
 
-ISSUE_STATUS_LABELS = {
-    "backlog": "Backlog",
-    "todo": "Todo",
-    "in_progress": "In Progress",
-    "done": "Done",
-    "canceled": "Canceled",
-}
-ISSUE_STATUS_PROGRESS = {
-    "backlog": 0.0,
-    "todo": 0.0,
-    "in_progress": 0.5,
-    "done": 1.0,
-    "canceled": None,
-}
 TASK_LIST_STATUS_LABELS = {
     "planned": "Planned",
     "active": "Active",
@@ -90,16 +109,14 @@ MILESTONE_STATUS_LABELS = {
     "active": "Active",
     "complete": "Complete",
 }
-PRIORITY_LABELS = {
-    "low": "Low",
-    "medium": "Medium",
-    "high": "High",
-    "critical": "Critical",
-}
+NOISY_ACTIVITY_FIELD_NAMES = {"description_blocks"}
 
 
-def _priority_label(priority: str) -> str:
-    return PRIORITY_LABELS.get(priority, priority.replace("_", " ").title())
+def _visible_activity_log_filter():
+    return or_(
+        TaskActivityLog.field_name.is_(None),
+        TaskActivityLog.field_name.not_in(NOISY_ACTIVITY_FIELD_NAMES),
+    )
 
 
 def _utcnow() -> datetime:
@@ -112,6 +129,14 @@ class ListParams(BaseModel):
     sort_by: str = "updated_at"
     sort_dir: Literal["asc", "desc"] = "desc"
     q: str = ""
+
+
+class PmsViewPreferencesResponse(BaseModel):
+    task_list_group_by: Literal["none", "status", "assignee"]
+
+
+class UpdatePmsViewPreferencesRequest(BaseModel):
+    task_list_group_by: Literal["none", "status", "assignee"]
 
 
 class TaskListCreateRequest(BaseModel):
@@ -159,25 +184,26 @@ class MilestoneUpdateRequest(BaseModel):
     sort_order: int | None = None
 
 
-class IssueCreateRequest(BaseModel):
+class TaskCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     title: str = Field(..., min_length=2, max_length=180)
     description: str = Field(default="", max_length=4000)
     description_blocks: list[dict] | None = None
-    status: str = "backlog"
+    status: str = "todo"
     priority: Literal["low", "medium", "high", "critical"] = "medium"
     assignee_id: str | None = None
+    assignee_ids: list[str] | None = Field(default=None, max_length=20)
     milestone_id: str | None = None
     parent_id: str | None = None
     start_date: date | None = None
     due_date: date | None = None
-    estimate_hours: float | None = None
+    completed_date: date | None = None
     recurrence_rule: str | None = None
     label_ids: list[str] = Field(default_factory=list)
 
 
-class IssueUpdateRequest(BaseModel):
+class TaskUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     title: str | None = Field(default=None, min_length=2, max_length=180)
@@ -187,31 +213,28 @@ class IssueUpdateRequest(BaseModel):
     status: str | None = None
     priority: Literal["low", "medium", "high", "critical"] | None = None
     assignee_id: str | None = None
+    assignee_ids: list[str] | None = Field(default=None, max_length=20)
     milestone_id: str | None = None
     start_date: date | None = None
     due_date: date | None = None
+    completed_date: date | None = None
     board_position: int | None = None
     archived: bool | None = None
-    estimate_hours: float | None = None
     recurrence_rule: str | None = None
     label_ids: list[str] | None = None
 
 
-class IssueCommentCreateRequest(BaseModel):
+class TaskCommentCreateRequest(BaseModel):
     body: str = Field(default="", max_length=4000)
     body_blocks: list[dict] | None = None
 
 
-class DependencyCreateRequest(BaseModel):
-    predecessor_kind: Literal["issue"] = "issue"
-    predecessor_id: str
-    successor_kind: Literal["issue"] = "issue"
-    successor_id: str
-    relation_type: Literal["blocks"] = "blocks"
+class TaskDocAttachRequest(BaseModel):
+    doc_id: str
 
 
 class BulkUpdateRequest(BaseModel):
-    issue_ids: list[str] = Field(..., min_length=1, max_length=50)
+    task_ids: list[str] = Field(..., min_length=1, max_length=50)
     status: str | None = None
     priority: Literal["low", "medium", "high", "critical"] | None = None
     assignee_id: str | None = None
@@ -219,6 +242,20 @@ class BulkUpdateRequest(BaseModel):
     remove_label_ids: list[str] = Field(default_factory=list)
     archived: bool | None = None
     delete: bool = False
+
+
+class TaskReorderItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: str
+    board_position: int = Field(..., ge=0)
+    parent_id: str | None = None
+
+
+class TaskReorderRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[TaskReorderItem] = Field(..., min_length=1, max_length=500)
 
 
 class BulkUpdateResponse(BaseModel):
@@ -232,6 +269,7 @@ class TaskListItem(BaseModel):
     name: str
     description: str
     status: str
+    status_mode: str = "custom"
     archived: bool
     team_id: str | None
     team_name: str | None
@@ -242,8 +280,8 @@ class TaskListItem(BaseModel):
     progress: float
     member_count: int
     milestone_count: int
-    issue_count: int
-    overdue_issue_count: int
+    task_count: int
+    overdue_task_count: int
     created_at: datetime
     updated_at: datetime
 
@@ -282,6 +320,7 @@ class SpaceMemberItem(BaseModel):
     user_id: str
     email: str
     full_name: str
+    primary_org_unit_name: str | None = None
     is_admin: bool
     role: str
     joined_at: datetime
@@ -291,6 +330,7 @@ class SpaceUserItem(BaseModel):
     id: str
     email: str
     full_name: str
+    primary_org_unit_name: str | None = None
 
 
 class SpaceMemberListResponse(BaseModel):
@@ -319,8 +359,8 @@ class MilestoneItem(BaseModel):
     due_date: date | None
     sort_order: int
     progress: float
-    issue_count: int
-    completed_issue_count: int
+    task_count: int
+    completed_task_count: int
     updated_at: datetime
 
 
@@ -344,33 +384,6 @@ class LabelListResponse(BaseModel):
     page_size: int
 
 
-class TaskListStatusItem(BaseModel):
-    id: str
-    slug: str
-    name: str
-    color: str
-    category: str
-    sort_order: int
-
-
-class TaskListStatusesResponse(BaseModel):
-    items: list[TaskListStatusItem]
-
-
-class TaskListStatusCreateRequest(BaseModel):
-    name: str = Field(..., min_length=1, max_length=60)
-    color: str = Field(default="#6b7280", max_length=24)
-    category: Literal["backlog", "active", "done", "canceled"] = "active"
-    sort_order: int = 0
-
-
-class TaskListStatusUpdateRequest(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=60)
-    color: str | None = Field(default=None, max_length=24)
-    category: Literal["backlog", "active", "done", "canceled"] | None = None
-    sort_order: int | None = None
-
-
 class TaskTemplateItem(BaseModel):
     id: str
     list_id: str
@@ -389,7 +402,7 @@ class TaskTemplateListResponse(BaseModel):
 class TaskTemplateCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=140)
     description: str = Field(default="", max_length=4000)
-    default_status: str = "backlog"
+    default_status: str = "todo"
     default_priority: Literal["low", "medium", "high", "critical"] = "medium"
     checklist_items: list[dict] | None = None
 
@@ -459,37 +472,14 @@ class ChecklistReorderRequest(BaseModel):
 
 class ChecklistItemResponse(BaseModel):
     id: str
-    issue_id: str
+    task_id: str
     text: str
     completed: bool
     sort_order: int
     created_at: datetime
 
 
-class TimeEntryCreateRequest(BaseModel):
-    duration_minutes: int = Field(..., ge=1, le=1440)
-    description: str = Field(default="", max_length=500)
-    entry_date: date
-
-
-class TimeEntryUpdateRequest(BaseModel):
-    duration_minutes: int | None = Field(default=None, ge=1, le=1440)
-    description: str | None = Field(default=None, max_length=500)
-    entry_date: date | None = None
-
-
-class TimeEntryItem(BaseModel):
-    id: str
-    issue_id: str
-    user_id: str
-    user_name: str
-    duration_minutes: int
-    description: str
-    entry_date: date
-    created_at: datetime
-
-
-class IssueListItem(BaseModel):
+class TaskItem(BaseModel):
     id: str
     list_id: str
     reference: str
@@ -506,44 +496,58 @@ class IssueListItem(BaseModel):
     assignee_name: str | None
     assignee_ids: list[str] = []
     assignee_names: list[str] = []
+    follower_ids: list[str] = []
+    follower_names: list[str] = []
     reporter_id: str
     reporter_name: str
     milestone_id: str | None
     milestone_title: str | None
     start_date: date | None
     due_date: date | None
+    completed_date: date | None
     board_position: int
     archived: bool
     progress: float | None
     comments_count: int
     checklist_total: int = 0
     checklist_done: int = 0
-    estimate_hours: float | None = None
-    time_spent_minutes: int = 0
     recurrence_rule: str | None = None
     labels: list[LabelItem]
     updated_at: datetime
 
 
-class IssueListResponse(BaseModel):
-    items: list[IssueListItem]
+class TaskItemsResponse(BaseModel):
+    items: list[TaskItem]
     total: int
     page: int
     page_size: int
 
 
-class DependencyItem(BaseModel):
-    id: str
-    predecessor_kind: str
-    predecessor_id: str
-    successor_kind: str
-    successor_id: str
-    relation_type: str
+class TaskReorderResponse(BaseModel):
+    updated_count: int
+    items: list[TaskItem]
 
 
-class IssueCommentItem(BaseModel):
+class TaskDocLinkItem(BaseModel):
     id: str
-    issue_id: str
+    task_id: str
+    doc_id: str
+    doc_title: str
+    doc_type: str
+    source_app: str
+    source_kind: str
+    updated_at: datetime
+    created_by_id: str
+    created_at: datetime
+
+
+class TaskDocLinksResponse(BaseModel):
+    items: list[TaskDocLinkItem]
+
+
+class TaskCommentItem(BaseModel):
+    id: str
+    task_id: str
     author_id: str
     author_name: str
     body: str
@@ -553,7 +557,7 @@ class IssueCommentItem(BaseModel):
 
 class ActivityLogItem(BaseModel):
     id: str
-    issue_id: str
+    task_id: str
     actor_id: str | None
     actor_name: str | None
     action: str
@@ -573,7 +577,7 @@ class ActivityLogListResponse(BaseModel):
 
 class AttachmentItem(BaseModel):
     id: str
-    issue_id: str
+    task_id: str
     filename: str
     content_type: str
     size_bytes: int
@@ -606,14 +610,13 @@ class UnreadCountResponse(BaseModel):
     count: int
 
 
-class IssueDetailResponse(BaseModel):
-    issue: IssueListItem
-    comments: list[IssueCommentItem]
-    dependencies: list[DependencyItem]
-    subtasks: list[IssueListItem] = []
+class TaskDetailResponse(BaseModel):
+    task: TaskItem
+    comments: list[TaskCommentItem]
+    linked_docs: list[TaskDocLinkItem] = []
+    subtasks: list[TaskItem] = []
     attachments: list[AttachmentItem] = []
     checklist_items: list[ChecklistItemResponse] = []
-    time_entries: list[TimeEntryItem] = []
 
 
 class StatusCountItem(BaseModel):
@@ -630,8 +633,8 @@ class PriorityCountItem(BaseModel):
 
 class RecentActivityItem(BaseModel):
     id: str
-    issue_id: str
-    issue_reference: str
+    task_id: str
+    task_reference: str
     message: str
     actor_name: str | None
     created_at: datetime
@@ -642,16 +645,16 @@ class DashboardTaskListItem(BaseModel):
     key: str
     name: str
     progress: float
-    open_issue_count: int
-    overdue_issue_count: int
+    open_task_count: int
+    overdue_task_count: int
     next_due_date: date | None
 
 
 class DashboardSummaryResponse(BaseModel):
     list_count: int
-    active_issue_count: int
-    overdue_issue_count: int
-    my_issue_count: int
+    active_task_count: int
+    overdue_task_count: int
+    my_task_count: int
     milestone_due_soon_count: int
     status_counts: list[StatusCountItem]
     priority_counts: list[PriorityCountItem]
@@ -659,7 +662,17 @@ class DashboardSummaryResponse(BaseModel):
     recent_activity: list[RecentActivityItem]
 
 
+require_pms_app_enabled = require_workspace_app_enabled(
+    PMS_WORKSPACE_APP.app_id,
+    error_code="workspace.app_disabled",
+)
+
 router = APIRouter(
+    prefix="/pms",
+    tags=["pms"],
+    dependencies=[Depends(require_pms_app_enabled)],
+)
+public_router = APIRouter(
     prefix="/pms",
     tags=["pms"],
 )
@@ -678,33 +691,12 @@ TASK_LIST_ROLE_RANK = {
     "admin": 2,
     "owner": 3,
 }
-SPACE_TEAM_EDITOR_ROLES = {"member", "admin", "owner"}
-SPACE_TEAM_MANAGER_ROLES = {"admin", "owner"}
 TASK_LIST_EDITOR_ROLES = {"member", "admin", "owner"}
 TASK_LIST_MANAGER_ROLES = {"admin", "owner"}
 
 
 def _is_pms_super_admin(db: Session, user: User) -> bool:
     return has_system_role(db, user, "platform_admin")
-
-
-def _load_active_space(
-    db: Session,
-    space_id: str,
-    *,
-    include_members: bool = False,
-) -> Team | None:
-    workspace = _get_pms_workspace(db)
-    query = select(Team).options(joinedload(Team.workspace)).where(
-        Team.id == space_id,
-        Team.active.is_(True),
-        Team.trashed_at.is_(None),
-        Team.workspace.has(Workspace.active.is_(True)),
-        Team.workspace_id == workspace.id,
-    )
-    if include_members:
-        query = query.options(selectinload(Team.members))
-    return db.scalar(query)
 
 
 def _serialize_space(team: Team, current_user_role: str | None) -> SpaceItem:
@@ -727,6 +719,9 @@ def _serialize_space_member(db: Session, member: TeamMember) -> SpaceMemberItem:
         user_id=member.user_id,
         email=member.user.email,
         full_name=member.user.full_name,
+        primary_org_unit_name=(
+            member.user.primary_org_unit.name if member.user.primary_org_unit else None
+        ),
         is_admin=_is_pms_super_admin(db, member.user),
         role=member.role,
         joined_at=member.created_at,
@@ -734,155 +729,14 @@ def _serialize_space_member(db: Session, member: TeamMember) -> SpaceMemberItem:
 
 
 def _best_task_list_role(db: Session, user: User, space_id: str) -> str | None:
-    workspace = _get_pms_workspace(db)
-    team = db.scalar(
-        select(Team)
-        .options(joinedload(Team.workspace))
-        .where(
-            Team.id == space_id,
-            Team.active.is_(True),
-            Team.trashed_at.is_(None),
-            Team.workspace.has(Workspace.active.is_(True)),
-            Team.workspace_id == workspace.id,
-        )
-    )
+    team = _load_active_space(db, space_id)
     if team is None:
         return None
-    return resolve_team_role(db, user, team)
+    return resolve_pms_space_role(db, user, team)
 
 
 def _is_active_space_id(db: Session, space_id: str) -> bool:
-    workspace = _get_pms_workspace(db)
-    return (
-        db.scalar(
-            select(Team.id).where(
-                Team.id == space_id,
-                Team.active.is_(True),
-                Team.trashed_at.is_(None),
-                Team.workspace.has(Workspace.active.is_(True)),
-                Team.workspace_id == workspace.id,
-            )
-        )
-        is not None
-    )
-
-
-def _ensure_space_access(db: Session, user: User, space_id: str) -> tuple[Team, str]:
-    team = _load_active_space(db, space_id, include_members=True)
-    if team is None:
-        raise localized_http_exception(status_code=404, code="pms.space_not_found")
-
-    role = resolve_team_role(db, user, team)
-    if role is not None:
-        return team, role
-
-    raise localized_http_exception(status_code=403, code="pms.space_access_required")
-
-
-def _ensure_space_editor(db: Session, user: User, space_id: str) -> tuple[Team, str]:
-    team, role = _ensure_space_access(db, user, space_id)
-
-    if role in SPACE_TEAM_EDITOR_ROLES:
-        return team, role
-
-    raise localized_http_exception(status_code=403, code="pms.space_viewer_modify_denied")
-
-
-def _ensure_space_manager(db: Session, user: User, space_id: str) -> tuple[Team, str]:
-    team, role = _ensure_space_access(db, user, space_id)
-
-    if role in SPACE_TEAM_MANAGER_ROLES:
-        return team, role
-
-    raise localized_http_exception(status_code=403, code="pms.space_owner_admin_required")
-
-
-def _ensure_space_owner(db: Session, user: User, space_id: str) -> tuple[Team, str]:
-    team, role = _ensure_space_access(db, user, space_id)
-    if role == "owner":
-        return team, role
-    raise localized_http_exception(status_code=403, code="pms.space_owner_required")
-
-
-def _accessible_space_ids(db: Session, user: User) -> set[str]:
-    workspace = _get_pms_workspace(db)
-    direct_space_ids = set(
-        db.scalars(
-            select(TeamMember.team_id)
-            .join(Team, Team.id == TeamMember.team_id)
-            .where(
-                TeamMember.user_id == user.id,
-                Team.active.is_(True),
-                Team.trashed_at.is_(None),
-                Team.workspace.has(Workspace.active.is_(True)),
-                Team.workspace_id == workspace.id,
-            )
-        )
-    )
-    return direct_space_ids
-
-
-def _load_space_members(db: Session, space_id: str) -> list[TeamMember]:
-    return list(
-        db.scalars(
-            select(TeamMember)
-            .options(selectinload(TeamMember.user))
-            .where(TeamMember.team_id == space_id)
-        )
-    )
-
-
-def _space_member_ids(db: Session, space_id: str) -> set[str]:
-    return set(db.scalars(select(TeamMember.user_id).where(TeamMember.team_id == space_id)))
-
-
-def _ensure_space_owner_survives(
-    members: list[TeamMember],
-    target_user_id: str,
-    *,
-    next_role: str | None,
-) -> None:
-    current_member = next((member for member in members if member.user_id == target_user_id), None)
-    if current_member is None or current_member.role != "owner":
-        return
-
-    remaining = 0
-    for member in members:
-        role = next_role if member.user_id == target_user_id else member.role
-        if role == "owner":
-            remaining += 1
-
-    if remaining < 1:
-        raise localized_http_exception(
-            status_code=409,
-            code="pms.space_owner_must_remain",
-        )
-
-
-def _ensure_space_admin_change_allowed(
-    db: Session,
-    user: User,
-    space_id: str,
-    *,
-    current_role: str | None,
-    next_role: str | None,
-) -> tuple[Team, str]:
-    team, actor_role = _ensure_space_manager(db, user, space_id)
-    if actor_role != "owner" and (
-        current_role in SPACE_TEAM_MANAGER_ROLES or next_role in SPACE_TEAM_MANAGER_ROLES
-    ):
-        raise localized_http_exception(
-            status_code=403,
-            code="pms.space_owner_admin_manage_required",
-        )
-    return team, actor_role
-
-
-def _get_pms_workspace(db: Session) -> Workspace:
-    workspace = get_current_workspace(db)
-    if workspace is None:
-        raise localized_http_exception(status_code=500, code="pms.workspace_context_unavailable")
-    return workspace
+    return _load_active_space(db, space_id) is not None
 
 
 def _unique_space_key(db: Session, workspace_id: str, name: str) -> str:
@@ -900,46 +754,6 @@ def _unique_space_key(db: Session, workspace_id: str, name: str) -> str:
     return candidate
 
 
-def _space_query_for_user(db: Session, user: User):
-    workspace = _get_pms_workspace(db)
-    return (
-        select(Team)
-        .options(joinedload(Team.workspace), selectinload(Team.members))
-        .join(TeamMember, TeamMember.team_id == Team.id)
-        .where(
-            TeamMember.user_id == user.id,
-            Team.active.is_(True),
-            Team.trashed_at.is_(None),
-            Team.workspace.has(Workspace.active.is_(True)),
-            Team.workspace_id == workspace.id,
-        )
-    )
-
-
-def _get_space_membership(
-    db: Session,
-    space_id: str,
-    user_id: str,
-) -> TeamMember | None:
-    return db.scalar(
-        select(TeamMember)
-        .options(selectinload(TeamMember.user))
-        .where(
-            TeamMember.team_id == space_id,
-            TeamMember.user_id == user_id,
-        )
-    )
-
-
-def _validate_space_member_user(db: Session, space_id: str, user_id: str) -> User:
-    user = db.scalar(select(User).where(User.id == user_id, User.status == "active"))
-    if user is None:
-        raise localized_http_exception(status_code=404, code="auth.user_not_found")
-    if user_id in _space_member_ids(db, space_id):
-        raise localized_http_exception(status_code=409, code="pms.user_already_space_member")
-    return user
-
-
 def _validate_folder_membership(db: Session, team_id: str, folder_id: str | None) -> None:
     if folder_id is None:
         return
@@ -951,115 +765,42 @@ def _validate_folder_membership(db: Session, team_id: str, folder_id: str | None
         raise localized_http_exception(status_code=400, code="pms.folder_same_space_required")
 
 
-def _accessible_task_lists_query(db: Session, user: User):
-    accessible_space_ids = _accessible_space_ids(db, user)
-    if not accessible_space_ids:
-        return select(TaskList).where(TaskList.id == "__none__")
-    return select(TaskList).where(TaskList.team_id.in_(accessible_space_ids))
+def _normalize_status_category(category: str) -> str:
+    return normalize_status_category(category)
 
 
-CATEGORY_PROGRESS = {
-    "backlog": 0.0,
-    "active": 0.5,
-    "done": 1.0,
-    "canceled": None,
-}
+def _status_definitions(task_list: TaskList | None) -> list[TaskListStatus | SpaceStatus]:
+    return status_definitions(task_list)
 
 
-def _issue_progress(status_value: str, task_list: TaskList | None = None) -> float | None:
-    result = ISSUE_STATUS_PROGRESS.get(status_value)
-    if result is not None or status_value in ISSUE_STATUS_PROGRESS:
-        return result
-    # Fallback: look up category from task_list custom statuses
-    if task_list is not None:
-        for ps in getattr(task_list, "statuses", []):
-            if ps.slug == status_value:
-                return CATEGORY_PROGRESS.get(ps.category, 0.5)
-    return 0.5  # Unknown status defaults to active
+def _status_label(status_value: str, task_list: TaskList | None = None) -> str:
+    return status_label(status_value, task_list)
+
+
+def _status_category(status_value: str, task_list: TaskList | None = None) -> str | None:
+    return status_category(status_value, task_list)
 
 
 def _is_closed_status(status_value: str, task_list: TaskList | None = None) -> bool:
-    """Check if a status represents a closed state (done or canceled)."""
-    if status_value in {"done", "canceled"}:
-        return True
-    if task_list is not None:
-        for ps in getattr(task_list, "statuses", []):
-            if ps.slug == status_value:
-                return ps.category in {"done", "canceled"}
-    return False
+    """Check if a status represents a final closed state."""
+    return is_closed_status(status_value, task_list)
 
 
 def _is_done_status(status_value: str, task_list: TaskList | None = None) -> bool:
     """Check if a status represents a completed state."""
-    if status_value == "done":
-        return True
-    if task_list is not None:
-        for ps in getattr(task_list, "statuses", []):
-            if ps.slug == status_value:
-                return ps.category == "done"
-    return False
+    return is_done_status(status_value, task_list)
 
 
-def _calculate_progress(issues: list[Issue], task_list: TaskList | None = None) -> float:
-    progress_values = [
-        progress
-        for issue in issues
-        if not issue.archived
-        for progress in [_issue_progress(issue.status, task_list)]
-        if progress is not None
-    ]
-    if not progress_values:
-        return 0.0
-    return round(sum(progress_values) / len(progress_values), 2)
+def _is_overdue_exempt_status(status_value: str, task_list: TaskList | None = None) -> bool:
+    return is_overdue_exempt_status(status_value, task_list)
 
 
-def _serialize_labels(issue: Issue) -> list[LabelItem]:
-    return [
-        LabelItem(id=link.label.id, name=link.label.name, color=link.label.color)
-        for link in issue.label_links
-    ]
+def _calculate_progress(tasks: list[Task], task_list: TaskList | None = None) -> float:
+    return calculate_progress(tasks, task_list)
 
 
-def _issue_reference(issue: Issue) -> str:
-    return f"{issue.task_list.key}-{issue.issue_number}"
-
-
-def _serialize_issue(issue: Issue) -> IssueListItem:
-    return IssueListItem(
-        id=issue.id,
-        list_id=issue.list_id,
-        reference=_issue_reference(issue),
-        title=issue.title,
-        description=issue.description,
-        description_blocks=issue.description_blocks,
-        parent_id=issue.parent_id,
-        subtask_count=len(issue.subtasks) if issue.subtasks else 0,
-        status=issue.status,
-        status_label=ISSUE_STATUS_LABELS.get(issue.status, issue.status.replace("_", " ").title()),
-        priority=issue.priority,
-        priority_label=_priority_label(issue.priority),
-        assignee_id=issue.assignee_id,
-        assignee_name=getattr(issue.assignee, "full_name", None),
-        assignee_ids=[link.user_id for link in getattr(issue, "assignee_links", [])],
-        assignee_names=[getattr(link.user, "full_name", "") for link in getattr(issue, "assignee_links", [])],
-        reporter_id=issue.reporter_id,
-        reporter_name=issue.reporter.full_name,
-        milestone_id=issue.milestone_id,
-        milestone_title=getattr(issue.milestone, "title", None),
-        start_date=issue.start_date,
-        due_date=issue.due_date,
-        board_position=issue.board_position,
-        archived=issue.archived,
-        progress=_issue_progress(issue.status, issue.task_list),
-        comments_count=len(issue.comments),
-        checklist_total=len(issue.checklist_items) if issue.checklist_items else 0,
-        checklist_done=sum(1 for ci in issue.checklist_items if ci.completed) if issue.checklist_items else 0,
-        estimate_hours=issue.estimate_hours,
-        time_spent_minutes=sum(te.duration_minutes for te in issue.time_entries) if issue.time_entries else 0,
-        recurrence_rule=issue.recurrence_rule,
-        labels=_serialize_labels(issue),
-        updated_at=issue.updated_at,
-    )
+def _serialize_task(task: Task) -> TaskItem:
+    return TaskItem.model_validate(serialize_task_summary(task))
 
 
 def _serialize_task_list(
@@ -1068,14 +809,14 @@ def _serialize_task_list(
     team_name: str | None = None,
     member_count: int | None = None,
 ) -> TaskListItem:
-    overdue_issue_count = sum(
+    overdue_task_count = sum(
         1
-        for issue in task_list.issues
+        for task in task_list.tasks
         if (
-            not issue.archived
-            and not _is_closed_status(issue.status, task_list)
-            and issue.due_date is not None
-            and issue.due_date < date.today()
+            not task.archived
+            and not _is_overdue_exempt_status(task.status, task_list)
+            and task.due_date is not None
+            and task.due_date < date.today()
         )
     )
     return TaskListItem(
@@ -1084,6 +825,7 @@ def _serialize_task_list(
         name=task_list.name,
         description=task_list.description,
         status=task_list.status,
+        status_mode=task_list.status_mode,
         archived=task_list.archived,
         team_id=task_list.team_id,
         team_name=team_name,
@@ -1091,19 +833,19 @@ def _serialize_task_list(
         folder_name=getattr(task_list.folder, "name", None) if task_list.folder_id else None,
         sort_order=task_list.sort_order,
         role=role,
-        progress=_calculate_progress(task_list.issues, task_list),
+        progress=_calculate_progress(task_list.tasks, task_list),
         member_count=member_count if member_count is not None else 0,
         milestone_count=len(task_list.milestones),
-        issue_count=len(task_list.issues),
-        overdue_issue_count=overdue_issue_count,
+        task_count=len(task_list.tasks),
+        overdue_task_count=overdue_task_count,
         created_at=task_list.created_at,
         updated_at=task_list.updated_at,
     )
 
 
 def _serialize_milestone(milestone: Milestone) -> MilestoneItem:
-    issues = list(milestone.issues)
-    completed_issue_count = sum(1 for issue in issues if _is_done_status(issue.status))
+    tasks = list(milestone.tasks)
+    completed_task_count = sum(1 for task in tasks if _is_done_status(task.status))
     return MilestoneItem(
         id=milestone.id,
         list_id=milestone.list_id,
@@ -1113,17 +855,17 @@ def _serialize_milestone(milestone: Milestone) -> MilestoneItem:
         start_date=milestone.start_date,
         due_date=milestone.due_date,
         sort_order=milestone.sort_order,
-        progress=_calculate_progress(issues),
-        issue_count=len(issues),
-        completed_issue_count=completed_issue_count,
+        progress=_calculate_progress(tasks),
+        task_count=len(tasks),
+        completed_task_count=completed_task_count,
         updated_at=milestone.updated_at,
     )
 
 
-def _serialize_comment(comment: IssueComment) -> IssueCommentItem:
-    return IssueCommentItem(
+def _serialize_comment(comment: TaskComment) -> TaskCommentItem:
+    return TaskCommentItem(
         id=comment.id,
-        issue_id=comment.issue_id,
+        task_id=comment.task_id,
         author_id=comment.author_id,
         author_name=comment.author.full_name,
         body=comment.body,
@@ -1132,10 +874,10 @@ def _serialize_comment(comment: IssueComment) -> IssueCommentItem:
     )
 
 
-def _serialize_activity(log: IssueActivityLog, reference_lookup: dict[str, str]) -> ActivityLogItem:
+def _serialize_activity(log: TaskActivityLog, reference_lookup: dict[str, str]) -> ActivityLogItem:
     return ActivityLogItem(
         id=log.id,
-        issue_id=log.issue_id,
+        task_id=log.task_id,
         actor_id=log.actor_id,
         actor_name=getattr(log.actor, "full_name", None),
         action=log.action,
@@ -1147,23 +889,15 @@ def _serialize_activity(log: IssueActivityLog, reference_lookup: dict[str, str])
     )
 
 
-def _task_list_role(db: Session, task_list: TaskList, user: User, team_lookup: dict[str, Team]) -> str:
+def _task_list_role(
+    db: Session, task_list: TaskList, user: User, team_lookup: dict[str, Team]
+) -> str:
     if task_list.team_id is None:
         return "viewer"
     team = team_lookup.get(task_list.team_id)
     if team is None:
         return "viewer"
-    return resolve_team_role(db, user, team) or "viewer"
-
-
-DEFAULT_TASK_LIST_STATUSES: list[tuple[str, str, str, str, int]] = [
-    # (slug, name, color, category, sort_order)
-    ("backlog", "Backlog", "#6b7280", "backlog", 0),
-    ("todo", "Todo", "#3b82f6", "active", 1),
-    ("in_progress", "In Progress", "#f59e0b", "active", 2),
-    ("done", "Done", "#22c55e", "done", 3),
-    ("canceled", "Canceled", "#ef4444", "canceled", 4),
-]
+    return resolve_pms_space_role(db, user, team) or "viewer"
 
 
 def _auto_key_from_name(name: str) -> str:
@@ -1193,21 +927,6 @@ def _unique_key(db: Session, base_name: str) -> str:
     return resolved
 
 
-def _create_default_statuses(db: Session, list_id: str) -> None:
-    for slug, name, color, category, sort_order in DEFAULT_TASK_LIST_STATUSES:
-        db.add(
-            TaskListStatus(
-                id=new_id(),
-                list_id=list_id,
-                slug=slug,
-                name=name,
-                color=color,
-                category=category,
-                sort_order=sort_order,
-            )
-        )
-
-
 def _create_default_labels(db: Session, list_id: str) -> None:
     for name, color in [
         ("blocked", "#b45309"),
@@ -1217,9 +936,9 @@ def _create_default_labels(db: Session, list_id: str) -> None:
         db.add(Label(id=new_id(), list_id=list_id, name=name, color=color))
 
 
-def _log_issue_activity(
+def _log_task_activity(
     db: Session,
-    issue_id: str,
+    task_id: str,
     actor_id: str | None,
     action: str,
     message: str,
@@ -1228,9 +947,9 @@ def _log_issue_activity(
     from_value: str | None = None,
     to_value: str | None = None,
 ) -> None:
-    pms_service._log_issue_activity(
+    pms_service._log_task_activity(
         db,
-        issue_id,
+        task_id,
         actor_id,
         action,
         message,
@@ -1246,7 +965,7 @@ def _create_notification(
     ntype: str,
     title: str,
     body: str,
-    reference_type: str = "issue",
+    reference_type: str = "task",
     reference_id: str | None = None,
     action_url: str | None = None,
 ) -> None:
@@ -1266,22 +985,16 @@ def _extract_mentions_from_blocks(blocks: list[dict], out: set[str]) -> None:
     pms_service._extract_mentions_from_blocks(blocks, out)
 
 
-def _build_attachment_download_url(storage_key: str) -> str:
-    settings = get_settings()
-    client = get_minio_client()
-    return client.presigned_get_object(
-        settings.minio_bucket,
-        storage_key,
-        expires=timedelta(hours=1),
-    )
+def _next_task_number(db: Session, list_id: str) -> int:
+    return pms_service._next_task_number(db, list_id)
 
 
-def _next_issue_number(db: Session, list_id: str) -> int:
-    return pms_service._next_issue_number(db, list_id)
-
-
-def _next_issue_board_position(db: Session, list_id: str, status_value: str) -> int:
-    return pms_service._next_issue_board_position(db, list_id, status_value)
+def _next_task_board_position(
+    db: Session,
+    list_id: str,
+    parent_id: str | None = None,
+) -> int:
+    return pms_service._next_task_board_position(db, list_id, parent_id)
 
 
 def _validate_member_user(db: Session, task_list: TaskList, user_id: str) -> User:
@@ -1295,40 +1008,55 @@ def _validate_member_user(db: Session, task_list: TaskList, user_id: str) -> Use
     return user
 
 
-def _validate_issue_assignee(db: Session, task_list: TaskList, assignee_id: str | None) -> None:
-    pms_service._validate_issue_assignee(db, task_list, assignee_id)
+def _validate_task_assignee(db: Session, task_list: TaskList, assignee_id: str | None) -> None:
+    pms_service._validate_task_assignee(db, task_list, assignee_id)
 
 
 def _validate_milestone(task_list: TaskList, milestone_id: str | None) -> None:
     pms_service._validate_milestone(task_list, milestone_id)
 
 
-def _validate_parent_issue(
+def _validate_parent_task(
     db: Session,
     task_list: TaskList,
     parent_id: str | None,
     *,
-    issue_id: str | None = None,
+    task_id: str | None = None,
 ) -> None:
-    pms_service._validate_parent_issue(db, task_list, parent_id, issue_id=issue_id)
+    pms_service._validate_parent_task(db, task_list, parent_id, task_id=task_id)
 
 
-def _set_issue_labels(db: Session, issue: Issue, label_ids: list[str], task_list: TaskList) -> None:
-    pms_service._set_issue_labels(db, issue, label_ids, task_list)
+def _set_task_labels(db: Session, task: Task, label_ids: list[str], task_list: TaskList) -> None:
+    pms_service._set_task_labels(db, task, label_ids, task_list)
 
 
-def _get_issue_for_user(
+def _get_task_for_user(
     db: Session,
     user: User,
-    issue_id: str,
+    task_id: str,
     *,
     require_editor: bool = False,
-) -> tuple[Issue, TaskList]:
-    return pms_service._get_issue_for_user(
+) -> tuple[Task, TaskList]:
+    return pms_service._get_task_for_user(
         db,
         user,
-        issue_id,
+        task_id,
         require_editor=require_editor,
+    )
+
+
+def _serialize_visible_task_doc_links(
+    db: Session,
+    *,
+    user: User,
+    task_id: str,
+) -> TaskDocLinksResponse:
+    return TaskDocLinksResponse(
+        items=pms_task_doc_links.visible_task_doc_link_items(
+            db,
+            user=user,
+            task_id=task_id,
+        )
     )
 
 
@@ -1354,11 +1082,17 @@ def list_spaces(
 def list_pms_users(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> list[SpaceUserItem]:
     del current_user
     users = db.scalars(
         select(User)
-        .where(User.status == "active")
+        .join(WorkspaceUserBinding, WorkspaceUserBinding.user_id == User.id)
+        .options(selectinload(User.primary_org_unit))
+        .where(
+            User.status == "active",
+            WorkspaceUserBinding.workspace_id == workspace.id,
+        )
         .order_by(User.full_name.asc(), User.email.asc())
     ).all()
     return [
@@ -1366,9 +1100,42 @@ def list_pms_users(
             id=user.id,
             email=user.email,
             full_name=user.full_name,
+            primary_org_unit_name=(user.primary_org_unit.name if user.primary_org_unit else None),
         )
         for user in users
     ]
+
+
+@router.get("/view-preferences", response_model=PmsViewPreferencesResponse)
+def get_view_preferences(
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
+) -> PmsViewPreferencesResponse:
+    return PmsViewPreferencesResponse(
+        task_list_group_by=pms_view_preferences.get_task_list_group_by(
+            db,
+            user=current_user,
+            workspace=workspace,
+        )
+    )
+
+
+@router.patch("/view-preferences", response_model=PmsViewPreferencesResponse)
+def update_view_preferences(
+    payload: UpdatePmsViewPreferencesRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
+) -> PmsViewPreferencesResponse:
+    return PmsViewPreferencesResponse(
+        task_list_group_by=pms_view_preferences.update_task_list_group_by(
+            db,
+            user=current_user,
+            workspace=workspace,
+            group_by=payload.task_list_group_by,
+        )
+    )
 
 
 @router.post("/spaces", response_model=SpaceItem, status_code=status.HTTP_201_CREATED)
@@ -1376,30 +1143,22 @@ def create_space(
     payload: SpaceCreateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> SpaceItem:
-    workspace = _get_pms_workspace(db)
-    team = Team(
-        id=new_id(),
-        workspace_id=workspace.id,
-        key=_unique_space_key(db, workspace.id, payload.name),
-        name=payload.name.strip(),
-        description=payload.description.strip(),
-        active=True,
-    )
-    db.add(team)
-    db.flush()
-    db.add(
-        TeamMember(
-            id=new_id(),
-            team_id=team.id,
-            user_id=current_user.id,
-            role="owner",
+    return SpaceItem.model_validate(
+        pms_service.create_space(
+            db,
+            workspace=workspace,
+            principal=user_principal(
+                workspace_id=workspace.id,
+                user_id=current_user.id,
+                source="api.pms.create_space",
+            ),
+            user=current_user,
+            name=payload.name,
+            description=payload.description,
         )
     )
-    db.commit()
-    team = _load_active_space(db, team.id, include_members=True)
-    assert team is not None
-    return _serialize_space(team, "owner")
 
 
 @router.patch("/spaces/{space_id}", response_model=SpaceItem)
@@ -1408,17 +1167,23 @@ def update_space(
     payload: SpaceUpdateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> SpaceItem:
-    team, role = _ensure_space_manager(db, current_user, space_id)
-    if payload.name is not None:
-        team.name = payload.name.strip()
-    if payload.description is not None:
-        team.description = payload.description.strip()
-    db.add(team)
-    db.commit()
-    team = _load_active_space(db, team.id, include_members=True)
-    assert team is not None
-    return _serialize_space(team, role)
+    return SpaceItem.model_validate(
+        pms_service.update_space(
+            db,
+            workspace=workspace,
+            principal=user_principal(
+                workspace_id=workspace.id,
+                user_id=current_user.id,
+                source="api.pms.update_space",
+            ),
+            user=current_user,
+            space_id=space_id,
+            name=payload.name,
+            description=payload.description,
+        )
+    )
 
 
 @router.delete("/spaces/{space_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -1426,13 +1191,19 @@ def delete_space(
     space_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> Response:
-    team, _role = _ensure_space_manager(db, current_user, space_id)
-    team.trashed_at = _utcnow()
-    db.add(team)
-    for task_list in db.scalars(select(TaskList).where(TaskList.team_id == team.id)):
-        enqueue_task_list_issue_recompute(db, task_list=task_list)
-    db.commit()
+    pms_service.delete_space(
+        db,
+        workspace=workspace,
+        principal=user_principal(
+            workspace_id=workspace.id,
+            user_id=current_user.id,
+            source="api.pms.delete_space",
+        ),
+        user=current_user,
+        space_id=space_id,
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -1443,45 +1214,52 @@ def list_space_members(
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> SpaceMemberListResponse:
-    _ensure_space_access(db, current_user, space_id)
-    members = [
-        _serialize_space_member(db, member)
-        for member in sorted(
-            _load_space_members(db, space_id),
-            key=lambda item: (item.role not in {"owner", "admin"}, item.user.full_name.lower()),
+    return SpaceMemberListResponse.model_validate(
+        pms_service.list_space_members(
+            db,
+            workspace=workspace,
+            principal=user_principal(
+                workspace_id=workspace.id,
+                user_id=current_user.id,
+                source="api.pms.list_space_members",
+            ),
+            user=current_user,
+            space_id=space_id,
+            page=page,
+            page_size=page_size,
         )
-    ]
-    page_items, total = _paginate(members, page, page_size)
-    return SpaceMemberListResponse(items=page_items, total=total, page=page, page_size=page_size)
+    )
 
 
-@router.post("/spaces/{space_id}/members", response_model=SpaceMemberItem, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/spaces/{space_id}/members",
+    response_model=SpaceMemberItem,
+    status_code=status.HTTP_201_CREATED,
+)
 def add_space_member(
     space_id: str,
     payload: SpaceMemberCreateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> SpaceMemberItem:
-    _ensure_space_admin_change_allowed(
-        db,
-        current_user,
-        space_id,
-        current_role=None,
-        next_role=payload.role,
+    return SpaceMemberItem.model_validate(
+        pms_service.add_space_member(
+            db,
+            workspace=workspace,
+            principal=user_principal(
+                workspace_id=workspace.id,
+                user_id=current_user.id,
+                source="api.pms.add_space_member",
+            ),
+            user=current_user,
+            space_id=space_id,
+            target_user_id=payload.user_id,
+            role=payload.role,
+        )
     )
-    user = _validate_space_member_user(db, space_id, payload.user_id)
-    membership = TeamMember(
-        id=new_id(),
-        team_id=space_id,
-        user_id=user.id,
-        role=payload.role,
-    )
-    db.add(membership)
-    db.commit()
-    membership = _get_space_membership(db, space_id, user.id)
-    assert membership is not None
-    return _serialize_space_member(db, membership)
 
 
 @router.patch("/spaces/{space_id}/members/{user_id}", response_model=SpaceMemberItem)
@@ -1491,25 +1269,23 @@ def update_space_member(
     payload: SpaceMemberRoleUpdateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> SpaceMemberItem:
-    membership = _get_space_membership(db, space_id, user_id)
-    if membership is None:
-        raise localized_http_exception(status_code=404, code="pms.member_not_found")
-    _ensure_space_admin_change_allowed(
-        db,
-        current_user,
-        space_id,
-        current_role=membership.role,
-        next_role=payload.role,
+    return SpaceMemberItem.model_validate(
+        pms_service.update_space_member(
+            db,
+            workspace=workspace,
+            principal=user_principal(
+                workspace_id=workspace.id,
+                user_id=current_user.id,
+                source="api.pms.update_space_member",
+            ),
+            user=current_user,
+            space_id=space_id,
+            target_user_id=user_id,
+            role=payload.role,
+        )
     )
-    members = _load_space_members(db, space_id)
-    _ensure_space_owner_survives(members, user_id, next_role=payload.role)
-    membership.role = payload.role
-    db.add(membership)
-    db.commit()
-    membership = _get_space_membership(db, space_id, user_id)
-    assert membership is not None
-    return _serialize_space_member(db, membership)
 
 
 @router.delete("/spaces/{space_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -1518,21 +1294,20 @@ def remove_space_member(
     user_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> Response:
-    membership = _get_space_membership(db, space_id, user_id)
-    if membership is None:
-        raise localized_http_exception(status_code=404, code="pms.member_not_found")
-    _ensure_space_admin_change_allowed(
+    pms_service.remove_space_member(
         db,
-        current_user,
-        space_id,
-        current_role=membership.role,
-        next_role=None,
+        workspace=workspace,
+        principal=user_principal(
+            workspace_id=workspace.id,
+            user_id=current_user.id,
+            source="api.pms.remove_space_member",
+        ),
+        user=current_user,
+        space_id=space_id,
+        target_user_id=user_id,
     )
-    members = _load_space_members(db, space_id)
-    _ensure_space_owner_survives(members, user_id, next_role=None)
-    db.delete(membership)
-    db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -1605,51 +1380,25 @@ def create_task_list(
     payload: TaskListCreateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> TaskListItem:
-    resolved_key = payload.key.upper() if payload.key else _unique_key(db, payload.name)
-
-    resolved_team_name: str | None = None
-    resolved_team_id = payload.team_id
-    if resolved_team_id:
-        team, _role = _ensure_space_editor(db, current_user, resolved_team_id)
-        resolved_team_name = team.name
-    else:
-        team = get_or_create_default_pms_space(db, workspace=_get_pms_workspace(db))
-        resolved_team_id = team.id
-        resolved_team_name = team.name
-
-    _validate_folder_membership(db, resolved_team_id, payload.folder_id)
-
-    task_list = TaskList(
-        id=new_id(),
-        key=resolved_key,
-        name=payload.name.strip(),
-        description=payload.description.strip(),
-        status="active",
-        team_id=resolved_team_id,
-        folder_id=payload.folder_id,
-        created_by_id=current_user.id,
-    )
-    db.add(task_list)
-    if not db.scalar(
-        select(TeamMember.id).where(TeamMember.team_id == resolved_team_id, TeamMember.user_id == current_user.id)
-    ):
-        db.add(TeamMember(id=new_id(), team_id=resolved_team_id, user_id=current_user.id, role="owner"))
-    _create_default_labels(db, task_list.id)
-    _create_default_statuses(db, task_list.id)
-    db.commit()
-    db.refresh(task_list)
-    task_list = db.scalar(
-        select(TaskList)
-        .options(
-            selectinload(TaskList.milestones),
-            selectinload(TaskList.issues).selectinload(Issue.comments),
-            joinedload(TaskList.folder),
+    return TaskListItem.model_validate(
+        pms_service.create_task_list(
+            db,
+            workspace=workspace,
+            principal=user_principal(
+                workspace_id=workspace.id,
+                user_id=current_user.id,
+                source="api.pms.create_task_list",
+            ),
+            user=current_user,
+            name=payload.name,
+            description=payload.description,
+            key=payload.key,
+            team_id=payload.team_id,
+            folder_id=payload.folder_id,
         )
-        .where(TaskList.id == task_list.id)
     )
-    member_count = len(_load_space_members(db, resolved_team_id))
-    return _serialize_task_list(task_list, "owner", resolved_team_name, member_count)
 
 
 @router.get("/lists/{list_id}", response_model=TaskListItem)
@@ -1658,19 +1407,13 @@ def get_task_list(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> TaskListItem:
-    task_list, role = _ensure_list_member(db, current_user, list_id)
-    task_list = db.scalar(
-        select(TaskList)
-        .options(
-            selectinload(TaskList.milestones),
-            selectinload(TaskList.issues).selectinload(Issue.comments),
-            joinedload(TaskList.folder),
+    return TaskListItem.model_validate(
+        pms_board_configuration.get_task_list(
+            db,
+            user=current_user,
+            list_id=list_id,
         )
-        .where(TaskList.id == task_list.id)
     )
-    t_name = db.scalar(select(Team.name).where(Team.id == task_list.team_id)) if task_list.team_id else None
-    member_count = len(_load_space_members(db, task_list.team_id)) if task_list.team_id else 0
-    return _serialize_task_list(task_list, role, t_name, member_count)
 
 
 @router.patch("/lists/{list_id}", response_model=TaskListItem)
@@ -1680,40 +1423,36 @@ def update_task_list(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> TaskListItem:
-    fields_set = set(payload.model_fields_set)
-    if fields_set and fields_set.issubset({"folder_id", "sort_order"}):
-        task_list, role = _ensure_list_editor(db, current_user, list_id)
-    else:
-        task_list, role = _ensure_list_owner(db, current_user, list_id)
-    if "folder_id" in payload.model_fields_set:
-        _validate_folder_membership(db, task_list.team_id, payload.folder_id)
-        task_list.folder_id = payload.folder_id
-    if payload.sort_order is not None:
-        task_list.sort_order = payload.sort_order
-
-    for field_name in ["name", "description", "status", "archived"]:
-        if field_name not in payload.model_fields_set:
-            continue
-        value = getattr(payload, field_name)
-        if value is None:
-            continue
-        setattr(task_list, field_name, value.strip() if isinstance(value, str) else value)
-    if fields_set - {"folder_id", "sort_order"}:
-        enqueue_task_list_issue_recompute(db, task_list=task_list)
-    db.commit()
-    db.refresh(task_list)
-    task_list = db.scalar(
-        select(TaskList)
-        .options(
-            selectinload(TaskList.milestones),
-            selectinload(TaskList.issues).selectinload(Issue.comments),
-            joinedload(TaskList.folder),
+    return TaskListItem.model_validate(
+        pms_board_configuration.update_task_list(
+            db,
+            user=current_user,
+            list_id=list_id,
+            fields=pms_board_configuration.TaskListUpdateFields(
+                provided_fields=set(payload.model_fields_set),
+                name=payload.name,
+                description=payload.description,
+                status=payload.status,
+                archived=payload.archived,
+                folder_id=payload.folder_id,
+                sort_order=payload.sort_order,
+            ),
         )
-        .where(TaskList.id == task_list.id)
     )
-    t_name = db.scalar(select(Team.name).where(Team.id == task_list.team_id)) if task_list.team_id else None
-    member_count = len(_load_space_members(db, task_list.team_id)) if task_list.team_id else 0
-    return _serialize_task_list(task_list, role, t_name, member_count)
+
+
+@router.delete("/lists/{list_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_task_list(
+    list_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> Response:
+    pms_board_configuration.delete_task_list(
+        db,
+        user=current_user,
+        list_id=list_id,
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.patch("/spaces/{space_id}/lists/reorder", status_code=status.HTTP_204_NO_CONTENT)
@@ -1723,30 +1462,19 @@ def reorder_space_lists(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> Response:
-    _ensure_space_editor(db, current_user, space_id)
-    item_ids = [item.id for item in payload.items]
-    if len(set(item_ids)) != len(item_ids):
-        raise localized_http_exception(status_code=400, code="pms.duplicate_task_list_ids")
-
-    task_lists = list(
-        db.scalars(
-            select(TaskList).where(
-                TaskList.team_id == space_id,
-                TaskList.id.in_(item_ids),
+    pms_board_configuration.reorder_space_task_lists(
+        db,
+        user=current_user,
+        space_id=space_id,
+        items=[
+            pms_board_configuration.TaskListReorderItem(
+                id=item.id,
+                folder_id=item.folder_id,
+                sort_order=item.sort_order,
             )
-        )
+            for item in payload.items
+        ],
     )
-    task_list_map = {task_list.id: task_list for task_list in task_lists}
-    if len(task_list_map) != len(item_ids):
-        raise localized_http_exception(status_code=404, code="pms.task_list_not_found")
-
-    for item in payload.items:
-        _validate_folder_membership(db, space_id, item.folder_id)
-        task_list = task_list_map[item.id]
-        task_list.folder_id = item.folder_id
-        task_list.sort_order = item.sort_order
-
-    db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -1821,11 +1549,11 @@ def update_milestone(
         value = getattr(payload, field_name)
         if value is not None:
             setattr(milestone, field_name, value.strip() if isinstance(value, str) else value)
-    enqueue_milestone_issue_recompute(db, milestone=milestone)
+    enqueue_milestone_task_recompute(db, milestone=milestone)
     db.commit()
     db.refresh(milestone)
     milestone = db.scalar(
-        select(Milestone).options(selectinload(Milestone.issues)).where(Milestone.id == milestone_id)
+        select(Milestone).options(selectinload(Milestone.tasks)).where(Milestone.id == milestone_id)
     )
     return _serialize_milestone(milestone)
 
@@ -1845,7 +1573,9 @@ def list_task_list_labels(
     return LabelListResponse(items=page_items, total=total, page=page, page_size=page_size)
 
 
-@router.post("/lists/{list_id}/labels", response_model=LabelItem, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/lists/{list_id}/labels", response_model=LabelItem, status_code=status.HTTP_201_CREATED
+)
 def create_task_list_label(
     list_id: str,
     payload: LabelCreateRequest,
@@ -1854,7 +1584,9 @@ def create_task_list_label(
 ) -> LabelItem:
     _ensure_list_owner(db, current_user, list_id)
     existing = db.scalar(
-        select(Label).where(Label.list_id == list_id, func.lower(Label.name) == payload.name.strip().lower())
+        select(Label).where(
+            Label.list_id == list_id, func.lower(Label.name) == payload.name.strip().lower()
+        )
     )
     if existing is not None:
         raise localized_http_exception(status_code=409, code="pms.label_name_exists")
@@ -1890,7 +1622,7 @@ def update_label(
         label.name = normalized_name
     if payload.color is not None:
         label.color = payload.color
-    enqueue_label_issue_recompute(db, label=label)
+    enqueue_label_task_recompute(db, label=label)
     db.commit()
     db.refresh(label)
     return LabelItem(id=label.id, name=label.name, color=label.color)
@@ -1906,18 +1638,18 @@ def delete_label(
     if label is None:
         raise localized_http_exception(status_code=404, code="pms.label_not_found")
     _ensure_list_owner(db, current_user, label.list_id)
-    affected_issue_ids = collect_label_issue_ids(db, label_id=label.id)
-    enqueue_label_issue_recompute(
+    affected_task_ids = collect_label_task_ids(db, label_id=label.id)
+    enqueue_label_task_recompute(
         db,
         label=label,
-        issue_ids=affected_issue_ids,
+        task_ids=affected_task_ids,
     )
     db.delete(label)
     db.commit()
 
 
-@router.get("/lists/{list_id}/issues", response_model=IssueListResponse)
-def list_issues(
+@router.get("/lists/{list_id}/tasks", response_model=TaskItemsResponse)
+def list_tasks(
     list_id: str,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=100),
@@ -1937,14 +1669,14 @@ def list_issues(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
-) -> IssueListResponse:
-    return pms_service.list_issues(
+) -> TaskItemsResponse:
+    return pms_service.list_tasks(
         db,
         workspace=workspace,
         principal=user_principal(
             workspace_id=workspace.id,
             user_id=current_user.id,
-            source="api.pms.list_issues",
+            source="api.pms.list_tasks",
         ),
         user=current_user,
         list_id=list_id,
@@ -1967,24 +1699,24 @@ def list_issues(
 
 
 @router.post(
-    "/lists/{list_id}/issues",
-    response_model=IssueListItem,
+    "/lists/{list_id}/tasks",
+    response_model=TaskItem,
     status_code=status.HTTP_201_CREATED,
 )
-def create_issue(
+def create_task(
     list_id: str,
-    payload: IssueCreateRequest,
+    payload: TaskCreateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
-) -> IssueListItem:
-    return pms_service.create_issue(
+) -> TaskItem:
+    return pms_service.create_task(
         db,
         workspace=workspace,
         principal=user_principal(
             workspace_id=workspace.id,
             user_id=current_user.id,
-            source="api.pms.create_issue",
+            source="api.pms.create_task",
         ),
         user=current_user,
         list_id=list_id,
@@ -1994,74 +1726,103 @@ def create_issue(
         status=payload.status,
         priority=payload.priority,
         assignee_id=payload.assignee_id,
+        assignee_ids=payload.assignee_ids,
         milestone_id=payload.milestone_id,
         parent_id=payload.parent_id,
         start_date=payload.start_date,
         due_date=payload.due_date,
-        estimate_hours=payload.estimate_hours,
+        completed_date=payload.completed_date,
         recurrence_rule=payload.recurrence_rule,
         label_ids=payload.label_ids,
     )
 
 
-@router.get("/issues/assigned", response_model=IssueListResponse)
-def list_assigned_issues(
-    limit: int = Query(default=10, ge=1, le=50),
+@router.get("/tasks/assigned", response_model=TaskItemsResponse)
+def list_assigned_tasks(
+    limit: int | None = Query(default=10, ge=1, le=50),
+    page: int | None = Query(default=None, ge=1),
+    page_size: int = Query(default=50, ge=1, le=100),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
-) -> IssueListResponse:
-    return pms_service.list_assigned_issues(
+) -> TaskItemsResponse:
+    return pms_service.list_assigned_tasks(
         db,
         workspace=workspace,
         principal=user_principal(
             workspace_id=workspace.id,
             user_id=current_user.id,
-            source="api.pms.list_assigned_issues",
+            source="api.pms.list_assigned_tasks",
         ),
         user=current_user,
         limit=limit,
+        page=page,
+        page_size=page_size,
     )
 
 
-@router.get("/issues/{issue_id}", response_model=IssueDetailResponse)
-def get_issue(
-    issue_id: str,
+@router.get("/tasks/today-overdue", response_model=TaskItemsResponse)
+def list_today_overdue_tasks(
+    today: date = Query(...),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=100),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
-) -> IssueDetailResponse:
-    return pms_service.get_issue_detail(
+) -> TaskItemsResponse:
+    return pms_service.list_today_overdue_tasks(
         db,
         workspace=workspace,
         principal=user_principal(
             workspace_id=workspace.id,
             user_id=current_user.id,
-            source="api.pms.get_issue",
+            source="api.pms.list_today_overdue_tasks",
         ),
         user=current_user,
-        issue_id=issue_id,
+        today=today,
+        page=page,
+        page_size=page_size,
     )
 
 
-@router.patch("/issues/{issue_id}", response_model=IssueListItem)
-def update_issue(
-    issue_id: str,
-    payload: IssueUpdateRequest,
+@router.get("/tasks/{task_id}", response_model=TaskDetailResponse)
+def get_task(
+    task_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
-) -> IssueListItem:
-    return pms_service.update_issue(
+) -> TaskDetailResponse:
+    return pms_service.get_task_detail(
         db,
         workspace=workspace,
         principal=user_principal(
             workspace_id=workspace.id,
             user_id=current_user.id,
-            source="api.pms.update_issue",
+            source="api.pms.get_task",
         ),
         user=current_user,
-        issue_id=issue_id,
+        task_id=task_id,
+    )
+
+
+@router.patch("/tasks/{task_id}", response_model=TaskItem)
+def update_task(
+    task_id: str,
+    payload: TaskUpdateRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
+) -> TaskItem:
+    return pms_service.update_task(
+        db,
+        workspace=workspace,
+        principal=user_principal(
+            workspace_id=workspace.id,
+            user_id=current_user.id,
+            source="api.pms.update_task",
+        ),
+        user=current_user,
+        task_id=task_id,
         provided_fields=set(payload.model_fields_set),
         title=payload.title,
         description=payload.description,
@@ -2070,248 +1831,206 @@ def update_issue(
         status=payload.status,
         priority=payload.priority,
         assignee_id=payload.assignee_id,
+        assignee_ids=payload.assignee_ids,
         milestone_id=payload.milestone_id,
         start_date=payload.start_date,
         due_date=payload.due_date,
+        completed_date=payload.completed_date,
         board_position=payload.board_position,
         archived=payload.archived,
-        estimate_hours=payload.estimate_hours,
         recurrence_rule=payload.recurrence_rule,
         label_ids=payload.label_ids,
     )
 
 
-@router.patch("/lists/{list_id}/issues/bulk", response_model=BulkUpdateResponse)
-def bulk_update_issues(
+@router.patch("/lists/{list_id}/tasks/reorder", response_model=TaskReorderResponse)
+def reorder_task_list_tasks(
+    list_id: str,
+    payload: TaskReorderRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
+) -> TaskReorderResponse:
+    items = pms_service.reorder_task_list_tasks(
+        db,
+        workspace=workspace,
+        principal=user_principal(
+            workspace_id=workspace.id,
+            user_id=current_user.id,
+            source="api.pms.reorder_tasks",
+        ),
+        user=current_user,
+        list_id=list_id,
+        updates=[
+            pms_service.TaskReorderUpdate(
+                task_id=item.task_id,
+                board_position=item.board_position,
+                parent_id=item.parent_id,
+                parent_id_present="parent_id" in item.model_fields_set,
+            )
+            for item in payload.items
+        ],
+    )
+    return TaskReorderResponse(updated_count=len(items), items=items)
+
+
+@router.patch("/lists/{list_id}/tasks/bulk", response_model=BulkUpdateResponse)
+def bulk_update_tasks(
     list_id: str,
     payload: BulkUpdateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> BulkUpdateResponse:
     task_list, _role = _ensure_list_editor(db, current_user, list_id)
-    issue_map = {
-        issue.id: issue
-        for issue in db.scalars(
-            select(Issue)
+    if payload.status is not None:
+        pms_service._lock_task_list_order(db, list_id)
+    task_map = {
+        task.id: task
+        for task in db.scalars(
+            select(Task)
             .options(
-                selectinload(Issue.task_list),
-                selectinload(Issue.label_links).selectinload(IssueLabel.label),
-                selectinload(Issue.assignee),
+                selectinload(Task.task_list),
+                selectinload(Task.task_list).selectinload(TaskList.statuses),
+                selectinload(Task.task_list).selectinload(TaskList.space_statuses),
+                selectinload(Task.label_links).selectinload(TaskLabel.label),
+                selectinload(Task.assignee),
+                selectinload(Task.assignee_links).selectinload(TaskAssignee.user),
             )
-            .where(Issue.id.in_(payload.issue_ids), Issue.list_id == list_id)
+            .where(Task.id.in_(payload.task_ids), Task.list_id == list_id)
+            .order_by(Task.id)
+            .with_for_update()
         )
     }
-    ordered_issues = [issue_map[issue_id] for issue_id in payload.issue_ids if issue_id in issue_map]
-    if not ordered_issues:
-        raise localized_http_exception(status_code=404, code="pms.no_matching_issues")
+    ordered_tasks = [task_map[task_id] for task_id in payload.task_ids if task_id in task_map]
+    if not ordered_tasks:
+        raise localized_http_exception(status_code=404, code="pms.no_matching_tasks")
 
     if payload.delete:
-        media_keys: list[str] = []
-        for issue in ordered_issues:
-            for child in getattr(issue, "subtasks", []):
-                child.parent_id = None
-            media_keys.extend(cleanup_media_for_resource(db, "issue", issue.id))
-            enqueue_issue_rag_sync(
-                db,
-                issue=issue,
-                operation=RagSyncOperation.DELETE,
-            )
-            db.delete(issue)
-        db.commit()
-        if media_keys:
-            settings = get_settings()
-            client = get_minio_client()
-            for key in media_keys:
-                try:
-                    client.remove_object(settings.minio_bucket, key)
-                except Exception:
-                    pass
-        return BulkUpdateResponse(updated_count=0, deleted_count=len(ordered_issues))
+        deleted_task_ids = pms_service.delete_loaded_tasks(db, ordered_tasks)
+        return BulkUpdateResponse(updated_count=0, deleted_count=len(deleted_task_ids))
 
-    label_map = {label.id: label for label in task_list.labels}
-    updated = 0
-    next_position = None
-    if payload.status is not None:
-        next_position = _next_issue_board_position(db, list_id, payload.status)
-
-    for issue in ordered_issues:
-        changed = False
-        if payload.status is not None and issue.status != payload.status:
-            _log_issue_activity(db, issue.id, current_user.id, "updated", f"{current_user.full_name} updated status.", field_name="status", from_value=issue.status, to_value=payload.status)
-            issue.status = payload.status
-            if next_position is not None:
-                issue.board_position = next_position
-                next_position += 1
-            changed = True
-        if payload.priority is not None and issue.priority != payload.priority:
-            _log_issue_activity(db, issue.id, current_user.id, "updated", f"{current_user.full_name} updated priority.", field_name="priority", from_value=issue.priority, to_value=payload.priority)
-            issue.priority = payload.priority
-            changed = True
-        if "assignee_id" in payload.model_fields_set and payload.assignee_id != issue.assignee_id:
-            _validate_issue_assignee(db, task_list, payload.assignee_id)
-            old_name = getattr(issue.assignee, "full_name", "Unassigned")
-            issue.assignee_id = payload.assignee_id
-            _log_issue_activity(db, issue.id, current_user.id, "updated", f"{current_user.full_name} updated assignee.", field_name="assignee", from_value=old_name, to_value=payload.assignee_id or "Unassigned")
-            changed = True
-        if payload.archived is not None and issue.archived != payload.archived:
-            issue.archived = payload.archived
-            _log_issue_activity(db, issue.id, current_user.id, "updated", f"{current_user.full_name} {'archived' if payload.archived else 'unarchived'} issue.", field_name="archived", from_value=str(not payload.archived), to_value=str(payload.archived))
-            changed = True
-        if payload.add_label_ids:
-            existing_ids = {link.label_id for link in issue.label_links}
-            for lid in payload.add_label_ids:
-                if lid not in existing_ids and lid in label_map:
-                    issue.label_links.append(IssueLabel(id=new_id(), label_id=lid))
-                    changed = True
-        if payload.remove_label_ids:
-            issue.label_links = [link for link in issue.label_links if link.label_id not in payload.remove_label_ids]
-            changed = True
-        if changed:
-            enqueue_issue_rag_sync(
-                db,
-                issue=issue,
-                operation=RagSyncOperation.UPSERT,
-            )
-            updated += 1
-
-    db.commit()
+    updated = pms_service.bulk_update_loaded_tasks(
+        db,
+        task_list=task_list,
+        tasks=ordered_tasks,
+        actor=current_user,
+        status_value=payload.status,
+        priority=payload.priority,
+        assignee_field_present="assignee_id" in payload.model_fields_set,
+        assignee_id=payload.assignee_id,
+        archived=payload.archived,
+        add_label_ids=payload.add_label_ids,
+        remove_label_ids=payload.remove_label_ids,
+    )
     return BulkUpdateResponse(updated_count=updated, deleted_count=0)
 
 
-@router.delete("/issues/{issue_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_issue(
-    issue_id: str,
+@router.delete("/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_task(
+    task_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> None:
-    issue, _project = _get_issue_for_user(db, current_user, issue_id, require_editor=True)
-    for child in issue.subtasks:
-        child.parent_id = None
-    media_keys = cleanup_media_for_resource(db, "issue", issue.id)
-    enqueue_issue_rag_sync(
-        db,
-        issue=issue,
-        operation=RagSyncOperation.DELETE,
-    )
-    db.delete(issue)
-    db.commit()
-    # Post-commit MinIO cleanup — DB is authoritative, best-effort storage delete
-    if media_keys:
-        settings = get_settings()
-        client = get_minio_client()
-        for key in media_keys:
-            try:
-                client.remove_object(settings.minio_bucket, key)
-            except Exception:
-                pass
+    task, _project = _get_task_for_user(db, current_user, task_id, require_editor=True)
+    pms_service.delete_loaded_tasks(db, [task])
 
 
 @router.post(
-    "/issues/{issue_id}/comments",
-    response_model=IssueCommentItem,
+    "/tasks/{task_id}/comments",
+    response_model=TaskCommentItem,
     status_code=status.HTTP_201_CREATED,
 )
-def create_issue_comment(
-    issue_id: str,
-    payload: IssueCommentCreateRequest,
+def create_task_comment(
+    task_id: str,
+    payload: TaskCommentCreateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
-) -> IssueCommentItem:
-    return pms_service.add_issue_comment(
+) -> TaskCommentItem:
+    return pms_service.add_task_comment(
         db,
         workspace=workspace,
         principal=user_principal(
             workspace_id=workspace.id,
             user_id=current_user.id,
-            source="api.pms.create_issue_comment",
+            source="api.pms.create_task_comment",
         ),
         user=current_user,
-        issue_id=issue_id,
+        task_id=task_id,
         body=payload.body,
         body_blocks=payload.body_blocks,
     )
 
 
-@router.get("/issues/{issue_id}/activity-logs", response_model=ActivityLogListResponse)
-def list_issue_activity_logs(
-    issue_id: str,
+@router.get("/tasks/{task_id}/activity-logs", response_model=ActivityLogListResponse)
+def list_task_activity_logs(
+    task_id: str,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=100),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> ActivityLogListResponse:
-    issue, _ = _get_issue_for_user(db, current_user, issue_id)
+    task, _ = _get_task_for_user(db, current_user, task_id)
     logs = list(
         db.scalars(
-            select(IssueActivityLog)
-            .options(selectinload(IssueActivityLog.actor))
-            .where(IssueActivityLog.issue_id == issue.id)
-            .order_by(IssueActivityLog.created_at.desc())
+            select(TaskActivityLog)
+            .options(selectinload(TaskActivityLog.actor))
+            .where(TaskActivityLog.task_id == task.id, _visible_activity_log_filter())
+            .order_by(TaskActivityLog.created_at.desc())
         )
     )
-    reference_lookup = {issue.id: _issue_reference(issue)}
+    reference_lookup = {task.id: _task_reference(task)}
     serialized = [_serialize_activity(log, reference_lookup) for log in logs]
     page_items, total = _paginate(serialized, page, page_size)
     return ActivityLogListResponse(items=page_items, total=total, page=page, page_size=page_size)
 
 
-@router.post("/dependencies", response_model=DependencyItem, status_code=status.HTTP_201_CREATED)
-def create_dependency(
-    payload: DependencyCreateRequest,
+@router.get("/tasks/{task_id}/docs", response_model=TaskDocLinksResponse)
+def list_task_docs(
+    task_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-) -> DependencyItem:
-    predecessor_issue, predecessor_task_list = _get_issue_for_user(
-        db, current_user, payload.predecessor_id, require_editor=True
-    )
-    successor_issue, successor_task_list = _get_issue_for_user(
-        db, current_user, payload.successor_id, require_editor=True
-    )
-    if predecessor_task_list.id != successor_task_list.id:
-        raise localized_http_exception(status_code=400, code="pms.dependencies_same_list_required")
+) -> TaskDocLinksResponse:
+    _get_task_for_user(db, current_user, task_id)
+    return _serialize_visible_task_doc_links(db, user=current_user, task_id=task_id)
 
-    dependency = ScheduleDependency(
-        id=new_id(),
-        list_id=predecessor_task_list.id,
-        predecessor_kind=payload.predecessor_kind,
-        predecessor_id=predecessor_issue.id,
-        successor_kind=payload.successor_kind,
-        successor_id=successor_issue.id,
-        relation_type=payload.relation_type,
-    )
-    db.add(dependency)
-    _log_issue_activity(
+
+@router.post(
+    "/tasks/{task_id}/docs",
+    response_model=TaskDocLinksResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def attach_task_doc(
+    task_id: str,
+    payload: TaskDocAttachRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> TaskDocLinksResponse:
+    task, _task_list = _get_task_for_user(db, current_user, task_id, require_editor=True)
+    pms_task_doc_links.attach_doc_to_task(
         db,
-        successor_issue.id,
-        current_user.id,
-        "dependency_added",
-        f"{current_user.full_name} linked {_issue_reference(predecessor_issue)} to {_issue_reference(successor_issue)}.",
+        user=current_user,
+        task=task,
+        doc_id=payload.doc_id,
     )
-    db.commit()
-    return DependencyItem(
-        id=dependency.id,
-        predecessor_kind=dependency.predecessor_kind,
-        predecessor_id=dependency.predecessor_id,
-        successor_kind=dependency.successor_kind,
-        successor_id=dependency.successor_id,
-        relation_type=dependency.relation_type,
-    )
+    return _serialize_visible_task_doc_links(db, user=current_user, task_id=task.id)
 
 
-@router.delete("/dependencies/{dependency_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_dependency(
-    dependency_id: str,
+@router.delete("/tasks/{task_id}/docs/{doc_id}", response_model=TaskDocLinksResponse)
+def detach_task_doc(
+    task_id: str,
+    doc_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-) -> Response:
-    dependency = db.scalar(select(ScheduleDependency).where(ScheduleDependency.id == dependency_id))
-    if dependency is None:
-        raise localized_http_exception(status_code=404, code="pms.dependency_not_found")
-    _ensure_list_editor(db, current_user, dependency.list_id)
-    db.delete(dependency)
-    db.commit()
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+) -> TaskDocLinksResponse:
+    task, _task_list = _get_task_for_user(db, current_user, task_id, require_editor=True)
+    pms_task_doc_links.detach_doc_from_task(
+        db,
+        user=current_user,
+        task=task,
+        doc_id=doc_id,
+    )
+    return _serialize_visible_task_doc_links(db, user=current_user, task_id=task.id)
 
 
 @router.get("/dashboard/summary", response_model=DashboardSummaryResponse)
@@ -2322,173 +2041,69 @@ def get_dashboard_summary(
 ) -> DashboardSummaryResponse:
     task_lists = list(
         db.scalars(
-            _accessible_task_lists_query(db, current_user).options(
-                selectinload(TaskList.milestones).selectinload(Milestone.issues),
-                selectinload(TaskList.issues)
-                .selectinload(Issue.comments),
-                selectinload(TaskList.issues).selectinload(Issue.assignee),
-                selectinload(TaskList.issues).selectinload(Issue.reporter),
+            _active_accessible_task_lists_query(db, current_user).options(
+                selectinload(TaskList.milestones).selectinload(Milestone.tasks),
+                selectinload(TaskList.statuses),
+                selectinload(TaskList.space_statuses),
+                selectinload(TaskList.tasks).selectinload(Task.comments),
+                selectinload(TaskList.tasks).selectinload(Task.assignee),
+                selectinload(TaskList.tasks).selectinload(Task.reporter),
             )
         )
     )
     if list_id:
         task_lists = [task_list for task_list in task_lists if task_list.id == list_id]
-    issues = [issue for task_list in task_lists for issue in task_list.issues if not issue.archived]
-    active_issues = [issue for issue in issues if issue.status not in {"done", "canceled"}]
-    overdue_issues = [
-        issue
-        for issue in active_issues
-        if issue.due_date is not None and issue.due_date < date.today()
-    ]
-    milestone_due_soon_count = sum(
-        1
-        for task_list in task_lists
-        for milestone in task_list.milestones
-        if milestone.due_date is not None and milestone.due_date <= date.today() + timedelta(days=14)
-    )
-
-    status_counts = [
-        StatusCountItem(
-            status=status_key,
-            label=label,
-            count=sum(1 for issue in issues if issue.status == status_key),
-        )
-        for status_key, label in ISSUE_STATUS_LABELS.items()
-    ]
-    priority_counts = [
-        PriorityCountItem(
-            priority=priority_key,
-            label=label,
-            count=sum(1 for issue in issues if issue.priority == priority_key),
-        )
-        for priority_key, label in PRIORITY_LABELS.items()
-    ]
-
     recent_logs = list(
         db.scalars(
-            select(IssueActivityLog)
-            .join(Issue, Issue.id == IssueActivityLog.issue_id)
-            .options(selectinload(IssueActivityLog.actor), selectinload(IssueActivityLog.issue).selectinload(Issue.task_list))
-            .where(Issue.list_id.in_([task_list.id for task_list in task_lists] or ["__none__"]))
-            .order_by(IssueActivityLog.created_at.desc())
+            select(TaskActivityLog)
+            .join(Task, Task.id == TaskActivityLog.task_id)
+            .options(
+                selectinload(TaskActivityLog.actor),
+                selectinload(TaskActivityLog.task).selectinload(Task.task_list),
+            )
+            .where(
+                Task.list_id.in_([task_list.id for task_list in task_lists] or ["__none__"]),
+                _visible_activity_log_filter(),
+            )
+            .order_by(TaskActivityLog.created_at.desc())
             .limit(8)
         )
     )
-    recent_activity = [
-        RecentActivityItem(
-            id=log.id,
-            issue_id=log.issue_id,
-            issue_reference=_issue_reference(log.issue),
-            message=log.message,
-            actor_name=getattr(log.actor, "full_name", None),
-            created_at=log.created_at,
-        )
-        for log in recent_logs
-    ]
 
-    list_cards = []
-    for task_list in task_lists:
-        issue_progress_scope = [issue for issue in task_list.issues if not issue.archived]
-        open_issue_count = sum(
-            1 for issue in issue_progress_scope if issue.status not in {"done", "canceled"}
+    return DashboardSummaryResponse.model_validate(
+        dashboard_summary_payload(
+            task_lists=task_lists,
+            recent_logs=recent_logs,
+            current_user_id=current_user.id,
+            today=date.today(),
         )
-        overdue_issue_count = sum(
-            1
-            for issue in issue_progress_scope
-            if issue.status not in {"done", "canceled"}
-            and issue.due_date is not None
-            and issue.due_date < date.today()
-        )
-        due_dates = sorted(
-            issue.due_date
-            for issue in issue_progress_scope
-            if issue.due_date is not None and issue.status not in {"done", "canceled"}
-        )
-        list_cards.append(
-            DashboardTaskListItem(
-                list_id=task_list.id,
-                key=task_list.key,
-                name=task_list.name,
-                progress=_calculate_progress(issue_progress_scope),
-                open_issue_count=open_issue_count,
-                overdue_issue_count=overdue_issue_count,
-                next_due_date=due_dates[0] if due_dates else None,
-            )
-        )
-
-    return DashboardSummaryResponse(
-        list_count=len(task_lists),
-        active_issue_count=len(active_issues),
-        overdue_issue_count=len(overdue_issues),
-        my_issue_count=sum(1 for issue in active_issues if issue.assignee_id == current_user.id),
-        milestone_due_soon_count=milestone_due_soon_count,
-        status_counts=status_counts,
-        priority_counts=priority_counts,
-        lists=list_cards,
-        recent_activity=recent_activity,
     )
 
 
-MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
-
-
 @router.post(
-    "/issues/{issue_id}/attachments",
+    "/tasks/{task_id}/attachments",
     response_model=AttachmentItem,
     status_code=status.HTTP_201_CREATED,
 )
 async def upload_attachment(
-    issue_id: str,
+    task_id: str,
     file: UploadFile,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> AttachmentItem:
-    issue, task_list = _get_issue_for_user(db, current_user, issue_id, require_editor=True)
-    data = await file.read()
-    if len(data) > MAX_UPLOAD_SIZE:
-        raise localized_http_exception(status_code=413, code="pms.file_size_limit_exceeded", limit_mb=50)
-
-    settings = get_settings()
-    client = get_minio_client()
-    attachment_id = new_id()
-    storage_key = f"pms/{task_list.id}/{issue.id}/{attachment_id}/{file.filename}"
-    client.put_object(
-        settings.minio_bucket,
-        storage_key,
-        BytesIO(data),
-        length=len(data),
-        content_type=file.content_type or "application/octet-stream",
-    )
-    attachment = Attachment(
-        id=attachment_id,
-        issue_id=issue.id,
-        filename=file.filename or "unnamed",
-        content_type=file.content_type or "application/octet-stream",
-        size_bytes=len(data),
-        storage_key=storage_key,
-        uploaded_by_id=current_user.id,
-    )
-    db.add(attachment)
-    _log_issue_activity(
+    item = upload_task_attachment(
         db,
-        issue.id,
-        current_user.id,
-        "attachment_added",
-        f"{current_user.full_name} attached {file.filename} to {_issue_reference(issue)}.",
+        workspace=current_workspace,
+        user=current_user,
+        task_id=task_id,
+        upload=TaskAttachmentUpload(
+            filename=file.filename,
+            content_type=file.content_type,
+            content=await file.read(),
+        ),
     )
-    db.commit()
-    db.refresh(attachment)
-    return AttachmentItem(
-        id=attachment.id,
-        issue_id=attachment.issue_id,
-        filename=attachment.filename,
-        content_type=attachment.content_type,
-        size_bytes=attachment.size_bytes,
-        download_url=_build_attachment_download_url(attachment.storage_key),
-        uploaded_by_id=attachment.uploaded_by_id,
-        uploaded_by_name=current_user.full_name,
-        created_at=attachment.created_at,
-    )
+    return AttachmentItem(**asdict(item))
 
 
 @router.get("/attachments/{attachment_id}/download")
@@ -2497,13 +2112,34 @@ def download_attachment(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> RedirectResponse:
-    attachment = db.scalar(select(Attachment).where(Attachment.id == attachment_id))
-    if attachment is None:
-        raise localized_http_exception(status_code=404, code="pms.attachment_not_found")
-    _ensure_issue_readable(db, current_user, attachment.issue_id)
-
-    url = _build_attachment_download_url(attachment.storage_key)
+    url = get_task_attachment_download_url(
+        db,
+        user=current_user,
+        attachment_id=attachment_id,
+    )
     return RedirectResponse(url=url, status_code=302)
+
+
+@public_router.get("/attachments/{attachment_id}/content")
+def proxy_attachment_content(
+    attachment_id: str,
+    expires: int = Query(..., ge=1),
+    signature: str = Query(..., min_length=1),
+    disposition: TaskAttachmentDisposition = "attachment",
+    db: Session = Depends(get_db_session),
+) -> StreamingResponse:
+    content = open_task_attachment_content(
+        db,
+        attachment_id=attachment_id,
+        expires=expires,
+        signature=signature,
+        disposition=disposition,
+    )
+    return StreamingResponse(
+        content.body,
+        media_type=content.media_type,
+        headers=content.headers,
+    )
 
 
 @router.delete("/attachments/{attachment_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -2511,27 +2147,14 @@ def delete_attachment(
     attachment_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> Response:
-    attachment = db.scalar(
-        select(Attachment).options(selectinload(Attachment.issue).selectinload(Issue.task_list)).where(Attachment.id == attachment_id)
-    )
-    if attachment is None:
-        raise localized_http_exception(status_code=404, code="pms.attachment_not_found")
-    _ensure_list_editor(db, current_user, attachment.issue.list_id)
-
-    settings = get_settings()
-    client = get_minio_client()
-    client.remove_object(settings.minio_bucket, attachment.storage_key)
-
-    _log_issue_activity(
+    delete_task_attachment(
         db,
-        attachment.issue_id,
-        current_user.id,
-        "attachment_removed",
-        f"{current_user.full_name} removed {attachment.filename} from {_issue_reference(attachment.issue)}.",
+        workspace=current_workspace,
+        user=current_user,
+        attachment_id=attachment_id,
     )
-    db.delete(attachment)
-    db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -2561,7 +2184,7 @@ def list_notifications(
                 body=n.body,
                 reference_type=n.reference_type,
                 reference_id=n.reference_id,
-                action_url=n.action_url,
+                action_url=normalize_pms_deep_link(n.action_url),
                 is_read=n.is_read,
                 created_at=n.created_at,
             )
@@ -2578,12 +2201,15 @@ def get_unread_count(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> UnreadCountResponse:
-    count = db.scalar(
-        select(func.count(Notification.id)).where(
-            Notification.user_id == current_user.id,
-            Notification.is_read == False,  # noqa: E712
+    count = (
+        db.scalar(
+            select(func.count(Notification.id)).where(
+                Notification.user_id == current_user.id,
+                Notification.is_read == False,  # noqa: E712
+            )
         )
-    ) or 0
+        or 0
+    )
     return UnreadCountResponse(count=count)
 
 
@@ -2594,7 +2220,9 @@ def mark_notification_read(
     current_user: User = Depends(require_current_user),
 ) -> NotificationItem:
     notification = db.scalar(
-        select(Notification).where(Notification.id == notification_id, Notification.user_id == current_user.id)
+        select(Notification).where(
+            Notification.id == notification_id, Notification.user_id == current_user.id
+        )
     )
     if notification is None:
         raise localized_http_exception(status_code=404, code="pms.notification_not_found")
@@ -2607,7 +2235,7 @@ def mark_notification_read(
         body=notification.body,
         reference_type=notification.reference_type,
         reference_id=notification.reference_id,
-        action_url=notification.action_url,
+        action_url=normalize_pms_deep_link(notification.action_url),
         is_read=notification.is_read,
         created_at=notification.created_at,
     )
@@ -2632,37 +2260,25 @@ def mark_all_notifications_read(
 # ── Checklist ────────────────────────────────────────────────────────────────
 
 
-@router.post("/issues/{issue_id}/checklist", response_model=ChecklistItemResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/tasks/{task_id}/checklist",
+    response_model=ChecklistItemResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 def create_checklist_item(
-    issue_id: str,
+    task_id: str,
     payload: ChecklistItemCreateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> ChecklistItemResponse:
-    issue, _project = _get_issue_for_user(db, current_user, issue_id, require_editor=True)
-    item = ChecklistItem(
-        id=new_id(),
-        issue_id=issue.id,
+    item = pms_task_work_items.create_checklist_item(
+        db,
+        user=current_user,
+        task_id=task_id,
         text=payload.text,
         sort_order=payload.sort_order,
     )
-    db.add(item)
-    _log_issue_activity(
-        db,
-        issue.id,
-        current_user.id,
-        "checklist_added",
-        f"{current_user.full_name} added checklist item.",
-    )
-    db.commit()
-    return ChecklistItemResponse(
-        id=item.id,
-        issue_id=item.issue_id,
-        text=item.text,
-        completed=item.completed,
-        sort_order=item.sort_order,
-        created_at=item.created_at,
-    )
+    return ChecklistItemResponse(**asdict(item))
 
 
 @router.patch("/checklist/{item_id}", response_model=ChecklistItemResponse)
@@ -2672,39 +2288,15 @@ def update_checklist_item(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> ChecklistItemResponse:
-    item = db.scalar(
-        select(ChecklistItem)
-        .options(selectinload(ChecklistItem.issue).selectinload(Issue.task_list))
-        .where(ChecklistItem.id == item_id)
+    item = pms_task_work_items.update_checklist_item(
+        db,
+        user=current_user,
+        item_id=item_id,
+        text=payload.text,
+        completed=payload.completed,
+        sort_order=payload.sort_order,
     )
-    if item is None:
-        raise localized_http_exception(status_code=404, code="pms.checklist_item_not_found")
-    _ensure_list_editor(db, current_user, item.issue.list_id)
-
-    if payload.text is not None:
-        item.text = payload.text
-    if payload.completed is not None and payload.completed != item.completed:
-        item.completed = payload.completed
-        action = "checklist_checked" if payload.completed else "checklist_unchecked"
-        _log_issue_activity(
-            db,
-            item.issue_id,
-            current_user.id,
-            action,
-            f"{current_user.full_name} {'checked' if payload.completed else 'unchecked'} \"{item.text}\".",
-        )
-    if payload.sort_order is not None:
-        item.sort_order = payload.sort_order
-
-    db.commit()
-    return ChecklistItemResponse(
-        id=item.id,
-        issue_id=item.issue_id,
-        text=item.text,
-        completed=item.completed,
-        sort_order=item.sort_order,
-        created_at=item.created_at,
-    )
+    return ChecklistItemResponse(**asdict(item))
 
 
 @router.delete("/checklist/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -2713,305 +2305,39 @@ def delete_checklist_item(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> Response:
-    item = db.scalar(
-        select(ChecklistItem)
-        .options(selectinload(ChecklistItem.issue).selectinload(Issue.task_list))
-        .where(ChecklistItem.id == item_id)
-    )
-    if item is None:
-        raise localized_http_exception(status_code=404, code="pms.checklist_item_not_found")
-    _ensure_list_editor(db, current_user, item.issue.list_id)
-    _log_issue_activity(
+    pms_task_work_items.delete_checklist_item(
         db,
-        item.issue_id,
-        current_user.id,
-        "checklist_removed",
-        f"{current_user.full_name} removed checklist item \"{item.text}\".",
+        user=current_user,
+        item_id=item_id,
     )
-    db.delete(item)
-    db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.patch("/issues/{issue_id}/checklist/reorder", status_code=status.HTTP_204_NO_CONTENT)
+@router.patch("/tasks/{task_id}/checklist/reorder", status_code=status.HTTP_204_NO_CONTENT)
 def reorder_checklist(
-    issue_id: str,
+    task_id: str,
     payload: ChecklistReorderRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> Response:
-    _get_issue_for_user(db, current_user, issue_id, require_editor=True)
-    items = list(
-        db.scalars(
-            select(ChecklistItem).where(ChecklistItem.issue_id == issue_id)
-        )
-    )
-    item_map = {item.id: item for item in items}
-    for idx, item_id in enumerate(payload.item_ids):
-        if item_id in item_map:
-            item_map[item_id].sort_order = idx
-    db.commit()
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-# ── Time Tracking ────────────────────────────────────────────────────────────
-
-
-@router.post("/issues/{issue_id}/time-entries", response_model=TimeEntryItem, status_code=status.HTTP_201_CREATED)
-def create_time_entry(
-    issue_id: str,
-    payload: TimeEntryCreateRequest,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> TimeEntryItem:
-    issue, _project = _get_issue_for_user(db, current_user, issue_id, require_editor=True)
-    entry = TimeEntry(
-        id=new_id(),
-        issue_id=issue.id,
-        user_id=current_user.id,
-        duration_minutes=payload.duration_minutes,
-        description=payload.description.strip(),
-        entry_date=payload.entry_date,
-    )
-    db.add(entry)
-    hours = payload.duration_minutes / 60
-    _log_issue_activity(
+    pms_task_work_items.reorder_checklist(
         db,
-        issue.id,
-        current_user.id,
-        "time_tracked",
-        f"{current_user.full_name} logged {hours:.1f}h.",
+        user=current_user,
+        task_id=task_id,
+        item_ids=payload.item_ids,
     )
-    db.commit()
-    return TimeEntryItem(
-        id=entry.id,
-        issue_id=entry.issue_id,
-        user_id=entry.user_id,
-        user_name=current_user.full_name,
-        duration_minutes=entry.duration_minutes,
-        description=entry.description,
-        entry_date=entry.entry_date,
-        created_at=entry.created_at,
-    )
-
-
-@router.patch("/time-entries/{entry_id}", response_model=TimeEntryItem)
-def update_time_entry(
-    entry_id: str,
-    payload: TimeEntryUpdateRequest,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> TimeEntryItem:
-    entry = db.scalar(
-        select(TimeEntry)
-        .options(selectinload(TimeEntry.issue).selectinload(Issue.task_list), selectinload(TimeEntry.user))
-        .where(TimeEntry.id == entry_id)
-    )
-    if entry is None:
-        raise localized_http_exception(status_code=404, code="pms.time_entry_not_found")
-    _ensure_list_editor(db, current_user, entry.issue.list_id)
-
-    if payload.duration_minutes is not None:
-        entry.duration_minutes = payload.duration_minutes
-    if payload.description is not None:
-        entry.description = payload.description.strip()
-    if payload.entry_date is not None:
-        entry.entry_date = payload.entry_date
-
-    db.commit()
-    return TimeEntryItem(
-        id=entry.id,
-        issue_id=entry.issue_id,
-        user_id=entry.user_id,
-        user_name=entry.user.full_name,
-        duration_minutes=entry.duration_minutes,
-        description=entry.description,
-        entry_date=entry.entry_date,
-        created_at=entry.created_at,
-    )
-
-
-@router.delete("/time-entries/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_time_entry(
-    entry_id: str,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> Response:
-    entry = db.scalar(
-        select(TimeEntry)
-        .options(selectinload(TimeEntry.issue).selectinload(Issue.task_list))
-        .where(TimeEntry.id == entry_id)
-    )
-    if entry is None:
-        raise localized_http_exception(status_code=404, code="pms.time_entry_not_found")
-    _ensure_list_editor(db, current_user, entry.issue.list_id)
-    _log_issue_activity(
-        db,
-        entry.issue_id,
-        current_user.id,
-        "time_removed",
-        f"{current_user.full_name} removed time entry.",
-    )
-    db.delete(entry)
-    db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-# ── Task List Statuses (Custom Workflow) ─────────────────────────────
-
-
-def _slugify(name: str) -> str:
-    return name.strip().lower().replace(" ", "_")[:40]
-
-
-def _serialize_status(s: TaskListStatus) -> TaskListStatusItem:
-    return TaskListStatusItem(
-        id=s.id,
-        slug=s.slug,
-        name=s.name,
-        color=s.color,
-        category=s.category,
-        sort_order=s.sort_order,
-    )
-
-
-@router.get("/lists/{list_id}/statuses", response_model=TaskListStatusesResponse)
-def list_task_list_statuses(
-    list_id: str,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> TaskListStatusesResponse:
-    task_list, _ = _ensure_list_member(db, current_user, list_id)
-    statuses = list(
-        db.scalars(
-            select(TaskListStatus)
-            .where(TaskListStatus.list_id == list_id)
-            .order_by(TaskListStatus.sort_order)
-        )
-    )
-    # Auto-seed default statuses for existing task lists that don't have any
-    if not statuses:
-        _create_default_statuses(db, list_id)
-        db.commit()
-        statuses = list(
-            db.scalars(
-                select(TaskListStatus)
-                .where(TaskListStatus.list_id == list_id)
-                .order_by(TaskListStatus.sort_order)
-            )
-        )
-    return TaskListStatusesResponse(items=[_serialize_status(s) for s in statuses])
-
-
-@router.post(
-    "/lists/{list_id}/statuses",
-    response_model=TaskListStatusItem,
-    status_code=status.HTTP_201_CREATED,
-)
-def create_task_list_status(
-    list_id: str,
-    payload: TaskListStatusCreateRequest,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> TaskListStatusItem:
-    _ensure_list_owner(db, current_user, list_id)
-    slug = _slugify(payload.name)
-    existing = db.scalar(
-        select(TaskListStatus).where(
-            TaskListStatus.list_id == list_id,
-            TaskListStatus.slug == slug,
-        )
-    )
-    if existing is not None:
-        raise localized_http_exception(status_code=409, code="pms.status_name_exists")
-
-    ps = TaskListStatus(
-        id=new_id(),
-        list_id=list_id,
-        slug=slug,
-        name=payload.name.strip(),
-        color=payload.color,
-        category=payload.category,
-        sort_order=payload.sort_order,
-    )
-    db.add(ps)
-    enqueue_task_list_status_issue_search_recompute(db, task_status=ps)
-    db.commit()
-    db.refresh(ps)
-    return _serialize_status(ps)
-
-
-@router.patch("/task-list-statuses/{status_id}", response_model=TaskListStatusItem)
-def update_task_list_status(
-    status_id: str,
-    payload: TaskListStatusUpdateRequest,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> TaskListStatusItem:
-    ps = db.scalar(select(TaskListStatus).where(TaskListStatus.id == status_id))
-    if ps is None:
-        raise localized_http_exception(status_code=404, code="pms.status_not_found")
-    _ensure_list_owner(db, current_user, ps.list_id)
-
-    if payload.name is not None:
-        normalized_name = payload.name.strip()
-        existing = db.scalar(
-            select(TaskListStatus).where(
-                TaskListStatus.list_id == ps.list_id,
-                TaskListStatus.id != ps.id,
-                func.lower(TaskListStatus.name) == normalized_name.lower(),
-            )
-        )
-        if existing is not None:
-            raise localized_http_exception(status_code=409, code="pms.status_name_exists")
-        ps.name = normalized_name
-    if payload.color is not None:
-        ps.color = payload.color
-    if payload.category is not None:
-        ps.category = payload.category
-    if payload.sort_order is not None:
-        ps.sort_order = payload.sort_order
-
-    enqueue_task_list_status_issue_search_recompute(db, task_status=ps)
-    db.commit()
-    db.refresh(ps)
-    return _serialize_status(ps)
-
-
-@router.delete("/task-list-statuses/{status_id}")
-def delete_task_list_status(
-    status_id: str,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> Response:
-    ps = db.scalar(select(TaskListStatus).where(TaskListStatus.id == status_id))
-    if ps is None:
-        raise localized_http_exception(status_code=404, code="pms.status_not_found")
-    _ensure_list_owner(db, current_user, ps.list_id)
-
-    # Prevent deleting if issues use this status
-    count = db.scalar(
-        select(func.count())
-        .select_from(Issue)
-        .where(Issue.list_id == ps.list_id, Issue.status == ps.slug)
-    )
-    if count and count > 0:
-        raise localized_http_exception(
-            status_code=409,
-            code="pms.status_in_use",
-            count=count,
-        )
-
-    db.delete(ps)
-    db.commit()
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+# Task List Statuses (Custom Workflow)
+router.include_router(status_router)
 
 
 # ── CSV Export ──────────────────────────────────────────────────────
 
 
 @router.get("/lists/{list_id}/export")
-def export_task_list_issues(
+def export_task_list_tasks(
     list_id: str,
     format: str = Query(default="csv"),
     db: Session = Depends(get_db_session),
@@ -3019,82 +2345,86 @@ def export_task_list_issues(
 ) -> Response:
     task_list, _ = _ensure_list_member(db, current_user, list_id)
 
-    issues = list(
+    tasks = list(
         db.scalars(
-            select(Issue)
+            select(Task)
             .options(
-                selectinload(Issue.task_list),
-                selectinload(Issue.assignee),
-                selectinload(Issue.reporter),
-                selectinload(Issue.milestone),
-                selectinload(Issue.label_links).selectinload(IssueLabel.label),
-                selectinload(Issue.comments),
-                selectinload(Issue.checklist_items),
-                selectinload(Issue.time_entries),
-                selectinload(Issue.subtasks),
+                selectinload(Task.task_list),
+                selectinload(Task.task_list).selectinload(TaskList.statuses),
+                selectinload(Task.task_list).selectinload(TaskList.space_statuses),
+                selectinload(Task.assignee),
+                selectinload(Task.reporter),
+                selectinload(Task.milestone),
+                selectinload(Task.label_links).selectinload(TaskLabel.label),
+                selectinload(Task.comments),
+                selectinload(Task.checklist_items),
+                selectinload(Task.subtasks),
             )
-            .where(Issue.list_id == list_id)
-            .order_by(Issue.issue_number)
+            .where(Task.list_id == list_id)
+            .order_by(Task.task_number)
         )
     )
 
     buf = StringIO()
     writer = csv.writer(buf)
-    writer.writerow([
-        "Reference", "Title", "Status", "Priority",
-        "Assignee", "Reporter", "Milestone",
-        "Start Date", "Due Date", "Labels",
-        "Estimate Hours", "Time Spent (min)",
-        "Checklist Done/Total", "Comments",
-        "Created", "Updated",
-    ])
-    for issue in issues:
-        ref = f"{task_list.key}-{issue.issue_number}"
-        label_str = ", ".join(link.label.name for link in issue.label_links)
-        checklist_str = f"{sum(1 for c in issue.checklist_items if c.completed)}/{len(issue.checklist_items)}" if issue.checklist_items else ""
-        writer.writerow([
-            ref,
-            issue.title,
-            issue.status,
-            issue.priority,
-            getattr(issue.assignee, "full_name", ""),
-            getattr(issue.reporter, "full_name", ""),
-            getattr(issue.milestone, "title", ""),
-            str(issue.start_date or ""),
-            str(issue.due_date or ""),
-            label_str,
-            issue.estimate_hours or "",
-            sum(te.duration_minutes for te in issue.time_entries) if issue.time_entries else 0,
-            checklist_str,
-            len(issue.comments),
-            issue.created_at.isoformat(),
-            issue.updated_at.isoformat(),
-        ])
+    writer.writerow(
+        [
+            "Reference",
+            "Title",
+            "Status",
+            "Priority",
+            "Assignee",
+            "Reporter",
+            "Milestone",
+            "Start Date",
+            "Due Date",
+            "Completed Date",
+            "Labels",
+            "Checklist Done/Total",
+            "Comments",
+            "Created",
+            "Updated",
+        ]
+    )
+    for task in tasks:
+        ref = f"{task_list.key}-{task.task_number}"
+        label_str = ", ".join(link.label.name for link in task.label_links)
+        checklist_str = (
+            f"{sum(1 for c in task.checklist_items if c.completed)}/{len(task.checklist_items)}"
+            if task.checklist_items
+            else ""
+        )
+        writer.writerow(
+            [
+                ref,
+                task.title,
+                task.status,
+                task.priority,
+                getattr(task.assignee, "full_name", ""),
+                getattr(task.reporter, "full_name", ""),
+                getattr(task.milestone, "title", ""),
+                str(task.start_date or ""),
+                str(task.due_date or ""),
+                str(task.completed_date or ""),
+                label_str,
+                checklist_str,
+                len(task.comments),
+                task.created_at.isoformat(),
+                task.updated_at.isoformat(),
+            ]
+        )
 
     content = buf.getvalue()
     return Response(
         content=content,
         media_type="text/csv",
         headers={
-            "Content-Disposition": f'attachment; filename="{task_list.key}_issues.csv"',
+            "Content-Disposition": f'attachment; filename="{task_list.key}_tasks.csv"',
         },
     )
 
 
 # ── Task Templates ──────────────────────────────────────────────────
-
-
-def _serialize_template(t: TaskTemplate) -> TaskTemplateItem:
-    return TaskTemplateItem(
-        id=t.id,
-        list_id=t.list_id,
-        name=t.name,
-        description=t.description,
-        default_status=t.default_status,
-        default_priority=t.default_priority,
-        checklist_items=t.checklist_items,
-        created_at=t.created_at,
-    )
 
 
 @router.get("/lists/{list_id}/templates", response_model=TaskTemplateListResponse)
@@ -3103,15 +2433,12 @@ def list_templates(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> TaskTemplateListResponse:
-    _ensure_list_member(db, current_user, list_id)
-    templates = list(
-        db.scalars(
-            select(TaskTemplate)
-            .where(TaskTemplate.list_id == list_id)
-            .order_by(TaskTemplate.created_at.desc())
-        )
+    templates = pms_task_list_customization.list_task_templates(
+        db,
+        user=current_user,
+        list_id=list_id,
     )
-    return TaskTemplateListResponse(items=[_serialize_template(t) for t in templates])
+    return TaskTemplateListResponse(items=[TaskTemplateItem(**asdict(t)) for t in templates])
 
 
 @router.post(
@@ -3125,9 +2452,9 @@ def create_template(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> TaskTemplateItem:
-    _ensure_list_editor(db, current_user, list_id)
-    t = TaskTemplate(
-        id=new_id(),
+    template = pms_task_list_customization.create_task_template(
+        db,
+        user=current_user,
         list_id=list_id,
         name=payload.name.strip(),
         description=payload.description.strip(),
@@ -3135,10 +2462,7 @@ def create_template(
         default_priority=payload.default_priority,
         checklist_items=payload.checklist_items,
     )
-    db.add(t)
-    db.commit()
-    db.refresh(t)
-    return _serialize_template(t)
+    return TaskTemplateItem(**asdict(template))
 
 
 @router.patch("/templates/{template_id}", response_model=TaskTemplateItem)
@@ -3148,25 +2472,17 @@ def update_template(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> TaskTemplateItem:
-    t = db.scalar(select(TaskTemplate).where(TaskTemplate.id == template_id))
-    if t is None:
-        raise localized_http_exception(status_code=404, code="pms.template_not_found")
-    _ensure_list_editor(db, current_user, t.list_id)
-
-    if payload.name is not None:
-        t.name = payload.name.strip()
-    if payload.description is not None:
-        t.description = payload.description.strip()
-    if payload.default_status is not None:
-        t.default_status = payload.default_status
-    if payload.default_priority is not None:
-        t.default_priority = payload.default_priority
-    if payload.checklist_items is not None:
-        t.checklist_items = payload.checklist_items
-
-    db.commit()
-    db.refresh(t)
-    return _serialize_template(t)
+    template = pms_task_list_customization.update_task_template(
+        db,
+        user=current_user,
+        template_id=template_id,
+        name=payload.name,
+        description=payload.description,
+        default_status=payload.default_status,
+        default_priority=payload.default_priority,
+        checklist_items=payload.checklist_items,
+    )
+    return TaskTemplateItem(**asdict(template))
 
 
 @router.delete("/templates/{template_id}")
@@ -3175,12 +2491,11 @@ def delete_template(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> Response:
-    t = db.scalar(select(TaskTemplate).where(TaskTemplate.id == template_id))
-    if t is None:
-        raise localized_http_exception(status_code=404, code="pms.template_not_found")
-    _ensure_list_editor(db, current_user, t.list_id)
-    db.delete(t)
-    db.commit()
+    pms_task_list_customization.delete_task_template(
+        db,
+        user=current_user,
+        template_id=template_id,
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -3193,27 +2508,12 @@ def list_custom_fields(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> CustomFieldListResponse:
-    _ensure_list_member(db, current_user, list_id)
-    fields = list(
-        db.scalars(
-            select(CustomField)
-            .where(CustomField.list_id == list_id)
-            .order_by(CustomField.sort_order)
-        )
+    fields = pms_task_list_customization.list_custom_fields(
+        db,
+        user=current_user,
+        list_id=list_id,
     )
-    return CustomFieldListResponse(
-        items=[
-            CustomFieldItem(
-                id=f.id,
-                list_id=f.list_id,
-                name=f.name,
-                field_type=f.field_type,
-                options=f.options,
-                sort_order=f.sort_order,
-            )
-            for f in fields
-        ]
-    )
+    return CustomFieldListResponse(items=[CustomFieldItem(**asdict(f)) for f in fields])
 
 
 @router.post(
@@ -3227,22 +2527,16 @@ def create_custom_field(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> CustomFieldItem:
-    _ensure_list_owner(db, current_user, list_id)
-    f = CustomField(
-        id=new_id(),
+    field = pms_task_list_customization.create_custom_field(
+        db,
+        user=current_user,
         list_id=list_id,
         name=payload.name.strip(),
         field_type=payload.field_type,
         options=payload.options,
         sort_order=payload.sort_order,
     )
-    db.add(f)
-    db.commit()
-    db.refresh(f)
-    return CustomFieldItem(
-        id=f.id, list_id=f.list_id, name=f.name,
-        field_type=f.field_type, options=f.options, sort_order=f.sort_order,
-    )
+    return CustomFieldItem(**asdict(field))
 
 
 @router.delete("/custom-fields/{field_id}")
@@ -3251,115 +2545,163 @@ def delete_custom_field(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> Response:
-    f = db.scalar(select(CustomField).where(CustomField.id == field_id))
-    if f is None:
-        raise localized_http_exception(status_code=404, code="pms.custom_field_not_found")
-    _ensure_list_owner(db, current_user, f.list_id)
-    # Delete all values for this field
-    for v in db.scalars(select(CustomFieldValue).where(CustomFieldValue.field_id == field_id)):
-        db.delete(v)
-    db.delete(f)
-    db.commit()
+    pms_task_list_customization.delete_custom_field(
+        db,
+        user=current_user,
+        field_id=field_id,
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get("/issues/{issue_id}/custom-field-values", response_model=list[CustomFieldValueItem])
-def list_issue_custom_field_values(
-    issue_id: str,
+@router.get("/tasks/{task_id}/custom-field-values", response_model=list[CustomFieldValueItem])
+def list_task_custom_field_values(
+    task_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> list[CustomFieldValueItem]:
-    issue = db.scalar(select(Issue).where(Issue.id == issue_id))
-    if issue is None:
-        raise localized_http_exception(status_code=404, code="pms.issue_not_found")
-    _ensure_issue_readable(db, current_user, issue)
-    values = list(
-        db.scalars(select(CustomFieldValue).where(CustomFieldValue.issue_id == issue_id))
+    values = pms_task_list_customization.list_task_custom_field_values(
+        db,
+        user=current_user,
+        task_id=task_id,
     )
-    return [CustomFieldValueItem(field_id=v.field_id, value=v.value) for v in values]
+    return [CustomFieldValueItem(**asdict(v)) for v in values]
 
 
-@router.put("/issues/{issue_id}/custom-field-values")
-def set_issue_custom_field_value(
-    issue_id: str,
+@router.put("/tasks/{task_id}/custom-field-values")
+def set_task_custom_field_value(
+    task_id: str,
     payload: SetCustomFieldValueRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> CustomFieldValueItem:
-    issue = db.scalar(select(Issue).where(Issue.id == issue_id))
-    if issue is None:
-        raise localized_http_exception(status_code=404, code="pms.issue_not_found")
-    _ensure_list_editor(db, current_user, issue.list_id)
-
-    # Validate field belongs to the same task list.
-    field = db.scalar(select(CustomField).where(CustomField.id == payload.field_id))
-    if field is None or field.list_id != issue.list_id:
-        raise localized_http_exception(status_code=400, code="pms.custom_field_wrong_list")
-
-    existing = db.scalar(
-        select(CustomFieldValue).where(
-            CustomFieldValue.issue_id == issue_id,
-            CustomFieldValue.field_id == payload.field_id,
-        )
+    value = pms_task_list_customization.set_task_custom_field_value(
+        db,
+        user=current_user,
+        task_id=task_id,
+        field_id=payload.field_id,
+        value=payload.value,
     )
-    if existing:
-        existing.value = payload.value
-    else:
-        db.add(CustomFieldValue(id=new_id(), issue_id=issue_id, field_id=payload.field_id, value=payload.value))
-    db.commit()
-    return CustomFieldValueItem(field_id=payload.field_id, value=payload.value)
+    return CustomFieldValueItem(**asdict(value))
 
 
-# ── Issue Assignees (Multiple) ──────────────────────────────────────
+# ── Task Assignees (Multiple) ──────────────────────────────────────
 
 
-class IssueAssigneeItem(BaseModel):
+class TaskAssigneeItem(BaseModel):
     user_id: str
     full_name: str
 
 
-class SetIssueAssigneesRequest(BaseModel):
+class TaskFollowerItem(BaseModel):
+    user_id: str
+    full_name: str
+
+
+class SetTaskAssigneesRequest(BaseModel):
     user_ids: list[str] = Field(..., max_length=20)
 
 
-@router.put("/issues/{issue_id}/assignees", response_model=list[IssueAssigneeItem])
-def set_issue_assignees(
-    issue_id: str,
-    payload: SetIssueAssigneesRequest,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> list[IssueAssigneeItem]:
-    issue, task_list = _get_issue_for_user(db, current_user, issue_id, require_editor=True)
+class SetTaskFollowersRequest(BaseModel):
+    user_ids: list[str] = Field(..., max_length=50)
+
+
+def _validate_task_role_users(
+    db: Session,
+    task_list: TaskList,
+    user_ids: list[str],
+    *,
+    invalid_member_code: str,
+) -> list[User]:
+    if not user_ids:
+        return []
     if task_list.team_id is None:
         raise localized_http_exception(status_code=409, code="pms.task_list_space_missing")
     member_ids = _space_member_ids(db, task_list.team_id)
+    users: list[User] = []
+    seen_user_ids: set[str] = set()
+    for user_id in user_ids:
+        if user_id in seen_user_ids:
+            continue
+        seen_user_ids.add(user_id)
+        if user_id not in member_ids:
+            raise localized_http_exception(status_code=400, code=invalid_member_code)
+        user = db.scalar(select(User).where(User.id == user_id))
+        if user is None:
+            raise localized_http_exception(status_code=404, code="auth.user_not_found")
+        users.append(user)
+    return users
 
-    # Clear existing assignee links
-    for link in list(issue.assignee_links):
+
+@router.put("/tasks/{task_id}/assignees", response_model=list[TaskAssigneeItem])
+def set_task_assignees(
+    task_id: str,
+    payload: SetTaskAssigneesRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
+) -> list[TaskAssigneeItem]:
+    updated_task = pms_service.update_task(
+        db,
+        workspace=workspace,
+        principal=user_principal(
+            workspace_id=workspace.id,
+            user_id=current_user.id,
+            source="api.pms.set_task_assignees",
+        ),
+        user=current_user,
+        task_id=task_id,
+        provided_fields={"assignee_ids"},
+        assignee_ids=payload.user_ids,
+    )
+    assignee_ids = updated_task.get("assignee_ids", [])
+    assignee_names = updated_task.get("assignee_names", [])
+    return [
+        TaskAssigneeItem(
+            user_id=user_id,
+            full_name=assignee_names[index] if index < len(assignee_names) else user_id,
+        )
+        for index, user_id in enumerate(assignee_ids)
+    ]
+
+
+@router.put("/tasks/{task_id}/followers", response_model=list[TaskFollowerItem])
+def set_task_followers(
+    task_id: str,
+    payload: SetTaskFollowersRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> list[TaskFollowerItem]:
+    task, task_list = _get_task_for_user(db, current_user, task_id, require_editor=True)
+    followers = _validate_task_role_users(
+        db,
+        task_list,
+        payload.user_ids,
+        invalid_member_code="pms.followers_task_list_members_required",
+    )
+
+    for link in list(task.follower_links):
         db.delete(link)
     db.flush()
 
-    # Add new ones (validate all users first)
-    result: list[IssueAssigneeItem] = []
-    validated_user_ids: list[str] = []
-    for uid in payload.user_ids:
-        if uid not in member_ids:
-            raise localized_http_exception(status_code=400, code="pms.assignees_task_list_members_required")
-        user = db.scalar(select(User).where(User.id == uid))
-        if user is None:
-            raise localized_http_exception(status_code=404, code="auth.user_not_found")
-        db.add(IssueAssignee(id=new_id(), issue_id=issue_id, user_id=uid))
-        result.append(IssueAssigneeItem(user_id=uid, full_name=user.full_name))
-        validated_user_ids.append(uid)
+    result: list[TaskFollowerItem] = []
+    for follower in followers:
+        db.add(TaskFollower(id=new_id(), task_id=task_id, user_id=follower.id))
+        result.append(TaskFollowerItem(user_id=follower.id, full_name=follower.full_name))
 
-    # Update primary assignee_id to the first validated user (or clear)
-    issue.assignee_id = validated_user_ids[0] if validated_user_ids else None
-    enqueue_issue_rag_sync(
+    _log_task_activity(
         db,
-        issue=issue,
+        task.id,
+        current_user.id,
+        "updated",
+        f"{current_user.full_name} updated followers for {_task_reference(task)}.",
+        field_name="follower_ids",
+        to_value=",".join(follower.id for follower in followers) if followers else None,
+    )
+    enqueue_task_rag_sync(
+        db,
+        task=task,
         operation=RagSyncOperation.UPSERT,
     )
-
     db.commit()
     return result
 
@@ -3421,7 +2763,9 @@ def list_folders(
     return FolderListResponse(
         items=[
             FolderItem(
-                id=f.id, team_id=f.team_id, name=f.name,
+                id=f.id,
+                team_id=f.team_id,
+                name=f.name,
                 sort_order=f.sort_order,
                 list_count=list_counts.get(f.id, 0),
             )
@@ -3465,17 +2809,24 @@ def create_folder(
     )
     db.add(default_task_list)
     if not db.scalar(
-        select(TeamMember.id).where(TeamMember.team_id == resolved_team_id, TeamMember.user_id == current_user.id)
+        select(TeamMember.id).where(
+            TeamMember.team_id == resolved_team_id, TeamMember.user_id == current_user.id
+        )
     ):
-        db.add(TeamMember(id=new_id(), team_id=resolved_team_id, user_id=current_user.id, role="owner"))
+        db.add(
+            TeamMember(id=new_id(), team_id=resolved_team_id, user_id=current_user.id, role="owner")
+        )
     _create_default_statuses(db, default_task_list.id)
     _create_default_labels(db, default_task_list.id)
 
     db.commit()
     db.refresh(folder)
     return FolderItem(
-        id=folder.id, team_id=folder.team_id, name=folder.name,
-        sort_order=folder.sort_order, list_count=1,
+        id=folder.id,
+        team_id=folder.team_id,
+        name=folder.name,
+        sort_order=folder.sort_order,
+        list_count=1,
     )
 
 
@@ -3498,10 +2849,16 @@ def update_folder(
         folder.sort_order = payload.sort_order
     db.commit()
     db.refresh(folder)
-    cnt = db.scalar(select(func.count()).select_from(TaskList).where(TaskList.folder_id == folder_id)) or 0
+    cnt = (
+        db.scalar(select(func.count()).select_from(TaskList).where(TaskList.folder_id == folder_id))
+        or 0
+    )
     return FolderItem(
-        id=folder.id, team_id=folder.team_id, name=folder.name,
-        sort_order=folder.sort_order, list_count=cnt,
+        id=folder.id,
+        team_id=folder.team_id,
+        name=folder.name,
+        sort_order=folder.sort_order,
+        list_count=cnt,
     )
 
 
@@ -3517,9 +2874,12 @@ def delete_folder(
     if folder.team_id is None:
         raise localized_http_exception(status_code=409, code="pms.folder_space_missing")
     _ensure_space_manager(db, current_user, folder.team_id)
+    task_lists = list(db.scalars(select(TaskList).where(TaskList.folder_id == folder_id)))
+    for task_list in task_lists:
+        _ensure_task_list_active(task_list)
     # Unlink task lists from this folder without deleting them.
-    for p in db.scalars(select(TaskList).where(TaskList.folder_id == folder_id)):
-        p.folder_id = None
+    for task_list in task_lists:
+        task_list.folder_id = None
     db.delete(folder)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

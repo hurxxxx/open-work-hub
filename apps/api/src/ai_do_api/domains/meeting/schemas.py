@@ -61,7 +61,7 @@ class MeetingAttendeesAddRequest(BaseModel):
 
 
 class MeetingTaskAttachRequest(BaseModel):
-    issue_id: str
+    task_id: str
 
 
 class MeetingDocAttachRequest(BaseModel):
@@ -93,10 +93,10 @@ class MeetingTaskLinkOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    issue_id: str
-    issue_title: str
+    task_id: str
+    task_title: str
     list_key: str
-    issue_number: int
+    task_number: int
     added_by_id: str
     created_at: datetime
 
@@ -252,6 +252,7 @@ class MeetingUserItem(BaseModel):
     id: str
     email: str
     full_name: str
+    primary_org_unit_name: str | None = None
 
 
 class MeetingAvailabilityBlock(BaseModel):

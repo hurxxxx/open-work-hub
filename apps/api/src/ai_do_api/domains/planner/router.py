@@ -5,12 +5,15 @@ from sqlalchemy.orm import Session
 
 from ai_do_api.core.db import get_db_session
 from ai_do_api.core.i18n import localized_http_exception
-from ai_do_api.core.principal import user_principal
-from ai_do_api.domains.auth.dependencies import (
-    require_current_user,
-    require_current_workspace,
+from ai_do_api.domains.auth.dependencies import require_current_user
+from ai_do_api.domains.auth.models import User
+from ai_do_api.domains.auth.workspace_app_gate import require_platform_app_enabled
+from ai_do_api.domains.planner.app_catalog import PLANNER_WORKSPACE_APP
+from ai_do_api.domains.planner.event_application import (
+    PlannerEventCreateCommand,
+    PlannerEventUpdateCommand,
 )
-from ai_do_api.domains.auth.models import User, Workspace
+from ai_do_api.domains.planner.event_time import parse_iso_or_date
 
 from .schemas import (
     PlannerEventCreateRequest,
@@ -18,17 +21,19 @@ from .schemas import (
     PlannerEventsResponse,
     PlannerEventUpdateRequest,
 )
-from .service import (
-    create_event,
-    delete_event,
-    get_event,
-    list_events,
-    parse_iso_or_date,
-    update_event,
+from .service import create_event, delete_event, get_event, list_events, update_event
+
+
+require_planner_app_enabled = require_platform_app_enabled(
+    PLANNER_WORKSPACE_APP.app_id,
+    error_code="platform.app_disabled",
 )
 
-
-router = APIRouter(prefix="/planner", tags=["planner"])
+router = APIRouter(
+    prefix="/planner",
+    tags=["planner"],
+    dependencies=[Depends(require_planner_app_enabled)],
+)
 
 
 @router.get("/events", response_model=PlannerEventsResponse)
@@ -37,29 +42,23 @@ def list_planner_events(
     to_param: str | None = Query(default=None, alias="to"),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> PlannerEventsResponse:
     try:
-        from_at = parse_iso_or_date(from_param) if from_param is not None else None
-        to_at = parse_iso_or_date(to_param) if to_param is not None else None
+        from_at = (
+            parse_iso_or_date(from_param, current_user.time_zone)
+            if from_param is not None
+            else None
+        )
+        to_at = (
+            parse_iso_or_date(to_param, current_user.time_zone) if to_param is not None else None
+        )
     except ValueError as exc:
         raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
             code="calendar.invalid_iso_datetime",
             error=str(exc),
         ) from exc
-    return list_events(
-        db,
-        workspace=workspace,
-        principal=user_principal(
-            workspace_id=workspace.id,
-            user_id=current_user.id,
-            source="api.planner.list_events",
-        ),
-        user=current_user,
-        from_at=from_at,
-        to_at=to_at,
-    )
+    return list_events(db, user=current_user, from_at=from_at, to_at=to_at)
 
 
 @router.post("/events", response_model=PlannerEventOut, status_code=status.HTTP_201_CREATED)
@@ -67,9 +66,20 @@ def create_planner_event(
     payload: PlannerEventCreateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> PlannerEventOut:
-    return create_event(db, workspace=workspace, user=current_user, payload=payload)
+    return create_event(
+        db,
+        user=current_user,
+        command=PlannerEventCreateCommand(
+            title=payload.title,
+            description=payload.description,
+            location=payload.location,
+            all_day=payload.all_day,
+            start=payload.start,
+            end=payload.end,
+            time_zone=current_user.time_zone,
+        ),
+    )
 
 
 @router.get("/events/{event_id}", response_model=PlannerEventOut)
@@ -77,19 +87,8 @@ def get_planner_event(
     event_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> PlannerEventOut:
-    return get_event(
-        db,
-        workspace=workspace,
-        principal=user_principal(
-            workspace_id=workspace.id,
-            user_id=current_user.id,
-            source="api.planner.get_event",
-        ),
-        user=current_user,
-        event_id=event_id,
-    )
+    return get_event(db, user=current_user, event_id=event_id)
 
 
 @router.patch("/events/{event_id}", response_model=PlannerEventOut)
@@ -98,14 +97,19 @@ def update_planner_event(
     payload: PlannerEventUpdateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> PlannerEventOut:
     return update_event(
         db,
-        workspace=workspace,
         user=current_user,
         event_id=event_id,
-        payload=payload,
+        command=PlannerEventUpdateCommand(
+            title=payload.title,
+            description=payload.description,
+            location=payload.location,
+            all_day=payload.all_day,
+            start=payload.start,
+            end=payload.end,
+        ),
     )
 
 
@@ -114,7 +118,6 @@ def delete_planner_event(
     event_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> Response:
-    delete_event(db, workspace=workspace, user=current_user, event_id=event_id)
+    delete_event(db, user=current_user, event_id=event_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

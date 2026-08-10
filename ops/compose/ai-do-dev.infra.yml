@@ -1,0 +1,143 @@
+name: ai-do-dev
+
+services:
+  redis:
+    image: redis:7
+    container_name: ai-do-dev-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${AI_DO_INFRA_BIND_HOST:-0.0.0.0}:${AI_DO_INFRA_REDIS_PORT:-56380}:6379"
+    volumes:
+      - ai-do-dev-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - ai-do-dev-infra
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    container_name: ai-do-dev-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${AI_DO_INFRA_MINIO_ROOT_USER:-ai_do_dev_minio}
+      MINIO_ROOT_PASSWORD: ${AI_DO_INFRA_MINIO_ROOT_PASSWORD:-ai_do_dev_minio}
+    command: server /data --console-address :9001
+    ports:
+      - "${AI_DO_INFRA_BIND_HOST:-0.0.0.0}:${AI_DO_INFRA_MINIO_PORT:-59010}:9000"
+      - "${AI_DO_INFRA_BIND_HOST:-0.0.0.0}:${AI_DO_INFRA_MINIO_CONSOLE_PORT:-59011}:9001"
+    volumes:
+      - ai-do-dev-minio-data:/data
+    networks:
+      - ai-do-dev-infra
+
+  opensearch:
+    build:
+      context: ../..
+      dockerfile: ops/opensearch/Dockerfile
+    image: ai-do-opensearch:3.3.2-nori
+    container_name: ai-do-dev-opensearch
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      DISABLE_SECURITY_PLUGIN: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "${AI_DO_INFRA_BIND_HOST:-0.0.0.0}:${AI_DO_INFRA_OPENSEARCH_PORT:-59210}:9200"
+      - "${AI_DO_INFRA_BIND_HOST:-0.0.0.0}:${AI_DO_INFRA_OPENSEARCH_PERF_PORT:-59610}:9600"
+    volumes:
+      - ai-do-dev-opensearch-data:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9200 >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks:
+      - ai-do-dev-infra
+
+  qdrant:
+    image: qdrant/qdrant:v1.17.1
+    container_name: ai-do-dev-qdrant
+    restart: unless-stopped
+    environment:
+      QDRANT__SERVICE__API_KEY: ${AI_DO_INFRA_QDRANT_API_KEY:-ai_do_dev_qdrant}
+    ports:
+      - "${AI_DO_INFRA_BIND_HOST:-0.0.0.0}:${AI_DO_INFRA_QDRANT_PORT:-16333}:6333"
+      - "${AI_DO_INFRA_BIND_HOST:-0.0.0.0}:${AI_DO_INFRA_QDRANT_GRPC_PORT:-16334}:6334"
+    volumes:
+      - ai-do-dev-qdrant-data:/qdrant/storage
+    networks:
+      - ai-do-dev-infra
+
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: ai-do-dev-livekit
+    restart: unless-stopped
+    environment:
+      LIVEKIT_CONFIG: |
+        port: 7880
+        log_level: info
+        rtc:
+          tcp_port: ${AI_DO_LIVEKIT_RTC_TCP_PORT:-7881}
+          port_range_start: ${AI_DO_LIVEKIT_RTC_PORT_RANGE_START:-52000}
+          port_range_end: ${AI_DO_LIVEKIT_RTC_PORT_RANGE_END:-52100}
+          use_external_ip: false
+        keys:
+          ${AI_DO_LIVEKIT_API_KEY:-devkey}: ${AI_DO_LIVEKIT_API_SECRET:-devsecret}
+    ports:
+      - "${AI_DO_INFRA_BIND_HOST:-0.0.0.0}:${AI_DO_LIVEKIT_PORT:-7880}:7880"
+      - "${AI_DO_INFRA_BIND_HOST:-0.0.0.0}:${AI_DO_LIVEKIT_RTC_TCP_PORT:-7881}:${AI_DO_LIVEKIT_RTC_TCP_PORT:-7881}/tcp"
+      - "${AI_DO_INFRA_BIND_HOST:-0.0.0.0}:${AI_DO_LIVEKIT_RTC_PORT_RANGE_START:-52000}-${AI_DO_LIVEKIT_RTC_PORT_RANGE_END:-52100}:${AI_DO_LIVEKIT_RTC_PORT_RANGE_START:-52000}-${AI_DO_LIVEKIT_RTC_PORT_RANGE_END:-52100}/udp"
+    networks:
+      - ai-do-dev-infra
+
+  drawio:
+    image: jgraph/drawio:${AI_DO_DRAWIO_IMAGE_TAG:-30.2.5}
+    container_name: ai-do-dev-drawio
+    restart: unless-stopped
+    ports:
+      - "${AI_DO_DRAWIO_BIND_HOST:-0.0.0.0}:${AI_DO_DRAWIO_PORT:-18082}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/ >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks:
+      - ai-do-dev-infra
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: ai-do-dev-nginx
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_started
+      drawio:
+        condition: service_healthy
+    ports:
+      - "${AI_DO_INFRA_BIND_HOST:-0.0.0.0}:${AI_DO_INFRA_NGINX_PORT:-4200}:80"
+    extra_hosts:
+      - "dev-host:host-gateway"
+    volumes:
+      - ../../dist/apps/web:/usr/share/nginx/html:ro
+      - ${AI_DO_DEV_NGINX_CONF_PATH:-../../ops/dev/nginx.conf}:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - ai-do-dev-infra
+
+networks:
+  ai-do-dev-infra:
+    name: ai-do-dev-infra
+
+volumes:
+  ai-do-dev-redis-data:
+    name: ai-do-dev-redis-data
+  ai-do-dev-minio-data:
+    name: ai-do-dev-minio-data
+  ai-do-dev-opensearch-data:
+    name: ai-do-dev-opensearch-data
+  ai-do-dev-qdrant-data:
+    name: ai-do-dev-qdrant-data

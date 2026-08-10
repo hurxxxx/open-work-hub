@@ -4,14 +4,19 @@ from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 import json
 import math
-import re
-import time
+from threading import Lock
+from time import monotonic
 from typing import Any
-from urllib.parse import quote
 
 import httpx
 
 from ai_do_api.domains.rag.contracts import RagProviderHealth, RagVectorSearchHit
+from ai_do_api.domains.rag.providers.operation import (
+    ProviderCircuitBreaker,
+    sanitize_untrusted_text as _sanitize_untrusted_text,
+    xml_escape as _xml_escape,
+)
+from ai_do_api.domains.rag.providers.rerank_text import build_rerank_document_text
 
 
 class RagProviderError(RuntimeError):
@@ -37,9 +42,19 @@ class _RerankEndpointUnavailable(RagProviderError):
     pass
 
 
+CIRCUIT_BREAKER_FAILURE_THRESHOLD = 3
+CIRCUIT_BREAKER_COOLDOWN_SECONDS = 15
+INFERENCE_GATEWAY_HEALTH_CACHE_TTL_SECONDS = 2.0
+_INFERENCE_GATEWAY_HEALTH_CACHE_LOCK = Lock()
+_INFERENCE_GATEWAY_HEALTH_CACHE: dict[
+    str,
+    tuple[float, dict[str, Any] | None, str | None],
+] = {}
+
+
 class _OpenAICompatibleHttpClient:
-    _circuit_breaker_failure_threshold = 3
-    _circuit_breaker_cooldown_seconds = 15
+    _circuit_breaker_failure_threshold = CIRCUIT_BREAKER_FAILURE_THRESHOLD
+    _circuit_breaker_cooldown_seconds = CIRCUIT_BREAKER_COOLDOWN_SECONDS
 
     def __init__(
         self,
@@ -58,8 +73,11 @@ class _OpenAICompatibleHttpClient:
             headers=_auth_headers(self._api_key),
             timeout=self._timeout,
         )
-        self._consecutive_transient_failures = 0
-        self._blocked_until_monotonic = 0.0
+        self._transient_circuit = ProviderCircuitBreaker(
+            failure_threshold=self._circuit_breaker_failure_threshold,
+            cooldown_seconds=self._circuit_breaker_cooldown_seconds,
+            open_message="Provider temporarily unavailable after repeated transient failures.",
+        )
         if provider_name is not None:
             self.provider_name = provider_name
 
@@ -115,33 +133,31 @@ class _OpenAICompatibleHttpClient:
 
     def _record_transient_failure(self, error: Exception) -> None:
         retry_after_seconds = getattr(error, "retry_after_seconds", None)
-        if isinstance(retry_after_seconds, int) and retry_after_seconds > 0:
-            self._blocked_until_monotonic = max(
-                self._blocked_until_monotonic,
-                time.monotonic() + retry_after_seconds,
-            )
-            self._consecutive_transient_failures = 0
-            return
-        self._consecutive_transient_failures += 1
-        if self._consecutive_transient_failures < self._circuit_breaker_failure_threshold:
-            return
-        self._blocked_until_monotonic = max(
-            self._blocked_until_monotonic,
-            time.monotonic() + self._circuit_breaker_cooldown_seconds,
+        self._transient_circuit.record_failure(
+            retry_after_seconds=retry_after_seconds
+            if isinstance(retry_after_seconds, int)
+            else None
         )
-        self._consecutive_transient_failures = 0
 
     def _reset_transient_failures(self) -> None:
-        self._consecutive_transient_failures = 0
+        self._transient_circuit.record_success()
 
     def _raise_if_circuit_open(self) -> None:
-        remaining = self._blocked_until_monotonic - time.monotonic()
-        if remaining <= 0:
-            self._blocked_until_monotonic = 0.0
-            return
-        raise RagProviderTransientError(
-            "Provider temporarily unavailable after repeated transient failures.",
-            retry_after_seconds=max(int(math.ceil(remaining)), 1),
+        self._transient_circuit.raise_if_open(
+            lambda message, retry_after_seconds: RagProviderTransientError(
+                message,
+                retry_after_seconds=retry_after_seconds,
+            )
+        )
+
+    def _healthcheck_task(self, *, task: str) -> RagProviderHealth:
+        return _probe_inference_gateway_health(
+            client=self._http,
+            base_url=self._base_url,
+            timeout_seconds=min(self._timeout, 5.0),
+            provider_name=self.provider_name,
+            task=task,
+            expected_model=self._model,
         )
 
 
@@ -156,6 +172,9 @@ class OpenAICompatibleEmbeddingClient(_OpenAICompatibleHttpClient):
         model: str,
         timeout: float = 60.0,
         provider_name: str | None = None,
+        query_input_type: str | None = None,
+        query_prompt_name: str | None = None,
+        max_batch_size: int | None = None,
     ) -> None:
         super().__init__(
             base_url=base_url,
@@ -164,6 +183,9 @@ class OpenAICompatibleEmbeddingClient(_OpenAICompatibleHttpClient):
             timeout=timeout,
             provider_name=provider_name,
         )
+        self._query_input_type = query_input_type
+        self._query_prompt_name = query_prompt_name
+        self._max_batch_size = max_batch_size if max_batch_size and max_batch_size > 0 else None
 
     def healthcheck(self) -> RagProviderHealth:
         if not self._api_key:
@@ -178,22 +200,49 @@ class OpenAICompatibleEmbeddingClient(_OpenAICompatibleHttpClient):
                 ready=False,
                 detail="Missing embedding model.",
             )
-        return RagProviderHealth(provider_name=self.provider_name, ready=True)
+        return self._healthcheck_task(task="embedding")
 
     def embed_texts(
         self,
         texts: list[str],
         timeout_seconds: float | None = None,
     ) -> list[list[float]]:
+        return self._embed_texts(texts, timeout_seconds=timeout_seconds)
+
+    def _embed_texts(
+        self,
+        texts: list[str],
+        timeout_seconds: float | None = None,
+        *,
+        input_type: str | None = None,
+        prompt_name: str | None = None,
+    ) -> list[list[float]]:
         if not texts:
             return []
+        if self._max_batch_size is not None and len(texts) > self._max_batch_size:
+            embeddings: list[list[float]] = []
+            for batch in _chunks(texts, self._max_batch_size):
+                embeddings.extend(
+                    self._embed_texts(
+                        batch,
+                        timeout_seconds=timeout_seconds,
+                        input_type=input_type,
+                        prompt_name=prompt_name,
+                    )
+                )
+            return embeddings
+        request_payload: dict[str, Any] = {
+            "model": self._model,
+            "input": texts,
+            "encoding_format": "float",
+        }
+        if input_type:
+            request_payload["input_type"] = input_type
+        if prompt_name:
+            request_payload["prompt_name"] = prompt_name
         payload = self._post_json(
             "/embeddings",
-            {
-                "model": self._model,
-                "input": texts,
-                "encoding_format": "float",
-            },
+            request_payload,
             timeout_seconds=timeout_seconds,
         )
         data = payload.get("data")
@@ -208,12 +257,13 @@ class OpenAICompatibleEmbeddingClient(_OpenAICompatibleHttpClient):
         return embeddings
 
     def embed_query(self, text: str, timeout_seconds: float | None = None) -> list[float]:
-        embeddings = self.embed_texts([text], timeout_seconds=timeout_seconds)
+        embeddings = self._embed_texts(
+            [text],
+            timeout_seconds=timeout_seconds,
+            input_type=self._query_input_type,
+            prompt_name=self._query_prompt_name,
+        )
         return embeddings[0] if embeddings else []
-
-
-class DeepInfraEmbeddingClient(OpenAICompatibleEmbeddingClient):
-    provider_name = "deepinfra-embedding"
 
 
 class OpenAICompatibleRerankClient(_OpenAICompatibleHttpClient):
@@ -227,6 +277,7 @@ class OpenAICompatibleRerankClient(_OpenAICompatibleHttpClient):
         model: str,
         timeout: float = 60.0,
         provider_name: str | None = None,
+        score_semantics: str = "unknown",
     ) -> None:
         super().__init__(
             base_url=base_url,
@@ -235,6 +286,7 @@ class OpenAICompatibleRerankClient(_OpenAICompatibleHttpClient):
             timeout=timeout,
             provider_name=provider_name,
         )
+        self.score_semantics = score_semantics.strip() or "unknown"
 
     def healthcheck(self) -> RagProviderHealth:
         if not self._api_key:
@@ -249,7 +301,7 @@ class OpenAICompatibleRerankClient(_OpenAICompatibleHttpClient):
                 ready=False,
                 detail="Missing reranker model.",
             )
-        return RagProviderHealth(provider_name=self.provider_name, ready=True)
+        return self._healthcheck_task(task="reranker")
 
     def rerank(
         self,
@@ -261,7 +313,9 @@ class OpenAICompatibleRerankClient(_OpenAICompatibleHttpClient):
         if not hits:
             return []
         try:
-            return self._rerank_via_endpoint(query=query, hits=hits, timeout_seconds=timeout_seconds)
+            return self._rerank_via_endpoint(
+                query=query, hits=hits, timeout_seconds=timeout_seconds
+            )
         except _RerankEndpointUnavailable:
             return self._rerank_via_chat_completion(
                 query=query,
@@ -280,7 +334,7 @@ class OpenAICompatibleRerankClient(_OpenAICompatibleHttpClient):
         payload = {
             "model": self._model,
             "query": query,
-            "documents": [hit.text for hit in hits],
+            "documents": [build_rerank_document_text(hit) for hit in hits],
             "top_n": len(hits),
             "return_documents": False,
         }
@@ -304,7 +358,9 @@ class OpenAICompatibleRerankClient(_OpenAICompatibleHttpClient):
             if not isinstance(index, int) or index < 0 or index >= len(hits):
                 continue
             score_value = item.get("relevance_score", item.get("score"))
-            score = float(score_value) if isinstance(score_value, int | float) else hits[index].score
+            score = (
+                float(score_value) if isinstance(score_value, int | float) else hits[index].score
+            )
             scored_hits.append(hits[index].model_copy(update={"score": score}))
         if not scored_hits:
             raise RagProviderError("Rerank provider returned no usable scores.")
@@ -375,48 +431,75 @@ class OpenAICompatibleRerankClient(_OpenAICompatibleHttpClient):
         reranked.sort(key=lambda item: item.score, reverse=True)
         return reranked
 
-class DeepInfraRerankClient(OpenAICompatibleRerankClient):
-    provider_name = "deepinfra-rerank"
 
-    def _rerank_via_endpoint(
+class InferenceGatewayOcrClient:
+    provider_name = "inference-gateway-ocr"
+
+    def __init__(
         self,
         *,
-        query: str,
-        hits: list[RagVectorSearchHit],
-        timeout_seconds: float | None = None,
-    ) -> list[RagVectorSearchHit]:
-        encoded_model = quote(self._model, safe="")
-        payload = {
-            "queries": [query for _ in hits],
-            "documents": [hit.text for hit in hits],
-            "instruction": (
-                "Given a search query, score whether the document is relevant "
-                "to answering the query."
-            ),
-        }
-        response = self._post_response(
-            url=f"{_strip_openai_suffix(self._base_url)}/inference/{encoded_model}",
-            payload=payload,
-            timeout_seconds=timeout_seconds,
+        base_url: str,
+        api_key: str = "",
+        timeout: float = 600.0,
+    ) -> None:
+        self._base_url = base_url.rstrip("/")
+        self._api_key = api_key.strip()
+        self._timeout = timeout
+        self._http = httpx.Client(
+            headers=_bearer_headers(self._api_key),
+            timeout=self._timeout,
         )
-        if response.status_code in {404, 405, 422}:
-            self._reset_transient_failures()
-            raise _RerankEndpointUnavailable(response.text)
-        payload = self._parse_json_payload(response)
-        scores = payload.get("scores")
-        if not isinstance(scores, list):
-            raise RagProviderError("Rerank provider returned an invalid scores payload.")
-        if len(scores) != len(hits):
-            raise RagProviderError("Rerank provider returned a mismatched number of scores.")
-        reranked = [
-            hit.model_copy(update={"score": float(score)})
-            for hit, score in zip(hits, scores, strict=True)
-            if isinstance(score, int | float)
-        ]
-        if not reranked:
-            raise RagProviderError("Rerank provider returned no usable scores.")
-        reranked.sort(key=lambda item: item.score, reverse=True)
-        return reranked
+
+    def close(self) -> None:
+        self._http.close()
+
+    def healthcheck(self) -> RagProviderHealth:
+        if not self._base_url:
+            return RagProviderHealth(
+                provider_name=self.provider_name,
+                ready=False,
+                detail="Missing inference-gateway base URL.",
+            )
+        return _probe_inference_gateway_health(
+            client=self._http,
+            base_url=self._base_url,
+            timeout_seconds=min(self._timeout, 5.0),
+            provider_name=self.provider_name,
+            task="docling",
+            expected_model=None,
+        )
+
+    def extract_text(self, *, content: bytes, content_type: str | None = None) -> str:
+        if not content:
+            return ""
+        filename = f"document{_document_suffix_for_content_type(content_type)}"
+        try:
+            response = self._http.post(
+                f"{self._base_url}/convert/source",
+                files={
+                    "file": (
+                        filename,
+                        content,
+                        content_type or "application/octet-stream",
+                    )
+                },
+                data={"to": "markdown"},
+                timeout=self._timeout,
+            )
+        except httpx.TimeoutException as exc:
+            raise RagProviderTimeoutError(str(exc)) from exc
+        except httpx.NetworkError as exc:
+            raise RagProviderTransientError(str(exc)) from exc
+        except httpx.HTTPError as exc:
+            raise RagProviderError(str(exc)) from exc
+
+        payload = _parse_json_response(response)
+        extracted = payload.get("content")
+        if isinstance(extracted, str):
+            return extracted.strip()
+        if extracted is not None:
+            return json.dumps(extracted, ensure_ascii=False)
+        raise RagProviderError("inference-gateway OCR returned an invalid response payload.")
 
 
 def _auth_headers(api_key: str) -> dict[str, str]:
@@ -426,6 +509,10 @@ def _auth_headers(api_key: str) -> dict[str, str]:
     }
 
 
+def _bearer_headers(api_key: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {api_key}"} if api_key else {}
+
+
 def _parse_json_response(response: httpx.Response) -> dict[str, Any]:
     if response.status_code == 429 or response.status_code >= 500:
         raise RagProviderTransientError(
@@ -433,9 +520,7 @@ def _parse_json_response(response: httpx.Response) -> dict[str, Any]:
             retry_after_seconds=_retry_after_seconds(response),
         )
     if response.status_code >= 400:
-        raise RagProviderError(
-            _response_error_message(response.status_code, response.text)
-        )
+        raise RagProviderError(_response_error_message(response.status_code, response.text))
     try:
         payload = response.json()
     except ValueError as exc:
@@ -452,11 +537,118 @@ def _embedding_sort_key(item: Any) -> int:
     return index if isinstance(index, int) else 0
 
 
+def _chunks(items: list[str], size: int) -> list[list[str]]:
+    return [items[index : index + size] for index in range(0, len(items), size)]
+
+
 def _strip_openai_suffix(base_url: str) -> str:
     suffix = "/openai"
     if base_url.endswith(suffix):
         return base_url[: -len(suffix)]
     return base_url
+
+
+def _inference_gateway_root_url(base_url: str) -> str:
+    normalized = base_url.rstrip("/")
+    for suffix in ("/v1/openai", "/v1"):
+        if normalized.endswith(suffix):
+            return normalized[: -len(suffix)]
+    return normalized
+
+
+def _probe_inference_gateway_health(
+    *,
+    client: httpx.Client,
+    base_url: str,
+    timeout_seconds: float,
+    provider_name: str,
+    task: str,
+    expected_model: str | None,
+) -> RagProviderHealth:
+    payload, probe_error = _load_inference_gateway_health_payload(
+        client=client,
+        base_url=base_url,
+        timeout_seconds=timeout_seconds,
+    )
+    if probe_error is not None:
+        return RagProviderHealth(
+            provider_name=provider_name,
+            ready=False,
+            detail=f"Inference gateway health probe failed: {probe_error}",
+        )
+    if payload is None:
+        return RagProviderHealth(
+            provider_name=provider_name,
+            ready=False,
+            detail="Inference gateway health probe failed: Empty health payload.",
+        )
+    if payload.get("ready") is not True:
+        return RagProviderHealth(
+            provider_name=provider_name,
+            ready=False,
+            detail="Inference gateway is not ready.",
+        )
+    models = payload.get("models")
+    task_status = models.get(task) if isinstance(models, dict) else None
+    if not isinstance(task_status, dict) or task_status.get("loaded") is not True:
+        return RagProviderHealth(
+            provider_name=provider_name,
+            ready=False,
+            detail=f"Inference gateway task {task!r} is not loaded.",
+        )
+    actual_model = task_status.get("model")
+    if expected_model and actual_model != expected_model:
+        return RagProviderHealth(
+            provider_name=provider_name,
+            ready=False,
+            detail=f"Inference gateway task {task!r} loaded an unexpected model.",
+        )
+    return RagProviderHealth(provider_name=provider_name, ready=True)
+
+
+def _load_inference_gateway_health_payload(
+    *,
+    client: httpx.Client,
+    base_url: str,
+    timeout_seconds: float,
+) -> tuple[dict[str, Any] | None, str | None]:
+    root_url = _inference_gateway_root_url(base_url)
+    now = monotonic()
+    with _INFERENCE_GATEWAY_HEALTH_CACHE_LOCK:
+        cached = _INFERENCE_GATEWAY_HEALTH_CACHE.get(root_url)
+        if cached is not None and cached[0] > now:
+            return cached[1], cached[2]
+
+        try:
+            response = client.get(
+                f"{root_url}/health",
+                timeout=timeout_seconds,
+            )
+            payload = _parse_json_response(response)
+            result: tuple[dict[str, Any] | None, str | None] = (payload, None)
+        except (httpx.TimeoutException, httpx.NetworkError, httpx.HTTPError) as error:
+            result = (None, f"{error.__class__.__name__}.")
+        except RagProviderError as error:
+            result = (None, str(error))
+
+        _INFERENCE_GATEWAY_HEALTH_CACHE[root_url] = (
+            monotonic() + INFERENCE_GATEWAY_HEALTH_CACHE_TTL_SECONDS,
+            result[0],
+            result[1],
+        )
+        return result
+
+
+def _clear_inference_gateway_health_cache() -> None:
+    with _INFERENCE_GATEWAY_HEALTH_CACHE_LOCK:
+        _INFERENCE_GATEWAY_HEALTH_CACHE.clear()
+
+
+def _document_suffix_for_content_type(content_type: str | None) -> str:
+    if not content_type:
+        return ".bin"
+    normalized = content_type.split(";", 1)[0].strip().lower()
+    return _DOCUMENT_SUFFIX_BY_CONTENT_TYPE.get(normalized, ".bin")
 
 
 def _extract_json_document(content: str) -> dict[str, Any]:
@@ -488,6 +680,7 @@ def _rerank_prompt_content(
                 f'<candidate chunk_id="{_xml_escape(hit.chunk_id)}">',
                 f"<title>{_xml_escape(_sanitize_untrusted_text(hit.projection.title or '', max_chars=240))}</title>",
                 f"<summary>{_xml_escape(_sanitize_untrusted_text(hit.summary or '', max_chars=320))}</summary>",
+                f"<context>{_xml_escape(_sanitize_untrusted_text(build_rerank_document_text(hit), max_chars=2000))}</context>",
                 f"<excerpt>{_xml_escape(_sanitize_untrusted_text(hit.text, max_chars=1600))}</excerpt>",
                 "</candidate>",
             ]
@@ -503,23 +696,6 @@ def _rerank_prompt_content(
             *candidate_blocks,
             "</untrusted_candidates>",
         ]
-    )
-
-
-def _sanitize_untrusted_text(value: str, *, max_chars: int) -> str:
-    normalized = _CONTROL_CHARS.sub(" ", value).replace("```", "` ` `")
-    normalized = " ".join(normalized.split()).strip()
-    if len(normalized) <= max_chars:
-        return normalized
-    return normalized[: max_chars - 3].rstrip() + "..."
-
-
-def _xml_escape(value: str) -> str:
-    return (
-        value.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
     )
 
 
@@ -554,4 +730,17 @@ def _retry_after_seconds(response: httpx.Response) -> int | None:
     return max(seconds, 1)
 
 
-_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+_DOCUMENT_SUFFIX_BY_CONTENT_TYPE = {
+    "application/pdf": ".pdf",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
+    "application/vnd.ms-powerpoint": ".ppt",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+    "application/msword": ".doc",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+    "application/vnd.ms-excel": ".xls",
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/jpg": ".jpg",
+    "image/webp": ".webp",
+    "text/plain": ".txt",
+}

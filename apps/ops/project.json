@@ -23,7 +23,7 @@
       "executor": "nx:run-commands",
       "options": {
         "cwd": "apps/ops",
-        "command": "uv run --python 3.12 python -m compileall src"
+        "command": "uv run --python 3.12 --with pytest --group dev pytest"
       }
     }
   }

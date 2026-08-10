@@ -1,6 +1,5 @@
 import {
   useCallback,
-  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -20,12 +19,13 @@ import {
 import { DocsViewerModal } from '@/src/app-modules/docs/public-api';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
-import {
-  listRecordings,
-  retryRecording,
-  type Recording,
-} from '../api/recording-api';
 import { RecordingStageRail } from './RecordingStageRail';
+import { useRecordingCollectionWorkflow } from './recording-collection-workflow';
+import {
+  formatBytes,
+  hasFailedStage,
+  titleFor,
+} from './recording-view-model';
 
 export interface LinkedRecordingListItem {
   id: string;
@@ -41,7 +41,7 @@ export interface LinkedRecordingListItem {
   doneLabel?: ReactNode;
 }
 
-interface LinkedRecordingListProps {
+export interface LinkedRecordingListProps {
   items: LinkedRecordingListItem[];
   workspaceSlug: string;
   emptyText: string;
@@ -53,11 +53,11 @@ interface LinkedRecordingListProps {
   onError?: (error: unknown) => void;
 }
 
-interface LinkedRecordingsForContainerProps {
+export interface LinkedRecordingsForTargetProps {
   workspaceSlug: string | null | undefined;
-  containerApp: string;
-  containerType: string;
-  containerId: string;
+  targetApp: string;
+  targetType: string;
+  targetId: string;
   title?: string;
   emptyText?: string;
   showHeader?: boolean;
@@ -67,24 +67,6 @@ type RecordingDocViewerTarget = {
   docId: string;
   title: string;
 };
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function hasFailedStage(recording: Recording): boolean {
-  return [
-    recording.transcript_status,
-    recording.raw_transcript_doc_status,
-    recording.minutes_doc_status,
-  ].some((status) => status === 'failed');
-}
-
-function titleFor(recording: Recording, fallback: string): string {
-  return recording.title?.trim() || fallback;
-}
 
 function iconButtonClass(tone: 'default' | 'danger' = 'default'): string {
   return [
@@ -306,59 +288,43 @@ export function LinkedRecordingList({
   );
 }
 
-export function LinkedRecordingsForContainer({
+export function LinkedRecordingsForTarget({
   workspaceSlug,
-  containerApp,
-  containerType,
-  containerId,
+  targetApp,
+  targetType,
+  targetId,
   title,
   emptyText,
   showHeader = true,
-}: LinkedRecordingsForContainerProps) {
+}: LinkedRecordingsForTargetProps) {
   const { t } = useTranslation('apps');
   const { token, user } = useAuth();
-  const [recordings, setRecordings] = useState<Recording[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [errorText, setErrorText] = useState<string | null>(null);
-
-  const refresh = useCallback(async () => {
-    if (!token || !workspaceSlug) {
-      return;
-    }
-    setLoading(true);
-    setErrorText(null);
-    try {
-      const response = await listRecordings(token, workspaceSlug, {
-        container_app: containerApp,
-        container_type: containerType,
-        container_id: containerId,
-      });
-      setRecordings(response.items);
-    } catch (error) {
-      setRecordings([]);
-      setErrorText(
-        error instanceof Error
-          ? error.message
-          : t('recording.errors.loadFailed'),
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [containerApp, containerId, containerType, t, token, workspaceSlug]);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  const recordingScope = useMemo(
+    () => ({
+      kind: 'target' as const,
+      targetApp,
+      targetType,
+      targetId,
+    }),
+    [targetApp, targetId, targetType],
+  );
+  const recordingCollection = useRecordingCollectionWorkflow({
+    token,
+    workspaceSlug,
+    scope: recordingScope,
+    messages: {
+      loadFailed: t('recording.errors.loadFailed'),
+      retryFailed: t('recording.errors.retryFailed'),
+      deleteFailed: t('recording.errors.loadFailed'),
+    },
+  });
+  const { error: errorText, items: recordings, loading } = recordingCollection;
 
   const retryLinkedRecording = useCallback(
     async (recordingId: string) => {
-      if (!token || !workspaceSlug) {
-        throw new Error(t('recording.errors.retryFailed'));
-      }
-      await retryRecording(token, workspaceSlug, recordingId);
-      await refresh();
+      await recordingCollection.retry(recordingId);
     },
-    [refresh, t, token, workspaceSlug],
+    [recordingCollection],
   );
 
   const linkedItems = useMemo<LinkedRecordingListItem[]>(
@@ -405,13 +371,7 @@ export function LinkedRecordingsForContainer({
         loading={loading}
         errorText={errorText}
         onRetry={retryLinkedRecording}
-        onError={(error) => {
-          setErrorText(
-            error instanceof Error
-              ? error.message
-              : t('recording.errors.loadFailed'),
-          );
-        }}
+        onError={(error) => recordingCollection.setError(error)}
       />
     </div>
   );

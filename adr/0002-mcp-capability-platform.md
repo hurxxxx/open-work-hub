@@ -5,12 +5,13 @@
 
 ## Context
 
-Phase 3.5에서 Doowon AI capability registry는 단순 `OpenAI function` 목록에서 **MCP-first capability platform** 으로 전환됐다. 현재 구현은 다음 구조를 전제로 한다.
+Doowon AI capability registry는 단순 `OpenAI function` 목록에서 **MCP-first capability platform** 으로 전환됐다. 현재 구현은 다음 구조를 전제로 한다.
 
 - 내부 정본 계약은 `AiCapabilityDescriptor`
 - AI-facing 1차 산출물은 MCP manifest
 - OpenAI function schema와 derived OpenAPI는 MCP/descriptor에서 파생
-- discovery는 workspace entitlement 기반으로 필터링
+- discovery는 capability가 속한 앱의 availability scope에 맞춰 platform 또는 workspace
+  entitlement로 필터링
 - execution은 tool invoke 시점에 discoverability와 도메인 ACL을 다시 검증
 
 이 계약을 코드에만 남겨두면 다음 문제가 다시 생긴다.
@@ -48,7 +49,8 @@ Phase 3.5에서 Doowon AI capability registry는 단순 `OpenAI function` 목록
 
 ### 4. Discovery와 execution은 별도 게이트를 가진다
 
-- `AiMcpClient.list_tools()` 는 workspace entitlement와 discoverability predicate로 tool 목록을 필터링한다.
+- `AiMcpClient.list_tools()` 는 principal과 app availability scope에 맞는 entitlement 및
+  discoverability predicate로 tool 목록을 필터링한다.
 - `tool_service.execute_tool()` 는 실제 invoke 시점에 같은 discoverability predicate를 다시 평가한다.
 - discovery에서 숨겨진 tool은 execution에서도 차단되어야 한다.
 - execution 단계의 최종 권한 판정은 기존 domain ACL helper/service가 담당한다.
@@ -78,17 +80,20 @@ Phase 3.5에서 Doowon AI capability registry는 단순 `OpenAI function` 목록
 
 ### 6. Builtin discoverability source를 고정한다
 
-- coarse app-level predicate는 `domains/auth/workspace_apps.py` 의 `WORKSPACE_APP_IDS` 를 기준으로 생성한다.
+- coarse app-level predicate는 `domains/auth/workspace_apps.py` 의 컴파일된 app catalog를
+  기준으로 생성한다.
+- `availability_scope="workspace"` 앱은 현재 workspace entitlement를 사용한다.
+- `availability_scope="platform"` 앱은 선택된 workspace와 무관하게 platform visibility를
+  사용하며, personal principal(`workspace_id=None`)에서도 같은 hard gate를 적용한다.
 - app 목록을 AI registry 내부에 별도 하드코딩하지 않는다.
-- fine-grained write predicate는 해당 write capability가 실제로 도입되는 Phase에서 추가한다.
+- fine-grained write predicate는 해당 write capability가 실제로 도입되는 시점에 추가한다.
 
-### 7. Phase 경계를 고정한다
+### 7. Write capability rollout 경계를 고정한다
 
-- Phase 3.5는 read capability parity + MCP bridge + inspection/export까지다.
-- write capability 실행은 Phase 4부터 활성화한다.
-- write anchor용 DTO / preview builder는 Phase 3.5에서 미리 둘 수 있다.
-- executable write tool은 Phase 4에서만 등록하며, `AI_DO_AI_WRITE_TOOLS_ENABLED=true` 일 때에만 discovery 대상이 된다.
-- 즉 Phase 4 이후에도 write capability는 코드 존재와 discovery 노출을 분리해서 rollout 한다.
+- Read capability parity, MCP bridge, inspection/export는 현재 계약에 포함한다.
+- Write DTO, preview builder, handler 코드는 둘 수 있지만 discovery 노출은 분리한다.
+- executable write tool은 `AI_DO_AI_WRITE_TOOLS_ENABLED=true` 일 때에만 discovery 대상이 된다.
+- write capability는 코드 존재와 discovery 노출을 분리해서 rollout 한다.
 
 ### 8. 필수 테스트를 고정한다
 
@@ -122,11 +127,11 @@ capability contract를 바꾸는 PR은 **문서 + 테스트 + 코드** 를 같�
 
 - 이 ADR은 remote MCP transport의 wire-level OAuth 구현 자체를 다루지 않는다.
 - `resources/*`, `prompts/*` 실행 활성화 시점은 별도 결정으로 남긴다.
-- approval persistence 세부 상태머신은 Phase 4 문서가 정본이다.
+- approval persistence 세부 상태머신은 runtime approval service와 해당 테스트가 정본이다.
 
 ## Follow-up
 
 - 새 앱 추가 시 이 ADR의 규칙을 먼저 확인하고 capability를 추가한다.
-- `plans/00-ai-platform-roadmap.md` 와 Phase 4 계획은 구현 상태가 바뀔 때 이 ADR과 같이 정합성을 맞춘다.
-- Phase 4에서 write capability를 실제로 활성화할 때 fine-grained discoverability predicate와 approval persistence 문서를 이어서 확정한다.
+- capability platform 구현 상태가 바뀌면 관련 current/domain 문서와 하네스 검증 기준을 이 ADR과 같이 정합성 있게 갱신한다.
+- write capability를 실제로 활성화할 때 fine-grained discoverability predicate와 approval persistence 기준을 함께 확정한다.
 - write capability 추가 시 `AI_DO_AI_WRITE_TOOLS_ENABLED` off/on 양쪽 discovery test를 함께 유지한다.

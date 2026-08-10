@@ -1,0 +1,23 @@
+[Unit]
+Description=AI-DO Development Worker Beat
+Wants=network-online.target ai-do-dev-worker.service ai-do-dev-worker-realtime.service ai-do-dev-worker-long.service ai-do-dev-worker-patent.service ai-do-dev-worker-ai-graph.service
+After=network-online.target ai-do-dev-worker.service ai-do-dev-worker-realtime.service ai-do-dev-worker-long.service ai-do-dev-worker-patent.service ai-do-dev-worker-ai-graph.service
+
+[Service]
+Type=simple
+WorkingDirectory=__AI_DO_ROOT__/apps/worker
+Environment=PYTHONPATH=__AI_DO_ROOT__/apps/worker/src
+Environment=AI_DO_WORKER_QUEUE_GROUP=beat
+Environment=AI_DO_RUNTIME_REVISION=__AI_DO_RUNTIME_REVISION__
+ExecStart=/usr/bin/env bash -lc 'source "__AI_DO_ROOT__/scripts/dev-env.sh" && cd "__AI_DO_ROOT__/apps/worker" && exec uv run --python 3.12 celery -A ai_do_worker.celery_app:celery_app beat --loglevel=info --schedule "__AI_DO_ROOT__/.runtime/celerybeat-schedule.db"'
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0077
+Restart=always
+RestartSec=10
+TimeoutStartSec=300
+TimeoutStopSec=180
+KillMode=control-group
+
+[Install]
+WantedBy=default.target

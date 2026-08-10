@@ -1,8 +1,8 @@
 import {
-  useEffect,
+  useCallback,
   useMemo,
-  useRef,
   useState,
+  useSyncExternalStore,
   type CSSProperties,
 } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -13,19 +13,20 @@ import type {
   CalendarSourceType,
 } from '@/src/platform/calendar/calendar-types';
 import {
-  getZonedDateParts,
-  parseDateOnlyParts,
-} from '@/src/platform/time/time-utils';
+  addDays,
+  buildDays,
+  buildItemGroups,
+  buildMonthSpans,
+  buildTimelineItems,
+  dateOnlyToLocalDate,
+  diffDays,
+  diffTimestampDays,
+  getTimelineDayWidth,
+  startOfLocalDay,
+  type TimelineItem,
+} from './planner-timeline-model';
 
 const LEFT_COLUMN_WIDTH = 320;
-const MS_PER_DAY = 86_400_000;
-
-const SOURCE_ORDER: CalendarSourceType[] = [
-  'meeting',
-  'pms_block',
-  'pms_due',
-  'planner_event',
-];
 
 const SOURCE_LABEL_KEYS: Record<CalendarSourceType, string> = {
   meeting: 'planner.timeline.sources.meeting',
@@ -43,188 +44,35 @@ interface PlannerTimelineViewProps {
   onEventClick: (event: CalendarEvent) => void;
 }
 
-interface TimelineItem {
-  event: CalendarEvent;
-  start: Date;
-  endExclusive: Date;
-  left: number;
-  width: number;
-  clippedStart: boolean;
-  clippedEnd: boolean;
+interface TimelineFormatters {
+  month: Intl.DateTimeFormat;
+  day: Intl.DateTimeFormat;
+  weekday: Intl.DateTimeFormat;
+  itemDate: Intl.DateTimeFormat;
+  itemTime: Intl.DateTimeFormat;
 }
 
-function dateOnlyToLocalDate(value: string | null | undefined): Date | null {
-  const parts = parseDateOnlyParts(value);
-  return parts ? new Date(parts.year, parts.month - 1, parts.day) : null;
+function formatDayLabel(date: Date, formatter: Intl.DateTimeFormat): string {
+  return formatter.format(date);
 }
 
-function startOfLocalDay(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-}
-
-function addDays(date: Date, days: number): Date {
-  const next = startOfLocalDay(date);
-  next.setDate(next.getDate() + days);
-  return next;
-}
-
-function diffDays(left: Date, right: Date): number {
-  return Math.round(
-    (startOfLocalDay(left).getTime() - startOfLocalDay(right).getTime()) /
-      MS_PER_DAY,
-  );
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-function getBaseDayWidth(totalDays: number): number {
-  if (totalDays <= 14) return 64;
-  if (totalDays <= 28) return 42;
-  if (totalDays <= 56) return 30;
-  return 24;
-}
-
-function getMaxDayWidth(totalDays: number): number {
-  if (totalDays <= 14) return 96;
-  if (totalDays <= 28) return 56;
-  if (totalDays <= 56) return 36;
-  return 28;
-}
-
-function getTimelineDayWidth(totalDays: number, viewportWidth: number): number {
-  const baseDayWidth = getBaseDayWidth(totalDays);
-  const maxDayWidth = getMaxDayWidth(totalDays);
-  const availableGridWidth = Math.max(0, viewportWidth - LEFT_COLUMN_WIDTH);
-  const fittedDayWidth =
-    availableGridWidth > 0 ? Math.floor(availableGridWidth / totalDays) : 0;
-
-  return clamp(
-    Math.max(baseDayWidth, fittedDayWidth),
-    baseDayWidth,
-    maxDayWidth,
-  );
-}
-
-function toTimelineDate(value: string, timeZone: string): Date | null {
-  const dateOnly = dateOnlyToLocalDate(value);
-  if (dateOnly) {
-    return dateOnly;
-  }
-
-  const parts = getZonedDateParts(value, timeZone);
-  return parts
-    ? new Date(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute)
-    : null;
-}
-
-function buildDays(rangeStart: Date, totalDays: number): Date[] {
-  return Array.from({ length: totalDays }, (_, index) =>
-    addDays(rangeStart, index),
-  );
-}
-
-function buildMonthSpans(days: Date[], locale: string) {
-  const formatter = new Intl.DateTimeFormat(locale, {
-    month: 'long',
-    year: 'numeric',
-  });
-  const spans: Array<{ key: string; label: string; days: number }> = [];
-
-  for (const day of days) {
-    const key = `${day.getFullYear()}-${day.getMonth()}`;
-    const current = spans.at(-1);
-    if (current?.key === key) {
-      current.days += 1;
-    } else {
-      spans.push({ key, label: formatter.format(day), days: 1 });
-    }
-  }
-
-  return spans;
-}
-
-function buildTimelineItems(
-  events: CalendarEvent[],
-  rangeStart: Date,
-  rangeEnd: Date,
-  timeZone: string,
-  dayWidth: number,
-): TimelineItem[] {
-  const totalDays = Math.max(1, diffDays(rangeEnd, rangeStart));
-
-  return events
-    .map((event) => {
-      const start = toTimelineDate(event.start, timeZone);
-      const rawEnd = toTimelineDate(event.end, timeZone);
-      if (!start || !rawEnd) {
-        return null;
-      }
-
-      const endExclusive = event.allDay ? rawEnd : addDays(rawEnd, 1);
-      const startOffset = diffDays(start, rangeStart);
-      const endOffset = Math.max(
-        startOffset + 1,
-        diffDays(endExclusive, rangeStart),
-      );
-      const visibleStart = clamp(startOffset, 0, totalDays);
-      const visibleEnd = clamp(endOffset, 0, totalDays);
-      const width = Math.max(
-        dayWidth * 0.6,
-        (visibleEnd - visibleStart) * dayWidth,
-      );
-
-      return {
-        event,
-        start,
-        endExclusive,
-        left: visibleStart * dayWidth,
-        width,
-        clippedStart: startOffset < 0,
-        clippedEnd: endOffset > totalDays,
-      };
-    })
-    .filter((item): item is TimelineItem => item !== null)
-    .sort((left, right) => {
-      const byStart = left.start.getTime() - right.start.getTime();
-      return byStart || left.event.title.localeCompare(right.event.title);
-    });
-}
-
-function formatDayLabel(date: Date, locale: string): string {
-  return new Intl.DateTimeFormat(locale, { day: 'numeric' }).format(date);
-}
-
-function formatWeekday(date: Date, locale: string): string {
-  return new Intl.DateTimeFormat(locale, { weekday: 'short' }).format(date);
+function formatWeekday(date: Date, formatter: Intl.DateTimeFormat): string {
+  return formatter.format(date);
 }
 
 function formatItemTime(
   item: TimelineItem,
-  locale: string,
-  timeZone: string,
+  formatters: TimelineFormatters,
 ): string {
-  const dateFormatter = new Intl.DateTimeFormat(locale, {
-    day: 'numeric',
-    month: 'short',
-    timeZone,
-  });
-  const timeFormatter = new Intl.DateTimeFormat(locale, {
-    hour: 'numeric',
-    minute: '2-digit',
-    timeZone,
-  });
-
   if (item.event.allDay) {
     const endVisible = addDays(item.endExclusive, -1);
     if (diffDays(endVisible, item.start) <= 0) {
-      return dateFormatter.format(item.start);
+      return formatters.itemDate.format(item.start);
     }
-    return `${dateFormatter.format(item.start)} - ${dateFormatter.format(endVisible)}`;
+    return `${formatters.itemDate.format(item.start)} - ${formatters.itemDate.format(endVisible)}`;
   }
 
-  return `${dateFormatter.format(item.start)} ${timeFormatter.format(item.start)}`;
+  return `${formatters.itemDate.format(item.start)} ${formatters.itemTime.format(item.start)}`;
 }
 
 function sourceCountLabel(
@@ -234,7 +82,81 @@ function sourceCountLabel(
   return t('planner.timeline.itemCount', { count });
 }
 
-export function PlannerTimelineView({
+function subscribeTodayTimestamp(): () => void {
+  return () => undefined;
+}
+
+function getTodayTimestampSnapshot(): number | null {
+  return startOfLocalDay(new Date()).getTime();
+}
+
+function getServerTodayTimestampSnapshot(): null {
+  return null;
+}
+
+function getServerElementWidthSnapshot(): undefined {
+  return undefined;
+}
+
+function useObservedElementWidth<TElement extends HTMLElement>(): [
+  (node: TElement | null) => void,
+  number | undefined,
+] {
+  const [element, setElement] = useState<TElement | null>(null);
+
+  const subscribe = useCallback(
+    (onStoreChange: () => void) => {
+      if (!element || typeof ResizeObserver === 'undefined') {
+        return () => undefined;
+      }
+
+      const resizeObserver = new ResizeObserver(onStoreChange);
+      resizeObserver.observe(element);
+      return () => resizeObserver.disconnect();
+    },
+    [element],
+  );
+
+  const getSnapshot = useCallback(() => element?.clientWidth, [element]);
+
+  return [
+    setElement,
+    useSyncExternalStore(subscribe, getSnapshot, getServerElementWidthSnapshot),
+  ];
+}
+
+function useTimelineFormatters(
+  locale: string,
+  timeZone: string,
+): TimelineFormatters {
+  return useMemo(
+    () => ({
+      month: new Intl.DateTimeFormat(locale, {
+        month: 'long',
+        year: 'numeric',
+      }),
+      day: new Intl.DateTimeFormat(locale, { day: 'numeric' }),
+      weekday: new Intl.DateTimeFormat(locale, { weekday: 'short' }),
+      itemDate: new Intl.DateTimeFormat(locale, {
+        day: 'numeric',
+        month: 'short',
+        timeZone,
+      }),
+      itemTime: new Intl.DateTimeFormat(locale, {
+        hour: 'numeric',
+        minute: '2-digit',
+        timeZone,
+      }),
+    }),
+    [locale, timeZone],
+  );
+}
+
+export function PlannerTimelineView(props: PlannerTimelineViewProps) {
+  return usePlannerTimelineViewElement(props);
+}
+
+function usePlannerTimelineViewElement({
   events,
   rangeStart,
   rangeEnd,
@@ -243,41 +165,37 @@ export function PlannerTimelineView({
   onEventClick,
 }: PlannerTimelineViewProps) {
   const { t } = useTranslation('apps');
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [viewportWidth, setViewportWidth] = useState(0);
-  const rangeStartDate =
-    dateOnlyToLocalDate(rangeStart) ?? startOfLocalDay(new Date());
-  const rangeEndDate =
-    dateOnlyToLocalDate(rangeEnd) ?? addDays(rangeStartDate, 1);
+  const [containerRef, viewportWidth] =
+    useObservedElementWidth<HTMLDivElement>();
+  const todayTimestamp = useSyncExternalStore(
+    subscribeTodayTimestamp,
+    getTodayTimestampSnapshot,
+    getServerTodayTimestampSnapshot,
+  );
+  const formatters = useTimelineFormatters(locale, timeZone);
+  const rangeStartDate = useMemo(
+    () => dateOnlyToLocalDate(rangeStart) ?? new Date(todayTimestamp ?? 0),
+    [rangeStart, todayTimestamp],
+  );
+  const rangeEndDate = useMemo(
+    () => dateOnlyToLocalDate(rangeEnd) ?? addDays(rangeStartDate, 1),
+    [rangeEnd, rangeStartDate],
+  );
   const totalDays = Math.max(1, diffDays(rangeEndDate, rangeStartDate));
-  const dayWidth = getTimelineDayWidth(totalDays, viewportWidth);
+  const dayWidth = getTimelineDayWidth(
+    totalDays,
+    viewportWidth ?? 0,
+    LEFT_COLUMN_WIDTH,
+  );
   const timelineWidth = totalDays * dayWidth;
-
-  useEffect(() => {
-    const element = containerRef.current;
-    if (!element) {
-      return;
-    }
-
-    const updateWidth = () => setViewportWidth(element.clientWidth);
-    updateWidth();
-
-    if (typeof ResizeObserver === 'undefined') {
-      return;
-    }
-
-    const resizeObserver = new ResizeObserver(updateWidth);
-    resizeObserver.observe(element);
-    return () => resizeObserver.disconnect();
-  }, []);
 
   const days = useMemo(
     () => buildDays(rangeStartDate, totalDays),
     [rangeStartDate, totalDays],
   );
   const monthSpans = useMemo(
-    () => buildMonthSpans(days, locale),
-    [days, locale],
+    () => buildMonthSpans(days, formatters.month),
+    [days, formatters.month],
   );
   const items = useMemo(
     () =>
@@ -290,27 +208,16 @@ export function PlannerTimelineView({
       ),
     [dayWidth, events, rangeEndDate, rangeStartDate, timeZone],
   );
-  const groupedItems = useMemo(
-    () =>
-      SOURCE_ORDER.map((source) => ({
-        source,
-        items: items.filter((item) => item.event.sourceType === source),
-      })).filter((group) => group.items.length > 0),
+  const { groupedItems, sourceCounts } = useMemo(
+    () => buildItemGroups(items),
     [items],
   );
-  const sourceCounts = useMemo(
-    () =>
-      SOURCE_ORDER.map((source) => ({
-        source,
-        count: items.filter((item) => item.event.sourceType === source).length,
-        color: items.find((item) => item.event.sourceType === source)?.event
-          .color,
-      })).filter((item) => item.count > 0),
-    [items],
-  );
-  const todayOffset = diffDays(startOfLocalDay(new Date()), rangeStartDate);
+  const todayOffset =
+    todayTimestamp === null
+      ? null
+      : diffTimestampDays(todayTimestamp, rangeStartDate);
   const todayLeft =
-    todayOffset >= 0 && todayOffset < totalDays
+    todayOffset !== null && todayOffset >= 0 && todayOffset < totalDays
       ? todayOffset * dayWidth + dayWidth / 2
       : null;
 
@@ -347,7 +254,7 @@ export function PlannerTimelineView({
               className="app-text-caption inline-flex items-center gap-1.5 rounded border border-app-border bg-app-surface-sidebar px-2 py-1 text-app-ink/65"
             >
               <span
-                className="h-2 w-2 rounded-full"
+                className="size-2 rounded-full"
                 style={{ backgroundColor: color }}
               />
               <span>{t(SOURCE_LABEL_KEYS[source])}</span>
@@ -395,7 +302,8 @@ export function PlannerTimelineView({
                 <div className="flex h-10 border-b border-app-border">
                   {days.map((day) => {
                     const isToday =
-                      diffDays(day, startOfLocalDay(new Date())) === 0;
+                      todayTimestamp !== null &&
+                      day.getTime() === todayTimestamp;
                     const isSunday = day.getDay() === 0;
                     return (
                       <div
@@ -411,10 +319,10 @@ export function PlannerTimelineView({
                         <span
                           className={cn(
                             'app-text-micro',
-                            isSunday ? 'text-red-500' : 'text-app-ink/45',
+                            isSunday ? 'text-app-danger' : 'text-app-ink/45',
                           )}
                         >
-                          {formatWeekday(day, locale)}
+                          {formatWeekday(day, formatters.weekday)}
                         </span>
                         <span
                           className={cn(
@@ -422,7 +330,7 @@ export function PlannerTimelineView({
                             isToday ? 'text-app-accent' : 'text-app-ink',
                           )}
                         >
-                          {formatDayLabel(day, locale)}
+                          {formatDayLabel(day, formatters.day)}
                         </span>
                       </div>
                     );
@@ -465,10 +373,11 @@ export function PlannerTimelineView({
                 {group.items.map((item) => {
                   const metadata = item.event.metadata;
                   const metaParts = [
-                    formatItemTime(item, locale, timeZone),
+                    formatItemTime(item, formatters),
+                    item.event.workspace?.name,
                     metadata.location,
-                    metadata.taskListKey && metadata.issueNumber
-                      ? `${metadata.taskListKey}-${metadata.issueNumber}`
+                    metadata.taskListKey && metadata.taskNumber
+                      ? `${metadata.taskListKey}-${metadata.taskNumber}`
                       : null,
                     metadata.status,
                     metadata.attendeeCount !== null &&
@@ -499,7 +408,7 @@ export function PlannerTimelineView({
                         style={{ width: LEFT_COLUMN_WIDTH }}
                       >
                         <span
-                          className="h-2.5 w-2.5 shrink-0 rounded-full"
+                          className="size-2.5 shrink-0 rounded-full"
                           style={{ backgroundColor: item.event.color }}
                         />
                         <span className="min-w-0 flex-1">

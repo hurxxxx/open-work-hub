@@ -4,11 +4,22 @@ import json
 from pathlib import Path
 
 from ai_do_api.core.settings import Settings
+from ai_do_api.domains.ai.router import _attach_external_egress_trace_metadata
+from ai_do_api.domains.ai.runtime.external_adapters import (
+    register_external_planner_execution_adapter,
+    register_external_search_execution_adapter,
+    reset_external_execution_adapters,
+)
 from ai_do_api.domains.ai.runtime.external_egress import (
     allowed_external_providers,
     evaluate_external_egress,
     normalize_external_provider,
 )
+from ai_do_api.domains.ai.runtime.external_planner import (
+    ExternalPlannerExecutionResult,
+)
+from ai_do_api.domains.ai.runtime.external_search import ExternalSearchExecutionResult
+from ai_do_api.domains.ai.runtime.routing import RuntimeRoutingDecision
 
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "ai_runtime"
@@ -18,7 +29,12 @@ SETTING_ALIASES = {
     "ai_external_reasoning_enabled": "AI_DO_AI_EXTERNAL_REASONING_ENABLED",
     "ai_external_quality_review_enabled": "AI_DO_AI_EXTERNAL_QUALITY_REVIEW_ENABLED",
     "ai_external_search_enabled": "AI_DO_AI_EXTERNAL_SEARCH_ENABLED",
+    "ai_external_planner_execution_enabled": "AI_DO_AI_EXTERNAL_PLANNER_EXECUTION_ENABLED",
+    "ai_external_planner_execution_adapter": "AI_DO_AI_EXTERNAL_PLANNER_EXECUTION_ADAPTER",
+    "ai_external_search_execution_enabled": "AI_DO_AI_EXTERNAL_SEARCH_EXECUTION_ENABLED",
+    "ai_external_search_execution_adapter": "AI_DO_AI_EXTERNAL_SEARCH_EXECUTION_ADAPTER",
     "ai_allowed_external_providers": "AI_DO_AI_ALLOWED_EXTERNAL_PROVIDERS",
+    "ai_default_external_llm_provider": "AI_DO_AI_DEFAULT_EXTERNAL_LLM_PROVIDER",
     "ai_default_external_search_provider": "AI_DO_AI_DEFAULT_EXTERNAL_SEARCH_PROVIDER",
 }
 
@@ -34,13 +50,165 @@ def _settings(**overrides):
 
 
 def test_external_provider_aliases_normalize_to_policy_names() -> None:
-    settings = _settings(ai_allowed_external_providers="openai,claude")
+    settings = _settings(ai_allowed_external_providers="openai,claude,gemini")
 
     assert normalize_external_provider("openai") == "openai"
     assert normalize_external_provider("claude") == "anthropic"
     assert normalize_external_provider("anthropic") == "anthropic"
+    assert normalize_external_provider("google") == "gemini"
+    assert normalize_external_provider("gemini") == "gemini"
     assert normalize_external_provider("unknown") is None
-    assert allowed_external_providers(settings) == ("openai", "anthropic")
+    assert allowed_external_providers(settings) == ("openai", "anthropic", "gemini")
+
+
+def test_external_search_provider_can_use_search_execution_adapter_registry() -> None:
+    class VendorSearchAdapter:
+        adapter_id = "external_search_v0"
+        execution_provider = "vendor-search"
+
+        def execute(self, request):
+            return ExternalSearchExecutionResult(
+                status="completed",
+                execution_provider=self.execution_provider,
+                provider=request.provider,
+                result_count=1,
+            )
+
+    reset_external_execution_adapters()
+    try:
+        register_external_search_execution_adapter(
+            "vendor-search",
+            VendorSearchAdapter,
+        )
+        settings = _settings(
+            ai_external_search_enabled=True,
+            ai_allowed_external_providers="vendor-search",
+            ai_default_external_search_provider="vendor-search",
+        )
+
+        assert normalize_external_provider("vendor-search") is None
+        assert (
+            normalize_external_provider("vendor-search", capability="search")
+            == "vendor-search"
+        )
+        assert allowed_external_providers(settings, capability="search") == (
+            "vendor-search",
+        )
+
+        decision = evaluate_external_egress(
+            capability="search",
+            provider=None,
+            text="공개 CE 인증 기준을 검색해줘.",
+            settings=settings,
+        )
+
+        assert decision.allow_external is True
+        assert decision.requested_provider == "vendor-search"
+        assert decision.provider == "vendor-search"
+    finally:
+        reset_external_execution_adapters()
+
+
+def test_external_trace_execution_waits_for_graph_execution_adapter_selection() -> None:
+    calls: list[str] = []
+
+    class CountingPlannerAdapter:
+        adapter_id = "external_planner_v0"
+        execution_provider = "counting-planner"
+
+        def execute(self, request):
+            calls.append(request.provider or "")
+            return ExternalPlannerExecutionResult(
+                status="completed",
+                execution_provider=self.execution_provider,
+                provider=request.provider,
+            )
+
+    reset_external_execution_adapters()
+    try:
+        register_external_planner_execution_adapter("counting-planner", CountingPlannerAdapter)
+        settings = _settings(
+            ai_external_llm_enabled=True,
+            ai_external_planning_enabled=True,
+            ai_allowed_external_providers="openai",
+            ai_default_external_llm_provider="openai",
+            ai_external_planner_execution_enabled=True,
+            ai_external_planner_execution_adapter="counting-planner",
+        )
+        routing = RuntimeRoutingDecision(
+            runtime_profile="interactive_read",
+            reason_codes=(),
+            graph_gate="eligible",
+            graph_fallback_reason=None,
+            graph_validation_status="accepted",
+            graph_execution_status="disabled",
+        )
+
+        result = _attach_external_egress_trace_metadata(
+            routing,
+            messages=[{"role": "user", "content": "공개 정보 기준으로 계획해줘"}],
+            settings=settings,
+        )
+
+        assert calls == []
+        assert result.external_egress_summary is None
+        assert result.external_planner_execution_summary is None
+    finally:
+        reset_external_execution_adapters()
+
+
+def test_external_trace_adapter_exceptions_are_normalized_to_failed_summary() -> None:
+    class FailingPlannerAdapter:
+        adapter_id = "external_planner_v0"
+        execution_provider = "failing-planner"
+
+        def execute(self, request):
+            raise TimeoutError("planner timeout")
+
+    reset_external_execution_adapters()
+    try:
+        register_external_planner_execution_adapter("failing-planner", FailingPlannerAdapter)
+        settings = _settings(
+            ai_external_llm_enabled=True,
+            ai_external_planning_enabled=True,
+            ai_allowed_external_providers="openai",
+            ai_default_external_llm_provider="openai",
+            ai_external_planner_execution_enabled=True,
+            ai_external_planner_execution_adapter="failing-planner",
+        )
+        routing = RuntimeRoutingDecision(
+            runtime_profile="interactive_read",
+            reason_codes=(),
+            graph_gate="eligible",
+            graph_fallback_reason=None,
+            graph_validation_status="accepted",
+            graph_execution_status="adapter_selected",
+            graph_execution_adapter="graph_node_runner_v0",
+        )
+
+        result = _attach_external_egress_trace_metadata(
+            routing,
+            messages=[{"role": "user", "content": "공개 정보 기준으로 계획해줘"}],
+            settings=settings,
+        )
+
+        assert result.external_planner_execution_summary == {
+            "adapter_id": "external_planner_v0",
+            "disabled_reason": None,
+            "error_class": "TimeoutError",
+            "estimated_cost_microunits": 0,
+            "execution_provider": "failing-planner",
+            "intent_hint": None,
+            "latency_ms": 0,
+            "output_kind_hint": None,
+            "planned_agent_count": 0,
+            "provider": "openai",
+            "raw_output_persisted": False,
+            "retry_count": 0,
+            "status": "failed",
+        }
+    finally:
+        reset_external_execution_adapters()
 
 
 def test_external_planning_is_denied_until_global_and_capability_flags_enable() -> None:
@@ -89,6 +257,24 @@ def test_external_egress_denies_provider_outside_allowlist() -> None:
 
     assert decision.allow_external is False
     assert decision.reason == "provider_not_allowed"
+    assert decision.provider == "anthropic"
+
+
+def test_external_planning_default_provider_uses_ai_llm_default() -> None:
+    decision = evaluate_external_egress(
+        capability="planning",
+        provider=None,
+        text="공개 규격만 기준으로 초기 분석해줘",
+        settings=_settings(
+            ai_external_llm_enabled=True,
+            ai_external_planning_enabled=True,
+            ai_allowed_external_providers="anthropic",
+            ai_default_external_llm_provider="anthropic",
+        ),
+    )
+
+    assert decision.allow_external is True
+    assert decision.requested_provider == "anthropic"
     assert decision.provider == "anthropic"
 
 

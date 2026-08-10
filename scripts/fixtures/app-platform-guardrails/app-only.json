@@ -1,0 +1,27 @@
+{
+  "name": "valid app-only change",
+  "declaredLane": "app-sandbox",
+  "changes": [
+    {
+      "status": "A",
+      "path": "apps/web/src/app-modules/pms/views/GeneratedBoard.tsx"
+    },
+    {
+      "status": "M",
+      "path": "apps/web/src/app-modules/pms/routes.ts"
+    },
+    {
+      "status": "A",
+      "path": "apps/api/src/ai_do_api/domains/pms/generated_board.py"
+    },
+    {
+      "status": "A",
+      "path": "apps/api/tests/test_pms_generated_board.py"
+    }
+  ],
+  "expect": {
+    "ok": true,
+    "requiredLane": "app-sandbox"
+  }
+}
+

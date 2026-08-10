@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI-DO · FMEA 비교 사용 가이드</title>
+    <link rel="stylesheet" href="_guide.css" />
+  </head>
+  <body>
+    <main class="doc">
+      <header class="hero">
+        <p class="eyebrow"><span class="badge cat">핵심 도구</span></p>
+        <h1>FMEA 비교</h1>
+        <p>FMEA 리스크 항목과 조치안을 비교합니다. 두 FMEA 문서의 고장 모드와 대응 방안 차이를 정리해 검토를 돕습니다.</p>
+      </header>
+
+      <section>
+        <div class="section-head">
+          <h2>이 기능을 만든 이유</h2>
+        </div>
+        <div class="callout purpose">FMEA는 개정과 유사 프로젝트 간 비교가 잦은데, 고장 모드와 조치안을 일일이 대조하는 일이 까다롭고 시간이 많이 들었습니다. FMEA 비교는 두 문서의 리스크 항목·조치안 차이를 자동으로 정리해 주도록 만들었습니다. 검토 시간을 줄이고 변경 항목을 놓치지 않게 하는 것이 목적입니다.</div>
+      </section>
+
+      <section>
+        <div class="section-head">
+          <h2>이 기능 열기</h2>
+        </div>
+        <ol class="step-list">
+          <li><b>1</b><span>AI 기능을 사용할 워크스페이스로 전환합니다.</span></li>
+          <li><b>2</b><span>앱 바에서 <code>AI</code> 앱을 열거나, 홈 상단의 <code>AI 도구</code> 메뉴에서 <b>FMEA 비교</b>을(를) 선택합니다.</span></li>
+          <li><b>3</b><span>비교할 두 FMEA 문서를 업로드하고 비교를 실행합니다.</span></li>
+        </ol>
+      </section>
+
+      <section>
+        <figure class="card">
+          <a class="shot" href="screenshots/09-fmea-compare.png">
+            <img src="screenshots/09-fmea-compare.png" alt="FMEA 비교 화면" />
+          </a>
+          <figcaption class="card-body">
+            <h3>화면 구성</h3>
+            <p>두 FMEA 문서를 업로드하면 리스크 항목과 조치안 차이를 정리해 보여 줍니다.</p>
+          </figcaption>
+        </figure>
+      </section>
+
+      <section>
+        <div class="section-head">
+          <h2>활용 팁</h2>
+        </div>
+        <ul class="bullet">
+          <li>고장 모드, 심각도, 조치안 변화를 항목별로 비교해 줍니다.</li>
+          <li>리스크 등급이 바뀐 항목을 우선 검토하면 효율적입니다.</li>
+          <li>비교 결과는 검토 보조 자료이며 최종 평가는 담당자가 확정합니다.</li>
+        </ul>
+        <div class="callout warn">
+          AI 결과는 초안·참고용입니다. 발송·제출·의사결정 전에 원문 출처와 사실
+          관계를 사람이 검토하고, 민감 정보를 입력할 때는 사내 정보 보안 지침을
+          따릅니다.
+        </div>
+      </section>
+
+      <div class="footer">
+        AI-DO FMEA 비교 사용 가이드 · 메뉴 구성과 명칭은 업데이트에 따라
+        달라질 수 있습니다. 화면 캡처는 예시 워크스페이스 기준입니다.
+      </div>
+    </main>
+
+    <div class="lightbox" id="imageLightbox" hidden>
+      <div class="lightbox-bar">
+        <p class="lightbox-title"></p>
+        <button class="lightbox-close" type="button">닫기 (Esc)</button>
+      </div>
+      <img class="lightbox-image" alt="" />
+      <p class="lightbox-caption"></p>
+    </div>
+    <script src="_guide.js"></script>
+  </body>
+</html>

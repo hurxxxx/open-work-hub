@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Button } from '@ai-do/ui';
+import { useCallback, useEffect, useReducer } from 'react';
+import { Button, InlineNotice } from '@ai-do/ui';
 import { Loader2, PencilRuler, Plus, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -10,19 +10,22 @@ import {
   createWhiteboardContextSlot,
   detachWhiteboardContextSlot,
   getWhiteboardContextSlot,
-  type WhiteboardDetail,
   type WhiteboardHubItem,
 } from '../api/whiteboard-api';
 import { WhiteboardEditorSurface } from './WhiteboardEditorSurface';
 import { WhiteboardPickerModal } from './WhiteboardPickerModal';
+import {
+  INITIAL_WHITEBOARD_CONTEXT_SLOT_PANEL_STATE,
+  buildWhiteboardContextSlotAttachPayload,
+  buildWhiteboardContextSlotCreatePayload,
+  getWhiteboardContextSlotExcludeIds,
+  whiteboardContextSlotPanelReducer,
+  type WhiteboardContextRef,
+} from './whiteboard-context-slot-panel-model';
 
-interface WhiteboardContextRef {
-  app: string;
-  type: string;
-  id: string;
-}
+export type { WhiteboardContextRef } from './whiteboard-context-slot-panel-model';
 
-interface WhiteboardContextSlotPanelProps {
+export interface WhiteboardContextSlotPanelProps {
   context: WhiteboardContextRef;
   workspaceSlug?: string | null;
   defaultTitle: string;
@@ -41,24 +44,27 @@ export function WhiteboardContextSlotPanel({
 }: WhiteboardContextSlotPanelProps) {
   const { t } = useTranslation('apps');
   const { token } = useAuth();
-  const [item, setItem] = useState<WhiteboardDetail | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [state, dispatch] = useReducer(
+    whiteboardContextSlotPanelReducer,
+    INITIAL_WHITEBOARD_CONTEXT_SLOT_PANEL_STATE,
+  );
 
   const loadSlot = useCallback(async () => {
     if (!token) return;
-    setLoading(true);
-    setError(null);
+    dispatch({ type: 'load-started' });
     try {
-      const response = await getWhiteboardContextSlot(token, context, workspaceSlug);
-      setItem(response.item);
+      const response = await getWhiteboardContextSlot(
+        token,
+        context,
+        workspaceSlug,
+      );
+      dispatch({ type: 'load-succeeded', item: response.item });
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('whiteboard.loadSlotFailed'));
-      setItem(null);
-    } finally {
-      setLoading(false);
+      dispatch({
+        type: 'load-failed',
+        error:
+          err instanceof Error ? err.message : t('whiteboard.loadSlotFailed'),
+      });
     }
   }, [context, t, token, workspaceSlug]);
 
@@ -68,19 +74,20 @@ export function WhiteboardContextSlotPanel({
 
   async function handleCreate() {
     if (!token) return;
-    setBusy(true);
-    setError(null);
+    dispatch({ type: 'create-started' });
     try {
       const created = await createWhiteboardContextSlot(
         token,
-        { ...context, title: defaultTitle },
+        buildWhiteboardContextSlotCreatePayload(context, defaultTitle),
         workspaceSlug,
       );
-      setItem(created);
+      dispatch({ type: 'create-succeeded', item: created });
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('whiteboard.createFailed'));
-    } finally {
-      setBusy(false);
+      dispatch({
+        type: 'create-failed',
+        error:
+          err instanceof Error ? err.message : t('whiteboard.createFailed'),
+      });
     }
   }
 
@@ -88,50 +95,59 @@ export function WhiteboardContextSlotPanel({
     if (!token) return;
     const attached = await attachWhiteboardContextSlot(
       token,
-      { ...context, whiteboard_id: selected.id },
+      buildWhiteboardContextSlotAttachPayload(context, selected.id),
       workspaceSlug,
     );
-    setItem(attached);
+    dispatch({ type: 'attach-succeeded', item: attached });
   }
 
   async function handleDetach() {
     if (!token) return;
-    setBusy(true);
-    setError(null);
+    dispatch({ type: 'detach-started' });
     try {
       await detachWhiteboardContextSlot(token, context, workspaceSlug);
-      setItem(null);
+      dispatch({ type: 'detach-succeeded' });
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('whiteboard.detachFailed'));
-    } finally {
-      setBusy(false);
+      dispatch({
+        type: 'detach-failed',
+        error:
+          err instanceof Error ? err.message : t('whiteboard.detachFailed'),
+      });
     }
   }
 
   return (
-    <div className={cn('flex min-h-0 flex-1 flex-col rounded-md border border-app-border bg-app-bg', className)}>
-      {error ? (
-        <div
+    <div
+      className={cn(
+        'flex min-h-0 flex-1 flex-col rounded-md border border-app-border bg-app-bg',
+        className,
+      )}
+    >
+      {state.error ? (
+        <InlineNotice
           role="alert"
-          className="app-text-body border-b border-[var(--ui-color-danger)]/30 bg-[var(--ui-color-danger)]/10 px-4 py-2 text-[var(--ui-color-danger)]"
+          className="rounded-none border-x-0 border-t-0 px-4 app-text-body"
+          tone="danger"
         >
-          {error}
-        </div>
+          {state.error}
+        </InlineNotice>
       ) : null}
 
-      {loading ? (
+      {state.loading ? (
         <div className="flex min-h-[360px] flex-1 items-center justify-center text-app-ink/40">
           <Loader2 size={22} className="animate-spin" />
         </div>
-      ) : item ? (
+      ) : state.item ? (
         <WhiteboardEditorSurface
-          key={item.id}
-          boardId={item.id}
+          key={state.item.id}
+          boardId={state.item.id}
           workspaceSlug={workspaceSlug}
           showArchive={false}
           showDetach={canEditContext}
           onDetach={handleDetach}
-          onBoardUpdated={(updated) => setItem(updated)}
+          onBoardUpdated={(updated) =>
+            dispatch({ type: 'update-succeeded', item: updated })
+          }
           className={cn('min-h-[560px]', editorClassName)}
         />
       ) : (
@@ -144,27 +160,40 @@ export function WhiteboardContextSlotPanel({
             </p>
             {canEditContext ? (
               <div className="mt-5 flex flex-wrap justify-center gap-2">
-                <Button onClick={() => void handleCreate()} disabled={busy}>
-                  {busy ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                <Button
+                  onClick={() => void handleCreate()}
+                  disabled={state.busy}
+                >
+                  {state.busy ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <Plus size={14} />
+                  )}
                   {t('whiteboard.new')}
                 </Button>
-                <Button variant="secondary" onClick={() => setPickerOpen(true)} disabled={busy}>
+                <Button
+                  variant="secondary"
+                  onClick={() => dispatch({ type: 'picker-opened' })}
+                  disabled={state.busy}
+                >
                   <Search size={14} />
                   {t('whiteboard.chooseExisting')}
                 </Button>
               </div>
             ) : (
-              <p className="app-text-caption mt-4 text-app-ink/45">{t('whiteboard.editPermissionHint')}</p>
+              <p className="app-text-caption mt-4 text-app-ink/45">
+                {t('whiteboard.editPermissionHint')}
+              </p>
             )}
           </div>
         </div>
       )}
 
       <WhiteboardPickerModal
-        isOpen={pickerOpen}
+        isOpen={state.pickerOpen}
         workspaceSlug={workspaceSlug}
-        excludeWhiteboardIds={item ? [item.id] : []}
-        onClose={() => setPickerOpen(false)}
+        excludeWhiteboardIds={getWhiteboardContextSlotExcludeIds(state.item)}
+        onClose={() => dispatch({ type: 'picker-closed' })}
         onPick={handleAttach}
       />
     </div>

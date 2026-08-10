@@ -5,7 +5,7 @@
 #   bash scripts/mlx-serve.sh            # foreground
 #   nohup bash scripts/mlx-serve.sh &    # background
 #
-# Default port:  8080 (matches DOOWON_LLM_LOCAL_BASE_URL default)
+# Default port:  8080 (matches AI_DO_LLM_LOCAL_BASE_URL default)
 #
 # Override via env:
 #   MLX_MODEL=mlx-community/<model> MLX_PORT=8090 bash scripts/mlx-serve.sh
@@ -14,12 +14,12 @@ set -euo pipefail
 
 MLX_HOST="${MLX_HOST:-127.0.0.1}"
 MLX_PORT="${MLX_PORT:-8080}"
-MLX_MODEL="${MLX_MODEL:-${DOOWON_LLM_LOCAL_DEFAULT_MODEL:-${DOOWON_LLM_DEFAULT_MODEL:-}}}"
+MLX_MODEL="${MLX_MODEL:-}"
 MLX_VENV="${MLX_VENV:-$HOME/.local/share/mlx-lm-venv}"
 MLX_CHAT_TEMPLATE_ARGS="${MLX_CHAT_TEMPLATE_ARGS:-}"
 
 if [[ -z "$MLX_MODEL" ]]; then
-  echo "[mlx-serve] Set MLX_MODEL or DOOWON_LLM_LOCAL_DEFAULT_MODEL." >&2
+  echo "[mlx-serve] Set MLX_MODEL." >&2
   exit 2
 fi
 

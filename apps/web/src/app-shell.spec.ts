@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import type { AuthUser, WorkspaceSummary } from './platform/auth/auth-api';
 import { resolveShellState } from './app-shell';
 
-function buildWorkspace(overrides: Partial<WorkspaceSummary> = {}): WorkspaceSummary {
+function buildWorkspace(
+  overrides: Partial<WorkspaceSummary> = {},
+): WorkspaceSummary {
   return {
     id: 'workspace-delivery-hub',
     slug: 'delivery-hub',
@@ -16,6 +18,7 @@ function buildWorkspace(overrides: Partial<WorkspaceSummary> = {}): WorkspaceSum
 function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
   return {
     id: 'user-1',
+    login_id: 'member',
     email: 'member@ai-do.local',
     full_name: 'AI-DO Member',
     display_name: 'AI-DO Member',
@@ -26,8 +29,6 @@ function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
     workspaces: [buildWorkspace()],
     workspace_roles: [],
     system_roles: [],
-    group_ids: [],
-    group_slugs: [],
     must_change_password: false,
     ...overrides,
   };
@@ -42,7 +43,9 @@ describe('resolveShellState', () => {
       activeAppId: 'home',
       activeNavItemId: '',
     });
-    expect(resolveShellState('/tool/pms-list-demo', userWithoutPms)).toEqual({
+    expect(
+      resolveShellState('/w/delivery-hub/pms/lists/demo', userWithoutPms),
+    ).toEqual({
       activeAppId: 'home',
       activeNavItemId: '',
     });
@@ -50,23 +53,57 @@ describe('resolveShellState', () => {
 
   it('keeps PMS shell state for authorized PMS routes', () => {
     expect(resolveShellState('/w/delivery-hub/pms', buildUser())).toEqual({
-      activeAppId: 'pms',
-      activeNavItemId: '',
+      activeAppId: 'collaboration',
+      activeNavItemId: 'pms-inbox',
     });
-    expect(resolveShellState('/w/delivery-hub/pms/assigned', buildUser())).toEqual({
-      activeAppId: 'pms',
+    expect(
+      resolveShellState('/w/delivery-hub/pms/assigned', buildUser()),
+    ).toEqual({
+      activeAppId: 'collaboration',
       activeNavItemId: 'pms-tasks-assigned',
     });
-    expect(resolveShellState('/tool/pms-list-demo', buildUser())).toEqual({
-      activeAppId: 'pms',
+    expect(
+      resolveShellState('/w/delivery-hub/pms/lists/demo', buildUser()),
+    ).toEqual({
+      activeAppId: 'collaboration',
       activeNavItemId: 'pms-list-demo',
+    });
+    expect(
+      resolveShellState(
+        '/w/delivery-hub/pms/spaces/space-1/docs/doc-1',
+        buildUser(),
+      ),
+    ).toEqual({
+      activeAppId: 'collaboration',
+      activeNavItemId: 'pms-space-space-1-docs-doc-1',
+    });
+  });
+
+  it('keeps integrated search as its own shell state', () => {
+    expect(
+      resolveShellState('/tool/search?workspace=delivery-hub', buildUser()),
+    ).toEqual({
+      activeAppId: 'search',
+      activeNavItemId: 'search',
     });
   });
 
   it('routes the new workspace meeting path to the meeting shell', () => {
     expect(resolveShellState('/w/delivery-hub/meeting', buildUser())).toEqual({
-      activeAppId: 'meeting',
+      activeAppId: 'collaboration',
       activeNavItemId: 'meeting-upcoming',
+    });
+    expect(
+      resolveShellState('/w/delivery-hub/meeting?scope=mine', buildUser()),
+    ).toEqual({
+      activeAppId: 'collaboration',
+      activeNavItemId: 'meeting-mine',
+    });
+    expect(
+      resolveShellState('/w/delivery-hub/meeting?tab=recordings', buildUser()),
+    ).toEqual({
+      activeAppId: 'collaboration',
+      activeNavItemId: 'meeting-recordings',
     });
     expect(resolveShellState('/w/delivery-hub/home', buildUser())).toEqual({
       activeAppId: 'home',
@@ -74,42 +111,358 @@ describe('resolveShellState', () => {
     });
   });
 
-  it('uses planner query views for the active planner navigation item', () => {
-    expect(resolveShellState('/w/delivery-hub/planner', buildUser())).toEqual({
+  it('uses whiteboard manifest query views for the active navigation item', () => {
+    expect(
+      resolveShellState('/w/delivery-hub/whiteboard', buildUser()),
+    ).toEqual({
+      activeAppId: 'collaboration',
+      activeNavItemId: 'whiteboard-all',
+    });
+    expect(
+      resolveShellState('/w/delivery-hub/whiteboard?view=mine', buildUser()),
+    ).toEqual({
+      activeAppId: 'collaboration',
+      activeNavItemId: 'whiteboard-my',
+    });
+    expect(
+      resolveShellState(
+        '/w/delivery-hub/whiteboard?view=favorites',
+        buildUser(),
+      ),
+    ).toEqual({
+      activeAppId: 'collaboration',
+      activeNavItemId: 'whiteboard-favorites',
+    });
+  });
+
+  it('uses global planner query views for the active planner navigation item', () => {
+    expect(resolveShellState('/planner', buildUser(), ['planner'])).toEqual({
       activeAppId: 'planner',
       activeNavItemId: 'planner-calendar',
     });
     expect(
-      resolveShellState('/w/delivery-hub/planner?view=timeline', buildUser()),
+      resolveShellState('/planner?view=timeline', buildUser(), ['planner']),
     ).toEqual({
       activeAppId: 'planner',
       activeNavItemId: 'planner-timeline',
     });
   });
 
-  it('uses recording query filters for the active recording navigation item', () => {
-    expect(resolveShellState('/w/delivery-hub/recording', buildUser())).toEqual({
-      activeAppId: 'recording',
-      activeNavItemId: 'recording-quick',
+  it('uses news query channels for the active news navigation item', () => {
+    expect(resolveShellState('/news', buildUser(), ['news'])).toEqual({
+      activeAppId: 'news',
+      activeNavItemId: 'news-home',
     });
-    expect(resolveShellState('/w/delivery-hub/recording?view=mine', buildUser())).toEqual({
-      activeAppId: 'recording',
+    expect(
+      resolveShellState('/news?channel=keyword', buildUser(), ['news']),
+    ).toEqual({
+      activeAppId: 'news',
+      activeNavItemId: 'news-keyword',
+    });
+    expect(
+      resolveShellState('/news?channel=car', buildUser(), ['news']),
+    ).toEqual({
+      activeAppId: 'news',
+      activeNavItemId: 'news-car',
+    });
+    expect(
+      resolveShellState('/news?channel=front', buildUser(), ['news']),
+    ).toEqual({
+      activeAppId: 'news',
+      activeNavItemId: 'news-front',
+    });
+    expect(
+      resolveShellState('/news?view=report&tab=kdi', buildUser(), ['news']),
+    ).toEqual({
+      activeAppId: 'news',
+      activeNavItemId: 'industry-report-kdi',
+    });
+    expect(
+      resolveShellState(
+        '/w/retired-workspace/news?channel=keyword',
+        buildUser({ workspaces: [] }),
+        ['news'],
+      ),
+    ).toEqual({
+      activeAppId: 'news',
+      activeNavItemId: 'news-keyword',
+    });
+  });
+
+  it('routes community paths to the company-wide community shell', () => {
+    expect(
+      resolveShellState('/community', buildUser({ workspaces: [] })),
+    ).toEqual({
+      activeAppId: 'home',
+      activeNavItemId: '',
+    });
+    expect(
+      resolveShellState('/community', buildUser({ workspaces: [] }), [
+        'community',
+      ]),
+    ).toEqual({
+      activeAppId: 'community',
+      activeNavItemId: '',
+    });
+    expect(
+      resolveShellState('/community?channel=suggestions', buildUser(), [
+        'community',
+      ]),
+    ).toEqual({
+      activeAppId: 'community',
+      activeNavItemId: '',
+    });
+  });
+
+  it('routes company-wide Q&A paths to the global AI shell', () => {
+    expect(
+      resolveShellState('/qa-assistant', buildUser({ workspaces: [] }), [
+        'qa-assistant',
+      ]),
+    ).toEqual({
+      activeAppId: 'ai',
+      activeNavItemId: 'qa-assistant',
+    });
+    expect(
+      resolveShellState('/qa-assistant?tab=documents', buildUser(), [
+        'qa-assistant',
+      ]),
+    ).toEqual({
+      activeAppId: 'ai',
+      activeNavItemId: 'qa-assistant',
+    });
+  });
+
+  it('uses docs query views for the active docs navigation item', () => {
+    expect(resolveShellState('/w/delivery-hub/docs', buildUser())).toEqual({
+      activeAppId: 'collaboration',
+      activeNavItemId: 'docs-all',
+    });
+    expect(
+      resolveShellState('/w/delivery-hub/docs?view=mine', buildUser()),
+    ).toEqual({
+      activeAppId: 'collaboration',
+      activeNavItemId: 'docs-my',
+    });
+    expect(
+      resolveShellState('/w/delivery-hub/docs?view=shared', buildUser()),
+    ).toEqual({
+      activeAppId: 'collaboration',
+      activeNavItemId: 'docs-shared',
+    });
+    expect(
+      resolveShellState('/w/delivery-hub/docs?view=private', buildUser()),
+    ).toEqual({
+      activeAppId: 'collaboration',
+      activeNavItemId: 'docs-private',
+    });
+    expect(
+      resolveShellState('/w/delivery-hub/docs?view=meeting_notes', buildUser()),
+    ).toEqual({
+      activeAppId: 'collaboration',
+      activeNavItemId: 'docs-notes',
+    });
+    expect(
+      resolveShellState(
+        '/w/delivery-hub/docs/doc-1?view=recent&page=page-1',
+        buildUser(),
+      ),
+    ).toEqual({
+      activeAppId: 'collaboration',
+      activeNavItemId: 'docs-recent',
+    });
+    expect(
+      resolveShellState('/w/delivery-hub/docs?view=archived', buildUser()),
+    ).toEqual({
+      activeAppId: 'collaboration',
+      activeNavItemId: 'docs-archived',
+    });
+    expect(
+      resolveShellState('/w/delivery-hub/docs?view=unknown', buildUser()),
+    ).toEqual({
+      activeAppId: 'collaboration',
+      activeNavItemId: 'docs-all',
+    });
+  });
+
+  it('uses manifest global routes for shared docs and whiteboards', () => {
+    expect(
+      resolveShellState('/docs/shared/share-1', buildUser(), ['docs']),
+    ).toEqual({
+      activeAppId: 'collaboration',
+      activeNavItemId: '',
+    });
+    expect(
+      resolveShellState('/docs/shared/share-1/html/page-1', buildUser(), [
+        'docs',
+      ]),
+    ).toEqual({
+      activeAppId: 'collaboration',
+      activeNavItemId: '',
+    });
+    expect(
+      resolveShellState('/whiteboard/shared/share-1', buildUser(), [
+        'whiteboard',
+      ]),
+    ).toEqual({
+      activeAppId: 'collaboration',
+      activeNavItemId: '',
+    });
+  });
+
+  it('uses leaf bootstrap IDs to gate aggregate global route chrome', () => {
+    expect(
+      resolveShellState('/docs/shared/share-1', buildUser(), ['docs']),
+    ).toEqual({
+      activeAppId: 'collaboration',
+      activeNavItemId: '',
+    });
+    expect(
+      resolveShellState('/docs/shared/share-1', buildUser(), ['whiteboard']),
+    ).toEqual({
+      activeAppId: 'home',
+      activeNavItemId: '',
+    });
+    expect(
+      resolveShellState('/whiteboard/shared/share-1', buildUser(), [
+        'whiteboard',
+      ]),
+    ).toEqual({
+      activeAppId: 'collaboration',
+      activeNavItemId: '',
+    });
+  });
+
+  it('uses the settings shell resolver for admin routes', () => {
+    const adminUser = buildUser({ system_roles: ['platform_admin'] });
+    expect(resolveShellState('/admin', adminUser)).toEqual({
+      activeAppId: 'settings',
+      activeNavItemId: 'settings-general',
+    });
+    expect(resolveShellState('/admin/users', adminUser)).toEqual({
+      activeAppId: 'settings',
+      activeNavItemId: 'settings-people',
+    });
+    expect(resolveShellState('/admin/hr', adminUser)).toEqual({
+      activeAppId: 'settings',
+      activeNavItemId: 'settings-hr',
+    });
+    expect(resolveShellState('/admin/teams', adminUser)).toEqual({
+      activeAppId: 'settings',
+      activeNavItemId: 'settings-workspaces',
+    });
+    expect(resolveShellState('/admin/apps', adminUser)).toEqual({
+      activeAppId: 'settings',
+      activeNavItemId: 'settings-apps-platform',
+    });
+    expect(resolveShellState('/admin/apps/workspace', adminUser)).toEqual({
+      activeAppId: 'settings',
+      activeNavItemId: 'settings-apps-workspace',
+    });
+    expect(resolveShellState('/admin/apps/app-bar', adminUser)).toEqual({
+      activeAppId: 'settings',
+      activeNavItemId: 'settings-apps-app-bar',
+    });
+    expect(resolveShellState('/admin/llm', adminUser)).toEqual({
+      activeAppId: 'settings',
+      activeNavItemId: 'settings-llm',
+    });
+    expect(resolveShellState('/admin/llm?tab=providers', adminUser)).toEqual({
+      activeAppId: 'settings',
+      activeNavItemId: 'settings-llm',
+    });
+    expect(resolveShellState('/admin/model-monitoring', adminUser)).toEqual({
+      activeAppId: 'settings',
+      activeNavItemId: 'settings-model-monitoring',
+    });
+    expect(resolveShellState('/admin/document-processing', adminUser)).toEqual({
+      activeAppId: 'settings',
+      activeNavItemId: 'settings-document-processing',
+    });
+    expect(resolveShellState('/admin/ai-security', adminUser)).toEqual({
+      activeAppId: 'settings',
+      activeNavItemId: 'settings-ai-security',
+    });
+    expect(resolveShellState('/admin/community', adminUser)).toEqual({
+      activeAppId: 'settings',
+      activeNavItemId: 'settings-community',
+    });
+    expect(resolveShellState('/admin/usage', adminUser)).toEqual({
+      activeAppId: 'settings',
+      activeNavItemId: 'settings-usage',
+    });
+    expect(resolveShellState('/admin/audit', adminUser)).toEqual({
+      activeAppId: 'settings',
+      activeNavItemId: 'settings-audit',
+    });
+    expect(resolveShellState('/admin', buildUser())).toEqual({
+      activeAppId: 'home',
+      activeNavItemId: '',
+    });
+  });
+
+  it('falls back to home for unknown workspace app routes', () => {
+    expect(
+      resolveShellState(
+        '/w/delivery-hub/unknown-app/unknown-tool',
+        buildUser(),
+      ),
+    ).toEqual({
+      activeAppId: 'home',
+      activeNavItemId: '',
+    });
+  });
+
+  it('uses recording query filters for the active recording navigation item', () => {
+    expect(resolveShellState('/w/delivery-hub/recording', buildUser())).toEqual(
+      {
+        activeAppId: 'collaboration',
+        activeNavItemId: 'recording-quick',
+      },
+    );
+    expect(
+      resolveShellState('/w/delivery-hub/recording?view=mine', buildUser()),
+    ).toEqual({
+      activeAppId: 'collaboration',
       activeNavItemId: 'recording-mine',
     });
-    expect(resolveShellState('/w/delivery-hub/recording?view=mine&category=meeting', buildUser())).toEqual({
-      activeAppId: 'recording',
+    expect(
+      resolveShellState(
+        '/w/delivery-hub/recording?view=needs_review',
+        buildUser(),
+      ),
+    ).toEqual({
+      activeAppId: 'collaboration',
+      activeNavItemId: 'recording-mine',
+    });
+    expect(
+      resolveShellState(
+        '/w/delivery-hub/recording?view=mine&category=meeting',
+        buildUser(),
+      ),
+    ).toEqual({
+      activeAppId: 'collaboration',
       activeNavItemId: 'recording-meeting',
     });
-    expect(resolveShellState('/w/delivery-hub/recording?view=processing', buildUser())).toEqual({
-      activeAppId: 'recording',
+    expect(
+      resolveShellState(
+        '/w/delivery-hub/recording?view=processing',
+        buildUser(),
+      ),
+    ).toEqual({
+      activeAppId: 'collaboration',
       activeNavItemId: 'recording-processing',
     });
-    expect(resolveShellState('/w/delivery-hub/recording?view=failed', buildUser())).toEqual({
-      activeAppId: 'recording',
+    expect(
+      resolveShellState('/w/delivery-hub/recording?view=failed', buildUser()),
+    ).toEqual({
+      activeAppId: 'collaboration',
       activeNavItemId: 'recording-failed',
     });
-    expect(resolveShellState('/w/delivery-hub/recording?view=archived', buildUser())).toEqual({
-      activeAppId: 'recording',
+    expect(
+      resolveShellState('/w/delivery-hub/recording?view=archived', buildUser()),
+    ).toEqual({
+      activeAppId: 'collaboration',
       activeNavItemId: 'recording-archived',
     });
   });
@@ -119,7 +472,7 @@ describe('resolveShellState', () => {
       activeAppId: 'home',
       activeNavItemId: '',
     });
-    for (const legacyPath of ['/docs', '/pms', '/planner', '/ai']) {
+    for (const legacyPath of ['/docs', '/pms', '/planner']) {
       expect(resolveShellState(legacyPath, buildUser())).toEqual({
         activeAppId: 'home',
         activeNavItemId: '',
@@ -129,10 +482,45 @@ describe('resolveShellState', () => {
 
   it('falls back to home when the workspace bootstrap disables the app', () => {
     expect(
-      resolveShellState('/w/delivery-hub/ai', buildUser(), ['home', 'pms', 'docs']),
+      resolveShellState('/w/delivery-hub/docs', buildUser(), [
+        'home',
+        'business',
+      ]),
     ).toEqual({
       activeAppId: 'home',
       activeNavItemId: '',
+    });
+    expect(
+      resolveShellState('/w/delivery-hub/docs/private', buildUser(), [
+        'home',
+        'business',
+      ]),
+    ).toEqual({
+      activeAppId: 'home',
+      activeNavItemId: '',
+    });
+  });
+
+  it('uses leaf bootstrap IDs while preserving aggregate shell chrome', () => {
+    expect(
+      resolveShellState('/w/delivery-hub/docs', buildUser(), ['docs']),
+    ).toEqual({
+      activeAppId: 'collaboration',
+      activeNavItemId: 'docs-all',
+    });
+    expect(
+      resolveShellState('/w/delivery-hub/docs', buildUser(), ['collaboration']),
+    ).toEqual({
+      activeAppId: 'home',
+      activeNavItemId: '',
+    });
+    expect(
+      resolveShellState('/tool/docs-all?workspace=delivery-hub', buildUser(), [
+        'docs',
+      ]),
+    ).toEqual({
+      activeAppId: 'collaboration',
+      activeNavItemId: 'docs-all',
     });
   });
 });

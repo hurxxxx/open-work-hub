@@ -1,0 +1,31 @@
+{
+  "name": "invalid mass delete",
+  "declaredLane": "core-platform",
+  "changes": [
+    { "status": "D", "path": "apps/web/src/app-modules/pms/views/Deleted01.tsx" },
+    { "status": "D", "path": "apps/web/src/app-modules/pms/views/Deleted02.tsx" },
+    { "status": "D", "path": "apps/web/src/app-modules/pms/views/Deleted03.tsx" },
+    { "status": "D", "path": "apps/web/src/app-modules/pms/views/Deleted04.tsx" },
+    { "status": "D", "path": "apps/web/src/app-modules/pms/views/Deleted05.tsx" },
+    { "status": "D", "path": "apps/web/src/app-modules/pms/views/Deleted06.tsx" },
+    { "status": "D", "path": "apps/web/src/app-modules/pms/views/Deleted07.tsx" },
+    { "status": "D", "path": "apps/web/src/app-modules/pms/views/Deleted08.tsx" },
+    { "status": "D", "path": "apps/web/src/app-modules/pms/views/Deleted09.tsx" },
+    { "status": "D", "path": "apps/web/src/app-modules/pms/views/Deleted10.tsx" },
+    { "status": "D", "path": "apps/web/src/app-modules/pms/views/Deleted11.tsx" },
+    { "status": "D", "path": "apps/web/src/app-modules/pms/views/Deleted12.tsx" },
+    { "status": "D", "path": "apps/web/src/app-modules/pms/views/Deleted13.tsx" },
+    { "status": "D", "path": "apps/web/src/app-modules/pms/views/Deleted14.tsx" },
+    { "status": "D", "path": "apps/web/src/app-modules/pms/views/Deleted15.tsx" },
+    { "status": "D", "path": "apps/web/src/app-modules/pms/views/Deleted16.tsx" },
+    { "status": "D", "path": "apps/web/src/app-modules/pms/views/Deleted17.tsx" },
+    { "status": "D", "path": "apps/web/src/app-modules/pms/views/Deleted18.tsx" },
+    { "status": "D", "path": "apps/web/src/app-modules/pms/views/Deleted19.tsx" },
+    { "status": "D", "path": "apps/web/src/app-modules/pms/views/Deleted20.tsx" }
+  ],
+  "expect": {
+    "ok": false,
+    "failureCodes": ["mass-delete"]
+  }
+}
+

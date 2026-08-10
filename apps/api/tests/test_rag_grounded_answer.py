@@ -9,191 +9,14 @@ from ai_do_api.domains.rag.contracts import (
     RagAnswerMode,
     RagProjection,
     RagQueryRequest,
-    RagQueryResponse,
 )
+from ai_do_api.domains.rag import grounded_answer
 from ai_do_api.domains.rag.grounded_answer import LlmGroundedAnswerSynthesizer
+from ai_do_api.domains.rag.grounded_answer_assembly import GroundedAnswerAssembler
 from ai_do_api.domains.rag.providers import RagProviderTransientError
 from ai_do_api.domains.rag.providers.fake import FakeEmbeddingClient, FakeVectorIndexClient
 from ai_do_api.domains.rag.query_service import RagQueryService
 from ai_do_api.domains.rag.service import RagService
-
-
-def test_llm_grounded_answer_synthesizer_keeps_only_citation_backed_statements(monkeypatch) -> None:
-    hit = SimpleNamespace(
-        resource_id="doc-1",
-        source_kind="manual",
-        summary="Supplier repricing increased the budget risk.",
-        title="Budget Review",
-        citation="doc-1:0",
-    )
-
-    def _fake_complete_chat(*args, **kwargs):
-        del args, kwargs
-        response = SimpleNamespace(
-            choices=[
-                SimpleNamespace(
-                    message=SimpleNamespace(
-                        content=(
-                            '{"statements":['
-                            '{"text":"예산 리스크가 상승했습니다.","citation_indexes":[1]},'
-                            '{"text":"증거 없는 문장입니다.","citation_indexes":[]}'
-                            '],"unsupported_claims":["확인되지 않은 주장"]}'
-                        )
-                    )
-                )
-            ]
-        )
-        return response, None, None
-
-    monkeypatch.setattr(
-        "ai_do_api.domains.rag.grounded_answer.complete_chat",
-        _fake_complete_chat,
-    )
-
-    synthesizer = LlmGroundedAnswerSynthesizer(
-        db=object(),
-        workspace_id="ws-1",
-        actor_user_id="user-1",
-        principal_kind="user",
-        principal_id="user-1",
-        source="test.rag",
-        conversation_id="conversation-1",
-        agent_run_id="agent-run-1",
-    )
-
-    answer = synthesizer.synthesize(query="현재 리스크는?", hits=[hit], timeout_ms=1200)
-
-    assert answer is not None
-    assert answer.text == "예산 리스크가 상승했습니다."
-    assert answer.citations[0].resource_id == "doc-1"
-    assert answer.unsupported_claims == ["확인되지 않은 주장"]
-
-
-def test_llm_grounded_answer_synthesizer_routes_through_llm_runtime(monkeypatch) -> None:
-    captured: dict[str, object] = {}
-    hit = SimpleNamespace(
-        resource_id="doc-1",
-        source_kind="manual",
-        summary="Budget risk increased after supplier repricing.",
-        title="Budget Review",
-        citation="doc-1:0",
-    )
-
-    def _fake_complete_chat(context, db, *, messages, **kwargs):
-        captured["context"] = context
-        captured["db"] = db
-        captured["messages"] = messages
-        captured["kwargs"] = kwargs
-        response = SimpleNamespace(
-            choices=[
-                SimpleNamespace(
-                    message=SimpleNamespace(
-                        content=(
-                            '{"statements":['
-                            '{"text":"예산 리스크가 상승했습니다.","citation_indexes":[1]}'
-                            '],"unsupported_claims":[]}'
-                        )
-                    )
-                )
-            ]
-        )
-        return response, None, None
-
-    monkeypatch.setattr(
-        "ai_do_api.domains.rag.grounded_answer.complete_chat",
-        _fake_complete_chat,
-    )
-
-    synthesizer = LlmGroundedAnswerSynthesizer(
-        db=object(),
-        workspace_id="ws-1",
-        actor_user_id="user-1",
-        principal_kind="user",
-        principal_id="user-1",
-        source="api.stream",
-        conversation_id="conversation-1",
-        agent_run_id="agent-run-1",
-    )
-
-    answer = synthesizer.synthesize(query="현재 리스크는?", hits=[hit], timeout_ms=1200)
-
-    assert answer is not None
-    context = captured["context"]
-    kwargs = captured["kwargs"]
-    assert context.task_kind == "rag_grounded_answer"
-    assert context.source == "api.stream"
-    assert context.workspace_id == "ws-1"
-    assert context.actor_user_id == "user-1"
-    assert context.principal_kind == "user"
-    assert context.principal_id == "user-1"
-    assert kwargs["agent_run_id"] == "agent-run-1"
-    assert kwargs["conversation_id"] == "conversation-1"
-    assert kwargs["timeout_seconds"] == pytest.approx(1.2)
-    assert kwargs["reasoning_effort"] == "none"
-    assert kwargs["temperature"] == 0
-    assert kwargs["max_tokens"] == 1200
-
-
-def test_workspace_rag_query_builds_llm_grounded_answer_synthesizer(monkeypatch) -> None:
-    captured: dict[str, object] = {}
-
-    class _StubQueryService:
-        def query(self, request, *, post_filter, grounded_answer_synthesizer=None):
-            del post_filter
-            captured["request"] = request
-            captured["grounded_answer_synthesizer"] = grounded_answer_synthesizer
-            return RagQueryResponse(
-                query=request.query,
-                answer_mode=request.answer_mode,
-                hits=[],
-                grounded_answer=None,
-                sources_used=[],
-                query_profile={},
-                latency_ms=0,
-            )
-
-    monkeypatch.setattr(
-        rag_application,
-        "list_workspace_rag_sources",
-        lambda *args, **kwargs: [
-            {
-                "source_kind": "manual",
-                "resource_type": "docs_native_doc",
-                "label": "Docs / Manual",
-                "app_id": "docs",
-            }
-        ],
-    )
-    monkeypatch.setattr(
-        rag_application,
-        "resolve_workspace_enabled_app_ids",
-        lambda db, workspace_id: {"ai", "docs"},
-    )
-    monkeypatch.setattr(rag_application, "ensure_default_collection_ready", lambda *args, **kwargs: "rag-test")
-    monkeypatch.setattr(rag_application, "resolve_default_collection_name", lambda settings: "rag-test")
-    monkeypatch.setattr(rag_application, "build_user_rag_post_filter", lambda db, user: lambda hit: True)
-
-    response = rag_application.query_workspace_rag(
-        db=object(),
-        workspace=SimpleNamespace(id="ws-1"),
-        user=SimpleNamespace(id="user-1"),
-        query="budget risk",
-        answer_mode=RagAnswerMode.GROUNDED_ANSWER,
-        source_kinds=[],
-        filters={},
-        top_k=8,
-        include_binary_hits=False,
-        settings=SimpleNamespace(rag_enabled=True),
-        query_service=_StubQueryService(),
-        source="api.stream",
-        principal_kind="user",
-        principal_id="user-1",
-        conversation_id="conversation-1",
-        agent_run_id="agent-run-1",
-    )
-
-    assert response.answer_mode == RagAnswerMode.GROUNDED_ANSWER
-    assert isinstance(captured["grounded_answer_synthesizer"], LlmGroundedAnswerSynthesizer)
 
 
 def test_workspace_rag_query_wraps_provider_failures_as_unavailable(monkeypatch) -> None:
@@ -216,12 +39,20 @@ def test_workspace_rag_query_wraps_provider_failures_as_unavailable(monkeypatch)
     )
     monkeypatch.setattr(
         rag_application,
-        "resolve_workspace_enabled_app_ids",
-        lambda db, workspace_id: {"ai", "docs"},
+        "resolve_workspace_runtime_enabled_app_ids",
+        lambda db, workspace_id: {"chatbot", "docs"},
     )
-    monkeypatch.setattr(rag_application, "ensure_default_collection_ready", lambda *args, **kwargs: "rag-test")
-    monkeypatch.setattr(rag_application, "resolve_default_collection_name", lambda settings: "rag-test")
-    monkeypatch.setattr(rag_application, "build_user_rag_post_filter", lambda db, user: lambda hit: True)
+    monkeypatch.setattr(
+        rag_application, "ensure_default_collection_ready", lambda *args, **kwargs: "rag-test"
+    )
+    monkeypatch.setattr(
+        rag_application, "resolve_default_collection_name", lambda settings: "rag-test"
+    )
+    monkeypatch.setattr(
+        rag_application,
+        "build_user_rag_post_filter",
+        lambda db, user, **kwargs: lambda hit: True,
+    )
 
     with pytest.raises(rag_application.RagUnavailableError) as exc_info:
         rag_application.query_workspace_rag(
@@ -268,10 +99,14 @@ def test_query_service_marks_grounded_answer_as_degraded_when_synthesizer_return
     )
 
     class _NullSynthesizer:
+        timeout_ms: int | None = -1
+
         def synthesize(self, *, query: str, hits, timeout_ms: int | None = None):
-            del query, hits, timeout_ms
+            del query, hits
+            self.timeout_ms = timeout_ms
             return None
 
+    synthesizer = _NullSynthesizer()
     response = rag_query.query(
         RagQueryRequest(
             collection="rag-grounded-answer",
@@ -280,9 +115,120 @@ def test_query_service_marks_grounded_answer_as_degraded_when_synthesizer_return
             answer_mode=RagAnswerMode.GROUNDED_ANSWER,
             source_kinds=["manual"],
         ),
-        grounded_answer_synthesizer=_NullSynthesizer(),
+        grounded_answer_synthesizer=synthesizer,
     )
 
     assert response.hits
-    assert response.grounded_answer is None
+    assert response.grounded_answer is not None
+    assert "Budget risk increased" in response.grounded_answer.text
     assert response.query_profile["grounded_answer_degraded"] is True
+    assert synthesizer.timeout_ms is None
+
+
+def test_grounded_answer_assembler_accepts_provider_schema_drift() -> None:
+    answer = GroundedAnswerAssembler().assemble(
+        raw_content=(
+            '{"statements":[{"text":"복지제도 요약","citation_indexes":["1"],'
+            '"confidence":0.9}],"unsupported_claims":[],"notes":"ignored"}'
+        ),
+        hits=[_hit()],
+    )
+
+    assert answer is not None
+    assert answer.text == "복지제도 요약"
+    assert [citation.resource_id for citation in answer.citations] == ["doc-1"]
+
+
+def test_grounded_answer_stream_prompt_returns_plain_markdown_contract() -> None:
+    messages = GroundedAnswerAssembler().build_stream_messages(
+        query="복지제도 정리해줘",
+        hits=[_hit()],
+    )
+
+    assert messages[0]["role"] == "system"
+    assert "plain Markdown answer text only" in messages[0]["content"]
+    assert "not JSON" in messages[0]["content"]
+    assert "Do not include a separate sources" in messages[0]["content"]
+    assert '<evidence index="1">' in messages[1]["content"]
+
+
+def test_llm_grounded_answer_uses_task_token_budget(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_execute_llm(workload_id, context, db, **kwargs):
+        captured["workload_id"] = workload_id
+        captured["context"] = context
+        captured["kwargs"] = kwargs
+        captured["db"] = db
+        completion = SimpleNamespace(
+            text='{"statements":[{"text":"복지제도 요약","citation_indexes":[1]}],'
+            '"unsupported_claims":[]}',
+            finish_reason="stop",
+        )
+        return SimpleNamespace(completion=completion)
+
+    monkeypatch.setattr(
+        grounded_answer,
+        "execute_llm",
+        fake_execute_llm,
+    )
+    synthesizer = _llm_synthesizer()
+
+    answer = synthesizer.synthesize(query="복지제도 정리해줘", hits=[_hit()])
+
+    assert answer is not None
+    assert answer.text == "복지제도 요약"
+    assert captured["workload_id"] == "rag_grounded_answer"
+    assert captured["context"].app_id == "rag"
+    context_pack = captured["kwargs"]["context_pack"]
+    assert context_pack.context_strategy == "rag_grounded_answer_evidence"
+    assert context_pack.source_kinds == ("qna_doc",)
+    assert context_pack.sensitivity_labels == ("internal",)
+    assert context_pack.content_origin == "internal_context"
+    assert captured["kwargs"].get("max_tokens") is None
+    assert captured["kwargs"].get("timeout_seconds") is None
+
+
+def test_llm_grounded_answer_rejects_truncated_completion(monkeypatch) -> None:
+    def fake_execute_llm(workload_id, context, db, **kwargs):
+        del workload_id, context, db, kwargs
+        completion = SimpleNamespace(
+            text='{"statements":[{"text":"잘린 답변","citation_indexes":[1]}]',
+            finish_reason="length",
+        )
+        return SimpleNamespace(completion=completion)
+
+    monkeypatch.setattr(
+        grounded_answer,
+        "execute_llm",
+        fake_execute_llm,
+    )
+    synthesizer = _llm_synthesizer()
+
+    with pytest.raises(ValueError, match="did not finish cleanly"):
+        synthesizer.synthesize(query="복지제도 정리해줘", hits=[_hit()])
+
+
+def _llm_synthesizer() -> LlmGroundedAnswerSynthesizer:
+    return LlmGroundedAnswerSynthesizer(
+        db=object(),
+        workspace_id="ws-1",
+        actor_user_id="user-1",
+        principal_kind="user",
+        principal_id="user-1",
+        source="api.qna.ask",
+    )
+
+
+def _hit():
+    return SimpleNamespace(
+        source_kind="qna_doc",
+        resource_type="qna_document",
+        resource_id="doc-1",
+        workspace_id="ws-1",
+        title="복지제도 기준",
+        summary="복지제도 기준",
+        excerpt="건강검진, 가족수당, 경조비, 장기근속 포상",
+        score=0.9,
+        citation="[첨부: 복지제도.pdf] [p.1]",
+    )

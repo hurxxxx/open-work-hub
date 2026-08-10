@@ -9,14 +9,14 @@
 //   - user timeZone with KST default, firstDay: 0 (Sun-first per user pref), weekNumbers ISO, locale ko
 //   - Sunday rendered in red (CSS via .fc-day-sun in fullcalendar-theme.css)
 //   - selectable + editable + eventDurationEditable
-//   - dayMaxEvents: 2 with "+N더" expansion (Korean density per D6)
+//   - dayMaxEvents defaults to 2 with "+N더" expansion (Korean density per D6)
 //   - Source-type colors via CalendarEvent.color (D5)
 //   - Korean holidays optionally inject as background events
 //
 // Styling: theme is applied globally via apps/web/src/styles/fullcalendar-theme.css
 // which overrides FullCalendar CSS variables to match the app's design tokens
 // (light + dark mode). This component does NOT inline styles.
-import { forwardRef, useImperativeHandle, useMemo, useRef } from 'react';
+import { useImperativeHandle, useMemo, useRef, type Ref } from 'react';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
@@ -26,6 +26,8 @@ import luxon3Plugin from '@fullcalendar/luxon3';
 import koLocale from '@fullcalendar/core/locales/ko';
 import type {
   EventInput,
+  EventContentArg,
+  EventHoveringArg,
   EventClickArg,
   DateSelectArg,
   DatesSetArg,
@@ -33,9 +35,18 @@ import type {
 } from '@fullcalendar/core';
 import type { EventResizeDoneArg } from '@fullcalendar/interaction';
 
-import type { CalendarEvent } from '@/src/platform/calendar/calendar-types';
-import { getKoreanHolidayNames } from '@/src/lib/korean-holidays';
 import { DEFAULT_TIME_ZONE, normalizeTimeZone } from '@/src/platform/time/time-utils';
+import type { CalendarEvent } from '@/src/platform/calendar/calendar-types';
+import {
+  buildDateSelectPayload,
+  buildDatesSetPayload,
+  buildEventDropPayload,
+  buildEventResizePayload,
+  getCalendarEventOriginal,
+  getKoreanHolidayDayClass,
+  getKoreanHolidayLabel,
+  toFullCalendarEvent,
+} from './unified-calendar-adapter';
 
 export type UnifiedCalendarView =
   | 'dayGridMonth'
@@ -67,6 +78,10 @@ export interface UnifiedCalendarProps {
   }) => void;
   /** Fired when user clicks an existing event chip. */
   onEventClick?: (event: CalendarEvent, anchorEl: HTMLElement) => void;
+  /** Fired when the pointer enters an existing event chip. */
+  onEventMouseEnter?: (event: CalendarEvent, anchorEl: HTMLElement) => void;
+  /** Fired when the pointer leaves an existing event chip. */
+  onEventMouseLeave?: (event: CalendarEvent, anchorEl: HTMLElement) => void;
   /** Fired when user drag-selects an empty time range to create a new event.
    *  ``anchor`` carries the pointer coordinates from the select gesture so the
    *  host can position a popover near the click. */
@@ -107,6 +122,14 @@ export interface UnifiedCalendarProps {
   ) => void;
   /** Whether to inject Korean holidays as background events (red). Default true. */
   showKoreanHolidays?: boolean;
+  /**
+   * Month-view overflow behavior. Default ``2`` preserves Planner density with
+   * FullCalendar's "+N더" link. Pass ``false`` for views that should grow rows
+   * and show every event.
+   */
+  dayMaxEvents?: boolean | number;
+  /** Optional source-specific class names for FullCalendar event elements. */
+  eventClassNames?: (event: CalendarEvent) => string[];
   /** IANA timezone used by FullCalendar. Defaults to Korea Standard Time. */
   timeZone?: string;
   /**
@@ -118,6 +141,11 @@ export interface UnifiedCalendarProps {
    * for ``'100%'`` to resolve correctly.
    */
   height?: number | string;
+  /**
+   * Wrapper layout. ``fill`` keeps legacy absolute positioning for Planner.
+   * ``content`` lets the calendar own its height and grow inside a scroll area.
+   */
+  layout?: 'fill' | 'content';
   /** Optional className for outer wrapper. */
   className?: string;
 }
@@ -130,51 +158,26 @@ const PLUGINS = [
   luxon3Plugin,
 ];
 
-function calendarEventToFc(event: CalendarEvent): EventInput {
-  return {
-    id: event.id,
-    title: event.title,
-    start: event.start,
-    end: event.end,
-    allDay: event.allDay,
-    backgroundColor: event.color,
-    borderColor: event.color,
-    extendedProps: {
-      sourceType: event.sourceType,
-      sourceId: event.sourceId,
-      metadata: event.metadata,
-      // Roundtrip the original CalendarEvent so callbacks can return it
-      // without rebuilding from FC's EventApi shape.
-      original: event,
-    },
-  };
-}
-
-function koreanHolidayDayClass(date: Date): string[] {
-  // Tag the day cell so CSS can color the day number red. We previously
-  // injected a background event with a pink fill, but that clashed with the
-  // app's minimal styling — the user preferred a plain white background with
-  // just the date number in red. See fullcalendar-theme.css `.fc-korean-holiday`.
-  const names = getKoreanHolidayNames(date.getFullYear(), date.getMonth(), date.getDate());
-  return names ? ['fc-korean-holiday'] : [];
-}
-
-export const UnifiedCalendar = forwardRef<UnifiedCalendarHandle, UnifiedCalendarProps>(
-  function UnifiedCalendar(props, ref) {
-    const {
-      events,
-      initialView = 'dayGridMonth',
-      initialDate,
-      onDatesSet,
-      onEventClick,
-      onDateSelect,
-      onEventDrop,
-      onEventResize,
-      showKoreanHolidays = true,
-      timeZone = DEFAULT_TIME_ZONE,
-      height = '100%',
-      className,
-    } = props;
+export function UnifiedCalendar({
+  events,
+  initialView = 'dayGridMonth',
+  initialDate,
+  onDatesSet,
+  onEventClick,
+  onEventMouseEnter,
+  onEventMouseLeave,
+  onDateSelect,
+  onEventDrop,
+  onEventResize,
+  showKoreanHolidays = true,
+  dayMaxEvents = 2,
+  eventClassNames,
+  timeZone = DEFAULT_TIME_ZONE,
+  height = '100%',
+  layout = 'fill',
+  className,
+  ref,
+}: UnifiedCalendarProps & { ref?: Ref<UnifiedCalendarHandle> }) {
     const resolvedTimeZone = normalizeTimeZone(timeZone);
 
     const calendarRef = useRef<FullCalendar | null>(null);
@@ -193,13 +196,19 @@ export const UnifiedCalendar = forwardRef<UnifiedCalendarHandle, UnifiedCalendar
     );
 
     const fcEvents = useMemo<EventInput[]>(
-      () => events.map(calendarEventToFc),
+      () => events.map(toFullCalendarEvent),
       [events],
     );
+    const wrapperClassName = [
+      layout === 'fill' ? 'absolute inset-0' : 'relative min-h-full',
+      className,
+    ]
+      .filter(Boolean)
+      .join(' ');
 
     return (
       <div
-        className={`absolute inset-0 ${className ?? ''}`.trim()}
+        className={wrapperClassName}
         data-unified-calendar=""
       >
         <FullCalendar
@@ -214,35 +223,49 @@ export const UnifiedCalendar = forwardRef<UnifiedCalendarHandle, UnifiedCalendar
           weekNumberCalculation="ISO"
           headerToolbar={false}
           nowIndicator
-          dayMaxEvents={2}
+          dayMaxEvents={dayMaxEvents}
           selectable={Boolean(onDateSelect)}
           editable={Boolean(onEventDrop || onEventResize)}
           eventDurationEditable={Boolean(onEventResize)}
           height={height}
           events={fcEvents}
+          eventClassNames={
+            eventClassNames
+              ? (arg: EventContentArg) => {
+                  const original = getCalendarEventOriginal(arg.event);
+                  return original ? eventClassNames(original) : [];
+                }
+              : undefined
+          }
+          eventMouseEnter={(arg: EventHoveringArg) => {
+            const original = getCalendarEventOriginal(arg.event);
+            if (!original) return;
+            onEventMouseEnter?.(original, arg.el);
+          }}
+          eventMouseLeave={(arg: EventHoveringArg) => {
+            const original = getCalendarEventOriginal(arg.event);
+            if (!original) return;
+            onEventMouseLeave?.(original, arg.el);
+          }}
           datesSet={(arg: DatesSetArg) => {
-            const currentDate = calendarRef.current?.getApi().getDate() ?? arg.start;
+            const payload = buildDatesSetPayload(arg);
             onDatesSet?.({
-              view: arg.view.type as UnifiedCalendarView,
-              currentDate,
-              rangeStart: arg.start,
-              rangeEnd: arg.end,
+              view: payload.view as UnifiedCalendarView,
+              currentDate: payload.currentDate,
+              rangeStart: payload.rangeStart,
+              rangeEnd: payload.rangeEnd,
             });
           }}
           dayCellClassNames={
             showKoreanHolidays
-              ? (arg) => koreanHolidayDayClass(arg.date)
+              ? (arg) => getKoreanHolidayDayClass(arg.date)
               : undefined
           }
           dayCellDidMount={
             showKoreanHolidays
               ? (arg) => {
-                  const names = getKoreanHolidayNames(
-                    arg.date.getFullYear(),
-                    arg.date.getMonth(),
-                    arg.date.getDate(),
-                  );
-                  if (!names) return;
+                  const labelText = getKoreanHolidayLabel(arg.date);
+                  if (!labelText) return;
                   // Inject the holiday label as a sibling of the day-top area
                   // (inside the day frame) so it flows as its own block line
                   // below the date number rather than being squeezed into the
@@ -254,7 +277,7 @@ export const UnifiedCalendar = forwardRef<UnifiedCalendarHandle, UnifiedCalendar
                   const top = frame.querySelector('.fc-daygrid-day-top');
                   const label = document.createElement('div');
                   label.className = 'fc-korean-holiday-label';
-                  label.textContent = names.join(', ');
+                  label.textContent = labelText;
                   if (top && top.nextSibling) {
                     frame.insertBefore(label, top.nextSibling);
                   } else {
@@ -264,47 +287,30 @@ export const UnifiedCalendar = forwardRef<UnifiedCalendarHandle, UnifiedCalendar
               : undefined
           }
           select={(arg: DateSelectArg) => {
-            const native = arg.jsEvent as MouseEvent | null | undefined;
-            const anchor =
-              native && typeof native.clientX === 'number' && typeof native.clientY === 'number'
-                ? { x: native.clientX, y: native.clientY }
-                : null;
-            onDateSelect?.({
-              start: arg.start,
-              end: arg.end,
-              allDay: arg.allDay,
-              anchor,
-            });
+            onDateSelect?.(buildDateSelectPayload(arg));
           }}
           eventClick={(arg: EventClickArg) => {
-            const original = arg.event.extendedProps.original as
-              | CalendarEvent
-              | undefined;
+            const original = getCalendarEventOriginal(arg.event);
             if (!original) return;
             onEventClick?.(original, arg.el);
           }}
           eventDrop={(arg: EventDropArg) => {
-            const original = arg.event.extendedProps.original as
-              | CalendarEvent
-              | undefined;
-            if (!original || !arg.event.startStr) return;
+            const payload = buildEventDropPayload(arg);
+            if (!payload) return;
             onEventDrop?.(
-              original,
-              arg.event.startStr,
-              arg.event.endStr || arg.event.startStr,
-              arg.event.allDay,
-              arg.revert,
+              payload.event,
+              payload.newStart,
+              payload.newEnd,
+              payload.newAllDay,
+              payload.revert,
             );
           }}
           eventResize={(arg: EventResizeDoneArg) => {
-            const original = arg.event.extendedProps.original as
-              | CalendarEvent
-              | undefined;
-            if (!original || !arg.event.endStr) return;
-            onEventResize?.(original, arg.event.endStr, arg.revert);
+            const payload = buildEventResizePayload(arg);
+            if (!payload) return;
+            onEventResize?.(payload.event, payload.newEnd, payload.revert);
           }}
         />
       </div>
     );
-  },
-);
+}

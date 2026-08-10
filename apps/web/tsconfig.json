@@ -2,18 +2,24 @@
   "compilerOptions": {
     "jsx": "react-jsx",
     "allowJs": false,
-    "esModuleInterop": false,
     "allowSyntheticDefaultImports": true,
     "strict": true,
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "types": ["vite/client", "vitest"],
-    "baseUrl": ".",
+    "rootDir": "../..",
     "paths": {
+      "@ai-do/contracts": ["../../packages/contracts/src/index.ts"],
+      "@ai-do/contracts/openapi": [
+        "../../packages/contracts/src/openapi.generated.d.ts"
+      ],
+      "@ai-do/contracts/*": ["../../packages/contracts/src/*"],
+      "@ai-do/core-web": ["../../packages/core-web/src/index.ts"],
+      "@ai-do/core-web/*": ["../../packages/core-web/src/*"],
       "@ai-do/ui": ["../../packages/ui/src/index.ts"],
       "@ai-do/ui/*": ["../../packages/ui/src/lib/*"],
       "@ai-do/ui/styles.css": ["../../packages/ui/styles.css"],
-      "@/src/*": ["src/*"]
+      "@/src/*": ["./src/*"]
     }
   },
   "files": [],

@@ -1,0 +1,41 @@
+import { describe, expect, it } from 'vitest';
+
+import { normalizeUsageRoutePath, resolveUsageEventAppId } from './usage-route';
+
+describe('normalizeUsageRoutePath', () => {
+  it('groups workspace routes without preserving workspace slugs or ids', () => {
+    expect(
+      normalizeUsageRoutePath(
+        '/w/product-dev/docs/items/550e8400-e29b-41d4-a716-446655440000',
+      ),
+    ).toBe('/w/:workspace/docs/items/:id');
+  });
+
+  it('keeps stable admin routes readable', () => {
+    expect(normalizeUsageRoutePath('/admin/general/usage')).toBe(
+      '/admin/general/usage',
+    );
+  });
+});
+
+describe('resolveUsageEventAppId', () => {
+  it('uses the leaf bootstrap app id for usage events', () => {
+    expect(
+      resolveUsageEventAppId({
+        activeAppId: 'collaboration',
+        activeNavItemId: 'docs-my',
+        navItems: [{ app_id: 'docs', id: 'docs-my' }],
+      }),
+    ).toBe('docs');
+  });
+
+  it('falls back to the active app when the nav item has no app id', () => {
+    expect(
+      resolveUsageEventAppId({
+        activeAppId: 'collaboration',
+        activeNavItemId: 'collaboration-home',
+        navItems: [{ id: 'collaboration-home' }],
+      }),
+    ).toBe('collaboration');
+  });
+});

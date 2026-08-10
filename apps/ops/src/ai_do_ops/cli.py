@@ -1,27 +1,33 @@
 import argparse
-import json
 from pathlib import Path
+from typing import Sequence
+
+from ai_do_ops.scenario_catalog import (
+    DEFAULT_SCENARIO_DIR,
+    ScenarioCatalogError,
+    list_scenario_ids,
+)
+
+SCENARIO_DIR = DEFAULT_SCENARIO_DIR
 
 
-ROOT = Path(__file__).resolve().parents[4]
-SCENARIO_DIR = ROOT / "docs" / "harness" / "manifests" / "scenarios"
-
-
-def list_scenarios() -> int:
-    for path in sorted(SCENARIO_DIR.glob("*.json")):
-        payload = json.loads(path.read_text(encoding="utf-8"))
-        print(payload["scenario_id"])
+def list_scenarios(scenario_dir: Path = SCENARIO_DIR) -> int:
+    for scenario_id in list_scenario_ids(scenario_dir):
+        print(scenario_id)
     return 0
 
 
-def main() -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="AI-DO ops scaffold")
     subparsers = parser.add_subparsers(dest="command")
     subparsers.add_parser("list-scenarios", help="List scenario ids from the harness manifests")
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.command == "list-scenarios":
-        return list_scenarios()
+        try:
+            return list_scenarios()
+        except ScenarioCatalogError as exc:
+            parser.exit(1, f"error: {exc}\n")
 
     parser.print_help()
     return 0

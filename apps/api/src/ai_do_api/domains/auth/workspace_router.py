@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ai_do_api.core.db import get_db_session
@@ -10,39 +9,24 @@ from ai_do_api.domains.auth.access import (
 )
 from ai_do_api.domains.auth.dependencies import require_current_user, require_current_workspace
 from ai_do_api.domains.auth.models import User, Workspace
+from ai_do_api.domains.auth.workspace_bootstrap_schemas import (
+    WorkspaceBootstrapAppBarCategoryItemResponse,
+    WorkspaceBootstrapAppBarCategoryResponse,
+    WorkspaceBootstrapAppResponse,
+    WorkspaceBootstrapNavItemResponse,
+    WorkspaceBootstrapResponse,
+    WorkspaceBootstrapWorkspaceResponse,
+)
 
-
-class WorkspaceBootstrapWorkspaceResponse(BaseModel):
-    id: str
-    slug: str
-    name: str
-    role: str
-
-
-class WorkspaceBootstrapNavItemResponse(BaseModel):
-    id: str
-    app_id: str
-    title: str
-    category: str
-    icon_key: str
-    link_app_id: str | None = None
-    path_suffix: str | None = None
-    absolute_path: str | None = None
-
-
-class WorkspaceBootstrapAppResponse(BaseModel):
-    app_id: str
-    title: str
-    route_base: str
-    icon_key: str
-    enabled: bool
-    nav_items: list[WorkspaceBootstrapNavItemResponse]
-
-
-class WorkspaceBootstrapResponse(BaseModel):
-    workspace: WorkspaceBootstrapWorkspaceResponse
-    apps: list[WorkspaceBootstrapAppResponse]
-    nav: list[WorkspaceBootstrapNavItemResponse]
+__all__ = [
+    "WorkspaceBootstrapAppBarCategoryItemResponse",
+    "WorkspaceBootstrapAppBarCategoryResponse",
+    "WorkspaceBootstrapAppResponse",
+    "WorkspaceBootstrapNavItemResponse",
+    "WorkspaceBootstrapResponse",
+    "WorkspaceBootstrapWorkspaceResponse",
+    "router",
+]
 
 
 router = APIRouter(prefix="/workspaces/{workspace_slug}", tags=["workspaces"])

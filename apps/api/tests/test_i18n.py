@@ -27,6 +27,7 @@ def test_translate_auth_and_admin_validation_messages() -> None:
     email_message = LocalizedApiMessage(code="auth.valid_email_required")
     locale_message = LocalizedApiMessage(code="auth.invalid_locale")
     time_zone_message = LocalizedApiMessage(code="auth.invalid_time_zone")
+    date_format_message = LocalizedApiMessage(code="auth.invalid_date_format")
     role_message = LocalizedApiMessage(code="admin.invalid_workspace_role")
 
     assert translate_message(email_message, "en-US") == "A valid email address is required."
@@ -35,6 +36,8 @@ def test_translate_auth_and_admin_validation_messages() -> None:
     assert translate_message(locale_message, "ko-KR") == "locale이 올바르지 않습니다."
     assert translate_message(time_zone_message, "en-US") == "Invalid time zone."
     assert translate_message(time_zone_message, "ko-KR") == "time zone이 올바르지 않습니다."
+    assert translate_message(date_format_message, "en-US") == "Invalid date format."
+    assert translate_message(date_format_message, "ko-KR") == "날짜 형식이 올바르지 않습니다."
     assert translate_message(role_message, "en-US") == "Invalid workspace role."
     assert translate_message(role_message, "ko-KR") == "워크스페이스 역할이 올바르지 않습니다."
 
@@ -81,8 +84,8 @@ def test_translate_domain_message_interpolates_dynamic_values() -> None:
         params={"count": 3},
     )
 
-    assert translate_message(message, "en-US") == "Cannot delete status: 3 issue(s) are using it."
-    assert translate_message(message, "ko-KR") == "상태를 삭제할 수 없습니다. 3개의 이슈가 사용 중입니다."
+    assert translate_message(message, "en-US") == "Cannot delete status: 3 task(s) are using it."
+    assert translate_message(message, "ko-KR") == "상태를 삭제할 수 없습니다. 3개의 태스크가 사용 중입니다."
 
 
 def test_translate_search_backend_message_preserves_dynamic_reason() -> None:
@@ -225,10 +228,10 @@ def test_translate_ai_tool_domain_validation_messages() -> None:
         "Planner 이벤트 업데이트에는 변경할 필드를 하나 이상 제공해야 합니다."
     )
     assert translate_message(pms_mutation, "en-US") == (
-        "PMS issue updates must provide at least one mutable field."
+        "PMS task updates must provide at least one mutable field."
     )
     assert translate_message(pms_mutation, "ko-KR") == (
-        "PMS 이슈 업데이트에는 변경할 필드를 하나 이상 제공해야 합니다."
+        "PMS 태스크 업데이트에는 변경할 필드를 하나 이상 제공해야 합니다."
     )
 
 

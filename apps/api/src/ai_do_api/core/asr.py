@@ -1,60 +1,28 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Callable, Literal, Protocol, cast
+from typing import Any, Callable
 
 import httpx
 
+from ai_do_api.core.asr_backend_registry import (
+    ASRBackendDescriptor,
+    build_registered_asr_backend,
+    has_asr_backend,
+    register_asr_backend,
+)
+from ai_do_api.core.asr_contracts import (
+    ASRBackend,
+    ASRBackendName,
+    ASRHealth,
+    PermanentError,
+    TranscriptResult,
+    TranscriptSegment,
+    TransientError,
+)
+from ai_do_api.core.asr_payloads import parse_transcript_payload
 from ai_do_api.core.settings import get_settings
-
-
-ASRBackendName = Literal["cohere", "qwen_asr", "whisper", "deepinfra"]
-
-
-class TransientError(Exception):
-    pass
-
-
-class PermanentError(Exception):
-    pass
-
-
-@dataclass(frozen=True)
-class ASRHealth:
-    backend: ASRBackendName
-    ready: bool
-    detail: str | None = None
-
-
-@dataclass(frozen=True)
-class TranscriptSegment:
-    start: float
-    end: float
-    text: str
-
-
-@dataclass(frozen=True)
-class TranscriptResult:
-    text: str
-    segments: list[TranscriptSegment]
-    language: str | None = None
-    duration_sec: float | None = None
-
-
-class ASRBackend(Protocol):
-    name: ASRBackendName
-
-    def healthcheck(self) -> ASRHealth: ...
-
-    def transcribe(
-        self,
-        audio_path: Path,
-        *,
-        language_hint: str | None = None,
-        on_progress: Callable[[float], None] | None = None,
-    ) -> TranscriptResult: ...
 
 
 class CohereASRBackend:
@@ -66,7 +34,8 @@ class CohereASRBackend:
         self.base_url = base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
 
-    def healthcheck(self) -> ASRHealth:
+    def healthcheck(self, *, deep: bool = False) -> ASRHealth:
+        del deep
         if not self.api_key:
             return ASRHealth(backend="cohere", ready=False, detail="Missing Cohere API key.")
         return ASRHealth(backend="cohere", ready=True)
@@ -105,102 +74,11 @@ class CohereASRBackend:
             raise PermanentError(f"Cohere transcription failed: {response.status_code} {response.text}")
 
         payload = response.json()
-        text = (
-            payload.get("text")
-            or payload.get("transcript")
-            or payload.get("results", {}).get("text")
-            or ""
-        )
-        segments_payload = payload.get("segments") or payload.get("results", {}).get("segments") or []
-        segments = [
-            TranscriptSegment(
-                start=float(item.get("start", 0.0)),
-                end=float(item.get("end", item.get("start", 0.0))),
-                text=str(item.get("text", "")),
-            )
-            for item in segments_payload
-        ]
-        if on_progress is not None:
-            on_progress(1.0)
-        return TranscriptResult(
-            text=text.strip(),
-            segments=segments,
-            language=payload.get("language"),
-            duration_sec=payload.get("duration") or payload.get("duration_sec"),
-        )
-
-
-class DeepInfraASRBackend:
-    name: ASRBackendName = "deepinfra"
-
-    def __init__(self, *, api_key: str, model: str, base_url: str, timeout_seconds: float) -> None:
-        self.api_key = api_key.strip()
-        self.model = model.strip().strip("/")
-        self.base_url = base_url.rstrip("/")
-        self.timeout_seconds = timeout_seconds
-
-    def healthcheck(self) -> ASRHealth:
-        if not self.api_key:
-            return ASRHealth(backend="deepinfra", ready=False, detail="Missing DeepInfra API key.")
-        if not self.model:
-            return ASRHealth(backend="deepinfra", ready=False, detail="Missing DeepInfra ASR model.")
-        return ASRHealth(backend="deepinfra", ready=True)
-
-    def transcribe(
-        self,
-        audio_path: Path,
-        *,
-        language_hint: str | None = None,
-        on_progress: Callable[[float], None] | None = None,
-    ) -> TranscriptResult:
-        if not self.api_key:
-            raise PermanentError("DeepInfra API key is not configured.")
-        if not self.model:
-            raise PermanentError("DeepInfra ASR model is not configured.")
-        if on_progress is not None:
-            on_progress(0.1)
-
-        data: dict[str, str] = {}
-        if language_hint:
-            data["language"] = language_hint
-        try:
-            with audio_path.open("rb") as audio_file:
-                response = httpx.post(
-                    f"{self.base_url}/{self.model}",
-                    headers={"Authorization": f"Bearer {self.api_key}"},
-                    files={"audio": (audio_path.name, audio_file, "application/octet-stream")},
-                    data=data or None,
-                    timeout=self.timeout_seconds,
-                )
-        except (httpx.TimeoutException, httpx.NetworkError) as exc:
-            raise TransientError(str(exc)) from exc
-        except httpx.HTTPError as exc:
-            raise PermanentError(str(exc)) from exc
-
-        if response.status_code in {408, 409, 425, 429} or response.status_code >= 500:
-            raise TransientError(f"DeepInfra transcription failed: {response.status_code}")
-        if response.status_code >= 400:
-            raise PermanentError(
-                f"DeepInfra transcription failed: {response.status_code} {response.text}"
-            )
-
-        try:
-            payload = response.json()
-        except ValueError as exc:
-            raise PermanentError("DeepInfra transcription returned invalid JSON.") from exc
         if not isinstance(payload, dict):
-            raise PermanentError("DeepInfra transcription returned an unexpected payload.")
-
-        text = _payload_text(payload)
-        segments = _payload_segments(payload)
+            raise PermanentError("Cohere returned an invalid transcription payload.")
         if on_progress is not None:
             on_progress(1.0)
-        return TranscriptResult(
-            text=text.strip(),
-            segments=segments,
-            language=_payload_string(payload, "language") or language_hint,
-            duration_sec=_payload_float(payload, "duration") or _payload_float(payload, "duration_sec"),
-        )
+        return parse_transcript_payload(payload, language_hint=language_hint)
 
 
 class QwenASRBackend:
@@ -225,7 +103,19 @@ class QwenASRBackend:
         self._processor = AutoProcessor.from_pretrained(self.model_repo)
         return self._model, self._processor
 
-    def healthcheck(self) -> ASRHealth:
+    def healthcheck(self, *, deep: bool = False) -> ASRHealth:
+        try:
+            from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor  # type: ignore  # noqa: F401
+            import torch  # type: ignore  # noqa: F401
+            import torchaudio  # type: ignore  # noqa: F401
+        except ImportError as exc:
+            return ASRHealth(backend="qwen_asr", ready=False, detail=str(exc))
+        if not deep:
+            return ASRHealth(backend="qwen_asr", ready=True)
+        try:
+            self._load()
+        except Exception as exc:  # noqa: BLE001 - deep readiness surfaces backend load failures.
+            return ASRHealth(backend="qwen_asr", ready=False, detail=str(exc))
         return ASRHealth(backend="qwen_asr", ready=True)
 
     def transcribe(
@@ -282,7 +172,17 @@ class WhisperASRBackend:
         )
         return self._model
 
-    def healthcheck(self) -> ASRHealth:
+    def healthcheck(self, *, deep: bool = False) -> ASRHealth:
+        try:
+            from faster_whisper import WhisperModel  # type: ignore  # noqa: F401
+        except ImportError as exc:
+            return ASRHealth(backend="whisper", ready=False, detail=str(exc))
+        if not deep:
+            return ASRHealth(backend="whisper", ready=True)
+        try:
+            self._load()
+        except Exception as exc:  # noqa: BLE001 - deep readiness surfaces backend load failures.
+            return ASRHealth(backend="whisper", ready=False, detail=str(exc))
         return ASRHealth(backend="whisper", ready=True)
 
     def transcribe(
@@ -321,107 +221,204 @@ class WhisperASRBackend:
         )
 
 
+class InferenceGatewayASRBackend:
+    name: ASRBackendName = "inference_gateway"
+
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        api_key: str,
+        model: str,
+        timeout_seconds: float,
+    ) -> None:
+        self.base_url = _inference_gateway_v1_base_url(base_url)
+        self.health_base_url = _inference_gateway_root_base_url(base_url)
+        self.api_key = api_key.strip()
+        self.model = model
+        self.timeout_seconds = timeout_seconds
+
+    def healthcheck(self, *, deep: bool = False) -> ASRHealth:
+        del deep
+        if not self.base_url:
+            return ASRHealth(
+                backend="inference_gateway",
+                ready=False,
+                detail="Missing inference-gateway base URL.",
+            )
+        try:
+            response = httpx.get(
+                f"{self.health_base_url}/health",
+                headers=_bearer_headers(self.api_key),
+                timeout=min(self.timeout_seconds, 5.0),
+            )
+        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+            return ASRHealth(backend="inference_gateway", ready=False, detail=str(exc))
+        except httpx.HTTPError as exc:
+            return ASRHealth(backend="inference_gateway", ready=False, detail=str(exc))
+        if response.status_code >= 400:
+            return ASRHealth(
+                backend="inference_gateway",
+                ready=False,
+                detail=f"inference-gateway healthcheck failed: {response.status_code}",
+            )
+        try:
+            payload = response.json()
+        except ValueError:
+            payload = {}
+        if isinstance(payload, dict) and payload.get("ready") is False:
+            return ASRHealth(
+                backend="inference_gateway",
+                ready=False,
+                detail="inference-gateway is not ready.",
+            )
+        return ASRHealth(backend="inference_gateway", ready=True)
+
+    def transcribe(
+        self,
+        audio_path: Path,
+        *,
+        language_hint: str | None = None,
+        on_progress: Callable[[float], None] | None = None,
+    ) -> TranscriptResult:
+        if on_progress is not None:
+            on_progress(0.1)
+        data = {"model": self.model}
+        if language_hint:
+            data["language"] = language_hint
+        try:
+            with audio_path.open("rb") as audio_file:
+                response = httpx.post(
+                    f"{self.base_url}/audio/transcriptions",
+                    headers=_bearer_headers(self.api_key),
+                    files={
+                        "file": (
+                            audio_path.name,
+                            audio_file,
+                            "application/octet-stream",
+                        )
+                    },
+                    data=data,
+                    timeout=self.timeout_seconds,
+                )
+        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+            raise TransientError(str(exc)) from exc
+        except httpx.HTTPError as exc:
+            raise PermanentError(str(exc)) from exc
+
+        if response.status_code >= 500:
+            raise TransientError(f"inference-gateway transcription failed: {response.status_code}")
+        if response.status_code >= 400:
+            raise PermanentError(
+                f"inference-gateway transcription failed: {response.status_code} {response.text}"
+            )
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise PermanentError("inference-gateway returned invalid JSON.") from exc
+        if not isinstance(payload, dict):
+            raise PermanentError("inference-gateway returned an invalid transcription payload.")
+        if on_progress is not None:
+            on_progress(1.0)
+        return parse_transcript_payload(payload, language_hint=language_hint)
+
+
 @lru_cache(maxsize=1)
 def get_asr_backend() -> ASRBackend:
-    settings = get_settings()
-    if settings.asr_backend == "deepinfra":
-        return DeepInfraASRBackend(
-            api_key=settings.asr_deepinfra_api_key,
-            model=settings.asr_deepinfra_model,
-            base_url=settings.asr_deepinfra_base_url,
-            timeout_seconds=settings.asr_request_timeout_seconds,
-        )
-    if settings.asr_backend == "cohere":
-        return CohereASRBackend(
-            api_key=settings.asr_cohere_api_key,
-            model=settings.asr_cohere_model,
-            base_url=settings.asr_cohere_base_url,
-            timeout_seconds=settings.asr_request_timeout_seconds,
-        )
-    if settings.asr_backend == "qwen_asr":
-        return QwenASRBackend(
-            model_repo=settings.asr_qwen_model,
-            device=settings.asr_qwen_device,
-        )
-    if settings.asr_backend == "whisper":
-        return WhisperASRBackend(
-            model_size=settings.asr_whisper_model,
-            device=settings.asr_whisper_device,
-            compute_type=settings.asr_whisper_compute_type,
-        )
-    raise PermanentError(f"Unknown ASR backend: {settings.asr_backend}")
+    return build_asr_backend(get_settings())
 
 
-def check_asr_health() -> ASRHealth:
+def build_asr_backend(settings: Any) -> ASRBackend:
+    ensure_default_asr_backends_registered()
     try:
-        return get_asr_backend().healthcheck()
+        return build_registered_asr_backend(settings.asr_backend, settings)
+    except LookupError as exc:
+        raise PermanentError(f"Unknown ASR backend: {settings.asr_backend}") from exc
+
+
+def ensure_default_asr_backends_registered() -> None:
+    for descriptor in (
+        ASRBackendDescriptor(
+            backend="inference_gateway",
+            builder=_build_inference_gateway_asr_backend,
+            label="Inference Gateway ASR",
+        ),
+        ASRBackendDescriptor(
+            backend="cohere",
+            builder=_build_cohere_asr_backend,
+            label="Cohere ASR",
+        ),
+        ASRBackendDescriptor(
+            backend="qwen_asr",
+            builder=_build_qwen_asr_backend,
+            label="Qwen ASR",
+        ),
+        ASRBackendDescriptor(
+            backend="whisper",
+            builder=_build_whisper_asr_backend,
+            label="Whisper ASR",
+        ),
+    ):
+        if has_asr_backend(descriptor.backend):
+            continue
+        register_asr_backend(descriptor)
+
+
+def _build_inference_gateway_asr_backend(settings: Any) -> ASRBackend:
+    return InferenceGatewayASRBackend(
+        base_url=settings.inference_gateway_base_url,
+        api_key=settings.inference_gateway_api_key,
+        model=settings.asr_inference_gateway_model,
+        timeout_seconds=settings.asr_request_timeout_seconds,
+    )
+
+
+def _build_cohere_asr_backend(settings: Any) -> ASRBackend:
+    return CohereASRBackend(
+        api_key=settings.asr_cohere_api_key,
+        model=settings.asr_cohere_model,
+        base_url=settings.asr_cohere_base_url,
+        timeout_seconds=settings.asr_request_timeout_seconds,
+    )
+
+
+def _build_qwen_asr_backend(settings: Any) -> ASRBackend:
+    return QwenASRBackend(
+        model_repo=settings.asr_qwen_model,
+        device=settings.asr_qwen_device,
+    )
+
+
+def _build_whisper_asr_backend(settings: Any) -> ASRBackend:
+    return WhisperASRBackend(
+        model_size=settings.asr_whisper_model,
+        device=settings.asr_whisper_device,
+        compute_type=settings.asr_whisper_compute_type,
+    )
+
+
+def check_asr_health(*, deep: bool = False) -> ASRHealth:
+    try:
+        backend = get_asr_backend()
+        if deep:
+            return backend.healthcheck(deep=True)
+        return backend.healthcheck()
     except Exception as exc:
-        configured_backend = cast(ASRBackendName, get_settings().asr_backend)
+        configured_backend = str(get_settings().asr_backend).strip() or "unknown"
         return ASRHealth(backend=configured_backend, ready=False, detail=str(exc))
 
 
-def _payload_text(payload: dict[str, Any]) -> str:
-    result = payload.get("results")
-    candidates = [
-        payload.get("text"),
-        payload.get("transcript"),
-        result.get("text") if isinstance(result, dict) else None,
-    ]
-    for candidate in candidates:
-        if isinstance(candidate, str) and candidate.strip():
-            return candidate
-    segments = _payload_segments(payload)
-    return " ".join(segment.text for segment in segments if segment.text).strip()
+def _bearer_headers(api_key: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {api_key}"} if api_key else {}
 
 
-def _payload_segments(payload: dict[str, Any]) -> list[TranscriptSegment]:
-    result = payload.get("results")
-    raw_segments = payload.get("segments")
-    if raw_segments is None and isinstance(result, dict):
-        raw_segments = result.get("segments") or result.get("chunks")
-    if raw_segments is None:
-        raw_segments = payload.get("chunks")
-    if not isinstance(raw_segments, list):
-        return []
-
-    segments: list[TranscriptSegment] = []
-    for item in raw_segments:
-        if not isinstance(item, dict):
-            continue
-        timestamp = item.get("timestamp")
-        start = _segment_time(item, "start", timestamp, 0)
-        end = _segment_time(item, "end", timestamp, 1)
-        segments.append(
-            TranscriptSegment(
-                start=start,
-                end=max(start, end),
-                text=str(item.get("text") or item.get("sentence") or "").strip(),
-            )
-        )
-    return segments
+def _inference_gateway_v1_base_url(base_url: str) -> str:
+    stripped = base_url.rstrip("/")
+    if not stripped:
+        return ""
+    return stripped if stripped.endswith("/v1") else f"{stripped}/v1"
 
 
-def _segment_time(item: dict[str, Any], key: str, timestamp: Any, index: int) -> float:
-    if key in item:
-        return _coerce_float(item.get(key))
-    if isinstance(timestamp, (list, tuple)) and len(timestamp) > index:
-        return _coerce_float(timestamp[index])
-    return 0.0
-
-
-def _payload_string(payload: dict[str, Any], key: str) -> str | None:
-    value = payload.get(key)
-    return value if isinstance(value, str) and value else None
-
-
-def _payload_float(payload: dict[str, Any], key: str) -> float | None:
-    if key not in payload:
-        return None
-    return _coerce_float(payload.get(key))
-
-
-def _coerce_float(value: Any) -> float:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return 0.0
+def _inference_gateway_root_base_url(base_url: str) -> str:
+    stripped = base_url.rstrip("/")
+    return stripped[: -len("/v1")] if stripped.endswith("/v1") else stripped

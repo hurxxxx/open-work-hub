@@ -26,7 +26,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ai_do_api.core.db import Base
-from ai_do_api.domains.meeting.models import utcnow_naive
+from ai_do_api.domains.auth.models import utcnow_naive
 
 
 class Conversation(Base):
@@ -51,21 +51,15 @@ class Conversation(Base):
     workspace_id: Mapped[str] = mapped_column(
         ForeignKey("workspaces.id"), index=True, nullable=False
     )
-    user_id: Mapped[str] = mapped_column(
-        ForeignKey("users.id"), index=True, nullable=False
-    )
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
     title: Mapped[str] = mapped_column(String(200), default="", nullable=False)
-    scope_ref: Mapped[str | None] = mapped_column(String(24), nullable=True)
-    scope_resource_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utcnow_naive, nullable=False
-    )
+    scope_ref: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    scope_resource_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow_naive, onupdate=utcnow_naive, nullable=False
     )
-    deleted_at: Mapped[datetime | None] = mapped_column(
-        DateTime, nullable=True, index=True
-    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
 
     turns: Mapped[list["ConversationTurn"]] = relationship(
         "ConversationTurn",
@@ -81,9 +75,7 @@ class ConversationTurn(Base):
         # Unique on (conversation_id, seq) so a concurrent append race can
         # never silently insert two turns with the same sequence number —
         # the second transaction takes an integrity error and retries.
-        UniqueConstraint(
-            "conversation_id", "seq", name="uq_conversation_turns_conversation_seq"
-        ),
+        UniqueConstraint("conversation_id", "seq", name="uq_conversation_turns_conversation_seq"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -99,8 +91,6 @@ class ConversationTurn(Base):
     # decision, PII hits). Schema mirrors the frontend ChatTurn shape so a
     # reloaded turn renders the same as a live-streamed one.
     meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utcnow_naive, nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
 
     conversation = relationship("Conversation", back_populates="turns")

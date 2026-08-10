@@ -10,9 +10,9 @@ Core invariants:
 
 All write endpoints operate on the caller's own note.
 """
+
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime
 from typing import Any
 
@@ -24,14 +24,23 @@ from ai_do_api.domains.auth.models import User, Workspace
 from ai_do_api.domains.auth.security import new_id
 from ai_do_api.domains.docs.collab import sync_collab_record_from_rest_patch
 from ai_do_api.domains.docs.models import NativeDoc, NativeDocPage
+from ai_do_api.domains.rag.source_registry import RAG_SCOPE_PERSONAL
+from ai_do_api.domains.retrieval.partitioning import assign_default_partition
 
-from .schemas import MAX_CONTENT_BLOCKS_BYTES, Visibility
-
-
-SOURCE_APP = "learning"
-SOURCE_KIND_PUBLIC = "lesson_note_public"
-SOURCE_KIND_PRIVATE = "lesson_note_private"
-SOURCE_KINDS_ALL = (SOURCE_KIND_PUBLIC, SOURCE_KIND_PRIVATE)
+from .note_document import (
+    PAGE_TITLE,
+    SOURCE_APP,
+    SOURCE_KIND_PRIVATE,
+    SOURCE_KIND_PUBLIC,
+    SOURCE_KINDS_ALL,
+    build_source_ref,
+    compose_title as _compose_title,
+    kind_for_visibility as _kind_for_visibility,
+    serialize_detail as _serialize_detail,
+    serialize_list_item as _serialize_list_item,
+    validate_content_blocks as _validate_content_blocks,
+)
+from .schemas import Visibility
 
 SYSTEM_WORKSPACE_KEY = "system-learning-notes"
 SYSTEM_WORKSPACE_NAME = "Learning Notes (system)"
@@ -39,27 +48,6 @@ SYSTEM_WORKSPACE_DESCRIPTION = (
     "System-owned workspace backing /api/v1/learning/notes. "
     "Has no human members — access is enforced by the learning_notes router."
 )
-
-
-def build_source_ref(course_slug: str, lesson_id: str) -> str:
-    return f"{course_slug}:{lesson_id}"
-
-
-def _kind_for_visibility(visibility: Visibility) -> str:
-    if visibility == "public":
-        return SOURCE_KIND_PUBLIC
-    if visibility == "private":
-        return SOURCE_KIND_PRIVATE
-    raise localized_http_exception(status_code=422, code="learning.unknown_visibility")
-
-
-def _visibility_from_kind(kind: str) -> Visibility:
-    if kind == SOURCE_KIND_PUBLIC:
-        return "public"
-    if kind == SOURCE_KIND_PRIVATE:
-        return "private"
-    # Defensive — should not happen since we filter by SOURCE_KINDS_ALL.
-    return "private"
 
 
 def get_or_create_system_workspace(db: Session) -> Workspace:
@@ -85,40 +73,6 @@ def get_or_create_system_workspace(db: Session) -> Workspace:
 
 def _utcnow_naive() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
-
-
-def _validate_content_blocks(content_blocks: list[dict]) -> list[dict]:
-    if not isinstance(content_blocks, list):
-        raise localized_http_exception(
-            status_code=422,
-            code="learning.content_blocks_list_required",
-        )
-    for index, block in enumerate(content_blocks):
-        if not isinstance(block, dict):
-            raise localized_http_exception(
-                status_code=422,
-                code="learning.content_block_object_required",
-                index=index,
-            )
-        if "type" not in block or not isinstance(block["type"], str):
-            raise localized_http_exception(
-                status_code=422,
-                code="learning.content_block_type_required",
-                index=index,
-            )
-    try:
-        payload_size = len(json.dumps(content_blocks).encode("utf-8"))
-    except (TypeError, ValueError) as exc:
-        raise localized_http_exception(
-            status_code=422,
-            code="learning.content_blocks_not_serializable",
-        ) from exc
-    if payload_size > MAX_CONTENT_BLOCKS_BYTES:
-        raise localized_http_exception(
-            status_code=413,
-            code="learning.content_blocks_too_large",
-        )
-    return content_blocks
 
 
 def _active_page(doc: NativeDoc) -> NativeDocPage | None:
@@ -161,55 +115,6 @@ def _load_user_doc(
             NativeDoc.owner_id == owner_id,
         )
     )
-
-
-def _serialize_list_item(doc: NativeDoc, *, viewer_id: str) -> dict[str, Any]:
-    course_slug, lesson_id = _parse_source_ref(doc.source_ref)
-    return {
-        "doc_id": doc.id,
-        "course_slug": course_slug,
-        "lesson_id": lesson_id,
-        "visibility": _visibility_from_kind(doc.source_kind),
-        "author_id": doc.owner_id,
-        "author_name": _author_display_name(doc),
-        "is_mine": doc.owner_id == viewer_id,
-        "updated_at": doc.updated_at,
-    }
-
-
-def _serialize_detail(
-    doc: NativeDoc, page: NativeDocPage, *, viewer_id: str
-) -> dict[str, Any]:
-    course_slug, lesson_id = _parse_source_ref(doc.source_ref)
-    return {
-        "doc_id": doc.id,
-        "page_id": page.id,
-        "course_slug": course_slug,
-        "lesson_id": lesson_id,
-        "visibility": _visibility_from_kind(doc.source_kind),
-        "author_id": doc.owner_id,
-        "author_name": _author_display_name(doc),
-        "is_mine": doc.owner_id == viewer_id,
-        "title": doc.title,
-        "content_blocks": page.content_blocks or [],
-        "trashed_at": doc.trashed_at,
-        "created_at": doc.created_at,
-        "updated_at": doc.updated_at,
-    }
-
-
-def _author_display_name(doc: NativeDoc) -> str:
-    owner = getattr(doc, "owner", None)
-    if owner is None:
-        return ""
-    return owner.display_name or owner.full_name or owner.email
-
-
-def _parse_source_ref(source_ref: str | None) -> tuple[str, str]:
-    if not source_ref or ":" not in source_ref:
-        return "", ""
-    course_slug, _, lesson_id = source_ref.partition(":")
-    return course_slug, lesson_id
 
 
 def list_page_notes(
@@ -255,9 +160,7 @@ def _raise_not_found() -> None:
 def get_my_page_note(
     db: Session, *, user: User, course_slug: str, lesson_id: str
 ) -> dict[str, Any] | None:
-    doc = _load_user_doc(
-        db, owner_id=user.id, course_slug=course_slug, lesson_id=lesson_id
-    )
+    doc = _load_user_doc(db, owner_id=user.id, course_slug=course_slug, lesson_id=lesson_id)
     if doc is None or doc.trashed_at is not None:
         return None
     page = _active_page(doc)
@@ -266,9 +169,7 @@ def get_my_page_note(
     return _serialize_detail(doc, page, viewer_id=user.id)
 
 
-def get_page_note_detail(
-    db: Session, *, viewer: User, doc_id: str
-) -> dict[str, Any]:
+def get_page_note_detail(db: Session, *, viewer: User, doc_id: str) -> dict[str, Any]:
     doc = _load_doc_by_id(db, doc_id)
     if doc is None or doc.trashed_at is not None:
         _raise_not_found()
@@ -299,11 +200,8 @@ def upsert_my_page_note(
     source_ref = build_source_ref(course_slug, lesson_id)
     kind = _kind_for_visibility(visibility)
     note_title = _compose_title(lesson_title=lesson_title, user=user)
-    page_title = "페이지 노트"
 
-    existing = _load_user_doc(
-        db, owner_id=user.id, course_slug=course_slug, lesson_id=lesson_id
-    )
+    existing = _load_user_doc(db, owner_id=user.id, course_slug=course_slug, lesson_id=lesson_id)
     if existing is None:
         doc = NativeDoc(
             id=new_id(),
@@ -314,6 +212,7 @@ def upsert_my_page_note(
             source_kind=kind,
             source_ref=source_ref,
             generation_kind="human",
+            rag_scope=RAG_SCOPE_PERSONAL,
         )
         db.add(doc)
         db.flush()
@@ -321,7 +220,7 @@ def upsert_my_page_note(
             id=new_id(),
             doc_id=doc.id,
             parent_id=None,
-            title=page_title,
+            title=PAGE_TITLE,
             content_blocks=validated_blocks,
             sort_order=0,
             created_by_id=user.id,
@@ -332,6 +231,7 @@ def upsert_my_page_note(
         doc = existing
         doc.title = note_title
         doc.source_kind = kind
+        doc.rag_scope = RAG_SCOPE_PERSONAL
         doc.trashed_at = None
         db.add(doc)
         active_pages = sorted(
@@ -340,7 +240,7 @@ def upsert_my_page_note(
         )
         if active_pages:
             page = active_pages[0]
-            page.title = page_title
+            page.title = PAGE_TITLE
             page.content_blocks = validated_blocks
             db.add(page)
         else:
@@ -348,13 +248,21 @@ def upsert_my_page_note(
                 id=new_id(),
                 doc_id=doc.id,
                 parent_id=None,
-                title=page_title,
+                title=PAGE_TITLE,
                 content_blocks=validated_blocks,
                 sort_order=0,
                 created_by_id=user.id,
             )
             db.add(page)
         db.flush()
+
+    assign_default_partition(
+        db,
+        target=doc,
+        source_namespace="docs",
+        candidate_scope_kind="personal",
+        user_id=user.id,
+    )
 
     sync_collab_record_from_rest_patch(
         db,
@@ -368,9 +276,7 @@ def upsert_my_page_note(
     return _serialize_detail(doc, page, viewer_id=user.id)
 
 
-def archive_my_page_note(
-    db: Session, *, user: User, doc_id: str
-) -> dict[str, Any]:
+def archive_my_page_note(db: Session, *, user: User, doc_id: str) -> dict[str, Any]:
     doc = _load_doc_by_id(db, doc_id)
     # Ownership check uses the same 404-hide-existence rule as detail.
     if doc is None or doc.owner_id != user.id:
@@ -396,9 +302,7 @@ def archive_my_page_note(
     return _serialize_detail(doc, page, viewer_id=user.id)
 
 
-def restore_my_page_note(
-    db: Session, *, user: User, doc_id: str
-) -> dict[str, Any]:
+def restore_my_page_note(db: Session, *, user: User, doc_id: str) -> dict[str, Any]:
     doc = _load_doc_by_id(db, doc_id)
     if doc is None or doc.owner_id != user.id:
         _raise_not_found()
@@ -418,8 +322,3 @@ def restore_my_page_note(
             code="learning.note_active_page_missing",
         )
     return _serialize_detail(doc, page, viewer_id=user.id)
-
-
-def _compose_title(*, lesson_title: str, user: User) -> str:
-    author = user.display_name or user.full_name or user.email
-    return f"{lesson_title.strip()} 노트 · {author}"

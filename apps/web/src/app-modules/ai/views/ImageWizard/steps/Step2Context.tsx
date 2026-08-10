@@ -2,12 +2,18 @@ import { useId, useState } from 'react';
 import { Briefcase, Calendar, FileText, Lightbulb, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import {
-  MeetingPickerModal,
-  TaskPickerModal,
-} from '@/src/app-modules/recording/public-api';
+import { MeetingPickerModal } from '@/src/app-modules/meeting/public-api';
+import { TaskPickerModal } from '@/src/app-modules/recording/public-api';
 import type { ContextRef, DetailsPayload } from '../../../api/image-wizard-api';
 import { DocPickerModal } from '../pickers/DocPickerModal';
+import {
+  attachContextRef,
+  buildPickedContextRef,
+  buildStep2ContextProjection,
+  detachContextRef,
+  getContextRefKey,
+  getContextRefLabel,
+} from './step2-context-model';
 
 interface Step2ContextProps {
   workspaceSlug: string;
@@ -28,19 +34,16 @@ export function Step2Context({
   const audienceId = useId();
   const notesId = useId();
   const [openModal, setOpenModal] = useState<'meeting' | 'task' | 'doc' | null>(null);
+  const contextProjection = buildStep2ContextProjection(contextRefs);
 
   function attach(next: ContextRef) {
-    if (contextRefs.some((ref) => ref.kind === next.kind && ref.id === next.id)) return;
-    onChangeContextRefs([...contextRefs, next]);
+    const nextRefs = attachContextRef(contextRefs, next);
+    if (nextRefs !== contextRefs) onChangeContextRefs(nextRefs);
   }
 
-  function detach(kind: string, id: string) {
-    onChangeContextRefs(contextRefs.filter((ref) => !(ref.kind === kind && ref.id === id)));
+  function detach(kind: ContextRef['kind'], id: string) {
+    onChangeContextRefs(detachContextRef(contextRefs, kind, id));
   }
-
-  const meetingRefs = contextRefs.filter((ref) => ref.kind === 'meeting');
-  const taskRefs = contextRefs.filter((ref) => ref.kind === 'task');
-  const docRefs = contextRefs.filter((ref) => ref.kind === 'doc');
 
   return (
     <div className="space-y-5">
@@ -91,13 +94,13 @@ export function Step2Context({
           <ContextBucket
             icon={<Calendar size={14} />}
             label={t('ai.imageWizard.context.meetings')}
-            count={meetingRefs.length}
+            count={contextProjection.meetings.refs.length}
             onAdd={() => setOpenModal('meeting')}
           >
-            {meetingRefs.map((ref) => (
+            {contextProjection.meetings.refs.map((ref) => (
               <ContextChip
-                key={`${ref.kind}:${ref.id}`}
-                label={ref.snapshot?.title || ref.id}
+                key={getContextRefKey(ref)}
+                label={getContextRefLabel(ref)}
                 onRemove={() => detach(ref.kind, ref.id)}
               />
             ))}
@@ -105,13 +108,13 @@ export function Step2Context({
           <ContextBucket
             icon={<Briefcase size={14} />}
             label={t('ai.imageWizard.context.tasks')}
-            count={taskRefs.length}
+            count={contextProjection.tasks.refs.length}
             onAdd={() => setOpenModal('task')}
           >
-            {taskRefs.map((ref) => (
+            {contextProjection.tasks.refs.map((ref) => (
               <ContextChip
-                key={`${ref.kind}:${ref.id}`}
-                label={ref.snapshot?.title || ref.id}
+                key={getContextRefKey(ref)}
+                label={getContextRefLabel(ref)}
                 onRemove={() => detach(ref.kind, ref.id)}
               />
             ))}
@@ -119,13 +122,13 @@ export function Step2Context({
           <ContextBucket
             icon={<FileText size={14} />}
             label={t('ai.imageWizard.context.docs')}
-            count={docRefs.length}
+            count={contextProjection.docs.refs.length}
             onAdd={() => setOpenModal('doc')}
           >
-            {docRefs.map((ref) => (
+            {contextProjection.docs.refs.map((ref) => (
               <ContextChip
-                key={`${ref.kind}:${ref.id}`}
-                label={ref.snapshot?.title || ref.id}
+                key={getContextRefKey(ref)}
+                label={getContextRefLabel(ref)}
                 onRemove={() => detach(ref.kind, ref.id)}
               />
             ))}
@@ -142,27 +145,27 @@ export function Step2Context({
         isOpen={openModal === 'meeting'}
         onClose={() => setOpenModal(null)}
         workspaceSlug={workspaceSlug}
-        excludeMeetingIds={meetingRefs.map((ref) => ref.id)}
+        excludeMeetingIds={contextProjection.meetings.excludeIds}
         onPick={(meeting) =>
-          attach({ kind: 'meeting', id: meeting.id, snapshot: { title: meeting.title } })
+          attach(buildPickedContextRef('meeting', meeting))
         }
       />
       <TaskPickerModal
         isOpen={openModal === 'task'}
         onClose={() => setOpenModal(null)}
         workspaceSlug={workspaceSlug}
-        excludeIssueIds={taskRefs.map((ref) => ref.id)}
-        onPick={(issue) =>
-          attach({ kind: 'task', id: issue.id, snapshot: { title: issue.title } })
+        excludeTaskIds={contextProjection.tasks.excludeIds}
+        onPick={(task) =>
+          attach(buildPickedContextRef('task', task))
         }
       />
       <DocPickerModal
         isOpen={openModal === 'doc'}
         onClose={() => setOpenModal(null)}
         workspaceSlug={workspaceSlug}
-        excludeDocIds={docRefs.map((ref) => ref.id)}
+        excludeDocIds={contextProjection.docs.excludeIds}
         onPick={(doc) =>
-          attach({ kind: 'doc', id: doc.id, snapshot: { title: doc.title } })
+          attach(buildPickedContextRef('doc', doc))
         }
       />
     </div>
@@ -223,5 +226,3 @@ function ContextChip({ label, onRemove }: ContextChipProps) {
     </span>
   );
 }
-
-export default Step2Context;

@@ -5,11 +5,11 @@ from sqlalchemy.orm import Session, selectinload
 
 from ai_do_api.domains.meeting.models import Meeting, MeetingAttendee, MeetingRecording
 from ai_do_api.domains.rag.contracts import RagProjection
-from ai_do_api.domains.rag.projection import build_projection
-from ai_do_api.domains.recording.models import Recording, RecordingContainer
+from ai_do_api.domains.rag.projection_builders import build_text_projection
+from ai_do_api.domains.recording.models import Recording, RecordingTarget
+from ai_do_api.domains.source_access.resource_types import MEETING_RESOURCE_TYPE
 
 
-MEETING_RESOURCE_TYPE = "meeting"
 MEETING_SOURCE_KIND = "meeting"
 
 
@@ -61,14 +61,14 @@ def build_meeting_projection(
     ]
     summary = recording_summary or (meeting.agenda or "").strip() or meeting.title.strip()
 
-    return build_projection(
+    return build_text_projection(
         workspace_id=meeting.workspace_id,
         resource_type=MEETING_RESOURCE_TYPE,
         resource_id=meeting.id,
         source_kind=MEETING_SOURCE_KIND,
         title=meeting.title,
         summary=_trim_summary(summary),
-        text_content="\n\n".join(section for section in text_sections if section),
+        text_sections=text_sections,
         owner_label=getattr(meeting.organizer, "full_name", None),
         visibility_refs=_build_visibility_refs(meeting),
         metadata={
@@ -92,15 +92,15 @@ def _latest_meeting_recording_for_projection(
     if _canonical_recording_tables_available(db):
         recording = db.scalar(
             select(Recording)
-            .join(RecordingContainer)
+            .join(RecordingTarget)
             .where(
                 Recording.workspace_id == meeting.workspace_id,
                 Recording.trashed_at.is_(None),
-                RecordingContainer.container_app == "meeting",
-                RecordingContainer.container_type == "meeting",
-                RecordingContainer.container_id == meeting.id,
+                RecordingTarget.target_app == "meeting",
+                RecordingTarget.target_type == "meeting",
+                RecordingTarget.target_id == meeting.id,
             )
-            .order_by(RecordingContainer.sort_order.desc(), Recording.started_at.desc())
+            .order_by(RecordingTarget.sort_order.desc(), Recording.started_at.desc())
         )
         if recording is not None:
             return recording
@@ -115,7 +115,7 @@ def _canonical_recording_tables_available(db: Session) -> bool:
     try:
         inspector = inspect(db.get_bind())
         return inspector.has_table(Recording.__tablename__) and inspector.has_table(
-            RecordingContainer.__tablename__
+            RecordingTarget.__tablename__
         )
     except Exception:  # noqa: BLE001
         return False

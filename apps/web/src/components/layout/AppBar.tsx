@@ -1,532 +1,192 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
-import {
-  Bell,
-  Check,
-  ChevronDown,
-  Menu,
-  Plus,
-  Search,
-  Settings as SettingsIcon,
-} from 'lucide-react';
+import { useEffect } from 'react';
 import { AnimatePresence } from 'motion/react';
 
-import { APP_BAR_ITEMS } from '@/src/app/shell/app-registry';
+import { AppBarDesktopRail } from './AppBarDesktopRail';
+import { AppBarMobileHeader } from './AppBarMobileHeader';
 import {
-  getDefaultAdminPath,
-  hasAnyAdminReadPermission,
-} from '@/src/platform/admin/admin-permissions';
-import {
-  hasAdminConsoleAccess,
-  type AuthUser,
-  workspaceRoleAllows,
-} from '@/src/platform/auth/auth-api';
-import {
-  buildWorkspaceAppPath,
-  getPreferredWorkspace,
-  persistLastWorkspaceSlug,
-  resolveWorkspaceSwitchPath,
-  type WorkspaceAppId,
-} from '@/src/platform/workspaces/workspace-utils';
-import { canUseWorkspaceSearchTool } from '@/src/platform/rag/rag-ui-access';
-import type { WorkspaceBootstrapApp } from '@/src/platform/workspaces/workspaces-api';
-import { useAuth } from '@/src/platform/auth/auth-provider';
-import { getUnreadNotificationCount } from '@/src/platform/notifications/notifications-api';
-import { cn } from '@/src/lib/utils';
-import { NotificationPanel } from './NotificationPanel';
+  buildAppLink,
+  type AppBarAppLinkResolver,
+  type AppBarProps,
+} from './app-bar-model';
+import { useAppBarController } from './useAppBarController';
+import { EMPTY_LAUNCHER_GLOBAL_PATHS } from '@/src/app/shell/navigation-types';
 
-function getInitials(label: string, fallback: string): string {
-  const initials = label
-    .trim()
-    .split(/[\s-]+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('');
-
-  return initials || fallback;
-}
-
-export function AppBar({
-  activeAppId,
-  canOpenMobileAppMenu,
-  currentPathname,
-  currentUser,
-  onOpenMobileAppMenu,
-  onShellWorkspaceChange,
-  shellWorkspaceSlug,
-  workspaceApps,
-  onOpenAccount,
-  onOpenMobileNavigation,
-}: {
-  activeAppId: string;
-  canOpenMobileAppMenu?: boolean;
-  currentPathname: string;
-  currentUser: AuthUser;
-  onOpenMobileAppMenu?: () => void;
-  onShellWorkspaceChange: (workspaceSlug: string | null) => void;
-  shellWorkspaceSlug: string | null;
-  workspaceApps: WorkspaceBootstrapApp[];
-  onOpenAccount: () => void;
-  onOpenMobileNavigation: () => void;
-}) {
-  const { hasPermission, token } = useAuth();
-  const { t, i18n } = useTranslation(['common', 'shell', 'auth']);
-  const navigate = useNavigate();
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [notifOpen, setNotifOpen] = useState(false);
-  const [workspaceSwitcherOpen, setWorkspaceSwitcherOpen] = useState(false);
-  const [workspaceQuery, setWorkspaceQuery] = useState('');
-  const workspaceSwitcherRef = useRef<HTMLDivElement>(null);
-  const currentWorkspace = currentUser.workspaces.find((workspace) => workspace.slug === shellWorkspaceSlug) ?? null;
-  const canCreateWorkspace = hasPermission('workspace.write');
-  const canManageCurrentWorkspace = workspaceRoleAllows(currentWorkspace?.role, 'admin');
-  const normalizedWorkspaceQuery = workspaceQuery.trim().toLowerCase();
-  const matchingWorkspaces = currentUser.workspaces.filter((workspace) => {
-    if (!normalizedWorkspaceQuery) {
-      return true;
-    }
-
-    const haystack = `${workspace.name} ${workspace.slug}`.toLowerCase();
-    return haystack.includes(normalizedWorkspaceQuery);
-  });
-  const pinnedWorkspace = currentWorkspace && matchingWorkspaces.some((workspace) => workspace.id === currentWorkspace.id)
-    ? currentWorkspace
-    : null;
-  const otherWorkspaces = matchingWorkspaces
-    .filter((workspace) => workspace.id !== currentWorkspace?.id)
-    .sort((left, right) => left.name.localeCompare(right.name, i18n.language));
+export function AppBar(props: AppBarProps) {
+  const {
+    activeAppId,
+    canOpenMobileAppMenu,
+    currentUser,
+    launcherGlobalPaths = EMPTY_LAUNCHER_GLOBAL_PATHS,
+    onDesktopMenuOpenChange,
+    onDesktopRailMouseEnter,
+    onDesktopRailMouseLeave,
+    onOpenAccount,
+    onOpenHelp,
+    onOpenMobileAppMenu,
+    onOpenMobileNavigation,
+    shellWorkspaceSlug,
+    workspaceAppBarCategories,
+  } = props;
+  const NotificationPanel = props.notificationPanel ?? null;
+  const notificationsEnabled =
+    props.notificationsEnabled ?? Boolean(NotificationPanel);
+  const controller = useAppBarController({ ...props, notificationsEnabled });
+  const resolveAppLink: AppBarAppLinkResolver = (appId) =>
+    buildAppLink(appId, currentUser, shellWorkspaceSlug, launcherGlobalPaths);
+  const {
+    activeAppTitle,
+    businessSitesMenuRef,
+    canCreateWorkspace,
+    canManageCurrentWorkspace,
+    canOpenWorkspaceSearch,
+    currentWorkspace,
+    currentWorkspaceName,
+    defaultWorkspaceOptions,
+    draftItems,
+    fixedItems,
+    handleCountChange,
+    handleNavigateToIssue,
+    handleSetDefaultWorkspace,
+    handleWorkspaceSelect,
+    moreMenuRef,
+    normalizedDefaultWorkspaceId,
+    onCloseEditor,
+    onCloseBusinessSites,
+    onCloseLauncherMenus,
+    onCreateWorkspace,
+    onManageCurrentWorkspace,
+    onMovePinnedApp,
+    onOpenEditor,
+    onOpenWorkspaceSearch,
+    onResetDraft,
+    onSaveLayout,
+    onSearchQueryChange,
+    onToggleBusinessSites,
+    onToggleCategoryMenu,
+    onToggleFavorites,
+    onToggleNotifications,
+    onTogglePinnedApp,
+    onToggleWorkspaceSwitcher,
+    otherWorkspaces,
+    pinnedEligibleAppIds,
+    pinnedItems,
+    pinnedWorkspace,
+    state,
+    t,
+    workspaceSwitcherRef,
+  } = controller;
+  const desktopMenuOpen =
+    state.favoritesOpen ||
+    Boolean(state.categoryMenuId) ||
+    state.appBarEditorOpen ||
+    state.businessSitesOpen;
 
   useEffect(() => {
-    if (!token || !shellWorkspaceSlug) {
-      setUnreadCount(0);
-      return;
-    }
-
-    let active = true;
-
-    const syncUnreadCount = async () => {
-      try {
-        const res = await getUnreadNotificationCount(token, shellWorkspaceSlug);
-        if (active) {
-          setUnreadCount(res.count);
-        }
-      } catch {
-        return;
-      }
-    };
-
-    void syncUnreadCount();
-    const interval = window.setInterval(() => {
-      void syncUnreadCount();
-    }, 30000);
-
-    return () => {
-      active = false;
-      window.clearInterval(interval);
-    };
-  }, [shellWorkspaceSlug, token]);
-
-  useEffect(() => {
-    if (!workspaceSwitcherOpen) {
-      return;
-    }
-
-    function handlePointerDown(event: MouseEvent) {
-      if (workspaceSwitcherRef.current && !workspaceSwitcherRef.current.contains(event.target as Node)) {
-        setWorkspaceSwitcherOpen(false);
-      }
-    }
-
-    document.addEventListener('mousedown', handlePointerDown);
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown);
-    };
-  }, [workspaceSwitcherOpen]);
-
-  useEffect(() => {
-    setWorkspaceSwitcherOpen(false);
-    setWorkspaceQuery('');
-  }, [currentPathname, shellWorkspaceSlug]);
-
-  const handleCountChange = useCallback((delta: number) => {
-    setUnreadCount(prev => Math.max(0, prev + delta));
-  }, []);
-
-  const handleNavigateToIssue = useCallback((issueId: string) => {
-    const pmsPath = buildAppLink('pms', currentUser, shellWorkspaceSlug);
-    if (pmsPath === '/') {
-      return;
-    }
-    navigate(`${pmsPath}?issue=${encodeURIComponent(issueId)}`);
-  }, [currentUser, navigate, shellWorkspaceSlug]);
-
-  const handleWorkspaceSelect = useCallback((nextWorkspaceSlug: string) => {
-    if (nextWorkspaceSlug === shellWorkspaceSlug) {
-      setWorkspaceSwitcherOpen(false);
-      return;
-    }
-
-    persistLastWorkspaceSlug(nextWorkspaceSlug);
-    onShellWorkspaceChange(nextWorkspaceSlug);
-    navigate(resolveWorkspaceSwitchPath(currentUser, currentPathname, nextWorkspaceSlug));
-  }, [currentPathname, currentUser, navigate, onShellWorkspaceChange, shellWorkspaceSlug]);
-
-  const appBarItemById = new Map(APP_BAR_ITEMS.map((item) => [item.id, item]));
-  const visibleItems = workspaceApps
-    .filter((item) => item.enabled)
-    .map((item) => {
-      const localItem = appBarItemById.get(item.app_id as (typeof APP_BAR_ITEMS)[number]['id']);
-      if (!localItem) {
-        return null;
-      }
-      return {
-        id: item.app_id as WorkspaceAppId,
-        title: t(`shell:apps.${item.app_id}`, { defaultValue: item.title }),
-        icon: localItem.icon,
-      };
-    })
-    .filter((item): item is { id: WorkspaceAppId; title: string; icon: (typeof APP_BAR_ITEMS)[number]['icon'] } => Boolean(item));
-  const canShowSettings = (
-    hasAdminConsoleAccess(currentUser)
-    || hasAnyAdminReadPermission(currentUser.system_roles)
-  );
-  const settingsItem = appBarItemById.get('settings');
-  const canOpenWorkspaceSearch = canUseWorkspaceSearchTool(workspaceApps);
-  const workspaceSearchHref = shellWorkspaceSlug
-    ? `/tool/search?workspace=${encodeURIComponent(shellWorkspaceSlug)}`
-    : '/tool/search';
-  const activeWorkspaceApp = visibleItems.find((item) => item.id === activeAppId);
-  const activeAppTitle = activeAppId === 'settings'
-    ? t('shell:apps.settings')
-    : activeWorkspaceApp?.title
-      ?? t(`shell:apps.${activeAppId}`, {
-        defaultValue: appBarItemById.get(activeAppId as (typeof APP_BAR_ITEMS)[number]['id'])?.title ?? 'AI-DO',
-      });
-  const mobileTitle = (
-    <>
-      <div className="app-text-body-sm truncate font-semibold text-app-ink">
-        <span>{activeAppTitle}</span>
-        {canOpenMobileAppMenu ? (
-          <ChevronDown size={13} className="ml-1 inline-block align-[-2px] text-app-ink/45" />
-        ) : null}
-      </div>
-      <div className="app-text-caption truncate text-app-ink/50">
-        {currentWorkspace?.name ?? t('common:labels.workspace')}
-      </div>
-    </>
-  );
+    onDesktopMenuOpenChange?.(desktopMenuOpen);
+  }, [desktopMenuOpen, onDesktopMenuOpenChange]);
 
   return (
     <>
-      <div className="flex h-14 shrink-0 items-center gap-2 border-b border-app-border bg-app-bg-strong px-3 text-app-ink lg:hidden">
-        <button
-          aria-label={t('shell:mobileNavigation.open')}
-          className="flex h-10 w-10 items-center justify-center rounded-xl border border-app-border bg-app-surface text-app-ink shadow-sm transition-colors hover:bg-app-surface-hover"
-          onClick={onOpenMobileNavigation}
-          type="button"
-        >
-          <Menu size={20} />
-        </button>
+      <AppBarMobileHeader
+        activeAppTitle={activeAppTitle}
+        canOpenMobileAppMenu={canOpenMobileAppMenu}
+        canOpenWorkspaceSearch={canOpenWorkspaceSearch}
+        currentUser={currentUser}
+        currentWorkspaceName={currentWorkspaceName}
+        labels={{
+          accountTitle: t('auth:settings.mySettings'),
+          mobileMenuTitle: t('shell:mobileAppMenu.title', {
+            title: activeAppTitle,
+          }),
+          mobileNavigationOpen: t('shell:mobileNavigation.open'),
+          notificationsTitle: t('shell:notifications.title'),
+          searchOpen: t('shell:search.open'),
+          searchTitle: t('shell:search.title'),
+        }}
+        onOpenAccount={onOpenAccount}
+        onOpenMobileAppMenu={onOpenMobileAppMenu}
+        onOpenMobileNavigation={onOpenMobileNavigation}
+        onOpenWorkspaceSearch={onOpenWorkspaceSearch}
+        onToggleNotifications={onToggleNotifications}
+        notificationsEnabled={notificationsEnabled}
+        unreadCount={state.unreadCount}
+      />
 
-        {canOpenMobileAppMenu ? (
-          <button
-            aria-label={t('shell:mobileAppMenu.title', { title: activeAppTitle })}
-            className="min-w-0 flex-1 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-app-surface-hover focus:outline-none focus:ring-2 focus:ring-app-accent/35"
-            onClick={onOpenMobileAppMenu}
-            type="button"
-          >
-            {mobileTitle}
-          </button>
-        ) : (
-          <div className="min-w-0 flex-1 px-1.5 py-1">
-            {mobileTitle}
-          </div>
-        )}
-
-        {canOpenWorkspaceSearch ? (
-          <button
-            aria-label={t('shell:search.open')}
-            className="flex h-10 w-10 items-center justify-center rounded-xl text-app-ink/60 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
-            onClick={() => navigate(workspaceSearchHref)}
-            title={t('shell:search.title')}
-            type="button"
-          >
-            <Search size={19} />
-          </button>
-        ) : null}
-
-        <button
-          aria-label={t('shell:notifications.title')}
-          className="relative flex h-10 w-10 items-center justify-center rounded-xl text-app-ink/60 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
-          onClick={() => setNotifOpen(prev => !prev)}
-          title={t('shell:notifications.title')}
-          type="button"
-        >
-          <Bell size={19} />
-          {unreadCount > 0 && (
-            <span className="app-text-micro absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 font-bold text-white">
-              {unreadCount > 9 ? '9+' : unreadCount}
-            </span>
-          )}
-        </button>
-
-        <button
-          aria-label={t('auth:settings.mySettings')}
-          className="app-text-body-sm flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full bg-app-accent font-bold text-app-accent-fg shadow-sm outline-none ring-2 ring-transparent transition-all hover:ring-app-accent/40"
-          onClick={onOpenAccount}
-          title={`${currentUser.display_name || currentUser.full_name} · ${t('auth:settings.mySettings')}`}
-          type="button"
-        >
-          {getInitials(currentUser.display_name || currentUser.full_name, 'ID')}
-        </button>
-      </div>
-
-      <div className="z-20 hidden h-full w-16 flex-col items-center gap-4 border-r border-app-border bg-app-bg-strong py-4 lg:flex">
-      <div ref={workspaceSwitcherRef} className="relative mb-2">
-        <button
-          aria-expanded={workspaceSwitcherOpen}
-          aria-haspopup="dialog"
-          aria-label={t('shell:workspaceSwitcher.switch')}
-          className="group flex h-11 w-11 flex-col items-center justify-center rounded-xl border border-app-border bg-app-surface text-app-ink shadow-sm transition-colors hover:bg-app-surface-hover"
-          onClick={() => setWorkspaceSwitcherOpen((open) => !open)}
-          title={currentWorkspace ? `${currentWorkspace.name} workspace` : t('shell:workspaceSwitcher.switch')}
-          type="button"
-        >
-          <span className="app-text-body-sm font-semibold leading-none">
-            {getInitials(currentWorkspace?.name ?? 'Workspace', 'WS')}
-          </span>
-          <ChevronDown
-            size={12}
-            className={cn(
-              'mt-1 text-gray-500 transition-transform',
-              workspaceSwitcherOpen && 'rotate-180',
-            )}
-          />
-        </button>
-
-        {workspaceSwitcherOpen ? (
-          <div
-            className="absolute left-full top-0 ml-3 w-80 rounded-2xl border border-app-border bg-app-surface p-3 shadow-2xl"
-            role="dialog"
-          >
-            <div className="px-1 pb-2">
-              <div className="app-text-overline text-gray-500">{t('common:labels.workspaces')}</div>
-            </div>
-
-            <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                className="app-text-body-sm w-full rounded-xl border border-app-border bg-app-bg py-2 pl-9 pr-3 text-app-ink outline-none transition-colors focus:border-app-accent"
-                onChange={(event) => setWorkspaceQuery(event.currentTarget.value)}
-                placeholder={t('shell:workspaceSwitcher.searchPlaceholder')}
-                type="text"
-                value={workspaceQuery}
-              />
-            </div>
-
-            <div className="mt-3 max-h-80 overflow-y-auto">
-              {pinnedWorkspace ? (
-                <WorkspaceRow
-                  isCurrent
-                  onClick={() => handleWorkspaceSelect(pinnedWorkspace.slug)}
-                  workspace={pinnedWorkspace}
-                />
-              ) : null}
-
-              {pinnedWorkspace && otherWorkspaces.length > 0 ? (
-                <div className="my-2 border-t border-app-border" />
-              ) : null}
-
-              {otherWorkspaces.map((workspace) => (
-                <WorkspaceRow
-                  key={workspace.id}
-                  onClick={() => handleWorkspaceSelect(workspace.slug)}
-                  workspace={workspace}
-                />
-              ))}
-
-              {!pinnedWorkspace && otherWorkspaces.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-app-border px-3 py-5 text-center">
-                  <div className="app-text-body-sm text-app-ink">{t('shell:workspaceSwitcher.noResults')}</div>
-                  <div className="app-text-caption mt-1 text-gray-500">{t('shell:workspaceSwitcher.noResultsHint')}</div>
-                </div>
-              ) : null}
-            </div>
-
-            {canCreateWorkspace || canManageCurrentWorkspace ? (
-              <div className="mt-3 border-t border-app-border pt-2">
-                {canCreateWorkspace ? (
-                  <button
-                    className="app-text-body-sm flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-app-ink transition-colors hover:bg-app-surface-hover"
-                    onClick={() => navigate('/admin/workspaces')}
-                    type="button"
-                  >
-                    <Plus size={14} className="text-gray-500" />
-                    <span>{t('shell:workspaceSwitcher.create')}</span>
-                  </button>
-                ) : null}
-
-                {canManageCurrentWorkspace && currentWorkspace ? (
-                  <button
-                    className="app-text-body-sm flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-app-ink transition-colors hover:bg-app-surface-hover"
-                    onClick={() => navigate(`/w/${encodeURIComponent(currentWorkspace.slug)}/settings`)}
-                    type="button"
-                  >
-                    <SettingsIcon size={14} className="text-gray-500" />
-                    <span>{t('shell:workspaceSwitcher.manage')}</span>
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
-
-      {canOpenWorkspaceSearch ? (
-        <button
-          aria-label={t('shell:search.title')}
-          className="group relative rounded-xl p-3 text-gray-500 transition-all hover:bg-app-surface-hover hover:text-gray-300"
-          onClick={() => navigate(workspaceSearchHref)}
-          title={t('shell:search.title')}
-          type="button"
-        >
-          <Search size={22} />
-          <div className="app-text-micro pointer-events-none absolute left-full z-50 ml-2 whitespace-nowrap rounded bg-black px-2 py-1 text-white opacity-0 group-hover:opacity-100">
-            {t('shell:search.title')}
-          </div>
-        </button>
-      ) : null}
-
-      {visibleItems.map((item) => (
-        <Link
-          key={item.id}
-          to={buildAppLink(item.id as WorkspaceAppId, currentUser, shellWorkspaceSlug)}
-          className={cn(
-            'p-3 rounded-xl transition-all group relative',
-            activeAppId === item.id
-              ? 'bg-app-surface-sidebar text-app-accent shadow-inner'
-              : 'text-gray-500 hover:text-gray-300 hover:bg-app-surface-hover',
-          )}
-        >
-          <item.icon size={22} />
-          <div className="app-text-micro absolute left-full ml-2 rounded bg-black px-2 py-1 text-white opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100">
-            {item.title}
-          </div>
-          {activeAppId === item.id ? (
-            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-app-accent rounded-r-full" />
-          ) : null}
-        </Link>
-      ))}
-
-      {canShowSettings ? (
-        <Link
-          to={getDefaultAdminPath(currentUser.system_roles)}
-          className={cn(
-            'p-3 rounded-xl transition-all group relative',
-            activeAppId === 'settings'
-              ? 'bg-app-surface-sidebar text-app-accent shadow-inner'
-              : 'text-gray-500 hover:text-gray-300 hover:bg-app-surface-hover',
-          )}
-        >
-          {settingsItem ? <settingsItem.icon size={22} /> : <SettingsIcon size={22} />}
-          <div className="app-text-micro absolute left-full ml-2 rounded bg-black px-2 py-1 text-white opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100">
-            {t('shell:apps.settings')}
-          </div>
-          {activeAppId === 'settings' ? (
-            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-app-accent rounded-r-full" />
-          ) : null}
-        </Link>
-      ) : null}
-
-      <div className="mt-auto flex flex-col items-center gap-3 relative">
-        <button
-          aria-label={t('shell:notifications.title')}
-          className="relative p-2 rounded-xl text-gray-500 hover:text-gray-300 hover:bg-app-surface-hover transition-all"
-          onClick={() => setNotifOpen(prev => !prev)}
-          type="button"
-        >
-          <Bell size={20} />
-          {unreadCount > 0 && (
-            <span className="app-text-micro absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 font-bold text-white">
-              {unreadCount > 9 ? '9+' : unreadCount}
-            </span>
-          )}
-        </button>
-
-        <button
-          aria-label={t('auth:settings.mySettings')}
-          className="app-text-body-sm flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-app-accent font-bold text-app-accent-fg shadow-sm outline-none ring-2 ring-transparent transition-all hover:ring-app-accent/40"
-          onClick={onOpenAccount}
-          title={`${currentUser.display_name || currentUser.full_name} · ${t('auth:settings.mySettings')}`}
-          type="button"
-        >
-          {getInitials(currentUser.display_name || currentUser.full_name, 'ID')}
-        </button>
-      </div>
-      </div>
+      <AppBarDesktopRail
+        activeAppId={activeAppId}
+        appBarEditorOpen={state.appBarEditorOpen}
+        appBarLayoutError={state.appBarLayoutError}
+        appBarLayoutSaving={state.appBarLayoutSaving}
+        appBarItems={props.appBarItems}
+        businessSitesMenuRef={businessSitesMenuRef}
+        businessSitesOpen={state.businessSitesOpen}
+        canCreateWorkspace={canCreateWorkspace}
+        canManageCurrentWorkspace={canManageCurrentWorkspace}
+        canOpenWorkspaceSearch={canOpenWorkspaceSearch}
+        currentUser={currentUser}
+        currentPathname={props.currentPathname}
+        currentWorkspace={currentWorkspace}
+        currentWorkspaceName={currentWorkspaceName}
+        defaultWorkspaceOptions={defaultWorkspaceOptions}
+        defaultWorkspaceSaving={state.defaultWorkspaceSaving}
+        draftItems={draftItems}
+        draftPinnedAppIds={state.draftPinnedAppIds}
+        fixedItems={fixedItems}
+        categoryMenuId={state.categoryMenuId}
+        favoritesOpen={state.favoritesOpen}
+        moreMenuRef={moreMenuRef}
+        normalizedDefaultWorkspaceId={normalizedDefaultWorkspaceId}
+        onCloseBusinessSites={onCloseBusinessSites}
+        onCloseEditor={onCloseEditor}
+        onCloseLauncherMenus={onCloseLauncherMenus}
+        onCreateWorkspace={onCreateWorkspace}
+        onMouseEnter={onDesktopRailMouseEnter}
+        onMouseLeave={onDesktopRailMouseLeave}
+        onDefaultWorkspaceChange={(workspaceId) => {
+          void handleSetDefaultWorkspace(workspaceId);
+        }}
+        onManageCurrentWorkspace={onManageCurrentWorkspace}
+        onMovePinnedApp={onMovePinnedApp}
+        onOpenAccount={onOpenAccount}
+        onOpenEditor={onOpenEditor}
+        onOpenHelp={onOpenHelp}
+        onOpenWorkspaceSearch={onOpenWorkspaceSearch}
+        onResetDraft={onResetDraft}
+        onSaveLayout={onSaveLayout}
+        onSearchQueryChange={onSearchQueryChange}
+        onToggleBusinessSites={onToggleBusinessSites}
+        onToggleCategoryMenu={onToggleCategoryMenu}
+        onToggleFavorites={onToggleFavorites}
+        onSelectWorkspace={handleWorkspaceSelect}
+        onToggleNotifications={onToggleNotifications}
+        onTogglePinnedApp={onTogglePinnedApp}
+        notificationsEnabled={notificationsEnabled}
+        onToggleWorkspaceSwitcher={onToggleWorkspaceSwitcher}
+        otherWorkspaces={otherWorkspaces}
+        pinnedEligibleAppIds={pinnedEligibleAppIds}
+        pinnedItems={pinnedItems}
+        pinnedWorkspace={pinnedWorkspace}
+        resolveAppLink={resolveAppLink}
+        t={t}
+        unreadCount={state.unreadCount}
+        workspaceAppBarCategories={workspaceAppBarCategories}
+        workspacePreferenceError={state.workspacePreferenceError}
+        workspaceQuery={state.workspaceQuery}
+        workspaceSwitcherOpen={state.workspaceSwitcherOpen}
+        workspaceSwitcherRef={workspaceSwitcherRef}
+      />
 
       <AnimatePresence>
-        {notifOpen && (
+        {notificationsEnabled && NotificationPanel && state.notifOpen ? (
           <NotificationPanel
-            onClose={() => setNotifOpen(false)}
-            onNavigateToIssue={handleNavigateToIssue}
+            onClose={onToggleNotifications}
             onCountChange={handleCountChange}
+            onNavigateToIssue={handleNavigateToIssue}
+            refreshKey={state.notificationRefreshSeq}
             workspaceSlug={shellWorkspaceSlug}
           />
-        )}
+        ) : null}
       </AnimatePresence>
     </>
   );
-}
-
-function WorkspaceRow({
-  isCurrent = false,
-  onClick,
-  workspace,
-}: {
-  isCurrent?: boolean;
-  onClick: () => void;
-  workspace: AuthUser['workspaces'][number];
-}) {
-  return (
-    <button
-      className={cn(
-        'flex w-full items-start gap-3 rounded-xl px-3 py-2 text-left transition-colors hover:bg-app-surface-hover',
-        isCurrent && 'bg-app-bg',
-      )}
-      onClick={onClick}
-      type="button"
-    >
-      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-app-border bg-app-bg text-app-ink">
-        <span className="app-text-body-sm font-semibold">{getInitials(workspace.name, 'WS')}</span>
-      </div>
-
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="app-text-body-sm truncate text-app-ink">{workspace.name}</span>
-          {isCurrent ? <Check size={14} className="shrink-0 text-app-accent" /> : null}
-        </div>
-        <div className="app-text-caption mt-0.5 truncate text-gray-500">
-          {workspace.slug}
-        </div>
-      </div>
-    </button>
-  );
-}
-
-function buildAppLink(
-  appId: WorkspaceAppId,
-  currentUser: AuthUser,
-  shellWorkspaceSlug: string | null,
-): string {
-  const selectedWorkspace = (
-    shellWorkspaceSlug
-      ? currentUser.workspaces.find(
-        (workspace) => workspace.slug === shellWorkspaceSlug,
-      ) ?? null
-      : null
-  ) ?? getPreferredWorkspace(currentUser, appId);
-
-  return selectedWorkspace ? buildWorkspaceAppPath(selectedWorkspace.slug, appId) : '/';
 }

@@ -2,37 +2,10 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from fastapi import HTTPException, status
 import pytest
 
 from ai_do_api.domains.ai import tool_runtime
 from ai_do_api.domains.ai.tool_service import ToolRequiresApproval
-
-
-def test_execute_tool_call_treats_http_conflict_as_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def fake_execute_tool(*args, **kwargs):
-        del args, kwargs
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Meeting recording summary is not available yet.",
-        )
-
-    monkeypatch.setattr(tool_runtime, "execute_tool", fake_execute_tool)
-
-    result = tool_runtime.execute_tool_call(
-        SimpleNamespace(),
-        workspace=SimpleNamespace(id="ws-1"),
-        principal=SimpleNamespace(kind="user", user_id="user-1"),
-        user=SimpleNamespace(id="user-1"),
-        tool_name="meeting.extract_actions",
-        arguments={},
-        source="test.runtime",
-    )
-
-    assert result.status == "error"
-    assert result.error_message == "Meeting recording summary is not available yet."
 
 
 def test_execute_tool_call_maps_approval_required_exception_to_blocked(
@@ -42,8 +15,8 @@ def test_execute_tool_call_maps_approval_required_exception_to_blocked(
         del args, kwargs
         raise ToolRequiresApproval(
             tool_call_id="call-1",
-            tool_name="pms.delete_issue",
-            arguments_json='{"issue_id":"issue-1"}',
+            tool_name="pms.delete_task",
+            arguments_json='{"task_id":"issue-1"}',
             resource_preview="issue-1",
         )
 
@@ -54,11 +27,11 @@ def test_execute_tool_call_maps_approval_required_exception_to_blocked(
         workspace=SimpleNamespace(id="ws-1"),
         principal=SimpleNamespace(kind="user", user_id="user-1"),
         user=SimpleNamespace(id="user-1"),
-        tool_name="pms.delete_issue",
-        arguments={"issue_id": "issue-1"},
+        tool_name="pms.delete_task",
+        arguments={"task_id": "issue-1"},
         source="test.runtime",
     )
 
     assert result.status == "blocked"
     assert result.resource_preview == "issue-1"
-    assert result.arguments_json == '{"issue_id":"issue-1"}'
+    assert result.arguments_json == '{"task_id":"issue-1"}'

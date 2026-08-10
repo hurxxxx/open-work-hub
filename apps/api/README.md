@@ -1,81 +1,100 @@
 # API App
 
-FastAPI 기반의 조립 계층이다. 현재 스캐폴드는 아래를 제공한다.
+FastAPI 기반의 조립 계층이다. 현재 API는 아래를 제공한다.
 
 - 앱 팩토리와 설정 로딩
 - health endpoint
-- mlx-lm (Apple Silicon) / OpenAI 호환 LLM 연결과 readiness endpoint
-- 문서 검색, PLM 조회, 템플릿/초안, 위키 페이지의 최소 placeholder endpoint
+- vLLM / mlx-lm 등 OpenAI 호환 LLM 연결과 readiness endpoint
+- retrieval/search, PLM 조회, 템플릿/초안, 위키, PMS 등 도메인 API
 - 도메인 루트와 local rule 파일
 
-실행:
+서버 dev checkout 실행:
 
 ```bash
-cp .env.example .env
-pnpm nx dev api
+cd /projects/ai-do/dev
+./dev.sh --api-only
 ```
 
-LLM 설정은 **로컬 풀**(Apple Silicon mlx-lm)과 **외부 풀**(OpenRouter)로 완전히 분리되어
-있다. 어느 풀을 쓸지는 `task_kind` 별 DB 정책(`LlmPolicy`)이 결정하며, 기본 정책은
-`local_only`다. 로컬 장애 시 외부로 자동 폴백하지 않는다 ([`plans/00-ai-platform-roadmap.md`](../../plans/00-ai-platform-roadmap.md) 참조).
+로컬 개발자 머신은 루트 `.env`를 만들거나 공유 dev DB를 자동 migration하지 않는다.
+GitLab Secure File의 `.env.local`과 플랫폼별 launcher를 사용하는
+[`ai-do-development-environment`](../../.agents/skills/ai-do-development-environment/SKILL.md)
+절차를 따른다.
 
-로컬 mlx-lm 서버 구동:
+LLM 설정은 **로컬 풀**(DGX Spark vLLM 또는 Apple Silicon mlx-lm)과
+**외부 풀**(OpenAI/Anthropic/Gemini 공식 API)로 분리되어 있다.
+어느 풀을 쓸지는 등록된 workload와 관리자의 명시적 override가 결정한다. 로컬 장애 시
+외부로 자동 폴백하지 않는다.
+
+DGX Spark local LLM runtime 계약은
+[`local LLM 운영 문서`](../../docs/domains/inference-gateway/dgx-spark-servers.md)를 정본으로 본다.
+endpoint는 private network와 firewall/ACL로 보호된 운영 전제를 가진다. vLLM 자체는
+API key를 검증하지 않으므로 public network에 직접 노출하면 안 된다. 애플리케이션의 local
+endpoint와 기본 모델은 관리자가 `LLM 관리 > Provider`에서 탐색·승인 후 명시적으로 선택한다.
+`.env.example`에는 기본 모델명을 중복 기록하지 않는다.
+
+개인 장비에서 로컬 mlx-lm 서버를 구동해야 하는 경우 모델을 명시한다.
 
 ```bash
-MLX_MODEL=mlx-community/Qwen3.6-35B-A3B-4bit \
-MLX_CHAT_TEMPLATE_ARGS='{"enable_thinking":false}' \
+MLX_MODEL=org/local-model-id \
 bash scripts/mlx-serve.sh
 ```
 
 최초 실행 시 `~/.local/share/mlx-lm-venv`에 venv를 만들고 `mlx-lm`을 설치한다.
-모델은 `~/.cache/huggingface` 로 첫 요청 시 캐시된다. 현재 개발 기본 local profile은
-Qwen3.6 35B A3B 4-bit이지만, 런타임 코드는 특정 모델명에 의존하지 않는다.
-기본 스크립트는 모델별 chat template option을 주입하지 않는다. 특정 모델에만 필요한 옵션은
-`MLX_CHAT_TEMPLATE_ARGS`로 명시적으로 넘긴다. 현재 Qwen profile은 내부 agent 요약이
-`message.content`로 안정적으로 나오도록 non-thinking 경로를 사용한다.
+모델은 `~/.cache/huggingface`로 첫 요청 시 캐시된다. 아래 값은 개인 장비용 예시이며
+공유 dev 또는 운영 기본값이 아니다. 모델별 chat template option이 필요한 경우에만
+`MLX_CHAT_TEMPLATE_ARGS`로 명시한다.
 
 ```env
-# Local pool
-DOOWON_LLM_LOCAL_PROVIDER=mlx-lm
-DOOWON_LLM_LOCAL_BASE_URL=http://127.0.0.1:8080/v1
-DOOWON_LLM_LOCAL_API_KEY=mlx
-DOOWON_LLM_LOCAL_DEFAULT_MODEL=mlx-community/Qwen3.6-35B-A3B-4bit
-DOOWON_LLM_LOCAL_CANONICAL_MODEL=qwen/qwen3.6-35b-a3b
-DOOWON_LLM_LOCAL_LONG_GENERATION_TIMEOUT_SECONDS=1200
+# Local pool (mlx-lm alternative)
+AI_DO_LLM_LOCAL_PROVIDER=mlx-lm
+AI_DO_LLM_LOCAL_BASE_URL=http://127.0.0.1:8080/v1
+AI_DO_LLM_LOCAL_API_KEY=mlx
+AI_DO_LLM_LOCAL_LONG_GENERATION_TIMEOUT_SECONDS=1200
 
 # External pool
-DOOWON_LLM_EXTERNAL_ENABLED=true
-DOOWON_LLM_EXTERNAL_PROVIDER=openrouter
-DOOWON_LLM_EXTERNAL_BASE_URL=https://openrouter.ai/api/v1
-DOOWON_LLM_EXTERNAL_DEFAULT_MODEL=openai/gpt-5.4-mini
-DOOWON_LLM_EXTERNAL_API_KEY=
-DOOWON_LLM_EXTERNAL_LONG_GENERATION_TIMEOUT_SECONDS=900
+AI_DO_LLM_EXTERNAL_ALLOWED_PROVIDERS=openai,anthropic,gemini
+AI_DO_LLM_EXTERNAL_LONG_GENERATION_TIMEOUT_SECONDS=900
 ```
+
+외부 LLM provider API key는 환경 변수로 전달하지 않는다. 관리자가 Admin의
+AI 모델 설정에서 provider별 credential을 입력하면 DB에 암호화해 저장한다.
+환경에는 저장 credential을 암복호화하는
+`AI_DO_AI_MODEL_CREDENTIAL_ENCRYPTION_KEY`만 설정한다.
+
+이미지 생성 provider와 LLM provider는 서로 다른 제어면을 사용한다. 관리자는
+Admin의 `LLM 관리 > 이미지 모델`에서 이미지 provider endpoint, API key,
+supervisor 모델, generation 모델과 실행 프로필을 명시적으로 설정한다. 이미지
+provider API key와 모델명은 환경 변수에 두지 않으며, 같은 credential 암호화 키만
+재사용한다. `AI_DO_IMAGE_ENABLED`는 배포 kill switch이고 파일 크기·reference 수·
+timeout은 운영 한도로 유지한다. 모델 설정이 없으면 이미지 실행은 fail-closed 한다.
 
 준비 상태 확인:
 
 ```bash
-curl http://127.0.0.1:8000/readyz               # 무인증, 현재 정책 기준의 실제 AI readiness
-curl http://127.0.0.1:8000/api/v1/ai/health     # 인증 필요, raw local/external pool health
+curl http://127.0.0.1:8001/readyz                 # dev, 무인증 AI readiness
 ```
 
-`/api/v1/ai/chat` 등 AI 엔드포인트는 app-level dependency 체인으로
+인증된 pool health endpoint는
+`/api/v1/workspaces/{workspace_slug}/chatbot/health`다.
+
+운영 API 포트는 `8000`이며 운영 확인은 루트 README와 production runbook을 따른다.
+
+`/api/v1/workspaces/{workspace_slug}/chatbot/chat` 등 AI 엔드포인트는 app-level dependency 체인으로
 `require_current_user` + workspace membership 검증 뒤에만 mount된다.
 
 ## 데이터베이스 마이그레이션 (Alembic)
 
 스키마는 Alembic 이 단독 소유한다. `Base.metadata.create_all()` 과 손으로 만든
 `_apply_postgres_schema_compat()` SQL 리스트는 `0b843a383b2b_baseline_2026_04_10`
-리비전으로 baseline 화 되었다 (PR0).
+리비전으로 baseline 화 되었다.
 
 ### 일상 워크플로
 
 ```bash
 cd apps/api
 
-# 1. 모델 변경 후 마이그레이션 자동 생성
-DOOWON_POSTGRES_DSN=postgresql+psycopg://ai_do_db:ai_do_db@127.0.0.1:5432/ai_do_portal \
-  uv run --python 3.12 alembic revision --autogenerate -m "add_meeting_tables"
+# 1. 현재 checkout의 typed env가 가리키는 조정된 개발 DB에서만 자동 생성
+uv run --python 3.12 alembic revision --autogenerate -m "add_meeting_tables"
 
 # 2. 생성된 alembic/versions/<hash>_*.py 파일을 반드시 손으로 검토
 #    autogenerate 가 잡지 못하는 변경 (테이블/컬럼 rename, server_default, CHECK 등) 보강
@@ -88,11 +107,13 @@ uv run --python 3.12 alembic downgrade -1
 
 ### 환경별 적용 방법
 
-| 환경 | 방법 |
-| --- | --- |
-| 로컬 dev / 테스트 | `DOOWON_API_AUTO_MIGRATE=1` 환경변수를 켜면 앱 부팅 시 `init_db()` 가 자동으로 `alembic upgrade head` 를 호출한다. 테스트 fixture (`apps/api/tests/conftest.py`) 가 이 방식을 사용한다. |
-| 스테이징 / 프로덕션 | **자동 실행 금지.** 배포 스크립트에서 명시적으로 `alembic upgrade head` 를 실행한 뒤 앱을 기동한다. `DOOWON_API_AUTO_MIGRATE` 는 prod 에서 절대 켜지 말 것. |
-| Alembic 도입 이전부터 운영 중인 기존 DB | 한 번만 `alembic stamp head` 로 baseline 적용 표시. 이후부터 일반 워크플로 따르면 된다. baseline 은 새 컬럼/테이블만 다루므로 기존 row 는 손실 없음. 다만 legacy `pms_goals`, `pms_goal_links`, `pms_automations` 는 baseline 이 더 이상 다루지 않으므로 필요하면 수동 DROP. |
+| 환경                                    | 방법                                                                                                                                                                                                                                                                         |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 서버 dev checkout | `./dev.sh`의 migration 검증과 현재 dev 환경 계약을 따른다. 공유 DB drift를 발견하면 stamp하지 말고 `ai-do-development-environment` 절차로 조사한다. |
+| 로컬 개발자 머신 | 공유 dev DB에 auto-migrate하지 않는다. 공식 launcher가 `AI_DO_API_AUTO_MIGRATE=0`을 강제한다. |
+| 테스트 | run/worker별 임시 DB에 Alembic과 runtime seed를 한 번 적용하고, 일반 API 테스트는 application-ready baseline과 worker별 앱 조립을 재사용한다. 실제 startup/migration 계약만 전용 테스트에서 다시 실행한다. |
+| 스테이징 / 프로덕션 | **자동 실행 금지.** 배포 스크립트에서 명시적으로 `alembic upgrade head`를 실행한 뒤 앱을 기동한다. |
+| Alembic 도입 이전 DB | 현재 revision, 실제 schema, migration chain을 비교한 승인된 전환 계획 없이 `alembic stamp`하거나 수동 DROP하지 않는다. |
 
 ### 모델 드리프트 가드
 

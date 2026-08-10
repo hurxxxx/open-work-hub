@@ -1,21 +1,35 @@
-import type { ReactNode } from 'react';
-import {
-  Bar,
-  BarChart,
-  Cell,
-  Line,
-  LineChart,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import { lazy, Suspense, type CSSProperties, type ReactNode } from 'react';
 
 import type { ChartSeries } from '../types';
+import {
+  toCartesianData,
+  toDonutChartData,
+  type CartesianChartData,
+  type DonutChartData,
+} from './chart-data';
 
 type ChartStatus = 'ready' | 'loading' | 'empty' | 'error';
+
+const chartAxisTick = {
+  fill: 'var(--ui-color-ink-muted)',
+  fontSize: 12,
+};
+
+const chartTooltipContentStyle: CSSProperties = {
+  backgroundColor: 'var(--ui-color-surface-raised)',
+  border: '1px solid var(--ui-color-border)',
+  borderRadius: 'var(--ui-radius-sm)',
+  boxShadow: 'var(--ui-shadow-lg)',
+  color: 'var(--ui-color-ink)',
+};
+
+const chartTooltipLabelStyle: CSSProperties = {
+  color: 'var(--ui-color-ink)',
+};
+
+const chartTooltipItemStyle: CSSProperties = {
+  color: 'var(--ui-color-ink-muted)',
+};
 
 export interface ChartFrameProps {
   title: ReactNode;
@@ -25,17 +39,158 @@ export interface ChartFrameProps {
   children?: ReactNode;
 }
 
-function toCartesianData(categories: string[], series: ChartSeries[]) {
-  return categories.map((category, index) => {
-    return series.reduce<Record<string, string | number>>(
-      (row, item) => {
-        row[item.key] = item.data[index] ?? 0;
-        return row;
-      },
-      { category },
-    );
-  });
-}
+const LineChartRenderer = lazy(async () => {
+  const { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } =
+    await import('recharts');
+
+  return {
+    default: function LineChartRenderer({
+      data,
+      series,
+    }: {
+      data: CartesianChartData;
+      series: ChartSeries[];
+    }) {
+      return (
+        <ResponsiveContainer
+          width="100%"
+          height="100%"
+          initialDimension={{ width: 640, height: 192 }}
+          minWidth={0}
+          minHeight={192}
+        >
+          <LineChart data={data}>
+            <XAxis
+              axisLine={false}
+              dataKey="category"
+              tick={chartAxisTick}
+              tickLine={false}
+              tickMargin={8}
+            />
+            <YAxis
+              axisLine={false}
+              tick={chartAxisTick}
+              tickLine={false}
+              tickMargin={8}
+              width={32}
+            />
+            <Tooltip
+              contentStyle={chartTooltipContentStyle}
+              itemStyle={chartTooltipItemStyle}
+              labelStyle={chartTooltipLabelStyle}
+            />
+            {series.map((item) => (
+              <Line
+                key={item.key}
+                type="monotone"
+                dataKey={item.key}
+                name={item.label}
+                stroke={item.color}
+                strokeWidth={2}
+                dot={false}
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      );
+    },
+  };
+});
+
+const BarChartRenderer = lazy(async () => {
+  const { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } =
+    await import('recharts');
+
+  return {
+    default: function BarChartRenderer({
+      data,
+      series,
+    }: {
+      data: CartesianChartData;
+      series: ChartSeries[];
+    }) {
+      return (
+        <ResponsiveContainer
+          width="100%"
+          height="100%"
+          initialDimension={{ width: 640, height: 192 }}
+          minWidth={0}
+          minHeight={192}
+        >
+          <BarChart data={data}>
+            <XAxis
+              axisLine={false}
+              dataKey="category"
+              tick={chartAxisTick}
+              tickLine={false}
+              tickMargin={8}
+            />
+            <YAxis
+              axisLine={false}
+              tick={chartAxisTick}
+              tickLine={false}
+              tickMargin={8}
+              width={32}
+            />
+            <Tooltip
+              contentStyle={chartTooltipContentStyle}
+              itemStyle={chartTooltipItemStyle}
+              labelStyle={chartTooltipLabelStyle}
+            />
+            {series.map((item) => (
+              <Bar
+                key={item.key}
+                dataKey={item.key}
+                name={item.label}
+                fill={item.color}
+                radius={[4, 4, 0, 0]}
+              />
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
+      );
+    },
+  };
+});
+
+const DonutChartRenderer = lazy(async () => {
+  const { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } = await import(
+    'recharts'
+  );
+
+  return {
+    default: function DonutChartRenderer({ data }: { data: DonutChartData }) {
+      return (
+        <ResponsiveContainer
+          width="100%"
+          height="100%"
+          initialDimension={{ width: 320, height: 192 }}
+          minWidth={0}
+          minHeight={192}
+        >
+          <PieChart>
+            <Tooltip
+              contentStyle={chartTooltipContentStyle}
+              itemStyle={chartTooltipItemStyle}
+              labelStyle={chartTooltipLabelStyle}
+            />
+            <Pie
+              data={data}
+              dataKey="value"
+              nameKey="name"
+              innerRadius={52}
+              outerRadius={74}
+            >
+              {data.map((item) => (
+                <Cell key={item.name} fill={item.color} />
+              ))}
+            </Pie>
+          </PieChart>
+        </ResponsiveContainer>
+      );
+    },
+  };
+});
 
 export function ChartFrame({
   title,
@@ -45,18 +200,18 @@ export function ChartFrame({
   children,
 }: ChartFrameProps) {
   const body =
-    status === 'empty' || status === 'error' ? (
-      emptyState ?? null
-    ) : (
-      children
-    );
+    status === 'empty' || status === 'error' ? (emptyState ?? null) : children;
 
   return (
     <section className="rounded-[var(--ui-radius-lg)] border border-[var(--ui-color-border)] bg-ui-surface p-5 shadow-[var(--ui-shadow-sm)]">
       <div className="mb-4 grid gap-1">
-        <h3 className="m-0 text-base font-semibold text-[var(--ui-color-ink)]">{title}</h3>
+        <h3 className="m-0 text-[length:var(--ui-text-h3)] font-semibold text-[var(--ui-color-ink)]">
+          {title}
+        </h3>
         {description ? (
-          <p className="m-0 text-sm text-[var(--ui-color-ink-muted)]">{description}</p>
+          <p className="m-0 text-[length:var(--ui-text-body)] text-[var(--ui-color-ink-muted)]">
+            {description}
+          </p>
         ) : null}
       </div>
       <div className="h-48">{body}</div>
@@ -83,23 +238,9 @@ export function LineChartCard({
 
   return (
     <ChartFrame title={title} status={status} emptyState={emptyState}>
-      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={192}>
-        <LineChart data={data}>
-          <XAxis dataKey="category" tickLine={false} axisLine={false} />
-          <YAxis tickLine={false} axisLine={false} width={32} />
-          <Tooltip />
-          {series.map((item) => (
-            <Line
-              key={item.key}
-              type="monotone"
-              dataKey={item.key}
-              stroke={item.color}
-              strokeWidth={2}
-              dot={false}
-            />
-          ))}
-        </LineChart>
-      </ResponsiveContainer>
+      <Suspense fallback={null}>
+        <LineChartRenderer data={data} series={series} />
+      </Suspense>
     </ChartFrame>
   );
 }
@@ -117,16 +258,9 @@ export function BarChartCard({
 
   return (
     <ChartFrame title={title} status={status} emptyState={emptyState}>
-      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={192}>
-        <BarChart data={data}>
-          <XAxis dataKey="category" tickLine={false} axisLine={false} />
-          <YAxis tickLine={false} axisLine={false} width={32} />
-          <Tooltip />
-          {series.map((item) => (
-            <Bar key={item.key} dataKey={item.key} fill={item.color} radius={[4, 4, 0, 0]} />
-          ))}
-        </BarChart>
-      </ResponsiveContainer>
+      <Suspense fallback={null}>
+        <BarChartRenderer data={data} series={series} />
+      </Suspense>
     </ChartFrame>
   );
 }
@@ -146,24 +280,13 @@ export function DonutChartCard({
   status = 'ready',
   emptyState,
 }: DonutChartCardProps) {
-  const data = categories.map((category, index) => ({
-    name: category,
-    value: series[0]?.data[index] ?? 0,
-    color: series[index]?.color ?? series[0]?.color ?? 'var(--ui-color-accent)',
-  }));
+  const data = toDonutChartData(categories, series);
 
   return (
     <ChartFrame title={title} status={status} emptyState={emptyState}>
-      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={192}>
-        <PieChart>
-          <Tooltip />
-          <Pie data={data} dataKey="value" nameKey="name" innerRadius={52} outerRadius={74}>
-            {data.map((item) => (
-              <Cell key={item.name} fill={item.color} />
-            ))}
-          </Pie>
-        </PieChart>
-      </ResponsiveContainer>
+      <Suspense fallback={null}>
+        <DonutChartRenderer data={data} />
+      </Suspense>
     </ChartFrame>
   );
 }

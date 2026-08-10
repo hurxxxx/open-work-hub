@@ -5,12 +5,13 @@ from typing import Literal
 
 
 CallerPrincipalKind = Literal["user", "service_account", "system"]
+CallerPrincipalScope = Literal["personal", "workspace"]
 
 
 @dataclass(frozen=True)
 class CallerPrincipal:
     kind: CallerPrincipalKind
-    workspace_id: str
+    workspace_id: str | None
     source: str
     user_id: str | None = None
     service_account_id: str | None = None
@@ -24,6 +25,10 @@ class CallerPrincipal:
             return self.service_account_id
         return None
 
+    @property
+    def scope(self) -> CallerPrincipalScope:
+        return "workspace" if self.workspace_id is not None else "personal"
+
     def as_payload(self) -> dict[str, str | None]:
         return {
             "kind": self.kind,
@@ -33,6 +38,7 @@ class CallerPrincipal:
             "service_account_id": self.service_account_id,
             "session_id": self.session_id,
             "principal_id": self.principal_id,
+            "scope": self.scope,
         }
 
 
@@ -46,6 +52,21 @@ def user_principal(
     return CallerPrincipal(
         kind="user",
         workspace_id=workspace_id,
+        source=source,
+        user_id=user_id,
+        session_id=session_id,
+    )
+
+
+def personal_user_principal(
+    *,
+    user_id: str,
+    source: str,
+    session_id: str | None = None,
+) -> CallerPrincipal:
+    return CallerPrincipal(
+        kind="user",
+        workspace_id=None,
         source=source,
         user_id=user_id,
         session_id=session_id,

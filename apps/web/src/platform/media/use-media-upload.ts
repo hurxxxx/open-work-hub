@@ -1,16 +1,10 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { i18n } from '@/src/platform/i18n';
 import { linkMedia, uploadMedia, resolveMediaUrls } from './media-api';
+import { createMediaUrlResolutionSession } from './media-url-resolution-session';
 
-const CACHE_TTL_MS = 50 * 60 * 1000; // 50 minutes (presigned URLs expire in 1h)
-
-interface CacheEntry {
-  url: string;
-  expiresAt: number;
-}
-
-export type MediaResourceType = 'issue' | 'docs_native_page';
+export type MediaResourceType = 'task' | 'docs_native_page';
 
 export interface MediaLinkTarget {
   resourceType: MediaResourceType;
@@ -19,9 +13,10 @@ export interface MediaLinkTarget {
 
 export function useMediaUpload() {
   const { token } = useAuth();
-  const cacheRef = useRef(new Map<string, CacheEntry>());
-  const pendingRef = useRef(new Map<string, Array<(url: string) => void>>());
-  const scheduledRef = useRef(false);
+  const urlResolutionSession = useMemo(
+    () => createMediaUrlResolutionSession({ resolveMediaUrls }),
+    [],
+  );
 
   const uploadFile = useCallback(
     async (file: File): Promise<string> => {
@@ -53,53 +48,10 @@ export function useMediaUpload() {
 
   const resolveFileUrl = useCallback(
     (url: string): Promise<string> => {
-      if (!url.startsWith('media:')) return Promise.resolve(url);
       if (!token) return Promise.resolve(url);
-
-      // Check cache
-      const cached = cacheRef.current.get(url);
-      if (cached && cached.expiresAt > Date.now()) {
-        return Promise.resolve(cached.url);
-      }
-
-      // Batch via microtask
-      return new Promise<string>((resolve) => {
-        const pending = pendingRef.current;
-        const resolvers = pending.get(url) ?? [];
-        resolvers.push(resolve);
-        pending.set(url, resolvers);
-
-        if (!scheduledRef.current) {
-          scheduledRef.current = true;
-          queueMicrotask(async () => {
-            scheduledRef.current = false;
-            const batch = new Map(pending);
-            pending.clear();
-
-            const urls = [...batch.keys()];
-            try {
-              const resolved = await resolveMediaUrls(token, urls);
-              const now = Date.now();
-              for (const [mediaUrl, resolvers] of batch) {
-                const presigned = resolved[mediaUrl] ?? mediaUrl;
-                if (resolved[mediaUrl]) {
-                  cacheRef.current.set(mediaUrl, {
-                    url: presigned,
-                    expiresAt: now + CACHE_TTL_MS,
-                  });
-                }
-                resolvers.forEach((r) => r(presigned));
-              }
-            } catch {
-              for (const [mediaUrl, resolvers] of batch) {
-                resolvers.forEach((r) => r(mediaUrl));
-              }
-            }
-          });
-        }
-      });
+      return urlResolutionSession.resolveFileUrl({ token, url });
     },
-    [token],
+    [token, urlResolutionSession],
   );
 
   return {

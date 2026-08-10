@@ -3,16 +3,50 @@
   "ignoreFiles": [
     "coverage/**",
     "dist/**",
-    "legacy_ai_portal_prototype/**",
     "node_modules/**"
   ],
+  "rules": {
+    "dependencies": "off",
+    "devDependencies": "off",
+    "unlisted": "off"
+  },
   "workspaces": {
     ".": {
       "entry": [
+        "apps/web/src/main.tsx",
+        "apps/web/src/App.tsx",
+        "apps/web/src/app/AppRoot.tsx",
+        "apps/web/vite.config.mts",
+        "apps/web/playwright.config.ts",
+        "packages/ui/src/index.ts",
+        "packages/ui/styles.css",
+        "packages/ui/vite.config.mts",
         "eslint.config.mjs",
         "scripts/blocknote-collab-codec.mjs",
+        "scripts/check-contracts-publish-tag.mjs",
+        "scripts/run-affected-api-tests.mjs",
         "scripts/check-web-app-boundaries.mjs"
       ],
+      "paths": {
+        "@/src/*": [
+          "apps/web/src/*"
+        ],
+        "@ai-do/ui": [
+          "packages/ui/src/index.ts"
+        ],
+        "@ai-do/ui/styles.css": [
+          "packages/ui/styles.css"
+        ],
+        "@ai-do/web-shell": [
+          "apps/web/src/app/shell/AppContent.tsx"
+        ],
+        "@ai-do/web/styles.css": [
+          "apps/web/src/index.css"
+        ],
+        "@ai-do/web/fullcalendar-theme.css": [
+          "apps/web/src/styles/fullcalendar-theme.css"
+        ]
+      },
       "project": [
         "*.cjs",
         "*.mjs",
@@ -42,6 +76,15 @@
         ],
         "@ai-do/ui/styles.css": [
           "../../packages/ui/styles.css"
+        ],
+        "@ai-do/web-shell": [
+          "../web/src/app/shell/AppContent.tsx"
+        ],
+        "@ai-do/web/styles.css": [
+          "../web/src/index.css"
+        ],
+        "@ai-do/web/fullcalendar-theme.css": [
+          "../web/src/styles/fullcalendar-theme.css"
         ]
       },
       "project": [

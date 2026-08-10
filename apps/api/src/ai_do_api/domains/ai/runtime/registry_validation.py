@@ -3,6 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ai_do_api.domains.ai.runtime.contracts import ExecutionGraph
+from ai_do_api.domains.ai.runtime.graph_invocation_dependencies import (
+    GraphInvocationDependencyError,
+    validate_invocation_dependencies,
+)
 
 
 class RuntimeRegistryValidationError(ValueError):
@@ -15,6 +19,7 @@ class RuntimeRegistry:
     intents: frozenset[str]
     domains: frozenset[str]
     output_kinds: frozenset[str]
+    blocked_direct_invocation_agent_ids: frozenset[str] = frozenset()
 
 
 def validate_execution_graph(
@@ -37,18 +42,27 @@ def validate_execution_graph(
     if unknown_agents:
         raise RuntimeRegistryValidationError(f"unknown agent id(s): {unknown_agents}")
 
-    if any(invocation.agent_id == "external.search" for invocation in graph.invocations):
+    blocked_direct_invocation_agents = sorted(
+        {invocation.agent_id for invocation in graph.invocations}
+        & registry.blocked_direct_invocation_agent_ids
+    )
+    if blocked_direct_invocation_agents:
+        if len(blocked_direct_invocation_agents) == 1:
+            raise RuntimeRegistryValidationError(
+                f"{blocked_direct_invocation_agents[0]} cannot be a direct invocation target"
+            )
         raise RuntimeRegistryValidationError(
-            "external.search cannot be a direct invocation target"
+            "blocked direct invocation agent id(s): "
+            f"{blocked_direct_invocation_agents}"
         )
 
-    invocation_ids = {invocation.agent_id for invocation in graph.invocations}
-    for invocation in graph.invocations:
-        missing_dependencies = sorted(set(invocation.must_run_after) - invocation_ids)
-        if missing_dependencies:
-            raise RuntimeRegistryValidationError(
-                f"{invocation.agent_id} depends on unknown invocation(s): "
-                f"{missing_dependencies}"
-            )
+    _validate_invocation_graph_shape(graph)
 
     return graph
+
+
+def _validate_invocation_graph_shape(graph: ExecutionGraph) -> None:
+    try:
+        validate_invocation_dependencies(graph)
+    except GraphInvocationDependencyError as exc:
+        raise RuntimeRegistryValidationError(str(exc)) from exc

@@ -1,5 +1,8 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+
+from ai_do_api.domains.auth.workspace_app_gate import require_workspace_app_enabled
+from ai_do_api.domains.writing_assistant.app_catalog import DRAFTING_WORKSPACE_APP
 
 
 class DraftTemplate(BaseModel):
@@ -14,7 +17,15 @@ class DraftRecord(BaseModel):
     export_status: str
 
 
-router = APIRouter(tags=["drafts"])
+require_drafting_app_enabled = require_workspace_app_enabled(
+    DRAFTING_WORKSPACE_APP.app_id,
+    error_code="writing_assistant.app_disabled",
+)
+
+router = APIRouter(
+    tags=["drafts"],
+    dependencies=[Depends(require_drafting_app_enabled)],
+)
 
 
 @router.get("/templates", response_model=list[DraftTemplate])

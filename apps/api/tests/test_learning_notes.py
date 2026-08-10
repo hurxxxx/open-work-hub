@@ -1,15 +1,21 @@
 """Tests for the personal learning notes endpoints.
 
-Covers the permission matrix from ``plans/06-learning-annotations.md``:
+Covers the learning-note permission matrix:
   * anonymous -> 401 on every endpoint
   * any authenticated user can upsert their own note with public/private toggle
   * the list endpoint never leaks other users' private notes
   * detail/archive/restore of another user's note -> 404 (hide existence)
   * platform admin has NO special privilege over private notes
 """
+
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
+
+from ai_do_api.core.db import get_session_factory
+from ai_do_api.domains.docs.models import NativeDoc
+from ai_do_api.domains.retrieval.models import RetrievalPartition
 
 
 def _auth_headers(token: str) -> dict[str, str]:
@@ -47,7 +53,7 @@ def _create_member(
     user_id = response.json()["user"]["id"]
     login = client.post(
         "/api/v1/auth/login",
-        json={"email": email, "password": password},
+        json={"login_id": email.split("@", 1)[0].lower(), "password": password},
     )
     assert login.status_code == 200, login.text
     return user_id, login.json()["token"]
@@ -55,9 +61,7 @@ def _create_member(
 
 _COURSE = "vibe-coding-foundations"
 _LESSON = "vcf-001-orientation"
-_BLOCKS = [
-    {"type": "paragraph", "content": [{"type": "text", "text": "개인 메모."}]}
-]
+_BLOCKS = [{"type": "paragraph", "content": [{"type": "text", "text": "개인 메모."}]}]
 
 
 def _payload(visibility: str = "private", text: str = "개인 메모.") -> dict:
@@ -66,22 +70,26 @@ def _payload(visibility: str = "private", text: str = "개인 메모.") -> dict:
         "lesson_id": _LESSON,
         "lesson_title": "오리엔테이션",
         "visibility": visibility,
-        "content_blocks": [
-            {"type": "paragraph", "content": [{"type": "text", "text": text}]}
-        ],
+        "content_blocks": [{"type": "paragraph", "content": [{"type": "text", "text": text}]}],
     }
 
 
 def test_anonymous_requests_are_rejected(client: TestClient) -> None:
     _bootstrap_admin_session(client)
-    assert client.get(
-        "/api/v1/learning/notes",
-        params={"course_slug": _COURSE, "lesson_id": _LESSON},
-    ).status_code == 401
-    assert client.get(
-        "/api/v1/learning/notes/me",
-        params={"course_slug": _COURSE, "lesson_id": _LESSON},
-    ).status_code == 401
+    assert (
+        client.get(
+            "/api/v1/learning/notes",
+            params={"course_slug": _COURSE, "lesson_id": _LESSON},
+        ).status_code
+        == 401
+    )
+    assert (
+        client.get(
+            "/api/v1/learning/notes/me",
+            params={"course_slug": _COURSE, "lesson_id": _LESSON},
+        ).status_code
+        == 401
+    )
     assert client.put("/api/v1/learning/notes/me", json=_payload()).status_code == 401
     assert client.get("/api/v1/learning/notes/anything").status_code == 401
     assert client.post("/api/v1/learning/notes/anything/archive").status_code == 401
@@ -103,6 +111,14 @@ def test_any_user_can_create_and_edit_their_own_private_note(client: TestClient)
     assert body["is_mine"] is True
     assert body["author_name"]  # populated from display_name/full_name/email
     doc_id = body["doc_id"]
+
+    with get_session_factory()() as db:
+        doc = db.scalar(select(NativeDoc).where(NativeDoc.id == doc_id))
+        assert doc is not None
+        partition = db.get(RetrievalPartition, doc.retrieval_partition_id)
+        assert partition is not None
+        assert partition.candidate_scope_kind == "personal"
+        assert partition.candidate_user_id == doc.owner_id
 
     # Re-upsert updates the same document and can flip visibility.
     updated = client.put(
@@ -176,9 +192,7 @@ def test_public_notes_are_listed_and_readable_by_everyone(client: TestClient) ->
     alice_id, alice_token = _create_member(
         client, admin["token"], email="alice@ai-do.local", full_name="Alice"
     )
-    _, bob_token = _create_member(
-        client, admin["token"], email="bob@ai-do.local", full_name="Bob"
-    )
+    _, bob_token = _create_member(client, admin["token"], email="bob@ai-do.local", full_name="Bob")
 
     alice_note = client.put(
         "/api/v1/learning/notes/me",

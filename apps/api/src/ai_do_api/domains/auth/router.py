@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+import secrets
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Request, status
@@ -11,7 +12,11 @@ from sqlalchemy.orm import Session
 
 from ai_do_api.core.db import get_db_session
 from ai_do_api.core.i18n import localized_http_exception
-from ai_do_api.core.settings import get_settings
+from ai_do_api.core.settings import (
+    get_settings,
+    is_production_environment,
+    is_production_like_environment,
+)
 from ai_do_api.domains.auth.access import (
     SYSTEM_PLATFORM_ADMIN,
     ensure_dev_login_seed_data,
@@ -20,35 +25,67 @@ from ai_do_api.domains.auth.access import (
     get_dev_login_user,
     list_dev_login_account_catalog,
     list_dev_login_accounts,
+    load_active_workspace_by_id,
     load_user_graph,
     normalize_locale,
     normalize_time_zone,
     record_audit_log,
-    resolve_group_slugs,
+    resolve_workspace_role,
     replace_user_system_roles,
     serialize_auth_user,
 )
-from ai_do_api.domains.auth.dependencies import AuthContext, require_auth_context
+from ai_do_api.domains.auth.date_format_preferences import (
+    default_date_format_value,
+    normalize_date_format_payload,
+    validate_date_format_value,
+)
+from ai_do_api.domains.auth.app_bar_preferences import (
+    normalize_app_bar_pinned_app_ids,
+)
+from ai_do_api.domains.auth.dependencies import (
+    AuthContext,
+    require_auth_context,
+    require_permission,
+)
+from ai_do_api.domains.auth.groupware_http import (
+    GroupwareAuthUnavailable,
+    verify_groupware_password,
+)
 from ai_do_api.domains.auth.models import (
     AuthSession,
+    DesktopSessionLink,
     OrgUnit,
     User,
     Workspace,
     WorkspaceUserBinding,
 )
 from ai_do_api.domains.auth.security import (
+    derive_login_id_from_email,
+    hash_token,
     hash_password,
     issue_session_token,
+    is_valid_login_id,
     new_id,
     normalize_email,
+    normalize_login_id,
     verify_password,
 )
+
+DESKTOP_SESSION_LINK_TTL_SECONDS = 5 * 60
 
 
 def _valid_email_required_error() -> PydanticCustomError:
     return PydanticCustomError(
         "auth.valid_email_required",
         "A valid email address is required.",
+        {},
+    )
+
+
+def _valid_login_id_required_error() -> PydanticCustomError:
+    return PydanticCustomError(
+        "auth.valid_login_id_required",
+        "A valid ID is required.",
         {},
     )
 
@@ -65,6 +102,22 @@ def _invalid_time_zone_error() -> PydanticCustomError:
     return PydanticCustomError(
         "auth.invalid_time_zone",
         "Invalid time zone.",
+        {},
+    )
+
+
+def _invalid_app_bar_layout_error() -> PydanticCustomError:
+    return PydanticCustomError(
+        "auth.invalid_app_bar_layout",
+        "Invalid app bar layout.",
+        {},
+    )
+
+
+def _password_confirmation_mismatch_error() -> PydanticCustomError:
+    return PydanticCustomError(
+        "auth.password_confirmation_mismatch",
+        "Password confirmation does not match.",
         {},
     )
 
@@ -97,21 +150,38 @@ class WorkspaceSummaryResponse(BaseModel):
     role: str
 
 
+class AppBarLayoutPreference(BaseModel):
+    pinned_app_ids: list[str] = Field(default_factory=list)
+
+    @field_validator("pinned_app_ids")
+    @classmethod
+    def validate_pinned_app_ids(cls, value: list[str]) -> list[str]:
+        try:
+            return normalize_app_bar_pinned_app_ids(value, reject_unknown=True)
+        except ValueError as exc:
+            raise _invalid_app_bar_layout_error() from exc
+
+
 class AuthUserResponse(BaseModel):
     id: str
+    login_id: str
     email: str
     full_name: str
     display_name: str
+    employee_code: str | None = None
     job_title: str | None
+    auth_provider: str
     status: str
+    login_blocked: bool
     theme_preference: str
     locale: str
     time_zone: str
+    date_format: str
+    app_bar_layout: AppBarLayoutPreference
+    default_workspace_id: str | None
     primary_org_unit: OrgUnitSummaryResponse | None
     system_roles: list[str]
     workspaces: list[WorkspaceSummaryResponse]
-    group_ids: list[str]
-    group_slugs: list[str]
     must_change_password: bool
     last_login_at: datetime | None
     created_at: datetime
@@ -120,6 +190,15 @@ class AuthUserResponse(BaseModel):
 class AuthSessionResponse(BaseModel):
     token: str
     user: AuthUserResponse
+
+
+class DesktopSessionLinkResponse(BaseModel):
+    code: str
+    expires_at: datetime
+
+
+class DesktopSessionLinkExchangeRequest(BaseModel):
+    code: str = Field(..., min_length=16, max_length=256)
 
 
 class SessionListItemResponse(BaseModel):
@@ -139,8 +218,21 @@ class SessionListResponse(BaseModel):
 
 class SetupFirstUserRequest(BaseModel):
     full_name: str = Field(..., min_length=2, max_length=120)
+    login_id: str | None = Field(default=None, min_length=3, max_length=40)
     email: str = Field(..., min_length=5, max_length=320)
     password: str = Field(..., min_length=8, max_length=128)
+
+    @field_validator("login_id", mode="before")
+    @classmethod
+    def validate_login_id(cls, value: object) -> object:
+        if value is None:
+            return value
+        if not isinstance(value, str):
+            return value
+        normalized = normalize_login_id(value)
+        if not is_valid_login_id(normalized):
+            raise _valid_login_id_required_error()
+        return normalized
 
     @field_validator("email")
     @classmethod
@@ -151,9 +243,22 @@ class SetupFirstUserRequest(BaseModel):
         return normalized
 
 
-class LoginRequest(BaseModel):
+class SignupRequest(BaseModel):
+    full_name: str = Field(..., min_length=2, max_length=120)
+    login_id: str = Field(..., min_length=3, max_length=40)
     email: str = Field(..., min_length=5, max_length=320)
     password: str = Field(..., min_length=8, max_length=128)
+    password_confirm: str = Field(..., min_length=8, max_length=128)
+
+    @field_validator("login_id", mode="before")
+    @classmethod
+    def validate_login_id(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        normalized = normalize_login_id(value)
+        if not is_valid_login_id(normalized):
+            raise _valid_login_id_required_error()
+        return normalized
 
     @field_validator("email")
     @classmethod
@@ -161,6 +266,27 @@ class LoginRequest(BaseModel):
         normalized = normalize_email(value)
         if "@" not in normalized:
             raise _valid_email_required_error()
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_password_confirmation(self) -> "SignupRequest":
+        if self.password != self.password_confirm:
+            raise _password_confirmation_mismatch_error()
+        return self
+
+
+class LoginRequest(BaseModel):
+    login_id: str = Field(..., min_length=3, max_length=40)
+    password: str = Field(..., min_length=8, max_length=128)
+
+    @field_validator("login_id", mode="before")
+    @classmethod
+    def validate_login_id(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        normalized = normalize_login_id(value)
+        if not is_valid_login_id(normalized):
+            raise _valid_login_id_required_error()
         return normalized
 
 
@@ -180,6 +306,9 @@ class UpdatePreferencesRequest(BaseModel):
     theme_preference: Literal["system", "light", "dark"] | None = None
     locale: Literal["ko-KR", "en-US"] | None = None
     time_zone: str | None = Field(default=None, min_length=1, max_length=64)
+    date_format: Literal["korean", "iso", "us", "european", "locale"] | None = None
+    app_bar_layout: AppBarLayoutPreference | None = None
+    default_workspace_id: str | None = Field(default=None, max_length=36)
 
     @model_validator(mode="before")
     @classmethod
@@ -194,6 +323,11 @@ class UpdatePreferencesRequest(BaseModel):
         except ValueError as exc:
             raise _invalid_locale_error() from exc
         return {**data, "locale": normalized}
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_date_format_before_field_types(cls, data):
+        return normalize_date_format_payload(data)
 
     @field_validator("time_zone")
     @classmethod
@@ -215,6 +349,19 @@ class UpdatePreferencesRequest(BaseModel):
         except ValueError as exc:
             raise _invalid_locale_error() from exc
 
+    @field_validator("date_format")
+    @classmethod
+    def validate_date_format(cls, value: str | None) -> str | None:
+        return validate_date_format_value(value)
+
+    @field_validator("default_workspace_id")
+    @classmethod
+    def validate_default_workspace_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -235,13 +382,20 @@ def _request_user_agent(request: Request) -> str | None:
     return request.headers.get("user-agent")
 
 
-def _issue_auth_response(db: Session, user: User, request: Request) -> AuthSessionResponse:
+def _issue_auth_response(
+    db: Session,
+    user: User,
+    request: Request,
+    *,
+    impersonator_user_id: str | None = None,
+) -> AuthSessionResponse:
     settings = get_settings()
     issued = issue_session_token(settings.session_ttl_hours)
     now = datetime.now(UTC).replace(tzinfo=None)
     session = AuthSession(
         id=new_id(),
         user_id=user.id,
+        impersonator_user_id=impersonator_user_id,
         token_hash=issued.token_hash,
         expires_at=issued.expires_at,
         last_seen_at=now,
@@ -256,7 +410,7 @@ def _issue_auth_response(db: Session, user: User, request: Request) -> AuthSessi
 
 
 def _ensure_active_user(user: User) -> None:
-    if user.status != "active":
+    if user.status != "active" or user.login_blocked:
         raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
             code="auth.user_inactive",
@@ -265,16 +419,19 @@ def _ensure_active_user(user: User) -> None:
 
 def _ensure_development_environment() -> None:
     settings = get_settings()
-    if settings.environment.lower() == "production":
+    if is_production_environment(settings.environment):
         raise localized_http_exception(
             status_code=status.HTTP_404_NOT_FOUND,
             code="auth.not_found",
         )
 
 
-def _is_local_dev_admin_login_available(request: Request) -> bool:
+def is_local_dev_admin_login_available(request: Request) -> bool:
     settings = get_settings()
-    if settings.environment.lower() == "production" or not settings.allow_dev_admin_login:
+    if (
+        is_production_like_environment(settings.environment)
+        or not settings.allow_dev_admin_login
+    ):
         return False
 
     client_host = request.client.host if request.client else None
@@ -302,7 +459,7 @@ def _is_local_dev_admin_login_available(request: Request) -> bool:
 
 
 def _ensure_local_dev_admin_login_allowed(request: Request) -> None:
-    if not _is_local_dev_admin_login_available(request):
+    if not is_local_dev_admin_login_available(request):
         raise localized_http_exception(
             status_code=status.HTTP_404_NOT_FOUND,
             code="auth.not_found",
@@ -315,7 +472,7 @@ def bootstrap_status(
     db: Session = Depends(get_db_session),
 ) -> BootstrapStatusResponse:
     has_users = db.scalar(select(func.count()).select_from(User)) > 0
-    dev_admin_login_available = _is_local_dev_admin_login_available(request)
+    dev_admin_login_available = is_local_dev_admin_login_available(request)
     # The dev-login account list is a read-only projection. Previously this
     # endpoint also triggered ``ensure_dev_login_seed_data`` on every call,
     # which turned the routine "open login page" action into an expensive
@@ -364,6 +521,7 @@ def setup_first_user(
 
     user = User(
         id=new_id(),
+        login_id=payload.login_id or derive_login_id_from_email(payload.email),
         email=payload.email,
         full_name=payload.full_name.strip(),
         display_name=payload.full_name.strip(),
@@ -374,6 +532,7 @@ def setup_first_user(
         theme_preference="system",
         locale=normalize_locale(None),
         time_zone=normalize_time_zone(None),
+        date_format=default_date_format_value(),
     )
     db.add(user)
     db.flush()
@@ -404,19 +563,58 @@ def setup_first_user(
     return _issue_auth_response(db, user, request)
 
 
+@router.post(
+    "/signup",
+    response_model=AuthSessionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def signup(
+    payload: SignupRequest,
+    request: Request,
+    db: Session = Depends(get_db_session),
+) -> AuthSessionResponse:
+    del payload, request, db
+    raise localized_http_exception(
+        status_code=status.HTTP_403_FORBIDDEN,
+        code="auth.signup_disabled",
+    )
+
+
 @router.post("/login", response_model=AuthSessionResponse)
 def login(
     payload: LoginRequest,
     request: Request,
     db: Session = Depends(get_db_session),
 ) -> AuthSessionResponse:
-    user = db.scalar(select(User).where(User.email == payload.email))
-    if user is None or not verify_password(payload.password, user.password_hash):
+    user = db.scalar(select(User).where(User.login_id == payload.login_id))
+    if user is None:
         raise localized_http_exception(
             status_code=status.HTTP_401_UNAUTHORIZED,
             code="auth.invalid_credentials",
         )
     _ensure_active_user(user)
+    if user.auth_provider == "groupware":
+        settings = get_settings()
+        try:
+            password_matches = verify_groupware_password(
+                auth_url=settings.hr_groupware_auth_url,
+                login_id=payload.login_id,
+                password=payload.password,
+                timeout_seconds=settings.hr_groupware_auth_timeout_seconds,
+            )
+        except GroupwareAuthUnavailable as exc:
+            raise localized_http_exception(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                code="auth.external_auth_unavailable",
+            ) from exc
+    else:
+        password_matches = verify_password(payload.password, user.password_hash)
+
+    if not password_matches:
+        raise localized_http_exception(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            code="auth.invalid_credentials",
+        )
     record_audit_log(
         db,
         actor_user_id=user.id,
@@ -424,7 +622,6 @@ def login(
         entity_kind="session",
         entity_id=user.id,
         summary=f"User logged in: {user.email}",
-        payload={"group_slugs": resolve_group_slugs(load_user_graph(db, user.id) or user)},
     )
     db.commit()
     return _issue_auth_response(db, user, request)
@@ -467,7 +664,6 @@ def dev_admin_login(
         entity_kind="session",
         entity_id=user.id,
         summary=f"Development admin quick login: {user.email}",
-        payload={"group_slugs": resolve_group_slugs(load_user_graph(db, user.id) or user)},
     )
     db.commit()
     return _issue_auth_response(db, user, request)
@@ -505,6 +701,42 @@ def dev_login(
     return _issue_auth_response(db, user, request)
 
 
+@router.post("/impersonations/{user_id}", response_model=AuthSessionResponse)
+def impersonate_user(
+    user_id: str,
+    request: Request,
+    context: AuthContext = Depends(require_permission("user.impersonate")),
+    db: Session = Depends(get_db_session),
+) -> AuthSessionResponse:
+    target_user = db.scalar(select(User).where(User.id == user_id))
+    if target_user is None:
+        raise localized_http_exception(status_code=404, code="auth.user_not_found")
+    _ensure_active_user(target_user)
+
+    impersonator_user_id = context.impersonator_user_id or context.user.id
+    record_audit_log(
+        db,
+        actor_user_id=context.user.id,
+        action="auth.impersonate",
+        entity_kind="user",
+        entity_id=target_user.id,
+        summary=f"User impersonation started: {context.user.email} -> {target_user.email}",
+        payload={
+            "impersonator_user_id": impersonator_user_id,
+            "impersonator_email": context.user.email,
+            "target_user_id": target_user.id,
+            "target_email": target_user.email,
+            "source_session_id": context.session.id,
+        },
+    )
+    return _issue_auth_response(
+        db,
+        target_user,
+        request,
+        impersonator_user_id=impersonator_user_id,
+    )
+
+
 @router.get("/me", response_model=AuthUserResponse)
 def me(
     context: AuthContext = Depends(require_auth_context),
@@ -531,12 +763,104 @@ def logout(
     db.commit()
 
 
+@router.post("/desktop-session-links", response_model=DesktopSessionLinkResponse)
+def create_desktop_session_link(
+    request: Request,
+    context: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> DesktopSessionLinkResponse:
+    code = secrets.token_urlsafe(32)
+    now = datetime.now(UTC).replace(tzinfo=None)
+    expires_at = now + timedelta(seconds=DESKTOP_SESSION_LINK_TTL_SECONDS)
+    link = DesktopSessionLink(
+        id=new_id(),
+        user_id=context.user.id,
+        source_session_id=context.session.id,
+        code_hash=hash_token(code),
+        created_at=now,
+        expires_at=expires_at,
+        user_agent=_request_user_agent(request),
+        ip_address=_request_ip(request),
+    )
+    db.add(link)
+    record_audit_log(
+        db,
+        actor_user_id=context.user.id,
+        action="auth.desktop-session-link.create",
+        entity_kind="session",
+        entity_id=link.id,
+        summary=f"Desktop session link created for {context.user.email}",
+        payload={"expires_at": expires_at.isoformat()},
+    )
+    db.commit()
+    return DesktopSessionLinkResponse(code=code, expires_at=expires_at)
+
+
+@router.post("/desktop-session-links/exchange", response_model=AuthSessionResponse)
+def exchange_desktop_session_link(
+    payload: DesktopSessionLinkExchangeRequest,
+    request: Request,
+    db: Session = Depends(get_db_session),
+) -> AuthSessionResponse:
+    now = datetime.now(UTC).replace(tzinfo=None)
+    link = db.scalar(
+        select(DesktopSessionLink)
+        .where(
+            DesktopSessionLink.code_hash == hash_token(payload.code),
+            DesktopSessionLink.consumed_at.is_(None),
+            DesktopSessionLink.expires_at > now,
+        )
+        .with_for_update()
+    )
+    if link is None:
+        raise localized_http_exception(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            code="auth.desktop_session_link_invalid",
+        )
+
+    source_session = db.scalar(
+        select(AuthSession).where(
+            AuthSession.id == link.source_session_id,
+            AuthSession.revoked_at.is_(None),
+            AuthSession.expires_at > now,
+        )
+    )
+    user = load_user_graph(db, link.user_id)
+    if source_session is None or user is None:
+        link.consumed_at = now
+        db.add(link)
+        db.commit()
+        raise localized_http_exception(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            code="auth.desktop_session_link_invalid",
+        )
+    _ensure_active_user(user)
+
+    link.consumed_at = now
+    db.add(link)
+    record_audit_log(
+        db,
+        actor_user_id=user.id,
+        action="auth.desktop-session-link.exchange",
+        entity_kind="session",
+        entity_id=link.id,
+        summary=f"Desktop session link exchanged for {user.email}",
+    )
+    db.commit()
+    return _issue_auth_response(db, user, request)
+
+
 @router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
 def change_password(
     payload: ChangePasswordRequest,
     context: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
 ) -> None:
+    if context.user.auth_provider == "groupware":
+        raise localized_http_exception(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code="auth.password_managed_externally",
+        )
     if not verify_password(payload.current_password, context.user.password_hash):
         raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -575,6 +899,31 @@ def update_preferences(
         context.user.locale = payload.locale
     if payload.time_zone is not None:
         context.user.time_zone = payload.time_zone
+    if payload.date_format is not None:
+        context.user.date_format = payload.date_format
+    if "app_bar_layout" in payload.model_fields_set:
+        context.user.app_bar_layout = (
+            payload.app_bar_layout.model_dump()
+            if payload.app_bar_layout is not None
+            else None
+        )
+    if "default_workspace_id" in payload.model_fields_set:
+        if payload.default_workspace_id is None:
+            context.user.default_workspace_id = None
+        else:
+            workspace = load_active_workspace_by_id(db, payload.default_workspace_id)
+            if workspace is None:
+                raise localized_http_exception(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    code="workspace.not_found",
+                )
+            if resolve_workspace_role(db, context.user, workspace.id) is None:
+                raise localized_http_exception(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    code="workspace.membership_required",
+                    workspace=workspace.key,
+                )
+            context.user.default_workspace_id = workspace.id
 
     db.add(context.user)
     record_audit_log(
@@ -588,6 +937,17 @@ def update_preferences(
             "theme_preference": payload.theme_preference,
             "locale": payload.locale,
             "time_zone": payload.time_zone,
+            "date_format": payload.date_format,
+            "app_bar_layout": (
+                payload.app_bar_layout.model_dump()
+                if payload.app_bar_layout is not None
+                else None
+            ),
+            "default_workspace_id": (
+                payload.default_workspace_id
+                if "default_workspace_id" in payload.model_fields_set
+                else None
+            ),
             "display_name": payload.display_name,
             "job_title": payload.job_title,
         },

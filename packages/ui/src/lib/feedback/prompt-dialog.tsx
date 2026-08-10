@@ -1,9 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 
-import { Button } from '../primitives/button';
-import { Input } from '../primitives/input';
-import { cn } from '../utils/cn';
+import { PromptDialogContent } from './prompt-dialog-content';
+import {
+  cancelCurrentPromptDialog,
+  openPromptDialog,
+  submitCurrentPromptDialog,
+  type PromptDialogState,
+  type PromptOptions,
+} from './prompt-dialog-state';
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
@@ -32,61 +37,27 @@ export function PromptDialog({
   onSubmit,
   onCancel,
 }: PromptDialogProps) {
-  const [value, setValue] = useState(defaultValue);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (open) {
-      setValue(defaultValue);
-      // Focus + select after the dialog renders
-      requestAnimationFrame(() => inputRef.current?.select());
-    }
-  }, [open, defaultValue]);
-
-  const handleSubmit = () => {
-    if (value.trim()) onSubmit(value.trim());
-  };
-
   return (
-    <DialogPrimitive.Root open={open} onOpenChange={(v) => { if (!v) onCancel(); }}>
+    <DialogPrimitive.Root
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) onCancel();
+      }}
+    >
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-[calc(var(--ui-z-drawer)-1)] bg-slate-950/32 backdrop-blur-sm" />
-        <DialogPrimitive.Content
-          className={cn(
-            'fixed left-1/2 top-1/2 z-[var(--ui-z-drawer)] w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2',
-            'flex flex-col rounded-[var(--ui-radius-lg)] border border-[var(--ui-color-border)] bg-ui-surface-raised shadow-[var(--ui-shadow-lg)] outline-none',
-          )}
-        >
-          <div className="px-5 pt-5 pb-3">
-            <DialogPrimitive.Title className="m-0 text-[1rem] font-semibold tracking-[-0.02em] text-[var(--ui-color-ink)]">
-              {title}
-            </DialogPrimitive.Title>
-            {description ? (
-              <DialogPrimitive.Description className="mt-2 text-[0.84rem] leading-relaxed text-[var(--ui-color-ink-muted)]">
-                {description}
-              </DialogPrimitive.Description>
-            ) : null}
-          </div>
-
-          <div className="px-5 pb-2">
-            <Input
-              ref={inputRef}
-              value={value}
-              placeholder={placeholder}
-              onChange={(e) => setValue(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
-            />
-          </div>
-
-          <div className="flex items-center justify-end gap-2 px-5 py-4">
-            <Button variant="ghost" onClick={onCancel}>
-              {cancelLabel}
-            </Button>
-            <Button variant="primary" onClick={handleSubmit} disabled={!value.trim()}>
-              {submitLabel}
-            </Button>
-          </div>
-        </DialogPrimitive.Content>
+        {open ? (
+          <PromptDialogContent
+            key={defaultValue}
+            title={title}
+            description={description}
+            placeholder={placeholder}
+            defaultValue={defaultValue}
+            submitLabel={submitLabel}
+            cancelLabel={cancelLabel}
+            onSubmit={onSubmit}
+            onCancel={onCancel}
+          />
+        ) : null}
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
   );
@@ -95,17 +66,6 @@ export function PromptDialog({
 /* ------------------------------------------------------------------ */
 /*  Hook – drop-in replacement for window.prompt                       */
 /* ------------------------------------------------------------------ */
-
-type PromptOptions = {
-  title: string;
-  description?: string;
-  placeholder?: string;
-  defaultValue?: string;
-  submitLabel: string;
-  cancelLabel: string;
-};
-
-type PromptState = PromptOptions & { resolve: (value: string | null) => void };
 
 /**
  * Returns an async `prompt()` function and a `<PromptDialog />` element.
@@ -121,25 +81,37 @@ type PromptState = PromptOptions & { resolve: (value: string | null) => void };
  * ```
  */
 export function usePrompt() {
-  const [state, setState] = useState<PromptState | null>(null);
+  const [state, setState] = useState<PromptDialogState>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
 
   const prompt = useCallback((options: PromptOptions) => {
-    if (stateRef.current) stateRef.current.resolve(null);
     return new Promise<string | null>((resolve) => {
-      setState({ ...options, resolve });
+      const transition = openPromptDialog(stateRef.current, {
+        ...options,
+        resolve,
+      });
+      transition.completion?.resolve(transition.completion.value);
+      stateRef.current = transition.state;
+      setState(transition.state);
     });
   }, []);
 
-  const handleSubmit = useCallback((value: string) => {
-    state?.resolve(value);
-    setState(null);
-  }, [state]);
+  const handleSubmit = useCallback(
+    (value: string) => {
+      const transition = submitCurrentPromptDialog(state, value);
+      transition.completion?.resolve(transition.completion.value);
+      stateRef.current = transition.state;
+      setState(transition.state);
+    },
+    [state],
+  );
 
   const handleCancel = useCallback(() => {
-    state?.resolve(null);
-    setState(null);
+    const transition = cancelCurrentPromptDialog(state);
+    transition.completion?.resolve(transition.completion.value);
+    stateRef.current = transition.state;
+    setState(transition.state);
   }, [state]);
 
   const promptDialog = state ? (

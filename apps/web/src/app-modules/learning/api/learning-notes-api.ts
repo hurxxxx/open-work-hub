@@ -1,4 +1,4 @@
-import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
+import { apiFetchJsonWithMappedError } from '@/src/platform/api/client';
 
 import type {
   LearningPageNoteDetail,
@@ -23,16 +23,19 @@ async function request<T>(
   init: RequestInit = {},
 ): Promise<T | null> {
   try {
-    return await apiFetchJson<T>(path, token, init);
+    return await apiFetchJsonWithMappedError<T>(
+      path,
+      token,
+      init,
+      (error) =>
+        new LearningNotesApiError(
+          error.status,
+          error.message || `Learning notes request failed with ${error.status}.`,
+        ),
+    );
   } catch (error) {
-    if (error instanceof ApiRequestError) {
-      if (error.status === 404) {
-        return null;
-      }
-      throw new LearningNotesApiError(
-        error.status,
-        error.message || `Learning notes request failed with ${error.status}.`,
-      );
+    if (error instanceof LearningNotesApiError && error.status === 404) {
+      return null;
     }
     throw error;
   }

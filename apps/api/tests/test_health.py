@@ -1,16 +1,15 @@
-from datetime import date, timedelta
-
 from fastapi.testclient import TestClient
 
-EXPECTED_DEV_LOGIN_ACCOUNT_KEYS = {
-    "administrator",
-}
+from ai_do_api.version import RUNTIME_REVISION, VERSION
 
 
 def test_healthz(client: TestClient) -> None:
     response = client.get("/healthz")
     assert response.status_code == 200
-    assert response.json()["status"] == "ok"
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert payload["version"] == VERSION
+    assert payload["runtime_revision"] == RUNTIME_REVISION
 
 
 def test_healthz_preserves_inbound_trace_id(client: TestClient) -> None:
@@ -33,7 +32,7 @@ def test_auth_bootstrap_and_protected_search(client: TestClient) -> None:
     }
 
     unauthenticated = client.post(
-        "/api/v1/workspaces/hq/search/documents",
+        "/api/v1/workspaces/administrator/search/documents",
         json={"query": "compressor specification"},
     )
     assert unauthenticated.status_code == 401
@@ -52,6 +51,12 @@ def test_auth_bootstrap_and_protected_search(client: TestClient) -> None:
     assert auth_payload["user"]["theme_preference"] == "system"
     assert auth_payload["user"]["locale"] == "ko-KR"
     assert auth_payload["user"]["time_zone"] == "Asia/Seoul"
+    assert auth_payload["user"]["date_format"] == "korean"
+    assert auth_payload["user"]["app_bar_layout"] == {
+        "pinned_app_ids": ["pms", "docs", "whiteboard", "qa-assistant"],
+    }
+    assert auth_payload["user"]["default_workspace_id"] is None
+    assert auth_payload["user"]["login_id"] == "admin"
     assert auth_payload["user"]["workspaces"]
     assert any(item["role"] == "admin" for item in auth_payload["user"]["workspaces"])
     assert "workspace_roles" not in auth_payload["user"]
@@ -66,13 +71,13 @@ def test_auth_bootstrap_and_protected_search(client: TestClient) -> None:
     assert me_response.json()["email"] == "admin@ai-do.local"
 
     search_response = client.post(
-        "/api/v1/workspaces/hq/search/documents",
+        "/api/v1/workspaces/administrator/search/documents",
         headers={"Authorization": f"Bearer {token}"},
         json={"query": "compressor specification"},
     )
     assert search_response.status_code == 200
     payload = search_response.json()
-    assert payload["scenario_id"] == "documents-rag"
+    assert payload["scenario_id"] == "documents-demo"
     assert payload["hits"]
 
     logout_response = client.post(
@@ -93,6 +98,7 @@ def test_auth_login_success_and_invalid_password(client: TestClient) -> None:
         "/api/v1/auth/setup",
         json={
             "full_name": "AI-DO Admin",
+            "login_id": "admin",
             "email": "admin@ai-do.local",
             "password": "supersecret123",
         },
@@ -102,7 +108,7 @@ def test_auth_login_success_and_invalid_password(client: TestClient) -> None:
     login_response = client.post(
         "/api/v1/auth/login",
         json={
-            "email": "ADMIN@AI-DO.LOCAL",
+            "login_id": "ADMIN",
             "password": "supersecret123",
         },
     )
@@ -114,11 +120,256 @@ def test_auth_login_success_and_invalid_password(client: TestClient) -> None:
     invalid_password_response = client.post(
         "/api/v1/auth/login",
         json={
-            "email": "admin@ai-do.local",
+            "login_id": "admin",
             "password": "wrongpass123",
         },
     )
     assert invalid_password_response.status_code == 401
+
+
+def test_auth_preferences_manage_default_workspace(client: TestClient) -> None:
+    setup_response = client.post(
+        "/api/v1/auth/setup",
+        json={
+            "full_name": "AI-DO Admin",
+            "login_id": "admin",
+            "email": "admin@ai-do.local",
+            "password": "supersecret123",
+        },
+    )
+    assert setup_response.status_code == 201
+    setup_payload = setup_response.json()
+    admin_token = setup_payload["token"]
+    first_workspace = setup_payload["user"]["workspaces"][0]
+
+    update_response = client.patch(
+        "/api/v1/auth/preferences",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={"default_workspace_id": first_workspace["id"]},
+    )
+    assert update_response.status_code == 200, update_response.text
+    assert update_response.json()["default_workspace_id"] == first_workspace["id"]
+
+    me_response = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert me_response.status_code == 200
+    assert me_response.json()["default_workspace_id"] == first_workspace["id"]
+
+    create_member_response = client.post(
+        "/api/v1/admin/users",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={
+            "full_name": "Pending Member",
+            "login_id": "pending-member",
+            "email": "pending@ai-do.local",
+            "temporary_password": "memberpass123",
+        },
+    )
+    assert create_member_response.status_code == 201, create_member_response.text
+    login_member_response = client.post(
+        "/api/v1/auth/login",
+        json={"login_id": "pending-member", "password": "memberpass123"},
+    )
+    assert login_member_response.status_code == 200, login_member_response.text
+    member_token = login_member_response.json()["token"]
+
+    forbidden_response = client.patch(
+        "/api/v1/auth/preferences",
+        headers={"Authorization": f"Bearer {member_token}"},
+        json={"default_workspace_id": first_workspace["id"]},
+    )
+    assert forbidden_response.status_code == 403
+    assert forbidden_response.json()["code"] == "workspace.membership_required"
+
+    clear_response = client.patch(
+        "/api/v1/auth/preferences",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={"default_workspace_id": None},
+    )
+    assert clear_response.status_code == 200
+    assert clear_response.json()["default_workspace_id"] is None
+
+
+def test_auth_preferences_manage_app_bar_layout(client: TestClient) -> None:
+    token = _bootstrap_admin(client)
+
+    update_response = client.patch(
+        "/api/v1/auth/preferences",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "app_bar_layout": {
+                "pinned_app_ids": ["home", "plm", "docs", "docs", "pms"],
+            },
+        },
+    )
+    assert update_response.status_code == 200, update_response.text
+    assert update_response.json()["app_bar_layout"] == {
+        "pinned_app_ids": ["plm", "docs", "pms"],
+    }
+
+    me_response = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert me_response.status_code == 200
+    assert me_response.json()["app_bar_layout"] == {
+        "pinned_app_ids": ["plm", "docs", "pms"],
+    }
+
+    custom_feature_response = client.patch(
+        "/api/v1/auth/preferences",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "app_bar_layout": {
+                "pinned_app_ids": ["data-viz", "qa-assistant", "legacy-issues"],
+            },
+        },
+    )
+    assert custom_feature_response.status_code == 200, custom_feature_response.text
+    assert custom_feature_response.json()["app_bar_layout"] == {
+        "pinned_app_ids": ["data-viz", "qa-assistant", "legacy-issues"],
+    }
+
+    overflow_response = client.patch(
+        "/api/v1/auth/preferences",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "app_bar_layout": {
+                "pinned_app_ids": [
+                    "home",
+                    "docs",
+                    "community",
+                    "mail",
+                    "whiteboard",
+                    "video-chat",
+                    "recording",
+                    "plm",
+                    "news",
+                ],
+            },
+        },
+    )
+    assert overflow_response.status_code == 200, overflow_response.text
+    assert overflow_response.json()["app_bar_layout"] == {
+        "pinned_app_ids": [
+            "docs",
+            "community",
+            "whiteboard",
+            "video-chat",
+            "recording",
+            "plm",
+            "news",
+        ],
+    }
+
+    retired_category_response = client.patch(
+        "/api/v1/auth/preferences",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"app_bar_layout": {"pinned_app_ids": ["ai", "business"]}},
+    )
+    assert retired_category_response.status_code == 422
+    assert retired_category_response.json()["code"] == "auth.invalid_app_bar_layout"
+
+    invalid_response = client.patch(
+        "/api/v1/auth/preferences",
+        headers={"Authorization": f"Bearer {token}", "Accept-Language": "ko-KR"},
+        json={"app_bar_layout": {"pinned_app_ids": ["home", "unknown-app"]}},
+    )
+    assert invalid_response.status_code == 422
+    assert invalid_response.json()["code"] == "auth.invalid_app_bar_layout"
+    assert invalid_response.json()["detail"] == "앱바 구성이 올바르지 않습니다."
+
+    reset_response = client.patch(
+        "/api/v1/auth/preferences",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"app_bar_layout": None},
+    )
+    assert reset_response.status_code == 200
+    assert reset_response.json()["app_bar_layout"] == {
+        "pinned_app_ids": ["pms", "docs", "whiteboard", "qa-assistant"],
+    }
+
+
+def test_auth_signup_is_disabled_after_setup(client: TestClient) -> None:
+    setup_response = client.post(
+        "/api/v1/auth/setup",
+        json={
+            "full_name": "AI-DO Admin",
+            "email": "admin@ai-do.local",
+            "password": "supersecret123",
+        },
+    )
+    assert setup_response.status_code == 201
+
+    signup_response = client.post(
+        "/api/v1/auth/signup",
+        json={
+            "full_name": "New Member",
+            "login_id": "new-member",
+            "email": "NEW@AI-DO.LOCAL",
+            "password": "memberpass123",
+            "password_confirm": "memberpass123",
+        },
+    )
+    assert signup_response.status_code == 403, signup_response.text
+    assert signup_response.json()["code"] == "auth.signup_disabled"
+
+
+def test_auth_signup_validates_payload_then_returns_disabled(
+    client: TestClient,
+) -> None:
+    disabled_before_setup_response = client.post(
+        "/api/v1/auth/signup",
+        json={
+            "full_name": "Early Member",
+            "login_id": "early",
+            "email": "early@ai-do.local",
+            "password": "memberpass123",
+            "password_confirm": "memberpass123",
+        },
+    )
+    assert disabled_before_setup_response.status_code == 403
+    assert disabled_before_setup_response.json()["code"] == "auth.signup_disabled"
+
+    setup_response = client.post(
+        "/api/v1/auth/setup",
+        json={
+            "full_name": "AI-DO Admin",
+            "email": "admin@ai-do.local",
+            "password": "supersecret123",
+        },
+    )
+    assert setup_response.status_code == 201
+
+    disabled_after_setup_response = client.post(
+        "/api/v1/auth/signup",
+        json={
+            "full_name": "Duplicate Admin",
+            "login_id": "duplicate-admin",
+            "email": "ADMIN@AI-DO.LOCAL",
+            "password": "memberpass123",
+            "password_confirm": "memberpass123",
+        },
+    )
+    assert disabled_after_setup_response.status_code == 403
+    assert disabled_after_setup_response.json()["code"] == "auth.signup_disabled"
+
+    mismatch_response = client.post(
+        "/api/v1/auth/signup",
+        headers={"Accept-Language": "ko-KR"},
+        json={
+            "full_name": "Mismatch Member",
+            "login_id": "mismatch",
+            "email": "mismatch@ai-do.local",
+            "password": "memberpass123",
+            "password_confirm": "different123",
+        },
+    )
+    assert mismatch_response.status_code == 422
+    assert mismatch_response.json()["code"] == "auth.password_confirmation_mismatch"
+    assert mismatch_response.json()["detail"] == "비밀번호 확인이 일치하지 않습니다."
 
 
 def test_auth_error_messages_are_localized(client: TestClient) -> None:
@@ -136,12 +387,12 @@ def test_auth_error_messages_are_localized(client: TestClient) -> None:
         "/api/v1/auth/login",
         headers={"Accept-Language": "en-US"},
         json={
-            "email": "admin@ai-do.local",
+            "login_id": "admin",
             "password": "wrongpass123",
         },
     )
     assert english_response.status_code == 401
-    assert english_response.json()["detail"] == "Email or password is invalid."
+    assert english_response.json()["detail"] == "ID or password is invalid."
     assert english_response.json()["code"] == "auth.invalid_credentials"
     assert english_response.headers["X-AI-DO-Error-Code"] == "auth.invalid_credentials"
 
@@ -149,12 +400,12 @@ def test_auth_error_messages_are_localized(client: TestClient) -> None:
         "/api/v1/auth/login",
         headers={"Accept-Language": "ko-KR"},
         json={
-            "email": "admin@ai-do.local",
+            "login_id": "admin",
             "password": "wrongpass123",
         },
     )
     assert korean_response.status_code == 401
-    assert korean_response.json()["detail"] == "이메일 또는 비밀번호가 올바르지 않습니다."
+    assert korean_response.json()["detail"] == "ID 또는 비밀번호가 올바르지 않습니다."
     assert korean_response.json()["code"] == "auth.invalid_credentials"
 
     explicit_locale_response = client.get(
@@ -174,23 +425,23 @@ def test_auth_validation_error_is_localized(client: TestClient) -> None:
         "/api/v1/auth/login",
         headers={"Accept-Language": "ko-KR"},
         json={
-            "email": "not-email",
+            "login_id": "not@email",
             "password": "wrongpass123",
         },
     )
 
     assert response.status_code == 422, response.text
     body = response.json()
-    assert body["detail"] == "올바른 이메일 주소가 필요합니다."
-    assert body["code"] == "auth.valid_email_required"
-    assert body["validation"][0]["loc"] == ["body", "email"]
+    assert body["detail"] == "ID는 영문 소문자, 숫자, 점, 밑줄, 하이픈으로 3~40자여야 합니다."
+    assert body["code"] == "auth.valid_login_id_required"
+    assert body["validation"][0]["loc"] == ["body", "login_id"]
 
 
 def test_generic_request_validation_error_is_localized(client: TestClient) -> None:
     response = client.post(
         "/api/v1/auth/login",
         headers={"Accept-Language": "ko-KR"},
-        json={"email": "admin@ai-do.local"},
+        json={"login_id": "admin"},
     )
 
     assert response.status_code == 422, response.text
@@ -212,7 +463,7 @@ def test_generic_request_validation_error_preserves_dynamic_constraints(
     response = client.post(
         "/api/v1/auth/login",
         headers={"Accept-Language": "en-US"},
-        json={"email": "admin@ai-do.local", "password": "short"},
+        json={"login_id": "admin", "password": "short"},
     )
 
     assert response.status_code == 422, response.text
@@ -222,168 +473,6 @@ def test_generic_request_validation_error_preserves_dynamic_constraints(
     assert body["validation"][0]["loc"] == ["body", "password"]
     assert body["validation"][0]["type"] == "string_too_short"
     assert body["validation"][0]["message"] == "Value is too short. Minimum length: 8"
-
-
-def test_dev_admin_login_shortcut(client: TestClient) -> None:
-    setup_response = client.post(
-        "/api/v1/auth/setup",
-        json={
-            "full_name": "AI-DO Admin",
-            "email": "admin@ai-do.local",
-            "password": "supersecret123",
-        },
-    )
-    assert setup_response.status_code == 201
-
-    dev_login_response = client.post("/api/v1/auth/dev-admin-login")
-    assert dev_login_response.status_code == 200
-    payload = dev_login_response.json()
-    assert payload["user"]["email"] == "admin@ai-do.local"
-    assert "platform_admin" in payload["user"]["system_roles"]
-    assert payload["token"]
-
-
-def test_dev_admin_login_shortcut_skips_non_admin_email_match(client: TestClient) -> None:
-    _create_direct_user(
-        email="admin@ai-do.local",
-        full_name="Plain Admin Email",
-        is_admin=False,
-    )
-    _create_direct_user(
-        email="platform-owner@ai-do.local",
-        full_name="Platform Owner",
-        is_admin=True,
-    )
-
-    dev_login_response = client.post("/api/v1/auth/dev-admin-login")
-    assert dev_login_response.status_code == 200
-    payload = dev_login_response.json()
-    assert payload["user"]["email"] == "platform-owner@ai-do.local"
-    assert "platform_admin" in payload["user"]["system_roles"]
-
-
-def test_seeded_dev_login_accounts_are_listed_and_can_log_in(client: TestClient) -> None:
-    _seed_dev_login_accounts()
-
-    status_response = client.get("/api/v1/auth/bootstrap-status")
-    assert status_response.status_code == 200
-    payload = status_response.json()
-    assert payload["requires_setup"] is False
-    assert payload["dev_admin_login_available"] is True
-    account_keys = {item["account_key"] for item in payload["dev_login_accounts"]}
-    assert account_keys == EXPECTED_DEV_LOGIN_ACCOUNT_KEYS
-
-    admin_login_response = client.post(
-        "/api/v1/auth/dev-login",
-        json={"account_key": "administrator"},
-    )
-    assert admin_login_response.status_code == 200
-    admin_payload = admin_login_response.json()
-    assert admin_payload["user"]["email"] == "admin@ai-do.local"
-    assert "platform_admin" in admin_payload["user"]["system_roles"]
-    assert {item["slug"] for item in admin_payload["user"]["workspaces"]} == {
-        "administrator",
-        "ai-tft",
-    }
-    assert {item["role"] for item in admin_payload["user"]["workspaces"]} == {"admin"}
-    assert "app_access" not in admin_payload["user"]
-
-
-def test_dev_login_creates_missing_dev_accounts_on_demand(client: TestClient) -> None:
-    """After ``/auth/setup`` only creates the first admin, the dev-login
-    quick-login endpoint must still be able to provision the remaining
-    seed accounts the first time one of them is requested.
-
-    Previously ``/auth/bootstrap-status`` also re-seeded on every call as
-    a side-effect, which ran the full reconcile loop constantly and wiped
-    user-created team memberships along the way. Bootstrap-status is now
-    a pure read and the seeding responsibility sits on the dev-login route
-    itself, which only mutates the database on a fresh install."""
-    setup_response = client.post(
-        "/api/v1/auth/setup",
-        json={
-            "full_name": "AI-DO Admin",
-            "email": "admin@ai-do.local",
-            "password": "supersecret123",
-        },
-    )
-    assert setup_response.status_code == 201
-
-    # bootstrap-status is a pure read after setup.
-    status_response = client.get("/api/v1/auth/bootstrap-status")
-    assert status_response.status_code == 200
-    payload = status_response.json()
-    assert payload["requires_setup"] is False
-    account_keys = {item["account_key"] for item in payload["dev_login_accounts"]}
-    assert account_keys == EXPECTED_DEV_LOGIN_ACCOUNT_KEYS
-
-    # First dev-login for administrator seeds the full DEV_LOGIN_ACCOUNTS set.
-    admin_login_response = client.post(
-        "/api/v1/auth/dev-login",
-        json={"account_key": "administrator"},
-    )
-    assert admin_login_response.status_code == 200
-    assert admin_login_response.json()["user"]["email"] == "admin@ai-do.local"
-    assert "platform_admin" in admin_login_response.json()["user"]["system_roles"]
-
-    # After seeding, bootstrap-status surfaces the full dev-login account
-    # list without having to mutate the database itself.
-    second_status = client.get("/api/v1/auth/bootstrap-status")
-    assert second_status.status_code == 200
-    account_keys = {item["account_key"] for item in second_status.json()["dev_login_accounts"]}
-    assert account_keys == EXPECTED_DEV_LOGIN_ACCOUNT_KEYS
-
-
-def test_dev_login_shortcut_allows_configured_external_host(monkeypatch) -> None:
-    from types import SimpleNamespace
-
-    from starlette.requests import Request
-
-    from ai_do_api.domains.auth import router as auth_router
-
-    def request_for(host: str, *, forwarded_host: str | None = None) -> Request:
-        headers = [(b"host", host.encode("ascii"))]
-        if forwarded_host is not None:
-            headers.append((b"x-forwarded-host", forwarded_host.encode("ascii")))
-        return Request(
-            {
-                "type": "http",
-                "method": "GET",
-                "path": "/api/v1/auth/bootstrap-status",
-                "headers": headers,
-                "client": ("203.0.113.10", 55123),
-                "server": (host.split(":", 1)[0], 443),
-                "scheme": "https",
-                "query_string": b"",
-            }
-        )
-
-    monkeypatch.setattr(
-        auth_router,
-        "get_settings",
-        lambda: SimpleNamespace(
-            environment="development",
-            allow_dev_admin_login=True,
-            dev_login_allowed_hosts="dwdcc.lumejs.com",
-        ),
-    )
-
-    assert auth_router._is_local_dev_admin_login_available(request_for("dwdcc.lumejs.com"))
-    assert auth_router._is_local_dev_admin_login_available(
-        request_for("internal-proxy:8000", forwarded_host="dwdcc.lumejs.com")
-    )
-    assert not auth_router._is_local_dev_admin_login_available(request_for("example.com"))
-
-    monkeypatch.setattr(
-        auth_router,
-        "get_settings",
-        lambda: SimpleNamespace(
-            environment="production",
-            allow_dev_admin_login=True,
-            dev_login_allowed_hosts="dwdcc.lumejs.com",
-        ),
-    )
-    assert not auth_router._is_local_dev_admin_login_available(request_for("dwdcc.lumejs.com"))
 
 
 def test_auth_preferences_password_and_sessions(client: TestClient) -> None:
@@ -398,6 +487,7 @@ def test_auth_preferences_password_and_sessions(client: TestClient) -> None:
             "theme_preference": "light",
             "locale": "en-US",
             "time_zone": "America/New_York",
+            "date_format": "iso",
         },
     )
     assert preferences_response.status_code == 200
@@ -405,6 +495,7 @@ def test_auth_preferences_password_and_sessions(client: TestClient) -> None:
     assert preferences_response.json()["theme_preference"] == "light"
     assert preferences_response.json()["locale"] == "en-US"
     assert preferences_response.json()["time_zone"] == "America/New_York"
+    assert preferences_response.json()["date_format"] == "iso"
 
     invalid_locale_response = client.patch(
         "/api/v1/auth/preferences",
@@ -423,6 +514,15 @@ def test_auth_preferences_password_and_sessions(client: TestClient) -> None:
     assert invalid_timezone_response.status_code == 422
     assert invalid_timezone_response.json()["code"] == "auth.invalid_time_zone"
     assert invalid_timezone_response.json()["detail"] == "Invalid time zone."
+
+    invalid_date_format_response = client.patch(
+        "/api/v1/auth/preferences",
+        headers={"Authorization": f"Bearer {token}", "Accept-Language": "ko-KR"},
+        json={"date_format": "quarterly"},
+    )
+    assert invalid_date_format_response.status_code == 422
+    assert invalid_date_format_response.json()["code"] == "auth.invalid_date_format"
+    assert invalid_date_format_response.json()["detail"] == "날짜 형식이 올바르지 않습니다."
 
     sessions_response = client.get(
         "/api/v1/auth/sessions",
@@ -447,7 +547,7 @@ def test_auth_preferences_password_and_sessions(client: TestClient) -> None:
     login_response = client.post(
         "/api/v1/auth/login",
         json={
-            "email": "admin@ai-do.local",
+            "login_id": "admin",
             "password": "supersecret123",
         },
     )
@@ -467,7 +567,7 @@ def test_auth_preferences_password_and_sessions(client: TestClient) -> None:
     old_login_response = client.post(
         "/api/v1/auth/login",
         json={
-            "email": "admin@ai-do.local",
+            "login_id": "admin",
             "password": "supersecret123",
         },
     )
@@ -476,44 +576,11 @@ def test_auth_preferences_password_and_sessions(client: TestClient) -> None:
     new_login_response = client.post(
         "/api/v1/auth/login",
         json={
-            "email": "admin@ai-do.local",
+            "login_id": "admin",
             "password": "newsupersecret123",
         },
     )
     assert new_login_response.status_code == 200
-
-
-def test_documents_search_filters_and_grounded_answer(client: TestClient) -> None:
-    setup_response = client.post(
-        "/api/v1/auth/setup",
-        json={
-            "full_name": "AI-DO Admin",
-            "email": "admin@ai-do.local",
-            "password": "supersecret123",
-        },
-    )
-    token = setup_response.json()["token"]
-
-    response = client.post(
-        "/api/v1/workspaces/hq/search/documents",
-        headers={"Authorization": f"Bearer {token}"},
-        json={
-            "query": "seal material change notice",
-            "filters": {
-                "doc_type": ["revision-note"],
-                "project": ["Project A"],
-                "department": ["Engineering"],
-            },
-            "answer_mode": "grounded-answer",
-        },
-    )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["filters_applied"]["doc_type"] == ["revision-note"]
-    assert payload["hits"][0]["document_id"] == "doc-revision-002"
-    assert payload["grounded_answer"]["citations"]
-    assert payload["grounded_answer"]["citations"][0]["page_reference"] == "pp. 2-3"
 
 
 def _bootstrap_admin(client: TestClient) -> str:
@@ -529,10 +596,44 @@ def _bootstrap_admin(client: TestClient) -> str:
     return setup_response.json()["token"]
 
 
+def _replace_workspace_user_bindings(
+    client: TestClient,
+    *,
+    workspace_id: str,
+    headers: dict[str, str],
+    changes: dict[str, str | None],
+):
+    current_response = client.get(
+        f"/api/v1/admin/workspaces/{workspace_id}/bindings",
+        headers=headers,
+    )
+    assert current_response.status_code == 200, current_response.text
+    roles_by_user_id = {
+        item["subject_id"]: item["role"]
+        for item in current_response.json()
+        if item["subject_type"] == "user"
+    }
+    for user_id, role in changes.items():
+        if role is None:
+            roles_by_user_id.pop(user_id, None)
+        else:
+            roles_by_user_id[user_id] = role
+    return client.put(
+        f"/api/v1/admin/workspaces/{workspace_id}/bindings",
+        headers=headers,
+        json={
+            "users": [
+                {"subject_id": user_id, "role": role}
+                for user_id, role in roles_by_user_id.items()
+            ],
+        },
+    )
+
+
 def _login(client: TestClient, email: str, password: str) -> str:
     response = client.post(
         "/api/v1/auth/login",
-        json={"email": email, "password": password},
+        json={"login_id": email.split("@", 1)[0].lower(), "password": password},
     )
     assert response.status_code == 200
     return response.json()["token"]
@@ -571,6 +672,7 @@ def _create_direct_user(
         db.add(
             User(
                 id=user_id,
+                login_id=normalize_email(email).split("@", 1)[0],
                 email=normalize_email(email),
                 full_name=full_name,
                 display_name=full_name,
@@ -617,17 +719,6 @@ def _create_direct_user(
     return user_id, session_token.plain_text
 
 
-def _seed_dev_login_accounts() -> None:
-    from ai_do_api.core.db import get_session_factory
-    from ai_do_api.domains.auth.access import ensure_dev_login_seed_data
-
-    db = get_session_factory()()
-    try:
-        ensure_dev_login_seed_data(db)
-    finally:
-        db.close()
-
-
 def _create_pms_task_list(
     client: TestClient,
     token: str,
@@ -636,7 +727,7 @@ def _create_pms_task_list(
     name: str,
 ) -> dict[str, object]:
     response = client.post(
-        "/api/v1/workspaces/hq/pms/lists",
+        "/api/v1/workspaces/administrator/pms/lists",
         headers={"Authorization": f"Bearer {token}"},
         json={
             "key": key,
@@ -648,21 +739,22 @@ def _create_pms_task_list(
     return response.json()
 
 
-def _create_pms_issue(
+def _create_pms_task(
     client: TestClient,
     token: str,
     list_id: str,
     *,
     title: str,
     parent_id: str | None = None,
+    status: str = "todo",
 ) -> dict[str, object]:
     response = client.post(
-        f"/api/v1/workspaces/hq/pms/lists/{list_id}/issues",
+        f"/api/v1/workspaces/administrator/pms/lists/{list_id}/tasks",
         headers={"Authorization": f"Bearer {token}"},
         json={
             "title": title,
             "description": f"{title} description",
-            "status": "todo",
+            "status": status,
             "priority": "medium",
             "parent_id": parent_id,
         },
@@ -679,17 +771,19 @@ def test_admin_identity_management_endpoints(client: TestClient) -> None:
     assert org_units_response.status_code == 200
     root_org_unit_id = org_units_response.json()[0]["id"]
 
-    group_response = client.post(
-        "/api/v1/admin/groups",
+    removed_groups_response = client.get("/api/v1/admin/groups", headers=headers)
+    assert removed_groups_response.status_code == 404
+
+    legacy_group_field_response = client.post(
+        "/api/v1/admin/users",
         headers=headers,
         json={
-            "name": "Docs Editors",
-            "description": "Can manage docs access",
-            "system_roles": ["platform_admin"],
+            "email": "legacy-group-field@ai-do.local",
+            "full_name": "Legacy Group Field",
+            "group_ids": [],
         },
     )
-    assert group_response.status_code == 201
-    group_id = group_response.json()["id"]
+    assert legacy_group_field_response.status_code == 422
 
     create_user_response = client.post(
         "/api/v1/admin/users",
@@ -698,14 +792,16 @@ def test_admin_identity_management_endpoints(client: TestClient) -> None:
             "email": "member@ai-do.local",
             "full_name": "AI-DO Member",
             "display_name": "Member",
+            "employee_code": "E-100",
             "primary_org_unit_id": root_org_unit_id,
-            "group_ids": [group_id],
+            "system_roles": ["platform_admin"],
         },
     )
     assert create_user_response.status_code == 201
     created_user = create_user_response.json()["user"]
     temporary_password = create_user_response.json()["temporary_password"]
     assert created_user["email"] == "member@ai-do.local"
+    assert created_user["employee_code"] == "E-100"
     assert created_user["must_change_password"] is True
     assert temporary_password
 
@@ -716,6 +812,10 @@ def test_admin_identity_management_endpoints(client: TestClient) -> None:
     assert list_users_payload["total"] == 2
     assert list_users_payload["page"] == 1
     assert list_users_payload["page_size"] == 20
+    listed_user = next(
+        item for item in list_users_payload["items"] if item["id"] == created_user["id"]
+    )
+    assert listed_user["employee_code"] == "E-100"
 
     paged_users_response = client.get(
         "/api/v1/admin/users",
@@ -737,20 +837,32 @@ def test_admin_identity_management_endpoints(client: TestClient) -> None:
     assert len(searched_users_payload["items"]) == 1
     assert searched_users_payload["total"] == 1
 
+    searched_by_employee_code_response = client.get(
+        "/api/v1/admin/users",
+        headers=headers,
+        params={"q": "E-100"},
+    )
+    assert searched_by_employee_code_response.status_code == 200
+    searched_by_employee_code_payload = searched_by_employee_code_response.json()
+    assert len(searched_by_employee_code_payload["items"]) == 1
+    assert searched_by_employee_code_payload["items"][0]["id"] == created_user["id"]
+
     update_user_response = client.patch(
         f"/api/v1/admin/users/{created_user['id']}",
         headers=headers,
         json={
             "full_name": "AI-DO Member Updated",
             "display_name": "Updated Member",
+            "employee_code": "E-101",
             "status": "active",
-            "group_ids": [group_id],
+            "system_roles": ["platform_admin"],
         },
     )
     assert update_user_response.status_code == 200
     assert update_user_response.json()["full_name"] == "AI-DO Member Updated"
     assert update_user_response.json()["display_name"] == "Updated Member"
-    assert update_user_response.json()["group_ids"] == [group_id]
+    assert update_user_response.json()["employee_code"] == "E-101"
+    assert update_user_response.json()["system_roles"] == ["platform_admin"]
 
     delete_user_response = client.post(
         "/api/v1/admin/users",
@@ -767,6 +879,7 @@ def test_admin_identity_management_endpoints(client: TestClient) -> None:
 
     me_response = client.get("/api/v1/auth/me", headers=headers)
     assert me_response.status_code == 200
+    assert "employee_code" in me_response.json()
     self_delete_response = client.delete(
         f"/api/v1/admin/users/{me_response.json()['id']}",
         headers=headers,
@@ -796,13 +909,21 @@ def test_admin_identity_management_endpoints(client: TestClient) -> None:
     assert workspace_response.status_code == 201
     workspace_id = workspace_response.json()["id"]
 
-    bindings_response = client.put(
+    legacy_group_bindings_response = client.put(
         f"/api/v1/admin/workspaces/{workspace_id}/bindings",
         headers=headers,
         json={
-            "users": [{"subject_id": created_user["id"], "role": "member"}],
-            "groups": [{"subject_id": group_id, "role": "viewer"}],
+            "users": [],
+            "groups": [],
         },
+    )
+    assert legacy_group_bindings_response.status_code == 422
+
+    bindings_response = _replace_workspace_user_bindings(
+        client,
+        workspace_id=workspace_id,
+        headers=headers,
+        changes={created_user["id"]: "member"},
     )
     assert bindings_response.status_code == 200
     assert len(bindings_response.json()) == 2
@@ -835,18 +956,6 @@ def test_workspace_scoped_team_management_requires_workspace_admin_role(client: 
     admin_token = _bootstrap_admin(client)
     admin_headers = {"Authorization": f"Bearer {admin_token}"}
 
-    permission_group_response = client.post(
-        "/api/v1/admin/groups",
-        headers=admin_headers,
-        json={
-            "name": "Scoped Team Operators",
-            "description": "Can manage teams only within scoped workspaces.",
-            "system_roles": [],
-        },
-    )
-    assert permission_group_response.status_code == 201
-    permission_group_id = permission_group_response.json()["id"]
-
     workspace_response = client.post(
         "/api/v1/admin/workspaces",
         headers=admin_headers,
@@ -875,7 +984,6 @@ def test_workspace_scoped_team_management_requires_workspace_admin_role(client: 
         json={
             "email": "scoped-manager@ai-do.local",
             "full_name": "Scoped Manager",
-            "group_ids": [permission_group_id],
         },
     )
     assert scoped_user_response.status_code == 201
@@ -900,13 +1008,11 @@ def test_workspace_scoped_team_management_requires_workspace_admin_role(client: 
     )
     assert create_team_without_scope_response.status_code == 403
 
-    bind_workspace_response = client.put(
-        f"/api/v1/admin/workspaces/{workspace_id}/bindings",
+    bind_workspace_response = _replace_workspace_user_bindings(
+        client,
+        workspace_id=workspace_id,
         headers=admin_headers,
-        json={
-            "users": [{"subject_id": scoped_user["id"], "role": "admin"}],
-            "groups": [],
-        },
+        changes={scoped_user["id"]: "admin"},
     )
     assert bind_workspace_response.status_code == 200
 
@@ -945,7 +1051,9 @@ def test_non_workspace_routes_require_workspace_membership(client: TestClient) -
 
     workspaces_response = client.get("/api/v1/admin/workspaces", headers=admin_headers)
     assert workspaces_response.status_code == 200
-    hq_workspace = next(item for item in workspaces_response.json() if item["key"] == "hq")
+    hq_workspace = next(
+        item for item in workspaces_response.json() if item["key"] == "administrator"
+    )
 
     user_response = client.post(
         "/api/v1/admin/users",
@@ -961,234 +1069,74 @@ def test_non_workspace_routes_require_workspace_membership(client: TestClient) -
     user_headers = {"Authorization": f"Bearer {user_token}"}
 
     documents_forbidden_response = client.post(
-        "/api/v1/workspaces/hq/search/documents",
+        "/api/v1/workspaces/administrator/search/documents",
         headers=user_headers,
         json={"query": "compressor specification"},
     )
     assert documents_forbidden_response.status_code == 403
 
-    drafts_forbidden_response = client.get("/api/v1/workspaces/hq/drafts", headers=user_headers)
+    drafts_forbidden_response = client.get(
+        "/api/v1/workspaces/administrator/drafts", headers=user_headers
+    )
     assert drafts_forbidden_response.status_code == 403
 
-    wiki_forbidden_response = client.get("/api/v1/workspaces/hq/wiki/pages", headers=user_headers)
+    wiki_forbidden_response = client.get(
+        "/api/v1/workspaces/administrator/wiki/pages", headers=user_headers
+    )
     assert wiki_forbidden_response.status_code == 403
 
     plm_forbidden_response = client.post(
-        "/api/v1/workspaces/hq/search/plm",
+        "/api/v1/workspaces/administrator/search/plm",
         headers=user_headers,
         json={"query": "release delay"},
     )
     assert plm_forbidden_response.status_code == 403
 
     ocr_forbidden_response = client.post(
-        "/api/v1/workspaces/hq/connectors/ocr/route",
+        "/api/v1/workspaces/administrator/connectors/ocr/route",
         headers=user_headers,
         json={"asset_uri": "file://scan.pdf"},
     )
     assert ocr_forbidden_response.status_code == 403
 
-    bind_docs_workspace_response = client.put(
-        f"/api/v1/admin/workspaces/{hq_workspace['id']}/bindings",
+    bind_docs_workspace_response = _replace_workspace_user_bindings(
+        client,
+        workspace_id=hq_workspace["id"],
         headers=admin_headers,
-        json={
-            "users": [{"subject_id": user["id"], "role": "member"}],
-            "groups": [],
-        },
+        changes={user["id"]: "member"},
     )
     assert bind_docs_workspace_response.status_code == 200
 
     documents_allowed_response = client.post(
-        "/api/v1/workspaces/hq/search/documents",
+        "/api/v1/workspaces/administrator/search/documents",
         headers=user_headers,
         json={"query": "compressor specification"},
     )
     assert documents_allowed_response.status_code == 200
 
-    drafts_allowed_response = client.get("/api/v1/workspaces/hq/drafts", headers=user_headers)
+    drafts_allowed_response = client.get(
+        "/api/v1/workspaces/administrator/drafts", headers=user_headers
+    )
     assert drafts_allowed_response.status_code == 200
 
-    wiki_allowed_response = client.get("/api/v1/workspaces/hq/wiki/pages", headers=user_headers)
+    wiki_allowed_response = client.get(
+        "/api/v1/workspaces/administrator/wiki/pages", headers=user_headers
+    )
     assert wiki_allowed_response.status_code == 200
 
     plm_allowed_response = client.post(
-        "/api/v1/workspaces/hq/search/plm",
+        "/api/v1/workspaces/administrator/search/plm",
         headers=user_headers,
         json={"query": "release delay"},
     )
     assert plm_allowed_response.status_code == 200
 
     ocr_allowed_response = client.post(
-        "/api/v1/workspaces/hq/connectors/ocr/route",
+        "/api/v1/workspaces/administrator/connectors/ocr/route",
         headers=user_headers,
         json={"asset_uri": "file://scan.pdf"},
     )
     assert ocr_allowed_response.status_code == 200
-
-
-def test_removed_legacy_workspace_api_paths_fail(client: TestClient) -> None:
-    removed_paths = [
-        ("POST", "/api/v1/ai/chat", {"message": "hello"}),
-        ("GET", "/api/v1/calendar/events", None),
-        ("POST", "/api/v1/connectors/ocr/route", {"asset_uri": "file://scan.pdf"}),
-        ("GET", "/api/v1/docs/hub", None),
-        ("GET", "/api/v1/drafts", None),
-        ("GET", "/api/v1/meeting/meetings", None),
-        ("GET", "/api/v1/planner/events", None),
-        ("GET", "/api/v1/pms/lists", None),
-        ("POST", "/api/v1/search/documents", {"query": "compressor specification"}),
-        ("GET", "/api/v1/wiki/pages", None),
-    ]
-
-    for method, path, body in removed_paths:
-        response = client.request(method, path, json=body)
-        assert response.status_code in {404, 405}, path
-
-
-def test_pms_task_list_workflow_and_dashboard(client: TestClient) -> None:
-    token = _bootstrap_admin(client)
-    overdue_date = (date.today() - timedelta(days=1)).isoformat()
-
-    task_list_response = client.post(
-        "/api/v1/workspaces/hq/pms/lists",
-        headers={"Authorization": f"Bearer {token}"},
-        json={
-            "key": "AID",
-            "name": "AI-DO PMS",
-            "description": "Execution management",
-        },
-    )
-    assert task_list_response.status_code == 201
-    task_list = task_list_response.json()
-    assert task_list["role"] == "owner"
-    list_id = task_list["id"]
-
-    members_response = client.get(
-        f"/api/v1/workspaces/hq/pms/spaces/{task_list['team_id']}/members",
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert members_response.status_code == 200
-    assert members_response.json()["items"][0]["role"] == "owner"
-
-    milestone_response = client.post(
-        f"/api/v1/workspaces/hq/pms/lists/{list_id}/milestones",
-        headers={"Authorization": f"Bearer {token}"},
-        json={
-            "title": "Phase 1",
-            "description": "Ship the first management surface",
-            "status": "active",
-            "due_date": overdue_date,
-        },
-    )
-    assert milestone_response.status_code == 201
-    milestone_id = milestone_response.json()["id"]
-
-    first_issue_response = client.post(
-        f"/api/v1/workspaces/hq/pms/lists/{list_id}/issues",
-        headers={"Authorization": f"Bearer {token}"},
-        json={
-            "title": "Build dashboard",
-            "description": "List-level rollup",
-            "status": "backlog",
-            "priority": "high",
-            "milestone_id": milestone_id,
-            "due_date": overdue_date,
-        },
-    )
-    assert first_issue_response.status_code == 201
-    first_issue = first_issue_response.json()
-
-    second_issue_response = client.post(
-        f"/api/v1/workspaces/hq/pms/lists/{list_id}/issues",
-        headers={"Authorization": f"Bearer {token}"},
-        json={
-            "title": "Build board",
-            "description": "Issue board lane UI",
-            "status": "done",
-            "priority": "medium",
-            "milestone_id": milestone_id,
-        },
-    )
-    assert second_issue_response.status_code == 201
-    second_issue = second_issue_response.json()
-
-    dependency_response = client.post(
-        "/api/v1/workspaces/hq/pms/dependencies",
-        headers={"Authorization": f"Bearer {token}"},
-        json={
-            "predecessor_id": first_issue["id"],
-            "successor_id": second_issue["id"],
-            "relation_type": "blocks",
-        },
-    )
-    assert dependency_response.status_code == 201
-    dependency_id = dependency_response.json()["id"]
-
-    update_response = client.patch(
-        f"/api/v1/workspaces/hq/pms/issues/{first_issue['id']}",
-        headers={"Authorization": f"Bearer {token}"},
-        json={"status": "in_progress", "board_position": 1},
-    )
-    assert update_response.status_code == 200
-    assert update_response.json()["status"] == "in_progress"
-
-    comment_response = client.post(
-        f"/api/v1/workspaces/hq/pms/issues/{first_issue['id']}/comments",
-        headers={"Authorization": f"Bearer {token}"},
-        json={"body": "Need summary and overdue metrics."},
-    )
-    assert comment_response.status_code == 201
-
-    detail_response = client.get(
-        f"/api/v1/workspaces/hq/pms/issues/{first_issue['id']}",
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert detail_response.status_code == 200
-    detail = detail_response.json()
-    assert detail["issue"]["reference"] == "AID-1"
-    assert detail["comments"][0]["body"] == "Need summary and overdue metrics."
-    assert detail["dependencies"][0]["id"] == dependency_id
-
-    logs_response = client.get(
-        f"/api/v1/workspaces/hq/pms/issues/{first_issue['id']}/activity-logs",
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert logs_response.status_code == 200
-    log_actions = [item["action"] for item in logs_response.json()["items"]]
-    assert "created" in log_actions
-    assert "updated" in log_actions
-    assert "commented" in log_actions
-
-    issues_response = client.get(
-        f"/api/v1/workspaces/hq/pms/lists/{list_id}/issues?status=in_progress",
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert issues_response.status_code == 200
-    assert issues_response.json()["total"] == 1
-
-    task_list_detail_response = client.get(
-        f"/api/v1/workspaces/hq/pms/lists/{list_id}",
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert task_list_detail_response.status_code == 200
-    assert task_list_detail_response.json()["progress"] == 0.75
-    assert task_list_detail_response.json()["overdue_issue_count"] == 1
-
-    dashboard_response = client.get(
-        "/api/v1/workspaces/hq/pms/dashboard/summary",
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert dashboard_response.status_code == 200
-    dashboard = dashboard_response.json()
-    assert dashboard["list_count"] == 1
-    assert dashboard["active_issue_count"] == 1
-    assert dashboard["overdue_issue_count"] == 1
-    assert dashboard["lists"][0]["progress"] == 0.75
-
-    dependency_delete = client.delete(
-        f"/api/v1/workspaces/hq/pms/dependencies/{dependency_id}",
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert dependency_delete.status_code == 204
 
 
 def test_pms_membership_permissions(client: TestClient) -> None:
@@ -1196,11 +1144,11 @@ def test_pms_membership_permissions(client: TestClient) -> None:
     outsider_id, outsider_token = _create_direct_user(
         email="member@ai-do.local",
         full_name="List Member",
-        workspace_keys=("hq",),
+        workspace_keys=("administrator",),
     )
 
     task_list_response = client.post(
-        "/api/v1/workspaces/hq/pms/lists",
+        "/api/v1/workspaces/administrator/pms/lists",
         headers={"Authorization": f"Bearer {admin_token}"},
         json={
             "key": "PERM",
@@ -1213,13 +1161,13 @@ def test_pms_membership_permissions(client: TestClient) -> None:
     space_id = task_list["team_id"]
 
     forbidden_response = client.get(
-        f"/api/v1/workspaces/hq/pms/lists/{list_id}",
+        f"/api/v1/workspaces/administrator/pms/lists/{list_id}",
         headers={"Authorization": f"Bearer {outsider_token}"},
     )
     assert forbidden_response.status_code == 403
 
     add_member_response = client.post(
-        f"/api/v1/workspaces/hq/pms/spaces/{space_id}/members",
+        f"/api/v1/workspaces/administrator/pms/spaces/{space_id}/members",
         headers={"Authorization": f"Bearer {admin_token}"},
         json={"user_id": outsider_id, "role": "member"},
     )
@@ -1227,7 +1175,7 @@ def test_pms_membership_permissions(client: TestClient) -> None:
     assert add_member_response.json()["role"] == "member"
 
     member_list_response = client.get(
-        f"/api/v1/workspaces/hq/pms/lists/{list_id}",
+        f"/api/v1/workspaces/administrator/pms/lists/{list_id}",
         headers={"Authorization": f"Bearer {outsider_token}"},
     )
     assert member_list_response.status_code == 200
@@ -1242,7 +1190,7 @@ def test_pms_space_members_still_need_workspace_membership(client: TestClient) -
     )
 
     task_list_response = client.post(
-        "/api/v1/workspaces/hq/pms/lists",
+        "/api/v1/workspaces/administrator/pms/lists",
         headers={"Authorization": f"Bearer {admin_token}"},
         json={
             "key": "SPACEONLY",
@@ -1256,14 +1204,14 @@ def test_pms_space_members_still_need_workspace_membership(client: TestClient) -
     space_id = task_list["team_id"]
 
     add_member_response = client.post(
-        f"/api/v1/workspaces/hq/pms/spaces/{space_id}/members",
+        f"/api/v1/workspaces/administrator/pms/spaces/{space_id}/members",
         headers={"Authorization": f"Bearer {admin_token}"},
         json={"user_id": member_id, "role": "member"},
     )
     assert add_member_response.status_code == 201
 
     task_list_detail_response = client.get(
-        f"/api/v1/workspaces/hq/pms/lists/{list_id}",
+        f"/api/v1/workspaces/administrator/pms/lists/{list_id}",
         headers={"Authorization": f"Bearer {member_token}"},
     )
     assert task_list_detail_response.status_code == 403
@@ -1274,11 +1222,11 @@ def test_pms_space_creator_becomes_owner_and_last_manager_is_protected(client: T
     creator_id, creator_token = _create_direct_user(
         email="space-creator@ai-do.local",
         full_name="Space Creator",
-        workspace_keys=("hq",),
+        workspace_keys=("administrator",),
     )
 
     create_space_response = client.post(
-        "/api/v1/workspaces/hq/pms/spaces",
+        "/api/v1/workspaces/administrator/pms/spaces",
         headers={"Authorization": f"Bearer {creator_token}"},
         json={"name": "Operations", "description": "Owner bootstrap"},
     )
@@ -1286,7 +1234,7 @@ def test_pms_space_creator_becomes_owner_and_last_manager_is_protected(client: T
     space = create_space_response.json()
 
     members_response = client.get(
-        f"/api/v1/workspaces/hq/pms/spaces/{space['id']}/members",
+        f"/api/v1/workspaces/administrator/pms/spaces/{space['id']}/members",
         headers={"Authorization": f"Bearer {creator_token}"},
     )
     assert members_response.status_code == 200
@@ -1294,14 +1242,14 @@ def test_pms_space_creator_becomes_owner_and_last_manager_is_protected(client: T
     assert members_response.json()["items"][0]["role"] == "owner"
 
     demote_response = client.patch(
-        f"/api/v1/workspaces/hq/pms/spaces/{space['id']}/members/{creator_id}",
+        f"/api/v1/workspaces/administrator/pms/spaces/{space['id']}/members/{creator_id}",
         headers={"Authorization": f"Bearer {creator_token}"},
         json={"role": "member"},
     )
     assert demote_response.status_code == 409
 
     remove_response = client.delete(
-        f"/api/v1/workspaces/hq/pms/spaces/{space['id']}/members/{creator_id}",
+        f"/api/v1/workspaces/administrator/pms/spaces/{space['id']}/members/{creator_id}",
         headers={"Authorization": f"Bearer {creator_token}"},
     )
     assert remove_response.status_code == 409
@@ -1312,7 +1260,7 @@ def test_platform_admin_without_workspace_membership_cannot_view_pms_spaces(
 ) -> None:
     admin_token = _bootstrap_admin(client)
     task_list_response = client.post(
-        "/api/v1/workspaces/hq/pms/lists",
+        "/api/v1/workspaces/administrator/pms/lists",
         headers={"Authorization": f"Bearer {admin_token}"},
         json={"key": "PLATADM", "name": "Platform Admin List", "description": "Visibility"},
     )
@@ -1333,84 +1281,35 @@ def test_platform_admin_without_workspace_membership_cannot_view_pms_spaces(
     assert "app_access" not in me_response.json()
 
     spaces_response = client.get(
-        "/api/v1/workspaces/hq/pms/spaces",
+        "/api/v1/workspaces/administrator/pms/spaces",
         headers={"Authorization": f"Bearer {platform_admin_token}"},
     )
     assert spaces_response.status_code == 403
 
 
-def test_group_workspace_templates_grant_and_revoke_effective_workspace_access(
+def test_workspace_bindings_grant_and_revoke_effective_workspace_access(
     client: TestClient,
 ) -> None:
     admin_token = _bootstrap_admin(client)
     admin_headers = {"Authorization": f"Bearer {admin_token}"}
-
-    group_response = client.post(
-        "/api/v1/admin/groups",
-        headers=admin_headers,
-        json={
-            "name": "Workspace Operators",
-            "description": "Workspace admins inherited through group templates.",
-            "system_roles": [],
-        },
-    )
-    assert group_response.status_code == 201
-    group = group_response.json()
 
     workspace_response = client.post(
         "/api/v1/admin/workspaces",
         headers=admin_headers,
         json={
             "name": "Operations Workspace",
-            "description": "Template-managed workspace",
+            "description": "Directly managed workspace",
         },
     )
     assert workspace_response.status_code == 201
     workspace = workspace_response.json()
 
-    update_group_response = client.patch(
-        f"/api/v1/admin/groups/{group['id']}",
-        headers=admin_headers,
-        json={
-            "name": "Workspace Operators Updated",
-            "slug": group["slug"],
-            "description": "Updated group metadata",
-            "group_kind": group["group_kind"],
-            "active": True,
-            "system_roles": [],
-        },
-    )
-    assert update_group_response.status_code == 200
-    assert update_group_response.json()["name"] == "Workspace Operators Updated"
-
-    workspace_templates_response = client.put(
-        f"/api/v1/admin/groups/{group['id']}/workspace-bindings",
-        headers=admin_headers,
-        json={
-            "items": [
-                {
-                    "workspace_id": workspace["id"],
-                    "role": "admin",
-                }
-            ]
-        },
-    )
-    assert workspace_templates_response.status_code == 200
-    assert workspace_templates_response.json()["workspace_bindings"] == [
-        {
-            "workspace_id": workspace["id"],
-            "workspace_key": workspace["key"],
-            "workspace_name": workspace["name"],
-            "role": "admin",
-        }
-    ]
-
     create_user_response = client.post(
         "/api/v1/admin/users",
         headers=admin_headers,
         json={
-            "email": "group-operator@ai-do.local",
-            "full_name": "Group Operator",
+            "email": "workspace-operator@ai-do.local",
+            "full_name": "Workspace Operator",
         },
     )
     assert create_user_response.status_code == 201
@@ -1422,33 +1321,37 @@ def test_group_workspace_templates_grant_and_revoke_effective_workspace_access(
     )
     user_headers = {"Authorization": f"Bearer {user_token}"}
 
-    replace_members_response = client.put(
-        f"/api/v1/admin/groups/{group['id']}/members",
+    me_before_binding_response = client.get("/api/v1/auth/me", headers=user_headers)
+    assert me_before_binding_response.status_code == 200
+    assert me_before_binding_response.json()["workspaces"] == []
+
+    bind_workspace_response = _replace_workspace_user_bindings(
+        client,
+        workspace_id=workspace["id"],
         headers=admin_headers,
-        json={"user_ids": [created_user["id"]]},
+        changes={created_user["id"]: "admin"},
     )
-    assert replace_members_response.status_code == 200
-    assert replace_members_response.json()["member_count"] == 1
+    assert bind_workspace_response.status_code == 200
 
     me_response = client.get("/api/v1/auth/me", headers=user_headers)
     assert me_response.status_code == 200
-    inherited_workspace = next(
+    bound_workspace = next(
         item for item in me_response.json()["workspaces"] if item["id"] == workspace["id"]
     )
-    assert inherited_workspace["role"] == "admin"
-    assert inherited_workspace["slug"] == workspace["key"]
+    assert bound_workspace["role"] == "admin"
+    assert bound_workspace["slug"] == workspace["key"]
 
     visible_workspaces_response = client.get("/api/v1/admin/workspaces", headers=user_headers)
     assert visible_workspaces_response.status_code == 200
     assert [item["id"] for item in visible_workspaces_response.json()] == [workspace["id"]]
 
-    remove_members_response = client.put(
-        f"/api/v1/admin/groups/{group['id']}/members",
+    remove_binding_response = _replace_workspace_user_bindings(
+        client,
+        workspace_id=workspace["id"],
         headers=admin_headers,
-        json={"user_ids": []},
+        changes={created_user["id"]: None},
     )
-    assert remove_members_response.status_code == 200
-    assert remove_members_response.json()["member_count"] == 0
+    assert remove_binding_response.status_code == 200
 
     me_after_removal_response = client.get("/api/v1/auth/me", headers=user_headers)
     assert me_after_removal_response.status_code == 200
@@ -1462,8 +1365,8 @@ def test_pms_parent_issue_validation_and_label_conflicts(client: TestClient) -> 
     primary_list = _create_pms_task_list(client, token, key="PARENT", name="Parent List")
     secondary_list = _create_pms_task_list(client, token, key="OTHER", name="Other List")
 
-    parent_issue = _create_pms_issue(client, token, str(primary_list["id"]), title="Parent issue")
-    child_issue = _create_pms_issue(
+    parent_issue = _create_pms_task(client, token, str(primary_list["id"]), title="Parent issue")
+    child_issue = _create_pms_task(
         client,
         token,
         str(primary_list["id"]),
@@ -1473,28 +1376,28 @@ def test_pms_parent_issue_validation_and_label_conflicts(client: TestClient) -> 
     assert child_issue["parent_id"] == parent_issue["id"]
 
     detail_response = client.get(
-        f"/api/v1/workspaces/hq/pms/issues/{parent_issue['id']}",
+        f"/api/v1/workspaces/administrator/pms/tasks/{parent_issue['id']}",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert detail_response.status_code == 200
     assert len(detail_response.json()["subtasks"]) == 1
 
     self_parent_response = client.patch(
-        f"/api/v1/workspaces/hq/pms/issues/{child_issue['id']}",
+        f"/api/v1/workspaces/administrator/pms/tasks/{child_issue['id']}",
         headers={"Authorization": f"Bearer {token}"},
         json={"parent_id": child_issue["id"]},
     )
     assert self_parent_response.status_code == 409
 
     cycle_response = client.patch(
-        f"/api/v1/workspaces/hq/pms/issues/{parent_issue['id']}",
+        f"/api/v1/workspaces/administrator/pms/tasks/{parent_issue['id']}",
         headers={"Authorization": f"Bearer {token}"},
         json={"parent_id": child_issue["id"]},
     )
     assert cycle_response.status_code == 409
 
     cross_list_response = client.post(
-        f"/api/v1/workspaces/hq/pms/lists/{secondary_list['id']}/issues",
+        f"/api/v1/workspaces/administrator/pms/lists/{secondary_list['id']}/tasks",
         headers={"Authorization": f"Bearer {token}"},
         json={
             "title": "Cross-list child",
@@ -1507,14 +1410,46 @@ def test_pms_parent_issue_validation_and_label_conflicts(client: TestClient) -> 
     assert cross_list_response.status_code == 400
 
     labels_response = client.get(
-        f"/api/v1/workspaces/hq/pms/lists/{primary_list['id']}/labels",
+        f"/api/v1/workspaces/administrator/pms/lists/{primary_list['id']}/labels",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert labels_response.status_code == 200
     labels = labels_response.json()["items"]
     rename_conflict_response = client.patch(
-        f"/api/v1/workspaces/hq/pms/labels/{labels[0]['id']}",
+        f"/api/v1/workspaces/administrator/pms/labels/{labels[0]['id']}",
         headers={"Authorization": f"Bearer {token}"},
         json={"name": labels[1]["name"]},
     )
     assert rename_conflict_response.status_code == 409
+
+
+def test_pms_task_board_positions_are_scoped_to_sibling_level(client: TestClient) -> None:
+    token = _bootstrap_admin(client)
+    task_list = _create_pms_task_list(client, token, key="POS", name="Position List")
+
+    parent = _create_pms_task(
+        client,
+        token,
+        str(task_list["id"]),
+        title="Parent",
+        status="in_progress",
+    )
+    child = _create_pms_task(
+        client,
+        token,
+        str(task_list["id"]),
+        title="Child",
+        parent_id=str(parent["id"]),
+        status="in_progress",
+    )
+    later_root = _create_pms_task(
+        client,
+        token,
+        str(task_list["id"]),
+        title="Later root",
+        status="todo",
+    )
+
+    assert parent["board_position"] == 1
+    assert child["board_position"] == 1
+    assert later_root["board_position"] == 2

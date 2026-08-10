@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -29,6 +31,52 @@ def _load_active_doc_grant(
             DocMeetingAccess.revoked_at.is_(None),
         )
     )
+
+
+def _load_active_doc_grants(
+    db: Session,
+    *criteria: Any,
+) -> list[DocMeetingAccess]:
+    return list(
+        db.scalars(
+            select(DocMeetingAccess).where(
+                *criteria,
+                DocMeetingAccess.revoked_at.is_(None),
+            )
+        )
+    )
+
+
+def _mutate_doc_grants(
+    db: Session,
+    grants: Iterable[DocMeetingAccess],
+    mutation: Callable[[DocMeetingAccess], None],
+) -> list[DocMeetingAccess]:
+    mutated = list(grants)
+    for grant in mutated:
+        mutation(grant)
+        db.add(grant)
+    db.flush()
+    for grant in mutated:
+        enqueue_doc_search_index_by_id(db, doc_id=grant.doc_id, operation="upsert")
+    return mutated
+
+
+def _revoke_doc_grants(
+    db: Session,
+    grants: Iterable[DocMeetingAccess],
+    *,
+    revoked_by_user_id: str,
+    reason: str,
+    now: datetime,
+) -> int:
+    def revoke(grant: DocMeetingAccess) -> None:
+        grant.revoked_at = now
+        grant.revoked_by_user_id = revoked_by_user_id
+        grant.revoke_reason = reason
+        grant.updated_at = now
+
+    return len(_mutate_doc_grants(db, grants, revoke))
 
 
 def grant_doc_access(
@@ -84,25 +132,18 @@ def revoke_doc_grants_for_meeting_attendee(
     reason: str,
 ) -> int:
     now = _utcnow()
-    grants = list(
-        db.scalars(
-            select(DocMeetingAccess).where(
-                DocMeetingAccess.granted_by_meeting_id == meeting_id,
-                DocMeetingAccess.user_id == user_id,
-                DocMeetingAccess.revoked_at.is_(None),
-            )
-        )
+    grants = _load_active_doc_grants(
+        db,
+        DocMeetingAccess.granted_by_meeting_id == meeting_id,
+        DocMeetingAccess.user_id == user_id,
     )
-    for grant in grants:
-        grant.revoked_at = now
-        grant.revoked_by_user_id = revoked_by_user_id
-        grant.revoke_reason = reason
-        grant.updated_at = now
-        db.add(grant)
-    db.flush()
-    for grant in grants:
-        enqueue_doc_search_index_by_id(db, doc_id=grant.doc_id, operation="upsert")
-    return len(grants)
+    return _revoke_doc_grants(
+        db,
+        grants,
+        revoked_by_user_id=revoked_by_user_id,
+        reason=reason,
+        now=now,
+    )
 
 
 def revoke_doc_grants_for_meeting(
@@ -113,24 +154,17 @@ def revoke_doc_grants_for_meeting(
     reason: str,
 ) -> int:
     now = _utcnow()
-    grants = list(
-        db.scalars(
-            select(DocMeetingAccess).where(
-                DocMeetingAccess.granted_by_meeting_id == meeting_id,
-                DocMeetingAccess.revoked_at.is_(None),
-            )
-        )
+    grants = _load_active_doc_grants(
+        db,
+        DocMeetingAccess.granted_by_meeting_id == meeting_id,
     )
-    for grant in grants:
-        grant.revoked_at = now
-        grant.revoked_by_user_id = revoked_by_user_id
-        grant.revoke_reason = reason
-        grant.updated_at = now
-        db.add(grant)
-    db.flush()
-    for grant in grants:
-        enqueue_doc_search_index_by_id(db, doc_id=grant.doc_id, operation="upsert")
-    return len(grants)
+    return _revoke_doc_grants(
+        db,
+        grants,
+        revoked_by_user_id=revoked_by_user_id,
+        reason=reason,
+        now=now,
+    )
 
 
 def revoke_doc_grants_for_attachment(
@@ -142,25 +176,18 @@ def revoke_doc_grants_for_attachment(
     reason: str,
 ) -> int:
     now = _utcnow()
-    grants = list(
-        db.scalars(
-            select(DocMeetingAccess).where(
-                DocMeetingAccess.granted_by_meeting_id == meeting_id,
-                DocMeetingAccess.doc_id == doc_id,
-                DocMeetingAccess.revoked_at.is_(None),
-            )
-        )
+    grants = _load_active_doc_grants(
+        db,
+        DocMeetingAccess.granted_by_meeting_id == meeting_id,
+        DocMeetingAccess.doc_id == doc_id,
     )
-    for grant in grants:
-        grant.revoked_at = now
-        grant.revoked_by_user_id = revoked_by_user_id
-        grant.revoke_reason = reason
-        grant.updated_at = now
-        db.add(grant)
-    db.flush()
-    for grant in grants:
-        enqueue_doc_search_index_by_id(db, doc_id=grant.doc_id, operation="upsert")
-    return len(grants)
+    return _revoke_doc_grants(
+        db,
+        grants,
+        revoked_by_user_id=revoked_by_user_id,
+        reason=reason,
+        now=now,
+    )
 
 
 def bump_doc_grant_expiry_for_meeting(
@@ -170,19 +197,13 @@ def bump_doc_grant_expiry_for_meeting(
     new_end_at: datetime,
 ) -> int:
     expires_at = new_end_at + timedelta(days=7)
-    grants = list(
-        db.scalars(
-            select(DocMeetingAccess).where(
-                DocMeetingAccess.granted_by_meeting_id == meeting_id,
-                DocMeetingAccess.revoked_at.is_(None),
-            )
-        )
+    grants = _load_active_doc_grants(
+        db,
+        DocMeetingAccess.granted_by_meeting_id == meeting_id,
     )
-    for grant in grants:
+
+    def bump_expiry(grant: DocMeetingAccess) -> None:
         grant.expires_at = expires_at
         grant.updated_at = _utcnow()
-        db.add(grant)
-    db.flush()
-    for grant in grants:
-        enqueue_doc_search_index_by_id(db, doc_id=grant.doc_id, operation="upsert")
-    return len(grants)
+
+    return len(_mutate_doc_grants(db, grants, bump_expiry))

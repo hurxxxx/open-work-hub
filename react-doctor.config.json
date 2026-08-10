@@ -1,0 +1,44 @@
+{
+  "offline": true,
+  "ignore": {
+    "overrides": [
+      {
+        "files": [
+          "apps/web/public/recording-sync-sw.js",
+          "apps/web/src/App.tsx",
+          "apps/web/src/app/AppRoot.tsx",
+          "apps/web/src/app/shell/AppContent.tsx",
+          "apps/web/src/app/shell/AppSubSidebar.tsx",
+          "apps/web/src/app/shell/redirects.ts",
+          "apps/web/src/app/shell/redirects/*.tsx",
+          "apps/web/src/app/shell/static-route-elements.tsx",
+          "apps/web/src/app/shell/tool-view-wrapper.tsx",
+          "apps/web/src/app/shell/tool-views/ComingSoonView.tsx",
+          "apps/web/src/app/shell/tool-views/ToolView.tsx",
+          "apps/web/src/app/shell/workspace-route-registry.tsx",
+          "apps/web/src/components/layout/SubSidebar.tsx",
+          "apps/web/src/main.tsx",
+          "dist-electron/**"
+        ],
+        "rules": ["deslop/unused-file"]
+      },
+      {
+        "files": ["package.json"],
+        "rules": ["deslop/unused-dev-dependency"]
+      },
+      {
+        "files": [
+          "src/use-dm-realtime-sync.ts",
+          "src/use-dm-thread-messages.ts"
+        ],
+        "rules": [
+          "react-doctor/no-event-handler",
+          "react-doctor/no-pass-data-to-parent"
+        ]
+      }
+    ]
+  },
+  "rules": {
+    "react-doctor/only-export-components": "warn"
+  }
+}

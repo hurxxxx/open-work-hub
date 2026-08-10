@@ -39,9 +39,9 @@ const ABC = 'ai-do-business-ai-curriculum';
 export const LEARNING_COURSES: LearningCourse[] = [
   {
     slug: ABC,
-    title: '현업을 위한 AI-Doo 12주 교육',
+    title: 'AI-DO LLM/RAG 운영 전문 교육',
     description:
-      'AI-Doo PoC 주간교육을 현업 실무형으로 재구성한 12주 과정입니다. 기존 교육자료를 참조하면서 좋은 요청, RAG, 승인 게이트, 운영 품질, 인계까지 다룹니다.',
+      '기존 교재와 중복되는 AI 협업·저장소·서비스 출시 내용은 원본 코스로 연결하고, AI-DO PoC에 필요한 LLM/RAG 모델 지형, 검색, 승인, 평가 운영을 깊게 다룹니다.',
     parts: [
       {
         slug: 'intro',
@@ -51,33 +51,15 @@ export const LEARNING_COURSES: LearningCourse[] = [
         ],
       },
       {
-        slug: 'collaboration',
-        title: 'AI 협업 기본기',
-        lessons: [
-          { id: 'abc-001-ai-collaboration', slug: '01-ai-collaboration', title: 'AI 시대 협업과 좋은 요청', file: `${ABC}/01-AI시대-협업과-좋은요청.md` },
-          { id: 'abc-002-work-breakdown', slug: '02-work-breakdown', title: '작업 분해와 프롬프트 설계', file: `${ABC}/02-작업분해와-프롬프트설계.md` },
-          { id: 'abc-003-verification', slug: '03-verification', title: 'AI 결과 검수와 변경 관리', file: `${ABC}/03-AI결과검수와-변경관리.md` },
-        ],
-      },
-      {
         slug: 'rag-operations',
-        title: 'LLM/RAG 운영',
+        title: 'LLM/RAG 운영 전문 교육',
         lessons: [
-          { id: 'abc-004-llm-routing', slug: '04-llm-routing', title: 'LLM 기초와 모델 라우팅', file: `${ABC}/04-LLM기초와-모델라우팅.md` },
-          { id: 'abc-005-rag-grounding', slug: '05-rag-grounding', title: 'RAG와 근거 기반 답변', file: `${ABC}/05-RAG와-근거기반답변.md` },
+          { id: 'abc-004-llm-routing', slug: '04-llm-routing', title: 'LLM 모델 지형과 모델 라우팅', file: `${ABC}/04-LLM기초와-모델라우팅.md` },
+          { id: 'abc-005-rag-grounding', slug: '05-rag-grounding', title: 'RAG 패턴과 근거 기반 답변 설계', file: `${ABC}/05-RAG와-근거기반답변.md` },
           { id: 'abc-006-indexing-pipeline', slug: '06-indexing-pipeline', title: '문서 인덱싱 파이프라인', file: `${ABC}/06-문서인덱싱-파이프라인.md` },
           { id: 'abc-007-search-quality', slug: '07-search-quality', title: '검색 품질: 키워드·벡터·재정렬', file: `${ABC}/07-검색품질-키워드-벡터-재정렬.md` },
           { id: 'abc-008-approval-gate', slug: '08-approval-gate', title: 'AI 도구 호출과 승인 게이트', file: `${ABC}/08-AI도구호출과-승인게이트.md` },
           { id: 'abc-009-ops-quality', slug: '09-ops-quality', title: '평가·관측·운영 품질', file: `${ABC}/09-평가관측-운영품질.md` },
-        ],
-      },
-      {
-        slug: 'handoff',
-        title: '저장소·출시·인계',
-        lessons: [
-          { id: 'abc-010-storage-selection', slug: '10-storage-selection', title: '데이터베이스와 저장소 선택', file: `${ABC}/10-데이터베이스와-저장소선택.md` },
-          { id: 'abc-011-service-launch', slug: '11-service-launch', title: '아이디어에서 출시까지', file: `${ABC}/11-아이디어에서-출시까지.md` },
-          { id: 'abc-012-handoff', slug: '12-handoff', title: '회고와 운영 인계', file: `${ABC}/12-회고와-운영인계.md` },
         ],
       },
     ],

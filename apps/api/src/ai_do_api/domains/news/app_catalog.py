@@ -1,0 +1,102 @@
+from ai_do_api.core.workspace_app_registry import (
+    WorkspaceAppRegistration,
+    WorkspaceNavRegistration,
+)
+
+
+NEWS_WORKSPACE_APP = WorkspaceAppRegistration(
+    app_id="news",
+    title="뉴스·리포트",
+    route_base="/news",
+    icon_key="newspaper",
+    enabled_by_default=True,
+    visible_by_default=True,
+    launcher_category=True,
+    availability_scope="platform",
+    nav_items=(
+        WorkspaceNavRegistration(
+            id="news-home",
+            title="홈",
+            category="News",
+            icon_key="home",
+            path_suffix="?channel=home",
+        ),
+        WorkspaceNavRegistration(
+            id="news-recommended",
+            title="추천 뉴스",
+            category="News",
+            icon_key="star",
+            path_suffix="?channel=recommended",
+        ),
+        WorkspaceNavRegistration(
+            id="news-keyword",
+            title="키워드 뉴스",
+            category="News",
+            icon_key="newspaper",
+            path_suffix="?channel=keyword",
+        ),
+        WorkspaceNavRegistration(
+            id="news-car",
+            title="자동차 뉴스",
+            category="News",
+            icon_key="car",
+            path_suffix="?channel=car",
+        ),
+        WorkspaceNavRegistration(
+            id="news-front",
+            title="신문사 뉴스",
+            category="News",
+            icon_key="building-2",
+            path_suffix="?channel=front",
+        ),
+        WorkspaceNavRegistration(
+            id="news-ai",
+            title="AI 추천 뉴스",
+            category="News",
+            icon_key="sparkles",
+            path_suffix="?channel=ai",
+        ),
+        WorkspaceNavRegistration(
+            id="industry-report-trend",
+            title="자동차 연구원",
+            category="Industry Report",
+            icon_key="library",
+            path_suffix="?view=report&tab=trend",
+        ),
+        WorkspaceNavRegistration(
+            id="industry-report-autojournal",
+            title="오토저널",
+            category="Industry Report",
+            icon_key="book-open",
+            path_suffix="?view=report&tab=autojournal",
+        ),
+        WorkspaceNavRegistration(
+            id="industry-report-kdi",
+            title="KDI 경제자료",
+            category="Industry Report",
+            icon_key="bar-chart-3",
+            path_suffix="?view=report&tab=kdi",
+        ),
+        WorkspaceNavRegistration(
+            id="industry-report-recommended",
+            title="추천 산업 리포트",
+            category="Industry Report",
+            icon_key="star",
+            path_suffix="?view=report&tab=recommended",
+        ),
+        WorkspaceNavRegistration(
+            id="industry-report-ai",
+            title="AI 추천 리포트",
+            category="Industry Report",
+            icon_key="sparkles",
+            path_suffix="?view=report&tab=ai",
+        ),
+        WorkspaceNavRegistration(
+            id="industry-report-scraps",
+            title="내 스크랩",
+            category="Industry Report",
+            icon_key="bookmark",
+            path_suffix="?view=report&tab=scraps",
+        ),
+    ),
+)

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from ai_do_api.core.db import get_db_session
 from ai_do_api.domains.auth.dependencies import require_current_user, require_current_workspace
 from ai_do_api.domains.auth.models import User, Workspace
-from ai_do_api.domains.search import service
+from ai_do_api.domains.retrieval import application as retrieval_application
 from ai_do_api.domains.search.schemas import KeywordSearchRequest, KeywordSearchResponse
 
 
@@ -20,7 +20,7 @@ def query_workspace_search(
     current_user: User = Depends(require_current_user),
     current_workspace: Workspace = Depends(require_current_workspace),
 ) -> KeywordSearchResponse:
-    return service.query_workspace_keyword_search(
+    return retrieval_application.query_workspace_keyword_search_response(
         db,
         workspace=current_workspace,
         user=current_user,

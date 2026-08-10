@@ -43,7 +43,9 @@ async function stubFullShell(page: Page) {
 }
 
 test.describe('AI-friendly app boundary smoke', () => {
-  test('renders workspace apps and tool wrappers through the shell registry', async ({ page }) => {
+  test('renders workspace apps and tool wrappers through the shell registry', async ({
+    page,
+  }) => {
     await stubFullShell(page);
     const errors = collectBrowserErrors(page);
 
@@ -54,86 +56,153 @@ test.describe('AI-friendly app boundary smoke', () => {
       {
         path: '/w/hq/home',
         assert: async (current) => {
-          await expect(current.getByRole('heading', { name: /Good/ })).toBeVisible();
+          await expect(current.getByText(/Good/)).toBeVisible();
         },
       },
       {
-        path: '/w/hq/ai',
+        path: '/w/hq/drafting',
         assert: async (current) => {
-          await expect(current.getByRole('heading', { name: 'AI' })).toBeVisible();
-          await expect(current.getByText('안녕하세요, 업무를 도와드릴게요.')).toBeVisible();
+          await expect(
+            current.getByRole('heading', {
+              name: /기안작성 도우미|Drafting Assistant/,
+            }),
+          ).toBeVisible();
+        },
+      },
+      {
+        path: '/w/hq/chatbot',
+        assert: async (current) => {
+          await expect(
+            current.getByRole('heading', { name: /아이두 챗봇|I-Do Chatbot/ }),
+          ).toBeVisible();
         },
       },
       {
         path: '/w/hq/pms',
         assert: async (current) => {
-          await expect(current.getByRole('heading', { name: 'PMS', exact: true })).toBeVisible();
-          await expect(current.getByRole('link', { name: 'Assigned to me' })).toBeVisible();
+          await expect(
+            current.getByRole('heading', { name: 'PMS', exact: true }).or(
+              current.getByRole('heading', {
+                name: /^(No Spaces Yet|아직 스페이스가 없습니다)$/,
+              }),
+            ),
+          ).toBeVisible();
+          await expect(
+            current
+              .getByRole('link', { name: /Assigned to me|내게 배정됨/ })
+              .or(
+                current.getByRole('button', {
+                  name: /Create Space|스페이스 만들기/,
+                }),
+              )
+              .first(),
+          ).toBeVisible();
         },
       },
       {
         path: '/w/hq/docs',
         assert: async (current) => {
-          await expect(current.getByRole('heading', { name: 'DOCS', exact: true })).toBeVisible();
-          await expect(current.getByRole('link', { name: 'All Docs' })).toBeVisible();
+          await expect(
+            current.getByRole('heading', {
+              level: 1,
+              name: /All Docs|전체 문서/,
+            }),
+          ).toBeVisible();
+          await expect(
+            current.getByRole('button', { name: /New Doc|새 Doc/ }).first(),
+          ).toBeVisible();
         },
       },
       {
-        path: '/w/hq/planner',
+        path: '/planner',
         assert: async (current) => {
-          await expect(current.getByRole('heading', { level: 1, name: 'Planner' })).toBeVisible();
-          await expect(current.getByRole('link', { name: '캘린더' })).toBeVisible();
+          await expect(
+            current.getByRole('heading', { level: 1, name: /Planner|플래너/ }),
+          ).toBeVisible();
+          await expect(
+            current.getByRole('button', { name: /Calendar|캘린더/ }),
+          ).toBeVisible();
         },
       },
       {
         path: '/w/hq/meeting',
         assert: async (current) => {
-          await expect(current.getByRole('heading', { name: 'MEETING', exact: true })).toBeVisible();
-          await expect(current.getByRole('button', { name: 'New Meeting' }).first()).toBeVisible();
+          await expect(
+            current.getByRole('heading', { level: 1, name: /Meetings|회의/ }),
+          ).toBeVisible();
+          await expect(
+            current
+              .getByRole('button', { name: /New Meeting|새 회의/ })
+              .first(),
+          ).toBeVisible();
         },
       },
       {
         path: '/w/hq/learning',
         assert: async (current) => {
-          await expect(current.getByRole('heading', { name: '학습' })).toBeVisible();
-          await expect(current.getByRole('region', { name: '코스 목록' })).toBeVisible();
+          await expect(
+            current.getByRole('heading', { name: /All Courses|전체 코스/ }),
+          ).toBeVisible();
+          await expect(
+            current.getByRole('region', { name: /Course list|코스 목록/ }),
+          ).toBeVisible();
         },
       },
       {
         path: '/w/hq/settings',
         assert: async (current) => {
-          await expect(current.getByText('Workspace Settings')).toBeVisible();
-          await expect(current.getByRole('heading', { level: 1, name: 'AI-DO HQ' })).toBeVisible();
+          await expect(
+            current.getByText(/Workspace Settings|워크스페이스 설정/),
+          ).toBeVisible();
+          await expect(
+            current.getByRole('heading', { level: 1, name: 'AI-DO HQ' }),
+          ).toBeVisible();
         },
       },
       {
         path: '/tool/search?workspace=hq',
         assert: async (current) => {
-          await expect(current.getByRole('heading', { name: 'AI-DO 통합검색' })).toBeVisible();
+          await expect(
+            current.getByRole('heading', { name: 'AI-DO 통합검색' }),
+          ).toBeVisible();
         },
       },
     ];
 
     for (const route of routes) {
       await page.goto(route.path);
-      await expect(page).toHaveURL(new RegExp(`${route.path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`));
+      await expect(page).toHaveURL(
+        new RegExp(`${route.path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`),
+      );
       await route.assert(page);
     }
 
     errors.expectClean();
   });
 
-  test('keeps disabled workspace apps blocked by WorkspaceGate', async ({ page }) => {
+  test('keeps disabled workspace apps blocked by WorkspaceGate', async ({
+    page,
+  }) => {
     await stubWorkspaceAppDataBackend(page);
     await stubShellBackend(page, {
-      enabledAppIds: ['home', 'ai', 'pms', 'docs', 'planner', 'learning'],
+      enabledAppIds: [
+        'home',
+        'chatbot',
+        'docs',
+        'drafting',
+        'learning',
+        'planner',
+        'pms',
+      ],
     });
     await stubConversationsApi(page);
     const errors = collectBrowserErrors(page);
 
     await page.goto('/w/hq/meeting');
 
-    await expect(page.getByRole('heading', { name: '접근 권한 없음' })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: '접근 권한 없음' }),
+    ).toBeVisible();
     await expect(
       page.getByText('현재 workspace에서는 이 앱이 활성화되어 있지 않습니다.'),
     ).toBeVisible();
@@ -141,11 +210,34 @@ test.describe('AI-friendly app boundary smoke', () => {
     errors.expectClean();
   });
 
+  test('shows the business sites menu outside the desktop rail', async ({
+    page,
+  }) => {
+    await stubFullShell(page);
+    await page.setViewportSize({ width: 1280, height: 720 });
+    const errors = collectBrowserErrors(page);
+
+    await page.goto('/w/hq/home');
+    await page
+      .getByRole('button', { name: /Business site links|업무 사이트 링크/ })
+      .click();
+
+    const groupwareLink = page.getByRole('menuitem', {
+      name: /Groupware|두원공조 그룹웨어/,
+    });
+    await expect(groupwareLink).toHaveAttribute(
+      'href',
+      'http://gw.dwdcc.co.kr/index.aspx',
+    );
+    await expect(groupwareLink).toBeInViewport();
+    errors.expectClean();
+  });
+
   test('keeps legacy top-level app paths on NotFoundView', async ({ page }) => {
     await stubFullShell(page);
     const errors = collectBrowserErrors(page);
 
-    for (const path of ['/meeting', '/docs', '/pms', '/planner', '/ai']) {
+    for (const path of ['/meeting', '/docs', '/pms', '/chatbot']) {
       await page.goto(path);
       await expect(page).toHaveURL(new RegExp(`${path}$`));
       await expect(
@@ -156,16 +248,22 @@ test.describe('AI-friendly app boundary smoke', () => {
     errors.expectClean();
   });
 
-  test('renders admin sections for platform admin through settings boundaries', async ({ page }) => {
+  test('renders admin sections for platform admin through settings boundaries', async ({
+    page,
+  }) => {
     await stubWorkspaceAppDataBackend(page);
     await stubShellBackend(page, { user: FAKE_PLATFORM_ADMIN_USER });
     const errors = collectBrowserErrors(page);
 
     await page.goto('/admin/general');
-    await expect(page.getByRole('heading', { name: 'General settings' })).toBeVisible();
+    await expect(
+      page.locator('main').getByRole('heading', { level: 1 }),
+    ).toBeVisible();
 
     await page.goto('/admin/workspaces');
-    await expect(page.getByRole('heading', { name: 'Workspaces', exact: true })).toBeVisible();
+    await expect(
+      page.locator('main').getByRole('heading', { level: 1 }),
+    ).toBeVisible();
     await expect(page.getByRole('button', { name: /AI-DO HQ/ })).toBeVisible();
 
     errors.expectClean();

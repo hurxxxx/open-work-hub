@@ -32,6 +32,3 @@ export const compactSchema = BlockNoteSchema.create({
     mention: Mention,
   },
 });
-
-export type FullSchema = typeof fullSchema;
-export type CompactSchema = typeof compactSchema;

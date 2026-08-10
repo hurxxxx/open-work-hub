@@ -1,84 +1,297 @@
-import { useMemo } from 'react';
-import { cn } from '@/src/lib/utils';
-import { parseDateOnlyParts } from '@/src/platform/time/time-utils';
-import type { PmsIssue, PmsTaskListStatus } from '../api/pms-api';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { Button } from '@ai-do/ui';
+import {
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+} from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import {
+  UnifiedCalendar,
+  type UnifiedCalendarHandle,
+} from '@/src/components/calendar/UnifiedCalendar';
+import type { CalendarEvent } from '@/src/platform/calendar/calendar-types';
+import type { PmsTask, PmsTaskListStatus } from '../api/pms-api';
+import {
+  addCalendarMonths,
+  buildPmsCalendarEvents,
+  startOfCalendarMonth,
+} from './calendar-view-model';
+import { formatDate, getStatusLabel } from './pms-constants';
 
-const STATUS_COLORS: Record<string, string> = {
-  backlog: '#6b7280',
-  todo: '#9ca3af',
-  in_progress: '#3b82f6',
-  done: '#22c55e',
-  canceled: '#ef4444',
+type HoveredCalendarTask = {
+  eventId: string;
+  rect: {
+    bottom: number;
+    left: number;
+    top: number;
+  };
+  task: PmsTask;
 };
 
-function getStatusColor(slug: string, taskListStatuses?: PmsTaskListStatus[]): string {
-  if (STATUS_COLORS[slug]) return STATUS_COLORS[slug];
-  const ps = taskListStatuses?.find(s => s.slug === slug);
-  return ps?.color ?? '#6b7280';
-}
+export const CalendarView = ({
+  tasks,
+  taskListStatuses,
+}: {
+  tasks: PmsTask[];
+  taskListStatuses?: PmsTaskListStatus[];
+}) => {
+  const { i18n, t } = useTranslation('apps');
+  const calendarRef = useRef<UnifiedCalendarHandle | null>(null);
+  const [visibleMonth, setVisibleMonth] = useState(() =>
+    startOfCalendarMonth(new Date()),
+  );
+  const [hoveredTask, setHoveredTask] = useState<HoveredCalendarTask | null>(
+    null,
+  );
 
-export const CalendarView = ({ issues, taskListStatuses }: { issues: PmsIssue[]; taskListStatuses?: PmsTaskListStatus[] }) => {
-  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const events = useMemo(
+    () => buildPmsCalendarEvents(tasks, taskListStatuses),
+    [taskListStatuses, tasks],
+  );
+  const tasksById = useMemo(
+    () => new Map(tasks.map((task) => [task.id, task])),
+    [tasks],
+  );
+  const monthTitle = useMemo(
+    () =>
+      new Intl.DateTimeFormat(i18n.language, {
+        month: 'long',
+        year: 'numeric',
+      }).format(visibleMonth),
+    [i18n.language, visibleMonth],
+  );
+  const handleEventMouseEnter = useCallback(
+    (event: CalendarEvent, anchorEl: HTMLElement) => {
+      const task = tasksById.get(event.sourceId);
+      if (!task) return;
+      const rect = anchorEl.getBoundingClientRect();
+      setHoveredTask({
+        eventId: event.id,
+        rect: {
+          bottom: rect.bottom,
+          left: rect.left,
+          top: rect.top,
+        },
+        task,
+      });
+    },
+    [tasksById],
+  );
+  const handleEventMouseLeave = useCallback((event: CalendarEvent) => {
+    setHoveredTask((current) =>
+      current?.eventId === event.id ? null : current,
+    );
+  }, []);
 
-  const { calendarDays, issuesByDate } = useMemo(() => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth();
-    const firstDay = new Date(year, month, 1).getDay();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-    const calDays: (number | null)[] = [];
-    for (let i = 0; i < firstDay; i++) calDays.push(null);
-    for (let d = 1; d <= daysInMonth; d++) calDays.push(d);
-    while (calDays.length < 35) calDays.push(null);
-
-    const byDate: Record<number, PmsIssue[]> = {};
-    for (const issue of issues) {
-      if (!issue.due_date) continue;
-      const due = parseDateOnlyParts(issue.due_date);
-      if (due && due.year === year && due.month === month + 1) {
-        (byDate[due.day] ??= []).push(issue);
-      }
-    }
-
-    return { calendarDays: calDays, issuesByDate: byDate };
-  }, [issues]);
+  const handleDatesSet = useCallback(
+    ({ currentDate }: { currentDate: Date }) => {
+      setVisibleMonth(startOfCalendarMonth(currentDate));
+      setHoveredTask(null);
+    },
+    [],
+  );
+  const shiftVisibleMonth = useCallback(
+    (months: number) => {
+      calendarRef.current?.gotoDate(addCalendarMonths(visibleMonth, months));
+      setHoveredTask(null);
+    },
+    [visibleMonth],
+  );
 
   return (
     <div className="h-full flex flex-col card p-0 overflow-hidden">
-      <div className="grid grid-cols-7 border-b border-app-border bg-app-surface-sidebar/30">
-        {days.map(day => (
-          <div key={day} className="app-text-overline border-r border-app-border py-3 text-center text-gray-500 last:border-r-0">
-            {day}
-          </div>
-        ))}
-      </div>
-      <div className="flex-1 grid grid-cols-7 grid-rows-5 overflow-y-auto custom-scrollbar">
-        {calendarDays.map((date, i) => (
-          <div
-            key={i}
-            className={cn(
-              "p-2 border-r border-b border-app-border last:border-r-0 min-h-[120px] hover:bg-app-surface-hover/50 transition-colors",
-              date === null && "bg-app-surface-sidebar/20"
-            )}
+      <div className="flex flex-col gap-2 border-b border-app-border bg-app-surface-sidebar/30 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 flex-wrap items-center gap-1">
+          <CalendarDays size={16} className="mr-1 shrink-0 text-app-accent" />
+          <Button
+            aria-label={t('pms.calendar.previousYear')}
+            onClick={() => shiftVisibleMonth(-12)}
+            size="icon"
+            title={t('pms.calendar.previousYear')}
+            variant="ghost"
           >
-            <div className="app-text-micro mb-2 font-bold text-gray-600">
-              {date ?? ''}
-            </div>
-            <div className="space-y-1">
-              {date && issuesByDate[date]?.map(issue => (
-                <div
-                  key={issue.id}
-                  className="app-text-micro truncate rounded border-l-2 bg-app-surface-sidebar/60 px-1.5 py-1 text-app-ink"
-                  style={{ borderLeftColor: getStatusColor(issue.status, taskListStatuses) }}
-                >
-                  {issue.reference} {issue.title}
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
+            <ChevronsLeft aria-hidden="true" size={16} />
+          </Button>
+          <Button
+            aria-label={t('pms.calendar.previousMonth')}
+            onClick={() => shiftVisibleMonth(-1)}
+            size="icon"
+            title={t('pms.calendar.previousMonth')}
+            variant="ghost"
+          >
+            <ChevronLeft aria-hidden="true" size={16} />
+          </Button>
+          <h3 className="app-text-title-md mx-2 min-w-0 truncate text-app-ink">
+            {monthTitle}
+          </h3>
+          <Button
+            aria-label={t('pms.calendar.nextMonth')}
+            onClick={() => shiftVisibleMonth(1)}
+            size="icon"
+            title={t('pms.calendar.nextMonth')}
+            variant="ghost"
+          >
+            <ChevronRight aria-hidden="true" size={16} />
+          </Button>
+          <Button
+            aria-label={t('pms.calendar.nextYear')}
+            onClick={() => shiftVisibleMonth(12)}
+            size="icon"
+            title={t('pms.calendar.nextYear')}
+            variant="ghost"
+          >
+            <ChevronsRight aria-hidden="true" size={16} />
+          </Button>
+        </div>
+        <Button
+          onClick={() => calendarRef.current?.today()}
+          size="dense"
+          variant="secondary"
+        >
+          {t('pms.calendar.today')}
+        </Button>
       </div>
+      <div className="flex-1 overflow-y-auto custom-scrollbar">
+        <UnifiedCalendar
+          ref={calendarRef}
+          className="min-h-full"
+          dayMaxEvents={false}
+          eventClassNames={(event) =>
+            event.sourceType === 'pms_due' ? ['fc-pms-task-event'] : []
+          }
+          events={events}
+          height="auto"
+          initialDate={visibleMonth}
+          initialView="dayGridMonth"
+          layout="content"
+          onDatesSet={handleDatesSet}
+          onEventMouseEnter={handleEventMouseEnter}
+          onEventMouseLeave={handleEventMouseLeave}
+        />
+      </div>
+      <CalendarTaskHoverCard
+        hoveredTask={hoveredTask}
+        taskListStatuses={taskListStatuses}
+      />
     </div>
   );
 };
+
+function CalendarTaskHoverCard({
+  hoveredTask,
+  taskListStatuses,
+}: {
+  hoveredTask: HoveredCalendarTask | null;
+  taskListStatuses?: PmsTaskListStatus[];
+}) {
+  if (!hoveredTask || typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div
+      className="pointer-events-none fixed z-[1000] w-72 rounded-lg border border-app-border bg-app-bg p-3 text-left shadow-xl"
+      role="tooltip"
+      style={getHoverCardStyle(hoveredTask.rect)}
+    >
+      <CalendarTaskDetailCard
+        task={hoveredTask.task}
+        taskListStatuses={taskListStatuses}
+      />
+    </div>,
+    document.body,
+  );
+}
+
+function CalendarTaskDetailCard({
+  task,
+  taskListStatuses,
+}: {
+  task: PmsTask;
+  taskListStatuses?: PmsTaskListStatus[];
+}) {
+  const { t } = useTranslation('apps');
+  const assignee = resolveCalendarTaskAssignee(task);
+  const notSet = t('pms.list.notSet');
+  const detailRows = [
+    {
+      label: t('pms.list.status'),
+      value: task.status_label || getStatusLabel(task.status, taskListStatuses),
+    },
+    {
+      label: t('pms.filter.priorityLabel'),
+      value: task.priority_label || task.priority || notSet,
+    },
+    {
+      label: t('pms.list.assignee'),
+      value: assignee || t('pms.taskDetail.unassigned'),
+    },
+    {
+      label: t('pms.filter.startDateLabel'),
+      value: formatDate(task.start_date) || notSet,
+    },
+    {
+      label: t('pms.list.dueDate'),
+      value: formatDate(task.due_date) || notSet,
+    },
+  ];
+
+  return (
+    <>
+      <div className="app-text-micro mb-1 text-app-ink/45">
+        {task.reference}
+      </div>
+      <div className="app-text-body-sm mb-2 line-clamp-2 font-semibold text-app-ink">
+        {task.title}
+      </div>
+      <dl className="space-y-1.5">
+        {detailRows.map((row) => (
+          <div
+            key={row.label}
+            className="flex items-start justify-between gap-3"
+          >
+            <dt className="app-text-micro shrink-0 text-app-ink/50">
+              {row.label}
+            </dt>
+            <dd className="app-text-micro min-w-0 truncate text-right text-app-ink">
+              {row.value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </>
+  );
+}
+
+function getHoverCardStyle(rect: HoveredCalendarTask['rect']): {
+  left: number;
+  top: number;
+} {
+  const margin = 8;
+  const width = 288;
+  const estimatedHeight = 180;
+  const viewportWidth =
+    typeof window === 'undefined' ? 1024 : window.innerWidth;
+  const viewportHeight =
+    typeof window === 'undefined' ? 768 : window.innerHeight;
+  const left = Math.min(
+    Math.max(rect.left, margin),
+    Math.max(margin, viewportWidth - width - margin),
+  );
+  const below = rect.bottom + margin;
+  const top =
+    below + estimatedHeight > viewportHeight
+      ? Math.max(margin, rect.top - estimatedHeight - margin)
+      : below;
+
+  return { left, top };
+}
+
+function resolveCalendarTaskAssignee(task: PmsTask): string {
+  if (task.assignee_names?.length) {
+    return task.assignee_names.join(', ');
+  }
+  return task.assignee_name ?? '';
+}

@@ -1,0 +1,28 @@
+[Unit]
+Description=AI-DO Development Worker - PPT Generation Queue
+Wants=network-online.target ai-do-dev-app.service
+After=network-online.target ai-do-dev-app.service
+
+[Service]
+Type=simple
+WorkingDirectory=__AI_DO_ROOT__/apps/worker
+Environment=PYTHONPATH=__AI_DO_ROOT__/apps/worker/src
+Environment=AI_DO_WORKER_QUEUE_GROUP=ppt
+Environment=AI_DO_RUNTIME_REVISION=__AI_DO_RUNTIME_REVISION__
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/dev/null
+# PPT generation needs a browser (HTML->pptx) / dedicated env, so only this worker consumes it.
+# When other (dev/remote) workers share the broker, mingle/gossip handshakes can hang startup;
+# disable them so this dedicated worker boots cleanly.
+ExecStartPre=/usr/bin/env bash -lc 'source "__AI_DO_ROOT__/scripts/dev-env.sh" && cd "__AI_DO_ROOT__/apps/worker" && exec uv run --python 3.12 python -m ai_do_worker.ppt_browser_smoke'
+ExecStart=/usr/bin/env bash -lc 'source "__AI_DO_ROOT__/scripts/dev-env.sh" && cd "__AI_DO_ROOT__/apps/worker" && exec uv run --python 3.12 celery -A ai_do_worker.celery_app:celery_app worker --loglevel=info --hostname=ai-do-dev-worker-ppt@%H -Q __AI_DO_WORKER_PPT_QUEUE_NAMES__ --concurrency __AI_DO_WORKER_PPT_CONCURRENCY__ --prefetch-multiplier 1 --without-mingle --without-gossip --without-heartbeat'
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0077
+Restart=always
+RestartSec=10
+TimeoutStartSec=300
+TimeoutStopSec=3900
+KillMode=mixed
+
+[Install]
+WantedBy=default.target

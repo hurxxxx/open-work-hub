@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Literal, Mapping
+from collections.abc import Mapping, Sequence
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -8,6 +9,33 @@ from ai_do_api.domains.ai.boundary_safety import assert_external_manager_payload
 
 
 LocalAgentResultStatus = Literal["completed", "blocked", "failed"]
+
+
+def normalize_unique_non_empty_strings(value: list[str], *, duplicate_message: str) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        normalized_item = item.strip()
+        if not normalized_item:
+            continue
+        if normalized_item in seen:
+            raise ValueError(duplicate_message)
+        normalized.append(normalized_item)
+        seen.add(normalized_item)
+    return normalized
+
+
+def assert_external_manager_payload_tree_safe(value: Any) -> None:
+    if isinstance(value, str):
+        assert_external_manager_payload_safe(value)
+        return
+    if isinstance(value, Mapping):
+        for nested_value in value.values():
+            assert_external_manager_payload_tree_safe(nested_value)
+        return
+    if isinstance(value, Sequence) and not isinstance(value, bytes | bytearray):
+        for nested_value in value:
+            assert_external_manager_payload_tree_safe(nested_value)
 
 
 class LocalAgentTask(BaseModel):
@@ -24,21 +52,15 @@ class LocalAgentTask(BaseModel):
     @field_validator("allowed_tool_names")
     @classmethod
     def _allowed_tools_must_not_repeat(cls, value: list[str]) -> list[str]:
-        normalized = [tool_name.strip() for tool_name in value if tool_name.strip()]
-        if len(normalized) != len(set(normalized)):
-            raise ValueError("allowed_tool_names must not contain duplicates")
-        return normalized
+        return normalize_unique_non_empty_strings(
+            value,
+            duplicate_message="allowed_tool_names must not contain duplicates",
+        )
 
     @field_validator("tool_arguments")
     @classmethod
     def _tool_arguments_must_be_safe(cls, value: Mapping[str, Any]) -> dict[str, Any]:
-        for item in value.values():
-            if isinstance(item, str):
-                assert_external_manager_payload_safe(item)
-            elif isinstance(item, list):
-                for nested_item in item:
-                    if isinstance(nested_item, str):
-                        assert_external_manager_payload_safe(nested_item)
+        assert_external_manager_payload_tree_safe(value)
         return dict(value)
 
 
@@ -59,10 +81,7 @@ class LocalAgentResult(BaseModel):
             raise ValueError("completed local result must include redacted_summary")
         if self.status == "blocked" and not self.blocked_reason:
             raise ValueError("blocked local result must include blocked_reason")
-        assert_external_manager_payload_safe(self.redacted_summary)
-        if self.blocked_reason:
-            assert_external_manager_payload_safe(self.blocked_reason)
-        for coverage_values in self.coverage.values():
-            for coverage_value in coverage_values:
-                assert_external_manager_payload_safe(coverage_value)
+        assert_external_manager_payload_tree_safe(self.redacted_summary)
+        assert_external_manager_payload_tree_safe(self.blocked_reason)
+        assert_external_manager_payload_tree_safe(self.coverage)
         return self

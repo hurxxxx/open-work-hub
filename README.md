@@ -1,63 +1,62 @@
-# Agentic Biz Hub
+# AI-DO
 
-## VM Preview 배포
+## 운영/개발 분리
 
-이 VM의 공개 preview는 `https://dwdcc.lumejs.com` 이며, 루트 스크립트
-`scripts/vm-app-stack.sh` 를 `pnpm` script로 호출해서 운영한다.
+이 서버의 운영 checkout은 `/projects/ai-do/prod`이며 `main` 브랜치를 따른다.
+개발 checkout은 `/projects/ai-do/dev`이며 `dev` 브랜치를 따른다.
+운영 서비스는 user-level systemd의 `ai-do-prod-*` unit으로 관리한다.
 
-### 배포
+일반 개발은 `/projects/ai-do/dev`의 `dev` 브랜치에서 수행한다. 개발 검증이 끝난
+변경만 GitLab MR로 `main`에 병합하고, `/projects/ai-do/prod`는 병합된 `main`을 배포하는
+운영 checkout으로 유지한다.
 
-```bash
-pnpm vm:app:deploy
-```
+The standard deployment entrypoint is `pnpm prod:deploy`. Run
+`pnpm prod:deploy -- --dry-run` first. `pnpm prod:install` is only for explicitly
+installing or refreshing systemd unit files; it is not a deployment command.
 
-이 명령은 다음을 수행한다.
+운영 Nginx는 TLS와 reverse proxy만 담당한다. Web production build는 FastAPI가
+`AI_DO_API_SERVE_FRONTEND=1` 설정으로 정적 서빙한다.
 
-- `nx build web` 로 web production build가 깨지지 않는지 확인한다.
-- 기존 API, web, worker, worker-beat 프로세스를 중지한다.
-- VM profile (`AI_DO_ENV_PROFILE=vm`) 기준으로 API, web dev server, worker, worker-beat를 다시 시작한다.
-- 마지막에 API health, web shell, collab route 상태를 출력한다.
-
-### 재시작만 할 때
-
-코드 빌드 없이 실행 중인 VM preview 프로세스만 다시 띄울 때 사용한다.
+배포 후 별도 상태 확인이 필요하면:
 
 ```bash
-pnpm vm:app:restart
+pnpm prod:status
+pnpm prod:smoke
 ```
 
-### 상태 확인
+배포의 backup, dependency/build, migration/head, release gate, 최종 smoke 계약은
+[`production deployment layout`](./docs/domains/release/production-deployment-layout.md)을 따른다.
+
+재시작만 필요하면:
 
 ```bash
-pnpm vm:app:status
+pnpm prod:restart
 ```
 
-정상 상태의 핵심 체크는 다음과 같다.
+문서 색인은 `docs/README.md` 를 먼저 본다.
 
-- `api health: 200`
-- `web shell: 200`
-- `collab route: 401`
+## Local LLM / DGX Spark
 
-`collab route` 의 `401` 은 비로그인 요청이므로 정상이다. `404` 이면 backend route가 배포되지 않았거나 잘못 연결된 것이다.
+DGX Spark `102` / `103` 서버의 SSH 접속, Dashboard, vLLM endpoint, CX7 직결 링크, Qwen3.6 운영 설정은 `docs/domains/inference-gateway/dgx-spark-servers.md` 를 정본으로 본다.
+비밀번호와 Hugging Face token 원문은 저장소 문서에 기록하지 않는다.
 
-### 로그 확인
+## Inference Gateway
 
-```bash
-pnpm vm:app:logs
-```
+Embedding, reranker, Docling, ASR 풀로드 백엔드는 별도 레포
+`/projects/ai-do/ai-do-inference-gateway`에서 운영한다. AI-DO 루트의
+`pnpm inference-gateway:*` 스크립트는 해당 레포의 실행 스크립트로 위임한다.
+운영/검증 절차는 `docs/domains/inference-gateway/backend-operations.md`를 정본으로 본다.
 
-### VM 포트
+## AI-DO Desktop
 
-- API: `127.0.0.1:8000`
-- Web: `0.0.0.0:4200`
-- Postgres: `127.0.0.1:55432`
-- Redis: `127.0.0.1:56379`
-- MinIO: `127.0.0.1:59000`
+Electron desktop client는 별도 레포 `/projects/ai-do/ai-do-desktop`에서 관리한다.
+GitLab 프로젝트는 `dwdcc/ai-do-desktop`이다. 이 포털 repo에는 desktop update
+feed serving contract와 웹 설치 링크 설정만 남긴다.
 
-### 주의
+### 루트 Markdown 기준
 
-- 이 VM preview에서는 `prod.sh restart` 를 쓰지 않는다. `prod.sh` nginx stack도 `4200` 포트를 사용하므로 현재 preview web 프로세스와 충돌할 수 있다.
-- VM Docker 접근은 일반 `docker` socket 권한이 없을 수 있으므로 repo helper (`dev_docker`) 또는 `sudo -n docker` 경로를 사용한다.
-- API pytest의 Docker fixture는 `AI_DO_ENV_PROFILE=vm` 또는 `AI_DO_TEST_DOCKER_NETWORK=host` 를 붙여 실행해야 host-network fixture가 맞게 동작한다.
-
-자세한 운영 유사 검증 메모는 `docs/working/dev-collab-validation.md` 를 참고한다.
+루트에는 현재 진입점 `README.md`와 활성 에이전트 규칙 `agents.md`만 둔다.
+예외로 `CLAUDE.md`는 Claude Code 도구 실행 환경 전용 운영 노트다.
+완료됐거나 현재 구현과 달라진 계획/MR 로그는 기본 작업 컨텍스트에 넣지 않는다.
+과거 계획은 저장소 정본 문서로 유지하지 않는다. 원문이 필요하면 사용자가 명시했을 때
+Git 이력에서만 복원하고, 현재 상태는 `docs/current/`와 코드/테스트를 기준으로 확인한다.

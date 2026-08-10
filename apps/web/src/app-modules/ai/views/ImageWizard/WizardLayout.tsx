@@ -100,5 +100,3 @@ function AutosaveIndicator({ state }: AutosaveIndicatorProps) {
     </span>
   );
 }
-
-export default WizardLayout;

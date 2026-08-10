@@ -9,11 +9,11 @@ from ai_do_api.core.telemetry import current_trace_id
 from ai_do_api.domains.rag.contracts import (
     RagAnswerMode,
     RagGroundedAnswer,
-    RagGroundedCitation,
     RagQueryHit,
     RagQueryRequest,
     RagQueryResponse,
     RagVectorSearchHit,
+    RagVectorSearchMode,
     RagVectorSearchRequest,
 )
 from ai_do_api.domains.rag.metrics import (
@@ -28,6 +28,11 @@ from ai_do_api.domains.rag.providers.base import (
     EmbeddingClient,
     RerankClient,
     VectorIndexClient,
+)
+from ai_do_api.domains.rag.query_projection import (
+    build_default_grounded_answer,
+    build_query_profile,
+    to_query_hit,
 )
 
 _MAX_VECTOR_TOP_K = 100
@@ -52,8 +57,9 @@ class RagQueryService:
         embedding_client: EmbeddingClient,
         rerank_client: RerankClient | None = None,
         grounded_answer_synthesizer: RagGroundedAnswerSynthesizer | None = None,
-        query_timeout_ms: int = 2500,
-        grounded_answer_timeout_ms: int = 7000,
+        query_timeout_ms: int = 210000,
+        rerank_candidate_k: int = 80,
+        vector_search_mode: RagVectorSearchMode = RagVectorSearchMode.DENSE_SPARSE_RRF,
         legacy_collection_resolver: Callable[[RagQueryRequest], Sequence[str]] | None = None,
     ) -> None:
         self._vector_index = vector_index
@@ -61,7 +67,8 @@ class RagQueryService:
         self._rerank_client = rerank_client
         self._grounded_answer_synthesizer = grounded_answer_synthesizer
         self._query_timeout_ms = query_timeout_ms
-        self._grounded_answer_timeout_ms = grounded_answer_timeout_ms
+        self._rerank_candidate_k = min(max(rerank_candidate_k, 1), _MAX_VECTOR_TOP_K)
+        self._vector_search_mode = vector_search_mode
         self._legacy_collection_resolver = legacy_collection_resolver
 
     def query(
@@ -69,6 +76,9 @@ class RagQueryService:
         request: RagQueryRequest,
         *,
         post_filter: Callable[[RagVectorSearchHit], bool] | None = None,
+        hit_hydrator: (
+            Callable[[Sequence[RagVectorSearchHit]], Sequence[RagVectorSearchHit]] | None
+        ) = None,
         grounded_answer_synthesizer: RagGroundedAnswerSynthesizer | None = None,
     ) -> RagQueryResponse:
         started = time.perf_counter()
@@ -98,13 +108,16 @@ class RagQueryService:
             workspace_id=request.workspace_id,
             source_kind=source_kind,
         )
-        vector_top_k = _resolve_vector_top_k(request.top_k, post_filter=post_filter)
         vector_hit_count = 0
         filtered_hit_count = 0
         rerank_applied = False
         rerank_degraded = False
         vector_hits: list[RagVectorSearchHit] = []
         rerank_client = self._rerank_client
+        retrieval_top_k = request.top_k
+        if rerank_client is not None:
+            retrieval_top_k = max(request.top_k, self._rerank_candidate_k)
+        vector_top_k = _resolve_vector_top_k(retrieval_top_k, post_filter=post_filter)
         query_collections = _resolve_query_collections(
             request=request,
             legacy_collection_resolver=self._legacy_collection_resolver,
@@ -118,11 +131,7 @@ class RagQueryService:
                 timeout_ms=_remaining_budget_ms(started, self._query_timeout_ms),
             )
             vector_hit_count = len(raw_hits)
-            filtered_hits = (
-                [hit for hit in raw_hits if post_filter(hit)]
-                if post_filter is not None
-                else list(raw_hits)
-            )
+            filtered_hits = _apply_post_filter(post_filter, raw_hits)
             filtered_hit_count = len(filtered_hits)
             vector_hits = filtered_hits
             if post_filter is None:
@@ -134,12 +143,19 @@ class RagQueryService:
                 break
             if _remaining_budget_ms(started, self._query_timeout_ms) <= 0:
                 break
-            next_top_k = min(max(vector_top_k * 2, vector_top_k + _POST_FILTER_OVERSAMPLE_BUFFER), _MAX_VECTOR_TOP_K)
+            next_top_k = min(
+                max(vector_top_k * 2, vector_top_k + _POST_FILTER_OVERSAMPLE_BUFFER),
+                _MAX_VECTOR_TOP_K,
+            )
             if next_top_k <= vector_top_k:
                 break
             vector_top_k = next_top_k
 
-        if rerank_client is not None and vector_hits and _remaining_budget_ms(started, self._query_timeout_ms) > 0:
+        if (
+            rerank_client is not None
+            and vector_hits
+            and _remaining_budget_ms(started, self._query_timeout_ms) > 0
+        ):
             rerank_started = time.perf_counter()
             try:
                 rerank_timeout_ms = _remaining_budget_ms(started, self._query_timeout_ms)
@@ -170,27 +186,30 @@ class RagQueryService:
         elif rerank_client is not None and vector_hits:
             rerank_degraded = True
 
+        # Refresh response metadata from source state before the final ACL.
+        # Hydration is never an authorization grant and may only narrow or
+        # rewrite the candidate set.
+        if hit_hydrator is not None:
+            vector_hits = _apply_hit_hydrator(hit_hydrator, vector_hits)
+
+        # Re-run the source-owned ACL after rerank/hydration and immediately
+        # before any hit can flow to projection, grounding, or citation
+        # assembly. This is the final authorization linearization point.
+        vector_hits = _apply_post_filter(post_filter, vector_hits)
+        filtered_hit_count = len(vector_hits)
         vector_hits = vector_hits[: request.top_k]
 
-        hits = [_to_query_hit(hit) for hit in vector_hits]
+        hits = [to_query_hit(hit) for hit in vector_hits]
         grounded_answer = None
         grounded_answer_degraded = False
-        if (
-            request.answer_mode == RagAnswerMode.GROUNDED_ANSWER
-            and _remaining_budget_ms(started, self._query_timeout_ms) > 0
-            and self._grounded_answer_timeout_ms > 0
-        ):
+        if request.answer_mode == RagAnswerMode.GROUNDED_ANSWER:
             grounded_started = time.perf_counter()
-            grounded_timeout_ms = min(
-                self._grounded_answer_timeout_ms,
-                _remaining_budget_ms(started, self._query_timeout_ms),
-            )
             try:
                 grounded_answer = self._build_grounded_answer(
                     request.query,
                     hits,
                     grounded_answer_synthesizer=grounded_answer_synthesizer,
-                    timeout_ms=grounded_timeout_ms,
+                    timeout_ms=None,
                 )
             except Exception as error:
                 _record_provider_failure(
@@ -212,12 +231,15 @@ class RagQueryService:
                     workspace_id=request.workspace_id,
                     source_kind=source_kind,
                 )
-                if _elapsed_ms(grounded_started) > self._grounded_answer_timeout_ms:
-                    grounded_answer = None
-                    grounded_answer_degraded = True
             if grounded_answer is None and hits:
                 grounded_answer_degraded = True
-        elif request.answer_mode == RagAnswerMode.GROUNDED_ANSWER:
+
+        if (
+            request.answer_mode == RagAnswerMode.GROUNDED_ANSWER
+            and grounded_answer is None
+            and hits
+        ):
+            grounded_answer = build_default_grounded_answer(query=request.query, hits=hits)
             grounded_answer_degraded = True
 
         latency_ms = int((time.perf_counter() - started) * 1000)
@@ -233,18 +255,18 @@ class RagQueryService:
             hits=hits,
             grounded_answer=grounded_answer,
             sources_used=sorted({hit.source_kind for hit in hits}),
-            query_profile={
-                "vector_requested_top_k": vector_top_k,
-                "vector_hit_count": vector_hit_count,
-                "post_filtered_hit_count": filtered_hit_count,
-                "returned_hit_count": len(hits),
-                "rerank_applied": rerank_applied,
-                "rerank_degraded": rerank_degraded,
-                "post_filter_applied": post_filter is not None,
-                "grounded_answer_degraded": grounded_answer_degraded,
-                "collections_consulted": list(query_collections),
-                "legacy_collection_fallback_applied": len(query_collections) > 1,
-            },
+            query_profile=build_query_profile(
+                vector_requested_top_k=vector_top_k,
+                vector_hit_count=vector_hit_count,
+                post_filtered_hit_count=filtered_hit_count,
+                returned_hit_count=len(hits),
+                rerank_applied=rerank_applied,
+                rerank_degraded=rerank_degraded,
+                post_filter_applied=post_filter is not None,
+                grounded_answer_degraded=grounded_answer_degraded,
+                collections_consulted=query_collections,
+                vector_search_mode=self._vector_search_mode.value,
+            ),
             trace_id=current_trace_id(),
             latency_ms=latency_ms,
         )
@@ -267,27 +289,7 @@ class RagQueryService:
                 query=query,
                 hits=hits,
             )
-        lead_hits = list(hits[:3])
-        text = " ".join(
-            _safe_result_text(hit.summary or hit.title or hit.resource_id, max_chars=280)
-            for hit in lead_hits
-            if hit.summary or hit.title
-        )
-        if not text:
-            text = f"'{query}'와 관련된 검색 결과 {len(hits)}건을 찾았습니다."
-        return RagGroundedAnswer(
-            text=text,
-            citations=[
-                RagGroundedCitation(
-                    resource_id=hit.resource_id,
-                    source_kind=hit.source_kind,
-                    quote=_safe_result_text(hit.summary or hit.title or hit.resource_id, max_chars=280),
-                    locator=hit.citation,
-                )
-                for hit in lead_hits
-            ],
-            sources_used=sorted({hit.source_kind for hit in hits}),
-        )
+        return build_default_grounded_answer(query=query, hits=hits)
 
     def _query_collections(
         self,
@@ -309,34 +311,19 @@ class RagQueryService:
                     request=RagVectorSearchRequest(
                         collection=collection,
                         query=request.query,
+                        scope_kind=request.scope_kind,
                         workspace_id=request.workspace_id,
                         query_embedding=query_embedding,
+                        retrieval_partition_ids=request.retrieval_partition_ids,
                         source_kinds=list(request.source_kinds),
                         metadata_filter=dict(request.filters),
+                        search_mode=self._vector_search_mode,
                         top_k=top_k,
                         trace_context=request.trace_context,
                     ),
                 )
             )
         return _dedupe_hits(hits)
-
-
-def _to_query_hit(hit: RagVectorSearchHit) -> RagQueryHit:
-    projection = hit.projection
-    return RagQueryHit(
-        source_kind=projection.source_kind,
-        resource_type=projection.resource_type,
-        resource_id=projection.resource_id,
-        workspace_id=projection.workspace_id,
-        title=projection.title,
-        summary=hit.summary or projection.summary,
-        score=hit.score,
-        citation=hit.citation,
-        owner_label=projection.owner_label,
-        acl_summary=_summarize_acl_refs(projection.visibility_refs),
-        origin_ref=projection.metadata.get("origin_ref") if projection.metadata else None,
-        metadata=dict(hit.metadata),
-    )
 
 
 def _resolve_query_collections(
@@ -348,6 +335,39 @@ def _resolve_query_collections(
     if legacy_collection_resolver is not None:
         collections.extend(legacy_collection_resolver(request))
     return tuple(dict.fromkeys(collections))
+
+
+def _apply_post_filter(
+    post_filter: Callable[[RagVectorSearchHit], bool] | None,
+    hits: Sequence[RagVectorSearchHit],
+) -> list[RagVectorSearchHit]:
+    if post_filter is None:
+        return list(hits)
+    filter_many = getattr(post_filter, "filter_many", None)
+    if callable(filter_many):
+        return list(filter_many(hits))
+    return [hit for hit in hits if post_filter(hit)]
+
+
+def _apply_hit_hydrator(
+    hit_hydrator: Callable[
+        [Sequence[RagVectorSearchHit]],
+        Sequence[RagVectorSearchHit],
+    ],
+    hits: Sequence[RagVectorSearchHit],
+) -> list[RagVectorSearchHit]:
+    candidate_keys = {
+        (hit.projection.resource_type, hit.projection.resource_id, hit.chunk_id)
+        for hit in hits
+    }
+    hydrated = list(hit_hydrator(hits))
+    if any(
+        (hit.projection.resource_type, hit.projection.resource_id, hit.chunk_id)
+        not in candidate_keys
+        for hit in hydrated
+    ):
+        raise ValueError("RAG hit hydrator may not add retrieval candidates")
+    return hydrated
 
 
 def _remaining_budget_ms(started: float, timeout_ms: int) -> int:
@@ -388,9 +408,10 @@ def _accepts_keyword(method, keyword: str) -> bool:
     return keyword in signature.parameters
 
 
-def _query_hit_identity(hit: RagVectorSearchHit) -> tuple[str, str, str, str]:
+def _query_hit_identity(hit: RagVectorSearchHit) -> tuple[str, str | None, str, str, str]:
     projection = hit.projection
     return (
+        projection.scope_kind.value,
         projection.workspace_id,
         projection.resource_type,
         projection.resource_id,
@@ -399,43 +420,13 @@ def _query_hit_identity(hit: RagVectorSearchHit) -> tuple[str, str, str, str]:
 
 
 def _dedupe_hits(hits: Sequence[RagVectorSearchHit]) -> list[RagVectorSearchHit]:
-    deduped: dict[tuple[str, str, str, str], RagVectorSearchHit] = {}
+    deduped: dict[tuple[str, str | None, str, str, str], RagVectorSearchHit] = {}
     for hit in hits:
         identity = _query_hit_identity(hit)
         existing = deduped.get(identity)
         if existing is None or hit.score > existing.score:
             deduped[identity] = hit
     return sorted(deduped.values(), key=lambda item: item.score, reverse=True)
-
-
-def _summarize_acl_refs(visibility_refs: Sequence[str]) -> list[str]:
-    labels: list[str] = []
-    seen: set[str] = set()
-    for raw_ref in visibility_refs:
-        prefix = raw_ref.split(":", 1)[0]
-        label = _ACL_SUMMARY_LABELS.get(prefix, prefix.replace("_", " "))
-        if label in seen:
-            continue
-        seen.add(label)
-        labels.append(label)
-    return labels
-
-
-_ACL_SUMMARY_LABELS = {
-    "workspace": "workspace",
-    "workspace_public": "workspace public",
-    "owner": "owner",
-    "container": "container access",
-    "share_user": "direct share",
-    "link_share_ref": "link share",
-    "meeting_grant": "meeting grant",
-    "meeting_source": "meeting source",
-    "meeting_organizer": "meeting organizer",
-    "meeting_attendee": "meeting attendee",
-    "team": "team access",
-    "list": "list access",
-    "issue_grant": "issue grant",
-}
 
 
 def _provider_name(provider: object) -> str | None:
@@ -496,10 +487,3 @@ def _is_timeout_error(error: Exception) -> bool:
     if isinstance(error, TimeoutError):
         return True
     return "timeout" in error.__class__.__name__.lower()
-
-
-def _safe_result_text(value: str, *, max_chars: int) -> str:
-    normalized = " ".join(value.split()).strip()
-    if len(normalized) <= max_chars:
-        return normalized
-    return normalized[: max_chars - 3].rstrip() + "..."

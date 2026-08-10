@@ -2,36 +2,24 @@ from __future__ import annotations
 
 import logging
 import os
-import sys
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
 from celery.exceptions import Ignore
+from sqlalchemy import select
+from sqlalchemy.orm import Session, selectinload
 
 from ai_do_worker.celery_app import celery_app
+from ai_do_worker.runtime import (
+    db_session as _db_session,
+    ensure_api_src_on_path as _ensure_api_src_on_path,
+    minio_client as _minio_client,
+)
 from ai_do_worker.settings import get_settings
 
 
-def _workspace_root() -> Path:
-    current = Path(__file__).resolve()
-    for parent in current.parents:
-        if (parent / "pnpm-workspace.yaml").exists():
-            return parent
-    return current.parents[5]
-
-
-def _ensure_api_src_on_path() -> None:
-    api_src = _workspace_root() / "apps" / "api" / "src"
-    if str(api_src) not in sys.path:
-        sys.path.insert(0, str(api_src))
-
-
 _ensure_api_src_on_path()
-
-from openai import OpenAIError  # noqa: E402
-from sqlalchemy import create_engine, select  # noqa: E402
-from sqlalchemy.orm import Session, selectinload  # noqa: E402
 
 from ai_do_api.core.asr import (  # noqa: E402
     PermanentError,
@@ -40,8 +28,12 @@ from ai_do_api.core.asr import (  # noqa: E402
     get_asr_backend,
 )
 from ai_do_api.core.llm import (  # noqa: E402
+    LlmRuntimeError,
     LlmTaskContext,
-    complete_chat,
+)
+from ai_do_api.domains.ai.gateway import (  # noqa: E402
+    LlmWorkloadContext,
+    execute_llm,
 )
 from ai_do_api.domains.auth.models import Workspace  # noqa: E402
 from ai_do_api.domains.auth.security import new_id  # noqa: E402
@@ -50,13 +42,13 @@ from ai_do_api.domains.meeting.models import (  # noqa: E402
     MeetingAttendee,
     MeetingRecording,
 )
-from ai_do_api.domains.pms.models import IssueComment  # noqa: E402
+from ai_do_api.domains.pms.models import TaskComment  # noqa: E402
 
 
 logger = logging.getLogger(__name__)
 
 
-def _meeting_insights_module():
+def meeting_insights_module():
     from ai_do_api.domains.meeting import insights as meeting_insights
 
     return meeting_insights
@@ -66,34 +58,13 @@ def _utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
-def _db_session() -> Session:
-    settings = get_settings()
-    engine = create_engine(settings.postgres_dsn, pool_pre_ping=True)
-    return Session(engine)
-
-
-def _minio_client():
-    from urllib.parse import urlparse
-
-    from minio import Minio
-
-    settings = get_settings()
-    parsed = urlparse(settings.minio_endpoint)
-    secure = parsed.scheme == "https"
-    host = parsed.netloc or parsed.path
-    return Minio(
-        host,
-        access_key=settings.minio_access_key,
-        secret_key=settings.minio_secret_key,
-        secure=secure,
-    )
-
-
 def _load_active_recording(session: Session, recording_id: str) -> MeetingRecording | None:
     recording = session.scalar(
         select(MeetingRecording)
         .options(
-            selectinload(MeetingRecording.meeting).selectinload(Meeting.attendees).selectinload(MeetingAttendee.user),
+            selectinload(MeetingRecording.meeting)
+            .selectinload(Meeting.attendees)
+            .selectinload(MeetingAttendee.user),
         )
         .where(MeetingRecording.id == recording_id)
     )
@@ -106,7 +77,9 @@ def _load_active_recording(session: Session, recording_id: str) -> MeetingRecord
     return recording
 
 
-def _heartbeat(session: Session, recording: MeetingRecording, pct: int, status_name: str | None = None) -> None:
+def _heartbeat(
+    session: Session, recording: MeetingRecording, pct: int, status_name: str | None = None
+) -> None:
     recording.progress_pct = max(0, min(100, pct))
     if status_name is not None:
         recording.transcription_status = status_name
@@ -115,6 +88,7 @@ def _heartbeat(session: Session, recording: MeetingRecording, pct: int, status_n
 
 
 def _mark_failed(session: Session, recording_id: str, reason: str) -> None:
+    session.rollback()
     recording = session.get(MeetingRecording, recording_id)
     if recording is None:
         return
@@ -162,6 +136,11 @@ def _summary_prompt(transcript_text: str) -> list[dict[str, str]]:
     ]
 
 
+# TODO: Implement and publish the meeting-owned recording pipeline when its
+# product flow is resumed. Until then, repository producers use the canonical
+# recording.* chain; do not enqueue the reserved meeting.transcribe,
+# meeting.summarize, meeting.extract_insights, or meeting.generate_doc tasks.
+# Add an end-to-end producer/chain test before treating this block as active.
 @celery_app.task(
     name="meeting.transcribe",
     bind=True,
@@ -188,7 +167,7 @@ def transcribe_recording(self, recording_id: str) -> str:
             recording.transcribe_started_at = _utcnow()
         _heartbeat(session, recording, max(recording.progress_pct, 10), "transcribing")
 
-        health = check_asr_health()
+        health = check_asr_health(deep=True)
         if not health.ready:
             raise TransientError(health.detail or "ASR backend is not ready.")
 
@@ -264,7 +243,7 @@ def summarize_recording(self, recording_id: str) -> str:
         _heartbeat(session, recording, max(recording.progress_pct, 60), "summarizing")
 
         # Build the LlmTaskContext for this system job. Routing is delegated to
-        # ``complete_chat()`` so policy changes take effect without touching the
+        # the AI Gateway so policy changes take effect without touching the
         # worker implementation.
         workspace_id = recording.meeting.workspace_id if recording.meeting else None
         if not workspace_id:
@@ -275,18 +254,20 @@ def summarize_recording(self, recording_id: str) -> str:
             actor_user_id=None,
             workspace_id=workspace_id,
             task_kind="meeting_summary",
+            app_id="meeting",
         )
         try:
-            response, _decision, _config = complete_chat(
-                context,
+            completion = execute_llm(
+                "meeting_summary",
+                LlmWorkloadContext.from_task_context(context),
                 session,
                 messages=_summary_prompt(recording.transcript_text),
                 temperature=0.2,
                 max_tokens=4000,
-            )
-        except OpenAIError as error:
+            ).completion
+        except LlmRuntimeError as error:
             raise TransientError(str(error)) from error
-        summary = (response.choices[0].message.content or "").strip()
+        summary = completion.text.strip()
         if not summary:
             raise PermanentError("LLM returned an empty summary.")
         recording = session.get(MeetingRecording, recording_id)
@@ -337,7 +318,7 @@ def extract_meeting_insights(self, recording_id: str) -> str:
 
         _heartbeat(session, recording, max(recording.progress_pct, 90), "extracting_insights")
         try:
-            _meeting_insights_module().extract_and_persist_meeting_insights(
+            meeting_insights_module().extract_and_persist_meeting_insights(
                 session,
                 recording_id=recording.id,
                 source="worker.meeting.extract_insights",
@@ -407,9 +388,9 @@ def generate_meeting_doc(self, recording_id: str) -> str:
             workspace = session.get(Workspace, meeting.workspace_id)
             slug = workspace.key if workspace is not None else ""
             session.add(
-                IssueComment(
+                TaskComment(
                     id=new_id(),
-                    issue_id=recording.linked_task_id,
+                    task_id=recording.linked_task_id,
                     author_id=meeting.organizer_id,
                     body=f"📄 회의록: /w/{slug}/docs/{doc.id}" if slug else f"📄 회의록: {doc.id}",
                     body_blocks=None,

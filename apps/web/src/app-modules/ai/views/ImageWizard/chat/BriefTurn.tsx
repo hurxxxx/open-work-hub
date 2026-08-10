@@ -2,139 +2,11 @@ import { Loader2, Sparkles, ThumbsUp } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import type { BriefVersion } from '../../../api/image-wizard-api';
-
-type BriefSectionKey = 'title' | 'goal' | 'composition' | 'visibleText' | 'style' | 'review';
-
-interface ParsedBrief {
-  sections: Record<BriefSectionKey, string[]>;
-  fallback: string[];
-}
-
-const SECTION_ORDER: BriefSectionKey[] = ['goal', 'composition', 'visibleText', 'style', 'review'];
-
-const SECTION_LABEL_ALIASES: Record<BriefSectionKey, string[]> = {
-  title: ['TITLE', '\uc81c\ubaa9'],
-  goal: ['GOAL', 'OBJECTIVE', '\ubaa9\ud45c'],
-  composition: [
-    'COMPOSITION',
-    'LAYOUT',
-    'KEY ELEMENTS',
-    'KEY ELEMENT',
-    '\ud654\uba74 \uad6c\uc131',
-    '\uad6c\uc131',
-    '\ub808\uc774\uc544\uc6c3',
-    '\ud575\uc2ec \uc694\uc18c',
-    '\uc8fc\uc694 \uc694\uc18c',
-  ],
-  visibleText: [
-    'VISIBLE TEXT',
-    'COPY',
-    '\ud654\uba74\uc5d0 \ub123\uc744 \ud14d\uc2a4\ud2b8',
-    '\ud45c\uc2dc \ud14d\uc2a4\ud2b8',
-  ],
-  style: [
-    'STYLE',
-    'COLORS',
-    'COLOR',
-    'TYPOGRAPHY',
-    '\uc2a4\ud0c0\uc77c',
-    '\uc0c9\uc0c1',
-    '\uceec\ub7ec',
-    '\uae00\uc790 \uc2a4\ud0c0\uc77c',
-    '\ud0c0\uc774\ud3c4\uadf8\ub798\ud53c',
-  ],
-  review: [
-    'NEEDS REVIEW',
-    'REVIEW',
-    'NOTES',
-    'NOTE',
-    '\ud655\uc778 \ud544\uc694',
-    '\uc8fc\uc758\uc0ac\ud56d',
-    '\uba54\ubaa8',
-  ],
-};
-
-const PLACEHOLDER_VALUES = new Set([
-  'metric',
-  'metrics',
-  'status',
-  'priority',
-  'client',
-  'label',
-  'title',
-  'description',
-  'copy',
-  'text',
-  '\uc124\uba85 \ud14d\uc2a4\ud2b8',
-]);
-
-function cleanPlaceholderText(value: string): string {
-  return value
-    .replace(/<\s*([^<>]{1,80})\s*>/g, (_match, inner: string) => {
-      const label = inner.trim().replace(/\s+/g, ' ');
-      if (PLACEHOLDER_VALUES.has(label.toLowerCase())) return '';
-      return label;
-    })
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function emptySections(): Record<BriefSectionKey, string[]> {
-  return {
-    title: [],
-    goal: [],
-    composition: [],
-    visibleText: [],
-    style: [],
-    review: [],
-  };
-}
-
-function normalizeLabel(value: string): string {
-  return value.trim().replace(/\s+/g, ' ').toUpperCase();
-}
-
-function sectionKeyForLabel(label: string): BriefSectionKey | null {
-  const normalized = normalizeLabel(label);
-  for (const [key, aliases] of Object.entries(SECTION_LABEL_ALIASES)) {
-    if (aliases.some((alias) => normalizeLabel(alias) === normalized)) {
-      return key as BriefSectionKey;
-    }
-  }
-  return null;
-}
-
-function parseBrief(text: string): ParsedBrief {
-  const sections = emptySections();
-  const fallback: string[] = [];
-  let current: BriefSectionKey | null = null;
-
-  for (const rawLine of text.split(/\r?\n/)) {
-    const line = cleanPlaceholderText(rawLine);
-    if (!line) continue;
-    const match = line.match(/^([^:：]{1,48})[:：]\s*(.*)$/);
-    if (match) {
-      const key = sectionKeyForLabel(match[1]);
-      if (key) {
-        current = key;
-        const value = cleanPlaceholderText(match[2] || '');
-        if (value) sections[key].push(value);
-        continue;
-      }
-    }
-    if (current) {
-      sections[current].push(line);
-    } else {
-      fallback.push(line);
-    }
-  }
-
-  return { sections, fallback };
-}
-
-function stripBullet(line: string): string {
-  return line.replace(/^[-*]\s+/, '').trim();
-}
+import {
+  BRIEF_SECTION_ORDER,
+  buildBriefTurnProjection,
+  stripBriefBullet,
+} from './brief-turn-model';
 
 function BriefSection({
   label,
@@ -154,8 +26,8 @@ function BriefSection({
         <ul className="space-y-1 app-text-body text-app-ink">
           {lines.map((line, index) => (
             <li key={`${line}-${index}`} className="flex gap-2">
-              <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-app-accent" />
-              <span>{stripBullet(line)}</span>
+              <span className="mt-2 size-1.5 shrink-0 rounded-full bg-app-accent" />
+              <span>{stripBriefBullet(line)}</span>
             </li>
           ))}
         </ul>
@@ -186,14 +58,8 @@ export function BriefTurn({
   onApprove,
 }: BriefTurnProps) {
   const { t } = useTranslation('apps');
-  const parsed = parseBrief(version.text);
-  const title = parsed.sections.title[0] || parsed.fallback[0] || `v${index + 1}`;
-  const hasParsedSections = SECTION_ORDER.some((section) => parsed.sections[section].length > 0);
-  const fallbackText = version.text
-    .split(/\r?\n/)
-    .map(cleanPlaceholderText)
-    .filter(Boolean)
-    .join('\n');
+  const { fallbackText, hasParsedSections, sections, title } =
+    buildBriefTurnProjection(version.text, index);
 
   return (
     <article className="rounded-lg border border-app-border bg-app-surface p-4 shadow-sm">
@@ -209,11 +75,11 @@ export function BriefTurn({
           <div>
             <h3 className="app-text-heading-3 text-app-ink">{title}</h3>
           </div>
-          {SECTION_ORDER.map((section) => (
+          {BRIEF_SECTION_ORDER.map((section) => (
             <BriefSection
               key={section}
               label={t(`ai.imageWizard.step4.briefSections.${section}`)}
-              lines={parsed.sections[section]}
+              lines={sections[section]}
             />
           ))}
         </div>
@@ -244,5 +110,3 @@ export function BriefTurn({
     </article>
   );
 }
-
-export default BriefTurn;

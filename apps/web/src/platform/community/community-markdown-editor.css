@@ -1,0 +1,354 @@
+@import '@milkdown/crepe/theme/common/style.css';
+@import '@milkdown/crepe/theme/frame.css';
+
+.community-markdown-editor {
+  --community-editor-min-height: 9rem;
+}
+
+.community-markdown-editor .milkdown {
+  --crepe-color-background: var(--ui-color-bg);
+  --crepe-color-on-background: var(--ui-color-ink);
+  --crepe-color-surface: var(--ui-color-surface);
+  --crepe-color-surface-low: var(--ui-color-surface-subtle);
+  --crepe-color-on-surface: var(--ui-color-ink);
+  --crepe-color-on-surface-variant: var(--ui-color-ink-muted);
+  --crepe-color-outline: var(--ui-color-border-strong);
+  --crepe-color-primary: var(--ui-color-accent);
+  --crepe-color-secondary: var(--ui-color-accent-weak);
+  --crepe-color-on-secondary: var(--ui-color-ink);
+  --crepe-color-inverse: var(--ui-color-ink);
+  --crepe-color-on-inverse: var(--ui-color-bg);
+  --crepe-color-inline-code: var(--ui-color-danger);
+  --crepe-color-error: var(--ui-color-danger);
+  --crepe-color-hover: var(--ui-color-surface-hover);
+  --crepe-color-selected: var(--ui-color-accent-weak);
+  --crepe-color-inline-area: var(--ui-color-surface-hover);
+  --crepe-font-default: var(--font-sans);
+
+  overflow: hidden;
+  border: 1px solid var(--ui-color-border);
+  border-radius: 0.5rem;
+  background: var(--ui-color-bg);
+  color: var(--ui-color-ink);
+}
+
+.community-markdown-editor .milkdown:focus-within {
+  border-color: var(--ui-color-accent);
+  box-shadow: 0 0 0 2px
+    color-mix(in srgb, var(--ui-color-accent), transparent 72%);
+}
+
+.community-markdown-editor .milkdown .ProseMirror {
+  min-height: var(--community-editor-min-height);
+  padding: 0.75rem 0.875rem;
+  color: var(--ui-color-ink);
+  caret-color: var(--ui-color-accent);
+  outline: none;
+  font-family: var(--font-sans);
+  font-size: var(--ui-text-body);
+  line-height: 1.65;
+}
+
+.community-markdown-editor .milkdown .ProseMirror p {
+  margin: 0.35rem 0;
+}
+
+.community-markdown-editor .milkdown .ProseMirror > *:first-child {
+  margin-top: 0;
+}
+
+.community-markdown-editor .milkdown .ProseMirror > *:last-child {
+  margin-bottom: 0;
+}
+
+.community-markdown-editor
+  .milkdown
+  .ProseMirror
+  > :is(
+    p,
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6,
+    blockquote,
+    ul,
+    ol,
+    pre,
+    table
+  ):first-of-type {
+  margin-top: 0;
+}
+
+.community-markdown-editor
+  .milkdown
+  .ProseMirror
+  > :is(
+    p,
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6,
+    blockquote,
+    ul,
+    ol,
+    pre,
+    table
+  ):last-of-type {
+  margin-bottom: 0;
+}
+
+.community-markdown-editor .milkdown .milkdown-top-bar {
+  background: color-mix(
+    in srgb,
+    var(--ui-color-surface-hover),
+    var(--ui-color-bg) 48%
+  );
+  border-bottom-color: color-mix(
+    in srgb,
+    var(--ui-color-border),
+    transparent 15%
+  );
+  color: var(--ui-color-ink);
+}
+
+.community-markdown-editor .milkdown .milkdown-top-bar .top-bar-heading-label,
+.community-markdown-editor .milkdown .milkdown-top-bar .top-bar-heading-option,
+.community-markdown-editor .milkdown .milkdown-slash-menu,
+.community-markdown-editor .milkdown .milkdown-toolbar {
+  color: var(--ui-color-ink);
+  font-family: var(--font-sans);
+}
+
+.community-markdown-editor .milkdown .milkdown-top-bar .top-bar-heading-button,
+.community-markdown-editor .milkdown .milkdown-top-bar .top-bar-item,
+.community-markdown-editor .milkdown .milkdown-toolbar .toolbar-item {
+  border: 1px solid
+    color-mix(in srgb, var(--ui-color-border-strong), transparent 15%);
+  border-radius: 0.375rem;
+  background: color-mix(
+    in srgb,
+    var(--ui-color-surface-hover),
+    var(--ui-color-bg) 22%
+  );
+  box-shadow: inset 0 1px 0
+    color-mix(in srgb, var(--ui-color-bg), transparent 20%);
+  color: var(--ui-color-ink);
+  opacity: 1;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+.community-markdown-editor
+  .milkdown
+  .milkdown-top-bar
+  .top-bar-heading-button:hover,
+.community-markdown-editor .milkdown .milkdown-top-bar .top-bar-item:hover,
+.community-markdown-editor .milkdown .milkdown-toolbar .toolbar-item:hover {
+  border-color: color-mix(in srgb, var(--ui-color-accent), transparent 35%);
+  background: var(--ui-color-surface-hover);
+  color: var(--ui-color-ink);
+}
+
+.community-markdown-editor
+  .milkdown
+  .milkdown-top-bar
+  .top-bar-heading-button:focus-visible,
+.community-markdown-editor
+  .milkdown
+  .milkdown-top-bar
+  .top-bar-item:focus-visible,
+.community-markdown-editor
+  .milkdown
+  .milkdown-toolbar
+  .toolbar-item:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--ui-color-accent), transparent 30%);
+  outline-offset: 2px;
+}
+
+.community-markdown-editor
+  .milkdown
+  .milkdown-top-bar
+  .top-bar-heading-button:active,
+.community-markdown-editor .milkdown .milkdown-top-bar .top-bar-item:active,
+.community-markdown-editor .milkdown .milkdown-toolbar .toolbar-item:active,
+.community-markdown-editor .milkdown .milkdown-top-bar .top-bar-item.active,
+.community-markdown-editor .milkdown .milkdown-toolbar .toolbar-item.active {
+  border-color: var(--ui-color-accent);
+  background: var(--ui-color-accent-weak);
+  color: var(--ui-color-ink);
+}
+
+.community-markdown-editor
+  .milkdown
+  .milkdown-top-bar
+  .top-bar-heading-button:disabled,
+.community-markdown-editor .milkdown .milkdown-top-bar .top-bar-item:disabled,
+.community-markdown-editor .milkdown .milkdown-toolbar .toolbar-item:disabled,
+.community-markdown-editor .milkdown .milkdown-top-bar [aria-disabled='true'],
+.community-markdown-editor .milkdown .milkdown-toolbar [aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.community-markdown-editor .milkdown .milkdown-top-bar .milkdown-icon,
+.community-markdown-editor .milkdown .milkdown-toolbar .milkdown-icon {
+  color: currentColor;
+}
+
+.community-markdown-editor .milkdown .milkdown-top-bar svg,
+.community-markdown-editor .milkdown .milkdown-toolbar svg {
+  color: currentColor;
+  fill: currentColor;
+}
+
+.community-markdown-editor .milkdown .milkdown-top-bar .top-bar-chevron svg {
+  fill: none;
+  stroke: currentColor;
+}
+
+.community-markdown-editor .milkdown .milkdown-image-block > .image-wrapper img,
+.community-markdown-editor .milkdown .milkdown-image-inline img {
+  border-radius: 0.375rem;
+}
+
+.community-markdown-editor[data-compact='true'] .milkdown .milkdown-top-bar {
+  padding: 0 0.375rem;
+  min-height: 2.25rem;
+}
+
+.community-markdown-editor[data-compact='true']
+  .milkdown
+  .milkdown-top-bar
+  .top-bar-heading-label {
+  min-width: 3.25rem;
+  font-size: var(--ui-text-caption);
+}
+
+.community-markdown-editor[data-compact='true']
+  .milkdown
+  .milkdown-top-bar
+  .top-bar-item {
+  width: 1.75rem;
+  height: 1.75rem;
+  margin: 0.25rem;
+}
+
+.community-markdown-editor[data-compact='true'] .milkdown .ProseMirror {
+  padding: 0.625rem 0.75rem;
+  font-size: var(--ui-text-body-sm);
+}
+
+.community-markdown-viewer table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--ui-text-body);
+}
+
+.community-markdown-viewer th,
+.community-markdown-viewer td {
+  border: 1px solid var(--ui-color-border);
+  padding: 0.375rem 0.625rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.community-markdown-viewer thead {
+  background: var(--ui-color-surface-hover);
+}
+
+.community-markdown-viewer img {
+  max-width: 100%;
+  border-radius: 0.5rem;
+}
+
+.community-markdown-viewer pre {
+  overflow-x: auto;
+  border: 1px solid var(--ui-color-border);
+  border-radius: 0.5rem;
+  background: var(--ui-color-surface);
+  padding: 0.75rem;
+}
+
+.community-markdown-viewer .hljs {
+  color: var(--ui-color-syntax-text);
+  background: transparent;
+}
+
+.community-markdown-viewer .hljs-comment,
+.community-markdown-viewer .hljs-quote {
+  color: var(--ui-color-syntax-comment);
+}
+
+.community-markdown-viewer .hljs-keyword,
+.community-markdown-viewer .hljs-selector-tag,
+.community-markdown-viewer .hljs-subst {
+  color: var(--ui-color-syntax-keyword);
+}
+
+.community-markdown-viewer .hljs-literal,
+.community-markdown-viewer .hljs-number,
+.community-markdown-viewer .hljs-template-variable,
+.community-markdown-viewer .hljs-variable {
+  color: var(--ui-color-syntax-literal);
+}
+
+.community-markdown-viewer .hljs-doctag,
+.community-markdown-viewer .hljs-string {
+  color: var(--ui-color-syntax-string);
+}
+
+.community-markdown-viewer .hljs-section,
+.community-markdown-viewer .hljs-selector-id,
+.community-markdown-viewer .hljs-title {
+  color: var(--ui-color-syntax-title);
+}
+
+.community-markdown-viewer :not(pre) > code {
+  border-radius: 0.25rem;
+  background: var(--ui-color-surface-hover);
+  padding: 0.125rem 0.375rem;
+}
+
+:where(.dark, .dark *) .community-markdown-viewer .hljs {
+  color: var(--ui-color-syntax-text);
+  background: var(--ui-color-syntax-surface);
+}
+
+:where(.dark, .dark *) .community-markdown-viewer .hljs-comment,
+:where(.dark, .dark *) .community-markdown-viewer .hljs-quote {
+  color: var(--ui-color-syntax-comment);
+}
+
+:where(.dark, .dark *) .community-markdown-viewer .hljs-keyword,
+:where(.dark, .dark *) .community-markdown-viewer .hljs-selector-tag,
+:where(.dark, .dark *) .community-markdown-viewer .hljs-subst {
+  color: var(--ui-color-syntax-keyword);
+}
+
+:where(.dark, .dark *) .community-markdown-viewer .hljs-literal,
+:where(.dark, .dark *) .community-markdown-viewer .hljs-number,
+:where(.dark, .dark *) .community-markdown-viewer .hljs-template-variable,
+:where(.dark, .dark *) .community-markdown-viewer .hljs-variable {
+  color: var(--ui-color-syntax-literal);
+}
+
+:where(.dark, .dark *) .community-markdown-viewer .hljs-doctag,
+:where(.dark, .dark *) .community-markdown-viewer .hljs-string {
+  color: var(--ui-color-syntax-string);
+}
+
+:where(.dark, .dark *) .community-markdown-viewer .hljs-section,
+:where(.dark, .dark *) .community-markdown-viewer .hljs-selector-id,
+:where(.dark, .dark *) .community-markdown-viewer .hljs-title {
+  color: var(--ui-color-syntax-title);
+}
+
+:where(.dark, .dark *) .community-markdown-viewer pre {
+  background: var(--ui-color-syntax-surface);
+}

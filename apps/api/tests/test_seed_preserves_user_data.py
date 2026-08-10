@@ -10,7 +10,7 @@ space was still there but the membership row behind it was gone.
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 
 def _auth_headers(token: str) -> dict[str, str]:
@@ -170,6 +170,62 @@ def test_dev_login_is_idempotent_and_preserves_user_spaces(
     assert any(item["id"] == space_id for item in list_response.json())
 
 
+def test_dev_login_seed_syncs_new_workspace_app_catalog_rows(
+    client: TestClient,
+) -> None:
+    """A completed dev seed must still pick up newly shipped app catalog rows.
+
+    The full seed reconciler stays guarded to preserve user data, but app
+    visibility rows are additive product metadata and need to be inserted when
+    a new app such as web-search is added after a DB already exists.
+    """
+    from ai_do_api.core.db import get_session_factory
+    from ai_do_api.domains.auth.access import ensure_dev_login_seed_data
+    from ai_do_api.domains.auth.models import (
+        PlatformAppVisibility,
+        Workspace,
+        WorkspaceAppEntitlement,
+    )
+
+    _seed_dev_accounts()
+    session_factory = get_session_factory()
+
+    with session_factory() as db:
+        workspace_ids = set(db.scalars(select(Workspace.id)).all())
+        assert workspace_ids
+        db.execute(
+            delete(WorkspaceAppEntitlement).where(
+                WorkspaceAppEntitlement.app_id == "web-search"
+            )
+        )
+        db.execute(
+            delete(PlatformAppVisibility).where(
+                PlatformAppVisibility.app_id == "web-search"
+            )
+        )
+        db.commit()
+
+    with session_factory() as db:
+        ensure_dev_login_seed_data(db)
+        db.commit()
+
+    with session_factory() as db:
+        web_search_workspace_ids = set(
+            db.scalars(
+                select(WorkspaceAppEntitlement.workspace_id).where(
+                    WorkspaceAppEntitlement.app_id == "web-search"
+                )
+            ).all()
+        )
+        visible = db.scalar(
+            select(PlatformAppVisibility.visible).where(
+                PlatformAppVisibility.app_id == "web-search"
+            )
+        )
+        assert workspace_ids <= web_search_workspace_ids
+        assert visible is True
+
+
 def test_ensure_seed_data_does_not_overwrite_workspace_renames(
     client: TestClient,
 ) -> None:
@@ -264,7 +320,6 @@ def test_dev_login_recreates_missing_dev_workspace_seeds(
             select(Workspace)
             .options(
                 selectinload(Workspace.user_bindings),
-                selectinload(Workspace.group_bindings),
                 selectinload(Workspace.teams).selectinload(Team.members),
             )
             .where(Workspace.key == "ai-tft")

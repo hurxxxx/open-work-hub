@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react';
+import { useId, useReducer, useRef } from 'react';
 import { ChevronDown, ChevronRight, Lightbulb, Loader2, Trash2, Upload } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -20,12 +20,16 @@ import {
   type LayoutId,
 } from '../layout-wireframes';
 import { StylePickerSheet } from '../pickers/StylePickerSheet';
-
-const ROLE_OPTIONS: ReferenceImageRole[] = ['style', 'composition', 'content'];
-const PALETTE_OPTIONS = ['auto', 'brand', 'warm', 'cool', 'monochrome', 'vivid'] as const;
-const BACKGROUND_OPTIONS = ['auto', 'transparent', 'white', 'dark'] as const;
-const QUALITY_OPTIONS = ['auto', 'low', 'medium', 'high'] as const;
-const MAX_REFS = 4;
+import {
+  INITIAL_STEP3_REFINE_STATE,
+  canUploadReferenceImage,
+  buildStep3RefineProjection,
+  getReferenceImageDisplayName,
+  removeReferenceImage,
+  step3RefineReducer,
+  type SelectOption,
+  type Step3Panel,
+} from './step3-refine-model';
 
 interface Step3RefineProps {
   workspaceSlug: string;
@@ -36,6 +40,88 @@ interface Step3RefineProps {
   onChangeStyle: (next: StylePayload) => void;
   onChangeLayout: (next: LayoutPayload) => void;
   onReferencesChange: (next: ReferenceImageRef[]) => void;
+}
+
+type AppsTranslator = ReturnType<typeof useTranslation>['t'];
+
+interface UseStep3RefineControllerArgs extends Step3RefineProps {
+  t: AppsTranslator;
+}
+
+function useStep3RefineController({
+  workspaceSlug,
+  generationId,
+  style,
+  layout,
+  references,
+  onReferencesChange,
+  t,
+}: UseStep3RefineControllerArgs) {
+  const roleSelectId = useId();
+  const { token } = useAuth();
+  const [state, dispatch] = useReducer(step3RefineReducer, INITIAL_STEP3_REFINE_STATE);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  function togglePanel(panel: Step3Panel) {
+    dispatch({ type: 'panel:toggle', panel });
+  }
+
+  const projection = buildStep3RefineProjection({
+    style,
+    layout,
+    referenceCount: references.length,
+    t,
+  });
+
+  async function handleUpload(file: File) {
+    if (!token) return;
+    if (!canUploadReferenceImage({ tokenPresent: true, referenceCount: references.length })) {
+      return;
+    }
+    dispatch({ type: 'upload:start' });
+    try {
+      const ref = await uploadReferenceImage(
+        token,
+        workspaceSlug,
+        generationId,
+        file,
+        state.pendingRole,
+      );
+      onReferencesChange([...references, ref]);
+    } catch (err) {
+      dispatch({
+        type: 'upload:fail',
+        message: err instanceof Error ? err.message : t('ai.imageWizard.errors.uploadFailed'),
+      });
+    } finally {
+      dispatch({ type: 'upload:finish' });
+    }
+  }
+
+  async function handleDelete(storageKey: string) {
+    if (!token) return;
+    try {
+      await deleteReferenceImage(token, workspaceSlug, generationId, storageKey);
+      onReferencesChange(removeReferenceImage(references, storageKey));
+    } catch (err) {
+      dispatch({
+        type: 'upload:fail',
+        message: err instanceof Error ? err.message : t('ai.imageWizard.errors.deleteFailed'),
+      });
+    }
+  }
+
+  return {
+    ...state,
+    roleSelectId,
+    fileInputRef,
+    ...projection,
+    togglePanel,
+    setStyleSheetOpen: (open: boolean) => dispatch({ type: 'style-sheet:set', open }),
+    setPendingRole: (role: ReferenceImageRole) => dispatch({ type: 'role:set', role }),
+    handleUpload,
+    handleDelete,
+  };
 }
 
 export function Step3Refine({
@@ -49,69 +135,39 @@ export function Step3Refine({
   onReferencesChange,
 }: Step3RefineProps) {
   const { t } = useTranslation('apps');
-  const roleSelectId = useId();
-  const { token } = useAuth();
-  const [openPanel, setOpenPanel] = useState<'style' | 'layout' | 'refs' | 'advanced' | null>(
-    'style',
-  );
-  const [styleSheetOpen, setStyleSheetOpen] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [pendingRole, setPendingRole] = useState<ReferenceImageRole>('style');
-
-  function togglePanel(panel: 'style' | 'layout' | 'refs' | 'advanced') {
-    setOpenPanel((current) => (current === panel ? null : panel));
-  }
-
-  const styleSummary =
-    style.chips.length === 0
-      ? t('ai.imageWizard.style.empty')
-      : style.chips
-          .slice(0, 3)
-          .map((chip) =>
-            t(`ai.imageWizard.style.chips.${chip}`, { defaultValue: chip }),
-          )
-          .join(' · ') + (style.chips.length > 3 ? ` +${style.chips.length - 3}` : '');
-
-  const layoutSummary = `${
-    layout.layout_id
-      ? t(`ai.imageWizard.layout.layouts.${layout.layout_id}.label`, {
-          defaultValue: layout.layout_id,
-        })
-      : t('ai.imageWizard.layout.unset')
-  } · ${t(`ai.imageWizard.layout.aspect.${layout.aspect}`, { defaultValue: layout.aspect })}`;
-
-  async function handleUpload(file: File) {
-    if (!token) return;
-    if (references.length >= MAX_REFS) return;
-    setUploading(true);
-    setUploadError(null);
-    try {
-      const ref = await uploadReferenceImage(
-        token,
-        workspaceSlug,
-        generationId,
-        file,
-        pendingRole,
-      );
-      onReferencesChange([...references, ref]);
-    } catch (err) {
-      setUploadError(err instanceof Error ? err.message : t('ai.imageWizard.errors.uploadFailed'));
-    } finally {
-      setUploading(false);
-    }
-  }
-
-  async function handleDelete(storageKey: string) {
-    if (!token) return;
-    try {
-      await deleteReferenceImage(token, workspaceSlug, generationId, storageKey);
-      onReferencesChange(references.filter((ref) => ref.storage_key !== storageKey));
-    } catch (err) {
-      setUploadError(err instanceof Error ? err.message : t('ai.imageWizard.errors.deleteFailed'));
-    }
-  }
+  const {
+    openPanel,
+    styleSheetOpen,
+    uploading,
+    uploadError,
+    pendingRole,
+    roleSelectId,
+    fileInputRef,
+    styleSummary,
+    layoutSummary,
+    advancedSummary,
+    paletteOptions,
+    backgroundOptions,
+    qualityOptions,
+    referenceLimitReached,
+    refsSummary,
+    roleOptions,
+    togglePanel,
+    setStyleSheetOpen,
+    setPendingRole,
+    handleUpload,
+    handleDelete,
+  } = useStep3RefineController({
+    workspaceSlug,
+    generationId,
+    style,
+    layout,
+    references,
+    onChangeStyle,
+    onChangeLayout,
+    onReferencesChange,
+    t,
+  });
 
   return (
     <div className="space-y-5">
@@ -141,10 +197,7 @@ export function Step3Refine({
           <SelectField
             label={t('ai.imageWizard.style.paletteLabel')}
             value={style.palette || 'auto'}
-            options={PALETTE_OPTIONS}
-            renderOption={(v) =>
-              t(`ai.imageWizard.style.palette.${v}`, { defaultValue: v })
-            }
+            options={paletteOptions}
             onChange={(value) => onChangeStyle({ ...style, palette: value })}
           />
         </div>
@@ -218,10 +271,7 @@ export function Step3Refine({
         open={openPanel === 'refs'}
         onToggle={() => togglePanel('refs')}
         title={t('ai.imageWizard.steps.step3.refsPanel')}
-        summary={t('ai.imageWizard.referenceImages.countSummary', {
-          count: references.length,
-          max: MAX_REFS,
-        })}
+        summary={refsSummary}
       >
         {!generationId ? (
           <p className="app-text-caption text-app-ink/40">
@@ -238,11 +288,11 @@ export function Step3Refine({
                   id={roleSelectId}
                   value={pendingRole}
                   onChange={(event) => setPendingRole(event.target.value as ReferenceImageRole)}
-                  className="app-text-body rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink focus:border-app-accent focus:outline-none"
+                  className="app-field-input w-auto"
                 >
-                  {ROLE_OPTIONS.map((role) => (
-                    <option key={role} value={role}>
-                      {t(`ai.imageWizard.referenceImages.roles.${role}`)}
+                  {roleOptions.map((role) => (
+                    <option key={role.value} value={role.value}>
+                      {role.label}
                     </option>
                   ))}
                 </select>
@@ -250,11 +300,11 @@ export function Step3Refine({
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                disabled={uploading || references.length >= MAX_REFS}
+                disabled={uploading || referenceLimitReached}
                 className="flex items-center gap-2 rounded-md border border-dashed border-app-border bg-app-surface-sidebar px-4 py-2 app-text-control-sm text-app-ink transition-colors hover:border-app-accent hover:text-app-accent disabled:opacity-50"
               >
                 {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-                {references.length >= MAX_REFS
+                {referenceLimitReached
                   ? t('ai.imageWizard.referenceImages.fullHint')
                   : t('ai.imageWizard.referenceImages.uploadAction')}
               </button>
@@ -262,6 +312,7 @@ export function Step3Refine({
                 type="file"
                 ref={fileInputRef}
                 accept="image/*"
+                aria-label={t('ai.imageWizard.referenceImages.uploadAction')}
                 onChange={(event) => {
                   const file = event.target.files?.[0];
                   event.target.value = '';
@@ -293,7 +344,7 @@ export function Step3Refine({
                       className="app-text-caption truncate text-app-ink/70"
                       title={ref.original_name}
                     >
-                      {ref.original_name || ref.storage_key.split('/').pop()}
+                      {getReferenceImageDisplayName(ref)}
                     </p>
                     <button
                       type="button"
@@ -315,27 +366,19 @@ export function Step3Refine({
         open={openPanel === 'advanced'}
         onToggle={() => togglePanel('advanced')}
         title={t('ai.imageWizard.steps.step3.advancedPanel')}
-        summary={`${t(`ai.imageWizard.style.background.${style.background || 'auto'}`)} · ${t(
-          `ai.imageWizard.style.quality.${style.quality || 'auto'}`,
-        )}`}
+        summary={advancedSummary}
       >
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <SelectField
             label={t('ai.imageWizard.style.backgroundLabel')}
             value={style.background || 'auto'}
-            options={BACKGROUND_OPTIONS}
-            renderOption={(v) =>
-              t(`ai.imageWizard.style.background.${v}`, { defaultValue: v })
-            }
+            options={backgroundOptions}
             onChange={(value) => onChangeStyle({ ...style, background: value })}
           />
           <SelectField
             label={t('ai.imageWizard.style.qualityLabel')}
             value={style.quality || 'auto'}
-            options={QUALITY_OPTIONS}
-            renderOption={(v) =>
-              t(`ai.imageWizard.style.quality.${v}`, { defaultValue: v })
-            }
+            options={qualityOptions}
             onChange={(value) => onChangeStyle({ ...style, quality: value })}
           />
         </div>
@@ -386,12 +429,11 @@ function DisclosurePanel({ open, title, summary, onToggle, children }: Disclosur
 interface SelectFieldProps {
   label: string;
   value: string;
-  options: readonly string[];
-  renderOption: (value: string) => string;
+  options: readonly SelectOption[];
   onChange: (next: string) => void;
 }
 
-function SelectField({ label, value, options, renderOption, onChange }: SelectFieldProps) {
+function SelectField({ label, value, options, onChange }: SelectFieldProps) {
   const id = useId();
   return (
     <div className="space-y-1">
@@ -400,16 +442,14 @@ function SelectField({ label, value, options, renderOption, onChange }: SelectFi
         id={id}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="app-text-body w-full rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink focus:border-app-accent focus:outline-none"
+        className="app-field-input"
       >
         {options.map((option) => (
-          <option key={option} value={option}>
-            {renderOption(option)}
+          <option key={option.value} value={option.value}>
+            {option.label}
           </option>
         ))}
       </select>
     </div>
   );
 }
-
-export default Step3Refine;

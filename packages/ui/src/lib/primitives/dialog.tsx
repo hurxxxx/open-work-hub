@@ -3,6 +3,13 @@ import type { ReactNode } from 'react';
 
 import { Button } from './button';
 import { cn } from '../utils/cn';
+import {
+  dialogAccessibilityProps,
+  dialogContentLayerClass,
+  dialogOverlayLayerClass,
+  dialogSizeClasses,
+  shouldPreventOutsideInteraction,
+} from '../overlay/dialog-surface-model';
 
 export interface DialogProps {
   open: boolean;
@@ -12,6 +19,7 @@ export interface DialogProps {
   children: ReactNode;
   actions?: ReactNode;
   closeLabel?: string;
+  contentClassName?: string;
   /** Maximum width class, e.g. "max-w-lg" or "max-w-3xl". Defaults to "max-w-lg". Ignored when ``fullSize`` is true. */
   maxWidth?: string;
   /**
@@ -46,6 +54,7 @@ export interface DialogProps {
    * layer, while still keeping popovers and toasts above the dialog.
    */
   layer?: 'default' | 'elevated';
+  overlayClassName?: string;
 }
 
 export function Dialog({
@@ -56,46 +65,44 @@ export function Dialog({
   children,
   actions,
   closeLabel,
+  contentClassName,
   maxWidth = 'max-w-lg',
   fullSize = false,
   embedded = false,
   dismissOnInteractOutside = true,
   layer = 'default',
+  overlayClassName,
 }: DialogProps) {
-  const blockOutside = dismissOnInteractOutside
-    ? undefined
-    : (event: Event) => event.preventDefault();
+  const handleOutsideInteraction = (event: Event) => {
+    if (shouldPreventOutsideInteraction(event, dismissOnInteractOutside)) {
+      event.preventDefault();
+    }
+  };
   // Radix warns when DialogContent omits a Description unless callers
   // explicitly opt out with aria-describedby={undefined}.
-  const accessibilityProps = description
-    ? {}
-    : ({ 'aria-describedby': undefined } as const);
-  const overlayLayerClass = layer === 'elevated'
-    ? 'z-[calc(var(--ui-z-dialog-elevated)-1)]'
-    : 'z-[calc(var(--ui-z-drawer)-1)]';
-  const contentLayerClass = layer === 'elevated'
-    ? 'z-[var(--ui-z-dialog-elevated)]'
-    : 'z-[var(--ui-z-drawer)]';
+  const accessibilityProps = dialogAccessibilityProps(Boolean(description));
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay
           className={cn(
-            'fixed inset-0 bg-slate-950/32 backdrop-blur-sm',
-            overlayLayerClass,
+            'fixed inset-0 bg-ui-static-black/32 backdrop-blur-sm',
+            dialogOverlayLayerClass(layer),
+            overlayClassName,
           )}
         />
         <DialogPrimitive.Content
           className={cn(
             'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2',
-            contentLayerClass,
+            dialogContentLayerClass(layer),
             'flex flex-col rounded-[var(--ui-radius-lg)] border border-[var(--ui-color-border)] bg-ui-surface-raised shadow-[var(--ui-shadow-lg)] outline-none overflow-hidden',
-            fullSize
-              ? 'h-[92vh] w-[96vw] max-w-[1600px]'
-              : ['w-[calc(100vw-2rem)] max-h-[85vh]', maxWidth],
+            dialogSizeClasses({ fullSize, maxWidth }),
+            contentClassName,
           )}
-          onPointerDownOutside={blockOutside}
-          onInteractOutside={blockOutside}
+          data-layer={layer}
+          onFocusOutside={handleOutsideInteraction}
+          onPointerDownOutside={handleOutsideInteraction}
+          onInteractOutside={handleOutsideInteraction}
           {...accessibilityProps}
         >
           {embedded ? (
@@ -116,11 +123,11 @@ export function Dialog({
             <>
               <div className="flex items-start justify-between gap-3 border-b border-b-[var(--ui-color-border)] px-5 py-4">
                 <div className="grid gap-1">
-                  <DialogPrimitive.Title className="m-0 text-[1rem] font-semibold tracking-[-0.02em] text-[var(--ui-color-ink)]">
+                  <DialogPrimitive.Title className="m-0 text-[length:var(--ui-text-h3)] font-semibold tracking-[-0.02em] text-[var(--ui-color-ink)]">
                     {title}
                   </DialogPrimitive.Title>
                   {description ? (
-                    <DialogPrimitive.Description className="m-0 text-[0.84rem] text-[var(--ui-color-ink-muted)]">
+                    <DialogPrimitive.Description className="m-0 text-[length:var(--ui-text-body-sm)] text-[var(--ui-color-ink-muted)]">
                       {description}
                     </DialogPrimitive.Description>
                   ) : null}

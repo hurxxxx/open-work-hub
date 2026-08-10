@@ -1,16 +1,16 @@
 import * as ToastPrimitive from '@radix-ui/react-toast';
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, use, useMemo, useState, type ReactNode } from 'react';
+import { X } from 'lucide-react';
 
 import { cn } from '../utils/cn';
-
-type ToastTone = 'info' | 'success' | 'error';
-
-type ToastRecord = {
-  id: string;
-  title: string;
-  description?: string;
-  tone: ToastTone;
-};
+import {
+  appendToastRecord,
+  createToastRecord,
+  dismissToastRecord,
+  toastToneClass,
+  type ToastRecord,
+  type ToastTone,
+} from './toast-state';
 
 type ToastApi = {
   info: (title: string, description?: string) => void;
@@ -20,31 +20,28 @@ type ToastApi = {
 
 const ToastContext = createContext<ToastApi | null>(null);
 
-function toneClass(tone: ToastTone) {
-  switch (tone) {
-    case 'success':
-      return 'border-transparent bg-[color-mix(in_oklab,var(--ui-color-success)_12%,white)] text-[var(--ui-color-success)]';
-    case 'error':
-      return 'border-transparent bg-[color-mix(in_oklab,var(--ui-color-danger)_14%,white)] text-[var(--ui-color-danger)]';
-    default:
-      return 'border-[var(--ui-color-border)] bg-ui-surface-raised text-[var(--ui-color-ink)]';
-  }
-}
-
-export function ToastProvider({ children }: { children: ReactNode }) {
+export function ToastProvider({
+  children,
+  closeLabel,
+}: {
+  children: ReactNode;
+  closeLabel: string;
+}) {
   const [toasts, setToasts] = useState<ToastRecord[]>([]);
 
   const api = useMemo<ToastApi>(() => {
     const push = (tone: ToastTone, title: string, description?: string) => {
-      setToasts((current) => [
-        ...current,
-        {
-          id: `${tone}-${Date.now()}-${current.length}`,
-          title,
-          description,
-          tone,
-        },
-      ]);
+      setToasts((current) =>
+        appendToastRecord(
+          current,
+          createToastRecord({
+            description,
+            id: `${tone}-${Date.now()}-${current.length}`,
+            title,
+            tone,
+          }),
+        ),
+      );
     };
 
     return {
@@ -62,25 +59,32 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           <ToastPrimitive.Root
             key={toast.id}
             className={cn(
-              'grid gap-1 rounded-[var(--ui-radius-md)] border px-4 py-3 shadow-[var(--ui-shadow-lg)]',
-              toneClass(toast.tone),
+              'relative grid gap-1 rounded-[var(--ui-radius-md)] border py-3 pl-4 pr-10 shadow-[var(--ui-shadow-lg)]',
+              toastToneClass(toast.tone),
             )}
             duration={2800}
             onOpenChange={(open) => {
               if (!open) {
-                setToasts((current) => current.filter((item) => item.id !== toast.id));
+                setToasts((current) => dismissToastRecord(current, toast.id));
               }
             }}
             open
           >
-            <ToastPrimitive.Title className="text-sm font-semibold">
+            <ToastPrimitive.Title className="text-[length:var(--ui-text-body-sm)] font-semibold">
               {toast.title}
             </ToastPrimitive.Title>
             {toast.description ? (
-              <ToastPrimitive.Description className="text-sm">
+              <ToastPrimitive.Description className="text-[length:var(--ui-text-body-sm)]">
                 {toast.description}
               </ToastPrimitive.Description>
             ) : null}
+            <ToastPrimitive.Close
+              aria-label={closeLabel}
+              className="absolute right-2 top-2 inline-flex size-7 items-center justify-center rounded-[var(--ui-radius-sm)] text-current/60 transition-colors hover:bg-black/5 hover:text-current focus:outline-none focus:ring-2 focus:ring-current/25 dark:hover:bg-white/10"
+              title={closeLabel}
+            >
+              <X aria-hidden="true" size={15} strokeWidth={2.2} />
+            </ToastPrimitive.Close>
           </ToastPrimitive.Root>
         ))}
       </ToastPrimitive.Provider>
@@ -90,12 +94,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
 export function ToastViewport() {
   return (
-    <ToastPrimitive.Viewport className="fixed bottom-4 right-4 z-[var(--ui-z-toast)] grid w-[min(360px,calc(100vw-2rem))] gap-2 outline-none" />
+    <ToastPrimitive.Viewport className="fixed top-4 right-4 z-[var(--ui-z-toast)] grid w-[min(360px,calc(100vw-2rem))] gap-2 outline-none" />
   );
 }
 
 export function useToast() {
-  const context = useContext(ToastContext);
+  const context = use(ToastContext);
 
   if (!context) {
     throw new Error('useToast must be used within ToastProvider');

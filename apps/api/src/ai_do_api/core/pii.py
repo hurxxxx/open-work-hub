@@ -1,12 +1,8 @@
-"""Basic PII detection for LLM pool routing.
+"""Shared PII patterns for outbound LLM detection and masking.
 
-Regex-based minimum set. Detection is used **only** to decide whether a task
-tagged `external` must be forced back to `local_only`; it does not mask or
-mutate the request body itself.
-
-Patterns are deliberately conservative (higher false-positive tolerance than
-false-negative tolerance) because the blast radius of a false negative is
-"private data leaves the local pool".
+Boundary-safety policy uses this conservative regex set to classify payloads.
+When the resolved action is ``mask_and_send``, the masking pipeline also uses
+the patterns to replace supported spans before external transfer.
 """
 
 from __future__ import annotations
@@ -28,9 +24,11 @@ class PiiHit(NamedTuple):
 # credit card number inside an SKU) are excluded until we have a full-validator
 # pass (Luhn, MOD-11, etc.).
 PII_PATTERNS: dict[str, re.Pattern[str]] = {
-    # Korean resident registration number (주민등록번호). 13 digits with
-    # optional hyphen after the 6th; the 7th digit is 1-4 for real issued IDs.
-    "rrn_kr": re.compile(r"\b\d{6}(?:[-\s]?[1-4]\d{6})\b"),
+    # Korean resident registration number (주민등록번호). Match the standard
+    # 13-digit form, plus the common high-risk paste/typing case where one
+    # extra trailing digit is attached. Foreign-resident 7th digits are also
+    # treated as sensitive here because false negatives are worse at egress.
+    "rrn_kr": re.compile(r"(?<!\d)\d{6}(?:[-\s]?[1-8]\d{6,7})(?!\d)"),
     # Email addresses (RFC-light; covers the common cases we'd care about).
     "email": re.compile(r"\b[\w.+\-]+@[\w\-]+(?:\.[\w\-]+)+\b"),
     # Korean mobile (010/011/016-019) and common landline (02, 0xx).

@@ -3,6 +3,11 @@
 `/w/<workspace>/learning` 앱이 이 디렉터리의 markdown 을 읽어 렌더합니다.
 콘텐츠는 **코스 단위** 로 관리합니다. 코스 하나 = 폴더 하나.
 
+이 디렉터리의 Markdown은 학습 앱 콘텐츠이며 프로젝트 정본 문서나 에이전트 작업 지침이
+아닙니다. 현재 구현 기준, 하네스 기준, 작업 컨텍스트는 `agents.md`와 `docs/` 아래
+current/domain/app/agent 문서를 우선합니다. 사용자가 학습 콘텐츠 수정이나 확인을
+명시적으로 요청한 경우에만 이 디렉터리를 작업 컨텍스트로 읽습니다.
+
 ## 디렉터리 규칙
 
 ```
@@ -25,7 +30,7 @@ learning/
 1. `learning/<new-course-slug>/` 폴더 생성.
 2. `00-index.md` 에 코스 개요·대상·학습 목표를 적습니다. (선택이지만 추천)
 3. 레슨 파일을 `NN-<title>.md` 로 추가.
-4. `apps/web/src/domains/learning/manifest.ts` 의 `LEARNING_COURSES` 배열에 코스 엔트리 추가:
+4. `apps/web/src/app-modules/learning/model/manifest.ts` 의 `LEARNING_COURSES` 배열에 코스 엔트리 추가:
 
    ```ts
    {
@@ -44,7 +49,7 @@ learning/
      ],
    }
    ```
-5. `pnpm vitest run -c apps/web/vite.config.mts apps/web/src/domains/learning/manifest.spec.ts` 로 매니페스트 무결성 확인 (각 `file` 이 실제 파일과 매칭되고 `id` 가 유일한지 자동 검증).
+5. `pnpm vitest run -c apps/web/vite.config.mts apps/web/src/app-modules/learning/model/manifest.spec.ts` 로 매니페스트 무결성 확인 (각 `file` 이 실제 파일과 매칭되고 `id` 가 유일한지 자동 검증).
 6. 브라우저에서 `/w/<workspace>/learning` 진입 → 새 코스 카드가 보이면 OK.
 
 ## 본문 vs 학습 노트
@@ -70,7 +75,7 @@ learning/
 
 | 슬러그 | 제목 | 설명 |
 | --- | --- | --- |
-| `ai-do-business-ai-curriculum` | 현업을 위한 AI-Doo 12주 교육 | PoC 주간교육을 현업 실무형으로 재구성한 12주 과정. 기존 자료를 참조하며 AI 협업, RAG, 승인, 운영 품질, 인계를 다룹니다. |
+| `ai-do-business-ai-curriculum` | AI-DO LLM/RAG 운영 전문 교육 | 기존 코스와 중복되는 AI 협업·저장소·출시 교재는 원본 코스를 사용하고, AI-DO PoC에 필요한 LLM/RAG 모델 지형, 검색, 승인, 평가 운영만 깊게 다룹니다. |
 | `vibe-coding-foundations` | 바이브 코딩 입문 | 소프트웨어·프로그래밍 기본부터 AI-DO 스택, 실전 워크플로까지. 전 구성원 공용 온보딩 트랙. |
 | `database-storage-basics` | 데이터베이스 입문 — 저장소를 고르는 법 | SQL, NoSQL, 캐시, 검색, 벡터 DB, 객체 저장소까지 초보자 눈높이로 비교하는 저장소 선택 트랙. |
 

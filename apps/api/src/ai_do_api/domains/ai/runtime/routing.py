@@ -4,7 +4,11 @@ from dataclasses import dataclass, replace
 from typing import Any, Literal
 
 from ai_do_api.domains.ai.runtime.contracts import RuntimeProfile
+from ai_do_api.domains.ai.runtime.manager_candidate import (
+    supports_deterministic_manager_candidate,
+)
 from ai_do_api.domains.ai.runtime.manager_validation import ManagerGraphValidationResult
+from ai_do_api.domains.ai.runtime.routing_signals import select_runtime_profile_signal
 
 
 GraphGateDecision = Literal["disabled", "eligible", "ineligible"]
@@ -19,46 +23,6 @@ GraphValidationStatus = Literal[
     "accepted",
     "rejected",
 ]
-
-LONG_DOC_CHAR_THRESHOLD = 12_000
-LONG_DOC_MAX_TOKENS_THRESHOLD = 32_768
-REPORT_KEYWORDS = (
-    "보고서",
-    "리포트",
-    "비교",
-    "분석",
-    "종합",
-    "근거",
-    "출처",
-    "citation",
-    "evidence",
-    "template",
-    "템플릿",
-)
-LONG_DOC_KEYWORDS = (
-    "장문",
-    "전체 문서",
-    "전문",
-    "긴 문서",
-    "batch",
-    "일괄",
-)
-HIGH_RISK_KEYWORDS = (
-    "등록",
-    "수정",
-    "삭제",
-    "승인",
-    "예약",
-    "전송",
-    "생성해줘",
-    "만들어줘",
-    "create",
-    "update",
-    "delete",
-    "send",
-    "approve",
-)
-
 
 @dataclass(frozen=True)
 class RuntimeRoutingDecision:
@@ -130,36 +94,21 @@ def select_runtime_profile(
     max_tokens: int | None,
     graph_enabled: bool,
 ) -> RuntimeRoutingDecision:
-    text = _message_text(messages)
-    lowered = text.lower()
-    reason_codes: list[str] = []
-
-    if allowed_app_ids == []:
-        reason_codes.append("text_only_scope")
-
-    if max_tokens is not None and max_tokens >= LONG_DOC_MAX_TOKENS_THRESHOLD:
-        reason_codes.append("large_output_budget")
-        return _decision("long_doc", reason_codes, graph_enabled=graph_enabled)
-
-    if len(text) >= LONG_DOC_CHAR_THRESHOLD or _contains_any(lowered, LONG_DOC_KEYWORDS):
-        reason_codes.append("long_doc_signal")
-        return _decision("long_doc", reason_codes, graph_enabled=graph_enabled)
-
-    if _contains_any(lowered, REPORT_KEYWORDS) or _has_multiple_app_scope(allowed_app_ids):
-        reason_codes.append("grounded_report_signal")
-        return _decision("grounded_report", reason_codes, graph_enabled=graph_enabled)
-
-    if _contains_any(lowered, HIGH_RISK_KEYWORDS) and allowed_app_ids != []:
-        reason_codes.append("write_or_external_action_signal")
-        return _decision("high_risk_action", reason_codes, graph_enabled=graph_enabled)
-
-    reason_codes.append("default_interactive_read")
-    return _decision("interactive_read", reason_codes, graph_enabled=graph_enabled)
+    signal = select_runtime_profile_signal(
+        messages=messages,
+        allowed_app_ids=allowed_app_ids,
+        max_tokens=max_tokens,
+    )
+    return _decision(
+        signal.runtime_profile,
+        signal.reason_codes,
+        graph_enabled=graph_enabled,
+    )
 
 
 def _decision(
     runtime_profile: RuntimeProfile,
-    reason_codes: list[str],
+    reason_codes: tuple[str, ...],
     *,
     graph_enabled: bool,
 ) -> RuntimeRoutingDecision:
@@ -168,7 +117,7 @@ def _decision(
     if graph_enabled:
         graph_gate = (
             "eligible"
-            if runtime_profile in {"grounded_report", "high_risk_action"}
+            if supports_deterministic_manager_candidate(runtime_profile)
             else "ineligible"
         )
         graph_fallback_reason = (
@@ -183,18 +132,6 @@ def _decision(
         graph_fallback_reason=graph_fallback_reason,
         graph_used=False,
     )
-
-
-def _message_text(messages: list[dict[str, str]]) -> str:
-    return "\n".join(str(message.get("content") or "") for message in messages)
-
-
-def _contains_any(text: str, keywords: tuple[str, ...]) -> bool:
-    return any(keyword in text for keyword in keywords)
-
-
-def _has_multiple_app_scope(allowed_app_ids: list[str] | None) -> bool:
-    return allowed_app_ids is not None and len(set(allowed_app_ids)) > 1
 
 
 __all__ = [

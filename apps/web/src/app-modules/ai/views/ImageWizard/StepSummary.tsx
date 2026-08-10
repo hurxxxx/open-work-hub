@@ -13,7 +13,7 @@ export function StepSummary({ stepNumber, title, value, onEdit }: StepSummaryPro
   return (
     <div className="flex items-center justify-between rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2">
       <div className="flex items-center gap-2 min-w-0">
-        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-app-accent/15 text-app-accent">
+        <span className="flex size-5 items-center justify-center rounded-full bg-app-accent/15 text-app-accent">
           <Check size={11} />
         </span>
         <span className="app-text-control-sm text-app-ink/60 shrink-0">
@@ -37,5 +37,3 @@ export function StepSummary({ stepNumber, title, value, onEdit }: StepSummaryPro
     </div>
   );
 }
-
-export default StepSummary;

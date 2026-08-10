@@ -15,25 +15,29 @@ import { useTranslation } from 'react-i18next';
 import { MeetingWorkspaceLayout } from '@/src/app-modules/meeting';
 
 interface MeetingPreviewModalProps {
+  contentClassName?: string;
   meetingId: string | null;
   workspaceSlug: string | undefined;
   onClose: () => void;
   /** Called after the meeting (or its notes) is changed so the calendar can refetch. */
   onChanged?: () => void;
+  overlayClassName?: string;
 }
 
 export function MeetingPreviewModal({
+  contentClassName,
   meetingId,
   workspaceSlug,
   onClose,
   onChanged,
+  overlayClassName,
 }: MeetingPreviewModalProps) {
   const { t } = useTranslation('apps');
   const open = meetingId !== null && Boolean(workspaceSlug);
 
   return (
     <Dialog
-        closeLabel={t('common:actions.close')}
+      closeLabel={t('common:actions.close')}
       open={open}
       onOpenChange={(next) => {
         if (!next) onClose();
@@ -45,6 +49,8 @@ export function MeetingPreviewModal({
       // Recording / form interactions inside MeetingWorkspaceLayout must not
       // be lost by an accidental backdrop click.
       dismissOnInteractOutside={false}
+      contentClassName={contentClassName}
+      overlayClassName={overlayClassName}
     >
       {meetingId && workspaceSlug ? (
         <MeetingWorkspaceLayout

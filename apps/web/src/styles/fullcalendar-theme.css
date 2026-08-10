@@ -23,7 +23,7 @@
   /* Events (default — overridden per-event by backgroundColor prop) */
   --fc-event-bg-color: var(--ui-color-accent);
   --fc-event-border-color: var(--ui-color-accent);
-  --fc-event-text-color: #ffffff;
+  --fc-event-text-color: var(--ui-color-accent-fg);
   --fc-event-selected-overlay-color: color-mix(in srgb, var(--ui-color-accent) 20%, transparent);
 
   /* List view */
@@ -53,9 +53,9 @@
 }
 
 /* Korean density per Design D6 — keep month-view event chips compact so 200-char
-   Korean titles don't blow up cell height. dayMaxEvents:2 already shows "+N더". */
+   Korean titles don't blow up cell height. Dense views can still use "+N더". */
 [data-unified-calendar] .fc .fc-daygrid-event {
-  font-size: 0.75rem;
+  font-size: var(--ui-text-caption);
   line-height: 1.25;
   padding-block: 1px;
   padding-inline: 4px;
@@ -68,8 +68,14 @@
 
 /* Time-grid event title (week/day view) — slightly looser since cells are taller */
 [data-unified-calendar] .fc .fc-timegrid-event .fc-event-title {
-  font-size: 0.75rem;
+  font-size: var(--ui-text-caption);
   line-height: 1.3;
+}
+
+/* PMS status colors are pastel backgrounds; keep default FC bars but use ink text. */
+[data-unified-calendar] .fc .fc-event.fc-pms-task-event,
+[data-unified-calendar] .fc .fc-event.fc-pms-task-event .fc-event-main {
+  color: var(--ui-color-bg-strong);
 }
 
 /* Day cell sizing — match the existing PlannerView min-height so the grid feels
@@ -82,22 +88,22 @@
 [data-unified-calendar] .fc .fc-day-sun .fc-daygrid-day-number,
 [data-unified-calendar] .fc .fc-day-sun .fc-list-day-cushion,
 [data-unified-calendar] .fc .fc-col-header-cell.fc-day-sun .fc-col-header-cell-cushion {
-  color: #ef4444;
+  color: var(--ui-color-danger);
 }
 
 /* Korean holidays: color the day number red on public-holiday cells, no
    background fill. A small red label is injected via dayCellDidMount so the
    user still sees "어린이날" / "노동절" under the date number. */
 [data-unified-calendar] .fc .fc-korean-holiday .fc-daygrid-day-number {
-  color: #ef4444;
+  color: var(--ui-color-danger);
 }
 [data-unified-calendar] .fc .fc-korean-holiday-label {
   display: block;
   padding: 2px 6px 0;
-  font-size: 0.8125rem;
+  font-size: var(--ui-text-body-sm);
   font-weight: 500;
   line-height: 1.25;
-  color: #ef4444;
+  color: var(--ui-color-danger);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -112,21 +118,40 @@
 
 /* Dark mode overrides — only the few values that don't translate via CSS variables. */
 :where(.dark, .dark *) [data-unified-calendar] .fc {
-  --fc-event-text-color: #ffffff;
+  --fc-event-text-color: var(--ui-color-accent-fg);
+}
+
+:where(.dark, .dark *) [data-unified-calendar] .fc .fc-event.fc-pms-task-event,
+:where(.dark, .dark *) [data-unified-calendar] .fc .fc-event.fc-pms-task-event .fc-event-main {
+  color: var(--ui-color-bg-strong);
 }
 
 :where(.dark, .dark *) [data-unified-calendar] .fc .fc-korean-holiday .fc-daygrid-day-number,
 :where(.dark, .dark *) [data-unified-calendar] .fc .fc-korean-holiday-label {
-  color: #f87171; /* red-400, brighter for dark backgrounds */
+  color: var(--ui-color-danger);
 }
 :where(.dark, .dark *) [data-unified-calendar] .fc .fc-day-sun .fc-daygrid-day-number,
 :where(.dark, .dark *) [data-unified-calendar] .fc .fc-day-sun .fc-list-day-cushion,
 :where(.dark, .dark *) [data-unified-calendar] .fc .fc-col-header-cell.fc-day-sun .fc-col-header-cell-cushion {
-  color: #f87171;
+  color: var(--ui-color-danger);
 }
 
-/* Today number badge — make it pop a bit without overriding FC's bg color. */
-[data-unified-calendar] .fc .fc-day-today .fc-daygrid-day-number {
+/* Today number badge — shared by Planner and PMS calendars. */
+[data-unified-calendar] .fc .fc-daygrid-day.fc-day-today .fc-daygrid-day-number {
+  display: inline-flex;
+  min-width: 1.6rem;
+  height: 1.6rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding-inline: 0.35rem;
+  background: var(--ui-color-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ui-color-accent) 18%, transparent);
+  color: var(--ui-color-accent-fg);
   font-weight: 700;
-  color: var(--ui-color-accent);
+  line-height: 1;
+}
+
+:where(.dark, .dark *) [data-unified-calendar] .fc .fc-daygrid-day.fc-day-today .fc-daygrid-day-number {
+  color: var(--ui-color-accent-fg);
 }

@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { LEARNING_COURSES, findCourse, findLesson, getAllLessons } from './manifest';
+import {
+  LEARNING_COURSES,
+  findCourse,
+  findLesson,
+  getAllLessons,
+} from './manifest';
 import { loadLessonBody, listAvailableLessonFiles } from './content';
 
 describe('LEARNING_COURSES manifest', () => {
@@ -12,9 +17,10 @@ describe('LEARNING_COURSES manifest', () => {
     const availableFiles = new Set(listAvailableLessonFiles());
     for (const course of LEARNING_COURSES) {
       for (const lesson of getAllLessons(course)) {
-        expect(availableFiles, `missing file in content map: ${lesson.file}`).toContain(
-          lesson.file,
-        );
+        expect(
+          availableFiles,
+          `missing file in content map: ${lesson.file}`,
+        ).toContain(lesson.file);
         const body = await loadLessonBody(lesson.file);
         expect(body, `empty body for ${lesson.file}`).toBeTruthy();
         if (!body) {
@@ -42,7 +48,10 @@ describe('LEARNING_COURSES manifest', () => {
   it('every lesson has a non-empty stable id', () => {
     for (const course of LEARNING_COURSES) {
       for (const lesson of getAllLessons(course)) {
-        expect(lesson.id, `lesson "${lesson.slug}" is missing an id`).toBeTruthy();
+        expect(
+          lesson.id,
+          `lesson "${lesson.slug}" is missing an id`,
+        ).toBeTruthy();
         expect(typeof lesson.id).toBe('string');
         expect(lesson.id.length).toBeGreaterThan(0);
       }
@@ -53,9 +62,10 @@ describe('LEARNING_COURSES manifest', () => {
     for (const course of LEARNING_COURSES) {
       const ids = new Set<string>();
       for (const lesson of getAllLessons(course)) {
-        expect(ids.has(lesson.id), `duplicate lesson id "${lesson.id}" in course "${course.slug}"`).toBe(
-          false,
-        );
+        expect(
+          ids.has(lesson.id),
+          `duplicate lesson id "${lesson.id}" in course "${course.slug}"`,
+        ).toBe(false);
         ids.add(lesson.id);
       }
     }

@@ -1,4 +1,5 @@
 """Pydantic schemas for the unified calendar events endpoint."""
+
 from __future__ import annotations
 
 from datetime import date, datetime
@@ -31,15 +32,26 @@ class CalendarEventMetadata(BaseModel):
     # PMS-only
     task_list_id: str | None = None
     task_list_key: str | None = None
-    issue_number: int | None = None
+    task_number: int | None = None
     status: str | None = None
     assignee_ids: list[str] | None = None
     # Planner-only
     planner_event_id: str | None = None
     owner_id: str | None = None
     owner_name: str | None = None
-    visibility: Literal["private", "public"] | None = None
     location: str | None = None
+    planner_all_day: bool | None = None
+    planner_start_has_time: bool | None = None
+    planner_end_has_time: bool | None = None
+    planner_time_zone: str | None = None
+
+
+class CalendarWorkspaceRef(BaseModel):
+    model_config = _camel_config()
+
+    id: str
+    slug: str
+    name: str
 
 
 class CalendarEventOut(BaseModel):
@@ -60,6 +72,7 @@ class CalendarEventOut(BaseModel):
     source_type: CalendarSourceType
     source_id: str
     color: str
+    workspace: CalendarWorkspaceRef | None
     metadata: CalendarEventMetadata
 
 
@@ -72,6 +85,7 @@ __all__ = [
     "CalendarEventMetadata",
     "CalendarEventOut",
     "CalendarEventsResponse",
+    "CalendarWorkspaceRef",
 ]
 
 

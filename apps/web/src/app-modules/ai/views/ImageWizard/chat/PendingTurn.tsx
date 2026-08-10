@@ -37,5 +37,3 @@ export function PendingTurn({ status, cancelling = false, onCancel }: PendingTur
     </article>
   );
 }
-
-export default PendingTurn;

@@ -1,2 +1,1 @@
 """Whiteboard domain."""
-

@@ -1,10 +1,10 @@
-# AI Runtime Phase 0 Gates
+# AI Runtime Evaluation Gates
 
-These fixtures are synthetic seed cases for Phase 6 Evidence Runtime checks.
-They are intentionally small and deterministic. They must not call an LLM,
-network provider, or workspace data source during tests.
+These fixtures are synthetic seed cases for runtime evaluation checks. They are
+intentionally small and deterministic. They must not call an LLM, network
+provider, or workspace data source during tests.
 
-Only fixtures that feed active runtime tests live here. Removed snapshot-only
+Only fixtures that feed active runtime tests live here. Historical sample
 fixtures should stay out of the local suite unless they drive executable
 behavior.
 
@@ -24,5 +24,5 @@ must be measured for:
 - tool-call stability
 - malformed output rate
 
-These gates are benchmark targets only in Phase 0-A. The graph manager is not
-enabled by these fixtures.
+These gates are evaluation targets only. The graph manager is not enabled by
+these fixtures.

@@ -35,17 +35,17 @@ export function Panel({
         <header className="mb-4 flex items-start justify-between gap-3 border-b border-[var(--ui-color-border)] pb-3 max-[720px]:flex-col">
           <div className="grid gap-1.5">
             {eyebrow ? (
-              <p className="m-0 text-xs font-semibold uppercase tracking-wider text-[var(--ui-color-ink-subtle)]">
+              <p className="m-0 text-[length:var(--ui-text-overline)] font-semibold uppercase tracking-wider text-[var(--ui-color-ink-subtle)]">
                 {eyebrow}
               </p>
             ) : null}
             {title ? (
-              <h2 className="m-0 text-lg font-semibold tracking-tight text-[var(--ui-color-ink)] max-[720px]:text-base">
+              <h2 className="m-0 text-[length:var(--ui-text-h3)] font-semibold tracking-tight text-[var(--ui-color-ink)]">
                 {title}
               </h2>
             ) : null}
             {description ? (
-              <p className="m-0 max-w-[72ch] text-sm leading-relaxed text-[var(--ui-color-ink-muted)]">
+              <p className="m-0 max-w-[72ch] text-[length:var(--ui-text-body)] leading-relaxed text-[var(--ui-color-ink-muted)]">
                 {description}
               </p>
             ) : null}

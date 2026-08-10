@@ -1,0 +1,18 @@
+export {
+  addCancellingCoreBackgroundWorkKey as addCancellingBackgroundWorkKey,
+  coreBackgroundWorkItemKey as backgroundWorkItemKey,
+  buildCoreBackgroundWorkSessionSnapshot as buildBackgroundWorkSessionSnapshot,
+  filterCoreBackgroundWorkSourcesForWorkspace as filterBackgroundWorkSourcesForWorkspace,
+  isActiveCoreBackgroundWorkStatus as isActiveBackgroundWorkStatus,
+  mergeCoreBackgroundWorkSourceListResults as mergeBackgroundWorkSourceListResults,
+  removeCancellingCoreBackgroundWorkKey as removeCancellingBackgroundWorkKey,
+  resolveCoreBackgroundWorkCadence as resolveBackgroundWorkCadence,
+  selectActiveCoreBackgroundWorkItems as selectActiveBackgroundWorkItems,
+  type CoreBackgroundWorkCadence as BackgroundWorkCadence,
+  type CoreBackgroundWorkItem as BackgroundWorkItem,
+  type CoreBackgroundWorkRuntimeSource as BackgroundWorkSource,
+  type CoreBackgroundWorkSessionSnapshot as BackgroundWorkSessionSnapshot,
+  type CoreBackgroundWorkSourceItemsSnapshot as BackgroundWorkSourceItemsSnapshot,
+  type CoreBackgroundWorkStatus as BackgroundWorkStatus,
+  type CoreBackgroundWorkToastEvent as BackgroundWorkToastEvent,
+} from '@ai-do/core-web/background-work';

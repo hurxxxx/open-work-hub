@@ -3,15 +3,18 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Form, Header, Query, Response, UploadFile, status
+from fastapi import APIRouter, Depends, Form, Header, Query, Request, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
 from ai_do_api.core.db import get_db_session
 from ai_do_api.domains.auth.dependencies import require_current_user, require_current_workspace
 from ai_do_api.domains.auth.models import User, Workspace
+from ai_do_api.domains.auth.workspace_app_gate import require_workspace_app_enabled
 from ai_do_api.domains.recording import service as recording_service
+from ai_do_api.domains.recording import tus_protocol
+from ai_do_api.domains.recording.app_catalog import RECORDING_WORKSPACE_APP
 from ai_do_api.domains.recording.schemas import (
-    RecordingContainerCreateRequest,
+    RecordingTargetCreateRequest,
     RecordingListResponse,
     RecordingOut,
     RecordingPlaybackResponse,
@@ -23,7 +26,30 @@ from ai_do_api.domains.recording.schemas import (
 )
 
 
-router = APIRouter(prefix="/recording", tags=["recording"])
+require_recording_app_enabled = require_workspace_app_enabled(
+    RECORDING_WORKSPACE_APP.app_id,
+    error_code="workspace.app_disabled",
+)
+
+router = APIRouter(
+    prefix="/recording",
+    tags=["recording"],
+    dependencies=[Depends(require_recording_app_enabled)],
+)
+
+
+def _tus_location(request: Request, staging_id: str) -> str:
+    return str(request.url).rstrip("/").rsplit("/recordings/tus", 1)[0] + (
+        f"/recordings/staging/{staging_id}/tus"
+    )
+
+
+@router.options("/recordings/tus")
+def recording_tus_options() -> Response:
+    return Response(
+        status_code=status.HTTP_204_NO_CONTENT,
+        headers=tus_protocol.response_headers(),
+    )
 
 
 @router.get("/recordings", response_model=RecordingListResponse)
@@ -31,9 +57,9 @@ def list_recordings(
     view: Literal["mine", "needs_review", "processing", "failed", "archived"] = "mine",
     from_: datetime | None = Query(default=None, alias="from"),
     to: datetime | None = None,
-    container_app: str | None = Query(default=None, min_length=1, max_length=64),
-    container_type: str | None = Query(default=None, min_length=1, max_length=64),
-    container_id: str | None = Query(default=None, min_length=1, max_length=128),
+    target_app: str | None = Query(default=None, min_length=1, max_length=64),
+    target_type: str | None = Query(default=None, min_length=1, max_length=64),
+    target_id: str | None = Query(default=None, min_length=1, max_length=128),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
@@ -45,9 +71,9 @@ def list_recordings(
         view=view,
         from_=from_,
         to=to,
-        container_app=container_app,
-        container_type=container_type,
-        container_id=container_id,
+        target_app=target_app,
+        target_type=target_type,
+        target_id=target_id,
     )
 
 
@@ -67,6 +93,94 @@ def init_recording_staging(
         workspace=workspace,
         user=current_user,
         payload=payload,
+    )
+
+
+@router.post("/recordings/tus", status_code=status.HTTP_201_CREATED)
+def create_recording_tus_upload(
+    request: Request,
+    tus_resumable: str | None = Header(default=None, alias="Tus-Resumable"),
+    upload_metadata: str | None = Header(default=None, alias="Upload-Metadata"),
+    upload_length: int | None = Header(default=None, alias="Upload-Length"),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
+) -> Response:
+    tus_protocol.require_version(tus_resumable)
+    staging = recording_service.init_tus_staging(
+        db,
+        workspace=workspace,
+        user=current_user,
+        upload_metadata=upload_metadata,
+        upload_length=upload_length,
+    )
+    headers = tus_protocol.response_headers(upload_offset=staging.bytes_received)
+    headers["Location"] = _tus_location(request, staging.id)
+    return Response(status_code=status.HTTP_201_CREATED, headers=headers)
+
+
+@router.options("/recordings/staging/{staging_id}/tus")
+def recording_staging_tus_options(staging_id: str) -> Response:
+    del staging_id
+    return Response(
+        status_code=status.HTTP_204_NO_CONTENT,
+        headers=tus_protocol.response_headers(),
+    )
+
+
+@router.head("/recordings/staging/{staging_id}/tus")
+def head_recording_tus_upload(
+    staging_id: str,
+    tus_resumable: str | None = Header(default=None, alias="Tus-Resumable"),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
+) -> Response:
+    tus_protocol.require_version(tus_resumable)
+    staging = recording_service.read_tus_upload(
+        db,
+        workspace=workspace,
+        user=current_user,
+        staging_id=staging_id,
+    )
+    return Response(
+        status_code=status.HTTP_204_NO_CONTENT,
+        headers=tus_protocol.response_headers(
+            upload_offset=staging.bytes_received,
+            upload_length=tus_protocol.upload_length_from_meta(staging.chunks_meta),
+        ),
+    )
+
+
+@router.patch("/recordings/staging/{staging_id}/tus")
+async def patch_recording_tus_upload(
+    staging_id: str,
+    request: Request,
+    tus_resumable: str | None = Header(default=None, alias="Tus-Resumable"),
+    upload_offset: int = Header(..., alias="Upload-Offset"),
+    upload_checksum: str | None = Header(default=None, alias="Upload-Checksum"),
+    upload_length: int | None = Header(default=None, alias="Upload-Length"),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
+) -> Response:
+    tus_protocol.require_version(tus_resumable)
+    staging = recording_service.upload_tus_chunk(
+        db,
+        workspace=workspace,
+        user=current_user,
+        staging_id=staging_id,
+        upload_offset=upload_offset,
+        data=await request.body(),
+        upload_checksum=upload_checksum,
+        upload_length=upload_length,
+    )
+    return Response(
+        status_code=status.HTTP_204_NO_CONTENT,
+        headers=tus_protocol.response_headers(
+            upload_offset=staging.bytes_received,
+            upload_length=tus_protocol.upload_length_from_meta(staging.chunks_meta),
+        ),
     )
 
 
@@ -113,9 +227,9 @@ def complete_recording_staging(
 
 @router.get("/recordings/staging", response_model=list[RecordingUploadOut])
 def list_recording_staging(
-    initial_container_app: str | None = Query(default=None, min_length=1, max_length=64),
-    initial_container_type: str | None = Query(default=None, min_length=1, max_length=64),
-    initial_container_id: str | None = Query(default=None, min_length=1, max_length=128),
+    initial_target_app: str | None = Query(default=None, min_length=1, max_length=64),
+    initial_target_type: str | None = Query(default=None, min_length=1, max_length=64),
+    initial_target_id: str | None = Query(default=None, min_length=1, max_length=128),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
@@ -124,9 +238,9 @@ def list_recording_staging(
         db,
         workspace=workspace,
         user=current_user,
-        initial_container_app=initial_container_app,
-        initial_container_type=initial_container_type,
-        initial_container_id=initial_container_id,
+        initial_target_app=initial_target_app,
+        initial_target_type=initial_target_type,
+        initial_target_id=initial_target_id,
     )
 
 
@@ -154,6 +268,10 @@ def import_recording(
     ended_at: datetime | None = Form(default=None),
     duration_sec: int | None = Form(default=None),
     source: Literal["quick_record", "manual_upload"] = Form(default="quick_record"),
+    initial_target_app: str | None = Form(default=None, min_length=1, max_length=64),
+    initial_target_type: str | None = Form(default=None, min_length=1, max_length=64),
+    initial_target_id: str | None = Form(default=None, min_length=1, max_length=128),
+    linked_task_id: str | None = Form(default=None, max_length=36),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
@@ -168,6 +286,10 @@ def import_recording(
         ended_at=ended_at,
         duration_sec=duration_sec,
         source=source,
+        initial_target_app=initial_target_app,
+        initial_target_type=initial_target_type,
+        initial_target_id=initial_target_id,
+        linked_task_id=linked_task_id,
     )
 
 
@@ -263,15 +385,15 @@ def stream_recording_media(
     )
 
 
-@router.post("/recordings/{recording_id}/containers", response_model=RecordingOut)
-def create_container(
+@router.post("/recordings/{recording_id}/targets", response_model=RecordingOut)
+def create_target(
     recording_id: str,
-    payload: RecordingContainerCreateRequest,
+    payload: RecordingTargetCreateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
 ) -> RecordingOut:
-    return recording_service.create_container(
+    return recording_service.create_target(
         db,
         workspace=workspace,
         user=current_user,
@@ -280,18 +402,18 @@ def create_container(
     )
 
 
-@router.delete("/recordings/{recording_id}/containers/{container_id}", response_model=RecordingOut)
-def delete_container(
+@router.delete("/recordings/{recording_id}/targets/{target_id}", response_model=RecordingOut)
+def delete_target(
     recording_id: str,
-    container_id: str,
+    target_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
 ) -> RecordingOut:
-    return recording_service.delete_container(
+    return recording_service.delete_target(
         db,
         workspace=workspace,
         user=current_user,
         recording_id=recording_id,
-        container_id=container_id,
+        target_id=target_id,
     )

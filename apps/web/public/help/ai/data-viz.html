@@ -1,0 +1,1405 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>데이터 시각화 사용 가이드</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6f8fb;
+        --paper: #ffffff;
+        --ink: #111827;
+        --muted: #64748b;
+        --line: #dbe3ee;
+        --soft: #edf2f7;
+        --nav: #111827;
+        --accent: #2563eb;
+        --shadow: 0 16px 45px rgba(15, 23, 42, 0.1);
+
+        /* === 실제 앱 디자인 토큰 (light) === */
+        --rep-bg: #ffffff;
+        --rep-surface: #ffffff;
+        --rep-surface-raised: #ffffff;
+        --rep-surface-sidebar: #f6f7f9;
+        --rep-surface-hover: #f0f1f4;
+        --rep-border: #e8eaed;
+        --rep-border-strong: #d1d5db;
+        --rep-ink: #2a2b2d;
+        --rep-ink-muted: #6b7280;
+        --rep-ink-subtle: #9ca3af;
+        --rep-accent: #0f172a;
+        --rep-accent-hover: #1e293b;
+        --rep-accent-fg: #ffffff;
+        --rep-warning: #f97316;
+        --rep-danger: #ef4444;
+        --rep-success: #22c55e;
+        --rep-font: "Pretendard Variable", "Pretendard", "IBM Plex Sans KR",
+          "Noto Sans KR", system-ui, -apple-system, sans-serif;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: "Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", system-ui,
+          -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        line-height: 1.62;
+      }
+
+      a { color: inherit; }
+
+      .shell {
+        display: grid;
+        grid-template-columns: 320px minmax(0, 1fr);
+        min-height: 100vh;
+      }
+
+      aside {
+        position: sticky;
+        top: 0;
+        height: 100vh;
+        overflow-y: auto;
+        background: var(--nav);
+        color: #f8fafc;
+        padding: 28px 22px;
+      }
+
+      aside h1 { margin: 0 0 8px; font-size: 24px; line-height: 1.15; }
+      aside > p { margin: 0 0 22px; color: #cbd5e1; font-size: 13px; }
+      aside nav { display: grid; gap: 5px; }
+      aside nav a {
+        display: block;
+        border-radius: 8px;
+        padding: 8px 10px;
+        color: #dbeafe;
+        font-size: 13px;
+        text-decoration: none;
+      }
+      aside nav a:hover { background: rgba(255, 255, 255, 0.08); }
+      aside nav a.sub { padding-left: 22px; color: #bfdbfe; font-size: 12.5px; }
+      aside .nav-group {
+        margin-top: 14px;
+        padding: 0 10px;
+        color: #94a3b8;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      main { min-width: 0; }
+
+      .hero {
+        background: linear-gradient(110deg, rgba(15, 23, 42, 0.94), rgba(30, 41, 59, 0.85));
+        color: white;
+        padding: 60px min(7vw, 80px) 64px;
+      }
+      .hero .eyebrow { margin: 0 0 12px; color: #bfdbfe; font-size: 13px; font-weight: 700; }
+      .hero h2 { max-width: 940px; margin: 0; font-size: clamp(30px, 4vw, 50px); line-height: 1.1; }
+      .hero p { max-width: 820px; margin: 18px 0 0; color: #e2e8f0; font-size: 17px; }
+
+      section { padding: 44px min(7vw, 80px); }
+      section:nth-of-type(even) { background: #fff; }
+
+      .section-head { max-width: 960px; margin-bottom: 22px; }
+      .section-head h2 { margin: 0 0 8px; font-size: 26px; line-height: 1.2; }
+      .section-head p { margin: 0; color: var(--muted); }
+
+      .purpose {
+        display: flex; gap: 14px; align-items: flex-start; max-width: 960px;
+        border: 1px solid var(--line); border-left: 4px solid var(--accent);
+        border-radius: 8px; background: #eff6ff; padding: 16px 18px; margin-bottom: 24px;
+      }
+      .purpose .purpose-label {
+        flex: 0 0 auto; display: inline-flex; align-items: center; border-radius: 999px;
+        background: var(--accent); color: #fff; font-size: 13px; font-weight: 700; padding: 6px 14px;
+      }
+      .purpose .purpose-body { color: #1e3a8a; font-size: 15px; }
+      .purpose .purpose-body strong { color: #1d4ed8; }
+
+      .subhead {
+        max-width: 960px; margin: 30px 0 12px; display: flex; align-items: center; gap: 10px;
+        font-size: 18px; font-weight: 700; color: #0f172a;
+      }
+      .subhead .badge-tab {
+        font-size: 12px; font-weight: 700; color: #fff; background: #0f172a;
+        border-radius: 6px; padding: 3px 9px;
+      }
+
+      .callout {
+        max-width: 960px; border-left: 4px solid #0f766e; border-radius: 8px;
+        background: #ecfdf5; padding: 14px 16px; color: #134e4a; font-size: 14px;
+      }
+      .callout.soon { border-left-color: #6366f1; background: #eef2ff; color: #3730a3; }
+      .callout.warn { border-left-color: var(--rep-warning); background: #fff7ed; color: #7c2d12; }
+
+      code {
+        border-radius: 5px; background: #e2e8f0; padding: 2px 5px; color: #0f172a;
+        font-family: "SFMono-Regular", Consolas, monospace; font-size: 0.9em;
+      }
+
+      /* ====================== 화면 재현 (replica) ====================== */
+      .rep-frame {
+        max-width: 1080px;
+        border: 1px solid var(--rep-border);
+        border-radius: 12px;
+        background: var(--rep-bg);
+        overflow: hidden;
+        box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+        font-family: var(--rep-font);
+        color: var(--rep-ink);
+      }
+      .rep-header { border-bottom: 1px solid var(--rep-border); background: var(--rep-bg); padding: 14px 18px; }
+      .rep-crumb { font-size: 12px; color: var(--rep-ink-subtle); display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
+      .rep-crumb .sep { color: #cbd5e1; }
+      .rep-titlerow { display: flex; align-items: center; gap: 10px; }
+      .rep-appicon {
+        width: 28px; height: 28px; border-radius: 6px; background: var(--rep-accent);
+        color: var(--rep-accent-fg); display: inline-flex; align-items: center; justify-content: center; font-size: 15px;
+      }
+      .rep-apptitle { font-size: 16px; font-weight: 600; letter-spacing: -0.015em; }
+      .rep-appsub { font-size: 12px; color: var(--rep-ink-subtle); }
+      .rep-back {
+        margin-left: 6px; display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 8px;
+        border-radius: 6px; font-size: 13px; font-weight: 500; color: var(--rep-ink-muted); background: transparent;
+      }
+      .rep-main { padding: 18px; display: flex; flex-direction: column; gap: 16px; }
+
+      .rep-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+      .rep-tab {
+        position: relative; font-size: 13px; font-weight: 500; border-radius: 6px;
+        border: 1px solid var(--rep-border); padding: 6px 12px; color: rgba(42, 43, 45, 0.65);
+        background: #fff;
+      }
+      .rep-tab.active { border-color: var(--rep-accent); background: rgba(15, 23, 42, 0.1); color: var(--rep-accent); font-weight: 600; }
+
+      /* underline 탭 (홈 컴프 / 컴프 성능 메인탭) */
+      .rep-tabs-underline { display: flex; gap: 24px; border-bottom: 1px solid var(--rep-border); }
+      .rep-tab-u {
+        position: relative; font-size: 14px; font-weight: 500; padding-bottom: 10px;
+        color: rgba(42, 43, 45, 0.5); background: transparent; border: none;
+      }
+      .rep-tab-u.active { color: var(--rep-ink); }
+      .rep-tab-u.active::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--rep-accent); }
+
+      .rep-card {
+        position: relative; border: 1px solid var(--rep-border); border-radius: 16px;
+        background: var(--rep-surface); padding: 18px;
+      }
+      .rep-card-title { font-size: 13px; font-weight: 600; color: var(--rep-ink); margin-bottom: 12px; }
+      .rep-card-sub { font-size: 12px; color: var(--rep-ink-muted); }
+
+      .rep-dropzone {
+        position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 6px; border: 1px dashed var(--rep-border-strong); border-radius: 12px; background: var(--rep-bg);
+        padding: 26px 16px; text-align: center; width: 66%;
+      }
+      .rep-dropzone.full { width: 100%; }
+      .rep-dz-title { font-size: 14px; font-weight: 700; color: var(--rep-ink); display: flex; align-items: center; gap: 6px; }
+      .rep-dz-sub { font-size: 12px; color: var(--rep-ink-muted); font-weight: 600; }
+      .rep-dz-note { font-size: 12px; color: var(--rep-ink-subtle); }
+
+      .rep-btn {
+        position: relative; display: inline-flex; align-items: center; gap: 6px;
+        border: 1px solid var(--rep-border); background: var(--rep-surface);
+        border-radius: 6px; padding: 6px 12px; font-size: 13px; font-weight: 500; color: var(--rep-ink);
+      }
+      .rep-btn-primary {
+        position: relative; display: inline-flex; align-items: center; gap: 6px;
+        background: var(--rep-accent); color: var(--rep-accent-fg); border: none;
+        border-radius: 6px; padding: 8px 16px; font-size: 13px; font-weight: 600;
+      }
+      .rep-btn-warn { border: 1px solid rgba(249,115,22,.5); background: rgba(249,115,22,.1); color: #c2410c; }
+      .rep-btn-danger { color: var(--rep-danger); }
+      .rep-btn-lime { background: #ecfccb; color: #3f6212; border: 1px solid #d9f99d; }
+      .rep-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+      .rep-input {
+        position: relative; border: 1px solid var(--rep-border); border-radius: 6px;
+        background: var(--rep-bg); padding: 6px 8px; font-size: 13px; color: var(--rep-ink); min-width: 0;
+      }
+      .rep-label { font-size: 12px; color: var(--rep-ink-muted); display: block; margin-bottom: 4px; }
+      .rep-field { display: flex; flex-direction: column; }
+      .rep-grid { display: grid; gap: 12px; }
+      .rep-pill {
+        position: relative; border-radius: 999px; border: 1px solid var(--rep-border); background: #fff;
+        padding: 5px 12px; font-size: 12px; font-weight: 600; color: var(--rep-ink-muted);
+      }
+      .rep-pill.active { background: var(--rep-accent); color: #fff; border-color: var(--rep-accent); }
+      .rep-chip {
+        display: inline-flex; align-items: center; gap: 5px; border-radius: 14px; border: 1px solid var(--rep-border);
+        background: #fff; padding: 3px 10px; font-size: 12px; color: var(--rep-ink);
+      }
+      .rep-chip.none { border-style: dashed; color: var(--rep-ink-subtle); font-style: italic; }
+      .rep-chip.sel { background: #dbeafe; border-color: #93c5fd; color: #1e40af; }
+      .rep-fileitem {
+        position: relative; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+        border: 1px solid var(--rep-border); border-radius: 8px; padding: 8px 12px; font-size: 13px;
+      }
+      .rep-fileitem.sel { border-color: var(--rep-accent); background: rgba(15,23,42,.04); }
+
+      .rep-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+      .rep-table th, .rep-table td { border: 1px solid var(--rep-border); padding: 5px 8px; text-align: left; white-space: nowrap; }
+      .rep-table th { background: #4472C4; color: #fff; font-weight: 600; }
+      .rep-table th.sub { background: #5B9BD5; }
+      .rep-table.plain th { background: #f1f5f9; color: #334155; }
+      .rep-table .muted { color: var(--rep-ink-subtle); }
+      .rep-scroll { overflow-x: auto; border: 1px solid var(--rep-border); border-radius: 8px; }
+      .rep-chart {
+        display: grid; place-items: center; min-height: 220px; border: 1px solid var(--rep-border);
+        border-radius: 10px; background: repeating-linear-gradient(90deg,#fafafa,#fafafa 38px,#f4f4f5 38px,#f4f4f5 39px);
+        color: var(--rep-ink-subtle); font-size: 13px;
+      }
+      .rep-cardgrid { display: grid; gap: 14px; }
+
+      /* ====================== 주석(번호 배지 + 범례) ====================== */
+      .has-anno { position: relative; }
+      .anno {
+        position: absolute; top: -9px; right: -9px; z-index: 6;
+        display: inline-flex; align-items: center; justify-content: center;
+        min-width: 21px; height: 21px; padding: 0 5px; border-radius: 999px;
+        background: #e11d48; color: #fff; font-size: 11px; font-weight: 800;
+        border: 2px solid #fff; box-shadow: 0 2px 6px rgba(225, 29, 72, 0.45);
+        font-family: var(--rep-font);
+      }
+      .anno.tl { top: -9px; left: -9px; right: auto; }
+      .anno.inline { position: static; border: none; box-shadow: none; margin-left: 6px; vertical-align: middle; }
+
+      .legend { max-width: 1080px; margin-top: 16px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #fff; }
+      .legend-cap {
+        background: #fff5f7; border-bottom: 1px solid #fbcfe8; color: #be123c;
+        font-size: 12px; font-weight: 700; padding: 8px 12px;
+      }
+      .legend-row { display: grid; grid-template-columns: 44px minmax(0, 1fr); border-top: 1px solid var(--line); }
+      .legend-row:first-of-type { border-top: none; }
+      .legend-num {
+        display: flex; align-items: center; justify-content: center; background: #fff5f7;
+        color: #e11d48; font-weight: 800; font-size: 13px; border-right: 1px solid var(--line);
+      }
+      .legend-note {
+        padding: 9px 12px; font-size: 14px; min-height: 22px;
+      }
+
+      .footer { padding: 30px min(7vw, 80px) 56px; color: var(--muted); font-size: 13px; }
+
+      @media (max-width: 1040px) {
+        .shell { display: block; }
+        aside { position: static; height: auto; }
+        aside nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      }
+      @media (max-width: 760px) {
+        .hero { padding: 44px 20px 50px; }
+        section, .footer { padding-left: 20px; padding-right: 20px; }
+        .rep-dropzone { width: 100%; }
+        aside nav { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <aside>
+        <h1>데이터 시각화 가이드</h1>
+        <p>공조 시험 데이터 시각화 — 화면·버튼 사용 안내</p>
+        <nav aria-label="문서 목차">
+          <a href="#home">1. 데이터 시각화 홈 (구성)</a>
+          <div class="nav-group">시스템 성능</div>
+          <a class="sub" href="#sys-upload">2-1. 파일 업로드</a>
+          <a class="sub" href="#sys-match">2-2. 데이터 매칭</a>
+          <a class="sub" href="#sys-table">2-3. 데이터 표</a>
+          <a class="sub" href="#sys-graph">2-4. 그래프</a>
+          <a class="sub" href="#sys-diagram">2-5. 선도화 결과</a>
+          <a class="sub" href="#sys-db">2-6. DB화 결과</a>
+          <a class="sub" href="#sys-base">2-7. BASE 관리</a>
+          <div class="nav-group">컴프레서 성능</div>
+          <a class="sub" href="#comp-upload">3-1. 데이터 업로드</a>
+          <a class="sub" href="#comp-result">3-2. 정리결과</a>
+          <a class="sub" href="#comp-analysis">3-3. 결과 분석</a>
+          <a class="sub" href="#comp-tol">3-4. 승인도 성능 기준값</a>
+          <div class="nav-group">컴프레서 신뢰성</div>
+          <a class="sub" href="#rel-sel">4-1. 벤치 선택</a>
+          <a class="sub" href="#rel-dur-up">4-2. 복합내구벤치 · 업로드</a>
+          <a class="sub" href="#rel-dur-gr">4-3. 복합내구벤치 · 그래프</a>
+          <a class="sub" href="#rel-sim-up">4-4. 간이벤치 · 업로드</a>
+          <a class="sub" href="#rel-sim-gr">4-5. 간이벤치 · 그래프</a>
+          <div class="nav-group">기타</div>
+          <a class="sub" href="#vehicle">실차 (준비중)</a>
+        </nav>
+      </aside>
+
+      <main>
+        <header class="hero">
+          <p class="eyebrow">데이터 시각화 사용 매뉴얼</p>
+          <h2>실제 화면 그대로,<br />각 버튼의 의미를 적는 가이드</h2>
+          <p>
+            홈페이지의 데이터 시각화 화면을 화면 구성·버튼 그대로 재현했습니다.
+            각 버튼에 번호(빨간 배지)를 달아 두었고, 화면 아래 범례에서 번호별
+            의미를 설명합니다.
+          </p>
+        </header>
+
+        <!-- ===================== 1. 홈 ===================== -->
+        <section id="home">
+          <div class="section-head">
+            <h2>1. 데이터 시각화 홈 (구성)</h2>
+            <p>데이터 시각화는 실차 · 시스템 · 컴프(성능/신뢰성)로 구성됩니다. 홈에서 시험 유형을 선택해 들어갑니다.</p>
+          </div>
+
+          <div class="rep-frame">
+            <div class="rep-header">
+              <div class="rep-crumb"><span>데이터 시각화</span></div>
+              <div class="rep-titlerow">
+                <span class="rep-appicon">📊</span>
+                <span class="rep-apptitle">데이터 시각화</span>
+              </div>
+            </div>
+            <div class="rep-main">
+              <div class="rep-cardgrid" style="grid-template-columns: repeat(3, minmax(0,1fr));">
+                <!-- 실차 -->
+                <div class="rep-card has-anno" style="opacity:.6;">
+                  <span class="anno tl">1</span>
+                  <div style="font-size:14px;font-weight:600;color:var(--rep-ink);">실차</div>
+                  <div class="rep-card-sub" style="margin-top:2px;">실차 평가 데이터</div>
+                  <span class="rep-pill" style="margin-top:10px;display:inline-block;">준비 중</span>
+                </div>
+                <!-- 시스템 -->
+                <div class="rep-card has-anno" style="cursor:pointer;">
+                  <span class="anno tl">2</span>
+                  <div style="font-size:14px;font-weight:600;color:var(--rep-ink);">시스템</div>
+                  <div class="rep-card-sub" style="margin-top:2px;">시스템 평가 데이터</div>
+                </div>
+                <!-- 컴프 -->
+                <div class="rep-card">
+                  <div style="font-size:14px;font-weight:600;color:var(--rep-ink);">컴프</div>
+                  <div class="rep-card-sub" style="margin-top:2px;margin-bottom:10px;">컴프레서 성능 및 신뢰성</div>
+                  <div class="rep-row" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                    <button class="rep-btn has-anno" style="justify-content:flex-start;border-radius:12px;">성능<span class="anno">3</span></button>
+                    <button class="rep-btn has-anno" style="justify-content:flex-start;border-radius:12px;">신뢰성<span class="anno">4</span></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="legend">
+            <div class="legend-cap">버튼 의미 — 데이터 시각화 홈</div>
+            <div class="legend-row"><div class="legend-num">1</div><div class="legend-note">실차 카드 (준비 중 / 비활성)</div></div>
+            <div class="legend-row"><div class="legend-num">2</div><div class="legend-note">시스템 카드 — 시스템 성능 화면으로 진입</div></div>
+            <div class="legend-row"><div class="legend-num">3</div><div class="legend-note">컴프 → 성능 화면으로 진입</div></div>
+            <div class="legend-row"><div class="legend-num">4</div><div class="legend-note">컴프 → 신뢰성 화면으로 진입</div></div>
+          </div>
+        </section>
+
+        <!-- ===================== 2-1. 파일 업로드 ===================== -->
+        <section id="sys-upload">
+          <div class="section-head">
+            <h2>2. 시스템 성능</h2>
+            <p>시스템 평가 데이터를 업로드 → 매칭 → 표/그래프/선도 → DB화하는 7개 탭으로 구성됩니다. 먼저 상단 탭과 파일 업로드 화면입니다.</p>
+          </div>
+
+          <div class="purpose">
+            <span class="purpose-label">목적</span>
+            <span class="purpose-body">시스템 성능 시험 후 <strong>원인분석·사양 변경사항을 반영한 데이터베이스</strong>를 구축합니다.</span>
+          </div>
+
+          <div class="subhead"><span class="badge-tab">탭 2-1</span> 파일 업로드</div>
+
+          <div class="rep-frame">
+            <div class="rep-header">
+              <div class="rep-crumb"><span>데이터 시각화</span><span class="sep">/</span><span>시스템</span></div>
+              <div class="rep-titlerow">
+                <span class="rep-appicon">📊</span>
+                <div>
+                  <div class="rep-apptitle">데이터 시각화</div>
+                  <div class="rep-appsub">시스템</div>
+                </div>
+                <span class="rep-back has-anno">← 시각화 홈<span class="anno">1</span></span>
+              </div>
+            </div>
+            <div class="rep-main">
+              <!-- 7 탭 -->
+              <div class="rep-tabs">
+                <button class="rep-tab active has-anno">파일 업로드<span class="anno">2</span></button>
+                <button class="rep-tab has-anno">데이터 매칭<span class="anno">3</span></button>
+                <button class="rep-tab has-anno">데이터 표<span class="anno">4</span></button>
+                <button class="rep-tab has-anno">그래프<span class="anno">5</span></button>
+                <button class="rep-tab has-anno">선도화 결과<span class="anno">6</span></button>
+                <button class="rep-tab has-anno">DB화 결과<span class="anno">7</span></button>
+                <button class="rep-tab has-anno">BASE 관리<span class="anno">8</span></button>
+              </div>
+
+              <!-- 업로드 카드 -->
+              <div class="rep-card">
+                <div class="rep-card-title">시험 데이터 업로드</div>
+                <div class="rep-dropzone has-anno">
+                  <span class="anno">9</span>
+                  <div class="rep-dz-title">⬆ Excel 파일 업로드 (다중 선택 가능)</div>
+                  <div class="rep-dz-sub">시험일자_차종_LOT NO_사양_시험항목_냉매 충진량_비고</div>
+                  <div class="rep-dz-note">형식이 달라도 업로드는 됩니다.</div>
+                </div>
+              </div>
+
+              <!-- 업로드 파일 목록 -->
+              <div class="rep-card">
+                <div class="rep-card-title">업로드 파일 (2)</div>
+                <div style="display:flex;flex-direction:column;gap:6px;">
+                  <div class="rep-fileitem sel has-anno"><span>UB(GSL γ1.6, 6단AT,MP, DVE12).xlsx</span><span class="rep-card-sub">3 시트</span><span class="anno">10</span></div>
+                  <div class="rep-fileitem"><span>UB(GSL γ1.7, 6단AT,MP, DVE12).xlsx</span><span class="rep-card-sub">3 시트</span></div>
+                </div>
+              </div>
+
+              <!-- 시트 선택 -->
+              <div class="rep-card">
+                <div class="rep-card-title">시트 선택 - UB(GSL γ1.6, 6단AT,MP, DVE12).xlsx</div>
+                <div class="rep-row" style="display:inline-flex;">
+                  <button class="rep-tab active">Sheet1</button>
+                  <button class="rep-tab">Data</button>
+                  <button class="rep-tab">요약</button>
+                </div>
+              </div>
+
+              <!-- 공통 시험정보 -->
+              <div class="rep-card has-anno">
+                <span class="anno">11</span>
+                <div class="rep-card-title">공통 시험정보</div>
+                <div class="rep-grid" style="grid-template-columns: repeat(3, minmax(0,1fr));">
+                  <label class="rep-field"><span class="rep-label">차종</span><span class="rep-input">&nbsp;</span></label>
+                  <label class="rep-field"><span class="rep-label">구분</span><span class="rep-input" style="color:var(--rep-ink-subtle)">ICE(GSL,DSL,LPG), HEV, EV</span></label>
+                  <label class="rep-field"><span class="rep-label">엔진</span><span class="rep-input" style="color:var(--rep-ink-subtle)">Kappa, Gamma etc.</span></label>
+                  <label class="rep-field"><span class="rep-label">단계</span><span class="rep-input" style="color:var(--rep-ink-subtle)">P1, P2, MP etc.</span></label>
+                  <label class="rep-field"><span class="rep-label">차량번호</span><span class="rep-input">&nbsp;</span></label>
+                </div>
+              </div>
+
+              <!-- 파일별 시험정보 · 부품사양 -->
+              <div class="rep-card">
+                <div class="rep-card-title">파일별 시험정보 · 부품사양</div>
+                <div class="rep-row has-anno" style="display:inline-flex;margin-bottom:10px;">
+                  <span class="anno">12</span>
+                  <button class="rep-tab active">1번 파일</button>
+                  <button class="rep-tab">2번 파일</button>
+                </div>
+                <div class="rep-grid" style="grid-template-columns: repeat(4, minmax(0,1fr));margin-bottom:14px;">
+                  <label class="rep-field"><span class="rep-label">시험항목</span><span class="rep-input">&nbsp;</span></label>
+                  <label class="rep-field"><span class="rep-label">시험일자</span><span class="rep-input">&nbsp;</span></label>
+                  <label class="rep-field"><span class="rep-label">냉매량 (g)</span><span class="rep-input">&nbsp;</span></label>
+                  <label class="rep-field"><span class="rep-label">LOT No</span><span class="rep-input">&nbsp;</span></label>
+                </div>
+                <div style="border-top:1px dashed var(--rep-border);padding-top:12px;">
+                  <div class="rep-row" style="margin-bottom:8px;">
+                    <span style="font-size:13px;font-weight:600;">부품사양 (1번 파일)</span>
+                    <span class="rep-btn-warn" style="font-size:11px;padding:2px 8px;border-radius:6px;">사양이 없는 경우 BASE → 부품 카탈로그에서 추가해 주세요.</span>
+                  </div>
+                  <div class="rep-row has-anno" style="padding:6px 0;">
+                    <span class="anno tl">13</span>
+                    <span style="width:64px;font-size:12px;font-weight:600;">컴프</span>
+                    <span class="rep-chip" style="background:#eef;">내부가변</span>
+                    <span class="rep-chip sel">외부가변</span>
+                    <span class="rep-chip">전동</span>
+                    <span class="rep-chip none">사양없음</span>
+                    <span class="rep-input" style="width:120px;color:var(--rep-ink-subtle);">직접입력</span>
+                    <span class="rep-pill" style="border-color:#86efac;color:#15803d;">양산</span>
+                    <span class="rep-pill" style="border-color:#fdba74;color:#c2410c;">개발</span>
+                    <span class="rep-pill" style="border-color:#d8b4fe;color:#7e22ce;">경쟁사</span>
+                  </div>
+                  <div class="rep-card-sub" style="margin-top:4px;">… 실내 콘덴서 · 콘덴서 · 쿨링팬 · 라디에이터 · IHX · 팽창밸브 · 배터리 칠러 · 에바 · HVAC · 히터코어 · PTC (동일 형식 반복)</div>
+                </div>
+                <div class="rep-row" style="margin-top:14px;">
+                  <button class="rep-btn-primary has-anno">시험정보 확인 완료<span class="anno">14</span></button>
+                  <span class="rep-card-sub">DB화(시계열 CSV 저장)는 "데이터 표" 탭에 있습니다.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="legend">
+            <div class="legend-cap">버튼 의미 — 파일 업로드</div>
+            <div class="legend-row"><div class="legend-num">1</div><div class="legend-note">← 시각화 홈 (홈으로 돌아가기 / 시험 유형 변경)</div></div>
+            <div class="legend-row"><div class="legend-num">2</div><div class="legend-note">파일 업로드 탭</div></div>
+            <div class="legend-row"><div class="legend-num">3</div><div class="legend-note">데이터 매칭 탭</div></div>
+            <div class="legend-row"><div class="legend-num">4</div><div class="legend-note">데이터 표 탭</div></div>
+            <div class="legend-row"><div class="legend-num">5</div><div class="legend-note">그래프 탭</div></div>
+            <div class="legend-row"><div class="legend-num">6</div><div class="legend-note">선도화 결과 탭</div></div>
+            <div class="legend-row"><div class="legend-num">7</div><div class="legend-note">DB화 결과 탭</div></div>
+            <div class="legend-row"><div class="legend-num">8</div><div class="legend-note">BASE 관리 탭 (관리 권한 필요)</div></div>
+            <div class="legend-row"><div class="legend-num">9</div><div class="legend-note">Excel 파일 업로드 영역 (클릭/드래그, 다중 선택)</div></div>
+            <div class="legend-row"><div class="legend-num">10</div><div class="legend-note">업로드된 파일 선택 (시트 수 표시)</div></div>
+            <div class="legend-row"><div class="legend-num">11</div><div class="legend-note">공통 시험정보 입력 (차종/구분/엔진/단계/차량번호)</div></div>
+            <div class="legend-row"><div class="legend-num">12</div><div class="legend-note">파일별 탭 전환</div></div>
+            <div class="legend-row"><div class="legend-num">13</div><div class="legend-note">부품사양 선택 (칩 / 직접입력 / 양산·개발·경쟁사 구분)</div></div>
+            <div class="legend-row"><div class="legend-num">14</div><div class="legend-note">시험정보 확인 완료 (공통+파일별 정보 저장)</div></div>
+          </div>
+        </section>
+
+        <!-- ===================== 2-2. 데이터 매칭 ===================== -->
+        <section id="sys-match">
+          <div class="subhead"><span class="badge-tab">탭 2-2</span> 데이터 매칭</div>
+          <div class="rep-frame">
+            <div class="rep-header">
+              <div class="rep-crumb"><span>데이터 시각화</span><span class="sep">/</span><span>시스템</span></div>
+              <div class="rep-titlerow"><span class="rep-appicon">📊</span><div><div class="rep-apptitle">데이터 시각화</div><div class="rep-appsub">시스템</div></div><span class="rep-back">← 시각화 홈</span></div>
+            </div>
+            <div class="rep-main">
+              <div class="rep-tabs">
+                <button class="rep-tab">파일 업로드</button>
+                <button class="rep-tab active">데이터 매칭</button>
+                <button class="rep-tab">데이터 표</button>
+                <button class="rep-tab">그래프</button>
+                <button class="rep-tab">선도화 결과</button>
+                <button class="rep-tab">DB화 결과</button>
+                <button class="rep-tab">BASE 관리</button>
+              </div>
+              <div class="rep-card">
+                <div class="rep-row" style="margin-bottom:12px;">
+                  <button class="rep-btn-primary has-anno">✔ 매칭 확정<span class="anno">1</span></button>
+                  <button class="rep-btn has-anno">↻ 자동찾기 재실행<span class="anno">2</span></button>
+                  <button class="rep-btn-warn rep-btn has-anno">⇄ 항목매칭 통일 (1번)<span class="anno">3</span></button>
+                </div>
+                <div class="rep-row has-anno" style="display:inline-flex;margin-bottom:8px;">
+                  <span class="anno tl">4</span>
+                  <button class="rep-tab active">1번 파일</button>
+                  <button class="rep-tab">2번 파일</button>
+                </div>
+                <div class="rep-scroll">
+                  <table class="rep-table">
+                    <thead>
+                      <tr>
+                        <th rowspan="2">구분</th><th rowspan="2">항목</th><th rowspan="2">단위</th>
+                        <th colspan="3">데이터 리스트</th><th rowspan="2">매칭<br/>성공</th>
+                      </tr>
+                      <tr><th class="sub">열 자동 체크</th><th class="sub">대체항목</th><th class="sub">데이터</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr><td>온도</td><td>BREA AVG</td><td>℃</td><td class="has-anno" style="text-align:center;"><span class="anno">5</span>☑</td><td class="has-anno"><span class="anno">6</span><span class="rep-input" style="font-size:11px;">— ▾</span></td><td class="muted">12.3 …</td><td style="text-align:center;">✅</td></tr>
+                      <tr><td>온도</td><td>FOOT AVG</td><td>℃</td><td style="text-align:center;">☑</td><td><span class="rep-input" style="font-size:11px;">— ▾</span></td><td class="muted">14.1 …</td><td style="text-align:center;">✅</td></tr>
+                      <tr><td>압력</td><td>Comp In</td><td>kgf/cm²</td><td style="text-align:center;">☑</td><td><span class="rep-input" style="font-size:11px;">— ▾</span></td><td class="muted" style="color:var(--rep-danger);">데이터 없음</td><td></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="rep-card-sub" style="margin-top:8px;">평균 그룹 행에는 <code>직접값/평균값</code> 전환 버튼과 펼침(+/−) 토글이 표시됩니다.</div>
+              </div>
+            </div>
+          </div>
+          <div class="legend">
+            <div class="legend-cap">버튼 의미 — 데이터 매칭</div>
+            <div class="legend-row"><div class="legend-num">1</div><div class="legend-note">매칭 확정 (그래프/선도 사용 가능해짐)</div></div>
+            <div class="legend-row"><div class="legend-num">2</div><div class="legend-note">자동찾기 재실행 (빈 항목만, 수동 매칭 유지)</div></div>
+            <div class="legend-row"><div class="legend-num">3</div><div class="legend-note">항목매칭 통일 — 1번 파일 매칭을 다른 파일에 복사</div></div>
+            <div class="legend-row"><div class="legend-num">4</div><div class="legend-note">파일별 탭 전환 (파일이 2개 이상일 때)</div></div>
+            <div class="legend-row"><div class="legend-num">5</div><div class="legend-note">열 자동 체크 (해당 열 포함/제외)</div></div>
+            <div class="legend-row"><div class="legend-num">6</div><div class="legend-note">대체항목 선택 (매칭 열 수동 변경)</div></div>
+          </div>
+        </section>
+
+        <!-- ===================== 2-3. 데이터 표 ===================== -->
+        <section id="sys-table">
+          <div class="subhead"><span class="badge-tab">탭 2-3</span> 데이터 표</div>
+          <div class="rep-frame">
+            <div class="rep-header">
+              <div class="rep-crumb"><span>데이터 시각화</span><span class="sep">/</span><span>시스템</span></div>
+              <div class="rep-titlerow"><span class="rep-appicon">📊</span><div><div class="rep-apptitle">데이터 시각화</div><div class="rep-appsub">시스템</div></div><span class="rep-back">← 시각화 홈</span></div>
+            </div>
+            <div class="rep-main">
+              <div class="rep-tabs">
+                <button class="rep-tab">파일 업로드</button><button class="rep-tab">데이터 매칭</button>
+                <button class="rep-tab active">데이터 표</button><button class="rep-tab">그래프</button>
+                <button class="rep-tab">선도화 결과</button><button class="rep-tab">DB화 결과</button><button class="rep-tab">BASE 관리</button>
+              </div>
+              <div class="rep-card">
+                <div class="rep-row" style="justify-content:space-between;margin-bottom:12px;">
+                  <div>
+                    <span style="font-size:13px;font-weight:600;">UB(GSL γ1.6 …).xlsx / Sheet1</span>
+                    <span class="rep-card-sub"> · 총 1,820행 (상위 200행 표시)</span>
+                  </div>
+                  <button class="rep-btn-primary has-anno">🗄 DB화 (이 파일 + 시험정보)<span class="anno">1</span></button>
+                </div>
+                <div class="rep-scroll">
+                  <table class="rep-table plain">
+                    <thead><tr><th>#</th><th>Time</th><th>BREA AVG</th><th>FOOT AVG</th><th>Comp In</th><th>Comp Out</th><th>…</th></tr></thead>
+                    <tbody>
+                      <tr><td class="muted">1</td><td>0.0</td><td>25.1</td><td>24.8</td><td>2.10</td><td>14.2</td><td class="muted">…</td></tr>
+                      <tr><td class="muted">2</td><td>0.5</td><td>24.0</td><td>23.9</td><td>2.08</td><td>14.6</td><td class="muted">…</td></tr>
+                      <tr><td class="muted">3</td><td>1.0</td><td>22.7</td><td>22.5</td><td>2.05</td><td>15.1</td><td class="muted">…</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="legend">
+            <div class="legend-cap">버튼 의미 — 데이터 표</div>
+            <div class="legend-row"><div class="legend-num">1</div><div class="legend-note">DB화 — 이 파일의 시계열 CSV + 시험정보·부품사양을 DB에 저장</div></div>
+          </div>
+        </section>
+
+        <!-- ===================== 2-4. 그래프 ===================== -->
+        <section id="sys-graph">
+          <div class="subhead"><span class="badge-tab">탭 2-4</span> 그래프</div>
+          <div class="rep-frame">
+            <div class="rep-header">
+              <div class="rep-crumb"><span>데이터 시각화</span><span class="sep">/</span><span>시스템</span></div>
+              <div class="rep-titlerow"><span class="rep-appicon">📊</span><div><div class="rep-apptitle">데이터 시각화</div><div class="rep-appsub">시스템</div></div><span class="rep-back">← 시각화 홈</span></div>
+            </div>
+            <div class="rep-main">
+              <div class="rep-tabs">
+                <button class="rep-tab">파일 업로드</button><button class="rep-tab">데이터 매칭</button><button class="rep-tab">데이터 표</button>
+                <button class="rep-tab active">그래프</button><button class="rep-tab">선도화 결과</button><button class="rep-tab">DB화 결과</button><button class="rep-tab">BASE 관리</button>
+              </div>
+              <div class="rep-row has-anno" style="display:inline-flex;">
+                <span class="anno tl">1</span>
+                <span class="rep-pill active">☑ 1번 파일</span>
+                <span class="rep-pill">☐ 2번 파일</span>
+              </div>
+              <div style="display:flex;gap:12px;">
+                <div class="rep-card has-anno" style="width:200px;flex-shrink:0;padding:0;overflow:hidden;">
+                  <span class="anno">2</span>
+                  <div style="background:var(--rep-accent);color:#fff;font-size:12px;font-weight:700;padding:8px 10px;">항목 선택</div>
+                  <div style="padding:8px 10px;font-size:12px;display:flex;flex-direction:column;gap:6px;">
+                    <span style="color:var(--rep-ink-muted);font-weight:700;">온도</span>
+                    <span style="background:rgba(15,23,42,.1);border-radius:4px;padding:2px 6px;">BREA AVG</span>
+                    <span>FOOT AVG</span>
+                    <span style="color:var(--rep-ink-muted);font-weight:700;margin-top:4px;">압력</span>
+                    <span>Comp In</span><span>Comp Out</span>
+                  </div>
+                </div>
+                <div style="flex:1;min-width:0;">
+                  <div class="rep-chart">📈 다축 그래프 영역 (Plotly)</div>
+                  <div class="rep-card has-anno" style="margin-top:8px;">
+                    <span class="anno">3</span>
+                    <div class="rep-card-title">X축 범위 설정 (Time, min) · Y축 범위 설정 (항목별 독립)</div>
+                    <div class="rep-row">
+                      <span class="rep-card-sub">Time (min)</span>
+                      <span class="rep-input" style="width:64px;">min</span><span class="rep-input" style="width:64px;">max</span><span class="rep-input" style="width:64px;">분할</span>
+                      <button class="rep-btn-primary">적용</button>
+                      <button class="rep-btn">자동범위</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="rep-card has-anno">
+                <span class="anno">4</span>
+                <div class="rep-card-title">파일별 비교</div>
+                <div class="rep-row">
+                  <span class="rep-input" style="min-width:220px;color:var(--rep-ink-subtle);">비교 항목 선택 ▾</span>
+                  <button class="rep-btn-primary">비교 그래프 그리기</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="legend">
+            <div class="legend-cap">버튼 의미 — 그래프</div>
+            <div class="legend-row"><div class="legend-num">1</div><div class="legend-note">파일 선택 (체크한 파일만 그래프에 표시)</div></div>
+            <div class="legend-row"><div class="legend-num">2</div><div class="legend-note">항목 선택 — 클릭한 항목을 다축 그래프에 추가/제거</div></div>
+            <div class="legend-row"><div class="legend-num">3</div><div class="legend-note">X/Y축 범위·분할 설정 (적용 / 자동범위)</div></div>
+            <div class="legend-row"><div class="legend-num">4</div><div class="legend-note">파일별 비교 — 한 항목을 여러 파일끼리 비교</div></div>
+          </div>
+        </section>
+
+        <!-- ===================== 2-5. 선도화 결과 ===================== -->
+        <section id="sys-diagram">
+          <div class="subhead"><span class="badge-tab">탭 2-5</span> 선도화 결과</div>
+          <div class="rep-frame">
+            <div class="rep-header">
+              <div class="rep-crumb"><span>데이터 시각화</span><span class="sep">/</span><span>시스템</span></div>
+              <div class="rep-titlerow"><span class="rep-appicon">📊</span><div><div class="rep-apptitle">데이터 시각화</div><div class="rep-appsub">시스템</div></div><span class="rep-back">← 시각화 홈</span></div>
+            </div>
+            <div class="rep-main">
+              <div class="rep-tabs">
+                <button class="rep-tab">파일 업로드</button><button class="rep-tab">데이터 매칭</button><button class="rep-tab">데이터 표</button><button class="rep-tab">그래프</button>
+                <button class="rep-tab active">선도화 결과</button><button class="rep-tab">DB화 결과</button><button class="rep-tab">BASE 관리</button>
+              </div>
+              <div class="rep-card">
+                <div class="rep-row" style="align-items:flex-end;">
+                  <label class="rep-field has-anno"><span class="anno tl">1</span><span class="rep-label">냉매</span><span class="rep-input" style="min-width:140px;">R-134a ▾</span></label>
+                  <div class="rep-row has-anno" style="display:inline-flex;">
+                    <span class="anno tl">2</span>
+                    <button class="rep-tab active">P-H 선도</button>
+                    <button class="rep-tab">T-S 선도</button>
+                  </div>
+                  <button class="rep-btn-primary has-anno">선도 그리기<span class="anno">3</span></button>
+                </div>
+              </div>
+              <div class="rep-card" style="background:var(--rep-surface-sidebar);">
+                <div class="rep-row has-anno" style="display:inline-flex;margin-bottom:8px;">
+                  <span class="anno tl">4</span>
+                  <button class="rep-tab active">1번 파일</button><button class="rep-tab">2번 파일</button>
+                </div>
+                <div class="rep-row">
+                  <span class="rep-card-sub">시각 입력 (분):</span>
+                  <span class="rep-input has-anno" style="width:80px;"><span class="anno">5</span>1.0</span>
+                  <span class="rep-card-sub" style="margin-left:auto;">일괄 시각 (분):</span>
+                  <span class="rep-input" style="width:80px;">1.0</span>
+                  <button class="rep-btn has-anno">일괄 적용<span class="anno">6</span></button>
+                </div>
+              </div>
+              <div class="rep-card">
+                <div class="rep-card-title">P-H선도 데이터 정리 — 1번 파일 @ t=1.0 min</div>
+                <div class="rep-scroll">
+                  <table class="rep-table plain">
+                    <thead><tr><th>No.</th><th>항목</th><th>압력 (kgf/cm²)</th><th>온도 (℃)</th><th>엔탈피 (kJ/kg)</th><th>비고</th></tr></thead>
+                    <tbody>
+                      <tr><td>1</td><td>Comp In</td><td>2.05</td><td>10.2</td><td>402.1</td><td class="muted">SH = 5.0 ℃</td></tr>
+                      <tr><td>2</td><td>Comp Out</td><td>15.1</td><td>78.5</td><td>440.6</td><td class="muted"></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div class="rep-chart">🧭 P-H / T-S 선도 영역 (Plotly)</div>
+            </div>
+          </div>
+          <div class="legend">
+            <div class="legend-cap">버튼 의미 — 선도화 결과</div>
+            <div class="legend-row"><div class="legend-num">1</div><div class="legend-note">냉매 선택 (R-134a, R-1234yf 등)</div></div>
+            <div class="legend-row"><div class="legend-num">2</div><div class="legend-note">선도 종류 전환 (P-H / T-S)</div></div>
+            <div class="legend-row"><div class="legend-num">3</div><div class="legend-note">선도 그리기 (표 + 선도 생성)</div></div>
+            <div class="legend-row"><div class="legend-num">4</div><div class="legend-note">파일별 탭 전환</div></div>
+            <div class="legend-row"><div class="legend-num">5</div><div class="legend-note">시각(분) 입력 — 해당 시점의 사이클 표시</div></div>
+            <div class="legend-row"><div class="legend-num">6</div><div class="legend-note">일괄 적용 — 모든 파일에 같은 시각 적용</div></div>
+          </div>
+        </section>
+
+        <!-- ===================== 2-6. DB화 결과 ===================== -->
+        <section id="sys-db">
+          <div class="subhead"><span class="badge-tab">탭 2-6</span> DB화 결과</div>
+          <div class="rep-frame">
+            <div class="rep-header">
+              <div class="rep-crumb"><span>데이터 시각화</span><span class="sep">/</span><span>시스템</span></div>
+              <div class="rep-titlerow"><span class="rep-appicon">📊</span><div><div class="rep-apptitle">데이터 시각화</div><div class="rep-appsub">시스템</div></div><span class="rep-back">← 시각화 홈</span></div>
+            </div>
+            <div class="rep-main">
+              <div class="rep-tabs">
+                <button class="rep-tab">파일 업로드</button><button class="rep-tab">데이터 매칭</button><button class="rep-tab">데이터 표</button><button class="rep-tab">그래프</button><button class="rep-tab">선도화 결과</button>
+                <button class="rep-tab active">DB화 결과</button><button class="rep-tab">BASE 관리</button>
+              </div>
+              <div class="rep-card">
+                <div class="rep-row" style="margin-bottom:6px;">
+                  <span style="font-size:13px;font-weight:600;">저장된 시험 DB (12)</span>
+                  <button class="rep-btn has-anno">↻ 새로고침<span class="anno">1</span></button>
+                  <span class="rep-card-sub">업로드 탭에서 입력 후 데이터 표 탭의 DB화로 저장한 시험 목록입니다.</span>
+                </div>
+                <div class="rep-scroll">
+                  <table class="rep-table plain">
+                    <thead><tr><th>ID</th><th>저장일시</th><th>파일명</th><th>차종</th><th>구분</th><th>엔진</th><th>시험항목</th><th>냉매량</th><th>컴프</th><th>…</th><th>행수</th><th></th></tr></thead>
+                    <tbody>
+                      <tr><td>1</td><td class="muted">2026-06-10 14:22</td><td>UB γ1.6</td><td>UB</td><td>EV</td><td>—</td><td>냉방</td><td>650</td><td>외부가변</td><td class="muted">…</td><td>1820</td><td class="has-anno" style="white-space:nowrap;"><span class="anno">2</span>⬇ 🗑</td></tr>
+                      <tr><td>2</td><td class="muted">2026-06-11 09:03</td><td>UB γ1.7</td><td>UB</td><td>EV</td><td>—</td><td>난방</td><td>650</td><td>외부가변</td><td class="muted">…</td><td>1760</td><td style="white-space:nowrap;">⬇ 🗑</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="legend">
+            <div class="legend-cap">버튼 의미 — DB화 결과</div>
+            <div class="legend-row"><div class="legend-num">1</div><div class="legend-note">새로고침 (저장된 시험 DB 목록 다시 불러오기)</div></div>
+            <div class="legend-row"><div class="legend-num">2</div><div class="legend-note">행별 작업 — CSV 다운로드(⬇) / 삭제(🗑)</div></div>
+          </div>
+        </section>
+
+        <!-- ===================== 2-7. BASE 관리 ===================== -->
+        <section id="sys-base">
+          <div class="subhead"><span class="badge-tab">탭 2-7</span> BASE 관리</div>
+          <div class="rep-frame">
+            <div class="rep-header">
+              <div class="rep-crumb"><span>데이터 시각화</span><span class="sep">/</span><span>시스템</span></div>
+              <div class="rep-titlerow"><span class="rep-appicon">📊</span><div><div class="rep-apptitle">데이터 시각화</div><div class="rep-appsub">시스템</div></div><span class="rep-back">← 시각화 홈</span></div>
+            </div>
+            <div class="rep-main">
+              <div class="rep-tabs">
+                <button class="rep-tab">파일 업로드</button><button class="rep-tab">데이터 매칭</button><button class="rep-tab">데이터 표</button><button class="rep-tab">그래프</button><button class="rep-tab">선도화 결과</button><button class="rep-tab">DB화 결과</button>
+                <button class="rep-tab active">BASE 관리</button>
+              </div>
+              <div class="rep-row has-anno" style="display:inline-flex;">
+                <span class="anno tl">1</span>
+                <button class="rep-tab active">표준 항목</button>
+                <button class="rep-tab">차종</button>
+                <button class="rep-tab">부품 카탈로그</button>
+              </div>
+              <div class="rep-card">
+                <div class="rep-card-title">표준 항목 사전 (48)</div>
+                <div class="rep-grid has-anno" style="grid-template-columns: 1fr 2fr 1fr auto;margin-bottom:10px;">
+                  <span class="anno tl">2</span>
+                  <span class="rep-input" style="color:var(--rep-ink-subtle);">표준명</span>
+                  <span class="rep-input" style="color:var(--rep-ink-subtle);">키워드 (쉼표 구분)</span>
+                  <span class="rep-input" style="color:var(--rep-ink-subtle);">단위</span>
+                  <button class="rep-btn-primary">＋</button>
+                </div>
+                <div class="rep-scroll">
+                  <table class="rep-table plain">
+                    <thead><tr><th>표준명</th><th>키워드</th><th>단위</th><th>분류</th><th></th></tr></thead>
+                    <tbody>
+                      <tr><td>BREA AVG</td><td class="muted">brea, 흡기</td><td>℃</td><td>general</td><td class="has-anno"><span class="anno">3</span>🗑</td></tr>
+                      <tr><td>Comp In</td><td class="muted">comp in, 흡입</td><td>kgf/cm²</td><td>general</td><td>🗑</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="rep-card-sub" style="margin-top:10px;">※ <b>차종</b> 탭: 검색/브랜드·세대·세그먼트 필터 + 차종 추가/삭제 · <b>부품 카탈로그</b> 탭: 12개 부품군별 항목 추가/삭제.</div>
+              </div>
+            </div>
+          </div>
+          <div class="legend">
+            <div class="legend-cap">버튼 의미 — BASE 관리</div>
+            <div class="legend-row"><div class="legend-num">1</div><div class="legend-note">하위 탭 전환 (표준 항목 / 차종 / 부품 카탈로그)</div></div>
+            <div class="legend-row"><div class="legend-num">2</div><div class="legend-note">표준 항목 추가 (표준명/키워드/단위 입력 후 ＋)</div></div>
+            <div class="legend-row"><div class="legend-num">3</div><div class="legend-note">표준 항목 삭제(🗑)</div></div>
+          </div>
+        </section>
+
+        <!-- ===================== 3-1. 컴프 성능 / 데이터 업로드 ===================== -->
+        <section id="comp-upload">
+          <div class="section-head">
+            <h2>3. 컴프레서 성능</h2>
+            <p>마스터/시험 데이터 업로드 → 정리결과 → 결과 분석 → 승인도 성능 기준값 4개 탭으로 구성됩니다. 카테고리(가변·전동)/냉매/용량 필터로 데이터를 조회합니다.</p>
+          </div>
+          <div class="purpose">
+            <span class="purpose-label">목적</span>
+            <span class="purpose-body"><strong>컴프레서 성능 데이터 관리 편의성</strong>을 확보하고, 시스템 단위 시험의 기준 데이터베이스를 구축합니다.</span>
+          </div>
+
+          <div class="subhead"><span class="badge-tab">탭 3-1</span> 데이터 업로드</div>
+          <div class="rep-frame">
+            <div class="rep-header">
+              <div class="rep-crumb"><span>데이터 시각화</span><span class="sep">/</span><span>컴프</span></div>
+              <div class="rep-titlerow"><span class="rep-appicon">📊</span><div><div class="rep-apptitle">데이터 시각화</div><div class="rep-appsub">컴프</div></div><span class="rep-back has-anno">← 시각화 홈<span class="anno">1</span></span></div>
+              <div class="rep-tabs-underline" style="margin-top:10px;">
+                <button class="rep-tab-u active has-anno">성능<span class="anno">2</span></button>
+                <button class="rep-tab-u has-anno">신뢰성<span class="anno">3</span></button>
+              </div>
+            </div>
+            <div class="rep-main">
+              <div class="rep-row" style="justify-content:flex-end;border-bottom:1px solid var(--rep-border);padding-bottom:12px;">
+                <button class="rep-btn has-anno">🗑 선택 데이터 초기화<span class="anno">4</span></button>
+                <button class="rep-btn rep-btn-danger has-anno">🗑 전체 초기화<span class="anno">5</span></button>
+              </div>
+              <div class="rep-tabs-underline">
+                <button class="rep-tab-u active has-anno">데이터 업로드<span class="anno">6</span></button>
+                <button class="rep-tab-u has-anno">정리결과<span class="anno">7</span></button>
+                <button class="rep-tab-u has-anno">결과 분석<span class="anno">8</span></button>
+                <button class="rep-tab-u has-anno">승인도 성능 기준값<span class="anno">9</span></button>
+              </div>
+              <div class="rep-cardgrid" style="grid-template-columns:1fr 1fr;">
+                <!-- 가변 컬럼 (주석) -->
+                <div class="rep-card">
+                  <div class="rep-card-title">가변 마스터 파일 업로드</div>
+                  <div class="rep-dropzone full has-anno" style="padding:16px;"><span class="anno">10</span><div class="rep-dz-title">📄 마스터 파일</div></div>
+                  <div class="rep-row" style="margin-top:10px;"><button class="rep-btn-primary has-anno">⬆ 업로드<span class="anno">11</span></button></div>
+                  <div style="border-top:1px dashed var(--rep-border);margin:14px 0;"></div>
+                  <div class="rep-card-title">가변 컴프 파일 업로드</div>
+                  <div class="rep-row has-anno" style="display:inline-flex;margin-bottom:8px;"><span class="anno tl">12</span><span class="rep-pill active">신냉매</span><span class="rep-pill">구냉매</span></div>
+                  <div class="rep-row has-anno" style="display:flex;margin-bottom:10px;"><span class="anno tl">13</span><span class="rep-pill active">155cc</span><span class="rep-pill">180cc</span><span class="rep-pill">250cc</span></div>
+                  <div class="rep-dropzone full has-anno"><span class="anno">14</span><div class="rep-dz-title">⬆ 시험 데이터 업로드</div><div class="rep-dz-note">(멀티 파일 업로드 가능)</div></div>
+                  <div class="rep-row" style="margin-top:10px;"><button class="rep-btn-primary has-anno">⬆ 업로드<span class="anno">15</span></button></div>
+                  <div class="rep-card-sub" style="margin-top:8px;">파일명 양식: 날짜_시간_시험기_타입_기종_차종_엔진사양_Lot No_목적_비고</div>
+                </div>
+                <!-- 전동 컬럼 (가변과 동일, 배지 없음) -->
+                <div class="rep-card">
+                  <div class="rep-card-title">전동 마스터 파일 업로드</div>
+                  <div class="rep-dropzone full" style="padding:16px;"><div class="rep-dz-title">📄 마스터 파일</div></div>
+                  <div class="rep-row" style="margin-top:10px;"><button class="rep-btn-primary">⬆ 업로드</button></div>
+                  <div style="border-top:1px dashed var(--rep-border);margin:14px 0;"></div>
+                  <div class="rep-card-title">전동 컴프 파일 업로드</div>
+                  <div class="rep-row" style="display:inline-flex;margin-bottom:8px;"><span class="rep-pill active">신냉매</span><span class="rep-pill">구냉매</span></div>
+                  <div class="rep-row" style="display:flex;margin-bottom:10px;"><span class="rep-pill active">155cc</span><span class="rep-pill">180cc</span></div>
+                  <div class="rep-dropzone full"><div class="rep-dz-title">⬆ 시험 데이터 업로드</div><div class="rep-dz-note">(멀티 파일 업로드 가능)</div></div>
+                  <div class="rep-row" style="margin-top:10px;"><button class="rep-btn-primary">⬆ 업로드</button></div>
+                  <div class="rep-card-sub" style="margin-top:8px;">파일명 양식: 날짜_시간_시험기_타입_기종_차종_엔진사양_Lot No_목적_비고</div>
+                </div>
+              </div>
+              <div class="rep-card">
+                <div class="rep-card-title">업로드 결과</div>
+                <div class="rep-scroll">
+                  <table class="rep-table plain">
+                    <thead><tr><th>파일</th><th>상태</th><th>행</th><th>경고</th></tr></thead>
+                    <tbody>
+                      <tr><td>20260610_…_가변_155cc.xlsx</td><td>완료</td><td>1</td><td class="muted">—</td></tr>
+                      <tr><td>20260611_…_가변_155cc.xlsx</td><td>중복</td><td>0</td><td class="muted">중복 키</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="legend">
+            <div class="legend-cap">버튼 의미 — 컴프레서 성능 / 데이터 업로드 (전동 컬럼은 가변과 동일)</div>
+            <div class="legend-row"><div class="legend-num">1</div><div class="legend-note">← 시각화 홈 (홈으로 / 시험 유형 변경)</div></div>
+            <div class="legend-row"><div class="legend-num">2</div><div class="legend-note">성능 탭</div></div>
+            <div class="legend-row"><div class="legend-num">3</div><div class="legend-note">신뢰성 탭으로 전환</div></div>
+            <div class="legend-row"><div class="legend-num">4</div><div class="legend-note">선택 데이터 초기화 (현재 카테고리 데이터+업로드 이력)</div></div>
+            <div class="legend-row"><div class="legend-num">5</div><div class="legend-note">전체 초기화 (모든 컴프 성능 데이터)</div></div>
+            <div class="legend-row"><div class="legend-num">6</div><div class="legend-note">데이터 업로드 탭</div></div>
+            <div class="legend-row"><div class="legend-num">7</div><div class="legend-note">정리결과 탭</div></div>
+            <div class="legend-row"><div class="legend-num">8</div><div class="legend-note">결과 분석 탭</div></div>
+            <div class="legend-row"><div class="legend-num">9</div><div class="legend-note">승인도 성능 기준값 탭</div></div>
+            <div class="legend-row"><div class="legend-num">10</div><div class="legend-note">마스터 파일 선택 영역</div></div>
+            <div class="legend-row"><div class="legend-num">11</div><div class="legend-note">마스터 파일 업로드</div></div>
+            <div class="legend-row"><div class="legend-num">12</div><div class="legend-note">냉매 선택 (신냉매/구냉매) — 업로드 탭 자체 선택</div></div>
+            <div class="legend-row"><div class="legend-num">13</div><div class="legend-note">용량 선택 (155cc 등)</div></div>
+            <div class="legend-row"><div class="legend-num">14</div><div class="legend-note">시험 데이터 업로드 영역 (멀티 파일)</div></div>
+            <div class="legend-row"><div class="legend-num">15</div><div class="legend-note">컴프 파일 업로드</div></div>
+          </div>
+        </section>
+
+        <!-- ===================== 3-2. 컴프 성능 / 정리결과 ===================== -->
+        <section id="comp-result">
+          <div class="subhead"><span class="badge-tab">탭 3-2</span> 정리결과</div>
+          <div class="rep-frame">
+            <div class="rep-header">
+              <div class="rep-crumb"><span>데이터 시각화</span><span class="sep">/</span><span>컴프</span></div>
+              <div class="rep-titlerow"><span class="rep-appicon">📊</span><div><div class="rep-apptitle">데이터 시각화</div><div class="rep-appsub">컴프</div></div><span class="rep-back">← 시각화 홈</span></div>
+              <div class="rep-tabs-underline" style="margin-top:10px;"><button class="rep-tab-u active">성능</button><button class="rep-tab-u">신뢰성</button></div>
+            </div>
+            <div class="rep-main">
+              <!-- 필터바 + 초기화 -->
+              <div style="border-bottom:1px solid var(--rep-border);padding-bottom:12px;">
+                <div class="rep-row" style="justify-content:space-between;align-items:flex-start;">
+                  <div style="display:flex;flex-direction:column;gap:6px;">
+                    <div style="font-size:12px;font-weight:600;color:var(--rep-ink-muted);border-left:3px solid var(--rep-accent);padding-left:8px;">정리결과 조회</div>
+                    <div class="rep-row has-anno" style="display:inline-flex;"><span class="anno tl">1</span><span class="rep-pill active">가변</span><span class="rep-pill">전동</span></div>
+                    <div class="rep-row has-anno" style="display:inline-flex;"><span class="anno tl">2</span><span class="rep-pill active">신냉매</span><span class="rep-pill">구냉매</span></div>
+                    <div class="rep-row has-anno" style="display:inline-flex;"><span class="anno tl">3</span><span class="rep-pill active">155cc</span><span class="rep-pill">180cc</span><span class="rep-pill">250cc</span></div>
+                  </div>
+                  <div class="rep-row"><button class="rep-btn">🗑 선택 데이터 초기화</button><button class="rep-btn rep-btn-danger">🗑 전체 초기화</button></div>
+                </div>
+              </div>
+              <div class="rep-tabs-underline"><button class="rep-tab-u">데이터 업로드</button><button class="rep-tab-u active">정리결과</button><button class="rep-tab-u">결과 분석</button><button class="rep-tab-u">승인도 성능 기준값</button></div>
+              <div class="rep-row" style="justify-content:space-between;">
+                <div class="rep-row">
+                  <button class="rep-btn has-anno">↻ 새로고침<span class="anno">4</span></button>
+                  <button class="rep-btn rep-btn-lime has-anno">⬇ 엑셀 다운로드<span class="anno">5</span></button>
+                </div>
+              </div>
+              <div class="rep-row" style="font-size:11px;color:var(--rep-ink-muted);">
+                <span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:12px;height:12px;background:rgba(249,115,22,.3);border-radius:3px;"></span> 승인도 기준값 위반 (냉방성능·소요동력·체적효율)</span>
+                <span style="display:inline-flex;align-items:center;gap:5px;color:var(--rep-danger);">글자색 — 시험공차 위반 (회전수·토출압력·흡입압력)</span>
+              </div>
+              <div class="rep-card">
+                <div class="rep-card-title">155cc 가변(신냉매) 성능 칼로리메타 데이터 정리본 — A Method 기준</div>
+                <div class="rep-scroll">
+                  <table class="rep-table plain">
+                    <thead>
+                      <tr><th>No</th><th>기종</th><th>평가그룹</th><th>S/N</th><th>차종</th><th>RPM</th><th>Pd</th><th>Ps</th><th>Cap(A)</th><th>Power</th><th>COP</th><th>…</th><th>작업</th></tr>
+                      <tr><th class="muted"></th><th class="muted"></th><th class="muted">ES</th><th class="muted"></th><th class="muted"></th><th class="muted">rpm</th><th class="muted">kgf/cm²</th><th class="muted">kgf/cm²</th><th class="muted">kcal/h</th><th class="muted">kW</th><th class="muted">-</th><th class="muted">…</th><th class="muted"></th></tr>
+                    </thead>
+                    <tbody>
+                      <tr><td>1</td><td>ES155</td><td>ES1</td><td>A001</td><td>UB</td><td>1800</td><td>15.1</td><td>2.05</td><td>5200</td><td>2.1</td><td>2.48</td><td class="muted">…</td><td class="has-anno"><span class="anno">6</span>🗑</td></tr>
+                      <tr><td>2</td><td>ES155</td><td>ES1</td><td>A002</td><td>UB</td><td>1800</td><td>15.3</td><td>2.04</td><td>5180</td><td>2.12</td><td>2.45</td><td class="muted">…</td><td>🗑</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="legend">
+            <div class="legend-cap">버튼 의미 — 정리결과 (상단 필터바·탭은 3-1 참고)</div>
+            <div class="legend-row"><div class="legend-num">1</div><div class="legend-note">카테고리 선택 (가변/전동)</div></div>
+            <div class="legend-row"><div class="legend-num">2</div><div class="legend-note">냉매 선택 (신냉매/구냉매)</div></div>
+            <div class="legend-row"><div class="legend-num">3</div><div class="legend-note">용량 선택 (155cc 등)</div></div>
+            <div class="legend-row"><div class="legend-num">4</div><div class="legend-note">새로고침 (정리결과 다시 불러오기)</div></div>
+            <div class="legend-row"><div class="legend-num">5</div><div class="legend-note">엑셀 다운로드 (해당 카테고리 전체를 xlsx로)</div></div>
+            <div class="legend-row"><div class="legend-num">6</div><div class="legend-note">행 삭제</div></div>
+          </div>
+        </section>
+
+        <!-- ===================== 3-3. 컴프 성능 / 결과 분석 ===================== -->
+        <section id="comp-analysis">
+          <div class="subhead"><span class="badge-tab">탭 3-3</span> 결과 분석</div>
+          <div class="rep-frame">
+            <div class="rep-header">
+              <div class="rep-crumb"><span>데이터 시각화</span><span class="sep">/</span><span>컴프</span></div>
+              <div class="rep-titlerow"><span class="rep-appicon">📊</span><div><div class="rep-apptitle">데이터 시각화</div><div class="rep-appsub">컴프</div></div><span class="rep-back">← 시각화 홈</span></div>
+              <div class="rep-tabs-underline" style="margin-top:10px;"><button class="rep-tab-u active">성능</button><button class="rep-tab-u">신뢰성</button></div>
+            </div>
+            <div class="rep-main">
+              <div style="border-bottom:1px solid var(--rep-border);padding-bottom:12px;">
+                <div class="rep-row" style="justify-content:space-between;align-items:flex-start;">
+                  <div style="display:flex;flex-direction:column;gap:6px;">
+                    <div style="font-size:12px;font-weight:600;color:var(--rep-ink-muted);border-left:3px solid var(--rep-accent);padding-left:8px;">결과 분석 조회</div>
+                    <div class="rep-row" style="display:inline-flex;"><span class="rep-pill active">가변</span><span class="rep-pill">전동</span></div>
+                    <div class="rep-row" style="display:inline-flex;"><span class="rep-pill active">신냉매</span><span class="rep-pill">구냉매</span><span class="rep-pill active" style="margin-left:8px;">155cc</span><span class="rep-pill">180cc</span></div>
+                  </div>
+                  <div class="rep-row"><button class="rep-btn">🗑 선택 데이터 초기화</button><button class="rep-btn rep-btn-danger">🗑 전체 초기화</button></div>
+                </div>
+              </div>
+              <div class="rep-tabs-underline"><button class="rep-tab-u">데이터 업로드</button><button class="rep-tab-u">정리결과</button><button class="rep-tab-u active">결과 분석</button><button class="rep-tab-u">승인도 성능 기준값</button></div>
+              <div class="rep-cardgrid" style="grid-template-columns:repeat(3,1fr);">
+                <div class="rep-card"><div class="rep-card-title">전체 평균</div><div class="rep-card-sub">ES · n · RPM · Pd · … 평균</div></div>
+                <div class="rep-card"><div class="rep-card-title">기종별 평균</div><div class="rep-card-sub">기종 + ES · n · 지표 평균</div></div>
+                <div class="rep-card"><div class="rep-card-title">최신 업로드</div><div class="rep-card-sub">S/N + ES · n · 지표</div></div>
+              </div>
+              <div class="rep-card">
+                <div class="rep-row has-anno" style="margin-bottom:10px;">
+                  <span class="anno tl">1</span>
+                  <span style="font-size:12px;color:var(--rep-ink-muted);">차트 필터:</span>
+                  <span class="rep-pill active">굴삭기 제외</span>
+                  <span class="rep-pill">ES 제외</span>
+                </div>
+                <div class="rep-cardgrid" style="grid-template-columns:repeat(3,1fr);">
+                  <div class="rep-chart" style="min-height:140px;">RPM</div>
+                  <div class="rep-chart" style="min-height:140px;">Pd</div>
+                  <div class="rep-chart" style="min-height:140px;">Cap(A)</div>
+                  <div class="rep-chart" style="min-height:140px;">Power</div>
+                  <div class="rep-chart" style="min-height:140px;">COP</div>
+                  <div class="rep-chart" style="min-height:140px;">Vol.Eff</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="legend">
+            <div class="legend-cap">버튼 의미 — 결과 분석 (필터바·탭은 3-1·3-2 참고)</div>
+            <div class="legend-row"><div class="legend-num">1</div><div class="legend-note">차트 필터 토글 (굴삭기 제외 / ES 제외 / 기종 제외) — 차트에서 해당 기종 제외</div></div>
+          </div>
+        </section>
+
+        <!-- ===================== 3-4. 컴프 성능 / 승인도 성능 기준값 ===================== -->
+        <section id="comp-tol">
+          <div class="subhead"><span class="badge-tab">탭 3-4</span> 승인도 성능 기준값</div>
+          <div class="rep-frame">
+            <div class="rep-header">
+              <div class="rep-crumb"><span>데이터 시각화</span><span class="sep">/</span><span>컴프</span></div>
+              <div class="rep-titlerow"><span class="rep-appicon">📊</span><div><div class="rep-apptitle">데이터 시각화</div><div class="rep-appsub">컴프</div></div><span class="rep-back">← 시각화 홈</span></div>
+              <div class="rep-tabs-underline" style="margin-top:10px;"><button class="rep-tab-u active">성능</button><button class="rep-tab-u">신뢰성</button></div>
+            </div>
+            <div class="rep-main">
+              <div style="border-bottom:1px solid var(--rep-border);padding-bottom:12px;">
+                <div class="rep-row" style="justify-content:space-between;align-items:flex-start;">
+                  <div style="display:flex;flex-direction:column;gap:6px;">
+                    <div style="font-size:12px;font-weight:600;color:var(--rep-ink-muted);border-left:3px solid var(--rep-accent);padding-left:8px;">승인도 성능 기준값 조회</div>
+                    <div class="rep-row" style="display:inline-flex;"><span class="rep-pill active">가변</span><span class="rep-pill">전동</span><span class="rep-pill active" style="margin-left:8px;">신냉매</span><span class="rep-pill">구냉매</span></div>
+                  </div>
+                  <div class="rep-row"><button class="rep-btn">🗑 선택 데이터 초기화</button><button class="rep-btn rep-btn-danger">🗑 전체 초기화</button></div>
+                </div>
+              </div>
+              <div class="rep-tabs-underline"><button class="rep-tab-u">데이터 업로드</button><button class="rep-tab-u">정리결과</button><button class="rep-tab-u">결과 분석</button><button class="rep-tab-u active">승인도 성능 기준값</button></div>
+
+              <!-- 용량별 기준값 -->
+              <div class="rep-card">
+                <div class="rep-card-title">용량별 기준값</div>
+                <div class="rep-row" style="margin-bottom:12px;">
+                  <span class="rep-input" style="color:var(--rep-ink-subtle);">파일 선택…</span>
+                  <button class="rep-btn-primary has-anno">⬆ 일괄 업로드<span class="anno">1</span></button>
+                </div>
+                <div class="rep-scroll">
+                  <table class="rep-table plain">
+                    <thead><tr><th>용량</th><th>기종</th><th>ES</th><th>RPM</th><th>Pd</th><th>Ps</th><th>Cool.capa</th><th>Power</th><th>Torque</th><th>Vol.eff</th></tr></thead>
+                    <tbody>
+                      <tr><td class="has-anno"><span class="anno">2</span><span class="rep-input" style="width:64px;">155</span>cc</td><td><span class="rep-input" style="width:64px;color:var(--rep-ink-subtle);">기종</span></td><td>ES1</td><td><span class="rep-input" style="width:54px;">1800</span></td><td><span class="rep-input" style="width:54px;">15.0</span></td><td><span class="rep-input" style="width:54px;">2.0</span></td><td><span class="rep-input" style="width:54px;">5200</span></td><td><span class="rep-input" style="width:54px;">2.1</span></td><td><span class="rep-input" style="width:54px;">—</span></td><td><span class="rep-input" style="width:54px;">—</span></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="rep-card-sub" style="margin:8px 0;">업로드 결과 - 전체 (n건) · 행을 클릭하면 위 입력칸에 로드됩니다</div>
+                <div class="rep-row"><button class="rep-btn-primary has-anno">💾 기준값 저장<span class="anno">3</span></button></div>
+              </div>
+
+              <!-- 시험공차 -->
+              <div class="rep-card">
+                <div class="rep-card-title">시험공차</div>
+                <div class="rep-row has-anno" style="margin-bottom:12px;">
+                  <span class="anno tl">4</span>
+                  <span class="rep-label" style="margin:0;">카테고리</span>
+                  <span class="rep-input" style="width:120px;color:var(--rep-ink-subtle);">예: ES</span>
+                  <button class="rep-btn">불러오기</button>
+                </div>
+                <div class="rep-row has-anno" style="margin-bottom:10px;">
+                  <span class="anno tl">5</span>
+                  <span class="rep-label" style="margin:0;">구분 행</span>
+                  <button class="rep-btn" style="padding:4px 10px;">−</button>
+                  <span style="font-size:13px;">3</span>
+                  <button class="rep-btn" style="padding:4px 10px;">＋</button>
+                </div>
+                <div class="rep-scroll">
+                  <table class="rep-table plain">
+                    <thead><tr><th>구분</th><th>회전수</th><th>토출압력</th><th>흡입압력</th><th>과열도</th><th>과냉도</th></tr></thead>
+                    <tbody>
+                      <tr><td>ES1</td>
+                        <td class="has-anno"><span class="anno">6</span><span class="rep-input" style="width:46px;">1800</span> <span class="rep-input" style="width:42px;">± ▾</span> <span class="rep-input" style="width:40px;">50</span></td>
+                        <td><span class="rep-input" style="width:46px;">15.0</span> <span class="rep-input" style="width:42px;">± ▾</span> <span class="rep-input" style="width:40px;">0.5</span></td>
+                        <td><span class="rep-input" style="width:46px;">2.0</span> <span class="rep-input" style="width:42px;">± ▾</span> <span class="rep-input" style="width:40px;">0.2</span></td>
+                        <td class="muted">—</td><td class="muted">—</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="rep-row" style="margin-top:10px;"><button class="rep-btn-primary has-anno">💾 프로필 저장<span class="anno">7</span></button></div>
+                <div class="rep-card-sub" style="margin-top:8px;">저장된 시험공차 (기준값 ± 공차) · 행을 클릭하면 위에서 편집됩니다</div>
+              </div>
+            </div>
+          </div>
+          <div class="legend">
+            <div class="legend-cap">버튼 의미 — 승인도 성능 기준값 (필터바·탭은 3-1·3-2 참고)</div>
+            <div class="legend-row"><div class="legend-num">1</div><div class="legend-note">일괄 업로드 (기준값 파일을 한 번에 반영)</div></div>
+            <div class="legend-row"><div class="legend-num">2</div><div class="legend-note">용량 입력 (숫자 → cc)</div></div>
+            <div class="legend-row"><div class="legend-num">3</div><div class="legend-note">기준값 저장 (용량별 승인도 기준값 저장)</div></div>
+            <div class="legend-row"><div class="legend-num">4</div><div class="legend-note">카테고리 입력 + 불러오기 (저장된 시험공차 로드)</div></div>
+            <div class="legend-row"><div class="legend-num">5</div><div class="legend-note">구분 행 추가/삭제 (＋ / −)</div></div>
+            <div class="legend-row"><div class="legend-num">6</div><div class="legend-note">기준값/부호(± · + · − · 편측)/공차 입력</div></div>
+            <div class="legend-row"><div class="legend-num">7</div><div class="legend-note">프로필 저장 (시험공차 저장)</div></div>
+          </div>
+        </section>
+
+        <!-- ===================== 4-1. 신뢰성 / 벤치 선택 ===================== -->
+        <section id="rel-sel">
+          <div class="section-head">
+            <h2>4. 컴프레서 신뢰성</h2>
+            <p>신뢰성 탭은 먼저 벤치 종류(간이벤치 · 복합내구벤치)를 고른 뒤, 각 벤치에서 파일 업로드 → 그래프로 진행합니다.</p>
+          </div>
+          <div class="purpose">
+            <span class="purpose-label">목적</span>
+            <span class="purpose-body"><strong>컴프레서 신뢰성 데이터 관리 편의성</strong>을 확보하고, 개발과정의 데이터베이스를 구축합니다.</span>
+          </div>
+
+          <div class="subhead"><span class="badge-tab">화면 4-1</span> 벤치 선택</div>
+          <div class="rep-frame">
+            <div class="rep-header">
+              <div class="rep-crumb"><span>데이터 시각화</span><span class="sep">/</span><span>컴프</span></div>
+              <div class="rep-titlerow"><span class="rep-appicon">📊</span><div><div class="rep-apptitle">데이터 시각화</div><div class="rep-appsub">컴프</div></div><span class="rep-back">← 시각화 홈</span></div>
+              <div class="rep-tabs-underline" style="margin-top:10px;"><button class="rep-tab-u">성능</button><button class="rep-tab-u active">신뢰성</button></div>
+            </div>
+            <div class="rep-main">
+              <div class="rep-cardgrid" style="grid-template-columns:1fr 1fr;">
+                <div class="rep-card has-anno" style="padding:24px;cursor:pointer;">
+                  <span class="anno tl">1</span>
+                  <div style="font-size:16px;font-weight:600;color:var(--rep-ink);">간이벤치</div>
+                  <div class="rep-card-sub" style="margin-top:4px;">단일 시험기 데이터 (열 매핑 + 3축 그래프)</div>
+                </div>
+                <div class="rep-card has-anno" style="padding:24px;cursor:pointer;">
+                  <span class="anno tl">2</span>
+                  <div style="font-size:16px;font-weight:600;color:var(--rep-ink);">복합내구벤치</div>
+                  <div class="rep-card-sub" style="margin-top:4px;">가변/전동 멀티파일 병합 + 그래프</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="legend">
+            <div class="legend-cap">버튼 의미 — 벤치 선택</div>
+            <div class="legend-row"><div class="legend-num">1</div><div class="legend-note">간이벤치 선택 (단일 시험기 + 열 매핑)</div></div>
+            <div class="legend-row"><div class="legend-num">2</div><div class="legend-note">복합내구벤치 선택 (가변/전동 멀티파일 병합)</div></div>
+          </div>
+        </section>
+
+        <!-- ===================== 4-2. 복합내구벤치 · 파일 업로드 ===================== -->
+        <section id="rel-dur-up">
+          <div class="subhead"><span class="badge-tab">화면 4-2</span> 복합내구벤치 · 파일 업로드</div>
+          <div class="rep-frame">
+            <div class="rep-header">
+              <div class="rep-crumb"><span>데이터 시각화</span><span class="sep">/</span><span>컴프</span></div>
+              <div class="rep-titlerow"><span class="rep-appicon">📊</span><div><div class="rep-apptitle">데이터 시각화</div><div class="rep-appsub">컴프</div></div><span class="rep-back">← 시각화 홈</span></div>
+              <div class="rep-tabs-underline" style="margin-top:10px;"><button class="rep-tab-u">성능</button><button class="rep-tab-u active">신뢰성</button></div>
+            </div>
+            <div class="rep-main">
+              <div class="rep-row" style="border-bottom:1px solid var(--rep-border);padding-bottom:12px;">
+                <button class="rep-btn has-anno">← 뒤로<span class="anno">1</span></button>
+                <span class="rep-pill active has-anno">가변<span class="anno">2</span></span>
+                <span class="rep-pill">전동</span>
+                <span style="margin-left:auto;"></span>
+                <button class="rep-tab active has-anno">파일 업로드<span class="anno">3</span></button>
+                <button class="rep-tab has-anno">그래프<span class="anno">4</span></button>
+              </div>
+              <div class="rep-cardgrid" style="grid-template-columns:1fr 1fr;">
+                <div class="rep-card">
+                  <div class="rep-card-title">파일 업로드</div>
+                  <label class="rep-field has-anno" style="margin-bottom:10px;"><span class="anno tl">5</span><span class="rep-label">시험항목</span><span class="rep-input" style="min-width:180px;color:var(--rep-ink-subtle);">— 선택 — ▾</span></label>
+                  <label class="rep-field has-anno" style="margin-bottom:10px;"><span class="anno tl">6</span><span class="rep-label">시험기</span><span class="rep-input" style="min-width:140px;">1호기 ▾</span></label>
+                  <div class="rep-dropzone full has-anno"><span class="anno">7</span><div class="rep-dz-title">⬆ 파일을 클릭해서 선택</div><div class="rep-dz-note">.csv, .xlsx, .xls (여러 개 가능)</div></div>
+                  <div class="rep-row" style="margin-top:10px;"><button class="rep-btn-primary has-anno">업로드 및 병합<span class="anno">8</span></button></div>
+                </div>
+                <div class="rep-card">
+                  <div class="rep-card-title">시험 정보</div>
+                  <table class="rep-table plain"><tbody>
+                    <tr><td style="color:var(--rep-ink-muted);width:90px;">시험목적</td><td>고압연속</td></tr>
+                    <tr><td style="color:var(--rep-ink-muted);">컴프 기종</td><td>가변</td></tr>
+                    <tr><td style="color:var(--rep-ink-muted);">시험기</td><td>1호기</td></tr>
+                  </tbody></table>
+                </div>
+              </div>
+              <div class="rep-card-sub">시험항목(가변): 고압연속·고속연속·고속단속·액압축·고압저냉매·복합내구·저오일·냉매부족·초고단·사판내구·무오일내구 / <b>전동</b> 선택 시 "시험기"가 "통신방식"(CAN, LIN 에러코드 O/X)으로 바뀝니다.</div>
+            </div>
+          </div>
+          <div class="legend">
+            <div class="legend-cap">버튼 의미 — 복합내구벤치 · 파일 업로드</div>
+            <div class="legend-row"><div class="legend-num">1</div><div class="legend-note">← 뒤로 (벤치 선택 화면으로)</div></div>
+            <div class="legend-row"><div class="legend-num">2</div><div class="legend-note">컴프 기종 전환 (가변/전동)</div></div>
+            <div class="legend-row"><div class="legend-num">3</div><div class="legend-note">파일 업로드 탭</div></div>
+            <div class="legend-row"><div class="legend-num">4</div><div class="legend-note">그래프 탭</div></div>
+            <div class="legend-row"><div class="legend-num">5</div><div class="legend-note">시험항목 선택</div></div>
+            <div class="legend-row"><div class="legend-num">6</div><div class="legend-note">시험기 선택 (전동은 통신방식)</div></div>
+            <div class="legend-row"><div class="legend-num">7</div><div class="legend-note">파일 선택 영역 (멀티 파일)</div></div>
+            <div class="legend-row"><div class="legend-num">8</div><div class="legend-note">업로드 및 병합 (파일 병합·파싱)</div></div>
+          </div>
+        </section>
+
+        <!-- ===================== 4-3. 복합내구벤치 · 그래프 ===================== -->
+        <section id="rel-dur-gr">
+          <div class="subhead"><span class="badge-tab">화면 4-3</span> 복합내구벤치 · 그래프</div>
+          <div class="rep-frame">
+            <div class="rep-header">
+              <div class="rep-crumb"><span>데이터 시각화</span><span class="sep">/</span><span>컴프</span></div>
+              <div class="rep-titlerow"><span class="rep-appicon">📊</span><div><div class="rep-apptitle">데이터 시각화</div><div class="rep-appsub">컴프</div></div><span class="rep-back">← 시각화 홈</span></div>
+              <div class="rep-tabs-underline" style="margin-top:10px;"><button class="rep-tab-u">성능</button><button class="rep-tab-u active">신뢰성</button></div>
+            </div>
+            <div class="rep-main">
+              <div class="rep-row" style="border-bottom:1px solid var(--rep-border);padding-bottom:12px;">
+                <button class="rep-btn">← 뒤로</button>
+                <span class="rep-pill active">가변</span><span class="rep-pill">전동</span>
+                <span style="margin-left:auto;"></span>
+                <button class="rep-tab">파일 업로드</button>
+                <button class="rep-tab active">그래프</button>
+              </div>
+              <div class="rep-card-sub" style="color:var(--rep-success);">1,820행 -&gt; LTTB 1000pt (24개 컬럼)</div>
+              <div class="rep-cardgrid" style="grid-template-columns:1fr 1fr;">
+                <div class="rep-card">
+                  <div class="rep-card-title">압력</div>
+                  <div class="rep-chart" style="min-height:150px;">📈 dual-Y 그래프</div>
+                  <div class="rep-row has-anno" style="margin-top:8px;font-size:12px;align-items:center;">
+                    <span class="anno tl">1</span>
+                    <span style="font-weight:600;">Y좌</span><span class="rep-input" style="width:46px;">min</span>~<span class="rep-input" style="width:46px;">max</span>/<span class="rep-input" style="width:38px;">div</span>
+                    <span style="font-weight:600;">Y우</span><span class="rep-input" style="width:46px;">min</span>~<span class="rep-input" style="width:46px;">max</span>
+                    <button class="rep-btn-primary" style="padding:4px 10px;">적용</button>
+                    <button class="rep-btn" style="padding:4px 10px;">자동</button>
+                  </div>
+                </div>
+                <div class="rep-card"><div class="rep-card-title">온도</div><div class="rep-chart" style="min-height:150px;">📈</div></div>
+                <div class="rep-card"><div class="rep-card-title">냉매유량</div><div class="rep-chart" style="min-height:150px;">📈</div></div>
+                <div class="rep-card"><div class="rep-card-title">차압/ECV</div><div class="rep-chart" style="min-height:150px;">📈</div></div>
+                <div class="rep-card"><div class="rep-card-title">SC/SH</div><div class="rep-chart" style="min-height:150px;">📈</div></div>
+              </div>
+              <div class="rep-card">
+                <div class="rep-card-title">개별 항목 선택</div>
+                <div class="rep-row has-anno"><span class="anno tl">2</span><span class="rep-pill active">Pd</span><span class="rep-pill">Ps</span><span class="rep-pill">Td</span><span class="rep-pill">Ts</span><span class="rep-pill">RPM</span><span class="rep-pill">ECV</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="legend">
+            <div class="legend-cap">버튼 의미 — 복합내구벤치 · 그래프 (헤더 버튼은 4-2 참고)</div>
+            <div class="legend-row"><div class="legend-num">1</div><div class="legend-note">축 범위·분할 설정 + 적용 / 자동 (각 그래프 Y좌·Y우·X축 제어)</div></div>
+            <div class="legend-row"><div class="legend-num">2</div><div class="legend-note">개별 항목 선택 (단일 컬럼 그래프 표시)</div></div>
+          </div>
+        </section>
+
+        <!-- ===================== 4-4. 간이벤치 · 파일 업로드 ===================== -->
+        <section id="rel-sim-up">
+          <div class="subhead"><span class="badge-tab">화면 4-4</span> 간이벤치 · 파일 업로드</div>
+          <div class="rep-frame">
+            <div class="rep-header">
+              <div class="rep-crumb"><span>데이터 시각화</span><span class="sep">/</span><span>컴프</span></div>
+              <div class="rep-titlerow"><span class="rep-appicon">📊</span><div><div class="rep-apptitle">데이터 시각화</div><div class="rep-appsub">컴프</div></div><span class="rep-back">← 시각화 홈</span></div>
+              <div class="rep-tabs-underline" style="margin-top:10px;"><button class="rep-tab-u">성능</button><button class="rep-tab-u active">신뢰성</button></div>
+            </div>
+            <div class="rep-main">
+              <div class="rep-row" style="border-bottom:1px solid var(--rep-border);padding-bottom:12px;">
+                <button class="rep-btn has-anno">← 뒤로<span class="anno">1</span></button>
+                <span style="font-size:14px;font-weight:600;">간이벤치</span>
+                <span style="margin-left:auto;"></span>
+                <button class="rep-tab active has-anno">파일 업로드<span class="anno">2</span></button>
+                <button class="rep-tab has-anno">그래프<span class="anno">3</span></button>
+              </div>
+              <div class="rep-cardgrid" style="grid-template-columns:1fr 1fr;">
+                <div class="rep-card">
+                  <div class="rep-card-title">파일 업로드</div>
+                  <label class="rep-field has-anno" style="margin-bottom:10px;"><span class="anno tl">4</span><span class="rep-label">시험항목</span><span class="rep-input" style="min-width:180px;color:var(--rep-ink-subtle);">— 항목 선택 — ▾</span></label>
+                  <div class="rep-field has-anno" style="margin-bottom:10px;">
+                    <span class="anno tl">5</span>
+                    <span class="rep-label">시험기</span>
+                    <div class="rep-row"><span class="rep-pill active">1호기</span><span class="rep-pill">2호기</span><span class="rep-pill">3호기</span><span class="rep-pill">4호기</span></div>
+                  </div>
+                  <div class="rep-dropzone full has-anno"><span class="anno">6</span><div class="rep-dz-title">⬆ 파일을 클릭해서 선택</div><div class="rep-dz-note">.csv, .xlsx, .xls</div></div>
+                  <div class="rep-row" style="margin-top:10px;"><button class="rep-btn-primary has-anno">업로드 및 병합<span class="anno">7</span></button></div>
+                </div>
+                <div class="rep-card">
+                  <div class="rep-card-title">열 매핑 · 프리셋</div>
+                  <div class="rep-row has-anno" style="margin-bottom:10px;">
+                    <span class="anno tl">8</span>
+                    <span class="rep-pill active">1호기</span><span class="rep-pill">2호기</span><span class="rep-pill">3호기</span><span class="rep-pill">4호기</span>
+                    <button class="rep-btn has-anno" style="margin-left:6px;">현재 매핑 저장<span class="anno">9</span></button>
+                  </div>
+                  <div class="rep-row has-anno" style="margin-bottom:10px;">
+                    <span class="anno tl">10</span>
+                    <span class="rep-field" style="width:80px;"><span class="rep-label">토출압력</span><span class="rep-input" style="text-align:center;">D</span></span>
+                    <span class="rep-field" style="width:80px;"><span class="rep-label">흡입압력</span><span class="rep-input" style="text-align:center;">E</span></span>
+                    <span class="rep-field" style="width:80px;"><span class="rep-label">Crank 압력</span><span class="rep-input" style="text-align:center;">F</span></span>
+                    <span class="rep-field" style="width:80px;"><span class="rep-label">토출온도</span><span class="rep-input" style="text-align:center;">H</span></span>
+                    <span class="rep-field" style="width:80px;"><span class="rep-label">흡입온도</span><span class="rep-input" style="text-align:center;">I</span></span>
+                    <span class="rep-field" style="width:80px;"><span class="rep-label">표면온도</span><span class="rep-input" style="text-align:center;">J</span></span>
+                    <span class="rep-field" style="width:80px;"><span class="rep-label">RPM</span><span class="rep-input" style="text-align:center;">K</span></span>
+                  </div>
+                  <div class="rep-row has-anno">
+                    <span class="anno tl">11</span>
+                    <span class="rep-label" style="margin:0;">헤더 행</span>
+                    <span class="rep-input" style="width:54px;text-align:center;">0</span>
+                    <span class="rep-input" style="width:54px;text-align:center;">0</span>
+                    <span class="rep-card-sub">비우면(0) 자동 감지</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="legend">
+            <div class="legend-cap">버튼 의미 — 간이벤치 · 파일 업로드</div>
+            <div class="legend-row"><div class="legend-num">1</div><div class="legend-note">← 뒤로 (벤치 선택 화면으로)</div></div>
+            <div class="legend-row"><div class="legend-num">2</div><div class="legend-note">파일 업로드 탭</div></div>
+            <div class="legend-row"><div class="legend-num">3</div><div class="legend-note">그래프 탭</div></div>
+            <div class="legend-row"><div class="legend-num">4</div><div class="legend-note">시험항목 선택</div></div>
+            <div class="legend-row"><div class="legend-num">5</div><div class="legend-note">시험기 선택 (1~4호기)</div></div>
+            <div class="legend-row"><div class="legend-num">6</div><div class="legend-note">파일 선택 영역 (멀티)</div></div>
+            <div class="legend-row"><div class="legend-num">7</div><div class="legend-note">업로드 및 병합 (헤더 행 자동 감지)</div></div>
+            <div class="legend-row"><div class="legend-num">8</div><div class="legend-note">프리셋 선택 (호기별 열 매핑 불러오기)</div></div>
+            <div class="legend-row"><div class="legend-num">9</div><div class="legend-note">현재 매핑 저장 (프리셋에 저장)</div></div>
+            <div class="legend-row"><div class="legend-num">10</div><div class="legend-note">열 매핑 입력 (각 항목의 엑셀 열 문자 D/E/H…)</div></div>
+            <div class="legend-row"><div class="legend-num">11</div><div class="legend-note">헤더 행 지정 (0이면 자동 감지)</div></div>
+          </div>
+        </section>
+
+        <!-- ===================== 4-5. 간이벤치 · 그래프 ===================== -->
+        <section id="rel-sim-gr">
+          <div class="subhead"><span class="badge-tab">화면 4-5</span> 간이벤치 · 그래프</div>
+          <div class="rep-frame">
+            <div class="rep-header">
+              <div class="rep-crumb"><span>데이터 시각화</span><span class="sep">/</span><span>컴프</span></div>
+              <div class="rep-titlerow"><span class="rep-appicon">📊</span><div><div class="rep-apptitle">데이터 시각화</div><div class="rep-appsub">컴프</div></div><span class="rep-back">← 시각화 홈</span></div>
+              <div class="rep-tabs-underline" style="margin-top:10px;"><button class="rep-tab-u">성능</button><button class="rep-tab-u active">신뢰성</button></div>
+            </div>
+            <div class="rep-main">
+              <div class="rep-row" style="border-bottom:1px solid var(--rep-border);padding-bottom:12px;">
+                <button class="rep-btn">← 뒤로</button>
+                <span style="font-size:14px;font-weight:600;">간이벤치</span>
+                <span style="margin-left:auto;"></span>
+                <button class="rep-tab">파일 업로드</button>
+                <button class="rep-tab active">그래프</button>
+              </div>
+              <div class="rep-card-sub" style="color:var(--rep-success);">1,200행 -&gt; LTTB 1000pt</div>
+              <div class="rep-card">
+                <div class="rep-chart" style="min-height:240px;">📈 3축 그래프 (압력 / 온도 / RPM)</div>
+                <div class="rep-row has-anno" style="margin-top:8px;font-size:12px;align-items:center;flex-wrap:wrap;">
+                  <span class="anno tl">1</span>
+                  <span style="font-weight:600;">Y좌(압력)</span><span class="rep-input" style="width:44px;">min</span>~<span class="rep-input" style="width:44px;">max</span>/<span class="rep-input" style="width:36px;">div</span>
+                  <span style="font-weight:600;">Y우1(온도)</span><span class="rep-input" style="width:44px;">min</span>~<span class="rep-input" style="width:44px;">max</span>
+                  <span style="font-weight:600;">Y우2(RPM)</span><span class="rep-input" style="width:44px;">min</span>~<span class="rep-input" style="width:44px;">max</span>
+                  <button class="rep-btn-primary" style="padding:4px 10px;">적용</button>
+                  <button class="rep-btn" style="padding:4px 10px;">자동</button>
+                </div>
+              </div>
+              <div class="rep-card">
+                <div class="rep-card-title">개별 항목</div>
+                <div class="rep-row has-anno"><span class="anno tl">2</span><span class="rep-pill active">토출압력</span><span class="rep-pill">흡입압력</span><span class="rep-pill">토출온도</span><span class="rep-pill">RPM</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="legend">
+            <div class="legend-cap">버튼 의미 — 간이벤치 · 그래프</div>
+            <div class="legend-row"><div class="legend-num">1</div><div class="legend-note">3축(압력/온도/RPM) 범위·분할 설정 + 적용 / 자동</div></div>
+            <div class="legend-row"><div class="legend-num">2</div><div class="legend-note">개별 항목 선택 (단일 컬럼 그래프)</div></div>
+          </div>
+        </section>
+
+        <!-- ===================== 실차 ===================== -->
+        <section id="vehicle">
+          <div class="section-head"><h2>실차</h2></div>
+          <div class="callout soon">실차 평가 데이터 — 홈 화면에서 "준비 중"으로 표시되는 단계입니다.</div>
+        </section>
+
+        <div class="footer">데이터 시각화 사용 가이드 · 화면은 실제 앱 코드(React)에서 구성·버튼·라벨을 추출해 재현했습니다.</div>
+      </main>
+    </div>
+
+  </body>
+</html>

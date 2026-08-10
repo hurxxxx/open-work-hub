@@ -7,30 +7,34 @@ import {
   parseDateOnlyParts,
 } from '@/src/platform/time/time-utils';
 
-export const ISSUE_STATUSES = ['backlog', 'todo', 'in_progress', 'done', 'canceled'] as const;
+const TASK_STATUSES = ['todo', 'in_progress', 'review', 'done', 'complete'] as const;
 
-export const STATUS_TONE: Record<string, 'neutral' | 'accent' | 'success' | 'warning' | 'danger'> = {
-  backlog: 'neutral',
+const STATUS_TONE: Record<string, 'neutral' | 'accent' | 'success' | 'warning' | 'danger'> = {
   todo: 'neutral',
   in_progress: 'accent',
+  review: 'accent',
   done: 'success',
   canceled: 'danger',
-};
-
-export const STATUS_DOT_COLOR: Record<string, string> = {
-  backlog: 'bg-gray-500',
-  todo: 'bg-gray-400',
-  in_progress: 'bg-blue-500',
-  done: 'bg-green-500',
-  canceled: 'bg-red-500',
+  complete: 'success',
 };
 
 const CATEGORY_TONE: Record<string, 'neutral' | 'accent' | 'success' | 'warning' | 'danger'> = {
-  backlog: 'neutral',
+  not_started: 'neutral',
   active: 'accent',
   done: 'success',
-  canceled: 'danger',
+  closed: 'success',
 };
+
+function findTaskListStatus(
+  slug: string,
+  taskListStatuses?: PmsTaskListStatus[],
+): PmsTaskListStatus | undefined {
+  return taskListStatuses?.find((status) => status.slug === slug);
+}
+
+function formatFallbackStatusLabel(slug: string): string {
+  return slug.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+}
 
 /** Resolve tone for a status slug, falling back to custom status category */
 export function getStatusTone(
@@ -38,66 +42,53 @@ export function getStatusTone(
   taskListStatuses?: PmsTaskListStatus[],
 ): 'neutral' | 'accent' | 'success' | 'warning' | 'danger' {
   if (STATUS_TONE[slug]) return STATUS_TONE[slug];
-  const ps = taskListStatuses?.find(s => s.slug === slug);
-  return ps ? (CATEGORY_TONE[ps.category] ?? 'neutral') : 'neutral';
-}
-
-/** Resolve dot color for a status slug */
-export function getStatusDotColor(slug: string, taskListStatuses?: PmsTaskListStatus[]): string {
-  if (STATUS_DOT_COLOR[slug]) return STATUS_DOT_COLOR[slug];
-  const ps = taskListStatuses?.find(s => s.slug === slug);
-  if (ps) return ''; // will use inline style with ps.color instead
-  return 'bg-gray-500';
+  const status = findTaskListStatus(slug, taskListStatuses);
+  return status ? (CATEGORY_TONE[status.category] ?? 'neutral') : 'neutral';
 }
 
 /** Get ordered status slugs from task list statuses, falling back to defaults */
 export function getStatusSlugs(taskListStatuses?: PmsTaskListStatus[]): string[] {
   if (taskListStatuses && taskListStatuses.length > 0) {
-    return taskListStatuses.map(s => s.slug);
+    return taskListStatuses.map((status) => status.slug);
   }
-  return [...ISSUE_STATUSES];
+  return [...TASK_STATUSES];
 }
 
 /** Get status display name */
 export function getStatusLabel(slug: string, taskListStatuses?: PmsTaskListStatus[]): string {
-  const ps = taskListStatuses?.find(s => s.slug === slug);
-  if (ps) return ps.name;
-  return slug.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  const status = findTaskListStatus(slug, taskListStatuses);
+  return status?.name ?? formatFallbackStatusLabel(slug);
+}
+
+/** Pick the default status for newly created tasks without reintroducing backlog. */
+export function getDefaultTaskStatus(taskListStatuses?: PmsTaskListStatus[]): string {
+  const slugs = getStatusSlugs(taskListStatuses);
+  if (slugs.includes('todo')) return 'todo';
+  return taskListStatuses?.find((status) => status.category === 'active')?.slug ?? slugs[0] ?? 'todo';
 }
 
 export const PRIORITY_COLOR: Record<string, string> = {
-  critical: 'text-red-500',
+  critical: 'text-app-danger',
   high: 'text-orange-500',
   medium: 'text-blue-500',
-  low: 'text-gray-500',
+  low: 'text-app-ink/55',
 };
 
-/** Generate initials from a full name, e.g. "John Doe" → "JD" */
+/** Generate a compact avatar initial from a full name. */
 export function initials(name: string | null | undefined): string {
   if (!name) return '?';
-  return name
-    .split(' ')
-    .map(w => w[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
+  return Array.from(name.trim())[0]?.toUpperCase() ?? '?';
 }
 
-/** Format ISO date string for display, e.g. "2024-04-10" → "Apr 10" */
+/** Format ISO date string using the user's date display preference. */
 export function formatDate(isoDate: string | null | undefined): string {
   if (!isoDate) return '';
   if (parseDateOnlyParts(isoDate)) {
     return formatDateOnly(isoDate, {
       fallback: isoDate,
-      locale: 'en-US',
-      month: 'short',
-      day: 'numeric',
     });
   }
   return formatDateTime(isoDate, {
     fallback: isoDate,
-    locale: 'en-US',
-    month: 'short',
-    day: 'numeric',
   });
 }

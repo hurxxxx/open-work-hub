@@ -8,10 +8,10 @@ export interface MetricInlineProps {
 export function MetricInline({ label, value }: MetricInlineProps) {
   return (
     <div className="grid gap-0.5">
-      <span className="text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-[var(--ui-color-ink-subtle)]">
+      <span className="text-[length:var(--ui-text-overline)] font-semibold uppercase tracking-[0.08em] text-[var(--ui-color-ink-subtle)]">
         {label}
       </span>
-      <strong className="text-[0.86rem] text-[var(--ui-color-ink)]">{value}</strong>
+      <strong className="text-[length:var(--ui-text-body)] text-[var(--ui-color-ink)]">{value}</strong>
     </div>
   );
 }

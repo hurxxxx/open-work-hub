@@ -9,7 +9,7 @@ export const Divider = createReactBlockSpec(
   {
     render: () => (
       <div className="py-2">
-        <hr className="border-t border-neutral-700" />
+        <hr className="border-t border-ui-border" />
       </div>
     ),
   },

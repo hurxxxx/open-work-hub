@@ -1,28 +1,29 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 import logging
 import time
 
+from celery.signals import worker_process_init
 from opentelemetry.trace import SpanKind
-from sqlalchemy import Engine, and_, create_engine, func, or_, select, update
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session
 
+from ai_do_worker.celery_app import celery_app
+from ai_do_worker.runtime import db_session as _db_session
 from ai_do_api.core.telemetry import start_as_current_span
-from ai_do_api.domains.rag.contracts import RagJobStatus, RagSyncLane, RagSyncOperation
-from ai_do_api.domains.docs.models import DocMeetingAccess
-from ai_do_api.domains.docs.rag_sync import MEETING_VISIBILITY_SCOPE
-from ai_do_api.domains.pms.models import Issue, IssueLabel, IssueUserAccess
-from ai_do_api.domains.pms.rag_sync import (
-    PMS_LABEL_RECOMPUTE_SCOPE,
-    PMS_MEETING_VISIBILITY_SCOPE,
-    PMS_MILESTONE_RECOMPUTE_SCOPE,
-    PMS_TASK_LIST_RECOMPUTE_SCOPE,
+from ai_do_api.domains.auth.workspace_app_gate import is_platform_app_enabled
+from ai_do_api.domains.auth.workspace_apps import get_workspace_app_catalog_item
+from ai_do_api.domains.rag.contracts import (
+    RagJobStatus,
+    RagScopeKind,
+    RagSyncLane,
+    RagSyncOperation,
 )
-from ai_do_api.domains.rag.docs_projection import NATIVE_DOC_RESOURCE_TYPE, load_native_doc_projection
-from ai_do_api.domains.rag.meeting_projection import MEETING_RESOURCE_TYPE, load_meeting_projection
+from ai_do_api.domains.rag.default_source_adapters import ensure_rag_source_adapters_registered
 from ai_do_api.domains.rag.metrics import (
     record_sync_job_lag,
     record_sync_job_result,
@@ -30,13 +31,15 @@ from ai_do_api.domains.rag.metrics import (
 )
 from ai_do_api.domains.rag.models import RagSyncJob, RagVisibilityRecomputeJob
 from ai_do_api.domains.rag.outbox import enqueue_rag_sync_job
-from ai_do_api.domains.rag.planner_projection import (
-    PLANNER_EVENT_RESOURCE_TYPE,
-    load_planner_event_projection,
+from ai_do_api.domains.rag.job_publication import (
+    RagJobPublication,
+    resolve_publication_target,
 )
-from ai_do_api.domains.rag.pms_projection import (
-    PMS_ISSUE_RESOURCE_TYPE,
-    load_issue_projection,
+from ai_do_api.domains.rag.job_state import merge_recompute_cursor
+from ai_do_api.domains.rag.source_adapter_registry import (
+    get_rag_resource_adapter,
+    get_rag_visibility_scope_adapter,
+    rag_resource_adapters,
 )
 from ai_do_api.domains.rag.providers import (
     RagProviderConfigurationError,
@@ -45,41 +48,63 @@ from ai_do_api.domains.rag.providers import (
     RagProviderTransientError,
 )
 from ai_do_api.domains.rag.providers.base import RagProviderBundle
-from ai_do_api.domains.rag.runtime import build_provider_bundle, resolve_default_collection_name
+from ai_do_api.domains.rag.runtime import (
+    build_partitioned_rag_projection_service,
+    build_provider_bundle,
+    preload_rag_runtime,
+    resolve_default_collection_name,
+)
 from ai_do_api.domains.rag.service import RagService
 from ai_do_api.domains.rag.telemetry import rag_span_attributes
-from ai_do_api.domains.meeting.models import Meeting, MeetingDocLink, MeetingTaskLink
-from ai_do_worker.celery_app import celery_app
+from ai_do_api.domains.retrieval.models import (
+    RetrievalProjectionEvent,
+    RetrievalProjectionHead,
+)
+from ai_do_api.domains.retrieval.projection_fencing import ProjectionEventRef
+from ai_do_api.domains.retrieval.runtime_binding import (
+    PartitionedRetrievalRuntimeUnavailable,
+    resolve_active_partitioned_generation_pair,
+)
+from ai_do_api.domains.source_access.resource_types import (
+    FILE_MANAGER_FILE_RESOURCE_TYPE,
+)
 from ai_do_worker.settings import get_settings
 
 
 logger = logging.getLogger(__name__)
+OUTBOX_REPUBLISH_BATCH_SIZE = 100
+FILES_OPERATOR_GATE_PAUSE_SECONDS = 60
+
+
+class RagProjectionIdentityError(RuntimeError):
+    pass
+
+
+class RagProjectionSuperseded(RuntimeError):
+    pass
+
+
+class RagPlatformAppDisabled(RuntimeError):
+    def __init__(self, app_id: str) -> None:
+        super().__init__(app_id)
+        self.app_id = app_id
+
+
+@dataclass(frozen=True, slots=True)
+class _RagProjectionRuntime:
+    service: RagService
+    collection: str
 
 
 @lru_cache(maxsize=1)
-def _engine() -> Engine:
-    settings = get_settings()
-    return create_engine(settings.postgres_dsn, pool_pre_ping=True)
-
-
-@lru_cache(maxsize=1)
-def _session_factory():
-    return sessionmaker(bind=_engine(), class_=Session)
-
-
-def _db_session() -> Session:
-    return _session_factory()()
-
-
-@lru_cache(maxsize=1)
-def _provider_bundle() -> RagProviderBundle:
+def provider_bundle() -> RagProviderBundle:
     return build_provider_bundle(get_settings())
 
 
 @lru_cache(maxsize=1)
 def _rag_service() -> RagService:
     settings = get_settings()
-    providers = _provider_bundle()
+    providers = provider_bundle()
     return RagService(
         vector_index=providers.vector_index,
         embedding_client=providers.embedding,
@@ -87,6 +112,14 @@ def _rag_service() -> RagService:
         rerank_client=providers.rerank,
         default_collection=resolve_default_collection_name(settings),
     )
+
+
+@worker_process_init.connect
+def _preload_rag_models_on_worker_startup(**_: object) -> None:
+    settings = get_settings()
+    if not settings.rag_enabled or not settings.rag_preload_on_startup:
+        return
+    preload_rag_runtime(settings, providers=provider_bundle())
 
 
 def _job_lag_ms(created_at: datetime) -> int:
@@ -130,6 +163,25 @@ def sync_backfill_resource(self, job_id: str) -> str:
     )
 
 
+@celery_app.task(
+    name="rag.republish_pending_jobs",
+    task_time_limit=60,
+    task_soft_time_limit=45,
+)
+def republish_pending_rag_jobs(limit: int = OUTBOX_REPUBLISH_BATCH_SIZE) -> int:
+    session = _db_session()
+    try:
+        publications = _due_pending_rag_publications(session, limit=limit)
+    finally:
+        session.close()
+
+    for publication in publications:
+        _publish_rag_job_publication(publication)
+    if publications:
+        logger.info("Republished %s due or stale RAG job(s)", len(publications))
+    return len(publications)
+
+
 def _run_sync_job(
     *,
     task,
@@ -148,6 +200,10 @@ def _run_sync_job(
             logger.warning("RAG sync job not found: %s", job_id)
             record_sync_job_result(status="missing", job_kind=job_kind)
             return "missing"
+        if claim_outcome == "platform-disabled":
+            logger.info("Pausing RAG sync while its platform app is disabled: %s", job_id)
+            record_sync_job_result(status="platform_disabled", job_kind=job_kind)
+            return "platform-disabled"
         if claim_outcome != "claimed" or job is None:
             logger.info("Ignoring RAG sync job already claimed or closed: %s", job_id)
             record_sync_job_result(status="ignored", job_kind=job_kind)
@@ -230,7 +286,114 @@ def _execute_sync_job(
             _mark_sync_job(session, job, status=RagJobStatus.CANCELLED.value)
             return "disabled"
         try:
-            result = _process_sync_job(session, job)
+            stale_reason = _initial_projection_fence_stale_reason(session, job)
+            if stale_reason is not None:
+                record_sync_job_result(
+                    status="superseded",
+                    workspace_id=job.workspace_id,
+                    resource_type=job.resource_type,
+                    resource_id=job.resource_id,
+                    operation=job.operation,
+                    job_lane=job.lane,
+                    job_kind=job_kind,
+                )
+                _mark_sync_job(
+                    session,
+                    job,
+                    status=RagJobStatus.CANCELLED.value,
+                    last_error=f"superseded_by_projection_head:initial:{stale_reason}",
+                )
+                return "superseded"
+            superseding = _latest_superseding_sync_job(session, job)
+            if superseding is not None:
+                record_sync_job_result(
+                    status="superseded",
+                    workspace_id=job.workspace_id,
+                    resource_type=job.resource_type,
+                    resource_id=job.resource_id,
+                    operation=job.operation,
+                    job_lane=job.lane,
+                    job_kind=job_kind,
+                )
+                _cancel_superseded_sync_job(
+                    session,
+                    job,
+                    superseding_job=superseding,
+                    phase="before_mutation",
+                )
+                return "superseded"
+            try:
+                result = _process_sync_job(session, job)
+            except RagPlatformAppDisabled as error:
+                job.attempts = max(job.attempts - 1, 0)
+                _mark_sync_job(
+                    session,
+                    job,
+                    status=RagJobStatus.PENDING.value,
+                    last_error=f"platform_app_disabled:{error.app_id}",
+                )
+                record_sync_job_result(
+                    status="platform_disabled",
+                    workspace_id=job.workspace_id,
+                    resource_type=job.resource_type,
+                    resource_id=job.resource_id,
+                    operation=job.operation,
+                    job_lane=job.lane,
+                    job_kind=job_kind,
+                )
+                return "platform-disabled"
+            except RagProjectionSuperseded as error:
+                record_sync_job_result(
+                    status="superseded",
+                    workspace_id=job.workspace_id,
+                    resource_type=job.resource_type,
+                    resource_id=job.resource_id,
+                    operation=job.operation,
+                    job_lane=job.lane,
+                    job_kind=job_kind,
+                )
+                _mark_sync_job(
+                    session,
+                    job,
+                    status=RagJobStatus.CANCELLED.value,
+                    last_error=f"superseded_by_projection_head:final:{error}",
+                )
+                return "superseded"
+            superseding = _latest_superseding_sync_job(session, job)
+            if superseding is not None:
+                if superseding.status == RagJobStatus.SUCCEEDED.value:
+                    enqueue_rag_sync_job(
+                        session,
+                        scope_kind=superseding.scope_kind,
+                        workspace_id=superseding.workspace_id,
+                        resource_type=superseding.resource_type,
+                        resource_id=superseding.resource_id,
+                        operation=RagSyncOperation(superseding.operation),
+                        lane=RagSyncLane(superseding.lane),
+                        content_checksum=superseding.content_checksum,
+                        visibility_checksum=superseding.visibility_checksum,
+                        trace_context=superseding.trace_context,
+                        projection_event=_projection_event_ref_for_job(
+                            session,
+                            superseding,
+                        ),
+                    )
+                record_sync_job_result(
+                    status="superseded",
+                    workspace_id=job.workspace_id,
+                    resource_type=job.resource_type,
+                    resource_id=job.resource_id,
+                    operation=job.operation,
+                    job_lane=job.lane,
+                    job_kind=job_kind,
+                )
+                _cancel_superseded_sync_job(
+                    session,
+                    job,
+                    superseding_job=superseding,
+                    phase="after_mutation",
+                )
+                return "superseded"
             record_sync_job_result(
                 status=result,
                 workspace_id=job.workspace_id,
@@ -240,12 +403,18 @@ def _execute_sync_job(
                 job_lane=job.lane,
                 job_kind=job_kind,
             )
+            unsupported = result == "unsupported_resource_type"
             final_status = (
-                RagJobStatus.CANCELLED.value
-                if result == "unsupported_resource_type"
-                else RagJobStatus.SUCCEEDED.value
+                RagJobStatus.FAILED.value if unsupported else RagJobStatus.SUCCEEDED.value
             )
-            _mark_sync_job(session, job, status=final_status)
+            _mark_sync_job(
+                session,
+                job,
+                status=final_status,
+                last_error=(
+                    f"unsupported resource_type: {job.resource_type}" if unsupported else None
+                ),
+            )
             return result
         except Exception as error:
             return _handle_sync_job_failure(
@@ -334,7 +503,7 @@ def _execute_visibility_job(
                 job_kind="visibility_recompute",
             )
             final_status = (
-                RagJobStatus.CANCELLED.value
+                RagJobStatus.FAILED.value
                 if result == "unsupported_scope_type"
                 else RagJobStatus.SUCCEEDED.value
             )
@@ -350,153 +519,259 @@ def _execute_visibility_job(
 
 
 def _process_sync_job(session: Session, job: RagSyncJob) -> str:
-    collection = _collection_name()
-    service = _rag_service()
+    disabled_app_id = _disabled_platform_app_id_for_job(session, job)
+    if disabled_app_id is not None:
+        raise RagPlatformAppDisabled(disabled_app_id)
+    runtime = _rag_runtime_for_job(session, job)
+    collection = runtime.collection
+    service = runtime.service
+    adapter = _resource_adapter_for_job(job)
+    if adapter is None:
+        logger.warning("Unsupported RAG resource type: %s", job.resource_type)
+        return "unsupported_resource_type"
 
     if job.operation == RagSyncOperation.DELETE.value:
+        _lock_projection_head_for_vector_mutation(session, job)
         service.delete_projection(
+            scope_kind=RagScopeKind(job.scope_kind),
             workspace_id=job.workspace_id,
             resource_type=job.resource_type,
             resource_id=job.resource_id,
             collection=collection,
+            retrieval_partition_id=getattr(job, "retrieval_partition_id", None),
         )
+        if adapter.on_projection_deleted is not None:
+            adapter.on_projection_deleted(session, job.resource_id)
         logger.info("Deleted RAG projection for %s:%s", job.resource_type, job.resource_id)
         return "deleted"
 
-    projection = _load_projection_for_job(session, job)
+    projection = _load_projection_for_job(session, job, rag_service=service)
     if projection == "unsupported":
         logger.warning("Unsupported RAG resource type: %s", job.resource_type)
         return "unsupported_resource_type"
     if projection is None:
+        _lock_projection_head_for_vector_mutation(session, job)
         service.delete_projection(
+            scope_kind=RagScopeKind(job.scope_kind),
             workspace_id=job.workspace_id,
             resource_type=job.resource_type,
             resource_id=job.resource_id,
             collection=collection,
+            retrieval_partition_id=getattr(job, "retrieval_partition_id", None),
         )
         logger.info(
             "Projection missing during RAG sync; deleted stale vectors for %s:%s",
             job.resource_type,
             job.resource_id,
         )
+        if adapter.on_projection_deleted is not None:
+            adapter.on_projection_deleted(session, job.resource_id)
         return "deleted_missing_projection"
 
-    service.sync_projection(projection, collection=collection)
+    _ensure_projection_matches_job(projection, job)
+    projection = _projection_with_job_fence(projection, job)
+    if adapter.on_projection_prepared_event is not None:
+        adapter.on_projection_prepared_event(
+            session,
+            job.resource_id,
+            _projection_event_ref_for_job(session, job),
+        )
+        session.commit()
+        stale_reason = _initial_projection_fence_stale_reason(session, job)
+        if stale_reason is not None:
+            raise RagProjectionSuperseded(stale_reason)
+    elif adapter.on_projection_prepared is not None:
+        adapter.on_projection_prepared(session, job.resource_id)
+        session.commit()
+    sync_with_fence = getattr(service, "sync_projection_with_fence", None)
+    if callable(sync_with_fence):
+        sync_result = sync_with_fence(
+            projection,
+            collection=collection,
+            before_vector_write=lambda: _lock_projection_head_for_vector_mutation(
+                session,
+                job,
+            ),
+        )
+    else:
+        # Test doubles and legacy service wrappers do not expose the split
+        # embed/write seam. Lock before their atomic mutation instead.
+        _lock_projection_head_for_vector_mutation(session, job)
+        sync_result = service.sync_projection(projection, collection=collection)
+    if adapter.on_projection_synced is not None:
+        adapter.on_projection_synced(session, job.resource_id, sync_result.chunk_count)
     logger.info("Synced RAG projection for %s:%s", job.resource_type, job.resource_id)
     return "succeeded"
 
 
-def _load_projection_for_job(session: Session, job: RagSyncJob):
-    if job.resource_type == NATIVE_DOC_RESOURCE_TYPE:
-        return load_native_doc_projection(session, doc_id=job.resource_id)
-    if job.resource_type == MEETING_RESOURCE_TYPE:
-        return load_meeting_projection(session, meeting_id=job.resource_id)
-    if job.resource_type == PLANNER_EVENT_RESOURCE_TYPE:
-        return load_planner_event_projection(session, event_id=job.resource_id)
-    if job.resource_type == PMS_ISSUE_RESOURCE_TYPE:
-        return load_issue_projection(session, issue_id=job.resource_id)
-    return "unsupported"
+def _rag_runtime_for_job(
+    session: Session,
+    job: RagSyncJob,
+) -> _RagProjectionRuntime:
+    if job.resource_type != FILE_MANAGER_FILE_RESOURCE_TYPE:
+        return _RagProjectionRuntime(
+            service=_rag_service(),
+            collection=collection_name(),
+        )
+    settings = get_settings()
+    if not settings.files_retrieval_enabled:
+        raise PartitionedRetrievalRuntimeUnavailable(reason="operator_gate_disabled")
+    if not _file_job_has_complete_projection_fence(job):
+        raise PartitionedRetrievalRuntimeUnavailable(reason="unfenced_file_job")
+    pair = resolve_active_partitioned_generation_pair(session, settings=settings)
+    collection = pair.qdrant_physical_name
+    return _RagProjectionRuntime(
+        service=build_partitioned_rag_projection_service(
+            settings,
+            collection=collection,
+            providers=provider_bundle(),
+        ),
+        collection=collection,
+    )
+
+
+def _file_job_has_complete_projection_fence(job: RagSyncJob) -> bool:
+    return bool(
+        getattr(job, "retrieval_partition_id", None) is not None
+        and getattr(job, "projection_event_sequence", None) is not None
+        and getattr(job, "projection_version", None) is not None
+        and getattr(job, "desired_state", None) in {"active", "deleted"}
+    )
+
+
+def _load_projection_for_job(session: Session, job: RagSyncJob, *, rag_service: RagService):
+    adapter = _resource_adapter_for_job(job)
+    if adapter is None or adapter.load_projection is None:
+        return "unsupported"
+    return adapter.load_projection(session, job.resource_id, rag_service)
+
+
+def _ensure_projection_matches_job(projection, job: RagSyncJob) -> None:
+    mismatches = [
+        field_name
+        for field_name, expected in (
+            ("scope_kind", job.scope_kind),
+            ("workspace_id", job.workspace_id),
+            ("resource_type", job.resource_type),
+            ("resource_id", job.resource_id),
+        )
+        if str(getattr(projection, field_name, "") or "") != str(expected or "")
+    ]
+    if mismatches:
+        raise RagProjectionIdentityError(
+            f"RAG projection identity mismatch for job {job.id}: {', '.join(mismatches)}"
+        )
+
+
+def _projection_with_job_fence(projection, job: RagSyncJob):
+    retrieval_partition_id = getattr(job, "retrieval_partition_id", None)
+    projection_version = getattr(job, "projection_version", None)
+    if retrieval_partition_id is None and projection_version is None:
+        return projection
+    if retrieval_partition_id is None or projection_version is None:
+        raise RagProjectionIdentityError("incomplete_job_fence")
+
+    mismatches = [
+        field
+        for field, current, expected in (
+            (
+                "retrieval_partition_id",
+                getattr(projection, "retrieval_partition_id", None),
+                retrieval_partition_id,
+            ),
+            (
+                "projection_version",
+                getattr(projection, "projection_version", None),
+                projection_version,
+            ),
+        )
+        if current is not None and current != expected
+    ]
+    if mismatches:
+        raise RagProjectionIdentityError(
+            f"RAG projection fence mismatch for job {job.id}: {', '.join(mismatches)}"
+        )
+    return projection.model_copy(
+        update={
+            "retrieval_partition_id": retrieval_partition_id,
+            "projection_version": projection_version,
+        }
+    )
+
+
+def _resource_adapter_for_job(job: RagSyncJob):
+    ensure_rag_source_adapters_registered()
+    return get_rag_resource_adapter(job.resource_type)
+
+
+def _sync_job_platform_app_enabled(session: Session, job: RagSyncJob) -> bool:
+    return _disabled_platform_app_id_for_job(session, job) is None
+
+
+def _disabled_platform_app_id_for_job(session: Session, job: RagSyncJob) -> str | None:
+    adapter = _resource_adapter_for_job(job)
+    app_id = getattr(adapter, "app_id", None)
+    catalog_item = get_workspace_app_catalog_item(app_id) if app_id else None
+    if catalog_item is None or catalog_item.availability_scope != "platform":
+        return None
+    return None if is_platform_app_enabled(session, app_id) else app_id
+
+
+def _disabled_platform_rag_resource_types(session: Session) -> tuple[str, ...]:
+    ensure_rag_source_adapters_registered()
+    disabled: list[str] = []
+    for adapter in rag_resource_adapters():
+        app_id = adapter.app_id
+        catalog_item = get_workspace_app_catalog_item(app_id) if app_id else None
+        if (
+            catalog_item is not None
+            and catalog_item.availability_scope == "platform"
+            and not is_platform_app_enabled(session, app_id)
+        ):
+            disabled.append(adapter.resource_type)
+    return tuple(disabled)
 
 
 def _process_visibility_job(
     session: Session,
     job: RagVisibilityRecomputeJob,
 ) -> tuple[str, str | None]:
-    if job.scope_type == MEETING_VISIBILITY_SCOPE:
-        doc_ids = _resolve_meeting_doc_ids(session, meeting_id=job.scope_id, cursor=job.cursor)
-        if not doc_ids:
-            logger.info(
-                "No affected docs for RAG visibility recompute meeting scope: %s",
-                job.scope_id,
-            )
-            return "noop", None
+    adapter = _visibility_scope_adapter_for_job(job)
+    if adapter is None:
+        logger.warning("Unsupported RAG visibility recompute scope: %s", job.scope_type)
+        return "unsupported_scope_type", f"unsupported scope_type: {job.scope_type}"
 
-        _enqueue_resource_sync_jobs(
-            session,
-            workspace_id=job.workspace_id,
-            resource_type=NATIVE_DOC_RESOURCE_TYPE,
-            resource_ids=doc_ids,
-            operation=RagSyncOperation.VISIBILITY_UPDATE,
-            lane=RagSyncLane.BACKFILL,
-        )
-        session.commit()
+    resource_ids = [
+        str(resource_id) for resource_id in adapter.resource_ids(session, job) if resource_id
+    ]
+    if not resource_ids:
         logger.info(
-            "Queued %s RAG visibility update sync job(s) for meeting scope %s",
-            len(doc_ids),
-            job.scope_id,
-        )
-        return "queued", None
-
-    if job.scope_type == PMS_MEETING_VISIBILITY_SCOPE:
-        issue_ids = _resolve_meeting_issue_ids(session, meeting_id=job.scope_id, cursor=job.cursor)
-        if not issue_ids:
-            logger.info(
-                "No affected issues for PMS meeting visibility recompute scope: %s",
-                job.scope_id,
-            )
-            return "noop", None
-        _enqueue_resource_sync_jobs(
-            session,
-            workspace_id=job.workspace_id,
-            resource_type=PMS_ISSUE_RESOURCE_TYPE,
-            resource_ids=issue_ids,
-            operation=RagSyncOperation.VISIBILITY_UPDATE,
-            lane=RagSyncLane.BACKFILL,
-        )
-        session.commit()
-        logger.info(
-            "Queued %s PMS visibility update sync job(s) for meeting scope %s",
-            len(issue_ids),
-            job.scope_id,
-        )
-        return "queued", None
-
-    if job.scope_type == PMS_TASK_LIST_RECOMPUTE_SCOPE:
-        issue_ids = _resolve_task_list_issue_ids(session, list_id=job.scope_id)
-        return _queue_pms_issue_recompute(session, job=job, issue_ids=issue_ids, scope_label="task_list")
-
-    if job.scope_type == PMS_LABEL_RECOMPUTE_SCOPE:
-        issue_ids = _resolve_label_issue_ids(session, label_id=job.scope_id, cursor=job.cursor)
-        return _queue_pms_issue_recompute(session, job=job, issue_ids=issue_ids, scope_label="label")
-
-    if job.scope_type == PMS_MILESTONE_RECOMPUTE_SCOPE:
-        issue_ids = _resolve_milestone_issue_ids(session, milestone_id=job.scope_id)
-        return _queue_pms_issue_recompute(session, job=job, issue_ids=issue_ids, scope_label="milestone")
-
-    logger.warning("Unsupported RAG visibility recompute scope: %s", job.scope_type)
-    return "unsupported_scope_type", f"unsupported scope_type: {job.scope_type}"
-
-
-def _queue_pms_issue_recompute(
-    session: Session,
-    *,
-    job: RagVisibilityRecomputeJob,
-    issue_ids: list[str],
-    scope_label: str,
-) -> tuple[str, str | None]:
-    if not issue_ids:
-        logger.info(
-            "No affected issues for PMS %s recompute scope: %s",
-            scope_label,
+            "No affected resources for RAG visibility recompute %s scope: %s",
+            adapter.scope_label or adapter.scope_type,
             job.scope_id,
         )
         return "noop", None
     _enqueue_resource_sync_jobs(
         session,
         workspace_id=job.workspace_id,
-        resource_type=PMS_ISSUE_RESOURCE_TYPE,
-        resource_ids=issue_ids,
-        operation=RagSyncOperation.UPSERT,
-        lane=RagSyncLane.BACKFILL,
+        resource_type=adapter.resource_type,
+        resource_ids=resource_ids,
+        operation=RagSyncOperation(adapter.operation),
+        lane=RagSyncLane(adapter.lane),
     )
     session.commit()
     logger.info(
-        "Queued %s PMS sync job(s) for %s scope %s",
-        len(issue_ids),
-        scope_label,
+        "Queued %s RAG sync job(s) for %s scope %s",
+        len(resource_ids),
+        adapter.scope_label or adapter.scope_type,
         job.scope_id,
     )
     return "queued", None
+
+
+def _visibility_scope_adapter_for_job(job: RagVisibilityRecomputeJob):
+    ensure_rag_source_adapters_registered()
+    return get_rag_visibility_scope_adapter(job.scope_type)
 
 
 def _enqueue_resource_sync_jobs(
@@ -519,83 +794,6 @@ def _enqueue_resource_sync_jobs(
         )
 
 
-def _resolve_meeting_doc_ids(
-    session: Session,
-    *,
-    meeting_id: str,
-    cursor: dict | None,
-) -> list[str]:
-    doc_ids = set()
-    if isinstance(cursor, dict):
-        doc_ids.update(str(doc_id) for doc_id in cursor.get("doc_ids") or [] if doc_id)
-
-    doc_ids.update(
-        session.scalars(select(MeetingDocLink.doc_id).where(MeetingDocLink.meeting_id == meeting_id))
-    )
-    doc_ids.update(
-        session.scalars(
-            select(DocMeetingAccess.doc_id).where(DocMeetingAccess.granted_by_meeting_id == meeting_id)
-        )
-    )
-    meeting = session.get(Meeting, meeting_id)
-    if meeting is not None and meeting.notes_doc_id:
-        doc_ids.add(meeting.notes_doc_id)
-
-    return sorted(doc_id for doc_id in doc_ids if doc_id)
-
-
-def _resolve_meeting_issue_ids(
-    session: Session,
-    *,
-    meeting_id: str,
-    cursor: dict | None,
-) -> list[str]:
-    issue_ids = set()
-    if isinstance(cursor, dict):
-        issue_ids.update(str(issue_id) for issue_id in cursor.get("issue_ids") or [] if issue_id)
-
-    issue_ids.update(
-        session.scalars(select(MeetingTaskLink.issue_id).where(MeetingTaskLink.meeting_id == meeting_id))
-    )
-    issue_ids.update(
-        session.scalars(
-            select(IssueUserAccess.issue_id).where(IssueUserAccess.granted_by_meeting_id == meeting_id)
-        )
-    )
-    return sorted(issue_id for issue_id in issue_ids if issue_id)
-
-
-def _resolve_task_list_issue_ids(session: Session, *, list_id: str) -> list[str]:
-    return sorted(
-        str(issue_id)
-        for issue_id in session.scalars(select(Issue.id).where(Issue.list_id == list_id))
-        if issue_id
-    )
-
-
-def _resolve_label_issue_ids(
-    session: Session,
-    *,
-    label_id: str,
-    cursor: dict | None,
-) -> list[str]:
-    issue_ids = set()
-    if isinstance(cursor, dict):
-        issue_ids.update(str(issue_id) for issue_id in cursor.get("issue_ids") or [] if issue_id)
-    issue_ids.update(
-        session.scalars(select(IssueLabel.issue_id).where(IssueLabel.label_id == label_id))
-    )
-    return sorted(issue_id for issue_id in issue_ids if issue_id)
-
-
-def _resolve_milestone_issue_ids(session: Session, *, milestone_id: str) -> list[str]:
-    return sorted(
-        str(issue_id)
-        for issue_id in session.scalars(select(Issue.id).where(Issue.milestone_id == milestone_id))
-        if issue_id
-    )
-
-
 def _mark_sync_job(
     session: Session,
     job: RagSyncJob,
@@ -612,13 +810,187 @@ def _mark_sync_job(
     job.next_retry_at = next_retry_at
     session.add(job)
     session.commit()
-    _record_sync_queue_depth_snapshot(session, workspace_id=job.workspace_id, lane=job.lane)
+    _record_sync_queue_depth_snapshot(
+        session,
+        scope_kind=job.scope_kind,
+        workspace_id=job.workspace_id,
+        lane=job.lane,
+    )
+
+
+def _latest_superseding_sync_job(
+    session: Session,
+    job: RagSyncJob,
+) -> RagSyncJob | None:
+    query = select(RagSyncJob).where(
+        RagSyncJob.id != job.id,
+        RagSyncJob.resource_type == job.resource_type,
+        RagSyncJob.resource_id == job.resource_id,
+        RagSyncJob.status != RagJobStatus.CANCELLED.value,
+    )
+    if job.projection_version is None:
+        query = query.where(
+            RagSyncJob.scope_kind == job.scope_kind,
+            RagSyncJob.workspace_id == job.workspace_id,
+            RagSyncJob.created_at > job.created_at,
+        ).order_by(RagSyncJob.created_at.desc(), RagSyncJob.id.desc())
+    else:
+        query = query.where(
+            RagSyncJob.projection_version.is_not(None),
+            RagSyncJob.projection_version > job.projection_version,
+        ).order_by(
+            RagSyncJob.projection_version.desc(),
+            RagSyncJob.created_at.desc(),
+            RagSyncJob.id.desc(),
+        )
+    return session.scalar(query.limit(1))
+
+
+def _initial_projection_fence_stale_reason(
+    session: Session,
+    job: RagSyncJob,
+) -> str | None:
+    try:
+        projection_event = _projection_event_ref_for_job(session, job)
+    except RagProjectionIdentityError as error:
+        return str(error)
+    if projection_event is None:
+        return None
+    head = session.get(
+        RetrievalProjectionHead,
+        (job.resource_type, job.resource_id),
+    )
+    return _projection_head_stale_reason(head, job)
+
+
+def _lock_projection_head_for_vector_mutation(
+    session: Session,
+    job: RagSyncJob,
+) -> None:
+    """Linearize a fenced Qdrant mutation against newer source events."""
+
+    projection_event = _projection_event_ref_for_job(session, job)
+    if projection_event is None:
+        return
+    head = session.scalar(
+        select(RetrievalProjectionHead)
+        .where(
+            RetrievalProjectionHead.resource_type == job.resource_type,
+            RetrievalProjectionHead.resource_id == job.resource_id,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    stale_reason = _projection_head_stale_reason(head, job)
+    if stale_reason is not None:
+        raise RagProjectionSuperseded(stale_reason)
+
+
+def _projection_head_stale_reason(
+    head: RetrievalProjectionHead | None,
+    job: RagSyncJob,
+) -> str | None:
+    if head is None:
+        return "missing_head"
+    mismatches = [
+        field
+        for field, current, expected in (
+            ("projection_version", head.projection_version, job.projection_version),
+            (
+                "retrieval_partition_id",
+                head.retrieval_partition_id,
+                job.retrieval_partition_id,
+            ),
+            ("desired_state", head.desired_state, job.desired_state),
+        )
+        if current != expected
+    ]
+    if mismatches:
+        return "head_mismatch:" + ",".join(mismatches)
+    return None
+
+
+def _projection_event_ref_for_job(
+    session: Session,
+    job: RagSyncJob,
+) -> ProjectionEventRef | None:
+    fence = (
+        getattr(job, "retrieval_partition_id", None),
+        getattr(job, "projection_event_sequence", None),
+        getattr(job, "projection_version", None),
+        getattr(job, "desired_state", None),
+    )
+    if not any(value is not None for value in fence):
+        return None
+    if not all(value is not None for value in fence):
+        raise RagProjectionIdentityError("incomplete_job_fence")
+    event = session.get(RetrievalProjectionEvent, job.projection_event_sequence)
+    if event is None:
+        raise RagProjectionIdentityError("missing_projection_event")
+    mismatches = [
+        field
+        for field, current, expected in (
+            ("resource_type", event.resource_type, job.resource_type),
+            ("resource_id", event.resource_id, job.resource_id),
+            ("projection_version", event.projection_version, job.projection_version),
+            (
+                "retrieval_partition_id",
+                event.retrieval_partition_id,
+                job.retrieval_partition_id,
+            ),
+            ("desired_state", event.desired_state, job.desired_state),
+            ("content_checksum", event.content_checksum, job.content_checksum),
+            (
+                "visibility_checksum",
+                event.visibility_checksum,
+                job.visibility_checksum,
+            ),
+        )
+        if current != expected
+    ]
+    if mismatches:
+        raise RagProjectionIdentityError("job_event_mismatch:" + ",".join(mismatches))
+    return ProjectionEventRef(
+        event_sequence=event.event_sequence,
+        resource_type=event.resource_type,
+        resource_id=event.resource_id,
+        projection_version=event.projection_version,
+        retrieval_partition_id=event.retrieval_partition_id,
+        change_kind=event.change_kind,
+        desired_state=event.desired_state,
+        content_checksum=event.content_checksum,
+        visibility_checksum=event.visibility_checksum,
+        diagnostic_workspace_id=event.diagnostic_workspace_id,
+    )
+
+
+def _cancel_superseded_sync_job(
+    session: Session,
+    job: RagSyncJob,
+    *,
+    superseding_job: RagSyncJob,
+    phase: str,
+) -> None:
+    _mark_sync_job(
+        session,
+        job,
+        status=RagJobStatus.CANCELLED.value,
+        last_error=f"superseded_by:{superseding_job.id}:{phase}",
+    )
 
 
 def _claim_sync_job(
     session: Session,
     job_id: str,
 ) -> tuple[RagSyncJob | None, str]:
+    existing = session.get(RagSyncJob, job_id)
+    if (
+        existing is not None
+        and existing.status == RagJobStatus.PENDING.value
+        and not _sync_job_platform_app_enabled(session, existing)
+    ):
+        return existing, "platform-disabled"
+
     settings = get_settings()
     now = datetime.now(UTC).replace(tzinfo=None)
     lease_cutoff = now - timedelta(seconds=settings.rag_job_processing_lease_seconds)
@@ -641,7 +1013,12 @@ def _claim_sync_job(
     if claimed.rowcount == 1:
         job = session.get(RagSyncJob, job_id)
         if job is not None:
-            _record_sync_queue_depth_snapshot(session, workspace_id=job.workspace_id, lane=job.lane)
+            _record_sync_queue_depth_snapshot(
+                session,
+                scope_kind=job.scope_kind,
+                workspace_id=job.workspace_id,
+                lane=job.lane,
+            )
         return job, "claimed"
 
     existing = session.get(RagSyncJob, job_id)
@@ -704,7 +1081,7 @@ def _claim_visibility_job(
     return existing, "ignored"
 
 
-def _collection_name() -> str:
+def collection_name() -> str:
     return resolve_default_collection_name(get_settings())
 
 
@@ -716,15 +1093,18 @@ def _claim_next_sync_job(
     settings = get_settings()
     now = datetime.now(UTC).replace(tzinfo=None)
     lease_cutoff = now - timedelta(seconds=settings.rag_job_processing_lease_seconds)
+    disabled_resource_types = _disabled_platform_rag_resource_types(session)
+    query = select(RagSyncJob.id).where(
+        RagSyncJob.lane == lane,
+        _sync_claimable_clause(now=now, lease_cutoff=lease_cutoff),
+    )
+    if disabled_resource_types:
+        query = query.where(RagSyncJob.resource_type.not_in(disabled_resource_types))
     candidate_ids = list(
         session.scalars(
-            select(RagSyncJob.id)
-            .where(
-                RagSyncJob.lane == lane,
-                _sync_claimable_clause(now=now, lease_cutoff=lease_cutoff),
+            query.order_by(RagSyncJob.created_at.asc(), RagSyncJob.id.asc()).limit(
+                max(settings.rag_backfill_batch_size, 1)
             )
-            .order_by(RagSyncJob.created_at.asc(), RagSyncJob.id.asc())
-            .limit(max(settings.rag_backfill_batch_size, 1))
         )
     )
     for candidate_id in candidate_ids:
@@ -763,6 +1143,68 @@ def _visibility_claimable_clause(*, now: datetime, lease_cutoff: datetime):
     )
 
 
+def _due_pending_rag_publications(
+    session: Session,
+    *,
+    limit: int,
+) -> list[RagJobPublication]:
+    remaining = max(int(limit), 1)
+    publications: list[RagJobPublication] = []
+    now = datetime.now(UTC).replace(tzinfo=None)
+    lease_cutoff = now - timedelta(seconds=get_settings().rag_job_processing_lease_seconds)
+
+    disabled_resource_types = _disabled_platform_rag_resource_types(session)
+    sync_query = select(RagSyncJob).where(
+        _sync_claimable_clause(now=now, lease_cutoff=lease_cutoff),
+    )
+    if disabled_resource_types:
+        sync_query = sync_query.where(RagSyncJob.resource_type.not_in(disabled_resource_types))
+    sync_jobs = list(
+        session.scalars(
+            sync_query.order_by(
+                RagSyncJob.updated_at.asc(),
+                RagSyncJob.created_at.asc(),
+                RagSyncJob.id.asc(),
+            ).limit(remaining)
+        )
+    )
+    publications.extend(RagJobPublication.sync(job_id=job.id, lane=job.lane) for job in sync_jobs)
+    remaining -= len(sync_jobs)
+    if remaining <= 0:
+        return publications
+
+    visibility_jobs = list(
+        session.scalars(
+            select(RagVisibilityRecomputeJob)
+            .where(
+                _visibility_claimable_clause(now=now, lease_cutoff=lease_cutoff),
+            )
+            .order_by(
+                RagVisibilityRecomputeJob.updated_at.asc(),
+                RagVisibilityRecomputeJob.created_at.asc(),
+                RagVisibilityRecomputeJob.id.asc(),
+            )
+            .limit(remaining)
+        )
+    )
+    publications.extend(
+        RagJobPublication.visibility_recompute(job_id=job.id) for job in visibility_jobs
+    )
+    return publications
+
+
+def _publish_rag_job_publication(publication: RagJobPublication) -> None:
+    target = resolve_publication_target(publication)
+    celery_app.signature(
+        target.task_name,
+        args=[publication.job_id],
+        immutable=True,
+    ).apply_async(
+        queue=target.queue,
+        retry=False,
+    )
+
+
 def _handle_sync_job_failure(
     session: Session,
     *,
@@ -773,7 +1215,51 @@ def _handle_sync_job_failure(
 ) -> str:
     settings = get_settings()
     error_text = str(error)
+    retrieval_failure_phase = str(getattr(error, "retrieval_failure_phase", "rag"))
+    adapter = _resource_adapter_for_job(job)
+    if _is_files_operator_gate_pause(error=error, job=job):
+        superseding = _latest_superseding_sync_job(session, job)
+        if superseding is not None:
+            _cancel_superseded_sync_job(
+                session,
+                job,
+                superseding_job=superseding,
+                phase="operator_gate_disabled",
+            )
+            return "superseded"
+        job.status = RagJobStatus.PENDING.value
+        job.attempts = max(job.attempts - 1, 0)
+        job.last_error = "operator_gate_disabled"
+        job.next_retry_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(
+            seconds=FILES_OPERATOR_GATE_PAUSE_SECONDS
+        )
+        session.add(job)
+        session.commit()
+        _record_sync_queue_depth_snapshot(
+            session,
+            scope_kind=job.scope_kind,
+            workspace_id=job.workspace_id,
+            lane=job.lane,
+        )
+        record_sync_job_result(
+            status="operator_gate_paused",
+            workspace_id=job.workspace_id,
+            resource_type=job.resource_type,
+            resource_id=job.resource_id,
+            operation=job.operation,
+            job_lane=job.lane,
+            job_kind=job_kind,
+        )
+        logger.info("Paused Files RAG sync job while operator gate is disabled: %s", job.id)
+        return "operator_gate_paused"
     if _is_non_retryable_rag_error(error):
+        if adapter is not None and adapter.on_projection_failed is not None:
+            adapter.on_projection_failed(
+                session,
+                job.resource_id,
+                error_text,
+                retrieval_failure_phase,
+            )
         record_sync_job_result(
             status="non_retryable_error",
             workspace_id=job.workspace_id,
@@ -789,9 +1275,18 @@ def _handle_sync_job_failure(
             status=RagJobStatus.CANCELLED.value,
             last_error=f"non_retryable: {error_text}",
         )
-        logger.error("Cancelling non-retryable RAG sync job %s after failure: %s", job.id, error_text)
+        logger.error(
+            "Cancelling non-retryable RAG sync job %s after failure: %s", job.id, error_text
+        )
         return "non_retryable_error"
     if job.attempts >= settings.rag_job_max_attempts:
+        if adapter is not None and adapter.on_projection_failed is not None:
+            adapter.on_projection_failed(
+                session,
+                job.resource_id,
+                error_text,
+                retrieval_failure_phase,
+            )
         record_sync_job_result(
             status="dead_letter",
             workspace_id=job.workspace_id,
@@ -837,6 +1332,7 @@ def _handle_sync_job_failure(
         session.rollback()
         merged_job = enqueue_rag_sync_job(
             session,
+            scope_kind=job.scope_kind,
             workspace_id=job.workspace_id,
             resource_type=job.resource_type,
             resource_id=job.resource_id,
@@ -845,6 +1341,7 @@ def _handle_sync_job_failure(
             content_checksum=job.content_checksum,
             visibility_checksum=job.visibility_checksum,
             trace_context=job.trace_context,
+            projection_event=_projection_event_ref_for_job(session, job),
         )
         current_job = session.get(RagSyncJob, job.id)
         if current_job is not None:
@@ -855,6 +1352,7 @@ def _handle_sync_job_failure(
             session.commit()
             _record_sync_queue_depth_snapshot(
                 session,
+                scope_kind=current_job.scope_kind,
                 workspace_id=current_job.workspace_id,
                 lane=current_job.lane,
             )
@@ -872,6 +1370,14 @@ def _handle_sync_job_failure(
         error_text,
     )
     raise task.retry(exc=error, countdown=countdown)
+
+
+def _is_files_operator_gate_pause(*, error: Exception, job: RagSyncJob) -> bool:
+    return bool(
+        job.resource_type == FILE_MANAGER_FILE_RESOURCE_TYPE
+        and isinstance(error, PartitionedRetrievalRuntimeUnavailable)
+        and error.reason == "operator_gate_disabled"
+    )
 
 
 def _handle_visibility_job_failure(
@@ -910,39 +1416,95 @@ def _handle_visibility_job_failure(
         attempts=job.attempts,
     )
     next_retry_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(seconds=countdown)
+    job_id = job.id
+    workspace_id = job.workspace_id
+    scope_type = job.scope_type
+    scope_id = job.scope_id
+    trace_context = job.trace_context
+    cursor = job.cursor
     record_sync_job_result(
         status="retry_scheduled",
-        workspace_id=job.workspace_id,
-        scope_type=job.scope_type,
-        scope_id=job.scope_id,
+        workspace_id=workspace_id,
+        scope_type=scope_type,
+        scope_id=scope_id,
         job_kind="visibility_recompute",
     )
-    _mark_visibility_job(
-        session,
-        job,
-        status=RagJobStatus.PENDING.value,
-        last_error=error_text,
-        next_retry_at=next_retry_at,
-    )
+    try:
+        _mark_visibility_job(
+            session,
+            job,
+            status=RagJobStatus.PENDING.value,
+            last_error=error_text,
+            next_retry_at=next_retry_at,
+        )
+    except IntegrityError:
+        session.rollback()
+        merged_job = _select_pending_visibility_job(
+            session,
+            workspace_id=workspace_id,
+            scope_type=scope_type,
+            scope_id=scope_id,
+        )
+        if merged_job is None:
+            raise
+        merged_job.trace_context = trace_context
+        merged_job.cursor = merge_recompute_cursor(merged_job.cursor, cursor)
+        session.add(merged_job)
+        current_job = session.get(RagVisibilityRecomputeJob, job_id)
+        if current_job is not None:
+            current_job.status = RagJobStatus.CANCELLED.value
+            current_job.last_error = f"merged_retry_into:{merged_job.id}: {error_text}"
+            current_job.next_retry_at = None
+            session.add(current_job)
+        session.commit()
+        _record_visibility_queue_depth_snapshot(session, workspace_id=workspace_id)
+        logger.warning(
+            "Merged retry for RAG visibility job %s into pending job %s after failure: %s",
+            job_id,
+            merged_job.id,
+            error_text,
+        )
+        return "retry_merged"
     logger.warning(
         "Retrying RAG visibility job %s in %ss after failure: %s",
-        job.id,
+        job_id,
         countdown,
         error_text,
     )
     raise task.retry(exc=error, countdown=countdown)
 
 
-def _record_sync_queue_depth_snapshot(
+def _select_pending_visibility_job(
     session: Session,
     *,
     workspace_id: str,
+    scope_type: str,
+    scope_id: str,
+) -> RagVisibilityRecomputeJob | None:
+    return session.scalar(
+        select(RagVisibilityRecomputeJob)
+        .where(
+            RagVisibilityRecomputeJob.workspace_id == workspace_id,
+            RagVisibilityRecomputeJob.scope_type == scope_type,
+            RagVisibilityRecomputeJob.scope_id == scope_id,
+            RagVisibilityRecomputeJob.status == RagJobStatus.PENDING.value,
+        )
+        .limit(1)
+    )
+
+
+def _record_sync_queue_depth_snapshot(
+    session: Session,
+    *,
+    scope_kind: str,
+    workspace_id: str | None,
     lane: str,
 ) -> None:
     pending_count = session.scalar(
         select(func.count())
         .select_from(RagSyncJob)
         .where(
+            RagSyncJob.scope_kind == scope_kind,
             RagSyncJob.workspace_id == workspace_id,
             RagSyncJob.lane == lane,
             RagSyncJob.status == RagJobStatus.PENDING.value,
@@ -978,6 +1540,8 @@ def _record_visibility_queue_depth_snapshot(
 
 
 def _is_non_retryable_rag_error(error: Exception) -> bool:
+    if isinstance(error, RagProjectionIdentityError):
+        return True
     if isinstance(error, RagProviderConfigurationError):
         return True
     if isinstance(error, (RagProviderTransientError, RagProviderTimeoutError)):

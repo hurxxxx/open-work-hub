@@ -143,7 +143,8 @@ apps/web/         React 프런트
   └── src/
       ├── main.tsx
       ├── App.tsx
-      ├── domains/
+      ├── app-modules/
+      ├── platform/
       ├── components/
       └── lib/
 
@@ -159,7 +160,7 @@ apps/worker/      Python Celery 워커
   └── src/ai_do_worker/
       └── tasks/
 
-apps/ops/         운영 도구 (초기 단계)
+apps/ops/         운영성 도구와 평가 CLI
 
 packages/ui/      공통 UI 컴포넌트
   ├── package.json  (name: "@ai-do/ui")
@@ -181,7 +182,7 @@ Python 앱 두 개는 pnpm-workspace에 넣지 않고(파이썬은 자체 패키
 import { AppShell } from '@ai-do/ui';
 ```
 
-이렇게 되려면 `packages/ui/package.json`의 `name` 이 `@ai-do/ui`여야 하고, `apps/web/package.json`이 그걸 `dependencies`(or `workspace:*` 참조)로 포함해야 합니다. pnpm 워크스페이스가 이 연결을 자동으로 처리합니다.
+이렇게 되려면 `packages/ui/package.json`의 `name` 이 `@ai-do/ui`여야 하고, 루트 `tsconfig.base.json`과 Vite alias가 `@ai-do/ui`를 `packages/ui/src`로 연결해야 합니다. pnpm 워크스페이스와 TypeScript path alias가 이 연결을 함께 처리합니다.
 
 ---
 

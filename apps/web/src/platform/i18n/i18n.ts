@@ -3,40 +3,35 @@ import { initReactI18next } from 'react-i18next';
 
 import {
   DEFAULT_LOCALE,
-  normalizeLocale,
-  persistLocale,
+  LOCALE_SESSION_CONFIG,
   readStoredLocale,
   type AppLocale,
 } from './locales';
+import {
+  syncLocale as syncLocaleSession,
+  type LocaleI18n,
+} from './locale-session';
 import { resources } from './resources';
 
-void i18n
-  .use(initReactI18next)
-  .init({
-    defaultNS: 'common',
-    fallbackLng: DEFAULT_LOCALE,
-    interpolation: {
-      escapeValue: false,
-    },
-    lng: readStoredLocale(),
-    ns: Object.keys(resources[DEFAULT_LOCALE]),
-    react: {
-      useSuspense: false,
-    },
-    resources,
-    supportedLngs: Object.keys(resources),
-  });
+void i18n.use(initReactI18next).init({
+  defaultNS: 'common',
+  fallbackLng: DEFAULT_LOCALE,
+  interpolation: {
+    escapeValue: false,
+  },
+  lng: readStoredLocale(),
+  ns: Object.keys(resources[DEFAULT_LOCALE]),
+  react: {
+    useSuspense: false,
+  },
+  resources,
+  supportedLngs: Object.keys(resources),
+});
 
 export function syncLocale(locale: string | null | undefined): AppLocale {
-  const normalized = normalizeLocale(locale);
-  if (i18n.language !== normalized) {
-    void i18n.changeLanguage(normalized);
-  }
-  persistLocale(normalized);
-  if (typeof document !== 'undefined') {
-    document.documentElement.lang = normalized;
-  }
-  return normalized;
+  return syncLocaleSession<AppLocale>(locale, LOCALE_SESSION_CONFIG, {
+    i18n: i18n as LocaleI18n<AppLocale>,
+  });
 }
 
 export { i18n };

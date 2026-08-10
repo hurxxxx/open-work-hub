@@ -6,8 +6,11 @@ import type { AuthUser } from '@/src/platform/auth/auth-api';
 import type { AppModuleId, NavItem } from './navigation-types';
 
 export interface AppSidebarActionContext {
+  activeAppId?: AppModuleId;
+  activeFeatureAppId?: string | null;
   currentPathname: string;
   currentWorkspaceSlug: string | null;
+  enabledWorkspaceAppIds: readonly string[];
   navigate: NavigateFunction;
   user: AuthUser | null;
 }
@@ -22,10 +25,12 @@ export interface AppSidebarCreateAction {
 
 export interface AppSidebarRenderContext extends AppSidebarActionContext {
   activeAppId: AppModuleId;
+  activeFeatureAppId?: string | null;
   activeNavItemId: string;
   canReadWorkspace: boolean;
   filteredItems: NavItem[];
   isCategoryExpanded: (category: string) => boolean;
+  onNavigate?: () => void;
   toggleCategory: (category: string) => void;
 }
 
@@ -35,7 +40,7 @@ export interface AppSidebarConfig {
   ) => AppSidebarCreateAction[];
   extendCategories?: (
     categories: string[],
-    context: { canReadWorkspace: boolean },
+    context: { activeFeatureAppId?: string | null; canReadWorkspace: boolean },
   ) => string[];
   beforeCategories?: (context: AppSidebarRenderContext) => ReactNode;
   afterCategories?: (context: AppSidebarRenderContext) => ReactNode;

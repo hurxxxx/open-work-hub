@@ -7,6 +7,7 @@ import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 import { compactSchema } from './schema';
 import { useResolvedTheme } from './use-theme';
+import { blockNoteInteractionPolicy } from './blocknote-interaction-policy';
 import type { BlockContent } from './types';
 
 export interface BlockEditorMiniProps {
@@ -32,6 +33,7 @@ export function BlockEditorMini({
   const editor = useCreateBlockNote({
     schema: compactSchema,
     ...(placeholder ? { placeholders: { default: placeholder } } : {}),
+    pasteHandler: blockNoteInteractionPolicy.preferRichTextPaste,
   });
 
   useEffect(() => {
@@ -55,10 +57,14 @@ export function BlockEditorMini({
   );
 
   return (
-    <div className={`[&_.bn-container]:!bg-transparent [&_.bn-editor]:!bg-transparent ${className ?? ''}`} onKeyDown={handleKeyDown}>
+    <div
+      className={`ui-block-editor [&_.bn-root]:!bg-transparent [&_.bn-container]:!bg-transparent [&_.bn-editor]:!bg-transparent ${className ?? ''}`}
+    >
       <MantineProvider forceColorScheme={theme}>
         <BlockNoteView
           editor={editor}
+          onKeyDown={handleKeyDown}
+          onCopy={blockNoteInteractionPolicy.normalizeCopyPlainText}
           theme={theme}
         />
       </MantineProvider>

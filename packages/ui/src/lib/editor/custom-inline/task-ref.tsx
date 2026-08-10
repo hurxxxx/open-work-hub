@@ -15,7 +15,7 @@ export const TaskRef = createReactInlineContentSpec(
       const { issueKey, title } = props.inlineContent.props;
       return (
         <span
-          className="inline-flex items-center gap-1 rounded bg-purple-500/20 px-1.5 py-0.5 text-xs font-medium text-purple-300 cursor-pointer hover:bg-purple-500/30 transition-colors"
+          className="inline-flex items-center gap-1 rounded bg-ui-accent/10 px-1.5 py-0.5 text-[length:var(--ui-text-caption)] font-medium text-ui-accent cursor-pointer hover:bg-ui-accent/15 transition-colors"
           data-issue-id={props.inlineContent.props.issueId}
         >
           #{issueKey || title || 'Unknown'}

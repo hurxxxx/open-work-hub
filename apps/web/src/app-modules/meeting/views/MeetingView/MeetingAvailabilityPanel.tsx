@@ -6,13 +6,16 @@ import type { MeetingUser } from '../../api/meeting-api';
 
 import { MeetingAvailabilityModal } from './MeetingAvailabilityModal';
 import {
-  addLocalDays,
   buildAvailabilityConflicts,
   formatAvailabilityBlockLabel,
-  startOfAvailabilityWeek,
+  projectMeetingAvailabilityPanelQuery,
+  selectMeetingAvailabilityPanelDisplayState,
   useMeetingAvailabilityQuery,
 } from './meetingAvailability';
-import { DEFAULT_TIME_ZONE, normalizeTimeZone } from '@/src/platform/time/time-utils';
+import {
+  DEFAULT_TIME_ZONE,
+  normalizeTimeZone,
+} from '@/src/platform/time/time-utils';
 
 interface MeetingAvailabilityPanelProps {
   workspaceSlug: string;
@@ -20,10 +23,6 @@ interface MeetingAvailabilityPanelProps {
   meetingStart: Date | null;
   meetingEnd: Date | null;
   timeZone?: string | null;
-}
-
-function isValidMeetingWindow(start: Date | null, end: Date | null): start is Date {
-  return Boolean(start && end && end > start);
 }
 
 export function MeetingAvailabilityPanel({
@@ -36,23 +35,25 @@ export function MeetingAvailabilityPanel({
   const { t, i18n } = useTranslation('apps');
   const [modalOpen, setModalOpen] = useState(false);
   const resolvedTimeZone = normalizeTimeZone(timeZone ?? DEFAULT_TIME_ZONE);
-  const attendeeIds = useMemo(
-    () => attendeeUsers.map((user) => user.id),
-    [attendeeUsers],
+  const panelQuery = useMemo(
+    () =>
+      projectMeetingAvailabilityPanelQuery({
+        attendeeUsers,
+        meetingEnd,
+        meetingStart,
+      }),
+    [attendeeUsers, meetingEnd, meetingStart],
   );
-  const rangeStart = meetingStart ? startOfAvailabilityWeek(meetingStart) : null;
-  const rangeEnd = rangeStart ? addLocalDays(rangeStart, 7) : null;
-  const canQuery = isValidMeetingWindow(meetingStart, meetingEnd) && attendeeIds.length > 0;
   const { items, loading, error } = useMeetingAvailabilityQuery({
     workspaceSlug,
-    userIds: attendeeIds,
-    rangeStart,
-    rangeEnd,
-    enabled: canQuery,
+    userIds: panelQuery.attendeeIds,
+    rangeStart: panelQuery.rangeStart,
+    rangeEnd: panelQuery.rangeEnd,
+    enabled: panelQuery.canQuery,
   });
 
   const conflicts = useMemo(() => {
-    if (!meetingStart || !meetingEnd || meetingEnd <= meetingStart) {
+    if (!panelQuery.validMeetingWindow || !meetingStart || !meetingEnd) {
       return [];
     }
     return buildAvailabilityConflicts(
@@ -63,14 +64,32 @@ export function MeetingAvailabilityPanel({
       i18n.language,
       { busy: t('meeting.busy'), schedule: t('meeting.schedule') },
     );
-  }, [i18n.language, items, meetingEnd, meetingStart, resolvedTimeZone, t]);
+  }, [
+    i18n.language,
+    items,
+    meetingEnd,
+    meetingStart,
+    panelQuery.validMeetingWindow,
+    resolvedTimeZone,
+    t,
+  ]);
+
+  const displayState = selectMeetingAvailabilityPanelDisplayState({
+    attendeeCount: panelQuery.attendeeIds.length,
+    conflictCount: conflicts.length,
+    error,
+    loading,
+    validMeetingWindow: panelQuery.validMeetingWindow,
+  });
 
   return (
     <>
       <div className="space-y-2 rounded-md border border-app-border bg-app-surface px-4 py-3">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="app-text-control-sm text-app-ink/70">{t('meeting.attendeeSchedule')}</p>
+            <p className="app-text-control-sm text-app-ink/70">
+              {t('meeting.attendeeSchedule')}
+            </p>
             <p className="app-text-caption text-app-ink/45">
               {t('meeting.attendeeScheduleDescription')}
             </p>
@@ -78,7 +97,7 @@ export function MeetingAvailabilityPanel({
           <button
             type="button"
             onClick={() => setModalOpen(true)}
-            disabled={!canQuery}
+            disabled={!panelQuery.canQuery}
             className="app-text-control-sm inline-flex items-center gap-1.5 rounded-md border border-app-border bg-app-surface-sidebar px-3 py-1.5 text-app-ink transition-colors hover:bg-app-surface-hover disabled:cursor-not-allowed disabled:opacity-45"
           >
             <CalendarDays size={14} />
@@ -86,23 +105,27 @@ export function MeetingAvailabilityPanel({
           </button>
         </div>
 
-        {!meetingStart || !meetingEnd || meetingEnd <= meetingStart ? (
+        {displayState.type === 'invalid-window' ? (
           <p className="app-text-caption text-app-ink/50">
             {t('meeting.availabilityInvalidWindow')}
           </p>
-        ) : attendeeUsers.length === 0 ? (
+        ) : displayState.type === 'no-attendees' ? (
           <p className="app-text-caption text-app-ink/50">
             {t('meeting.availabilityNoAttendees')}
           </p>
-        ) : loading ? (
+        ) : displayState.type === 'loading' ? (
           <div className="flex items-center gap-2 text-app-ink/50">
             <Loader2 size={14} className="animate-spin" />
-            <span className="app-text-caption">{t('meeting.availabilityChecking')}</span>
+            <span className="app-text-caption">
+              {t('meeting.availabilityChecking')}
+            </span>
           </div>
-        ) : error ? (
-          <p className="app-text-caption text-[var(--ui-color-warning)]">{error}</p>
-        ) : conflicts.length === 0 ? (
-          <p className="app-text-caption text-emerald-600">
+        ) : displayState.type === 'error' ? (
+          <p className="app-text-caption text-[var(--ui-color-warning)]">
+            {displayState.message}
+          </p>
+        ) : displayState.type === 'no-conflicts' ? (
+          <p className="app-text-caption text-app-success-text">
             {t('meeting.availabilityNoConflicts')}
           </p>
         ) : (
@@ -122,7 +145,10 @@ export function MeetingAvailabilityPanel({
                       item.block,
                       resolvedTimeZone,
                       i18n.language,
-                      { busy: t('meeting.busy'), schedule: t('meeting.schedule') },
+                      {
+                        busy: t('meeting.busy'),
+                        schedule: t('meeting.schedule'),
+                      },
                     )}
                   </span>
                 </div>
@@ -133,6 +159,7 @@ export function MeetingAvailabilityPanel({
       </div>
 
       <MeetingAvailabilityModal
+        key={`${modalOpen ? 'open' : 'closed'}-${meetingStart?.getTime() ?? 'none'}`}
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         workspaceSlug={workspaceSlug}

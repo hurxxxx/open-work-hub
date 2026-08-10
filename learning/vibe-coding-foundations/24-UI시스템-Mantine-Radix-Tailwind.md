@@ -87,7 +87,7 @@ function LoginModal() {
 | Ant Design | **중국권 기업 폼**이 강점 — 엔터프라이즈 폼·테이블 분야 최강. 고유 디자인 취향. |
 | shadcn/ui | **"npm 설치"가 아니라 코드 복사-붙여넣기** 방식 — 내 저장소에 소스가 그대로 들어와 자유도 최고. 최근 가장 뜨거움. |
 
-**shadcn/ui**는 최근 가장 뜨거운 선택지인데, 이 프로젝트는 Mantine을 메인으로 두고 shadcn 스타일의 컴포넌트를 일부 같이 쓰는 **하이브리드** 로 보입니다(실제로 `apps/web/src/components/ui/` 아래 shadcn 스타일이 보임).
+**shadcn/ui**는 최근 가장 뜨거운 선택지입니다. 이 프로젝트는 Mantine을 메인으로 두고, 공용 UI는 `packages/ui/src/lib/`와 `apps/web/src/components/` 경계에서 관리합니다.
 
 ### 2.4 ⚠️ UI 라이브러리에서 자주 듣는 오해
 

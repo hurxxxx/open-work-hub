@@ -1,9 +1,17 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Layout, UserPlus, X } from 'lucide-react';
-import { Dialog, Button } from '@ai-do/ui';
+import { useEffect, useMemo, useReducer } from 'react';
+import { Layout, UserPlus } from 'lucide-react';
+import { InlineNotice } from '@ai-do/ui';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { hasWorkspaceMembership } from '@/src/platform/auth/auth-api';
+import {
+  FORM_FIELD_CONTROL_CLASS_NAME,
+  FORM_TEXTAREA_CONTROL_CLASS_NAME,
+  FormDialog,
+  FormFieldRow,
+} from '@/src/components/form/FormDialog';
+import { UserSearchMultiSelect } from '@/src/platform/users/UserSearchMultiSelect';
+import { selectUserOptionsForPicker } from '@/src/platform/users/user-option-picker-model';
 import {
   addSpaceMember,
   createSpace,
@@ -11,180 +19,250 @@ import {
   type PmsSpace,
   type PmsUserSummary,
 } from '../api/pms-api';
-import { initials } from './pms-constants';
 
-const AVATAR_COLORS = [
-  'bg-rose-500',
-  'bg-pink-500',
-  'bg-fuchsia-500',
-  'bg-purple-500',
-  'bg-violet-500',
-  'bg-indigo-500',
-  'bg-blue-500',
-  'bg-sky-500',
-  'bg-cyan-500',
-  'bg-teal-500',
-  'bg-emerald-500',
-  'bg-green-500',
-  'bg-amber-500',
-  'bg-orange-500',
-];
+interface CreateSpaceModalState {
+  name: string;
+  description: string;
+  submitting: boolean;
+  error: string;
+  allUsers: PmsUserSummary[];
+  picked: PmsUserSummary[];
+  query: string;
+  queryFocused: boolean;
+}
 
-function avatarColor(seed: string): string {
-  let hash = 0;
-  for (let i = 0; i < seed.length; i += 1) {
-    hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+type CreateSpaceModalAction =
+  | { type: 'reset' }
+  | { type: 'setName'; value: string }
+  | { type: 'setDescription'; value: string }
+  | { type: 'setQuery'; value: string }
+  | { type: 'setQueryFocused'; value: boolean }
+  | { type: 'usersLoaded'; users: PmsUserSummary[] }
+  | { type: 'usersLoadFailed' }
+  | { type: 'addMember'; user: PmsUserSummary }
+  | { type: 'removeMember'; userId: string }
+  | { type: 'createStarted' }
+  | { type: 'createFailed'; message: string }
+  | { type: 'createPartialFailed'; message: string }
+  | { type: 'createFinished' };
+
+const INITIAL_CREATE_SPACE_MODAL_STATE: CreateSpaceModalState = {
+  name: '',
+  description: '',
+  submitting: false,
+  error: '',
+  allUsers: [],
+  picked: [],
+  query: '',
+  queryFocused: false,
+};
+
+function createSpaceModalReducer(
+  state: CreateSpaceModalState,
+  action: CreateSpaceModalAction,
+): CreateSpaceModalState {
+  switch (action.type) {
+    case 'reset':
+      return INITIAL_CREATE_SPACE_MODAL_STATE;
+    case 'setName':
+      return { ...state, name: action.value };
+    case 'setDescription':
+      return { ...state, description: action.value };
+    case 'setQuery':
+      return { ...state, query: action.value };
+    case 'setQueryFocused':
+      return { ...state, queryFocused: action.value };
+    case 'usersLoaded':
+      return { ...state, allUsers: action.users };
+    case 'usersLoadFailed':
+      return { ...state, allUsers: [] };
+    case 'addMember':
+      return {
+        ...state,
+        picked: state.picked.some((item) => item.id === action.user.id)
+          ? state.picked
+          : [...state.picked, action.user],
+        query: '',
+      };
+    case 'removeMember':
+      return {
+        ...state,
+        picked: state.picked.filter((user) => user.id !== action.userId),
+      };
+    case 'createStarted':
+      return { ...state, submitting: true, error: '' };
+    case 'createFailed':
+    case 'createPartialFailed':
+      return { ...state, submitting: false, error: action.message };
+    case 'createFinished':
+      return { ...state, submitting: false };
+    default:
+      return state;
   }
-  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
 }
 
 export const CreateSpaceModal = ({
   isOpen,
   onClose,
   onCreated,
+  workspaceSlug,
 }: {
   isOpen: boolean;
   onClose: () => void;
   onCreated?: (space: PmsSpace) => void;
+  workspaceSlug?: string | null;
 }) => {
   const { t } = useTranslation(['apps', 'common']);
   const { token, user } = useAuth();
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const [allUsers, setAllUsers] = useState<PmsUserSummary[]>([]);
-  const [picked, setPicked] = useState<PmsUserSummary[]>([]);
-  const [query, setQuery] = useState('');
-  const [queryFocused, setQueryFocused] = useState(false);
+  const [
+    {
+      name,
+      description,
+      submitting,
+      error,
+      allUsers,
+      picked,
+      query,
+      queryFocused,
+    },
+    dispatch,
+  ] = useReducer(createSpaceModalReducer, INITIAL_CREATE_SPACE_MODAL_STATE);
 
   const canCreateSpace = hasWorkspaceMembership(user);
 
   useEffect(() => {
     if (!isOpen) return;
-    setName('');
-    setDescription('');
-    setError('');
-    setSubmitting(false);
-    setPicked([]);
-    setQuery('');
-    setQueryFocused(false);
+    dispatch({ type: 'reset' });
   }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen || !token || !canCreateSpace) return;
     let cancelled = false;
-    listPmsUsers(token)
+    listPmsUsers(token, workspaceSlug)
       .then((users) => {
-        if (!cancelled) setAllUsers(users);
+        if (!cancelled) dispatch({ type: 'usersLoaded', users });
       })
       .catch(() => {
-        if (!cancelled) setAllUsers([]);
+        if (!cancelled) dispatch({ type: 'usersLoadFailed' });
       });
     return () => {
       cancelled = true;
     };
-  }, [isOpen, token, canCreateSpace]);
+  }, [isOpen, token, workspaceSlug, canCreateSpace]);
 
-  const pickedIds = useMemo(
-    () => new Set(picked.map((u) => u.id)),
-    [picked],
+  const excludedCandidateIds = useMemo(
+    () =>
+      new Set([
+        ...picked.map((pickedUser) => pickedUser.id),
+        ...(user?.id ? [user.id] : []),
+      ]),
+    [picked, user?.id],
   );
 
-  const candidates = useMemo(() => {
-    const trimmed = query.trim().toLowerCase();
-    // Hide the current user — they're added as owner automatically.
-    return allUsers
-      .filter((u) => u.id !== user?.id && !pickedIds.has(u.id))
-      .filter((u) => {
-        if (!trimmed) return true;
-        return (
-          u.full_name.toLowerCase().includes(trimmed) ||
-          u.email.toLowerCase().includes(trimmed)
-        );
-      })
-      .slice(0, 6);
-  }, [allUsers, pickedIds, query, user?.id]);
+  const candidates = useMemo(
+    () =>
+      selectUserOptionsForPicker<PmsUserSummary>({
+        users: allUsers,
+        query,
+        excludeIds: excludedCandidateIds,
+        limit: 6,
+      }),
+    [allUsers, excludedCandidateIds, query],
+  );
 
-  function addMember(u: PmsUserSummary) {
-    setPicked((prev) =>
-      prev.some((item) => item.id === u.id) ? prev : [...prev, u],
-    );
-    setQuery('');
+  function addMember(member: PmsUserSummary) {
+    dispatch({ type: 'addMember', user: member });
   }
 
   function removeMember(userId: string) {
-    setPicked((prev) => prev.filter((u) => u.id !== userId));
+    dispatch({ type: 'removeMember', userId });
+  }
+
+  function handleClose() {
+    dispatch({ type: 'reset' });
+    onClose();
   }
 
   async function handleCreate() {
     if (!token || !name.trim() || !canCreateSpace) return;
-    setSubmitting(true);
-    setError('');
+    dispatch({ type: 'createStarted' });
     try {
-      const space = await createSpace(token, {
-        name: name.trim(),
-        description: description.trim(),
-      });
+      const space = await createSpace(
+        token,
+        {
+          name: name.trim(),
+          description: description.trim(),
+        },
+        workspaceSlug,
+      );
 
-      // Add each picked member sequentially. Failures collect so the user
-      // sees exactly which invites couldn't be completed; the space itself
-      // is kept regardless so the creator can retry from SpaceMembersModal.
-      const failures: string[] = [];
-      for (const member of picked) {
-        try {
-          await addSpaceMember(token, space.id, {
-            user_id: member.id,
-            role: 'member',
-          });
-        } catch (err) {
-          failures.push(
-            `${member.full_name}: ${err instanceof Error ? err.message : t('apps:pms.memberInviteFailed')}`,
-          );
-        }
-      }
+      const failures = (
+        await Promise.all(
+          picked.map(async (member) => {
+            try {
+              await addSpaceMember(
+                token,
+                space.id,
+                {
+                  user_id: member.id,
+                  role: 'member',
+                },
+                workspaceSlug,
+              );
+              return null;
+            } catch (err) {
+              const message =
+                err instanceof Error
+                  ? err.message
+                  : t('apps:pms.memberInviteFailed');
+              return `${member.full_name}: ${message}`;
+            }
+          }),
+        )
+      ).filter((failure): failure is string => failure !== null);
 
       if (failures.length > 0) {
-        setError(
-          t('apps:pms.createSpacePartialFailure', { failures: failures.join(', ') }),
-        );
+        dispatch({
+          type: 'createPartialFailed',
+          message: t('apps:pms.createSpacePartialFailure', {
+            failures: failures.join(', '),
+          }),
+        });
       }
 
       onCreated?.(space);
       if (failures.length === 0) {
-        onClose();
+        handleClose();
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('apps:pms.createSpaceFailed'));
+      dispatch({
+        type: 'createFailed',
+        message:
+          err instanceof Error ? err.message : t('apps:pms.createSpaceFailed'),
+      });
     } finally {
-      setSubmitting(false);
+      dispatch({ type: 'createFinished' });
     }
   }
 
   return (
-    <Dialog
-        closeLabel={t('common:actions.close')}
+    <FormDialog
+      cancelLabel={t('common:actions.cancel')}
+      closeLabel={t('common:actions.close')}
       open={isOpen}
-      onOpenChange={(open) => { if (!open) onClose(); }}
+      onCancel={handleClose}
+      onPrimary={() => void handleCreate()}
       title={t('apps:pms.createSpace')}
       maxWidth="max-w-xl"
       dismissOnInteractOutside={false}
-      actions={
-        <div className="flex items-center justify-end gap-3 w-full">
-          <Button variant="secondary" onClick={onClose}>{t('common:actions.cancel')}</Button>
-          <Button
-            variant="primary"
-            onClick={handleCreate}
-            disabled={!name.trim() || !canCreateSpace || submitting}
-          >
-            {submitting ? t('apps:pms.creating') : t('apps:pms.createSpace')}
-          </Button>
-        </div>
-      }
+      primaryDisabled={!name.trim() || !canCreateSpace}
+      primaryLabel={t('apps:pms.createSpace')}
+      primaryPendingLabel={t('apps:pms.creating')}
+      submitting={submitting}
     >
       <div className="space-y-5 text-app-ink">
         <div className="flex items-center gap-3 p-4 rounded-lg bg-app-surface-sidebar border border-app-border">
-          <div className="w-10 h-10 bg-app-accent/20 rounded-lg flex items-center justify-center">
+          <div className="size-10 bg-app-accent/20 rounded-lg flex items-center justify-center">
             <Layout size={20} className="text-app-accent" />
           </div>
           <div className="app-text-body text-app-ink/60">
@@ -193,29 +271,30 @@ export const CreateSpaceModal = ({
         </div>
 
         {!canCreateSpace && (
-          <div className="app-text-body rounded-md border border-[var(--ui-color-warning)]/30 bg-[var(--ui-color-warning)]/10 px-3 py-2 text-[var(--ui-color-warning)]">
+          <InlineNotice tone="warning">
             {t('apps:pms.createSpaceNoAccess')}
-          </div>
+          </InlineNotice>
         )}
 
         {error && (
-          <div
-            role="alert"
-            className="app-text-body rounded-md border border-[var(--ui-color-danger)]/30 bg-[var(--ui-color-danger)]/10 px-3 py-2 text-[var(--ui-color-danger)]"
-          >
+          <InlineNotice role="alert" tone="danger">
             {error}
-          </div>
+          </InlineNotice>
         )}
 
-        <div className="space-y-1">
-          <label className="app-text-control-sm text-app-ink/70">
-            {t('apps:pms.spaceName')} <span className="text-[var(--ui-color-danger)]">*</span>
-          </label>
+        <FormFieldRow
+          htmlFor="create-space-name"
+          label={t('apps:pms.spaceName')}
+          required
+        >
           <input
+            id="create-space-name"
             type="text"
             placeholder={t('apps:pms.spacePlaceholder')}
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) =>
+              dispatch({ type: 'setName', value: e.target.value })
+            }
             onKeyDown={(e) => {
               if (
                 e.key === 'Enter' &&
@@ -223,121 +302,68 @@ export const CreateSpaceModal = ({
                 name.trim() &&
                 !submitting
               ) {
-                handleCreate();
+                void handleCreate();
               }
             }}
-            className="app-text-body w-full rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink placeholder:text-app-ink/30 transition-all focus:border-app-accent focus:outline-none"
-            autoFocus
+            className={FORM_FIELD_CONTROL_CLASS_NAME}
           />
-        </div>
+        </FormFieldRow>
 
-        <div className="space-y-1">
-          <label className="app-text-control-sm text-app-ink/70">
-            {t('apps:pms.description')} <span className="text-app-ink/30">({t('apps:pms.optional')})</span>
-          </label>
+        <FormFieldRow
+          htmlFor="create-space-description"
+          label={t('apps:pms.description')}
+          optionalLabel={t('apps:pms.optional')}
+        >
           <textarea
+            id="create-space-description"
             placeholder={t('apps:pms.spaceDescriptionPlaceholder')}
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
+            onChange={(e) =>
+              dispatch({ type: 'setDescription', value: e.target.value })
+            }
             rows={3}
-            className="app-text-body w-full resize-none rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink placeholder:text-app-ink/30 transition-all focus:border-app-accent focus:outline-none"
+            className={FORM_TEXTAREA_CONTROL_CLASS_NAME}
           />
-        </div>
+        </FormFieldRow>
 
         {canCreateSpace ? (
-          <div className="space-y-2">
-            <label className="app-text-control-sm text-app-ink/70">
-              {t('apps:pms.inviteMembers')} <span className="text-app-ink/30">({t('apps:pms.optional')})</span>
-            </label>
+          <FormFieldRow
+            htmlFor="create-space-member-query"
+            label={t('apps:pms.inviteMembers')}
+            optionalLabel={t('apps:pms.optional')}
+          >
             <p className="app-text-caption text-app-ink/40">
               {t('apps:pms.inviteMembersHint')}
             </p>
-
-            {picked.length > 0 ? (
-              <div className="flex flex-wrap gap-1.5">
-                {picked.map((member) => (
-                  <span
-                    key={member.id}
-                    className="app-text-caption inline-flex items-center gap-2 rounded-full border border-app-border bg-app-surface-sidebar py-1 pl-1 pr-2 text-app-ink"
-                  >
-                    <span
-                      className={`flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-semibold text-white ${avatarColor(member.id)}`}
-                    >
-                      {initials(member.full_name)}
-                    </span>
-                    <span className="max-w-[10rem] truncate">
-                      {member.full_name}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => removeMember(member.id)}
-                      className="text-app-ink/40 hover:text-app-ink"
-                      aria-label={t('apps:pms.removeMember', { name: member.full_name })}
-                    >
-                      <X size={11} />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            ) : null}
-
-            <div className="relative">
-              <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-app-ink/40">
-                <UserPlus size={14} />
-              </div>
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onFocus={() => setQueryFocused(true)}
-                onBlur={() => {
-                  window.setTimeout(() => setQueryFocused(false), 150);
-                }}
-                placeholder={t('apps:pms.searchUser')}
-                className="app-text-body w-full rounded-md border border-app-border bg-app-surface-sidebar py-2 pl-9 pr-3 text-app-ink placeholder:text-app-ink/30 focus:border-app-accent focus:outline-none"
-              />
-              {queryFocused && (query.trim() || candidates.length > 0) ? (
-                <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-56 overflow-y-auto rounded-md border border-app-border bg-app-surface shadow-lg">
-                  {candidates.length === 0 ? (
-                    <div className="app-text-caption px-3 py-3 text-app-ink/40">
-                      {query.trim()
-                        ? t('apps:pms.noMatchingUsers')
-                        : t('apps:pms.noUsersToAdd')}
-                    </div>
-                  ) : (
-                    <ul>
-                      {candidates.map((candidate) => (
-                        <li key={candidate.id}>
-                          <button
-                            type="button"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => addMember(candidate)}
-                            className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-app-surface-hover"
-                          >
-                            <span
-                              className={`flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-semibold text-white ${avatarColor(candidate.id)}`}
-                            >
-                              {initials(candidate.full_name)}
-                            </span>
-                            <div className="min-w-0 flex-1">
-                              <div className="app-text-body line-clamp-1 text-app-ink">
-                                {candidate.full_name}
-                              </div>
-                              <div className="app-text-caption line-clamp-1 text-app-ink/40">
-                                {candidate.email}
-                              </div>
-                            </div>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              ) : null}
-            </div>
-          </div>
+            <UserSearchMultiSelect
+              candidates={candidates}
+              inputId="create-space-member-query"
+              labels={{
+                noUserMatch: t('apps:pms.noMatchingUsers'),
+                removeItem: (memberName) =>
+                  t('apps:pms.removeMember', { name: memberName }),
+                searchPlaceholder: t('apps:pms.searchUser'),
+                searchPrompt: t('apps:pms.noUsersToAdd'),
+                searching: t('apps:pms.searchUser'),
+              }}
+              onAddUser={addMember}
+              onQueryChange={(value) => dispatch({ type: 'setQuery', value })}
+              onQueryFocusChange={(value) =>
+                dispatch({ type: 'setQueryFocused', value })
+              }
+              onRemoveUser={removeMember}
+              query={query}
+              queryFocused={
+                queryFocused && (Boolean(query.trim()) || candidates.length > 0)
+              }
+              renderCandidateTrailing={() => (
+                <UserPlus size={14} className="shrink-0 text-app-accent" />
+              )}
+              selectedUsers={picked}
+            />
+          </FormFieldRow>
         ) : null}
       </div>
-    </Dialog>
+    </FormDialog>
   );
 };

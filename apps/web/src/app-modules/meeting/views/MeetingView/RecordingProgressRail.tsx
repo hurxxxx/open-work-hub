@@ -1,31 +1,28 @@
 import { AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import type {
-  MeetingRecording,
-  MeetingRecordingStatus,
-} from '../../api/meeting-api';
+import type { MeetingRecording } from '../../api/meeting-api';
 
-const STAGES = [
-  { key: 'pending' },
-  { key: 'transcribing' },
-  { key: 'summarizing' },
-  { key: 'extracting_insights' },
-  { key: 'generating_doc' },
-  { key: 'done' },
-] as const satisfies ReadonlyArray<{ key: MeetingRecordingStatus }>;
+import {
+  projectRecordingProgressStages,
+  RECORDING_PROGRESS_STAGES,
+  type RecordingProgressStageKey,
+} from './recording-progress-rail-model';
 
-// Failure rail should freeze at the "generating_doc" marker (final
-// pipeline stage before completion). Deriving from STAGES keeps this
-// correct when stages are inserted — hard-coding the index would drift.
-const FAILED_STAGE_INDEX = STAGES.findIndex((stage) => stage.key === 'generating_doc');
+const STAGE_LABEL_KEYS: Record<RecordingProgressStageKey, string> = {
+  pending: 'meeting.recordingProgress.stages.pending',
+  transcribing: 'meeting.recordingProgress.stages.transcribing',
+  summarizing: 'meeting.recordingProgress.stages.summarizing',
+  extracting_insights: 'meeting.recordingProgress.stages.extractingInsights',
+  generating_doc: 'meeting.recordingProgress.stages.generatingDoc',
+  done: 'meeting.recordingProgress.stages.done',
+};
 
-function stageIndex(status: MeetingRecordingStatus): number {
-  const index = STAGES.findIndex((stage) => stage.key === status);
-  if (index >= 0) return index;
-  if (status === 'failed') return FAILED_STAGE_INDEX;
-  return 0;
-}
+const STAGE_STATE_LABEL_KEYS = {
+  complete: 'meeting.recordingProgress.stageStates.complete',
+  current: 'meeting.recordingProgress.stageStates.current',
+  upcoming: 'meeting.recordingProgress.stageStates.upcoming',
+} as const;
 
 export function RecordingProgressRail({
   recording,
@@ -35,39 +32,54 @@ export function RecordingProgressRail({
   onRetry?: () => void;
 }) {
   const { t } = useTranslation('apps');
-  const currentIndex = stageIndex(recording.transcription_status);
-  const active = recording.transcription_status !== 'failed' && recording.transcription_status !== 'done';
+  const stages = projectRecordingProgressStages(recording.transcription_status);
   return (
     <div className="space-y-2" aria-live="polite">
-      <div className="flex items-center gap-2">
-        {STAGES.map((stage, index) => {
-          const done = index < currentIndex || recording.transcription_status === 'done';
-          const current = index === currentIndex && active;
+      <ol
+        aria-label={t('meeting.recordingProgress.pipeline')}
+        className="flex items-center gap-2"
+      >
+        {stages.map((stage, index) => {
           return (
-            <div key={stage.key} className="flex flex-1 items-center gap-2">
+            <li
+              key={stage.key}
+              aria-current={stage.current ? 'step' : undefined}
+              aria-label={`${t(STAGE_LABEL_KEYS[stage.key])}: ${t(STAGE_STATE_LABEL_KEYS[stage.state])}`}
+              className="flex flex-1 items-center gap-2"
+            >
               <div
                 className={`flex h-6 w-6 items-center justify-center rounded-full border text-[11px] ${
-                  done
+                  stage.done
                     ? 'border-app-accent bg-app-accent text-app-accent-fg'
-                    : current
+                    : stage.current
                       ? 'border-app-accent text-app-accent'
                       : 'border-app-border text-app-ink/40'
                 }`}
               >
-                {done ? <CheckCircle2 size={12} /> : current ? <Loader2 size={12} className="animate-spin" /> : index + 1}
+                {stage.done ? (
+                  <CheckCircle2 size={12} />
+                ) : stage.current ? (
+                  <Loader2 size={12} className="animate-spin" />
+                ) : (
+                  stage.marker
+                )}
               </div>
-              {index < STAGES.length - 1 ? (
-                <div className={`h-px flex-1 ${done ? 'bg-app-accent' : 'bg-app-border'}`} />
+              {index < RECORDING_PROGRESS_STAGES.length - 1 ? (
+                <div
+                  className={`h-px flex-1 ${stage.done ? 'bg-app-accent' : 'bg-app-border'}`}
+                />
               ) : null}
-            </div>
+            </li>
           );
         })}
-      </div>
+      </ol>
       <div className="flex items-center justify-between gap-3">
         <p className="app-text-caption text-app-ink/60">
           {recording.transcription_status === 'failed'
             ? t('meeting.recordingProgress.failed')
-            : t('meeting.recordingProgress.progress', { progress: recording.progress_pct })}
+            : t('meeting.recordingProgress.progress', {
+                progress: recording.progress_pct,
+              })}
         </p>
         {recording.transcription_status === 'failed' && onRetry ? (
           <button
@@ -81,7 +93,9 @@ export function RecordingProgressRail({
         ) : null}
       </div>
       {recording.failure_reason ? (
-        <p className="app-text-caption text-[var(--ui-color-danger)]">{recording.failure_reason}</p>
+        <p className="app-text-caption text-[var(--ui-color-danger)]">
+          {recording.failure_reason}
+        </p>
       ) : null}
     </div>
   );

@@ -1,6 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { motion } from 'motion/react';
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { LazyMotion, domAnimation, m } from 'motion/react';
 import {
   Activity,
   CalendarDays,
@@ -13,10 +20,15 @@ import { cn } from '@/src/lib/utils';
 import { getKoreanHolidayNames } from '@/src/lib/korean-holidays';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { useCalendarEvents } from '@/src/platform/calendar/use-calendar-events';
-import type { CalendarEvent } from '@/src/platform/calendar/calendar-types';
+import type {
+  CalendarEvent,
+  CalendarSourceFilter,
+} from '@/src/platform/calendar/calendar-types';
+import { dispatchFloatingPmsOpen } from '@/src/platform/personal-widgets/floating-panel-events';
 import { normalizeTimeZone } from '@/src/platform/time/time-utils';
+import { resolveShellWorkspaceSlug } from '@/src/platform/workspaces/workspace-utils';
 import { updateMeeting } from '@/src/app-modules/meeting/public-api';
-import { updateIssue } from '@/src/app-modules/pms/public-api';
+import { updateTask } from '@/src/app-modules/pms/public-api';
 import { updatePlannerEvent } from '../api/planner-api';
 import {
   UnifiedCalendar,
@@ -28,14 +40,45 @@ import { MeetingPreviewModal } from './calendar/MeetingPreviewModal';
 import { PlannerEventModal } from './PlannerEventModal';
 import { PlannerEventChoicePopover } from './PlannerEventChoicePopover';
 import { PlannerTimelineView } from './PlannerTimelineView';
-
-type PlannerViewMode = 'Month' | 'Week' | 'Day' | 'Agenda';
-type PlannerSurfaceMode = 'calendar' | 'timeline';
-const TIMELINE_RANGE_OPTIONS = [14, 28, 56] as const;
-type TimelineRangeDays = (typeof TIMELINE_RANGE_OPTIONS)[number];
-
-const DEFAULT_TIMELINE_RANGE_DAYS: TimelineRangeDays = 28;
-const TIMELINE_RANGE_STORAGE_KEY = 'ai-do:planner-timeline-range-days';
+import { createPlannerCalendarScheduleWorkflow } from './planner-calendar-schedule-workflow';
+import {
+  buildPlannerSurfaceModeSearchParams,
+  movePlannerVisiblePeriod,
+  pickPlannerDate,
+  resolvePlannerCalendarEventClick,
+  runPlannerCalendarCommand,
+} from './planner-calendar-controller';
+import {
+  TIMELINE_RANGE_OPTIONS,
+  buildPlannerDatePickerGrid,
+  formatPlannerHeading,
+  getPlannerDateFormatter,
+  persistTimelineRangeDays,
+  readTimelineRangeDays,
+  type PlannerSurfaceMode,
+  type PlannerViewMode,
+  type TimelineRangeDays,
+} from './planner-calendar-view-model';
+import {
+  applyCalendarDatesSet,
+  applySurfaceMode,
+  chooseCalendarSelectionTarget,
+  closeCreateMenu,
+  closeMeetingCreate,
+  closePicker,
+  closePlannerEventModal as closePlannerEventModalSession,
+  closePreviewMeeting,
+  handleMeetingCreated as handleMeetingCreatedSession,
+  initializePlannerCalendarSession,
+  movePickerMonth,
+  openMeetingCreate,
+  openPicker as openPlannerPicker,
+  openPlannerEventCreate as openPlannerEventCreateSession,
+  openPlannerEventEdit as openPlannerEventEditSession,
+  selectTimelineRangeDays as selectTimelineRangeDaysSession,
+  toggleCreateMenu,
+  type PlannerEventDraftRange,
+} from './planner-calendar-session';
 
 const SURFACE_MODE_LABEL_KEYS: Record<PlannerSurfaceMode, string> = {
   calendar: 'planner.surfaces.calendar',
@@ -62,168 +105,12 @@ const VIEW_MODE_TO_FC: Record<PlannerViewMode, UnifiedCalendarView> = {
   Agenda: 'listWeek',
 };
 
-const FC_VIEW_TO_MODE: Record<UnifiedCalendarView, PlannerViewMode> = {
-  dayGridMonth: 'Month',
-  timeGridWeek: 'Week',
-  timeGridDay: 'Day',
-  listWeek: 'Agenda',
-};
-
-/** Subtract one day from a "YYYY-MM-DD" string. Used to convert FullCalendar's
- *  exclusive all-day end (next day 00:00) into the stored inclusive due_date. */
-function decrementYmd(ymd: string): string {
-  const [y, m, d] = ymd.split('-').map(Number);
-  const date = new Date(Date.UTC(y, m - 1, d));
-  date.setUTCDate(date.getUTCDate() - 1);
-  return date.toISOString().slice(0, 10);
-}
-
-function formatLocalYmd(date: Date): string {
-  return [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, '0'),
-    String(date.getDate()).padStart(2, '0'),
-  ].join('-');
-}
-
-function startOfLocalDay(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-}
-
-function addDays(date: Date, days: number): Date {
-  const next = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  next.setDate(next.getDate() + days);
-  return next;
-}
-
-function startOfWeek(date: Date): Date {
-  return addDays(startOfLocalDay(date), -startOfLocalDay(date).getDay());
-}
-
-function isTimelineRangeDays(value: number): value is TimelineRangeDays {
-  return TIMELINE_RANGE_OPTIONS.includes(value as TimelineRangeDays);
-}
-
-function readTimelineRangeDays(): TimelineRangeDays {
-  if (typeof window === 'undefined') {
-    return DEFAULT_TIMELINE_RANGE_DAYS;
-  }
-
-  try {
-    const rawValue = window.localStorage.getItem(TIMELINE_RANGE_STORAGE_KEY);
-    const parsedValue = rawValue ? Number(rawValue) : NaN;
-    return isTimelineRangeDays(parsedValue)
-      ? parsedValue
-      : DEFAULT_TIMELINE_RANGE_DAYS;
-  } catch {
-    return DEFAULT_TIMELINE_RANGE_DAYS;
-  }
-}
-
-function persistTimelineRangeDays(days: TimelineRangeDays) {
-  try {
-    window.localStorage.setItem(TIMELINE_RANGE_STORAGE_KEY, String(days));
-  } catch {
-    // Ignore storage failures; the selected range still applies in memory.
-  }
-}
-
-function buildInitialPlannerRange(
-  currentDate: Date,
-  viewMode: PlannerViewMode,
-  surfaceMode: PlannerSurfaceMode,
-  timelineRangeDays = DEFAULT_TIMELINE_RANGE_DAYS,
-): { currentDate: Date; rangeStart: string; rangeEnd: string } {
-  const current = startOfLocalDay(currentDate);
-  if (surfaceMode === 'timeline') {
-    const rangeStart = startOfWeek(current);
-    return {
-      currentDate: current,
-      rangeStart: formatLocalYmd(rangeStart),
-      rangeEnd: formatLocalYmd(addDays(rangeStart, timelineRangeDays)),
-    };
-  }
-  if (viewMode === 'Month') {
-    const monthStart = new Date(current.getFullYear(), current.getMonth(), 1);
-    const rangeStart = startOfWeek(monthStart);
-    const rangeEnd = addDays(rangeStart, 42);
-    return {
-      currentDate: current,
-      rangeStart: formatLocalYmd(rangeStart),
-      rangeEnd: formatLocalYmd(rangeEnd),
-    };
-  }
-  if (viewMode === 'Day') {
-    return {
-      currentDate: current,
-      rangeStart: formatLocalYmd(current),
-      rangeEnd: formatLocalYmd(addDays(current, 1)),
-    };
-  }
-  const rangeStart = startOfWeek(current);
-  return {
-    currentDate: current,
-    rangeStart: formatLocalYmd(rangeStart),
-    rangeEnd: formatLocalYmd(addDays(rangeStart, 7)),
-  };
-}
-
-function parseLocalYmd(value: string): Date | null {
-  const [year, month, day] = value.split('-').map(Number);
-  if (!year || !month || !day) {
-    return null;
-  }
-  return new Date(year, month - 1, day);
-}
-
-function formatTimelineHeading(
-  rangeStart: string,
-  rangeEnd: string,
-  locale: string,
-): string {
-  const start = parseLocalYmd(rangeStart);
-  const exclusiveEnd = parseLocalYmd(rangeEnd);
-  if (!start || !exclusiveEnd) {
-    return '';
-  }
-  const end = addDays(exclusiveEnd, -1);
-  const formatter = new Intl.DateTimeFormat(locale, {
-    day: 'numeric',
-    month: 'short',
-    year: start.getFullYear() === end.getFullYear() ? undefined : 'numeric',
-  });
-  const startLabel = formatter.format(start);
-  const endLabel = new Intl.DateTimeFormat(locale, {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  }).format(end);
-  return `${startLabel} - ${endLabel}`;
-}
-
-function formatPlannerHeading(
-  viewMode: PlannerViewMode,
-  currentDate: Date,
-  locale: string,
-  surfaceMode: PlannerSurfaceMode,
-  rangeStart: string,
-  rangeEnd: string,
-): string {
-  if (surfaceMode === 'timeline') {
-    return formatTimelineHeading(rangeStart, rangeEnd, locale);
-  }
-  if (viewMode === 'Day') {
-    return new Intl.DateTimeFormat(locale, {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    }).format(currentDate);
-  }
-  return new Intl.DateTimeFormat(locale, {
-    month: 'long',
-    year: 'numeric',
-  }).format(currentDate);
-}
+const PLANNER_SOURCES = [
+  'meeting',
+  'pms_due',
+  'pms_block',
+  'planner_event',
+] as const satisfies CalendarSourceFilter;
 
 interface DatePickerPopoverProps {
   pickerYear: number;
@@ -250,43 +137,46 @@ function DatePickerPopover({
   onPickToday,
   onPickDate,
 }: DatePickerPopoverProps) {
-  const { t, i18n } = useTranslation('apps');
-  // 6×7 grid: leading blanks for the days before the 1st (Sun-start, per user
-  // pref). Always render 42 cells so popover height never jumps as the user
-  // browses across months.
-  const leadingBlanks = new Date(pickerYear, pickerMonth, 1).getDay();
-  const daysInMonth = new Date(pickerYear, pickerMonth + 1, 0).getDate();
-  const cells = Array.from({ length: 42 }, (_, i) => {
-    const dayNumber = i - leadingBlanks + 1;
-    return dayNumber >= 1 && dayNumber <= daysInMonth ? dayNumber : 0;
-  });
+  const { i18n, t } = useTranslation('apps');
+  const cells = useMemo(
+    () =>
+      buildPlannerDatePickerGrid({
+        pickerYear,
+        pickerMonth,
+        viewYear,
+        viewMonth,
+        selectedDate,
+        today,
+        getHolidayNames: getKoreanHolidayNames,
+      }),
+    [pickerMonth, pickerYear, selectedDate, today, viewMonth, viewYear],
+  );
 
   return (
-    <div
-      role="dialog"
+    <dialog
+      open
       aria-label={t('planner.datePicker.chooseDate')}
-      className="absolute right-0 top-full mt-2 z-40 w-72 rounded-lg border border-app-border bg-app-surface p-3 shadow-xl"
+      className="absolute right-0 top-full z-40 m-0 mt-2 w-72 rounded-lg border border-app-border bg-app-surface p-3 shadow-xl"
     >
       <div className="flex items-center justify-between mb-2">
         <button
           type="button"
           onClick={onPrev}
           aria-label={t('planner.datePicker.previousMonth')}
-          className="flex h-7 w-7 items-center justify-center rounded text-gray-500 hover:bg-app-surface-hover hover:text-app-ink"
+          className="flex size-7 items-center justify-center rounded text-app-ink/55 hover:bg-app-surface-hover hover:text-app-ink"
         >
           <ChevronLeft size={14} />
         </button>
         <div className="app-text-control text-app-ink tabular-nums">
-          {new Intl.DateTimeFormat(i18n.language, {
-            month: 'long',
-            year: 'numeric',
-          }).format(new Date(pickerYear, pickerMonth, 1))}
+          {getPlannerDateFormatter(i18n.language, 'monthYear').format(
+            new Date(pickerYear, pickerMonth, 1),
+          )}
         </div>
         <button
           type="button"
           onClick={onNext}
           aria-label={t('planner.datePicker.nextMonth')}
-          className="flex h-7 w-7 items-center justify-center rounded text-gray-500 hover:bg-app-surface-hover hover:text-app-ink"
+          className="flex size-7 items-center justify-center rounded text-app-ink/55 hover:bg-app-surface-hover hover:text-app-ink"
         >
           <ChevronRight size={14} />
         </button>
@@ -295,58 +185,45 @@ function DatePickerPopover({
       <div className="grid grid-cols-7 mb-1">
         {Array.from({ length: 7 }, (_, i) => (
           <div
-            key={i}
+            key={`weekday-${i}`}
             className={cn(
               'app-text-overline py-1 text-center',
               // Sun-start: index 0 is Sunday (red).
-              i === 0 ? 'text-red-500' : 'text-gray-500',
+              i === 0 ? 'text-app-danger' : 'text-app-ink/55',
             )}
           >
-            {new Intl.DateTimeFormat(i18n.language, {
-              weekday: 'narrow',
-            }).format(new Date(2026, 1, i + 1))}
+            {getPlannerDateFormatter(i18n.language, 'weekdayNarrow').format(
+              new Date(2026, 1, i + 1),
+            )}
           </div>
         ))}
       </div>
 
       <div className="grid grid-cols-7 gap-0.5">
-        {cells.map((day, i) => {
-          if (day === 0) {
-            return <div key={i} className="h-8" />;
+        {cells.map((cell) => {
+          if (cell.kind === 'blank') {
+            return <div key={cell.key} className="h-8" />;
           }
-          const isToday =
-            pickerYear === today.getFullYear() &&
-            pickerMonth === today.getMonth() &&
-            day === today.getDate();
-          const isSelected =
-            pickerYear === viewYear &&
-            pickerMonth === viewMonth &&
-            day === selectedDate;
-          const cellDate = new Date(pickerYear, pickerMonth, day);
-          const isSunday = cellDate.getDay() === 0;
-          const holidayNames = getKoreanHolidayNames(
-            pickerYear,
-            pickerMonth,
-            day,
-          );
           return (
             <button
               type="button"
-              key={i}
-              onClick={() => onPickDate(pickerYear, pickerMonth, day)}
-              title={holidayNames ? holidayNames.join(', ') : undefined}
+              key={cell.key}
+              onClick={() => onPickDate(pickerYear, pickerMonth, cell.day)}
+              title={
+                cell.holidayNames ? cell.holidayNames.join(', ') : undefined
+              }
               className={cn(
                 'app-text-control-sm flex h-8 items-center justify-center rounded transition-colors tabular-nums',
-                isSelected
-                  ? 'bg-app-accent text-app-bg font-semibold'
-                  : isToday
+                cell.isSelected
+                  ? 'bg-app-accent text-app-accent-fg font-semibold'
+                  : cell.isToday
                     ? 'border border-app-accent text-app-accent font-semibold hover:bg-app-surface-hover'
-                    : holidayNames || isSunday
-                      ? 'text-red-500 hover:bg-app-surface-hover'
+                    : cell.holidayNames || cell.isSunday
+                      ? 'text-app-danger hover:bg-app-surface-hover'
                       : 'text-app-ink hover:bg-app-surface-hover',
               )}
             >
-              {day}
+              {cell.day}
             </button>
           );
         })}
@@ -361,99 +238,97 @@ function DatePickerPopover({
           {t('planner.today')}
         </button>
       </div>
-    </div>
+    </dialog>
   );
 }
 
-interface PlannerEventDraftRange {
-  start: Date;
-  end: Date;
-  allDay: boolean;
-}
+export const PlannerView = () => <>{usePlannerViewElement()}</>;
 
-function buildDefaultPlannerEventRange(
-  currentDate: Date,
-): PlannerEventDraftRange {
-  const start = new Date(
-    currentDate.getFullYear(),
-    currentDate.getMonth(),
-    currentDate.getDate(),
-    9,
-    0,
-    0,
-    0,
-  );
-  const end = new Date(start.getTime());
-  end.setHours(end.getHours() + 1);
-  return { start, end, allDay: false };
-}
-
-export const PlannerView = () => {
+function usePlannerViewElement(): ReactNode {
   const { t, i18n } = useTranslation('apps');
   const today = new Date();
-  const navigate = useNavigate();
   const { token, user } = useAuth();
   const timeZone = normalizeTimeZone(user?.time_zone);
-  const { workspaceSlug } = useParams();
+  const defaultWorkspaceSlug = resolveShellWorkspaceSlug(user, null);
+  const [meetingWorkspaceSlug, setMeetingWorkspaceSlug] = useState<
+    string | null
+  >(defaultWorkspaceSlug);
+  const meetingEnabled = Boolean(meetingWorkspaceSlug);
+  const [previewMeetingWorkspaceSlug, setPreviewMeetingWorkspaceSlug] =
+    useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const surfaceMode: PlannerSurfaceMode =
     searchParams.get('view') === 'timeline' ? 'timeline' : 'calendar';
   const [timelineRangeDays, setTimelineRangeDaysState] =
     useState<TimelineRangeDays>(() => readTimelineRangeDays());
   const [viewMode, setViewMode] = useState<PlannerViewMode>('Month');
-  const [calendarState, setCalendarState] = useState(() =>
-    buildInitialPlannerRange(
+  const [session, setSession] = useState(() =>
+    initializePlannerCalendarSession({
       today,
-      'Month',
+      viewMode: 'Month',
       surfaceMode,
       timelineRangeDays,
-    ),
+    }),
   );
+  const calendarState = session.calendarState;
+  const requestedPlannerEventId = searchParams.get('event');
+  const plannerEventModalOpen =
+    session.plannerEventModalOpen || Boolean(requestedPlannerEventId);
+  const plannerEventId = requestedPlannerEventId ?? session.plannerEventId;
+  const plannerEventRange = requestedPlannerEventId
+    ? null
+    : session.plannerEventRange;
+
+  useEffect(() => {
+    if (
+      meetingWorkspaceSlug &&
+      user?.workspaces.some(
+        (workspace) => workspace.slug === meetingWorkspaceSlug,
+      )
+    ) {
+      return;
+    }
+    setMeetingWorkspaceSlug(defaultWorkspaceSlug);
+  }, [defaultWorkspaceSlug, meetingWorkspaceSlug, user?.workspaces]);
 
   const calendarRef = useRef<UnifiedCalendarHandle | null>(null);
   const previousSurfaceMode = useRef(surfaceMode);
   const previousTimelineRangeDays = useRef(timelineRangeDays);
 
   const { events, loading, error, refresh } = useCalendarEvents({
-    workspaceSlug,
     from: calendarState.rangeStart,
     to: calendarState.rangeEnd,
+    sources: PLANNER_SOURCES,
     useMockData: false,
   });
+  const calendarEvents = useMemo(
+    () =>
+      events.map((event) =>
+        event.workspace
+          ? { ...event, title: `[${event.workspace.name}] ${event.title}` }
+          : event,
+      ),
+    [events],
+  );
 
   // Mini date-picker popover. The picker has its own (year, month) cursor so
   // the user can browse without committing — the main view only updates when
   // they actually click a day.
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [pickerYear, setPickerYear] = useState(today.getFullYear());
-  const [pickerMonth, setPickerMonth] = useState(today.getMonth());
   const pickerRef = useRef<HTMLDivElement>(null);
-  const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const createMenuRef = useRef<HTMLDivElement>(null);
-  const [plannerEventModalOpen, setPlannerEventModalOpen] = useState(false);
-  const [plannerEventId, setPlannerEventId] = useState<string | null>(null);
-  const [plannerEventRange, setPlannerEventRange] =
-    useState<PlannerEventDraftRange | null>(null);
-  const [meetingCreateOpen, setMeetingCreateOpen] = useState(false);
-  const [meetingCreateRange, setMeetingCreateRange] =
-    useState<PlannerEventDraftRange | null>(null);
-  const [creationChoice, setCreationChoice] = useState<{
-    range: PlannerEventDraftRange;
-    anchor: { x: number; y: number } | null;
-  } | null>(null);
 
   useEffect(() => {
-    if (!pickerOpen) return;
+    if (!session.pickerOpen) return;
     function onMouseDown(event: MouseEvent) {
       if (
         pickerRef.current &&
         !pickerRef.current.contains(event.target as Node)
       ) {
-        setPickerOpen(false);
+        setSession(closePicker);
       }
     }
     function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') setPickerOpen(false);
+      if (event.key === 'Escape') setSession(closePicker);
     }
     document.addEventListener('mousedown', onMouseDown);
     document.addEventListener('keydown', onKey);
@@ -461,20 +336,20 @@ export const PlannerView = () => {
       document.removeEventListener('mousedown', onMouseDown);
       document.removeEventListener('keydown', onKey);
     };
-  }, [pickerOpen]);
+  }, [session.pickerOpen]);
 
   useEffect(() => {
-    if (!createMenuOpen) return;
+    if (!session.createMenuOpen) return;
     function onMouseDown(event: MouseEvent) {
       if (
         createMenuRef.current &&
         !createMenuRef.current.contains(event.target as Node)
       ) {
-        setCreateMenuOpen(false);
+        setSession(closeCreateMenu);
       }
     }
     function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') setCreateMenuOpen(false);
+      if (event.key === 'Escape') setSession(closeCreateMenu);
     }
     document.addEventListener('mousedown', onMouseDown);
     document.addEventListener('keydown', onKey);
@@ -482,7 +357,18 @@ export const PlannerView = () => {
       document.removeEventListener('mousedown', onMouseDown);
       document.removeEventListener('keydown', onKey);
     };
-  }, [createMenuOpen]);
+  }, [session.createMenuOpen]);
+
+  const applySurfaceModeRangeChange = useCallback(() => {
+    previousSurfaceMode.current = surfaceMode;
+    previousTimelineRangeDays.current = timelineRangeDays;
+    setSession((current) =>
+      applySurfaceMode(current, {
+        viewMode,
+        surfaceMode,
+      }),
+    );
+  }, [surfaceMode, timelineRangeDays, viewMode]);
 
   useEffect(() => {
     if (
@@ -491,24 +377,12 @@ export const PlannerView = () => {
     ) {
       return;
     }
-    previousSurfaceMode.current = surfaceMode;
-    previousTimelineRangeDays.current = timelineRangeDays;
-    setPickerOpen(false);
-    setCalendarState((current) =>
-      buildInitialPlannerRange(
-        current.currentDate,
-        viewMode,
-        surfaceMode,
-        timelineRangeDays,
-      ),
-    );
-  }, [surfaceMode, timelineRangeDays, viewMode]);
+    queueMicrotask(applySurfaceModeRangeChange);
+  }, [applySurfaceModeRangeChange, surfaceMode, timelineRangeDays]);
 
   // When the popover opens, sync its cursor to whatever the main view is showing.
   const openPicker = () => {
-    setPickerYear(calendarState.currentDate.getFullYear());
-    setPickerMonth(calendarState.currentDate.getMonth());
-    setPickerOpen(true);
+    setSession(openPlannerPicker);
   };
 
   const setMode = (mode: PlannerViewMode) => {
@@ -520,98 +394,87 @@ export const PlannerView = () => {
     if (mode === surfaceMode) {
       return;
     }
-    const nextParams = new URLSearchParams(searchParams);
-    if (mode === 'timeline') {
-      nextParams.set('view', 'timeline');
-    } else {
-      nextParams.delete('view');
-    }
-    setSearchParams(nextParams, { replace: true });
+    setSearchParams(buildPlannerSurfaceModeSearchParams(searchParams, mode), {
+      replace: true,
+    });
   };
 
   const selectTimelineRangeDays = (days: TimelineRangeDays) => {
     setTimelineRangeDaysState(days);
-    persistTimelineRangeDays(days);
+    const result = selectTimelineRangeDaysSession(session, {
+      days,
+      viewMode,
+      surfaceMode,
+    });
+    if (result.command.persistTimelineRangeDays) {
+      persistTimelineRangeDays(result.command.persistTimelineRangeDays);
+    }
+    setSession(result.session);
   };
 
   const goToPreviousPeriod = () => {
-    if (surfaceMode === 'timeline') {
-      setCalendarState((current) =>
-        buildInitialPlannerRange(
-          addDays(current.currentDate, -timelineRangeDays),
-          viewMode,
-          'timeline',
-          timelineRangeDays,
-        ),
-      );
-      setPickerOpen(false);
-      return;
-    }
-    calendarRef.current?.prev();
+    const result = movePlannerVisiblePeriod(session, {
+      direction: 'previous',
+      viewMode,
+      surfaceMode,
+      timelineRangeDays,
+    });
+    setSession(result.session);
+    runPlannerCalendarCommand(calendarRef.current, result.command);
   };
 
   const goToNextPeriod = () => {
-    if (surfaceMode === 'timeline') {
-      setCalendarState((current) =>
-        buildInitialPlannerRange(
-          addDays(current.currentDate, timelineRangeDays),
-          viewMode,
-          'timeline',
-          timelineRangeDays,
-        ),
-      );
-      setPickerOpen(false);
-      return;
-    }
-    calendarRef.current?.next();
+    const result = movePlannerVisiblePeriod(session, {
+      direction: 'next',
+      viewMode,
+      surfaceMode,
+      timelineRangeDays,
+    });
+    setSession(result.session);
+    runPlannerCalendarCommand(calendarRef.current, result.command);
   };
 
   const goToToday = () => {
-    if (surfaceMode === 'timeline') {
-      setCalendarState(
-        buildInitialPlannerRange(
-          new Date(),
-          viewMode,
-          'timeline',
-          timelineRangeDays,
-        ),
-      );
-      setPickerOpen(false);
-      return;
-    }
-    calendarRef.current?.today();
-    setPickerOpen(false);
+    const result = movePlannerVisiblePeriod(session, {
+      direction: 'today',
+      viewMode,
+      surfaceMode,
+      timelineRangeDays,
+    });
+    setSession(result.session);
+    runPlannerCalendarCommand(calendarRef.current, result.command);
   };
   const openPlannerEventCreate = useCallback(
     (range?: PlannerEventDraftRange) => {
-      setPlannerEventId(null);
-      setPlannerEventRange(
-        range ?? buildDefaultPlannerEventRange(calendarState.currentDate),
-      );
-      setPlannerEventModalOpen(true);
-      setCreateMenuOpen(false);
+      setSession((current) => openPlannerEventCreateSession(current, range));
     },
-    [calendarState.currentDate],
+    [],
   );
   const openPlannerEventEdit = useCallback((eventId: string) => {
-    setPlannerEventId(eventId);
-    setPlannerEventRange(null);
-    setPlannerEventModalOpen(true);
+    setSession((current) => openPlannerEventEditSession(current, eventId));
   }, []);
-  const closePlannerEventModal = useCallback(() => {
-    setPlannerEventModalOpen(false);
-    setPlannerEventId(null);
-    setPlannerEventRange(null);
-    if (!searchParams.get('event')) {
+  const openMeetingCreateFromPlannerEvent = useCallback(() => {
+    if (!meetingEnabled) {
       return;
     }
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.delete('event');
-    setSearchParams(nextParams, { replace: true });
+    setSession((current) => openMeetingCreate(current));
+  }, [meetingEnabled]);
+  const closePlannerEventModal = useCallback(() => {
+    const hasEventQueryIntent = Boolean(searchParams.get('event'));
+    setSession((current) => {
+      const result = closePlannerEventModalSession(current, {
+        hasEventQueryIntent,
+      });
+      return result.session;
+    });
+    if (hasEventQueryIntent) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete('event');
+      setSearchParams(nextParams, { replace: true });
+    }
   }, [searchParams, setSearchParams]);
 
   const [actionError, setActionError] = useState<string | null>(null);
-  const [previewMeetingId, setPreviewMeetingId] = useState<string | null>(null);
   useEffect(() => {
     if (!actionError) return;
     const id = window.setTimeout(() => setActionError(null), 4000);
@@ -619,13 +482,36 @@ export const PlannerView = () => {
   }, [actionError]);
 
   useEffect(() => {
+    if (meetingEnabled) {
+      return;
+    }
+    setSession((current) => {
+      if (
+        !current.meetingCreateOpen &&
+        !current.previewMeetingId &&
+        !current.creationChoice
+      ) {
+        return current;
+      }
+      return {
+        ...current,
+        creationChoice: null,
+        meetingCreateOpen: false,
+        meetingCreateRange: null,
+        previewMeetingId: null,
+      };
+    });
+    setPreviewMeetingWorkspaceSlug(null);
+  }, [meetingEnabled]);
+
+  useEffect(() => {
     function handlePlannerCreateEvent() {
       openPlannerEventCreate();
     }
     function handlePlannerCreateMeeting() {
-      setCreateMenuOpen(false);
-      setMeetingCreateRange(null);
-      setMeetingCreateOpen(true);
+      if (meetingEnabled) {
+        openMeetingCreateFromPlannerEvent();
+      }
     }
     window.addEventListener('planner:create-event', handlePlannerCreateEvent);
     window.addEventListener(
@@ -642,15 +528,11 @@ export const PlannerView = () => {
         handlePlannerCreateMeeting,
       );
     };
-  }, [openPlannerEventCreate]);
-
-  useEffect(() => {
-    const requestedEventId = searchParams.get('event');
-    if (!workspaceSlug || !requestedEventId) {
-      return;
-    }
-    openPlannerEventEdit(requestedEventId);
-  }, [openPlannerEventEdit, searchParams, workspaceSlug]);
+  }, [
+    meetingEnabled,
+    openMeetingCreateFromPlannerEvent,
+    openPlannerEventCreate,
+  ]);
 
   const handleDatesSet = useCallback(
     (nextState: {
@@ -659,51 +541,54 @@ export const PlannerView = () => {
       rangeStart: Date;
       rangeEnd: Date;
     }) => {
-      const nextMode = FC_VIEW_TO_MODE[nextState.view];
-      setViewMode((current) => (current === nextMode ? current : nextMode));
-      setCalendarState((current) => {
-        const nextCurrentDate = startOfLocalDay(nextState.currentDate);
-        const nextRangeStart = formatLocalYmd(nextState.rangeStart);
-        const nextRangeEnd = formatLocalYmd(nextState.rangeEnd);
-        if (
-          current.currentDate.getTime() === nextCurrentDate.getTime() &&
-          current.rangeStart === nextRangeStart &&
-          current.rangeEnd === nextRangeEnd
-        ) {
-          return current;
-        }
-        return {
-          currentDate: nextCurrentDate,
-          rangeStart: nextRangeStart,
-          rangeEnd: nextRangeEnd,
-        };
-      });
+      const result = applyCalendarDatesSet(session, nextState);
+      setViewMode((currentMode) =>
+        currentMode === result.viewMode ? currentMode : result.viewMode,
+      );
+      setSession(result.session);
     },
-    [],
+    [session],
   );
 
   const handleEventClick = (event: CalendarEvent) => {
-    if (!workspaceSlug) return;
-    if (event.sourceType === 'planner_event') {
-      openPlannerEventEdit(event.sourceId);
-      return;
-    }
-    if (event.sourceType === 'meeting') {
-      // Open inline preview modal instead of navigating away — keeps user's
-      // place on the calendar. Modal has a "전체 열기" link for deep edits.
-      setPreviewMeetingId(event.sourceId);
-      return;
-    }
-    // pms_due / pms_block — both navigate to the task list with the issue panel open.
-    const listId = event.metadata.taskListId;
-    if (!listId) {
+    const action = resolvePlannerCalendarEventClick(event);
+    if (action.type === 'openPlannerEvent') {
+      openPlannerEventEdit(action.eventId);
+    } else if (action.type === 'previewMeeting') {
+      setPreviewMeetingWorkspaceSlug(action.workspaceSlug);
+      setSession((current) => ({
+        ...current,
+        previewMeetingId: action.meetingId,
+      }));
+    } else if (action.type === 'openTask') {
+      dispatchFloatingPmsOpen({
+        mode: 'openTask',
+        taskId: action.taskId,
+        taskListId: action.taskListId,
+        workspaceSlug: action.workspaceSlug,
+      });
+    } else if (action.type === 'missingTaskList') {
       setActionError(t('planner.taskLocationMissing'));
-      return;
     }
-    navigate(
-      `/tool/pms-list-${listId}?issue=${encodeURIComponent(event.sourceId)}`,
-    );
   };
+
+  const scheduleWorkflow = createPlannerCalendarScheduleWorkflow({
+    token,
+    adapters: {
+      updatePlannerEvent,
+      updateMeeting,
+      updateTask,
+    },
+    messages: {
+      meetingAllDayDisallowed: t('planner.meetingAllDayDisallowed'),
+      taskAllDayOnly: t('planner.taskAllDayOnly'),
+      eventMoveFailed: t('planner.eventMoveFailed'),
+      meetingMoveFailed: t('planner.meetingMoveFailed'),
+      taskScheduleMoveFailed: t('planner.taskScheduleMoveFailed'),
+    },
+    refresh,
+    setActionError,
+  });
 
   const handleEventDrop = async (
     event: CalendarEvent,
@@ -712,76 +597,13 @@ export const PlannerView = () => {
     newAllDay: boolean,
     revert: () => void,
   ) => {
-    if (!token || !workspaceSlug) {
-      revert();
-      return;
-    }
-    if (event.sourceType === 'planner_event') {
-      try {
-        await updatePlannerEvent(token, workspaceSlug, event.sourceId, {
-          allDay: newAllDay,
-          start: newStartIso,
-          end: newEndIso,
-        });
-        refresh();
-      } catch (err) {
-        revert();
-        setActionError(
-          err instanceof Error ? err.message : t('planner.eventMoveFailed'),
-        );
-      }
-      return;
-    }
-    if (event.sourceType === 'meeting') {
-      if (newAllDay) {
-        revert();
-        setActionError(t('planner.meetingAllDayDisallowed'));
-        return;
-      }
-      try {
-        // FullCalendar already formatted these in the calendar's named timezone.
-        // Backend stores naive UTC; meeting-api accepts the offset-prefixed
-        // string and the request pipeline normalizes it.
-        await updateMeeting(token, workspaceSlug, event.sourceId, {
-          start_at: newStartIso,
-          end_at: newEndIso,
-        });
-        refresh();
-      } catch (err) {
-        revert();
-        setActionError(
-          err instanceof Error ? err.message : t('planner.meetingMoveFailed'),
-        );
-      }
-      return;
-    }
-    if (!newAllDay) {
-      revert();
-      setActionError(t('planner.taskAllDayOnly'));
-      return;
-    }
-    // PMS issues — extract date portion only (all-day, no time component).
-    const newStartYmd = newStartIso.slice(0, 10);
-    // Exclusive end: FullCalendar's all-day end is the day AFTER the visible
-    // last day, so subtract one day for the stored due_date.
-    const newDueYmd = decrementYmd(newEndIso.slice(0, 10));
-    const payload: { due_date?: string | null; start_date?: string | null } = {
-      due_date: newDueYmd,
-    };
-    if (event.sourceType === 'pms_block') {
-      payload.start_date = newStartYmd;
-    }
-    try {
-      await updateIssue(token, event.sourceId, payload);
-      refresh();
-    } catch (err) {
-      revert();
-      setActionError(
-        err instanceof Error
-          ? err.message
-          : t('planner.taskScheduleMoveFailed'),
-      );
-    }
+    await scheduleWorkflow.drop(
+      event,
+      newStartIso,
+      newEndIso,
+      newAllDay,
+      revert,
+    );
   };
 
   const handleEventResize = async (
@@ -789,57 +611,7 @@ export const PlannerView = () => {
     newEndIso: string,
     revert: () => void,
   ) => {
-    if (!token || !workspaceSlug) {
-      revert();
-      return;
-    }
-    if (event.sourceType === 'meeting') {
-      try {
-        await updateMeeting(token, workspaceSlug, event.sourceId, {
-          end_at: newEndIso,
-        });
-        refresh();
-      } catch (err) {
-        revert();
-        setActionError(
-          err instanceof Error ? err.message : t('planner.meetingMoveFailed'),
-        );
-      }
-      return;
-    }
-    if (event.sourceType === 'planner_event') {
-      try {
-        await updatePlannerEvent(token, workspaceSlug, event.sourceId, {
-          allDay: event.allDay,
-          start: event.start,
-          end: newEndIso,
-        });
-        refresh();
-      } catch (err) {
-        revert();
-        setActionError(
-          err instanceof Error ? err.message : t('planner.eventMoveFailed'),
-        );
-      }
-      return;
-    }
-    if (event.sourceType === 'pms_block') {
-      const newDueYmd = decrementYmd(newEndIso.slice(0, 10));
-      try {
-        await updateIssue(token, event.sourceId, { due_date: newDueYmd });
-        refresh();
-      } catch (err) {
-        revert();
-        setActionError(
-          err instanceof Error
-            ? err.message
-            : t('planner.taskScheduleMoveFailed'),
-        );
-      }
-      return;
-    }
-    // pms_due (single-day) — resize is meaningless. Revert.
-    revert();
+    await scheduleWorkflow.resize(event, newEndIso, revert);
   };
   const handleDateSelect = useCallback(
     (range: {
@@ -848,26 +620,45 @@ export const PlannerView = () => {
       allDay: boolean;
       anchor: { x: number; y: number } | null;
     }) => {
-      setCreationChoice({
-        range: { start: range.start, end: range.end, allDay: range.allDay },
-        anchor: range.anchor,
-      });
+      if (!meetingEnabled) {
+        openPlannerEventCreate({
+          start: range.start,
+          end: range.end,
+          allDay: range.allDay,
+        });
+        return;
+      }
+      setSession((current) =>
+        chooseCalendarSelectionTarget(current, {
+          selection: {
+            range: { start: range.start, end: range.end, allDay: range.allDay },
+            anchor: range.anchor,
+          },
+        }),
+      );
     },
-    [],
+    [meetingEnabled, openPlannerEventCreate],
   );
   const handleChoicePickEvent = useCallback(() => {
-    if (!creationChoice) return;
-    openPlannerEventCreate(creationChoice.range);
-    setCreationChoice(null);
-  }, [creationChoice, openPlannerEventCreate]);
+    setSession((current) =>
+      chooseCalendarSelectionTarget(current, { target: 'event' }),
+    );
+  }, []);
   const handleChoicePickMeeting = useCallback(() => {
-    if (!creationChoice) return;
-    setMeetingCreateRange(creationChoice.range);
-    setMeetingCreateOpen(true);
-    setCreationChoice(null);
-  }, [creationChoice]);
+    if (!meetingEnabled) {
+      setSession((current) =>
+        chooseCalendarSelectionTarget(current, { target: 'dismiss' }),
+      );
+      return;
+    }
+    setSession((current) =>
+      chooseCalendarSelectionTarget(current, { target: 'meeting' }),
+    );
+  }, [meetingEnabled]);
   const handleChoiceDismiss = useCallback(() => {
-    setCreationChoice(null);
+    setSession((current) =>
+      chooseCalendarSelectionTarget(current, { target: 'dismiss' }),
+    );
   }, []);
   const handlePlannerEventSaved = useCallback(() => {
     closePlannerEventModal();
@@ -879,296 +670,322 @@ export const PlannerView = () => {
   }, [closePlannerEventModal, refresh]);
   const handleMeetingCreated = useCallback(
     (meetingId: string) => {
-      setMeetingCreateOpen(false);
-      setMeetingCreateRange(null);
-      setPreviewMeetingId(meetingId);
+      setPreviewMeetingWorkspaceSlug(meetingWorkspaceSlug);
+      setSession((current) => {
+        const result = handleMeetingCreatedSession(current, meetingId);
+        return result.session;
+      });
       refresh();
     },
-    [refresh],
+    [meetingWorkspaceSlug, refresh],
   );
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="p-8 h-full flex flex-col space-y-6 relative"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="app-text-title-lg text-app-ink">
-            {t('planner.planner')}
-          </h1>
-          <div className="flex items-center rounded-md border border-app-border bg-app-surface-sidebar p-1">
-            {(['calendar', 'timeline'] as const).map((mode) => {
-              const Icon = mode === 'calendar' ? CalendarDays : Activity;
-              return (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setSurfaceMode(mode)}
-                  aria-pressed={surfaceMode === mode}
-                  className={cn(
-                    'app-text-control-sm flex items-center gap-1.5 rounded px-3 py-1 transition-all',
-                    surfaceMode === mode
-                      ? 'bg-app-surface-hover text-app-ink shadow-sm'
-                      : 'text-gray-500 hover:text-app-ink',
-                  )}
-                >
-                  <Icon size={14} />
-                  <span>{t(SURFACE_MODE_LABEL_KEYS[mode])}</span>
-                </button>
-              );
-            })}
+    <LazyMotion features={domAnimation}>
+      <m.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="relative flex h-full flex-col gap-y-6 p-8"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="app-text-title-lg text-app-ink">
+              {t('planner.planner')}
+            </h1>
+            <div className="flex items-center rounded-md border border-app-border bg-app-surface-sidebar p-1">
+              {(['calendar', 'timeline'] as const).map((mode) => {
+                const Icon = mode === 'calendar' ? CalendarDays : Activity;
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setSurfaceMode(mode)}
+                    aria-pressed={surfaceMode === mode}
+                    className={cn(
+                      'app-text-control-sm flex items-center gap-1.5 rounded px-3 py-1 transition-all',
+                      surfaceMode === mode
+                        ? 'bg-app-surface-hover text-app-ink shadow-sm'
+                        : 'text-app-ink/55 hover:text-app-ink',
+                    )}
+                  >
+                    <Icon size={14} />
+                    <span>{t(SURFACE_MODE_LABEL_KEYS[mode])}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {surfaceMode === 'calendar' ? (
+              <div className="flex items-center bg-app-surface-sidebar border border-app-border rounded-md p-1">
+                {(['Month', 'Week', 'Day', 'Agenda'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setMode(mode)}
+                    className={cn(
+                      'app-text-control-sm rounded px-3 py-1 transition-all',
+                      viewMode === mode
+                        ? 'bg-app-surface-hover text-app-ink shadow-sm'
+                        : 'text-app-ink/55 hover:text-app-ink',
+                    )}
+                  >
+                    {t(VIEW_MODE_LABEL_KEYS[mode])}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="flex items-center bg-app-surface-sidebar border border-app-border rounded-md p-1">
+                {TIMELINE_RANGE_OPTIONS.map((days) => (
+                  <button
+                    key={days}
+                    type="button"
+                    onClick={() => selectTimelineRangeDays(days)}
+                    aria-pressed={timelineRangeDays === days}
+                    className={cn(
+                      'app-text-control-sm rounded px-3 py-1 transition-all',
+                      timelineRangeDays === days
+                        ? 'bg-app-surface-hover text-app-ink shadow-sm'
+                        : 'text-app-ink/55 hover:text-app-ink',
+                    )}
+                  >
+                    {t(TIMELINE_RANGE_LABEL_KEYS[days])}
+                  </button>
+                ))}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={goToToday}
+              className="app-text-control-sm rounded-md border border-app-border px-3 py-1 text-app-ink/55 transition-colors hover:text-app-ink"
+            >
+              {t('planner.today')}
+            </button>
           </div>
-          {surfaceMode === 'calendar' ? (
-            <div className="flex items-center bg-app-surface-sidebar border border-app-border rounded-md p-1">
-              {(['Month', 'Week', 'Day', 'Agenda'] as const).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setMode(mode)}
-                  className={cn(
-                    'app-text-control-sm rounded px-3 py-1 transition-all',
-                    viewMode === mode
-                      ? 'bg-app-surface-hover text-app-ink shadow-sm'
-                      : 'text-gray-500 hover:text-app-ink',
-                  )}
-                >
-                  {t(VIEW_MODE_LABEL_KEYS[mode])}
-                </button>
-              ))}
+          <div className="flex items-center gap-3">
+            <div ref={pickerRef} className="relative flex items-center gap-1">
+              <button
+                type="button"
+                onClick={goToPreviousPeriod}
+                aria-label={t('planner.previousPeriod')}
+                className="flex size-8 items-center justify-center rounded-md text-app-ink/55 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  session.pickerOpen ? setSession(closePicker) : openPicker()
+                }
+                aria-haspopup="dialog"
+                aria-expanded={session.pickerOpen}
+                className="app-text-control flex h-8 min-w-[180px] items-center justify-center rounded-md text-app-ink tabular-nums transition-colors hover:bg-app-surface-hover"
+              >
+                {formatPlannerHeading(
+                  viewMode,
+                  calendarState.currentDate,
+                  i18n.language,
+                  surfaceMode,
+                  calendarState.rangeStart,
+                  calendarState.rangeEnd,
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={goToNextPeriod}
+                aria-label={t('planner.nextPeriod')}
+                className="flex size-8 items-center justify-center rounded-md text-app-ink/55 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
+              >
+                <ChevronRight size={16} />
+              </button>
+              {session.pickerOpen ? (
+                <DatePickerPopover
+                  pickerYear={session.pickerYear}
+                  pickerMonth={session.pickerMonth}
+                  viewYear={calendarState.currentDate.getFullYear()}
+                  viewMonth={calendarState.currentDate.getMonth()}
+                  selectedDate={calendarState.currentDate.getDate()}
+                  today={today}
+                  onPrev={() =>
+                    setSession((current) => movePickerMonth(current, -1))
+                  }
+                  onNext={() =>
+                    setSession((current) => movePickerMonth(current, 1))
+                  }
+                  onPickToday={() => {
+                    goToToday();
+                    setSession(closePicker);
+                  }}
+                  onPickDate={(year, month, day) => {
+                    const result = pickPlannerDate(session, {
+                      year,
+                      month,
+                      day,
+                      viewMode,
+                      surfaceMode,
+                    });
+                    setSession(result.session);
+                    runPlannerCalendarCommand(
+                      calendarRef.current,
+                      result.command,
+                    );
+                  }}
+                />
+              ) : null}
+            </div>
+            <div ref={createMenuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setSession(toggleCreateMenu)}
+                className="app-text-control flex items-center gap-2 rounded-md border border-app-border bg-app-surface-sidebar px-4 py-2 text-app-ink transition-colors hover:bg-app-surface-hover"
+              >
+                <Plus size={16} />
+                <span>{t('common:actions.add')}</span>
+              </button>
+              {session.createMenuOpen ? (
+                <div className="absolute right-0 top-full z-30 mt-2 w-48 rounded-lg border border-app-border bg-app-surface py-1 shadow-xl">
+                  <div className="app-text-overline px-3 pt-1.5 pb-1 text-app-ink/45">
+                    {t('planner.create')}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => openPlannerEventCreate()}
+                    className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink transition-colors hover:bg-app-surface-hover"
+                  >
+                    <Plus size={14} className="text-app-ink/45" />
+                    <span>{t('planner.event')}</span>
+                  </button>
+                  {meetingEnabled ? (
+                    <>
+                      {user && user.workspaces.length > 1 ? (
+                        <label className="block border-t border-app-border px-3 py-2">
+                          <span className="app-text-overline mb-1 block text-app-ink/45">
+                            {t('common:labels.workspace')}
+                          </span>
+                          <select
+                            aria-label={t('common:labels.workspace')}
+                            className="app-field-input w-full"
+                            onChange={(event) =>
+                              setMeetingWorkspaceSlug(event.target.value)
+                            }
+                            value={meetingWorkspaceSlug ?? ''}
+                          >
+                            {user.workspaces.map((workspace) => (
+                              <option key={workspace.id} value={workspace.slug}>
+                                {workspace.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSession((current) => openMeetingCreate(current))
+                        }
+                        className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink transition-colors hover:bg-app-surface-hover"
+                      >
+                        <Plus size={14} className="text-app-ink/45" />
+                        <span>{t('planner.meeting')}</span>
+                      </button>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        {actionError ? (
+          <div
+            role="alert"
+            className="rounded-md border border-app-danger/40 bg-app-danger/10 px-4 py-2 app-text-caption text-app-danger"
+          >
+            {actionError}
+          </div>
+        ) : null}
+
+        <div className="flex-1 card p-0 overflow-hidden flex flex-col relative">
+          {error ? (
+            <div className="flex-1 flex items-center justify-center p-8">
+              <div className="text-center space-y-2">
+                <p className="text-app-danger app-text-body">{error}</p>
+                <p className="text-app-ink/55 app-text-caption">
+                  {t('planner.loadRetry')}
+                </p>
+              </div>
             </div>
           ) : (
-            <div className="flex items-center bg-app-surface-sidebar border border-app-border rounded-md p-1">
-              {TIMELINE_RANGE_OPTIONS.map((days) => (
-                <button
-                  key={days}
-                  type="button"
-                  onClick={() => selectTimelineRangeDays(days)}
-                  aria-pressed={timelineRangeDays === days}
-                  className={cn(
-                    'app-text-control-sm rounded px-3 py-1 transition-all',
-                    timelineRangeDays === days
-                      ? 'bg-app-surface-hover text-app-ink shadow-sm'
-                      : 'text-gray-500 hover:text-app-ink',
-                  )}
-                >
-                  {t(TIMELINE_RANGE_LABEL_KEYS[days])}
-                </button>
-              ))}
+            <div className="flex-1 relative">
+              {loading ? (
+                <div className="absolute inset-0 z-10 flex items-center justify-center bg-app-bg/40 pointer-events-none">
+                  <div className="text-app-ink/55 app-text-caption">
+                    {t('common:feedback.loading')}
+                  </div>
+                </div>
+              ) : null}
+              {surfaceMode === 'timeline' ? (
+                <PlannerTimelineView
+                  events={events}
+                  rangeStart={calendarState.rangeStart}
+                  rangeEnd={calendarState.rangeEnd}
+                  locale={i18n.language}
+                  timeZone={timeZone}
+                  onEventClick={handleEventClick}
+                />
+              ) : (
+                <UnifiedCalendar
+                  ref={calendarRef}
+                  events={calendarEvents}
+                  initialView={VIEW_MODE_TO_FC[viewMode]}
+                  initialDate={calendarState.currentDate}
+                  onDatesSet={handleDatesSet}
+                  onDateSelect={handleDateSelect}
+                  onEventClick={handleEventClick}
+                  onEventDrop={handleEventDrop}
+                  onEventResize={handleEventResize}
+                  timeZone={timeZone}
+                />
+              )}
             </div>
           )}
-          <button
-            type="button"
-            onClick={goToToday}
-            className="app-text-control-sm rounded-md border border-app-border px-3 py-1 text-gray-500 transition-colors hover:text-app-ink"
-          >
-            {t('planner.today')}
-          </button>
         </div>
-        <div className="flex items-center gap-3">
-          <div ref={pickerRef} className="relative flex items-center gap-1">
-            <button
-              type="button"
-              onClick={goToPreviousPeriod}
-              aria-label={t('planner.previousPeriod')}
-              className="flex h-8 w-8 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
-            >
-              <ChevronLeft size={16} />
-            </button>
-            <button
-              type="button"
-              onClick={() => (pickerOpen ? setPickerOpen(false) : openPicker())}
-              aria-haspopup="dialog"
-              aria-expanded={pickerOpen}
-              className="app-text-control flex h-8 min-w-[180px] items-center justify-center rounded-md text-app-ink tabular-nums transition-colors hover:bg-app-surface-hover"
-            >
-              {formatPlannerHeading(
-                viewMode,
-                calendarState.currentDate,
-                i18n.language,
-                surfaceMode,
-                calendarState.rangeStart,
-                calendarState.rangeEnd,
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={goToNextPeriod}
-              aria-label={t('planner.nextPeriod')}
-              className="flex h-8 w-8 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
-            >
-              <ChevronRight size={16} />
-            </button>
-            {pickerOpen ? (
-              <DatePickerPopover
-                pickerYear={pickerYear}
-                pickerMonth={pickerMonth}
-                viewYear={calendarState.currentDate.getFullYear()}
-                viewMonth={calendarState.currentDate.getMonth()}
-                selectedDate={calendarState.currentDate.getDate()}
-                today={today}
-                onPrev={() => {
-                  const next = new Date(pickerYear, pickerMonth - 1, 1);
-                  setPickerYear(next.getFullYear());
-                  setPickerMonth(next.getMonth());
-                }}
-                onNext={() => {
-                  const next = new Date(pickerYear, pickerMonth + 1, 1);
-                  setPickerYear(next.getFullYear());
-                  setPickerMonth(next.getMonth());
-                }}
-                onPickToday={() => {
-                  goToToday();
-                  setPickerOpen(false);
-                }}
-                onPickDate={(year, month, day) => {
-                  const pickedDate = new Date(year, month, day);
-                  if (surfaceMode === 'timeline') {
-                    setCalendarState(
-                      buildInitialPlannerRange(
-                        pickedDate,
-                        viewMode,
-                        'timeline',
-                        timelineRangeDays,
-                      ),
-                    );
-                  } else {
-                    calendarRef.current?.gotoDate(pickedDate);
-                  }
-                  setPickerOpen(false);
-                }}
-              />
-            ) : null}
-          </div>
-          <div ref={createMenuRef} className="relative">
-            <button
-              type="button"
-              onClick={() => setCreateMenuOpen((open) => !open)}
-              className="app-text-control flex items-center gap-2 rounded-md border border-app-border bg-app-surface-sidebar px-4 py-2 text-app-ink transition-colors hover:bg-app-surface-hover"
-            >
-              <Plus size={16} />
-              <span>{t('common:actions.add')}</span>
-            </button>
-            {createMenuOpen ? (
-              <div className="absolute right-0 top-full z-30 mt-2 w-48 rounded-lg border border-app-border bg-app-surface py-1 shadow-xl">
-                <div className="app-text-overline px-3 pt-1.5 pb-1 text-app-ink/45">
-                  {t('planner.create')}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => openPlannerEventCreate()}
-                  className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink transition-colors hover:bg-app-surface-hover"
-                >
-                  <Plus size={14} className="text-app-ink/45" />
-                  <span>{t('planner.event')}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCreateMenuOpen(false);
-                    setMeetingCreateRange(null);
-                    setMeetingCreateOpen(true);
-                  }}
-                  className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink transition-colors hover:bg-app-surface-hover"
-                >
-                  <Plus size={14} className="text-app-ink/45" />
-                  <span>{t('planner.meeting')}</span>
-                </button>
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </div>
 
-      {actionError ? (
-        <div
-          role="alert"
-          className="rounded-md border border-red-500/40 bg-red-500/10 px-4 py-2 app-text-caption text-red-500"
-        >
-          {actionError}
-        </div>
-      ) : null}
-
-      <div className="flex-1 card p-0 overflow-hidden flex flex-col relative">
-        {error ? (
-          <div className="flex-1 flex items-center justify-center p-8">
-            <div className="text-center space-y-2">
-              <p className="text-red-500 app-text-body">{error}</p>
-              <p className="text-gray-500 app-text-caption">
-                {t('planner.loadRetry')}
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className="flex-1 relative">
-            {loading ? (
-              <div className="absolute inset-0 z-10 flex items-center justify-center bg-app-bg/40 pointer-events-none">
-                <div className="text-gray-500 app-text-caption">
-                  {t('common:feedback.loading')}
-                </div>
-              </div>
-            ) : null}
-            {surfaceMode === 'timeline' ? (
-              <PlannerTimelineView
-                events={events}
-                rangeStart={calendarState.rangeStart}
-                rangeEnd={calendarState.rangeEnd}
-                locale={i18n.language}
-                timeZone={timeZone}
-                onEventClick={handleEventClick}
-              />
-            ) : (
-              <UnifiedCalendar
-                ref={calendarRef}
-                events={events}
-                initialView={VIEW_MODE_TO_FC[viewMode]}
-                initialDate={calendarState.currentDate}
-                onDatesSet={handleDatesSet}
-                onDateSelect={handleDateSelect}
-                onEventClick={handleEventClick}
-                onEventDrop={handleEventDrop}
-                onEventResize={handleEventResize}
-                timeZone={timeZone}
-              />
-            )}
-          </div>
-        )}
-      </div>
-
-      <MeetingPreviewModal
-        meetingId={previewMeetingId}
-        workspaceSlug={workspaceSlug}
-        onClose={() => setPreviewMeetingId(null)}
-        onChanged={refresh}
-      />
-      <MeetingCreateModal
-        isOpen={meetingCreateOpen && Boolean(workspaceSlug)}
-        onClose={() => {
-          setMeetingCreateOpen(false);
-          setMeetingCreateRange(null);
-        }}
-        onCreated={handleMeetingCreated}
-        workspaceSlug={workspaceSlug ?? ''}
-        initialRange={meetingCreateRange}
-      />
-      {creationChoice ? (
-        <PlannerEventChoicePopover
-          anchor={creationChoice.anchor}
-          onPickEvent={handleChoicePickEvent}
-          onPickMeeting={handleChoicePickMeeting}
-          onDismiss={handleChoiceDismiss}
+        {meetingEnabled ? (
+          <MeetingPreviewModal
+            meetingId={session.previewMeetingId}
+            workspaceSlug={previewMeetingWorkspaceSlug ?? undefined}
+            onClose={() => {
+              setPreviewMeetingWorkspaceSlug(null);
+              setSession(closePreviewMeeting);
+            }}
+            onChanged={refresh}
+          />
+        ) : null}
+        {meetingEnabled ? (
+          <MeetingCreateModal
+            isOpen={session.meetingCreateOpen && Boolean(meetingWorkspaceSlug)}
+            onClose={() => setSession(closeMeetingCreate)}
+            onCreated={handleMeetingCreated}
+            workspaceSlug={meetingWorkspaceSlug ?? ''}
+            initialRange={session.meetingCreateRange}
+          />
+        ) : null}
+        {meetingEnabled && session.creationChoice ? (
+          <PlannerEventChoicePopover
+            anchor={session.creationChoice.anchor}
+            onPickEvent={handleChoicePickEvent}
+            onPickMeeting={handleChoicePickMeeting}
+            onDismiss={handleChoiceDismiss}
+          />
+        ) : null}
+        <PlannerEventModal
+          isOpen={plannerEventModalOpen}
+          onClose={closePlannerEventModal}
+          eventId={plannerEventId}
+          initialRange={plannerEventRange}
+          onSaved={handlePlannerEventSaved}
+          onDeleted={handlePlannerEventDeleted}
         />
-      ) : null}
-      <PlannerEventModal
-        isOpen={plannerEventModalOpen}
-        onClose={closePlannerEventModal}
-        workspaceSlug={workspaceSlug}
-        eventId={plannerEventId}
-        initialRange={plannerEventRange}
-        onSaved={handlePlannerEventSaved}
-        onDeleted={handlePlannerEventDeleted}
-      />
-    </motion.div>
+      </m.div>
+    </LazyMotion>
   );
-};
+}

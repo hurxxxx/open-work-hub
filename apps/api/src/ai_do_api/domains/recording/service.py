@@ -1,17 +1,14 @@
 from __future__ import annotations
 
 import hashlib
-import os
-import shutil
 import socket
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
-from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlparse
 
 from celery import Celery, chain
-from fastapi import HTTPException, Response, UploadFile, status
+from fastapi import Response, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -19,23 +16,32 @@ from sqlalchemy.orm import Session, selectinload
 
 from ai_do_api.core.i18n import localized_http_exception
 from ai_do_api.core.settings import get_settings
-from ai_do_api.core.storage import get_minio_client
+from ai_do_api.core.worker_task_publisher import create_fail_fast_celery_publisher
+from ai_do_api.core.worker_queue_contract import MEETING_TRANSCRIBE_QUEUE
 from ai_do_api.domains.auth.models import User, Workspace
 from ai_do_api.domains.auth.security import new_id
-from ai_do_api.domains.docs.models import NativeDoc
-from ai_do_api.domains.docs.registry import (
-    ContainerRef,
-    container_access_allowed as docs_container_access_allowed,
-    project_container_access,
+from ai_do_api.domains.meeting.models import Meeting
+from ai_do_api.domains.recording import blob_store
+from ai_do_api.domains.recording.chunk_sequence import plan_chunk_assembly
+from ai_do_api.domains.recording.target_plan import (
+    RecordingTargetRef,
+    plan_recording_ingest_targets,
+    recording_target_ref,
 )
-from ai_do_api.domains.docs.service import can_read_native_doc_for_rag
-from ai_do_api.domains.meeting.models import Meeting, MeetingTaskLink
-from ai_do_api.domains.meeting.permissions import is_organizer, is_participant
-from ai_do_api.domains.pms.access import _ensure_issue_readable, ensure_issue_attachable
-from ai_do_api.domains.pms.models import Issue
-from ai_do_api.domains.recording.models import Recording, RecordingContainer, RecordingStaging
+from ai_do_api.domains.recording.target_access import (
+    can_attach_recording_target,
+    can_detach_recording_target,
+    can_view_recording_target,
+    recording_access_allowed,
+)
+from ai_do_api.domains.recording.target_projection import (
+    serialize_recording_with_target_titles as _serialize_recording,
+    serialize_recordings_with_target_titles as _serialize_recordings,
+)
+from ai_do_api.domains.recording.initial_target import resolve_initial_recording_target
+from ai_do_api.domains.recording.models import Recording, RecordingTarget, RecordingStaging
 from ai_do_api.domains.recording.schemas import (
-    RecordingContainerCreateRequest,
+    RecordingTargetCreateRequest,
     RecordingListResponse,
     RecordingOut,
     RecordingPlaybackResponse,
@@ -44,6 +50,13 @@ from ai_do_api.domains.recording.schemas import (
     RecordingUploadCompleteRequest,
     RecordingUploadInitRequest,
     RecordingUploadOut,
+)
+from ai_do_api.domains.recording.tus_protocol import (
+    parse_checksum,
+    parse_upload_metadata,
+    response_headers as tus_response_headers,
+    upload_length_from_meta,
+    with_upload_length,
 )
 
 
@@ -58,7 +71,9 @@ _AUDIO_EXTENSIONS = {
     "audio/ogg": ".ogg",
     "audio/flac": ".flac",
 }
-ENQUEUE_FAILURE_REASON = "Background processing queue is unavailable. Raw audio was saved; retry later."
+ENQUEUE_FAILURE_REASON = (
+    "Background processing queue is unavailable. Raw audio was saved; retry later."
+)
 RECORDING_STALE_AFTER_SECONDS = 60
 _STAGING_META_LINKED_TASK_ID = "__linked_task_id"
 _STAGING_META_TITLE = "__title"
@@ -77,7 +92,7 @@ def _as_utc_naive(value: datetime) -> datetime:
 def _load_recording(db: Session, recording_id: str) -> Recording | None:
     return db.scalar(
         select(Recording)
-        .options(selectinload(Recording.containers))
+        .options(selectinload(Recording.targets))
         .where(Recording.id == recording_id)
     )
 
@@ -94,7 +109,7 @@ def _load_recording_or_404(db: Session, recording_id: str) -> Recording:
 def _load_recording_for_update_or_404(db: Session, recording_id: str) -> Recording:
     recording = db.scalar(
         select(Recording)
-        .options(selectinload(Recording.containers))
+        .options(selectinload(Recording.targets))
         .where(Recording.id == recording_id)
         .with_for_update()
     )
@@ -105,186 +120,10 @@ def _load_recording_for_update_or_404(db: Session, recording_id: str) -> Recordi
     return recording
 
 
-def _container_ref(container: RecordingContainer) -> ContainerRef:
-    return ContainerRef(
-        app=container.container_app,
-        type=container.container_type,
-        id=container.container_id,
-    )
-
-
-def _meeting_container_access_allowed(
-    db: Session,
-    *,
-    user: User,
-    workspace: Workspace,
-    container_type: str,
-    container_id: str,
-) -> bool:
-    if container_type != "meeting":
-        return False
-    meeting = db.scalar(
-        select(Meeting).where(
-            Meeting.id == container_id,
-            Meeting.workspace_id == workspace.id,
-        )
-    )
-    return meeting is not None and is_participant(user, meeting)
-
-
-def _pms_container_access_allowed(
-    db: Session,
-    *,
-    user: User,
-    container_type: str,
-    container_id: str,
-) -> bool:
-    if container_type not in {"issue", "task"}:
-        return False
-    try:
-        _ensure_issue_readable(db, user, container_id)
-    except HTTPException:
-        return False
-    return True
-
-
-def _docs_container_access_allowed(
-    db: Session,
-    *,
-    user: User,
-    workspace: Workspace,
-    container_type: str,
-    container_id: str,
-) -> bool:
-    if container_type in {"native_doc", "doc"}:
-        return can_read_native_doc_for_rag(db, user=user, doc_id=container_id)
-    return docs_container_access_allowed(
-        db=db,
-        user=user,
-        workspace=workspace,
-        ref=ContainerRef(app="docs", type=container_type, id=container_id),
-    )
-
-
-def container_access_allowed(
-    db: Session,
-    *,
-    user: User,
-    workspace: Workspace,
-    container_app: str,
-    container_type: str,
-    container_id: str,
-) -> bool:
-    if container_app == "meeting":
-        return _meeting_container_access_allowed(
-            db,
-            user=user,
-            workspace=workspace,
-            container_type=container_type,
-            container_id=container_id,
-        )
-    if container_app == "pms":
-        if _pms_container_access_allowed(
-            db,
-            user=user,
-            container_type=container_type,
-            container_id=container_id,
-        ):
-            return True
-        return docs_container_access_allowed(
-            db=db,
-            user=user,
-            workspace=workspace,
-            ref=ContainerRef(app="pms", type=container_type, id=container_id),
-        )
-    if container_app == "docs":
-        return _docs_container_access_allowed(
-            db,
-            user=user,
-            workspace=workspace,
-            container_type=container_type,
-            container_id=container_id,
-        )
-    return False
-
-
-def _container_attach_allowed(
-    db: Session,
-    *,
-    user: User,
-    workspace: Workspace,
-    container_app: str,
-    container_type: str,
-    container_id: str,
-) -> bool:
-    if container_app == "pms" and container_type in {"issue", "task"}:
-        try:
-            ensure_issue_attachable(db, user, container_id)
-        except HTTPException:
-            return False
-        return True
-    return container_access_allowed(
-        db,
-        user=user,
-        workspace=workspace,
-        container_app=container_app,
-        container_type=container_type,
-        container_id=container_id,
-    )
-
-
-def _container_detach_allowed(
-    db: Session,
-    *,
-    user: User,
-    workspace: Workspace,
-    container: RecordingContainer,
-) -> bool:
-    if container.added_by_id == user.id:
-        return True
-    if container.container_app == "meeting" and container.container_type == "meeting":
-        meeting = db.scalar(
-            select(Meeting).where(
-                Meeting.id == container.container_id,
-                Meeting.workspace_id == workspace.id,
-            )
-        )
-        return meeting is not None and is_organizer(user, meeting)
-    if container.container_app in {"docs", "pms"}:
-        projection = project_container_access(
-            db=db,
-            user=user,
-            workspace=workspace,
-            ref=_container_ref(container),
-        )
-        return projection.can_manage
-    return False
-
-
-def _recording_access_allowed(
-    db: Session, *, workspace: Workspace, user: User, recording: Recording
-) -> bool:
-    if recording.workspace_id != workspace.id:
-        return False
-    if recording.owner_id == user.id:
-        return True
-    return any(
-        container_access_allowed(
-            db,
-            user=user,
-            workspace=workspace,
-            container_app=container.container_app,
-            container_type=container.container_type,
-            container_id=container.container_id,
-        )
-        for container in recording.containers
-    )
-
-
 def _ensure_recording_access(
     db: Session, *, workspace: Workspace, user: User, recording: Recording
 ) -> None:
-    if not _recording_access_allowed(db, workspace=workspace, user=user, recording=recording):
+    if not recording_access_allowed(db, workspace=workspace, user=user, recording=recording):
         raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
             code="recording.access_required",
@@ -316,83 +155,18 @@ def _extension_for_mime(mime_type: str) -> str:
     return _AUDIO_EXTENSIONS.get(mime_type, Path(mime_type.split("/", 1)[-1]).suffix or ".bin")
 
 
-def _recording_spool_root() -> Path:
-    path = Path(get_settings().recording_spool_dir).expanduser().resolve()
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
-
-def _spool_dir_for_recording(staging_id: str) -> Path:
-    return _recording_spool_root() / staging_id
-
-
-def _chunk_path(spool_path: str, seq: int) -> Path:
-    return Path(spool_path) / f"{seq:08d}.chunk"
-
-
-def _assembled_path(spool_path: str) -> Path:
-    return Path(spool_path) / "assembled.bin"
-
-
-def _fsync_path(path: Path, data: bytes) -> None:
-    tmp_path = path.with_suffix(path.suffix + ".tmp")
-    tmp_path.parent.mkdir(parents=True, exist_ok=True)
-    with tmp_path.open("wb") as handle:
-        handle.write(data)
-        handle.flush()
-        os.fsync(handle.fileno())
-    os.replace(tmp_path, path)
-
-
-def _cleanup_spool_dir(spool_path: str | None) -> None:
-    if not spool_path:
-        return
-    try:
-        shutil.rmtree(spool_path, ignore_errors=True)
-    except Exception:
-        pass
-
-
 def _default_title(started_at: datetime) -> str:
     return f"Recording {started_at:%Y-%m-%d %H:%M:%S UTC}"
-
-
-def _storage_key_for_recording(
-    *,
-    workspace: Workspace,
-    user: User,
-    recording_id: str,
-    mime_type: str,
-    started_at: datetime,
-) -> str:
-    timestamp = f"{started_at:%Y%m%dT%H%M%SZ}"
-    extension = _extension_for_mime(mime_type)
-    return (
-        f"recordings/{workspace.id}/{user.id}/{started_at:%Y/%m/%d}/"
-        f"{timestamp}-{recording_id}{extension}"
-    )
 
 
 @lru_cache(maxsize=1)
 def _get_celery_client() -> Celery:
     settings = get_settings()
-    celery_client = Celery(
+    return create_fail_fast_celery_publisher(
         "ai_do_api_recording_app",
         broker=settings.worker_broker_url,
         backend=settings.worker_result_backend,
     )
-    celery_client.conf.update(
-        broker_connection_retry=False,
-        broker_connection_retry_on_startup=False,
-        broker_connection_max_retries=0,
-        task_publish_retry=False,
-        broker_transport_options={
-            "socket_connect_timeout": 1,
-            "socket_timeout": 1,
-            "retry_on_timeout": False,
-        },
-    )
-    return celery_client
 
 
 def _broker_is_reachable() -> bool:
@@ -423,7 +197,7 @@ def enqueue_recording_pipeline(recording_id: str) -> str:
         celery_client.signature("recording.analyze_transcript"),
         celery_client.signature("recording.verify_transcript_summary"),
         celery_client.signature("recording.create_minutes_doc"),
-    ).apply_async(queue="meeting_transcribe", retry=False)
+    ).apply_async(queue=MEETING_TRANSCRIBE_QUEUE, retry=False)
     return str(result.id)
 
 
@@ -436,10 +210,10 @@ def revoke_recording_task(task_id: str) -> None:
         pass
 
 
-def _recording_has_meeting_container(recording: Recording) -> bool:
+def _recording_has_meeting_target(recording: Recording) -> bool:
     return any(
-        container.container_app == "meeting" and container.container_type == "meeting"
-        for container in recording.containers
+        target.target_app == "meeting" and target.target_type == "meeting"
+        for target in recording.targets
     )
 
 
@@ -497,6 +271,10 @@ def _staging_title(staging: RecordingStaging) -> str | None:
     return value if isinstance(value, str) and value.strip() else None
 
 
+def _staging_tus_upload_length(staging: RecordingStaging) -> int | None:
+    return upload_length_from_meta(staging.chunks_meta)
+
+
 def _serialize_staging(staging: RecordingStaging) -> RecordingUploadOut:
     return RecordingUploadOut(
         id=staging.id,
@@ -508,90 +286,14 @@ def _serialize_staging(staging: RecordingStaging) -> RecordingUploadOut:
         bytes_received=staging.bytes_received,
         chunk_count=staging.chunk_count,
         highest_seq=staging.highest_seq,
-        initial_container_app=staging.initial_container_app,
-        initial_container_type=staging.initial_container_type,
-        initial_container_id=staging.initial_container_id,
+        initial_target_app=staging.initial_target_app,
+        initial_target_type=staging.initial_target_type,
+        initial_target_id=staging.initial_target_id,
         linked_task_id=_staging_linked_task_id(staging),
         started_at=staging.started_at,
         last_chunk_at=staging.last_chunk_at,
         completed_at=staging.completed_at,
     )
-
-
-def _container_title_map(
-    db: Session,
-    containers: list[RecordingContainer],
-) -> dict[tuple[str, str, str], str]:
-    meeting_ids = {
-        item.container_id
-        for item in containers
-        if item.container_app == "meeting" and item.container_type == "meeting"
-    }
-    issue_ids = {
-        item.container_id
-        for item in containers
-        if item.container_app == "pms" and item.container_type in {"issue", "task"}
-    }
-    doc_ids = {
-        item.container_id
-        for item in containers
-        if item.container_app == "docs" and item.container_type in {"native_doc", "doc"}
-    }
-
-    titles: dict[tuple[str, str, str], str] = {}
-    if meeting_ids:
-        for meeting_id, title in db.execute(
-            select(Meeting.id, Meeting.title).where(Meeting.id.in_(meeting_ids))
-        ):
-            titles[("meeting", "meeting", meeting_id)] = title
-    if issue_ids:
-        for issue_id, title in db.execute(
-            select(Issue.id, Issue.title).where(Issue.id.in_(issue_ids))
-        ):
-            titles[("pms", "issue", issue_id)] = title
-            titles[("pms", "task", issue_id)] = title
-    if doc_ids:
-        for doc_id, title in db.execute(
-            select(NativeDoc.id, NativeDoc.title).where(NativeDoc.id.in_(doc_ids))
-        ):
-            titles[("docs", "native_doc", doc_id)] = title
-            titles[("docs", "doc", doc_id)] = title
-    return titles
-
-
-def _serialize_recording(
-    db: Session,
-    recording: Recording,
-    title_map: dict[tuple[str, str, str], str] | None = None,
-) -> RecordingOut:
-    out = RecordingOut.model_validate(recording)
-    resolved_title_map = (
-        title_map
-        if title_map is not None
-        else _container_title_map(db, list(recording.containers))
-    )
-    out.containers = [
-        container.model_copy(
-            update={
-                "container_title": resolved_title_map.get(
-                    (container.container_app, container.container_type, container.container_id)
-                )
-            }
-        )
-        for container in out.containers
-    ]
-    return out
-
-
-def _serialize_recordings(db: Session, recordings: list[Recording]) -> list[RecordingOut]:
-    title_map = _container_title_map(
-        db,
-        [container for recording in recordings for container in recording.containers],
-    )
-    return [
-        _serialize_recording(db, recording, title_map=title_map)
-        for recording in recordings
-    ]
 
 
 def staging_is_stale(staging: RecordingStaging, *, now: datetime | None = None) -> bool:
@@ -617,96 +319,128 @@ def _load_staging_or_404(db: Session, *, workspace: Workspace, staging_id: str) 
     return staging
 
 
-def _normalize_initial_container(payload: RecordingUploadInitRequest) -> tuple[str, str, str] | None:
-    values = [
-        payload.initial_container_app,
-        payload.initial_container_type,
-        payload.initial_container_id,
-    ]
-    if not any(values):
-        return None
-    if not all(values):
-        raise localized_http_exception(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            code="recording.container_attach_required",
-        )
-    return (
-        str(payload.initial_container_app),
-        str(payload.initial_container_type),
-        str(payload.initial_container_id),
+def load_staging_or_404(db: Session, *, workspace: Workspace, staging_id: str) -> RecordingStaging:
+    return _load_staging_or_404(db, workspace=workspace, staging_id=staging_id)
+
+
+def assemble_staging_chunks(staging: RecordingStaging) -> Path:
+    return blob_store.assemble_chunks(
+        spool_path=staging.spool_path,
+        sequences=_assert_contiguous_chunks(staging),
     )
 
 
-def _validate_meeting_linked_task(
+def _next_target_sort_order(
     db: Session,
     *,
-    user: User,
-    meeting_id: str,
-    linked_task_id: str | None,
-) -> None:
-    if linked_task_id is None:
-        return
-    _ensure_issue_readable(db, user, linked_task_id)
-    exists = db.scalar(
-        select(MeetingTaskLink.id).where(
-            MeetingTaskLink.meeting_id == meeting_id,
-            MeetingTaskLink.issue_id == linked_task_id,
-        )
-    )
-    if exists is None:
-        raise localized_http_exception(
-            status_code=status.HTTP_403_FORBIDDEN,
-            code="meeting.linked_task_attached_required",
-        )
-
-
-def _next_container_sort_order(
-    db: Session,
-    *,
-    container_app: str,
-    container_type: str,
-    container_id: str,
+    target_app: str,
+    target_type: str,
+    target_id: str,
 ) -> int:
-    if container_app == "meeting" and container_type == "meeting":
-        db.execute(select(Meeting.id).where(Meeting.id == container_id).with_for_update())
+    if target_app == "meeting" and target_type == "meeting":
+        db.execute(select(Meeting.id).where(Meeting.id == target_id).with_for_update())
     current_max = db.scalar(
-        select(func.max(RecordingContainer.sort_order)).where(
-            RecordingContainer.container_app == container_app,
-            RecordingContainer.container_type == container_type,
-            RecordingContainer.container_id == container_id,
+        select(func.max(RecordingTarget.sort_order)).where(
+            RecordingTarget.target_app == target_app,
+            RecordingTarget.target_type == target_type,
+            RecordingTarget.target_id == target_id,
         )
     )
     return int(current_max or 0) + 1
 
 
-def _container_for_recording(
+def _target_for_recording(
     db: Session,
     *,
     recording_id: str,
-    container_app: str,
-    container_type: str,
-    container_id: str,
+    target_app: str,
+    target_type: str,
+    target_id: str,
     added_by_id: str,
     is_primary: bool = True,
     sort_order: int | None = None,
-) -> RecordingContainer:
+) -> RecordingTarget:
     if sort_order is None:
-        sort_order = _next_container_sort_order(
+        sort_order = _next_target_sort_order(
             db,
-            container_app=container_app,
-            container_type=container_type,
-            container_id=container_id,
+            target_app=target_app,
+            target_type=target_type,
+            target_id=target_id,
         )
-    return RecordingContainer(
+    return RecordingTarget(
         id=new_id(),
         recording_id=recording_id,
-        container_app=container_app,
-        container_type=container_type,
-        container_id=container_id,
+        target_app=target_app,
+        target_type=target_type,
+        target_id=target_id,
         is_primary=is_primary,
         sort_order=sort_order,
         added_by_id=added_by_id,
     )
+
+
+def _new_saved_recording(
+    *,
+    recording_id: str,
+    workspace_id: str,
+    owner_id: str,
+    title: str,
+    started_at: datetime,
+    ended_at: datetime | None,
+    duration_sec: int | None,
+    source: str,
+    storage_key: str,
+    file_size: int,
+    mime_type: str,
+) -> Recording:
+    return Recording(
+        id=recording_id,
+        workspace_id=workspace_id,
+        owner_id=owner_id,
+        title=title,
+        started_at=started_at,
+        ended_at=ended_at,
+        duration_sec=duration_sec,
+        source=source,
+        storage_key=storage_key,
+        file_size=file_size,
+        mime_type=mime_type,
+        audio_status="saved",
+        transcript_status="pending",
+        raw_transcript_doc_status="pending",
+        minutes_doc_status="pending",
+        meeting_insight_status="none",
+        progress_pct=0,
+    )
+
+
+def _add_initial_recording_targets(
+    db: Session,
+    *,
+    recording_id: str,
+    added_by_id: str,
+    initial_target: RecordingTargetRef | None,
+    linked_task_id: str | None,
+) -> str | None:
+    primary_target_id: str | None = None
+    for plan in plan_recording_ingest_targets(
+        initial_target=initial_target,
+        linked_task_id=linked_task_id,
+    ):
+        target = _target_for_recording(
+            db,
+            recording_id=recording_id,
+            target_app=plan.ref.target_app,
+            target_type=plan.ref.target_type,
+            target_id=plan.ref.target_id,
+            added_by_id=added_by_id,
+            is_primary=plan.is_primary,
+            sort_order=plan.sort_order,
+        )
+        if plan.is_primary:
+            primary_target_id = target.id
+        db.add(target)
+    return primary_target_id
 
 
 def init_staging(
@@ -717,30 +451,17 @@ def init_staging(
     payload: RecordingUploadInitRequest,
 ) -> RecordingUploadOut:
     mime_type = _require_allowed_mime(payload.mime_type)
-    initial_container = _normalize_initial_container(payload)
-    linked_task_id = payload.linked_task_id.strip() if payload.linked_task_id else None
-
-    if initial_container is not None:
-        container_app, container_type, container_id = initial_container
-        if not _container_attach_allowed(
-            db,
-            user=user,
-            workspace=workspace,
-            container_app=container_app,
-            container_type=container_type,
-            container_id=container_id,
-        ):
-            raise localized_http_exception(
-                status_code=status.HTTP_403_FORBIDDEN,
-                code="recording.container_attach_required",
-            )
-        if container_app == "meeting" and container_type == "meeting":
-            _validate_meeting_linked_task(
-                db,
-                user=user,
-                meeting_id=container_id,
-                linked_task_id=linked_task_id,
-            )
+    initial_resolution = resolve_initial_recording_target(
+        db,
+        workspace=workspace,
+        user=user,
+        target_app=payload.initial_target_app,
+        target_type=payload.initial_target_type,
+        target_id=payload.initial_target_id,
+        linked_task_id=payload.linked_task_id,
+    )
+    initial_target = initial_resolution.ref
+    linked_task_id = initial_resolution.linked_task_id
 
     existing = db.scalar(
         select(RecordingStaging).where(
@@ -754,11 +475,11 @@ def init_staging(
         return _serialize_staging(existing)
 
     if (
-        initial_container is not None
-        and initial_container[0] == "meeting"
-        and initial_container[1] == "meeting"
+        initial_target is not None
+        and initial_target.target_app == "meeting"
+        and initial_target.target_type == "meeting"
     ):
-        meeting_id = initial_container[2]
+        meeting_id = initial_target.target_id
         db.execute(select(Meeting.id).where(Meeting.id == meeting_id).with_for_update())
         stale_cutoff = _utcnow() - timedelta(seconds=RECORDING_STALE_AFTER_SECONDS)
         other_active = db.scalar(
@@ -766,9 +487,9 @@ def init_staging(
             .options(selectinload(RecordingStaging.uploaded_by))
             .where(
                 RecordingStaging.workspace_id == workspace.id,
-                RecordingStaging.initial_container_app == "meeting",
-                RecordingStaging.initial_container_type == "meeting",
-                RecordingStaging.initial_container_id == meeting_id,
+                RecordingStaging.initial_target_app == "meeting",
+                RecordingStaging.initial_target_type == "meeting",
+                RecordingStaging.initial_target_id == meeting_id,
                 RecordingStaging.uploaded_by_id != user.id,
                 RecordingStaging.completed_at.is_(None),
                 RecordingStaging.last_chunk_at >= stale_cutoff,
@@ -791,8 +512,8 @@ def init_staging(
 
     staging_id = new_id()
     started_at = _utcnow()
-    spool_dir = _spool_dir_for_recording(staging_id)
-    spool_dir.mkdir(parents=True, exist_ok=True)
+    spool_store = blob_store.default_spool_store()
+    spool_dir = spool_store.allocate(staging_id)
     meta: dict[str, str] = {}
     if linked_task_id:
         meta[_STAGING_META_LINKED_TASK_ID] = linked_task_id
@@ -806,20 +527,20 @@ def init_staging(
         idempotency_key=payload.idempotency_key,
         status="recording",
         spool_path=str(spool_dir),
-        storage_key=_storage_key_for_recording(
-            workspace=workspace,
-            user=user,
+        storage_key=blob_store.build_recording_storage_key(
+            workspace_id=workspace.id,
+            user_id=user.id,
             recording_id=staging_id,
-            mime_type=mime_type,
             started_at=started_at,
+            file_extension=_extension_for_mime(mime_type),
         ),
         mime_type=mime_type,
         chunks_meta=meta,
         started_at=started_at,
         last_chunk_at=started_at,
-        initial_container_app=initial_container[0] if initial_container else None,
-        initial_container_type=initial_container[1] if initial_container else None,
-        initial_container_id=initial_container[2] if initial_container else None,
+        initial_target_app=initial_target.target_app if initial_target else None,
+        initial_target_type=initial_target.target_type if initial_target else None,
+        initial_target_id=initial_target.target_id if initial_target else None,
     )
     db.add(staging)
     db.commit()
@@ -827,22 +548,58 @@ def init_staging(
     return _serialize_staging(staging)
 
 
-async def upload_chunk(
+def init_tus_staging(
     db: Session,
     *,
     workspace: Workspace,
     user: User,
-    staging_id: str,
-    seq: int,
-    upload: UploadFile,
-    chunk_sha256: str | None,
-) -> RecordingUploadChunkAck:
-    if seq < 0:
+    upload_metadata: str | None,
+    upload_length: int | None,
+) -> RecordingUploadOut:
+    metadata = parse_upload_metadata(upload_metadata)
+    idempotency_key = metadata.get("idempotency_key") or metadata.get("idempotencyKey")
+    mime_type = metadata.get("mime_type") or metadata.get("mimeType")
+    if not idempotency_key or not mime_type:
         raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            code="recording.chunk_sequence_non_negative",
+            code="recording.tus_metadata_required",
+            headers=tus_response_headers(),
         )
-    staging = _load_staging_or_404(db, workspace=workspace, staging_id=staging_id)
+    staging = init_staging(
+        db,
+        workspace=workspace,
+        user=user,
+        payload=RecordingUploadInitRequest(
+            idempotency_key=idempotency_key,
+            mime_type=mime_type,
+            title=metadata.get("title") or None,
+            initial_target_app=metadata.get("initial_target_app")
+            or metadata.get("initialTargetApp")
+            or None,
+            initial_target_type=metadata.get("initial_target_type")
+            or metadata.get("initialTargetType")
+            or None,
+            initial_target_id=metadata.get("initial_target_id")
+            or metadata.get("initialTargetId")
+            or None,
+            linked_task_id=metadata.get("linked_task_id") or metadata.get("linkedTaskId") or None,
+        ),
+    )
+    if upload_length is not None:
+        current = _load_staging_or_404(db, workspace=workspace, staging_id=staging.id)
+        current.chunks_meta = with_upload_length(current.chunks_meta, upload_length)
+        db.add(current)
+        db.commit()
+        db.refresh(current)
+        return _serialize_staging(current)
+    return staging
+
+
+def _ensure_staging_writable(
+    staging: RecordingStaging,
+    *,
+    user: User,
+) -> None:
     if staging.uploaded_by_id != user.id:
         raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -854,13 +611,25 @@ async def upload_chunk(
             code="recording.staging_finalized",
         )
 
-    data = await upload.read()
+
+def _store_chunk_bytes(
+    db: Session,
+    *,
+    staging: RecordingStaging,
+    seq: int,
+    data: bytes,
+    chunk_sha256: str | None,
+) -> RecordingUploadChunkAck:
+    if seq < 0:
+        raise localized_http_exception(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="recording.chunk_sequence_non_negative",
+        )
     if not data:
         raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
             code="recording.empty_chunk",
         )
-
     digest = hashlib.sha256(data).hexdigest()
     if chunk_sha256 and chunk_sha256 != digest:
         raise localized_http_exception(
@@ -878,7 +647,11 @@ async def upload_chunk(
     meta = dict(staging.chunks_meta or {})
     existing = meta.get(str(seq))
     if existing is not None:
-        if not isinstance(existing, dict) or existing.get("sha256") != digest or int(existing.get("size", -1)) != len(data):
+        if (
+            not isinstance(existing, dict)
+            or existing.get("sha256") != digest
+            or int(existing.get("size", -1)) != len(data)
+        ):
             raise localized_http_exception(
                 status_code=status.HTTP_409_CONFLICT,
                 code="recording.chunk_payload_conflict",
@@ -889,7 +662,11 @@ async def upload_chunk(
             highest_seq=staging.highest_seq,
         )
 
-    _fsync_path(_chunk_path(staging.spool_path, seq), data)
+    blob_store.default_spool_store().write_chunk(
+        spool_path=staging.spool_path,
+        seq=seq,
+        data=data,
+    )
     meta[str(seq)] = {
         "size": len(data),
         "sha256": digest,
@@ -909,14 +686,100 @@ async def upload_chunk(
     )
 
 
+async def upload_chunk(
+    db: Session,
+    *,
+    workspace: Workspace,
+    user: User,
+    staging_id: str,
+    seq: int,
+    upload: UploadFile,
+    chunk_sha256: str | None,
+) -> RecordingUploadChunkAck:
+    staging = _load_staging_or_404(db, workspace=workspace, staging_id=staging_id)
+    _ensure_staging_writable(staging, user=user)
+    data = await upload.read()
+    return _store_chunk_bytes(
+        db,
+        staging=staging,
+        seq=seq,
+        data=data,
+        chunk_sha256=chunk_sha256,
+    )
+
+
+def read_tus_upload(
+    db: Session,
+    *,
+    workspace: Workspace,
+    user: User,
+    staging_id: str,
+) -> RecordingStaging:
+    staging = _load_staging_or_404(db, workspace=workspace, staging_id=staging_id)
+    if staging.uploaded_by_id != user.id:
+        raise localized_http_exception(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code="recording.uploader_read_staging_required",
+            headers=tus_response_headers(upload_offset=staging.bytes_received),
+        )
+    return staging
+
+
+def upload_tus_chunk(
+    db: Session,
+    *,
+    workspace: Workspace,
+    user: User,
+    staging_id: str,
+    upload_offset: int,
+    data: bytes,
+    upload_checksum: str | None,
+    upload_length: int | None,
+) -> RecordingStaging:
+    staging = _load_staging_or_404(db, workspace=workspace, staging_id=staging_id)
+    _ensure_staging_writable(staging, user=user)
+    if upload_offset != staging.bytes_received:
+        raise localized_http_exception(
+            status_code=status.HTTP_409_CONFLICT,
+            code="recording.tus_offset_conflict",
+            headers=tus_response_headers(
+                upload_offset=staging.bytes_received,
+                upload_length=_staging_tus_upload_length(staging),
+            ),
+        )
+    if upload_length is not None:
+        staging.chunks_meta = with_upload_length(staging.chunks_meta, upload_length)
+    expected_length = (
+        upload_length if upload_length is not None else _staging_tus_upload_length(staging)
+    )
+    if expected_length is not None and upload_offset + len(data) > expected_length:
+        raise localized_http_exception(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            code="recording.size_limit_exceeded",
+            headers=tus_response_headers(
+                upload_offset=staging.bytes_received,
+                upload_length=expected_length,
+            ),
+        )
+    checksum = parse_checksum(upload_checksum)
+    _store_chunk_bytes(
+        db,
+        staging=staging,
+        seq=staging.highest_seq + 1,
+        data=data,
+        chunk_sha256=checksum,
+    )
+    return _load_staging_or_404(db, workspace=workspace, staging_id=staging_id)
+
+
 def list_my_staging(
     db: Session,
     *,
     workspace: Workspace,
     user: User,
-    initial_container_app: str | None = None,
-    initial_container_type: str | None = None,
-    initial_container_id: str | None = None,
+    initial_target_app: str | None = None,
+    initial_target_type: str | None = None,
+    initial_target_id: str | None = None,
 ) -> list[RecordingUploadOut]:
     cutoff = _utcnow() - timedelta(hours=get_settings().recording_staging_retention_hours)
     query = select(RecordingStaging).where(
@@ -925,12 +788,12 @@ def list_my_staging(
         RecordingStaging.completed_at.is_(None),
         RecordingStaging.started_at >= cutoff,
     )
-    if initial_container_app is not None:
-        query = query.where(RecordingStaging.initial_container_app == initial_container_app)
-    if initial_container_type is not None:
-        query = query.where(RecordingStaging.initial_container_type == initial_container_type)
-    if initial_container_id is not None:
-        query = query.where(RecordingStaging.initial_container_id == initial_container_id)
+    if initial_target_app is not None:
+        query = query.where(RecordingStaging.initial_target_app == initial_target_app)
+    if initial_target_type is not None:
+        query = query.where(RecordingStaging.initial_target_type == initial_target_type)
+    if initial_target_id is not None:
+        query = query.where(RecordingStaging.initial_target_id == initial_target_id)
     rows = db.scalars(query.order_by(RecordingStaging.started_at.asc())).all()
     return [_serialize_staging(item) for item in rows]
 
@@ -953,41 +816,27 @@ def discard_staging(
             status_code=status.HTTP_409_CONFLICT,
             code="recording.finalized_staging_discard_denied",
         )
-    _cleanup_spool_dir(staging.spool_path)
+    blob_store.default_spool_store().cleanup(staging.spool_path)
     db.delete(staging)
     db.commit()
 
 
-def _chunk_sequences(staging: RecordingStaging) -> list[int]:
-    return sorted(int(seq) for seq in (staging.chunks_meta or {}).keys() if str(seq).isdigit())
-
-
 def _assert_contiguous_chunks(staging: RecordingStaging) -> list[int]:
-    if staging.highest_seq < 0:
+    plan = plan_chunk_assembly(
+        chunks_meta=staging.chunks_meta,
+        highest_seq=staging.highest_seq,
+    )
+    if plan.error == "no_chunks_to_finalize":
         raise localized_http_exception(
             status_code=status.HTTP_409_CONFLICT,
             code="recording.no_chunks_to_finalize",
         )
-    seqs = _chunk_sequences(staging)
-    expected = list(range(seqs[0], seqs[-1] + 1)) if seqs else []
-    if not seqs or seqs != expected:
+    if plan.error == "chunks_incomplete":
         raise localized_http_exception(
             status_code=status.HTTP_409_CONFLICT,
             code="recording.chunks_incomplete",
         )
-    return seqs
-
-
-def _assemble_chunks(staging: RecordingStaging) -> Path:
-    assembled_path = _assembled_path(staging.spool_path)
-    seqs = _assert_contiguous_chunks(staging)
-    with assembled_path.open("wb") as output:
-        for seq in seqs:
-            with _chunk_path(staging.spool_path, seq).open("rb") as handle:
-                shutil.copyfileobj(handle, output)
-        output.flush()
-        os.fsync(output.fileno())
-    return assembled_path
+    return plan.sequences
 
 
 def complete_staging(
@@ -1012,7 +861,11 @@ def complete_staging(
     staging.duration_sec_estimate = payload.duration_sec_estimate
     db.add(staging)
     db.commit()
-    assembled_path = _assemble_chunks(staging)
+    spool_store = blob_store.default_spool_store()
+    assembled_path = spool_store.assemble_chunks(
+        spool_path=staging.spool_path,
+        sequences=_assert_contiguous_chunks(staging),
+    )
 
     staging = _load_staging_or_404(db, workspace=workspace, staging_id=staging_id)
     if staging.promoted_recording_id:
@@ -1023,17 +876,15 @@ def complete_staging(
     db.add(staging)
     db.commit()
 
-    settings = get_settings()
-    get_minio_client().fput_object(
-        settings.minio_bucket,
-        staging.storage_key,
-        str(assembled_path),
+    blob_store.put_recording_file(
+        storage_key=staging.storage_key,
+        path=assembled_path,
         content_type=staging.mime_type,
     )
 
     title = (payload.title or _staging_title(staging) or "").strip()
-    recording = Recording(
-        id=staging.id,
+    recording = _new_saved_recording(
+        recording_id=staging.id,
         workspace_id=workspace.id,
         owner_id=user.id,
         title=title or _default_title(staging.started_at),
@@ -1044,51 +895,22 @@ def complete_staging(
         storage_key=staging.storage_key,
         file_size=staging.bytes_received,
         mime_type=staging.mime_type,
-        audio_status="saved",
-        transcript_status="pending",
-        raw_transcript_doc_status="pending",
-        minutes_doc_status="pending",
-        meeting_insight_status="none",
-        progress_pct=0,
     )
     db.add(recording)
     db.flush()
 
-    primary_container_id: str | None = None
-    if (
-        staging.initial_container_app
-        and staging.initial_container_type
-        and staging.initial_container_id
-    ):
-        container = _container_for_recording(
-            db,
-            recording_id=recording.id,
-            container_app=staging.initial_container_app,
-            container_type=staging.initial_container_type,
-            container_id=staging.initial_container_id,
-            added_by_id=user.id,
-            is_primary=True,
-        )
-        primary_container_id = container.id
-        db.add(container)
     linked_task_id = _staging_linked_task_id(staging)
-    if (
-        linked_task_id
-        and staging.initial_container_app == "meeting"
-        and staging.initial_container_type == "meeting"
-    ):
-        db.add(
-            _container_for_recording(
-                db,
-                recording_id=recording.id,
-                container_app="pms",
-                container_type="issue",
-                container_id=linked_task_id,
-                added_by_id=user.id,
-                is_primary=False,
-                sort_order=0,
-            )
-        )
+    primary_target_id = _add_initial_recording_targets(
+        db,
+        recording_id=recording.id,
+        added_by_id=user.id,
+        initial_target=recording_target_ref(
+            staging.initial_target_app,
+            staging.initial_target_type,
+            staging.initial_target_id,
+        ),
+        linked_task_id=linked_task_id,
+    )
 
     staging.promoted_recording_id = recording.id
     staging.completed_at = _utcnow()
@@ -1096,11 +918,11 @@ def complete_staging(
     db.add(staging)
     db.add(recording)
     db.commit()
-    if primary_container_id:
-        db.expire(recording, ["containers"])
+    if primary_target_id:
+        db.expire(recording, ["targets"])
     fresh = _load_recording_or_404(db, recording.id)
     _enqueue_pipeline_or_mark_failed(db, recording=fresh)
-    _cleanup_spool_dir(staging.spool_path)
+    spool_store.cleanup(staging.spool_path)
     fresh = _load_recording_or_404(db, recording.id)
     return _serialize_recording(db, fresh)
 
@@ -1113,13 +935,13 @@ def list_recordings(
     view: str = "mine",
     from_: datetime | None = None,
     to: datetime | None = None,
-    container_app: str | None = None,
-    container_type: str | None = None,
-    container_id: str | None = None,
+    target_app: str | None = None,
+    target_type: str | None = None,
+    target_id: str | None = None,
 ) -> RecordingListResponse:
     query = (
         select(Recording)
-        .options(selectinload(Recording.containers))
+        .options(selectinload(Recording.targets))
         .where(Recording.workspace_id == workspace.id)
     )
     if view != "archived":
@@ -1127,29 +949,29 @@ def list_recordings(
     else:
         query = query.where(Recording.trashed_at.is_not(None))
 
-    has_container_filter = any([container_app, container_type, container_id])
-    if has_container_filter:
-        if not (container_app and container_type and container_id):
+    has_target_filter = any([target_app, target_type, target_id])
+    if has_target_filter:
+        if not (target_app and target_type and target_id):
             raise localized_http_exception(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                code="recording.container_filter_required",
+                code="recording.target_filter_required",
             )
-        if not container_access_allowed(
+        if not can_view_recording_target(
             db,
             user=user,
             workspace=workspace,
-            container_app=container_app,
-            container_type=container_type,
-            container_id=container_id,
+            target_app=target_app,
+            target_type=target_type,
+            target_id=target_id,
         ):
             raise localized_http_exception(
                 status_code=status.HTTP_403_FORBIDDEN,
-                code="recording.container_access_required",
+                code="recording.target_access_required",
             )
-        query = query.join(RecordingContainer).where(
-            RecordingContainer.container_app == container_app,
-            RecordingContainer.container_type == container_type,
-            RecordingContainer.container_id == container_id,
+        query = query.join(RecordingTarget).where(
+            RecordingTarget.target_app == target_app,
+            RecordingTarget.target_type == target_type,
+            RecordingTarget.target_id == target_id,
         )
     else:
         query = query.where(Recording.owner_id == user.id)
@@ -1242,9 +1064,9 @@ def import_recording(
     ended_at: datetime | None,
     duration_sec: int | None,
     source: str = "quick_record",
-    initial_container_app: str | None = None,
-    initial_container_type: str | None = None,
-    initial_container_id: str | None = None,
+    initial_target_app: str | None = None,
+    initial_target_type: str | None = None,
+    initial_target_id: str | None = None,
     linked_task_id: str | None = None,
 ) -> RecordingOut:
     mime_type = _require_allowed_mime(upload.content_type)
@@ -1270,57 +1092,36 @@ def import_recording(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             code="recording.size_limit_exceeded",
         )
-    initial_container: tuple[str, str, str] | None = None
-    if any([initial_container_app, initial_container_type, initial_container_id]):
-        if not (initial_container_app and initial_container_type and initial_container_id):
-            raise localized_http_exception(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                code="recording.container_attach_required",
-            )
-        if not _container_attach_allowed(
-            db,
-            user=user,
-            workspace=workspace,
-            container_app=initial_container_app,
-            container_type=initial_container_type,
-            container_id=initial_container_id,
-        ):
-            raise localized_http_exception(
-                status_code=status.HTTP_403_FORBIDDEN,
-                code="recording.container_attach_required",
-            )
-        normalized_linked_task_id = linked_task_id.strip() if linked_task_id else None
-        if initial_container_app == "meeting" and initial_container_type == "meeting":
-            _validate_meeting_linked_task(
-                db,
-                user=user,
-                meeting_id=initial_container_id,
-                linked_task_id=normalized_linked_task_id,
-            )
-        initial_container = (initial_container_app, initial_container_type, initial_container_id)
-    else:
-        normalized_linked_task_id = linked_task_id.strip() if linked_task_id else None
-
-    recording_id = new_id()
-    storage_key = _storage_key_for_recording(
+    initial_resolution = resolve_initial_recording_target(
+        db,
         workspace=workspace,
         user=user,
-        recording_id=recording_id,
-        mime_type=mime_type,
-        started_at=resolved_started_at,
+        target_app=initial_target_app,
+        target_type=initial_target_type,
+        target_id=initial_target_id,
+        linked_task_id=linked_task_id,
     )
-    get_minio_client().put_object(
-        settings.minio_bucket,
-        storage_key,
-        BytesIO(data),
-        length=len(data),
+    initial_target = initial_resolution.ref
+    normalized_linked_task_id = initial_resolution.linked_task_id
+
+    recording_id = new_id()
+    storage_key = blob_store.build_recording_storage_key(
+        workspace_id=workspace.id,
+        user_id=user.id,
+        recording_id=recording_id,
+        started_at=resolved_started_at,
+        file_extension=_extension_for_mime(mime_type),
+    )
+    blob_store.put_recording_bytes(
+        storage_key=storage_key,
+        data=data,
         content_type=mime_type,
     )
 
     normalized_source = source if source in {"quick_record", "manual_upload"} else "quick_record"
     trimmed_title = title.strip() if title else ""
-    recording = Recording(
-        id=recording_id,
+    recording = _new_saved_recording(
+        recording_id=recording_id,
         workspace_id=workspace.id,
         owner_id=user.id,
         title=trimmed_title or _default_title(resolved_started_at),
@@ -1331,44 +1132,17 @@ def import_recording(
         storage_key=storage_key,
         file_size=len(data),
         mime_type=mime_type,
-        audio_status="saved",
-        transcript_status="pending",
-        raw_transcript_doc_status="pending",
-        minutes_doc_status="pending",
-        meeting_insight_status="none",
-        progress_pct=0,
     )
     db.add(recording)
-    if initial_container is not None:
+    if initial_target is not None:
         db.flush()
-        db.add(
-            _container_for_recording(
-                db,
-                recording_id=recording.id,
-                container_app=initial_container[0],
-                container_type=initial_container[1],
-                container_id=initial_container[2],
-                added_by_id=user.id,
-                is_primary=True,
-            )
+        _add_initial_recording_targets(
+            db,
+            recording_id=recording.id,
+            added_by_id=user.id,
+            initial_target=initial_target,
+            linked_task_id=normalized_linked_task_id,
         )
-        if (
-            normalized_linked_task_id
-            and initial_container[0] == "meeting"
-            and initial_container[1] == "meeting"
-        ):
-            db.add(
-                _container_for_recording(
-                    db,
-                    recording_id=recording.id,
-                    container_app="pms",
-                    container_type="issue",
-                    container_id=normalized_linked_task_id,
-                    added_by_id=user.id,
-                    is_primary=False,
-                    sort_order=0,
-                )
-            )
     db.commit()
     fresh = _load_recording_or_404(db, recording_id)
     _enqueue_pipeline_or_mark_failed(db, recording=fresh)
@@ -1437,13 +1211,13 @@ def retry_recording(
     return _serialize_recording(db, fresh)
 
 
-def create_container(
+def create_target(
     db: Session,
     *,
     workspace: Workspace,
     user: User,
     recording_id: str,
-    payload: RecordingContainerCreateRequest,
+    payload: RecordingTargetCreateRequest,
 ) -> RecordingOut:
     recording = _load_recording_for_update_or_404(db, recording_id)
     if recording.workspace_id != workspace.id:
@@ -1452,30 +1226,30 @@ def create_container(
         )
     _ensure_recording_owner(user=user, recording=recording)
     recording_pk = recording.id
-    if not _container_attach_allowed(
+    if not can_attach_recording_target(
         db,
         user=user,
         workspace=workspace,
-        container_app=payload.container_app,
-        container_type=payload.container_type,
-        container_id=payload.container_id,
+        target_app=payload.target_app,
+        target_type=payload.target_type,
+        target_id=payload.target_id,
     ):
         raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            code="recording.container_attach_required",
+            code="recording.target_attach_required",
         )
     existing = next(
         (
             item
-            for item in recording.containers
-            if item.container_app == payload.container_app
-            and item.container_type == payload.container_type
-            and item.container_id == payload.container_id
+            for item in recording.targets
+            if item.target_app == payload.target_app
+            and item.target_type == payload.target_type
+            and item.target_id == payload.target_id
         ),
         None,
     )
     if payload.is_primary:
-        for item in recording.containers:
+        for item in recording.targets:
             if item is not existing and item.is_primary:
                 item.is_primary = False
                 db.add(item)
@@ -1483,18 +1257,18 @@ def create_container(
     if existing is None:
         sort_order = payload.sort_order
         if sort_order is None:
-            sort_order = _next_container_sort_order(
+            sort_order = _next_target_sort_order(
                 db,
-                container_app=payload.container_app,
-                container_type=payload.container_type,
-                container_id=payload.container_id,
+                target_app=payload.target_app,
+                target_type=payload.target_type,
+                target_id=payload.target_id,
             )
-        existing = RecordingContainer(
+        existing = RecordingTarget(
             id=new_id(),
             recording_id=recording.id,
-            container_app=payload.container_app,
-            container_type=payload.container_type,
-            container_id=payload.container_id,
+            target_app=payload.target_app,
+            target_type=payload.target_type,
+            target_id=payload.target_id,
             is_primary=payload.is_primary,
             sort_order=sort_order,
             added_by_id=user.id,
@@ -1515,10 +1289,10 @@ def create_container(
         duplicate = next(
             (
                 item
-                for item in fresh.containers
-                if item.container_app == payload.container_app
-                and item.container_type == payload.container_type
-                and item.container_id == payload.container_id
+                for item in fresh.targets
+                if item.target_app == payload.target_app
+                and item.target_type == payload.target_type
+                and item.target_id == payload.target_id
             ),
             None,
         )
@@ -1529,13 +1303,13 @@ def create_container(
     return _serialize_recording(db, fresh)
 
 
-def delete_container(
+def delete_target(
     db: Session,
     *,
     workspace: Workspace,
     user: User,
     recording_id: str,
-    container_id: str,
+    target_id: str,
 ) -> RecordingOut:
     recording = _load_recording_or_404(db, recording_id)
     if recording.workspace_id != workspace.id:
@@ -1544,22 +1318,22 @@ def delete_container(
         )
     if recording.owner_id != user.id:
         _ensure_recording_access(db, workspace=workspace, user=user, recording=recording)
-    container = next((item for item in recording.containers if item.id == container_id), None)
-    if container is None:
+    target = next((item for item in recording.targets if item.id == target_id), None)
+    if target is None:
         raise localized_http_exception(
-            status_code=status.HTTP_404_NOT_FOUND, code="recording.container_not_found"
+            status_code=status.HTTP_404_NOT_FOUND, code="recording.target_not_found"
         )
-    if recording.owner_id != user.id and not _container_detach_allowed(
+    if recording.owner_id != user.id and not can_detach_recording_target(
         db,
         user=user,
         workspace=workspace,
-        container=container,
+        target=target,
     ):
         raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            code="recording.container_detach_required",
+            code="recording.target_detach_required",
         )
-    db.delete(container)
+    db.delete(target)
     recording.updated_at = _utcnow()
     db.add(recording)
     db.commit()
@@ -1588,20 +1362,20 @@ def _meeting_recording_status(recording: Recording) -> str:
 
 
 def _linked_task_id(recording: Recording) -> str | None:
-    for container in recording.containers:
-        if container.container_app == "pms" and container.container_type in {"issue", "task"}:
-            return container.container_id
+    for target in recording.targets:
+        if target.target_app == "pms" and target.target_type in {"task", "task"}:
+            return target.target_id
     return None
 
 
-def _meeting_container(recording: Recording, *, meeting_id: str) -> RecordingContainer | None:
+def _meeting_target(recording: Recording, *, meeting_id: str) -> RecordingTarget | None:
     return next(
         (
-            container
-            for container in recording.containers
-            if container.container_app == "meeting"
-            and container.container_type == "meeting"
-            and container.container_id == meeting_id
+            target
+            for target in recording.targets
+            if target.target_app == "meeting"
+            and target.target_type == "meeting"
+            and target.target_id == meeting_id
         ),
         None,
     )
@@ -1610,23 +1384,29 @@ def _meeting_container(recording: Recording, *, meeting_id: str) -> RecordingCon
 def list_meeting_recording_outs(db: Session, *, meeting: Meeting) -> list:
     from ai_do_api.domains.meeting.schemas import MeetingRecordingOut
 
-    recordings = db.scalars(
-        select(Recording)
-        .join(RecordingContainer)
-        .options(selectinload(Recording.containers))
-        .where(
-            Recording.workspace_id == meeting.workspace_id,
-            Recording.trashed_at.is_(None),
-            RecordingContainer.container_app == "meeting",
-            RecordingContainer.container_type == "meeting",
-            RecordingContainer.container_id == meeting.id,
+    recordings = (
+        db.scalars(
+            select(Recording)
+            .join(RecordingTarget)
+            .options(selectinload(Recording.targets))
+            .where(
+                Recording.workspace_id == meeting.workspace_id,
+                Recording.trashed_at.is_(None),
+                RecordingTarget.target_app == "meeting",
+                RecordingTarget.target_type == "meeting",
+                RecordingTarget.target_id == meeting.id,
+            )
+            .order_by(
+                RecordingTarget.sort_order.asc(), Recording.started_at.asc(), Recording.id.asc()
+            )
         )
-        .order_by(RecordingContainer.sort_order.asc(), Recording.started_at.asc(), Recording.id.asc())
-    ).unique().all()
+        .unique()
+        .all()
+    )
     items = []
     for recording in recordings:
-        container = _meeting_container(recording, meeting_id=meeting.id)
-        if container is None:
+        target = _meeting_target(recording, meeting_id=meeting.id)
+        if target is None:
             continue
         items.append(
             MeetingRecordingOut(
@@ -1637,7 +1417,7 @@ def list_meeting_recording_outs(db: Session, *, meeting: Meeting) -> list:
                 duration_sec=recording.duration_sec,
                 source=recording.source,
                 transcription_status=_meeting_recording_status(recording),
-                sequence_no=container.sort_order,
+                sequence_no=target.sort_order,
                 progress_pct=recording.progress_pct,
                 file_size=recording.file_size,
                 mime_type=recording.mime_type,
@@ -1664,9 +1444,9 @@ def resolve_active_recording_lock(db: Session, *, meeting: Meeting):
         .options(selectinload(RecordingStaging.uploaded_by))
         .where(
             RecordingStaging.workspace_id == meeting.workspace_id,
-            RecordingStaging.initial_container_app == "meeting",
-            RecordingStaging.initial_container_type == "meeting",
-            RecordingStaging.initial_container_id == meeting.id,
+            RecordingStaging.initial_target_app == "meeting",
+            RecordingStaging.initial_target_type == "meeting",
+            RecordingStaging.initial_target_id == meeting.id,
             RecordingStaging.completed_at.is_(None),
         )
         .order_by(RecordingStaging.started_at.asc())
@@ -1693,15 +1473,15 @@ def load_meeting_recording_or_404(
 ) -> Recording:
     recording = db.scalar(
         select(Recording)
-        .join(RecordingContainer)
-        .options(selectinload(Recording.containers))
+        .join(RecordingTarget)
+        .options(selectinload(Recording.targets))
         .where(
             Recording.id == recording_id,
             Recording.workspace_id == workspace.id,
             Recording.trashed_at.is_(None),
-            RecordingContainer.container_app == "meeting",
-            RecordingContainer.container_type == "meeting",
-            RecordingContainer.container_id == meeting_id,
+            RecordingTarget.target_app == "meeting",
+            RecordingTarget.target_type == "meeting",
+            RecordingTarget.target_id == meeting_id,
         )
     )
     if recording is None:
@@ -1721,16 +1501,16 @@ def latest_meeting_recording(
 ) -> Recording | None:
     query = (
         select(Recording)
-        .join(RecordingContainer)
-        .options(selectinload(Recording.containers))
+        .join(RecordingTarget)
+        .options(selectinload(Recording.targets))
         .where(
             Recording.workspace_id == workspace_id,
             Recording.trashed_at.is_(None),
-            RecordingContainer.container_app == "meeting",
-            RecordingContainer.container_type == "meeting",
-            RecordingContainer.container_id == meeting_id,
+            RecordingTarget.target_app == "meeting",
+            RecordingTarget.target_type == "meeting",
+            RecordingTarget.target_id == meeting_id,
         )
-        .order_by(RecordingContainer.sort_order.desc(), Recording.started_at.desc())
+        .order_by(RecordingTarget.sort_order.desc(), Recording.started_at.desc())
     )
     if require_transcript:
         query = query.where(Recording.transcript_text.is_not(None))
@@ -1863,17 +1643,8 @@ def stream_recording_media(
             status_code=status.HTTP_404_NOT_FOUND, code="recording.audio_unavailable"
         )
 
-    obj = get_minio_client().get_object(get_settings().minio_bucket, recording.storage_key)
-
-    def body():
-        try:
-            yield from obj.stream(1024 * 1024)
-        finally:
-            obj.close()
-            obj.release_conn()
-
     return StreamingResponse(
-        body(),
+        blob_store.open_recording_stream(storage_key=recording.storage_key),
         media_type=recording.mime_type,
         headers={
             "Content-Disposition": f'inline; filename="{_download_filename(recording)}"',

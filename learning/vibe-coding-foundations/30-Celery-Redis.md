@@ -230,14 +230,14 @@ services:
     command: celery -A ai_do_api beat --loglevel=info
 ```
 
-워커 코드는 `apps/worker` 아래에 위치하며, API와 같은 가상환경·의존성을 공유하되 실행 엔트리포인트만 다릅니다. 태스크 정의 자체는 `apps/api/src/ai_do_api/tasks/` 같은 폴더에 도메인별로 나뉘어 있습니다.
+워커 코드는 `apps/worker` 아래에 위치하며, 실행 엔트리포인트와 태스크 정의는 `apps/worker/src/ai_do_worker/` 아래에서 관리합니다. 태스크 정의는 `apps/worker/src/ai_do_worker/tasks/`에 도메인별로 나뉩니다.
 
 ### 8.1 🏢 업무 시나리오
 
 **케이스 — "회의록 자동 요약"**
 1. 사용자가 회의록 탭에서 "요약하기" 클릭 → `POST /meeting/{id}/summarize`.
 2. API는 Celery로 `summarize_meeting.delay(meeting_id)` 만 던지고 **즉시 202 Accepted + job_id** 반환.
-3. 워커(`apps/worker`)가 Redis 큐에서 집어 OpenAI 호출 → 결과 DB 저장.
+3. 워커(`apps/worker`)가 Redis 큐에서 집어 LLM provider 호출 → 결과 DB 저장.
 4. 프런트는 SSE 혹은 폴링으로 완료를 감지, 요약 내용을 표시.
 5. 같은 `meeting_id`로 두 번 눌러도 **멱등 키**(meeting_id + 모델 버전)로 중복 호출 방지.
 

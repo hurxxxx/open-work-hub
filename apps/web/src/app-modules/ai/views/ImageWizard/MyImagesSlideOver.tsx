@@ -1,51 +1,23 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useReducer } from 'react';
 import { Button, Dialog } from '@ai-do/ui';
 import { useConfirm } from '@ai-do/ui/feedback/confirm-dialog';
 import { Download, ImageIcon, Loader2, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
+import { UserDateTime } from '@/src/components/date/UserDateTime';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   deleteImageGeneration,
   downloadGeneratedImageBlob,
   listImageGenerations,
-  type ImageGeneration,
 } from '../../api/image-wizard-api';
-import { getUserTemplateSourceId } from './templates/template-presets';
-
-const STATUS_TONE: Record<string, string> = {
-  succeeded: 'text-[var(--ui-color-success,green)]',
-  failed: 'text-[var(--ui-color-danger)]',
-  running: 'text-app-accent',
-  queued: 'text-app-ink/60',
-  idle: 'text-app-ink/40',
-};
-
-function getGallerySummary(item: ImageGeneration): string {
-  const editInstruction =
-    typeof item.details?.source_image_edit_instruction === 'string'
-      ? item.details.source_image_edit_instruction.trim()
-      : '';
-  if (editInstruction) return editInstruction;
-  const latestBrief = item.brief_versions[item.brief_versions.length - 1];
-  if (!latestBrief || latestBrief.internal) return '';
-  return latestBrief.text;
-}
-
-function getGalleryTitle(
-  item: ImageGeneration,
-  t: (key: string, options?: Record<string, unknown>) => string,
-): string {
-  if (getUserTemplateSourceId(item.template_id)) {
-    return t('ai.imageWizard.gallery.userTemplateBasedTitle');
-  }
-  if (item.template_id) {
-    return t(`ai.imageWizard.templates.${item.template_id}.name`, {
-      defaultValue: item.template_id,
-    });
-  }
-  return t('ai.imageWizard.gallery.untitled');
-}
+import {
+  MY_IMAGES_INITIAL_STATE,
+  myImagesReducer,
+  projectMyImageGalleryItem,
+  shouldLoadGalleryThumbnail,
+} from './my-images-gallery-model';
+import { loadGeneratedImageAssets } from './generated-image-assets';
 
 interface MyImagesSlideOverProps {
   open: boolean;
@@ -65,27 +37,30 @@ export function MyImagesSlideOver({
   const { t } = useTranslation('apps');
   const { token } = useAuth();
   const { confirm, confirmDialog } = useConfirm();
-  const [items, setItems] = useState<ImageGeneration[]>([]);
-  const [thumbnailUrls, setThumbnailUrls] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [{ error, items, loading, thumbnailUrls }, dispatch] = useReducer(
+    myImagesReducer,
+    MY_IMAGES_INITIAL_STATE,
+  );
 
   useEffect(() => {
     if (!open || !token) return;
     let cancelled = false;
-    setLoading(true);
+    dispatch({ type: 'load' });
     listImageGenerations(token, workspaceSlug, { limit: 100, has_image_activity: true })
       .then((response) => {
         if (cancelled) return;
-        setItems(response.items);
+        dispatch({
+          type: 'loaded',
+          items: response.items,
+        });
         onCountChange?.(response.items.length);
       })
       .catch((err: Error) => {
         if (cancelled) return;
-        setError(err.message);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+        dispatch({
+          type: 'failed',
+          message: err.message,
+        });
       });
     return () => {
       cancelled = true;
@@ -94,36 +69,38 @@ export function MyImagesSlideOver({
 
   useEffect(() => {
     if (!open || !token || items.length === 0) {
-      setThumbnailUrls({});
+      dispatch({ type: 'clear-thumbnails' });
       return;
     }
     let cancelled = false;
-    const objectUrls: string[] = [];
-    const succeeded = items.filter(
-      (item) => item.image_status === 'succeeded' && item.image_storage_key,
-    );
-    Promise.all(
-      succeeded.map(async (item) => {
-        try {
-          const blob = await downloadGeneratedImageBlob(token, workspaceSlug, item.id);
-          if (cancelled) return null;
-          const objectUrl = URL.createObjectURL(blob);
-          objectUrls.push(objectUrl);
-          return [item.id, objectUrl] as const;
-        } catch {
-          return null;
-        }
-      }),
-    ).then((entries) => {
+    let disposeAssets: (() => void) | null = null;
+    const succeeded = items.filter(shouldLoadGalleryThumbnail);
+    loadGeneratedImageAssets(
+      succeeded.map((item) => item.id),
+      {
+        downloadBlob: (generationId) =>
+          downloadGeneratedImageBlob(token, workspaceSlug, generationId),
+        createObjectUrl: (blob) => URL.createObjectURL(blob),
+        revokeObjectUrl: (objectUrl) => URL.revokeObjectURL(objectUrl),
+      },
+    ).then((assets) => {
+      disposeAssets = assets.dispose;
+      if (cancelled) {
+        assets.dispose();
+        return;
+      }
+      const loadedEntries = assets.results
+        .filter((item): item is typeof item & { url: string } => item.url !== null)
+        .map((item) => [item.generationId, item.url] as const);
       if (cancelled) return;
-      const loadedEntries = entries.filter(
-        (entry): entry is readonly [string, string] => entry !== null,
-      );
-      setThumbnailUrls(Object.fromEntries(loadedEntries));
+      dispatch({
+        type: 'thumbnails-loaded',
+        thumbnailUrls: Object.fromEntries(loadedEntries),
+      });
     });
     return () => {
       cancelled = true;
-      for (const objectUrl of objectUrls) URL.revokeObjectURL(objectUrl);
+      disposeAssets?.();
     };
   }, [open, token, workspaceSlug, items]);
 
@@ -140,10 +117,16 @@ export function MyImagesSlideOver({
     try {
       await deleteImageGeneration(token, workspaceSlug, generationId);
       const next = items.filter((item) => item.id !== generationId);
-      setItems(next);
+      dispatch({
+        type: 'delete-succeeded',
+        generationId,
+      });
       onCountChange?.(next.length);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('ai.imageWizard.errors.deleteFailed'));
+      dispatch({
+        type: 'failed',
+        message: err instanceof Error ? err.message : t('ai.imageWizard.errors.deleteFailed'),
+      });
     }
   }
 
@@ -185,13 +168,16 @@ export function MyImagesSlideOver({
         ) : (
           <ul className="divide-y divide-app-border rounded-md border border-app-border">
             {items.map((item) => {
-              const summary = getGallerySummary(item);
+              const projection = projectMyImageGalleryItem(item);
               const thumbnailUrl = thumbnailUrls[item.id];
-              const tone = STATUS_TONE[item.image_status] ?? 'text-app-ink/40';
+              const title =
+                projection.title.defaultValue === undefined
+                  ? t(projection.title.key)
+                  : t(projection.title.key, { defaultValue: projection.title.defaultValue });
               return (
                 <li
                   key={item.id}
-                  className="flex items-start justify-between gap-3 px-3 py-3 hover:bg-app-surface-hover"
+                  className="flex items-start justify-between gap-3 p-3 hover:bg-app-surface-hover"
                 >
                   <button
                     type="button"
@@ -215,17 +201,17 @@ export function MyImagesSlideOver({
                     className="min-w-0 flex-1 text-left"
                   >
                     <p className="app-text-body line-clamp-1 font-medium text-app-ink">
-                      {getGalleryTitle(item, t)}
+                      {title}
                     </p>
-                    <p className={`app-text-caption ${tone}`}>
+                    <p className={`app-text-caption ${projection.statusTone}`}>
                       {t(`ai.imageWizard.gallery.status.${item.image_status}`, {
                         defaultValue: item.image_status,
                       })}{' '}
-                      · {new Date(item.created_at).toLocaleString()}
+                      · <UserDateTime value={item.created_at} />
                     </p>
-                    {summary ? (
+                    {projection.summary ? (
                       <p className="app-text-caption mt-1 line-clamp-2 text-app-ink/50">
-                        {summary}
+                        {projection.summary}
                       </p>
                     ) : null}
                   </button>
@@ -256,5 +242,3 @@ export function MyImagesSlideOver({
     </Dialog>
   );
 }
-
-export default MyImagesSlideOver;

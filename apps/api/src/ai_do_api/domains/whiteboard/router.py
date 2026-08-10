@@ -2,16 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import base64
-from dataclasses import dataclass
 from datetime import UTC, datetime
 import json
-import secrets
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, WebSocket, status
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 
 from ai_do_api.core.db import get_db_session, get_session_factory
 from ai_do_api.core.i18n import (
@@ -23,136 +21,105 @@ from ai_do_api.core.i18n import (
 from ai_do_api.core.settings import get_settings
 from ai_do_api.domains.auth.access import (
     bind_current_workspace,
-    get_current_workspace,
     resolve_workspace_role,
-    resolve_workspaces,
 )
-from ai_do_api.domains.auth.dependencies import require_current_user, resolve_auth_context_from_token
+from ai_do_api.domains.auth.dependencies import (
+    require_current_user,
+    resolve_auth_context_from_token,
+)
 from ai_do_api.domains.auth.models import User, Workspace
-from ai_do_api.domains.auth.security import new_id
-from ai_do_api.domains.docs.collab import FastAPIYjsWebsocket
+from ai_do_api.domains.auth.workspace_app_gate import require_workspace_app_enabled
+from ai_do_api.domains.collaboration.yjs_runtime import (
+    CollabConnectionLimitExceeded,
+    FastAPIYjsWebsocket,
+)
 from ai_do_api.domains.whiteboard.collab import (
     WhiteboardCollabContext,
     WhiteboardCollabHub,
-    ensure_collab_document_state,
-    sync_collab_record_from_rest_patch,
-    update_collab_snapshot_record,
+)
+from ai_do_api.domains.whiteboard.app_catalog import WHITEBOARD_WORKSPACE_APP
+from ai_do_api.domains.whiteboard.item_mutations import (
+    WhiteboardItemUpdateCommand,
+    update_whiteboard_item as update_whiteboard_item_command,
 )
 from ai_do_api.domains.whiteboard.models import (
     Whiteboard,
     WhiteboardCollabDocument,
-    WhiteboardContainer,
+    WhiteboardTarget,
     WhiteboardLinkShare,
     WhiteboardUserShare,
     WhiteboardUserItemPref,
     empty_scene,
 )
+from ai_do_api.domains.whiteboard.access import (
+    WhiteboardAccess,
+    ensure_whiteboard_workspace_access as _ensure_whiteboard_workspace_access,
+    load_whiteboard_for_share_token_or_404,
+    load_whiteboard_for_user_or_404,
+)
+from ai_do_api.domains.whiteboard.hub import (
+    ResolveWhiteboardSharedLinkResponse,
+    WhiteboardDetail,
+    WhiteboardHubQuery,
+    WhiteboardHubResponse,
+    WhiteboardHubView,
+    _attach_context_slot,
+    _delete_context_slot,
+    _delete_primary_target,
+    _find_context_slot,
+    _get_or_create_pref,
+    _get_pref_map,
+    _is_singleton_context,
+    _lookup_item,
+    _require_context_write,
+    _serialize_whiteboard_detail,
+    _serialize_whiteboard_item,
+    _upsert_primary_target,
+    build_whiteboard_hub_response,
+    resolve_whiteboard_hub_view,
+)
 from ai_do_api.domains.whiteboard.registry import (
-    ContainerRef,
-    container_write_allowed,
-    describe_source,
-    project_container_access,
-    resolve_container_label,
+    TargetRef,
+    project_target_access,
+)
+from ai_do_api.domains.usage.service import (
+    USAGE_EVENT_CONTENT_VIEW,
+    record_usage_event,
 )
 from ai_do_api.domains.whiteboard.service import create_whiteboard_for_user
+from ai_do_api.domains.whiteboard.sharing import (
+    WhiteboardSharingResponse,
+    delete_whiteboard_user_share as delete_whiteboard_user_share_command,
+    disable_whiteboard_link_share as disable_whiteboard_link_share_command,
+    get_whiteboard_sharing_response,
+    upsert_whiteboard_link_share as upsert_whiteboard_link_share_command,
+    upsert_whiteboard_user_share as upsert_whiteboard_user_share_command,
+)
+from ai_do_api.domains.whiteboard.scene_state import (
+    apply_collab_snapshot,
+    ensure_collab_session_state,
+)
 
 
-router = APIRouter(prefix="/whiteboard", tags=["whiteboard"])
+require_whiteboard_app_enabled = require_workspace_app_enabled(
+    WHITEBOARD_WORKSPACE_APP.app_id,
+    error_code="workspace.app_disabled",
+)
+
+router = APIRouter(
+    prefix="/whiteboard",
+    tags=["whiteboard"],
+    dependencies=[Depends(require_whiteboard_app_enabled)],
+)
 public_router = APIRouter(prefix="/whiteboard", tags=["whiteboard"])
 ws_router = APIRouter(prefix="/whiteboard", tags=["whiteboard"])
-
-TEAM_ACCESS_LEVEL_RANK = {
-    "read": 10,
-    "edit": 20,
-}
 
 
 def _utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
-def _max_access_level(*levels: str | None) -> str | None:
-    ranked = [level for level in levels if level in TEAM_ACCESS_LEVEL_RANK]
-    if not ranked:
-        return None
-    return max(ranked, key=lambda item: TEAM_ACCESS_LEVEL_RANK[item])
-
-
-@dataclass
-class WhiteboardAccess:
-    access_level: str | None
-    can_view: bool
-    can_edit: bool
-    can_share: bool
-    can_manage: bool
-
-
-class WhiteboardPrimaryContainer(BaseModel):
-    app: str
-    type: str
-    id: str
-    sort_order: int
-
-
-class WhiteboardContainerItem(WhiteboardPrimaryContainer):
-    is_primary: bool
-
-
-class WhiteboardHubItem(BaseModel):
-    id: str
-    source_app: str
-    source_type: Literal["whiteboard"] = "whiteboard"
-    source_id: str
-    source_kind: str
-    source_ref: str | None = None
-    generation_kind: str
-    location_label: str
-    container_label: str
-    primary_container: WhiteboardPrimaryContainer | None = None
-    containers: list[WhiteboardContainerItem] = Field(default_factory=list)
-    source_badge: str
-    source_deeplink: str | None = None
-    title: str
-    created_by_id: str
-    created_by_name: str
-    created_at: datetime
-    updated_at: datetime
-    trashed_at: datetime | None = None
-    is_favorite: bool
-    is_private: bool
-    last_viewed_at: datetime | None = None
-    can_view: bool
-    can_edit: bool
-    can_share: bool
-    can_manage: bool
-
-
-class WhiteboardDetail(WhiteboardHubItem):
-    scene: dict[str, Any]
-
-
-class WhiteboardHubResponse(BaseModel):
-    items: list[WhiteboardHubItem]
-    total: int
-    page: int
-    page_size: int
-
-
-class WhiteboardHubQuery(BaseModel):
-    view: Literal["all", "mine", "recent", "favorites", "archived"] = "all"
-    q: str = ""
-    sort_by: str = "updated_at"
-    sort_dir: Literal["asc", "desc"] = "desc"
-    page: int = 1
-    page_size: int = 50
-    source_app: str | None = None
-    source_kind: str | None = None
-    container_app: str | None = None
-    container_type: str | None = None
-    container_id: str | None = None
-
-
-class WhiteboardContainerPayload(BaseModel):
+class WhiteboardTargetPayload(BaseModel):
     app: str = Field(..., min_length=1, max_length=64)
     type: str = Field(..., min_length=1, max_length=64)
     id: str = Field(..., min_length=1, max_length=128)
@@ -166,7 +133,7 @@ class CreateWhiteboardRequest(BaseModel):
     source_kind: str = Field(default="manual", min_length=1, max_length=64)
     source_ref: str | None = Field(default=None, max_length=128)
     generation_kind: str = Field(default="human", min_length=1, max_length=32)
-    primary_container: WhiteboardContainerPayload | None = None
+    primary_target: WhiteboardTargetPayload | None = None
 
 
 class UpdateWhiteboardRequest(BaseModel):
@@ -174,7 +141,7 @@ class UpdateWhiteboardRequest(BaseModel):
     scene: dict[str, Any] | None = None
 
 
-class UpdateWhiteboardContainerRequest(BaseModel):
+class UpdateWhiteboardTargetRequest(BaseModel):
     app: str = Field(..., min_length=1, max_length=64)
     type: str = Field(..., min_length=1, max_length=64)
     id: str = Field(..., min_length=1, max_length=128)
@@ -191,27 +158,6 @@ class ShareableUserItem(BaseModel):
     full_name: str
 
 
-class WhiteboardUserShareItem(BaseModel):
-    user_id: str
-    email: str
-    full_name: str
-    access_level: Literal["read", "edit"]
-
-
-class WhiteboardLinkShareItem(BaseModel):
-    token: str
-    access_level: Literal["read", "edit"]
-    active: bool
-    share_path: str
-
-
-class WhiteboardSharingResponse(BaseModel):
-    whiteboard_id: str
-    owner_id: str
-    users: list[WhiteboardUserShareItem]
-    link_share: WhiteboardLinkShareItem | None = None
-
-
 class UpsertUserShareRequest(BaseModel):
     access_level: Literal["read", "edit"]
 
@@ -220,10 +166,6 @@ class UpsertLinkShareRequest(BaseModel):
     access_level: Literal["read", "edit"]
     active: bool = True
     regenerate_token: bool = False
-
-
-class ResolveWhiteboardSharedLinkResponse(BaseModel):
-    item: WhiteboardHubItem
 
 
 class WhiteboardContextPayload(BaseModel):
@@ -292,8 +234,33 @@ def _bind_workspace_slug_for_collab(db: Session, user: User, workspace_slug: str
         raise localized_http_exception(status_code=404, code="workspace.not_found")
     if resolve_workspace_role(db, user, workspace.id) is None:
         raise localized_http_exception(status_code=403, code="workspace.access_required")
+    require_whiteboard_app_enabled(db=db, current_workspace=workspace)
     bind_current_workspace(db, workspace)
     return workspace
+
+
+def _whiteboard_from_item_or_404(
+    db: Session,
+    item_id: str,
+    current_user: User,
+    share_token: str | None = None,
+) -> tuple[Whiteboard, WhiteboardAccess]:
+    context = load_whiteboard_for_user_or_404(
+        db,
+        item_id,
+        current_user,
+        share_token=share_token,
+    )
+    return context.whiteboard, context.access
+
+
+def _whiteboard_from_share_token_or_404(
+    db: Session,
+    share_token: str,
+    current_user: User,
+) -> tuple[Whiteboard, WhiteboardAccess]:
+    context = load_whiteboard_for_share_token_or_404(db, share_token, current_user)
+    return context.whiteboard, context.access
 
 
 def _decode_collab_yjs_state(value: str | None) -> bytes | None:
@@ -370,21 +337,23 @@ async def _close_websocket_for_http_error(websocket: WebSocket, exc: HTTPExcepti
         raise
 
 
-def _resolve_whiteboard_collab_context(
+def _ensure_whiteboard_collab_context(
     db: Session,
     user: User,
     item_id: str,
-) -> WhiteboardCollabContext:
+) -> tuple[WhiteboardCollabContext, WhiteboardCollabDocument]:
     _ensure_whiteboard_workspace_access(db, user)
     whiteboard, access = _whiteboard_from_item_or_404(db, item_id, user)
-    collab = ensure_collab_document_state(db, whiteboard=whiteboard)
-    return WhiteboardCollabContext(
+    scene_state = ensure_collab_session_state(db, whiteboard=whiteboard)
+    assert scene_state.collab is not None
+    context = WhiteboardCollabContext(
         whiteboard_id=whiteboard.id,
-        room_key=collab.room_key,
+        room_key=scene_state.collab.room_key,
         can_edit=access.can_edit,
         scene=whiteboard.scene or empty_scene(),
         default_actor_user_id=whiteboard.owner_id,
     )
+    return context, scene_state.collab
 
 
 async def _monitor_whiteboard_collab_access(
@@ -402,8 +371,8 @@ async def _monitor_whiteboard_collab_access(
         try:
             auth_context = resolve_auth_context_from_token(db, token, update_last_seen=False)
             _bind_workspace_slug_for_collab(db, auth_context.user, workspace_slug)
-            context = _resolve_whiteboard_collab_context(db, auth_context.user, item_id)
-            if not context.can_edit:
+            _whiteboard, access = _whiteboard_from_item_or_404(db, item_id, auth_context.user)
+            if not access.can_edit:
                 await websocket.close(
                     code=4403,
                     reason=_websocket_message(
@@ -419,591 +388,9 @@ async def _monitor_whiteboard_collab_access(
             db.close()
 
 
-def _ensure_whiteboard_workspace_access(db: Session, user: User) -> Workspace:
-    current_workspace = get_current_workspace(db)
-    if current_workspace is None:
-        for summary in resolve_workspaces(db, user):
-            workspace = db.scalar(
-                select(Workspace).where(
-                    Workspace.id == summary["id"],
-                    Workspace.active.is_(True),
-                )
-            )
-            if workspace is None:
-                continue
-            current_workspace = workspace
-            bind_current_workspace(db, current_workspace)
-            break
-    if current_workspace is None:
-        raise localized_http_exception(
-            status_code=status.HTTP_403_FORBIDDEN,
-            code="whiteboard.workspace_context_required",
-        )
-    return current_workspace
-
-
-def _workspace_for_whiteboard(db: Session, whiteboard: Whiteboard) -> Workspace:
-    current_workspace = get_current_workspace(db)
-    if current_workspace is not None and current_workspace.id == whiteboard.workspace_id:
-        return current_workspace
-    workspace = db.scalar(
-        select(Workspace).where(
-            Workspace.id == whiteboard.workspace_id,
-            Workspace.active.is_(True),
-        )
-    )
-    if workspace is None:
-        raise localized_http_exception(status_code=404, code="workspace.not_found")
-    return workspace
-
-
-def _primary_container(whiteboard: Whiteboard) -> WhiteboardContainer | None:
-    active = list(whiteboard.containers)
-    if not active:
-        return None
-    active.sort(
-        key=lambda item: (
-            0 if item.is_primary else 1,
-            item.sort_order,
-            item.created_at,
-        )
-    )
-    return active[0]
-
-
-def _serialize_primary_container(
-    container: WhiteboardContainer | None,
-) -> WhiteboardPrimaryContainer | None:
-    if container is None:
-        return None
-    return WhiteboardPrimaryContainer(
-        app=container.container_app,
-        type=container.container_type,
-        id=container.container_id,
-        sort_order=container.sort_order,
-    )
-
-
-def _serialize_container(container: WhiteboardContainer) -> WhiteboardContainerItem:
-    return WhiteboardContainerItem(
-        app=container.container_app,
-        type=container.container_type,
-        id=container.container_id,
-        sort_order=container.sort_order,
-        is_primary=container.is_primary,
-    )
-
-
-def _container_access_level(
-    db: Session,
-    whiteboard: Whiteboard,
-    user: User,
-) -> tuple[str | None, bool]:
-    workspace = _workspace_for_whiteboard(db, whiteboard)
-    best_level: str | None = None
-    can_manage = False
-    for container in whiteboard.containers:
-        projection = project_container_access(
-            db=db,
-            user=user,
-            workspace=workspace,
-            ref=ContainerRef(
-                app=container.container_app,
-                type=container.container_type,
-                id=container.container_id,
-            ),
-        )
-        if projection.can_manage:
-            can_manage = True
-        candidate = (
-            "edit"
-            if projection.can_edit or projection.can_manage
-            else "read" if projection.can_view else None
-        )
-        best_level = _max_access_level(best_level, candidate)
-    return best_level, can_manage
-
-
-def _resolve_whiteboard_access(
-    db: Session,
-    whiteboard: Whiteboard,
-    user: User,
-    share_token: str | None = None,
-) -> WhiteboardAccess:
-    if whiteboard.owner_id == user.id:
-        return WhiteboardAccess(
-            access_level="edit",
-            can_view=True,
-            can_edit=True,
-            can_share=True,
-            can_manage=True,
-        )
-    direct_share = next((item for item in whiteboard.user_shares if item.user_id == user.id), None)
-    matched_link = (
-        next(
-            (
-                item
-                for item in whiteboard.link_shares
-                if item.active and item.token == share_token
-            ),
-            None,
-        )
-        if share_token
-        else None
-    )
-    container_access_level, container_can_manage = _container_access_level(db, whiteboard, user)
-    access_level = _max_access_level(
-        getattr(direct_share, "access_level", None),
-        getattr(matched_link, "access_level", None),
-        container_access_level,
-    )
-    return WhiteboardAccess(
-        access_level=access_level,
-        can_view=access_level in TEAM_ACCESS_LEVEL_RANK,
-        can_edit=access_level == "edit",
-        can_share=container_can_manage,
-        can_manage=container_can_manage,
-    )
-
-
-def _whiteboard_query() -> select[tuple[Whiteboard]]:
-    return (
-        select(Whiteboard)
-        .options(
-            selectinload(Whiteboard.owner),
-            selectinload(Whiteboard.containers),
-            selectinload(Whiteboard.user_shares).selectinload(WhiteboardUserShare.user),
-            selectinload(Whiteboard.link_shares),
-        )
-    )
-
-
-def _load_accessible_whiteboards(db: Session, user: User) -> list[Whiteboard]:
-    current_workspace = get_current_workspace(db)
-    if current_workspace is None:
-        return []
-    whiteboards = list(
-        db.scalars(
-            _whiteboard_query().where(Whiteboard.workspace_id == current_workspace.id)
-        )
-    )
-    return [
-        whiteboard
-        for whiteboard in whiteboards
-        if _resolve_whiteboard_access(db, whiteboard, user).can_view
-    ]
-
-
-def _load_whiteboard_for_access(db: Session, whiteboard_id: str) -> Whiteboard | None:
-    current_workspace = get_current_workspace(db)
-    query = _whiteboard_query().where(Whiteboard.id == whiteboard_id)
-    if current_workspace is not None:
-        query = query.where(Whiteboard.workspace_id == current_workspace.id)
-    return db.scalar(query)
-
-
-def _get_pref_map(db: Session, user_id: str) -> dict[str, WhiteboardUserItemPref]:
-    rows = list(
-        db.scalars(
-            select(WhiteboardUserItemPref).where(WhiteboardUserItemPref.user_id == user_id)
-        )
-    )
-    return {row.whiteboard_id: row for row in rows}
-
-
-def _get_or_create_pref(
-    db: Session,
-    user_id: str,
-    whiteboard_id: str,
-) -> WhiteboardUserItemPref:
-    pref = db.scalar(
-        select(WhiteboardUserItemPref).where(
-            WhiteboardUserItemPref.user_id == user_id,
-            WhiteboardUserItemPref.whiteboard_id == whiteboard_id,
-        )
-    )
-    if pref is not None:
-        return pref
-    pref = WhiteboardUserItemPref(
-        id=new_id(),
-        user_id=user_id,
-        whiteboard_id=whiteboard_id,
-    )
-    db.add(pref)
-    db.flush()
-    return pref
-
-
-def _serialize_whiteboard_item(
-    db: Session,
-    whiteboard: Whiteboard,
-    access: WhiteboardAccess,
-    pref: WhiteboardUserItemPref | None,
-) -> WhiteboardHubItem:
-    workspace = _workspace_for_whiteboard(db, whiteboard)
-    primary_container = _primary_container(whiteboard)
-    containers = sorted(
-        whiteboard.containers,
-        key=lambda item: (
-            0 if item.is_primary else 1,
-            item.container_app,
-            item.container_type,
-            item.sort_order,
-            item.created_at,
-        ),
-    )
-    location_label = resolve_container_label(
-        db=db,
-        workspace=workspace,
-        container=primary_container,
-    )
-    source_badge, source_deeplink = describe_source(
-        workspace=workspace,
-        whiteboard=whiteboard,
-        primary_container=primary_container,
-    )
-    return WhiteboardHubItem(
-        id=whiteboard.id,
-        source_app=whiteboard.source_app,
-        source_id=whiteboard.id,
-        source_kind=whiteboard.source_kind,
-        source_ref=whiteboard.source_ref,
-        generation_kind=whiteboard.generation_kind,
-        location_label=location_label,
-        container_label=location_label,
-        primary_container=_serialize_primary_container(primary_container),
-        containers=[_serialize_container(container) for container in containers],
-        source_badge=source_badge,
-        source_deeplink=source_deeplink,
-        title=whiteboard.title,
-        created_by_id=whiteboard.owner_id,
-        created_by_name=getattr(whiteboard.owner, "full_name", ""),
-        created_at=whiteboard.created_at,
-        updated_at=whiteboard.updated_at,
-        trashed_at=whiteboard.trashed_at,
-        is_favorite=bool(pref and pref.is_favorite),
-        is_private=primary_container is None,
-        last_viewed_at=pref.last_viewed_at if pref else None,
-        can_view=access.can_view,
-        can_edit=access.can_edit,
-        can_share=access.can_share,
-        can_manage=access.can_manage,
-    )
-
-
-def _serialize_whiteboard_detail(
-    db: Session,
-    whiteboard: Whiteboard,
-    access: WhiteboardAccess,
-    pref: WhiteboardUserItemPref | None,
-) -> WhiteboardDetail:
-    item = _serialize_whiteboard_item(db, whiteboard, access, pref)
-    return WhiteboardDetail(
-        **item.model_dump(),
-        scene=whiteboard.scene or empty_scene(),
-    )
-
-
-def _whiteboard_from_item_or_404(
-    db: Session,
-    item_id: str,
-    current_user: User,
-    share_token: str | None = None,
-) -> tuple[Whiteboard, WhiteboardAccess]:
-    whiteboard = _load_whiteboard_for_access(db, item_id)
-    if whiteboard is None:
-        raise localized_http_exception(status_code=404, code="whiteboard.not_found")
-    access = _resolve_whiteboard_access(db, whiteboard, current_user, share_token=share_token)
-    if not access.can_view or (whiteboard.trashed_at is not None and not access.can_manage):
-        raise localized_http_exception(status_code=404, code="whiteboard.not_found")
-    return whiteboard, access
-
-
-def _whiteboard_from_share_token_or_404(
-    db: Session,
-    share_token: str,
-    current_user: User,
-) -> tuple[Whiteboard, WhiteboardAccess]:
-    whiteboard = db.scalar(
-        _whiteboard_query()
-        .join(WhiteboardLinkShare, WhiteboardLinkShare.whiteboard_id == Whiteboard.id)
-        .where(
-            WhiteboardLinkShare.token == share_token,
-            WhiteboardLinkShare.active.is_(True),
-        )
-    )
-    if whiteboard is None or whiteboard.trashed_at is not None:
-        raise localized_http_exception(status_code=404, code="whiteboard.shared_link_not_found")
-    access = _resolve_whiteboard_access(db, whiteboard, current_user, share_token=share_token)
-    if not access.can_view:
-        raise localized_http_exception(status_code=404, code="whiteboard.shared_link_not_found")
-    return whiteboard, access
-
-
-def _lookup_item(
-    db: Session,
-    item_id: str,
-    current_user: User,
-    share_token: str | None = None,
-) -> WhiteboardDetail:
-    whiteboard, access = _whiteboard_from_item_or_404(
-        db,
-        item_id,
-        current_user,
-        share_token=share_token,
-    )
-    return _serialize_whiteboard_detail(
-        db,
-        whiteboard,
-        access,
-        _get_pref_map(db, current_user.id).get(whiteboard.id),
-    )
-
-
-def _filter_whiteboards(
-    whiteboards: list[WhiteboardHubItem],
-    *,
-    current_user_id: str,
-    query: WhiteboardHubQuery,
-) -> list[WhiteboardHubItem]:
-    filtered = whiteboards
-    if query.view == "mine":
-        filtered = [
-            item
-            for item in filtered
-            if item.trashed_at is None and item.created_by_id == current_user_id
-        ]
-    elif query.view == "recent":
-        filtered = [
-            item
-            for item in filtered
-            if item.trashed_at is None and item.last_viewed_at is not None
-        ]
-    elif query.view == "favorites":
-        filtered = [
-            item
-            for item in filtered
-            if item.trashed_at is None and item.is_favorite
-        ]
-    elif query.view == "archived":
-        filtered = [item for item in filtered if item.trashed_at is not None]
-    else:
-        filtered = [item for item in filtered if item.trashed_at is None]
-
-    def container_matches(item: WhiteboardHubItem) -> bool:
-        if not (query.container_app or query.container_type or query.container_id):
-            return True
-        return any(
-            (query.container_app is None or container.app == query.container_app)
-            and (query.container_type is None or container.type == query.container_type)
-            and (query.container_id is None or container.id == query.container_id)
-            for container in item.containers
-        )
-
-    if query.source_app:
-        filtered = [item for item in filtered if item.source_app == query.source_app]
-    if query.source_kind:
-        filtered = [item for item in filtered if item.source_kind == query.source_kind]
-    filtered = [item for item in filtered if container_matches(item)]
-
-    search = query.q.strip().lower()
-    if search:
-        filtered = [
-            item
-            for item in filtered
-            if search in item.title.lower()
-            or search in item.location_label.lower()
-            or search in item.source_badge.lower()
-        ]
-    return filtered
-
-
-def _sort_whiteboards(
-    whiteboards: list[WhiteboardHubItem],
-    *,
-    sort_by: str,
-    sort_dir: Literal["asc", "desc"],
-) -> list[WhiteboardHubItem]:
-    reverse = sort_dir != "asc"
-
-    def sort_key(item: WhiteboardHubItem):
-        if sort_by == "title":
-            return item.title.lower()
-        if sort_by == "created_at":
-            return item.created_at
-        if sort_by == "last_viewed_at":
-            return item.last_viewed_at or datetime.min
-        if sort_by == "container_sort_order":
-            return item.containers[0].sort_order if item.containers else 0
-        return item.updated_at
-
-    return sorted(whiteboards, key=sort_key, reverse=reverse)
-
-
-def _upsert_primary_container(
-    db: Session,
-    *,
-    whiteboard: Whiteboard,
-    payload: UpdateWhiteboardContainerRequest,
-    current_user: User,
-) -> WhiteboardContainer:
-    workspace = _workspace_for_whiteboard(db, whiteboard)
-    ref = ContainerRef(app=payload.app, type=payload.type, id=payload.id)
-    if not container_write_allowed(
-        db=db,
-        user=current_user,
-        workspace=workspace,
-        ref=ref,
-    ):
-        raise localized_http_exception(
-            status_code=403,
-            code="whiteboard.container_edit_access_required",
-        )
-    if _is_singleton_context(ref):
-        _delete_context_slot(db, ref=ref, except_whiteboard_id=whiteboard.id)
-
-    for container in whiteboard.containers:
-        container.is_primary = False
-        db.add(container)
-
-    existing = next(
-        (
-            container
-            for container in whiteboard.containers
-            if container.container_app == payload.app
-            and container.container_type == payload.type
-            and container.container_id == payload.id
-        ),
-        None,
-    )
-    if existing is None:
-        existing = WhiteboardContainer(
-            id=new_id(),
-            whiteboard_id=whiteboard.id,
-            container_app=payload.app,
-            container_type=payload.type,
-            container_id=payload.id,
-            is_primary=True,
-            sort_order=payload.sort_order,
-            created_by_id=current_user.id,
-        )
-        db.add(existing)
-        whiteboard.containers.append(existing)
-    else:
-        existing.is_primary = True
-        existing.sort_order = payload.sort_order
-        db.add(existing)
-    db.flush()
-    return existing
-
-
-def _delete_primary_container(db: Session, whiteboard: Whiteboard) -> None:
-    for container in list(whiteboard.containers):
-        if container.is_primary:
-            db.delete(container)
-
-
-def _is_singleton_context(ref: ContainerRef) -> bool:
-    return (
-        (ref.app == "meeting" and ref.type == "meeting")
-        or (ref.app == "pms" and ref.type == "task_list")
-    )
-
-
-def _require_context_write(
-    db: Session,
-    *,
-    workspace: Workspace,
-    user: User,
-    ref: ContainerRef,
-) -> None:
-    if not container_write_allowed(db=db, user=user, workspace=workspace, ref=ref):
-        raise localized_http_exception(
-            status_code=403,
-            code="whiteboard.container_edit_access_required",
-        )
-
-
-def _find_context_slot(db: Session, ref: ContainerRef) -> WhiteboardContainer | None:
-    return db.scalar(
-        select(WhiteboardContainer)
-        .options(selectinload(WhiteboardContainer.whiteboard))
-        .where(
-            WhiteboardContainer.container_app == ref.app,
-            WhiteboardContainer.container_type == ref.type,
-            WhiteboardContainer.container_id == ref.id,
-        )
-        .order_by(WhiteboardContainer.created_at.asc())
-    )
-
-
-def _delete_context_slot(
-    db: Session,
-    *,
-    ref: ContainerRef,
-    except_whiteboard_id: str | None = None,
-) -> None:
-    containers = list(
-        db.scalars(
-            select(WhiteboardContainer).where(
-                WhiteboardContainer.container_app == ref.app,
-                WhiteboardContainer.container_type == ref.type,
-                WhiteboardContainer.container_id == ref.id,
-            )
-        )
-    )
-    deleted = False
-    for container in containers:
-        if except_whiteboard_id is not None and container.whiteboard_id == except_whiteboard_id:
-            continue
-        db.delete(container)
-        deleted = True
-    if deleted:
-        db.flush()
-
-
-def _attach_context_slot(
-    db: Session,
-    *,
-    whiteboard: Whiteboard,
-    ref: ContainerRef,
-    current_user: User,
-    is_primary: bool,
-) -> WhiteboardContainer:
-    existing = next(
-        (
-            container
-            for container in whiteboard.containers
-            if container.container_app == ref.app
-            and container.container_type == ref.type
-            and container.container_id == ref.id
-        ),
-        None,
-    )
-    if existing is None:
-        existing = WhiteboardContainer(
-            id=new_id(),
-            whiteboard_id=whiteboard.id,
-            container_app=ref.app,
-            container_type=ref.type,
-            container_id=ref.id,
-            is_primary=is_primary,
-            sort_order=0,
-            created_by_id=current_user.id,
-        )
-        db.add(existing)
-        whiteboard.containers.append(existing)
-    else:
-        existing.is_primary = existing.is_primary or is_primary
-        existing.created_by_id = existing.created_by_id or current_user.id
-        db.add(existing)
-    db.flush()
-    return existing
-
-
 @router.get("/hub", response_model=WhiteboardHubResponse)
 def list_whiteboard_hub(
-    view: Literal["all", "mine", "recent", "favorites", "archived"] | None = Query(default=None),
+    view: WhiteboardHubView | None = Query(default=None),
     category: str | None = Query(default=None),
     q: str = Query(default=""),
     sort_by: str = Query(default="updated_at"),
@@ -1012,23 +399,15 @@ def list_whiteboard_hub(
     page_size: int = Query(default=50, ge=1, le=200),
     source_app: str | None = Query(default=None),
     source_kind: str | None = Query(default=None),
-    container_app: str | None = Query(default=None),
-    container_type: str | None = Query(default=None),
-    container_id: str | None = Query(default=None),
+    space_id: str | None = Query(default=None),
+    target_app: str | None = Query(default=None),
+    target_type: str | None = Query(default=None),
+    target_id: str | None = Query(default=None),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> WhiteboardHubResponse:
-    resolved_view = view or {
-        "all": "all",
-        "my": "mine",
-        "mine": "mine",
-        "recent": "recent",
-        "favorite": "favorites",
-        "favorites": "favorites",
-        "archived": "archived",
-    }.get(category or "all", "all")
     query = WhiteboardHubQuery(
-        view=resolved_view,
+        view=resolve_whiteboard_hub_view(view=view, category=category),
         q=q,
         sort_by=sort_by,
         sort_dir=sort_dir,
@@ -1036,32 +415,12 @@ def list_whiteboard_hub(
         page_size=page_size,
         source_app=source_app,
         source_kind=source_kind,
-        container_app=container_app,
-        container_type=container_type,
-        container_id=container_id,
+        space_id=space_id,
+        target_app=target_app,
+        target_type=target_type,
+        target_id=target_id,
     )
-    _ensure_whiteboard_workspace_access(db, current_user)
-    pref_map = _get_pref_map(db, current_user.id)
-    whiteboards = [
-        _serialize_whiteboard_item(
-            db,
-            whiteboard,
-            _resolve_whiteboard_access(db, whiteboard, current_user),
-            pref_map.get(whiteboard.id),
-        )
-        for whiteboard in _load_accessible_whiteboards(db, current_user)
-    ]
-    whiteboards = _filter_whiteboards(whiteboards, current_user_id=current_user.id, query=query)
-    whiteboards = _sort_whiteboards(whiteboards, sort_by=query.sort_by, sort_dir=query.sort_dir)
-    total = len(whiteboards)
-    start = (query.page - 1) * query.page_size
-    end = start + query.page_size
-    return WhiteboardHubResponse(
-        items=whiteboards[start:end],
-        total=total,
-        page=query.page,
-        page_size=query.page_size,
-    )
+    return build_whiteboard_hub_response(db, current_user=current_user, query=query)
 
 
 @router.get("/contexts/slot", response_model=WhiteboardContextSlotResponse)
@@ -1073,12 +432,12 @@ def get_whiteboard_context_slot(
     current_user: User = Depends(require_current_user),
 ) -> WhiteboardContextSlotResponse:
     workspace = _ensure_whiteboard_workspace_access(db, current_user)
-    ref = ContainerRef(app=app, type=type, id=id)
-    projection = project_container_access(db=db, user=current_user, workspace=workspace, ref=ref)
+    ref = TargetRef(app=app, type=type, id=id)
+    projection = project_target_access(db=db, user=current_user, workspace=workspace, ref=ref)
     if not projection.can_view:
         raise localized_http_exception(
             status_code=403,
-            code="whiteboard.container_access_required",
+            code="whiteboard.target_access_required",
         )
     slot = _find_context_slot(db, ref)
     if slot is None:
@@ -1093,7 +452,7 @@ def create_whiteboard_context_slot(
     current_user: User = Depends(require_current_user),
 ) -> WhiteboardDetail:
     workspace = _ensure_whiteboard_workspace_access(db, current_user)
-    ref = ContainerRef(app=payload.app, type=payload.type, id=payload.id)
+    ref = TargetRef(app=payload.app, type=payload.type, id=payload.id)
     _require_context_write(db, workspace=workspace, user=current_user, ref=ref)
     if _is_singleton_context(ref):
         _delete_context_slot(db, ref=ref)
@@ -1105,7 +464,7 @@ def create_whiteboard_context_slot(
         source_app=payload.app,
         source_kind="manual",
         source_ref=payload.id,
-        primary_container=(ref.app, ref.type, ref.id, 0),
+        primary_target=(ref.app, ref.type, ref.id, 0),
     )
     db.commit()
     return _lookup_item(db, whiteboard.id, current_user)
@@ -1118,7 +477,7 @@ def attach_whiteboard_context_slot(
     current_user: User = Depends(require_current_user),
 ) -> WhiteboardDetail:
     workspace = _ensure_whiteboard_workspace_access(db, current_user)
-    ref = ContainerRef(app=payload.app, type=payload.type, id=payload.id)
+    ref = TargetRef(app=payload.app, type=payload.type, id=payload.id)
     _require_context_write(db, workspace=workspace, user=current_user, ref=ref)
     whiteboard, _access = _whiteboard_from_item_or_404(db, payload.whiteboard_id, current_user)
     if _is_singleton_context(ref):
@@ -1128,7 +487,7 @@ def attach_whiteboard_context_slot(
         whiteboard=whiteboard,
         ref=ref,
         current_user=current_user,
-        is_primary=len(whiteboard.containers) == 0,
+        is_primary=len(whiteboard.targets) == 0,
     )
     whiteboard.updated_at = _utcnow()
     db.add(whiteboard)
@@ -1145,7 +504,7 @@ def detach_whiteboard_context_slot(
     current_user: User = Depends(require_current_user),
 ) -> Response:
     workspace = _ensure_whiteboard_workspace_access(db, current_user)
-    ref = ContainerRef(app=app, type=type, id=id)
+    ref = TargetRef(app=app, type=type, id=id)
     _require_context_write(db, workspace=workspace, user=current_user, ref=ref)
     _delete_context_slot(db, ref=ref)
     db.commit()
@@ -1159,20 +518,20 @@ def create_whiteboard_item(
     current_user: User = Depends(require_current_user),
 ) -> WhiteboardDetail:
     workspace = _ensure_whiteboard_workspace_access(db, current_user)
-    container_payload = payload.primary_container
-    container_ref = (
-        ContainerRef(
-            app=container_payload.app,
-            type=container_payload.type,
-            id=container_payload.id,
+    target_payload = payload.primary_target
+    target_ref = (
+        TargetRef(
+            app=target_payload.app,
+            type=target_payload.type,
+            id=target_payload.id,
         )
-        if container_payload is not None
+        if target_payload is not None
         else None
     )
-    if container_ref is not None:
-        _require_context_write(db, workspace=workspace, user=current_user, ref=container_ref)
-        if _is_singleton_context(container_ref):
-            _delete_context_slot(db, ref=container_ref)
+    if target_ref is not None:
+        _require_context_write(db, workspace=workspace, user=current_user, ref=target_ref)
+        if _is_singleton_context(target_ref):
+            _delete_context_slot(db, ref=target_ref)
 
     whiteboard = create_whiteboard_for_user(
         db,
@@ -1184,14 +543,14 @@ def create_whiteboard_item(
         source_kind=payload.source_kind,
         source_ref=payload.source_ref,
         generation_kind=payload.generation_kind,
-        primary_container=(
+        primary_target=(
             (
-                container_ref.app,
-                container_ref.type,
-                container_ref.id,
-                container_payload.sort_order,
+                target_ref.app,
+                target_ref.type,
+                target_ref.id,
+                target_payload.sort_order,
             )
-            if container_payload is not None and container_ref is not None
+            if target_payload is not None and target_ref is not None
             else None
         ),
     )
@@ -1218,25 +577,16 @@ def update_whiteboard_item(
 ) -> WhiteboardDetail:
     _ensure_whiteboard_workspace_access(db, current_user)
     whiteboard, access = _whiteboard_from_item_or_404(db, item_id, current_user)
-    if not access.can_edit:
-        raise localized_http_exception(
-            status_code=403,
-            code="whiteboard.edit_access_required",
-        )
-    if payload.title is not None:
-        if not access.can_manage:
-            raise localized_http_exception(
-                status_code=403,
-                code="whiteboard.manage_access_required",
-            )
-        whiteboard.title = payload.title.strip()
-    if "scene" in payload.model_fields_set:
-        whiteboard.scene = payload.scene or empty_scene()
-    whiteboard.updated_at = _utcnow()
-    if "scene" in payload.model_fields_set:
-        sync_collab_record_from_rest_patch(db, whiteboard=whiteboard)
-    db.add(whiteboard)
-    db.commit()
+    update_whiteboard_item_command(
+        db,
+        WhiteboardItemUpdateCommand(
+            whiteboard=whiteboard,
+            access=access,
+            title=payload.title,
+            scene=payload.scene,
+            update_scene="scene" in payload.model_fields_set,
+        ),
+    )
     return _lookup_item(db, whiteboard.id, current_user)
 
 
@@ -1259,6 +609,27 @@ def delete_whiteboard_item(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@router.post("/items/{item_id}/restore", response_model=WhiteboardDetail)
+def restore_whiteboard_item(
+    item_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> WhiteboardDetail:
+    _ensure_whiteboard_workspace_access(db, current_user)
+    whiteboard, access = _whiteboard_from_item_or_404(db, item_id, current_user)
+    if not access.can_manage:
+        raise localized_http_exception(
+            status_code=403,
+            code="whiteboard.manage_access_required",
+        )
+    if whiteboard.trashed_at is not None:
+        whiteboard.trashed_at = None
+        whiteboard.updated_at = _utcnow()
+        db.add(whiteboard)
+        db.commit()
+    return _lookup_item(db, whiteboard.id, current_user)
+
+
 @router.delete("/items/{item_id}/permanent", status_code=status.HTTP_204_NO_CONTENT)
 def permanently_delete_whiteboard_item(
     item_id: str,
@@ -1278,20 +649,34 @@ def permanently_delete_whiteboard_item(
             code="whiteboard.archive_before_permanent_delete",
         )
 
-    db.execute(delete(WhiteboardCollabDocument).where(WhiteboardCollabDocument.whiteboard_id == whiteboard.id))
-    db.execute(delete(WhiteboardUserItemPref).where(WhiteboardUserItemPref.whiteboard_id == whiteboard.id))
-    db.execute(delete(WhiteboardUserShare).where(WhiteboardUserShare.whiteboard_id == whiteboard.id))
-    db.execute(delete(WhiteboardLinkShare).where(WhiteboardLinkShare.whiteboard_id == whiteboard.id))
-    db.execute(delete(WhiteboardContainer).where(WhiteboardContainer.whiteboard_id == whiteboard.id))
-    db.execute(delete(Whiteboard).where(Whiteboard.id == whiteboard.id).execution_options(synchronize_session=False))
+    db.execute(
+        delete(WhiteboardCollabDocument).where(
+            WhiteboardCollabDocument.whiteboard_id == whiteboard.id
+        )
+    )
+    db.execute(
+        delete(WhiteboardUserItemPref).where(WhiteboardUserItemPref.whiteboard_id == whiteboard.id)
+    )
+    db.execute(
+        delete(WhiteboardUserShare).where(WhiteboardUserShare.whiteboard_id == whiteboard.id)
+    )
+    db.execute(
+        delete(WhiteboardLinkShare).where(WhiteboardLinkShare.whiteboard_id == whiteboard.id)
+    )
+    db.execute(delete(WhiteboardTarget).where(WhiteboardTarget.whiteboard_id == whiteboard.id))
+    db.execute(
+        delete(Whiteboard)
+        .where(Whiteboard.id == whiteboard.id)
+        .execution_options(synchronize_session=False)
+    )
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.put("/items/{item_id}/container", response_model=WhiteboardDetail)
-def update_whiteboard_container(
+@router.put("/items/{item_id}/target", response_model=WhiteboardDetail)
+def update_whiteboard_target(
     item_id: str,
-    payload: UpdateWhiteboardContainerRequest,
+    payload: UpdateWhiteboardTargetRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> WhiteboardDetail:
@@ -1302,15 +687,15 @@ def update_whiteboard_container(
             status_code=403,
             code="whiteboard.edit_access_required",
         )
-    _upsert_primary_container(db, whiteboard=whiteboard, payload=payload, current_user=current_user)
+    _upsert_primary_target(db, whiteboard=whiteboard, payload=payload, current_user=current_user)
     whiteboard.updated_at = _utcnow()
     db.add(whiteboard)
     db.commit()
     return _lookup_item(db, whiteboard.id, current_user)
 
 
-@router.delete("/items/{item_id}/container", response_model=WhiteboardDetail)
-def delete_whiteboard_container(
+@router.delete("/items/{item_id}/target", response_model=WhiteboardDetail)
+def delete_whiteboard_target(
     item_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
@@ -1322,7 +707,7 @@ def delete_whiteboard_container(
             status_code=403,
             code="whiteboard.edit_access_required",
         )
-    _delete_primary_container(db, whiteboard)
+    _delete_primary_target(db, whiteboard)
     whiteboard.updated_at = _utcnow()
     db.add(whiteboard)
     db.commit()
@@ -1336,7 +721,9 @@ def list_whiteboard_shareable_users(
     current_user: User = Depends(require_current_user),
 ) -> list[ShareableUserItem]:
     current_workspace = _ensure_whiteboard_workspace_access(db, current_user)
-    query = select(User).where(User.status == "active").order_by(User.full_name.asc(), User.email.asc())
+    query = (
+        select(User).where(User.status == "active").order_by(User.full_name.asc(), User.email.asc())
+    )
     search = q.strip()
     if search:
         query = query.where(
@@ -1351,50 +738,6 @@ def list_whiteboard_shareable_users(
     ]
 
 
-def _serialize_sharing_response(whiteboard: Whiteboard) -> WhiteboardSharingResponse:
-    link_share = next((item for item in whiteboard.link_shares if item.active), None)
-    return WhiteboardSharingResponse(
-        whiteboard_id=whiteboard.id,
-        owner_id=whiteboard.owner_id,
-        users=[
-            WhiteboardUserShareItem(
-                user_id=item.user_id,
-                email=item.user.email,
-                full_name=item.user.full_name,
-                access_level=item.access_level,  # type: ignore[arg-type]
-            )
-            for item in sorted(
-                whiteboard.user_shares,
-                key=lambda row: (row.user.full_name.lower(), row.user.email.lower()),
-            )
-        ],
-        link_share=(
-            WhiteboardLinkShareItem(
-                token=link_share.token,
-                access_level=link_share.access_level,  # type: ignore[arg-type]
-                active=link_share.active,
-                share_path=f"/whiteboard/shared/{link_share.token}",
-            )
-            if link_share is not None
-            else None
-        ),
-    )
-
-
-def _load_whiteboard_for_share_or_403(
-    db: Session,
-    item_id: str,
-    current_user: User,
-) -> Whiteboard:
-    whiteboard, access = _whiteboard_from_item_or_404(db, item_id, current_user)
-    if not access.can_share:
-        raise localized_http_exception(
-            status_code=403,
-            code="whiteboard.share_access_required",
-        )
-    return whiteboard
-
-
 @router.get("/items/{item_id}/sharing", response_model=WhiteboardSharingResponse)
 def get_whiteboard_sharing(
     item_id: str,
@@ -1402,8 +745,7 @@ def get_whiteboard_sharing(
     current_user: User = Depends(require_current_user),
 ) -> WhiteboardSharingResponse:
     _ensure_whiteboard_workspace_access(db, current_user)
-    whiteboard = _load_whiteboard_for_share_or_403(db, item_id, current_user)
-    return _serialize_sharing_response(whiteboard)
+    return get_whiteboard_sharing_response(db, item_id=item_id, current_user=current_user)
 
 
 @router.put("/items/{item_id}/sharing/users/{user_id}", response_model=WhiteboardSharingResponse)
@@ -1415,37 +757,13 @@ def upsert_whiteboard_user_share(
     current_user: User = Depends(require_current_user),
 ) -> WhiteboardSharingResponse:
     _ensure_whiteboard_workspace_access(db, current_user)
-    whiteboard = _load_whiteboard_for_share_or_403(db, item_id, current_user)
-    if user_id == current_user.id:
-        raise localized_http_exception(
-            status_code=409,
-            code="whiteboard.owner_already_has_full_access",
-        )
-    target_user = db.scalar(select(User).where(User.id == user_id, User.status == "active"))
-    if target_user is None:
-        raise localized_http_exception(status_code=404, code="auth.user_not_found")
-    if resolve_workspace_role(db, target_user, whiteboard.workspace_id) is None:
-        raise localized_http_exception(
-            status_code=409,
-            code="whiteboard.shared_users_workspace_required",
-        )
-    share = next((item for item in whiteboard.user_shares if item.user_id == user_id), None)
-    if share is None:
-        share = WhiteboardUserShare(
-            id=new_id(),
-            whiteboard_id=whiteboard.id,
-            user_id=user_id,
-            access_level=payload.access_level,
-            created_by_id=current_user.id,
-        )
-        db.add(share)
-    else:
-        share.access_level = payload.access_level
-        db.add(share)
-    db.commit()
-    whiteboard = _load_whiteboard_for_access(db, whiteboard.id)
-    assert whiteboard is not None
-    return _serialize_sharing_response(whiteboard)
+    return upsert_whiteboard_user_share_command(
+        db,
+        item_id=item_id,
+        user_id=user_id,
+        access_level=payload.access_level,
+        current_user=current_user,
+    )
 
 
 @router.delete("/items/{item_id}/sharing/users/{user_id}", response_model=WhiteboardSharingResponse)
@@ -1456,14 +774,12 @@ def delete_whiteboard_user_share(
     current_user: User = Depends(require_current_user),
 ) -> WhiteboardSharingResponse:
     _ensure_whiteboard_workspace_access(db, current_user)
-    whiteboard = _load_whiteboard_for_share_or_403(db, item_id, current_user)
-    share = next((item for item in whiteboard.user_shares if item.user_id == user_id), None)
-    if share is not None:
-        db.delete(share)
-        db.commit()
-    whiteboard = _load_whiteboard_for_access(db, whiteboard.id)
-    assert whiteboard is not None
-    return _serialize_sharing_response(whiteboard)
+    return delete_whiteboard_user_share_command(
+        db,
+        item_id=item_id,
+        user_id=user_id,
+        current_user=current_user,
+    )
 
 
 @router.put("/items/{item_id}/sharing/link", response_model=WhiteboardSharingResponse)
@@ -1474,28 +790,14 @@ def upsert_whiteboard_link_share(
     current_user: User = Depends(require_current_user),
 ) -> WhiteboardSharingResponse:
     _ensure_whiteboard_workspace_access(db, current_user)
-    whiteboard = _load_whiteboard_for_share_or_403(db, item_id, current_user)
-    link_share = next(iter(whiteboard.link_shares), None)
-    if link_share is None:
-        link_share = WhiteboardLinkShare(
-            id=new_id(),
-            whiteboard_id=whiteboard.id,
-            token=secrets.token_urlsafe(24),
-            access_level=payload.access_level,
-            active=payload.active,
-            created_by_id=current_user.id,
-        )
-        db.add(link_share)
-    else:
-        if payload.regenerate_token or not link_share.token:
-            link_share.token = secrets.token_urlsafe(24)
-        link_share.access_level = payload.access_level
-        link_share.active = payload.active
-        db.add(link_share)
-    db.commit()
-    whiteboard = _load_whiteboard_for_access(db, whiteboard.id)
-    assert whiteboard is not None
-    return _serialize_sharing_response(whiteboard)
+    return upsert_whiteboard_link_share_command(
+        db,
+        item_id=item_id,
+        access_level=payload.access_level,
+        active=payload.active,
+        regenerate_token=payload.regenerate_token,
+        current_user=current_user,
+    )
 
 
 @router.delete("/items/{item_id}/sharing/link", response_model=WhiteboardSharingResponse)
@@ -1505,15 +807,11 @@ def disable_whiteboard_link_share(
     current_user: User = Depends(require_current_user),
 ) -> WhiteboardSharingResponse:
     _ensure_whiteboard_workspace_access(db, current_user)
-    whiteboard = _load_whiteboard_for_share_or_403(db, item_id, current_user)
-    link_share = next(iter(whiteboard.link_shares), None)
-    if link_share is not None:
-        link_share.active = False
-        db.add(link_share)
-        db.commit()
-    whiteboard = _load_whiteboard_for_access(db, whiteboard.id)
-    assert whiteboard is not None
-    return _serialize_sharing_response(whiteboard)
+    return disable_whiteboard_link_share_command(
+        db,
+        item_id=item_id,
+        current_user=current_user,
+    )
 
 
 @router.get("/collab/items/{item_id}/session", response_model=WhiteboardCollabSessionResponse)
@@ -1524,16 +822,7 @@ def get_whiteboard_collab_session(
     current_user: User = Depends(require_current_user),
 ) -> WhiteboardCollabSessionResponse:
     _require_workspace_slug(request)
-    _ensure_whiteboard_workspace_access(db, current_user)
-    whiteboard, access = _whiteboard_from_item_or_404(db, item_id, current_user)
-    collab = ensure_collab_document_state(db, whiteboard=whiteboard)
-    context = WhiteboardCollabContext(
-        whiteboard_id=whiteboard.id,
-        room_key=collab.room_key,
-        can_edit=access.can_edit,
-        scene=whiteboard.scene or empty_scene(),
-        default_actor_user_id=whiteboard.owner_id,
-    )
+    context, collab = _ensure_whiteboard_collab_context(db, current_user, item_id)
     db.commit()
     ws_path = request.url.path.removesuffix("/session") + "/ws"
     hub: WhiteboardCollabHub = request.app.state.whiteboard_collab
@@ -1572,15 +861,15 @@ def save_whiteboard_collab_snapshot(
         )
 
     scene = payload.scene or empty_scene()
-    whiteboard.scene = scene
-    whiteboard.updated_at = _utcnow()
-    db.add(whiteboard)
-    collab = update_collab_snapshot_record(
+    yjs_state = _decode_collab_yjs_state(payload.yjs_state)
+    scene_state = apply_collab_snapshot(
         db,
         whiteboard=whiteboard,
-        snapshot_scene=scene,
-        yjs_state=_decode_collab_yjs_state(payload.yjs_state),
+        scene=scene,
+        yjs_state=yjs_state,
     )
+    assert scene_state.collab is not None
+    collab = scene_state.collab
     db.commit()
     snapshot_at = collab.last_snapshot_at or _utcnow()
     return WhiteboardCollabSnapshotResponse(
@@ -1601,6 +890,10 @@ async def whiteboard_collab_websocket(
     monitor_task: asyncio.Task[None] | None = None
     room_key: str | None = None
     context: WhiteboardCollabContext | None = None
+    yjs_websocket: FastAPIYjsWebsocket | None = None
+    runtime = None
+    auth_user_id: str | None = None
+    slot_acquired = False
     hub: WhiteboardCollabHub = websocket.app.state.whiteboard_collab
 
     try:
@@ -1615,24 +908,16 @@ async def whiteboard_collab_websocket(
         session_factory = get_session_factory()
         db = session_factory()
         collab_yjs_state: bytes | None = None
-        auth_user_id: str | None = None
         try:
             auth_context = resolve_auth_context_from_token(db, token)
             auth_user_id = auth_context.user.id
             _bind_workspace_slug_for_collab(db, auth_context.user, workspace_slug)
-            context = _resolve_whiteboard_collab_context(db, auth_context.user, item_id)
+            context, collab = _ensure_whiteboard_collab_context(db, auth_context.user, item_id)
             if not context.can_edit:
                 raise localized_http_exception(
                     status_code=403,
                     code="whiteboard.edit_access_required",
                 )
-            whiteboard = _load_whiteboard_for_access(db, context.whiteboard_id)
-            if whiteboard is None:
-                raise localized_http_exception(
-                    status_code=404,
-                    code="whiteboard.not_found",
-                )
-            collab = ensure_collab_document_state(db, whiteboard=whiteboard)
             db.commit()
             collab_yjs_state = collab.yjs_state
         finally:
@@ -1655,6 +940,12 @@ async def whiteboard_collab_websocket(
             return
 
         runtime = await hub.get_room(context, collab_yjs_state)
+        try:
+            await hub.acquire_connection_slot(runtime, auth_user_id)
+            slot_acquired = True
+        except CollabConnectionLimitExceeded as exc:
+            await websocket.close(code=exc.close_code, reason=exc.reason)
+            return
         monitor_task = asyncio.create_task(
             _monitor_whiteboard_collab_access(
                 websocket,
@@ -1663,25 +954,30 @@ async def whiteboard_collab_websocket(
                 token=token,
             )
         )
-        await runtime.room.serve(
-            FastAPIYjsWebsocket(
-                websocket,
-                room_key,
-                runtime,
-                auth_user_id,
-            )
+        yjs_websocket = FastAPIYjsWebsocket(
+            websocket,
+            room_key,
+            runtime,
+            auth_user_id,
         )
+        await runtime.room.serve(yjs_websocket)
     except HTTPException as exc:
         await _close_websocket_for_http_error(websocket, exc)
     finally:
+        if yjs_websocket is not None:
+            yjs_websocket.detach_room_runtime()
         if monitor_task is not None:
             monitor_task.cancel()
             await asyncio.gather(monitor_task, return_exceptions=True)
+        if slot_acquired and runtime is not None and auth_user_id is not None:
+            await hub.release_connection_slot(runtime, auth_user_id)
         if room_key is not None:
             await hub.cleanup_room(room_key)
 
 
-@public_router.get("/shared-links/{share_token}", response_model=ResolveWhiteboardSharedLinkResponse)
+@public_router.get(
+    "/shared-links/{share_token}", response_model=ResolveWhiteboardSharedLinkResponse
+)
 def resolve_whiteboard_shared_link(
     share_token: str,
     db: Session = Depends(get_db_session),
@@ -1720,25 +1016,16 @@ def update_shared_whiteboard_item(
     current_user: User = Depends(require_current_user),
 ) -> WhiteboardDetail:
     whiteboard, access = _whiteboard_from_share_token_or_404(db, share_token, current_user)
-    if not access.can_edit:
-        raise localized_http_exception(
-            status_code=403,
-            code="whiteboard.edit_access_required",
-        )
-    if payload.title is not None:
-        if not access.can_manage:
-            raise localized_http_exception(
-                status_code=403,
-                code="whiteboard.manage_access_required",
-            )
-        whiteboard.title = payload.title.strip()
-    if "scene" in payload.model_fields_set:
-        whiteboard.scene = payload.scene or empty_scene()
-    whiteboard.updated_at = _utcnow()
-    if "scene" in payload.model_fields_set:
-        sync_collab_record_from_rest_patch(db, whiteboard=whiteboard)
-    db.add(whiteboard)
-    db.commit()
+    update_whiteboard_item_command(
+        db,
+        WhiteboardItemUpdateCommand(
+            whiteboard=whiteboard,
+            access=access,
+            title=payload.title,
+            scene=payload.scene,
+            update_scene="scene" in payload.model_fields_set,
+        ),
+    )
     return _serialize_whiteboard_detail(
         db,
         whiteboard,
@@ -1757,6 +1044,17 @@ def record_shared_whiteboard_view(
     pref = _get_or_create_pref(db, current_user.id, whiteboard.id)
     pref.last_viewed_at = _utcnow()
     db.add(pref)
+    record_usage_event(
+        db,
+        actor_user_id=current_user.id,
+        workspace_id=whiteboard.workspace_id,
+        app_id="whiteboard",
+        event_type=USAGE_EVENT_CONTENT_VIEW,
+        content_kind="whiteboard",
+        content_id=whiteboard.id,
+        content_title=whiteboard.title,
+        source="whiteboard.item.view",
+    )
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

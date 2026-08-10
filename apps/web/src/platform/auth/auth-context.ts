@@ -1,13 +1,15 @@
-import { createContext, useContext } from 'react';
+import { createContext, use } from 'react';
 import { i18n } from '@/src/platform/i18n';
 
 import type {
+  AuthSessionResponse,
   AuthSessionItem,
   AuthUser,
   ChangePasswordPayload,
   DevLoginAccount,
   LoginPayload,
   SetupFirstUserPayload,
+  SignupPayload,
   UpdatePreferencesPayload,
 } from './auth-api';
 
@@ -25,9 +27,11 @@ export interface AuthContextValue {
   devLoginAccounts: DevLoginAccount[];
   bootstrapError: string | null;
   login: (payload: LoginPayload) => Promise<void>;
+  signup: (payload: SignupPayload) => Promise<void>;
   loginAsDevelopmentAdmin: () => Promise<void>;
   loginAsDevelopmentAccount: (accountKey: string) => Promise<void>;
   setupFirstUser: (payload: SetupFirstUserPayload) => Promise<void>;
+  switchSession: (session: AuthSessionResponse) => void;
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
   updatePreferences: (payload: UpdatePreferencesPayload) => Promise<void>;
@@ -41,7 +45,7 @@ export interface AuthContextValue {
 export const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function useAuth() {
-  const context = useContext(AuthContext);
+  const context = use(AuthContext);
 
   if (!context) {
     throw new Error(i18n.t('auth:errors.authProviderMissing'));

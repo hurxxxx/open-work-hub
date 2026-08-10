@@ -25,23 +25,30 @@ export function Select({
   disabled,
 }: SelectProps) {
   return (
-      <SelectPrimitive.Root value={value} onValueChange={onValueChange} disabled={disabled}>
-        <SelectPrimitive.Trigger
+    <SelectPrimitive.Root
+      value={value}
+      onValueChange={onValueChange}
+      disabled={disabled}
+    >
+      <SelectPrimitive.Trigger
         disabled={disabled}
         className={cn(
-          'inline-flex h-[var(--ui-density-dense)] min-w-[148px] items-center justify-between gap-2 rounded-[var(--ui-radius-sm)] border border-[var(--ui-color-border)] bg-ui-surface-raised px-3 text-[0.84rem] text-[var(--ui-color-ink)]',
+          'ui-primitive-control-normal inline-flex h-[var(--ui-density-dense)] min-w-[148px] items-center justify-between gap-2 rounded-[var(--ui-radius-sm)] border border-[var(--ui-color-border)] bg-ui-surface-raised px-2 text-[length:var(--ui-text-caption)] text-[var(--ui-color-ink)] outline-none transition-colors',
+          'focus:border-[var(--ui-color-accent)] focus:ring-2 focus:ring-[var(--ui-color-accent-weak)]',
           'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60',
           className,
         )}
-        >
+      >
+        <span className="min-w-0 flex-1 truncate text-left">
           <SelectPrimitive.Value placeholder={placeholder} />
-          <SelectPrimitive.Icon>
-            <span aria-hidden="true">▾</span>
-          </SelectPrimitive.Icon>
-        </SelectPrimitive.Trigger>
+        </span>
+        <SelectPrimitive.Icon className="shrink-0">
+          <span aria-hidden="true">▾</span>
+        </SelectPrimitive.Icon>
+      </SelectPrimitive.Trigger>
       <SelectPrimitive.Portal>
         <SelectPrimitive.Content
-          className="z-[var(--ui-z-popover)] overflow-hidden rounded-[var(--ui-radius-sm)] border border-[var(--ui-color-border)] bg-ui-surface-raised shadow-[var(--ui-shadow-lg)]"
+          className="z-[var(--ui-z-popover)] max-h-[min(320px,var(--radix-select-content-available-height))] min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-[var(--ui-radius-sm)] border border-[var(--ui-color-border)] bg-ui-surface-raised shadow-[var(--ui-shadow-lg)]"
           position="popper"
         >
           <SelectPrimitive.Viewport className="p-1">
@@ -49,9 +56,11 @@ export function Select({
               <SelectPrimitive.Item
                 key={option.value}
                 value={option.value}
-                className="relative flex min-h-[30px] cursor-pointer select-none items-center rounded-[calc(var(--ui-radius-sm)-1px)] px-3 text-[0.84rem] text-[var(--ui-color-ink)] outline-none data-[highlighted]:bg-ui-accent-weak"
+                className="ui-primitive-menu-item relative flex min-h-[var(--ui-density-dense)] cursor-pointer select-none items-center rounded-[calc(var(--ui-radius-sm)-1px)] px-2 text-[length:var(--ui-text-caption)] text-[var(--ui-color-ink)] outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[highlighted]:bg-ui-accent-weak"
               >
-                <SelectPrimitive.ItemText>{option.label}</SelectPrimitive.ItemText>
+                <SelectPrimitive.ItemText>
+                  {option.label}
+                </SelectPrimitive.ItemText>
               </SelectPrimitive.Item>
             ))}
           </SelectPrimitive.Viewport>

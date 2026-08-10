@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
@@ -14,22 +14,49 @@ from ai_do_api.core.llm import (
     LlmTaskContext,
     PolicyDecision,
     ResolvedLlmExecution,
-    complete_chat_stream,
-    get_pool_config,
 )
+from ai_do_api.core.llm_errors import LlmProviderError
 from ai_do_api.core.principal import CallerPrincipal
 from ai_do_api.domains.ai import approvals as ai_approvals
+from ai_do_api.domains.ai.agent_write_guard import (
+    WRITE_TOOL_REQUIRED_MESSAGE,
+    latest_user_message_has_write_intent,
+    write_tool_names_from_specs,
+)
 from ai_do_api.domains.ai.events import EnvelopeEncoder, make_envelope
-from ai_do_api.domains.ai.registry import get_ai_capability_registry
+from ai_do_api.domains.ai.gateway import (
+    LlmWorkloadContext,
+    ai_gateway_execution_from_resolved,
+    ai_gateway_request_from_task_context,
+    build_llm_workload_request,
+    complete_resolved_gateway_chat_stream,
+)
 from ai_do_api.domains.ai.runtime.contracts import RuntimeProfile
-from ai_do_api.domains.ai.tool_runtime import execute_tool_call, iter_tool_call_events
+from ai_do_api.domains.ai.runtime.routing_metadata import (
+    runtime_done_meta_from_model_meta,
+    runtime_model_meta_from_kwargs,
+)
+from ai_do_api.domains.ai.tool_contracts import (
+    AgentToolCallMessage,
+    AgentToolResultMessage,
+    AgentToolSpec,
+    agent_tool_names,
+    agent_tool_specs_to_openai_functions,
+    openai_tool_call_message,
+    openai_tool_result_message,
+)
+from ai_do_api.domains.ai.tool_call_event_projection import iter_tool_call_events
+from ai_do_api.domains.ai.tool_runtime import execute_tool_call
 from ai_do_api.domains.auth.models import User, Workspace
 from ai_do_api.domains.auth.security import new_id
 from ai_do_api.domains.conversations.models import Conversation
 
 
 AGENT_SYSTEM_PROMPT = (
-    "너는 두원공조 사내 업무를 돕는 한국어 AI 비서다. "
+    "너는 두원공조의 업무용 챗봇 아이두(AI-Do)다. "
+    "사용자가 정체성을 물으면 반드시 '저는 두원공조의 업무용 챗봇 아이두(AI-Do)입니다.'라고 소개한다. "
+    "Qwen, Tongyi, OpenAI 같은 기반 모델명이나 개발사를 너의 정체성처럼 말하지 않는다. "
+    "두원공조 사내 업무를 한국어로 돕는다. "
     "워크스페이스 사실은 추정하지 말고 가능하면 도구를 우선 사용한다. "
     "도구 결과가 있으면 그 범위 안에서만 답하고, 부족하면 부족하다고 말한다. "
     "도구 오류가 나면 조용히 무시하지 말고 필요한 경우 다시 시도하거나 한계를 설명한다.\n\n"
@@ -63,7 +90,8 @@ AGENT_SYSTEM_PROMPT = (
     '    <artifact type="svg" title="회사 로고">\n'
     '    <svg viewBox="0 0 100 100">...</svg>\n'
     "    </artifact>\n\n"
-    'HTML 을 \'돌려서 보여주는\' 목적이면 type="html", 소스만 설명/공유하려면 type="code" language="html" 을 쓴다.\n'
+    'HTML 을 \'돌려서 보여주는\' 목적이면 type="html", 소스만 설명/공유하려면 type="code" language="html" 을 쓴다. '
+    '실행/프리뷰가 필요한 HTML 은 chat 의 ```html 코드블록으로 쓰지 말고 반드시 type="html" artifact 로 낸다.\n'
     "짧은 한두 문단 답변이나 10줄 미만 스니펫은 artifact 없이 chat 에 쓴다. "
     "문서 본문 안에 짧은 코드 예시가 필요하면 document artifact 안에서 markdown fenced code block 으로 인라인 배치한다."
 )
@@ -74,11 +102,7 @@ FORCED_FINAL_ANSWER_PROMPT = (
     "새 도구 호출이나 추가 조회를 시도하지 말라."
 )
 
-WRITE_TOOL_REQUIRED_MESSAGE = (
-    "요청은 생성/수정/삭제 같은 쓰기 작업으로 보이지만 실제 write tool 실행 결과가 없습니다. "
-    "데이터가 변경됐다고 확인할 수 없으므로 완료됐다고 답할 수 없습니다. "
-    "대상과 변경 내용을 확인한 뒤 다시 요청해 주세요."
-)
+_RESUME_MODEL_CONFIGURATION_CHANGED = "ai.agent_resume_model_configuration_changed"
 
 
 @dataclass
@@ -113,7 +137,7 @@ async def run_agent_turn_stream(
     max_tool_calls: int,
     max_consecutive_tool_errors: int,
     agent_run_id: str,
-    tool_specs: list[dict[str, Any]],
+    tool_specs: Sequence[AgentToolSpec],
     bound_conversation: Conversation | None,
     scope_system_prompt: str | None = None,
     allowed_app_ids: list[str] | None = None,
@@ -166,12 +190,8 @@ async def run_agent_turn_stream(
         runtime_external_egress_summary=runtime_external_egress_summary,
         runtime_external_planner_summary=runtime_external_planner_summary,
         runtime_external_search_summary=runtime_external_search_summary,
-        runtime_external_planner_execution_summary=(
-            runtime_external_planner_execution_summary
-        ),
-        runtime_external_search_execution_summary=(
-            runtime_external_search_execution_summary
-        ),
+        runtime_external_planner_execution_summary=(runtime_external_planner_execution_summary),
+        runtime_external_search_execution_summary=(runtime_external_search_execution_summary),
         runtime_graph_execution_status=runtime_graph_execution_status,
         runtime_graph_execution_fallback_reason=runtime_graph_execution_fallback_reason,
         runtime_graph_execution_fallback_policy=runtime_graph_execution_fallback_policy,
@@ -217,7 +237,7 @@ async def resume_agent_run(
     max_turns: int,
     max_tool_calls: int,
     max_consecutive_tool_errors: int,
-    tool_specs: list[dict[str, Any]],
+    tool_specs: Sequence[AgentToolSpec],
 ) -> AsyncIterator[Any]:
     approval, snapshot = ai_approvals.get_resume_context(
         db,
@@ -228,7 +248,7 @@ async def resume_agent_run(
         for_update=True,
     )
     replay_config = ai_approvals.rehydrate_model_meta(snapshot)
-    execution = _execution_from_snapshot(snapshot)
+    execution = _execution_from_snapshot(snapshot, context=context, db=db)
     # Resume replays the frozen snapshot verbatim. We intentionally do not
     # rebuild any scope-bound prompt here because canonical replay must match
     # the exact context the halted run saw when it requested approval.
@@ -280,7 +300,7 @@ async def _run_agent_loop_stream(
     max_tool_calls: int,
     max_consecutive_tool_errors: int,
     agent_run_id: str,
-    tool_specs: list[dict[str, Any]],
+    tool_specs: Sequence[AgentToolSpec],
     bound_conversation: Conversation | None,
     parallel_tool_calls: bool | None,
     tool_choice_state: str | dict[str, Any] | None,
@@ -290,8 +310,9 @@ async def _run_agent_loop_stream(
     include_agent_run_id_in_done: bool,
 ) -> AsyncIterator[Any]:
     state = _LoopState()
-    write_tool_names = _write_tool_names_from_specs(tool_specs)
-    write_guard_required = bool(write_tool_names) and _latest_user_message_has_write_intent(
+    provider_tool_specs = agent_tool_specs_to_openai_functions(tool_specs)
+    write_tool_names = write_tool_names_from_specs(tool_specs)
+    write_guard_required = bool(write_tool_names) and latest_user_message_has_write_intent(
         conversation
     )
     replay_tool_executed = False
@@ -342,29 +363,16 @@ async def _run_agent_loop_stream(
                 state.consecutive_tool_errors = 1
                 if state.consecutive_tool_errors >= max_consecutive_tool_errors:
                     _complete_snapshot_if_needed(db, current_snapshot)
-                    yield make_envelope(
-                        "error",
-                        encoder.next_seq(),
-                        {
-                            "code": "agent_loop_tool_error_budget",
-                            "message": "도구 호출 오류가 연속으로 발생해 처리를 중단했습니다.",
-                            "retryable": False,
-                        },
-                    )
-                    yield make_envelope(
-                        "done",
-                        encoder.next_seq(),
-                        {
-                            "finish_reason": "error",
-                            "audit_id": None,
-                            "meta": _loop_done_meta(
-                                execution,
-                                model_meta=model_meta,
-                                agent_run_id=agent_run_id,
-                                include_agent_run_id=include_agent_run_id_in_done,
-                            ),
-                        },
-                    )
+                    async for event in _emit_error_done_events(
+                        encoder=encoder,
+                        execution=execution,
+                        model_meta=model_meta,
+                        agent_run_id=agent_run_id,
+                        include_agent_run_id=include_agent_run_id_in_done,
+                        code="agent_loop_tool_error_budget",
+                        message="도구 호출 오류가 연속으로 발생해 처리를 중단했습니다.",
+                    ):
+                        yield event
                     return
 
         for _turn_index in range(max_turns):
@@ -376,18 +384,26 @@ async def _run_agent_loop_stream(
             )
             buffered_content_chunks: list[str] = []
 
-            async for chunk, _decision, _config in complete_chat_stream(
-                context,
+            gateway_execution = ai_gateway_execution_from_resolved(
+                ai_gateway_request_from_task_context(
+                    context,
+                    messages=conversation,
+                    temperature=temperature,
+                    stream=True,
+                    stream_reasoning=stream_reasoning,
+                    tools=provider_tool_specs or None,
+                    tool_choice=tool_choice_state if provider_tool_specs else None,
+                    parallel_tool_calls=parallel_tool_calls,
+                    agent_run_id=agent_run_id,
+                    conversation_id=bound_conversation.id
+                    if bound_conversation is not None
+                    else None,
+                ),
+                execution,
+            )
+            async for chunk, _decision, _config in complete_resolved_gateway_chat_stream(
+                gateway_execution,
                 db,
-                messages=conversation,
-                temperature=temperature,
-                stream_reasoning=stream_reasoning,
-                tools=tool_specs or None,
-                tool_choice=tool_choice_state if tool_specs else None,
-                parallel_tool_calls=parallel_tool_calls,
-                resolved_execution=execution,
-                agent_run_id=agent_run_id,
-                conversation_id=bound_conversation.id if bound_conversation is not None else None,
             ):
                 if chunk.kind == "content" and chunk.text:
                     if buffer_content_for_write_guard:
@@ -457,92 +473,51 @@ async def _run_agent_loop_stream(
             if str(turn_finish_reason) != "tool_calls":
                 _complete_snapshot_if_needed(db, current_snapshot)
                 if buffer_content_for_write_guard:
-                    yield make_envelope(
-                        "content_delta",
-                        encoder.next_seq(),
-                        {"text": WRITE_TOOL_REQUIRED_MESSAGE},
-                    )
-                    if state.aggregated_usage:
-                        yield make_envelope(
-                            "usage",
-                            encoder.next_seq(),
-                            state.aggregated_usage,
-                        )
-                    yield make_envelope(
-                        "done",
-                        encoder.next_seq(),
-                        {
-                            "finish_reason": "stop",
-                            "audit_id": None,
-                            "meta": _loop_done_meta(
-                                execution,
-                                model_meta=model_meta,
-                                agent_run_id=agent_run_id,
-                                include_agent_run_id=include_agent_run_id_in_done,
-                            ),
-                        },
-                    )
+                    async for event in _emit_write_guard_done_events(
+                        encoder=encoder,
+                        state=state,
+                        execution=execution,
+                        model_meta=model_meta,
+                        agent_run_id=agent_run_id,
+                        include_agent_run_id=include_agent_run_id_in_done,
+                    ):
+                        yield event
                     return
-                for text in buffered_content_chunks:
-                    yield make_envelope(
-                        "content_delta",
-                        encoder.next_seq(),
-                        {"text": text},
-                    )
-                if state.aggregated_usage:
-                    yield make_envelope(
-                        "usage",
-                        encoder.next_seq(),
-                        state.aggregated_usage,
-                    )
-                yield make_envelope(
-                    "done",
-                    encoder.next_seq(),
-                    {
-                        "finish_reason": turn_finish_reason,
-                        "audit_id": None,
-                        "meta": _loop_done_meta(
-                            execution,
-                            model_meta=model_meta,
-                            agent_run_id=agent_run_id,
-                            include_agent_run_id=include_agent_run_id_in_done,
-                        ),
-                    },
-                )
+                async for event in _emit_buffered_content(
+                    encoder=encoder,
+                    chunks=buffered_content_chunks,
+                ):
+                    yield event
+                async for event in _emit_usage_and_loop_done_events(
+                    encoder=encoder,
+                    state=state,
+                    execution=execution,
+                    model_meta=model_meta,
+                    agent_run_id=agent_run_id,
+                    include_agent_run_id=include_agent_run_id_in_done,
+                    finish_reason=turn_finish_reason,
+                ):
+                    yield event
                 return
 
-            for text in buffered_content_chunks:
-                yield make_envelope(
-                    "content_delta",
-                    encoder.next_seq(),
-                    {"text": text},
-                )
+            async for event in _emit_buffered_content(
+                encoder=encoder,
+                chunks=buffered_content_chunks,
+            ):
+                yield event
 
             if not pending_order:
                 _complete_snapshot_if_needed(db, current_snapshot)
-                yield make_envelope(
-                    "error",
-                    encoder.next_seq(),
-                    {
-                        "code": "agent_loop_missing_tool_calls",
-                        "message": "모델이 tool_calls 종료를 보냈지만 호출 정보가 비어 있습니다.",
-                        "retryable": False,
-                    },
-                )
-                yield make_envelope(
-                    "done",
-                    encoder.next_seq(),
-                    {
-                        "finish_reason": "error",
-                        "audit_id": None,
-                        "meta": _loop_done_meta(
-                            execution,
-                            model_meta=model_meta,
-                            agent_run_id=agent_run_id,
-                            include_agent_run_id=include_agent_run_id_in_done,
-                        ),
-                    },
-                )
+                async for event in _emit_error_done_events(
+                    encoder=encoder,
+                    execution=execution,
+                    model_meta=model_meta,
+                    agent_run_id=agent_run_id,
+                    include_agent_run_id=include_agent_run_id_in_done,
+                    code="agent_loop_missing_tool_calls",
+                    message="모델이 tool_calls 종료를 보냈지만 호출 정보가 비어 있습니다.",
+                ):
+                    yield event
                 return
 
             for call_id in pending_order:
@@ -573,29 +548,16 @@ async def _run_agent_loop_stream(
                         ):
                             yield event
                         return
-                    yield make_envelope(
-                        "error",
-                        encoder.next_seq(),
-                        {
-                            "code": "agent_loop_tool_budget",
-                            "message": "허용된 도구 호출 횟수를 초과했습니다.",
-                            "retryable": False,
-                        },
-                    )
-                    yield make_envelope(
-                        "done",
-                        encoder.next_seq(),
-                        {
-                            "finish_reason": "error",
-                            "audit_id": None,
-                            "meta": _loop_done_meta(
-                                execution,
-                                model_meta=model_meta,
-                                agent_run_id=agent_run_id,
-                                include_agent_run_id=include_agent_run_id_in_done,
-                            ),
-                        },
-                    )
+                    async for event in _emit_error_done_events(
+                        encoder=encoder,
+                        execution=execution,
+                        model_meta=model_meta,
+                        agent_run_id=agent_run_id,
+                        include_agent_run_id=include_agent_run_id_in_done,
+                        code="agent_loop_tool_budget",
+                        message="허용된 도구 호출 횟수를 초과했습니다.",
+                    ):
+                        yield event
                     return
 
                 parsed_arguments = _parse_tool_arguments(pending)
@@ -625,29 +587,16 @@ async def _run_agent_loop_stream(
                         ):
                             yield event
                         return
-                    yield make_envelope(
-                        "error",
-                        encoder.next_seq(),
-                        {
-                            "code": "agent_loop_duplicate_tool_call",
-                            "message": f"중복 도구 호출이 감지되었습니다: {pending.name}",
-                            "retryable": False,
-                        },
-                    )
-                    yield make_envelope(
-                        "done",
-                        encoder.next_seq(),
-                        {
-                            "finish_reason": "error",
-                            "audit_id": None,
-                            "meta": _loop_done_meta(
-                                execution,
-                                model_meta=model_meta,
-                                agent_run_id=agent_run_id,
-                                include_agent_run_id=include_agent_run_id_in_done,
-                            ),
-                        },
-                    )
+                    async for event in _emit_error_done_events(
+                        encoder=encoder,
+                        execution=execution,
+                        model_meta=model_meta,
+                        agent_run_id=agent_run_id,
+                        include_agent_run_id=include_agent_run_id_in_done,
+                        code="agent_loop_duplicate_tool_call",
+                        message=f"중복 도구 호출이 감지되었습니다: {pending.name}",
+                    ):
+                        yield event
                     return
                 state.last_tool_signature = signature
 
@@ -696,12 +645,11 @@ async def _run_agent_loop_stream(
                         resource_preview=tool_execution.resource_preview,
                     )
                     db.commit()
-                    if state.aggregated_usage:
-                        yield make_envelope(
-                            "usage",
-                            encoder.next_seq(),
-                            state.aggregated_usage,
-                        )
+                    async for event in _emit_usage_if_present(
+                        encoder=encoder,
+                        state=state,
+                    ):
+                        yield event
                     yield make_envelope(
                         "approval_required",
                         encoder.next_seq(),
@@ -750,29 +698,16 @@ async def _run_agent_loop_stream(
                     state.consecutive_tool_errors += 1
                     if state.consecutive_tool_errors >= max_consecutive_tool_errors:
                         _complete_snapshot_if_needed(db, current_snapshot)
-                        yield make_envelope(
-                            "error",
-                            encoder.next_seq(),
-                            {
-                                "code": "agent_loop_tool_error_budget",
-                                "message": "도구 호출 오류가 연속으로 발생해 처리를 중단했습니다.",
-                                "retryable": False,
-                            },
-                        )
-                        yield make_envelope(
-                            "done",
-                            encoder.next_seq(),
-                            {
-                                "finish_reason": "error",
-                                "audit_id": None,
-                                "meta": _loop_done_meta(
-                                    execution,
-                                    model_meta=model_meta,
-                                    agent_run_id=agent_run_id,
-                                    include_agent_run_id=include_agent_run_id_in_done,
-                                ),
-                            },
-                        )
+                        async for event in _emit_error_done_events(
+                            encoder=encoder,
+                            execution=execution,
+                            model_meta=model_meta,
+                            agent_run_id=agent_run_id,
+                            include_agent_run_id=include_agent_run_id_in_done,
+                            code="agent_loop_tool_error_budget",
+                            message="도구 호출 오류가 연속으로 발생해 처리를 중단했습니다.",
+                        ):
+                            yield event
                         return
                 else:
                     state.consecutive_tool_errors = 0
@@ -796,29 +731,16 @@ async def _run_agent_loop_stream(
             ):
                 yield event
             return
-        yield make_envelope(
-            "error",
-            encoder.next_seq(),
-            {
-                "code": "agent_loop_turn_cap",
-                "message": "허용된 agent loop 턴 수를 초과했습니다.",
-                "retryable": False,
-            },
-        )
-        yield make_envelope(
-            "done",
-            encoder.next_seq(),
-            {
-                "finish_reason": "error",
-                "audit_id": None,
-                "meta": _loop_done_meta(
-                    execution,
-                    model_meta=model_meta,
-                    agent_run_id=agent_run_id,
-                    include_agent_run_id=include_agent_run_id_in_done,
-                ),
-            },
-        )
+        async for event in _emit_error_done_events(
+            encoder=encoder,
+            execution=execution,
+            model_meta=model_meta,
+            agent_run_id=agent_run_id,
+            include_agent_run_id=include_agent_run_id_in_done,
+            code="agent_loop_turn_cap",
+            message="허용된 agent loop 턴 수를 초과했습니다.",
+        ):
+            yield event
     except (asyncio.CancelledError, GeneratorExit):
         if (
             replay_approval is not None
@@ -840,6 +762,136 @@ async def _run_agent_loop_stream(
         raise
 
 
+async def _emit_buffered_content(
+    *,
+    encoder: EnvelopeEncoder,
+    chunks: list[str],
+) -> AsyncIterator[Any]:
+    for text in chunks:
+        yield make_envelope(
+            "content_delta",
+            encoder.next_seq(),
+            {"text": text},
+        )
+
+
+async def _emit_usage_if_present(
+    *,
+    encoder: EnvelopeEncoder,
+    state: _LoopState,
+) -> AsyncIterator[Any]:
+    if state.aggregated_usage:
+        yield make_envelope(
+            "usage",
+            encoder.next_seq(),
+            state.aggregated_usage,
+        )
+
+
+async def _emit_usage_and_loop_done_events(
+    *,
+    encoder: EnvelopeEncoder,
+    state: _LoopState,
+    execution: ResolvedLlmExecution,
+    model_meta: dict[str, Any],
+    agent_run_id: str,
+    include_agent_run_id: bool,
+    finish_reason: str,
+) -> AsyncIterator[Any]:
+    async for event in _emit_usage_if_present(encoder=encoder, state=state):
+        yield event
+    yield _loop_done_envelope(
+        encoder=encoder,
+        execution=execution,
+        model_meta=model_meta,
+        agent_run_id=agent_run_id,
+        include_agent_run_id=include_agent_run_id,
+        finish_reason=finish_reason,
+    )
+
+
+async def _emit_write_guard_done_events(
+    *,
+    encoder: EnvelopeEncoder,
+    state: _LoopState,
+    execution: ResolvedLlmExecution,
+    model_meta: dict[str, Any],
+    agent_run_id: str,
+    include_agent_run_id: bool,
+) -> AsyncIterator[Any]:
+    yield make_envelope(
+        "content_delta",
+        encoder.next_seq(),
+        {"text": WRITE_TOOL_REQUIRED_MESSAGE},
+    )
+    async for event in _emit_usage_and_loop_done_events(
+        encoder=encoder,
+        state=state,
+        execution=execution,
+        model_meta=model_meta,
+        agent_run_id=agent_run_id,
+        include_agent_run_id=include_agent_run_id,
+        finish_reason="stop",
+    ):
+        yield event
+
+
+async def _emit_error_done_events(
+    *,
+    encoder: EnvelopeEncoder,
+    execution: ResolvedLlmExecution,
+    model_meta: dict[str, Any],
+    agent_run_id: str,
+    include_agent_run_id: bool,
+    code: str,
+    message: str,
+) -> AsyncIterator[Any]:
+    yield make_envelope(
+        "error",
+        encoder.next_seq(),
+        {
+            "code": code,
+            "message": message,
+            "retryable": False,
+        },
+    )
+    yield _loop_done_envelope(
+        encoder=encoder,
+        execution=execution,
+        model_meta=model_meta,
+        agent_run_id=agent_run_id,
+        include_agent_run_id=include_agent_run_id,
+        finish_reason="error",
+    )
+
+
+def _loop_done_envelope(
+    *,
+    encoder: EnvelopeEncoder,
+    execution: ResolvedLlmExecution,
+    model_meta: dict[str, Any],
+    agent_run_id: str,
+    include_agent_run_id: bool,
+    finish_reason: str,
+) -> Any:
+    sequence = encoder.next_seq()
+    meta = _loop_done_meta(
+        execution,
+        model_meta=model_meta,
+        agent_run_id=agent_run_id,
+        include_agent_run_id=include_agent_run_id,
+    )
+    return make_envelope(
+        "done",
+        sequence,
+        {
+            "finish_reason": finish_reason,
+            "audit_id": None,
+            "meta": meta,
+        },
+    )
+
+
 def _prepend_agent_system_message(
     messages: list[dict[str, Any]],
     *,
@@ -852,101 +904,6 @@ def _prepend_agent_system_message(
         {"role": "system", "content": system_prompt},
         *[dict(message) for message in messages],
     ]
-
-
-def _write_tool_names_from_specs(tool_specs: list[dict[str, Any]]) -> frozenset[str]:
-    registry = get_ai_capability_registry()
-    names: set[str] = set()
-    for spec in tool_specs:
-        raw_name = spec.get("function", {}).get("name")
-        if not isinstance(raw_name, str):
-            continue
-        descriptor = registry.get_descriptor(raw_name)
-        if (descriptor is not None and descriptor.mode == "write") or _tool_name_looks_write(
-            raw_name
-        ):
-            names.add(raw_name)
-    return frozenset(names)
-
-
-def _tool_name_looks_write(tool_name: str) -> bool:
-    return any(
-        marker in tool_name
-        for marker in (
-            ".create_",
-            ".update_",
-            ".delete_",
-            ".add_",
-            ".remove_",
-            ".archive_",
-            ".restore_",
-        )
-    )
-
-
-def _latest_user_message_has_write_intent(messages: list[dict[str, Any]]) -> bool:
-    latest_text = ""
-    for message in reversed(messages):
-        if message.get("role") != "user":
-            continue
-        latest_text = _message_content_text(message.get("content"))
-        break
-    if not latest_text:
-        return False
-    normalized = latest_text.lower()
-    if any(
-        marker in normalized
-        for marker in (
-            "방법",
-            "어떻게",
-            "가이드",
-            "절차",
-            "설명해",
-            "알려줘",
-            "can i",
-            "how to",
-            "how do",
-        )
-    ):
-        return False
-    return any(
-        marker in normalized
-        for marker in (
-            "생성",
-            "만들",
-            "추가",
-            "등록",
-            "수정",
-            "변경",
-            "바꿔",
-            "업데이트",
-            "삭제",
-            "지워",
-            "제거",
-            "댓글",
-            "comment",
-            "create",
-            "add ",
-            "update",
-            "change",
-            "delete",
-            "remove",
-        )
-    )
-
-
-def _message_content_text(content: Any) -> str:
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        parts: list[str] = []
-        for item in content:
-            if isinstance(item, dict):
-                raw_text = item.get("text")
-                if isinstance(raw_text, str):
-                    parts.append(raw_text)
-        return "\n".join(parts)
-    return ""
 
 
 async def _run_forced_final_answer_stream(
@@ -971,18 +928,24 @@ async def _run_forced_final_answer_stream(
     ]
     finish_reason = "stop"
 
-    async for chunk, _decision, _config in complete_chat_stream(
-        context,
+    gateway_execution = ai_gateway_execution_from_resolved(
+        ai_gateway_request_from_task_context(
+            context,
+            messages=final_messages,
+            temperature=temperature,
+            stream=True,
+            stream_reasoning=stream_reasoning,
+            tools=None,
+            tool_choice=None,
+            parallel_tool_calls=None,
+            agent_run_id=agent_run_id,
+            conversation_id=bound_conversation.id if bound_conversation is not None else None,
+        ),
+        execution,
+    )
+    async for chunk, _decision, _config in complete_resolved_gateway_chat_stream(
+        gateway_execution,
         db,
-        messages=final_messages,
-        temperature=temperature,
-        stream_reasoning=stream_reasoning,
-        tools=None,
-        tool_choice=None,
-        parallel_tool_calls=None,
-        resolved_execution=execution,
-        agent_run_id=agent_run_id,
-        conversation_id=bound_conversation.id if bound_conversation is not None else None,
     ):
         if chunk.kind == "content" and chunk.text:
             yield make_envelope(
@@ -1005,12 +968,11 @@ async def _run_forced_final_answer_stream(
             finish_reason = chunk.finish_reason or "stop"
             continue
 
-    if state.aggregated_usage:
-        yield make_envelope(
-            "usage",
-            encoder.next_seq(),
-            state.aggregated_usage,
-        )
+    async for event in _emit_usage_if_present(
+        encoder=encoder,
+        state=state,
+    ):
+        yield event
     del recovery_reason
     meta = _loop_done_meta(
         execution,
@@ -1052,28 +1014,22 @@ def _assistant_tool_call_message(
     tool_name: str,
     arguments_json: str,
 ) -> dict[str, Any]:
-    return {
-        "role": "assistant",
-        "content": "",
-        "tool_calls": [
-            {
-                "id": call_id,
-                "type": "function",
-                "function": {
-                    "name": tool_name,
-                    "arguments": arguments_json,
-                },
-            }
-        ],
-    }
+    return openai_tool_call_message(
+        AgentToolCallMessage(
+            call_id=call_id,
+            tool_name=tool_name,
+            arguments_json=arguments_json,
+        )
+    )
 
 
 def _tool_result_message(*, call_id: str, content: str) -> dict[str, Any]:
-    return {
-        "role": "tool",
-        "tool_call_id": call_id,
-        "content": content,
-    }
+    return openai_tool_result_message(
+        AgentToolResultMessage(
+            call_id=call_id,
+            content=content,
+        )
+    )
 
 
 def _append_tool_exchange(
@@ -1179,33 +1135,7 @@ def _build_done_meta(
 
 
 def _runtime_done_meta(model_meta: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "runtime_profile": model_meta.get("runtime_profile"),
-        "runtime_routing_reason_codes": list(model_meta.get("runtime_routing_reason_codes") or []),
-        "graph_gate": model_meta.get("graph_gate"),
-        "graph_fallback_reason": model_meta.get("graph_fallback_reason"),
-        "graph_used": bool(model_meta.get("graph_used")),
-        "graph_validation_status": model_meta.get("graph_validation_status"),
-        "graph_validation_fallback_reason": model_meta.get("graph_validation_fallback_reason"),
-        "graph_registry_agent_count": int(model_meta.get("graph_registry_agent_count") or 0),
-        "graph_write_agent_count": int(model_meta.get("graph_write_agent_count") or 0),
-        "graph_candidate_summary": model_meta.get("graph_candidate_summary"),
-        "graph_schedule_summary": model_meta.get("graph_schedule_summary"),
-        "external_egress_summary": model_meta.get("external_egress_summary"),
-        "external_planner_summary": model_meta.get("external_planner_summary"),
-        "external_search_summary": model_meta.get("external_search_summary"),
-        "external_planner_execution_summary": model_meta.get(
-            "external_planner_execution_summary"
-        ),
-        "external_search_execution_summary": model_meta.get(
-            "external_search_execution_summary"
-        ),
-        "graph_execution_status": model_meta.get("graph_execution_status"),
-        "graph_execution_fallback_reason": model_meta.get("graph_execution_fallback_reason"),
-        "graph_execution_fallback_policy": model_meta.get("graph_execution_fallback_policy"),
-        "graph_execution_adapter": model_meta.get("graph_execution_adapter"),
-        "graph_node_execution_summary": model_meta.get("graph_node_execution_summary"),
-    }
+    return runtime_done_meta_from_model_meta(model_meta)
 
 
 def _build_snapshot_model_meta(
@@ -1216,7 +1146,7 @@ def _build_snapshot_model_meta(
     parallel_tool_calls: bool | None,
     tool_choice_state: str | dict[str, Any] | None,
     allowed_app_ids: list[str] | None,
-    tool_specs: list[dict[str, Any]],
+    tool_specs: Sequence[AgentToolSpec],
     runtime_profile: RuntimeProfile,
     runtime_routing_reason_codes: tuple[str, ...],
     runtime_graph_gate: str,
@@ -1238,7 +1168,7 @@ def _build_snapshot_model_meta(
     runtime_graph_execution_fallback_policy: dict[str, Any] | None,
     runtime_graph_execution_adapter: str | None,
 ) -> dict[str, Any]:
-    return {
+    meta = {
         "model": execution.chosen_model,
         "chosen_model": execution.chosen_model,
         "canonical_model": execution.config.canonical_model,
@@ -1254,69 +1184,92 @@ def _build_snapshot_model_meta(
         "temperature": temperature,
         "max_output_tokens": execution.resolved_max_tokens,
         "reasoning_effort": execution.resolved_reasoning_effort,
-        "runtime_profile": runtime_profile,
-        "runtime_routing_reason_codes": list(runtime_routing_reason_codes),
-        "graph_gate": runtime_graph_gate,
-        "graph_fallback_reason": runtime_graph_fallback_reason,
-        "graph_used": runtime_graph_used,
-        "graph_validation_status": runtime_graph_validation_status,
-        "graph_validation_fallback_reason": runtime_graph_validation_fallback_reason,
-        "graph_registry_agent_count": runtime_graph_registry_agent_count,
-        "graph_write_agent_count": runtime_graph_write_agent_count,
-        "graph_candidate_summary": runtime_graph_candidate_summary,
-        "graph_schedule_summary": runtime_graph_schedule_summary,
-        "external_egress_summary": runtime_external_egress_summary,
-        "external_planner_summary": runtime_external_planner_summary,
-        "external_search_summary": runtime_external_search_summary,
-        "external_planner_execution_summary": runtime_external_planner_execution_summary,
-        "external_search_execution_summary": runtime_external_search_execution_summary,
-        "graph_execution_status": runtime_graph_execution_status,
-        "graph_execution_fallback_reason": runtime_graph_execution_fallback_reason,
-        "graph_execution_fallback_policy": runtime_graph_execution_fallback_policy,
-        "graph_execution_adapter": runtime_graph_execution_adapter,
-        "graph_node_execution_summary": None,
-        "scope": _build_snapshot_scope_meta(
+        "scope": build_snapshot_scope_meta(
             allowed_app_ids=allowed_app_ids,
             tool_specs=tool_specs,
         ),
     }
+    meta.update(
+        runtime_model_meta_from_kwargs(
+            runtime_profile=runtime_profile,
+            runtime_routing_reason_codes=runtime_routing_reason_codes,
+            runtime_graph_gate=runtime_graph_gate,
+            runtime_graph_fallback_reason=runtime_graph_fallback_reason,
+            runtime_graph_used=runtime_graph_used,
+            runtime_graph_validation_status=runtime_graph_validation_status,
+            runtime_graph_validation_fallback_reason=(runtime_graph_validation_fallback_reason),
+            runtime_graph_registry_agent_count=runtime_graph_registry_agent_count,
+            runtime_graph_write_agent_count=runtime_graph_write_agent_count,
+            runtime_graph_candidate_summary=runtime_graph_candidate_summary,
+            runtime_graph_schedule_summary=runtime_graph_schedule_summary,
+            runtime_external_egress_summary=runtime_external_egress_summary,
+            runtime_external_planner_summary=runtime_external_planner_summary,
+            runtime_external_search_summary=runtime_external_search_summary,
+            runtime_external_planner_execution_summary=(runtime_external_planner_execution_summary),
+            runtime_external_search_execution_summary=(runtime_external_search_execution_summary),
+            runtime_graph_execution_status=runtime_graph_execution_status,
+            runtime_graph_execution_fallback_reason=(runtime_graph_execution_fallback_reason),
+            runtime_graph_execution_fallback_policy=runtime_graph_execution_fallback_policy,
+            runtime_graph_execution_adapter=runtime_graph_execution_adapter,
+        )
+    )
+    return meta
 
 
-def _build_snapshot_scope_meta(
+def build_snapshot_scope_meta(
     *,
     allowed_app_ids: list[str] | None,
-    tool_specs: list[dict[str, Any]],
+    tool_specs: Sequence[AgentToolSpec],
 ) -> dict[str, Any]:
     return {
         "allowed_app_ids": list(allowed_app_ids) if allowed_app_ids is not None else None,
         "resolved_agent_ids": ["single_loop"],
-        "resolved_tool_names": _tool_names_from_specs(tool_specs),
+        "resolved_tool_names": agent_tool_names(tool_specs),
     }
-
-
-def _tool_names_from_specs(tool_specs: list[dict[str, Any]]) -> list[str]:
-    names: list[str] = []
-    for spec in tool_specs:
-        function_spec = spec.get("function")
-        if not isinstance(function_spec, dict):
-            continue
-        name = function_spec.get("name")
-        if isinstance(name, str) and name not in names:
-            names.append(name)
-    return names
 
 
 def _execution_from_snapshot(
     snapshot: ai_approvals.AgentRunSnapshot,
+    *,
+    context: LlmTaskContext,
+    db: Session,
 ) -> ResolvedLlmExecution:
     replay = ai_approvals.rehydrate_model_meta(snapshot)
-    chosen_pool = replay.chosen_pool if replay.chosen_pool in {"local", "external"} else "local"
-    config = get_pool_config(chosen_pool)
-    policy = (
-        replay.policy
-        if replay.policy in {"local_only", "external"}
-        else ("external" if chosen_pool == "external" else "local_only")
+    workload_id = (context.workload_id or "").strip().lower()
+    if not workload_id:
+        raise LlmProviderError(_RESUME_MODEL_CONFIGURATION_CHANGED)
+
+    request = build_llm_workload_request(
+        workload_id,
+        LlmWorkloadContext.from_task_context(context),
+        db,
+        messages=[],
+        max_tokens=replay.max_output_tokens,
+        reasoning_effort=str(replay.raw.get("reasoning_effort") or "none"),
     )
+    config = request.workload_config
+    chosen_pool = request.workload_route
+    chosen_model = request.requested_model
+    expected_provider = str(replay.raw.get("provider") or "").strip().lower()
+    expected_model = str(replay.model or "").strip()
+    current_provider = (config.provider if config is not None else "").strip().lower()
+    current_model = str(chosen_model or "").strip()
+    if (
+        config is None
+        or chosen_pool not in {"local", "external"}
+        or replay.chosen_pool != chosen_pool
+        or not expected_provider
+        or expected_provider != current_provider
+        or not expected_model
+        or expected_model != current_model
+    ):
+        raise LlmProviderError(_RESUME_MODEL_CONFIGURATION_CHANGED)
+
+    policy = "external" if chosen_pool == "external" else "local_only"
+    if replay.policy != policy:
+        raise LlmProviderError(_RESUME_MODEL_CONFIGURATION_CHANGED)
+    if request.max_tokens is None:
+        raise LlmProviderError(_RESUME_MODEL_CONFIGURATION_CHANGED)
     decision = PolicyDecision(
         policy=policy,
         chosen_pool=chosen_pool,
@@ -1328,8 +1281,8 @@ def _execution_from_snapshot(
         pool=chosen_pool,
         decision=decision,
         config=config,
-        chosen_model=replay.model or config.default_model,
-        resolved_max_tokens=replay.max_output_tokens or 4096,
+        chosen_model=current_model,
+        resolved_max_tokens=request.max_tokens,
         resolved_reasoning_effort=str(replay.raw.get("reasoning_effort") or "none"),
     )
 

@@ -1,10 +1,10 @@
 import type { LayoutId, AspectId } from '../layout-wireframes';
 import type { StyleShape } from '../style-presets';
-import { TEMPLATE_MOCKUPS, type TemplateMockupId } from './mockups';
+import type { TemplateMockupId } from './mockups';
 
 export const TEMPLATE_CATEGORIES = ['deck', 'report', 'diagram', 'card', 'social'] as const;
 export type TemplateCategoryId = (typeof TEMPLATE_CATEGORIES)[number];
-export const USER_TEMPLATE_PREFIX = 'user_template:';
+const USER_TEMPLATE_PREFIX = 'user_template:';
 
 export interface TemplatePreset {
   id: string;
@@ -57,7 +57,7 @@ export const TEMPLATE_PRESETS: TemplatePreset[] = [
     mockupId: 'meeting_deck_kpi',
     preset: {
       use_case: 'status_report',
-      style: { chips: ['corporate', 'dataviz'], palette: 'brand', background: 'white', quality: 'high' },
+      style: { chips: ['corporate', 'infographic'], palette: 'brand', background: 'white', quality: 'high' },
       layout: { layout_id: 'top_title_grid', aspect: '1536x1024' },
     },
   },
@@ -99,7 +99,7 @@ export const TEMPLATE_PRESETS: TemplatePreset[] = [
     mockupId: 'status_report',
     preset: {
       use_case: 'status_report',
-      style: { chips: ['corporate', 'dataviz'], palette: 'brand', background: 'white', quality: 'high' },
+      style: { chips: ['corporate', 'infographic'], palette: 'brand', background: 'white', quality: 'high' },
       layout: { layout_id: 'top_title_grid', aspect: '1536x1024' },
     },
   },
@@ -109,7 +109,7 @@ export const TEMPLATE_PRESETS: TemplatePreset[] = [
     mockupId: 'kpi_dashboard',
     preset: {
       use_case: 'status_report',
-      style: { chips: ['dataviz', 'corporate'], palette: 'vivid', background: 'white', quality: 'high' },
+      style: { chips: ['infographic', 'corporate'], palette: 'vivid', background: 'white', quality: 'high' },
       layout: { layout_id: 'top_title_grid', aspect: '1536x1024' },
     },
   },
@@ -274,13 +274,6 @@ export const TEMPLATE_PRESETS: TemplatePreset[] = [
 export function getTemplate(id: string | null | undefined): TemplatePreset | null {
   if (!id) return null;
   return TEMPLATE_PRESETS.find((preset) => preset.id === id) ?? null;
-}
-
-export function getTemplateMockup(id: string | null | undefined) {
-  if (!id) return TEMPLATE_MOCKUPS.blank_canvas;
-  const template = getTemplate(id);
-  if (!template) return TEMPLATE_MOCKUPS.blank_canvas;
-  return TEMPLATE_MOCKUPS[template.mockupId];
 }
 
 export const TEMPLATES_BY_CATEGORY: Record<TemplateCategoryId, TemplatePreset[]> =

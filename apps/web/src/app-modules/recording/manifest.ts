@@ -13,6 +13,15 @@ import type { AppModuleManifest } from '@/src/app/shell/navigation-types';
 
 export const recordingManifest: AppModuleManifest = {
   appBarItem: { id: 'recording', title: 'recording', icon: Mic },
+  contract: {
+    owner: 'recording-platform',
+    permissions: [],
+    apiDomain: 'recording',
+    workspaceApiPrefixes: ['/api/v1/recording'],
+    aiCapabilities: [],
+    writeAuditActions: [],
+    appLocalTests: ['apps/api/tests/test_recording_targets.py'],
+  },
   defaultActiveNavItemId: 'recording-quick',
   navItems: [
     {

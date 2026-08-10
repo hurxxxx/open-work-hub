@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useReducer, useRef } from 'react';
 import { Loader2, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -15,46 +15,35 @@ import {
 } from '../../../api/image-wizard-api';
 import { BriefTurn } from '../chat/BriefTurn';
 import { ImageResultTurn } from '../chat/ImageResultTurn';
-import {
-  ImageRevisionGallery,
-  type ImageRevisionGalleryItem,
-} from '../chat/ImageRevisionGallery';
+import { ImageRevisionGallery } from '../chat/ImageRevisionGallery';
 import { PendingTurn } from '../chat/PendingTurn';
+import {
+  createStep4BrowserGeneratedImageAssetApi,
+  loadStep4GeneratedImageAsset,
+  loadStep4RevisionGallery,
+  type LoadedGeneratedImageAsset,
+  type LoadedStep4RevisionGallery,
+  step4AssetLoadErrorMessage,
+} from './step4-brief-assets';
+import {
+  INITIAL_STEP4_BRIEF_STATE,
+  getInitialStep4BriefIntent,
+  projectStep4Brief,
+  step4BriefReducer,
+  shouldAutoApproveDirectImageEdit,
+  shouldPollStep4ImageGeneration,
+} from './step4-brief-model';
+import { createStep4BriefOperations } from './step4-brief-operations';
 
 const POLL_INTERVAL_MS = 2000;
+const generatedImageAssetApi = createStep4BrowserGeneratedImageAssetApi(
+  downloadGeneratedImageBlob,
+);
 
-function getSourceGenerationId(item: ImageGeneration): string {
-  return typeof item.details?.source_generation_id === 'string'
-    ? item.details.source_generation_id
-    : '';
-}
-
-function getRootGenerationId(item: ImageGeneration, byId: Map<string, ImageGeneration>): string {
-  let currentId = item.id;
-  const seen = new Set<string>();
-  while (currentId && !seen.has(currentId)) {
-    seen.add(currentId);
-    const current = byId.get(currentId);
-    if (!current) return currentId;
-    const sourceId = getSourceGenerationId(current);
-    if (!sourceId) return currentId;
-    if (!byId.has(sourceId)) return sourceId;
-    currentId = sourceId;
-  }
-  return item.id;
-}
-
-function collectRevisionRows(
-  current: ImageGeneration,
-  candidates: ImageGeneration[],
-): ImageGeneration[] {
-  const byId = new Map(candidates.map((item) => [item.id, item]));
-  byId.set(current.id, current);
-  const rootId = getRootGenerationId(current, byId);
-  return Array.from(byId.values())
-    .filter((item) => getRootGenerationId(item, byId) === rootId)
-    .filter((item) => item.image_status === 'succeeded' && Boolean(item.image_storage_key))
-    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+function useLatestRef<T>(value: T) {
+  const ref = useRef(value);
+  ref.current = value;
+  return ref;
 }
 
 interface Step4BriefProps {
@@ -67,72 +56,119 @@ interface Step4BriefProps {
   onTemplateChanged?: (next: ImageGeneration) => void;
 }
 
-export function Step4Brief({
+type AppsTranslator = ReturnType<typeof useTranslation>['t'];
+
+interface UseStep4BriefControllerArgs {
+  workspaceSlug: string;
+  row: ImageGeneration;
+  token: string | null | undefined;
+  t: AppsTranslator;
+  onRowReplaced: (next: ImageGeneration) => void;
+  onImageEdit: (instruction: string) => Promise<void>;
+  onTemplateChanged?: (next: ImageGeneration) => void;
+}
+
+function useStep4BriefController({
   workspaceSlug,
   row,
   onRowReplaced,
-  onClone,
-  onDiscard,
   onImageEdit,
   onTemplateChanged,
-}: Step4BriefProps) {
-  const { t } = useTranslation('apps');
-  const { token } = useAuth();
-  const [busy, setBusy] = useState<'brief' | 'approve' | 'cancel' | 'image-edit' | null>(null);
-  const [templateBusy, setTemplateBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
-  const [imageLoadError, setImageLoadError] = useState<string | null>(null);
-  const [sourceImageUrl, setSourceImageUrl] = useState<string | null>(null);
-  const [sourceImageLoadError, setSourceImageLoadError] = useState<string | null>(null);
-  const [revisionItems, setRevisionItems] = useState<ImageRevisionGalleryItem[]>([]);
-  const [revisionGalleryError, setRevisionGalleryError] = useState<string | null>(null);
+  token,
+  t,
+}: UseStep4BriefControllerArgs) {
+  const [state, dispatch] = useReducer(step4BriefReducer, INITIAL_STEP4_BRIEF_STATE);
   const requestedInitialBriefFor = useRef<string | null>(null);
   const requestedDirectEditFor = useRef<string | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const sourceGenerationId =
-    typeof row.details?.source_generation_id === 'string'
-      ? row.details.source_generation_id
-      : '';
-  const sourceImageEditInstruction =
-    typeof row.details?.source_image_edit_instruction === 'string'
-      ? row.details.source_image_edit_instruction
-      : '';
-  const imageEditRequiresPlan = row.details?.source_image_requires_plan === true;
-  const isImageEdit = Boolean(sourceGenerationId && sourceImageEditInstruction);
-  const shouldSkipPlanForImageEdit = isImageEdit && !imageEditRequiresPlan;
+  const {
+    sourceGenerationId,
+    isImageEdit,
+    shouldSkipPlanForImageEdit,
+    isGeneratingImage,
+    isFinished,
+    showBriefPlan,
+    composerDisabled,
+    latestBrief,
+    latestBriefIndex,
+  } = projectStep4Brief(row);
+  const {
+    runGenerateBrief,
+    runApprove,
+    runCancel,
+    runImageEdit,
+    runTemplateToggle,
+  } = createStep4BriefOperations({
+    api: {
+      generateBrief,
+      getGeneration: getImageGeneration,
+      approveGeneration: approveImageGeneration,
+      cancelGeneration: cancelImageGeneration,
+      setTemplate: setImageGenerationTemplate,
+    },
+    dispatch,
+    onImageEdit,
+    onRowReplaced,
+    onTemplateChanged,
+    row,
+    t,
+    token,
+    workspaceSlug,
+  });
+  const runGenerateBriefRef = useLatestRef(runGenerateBrief);
+  const runApproveRef = useLatestRef(runApprove);
 
   // Auto-request the initial image plan on entering step 4 if there are none yet.
   useEffect(() => {
-    if (!token) return;
-    if (shouldSkipPlanForImageEdit) return;
-    if (requestedInitialBriefFor.current === row.id) return;
-    if (row.brief_versions.length > 0) {
-      requestedInitialBriefFor.current = row.id;
-      return;
-    }
-    if (row.brief_status === 'approved') return;
+    const intent = getInitialStep4BriefIntent({
+      briefStatus: row.brief_status,
+      briefVersionCount: row.brief_versions.length,
+      generationId: row.id,
+      requestedGenerationId: requestedInitialBriefFor.current,
+      shouldSkipPlanForImageEdit,
+      token,
+    });
+    if (intent === 'idle') return;
     requestedInitialBriefFor.current = row.id;
-    void runGenerateBrief();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, row.id, shouldSkipPlanForImageEdit]);
+    if (intent === 'mark-handled') return;
+    void runGenerateBriefRef.current();
+  }, [
+    token,
+    row.brief_status,
+    row.brief_versions.length,
+    row.id,
+    runGenerateBriefRef,
+    shouldSkipPlanForImageEdit,
+  ]);
 
   // Most image edits are concrete enough to run immediately. If a user lands
   // on an unqueued direct edit draft, approve and dispatch it without showing
   // the internal execution prompt as a human plan.
   useEffect(() => {
-    if (!token || !shouldSkipPlanForImageEdit) return;
-    if (requestedDirectEditFor.current === row.id) return;
-    if (row.image_status !== 'idle' || row.brief_status === 'approved') return;
+    const shouldApprove = shouldAutoApproveDirectImageEdit({
+      briefStatus: row.brief_status,
+      generationId: row.id,
+      imageStatus: row.image_status,
+      requestedGenerationId: requestedDirectEditFor.current,
+      shouldSkipPlanForImageEdit,
+      token,
+    });
+    if (!shouldApprove) return;
     requestedDirectEditFor.current = row.id;
-    void runApprove();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, row.id, row.image_status, row.brief_status, shouldSkipPlanForImageEdit]);
+    void runApproveRef.current();
+  }, [
+    token,
+    row.id,
+    row.image_status,
+    row.brief_status,
+    runApproveRef,
+    shouldSkipPlanForImageEdit,
+  ]);
 
   // Poll while generating.
   useEffect(() => {
     if (!token || !row.id) return;
-    if (row.image_status !== 'queued' && row.image_status !== 'running') return;
+    if (!shouldPollStep4ImageGeneration(row.image_status)) return;
     function tick() {
       if (!token) return;
       getImageGeneration(token, workspaceSlug, row.id)
@@ -157,29 +193,36 @@ export function Step4Brief({
   // internal to the VM and cannot be used directly from the public HTTPS page.
   useEffect(() => {
     if (!token || row.image_status !== 'succeeded' || !row.id) {
-      setDownloadUrl(null);
-      setImageLoadError(null);
+      dispatch({ type: 'image:reset' });
       return;
     }
     let cancelled = false;
-    let objectUrl: string | null = null;
-    setImageLoadError(null);
-    downloadGeneratedImageBlob(token, workspaceSlug, row.id)
-      .then((blob) => {
-        if (cancelled) return;
-        objectUrl = URL.createObjectURL(blob);
-        setDownloadUrl(objectUrl);
+    let asset: LoadedGeneratedImageAsset | null = null;
+    dispatch({ type: 'image:loading' });
+    loadStep4GeneratedImageAsset({
+      api: generatedImageAssetApi,
+      generationId: row.id,
+      token,
+      workspaceSlug,
+    })
+      .then((loaded) => {
+        if (cancelled) {
+          loaded.dispose();
+          return;
+        }
+        asset = loaded;
+        dispatch({ type: 'image:loaded', url: loaded.url });
       })
       .catch((err) => {
         if (cancelled) return;
-        setDownloadUrl(null);
-        setImageLoadError(
-          err instanceof Error ? err.message : t('ai.imageWizard.step4.imageLoadFailed'),
-        );
+        dispatch({
+          type: 'image:fail',
+          message: step4AssetLoadErrorMessage(err, t('ai.imageWizard.step4.imageLoadFailed')),
+        });
       });
     return () => {
       cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      asset?.dispose();
     };
   }, [token, workspaceSlug, row.id, row.image_status, t]);
 
@@ -187,179 +230,144 @@ export function Step4Brief({
   // reads as one comparison flow instead of a disconnected new job.
   useEffect(() => {
     if (!token || !sourceGenerationId) {
-      setSourceImageUrl(null);
-      setSourceImageLoadError(null);
+      dispatch({ type: 'source:reset' });
       return;
     }
     let cancelled = false;
-    let objectUrl: string | null = null;
-    setSourceImageLoadError(null);
-    downloadGeneratedImageBlob(token, workspaceSlug, sourceGenerationId)
-      .then((blob) => {
-        if (cancelled) return;
-        objectUrl = URL.createObjectURL(blob);
-        setSourceImageUrl(objectUrl);
+    let asset: LoadedGeneratedImageAsset | null = null;
+    dispatch({ type: 'source:loading' });
+    loadStep4GeneratedImageAsset({
+      api: generatedImageAssetApi,
+      generationId: sourceGenerationId,
+      token,
+      workspaceSlug,
+    })
+      .then((loaded) => {
+        if (cancelled) {
+          loaded.dispose();
+          return;
+        }
+        asset = loaded;
+        dispatch({ type: 'source:loaded', url: loaded.url });
       })
       .catch((err) => {
         if (cancelled) return;
-        setSourceImageUrl(null);
-        setSourceImageLoadError(
-          err instanceof Error ? err.message : t('ai.imageWizard.step4.sourceImageLoadFailed'),
-        );
+        dispatch({
+          type: 'source:fail',
+          message: step4AssetLoadErrorMessage(
+            err,
+            t('ai.imageWizard.step4.sourceImageLoadFailed'),
+          ),
+        });
       });
     return () => {
       cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      asset?.dispose();
     };
   }, [token, workspaceSlug, sourceGenerationId, t]);
 
   useEffect(() => {
     if (!token || !isImageEdit) {
-      setRevisionItems([]);
-      setRevisionGalleryError(null);
+      dispatch({ type: 'revisions:reset' });
       return;
     }
     let cancelled = false;
-    const objectUrls: string[] = [];
-    setRevisionGalleryError(null);
+    let gallery: LoadedStep4RevisionGallery | null = null;
+    dispatch({ type: 'revisions:loading' });
     listImageGenerations(token, workspaceSlug, { limit: 100 })
       .then(async (response) => {
-        const revisions = collectRevisionRows(row, response.items);
-        const loaded = await Promise.all(
-          revisions.map(async (item): Promise<ImageRevisionGalleryItem> => {
-            try {
-              const blob = await downloadGeneratedImageBlob(token, workspaceSlug, item.id);
-              if (cancelled) {
-                return {
-                  id: item.id,
-                  imageUrl: null,
-                  loadError: null,
-                  createdAt: item.created_at,
-                  isCurrent: item.id === row.id,
-                };
-              }
-              const objectUrl = URL.createObjectURL(blob);
-              objectUrls.push(objectUrl);
-              return {
-                id: item.id,
-                imageUrl: objectUrl,
-                loadError: null,
-                createdAt: item.created_at,
-                isCurrent: item.id === row.id,
-              };
-            } catch (err) {
-              return {
-                id: item.id,
-                imageUrl: null,
-                loadError:
-                  err instanceof Error
-                    ? err.message
-                    : t('ai.imageWizard.step4.revisionImageLoadFailed'),
-                createdAt: item.created_at,
-                isCurrent: item.id === row.id,
-              };
-            }
-          }),
-        );
-        if (!cancelled) setRevisionItems(loaded);
+        const loadedGallery = await loadStep4RevisionGallery({
+          api: generatedImageAssetApi,
+          candidates: response.items,
+          current: row,
+          revisionImageLoadFailed: t('ai.imageWizard.step4.revisionImageLoadFailed'),
+          token,
+          workspaceSlug,
+        });
+        if (cancelled) {
+          loadedGallery.dispose();
+          return;
+        }
+        gallery = loadedGallery;
+        dispatch({ type: 'revisions:loaded', items: loadedGallery.items });
       })
       .catch((err) => {
         if (cancelled) return;
-        setRevisionItems([]);
-        setRevisionGalleryError(
-          err instanceof Error ? err.message : t('ai.imageWizard.step4.revisionGalleryLoadFailed'),
-        );
+        dispatch({
+          type: 'revisions:fail',
+          message:
+            err instanceof Error
+              ? err.message
+              : t('ai.imageWizard.step4.revisionGalleryLoadFailed'),
+        });
       });
     return () => {
       cancelled = true;
-      for (const objectUrl of objectUrls) URL.revokeObjectURL(objectUrl);
+      gallery?.dispose();
     };
   }, [token, workspaceSlug, row, row.id, row.updated_at, row.image_status, isImageEdit, t]);
 
-  async function runGenerateBrief(editInstruction?: string) {
-    if (!token) return;
-    setBusy('brief');
-    setError(null);
-    try {
-      await generateBrief(token, workspaceSlug, row.id, { editInstruction });
-      const refreshed = await getImageGeneration(token, workspaceSlug, row.id);
-      onRowReplaced(refreshed);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('ai.imageWizard.errors.briefFailed'));
-    } finally {
-      setBusy(null);
-    }
-  }
+  return {
+    ...state,
+    isImageEdit,
+    shouldSkipPlanForImageEdit,
+    isGeneratingImage,
+    isFinished,
+    showBriefPlan,
+    composerDisabled,
+    latestBrief,
+    latestBriefIndex,
+    runGenerateBrief,
+    runApprove,
+    runCancel,
+    runImageEdit,
+    runTemplateToggle,
+  };
+}
 
-  async function runApprove() {
-    if (!token) return;
-    setBusy('approve');
-    setError(null);
-    try {
-      const approved = await approveImageGeneration(token, workspaceSlug, row.id);
-      onRowReplaced(approved);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('ai.imageWizard.errors.approveFailed'));
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function runCancel() {
-    if (!token) return;
-    setBusy('cancel');
-    setError(null);
-    try {
-      const cancelled = await cancelImageGeneration(token, workspaceSlug, row.id);
-      onRowReplaced(cancelled);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('ai.imageWizard.errors.cancelFailed'));
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function runImageEdit(instruction: string) {
-    setBusy('image-edit');
-    setError(null);
-    try {
-      await onImageEdit(instruction);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('ai.imageWizard.errors.editImageFailed'));
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function runTemplateToggle(nextIsTemplate: boolean) {
-    if (!token) return;
-    setTemplateBusy(true);
-    setError(null);
-    try {
-      const updated = await setImageGenerationTemplate(
-        token,
-        workspaceSlug,
-        row.id,
-        nextIsTemplate,
-      );
-      onRowReplaced(updated);
-      onTemplateChanged?.(updated);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('ai.imageWizard.errors.saveFailed'));
-    } finally {
-      setTemplateBusy(false);
-    }
-  }
-
-  const isGeneratingImage = row.image_status === 'queued' || row.image_status === 'running';
-  const isFinished =
-    row.image_status === 'succeeded'
-    || row.image_status === 'failed'
-    || row.image_status === 'cancelled';
-  const showBriefPlan = !shouldSkipPlanForImageEdit;
-  const composerDisabled = row.brief_status === 'approved' || isGeneratingImage || isFinished;
-  const latestBrief = row.brief_versions.at(-1);
-  const latestBriefIndex = Math.max(0, row.brief_versions.length - 1);
+export function Step4Brief({
+  workspaceSlug,
+  row,
+  onRowReplaced,
+  onClone,
+  onDiscard,
+  onImageEdit,
+  onTemplateChanged,
+}: Step4BriefProps) {
+  const { t } = useTranslation('apps');
+  const { token } = useAuth();
+  const {
+    busy,
+    templateBusy,
+    error,
+    downloadUrl,
+    imageLoadError,
+    sourceImageUrl,
+    sourceImageLoadError,
+    revisionItems,
+    revisionGalleryError,
+    isImageEdit,
+    shouldSkipPlanForImageEdit,
+    isGeneratingImage,
+    isFinished,
+    showBriefPlan,
+    composerDisabled,
+    latestBrief,
+    latestBriefIndex,
+    runGenerateBrief,
+    runApprove,
+    runCancel,
+    runImageEdit,
+    runTemplateToggle,
+  } = useStep4BriefController({
+    workspaceSlug,
+    row,
+    token,
+    t,
+    onRowReplaced,
+    onImageEdit,
+    onTemplateChanged,
+  });
 
   return (
     <div className="space-y-4">
@@ -502,5 +510,3 @@ export function Step4Brief({
     </div>
   );
 }
-
-export default Step4Brief;

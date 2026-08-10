@@ -1,0 +1,1245 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI-DO PMS 사용 가이드</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6f8fb;
+        --paper: #ffffff;
+        --ink: #111827;
+        --muted: #64748b;
+        --line: #dbe3ee;
+        --soft: #edf2f7;
+        --nav: #111827;
+        --accent: #2563eb;
+        --accent-2: #0f766e;
+        --warn: #b45309;
+        --shadow: 0 16px 45px rgba(15, 23, 42, 0.1);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family:
+          "Pretendard",
+          "Noto Sans KR",
+          "Apple SD Gothic Neo",
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        line-height: 1.62;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .shell {
+        display: grid;
+        grid-template-columns: 320px minmax(0, 1fr);
+        min-height: 100vh;
+      }
+
+      aside {
+        position: sticky;
+        top: 0;
+        height: 100vh;
+        overflow-y: auto;
+        background: var(--nav);
+        color: #f8fafc;
+        padding: 28px 22px;
+      }
+
+      aside h1 {
+        margin: 0 0 8px;
+        font-size: 26px;
+        line-height: 1.15;
+      }
+
+      aside p {
+        margin: 0 0 22px;
+        color: #cbd5e1;
+        font-size: 13px;
+      }
+
+      aside nav {
+        display: grid;
+        gap: 6px;
+      }
+
+      aside nav a {
+        display: block;
+        border-radius: 8px;
+        padding: 9px 10px;
+        color: #dbeafe;
+        font-size: 13px;
+        text-decoration: none;
+      }
+
+      aside nav a:hover {
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      main {
+        min-width: 0;
+      }
+
+      .hero {
+        background:
+          linear-gradient(110deg, rgba(15, 23, 42, 0.9), rgba(15, 118, 110, 0.78)),
+          url("screenshots/07-list-view.png") center / cover;
+        color: white;
+        padding: 72px min(7vw, 88px) 84px;
+      }
+
+      .hero .eyebrow {
+        margin: 0 0 12px;
+        color: #bfdbfe;
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0;
+      }
+
+      .hero h2 {
+        max-width: 940px;
+        margin: 0;
+        font-size: clamp(34px, 4.6vw, 58px);
+        line-height: 1.08;
+        letter-spacing: 0;
+      }
+
+      .hero p {
+        max-width: 820px;
+        margin: 20px 0 0;
+        color: #e2e8f0;
+        font-size: 18px;
+      }
+
+      .meta-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 28px;
+      }
+
+      .meta-pill {
+        border: 1px solid rgba(255, 255, 255, 0.28);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.12);
+        padding: 7px 12px;
+        color: #f8fafc;
+        font-size: 13px;
+      }
+
+      section {
+        padding: 46px min(7vw, 88px);
+      }
+
+      section:nth-of-type(even) {
+        background: #fff;
+      }
+
+      .section-head {
+        max-width: 920px;
+        margin-bottom: 24px;
+      }
+
+      .section-head h2 {
+        margin: 0 0 8px;
+        font-size: 28px;
+        line-height: 1.2;
+        letter-spacing: 0;
+      }
+
+      .section-head p {
+        margin: 0;
+        color: var(--muted);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+      }
+
+      .grid.three {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--paper);
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+        overflow: hidden;
+      }
+
+      .card-body {
+        padding: 18px 18px 20px;
+      }
+
+      .card h3 {
+        margin: 0 0 8px;
+        font-size: 18px;
+        letter-spacing: 0;
+      }
+
+      .card p,
+      .card li {
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .card p {
+        margin: 0;
+      }
+
+      .shot {
+        position: relative;
+        display: block;
+        border-bottom: 1px solid var(--line);
+        background: var(--soft);
+        cursor: zoom-in;
+        overflow: hidden;
+      }
+
+      .shot img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+
+      .pin {
+        position: absolute;
+        left: var(--x);
+        top: var(--y);
+        z-index: 2;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        max-width: min(260px, 42%);
+        border: 2px solid #fff;
+        border-radius: 999px;
+        background: rgba(15, 23, 42, 0.92);
+        box-shadow: 0 10px 28px rgba(15, 23, 42, 0.22);
+        color: #fff;
+        font-size: 13px;
+        font-weight: 700;
+        line-height: 1.2;
+        padding: 7px 10px 7px 7px;
+        pointer-events: none;
+      }
+
+      .pin::before {
+        content: attr(data-n);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 22px;
+        height: 22px;
+        flex: 0 0 22px;
+        border-radius: 50%;
+        background: #3b82f6;
+        color: white;
+        font-size: 12px;
+      }
+
+      .pin.teal::before {
+        background: #0f766e;
+      }
+
+      .pin.amber::before {
+        background: #b45309;
+      }
+
+      .pin.rose::before {
+        background: #e11d48;
+      }
+
+      .pin.line::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        top: 100%;
+        width: 2px;
+        height: 28px;
+        background: #fff;
+        box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.2);
+      }
+
+      .pin.line-up::after {
+        top: auto;
+        bottom: 100%;
+      }
+
+      .infographic {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      .infographic svg {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+
+      .wide {
+        grid-column: 1 / -1;
+      }
+
+      .step-list {
+        display: grid;
+        gap: 12px;
+        margin: 18px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .step-list li {
+        display: grid;
+        grid-template-columns: 32px minmax(0, 1fr);
+        gap: 12px;
+        align-items: start;
+        color: var(--ink);
+      }
+
+      .step-list b {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        background: var(--accent);
+        color: white;
+        font-size: 13px;
+      }
+
+      .callout {
+        border-left: 4px solid var(--accent-2);
+        border-radius: 8px;
+        background: #ecfdf5;
+        padding: 16px 18px;
+        color: #134e4a;
+      }
+
+      .callout.warn {
+        border-left-color: var(--warn);
+        background: #fff7ed;
+        color: #7c2d12;
+      }
+
+      .table-wrap {
+        overflow-x: auto;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: white;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 720px;
+      }
+
+      th,
+      td {
+        border-bottom: 1px solid var(--line);
+        padding: 12px 14px;
+        text-align: left;
+        vertical-align: top;
+        font-size: 14px;
+      }
+
+      th {
+        background: #f8fafc;
+        color: #334155;
+        font-weight: 700;
+      }
+
+      td {
+        color: #475569;
+      }
+
+      code {
+        border-radius: 5px;
+        background: #e2e8f0;
+        padding: 2px 5px;
+        color: #0f172a;
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 0.92em;
+      }
+
+      .caption {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .footer {
+        padding: 32px min(7vw, 88px) 56px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .lightbox {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+        gap: 14px;
+        padding: 24px;
+        background: rgba(15, 23, 42, 0.88);
+      }
+
+      .lightbox[hidden] {
+        display: none;
+      }
+
+      .lightbox-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        color: white;
+      }
+
+      .lightbox-title {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 700;
+      }
+
+      .lightbox-close {
+        border: 1px solid rgba(255, 255, 255, 0.55);
+        border-radius: 8px;
+        background: #fff;
+        color: #0f172a;
+        cursor: pointer;
+        font: inherit;
+        font-size: 14px;
+        font-weight: 700;
+        padding: 9px 14px;
+      }
+
+      .lightbox-close:hover {
+        background: #e2e8f0;
+      }
+
+      .lightbox-image {
+        align-self: center;
+        justify-self: center;
+        max-width: 100%;
+        max-height: 100%;
+        border-radius: 8px;
+        background: white;
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.35);
+        object-fit: contain;
+      }
+
+      .lightbox-caption {
+        margin: 0;
+        color: #dbeafe;
+        font-size: 13px;
+        text-align: center;
+      }
+
+      @media (max-width: 1040px) {
+        .shell {
+          display: block;
+        }
+
+        aside {
+          position: static;
+          height: auto;
+        }
+
+        aside nav {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 760px) {
+        .hero {
+          padding: 48px 20px 56px;
+        }
+
+        section,
+        .footer {
+          padding-left: 20px;
+          padding-right: 20px;
+        }
+
+        .grid,
+        .grid.three {
+          grid-template-columns: 1fr;
+        }
+
+        .pin {
+          display: none;
+        }
+
+        aside nav {
+          grid-template-columns: 1fr;
+        }
+
+        .lightbox {
+          padding: 12px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <aside>
+        <h1>AI-DO PMS</h1>
+        <p>PMS 기본 사용 가이드</p>
+        <nav aria-label="문서 목차">
+          <a href="#start">1. 접속과 빠른 시작</a>
+          <a href="#structure">2. PMS 구조</a>
+          <a href="#spaces">3. 스페이스 운영</a>
+          <a href="#tasks">4. 태스크 작성</a>
+          <a href="#detail">5. 태스크 상세</a>
+          <a href="#views">6. 보기 모드</a>
+          <a href="#filters">7. 검색과 일괄 작업</a>
+          <a href="#settings">8. 설정과 권한</a>
+          <a href="#personal">9. 개인 업무 화면</a>
+          <a href="#checklist">10. 운영 체크리스트</a>
+        </nav>
+      </aside>
+
+      <main>
+        <header class="hero">
+          <p class="eyebrow">PMS 사용 매뉴얼</p>
+          <h2>접속부터 태스크 관리까지<br />한 번에 보는 PMS 사용 가이드</h2>
+          <p>
+            이 가이드는 PMS에 처음 접속한 뒤 스페이스, 리스트, 태스크를 관리하는
+            기본 흐름을 설명합니다. 처음 사용하는 사용자는 빠른 시작 순서대로 따라가고,
+            관리자는 스페이스, 리스트 설정, 멤버 권한 섹션을 먼저 확인하면 됩니다.
+          </p>
+        </header>
+
+        <section id="start">
+          <div class="section-head">
+            <h2>1. 접속과 빠른 시작</h2>
+            <p>
+              운영 환경에서는 https://dwdcc.kr에 접속해 두원공조 그룹웨어 계정으로
+              로그인합니다. 별도 PMS 전용 계정을 새로 만들지 않고, 기존 그룹웨어
+              아이디와 비밀번호를 그대로 사용합니다.
+            </p>
+          </div>
+
+          <div class="grid">
+            <figure class="card wide">
+              <a class="shot" href="screenshots/01-login.png">
+                <img src="screenshots/01-login.png" alt="운영 환경 로그인 화면" />
+              </a>
+              <figcaption class="card-body">
+                <h3>로그인 화면</h3>
+                <p>
+                  운영 환경은 그룹웨어 인증을 사용합니다. 두원공조 그룹웨어에서
+                  사용하는 아이디와 비밀번호를 입력한 뒤 로그인 버튼을 누릅니다.
+                </p>
+              </figcaption>
+            </figure>
+
+            <figure class="card">
+              <a class="shot" href="screenshots/02-home-after-login.png">
+                <img src="screenshots/02-home-after-login.png" alt="로그인 후 홈 화면" />
+              </a>
+              <figcaption class="card-body">
+                <h3>워크스페이스 홈</h3>
+                <p>
+                  로그인 후 기본 워크스페이스 홈이 열립니다. 앱 바에서 PMS가 보이지
+                  않으면 더 보기 메뉴 또는 워크스페이스 앱 표시 설정을 확인합니다.
+                </p>
+              </figcaption>
+            </figure>
+
+            <figure class="card">
+              <a class="shot" href="screenshots/04-workspace-switcher-and-pms-sidebar.png">
+                <img src="screenshots/04-workspace-switcher-and-pms-sidebar.png" alt="워크스페이스 전환과 PMS 사이드바" />
+                <span class="pin" data-n="1" style="--x: 13%; --y: 9%">워크스페이스</span>
+                <span class="pin teal" data-n="2" style="--x: 23%; --y: 41%">PMS</span>
+                <span class="pin amber" data-n="3" style="--x: 23%; --y: 55%">내 업무</span>
+              </a>
+              <figcaption class="card-body">
+                <h3>워크스페이스 전환</h3>
+                <p>
+                  워크스페이스 전환 메뉴에서 작업 공간을 선택합니다. PMS 데이터는
+                  워크스페이스별로 분리되므로 화면이 비어 있으면 먼저 현재
+                  워크스페이스를 확인합니다.
+                </p>
+              </figcaption>
+            </figure>
+          </div>
+
+          <ol class="step-list">
+            <li><b>1</b><span>https://dwdcc.kr에 접속해 그룹웨어 계정으로 로그인합니다.</span></li>
+            <li><b>2</b><span>업무를 관리할 워크스페이스로 전환합니다.</span></li>
+            <li><b>3</b><span>앱 바에서 PMS를 엽니다.</span></li>
+            <li><b>4</b><span>스페이스를 선택하고 리스트 또는 Overview(개요) 화면으로 이동합니다.</span></li>
+            <li><b>5</b><span>새 태스크를 만들거나 기존 태스크 상세를 열어 상태와 담당자를 관리합니다.</span></li>
+          </ol>
+        </section>
+
+        <section id="structure">
+          <div class="section-head">
+            <h2>2. PMS 구조</h2>
+            <p>
+              PMS는 워크스페이스 &gt; 스페이스 &gt; 폴더 &gt; 리스트 &gt; 태스크 순서로
+              구성됩니다. 폴더는 선택 항목이며, 실제 업무는 리스트 안의 태스크로
+              관리합니다.
+            </p>
+          </div>
+
+          <div class="infographic" aria-label="PMS 업무 구조 인포그래픽">
+            <svg viewBox="0 0 1180 430" role="img" aria-labelledby="flow-title flow-desc">
+              <title id="flow-title">PMS 업무 구조</title>
+              <desc id="flow-desc">워크스페이스에서 스페이스, 리스트, 태스크, 연결 기능으로 이어지는 PMS 운영 흐름</desc>
+              <defs>
+                <marker id="arrow" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto">
+                  <path d="M2,2 L10,6 L2,10 Z" fill="#2563eb" />
+                </marker>
+                <filter id="soft-shadow" x="-20%" y="-20%" width="140%" height="140%">
+                  <feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#0f172a" flood-opacity="0.12" />
+                </filter>
+              </defs>
+              <rect width="1180" height="430" fill="#f8fafc" />
+              <text x="52" y="56" fill="#0f172a" font-size="30" font-weight="800">PMS 업무 구조</text>
+              <text x="52" y="88" fill="#64748b" font-size="16">권한은 스페이스에서, 실행 관리는 리스트와 태스크에서 진행합니다.</text>
+
+              <g filter="url(#soft-shadow)">
+                <rect x="60" y="145" width="190" height="120" rx="14" fill="#ffffff" stroke="#dbe3ee" />
+                <circle cx="92" cy="184" r="18" fill="#2563eb" />
+                <text x="86" y="191" fill="#fff" font-size="18" font-weight="800">1</text>
+                <text x="118" y="178" fill="#0f172a" font-size="20" font-weight="800">워크스페이스</text>
+                <text x="82" y="220" fill="#64748b" font-size="14">앱과 사용자를 묶는</text>
+                <text x="82" y="241" fill="#64748b" font-size="14">최상위 협업 공간</text>
+
+                <rect x="310" y="145" width="190" height="120" rx="14" fill="#ffffff" stroke="#dbe3ee" />
+                <circle cx="342" cy="184" r="18" fill="#0f766e" />
+                <text x="336" y="191" fill="#fff" font-size="18" font-weight="800">2</text>
+                <text x="368" y="178" fill="#0f172a" font-size="20" font-weight="800">스페이스</text>
+                <text x="332" y="220" fill="#64748b" font-size="14">팀, TF, 제품 단위</text>
+                <text x="332" y="241" fill="#64748b" font-size="14">멤버와 권한 관리</text>
+
+                <rect x="560" y="145" width="190" height="120" rx="14" fill="#ffffff" stroke="#dbe3ee" />
+                <circle cx="592" cy="184" r="18" fill="#b45309" />
+                <text x="586" y="191" fill="#fff" font-size="18" font-weight="800">3</text>
+                <text x="618" y="178" fill="#0f172a" font-size="20" font-weight="800">리스트</text>
+                <text x="582" y="220" fill="#64748b" font-size="14">프로젝트, 스프린트,</text>
+                <text x="582" y="241" fill="#64748b" font-size="14">운영 업무 목록</text>
+
+                <rect x="810" y="145" width="190" height="120" rx="14" fill="#ffffff" stroke="#dbe3ee" />
+                <circle cx="842" cy="184" r="18" fill="#e11d48" />
+                <text x="836" y="191" fill="#fff" font-size="18" font-weight="800">4</text>
+                <text x="868" y="178" fill="#0f172a" font-size="20" font-weight="800">태스크</text>
+                <text x="832" y="220" fill="#64748b" font-size="14">상태, 담당자, 일정,</text>
+                <text x="832" y="241" fill="#64748b" font-size="14">댓글과 체크리스트</text>
+              </g>
+
+              <path d="M255 205 H300" stroke="#2563eb" stroke-width="4" marker-end="url(#arrow)" />
+              <path d="M505 205 H550" stroke="#2563eb" stroke-width="4" marker-end="url(#arrow)" />
+              <path d="M755 205 H800" stroke="#2563eb" stroke-width="4" marker-end="url(#arrow)" />
+
+              <g>
+                <rect x="830" y="318" width="270" height="54" rx="27" fill="#e0f2fe" stroke="#7dd3fc" />
+                <text x="862" y="352" fill="#075985" font-size="17" font-weight="800">Docs · Whiteboard · Meeting · AI</text>
+                <path d="M900 268 C900 292 930 300 965 316" fill="none" stroke="#0ea5e9" stroke-width="3" marker-end="url(#arrow)" />
+              </g>
+
+              <g>
+                <rect x="72" y="318" width="620" height="54" rx="10" fill="#ecfdf5" stroke="#99f6e4" />
+                <text x="96" y="340" fill="#134e4a" font-size="15" font-weight="800">운영 원칙</text>
+                <text x="96" y="361" fill="#0f766e" font-size="14">권한은 스페이스에서, 업무 흐름은 리스트 워크플로에서, 실행 이력은 태스크 상세에서 관리합니다.</text>
+              </g>
+            </svg>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>단위</th>
+                  <th>포함 내용</th>
+                  <th>운영 팁</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>워크스페이스</td>
+                  <td>회사, 부서, TF처럼 앱과 멤버를 묶는 최상위 공간</td>
+                  <td>다른 조직 데이터가 보이지 않으면 워크스페이스 전환부터 확인합니다.</td>
+                </tr>
+                <tr>
+                  <td>스페이스</td>
+                  <td>팀 단위 업무 공간이며, 멤버, 리스트, Docs(문서), Whiteboard(화이트보드)를 함께 묶습니다.</td>
+                  <td>권한 경계가 다르면 스페이스를 분리합니다.</td>
+                </tr>
+                <tr>
+                  <td>폴더</td>
+                  <td>스페이스 안의 리스트와 문서를 묶는 정리 단위</td>
+                  <td>분류만 필요할 때 사용하고, 권한 분리는 스페이스에서 처리합니다.</td>
+                </tr>
+                <tr>
+                  <td>리스트</td>
+                  <td>프로젝트, 스프린트, 운영 요청 등 실제 태스크 목록</td>
+                  <td>반복 업무는 업무 성격별 리스트로 나누면 검색과 필터가 쉬워집니다.</td>
+                </tr>
+                <tr>
+                  <td>태스크</td>
+                  <td>담당자, 상태, 일정, 우선순위, 체크리스트, 댓글, 첨부파일</td>
+                  <td>제목은 실행 가능한 작업으로 쓰고, 긴 설명은 Docs(문서)로 연결합니다.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout" style="margin-top: 18px">
+            <h3>PMS 시작 화면</h3>
+            <p>
+              PMS를 열면 접근 가능한 첫 번째 스페이스의 Overview(개요)로 이동합니다.
+              워크스페이스 전체 태스크를 한 번에 불러오지 않으며, 상단의 리스트, 보드,
+              캘린더, 간트, 테이블 탭에서 현재 스페이스의 활성 리스트를 함께 확인합니다.
+              보관된 리스트는 스페이스 업무 화면에서 제외됩니다.
+            </p>
+          </div>
+        </section>
+
+        <section id="spaces">
+          <div class="section-head">
+            <h2>3. 스페이스 운영</h2>
+            <p>
+              스페이스 Overview(개요)는 팀 업무의 대시보드입니다. 리스트, 문서,
+              화이트보드, 멤버를 한 화면에서 확인합니다.
+            </p>
+          </div>
+
+          <div class="grid">
+            <figure class="card wide">
+              <a class="shot" href="screenshots/06-space-overview.png">
+                <img src="screenshots/06-space-overview.png" alt="PMS 스페이스 Overview" />
+                <span class="pin line" data-n="1" style="--x: 86%; --y: 5%">새 리스트</span>
+                <span class="pin teal" data-n="2" style="--x: 16%; --y: 30%">최근 항목</span>
+                <span class="pin amber" data-n="3" style="--x: 76%; --y: 27%">멤버 관리</span>
+                <span class="pin rose" data-n="4" style="--x: 16%; --y: 48%">리스트 바로 열기</span>
+              </a>
+              <figcaption class="card-body">
+                <h3>스페이스 Overview</h3>
+                <p>
+                  최근 항목, Team Docs(팀 문서), 멤버, 폴더, 리스트가 표시됩니다.
+                  새 리스트를 만들거나 멤버 관리를 열 때 이 화면에서 시작합니다.
+                </p>
+              </figcaption>
+            </figure>
+
+            <figure class="card">
+              <a class="shot" href="screenshots/26-create-list-modal.png">
+                <img src="screenshots/26-create-list-modal.png" alt="새 리스트 생성 모달" />
+              </a>
+              <figcaption class="card-body">
+                <h3>새 리스트 만들기</h3>
+                <p>
+                  리스트 이름은 AI TFT 주간 업무, 신규 기능 개발, 운영 요청처럼
+                  업무 범위가 드러나게 입력합니다. 설명은 필요한 경우에만 작성합니다.
+                </p>
+              </figcaption>
+            </figure>
+
+            <figure class="card">
+              <a class="shot" href="screenshots/27-space-members-modal.png">
+                <img src="screenshots/27-space-members-modal.png" alt="스페이스 멤버 관리 모달" />
+              </a>
+              <figcaption class="card-body">
+                <h3>스페이스 멤버 관리</h3>
+                <p>
+                  멤버 초대, 검색, 역할 확인을 한곳에서 처리합니다. 스페이스 멤버가
+                  아니면 리스트 담당자 후보에 나타나지 않을 수 있습니다.
+                </p>
+              </figcaption>
+            </figure>
+          </div>
+
+          <div class="callout" style="margin-top: 18px">
+            스페이스 역할은 소유자, 관리자, 멤버, 뷰어로 나뉩니다. 멤버를 초대할
+            때는 기본적으로 멤버 권한으로 추가하고, 운영 책임자는 관리자 또는
+            소유자로 지정합니다.
+          </div>
+        </section>
+
+        <section id="tasks">
+          <div class="section-head">
+            <h2>4. 태스크 작성</h2>
+            <p>
+              태스크는 제목만으로 빠르게 만들 수 있습니다. 실제 운영에서는 담당자,
+              기간, 우선순위, 완료 조건을 함께 입력해야 진행 상황을 확인하기 쉽습니다.
+            </p>
+          </div>
+
+          <div class="grid">
+            <figure class="card wide">
+              <a class="shot" href="screenshots/07-list-view.png">
+                <img src="screenshots/07-list-view.png" alt="PMS 리스트 보기" />
+                <span class="pin line" data-n="1" style="--x: 28%; --y: 9%">보기 탭</span>
+                <span class="pin teal" data-n="2" style="--x: 23%; --y: 15%">검색과 필터</span>
+                <span class="pin amber" data-n="3" style="--x: 84%; --y: 5%">새 태스크</span>
+                <span class="pin rose" data-n="4" style="--x: 52%; --y: 40%">태스크 행</span>
+              </a>
+              <figcaption class="card-body">
+                <h3>리스트 보기</h3>
+                <p>
+                  리스트 화면은 가장 기본적인 업무 관리 화면입니다. 검색, 필터, 그룹,
+                  빠른 업무 추가, 태스크 행 선택을 이 화면에서 처리합니다.
+                </p>
+              </figcaption>
+            </figure>
+
+            <article class="card">
+              <div class="card-body">
+                <h3>완료된 리스트 보관</h3>
+                <p>
+                  더 이상 현재 진행 중이 아닌 리스트는 화면 상단의 보관 버튼이나
+                  리스트 더 보기 메뉴에서 보관합니다. 보관된 리스트는 스페이스 아래
+                  보관된 리스트 영역으로 이동하며 태스크와 원래 폴더 위치는 유지됩니다.
+                  보관 중에는 읽기 전용으로 열리고, 다시 작업하려면 먼저 복원해야 합니다.
+                  영구 삭제는 보관된 리스트에서만 사용할 수 있습니다.
+                </p>
+              </div>
+            </article>
+
+            <figure class="card">
+              <a class="shot" href="screenshots/08-new-task-modal.png">
+                <img src="screenshots/08-new-task-modal.png" alt="새 태스크 모달" />
+                <span class="pin line" data-n="1" style="--x: 36%; --y: 40%">태스크 이름</span>
+                <span class="pin teal" data-n="2" style="--x: 37%; --y: 50%">설명 입력</span>
+                <span class="pin amber" data-n="3" style="--x: 54%; --y: 62%">일정 지정</span>
+              </a>
+              <figcaption class="card-body">
+                <h3>새 태스크</h3>
+                <p>
+                  새 태스크 버튼으로 입력 창을 엽니다. 제목, 설명, 시작일, 마감일을
+                  먼저 입력하고 생성한 뒤 상세 화면에서 담당자와 라벨을 보완합니다.
+                </p>
+              </figcaption>
+            </figure>
+
+            <figure class="card">
+              <a class="shot" href="screenshots/14-search-filter-applied.png">
+                <img src="screenshots/14-search-filter-applied.png" alt="태스크 검색어가 적용된 리스트" />
+              </a>
+              <figcaption class="card-body">
+                <h3>검색어로 좁히기</h3>
+                <p>
+                  제목으로 업무를 빠르게 찾을 때는 검색창을 사용합니다. 상태, 담당자,
+                  라벨 조건과 함께 사용하면 큰 리스트에서도 원하는 업무를 빠르게 찾을 수 있습니다.
+                </p>
+              </figcaption>
+            </figure>
+          </div>
+        </section>
+
+        <section id="detail">
+          <div class="section-head">
+            <h2>5. 태스크 상세</h2>
+            <p>
+              태스크 상세는 협업 내용을 관리하는 화면입니다. 왼쪽에는 업무 속성과
+              본문이, 오른쪽에는 활동 로그와 댓글이 표시됩니다.
+            </p>
+          </div>
+
+          <div class="grid">
+            <figure class="card wide">
+              <a class="shot" href="screenshots/09-task-detail.png">
+                <img src="screenshots/09-task-detail.png" alt="태스크 상세 화면" />
+                <span class="pin line" data-n="1" style="--x: 29%; --y: 19%">상태</span>
+                <span class="pin teal" data-n="2" style="--x: 55%; --y: 18%">담당자</span>
+                <span class="pin amber" data-n="3" style="--x: 40%; --y: 46%">설명·체크리스트</span>
+                <span class="pin rose" data-n="4" style="--x: 78%; --y: 14%">활동 로그</span>
+              </a>
+              <figcaption class="card-body">
+                <h3>상세 화면 전체</h3>
+                <p>
+                  상태, 담당자, 팔로워, 시작일, 마감일, 우선순위, 마일스톤, 반복,
+                  설명, 체크리스트, 서브태스크, 연결 문서, 첨부파일,
+                  댓글을 한 화면에서 관리합니다.
+                </p>
+              </figcaption>
+            </figure>
+
+            <figure class="card">
+              <a class="shot" href="screenshots/10-task-assignees-picker.png">
+                <img src="screenshots/10-task-assignees-picker.png" alt="태스크 담당자 선택" />
+              </a>
+              <figcaption class="card-body">
+                <h3>담당자와 팔로워</h3>
+                <p>
+                  담당자는 실제 수행자이고, 팔로워는 진행 상황을 확인할 사람입니다.
+                  여러 명을 선택할 수 있으므로 책임자와 협업자를 구분해 지정합니다.
+                </p>
+              </figcaption>
+            </figure>
+
+            <figure class="card">
+              <a class="shot" href="screenshots/11-task-label-picker.png">
+                <img src="screenshots/11-task-label-picker.png" alt="태스크 라벨 선택" />
+              </a>
+              <figcaption class="card-body">
+                <h3>라벨 지정</h3>
+                <p>
+                  라벨은 리스트 안에서 업무 유형을 구분하는 분류입니다. 리스크,
+                  고객 요청, QA, 진행 차단처럼 업무 상태나 성격을 표시할 때 사용합니다.
+                </p>
+              </figcaption>
+            </figure>
+
+            <figure class="card wide">
+              <a class="shot" href="screenshots/12-task-doc-picker.png">
+                <img src="screenshots/12-task-doc-picker.png" alt="태스크 문서 연결 모달" />
+              </a>
+              <figcaption class="card-body">
+                <h3>Docs 문서 연결</h3>
+                <p>
+                  요구사항, 의사결정, 회의 메모처럼 긴 내용은 태스크 본문에 모두
+                  쓰지 않고 Docs(문서)로 연결합니다. 필요하면 태스크 설명을 문서로
+                  전환해 관리할 수 있습니다.
+                </p>
+              </figcaption>
+            </figure>
+          </div>
+        </section>
+
+        <section id="views">
+          <div class="section-head">
+            <h2>6. 보기 모드</h2>
+            <p>
+              같은 태스크도 목적에 따라 다른 방식으로 볼 수 있습니다. 일상 작업은
+              리스트, 흐름 점검은 보드, 일정 점검은 캘린더와 간트를 사용합니다.
+            </p>
+          </div>
+
+          <div class="grid">
+            <figure class="card">
+              <a class="shot" href="screenshots/16-board-view.png">
+                <img src="screenshots/16-board-view.png" alt="PMS 보드 보기" />
+              </a>
+              <figcaption class="card-body">
+                <h3>보드</h3>
+                <p>
+                  상태별 칸반 화면입니다. 태스크 카드를 다른 상태 컬럼으로 옮기면
+                  상태를 직관적으로 변경할 수 있습니다.
+                </p>
+              </figcaption>
+            </figure>
+
+            <figure class="card">
+              <a class="shot" href="screenshots/17-table-view.png">
+                <img src="screenshots/17-table-view.png" alt="PMS 테이블 보기" />
+              </a>
+              <figcaption class="card-body">
+                <h3>테이블</h3>
+                <p>
+                  담당자, 마감일, 우선순위, 라벨을 행 단위로 비교합니다. 운영 회의에서
+                  여러 업무를 한 번에 확인할 때 유용합니다.
+                </p>
+              </figcaption>
+            </figure>
+
+            <figure class="card">
+              <a class="shot" href="screenshots/18-calendar-view.png">
+                <img src="screenshots/18-calendar-view.png" alt="PMS 캘린더 보기" />
+              </a>
+              <figcaption class="card-body">
+                <h3>캘린더</h3>
+                <p>
+                  마감일이 있는 태스크를 월간 달력에 표시합니다. 다른 달의 업무는
+                  달력 이동, 간트, 필터를 함께 사용해 확인합니다.
+                </p>
+              </figcaption>
+            </figure>
+
+            <figure class="card">
+              <a class="shot" href="screenshots/19-gantt-view.png">
+                <img src="screenshots/19-gantt-view.png" alt="PMS 간트 보기" />
+              </a>
+              <figcaption class="card-body">
+                <h3>간트</h3>
+                <p>
+                  시작일과 마감일이 있는 태스크를 막대로 표시합니다. 편집 권한이 있으면
+                  막대를 드래그해 기간을 조정할 수 있습니다.
+                </p>
+              </figcaption>
+            </figure>
+
+            <figure class="card wide">
+              <a class="shot" href="screenshots/20-whiteboard-context.png">
+                <img src="screenshots/20-whiteboard-context.png" alt="PMS 화이트보드 연결 화면" />
+              </a>
+              <figcaption class="card-body">
+                <h3>화이트보드</h3>
+                <p>
+                  리스트와 연결된 Whiteboard(화이트보드)를 만들거나 기존 Whiteboard를
+                  연결합니다. 업무 구조화, 아이디어 정리, 회의 중 도식화에 사용합니다.
+                </p>
+              </figcaption>
+            </figure>
+          </div>
+        </section>
+
+        <section id="filters">
+          <div class="section-head">
+            <h2>7. 검색, 필터, 일괄 작업</h2>
+            <p>
+              리스트가 커질수록 필터와 일괄 작업이 중요합니다. 상태, 우선순위,
+              담당자, 라벨, 기간, 보관 상태를 조합해 필요한 업무만 볼 수 있습니다.
+            </p>
+          </div>
+
+          <div class="grid">
+            <figure class="card">
+              <a class="shot" href="screenshots/13-filter-status-popover.png">
+                <img src="screenshots/13-filter-status-popover.png" alt="상태 필터 팝오버" />
+                <span class="pin line" data-n="1" style="--x: 23%; --y: 15%">상태 필터 열기</span>
+                <span class="pin teal" data-n="2" style="--x: 24%; --y: 26%">상태 선택</span>
+              </a>
+              <figcaption class="card-body">
+                <h3>상태 필터</h3>
+                <p>
+                  상태 필터는 현재 리스트의 워크플로 상태를 기준으로 표시됩니다.
+                  리스트가 개별 상태를 사용하면 필터에도 해당 상태명이 표시됩니다.
+                </p>
+              </figcaption>
+            </figure>
+
+            <figure class="card">
+              <a class="shot" href="screenshots/15-bulk-actions.png">
+                <img src="screenshots/15-bulk-actions.png" alt="태스크 선택 후 일괄 작업 막대" />
+                <span class="pin line" data-n="1" style="--x: 9%; --y: 40%">태스크 선택</span>
+                <span class="pin teal" data-n="2" style="--x: 38%; --y: 84%">일괄 변경</span>
+                <span class="pin amber" data-n="3" style="--x: 58%; --y: 84%">보관·삭제</span>
+              </a>
+              <figcaption class="card-body">
+                <h3>일괄 작업</h3>
+                <p>
+                  태스크를 선택하면 하단에 선택 막대가 나타납니다. 상태, 우선순위,
+                  담당자, 라벨, 보관, 복원, 삭제를 한 번에 처리할 수 있습니다.
+                </p>
+              </figcaption>
+            </figure>
+          </div>
+
+          <div class="callout warn" style="margin-top: 18px">
+            삭제는 되돌리기 어려울 수 있습니다. 완료된 업무를 화면에서 숨기려면
+            먼저 보관을 사용하고, 실제 삭제는 운영 기준이 명확할 때만 수행합니다.
+          </div>
+        </section>
+
+        <section id="settings">
+          <div class="section-head">
+            <h2>8. 설정과 권한</h2>
+            <p>
+              리스트 설정에서는 멤버, 라벨, 워크플로를 관리합니다. 일부 설정은
+              관리자 이상의 권한이 있어야 변경할 수 있습니다.
+            </p>
+          </div>
+
+          <div class="grid">
+            <figure class="card wide">
+              <a class="shot" href="screenshots/21-list-settings-workflow.png">
+                <img src="screenshots/21-list-settings-workflow.png" alt="리스트 워크플로 설정" />
+                <span class="pin line" data-n="1" style="--x: 36%; --y: 24%">설정 탭</span>
+                <span class="pin teal" data-n="2" style="--x: 34%; --y: 36%">상속/커스텀</span>
+                <span class="pin amber" data-n="3" style="--x: 62%; --y: 50%">상태 단계</span>
+                <span class="pin rose" data-n="4" style="--x: 67%; --y: 81%">변경 적용</span>
+              </a>
+              <figcaption class="card-body">
+                <h3>워크플로 설정</h3>
+                <p>
+                  기본 설정은 Space에서 상속입니다. 리스트마다 다른 단계가 필요할 때
+                  커스텀 상태 사용을 켜고 상태를 관리합니다.
+                </p>
+              </figcaption>
+            </figure>
+
+            <figure class="card">
+              <a class="shot" href="screenshots/22-list-settings-members.png">
+                <img src="screenshots/22-list-settings-members.png" alt="리스트 멤버 설정" />
+              </a>
+              <figcaption class="card-body">
+                <h3>리스트 멤버</h3>
+                <p>
+                  리스트의 참여자와 역할을 확인합니다. 본인이나 소유자, 관리자 변경은
+                  권한에 따라 제한될 수 있습니다.
+                </p>
+              </figcaption>
+            </figure>
+
+            <figure class="card">
+              <a class="shot" href="screenshots/23-list-settings-labels.png">
+                <img src="screenshots/23-list-settings-labels.png" alt="리스트 라벨 설정" />
+              </a>
+              <figcaption class="card-body">
+                <h3>라벨 설정</h3>
+                <p>
+                  라벨 이름과 색상을 관리합니다. 리스트별로 필요한 라벨만 유지하면
+                  필터와 보드 카드가 더 읽기 쉬워집니다.
+                </p>
+              </figcaption>
+            </figure>
+          </div>
+        </section>
+
+        <section id="personal">
+          <div class="section-head">
+            <h2>9. 개인 업무 화면</h2>
+            <p>
+              전체 리스트를 열지 않아도 내가 처리해야 할 업무와 오늘 집중할 업무를
+              빠르게 확인할 수 있습니다.
+            </p>
+          </div>
+
+          <div class="grid">
+            <figure class="card">
+              <a class="shot" href="screenshots/24-assigned-to-me.png">
+                <img src="screenshots/24-assigned-to-me.png" alt="내게 배정됨 화면" />
+              </a>
+              <figcaption class="card-body">
+                <h3>내게 배정됨</h3>
+                <p>
+                  현재 워크스페이스에서 나에게 담당자로 지정된 태스크를 모아 봅니다.
+                  담당 업무의 상태와 마감일을 확인하고 우선순위를 정할 때 사용합니다.
+                </p>
+              </figcaption>
+            </figure>
+
+            <figure class="card">
+              <a class="shot" href="screenshots/25-today-overdue.png">
+                <img src="screenshots/25-today-overdue.png" alt="오늘 및 지연 화면" />
+              </a>
+              <figcaption class="card-body">
+                <h3>오늘 및 지연</h3>
+                <p>
+                  오늘 마감이거나 마감일이 지난 태스크를 확인합니다. 매일 업무를
+                  시작할 때 이 화면에서 지연 항목을 먼저 확인합니다.
+                </p>
+              </figcaption>
+            </figure>
+          </div>
+        </section>
+
+        <section id="checklist">
+          <div class="section-head">
+            <h2>10. 운영 체크리스트</h2>
+            <p>정식 운영 전에 아래 항목을 팀 기준으로 정해 두면 PMS를 더 일관되게 사용할 수 있습니다.</p>
+          </div>
+
+          <div class="grid three">
+            <div class="card">
+              <div class="card-body">
+                <h3>스페이스 기준</h3>
+                <ul>
+                  <li>권한 경계가 같은 팀이나 TF 단위로 만듭니다.</li>
+                  <li>소유자와 관리자를 최소 1명 이상 지정합니다.</li>
+                  <li>문서와 화이트보드도 같은 스페이스에 묶습니다.</li>
+                </ul>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-body">
+                <h3>리스트 기준</h3>
+                <ul>
+                  <li>업무 성격이나 기간이 다르면 리스트를 분리합니다.</li>
+                  <li>공통 상태는 스페이스에서 상속합니다.</li>
+                  <li>반복 분류는 라벨로 관리합니다.</li>
+                </ul>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-body">
+                <h3>태스크 기준</h3>
+                <ul>
+                  <li>제목은 실행 가능한 한 문장으로 작성합니다.</li>
+                  <li>담당자와 마감일을 빠뜨리지 않습니다.</li>
+                  <li>긴 배경 설명은 Docs(문서)로 연결합니다.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+
+        </section>
+      </main>
+    </div>
+    <div class="lightbox" id="imageLightbox" role="dialog" aria-modal="true" aria-labelledby="lightboxTitle" hidden>
+      <div class="lightbox-bar">
+        <p class="lightbox-title" id="lightboxTitle">스크린샷 확대 보기</p>
+        <button class="lightbox-close" type="button">닫기</button>
+      </div>
+      <img class="lightbox-image" alt="" />
+      <p class="lightbox-caption"></p>
+    </div>
+    <script>
+      (() => {
+        const lightbox = document.querySelector("#imageLightbox");
+        const image = lightbox.querySelector(".lightbox-image");
+        const title = lightbox.querySelector(".lightbox-title");
+        const caption = lightbox.querySelector(".lightbox-caption");
+        const closeButton = lightbox.querySelector(".lightbox-close");
+        let lastActive = null;
+
+        const close = () => {
+          lightbox.hidden = true;
+          image.removeAttribute("src");
+          document.body.style.overflow = "";
+          if (lastActive) {
+            lastActive.focus();
+          }
+        };
+
+        document.querySelectorAll("a.shot").forEach((shot) => {
+          shot.addEventListener("click", (event) => {
+            event.preventDefault();
+            lastActive = document.activeElement;
+            const img = shot.querySelector("img");
+            const figure = shot.closest("figure");
+            const heading = figure?.querySelector("figcaption h3")?.textContent?.trim();
+            const alt = img?.getAttribute("alt") || "스크린샷";
+
+            image.src = shot.href;
+            image.alt = alt;
+            title.textContent = heading || alt;
+            caption.textContent = alt;
+            lightbox.hidden = false;
+            document.body.style.overflow = "hidden";
+            closeButton.focus();
+          });
+        });
+
+        closeButton.addEventListener("click", close);
+        lightbox.addEventListener("click", (event) => {
+          if (event.target === lightbox) {
+            close();
+          }
+        });
+        document.addEventListener("keydown", (event) => {
+          if (event.key === "Escape" && !lightbox.hidden) {
+            close();
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>

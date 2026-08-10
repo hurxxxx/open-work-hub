@@ -6,7 +6,8 @@ from urllib.parse import urlparse
 from sqlalchemy.orm import Session
 
 from ai_do_api.core.db import get_engine, run_migrations
-from ai_do_api.core.settings import get_settings
+from ai_do_api.core.model_registry import import_all_models
+from ai_do_api.core.settings import get_settings, is_production_like_environment
 from ai_do_api.domains.auth.access import (
     DEV_LOGIN_ACCOUNTS,
     DEV_LOGIN_PASSWORD,
@@ -41,20 +42,15 @@ def main() -> None:
     database_host = parsed_dsn.hostname
     database_name = (parsed_dsn.path or "/").removeprefix("/") or "<unknown>"
 
-    if settings.environment.lower() == "production":
-        raise SystemExit("Refusing to reset a production environment database.")
+    if is_production_like_environment(settings.environment):
+        raise SystemExit("Refusing to reset a preview/production environment database.")
 
     if not _is_local_database_host(database_host) and not args.force:
         raise SystemExit(
             f"Refusing to reset non-local database host {database_host!r} without --force."
         )
 
-    from ai_do_api.domains.auth import models as auth_models  # noqa: F401
-    from ai_do_api.domains.docs import models as docs_models  # noqa: F401
-    from ai_do_api.domains.media import models as media_models  # noqa: F401
-    from ai_do_api.domains.meeting import models as meeting_models  # noqa: F401
-    from ai_do_api.domains.pms import models as pms_models  # noqa: F401
-    from ai_do_api.domains.whiteboard import models as whiteboard_models  # noqa: F401
+    import_all_models()
 
     # Drop and recreate the public schema wholesale instead of letting
     # SQLAlchemy walk the metadata graph. drop_all() only knows about

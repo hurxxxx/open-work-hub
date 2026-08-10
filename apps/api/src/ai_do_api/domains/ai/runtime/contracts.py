@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 RuntimeProfile = Literal[
@@ -155,6 +155,18 @@ class EvidencePacket(BaseModel):
     coverage: EvidenceCoverage = Field(default_factory=EvidenceCoverage)
     quality: EvidenceQuality = Field(default_factory=EvidenceQuality)
     gaps: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _normalize_quality_counts(self) -> "EvidencePacket":
+        item_count = len(self.items)
+        if self.quality.evidence_item_count == item_count:
+            return self
+        object.__setattr__(
+            self,
+            "quality",
+            self.quality.model_copy(update={"evidence_item_count": item_count}),
+        )
+        return self
 
 
 class AgentRunContract(BaseModel):

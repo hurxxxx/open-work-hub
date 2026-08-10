@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Plus, Loader2, Users, Video, FileText } from 'lucide-react';
@@ -6,23 +6,23 @@ import { Button } from '@ai-do/ui';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { normalizeTimeZone } from '@/src/platform/time/time-utils';
-import {
-  listMeetings,
-  type MeetingListItem,
-  type MeetingScope,
-} from '../../api/meeting-api';
+import { listMeetings } from '../../api/meeting-api';
 import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
 
 import { MeetingList } from './MeetingList';
 import { MeetingCreateModal } from './MeetingCreateModal';
-
-type MeetingTab = 'upcoming' | 'mine' | 'recordings';
-
-const TABS: { id: MeetingTab; labelKey: string; scope: MeetingScope }[] = [
-  { id: 'upcoming', labelKey: 'meeting.scheduled', scope: 'upcoming' },
-  { id: 'mine', labelKey: 'meeting.mine', scope: 'mine' },
-  { id: 'recordings', labelKey: 'meeting.recordings', scope: 'mine' },
-];
+import {
+  INITIAL_MEETING_LIST_VIEW_STATE,
+  MEETING_CREATE_EVENT,
+  MEETING_TABS,
+  consumeMeetingCreateSearchParam,
+  createMeetingTabSearchParams,
+  getLegacyMeetingRedirectId,
+  meetingListViewReducer,
+  resolveMeetingScope,
+  resolveMeetingTab,
+  type MeetingTab,
+} from './meeting-list-view-model';
 
 export function MeetingView() {
   const { t } = useTranslation('apps');
@@ -31,23 +31,15 @@ export function MeetingView() {
   const navigate = useNavigate();
   const { workspaceSlug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-
-  const initialTab = (searchParams.get('tab') as MeetingTab | null) ?? 'upcoming';
-  const [activeTab, setActiveTab] = useState<MeetingTab>(initialTab);
-
-  const [items, setItems] = useState<MeetingListItem[] | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [refreshToken, setRefreshToken] = useState(0);
-
-  useEffect(() => {
-    setActiveTab((searchParams.get('tab') as MeetingTab | null) ?? 'upcoming');
-  }, [searchParams]);
+  const [state, dispatch] = useReducer(
+    meetingListViewReducer,
+    INITIAL_MEETING_LIST_VIEW_STATE,
+  );
+  const activeTab = resolveMeetingTab(searchParams.get('tab'));
 
   useEffect(() => {
     if (!workspaceSlug) return;
-    const legacyId = searchParams.get('id');
+    const legacyId = getLegacyMeetingRedirectId(searchParams);
     if (!legacyId) return;
     navigate(
       buildWorkspaceAppPath(workspaceSlug, 'meeting', `/${legacyId}`),
@@ -55,49 +47,44 @@ export function MeetingView() {
     );
   }, [navigate, searchParams, workspaceSlug]);
 
-  const scope = useMemo<MeetingScope>(() => {
-    return TABS.find((tab) => tab.id === activeTab)?.scope ?? 'upcoming';
-  }, [activeTab]);
+  const scope = useMemo(() => resolveMeetingScope(activeTab), [activeTab]);
 
   useEffect(() => {
     if (!token || !workspaceSlug) return;
     let cancelled = false;
-    setLoading(true);
-    setError(null);
+    dispatch({ type: 'load-started' });
     listMeetings(token, workspaceSlug, { scope })
       .then((response) => {
         if (cancelled) return;
-        setItems(response.items);
+        dispatch({ type: 'load-succeeded', items: response.items });
       })
       .catch((err: Error) => {
         if (cancelled) return;
-        setError(err.message ?? t('meeting.listLoadFailed'));
-        setItems([]);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+        dispatch({
+          type: 'load-failed',
+          error: err.message ?? t('meeting.listLoadFailed'),
+        });
       });
     return () => {
       cancelled = true;
     };
-  }, [refreshToken, scope, t, token, workspaceSlug]);
+  }, [scope, t, token, workspaceSlug]);
 
   // Listen for the SubSidebar "+" dropdown event so the New Meeting entry
   // there opens this view's create modal directly, mirroring the planner
   // create-event pattern.
   useEffect(() => {
     function handle() {
-      setCreateOpen(true);
+      dispatch({ type: 'create-opened' });
     }
-    window.addEventListener('meeting:create-event', handle);
-    return () => window.removeEventListener('meeting:create-event', handle);
+    window.addEventListener(MEETING_CREATE_EVENT, handle);
+    return () => window.removeEventListener(MEETING_CREATE_EVENT, handle);
   }, []);
 
   useEffect(() => {
-    if (searchParams.get('create') !== '1') return;
-    setCreateOpen(true);
-    const next = new URLSearchParams(searchParams);
-    next.delete('create');
+    const next = consumeMeetingCreateSearchParam(searchParams);
+    if (!next) return;
+    dispatch({ type: 'create-opened' });
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
 
@@ -111,19 +98,17 @@ export function MeetingView() {
 
   const handleTabChange = useCallback(
     (tab: MeetingTab) => {
-      setActiveTab(tab);
-      const next = new URLSearchParams(searchParams);
-      next.set('tab', tab);
-      next.delete('id');
-      setSearchParams(next, { replace: true });
+      setSearchParams(
+        createMeetingTabSearchParams({ searchParams, tab }),
+        { replace: true },
+      );
     },
     [searchParams, setSearchParams],
   );
 
   const handleCreated = useCallback((id: string) => {
     if (!workspaceSlug) return;
-    setCreateOpen(false);
-    setRefreshToken((value) => value + 1);
+    dispatch({ type: 'create-closed' });
     navigate(buildWorkspaceAppPath(workspaceSlug, 'meeting', `/${id}`));
   }, [navigate, workspaceSlug]);
 
@@ -140,7 +125,7 @@ export function MeetingView() {
         </div>
         <Button
           variant="primary"
-          onClick={() => setCreateOpen(true)}
+          onClick={() => dispatch({ type: 'create-opened' })}
           className="dark:border-app-border dark:bg-app-surface-raised dark:text-app-ink dark:hover:bg-app-surface-hover"
         >
           <Plus size={14} className="mr-1" />
@@ -149,7 +134,7 @@ export function MeetingView() {
       </header>
 
       <nav className="flex items-center gap-1 border-b border-app-border bg-app-surface px-6">
-        {TABS.map((tab) => {
+        {MEETING_TABS.map((tab) => {
           const isActive = tab.id === activeTab;
           return (
             <button
@@ -175,29 +160,29 @@ export function MeetingView() {
       <div className="flex-1 overflow-y-auto bg-app-bg">
         {activeTab === 'recordings' ? (
           <RecordingsPlaceholder />
-        ) : loading && items === null ? (
+        ) : state.loading && state.items === null ? (
           <div className="flex h-32 items-center justify-center text-app-ink/50">
             <Loader2 size={18} className="animate-spin" />
           </div>
-        ) : error ? (
+        ) : state.error ? (
           <div className="m-6 rounded-md border border-app-border bg-app-surface p-4 text-app-ink/70">
-            {error}
+            {state.error}
           </div>
-        ) : items && items.length === 0 ? (
-          <EmptyState onCreate={() => setCreateOpen(true)} />
+        ) : state.items && state.items.length === 0 ? (
+          <EmptyState onCreate={() => dispatch({ type: 'create-opened' })} />
         ) : (
           <MeetingList
-	            items={items ?? []}
-	            activeId={null}
-	            timeZone={timeZone}
-	            onSelect={handleSelect}
-	          />
+            items={state.items ?? []}
+            activeId={null}
+            timeZone={timeZone}
+            onSelect={handleSelect}
+          />
         )}
       </div>
 
       <MeetingCreateModal
-        isOpen={createOpen}
-        onClose={() => setCreateOpen(false)}
+        isOpen={state.createOpen}
+        onClose={() => dispatch({ type: 'create-closed' })}
         onCreated={handleCreated}
         workspaceSlug={workspaceSlug}
       />

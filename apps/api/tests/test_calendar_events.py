@@ -8,11 +8,13 @@ Covers (per autoplan Round 2 Eng review test plan):
   - Happy path: meeting + PMS issue both visible to current user
   - assignee_id parameter is silently ignored / never accepted (ENG-CRIT-1)
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta
 
 from fastapi.testclient import TestClient
+from httpx import Response
 
 
 def _auth_headers(token: str) -> dict[str, str]:
@@ -41,7 +43,7 @@ def _create_meeting(
     end_at: datetime,
 ) -> dict:
     response = client.post(
-        "/api/v1/workspaces/hq/meeting/meetings",
+        "/api/v1/workspaces/administrator/meeting/meetings",
         headers=_auth_headers(token),
         json={
             "title": title,
@@ -59,7 +61,7 @@ def _create_meeting(
 
 def _create_task_list(client: TestClient, token: str) -> dict:
     response = client.post(
-        "/api/v1/workspaces/hq/pms/lists",
+        "/api/v1/workspaces/administrator/pms/lists",
         headers=_auth_headers(token),
         json={
             "key": "CAL",
@@ -79,10 +81,10 @@ def _create_issue_with_due_date(
     due_date: str,
     start_date: str | None = None,
     assignee_id: str | None = None,
-    title: str = "Issue with due date",
+    title: str = "Task with due date",
 ) -> dict:
     create = client.post(
-        f"/api/v1/workspaces/hq/pms/lists/{list_id}/issues",
+        f"/api/v1/workspaces/administrator/pms/lists/{list_id}/tasks",
         headers=_auth_headers(token),
         json={
             "title": title,
@@ -96,7 +98,7 @@ def _create_issue_with_due_date(
     issue = create.json()
     # Set due_date via update endpoint (setup endpoint doesn't take it directly)
     update = client.patch(
-        f"/api/v1/workspaces/hq/pms/issues/{issue['id']}",
+        f"/api/v1/workspaces/administrator/pms/tasks/{issue['id']}",
         headers=_auth_headers(token),
         json={
             "due_date": due_date,
@@ -108,20 +110,40 @@ def _create_issue_with_due_date(
     return update.json()
 
 
-def test_calendar_events_requires_auth(client: TestClient) -> None:
-    response = client.get(
-        "/api/v1/workspaces/hq/calendar/events",
-        params={"from": "2026-04-01", "to": "2026-04-30"},
+def _get_calendar_events(
+    client: TestClient,
+    token: str | None = None,
+    *,
+    from_: str = "2026-04-01",
+    to: str = "2026-04-30",
+    sources: str | None = None,
+    extra_params: dict[str, str] | None = None,
+) -> Response:
+    params = {"from": from_, "to": to}
+    if sources is not None:
+        params["sources"] = sources
+    if extra_params is not None:
+        params.update(extra_params)
+
+    return client.get(
+        "/api/v1/calendar/events",
+        headers=_auth_headers(token) if token is not None else {},
+        params=params,
     )
+
+
+def test_calendar_events_requires_auth(client: TestClient) -> None:
+    response = _get_calendar_events(client)
     assert response.status_code in (401, 403)
 
 
 def test_calendar_events_range_cap_enforced(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
-    response = client.get(
-        "/api/v1/workspaces/hq/calendar/events",
-        headers=_auth_headers(admin["token"]),
-        params={"from": "2020-01-01", "to": "2099-12-31"},
+    response = _get_calendar_events(
+        client,
+        admin["token"],
+        from_="2020-01-01",
+        to="2099-12-31",
     )
     assert response.status_code == 400
     assert "366" in response.json()["detail"]
@@ -129,14 +151,10 @@ def test_calendar_events_range_cap_enforced(client: TestClient) -> None:
 
 def test_calendar_events_invalid_source_rejected(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
-    response = client.get(
-        "/api/v1/workspaces/hq/calendar/events",
-        headers=_auth_headers(admin["token"]),
-        params={
-            "from": "2026-04-01",
-            "to": "2026-04-30",
-            "sources": "meeting,bogus",
-        },
+    response = _get_calendar_events(
+        client,
+        admin["token"],
+        sources="meeting,bogus",
     )
     assert response.status_code == 400
     assert "bogus" in response.json()["detail"]
@@ -144,35 +162,29 @@ def test_calendar_events_invalid_source_rejected(client: TestClient) -> None:
 
 def test_calendar_events_empty_sources_returns_empty(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
-    response = client.get(
-        "/api/v1/workspaces/hq/calendar/events",
-        headers=_auth_headers(admin["token"]),
-        params={
-            "from": "2026-04-01",
-            "to": "2026-04-30",
-            "sources": "",
-        },
-    )
+    response = _get_calendar_events(client, admin["token"], sources="")
     assert response.status_code == 200
     assert response.json() == {"items": []}
 
 
 def test_calendar_events_invalid_dates_rejected(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
-    response = client.get(
-        "/api/v1/workspaces/hq/calendar/events",
-        headers=_auth_headers(admin["token"]),
-        params={"from": "not a date", "to": "also not"},
+    response = _get_calendar_events(
+        client,
+        admin["token"],
+        from_="not a date",
+        to="also not",
     )
     assert response.status_code == 400
 
 
 def test_calendar_events_to_must_be_after_from(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
-    response = client.get(
-        "/api/v1/workspaces/hq/calendar/events",
-        headers=_auth_headers(admin["token"]),
-        params={"from": "2026-04-30", "to": "2026-04-01"},
+    response = _get_calendar_events(
+        client,
+        admin["token"],
+        from_="2026-04-30",
+        to="2026-04-01",
     )
     assert response.status_code == 400
 
@@ -190,14 +202,11 @@ def test_calendar_events_returns_meeting_for_organizer(client: TestClient) -> No
         end_at=end,
     )
 
-    response = client.get(
-        "/api/v1/workspaces/hq/calendar/events",
-        headers=_auth_headers(token),
-        params={
-            "from": "2026-04-01",
-            "to": "2026-05-01",
-            "sources": "meeting",
-        },
+    response = _get_calendar_events(
+        client,
+        token,
+        to="2026-05-01",
+        sources="meeting",
     )
     assert response.status_code == 200, response.text
     items = response.json()["items"]
@@ -208,6 +217,7 @@ def test_calendar_events_returns_meeting_for_organizer(client: TestClient) -> No
     assert matching["sourceId"] == meeting["id"]
     assert matching["allDay"] is False
     assert matching["color"] == "#3b82f6"
+    assert matching["workspace"]["slug"] == "administrator"
 
 
 def test_calendar_events_excludes_meeting_starting_at_exclusive_end(client: TestClient) -> None:
@@ -223,14 +233,11 @@ def test_calendar_events_excludes_meeting_starting_at_exclusive_end(client: Test
         end_at=end,
     )
 
-    response = client.get(
-        "/api/v1/workspaces/hq/calendar/events",
-        headers=_auth_headers(token),
-        params={
-            "from": "2026-04-01",
-            "to": "2026-05-01",
-            "sources": "meeting",
-        },
+    response = _get_calendar_events(
+        client,
+        token,
+        to="2026-05-01",
+        sources="meeting",
     )
     assert response.status_code == 200, response.text
     assert "Boundary meeting" not in [item["title"] for item in response.json()["items"]]
@@ -249,23 +256,19 @@ def test_calendar_events_date_only_and_offset_ranges_match(client: TestClient) -
         end_at=end,
     )
 
-    date_only = client.get(
-        "/api/v1/workspaces/hq/calendar/events",
-        headers=_auth_headers(token),
-        params={
-            "from": "2026-04-15",
-            "to": "2026-04-16",
-            "sources": "meeting",
-        },
+    date_only = _get_calendar_events(
+        client,
+        token,
+        from_="2026-04-15",
+        to="2026-04-16",
+        sources="meeting",
     )
-    offset_range = client.get(
-        "/api/v1/workspaces/hq/calendar/events",
-        headers=_auth_headers(token),
-        params={
-            "from": "2026-04-15T00:00:00+09:00",
-            "to": "2026-04-16T00:00:00+09:00",
-            "sources": "meeting",
-        },
+    offset_range = _get_calendar_events(
+        client,
+        token,
+        from_="2026-04-15T00:00:00+09:00",
+        to="2026-04-16T00:00:00+09:00",
+        sources="meeting",
     )
     assert date_only.status_code == 200, date_only.text
     assert offset_range.status_code == 200, offset_range.text
@@ -294,19 +297,17 @@ def test_calendar_events_pms_all_day_end_is_exclusive(client: TestClient) -> Non
         title="Block through Apr 20",
     )
 
-    response = client.get(
-        "/api/v1/workspaces/hq/calendar/events",
-        headers=_auth_headers(token),
-        params={
-            "from": "2026-04-01",
-            "to": "2026-05-01",
-            "sources": "pms_due,pms_block",
-        },
+    response = _get_calendar_events(
+        client,
+        token,
+        to="2026-05-01",
+        sources="pms_due,pms_block",
     )
     assert response.status_code == 200, response.text
     items = {item["sourceId"]: item for item in response.json()["items"]}
     assert items[due_issue["id"]]["start"] == "2026-04-20"
     assert items[due_issue["id"]]["end"] == "2026-04-21"
+    assert items[due_issue["id"]]["workspace"]["slug"] == "administrator"
     assert items[block_issue["id"]]["start"] == "2026-04-18"
     assert items[block_issue["id"]]["end"] == "2026-04-21"
 
@@ -317,14 +318,10 @@ def test_calendar_events_assignee_id_query_param_is_ignored(client: TestClient) 
     token = admin["token"]
     # The endpoint does not declare assignee_id at all — extra params are silently
     # dropped by FastAPI. Ensure we still get back only the current user's data.
-    response = client.get(
-        "/api/v1/workspaces/hq/calendar/events",
-        headers=_auth_headers(token),
-        params={
-            "from": "2026-04-01",
-            "to": "2026-04-30",
-            "assignee_id": "some-other-user-id",
-        },
+    response = _get_calendar_events(
+        client,
+        token,
+        extra_params={"assignee_id": "some-other-user-id"},
     )
     assert response.status_code == 200
     # And for sanity: the absence of assignee_id in the schema means the optional

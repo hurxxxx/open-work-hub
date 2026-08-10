@@ -1,21 +1,24 @@
 from __future__ import annotations
 
+from datetime import UTC, date, datetime
 from hashlib import blake2b
 import inspect
-import math
 import time
 from typing import Any
 import uuid
 
 from qdrant_client import QdrantClient, models
 
+from ai_do_api.domains.rag.chunking import tokenize_sparse_terms
 from ai_do_api.domains.rag.contracts import (
     RagDeleteRequest,
     RagProjection,
     RagProviderHealth,
+    RagScopeKind,
     RagUpsertRequest,
     RagVectorRecord,
     RagVectorSearchHit,
+    RagVectorSearchMode,
     RagVectorSearchRequest,
 )
 from ai_do_api.domains.rag.metrics import (
@@ -29,17 +32,31 @@ from ai_do_api.domains.rag.providers.openai_compatible import (
     RagProviderTimeoutError,
     RagProviderTransientError,
 )
+from ai_do_api.domains.rag.providers.operation import (
+    ProviderCircuitBreaker,
+    ceil_positive_timeout_seconds as _qdrant_timeout,
+)
+from ai_do_api.domains.retrieval.projection_identity import canonical_vector_point_id
 
 _DENSE_VECTOR_NAME = "dense"
 _SPARSE_VECTOR_NAME = "sparse"
-_PAYLOAD_INDEX_FIELDS = (
-    "workspace_id",
-    "resource_type",
-    "resource_id",
-    "source_kind",
-    "visibility_refs",
-)
+_LEGACY_PAYLOAD_INDEX_FIELDS = {
+    "scope_kind": models.PayloadSchemaType.KEYWORD,
+    "workspace_id": models.PayloadSchemaType.KEYWORD,
+    "resource_type": models.PayloadSchemaType.KEYWORD,
+    "resource_id": models.PayloadSchemaType.KEYWORD,
+    "source_kind": models.PayloadSchemaType.KEYWORD,
+    "visibility_refs": models.PayloadSchemaType.KEYWORD,
+}
+_PARTITIONED_PAYLOAD_INDEX_FIELDS = {
+    "retrieval_partition_id": models.PayloadSchemaType.KEYWORD,
+    "projection_version": models.PayloadSchemaType.INTEGER,
+    **_LEGACY_PAYLOAD_INDEX_FIELDS,
+}
 _RESERVED_PAYLOAD_FIELDS = {
+    "retrieval_partition_id",
+    "projection_version",
+    "scope_kind",
     "workspace_id",
     "resource_type",
     "resource_id",
@@ -61,22 +78,56 @@ class QdrantVectorIndexClient:
         client: QdrantClient | None = None,
         dense_vector_name: str = _DENSE_VECTOR_NAME,
         sparse_vector_name: str = _SPARSE_VECTOR_NAME,
+        partitioned_generation: bool = False,
+        generation_collection: str | None = None,
     ) -> None:
+        normalized_generation_collection = (
+            generation_collection.strip() if generation_collection is not None else None
+        )
+        if partitioned_generation and not normalized_generation_collection:
+            raise RagProviderConfigurationError(
+                "partition-aware Qdrant generation requires an explicit "
+                "generation_collection binding"
+            )
+        if not partitioned_generation and normalized_generation_collection is not None:
+            raise RagProviderConfigurationError(
+                "generation_collection requires partitioned_generation=True"
+            )
         if client is None and not url:
             raise ValueError("QdrantVectorIndexClient requires either client or url")
         self._client = client or QdrantClient(url=url, api_key=api_key or None)
         self._dense_vector_name = dense_vector_name
         self._sparse_vector_name = sparse_vector_name
+        self._partitioned_generation = partitioned_generation
+        self._generation_collection = normalized_generation_collection
         self._indexed_collections: set[str] = set()
-        self._consecutive_query_failures = 0
-        self._blocked_until_monotonic = 0.0
+        self._query_circuit = ProviderCircuitBreaker(
+            failure_threshold=self._circuit_breaker_failure_threshold,
+            cooldown_seconds=self._circuit_breaker_cooldown_seconds,
+            open_message="Provider temporarily unavailable after repeated query failures.",
+        )
+
+    def for_partitioned_generation(
+        self,
+        *,
+        collection: str,
+    ) -> QdrantVectorIndexClient:
+        """Reuse transport credentials while isolating the new ID/payload contract."""
+
+        return QdrantVectorIndexClient(
+            client=self._client,
+            dense_vector_name=self._dense_vector_name,
+            sparse_vector_name=self._sparse_vector_name,
+            partitioned_generation=True,
+            generation_collection=collection,
+        )
 
     def healthcheck(self) -> RagProviderHealth:
-        if self._blocked_until_monotonic > time.monotonic():
+        if self._query_circuit.retry_after_seconds() is not None:
             return RagProviderHealth(
                 provider_name=self.provider_name,
                 ready=False,
-                detail="Provider temporarily unavailable after repeated query failures.",
+                detail=self._query_circuit.open_message,
             )
         try:
             self._client.get_collections()
@@ -95,9 +146,11 @@ class QdrantVectorIndexClient:
         dense_dimensions: int,
         sparse_enabled: bool = True,
     ) -> None:
+        self._require_bound_collection(collection)
         if dense_dimensions <= 0:
             raise ValueError("dense_dimensions must be greater than zero for Qdrant collections")
 
+        collection_created = False
         if not self._client.collection_exists(collection_name=collection):
             sparse_vectors_config = None
             if sparse_enabled:
@@ -117,6 +170,7 @@ class QdrantVectorIndexClient:
                     },
                     sparse_vectors_config=sparse_vectors_config,
                 )
+                collection_created = True
             except Exception:
                 if not self._client.collection_exists(collection_name=collection):
                     raise
@@ -132,14 +186,33 @@ class QdrantVectorIndexClient:
                 sparse_enabled=sparse_enabled,
             )
 
+        if self._partitioned_generation and not collection_created:
+            if collection not in self._indexed_collections:
+                self._validate_partitioned_payload_indexes(collection=collection)
+                self._indexed_collections.add(collection)
+            return
+
         if collection not in self._indexed_collections:
-            for field_name in _PAYLOAD_INDEX_FIELDS:
+            payload_indexes = (
+                _PARTITIONED_PAYLOAD_INDEX_FIELDS
+                if self._partitioned_generation
+                else _LEGACY_PAYLOAD_INDEX_FIELDS
+            )
+            for field_name, field_schema in payload_indexes.items():
                 self._client.create_payload_index(
                     collection_name=collection,
                     field_name=field_name,
-                    field_schema=models.PayloadSchemaType.KEYWORD,
+                    field_schema=field_schema,
                 )
             self._indexed_collections.add(collection)
+
+    def delete_collection(self, *, collection: str) -> bool:
+        self._require_bound_collection(collection)
+        if not self._client.collection_exists(collection_name=collection):
+            return False
+        self._client.delete_collection(collection_name=collection)
+        self._indexed_collections.discard(collection)
+        return True
 
     def upsert_chunks(
         self,
@@ -147,6 +220,11 @@ class QdrantVectorIndexClient:
         request: RagUpsertRequest,
         records: list[RagVectorRecord],
     ) -> int:
+        self._require_bound_collection(request.collection)
+        if self._partitioned_generation:
+            _require_projection_fence(request.projection)
+            for record in records:
+                _require_projection_fence(record.projection)
         if not records:
             return 0
 
@@ -158,13 +236,16 @@ class QdrantVectorIndexClient:
         return len(records)
 
     def delete_resource(self, *, request: RagDeleteRequest) -> int:
-        if not self._client.collection_exists(collection_name=request.collection):
-            return 0
+        self._require_bound_collection(request.collection)
         resource_filter = self._resource_filter(
+            retrieval_partition_id=request.retrieval_partition_id,
+            scope_kind=request.scope_kind,
             workspace_id=request.workspace_id,
             resource_type=request.resource_type,
             resource_id=request.resource_id,
         )
+        if not self._client.collection_exists(collection_name=request.collection):
+            return 0
         deleted_count = self._client.count(
             collection_name=request.collection,
             count_filter=resource_filter,
@@ -186,16 +267,18 @@ class QdrantVectorIndexClient:
         request: RagDeleteRequest,
         chunk_index: int,
     ) -> int:
+        self._require_bound_collection(request.collection)
         if chunk_index <= 0:
             return self.delete_resource(request=request)
-        if not self._client.collection_exists(collection_name=request.collection):
-            return 0
-
         resource_filter = self._resource_filter(
+            retrieval_partition_id=request.retrieval_partition_id,
+            scope_kind=request.scope_kind,
             workspace_id=request.workspace_id,
             resource_type=request.resource_type,
             resource_id=request.resource_id,
         )
+        if not self._client.collection_exists(collection_name=request.collection):
+            return 0
         offset: int | str | uuid.UUID | None = None
         point_ids: list[models.ExtendedPointId] = []
         while True:
@@ -231,6 +314,8 @@ class QdrantVectorIndexClient:
         request: RagVectorSearchRequest,
         timeout_seconds: float | None = None,
     ) -> list[RagVectorSearchHit]:
+        self._require_bound_collection(request.collection)
+        query_filter = self._build_query_filter(request)
         if not request.query_embedding:
             return []
         self._raise_if_circuit_open()
@@ -242,8 +327,11 @@ class QdrantVectorIndexClient:
         ):
             return []
 
-        query_filter = self._build_query_filter(request)
-        sparse_query = self._to_sparse_query_vector(request.query)
+        sparse_query = (
+            self._to_sparse_query_vector(request.query)
+            if request.search_mode == RagVectorSearchMode.DENSE_SPARSE_RRF
+            else None
+        )
         started = time.perf_counter()
         try:
             if sparse_query is not None:
@@ -324,7 +412,30 @@ class QdrantVectorIndexClient:
                 f"Qdrant collection {collection} is missing sparse vector '{self._sparse_vector_name}'"
             )
 
+    def _validate_partitioned_payload_indexes(self, *, collection: str) -> None:
+        info = self._client.get_collection(collection_name=collection)
+        payload_schema = getattr(info, "payload_schema", None)
+        if not isinstance(payload_schema, dict):
+            raise RagProviderConfigurationError(
+                f"Qdrant collection {collection} is missing partitioned payload indexes"
+            )
+        for field_name, expected_schema in _PARTITIONED_PAYLOAD_INDEX_FIELDS.items():
+            raw_schema = payload_schema.get(field_name)
+            if isinstance(raw_schema, dict):
+                actual_schema = raw_schema.get("data_type")
+            else:
+                actual_schema = getattr(raw_schema, "data_type", raw_schema)
+            actual_value = getattr(actual_schema, "value", actual_schema)
+            if actual_value != expected_schema.value:
+                raise RagProviderConfigurationError(
+                    f"Qdrant collection {collection} payload index mismatch for {field_name}: "
+                    f"expected {expected_schema.value}"
+                )
+
     def _to_point(self, collection: str, record: RagVectorRecord) -> models.PointStruct:
+        self._require_bound_collection(collection)
+        if self._partitioned_generation:
+            _require_projection_fence(record.projection)
         vector: dict[str, list[float] | models.SparseVector] = {
             self._dense_vector_name: list(record.embedding),
         }
@@ -332,18 +443,55 @@ class QdrantVectorIndexClient:
         if sparse_vector is not None:
             vector[self._sparse_vector_name] = sparse_vector
         return models.PointStruct(
-            id=_point_uuid(collection, record.projection.workspace_id, record.chunk_id),
+            id=_point_id(
+                collection=collection,
+                record=record,
+                partitioned_generation=self._partitioned_generation,
+            ),
             vector=vector,
-            payload=_payload_from_record(record),
+            payload=qdrant_payload_from_record(
+                record,
+                partitioned_generation=self._partitioned_generation,
+            ),
         )
 
     def _build_query_filter(self, request: RagVectorSearchRequest) -> models.Filter:
-        must: list[models.FieldCondition] = [
-            models.FieldCondition(
-                key="workspace_id",
-                match=models.MatchValue(value=request.workspace_id),
-            )
-        ]
+        if self._partitioned_generation:
+            if request.retrieval_partition_ids is None:
+                raise RagProviderConfigurationError(
+                    "partition-aware Qdrant queries require retrieval_partition_ids"
+                )
+            must: list[models.FieldCondition] = [
+                models.FieldCondition(
+                    key="retrieval_partition_id",
+                    match=models.MatchAny(any=list(request.retrieval_partition_ids)),
+                )
+            ]
+        else:
+            if request.retrieval_partition_ids is not None:
+                raise RagProviderConfigurationError(
+                    "retrieval partition filters require a partition-aware Qdrant generation"
+                )
+            must = [
+                models.FieldCondition(
+                    key="scope_kind",
+                    match=models.MatchValue(value=request.scope_kind.value),
+                )
+            ]
+            if request.scope_kind == RagScopeKind.WORKSPACE:
+                must.append(
+                    models.FieldCondition(
+                        key="workspace_id",
+                        match=models.MatchValue(value=request.workspace_id),
+                    )
+                )
+            else:
+                must.append(
+                    models.FieldCondition(
+                        key="visibility_refs",
+                        match=models.MatchValue(value="company_public"),
+                    )
+                )
         if request.source_kinds:
             must.append(
                 models.FieldCondition(
@@ -361,7 +509,10 @@ class QdrantVectorIndexClient:
     def _to_search_hit(self, point: models.ScoredPoint) -> RagVectorSearchHit:
         payload = point.payload or {}
         projection = RagProjection(
-            workspace_id=str(payload.get("workspace_id") or ""),
+            retrieval_partition_id=_string_or_none(payload.get("retrieval_partition_id")),
+            projection_version=_int_or_none(payload.get("projection_version")),
+            scope_kind=RagScopeKind(str(payload.get("scope_kind") or RagScopeKind.WORKSPACE)),
+            workspace_id=_string_or_none(payload.get("workspace_id")),
             resource_type=str(payload.get("resource_type") or ""),
             resource_id=str(payload.get("resource_id") or ""),
             source_kind=str(payload.get("source_kind") or ""),
@@ -385,26 +536,59 @@ class QdrantVectorIndexClient:
     def _resource_filter(
         self,
         *,
-        workspace_id: str,
+        retrieval_partition_id: str | None = None,
+        workspace_id: str | None,
         resource_type: str,
         resource_id: str,
+        scope_kind: RagScopeKind = RagScopeKind.WORKSPACE,
     ) -> models.Filter:
-        return models.Filter(
-            must=[
+        must: list[models.FieldCondition] = [
+            models.FieldCondition(
+                key="resource_type",
+                match=models.MatchValue(value=resource_type),
+            ),
+            models.FieldCondition(
+                key="resource_id",
+                match=models.MatchValue(value=resource_id),
+            ),
+        ]
+        if self._partitioned_generation:
+            if retrieval_partition_id is None:
+                raise RagProviderConfigurationError(
+                    "partition-aware Qdrant deletes require retrieval_partition_id"
+                )
+            must.insert(
+                0,
+                models.FieldCondition(
+                    key="retrieval_partition_id",
+                    match=models.MatchValue(value=retrieval_partition_id),
+                ),
+            )
+        else:
+            must.insert(
+                0,
+                models.FieldCondition(
+                    key="scope_kind",
+                    match=models.MatchValue(value=scope_kind.value),
+                ),
+            )
+        if not self._partitioned_generation and scope_kind == RagScopeKind.WORKSPACE:
+            must.append(
                 models.FieldCondition(
                     key="workspace_id",
                     match=models.MatchValue(value=workspace_id),
-                ),
-                models.FieldCondition(
-                    key="resource_type",
-                    match=models.MatchValue(value=resource_type),
-                ),
-                models.FieldCondition(
-                    key="resource_id",
-                    match=models.MatchValue(value=resource_id),
-                ),
-            ]
-        )
+                )
+            )
+        return models.Filter(must=must)
+
+    def _require_bound_collection(self, collection: str) -> None:
+        if not self._partitioned_generation:
+            return
+        if collection != self._generation_collection:
+            raise RagProviderConfigurationError(
+                "partition-aware Qdrant generation is bound to collection "
+                f"{self._generation_collection!r}, not {collection!r}"
+            )
 
     def _to_sparse_query_vector(self, query: str) -> models.SparseVector | None:
         terms: dict[str, float] = {}
@@ -413,36 +597,36 @@ class QdrantVectorIndexClient:
         return _sparse_vector_from_terms(terms)
 
     def _record_query_failure(self, error: Exception) -> None:
-        self._consecutive_query_failures += 1
-        if self._consecutive_query_failures < self._circuit_breaker_failure_threshold:
-            return
-        self._blocked_until_monotonic = max(
-            self._blocked_until_monotonic,
-            time.monotonic() + self._circuit_breaker_cooldown_seconds,
-        )
-        self._consecutive_query_failures = 0
+        del error
+        self._query_circuit.record_failure()
 
     def _reset_query_failures(self) -> None:
-        self._consecutive_query_failures = 0
+        self._query_circuit.record_success()
 
     def _raise_if_circuit_open(self) -> None:
-        remaining = self._blocked_until_monotonic - time.monotonic()
-        if remaining <= 0:
-            self._blocked_until_monotonic = 0.0
-            return
-        raise RagProviderTransientError(
-            "Provider temporarily unavailable after repeated query failures.",
-            retry_after_seconds=max(int(math.ceil(remaining)), 1),
+        self._query_circuit.raise_if_open(
+            lambda message, retry_after_seconds: RagProviderTransientError(
+                message,
+                retry_after_seconds=retry_after_seconds,
+            )
         )
 
 
+def qdrant_payload_from_record(
+    record: RagVectorRecord,
+    *,
+    partitioned_generation: bool,
+) -> dict[str, Any]:
+    """Build the canonical Qdrant payload shared by writers and verifiers."""
 
-def _payload_from_record(record: RagVectorRecord) -> dict[str, Any]:
     projection = record.projection
-    return {
+    if partitioned_generation:
+        _require_projection_fence(projection)
+    payload = {
         "chunk_id": record.chunk_id,
         "text": record.text,
         "summary": record.summary,
+        "scope_kind": projection.scope_kind.value,
         "workspace_id": projection.workspace_id,
         "resource_type": projection.resource_type,
         "resource_id": projection.resource_id,
@@ -454,6 +638,17 @@ def _payload_from_record(record: RagVectorRecord) -> dict[str, Any]:
         "metadata": dict(projection.metadata),
         "chunk_metadata": dict(record.metadata),
     }
+    if partitioned_generation:
+        payload["retrieval_partition_id"] = projection.retrieval_partition_id
+        payload["projection_version"] = projection.projection_version
+    return payload
+
+
+def _require_projection_fence(projection: RagProjection) -> None:
+    if projection.retrieval_partition_id is None or projection.projection_version is None:
+        raise RagProviderConfigurationError(
+            "partition-aware Qdrant upserts require retrieval_partition_id and projection_version"
+        )
 
 
 def _chunk_index_from_payload(payload: dict[str, Any]) -> int:
@@ -474,12 +669,6 @@ def _normalize_query_error(error: Exception) -> Exception:
     if isinstance(error, TimeoutError):
         return RagProviderTimeoutError(str(error))
     return RagProviderError(str(error))
-
-
-def _qdrant_timeout(timeout_seconds: float | None) -> int | None:
-    if timeout_seconds is None or timeout_seconds <= 0:
-        return None
-    return max(int(math.ceil(timeout_seconds)), 1)
 
 
 def _call_client_with_optional_timeout(
@@ -518,7 +707,6 @@ def _is_timeout_keyword_rejection(error: Exception) -> bool:
     )
 
 
-
 def _build_field_condition(
     *,
     key: str,
@@ -555,8 +743,42 @@ def _build_field_condition(
             key=field_key,
             match=models.MatchAny(any=[str(item) for item in normalized]),
         )
+    if isinstance(value, dict) and value:
+        range_keys = frozenset({"lt", "gt", "gte", "lte"})
+        if not set(value).issubset(range_keys):
+            return None
+        numeric = {
+            key: float(item)
+            for key, item in value.items()
+            if isinstance(item, int | float) and not isinstance(item, bool)
+        }
+        if len(numeric) == len(value):
+            return models.FieldCondition(key=field_key, range=models.Range(**numeric))
+        temporal = {
+            key: normalized
+            for key, item in value.items()
+            if (normalized := _filter_datetime(item)) is not None
+        }
+        if len(temporal) == len(value):
+            return models.FieldCondition(
+                key=field_key,
+                range=models.DatetimeRange(**temporal),
+            )
     return None
 
+
+def _filter_datetime(value: object) -> datetime | date | None:
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+    if isinstance(value, date):
+        return value
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed.astimezone(UTC)
 
 
 def _payload_key_for_filter(key: str) -> str:
@@ -567,20 +789,23 @@ def _payload_key_for_filter(key: str) -> str:
     return f"metadata.{key}"
 
 
-
 def _sparse_vector_from_terms(terms: dict[str, float]) -> models.SparseVector | None:
     if not terms:
         return None
 
-    indexed = [(_stable_sparse_index(token), float(weight)) for token, weight in terms.items() if weight > 0]
-    if not indexed:
+    weights_by_index: dict[int, float] = {}
+    for token, weight in terms.items():
+        if weight <= 0:
+            continue
+        index = _stable_sparse_index(token)
+        weights_by_index[index] = weights_by_index.get(index, 0.0) + float(weight)
+    if not weights_by_index:
         return None
-    indexed.sort(key=lambda item: item[0])
+    indexed = sorted(weights_by_index.items(), key=lambda item: item[0])
     return models.SparseVector(
         indices=[index for index, _ in indexed],
         values=[value for _, value in indexed],
     )
-
 
 
 def _stable_sparse_index(token: str) -> int:
@@ -591,15 +816,58 @@ def _stable_sparse_index(token: str) -> int:
     return int.from_bytes(digest, byteorder="big", signed=False)
 
 
+def _point_uuid(
+    collection: str,
+    scope_kind: RagScopeKind,
+    workspace_id: str | None,
+    source_kind: str,
+    resource_type: str,
+    resource_id: str,
+    chunk_id: str,
+) -> uuid.UUID:
+    identity = ":".join(
+        (
+            collection,
+            scope_kind.value,
+            workspace_id or "",
+            source_kind,
+            resource_type,
+            resource_id,
+            chunk_id,
+        )
+    )
+    return uuid.uuid5(uuid.NAMESPACE_URL, identity)
 
-def _point_uuid(collection: str, workspace_id: str, chunk_id: str) -> uuid.UUID:
-    return uuid.uuid5(uuid.NAMESPACE_URL, f"{collection}:{workspace_id}:{chunk_id}")
 
+def _point_id(
+    *,
+    collection: str,
+    record: RagVectorRecord,
+    partitioned_generation: bool,
+) -> uuid.UUID:
+    projection = record.projection
+    if partitioned_generation:
+        _require_projection_fence(projection)
+        return uuid.UUID(
+            canonical_vector_point_id(
+                resource_type=projection.resource_type,
+                resource_id=projection.resource_id,
+                chunk_id=record.chunk_id,
+            )
+        )
+    return _point_uuid(
+        collection,
+        projection.scope_kind,
+        projection.workspace_id,
+        projection.source_kind,
+        projection.resource_type,
+        projection.resource_id,
+        record.chunk_id,
+    )
 
 
 def _tokenize(text: str) -> list[str]:
-    return [token for token in text.lower().replace("\n", " ").split(" ") if token]
-
+    return tokenize_sparse_terms(text)
 
 
 def _string_or_none(value: object) -> str | None:
@@ -608,9 +876,14 @@ def _string_or_none(value: object) -> str | None:
     return str(value)
 
 
-
 def _string_or_empty(value: object) -> str:
     return "" if value is None else str(value)
+
+
+def _int_or_none(value: object) -> int | None:
+    if value is None:
+        return None
+    return int(value)
 
 
 def _record_query_failure(

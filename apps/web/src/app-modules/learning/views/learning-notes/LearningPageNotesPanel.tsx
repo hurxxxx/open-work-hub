@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, LazyMotion, domAnimation, m } from 'motion/react';
 import {
   Archive,
   Check,
@@ -13,22 +13,26 @@ import {
   Pencil,
   X,
 } from 'lucide-react';
-import { BlockEditor, BlockViewer, type BlockContent } from '@ai-do/ui';
+import { BlockEditor, type BlockContent } from '@ai-do/ui';
 import { useTranslation } from 'react-i18next';
 
-import { formatRelativeTime, normalizeTimeZone } from '@/src/platform/time/time-utils';
-import {
-  useLearningPageNoteDetail,
-  useLearningPageNotesList,
-  useMyLearningPageNote,
-} from '../../api/learning-notes-hooks';
-import { LearningNotesApiError } from '../../api/learning-notes-api';
+import { useLearningPageNoteDetail } from '../../api/learning-notes-hooks';
 import type {
   LearningPageNoteDetail,
   LearningPageNoteListItem,
   LearningPageNoteVisibility,
 } from '../../api/types';
-import { LearningImagePreviewSurface } from '../LearningImagePreview';
+import {
+  LearningNoteReadonlyDialog,
+  LearningNoteReadSurface,
+  LearningNoteVisibilityPill,
+} from './LearningNoteReadSurface';
+import {
+  authorInitials,
+  formatLearningNoteRelativeTime,
+  type MyEditorMode,
+} from './learning-page-notes-panel-model';
+import { useLearningPageNotesController } from './useLearningPageNotesController';
 
 export interface LearningPageNotesPanelProps {
   token: string | null;
@@ -38,10 +42,6 @@ export interface LearningPageNotesPanelProps {
   timeZone?: string | null;
 }
 
-type MyEditorMode = 'view' | 'edit';
-
-const EMPTY_BLOCKS: BlockContent = [];
-
 export function LearningPageNotesPanel({
   token,
   courseSlug,
@@ -50,180 +50,80 @@ export function LearningPageNotesPanel({
   timeZone,
 }: LearningPageNotesPanelProps) {
   const { t } = useTranslation('apps');
-  const resolvedTimeZone = normalizeTimeZone(timeZone);
-  const list = useLearningPageNotesList(token, courseSlug, lessonId);
-  const mine = useMyLearningPageNote(token, courseSlug, lessonId);
-
-  const [mode, setMode] = useState<MyEditorMode>('view');
-  const [draftBlocks, setDraftBlocks] = useState<BlockContent>(EMPTY_BLOCKS);
-  const [draftVisibility, setDraftVisibility] = useState<LearningPageNoteVisibility>('private');
-  const [flash, setFlash] = useState<'saved' | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState(false);
-  const draftDirtyRef = useRef(false);
-
-  // When the lesson changes, reset the editor state to avoid draft bleed.
-  useEffect(() => {
-    setMode('view');
-    setDraftBlocks(EMPTY_BLOCKS);
-    setDraftVisibility('private');
-    setActionError(null);
-    setExpanded(false);
-    draftDirtyRef.current = false;
-  }, [lessonId]);
-
-  // Always return to the inline editor when we leave edit mode, so the
-  // next "편집" click starts from a clean small size.
-  useEffect(() => {
-    if (mode === 'view' && expanded) {
-      setExpanded(false);
-    }
-  }, [mode, expanded]);
-
-  // Scroll-lock the page while the editor is in fullscreen.
-  useEffect(() => {
-    if (!expanded || typeof document === 'undefined') return;
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = previous;
-    };
-  }, [expanded]);
-
-  const savedContent = useMemo<BlockContent>(
-    () => (mine.note?.content_blocks ?? []) as BlockContent,
-    [mine.note],
-  );
-
-  const enterEditMode = (startingFromExisting: boolean) => {
-    setDraftBlocks(startingFromExisting ? savedContent : EMPTY_BLOCKS);
-    setDraftVisibility(mine.note?.visibility ?? 'private');
-    draftDirtyRef.current = false;
-    setMode('edit');
-    setActionError(null);
-  };
-
-  const cancelEdit = () => {
-    if (draftDirtyRef.current) {
-      const confirmed =
-        typeof window !== 'undefined'
-          ? window.confirm(t('learning.notesPanel.cancelDirtyConfirm'))
-          : true;
-      if (!confirmed) return;
-    }
-    setMode('view');
-    setDraftBlocks(EMPTY_BLOCKS);
-    draftDirtyRef.current = false;
-    setActionError(null);
-  };
-
-  const saveDraft = async () => {
-    setActionError(null);
-    try {
-      await mine.upsert({
-        course_slug: courseSlug,
-        lesson_id: lessonId,
-        lesson_title: lessonTitle,
-        visibility: draftVisibility,
-        content_blocks: draftBlocks as unknown[],
-      });
-      setMode('view');
-      draftDirtyRef.current = false;
-      setFlash('saved');
-      window.setTimeout(() => setFlash(null), 1800);
-      list.refresh();
-    } catch (caught) {
-      setActionError(
-        caught instanceof LearningNotesApiError
-          ? caught.message
-          : t('learning.notesPanel.saveFailed'),
-      );
-    }
-  };
-
-  const archiveMine = async () => {
-    if (!mine.note) return;
-    const confirmed =
-      typeof window !== 'undefined'
-        ? window.confirm(t('learning.notesPanel.archiveConfirm'))
-        : true;
-    if (!confirmed) return;
-    try {
-      await mine.archive(mine.note.doc_id);
-      list.refresh();
-    } catch (caught) {
-      setActionError(
-        caught instanceof LearningNotesApiError
-          ? caught.message
-          : t('learning.notesPanel.archiveFailed'),
-      );
-    }
-  };
-
-  const busy = list.status === 'loading' || mine.status === 'loading';
+  const controller = useLearningPageNotesController({
+    token,
+    courseSlug,
+    lessonId,
+    lessonTitle,
+    timeZone,
+  });
+  const { list, mine, panelState, savedContent, resolvedTimeZone, actions } =
+    controller;
+  const { mode, draftBlocks, draftVisibility, flash, actionError, expanded } =
+    panelState;
 
   return (
-    <section
-      aria-label={t('learning.notesPanel.pageNotes')}
-      data-testid="learning-page-notes-panel"
-      className="flex flex-col gap-4"
-    >
-      <CompactHeader
-        totalCount={list.items.length}
-        othersCount={list.othersNotes.length}
-        flash={flash}
-      />
+    <LazyMotion features={domAnimation}>
+      <section
+        aria-label={t('learning.notesPanel.pageNotes')}
+        data-testid="learning-page-notes-panel"
+        className="flex flex-col gap-4"
+      >
+        <CompactHeader
+          totalCount={list.items.length}
+          othersCount={list.othersNotes.length}
+          flash={flash}
+        />
 
-      {busy ? (
-        <NotesSkeleton />
-      ) : list.status === 'error' ? (
-        <InlineError message={list.error ?? t('learning.notesPanel.loadFailed')} />
-      ) : null}
+        {controller.busy ? (
+          <NotesSkeleton />
+        ) : list.status === 'error' ? (
+          <InlineError
+            message={list.error ?? t('learning.notesPanel.loadFailed')}
+          />
+        ) : null}
 
-      <MyNoteSlot
-        mode={mode}
-        saving={mine.saving}
-        myNote={mine.note}
-        draftBlocks={draftBlocks}
-        draftVisibility={draftVisibility}
-        actionError={actionError}
-        savedContent={savedContent}
-        expanded={expanded}
-        timeZone={resolvedTimeZone}
-        onEdit={() => enterEditMode(true)}
-        onCreate={() => enterEditMode(false)}
-        onArchive={archiveMine}
-        onCancel={cancelEdit}
-        onSave={saveDraft}
-        onToggleExpanded={() => setExpanded((v) => !v)}
-        onDraftChange={(content) => {
-          setDraftBlocks(content);
-          draftDirtyRef.current = true;
-        }}
-        onVisibilityChange={(v) => {
-          setDraftVisibility(v);
-          draftDirtyRef.current = true;
-        }}
-      />
+        <MyNoteSlot
+          mode={mode}
+          saving={mine.saving}
+          myNote={mine.note}
+          draftBlocks={draftBlocks}
+          draftVisibility={draftVisibility}
+          actionError={actionError}
+          savedContent={savedContent}
+          expanded={expanded}
+          timeZone={resolvedTimeZone}
+          onEdit={() => actions.enterEditMode(true)}
+          onCreate={() => actions.enterEditMode(false)}
+          onArchive={actions.archiveMine}
+          onCancel={actions.cancelEdit}
+          onSave={actions.saveDraft}
+          onToggleExpanded={actions.toggleExpanded}
+          onDraftChange={actions.onDraftChange}
+          onVisibilityChange={actions.onVisibilityChange}
+        />
 
-      {list.othersNotes.length > 0 ? (
-        <div className="flex flex-col gap-1.5">
-          <h3 className="app-text-overline text-app-ink/40">
-            {t('learning.notesPanel.otherLearners', { count: list.othersNotes.length })}
-          </h3>
+        {list.othersNotes.length > 0 ? (
           <div className="flex flex-col gap-1.5">
-            {list.othersNotes.map((item) => (
-              <OthersNoteCard
-                key={item.doc_id}
-                item={item}
-                timeZone={resolvedTimeZone}
-                token={token}
-              />
-            ))}
+            <h3 className="app-text-overline text-app-ink/40">
+              {t('learning.notesPanel.otherLearners', {
+                count: list.othersNotes.length,
+              })}
+            </h3>
+            <div className="flex flex-col gap-1.5">
+              {list.othersNotes.map((item) => (
+                <OthersNoteCard
+                  key={item.doc_id}
+                  item={item}
+                  timeZone={resolvedTimeZone}
+                  token={token}
+                />
+              ))}
+            </div>
           </div>
-        </div>
-      ) : null}
-    </section>
+        ) : null}
+      </section>
+    </LazyMotion>
   );
 }
 
@@ -252,20 +152,20 @@ function CompactHeader({
         {showHint
           ? t('learning.notesPanel.pageNotes')
           : othersCount > 0
-          ? t('learning.notesPanel.pageNotesPublic', { count: othersCount })
-          : t('learning.notesPanel.pageNotes')}
+            ? t('learning.notesPanel.pageNotesPublic', { count: othersCount })
+            : t('learning.notesPanel.pageNotes')}
       </span>
       <AnimatePresence>
         {flash === 'saved' ? (
-          <motion.span
+          <m.span
             key="saved-flash"
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
-            className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400"
+            className="inline-flex items-center gap-1 rounded-full bg-app-success/10 px-2 py-0.5 text-[12px] font-medium text-app-success-text dark:text-app-success-text"
           >
             <Check size={11} /> {t('learning.notesPanel.saved')}
-          </motion.span>
+          </m.span>
         ) : null}
       </AnimatePresence>
     </header>
@@ -376,9 +276,7 @@ function MyNoteViewer({
         className="group relative rounded-lg py-0.5 transition-colors hover:bg-app-surface/40 focus-within:bg-app-surface/40"
         data-testid="learning-page-notes-my-viewer"
       >
-        <LearningImagePreviewSurface className="learning-note-readable learning-note-dense app-markdown prose prose-sm max-w-none dark:prose-invert">
-          <BlockViewer content={savedContent} />
-        </LearningImagePreviewSurface>
+        <LearningNoteReadSurface content={savedContent} />
 
         <div
           className={
@@ -388,7 +286,7 @@ function MyNoteViewer({
           }
           aria-hidden="true"
         >
-          <VisibilityPill visibility={note.visibility} />
+          <LearningNoteVisibilityPill visibility={note.visibility} />
           <IconButton
             label={t('learning.notesPanel.viewLarge')}
             onClick={() => setReading(true)}
@@ -419,7 +317,7 @@ function MyNoteViewer({
       </div>
       {actionError ? <InlineError message={actionError} /> : null}
       {reading ? (
-        <FullscreenReadonlyViewer
+        <LearningNoteReadonlyDialog
           content={savedContent}
           title={t('learning.notesPanel.myNote')}
           subtitle={t('learning.notesPanel.updated', {
@@ -457,31 +355,14 @@ function IconButton({
       title={label}
       data-testid={testId}
       className={
-        'flex h-6 w-6 items-center justify-center rounded-md border border-app-border bg-app-surface text-app-ink/70 shadow-sm transition-colors hover:text-app-ink disabled:cursor-not-allowed disabled:opacity-50 ' +
-        (tone === 'danger' ? 'hover:border-rose-400 hover:text-rose-600' : 'hover:border-app-accent hover:text-app-accent')
+        'flex size-6 items-center justify-center rounded-md border border-app-border bg-app-surface text-app-ink/70 shadow-sm transition-colors hover:text-app-ink disabled:cursor-not-allowed disabled:opacity-50 ' +
+        (tone === 'danger'
+          ? 'hover:border-rose-400 hover:text-app-danger-text'
+          : 'hover:border-app-accent hover:text-app-accent')
       }
     >
       {children}
     </button>
-  );
-}
-
-function VisibilityPill({ visibility }: { visibility: LearningPageNoteVisibility }) {
-  const { t } = useTranslation('apps');
-  const isPublic = visibility === 'public';
-  return (
-    <span
-      aria-label={isPublic ? t('learning.notesPanel.publicNote') : t('learning.notesPanel.privateNote')}
-      title={isPublic ? t('learning.notesPanel.public') : t('learning.notesPanel.private')}
-      className={
-        'flex h-6 w-6 items-center justify-center rounded-md border shadow-sm ' +
-        (isPublic
-          ? 'border-emerald-400/60 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300'
-          : 'border-app-border bg-app-surface text-app-ink/60')
-      }
-    >
-      {isPublic ? <Globe2 size={11} /> : <Lock size={11} />}
-    </span>
   );
 }
 
@@ -528,6 +409,7 @@ function EditForm({
   hasExisting: boolean;
 }) {
   const { t } = useTranslation('apps');
+  const toggleExpandedEvent = useEffectEvent(onToggleExpanded);
   // ESC collapses the fullscreen overlay back to inline edit. Cancel is a
   // distinct action (discards the draft).
   useEffect(() => {
@@ -535,28 +417,41 @@ function EditForm({
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.stopPropagation();
-        onToggleExpanded();
+        toggleExpandedEvent();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [expanded, onToggleExpanded]);
+  }, [expanded, toggleExpandedEvent]);
 
   const toolbar = (
     <div className="flex flex-wrap items-center justify-between gap-2">
       <div className="flex flex-wrap items-center gap-2">
-        <VisibilityToggle value={initialVisibility} onChange={onVisibilityChange} />
+        <VisibilityToggle
+          value={initialVisibility}
+          onChange={onVisibilityChange}
+        />
         <button
           type="button"
           onClick={onToggleExpanded}
-          title={expanded ? t('learning.notesPanel.collapse') : t('learning.notesPanel.viewLarge')}
-          aria-label={expanded ? t('learning.notesPanel.collapse') : t('learning.notesPanel.viewLarge')}
+          title={
+            expanded
+              ? t('learning.notesPanel.collapse')
+              : t('learning.notesPanel.viewLarge')
+          }
+          aria-label={
+            expanded
+              ? t('learning.notesPanel.collapse')
+              : t('learning.notesPanel.viewLarge')
+          }
           data-testid="learning-page-notes-my-expand"
           className="inline-flex items-center gap-1 rounded-full border border-app-border bg-app-surface px-2.5 py-1 text-xs text-app-ink/70 transition-colors hover:border-app-accent hover:text-app-accent"
         >
           {expanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
           <span className="app-text-overline">
-            {expanded ? t('learning.notesPanel.collapse') : t('learning.notesPanel.large')}
+            {expanded
+              ? t('learning.notesPanel.collapse')
+              : t('learning.notesPanel.large')}
           </span>
         </button>
       </div>
@@ -607,7 +502,8 @@ function EditForm({
           className="inline-flex items-center gap-1.5 rounded-full bg-app-accent px-4 py-1 text-xs font-semibold text-app-accent-fg shadow-sm transition-colors hover:bg-app-accent/90 disabled:cursor-not-allowed disabled:opacity-60"
           data-testid="learning-page-notes-my-save"
         >
-          <Check size={12} /> {saving ? t('learning.notesPanel.saving') : t('common:actions.save')}
+          <Check size={12} />{' '}
+          {saving ? t('learning.notesPanel.saving') : t('common:actions.save')}
         </button>
       </div>
     </>
@@ -615,12 +511,12 @@ function EditForm({
 
   if (expanded && typeof document !== 'undefined') {
     return createPortal(
-      <div
-        className="fixed inset-0 z-[9000] flex items-stretch justify-center bg-black/60 backdrop-blur-sm"
-        role="dialog"
+      <dialog
+        open
+        className="fixed inset-0 z-[9000] m-0 flex h-auto max-h-none w-auto max-w-none items-stretch justify-center border-0 bg-black/60 p-0 backdrop-blur-sm"
         aria-label={t('learning.notesPanel.fullscreenEdit')}
       >
-        <motion.div
+        <m.div
           initial={{ opacity: 0, scale: 0.98 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.15 }}
@@ -630,23 +526,23 @@ function EditForm({
           {toolbar}
           {editor}
           {footer}
-        </motion.div>
-      </div>,
+        </m.div>
+      </dialog>,
       document.body,
     );
   }
 
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      className="flex flex-col gap-3 rounded-xl border border-app-accent/40 bg-app-surface p-3 shadow-[0_0_0_3px_rgba(99,102,241,0.08)] lg:p-4"
+      className="flex flex-col gap-3 rounded-xl border border-app-accent/40 bg-app-surface p-3 shadow-[var(--ui-shadow-focus-ring)] lg:p-4"
       data-testid="learning-page-notes-my-editor"
     >
       {toolbar}
       {editor}
       {footer}
-    </motion.div>
+    </m.div>
   );
 }
 
@@ -729,7 +625,10 @@ function OthersNoteCard({
   const { t, i18n } = useTranslation('apps');
   const [open, setOpen] = useState(false);
   const [reading, setReading] = useState(false);
-  const detail = useLearningPageNoteDetail(open ? token : null, open ? item.doc_id : null);
+  const detail = useLearningPageNoteDetail(
+    open ? token : null,
+    open ? item.doc_id : null,
+  );
   const readerContent = (detail.note?.content_blocks ?? []) as BlockContent;
 
   return (
@@ -764,7 +663,7 @@ function OthersNoteCard({
 
       <AnimatePresence initial={false}>
         {open ? (
-          <motion.div
+          <m.div
             key="content"
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
@@ -776,21 +675,25 @@ function OthersNoteCard({
               {detail.status === 'loading' ? (
                 <NotesSkeleton rows={2} />
               ) : detail.status === 'error' ? (
-                <InlineError message={detail.error ?? t('learning.notesPanel.loadNoteFailed')} />
+                <InlineError
+                  message={
+                    detail.error ?? t('learning.notesPanel.loadNoteFailed')
+                  }
+                />
               ) : detail.note ? (
                 <div className="flex flex-col gap-2">
-                  <LearningImagePreviewSurface className="learning-note-readable learning-note-dense app-markdown prose prose-sm max-w-none dark:prose-invert">
-                    <BlockViewer content={readerContent} />
-                  </LearningImagePreviewSurface>
+                  <LearningNoteReadSurface content={readerContent} />
                   <div className="flex justify-end">
                     <button
                       type="button"
                       onClick={() => setReading(true)}
-                      className="inline-flex items-center gap-1 rounded-full border border-app-border bg-app-surface px-2.5 py-1 text-[11px] text-app-ink/70 transition-colors hover:border-app-accent hover:text-app-accent"
+                      className="inline-flex items-center gap-1 rounded-full border border-app-border bg-app-surface px-2.5 py-1 text-[12px] text-app-ink/70 transition-colors hover:border-app-accent hover:text-app-accent"
                       data-testid={`learning-page-notes-other-expand-${item.doc_id}`}
                     >
                       <Maximize2 size={11} />
-                      <span className="app-text-overline">{t('learning.notesPanel.large')}</span>
+                      <span className="app-text-overline">
+                        {t('learning.notesPanel.large')}
+                      </span>
                     </button>
                   </div>
                 </div>
@@ -801,11 +704,11 @@ function OthersNoteCard({
                 </span>
               )}
             </div>
-          </motion.div>
+          </m.div>
         ) : null}
       </AnimatePresence>
       {reading && detail.note ? (
-        <FullscreenReadonlyViewer
+        <LearningNoteReadonlyDialog
           content={readerContent}
           title={item.author_name || t('learning.notesPanel.learner')}
           subtitle={t('learning.notesPanel.updated', {
@@ -820,22 +723,12 @@ function OthersNoteCard({
 }
 
 function AuthorAvatar({ name }: { name: string }) {
-  const initials = useMemo(() => {
-    const trimmed = (name || '').trim();
-    if (!trimmed) return '·';
-    // Take first two characters — handles Korean names cleanly; for Latin
-    // names it ends up with initials like "AB".
-    const parts = trimmed.split(/\s+/);
-    if (parts.length >= 2) {
-      return (parts[0][0] ?? '') + (parts[1][0] ?? '');
-    }
-    return trimmed.slice(0, 2);
-  }, [name]);
+  const initials = useMemo(() => authorInitials(name), [name]);
 
   return (
     <span
       aria-hidden="true"
-      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-app-accent/10 text-[10px] font-semibold uppercase text-app-accent"
+      className="flex size-6 shrink-0 items-center justify-center rounded-full bg-app-accent/10 text-[10px] font-semibold uppercase text-app-accent"
     >
       {initials}
     </span>
@@ -844,90 +737,11 @@ function AuthorAvatar({ name }: { name: string }) {
 
 // -------------------------------------------------------------------- shared
 
-function FullscreenReadonlyViewer({
-  content,
-  title,
-  subtitle,
-  visibility,
-  onClose,
-}: {
-  content: BlockContent;
-  title: string;
-  subtitle?: string;
-  visibility: LearningPageNoteVisibility;
-  onClose: () => void;
-}) {
-  const { t } = useTranslation('apps');
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.stopPropagation();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
-  useEffect(() => {
-    if (typeof document === 'undefined') return;
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = previous;
-    };
-  }, []);
-
-  if (typeof document === 'undefined') return null;
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[9000] flex items-stretch justify-center bg-black/60 backdrop-blur-sm"
-      role="dialog"
-      aria-label={t('learning.notesPanel.readLarge')}
-      onClick={onClose}
-    >
-      <motion.div
-        initial={{ opacity: 0, scale: 0.98 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.15 }}
-        className="m-4 flex w-full max-w-5xl flex-col gap-3 rounded-2xl border border-app-border bg-app-surface p-5 shadow-2xl lg:m-8 lg:p-6"
-        onClick={(event) => event.stopPropagation()}
-        data-testid="learning-page-notes-readonly-viewer"
-      >
-        <header className="flex flex-wrap items-center justify-between gap-2 border-b border-app-border/50 pb-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <VisibilityPill visibility={visibility} />
-            <span className="app-text-control truncate text-app-ink">{title}</span>
-            {subtitle ? (
-              <span className="app-text-meta text-app-ink/45">· {subtitle}</span>
-            ) : null}
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={t('common:actions.close')}
-            title={t('common:actions.close')}
-            className="flex h-8 w-8 items-center justify-center rounded-md border border-app-border bg-app-surface text-app-ink/70 transition-colors hover:border-app-accent hover:text-app-accent"
-          >
-            <X size={14} />
-          </button>
-        </header>
-        <LearningImagePreviewSurface className="learning-note-readable app-markdown prose prose-base max-w-none flex-1 overflow-y-auto pr-2 dark:prose-invert">
-          <BlockViewer content={content} />
-        </LearningImagePreviewSurface>
-      </motion.div>
-    </div>,
-    document.body,
-  );
-}
-
 function NotesSkeleton({ rows = 3 }: { rows?: number }) {
   const { t } = useTranslation('apps');
   return (
-    <div
-      role="status"
+    <output
+      aria-live="polite"
       aria-label={t('learning.notesPanel.loading')}
       className="flex flex-col gap-2"
     >
@@ -938,18 +752,18 @@ function NotesSkeleton({ rows = 3 }: { rows?: number }) {
           style={{ width: `${95 - idx * 15}%` }}
         />
       ))}
-    </div>
+    </output>
   );
 }
 
 function InlineError({ message }: { message: string }) {
   return (
-    <div className="rounded-lg border border-rose-300/60 bg-rose-50/50 p-2 text-xs text-rose-700 dark:border-rose-400/40 dark:bg-rose-500/10 dark:text-rose-200">
+    <div className="rounded-lg border border-app-danger-border bg-app-danger-bg p-2 text-xs text-app-danger-text dark:border-app-danger-border dark:bg-app-danger/10 dark:text-app-danger-text">
       {message}
     </div>
   );
 }
 
 function formatRelative(iso: string, timeZone: string, locale: string): string {
-  return formatRelativeTime(iso, { locale, timeZone });
+  return formatLearningNoteRelativeTime({ iso, locale, timeZone });
 }

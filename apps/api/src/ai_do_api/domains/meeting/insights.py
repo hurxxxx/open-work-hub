@@ -12,8 +12,12 @@ from sqlalchemy import inspect, select
 from sqlalchemy.orm import Session, selectinload
 
 from ai_do_api.core.i18n import localized_http_exception
-from ai_do_api.core.llm import LlmTaskContext, complete_chat
+from ai_do_api.core.llm import LlmTaskContext
 from ai_do_api.core.principal import CallerPrincipal
+from ai_do_api.domains.ai.gateway import (
+    LlmWorkloadContext,
+    execute_llm,
+)
 from ai_do_api.domains.auth.access import record_audit_log
 from ai_do_api.domains.auth.models import User, Workspace
 from ai_do_api.domains.auth.security import new_id
@@ -24,8 +28,8 @@ from ai_do_api.domains.meeting.models import (
     MeetingRecording,
 )
 from ai_do_api.domains.meeting.schemas import MeetingAvailabilityResponse
-from ai_do_api.domains.planner.service import parse_iso_or_date
-from ai_do_api.domains.recording.models import Recording, RecordingContainer
+from ai_do_api.domains.planner.event_time import parse_iso_or_date
+from ai_do_api.domains.recording.models import Recording, RecordingTarget
 
 
 logger = logging.getLogger(__name__)
@@ -117,9 +121,7 @@ def _recording_summary(recording: MeetingRecording | Recording) -> str:
 
 def _meeting_context_block(meeting: Meeting, recording: MeetingRecording | Recording) -> str:
     attendee_names = ", ".join(
-        attendee.user.full_name
-        for attendee in meeting.attendees
-        if attendee.user is not None
+        attendee.user.full_name for attendee in meeting.attendees if attendee.user is not None
     )
     transcript = _recording_transcript(recording)
     summary = _recording_summary(recording)
@@ -134,7 +136,9 @@ def _meeting_context_block(meeting: Meeting, recording: MeetingRecording | Recor
     )
 
 
-def _insight_prompt(insight_type: InsightType, meeting: Meeting, recording: MeetingRecording | Recording) -> list[dict[str, str]]:
+def _insight_prompt(
+    insight_type: InsightType, meeting: Meeting, recording: MeetingRecording | Recording
+) -> list[dict[str, str]]:
     context_block = _meeting_context_block(meeting, recording)
     if insight_type == "action":
         system = (
@@ -176,7 +180,9 @@ def _extract_json_object(text: str) -> str:
     return stripped
 
 
-def _payload_from_candidate(candidate: BaseModel) -> tuple[dict[str, Any], float | None, dict[str, Any] | None]:
+def _payload_from_candidate(
+    candidate: BaseModel,
+) -> tuple[dict[str, Any], float | None, dict[str, Any] | None]:
     payload = candidate.model_dump(mode="json", exclude_none=True)
     confidence = payload.pop("confidence", None)
     source_span = payload.pop("source_span", None)
@@ -205,7 +211,7 @@ def _canonical_recording_tables_available(db: Session) -> bool:
     try:
         inspector = inspect(db.get_bind())
         return inspector.has_table(Recording.__tablename__) and inspector.has_table(
-            RecordingContainer.__tablename__
+            RecordingTarget.__tablename__
         )
     except Exception:  # noqa: BLE001
         return False
@@ -222,23 +228,25 @@ def _latest_canonical_meeting_recording(
         return None
     query = (
         select(Recording)
-        .join(RecordingContainer)
-        .options(selectinload(Recording.containers))
+        .join(RecordingTarget)
+        .options(selectinload(Recording.targets))
         .where(
             Recording.workspace_id == workspace_id,
             Recording.trashed_at.is_(None),
-            RecordingContainer.container_app == "meeting",
-            RecordingContainer.container_type == "meeting",
-            RecordingContainer.container_id == meeting_id,
+            RecordingTarget.target_app == "meeting",
+            RecordingTarget.target_type == "meeting",
+            RecordingTarget.target_id == meeting_id,
         )
-        .order_by(RecordingContainer.sort_order.desc(), Recording.started_at.desc())
+        .order_by(RecordingTarget.sort_order.desc(), Recording.started_at.desc())
     )
     if require_transcript:
         query = query.where(Recording.transcript_text.is_not(None))
     return db.scalar(query)
 
 
-def _load_latest_ready_recording(db: Session, *, meeting_id: str) -> MeetingRecording | Recording | None:
+def _load_latest_ready_recording(
+    db: Session, *, meeting_id: str
+) -> MeetingRecording | Recording | None:
     meeting = db.get(Meeting, meeting_id)
     if meeting is not None:
         recording = _latest_canonical_meeting_recording(
@@ -267,18 +275,20 @@ def _load_ready_recording_context(
 ) -> tuple[MeetingRecording | Recording, str, str | None]:
     if _canonical_recording_tables_available(db):
         recording = db.scalar(
-            select(Recording).where(Recording.id == recording_id).options(selectinload(Recording.containers))
+            select(Recording)
+            .where(Recording.id == recording_id)
+            .options(selectinload(Recording.targets))
         )
         if recording is not None:
-            meeting_container = next(
+            meeting_target = next(
                 (
-                    container
-                    for container in recording.containers
-                    if container.container_app == "meeting" and container.container_type == "meeting"
+                    target
+                    for target in recording.targets
+                    if target.target_app == "meeting" and target.target_type == "meeting"
                 ),
                 None,
             )
-            if meeting_container is None:
+            if meeting_target is None:
                 raise localized_http_exception(
                     status_code=status.HTTP_404_NOT_FOUND,
                     code="meeting.recording_not_found",
@@ -288,7 +298,7 @@ def _load_ready_recording_context(
                     status_code=status.HTTP_409_CONFLICT,
                     code="meeting.recording_summary_unavailable",
                 )
-            return recording, meeting_container.container_id, None
+            return recording, meeting_target.target_id, None
 
     legacy = db.scalar(select(MeetingRecording).where(MeetingRecording.id == recording_id))
     if legacy is None:
@@ -407,7 +417,9 @@ def extract_and_persist_meeting_insights(
         .options(selectinload(Meeting.attendees).selectinload(MeetingAttendee.user))
     )
     if meeting is None:
-        raise localized_http_exception(status_code=status.HTTP_404_NOT_FOUND, code="meeting.not_found")
+        raise localized_http_exception(
+            status_code=status.HTTP_404_NOT_FOUND, code="meeting.not_found"
+        )
 
     created_counts: dict[str, int] = {}
     results: dict[InsightType, list[MeetingInsight]] = {}
@@ -428,20 +440,22 @@ def extract_and_persist_meeting_insights(
             actor_user_id=actor_user_id,
             workspace_id=meeting.workspace_id,
             task_kind=_INSIGHT_TASK_KIND[insight_type],
+            app_id="meeting",
             principal_kind="system" if actor_user_id is None else "user",
             principal_id=actor_user_id,
         )
         try:
-            response, _decision, _config = complete_chat(
-                context,
+            completion = execute_llm(
+                context.task_kind,
+                LlmWorkloadContext.from_task_context(context),
                 db,
                 messages=messages,
                 temperature=0.2,
                 max_tokens=4000,
                 reasoning_effort="none",
                 agent_run_id=created_by_run_id,
-            )
-            raw_content = (response.choices[0].message.content or "").strip()
+            ).completion
+            raw_content = completion.text.strip()
             payload = json.loads(_extract_json_object(raw_content))
             envelope_model = _INSIGHT_ENVELOPE_MODEL[insight_type]
             parsed_envelope = envelope_model.model_validate(payload)

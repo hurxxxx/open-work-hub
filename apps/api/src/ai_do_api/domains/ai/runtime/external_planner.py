@@ -6,22 +6,49 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from ai_do_api.domains.ai.runtime.contracts import RuntimeProfile
+from ai_do_api.domains.ai.runtime.external_capability import (
+    ExternalCapabilityDisabledReason,
+    ExternalCapabilityExecutionDisabledReason,
+    ExternalCapabilityExecutionStatus,
+    ExternalCapabilityRequestStatus,
+    RedactedSummaryField,
+    blocked_external_execution_result,
+    decide_external_capability_request,
+    external_execution_summary_projection,
+    external_request_fields_from_decision,
+    external_request_summary_projection,
+    failed_external_execution_result,
+    gate_mock_external_execution,
+)
 from ai_do_api.domains.ai.runtime.external_egress import ExternalEgressDecision
+from ai_do_api.domains.ai.runtime.external_planner_hints import (
+    external_planner_hint_for_runtime_profile,
+)
 
 
 EXTERNAL_PLANNER_ADAPTER_ID = "external_planner_v0"
 
-ExternalPlannerStatus = Literal["disabled", "ready"]
-ExternalPlannerDisabledReason = Literal[
-    "capability_mismatch",
-    "egress_denied",
-    "sanitized_empty",
-]
-ExternalPlannerExecutionStatus = Literal["disabled", "skipped", "completed", "failed"]
-ExternalPlannerExecutionDisabledReason = Literal[
-    "execution_flag_disabled",
-    "request_not_ready",
-]
+ExternalPlannerStatus = ExternalCapabilityRequestStatus
+ExternalPlannerDisabledReason = ExternalCapabilityDisabledReason
+ExternalPlannerExecutionStatus = ExternalCapabilityExecutionStatus
+ExternalPlannerExecutionDisabledReason = ExternalCapabilityExecutionDisabledReason
+
+_PLANNER_REQUEST_SUMMARY_PROJECTION = external_request_summary_projection(
+    (
+        RedactedSummaryField("message_count", source_attr="messages", codec="count"),
+    )
+)
+_PLANNER_EXECUTION_SUMMARY_PROJECTION = external_execution_summary_projection(
+    (
+        RedactedSummaryField(
+            "planned_agent_count",
+            source_attr="planned_agent_ids",
+            codec="count",
+        ),
+        RedactedSummaryField("intent_hint"),
+        RedactedSummaryField("output_kind_hint"),
+    )
+)
 
 
 class ExternalPlannerRequest(BaseModel):
@@ -80,34 +107,17 @@ def build_external_planner_request(
     runtime_profile: RuntimeProfile,
     agent_ids: list[str],
 ) -> ExternalPlannerRequest:
-    if egress_decision.capability != "planning":
-        return ExternalPlannerRequest(
-            status="disabled",
-            provider=egress_decision.provider,
-            disabled_reason="capability_mismatch",
-            egress_reason=egress_decision.reason,
-        )
-    if not egress_decision.allow_external:
-        return ExternalPlannerRequest(
-            status="disabled",
-            provider=egress_decision.provider,
-            disabled_reason="egress_denied",
-            egress_reason=egress_decision.reason,
-        )
-    sanitized_prompt = egress_decision.sanitized_prompt.strip()
-    if not sanitized_prompt:
-        return ExternalPlannerRequest(
-            status="disabled",
-            provider=egress_decision.provider,
-            disabled_reason="sanitized_empty",
-            egress_reason=egress_decision.reason,
-        )
+    decision = decide_external_capability_request(
+        egress_decision=egress_decision,
+        expected_capability="planning",
+        sanitized_payload=egress_decision.sanitized_prompt,
+    )
+    if decision.status == "disabled":
+        return ExternalPlannerRequest(**external_request_fields_from_decision(decision))
     return ExternalPlannerRequest(
-        status="ready",
-        provider=egress_decision.provider,
-        egress_reason=egress_decision.reason,
+        **external_request_fields_from_decision(decision),
         messages=_planner_messages(
-            sanitized_prompt=sanitized_prompt,
+            sanitized_prompt=decision.sanitized_payload,
             runtime_profile=runtime_profile,
             agent_ids=agent_ids,
         ),
@@ -117,14 +127,7 @@ def build_external_planner_request(
 def summarize_external_planner_request(
     request: ExternalPlannerRequest,
 ) -> dict[str, Any]:
-    return {
-        "adapter_id": request.adapter_id,
-        "status": request.status,
-        "provider": request.provider,
-        "disabled_reason": request.disabled_reason,
-        "egress_reason": request.egress_reason,
-        "message_count": len(request.messages),
-    }
+    return _PLANNER_REQUEST_SUMMARY_PROJECTION.build(request)
 
 
 def execute_mock_external_planner(
@@ -133,32 +136,31 @@ def execute_mock_external_planner(
     execution_enabled: bool,
     force_error_class: str | None = None,
 ) -> ExternalPlannerExecutionResult:
-    if not execution_enabled:
-        return ExternalPlannerExecutionResult(
-            status="disabled",
+    gate = gate_mock_external_execution(
+        execution_enabled=execution_enabled,
+        request_status=request.status,
+    )
+    if not gate.should_execute:
+        return blocked_external_execution_result(
+            ExternalPlannerExecutionResult,
+            gate=gate,
             provider=request.provider,
-            disabled_reason="execution_flag_disabled",
-        )
-    if request.status != "ready":
-        return ExternalPlannerExecutionResult(
-            status="skipped",
-            provider=request.provider,
-            disabled_reason="request_not_ready",
         )
     if force_error_class:
-        return ExternalPlannerExecutionResult(
-            status="failed",
+        return failed_external_execution_result(
+            ExternalPlannerExecutionResult,
             provider=request.provider,
             error_class=force_error_class,
         )
     planner_input = _planner_input_from_request(request)
     runtime_profile = str(planner_input.get("runtime_profile") or "")
+    hint = external_planner_hint_for_runtime_profile(runtime_profile)
     return ExternalPlannerExecutionResult(
         status="completed",
         provider=request.provider,
         planned_agent_ids=_string_list(planner_input.get("available_agent_ids")),
-        intent_hint=_intent_hint(runtime_profile),
-        output_kind_hint=_output_kind_hint(runtime_profile),
+        intent_hint=hint.intent,
+        output_kind_hint=hint.output_kind,
         raw_output_persisted=False,
     )
 
@@ -166,21 +168,7 @@ def execute_mock_external_planner(
 def summarize_external_planner_execution(
     result: ExternalPlannerExecutionResult,
 ) -> dict[str, Any]:
-    return {
-        "adapter_id": result.adapter_id,
-        "execution_provider": result.execution_provider,
-        "status": result.status,
-        "provider": result.provider,
-        "disabled_reason": result.disabled_reason,
-        "planned_agent_count": len(result.planned_agent_ids),
-        "intent_hint": result.intent_hint,
-        "output_kind_hint": result.output_kind_hint,
-        "latency_ms": result.latency_ms,
-        "retry_count": result.retry_count,
-        "error_class": result.error_class,
-        "estimated_cost_microunits": result.estimated_cost_microunits,
-        "raw_output_persisted": result.raw_output_persisted,
-    }
+    return _PLANNER_EXECUTION_SUMMARY_PROJECTION.build(result)
 
 
 def _planner_messages(
@@ -228,22 +216,6 @@ def _string_list(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
     return [item for item in value if isinstance(item, str) and item]
-
-
-def _intent_hint(runtime_profile: str) -> str:
-    if runtime_profile == "grounded_report":
-        return "report"
-    if runtime_profile == "high_risk_action":
-        return "write"
-    return "read"
-
-
-def _output_kind_hint(runtime_profile: str) -> str:
-    if runtime_profile == "grounded_report":
-        return "artifact"
-    if runtime_profile == "high_risk_action":
-        return "approval_preview"
-    return "answer"
 
 
 __all__ = [

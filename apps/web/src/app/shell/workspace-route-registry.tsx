@@ -1,104 +1,51 @@
 import { Route } from 'react-router-dom';
 
-import { aiWorkspaceRoutes } from '@/src/app-modules/ai/routes';
-import { docsGlobalRoutes, docsWorkspaceRoutes } from '@/src/app-modules/docs/routes';
-import { homeWorkspaceRoutes } from '@/src/app-modules/home/routes';
-import { learningWorkspaceRoutes } from '@/src/app-modules/learning/routes';
-import { meetingWorkspaceRoutes } from '@/src/app-modules/meeting/routes';
-import { plannerWorkspaceRoutes } from '@/src/app-modules/planner/routes';
-import { pmsWorkspaceRoutes } from '@/src/app-modules/pms/routes';
-import { recordingWorkspaceRoutes } from '@/src/app-modules/recording';
-import { whiteboardGlobalRoutes, whiteboardWorkspaceRoutes } from '@/src/app-modules/whiteboard/routes';
-import {
-  adminRedirectRoutes,
-  adminSectionRoutes,
-  workspaceSettingsRoute,
-} from '@/src/app-modules/settings/routes';
-import { AdminGate, WorkspaceGate } from './gates';
+import { WorkspaceGate } from './gates';
+import type { WorkspaceRouteDefinition } from './route-types';
 
-export const workspaceRouteDefinitions = [
-  ...homeWorkspaceRoutes,
-  ...aiWorkspaceRoutes,
-  ...pmsWorkspaceRoutes,
-  ...docsWorkspaceRoutes,
-  ...whiteboardWorkspaceRoutes,
-  ...plannerWorkspaceRoutes,
-  ...meetingWorkspaceRoutes,
-  ...recordingWorkspaceRoutes,
-  ...learningWorkspaceRoutes,
-];
+export type ShellWorkspaceRouteDefinition = Omit<
+  WorkspaceRouteDefinition,
+  'appId' | 'bootstrapAppId'
+> & {
+  appId: string;
+  bootstrapAppId?: string;
+};
 
-export const globalRouteDefinitions = [
-  ...docsGlobalRoutes,
-  ...whiteboardGlobalRoutes,
-  workspaceSettingsRoute,
-  ...adminRedirectRoutes,
-  ...adminSectionRoutes,
-];
+export function resolveWorkspaceRouteBootstrapAppId(
+  route: Pick<ShellWorkspaceRouteDefinition, 'appId' | 'bootstrapAppId'>,
+): string {
+  return route.bootstrapAppId ?? route.appId;
+}
 
 export function WorkspaceRouteElements({
   bootstrapAppIds,
   bootstrapError,
   bootstrapLoading,
+  workspaceRoutes = [],
 }: {
   bootstrapAppIds: string[] | null;
   bootstrapError: string | null;
   bootstrapLoading: boolean;
+  workspaceRoutes?: readonly ShellWorkspaceRouteDefinition[];
 }) {
   return (
     <>
-      {workspaceRouteDefinitions.map((route) => (
+      {workspaceRoutes.map((route) => (
         <Route
           key={route.path}
           path={route.path}
-          element={(
+          element={
             <WorkspaceGate
-              appId={route.appId}
+              appId={resolveWorkspaceRouteBootstrapAppId(route)}
               bootstrapAppIds={bootstrapAppIds}
               bootstrapError={bootstrapError}
               bootstrapLoading={bootstrapLoading}
             >
               {route.element}
             </WorkspaceGate>
-          )}
+          }
         />
       ))}
-    </>
-  );
-}
-
-export function AdminSectionRouteElements() {
-  return (
-    <>
-      {adminSectionRoutes.map((route) => (
-        <Route
-          key={route.path}
-          path={route.path}
-          element={(
-            <AdminGate section={route.section}>
-              {route.element}
-            </AdminGate>
-          )}
-        />
-      ))}
-    </>
-  );
-}
-
-export function StaticRouteElements() {
-  return (
-    <>
-      {docsGlobalRoutes.map((route) => (
-        <Route key={route.path} path={route.path} element={route.element} />
-      ))}
-      {whiteboardGlobalRoutes.map((route) => (
-        <Route key={route.path} path={route.path} element={route.element} />
-      ))}
-      <Route path={workspaceSettingsRoute.path} element={workspaceSettingsRoute.element} />
-      {adminRedirectRoutes.map((route) => (
-        <Route key={route.path} path={route.path} element={route.element} />
-      ))}
-      {AdminSectionRouteElements()}
     </>
   );
 }

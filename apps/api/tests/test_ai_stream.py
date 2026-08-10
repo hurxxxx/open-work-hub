@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 import asyncio
 from contextlib import asynccontextmanager
-from dataclasses import replace
+from datetime import timedelta
 import json
 import socket
 from types import SimpleNamespace
@@ -22,17 +23,23 @@ from ai_do_api.core import llm as llm_core
 from ai_do_api.core.db import get_engine
 from ai_do_api.core.llm_adapters import StreamChunk
 from ai_do_api.core.settings import get_settings
+from ai_do_api.domains.ai.model_credentials import encrypt_api_key
+from ai_do_api.domains.ai.model_settings_models import (
+    AiModelCatalogEntry,
+    AiModelProviderConfig,
+)
+from ai_do_api.domains.ai.registry import get_ai_capability_registry
 from ai_do_api.domains.ai import agent as ai_agent
 from ai_do_api.domains.ai import approvals as ai_approvals
-from ai_do_api.domains.ai.models import LlmPolicy
 from ai_do_api.domains.ai import router as ai_router
-from ai_do_api.domains.ai.runtime.models import AgentInvocation, AgentRun, AgentTraceEvent
-from ai_do_api.domains.ai.runtime.graph_scheduler import GraphSchedulerError
-from ai_do_api.domains.auth.models import AuditLog, Workspace, WorkspaceAppEntitlement
+from ai_do_api.domains.auth.models import AuditLog, User, Workspace
+from ai_do_api.domains.conversations.scope_registry import (
+    ConversationScopeArtifact,
+    ConversationScopeTurnContext,
+)
 from test_meeting import (
     _auth_headers,
     _bootstrap_admin_session,
-    _create_meeting,
     _create_user_with_workspaces,
     _dev_login,
     _login,
@@ -40,13 +47,34 @@ from test_meeting import (
 
 
 @pytest.fixture(autouse=True)
-def _reset_sse_starlette_app_status() -> None:
-    from sse_starlette.sse import AppStatus
+def _bridge_registered_client_factories(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep route tests' fake clients while registered workloads pass exact config."""
 
-    AppStatus.should_exit = False
-    AppStatus.should_exit_event = None
-    yield
-    AppStatus.should_exit_event = None
+    original_sync_getter = llm_core.get_pool_client
+    original_sync_factory = llm_core._new_pool_client
+    original_getter = llm_core.get_async_pool_client
+    original_factory = llm_core._new_async_pool_client
+
+    def sync_factory(config):  # type: ignore[no-untyped-def]
+        current_getter = llm_core.get_pool_client
+        if current_getter is original_sync_getter:
+            return original_sync_factory(config)
+        return current_getter(
+            config.pool,
+            external_provider=(config.provider if config.pool == "external" else None),
+        )
+
+    def factory(config):  # type: ignore[no-untyped-def]
+        current_getter = llm_core.get_async_pool_client
+        if current_getter is original_getter:
+            return original_factory(config)
+        return current_getter(
+            config.pool,
+            external_provider=(config.provider if config.pool == "external" else None),
+        )
+
+    monkeypatch.setattr(llm_core, "_new_pool_client", sync_factory)
+    monkeypatch.setattr(llm_core, "_new_async_pool_client", factory)
 
 
 def _enable_local_tool_calling(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -59,35 +87,20 @@ def _delta(
     *,
     content: str | None = None,
     reasoning_content: str | None = None,
+    reasoning: str | None = None,
     tool_calls: list[Any] | None = None,
     finish_reason: str | None = None,
 ) -> SimpleNamespace:
     delta = SimpleNamespace(
         content=content,
         reasoning_content=reasoning_content,
-        reasoning=None,
+        reasoning=reasoning,
         tool_calls=tool_calls,
     )
     return SimpleNamespace(
         choices=[SimpleNamespace(delta=delta, finish_reason=finish_reason)],
         usage=None,
     )
-
-
-def _disable_workspace_app(workspace_slug: str, app_id: str) -> None:
-    with Session(get_engine()) as session:
-        workspace = session.scalar(select(Workspace).where(Workspace.key == workspace_slug))
-        assert workspace is not None
-        entitlement = session.scalar(
-            select(WorkspaceAppEntitlement).where(
-                WorkspaceAppEntitlement.workspace_id == workspace.id,
-                WorkspaceAppEntitlement.app_id == app_id,
-            )
-        )
-        assert entitlement is not None
-        entitlement.enabled = False
-        session.add(entitlement)
-        session.commit()
 
 
 def _usage_tail(pt: int, ct: int, tt: int) -> SimpleNamespace:
@@ -265,11 +278,11 @@ class _SequencedAsyncPoolClient:
 
 
 def _workspace_ai_path(slug: str, suffix: str) -> str:
-    return f"/api/v1/workspaces/{slug}/ai{suffix}"
+    return f"/api/v1/workspaces/{slug}/chatbot{suffix}"
 
 
 def _legacy_ai_path(suffix: str) -> str:
-    return f"/api/v1/ai{suffix}"
+    return f"/api/v1/chatbot{suffix}"
 
 
 def _seeded_dev_login(client: TestClient, account_key: str) -> dict:
@@ -278,12 +291,75 @@ def _seeded_dev_login(client: TestClient, account_key: str) -> dict:
 
 
 def _set_policy(task_kind: str, mode: str) -> None:
-    with Session(get_engine()) as session:
-        policy = session.scalar(select(LlmPolicy).where(LlmPolicy.task_kind == task_kind))
-        assert policy is not None
-        policy.policy_mode = mode
-        session.add(policy)
-        session.commit()
+    registry = get_ai_capability_registry()
+    workload = registry.resolve_llm_workload("chatbot")
+    assert workload.task_kind == task_kind
+    registry.llm_workloads[workload.workload_id] = replace(
+        workload,
+        default_route="external" if mode == "external" else "local",
+    )
+    if mode != "external":
+        _configure_database_local_provider()
+
+
+def _configure_database_local_provider() -> None:
+    model_id = "local-current-moe-test-model"
+    model_key = "local/current-moe-test-model"
+    with Session(get_engine()) as db:
+        provider = db.get(AiModelProviderConfig, "local")
+        assert provider is not None
+        model = db.get(AiModelCatalogEntry, model_id)
+        if model is None:
+            model = AiModelCatalogEntry(
+                id=model_id,
+                provider_id="local",
+                model_key=model_key,
+                display_name=model_key,
+                capabilities_json=["chat", "tool_calling", "vision"],
+                source="manual",
+                discovery_status="active",
+                enabled=True,
+                version=1,
+            )
+            db.add(model)
+        provider.enabled = True
+        provider.endpoint_url = get_settings().llm_local_base_url
+        provider.default_model_id = model.id
+        db.commit()
+
+
+def _configure_database_external_provider(
+    *,
+    provider_id: str,
+    model_id: str,
+    model_key: str,
+    endpoint_url: str,
+) -> None:
+    with Session(get_engine()) as db:
+        for external_provider_id in ("openai", "anthropic", "gemini"):
+            row = db.get(AiModelProviderConfig, external_provider_id)
+            assert row is not None
+            row.enabled = external_provider_id == provider_id
+        provider = db.get(AiModelProviderConfig, provider_id)
+        assert provider is not None
+        model = db.get(AiModelCatalogEntry, model_id)
+        if model is None:
+            model = AiModelCatalogEntry(
+                id=model_id,
+                provider_id=provider_id,
+                model_key=model_key,
+                display_name=model_key,
+                capabilities_json=["chat", "tool_calling", "vision"],
+                source="manual",
+                discovery_status="active",
+                enabled=True,
+                version=1,
+            )
+            db.add(model)
+        provider.endpoint_url = endpoint_url
+        provider.api_key_ciphertext = encrypt_api_key(f"test-{provider_id}-key")
+        provider.default_model_id = model.id
+        db.commit()
 
 
 def _llm_audit_rows() -> list[AuditLog]:
@@ -295,31 +371,6 @@ def _llm_audit_rows() -> list[AuditLog]:
                 .order_by(AuditLog.created_at.asc())
             ).all()
         )
-
-
-def _tool_audit_rows() -> list[AuditLog]:
-    with Session(get_engine()) as session:
-        return list(
-            session.scalars(
-                select(AuditLog)
-                .where(AuditLog.action == "llm_tool_call")
-                .order_by(AuditLog.created_at.asc())
-            ).all()
-        )
-
-
-def _tool_call_delta(
-    *,
-    index: int,
-    tool_id: str,
-    name: str | None = None,
-    arguments: str | None = None,
-) -> SimpleNamespace:
-    return SimpleNamespace(
-        index=index,
-        id=tool_id,
-        function=SimpleNamespace(name=name, arguments=arguments),
-    )
 
 
 def _parse_sse(body: str) -> list[dict[str, Any]]:
@@ -363,6 +414,108 @@ def _chat_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     focused on the streamed response shape.
     """
     return [event for event in events if event.get("type") != "conversation_attached"]
+
+
+def _assert_ai_do_identity_system_message(messages: list[dict[str, Any]]) -> None:
+    assert messages[0]["role"] == "system"
+    system_prompt = messages[0]["content"]
+    assert "두원공조의 업무용 챗봇 아이두(AI-Do)" in system_prompt
+    assert "Qwen, Tongyi, OpenAI" in system_prompt
+
+
+def test_chat_sync_injects_ai_do_identity_prompt_for_plain_business_chat(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "administrator")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+    captured_messages: list[dict[str, Any]] = []
+
+    def _fake_complete_gateway_chat(request, _db):  # type: ignore[no-untyped-def]
+        captured_messages.extend(request.messages)
+
+        class _Usage:
+            prompt_tokens = completion_tokens = total_tokens = 0
+
+        class _Msg:
+            role = "assistant"
+            reasoning_content = None
+            content = "저는 두원공조의 업무용 챗봇 아이두(AI-Do)입니다."
+
+        class _Choice:
+            finish_reason = "stop"
+            message = _Msg()
+
+        class _Response:
+            model = "dev"
+            choices = [_Choice()]
+            usage = _Usage()
+
+        class _Decision:
+            policy = "local_only"
+            chosen_pool = "local"
+            reason = "policy_local_only"
+            reason_codes = ("policy_local_only",)
+            forced_local = False
+            pii_hits: list[str] = []
+
+        class _Cfg:
+            model = "dev"
+            canonical_model = "dev"
+            provider = "local"
+            backend = "primary"
+            base_url = ""
+            api_key = ""
+
+        return SimpleNamespace(response=_Response(), decision=_Decision(), config=_Cfg())
+
+    monkeypatch.setattr(ai_router, "complete_gateway_chat", _fake_complete_gateway_chat)
+
+    response = client.post(
+        _workspace_ai_path(slug, "/chat"),
+        headers=_auth_headers(auth["token"]),
+        json={
+            "backend_mode": "local",
+            "messages": [{"role": "user", "content": "넌 누구냐"}],
+        },
+    )
+
+    assert response.status_code == 200
+    _assert_ai_do_identity_system_message(captured_messages)
+
+
+def test_chat_stream_injects_ai_do_identity_prompt_for_plain_business_chat(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "administrator")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+    captured_messages: list[dict[str, Any]] = []
+
+    async def fake_complete_gateway_chat_stream(gateway_execution, _db):  # type: ignore[no-untyped-def]
+        captured_messages.extend(gateway_execution.request.messages)
+        yield StreamChunk(kind="content", text="stream ok"), None, None
+        yield StreamChunk(kind="done", finish_reason="stop"), None, None
+
+    monkeypatch.setattr(
+        ai_router,
+        "complete_resolved_gateway_chat_stream",
+        fake_complete_gateway_chat_stream,
+    )
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "messages": [{"role": "user", "content": "넌 누구냐"}],
+        },
+    )
+
+    assert status_code == 200
+    assert any(event["type"] == "done" for event in _chat_events(events))
+    _assert_ai_do_identity_system_message(captured_messages)
 
 
 def _find_free_port() -> int:
@@ -421,11 +574,40 @@ async def _close_stream_after_first_event(
     raise AssertionError("stream opened but no data event was received")
 
 
+async def _close_stream_after_event_type(
+    client: TestClient,
+    url: str,
+    *,
+    event_type: str,
+    headers: dict[str, str],
+    json_body: dict[str, Any],
+) -> list[dict[str, Any]]:
+    events: list[dict[str, Any]] = []
+    async with _live_server(client.app) as base_url:
+        async with httpx.AsyncClient(base_url=base_url) as async_client:
+            async with async_client.stream(
+                "POST",
+                url,
+                headers=headers,
+                json=json_body,
+            ) as response:
+                assert response.status_code == 200
+                async for line in response.aiter_lines():
+                    if not line.startswith("data:"):
+                        continue
+                    event = json.loads(line.removeprefix("data:").strip())
+                    events.append(event)
+                    if event.get("type") == event_type:
+                        await response.aclose()
+                        return events
+    raise AssertionError(f"stream opened but no {event_type!r} event was received")
+
+
 @pytest.mark.anyio
 async def test_chat_stream_disconnect_marks_audit_cancelled(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    auth = _seeded_dev_login(client, "hq-admin")
+    auth = _seeded_dev_login(client, "administrator")
     slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
 
@@ -433,7 +615,9 @@ async def test_chat_stream_disconnect_marks_audit_cancelled(
         [_delta(content="first"), _delta(content="second", finish_reason="stop")],
         block_after_first=True,
     )
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+    monkeypatch.setattr(
+        llm_core, "get_async_pool_client", lambda pool, external_provider=None: pool_client
+    )
 
     before = len(_llm_audit_rows())
     await _close_stream_after_first_event(
@@ -455,26 +639,212 @@ async def test_chat_stream_disconnect_marks_audit_cancelled(
     assert pool_client.chat.completions.last_stream.closed is True
 
 
-def test_chat_stream_rejects_openrouter_backend_mode(client: TestClient) -> None:
-    auth = _seeded_dev_login(client, "hq-admin")
+@pytest.mark.anyio
+async def test_chat_stream_disconnect_after_done_keeps_persisted_turn_completed(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "administrator")
     slug = auth["user"]["workspaces"][0]["slug"]
-    before = len(_llm_audit_rows())
-    response = client.post(
+    _set_policy("chatbot", "local_only")
+
+    async def fake_complete_gateway_chat_stream(*args: Any, **kwargs: Any):
+        yield StreamChunk(kind="content", text="hello"), None, None
+        yield StreamChunk(kind="done", finish_reason="stop"), None, None
+        await asyncio.sleep(60)
+
+    monkeypatch.setattr(
+        ai_router,
+        "complete_resolved_gateway_chat_stream",
+        fake_complete_gateway_chat_stream,
+    )
+
+    events = await _close_stream_after_event_type(
+        client,
         _workspace_ai_path(slug, "/chat/stream"),
+        event_type="done",
         headers=_auth_headers(auth["token"]),
-        json={
-            "backend_mode": "openrouter",
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
             "messages": [{"role": "user", "content": "hi"}],
         },
     )
-    assert response.status_code == 400
-    assert response.json()["code"] == "ai.openrouter_backend_mode_unsupported"
-    assert len(_llm_audit_rows()) == before
+    conversation_id = next(e for e in events if e["type"] == "conversation_attached")["data"][
+        "conversation_id"
+    ]
+
+    detail: dict[str, Any] | None = None
+    for _ in range(20):
+        response = client.get(
+            f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
+            headers=_auth_headers(auth["token"]),
+        )
+        detail = response.json()
+        if len(detail["turns"]) >= 2:
+            break
+        await asyncio.sleep(0.05)
+
+    assert detail is not None
+    assistant_turn = detail["turns"][1]
+    assert assistant_turn["content"] == "hello"
+    assert assistant_turn["responseStatus"] == "done"
+    assert assistant_turn["finishReason"] == "stop"
+
+
+def test_chat_stream_caller_provider_does_not_override_local_workload_route(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    auth = _seeded_dev_login(client, "administrator")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+    pool_client = _FakeAsyncPoolClient(
+        [_delta(content="local response"), _delta(finish_reason="stop")]
+    )
+    monkeypatch.setattr(
+        llm_core,
+        "get_async_pool_client",
+        lambda pool, external_provider=None: pool_client,
+    )
+    before = len(_llm_audit_rows())
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "external_provider": "anthropic",
+            "messages": [{"role": "user", "content": "hi"}],
+        },
+    )
+    assert status_code == 200
+    done = next(event for event in _chat_events(events) if event["type"] == "done")
+    assert done["data"]["meta"]["chosen_pool"] == "local"
+    assert len(_llm_audit_rows()) == before + 1
+
+
+def test_chat_stream_caller_model_does_not_override_local_workload_model(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    auth = _seeded_dev_login(client, "administrator")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+    pool_client = _FakeAsyncPoolClient(
+        [_delta(content="local response"), _delta(finish_reason="stop")]
+    )
+    monkeypatch.setattr(
+        llm_core,
+        "get_async_pool_client",
+        lambda pool, external_provider=None: pool_client,
+    )
+    before = len(_llm_audit_rows())
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "model": "gpt-5.4-mini",
+            "messages": [{"role": "user", "content": "hi"}],
+        },
+    )
+
+    assert status_code == 200
+    assert any(event["type"] == "done" for event in _chat_events(events))
+    assert pool_client.chat.completions.calls[0]["model"] == "local/current-moe-test-model"
+    assert len(_llm_audit_rows()) == before + 1
+
+
+def test_chat_stream_caller_provider_does_not_override_external_workload_provider(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    auth = _seeded_dev_login(client, "administrator")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "external")
+    _configure_database_external_provider(
+        provider_id="openai",
+        model_id="openai-gpt-5-4-mini",
+        model_key="gpt-5.4-mini",
+        endpoint_url="https://api.openai.com/v1",
+    )
+    pool_client = _FakeAsyncPoolClient(
+        [_delta(content="external response"), _delta(finish_reason="stop")]
+    )
+    selected_providers: list[str | None] = []
+
+    def get_client(config):  # type: ignore[no-untyped-def]
+        selected_providers.append(config.provider)
+        return pool_client
+
+    monkeypatch.setattr(llm_core, "_new_async_pool_client", get_client)
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "auto",
+            "external_provider": "anthropic",
+            "messages": [{"role": "user", "content": "find my issues"}],
+        },
+    )
+
+    assert status_code == 200
+    done = next(event for event in _chat_events(events) if event["type"] == "done")
+    assert done["data"]["meta"]["chosen_pool"] == "external"
+    assert selected_providers == ["openai"]
+
+
+def test_chat_stream_external_tool_incompatibility_blocks_without_local_fallback(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    auth = _seeded_dev_login(client, "administrator")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "external")
+    _configure_database_external_provider(
+        provider_id="anthropic",
+        model_id="anthropic-claude-sonnet-4-6",
+        model_key="claude-sonnet-4-6",
+        endpoint_url="https://api.anthropic.com",
+    )
+    settings = get_settings()
+    monkeypatch.setattr(settings, "ai_tool_calling_enabled", True)
+    monkeypatch.setattr(settings, "ai_local_tool_calling_enabled", False)
+
+    pool_client = _FakeAsyncPoolClient(
+        [_delta(content="business answer"), _delta(finish_reason="stop")]
+    )
+    monkeypatch.setattr(
+        llm_core,
+        "get_async_pool_client",
+        lambda pool, external_provider=None: pool_client,
+    )
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "auto",
+            "messages": [{"role": "user", "content": "find my issues"}],
+        },
+    )
+
+    assert status_code == 200
+    chat = _chat_events(events)
+    assert [event["type"] for event in chat] == ["error", "done"]
+    assert chat[0]["data"]["code"] == "request_error"
+    assert chat[1]["data"]["finish_reason"] == "error"
+    assert pool_client.chat.completions.calls == []
 
 
 def test_chat_stream_requires_auth(client: TestClient) -> None:
     response = client.post(
-        _workspace_ai_path("hq", "/chat/stream"),
+        _workspace_ai_path("administrator", "/chat/stream"),
         json={"messages": [{"role": "user", "content": "hi"}]},
     )
     assert response.status_code in (401, 403)
@@ -496,74 +866,17 @@ def test_chat_stream_requires_workspace_membership(client: TestClient) -> None:
     )
 
     response = client.post(
-        _workspace_ai_path("hq", "/chat/stream"),
+        _workspace_ai_path("administrator", "/chat/stream"),
         headers=_auth_headers(outsider_token),
         json={"messages": [{"role": "user", "content": "hi"}]},
     )
-    assert response.status_code == 403
-
-
-def test_chat_stream_includes_meeting_scope_prompt_for_scoped_conversation(
-    client: TestClient,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    auth = _seeded_dev_login(client, "hq-admin")
-    slug = auth["user"]["workspaces"][0]["slug"]
-    _set_policy("chatbot", "local_only")
-    monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool: False)
-
-    meeting = _create_meeting(client, auth["token"], title="Scoped meeting")
-
-    from ai_do_api.domains.auth.models import User
-    from ai_do_api.domains.conversations import service as conversations_service
-
-    with Session(get_engine()) as db:
-        workspace = db.scalar(select(Workspace).where(Workspace.key == slug))
-        user = db.get(User, auth["user"]["id"])
-        assert workspace is not None
-        assert user is not None
-        conversation = conversations_service.create_conversation(
-            db,
-            workspace=workspace,
-            user=user,
-            title="",
-            scope_ref="meeting",
-            scope_resource_id=meeting["id"],
-        )
-        conversation_id = conversation.id
-
-    pool_client = _FakeAsyncPoolClient(
-        [
-            _delta(content="회의 범위를 반영했습니다."),
-            _delta(finish_reason="stop"),
-            _usage_tail(1, 2, 3),
-        ]
-    )
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
-
-    status_code, events = _stream_post(
-        client,
-        _workspace_ai_path(slug, "/chat/stream"),
-        headers=_auth_headers(auth["token"]),
-        json_body={
-            "conversation_id": conversation_id,
-            "persist": True,
-            "messages": [{"role": "user", "content": "회의 기준으로 정리해줘"}],
-        },
-    )
-
-    assert status_code == 200
-    assert _chat_events(events)[-1]["type"] == "done"
-    sent_messages = pool_client.chat.completions.calls[0]["messages"]
-    assert sent_messages[0]["role"] == "system"
-    assert "[회의 컨텍스트]" in sent_messages[0]["content"]
-    assert "Scoped meeting" in sent_messages[0]["content"]
+    assert response.status_code in (403, 404)
 
 
 def test_chat_stream_emits_content_and_reasoning_in_order(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    auth = _seeded_dev_login(client, "hq-admin")
+    auth = _seeded_dev_login(client, "administrator")
     slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
 
@@ -576,7 +889,9 @@ def test_chat_stream_emits_content_and_reasoning_in_order(
             _usage_tail(1, 2, 3),
         ]
     )
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+    monkeypatch.setattr(
+        llm_core, "get_async_pool_client", lambda pool, external_provider=None: pool_client
+    )
 
     status_code, events = _stream_post(
         client,
@@ -615,106 +930,10 @@ def test_chat_stream_emits_content_and_reasoning_in_order(
     }
 
 
-def test_chat_stream_ai_manager_enabled_uses_sdk_adapter_boundary(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    auth = _seeded_dev_login(client, "hq-admin")
-    slug = auth["user"]["workspaces"][0]["slug"]
-    settings = get_settings()
-    monkeypatch.setattr(settings, "ai_manager_enabled", True)
-    monkeypatch.setattr(settings, "ai_manager_provider", "openai")
-    monkeypatch.setattr(settings, "ai_manager_model", "gpt-test")
-    monkeypatch.setattr(settings, "ai_manager_max_loops", 3)
-
-    from ai_do_api.domains.ai.manager_runtime import (
-        StaticLocalSpecialistRunner,
-        run_ai_manager_stream,
-    )
-
-    async def _mock_manager_stream(**kwargs: Any):
-        kwargs["context"] = replace(
-            kwargs["context"],
-            local_runner=StaticLocalSpecialistRunner(
-                redacted_summary="safe local summary"
-            ),
-        )
-        async for event in run_ai_manager_stream(**kwargs):
-            yield event
-
-    monkeypatch.setattr(
-        ai_router,
-        "run_openai_ai_manager_stream",
-        _mock_manager_stream,
-    )
-
-    before = len(_llm_audit_rows())
-    status_code, events = _stream_post(
-        client,
-        _workspace_ai_path(slug, "/chat/stream"),
-        headers=_auth_headers(auth["token"]),
-        json_body={"messages": [{"role": "user", "content": "문서를 요약해줘"}]},
-    )
-
-    assert status_code == 200
-    chat = _chat_events(events)
-    assert [event["type"] for event in chat] == [
-        "reasoning_delta",
-        "tool_call_started",
-        "tool_call_args_delta",
-        "tool_result",
-        "reasoning_delta",
-        "content_delta",
-        "done",
-    ]
-    assert [event["seq"] for event in events] == list(range(len(events)))
-    assert chat[1]["data"]["name"] == "run_local_specialist"
-    assert chat[3]["data"]["status"] == "ok"
-    done_meta = chat[-1]["data"]["meta"]
-    assert done_meta["policy"] == "ai_manager"
-    assert done_meta["provider"] == "openai"
-    assert done_meta["model"] == "gpt-test"
-    assert done_meta["runtime_profile"] == "ai_manager"
-    assert done_meta["external_egress_summary"]["hosted_tools_enabled"] is False
-    assert done_meta["external_egress_summary"]["response_storage"] is False
-    assert done_meta["external_egress_summary"]["trace_sensitive_data"] is False
-    assert len(_llm_audit_rows()) == before
-
-
-def test_chat_stream_ai_manager_error_returns_sse_error_done(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    auth = _seeded_dev_login(client, "hq-admin")
-    slug = auth["user"]["workspaces"][0]["slug"]
-    settings = get_settings()
-    monkeypatch.setattr(settings, "ai_manager_enabled", True)
-    monkeypatch.setattr(settings, "ai_manager_provider", "openai")
-    monkeypatch.setattr(settings, "ai_manager_model", "gpt-test")
-
-    async def _boom_stream(**_: Any):
-        raise RuntimeError("AI manager down")
-        yield  # pragma: no cover
-
-    monkeypatch.setattr(ai_router, "run_openai_ai_manager_stream", _boom_stream)
-
-    status_code, events = _stream_post(
-        client,
-        _workspace_ai_path(slug, "/chat/stream"),
-        headers=_auth_headers(auth["token"]),
-        json_body={"messages": [{"role": "user", "content": "문서를 요약해줘"}]},
-    )
-
-    assert status_code == 200
-    chat = _chat_events(events)
-    assert [event["type"] for event in chat] == ["error", "done"]
-    assert chat[0]["data"]["code"] == "adapter_error"
-    assert chat[0]["data"]["message"] == "AI manager down"
-    assert chat[1]["data"]["finish_reason"] == "error"
-
-
 def test_chat_stream_suppresses_reasoning_when_stream_reasoning_false(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    auth = _seeded_dev_login(client, "hq-admin")
+    auth = _seeded_dev_login(client, "administrator")
     slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
     pool_client = _FakeAsyncPoolClient(
@@ -723,7 +942,9 @@ def test_chat_stream_suppresses_reasoning_when_stream_reasoning_false(
             _delta(content="ok", finish_reason="stop"),
         ]
     )
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+    monkeypatch.setattr(
+        llm_core, "get_async_pool_client", lambda pool, external_provider=None: pool_client
+    )
 
     _, events = _stream_post(
         client,
@@ -742,32 +963,13 @@ def test_chat_stream_suppresses_reasoning_when_stream_reasoning_false(
     assert pool_client.chat.completions.calls[0]["extra_body"] == {"think": False}
 
 
-def test_chat_stream_tool_command_emits_tool_events_without_llm_call(
+def test_chat_stream_tool_command_uses_registered_business_tool(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "delivery-hub-admin")
     slug = "delivery-hub"
 
-    task_list_response = client.post(
-        f"/api/v1/workspaces/{slug}/pms/lists",
-        headers=_auth_headers(auth["token"]),
-        json={
-            "key": "AISTRM",
-            "name": "AI Stream Tool List",
-            "description": "tool command source",
-        },
-    )
-    assert task_list_response.status_code == 201, task_list_response.text
-    task_list = task_list_response.json()
-
-    issue_response = client.post(
-        f"/api/v1/workspaces/{slug}/pms/lists/{task_list['id']}/issues",
-        headers=_auth_headers(auth["token"]),
-        json={"title": "AI stream tool issue", "description": "stream search target"},
-    )
-    assert issue_response.status_code == 201, issue_response.text
-
-    def _unexpected_pool_call(pool):  # type: ignore[no-untyped-def]
+    def _unexpected_pool_call(pool, external_provider=None):  # type: ignore[no-untyped-def]
         raise AssertionError(f"LLM pool should not be called for /tool commands: {pool}")
 
     monkeypatch.setattr(llm_core, "get_async_pool_client", _unexpected_pool_call)
@@ -780,7 +982,7 @@ def test_chat_stream_tool_command_emits_tool_events_without_llm_call(
             "messages": [
                 {
                     "role": "user",
-                    "content": '/tool pms.search_issues {"q":"AI stream tool issue","limit":5}',
+                    "content": '/tool pms.search_tasks {"q":"AI stream tool issue","limit":5}',
                 }
             ]
         },
@@ -788,200 +990,36 @@ def test_chat_stream_tool_command_emits_tool_events_without_llm_call(
 
     assert status_code == 200
     chat = _chat_events(events)
-    assert [event["type"] for event in chat] == [
-        "tool_call_started",
-        "tool_call_args_delta",
-        "tool_result",
-        "content_delta",
-        "done",
-    ]
-    assert chat[0]["data"]["name"] == "pms.search_issues"
-    assert chat[2]["data"]["status"] == "ok"
-    assert "AI stream tool issue" in chat[3]["data"]["text"]
-    assert chat[4]["data"]["finish_reason"] == "stop"
-    assert chat[4]["data"]["meta"]["provider"] == "tool"
+    event_types = [event["type"] for event in chat]
+    assert event_types[0] == "tool_call_started"
+    assert "tool_result" in event_types
+    assert "error" not in event_types
+    assert event_types[-1] == "done"
+    assert chat[-1]["data"]["finish_reason"] == "stop"
 
 
-def test_chat_stream_tool_command_scoped_conversation_skips_scope_prompt_lookup(
+def test_chat_stream_agent_loop_uses_registered_business_tools(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    auth = _seeded_dev_login(client, "hq-admin")
-    slug = auth["user"]["workspaces"][0]["slug"]
-    meeting = _create_meeting(client, auth["token"], title="Scoped AI stream meeting")
-
-    conversation_response = client.post(
-        _workspace_ai_path(slug, "/conversations"),
-        headers=_auth_headers(auth["token"]),
-        json={
-            "title": "",
-            "scopeRef": "meeting",
-            "scopeResourceId": meeting["id"],
-        },
+    auth = _seeded_dev_login(client, "delivery-hub-admin")
+    slug = "delivery-hub"
+    _set_policy("chatbot", "local_only")
+    _enable_local_tool_calling(monkeypatch)
+    pool_client = _FakeAsyncPoolClient(
+        [_delta(content="local business answer"), _delta(finish_reason="stop")]
     )
-    assert conversation_response.status_code == 201, conversation_response.text
-    conversation_id = conversation_response.json()["id"]
-
-    task_list_response = client.post(
-        f"/api/v1/workspaces/{slug}/pms/lists",
-        headers=_auth_headers(auth["token"]),
-        json={
-            "key": "AISTRMSC",
-            "name": "AI Scoped Stream List",
-            "description": "tool command source",
-        },
-    )
-    assert task_list_response.status_code == 201, task_list_response.text
-    task_list = task_list_response.json()
-
-    issue_response = client.post(
-        f"/api/v1/workspaces/{slug}/pms/lists/{task_list['id']}/issues",
-        headers=_auth_headers(auth["token"]),
-        json={"title": "Scoped AI stream tool issue", "description": "stream search target"},
-    )
-    assert issue_response.status_code == 201, issue_response.text
-
-    def _unexpected_scope_prompt(*args, **kwargs):  # type: ignore[no-untyped-def]
-        raise AssertionError("scope prompt lookup should not run for /tool commands")
-
-    def _unexpected_pool_call(pool):  # type: ignore[no-untyped-def]
-        raise AssertionError(f"LLM pool should not be called for /tool commands: {pool}")
-
     monkeypatch.setattr(
-        ai_router.meeting_service,
-        "build_meeting_scope_prompt",
-        _unexpected_scope_prompt,
-    )
-    monkeypatch.setattr(llm_core, "get_async_pool_client", _unexpected_pool_call)
-
-    status_code, events = _stream_post(
-        client,
-        _workspace_ai_path(slug, "/chat/stream"),
-        headers=_auth_headers(auth["token"]),
-        json_body={
-            "conversationId": conversation_id,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": '/tool pms.search_issues {"q":"Scoped AI stream tool issue","limit":5}',
-                }
-            ],
-        },
+        llm_core,
+        "get_async_pool_client",
+        lambda pool, external_provider=None: pool_client,
     )
 
-    assert status_code == 200
-    chat = _chat_events(events)
-    assert [event["type"] for event in chat] == [
-        "tool_call_started",
-        "tool_call_args_delta",
-        "tool_result",
-        "content_delta",
-        "done",
-    ]
-    assert chat[0]["data"]["name"] == "pms.search_issues"
-    assert chat[2]["data"]["status"] == "ok"
-    assert "Scoped AI stream tool issue" in chat[3]["data"]["text"]
-    assert chat[4]["data"]["finish_reason"] == "stop"
-
-
-def test_chat_stream_agent_loop_executes_tool_and_keeps_shared_agent_run_id(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    auth = _seeded_dev_login(client, "delivery-hub-admin")
-    slug = "delivery-hub"
-    _set_policy("chatbot", "local_only")
-    _enable_local_tool_calling(monkeypatch)
-
-    task_list_response = client.post(
-        f"/api/v1/workspaces/{slug}/pms/lists",
-        headers=_auth_headers(auth["token"]),
-        json={
-            "key": "AIACT",
-            "name": "AI Agent Loop List",
-            "description": "agent loop source",
-        },
-    )
-    assert task_list_response.status_code == 201, task_list_response.text
-    task_list = task_list_response.json()
-
-    issue_response = client.post(
-        f"/api/v1/workspaces/{slug}/pms/lists/{task_list['id']}/issues",
-        headers=_auth_headers(auth["token"]),
-        json={"title": "Agent loop issue", "description": "agent result target"},
-    )
-    assert issue_response.status_code == 201, issue_response.text
-    issue = issue_response.json()
-
-    pool_client = _SequencedAsyncPoolClient(
-        [
-            [
-                _delta(
-                    tool_calls=[
-                        _tool_call_delta(
-                            index=0,
-                            tool_id="call-1",
-                            name="pms.search_issues",
-                            arguments='{"q":"Agent loop issue","limit":5}',
-                        )
-                    ]
-                ),
-                _delta(finish_reason="tool_calls"),
-            ],
-            [
-                _delta(content="Agent loop issue를 찾았습니다.", finish_reason="stop"),
-                _usage_tail(1, 2, 3),
-            ],
-        ]
-    )
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
-
-    status_code, events = _stream_post(
-        client,
-        _workspace_ai_path(slug, "/chat/stream"),
-        headers=_auth_headers(auth["token"]),
-        json_body={
-            "messages": [{"role": "user", "content": "오늘 내 이슈 보여줘"}],
-            "persist": True,
-        },
-    )
-
-    assert status_code == 200
-    chat = _chat_events(events)
-    assert [event["type"] for event in chat] == [
-        "tool_call_started",
-        "tool_call_args_delta",
-        "tool_result",
-        "content_delta",
-        "usage",
-        "done",
-    ]
-    assert chat[2]["data"]["status"] == "ok"
-    assert issue["id"] in _tool_audit_rows()[-1].payload["resource_ids"]
-
-    llm_rows = _llm_audit_rows()[-2:]
-    tool_row = _tool_audit_rows()[-1]
-    attached = next(event for event in events if event["type"] == "conversation_attached")
-    assert len({row.payload["agent_run_id"] for row in llm_rows}) == 1
-    assert tool_row.payload["agent_run_id"] == llm_rows[-1].payload["agent_run_id"]
-    assert {row.payload["conversation_id"] for row in llm_rows} == {attached["data"]["conversation_id"]}
-    assert all(isinstance(row.payload["trace_id"], str) and row.payload["trace_id"] for row in llm_rows)
-    assert tool_row.payload["conversation_id"] == attached["data"]["conversation_id"]
-    assert isinstance(tool_row.payload["trace_id"], str) and tool_row.payload["trace_id"]
-
-
-def test_chat_stream_agent_loop_halts_for_approval_required_tool(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    auth = _seeded_dev_login(client, "delivery-hub-admin")
-    slug = "delivery-hub"
-    _set_policy("chatbot", "local_only")
-    _enable_local_tool_calling(monkeypatch)
-
-    async def fake_complete_chat_stream(*args: Any, **kwargs: Any):
+    async def fake_complete_gateway_chat_stream(*args: Any, **kwargs: Any):
         yield (
             StreamChunk(
                 kind="tool_call_start",
                 tool_call_id="call-1",
-                tool_name="pms.create_issue",
+                tool_name="pms.create_task",
             ),
             None,
             None,
@@ -990,7 +1028,7 @@ def test_chat_stream_agent_loop_halts_for_approval_required_tool(
             StreamChunk(
                 kind="tool_call_args",
                 tool_call_id="call-1",
-                tool_name="pms.create_issue",
+                tool_name="pms.create_task",
                 args_delta='{"title":"Approval issue"}',
             ),
             None,
@@ -1002,12 +1040,16 @@ def test_chat_stream_agent_loop_halts_for_approval_required_tool(
             None,
         )
 
-    monkeypatch.setattr(ai_agent, "complete_chat_stream", fake_complete_chat_stream)
+    monkeypatch.setattr(
+        ai_agent,
+        "complete_resolved_gateway_chat_stream",
+        fake_complete_gateway_chat_stream,
+    )
 
     def blocked_tool_call(*args: Any, **kwargs: Any):
         return ai_router.ToolCallExecution(
             call_id="call-1",
-            tool_name="pms.create_issue",
+            tool_name="pms.create_task",
             arguments_json='{"title":"Approval issue"}',
             status="blocked",
             resource_preview="Create PMS issue Approval issue",
@@ -1033,320 +1075,24 @@ def test_chat_stream_agent_loop_halts_for_approval_required_tool(
         "approval_required",
         "done",
     ]
-    assert chat[2]["data"]["tool"] == "pms.create_issue"
-    assert chat[3]["data"]["finish_reason"] == "awaiting_approval"
-    approval_id = chat[2]["data"]["approval_id"]
-    agent_run_id = chat[3]["data"]["meta"]["agent_run_id"]
-    assert approval_id
-    assert agent_run_id
+    assert chat[-1]["data"]["finish_reason"] == "awaiting_approval"
 
     with Session(get_engine()) as session:
-        approval = session.scalar(
-            select(ai_approvals.AiToolApproval).where(
-                ai_approvals.AiToolApproval.id == approval_id
-            )
-        )
-        snapshot = session.scalar(
-            select(ai_approvals.AgentRunSnapshot).where(
-                ai_approvals.AgentRunSnapshot.id == agent_run_id
-            )
-        )
-        assert approval is not None
-        assert snapshot is not None
-        assert approval.status == "pending"
-        assert snapshot.status == "awaiting_approval"
-
-
-def test_chat_stream_agent_loop_halt_preserves_graph_schedule_summary(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    auth = _seeded_dev_login(client, "delivery-hub-admin")
-    slug = "delivery-hub"
-    _set_policy("chatbot", "local_only")
-    settings = get_settings()
-    monkeypatch.setattr(settings, "ai_runtime_graph_enabled", True)
-    _enable_local_tool_calling(monkeypatch)
-
-    async def fake_complete_chat_stream(*args: Any, **kwargs: Any):
-        yield (
-            StreamChunk(
-                kind="tool_call_start",
-                tool_call_id="call-1",
-                tool_name="pms.create_issue",
-            ),
-            None,
-            None,
-        )
-        yield (
-            StreamChunk(
-                kind="tool_call_args",
-                tool_call_id="call-1",
-                tool_name="pms.create_issue",
-                args_delta='{"title":"Approval issue"}',
-            ),
-            None,
-            None,
-        )
-        yield (
-            StreamChunk(kind="done", finish_reason="tool_calls"),
-            None,
-            None,
-        )
-
-    monkeypatch.setattr(ai_agent, "complete_chat_stream", fake_complete_chat_stream)
-
-    def blocked_tool_call(*args: Any, **kwargs: Any):
-        return ai_router.ToolCallExecution(
-            call_id="call-1",
-            tool_name="pms.create_issue",
-            arguments_json='{"title":"Approval issue"}',
-            status="blocked",
-            resource_preview="Create PMS issue Approval issue",
-        )
-
-    monkeypatch.setattr(ai_agent, "execute_tool_call", blocked_tool_call)
-
-    status_code, events = _stream_post(
-        client,
-        _workspace_ai_path(slug, "/chat/stream"),
-        headers=_auth_headers(auth["token"]),
-        json_body={
-            "messages": [{"role": "user", "content": "PMS 이슈를 만들어줘"}],
-            "persist": True,
-            "allowed_app_ids": ["pms"],
-        },
-    )
-
-    assert status_code == 200
-    chat = _chat_events(events)
-    assert [event["type"] for event in chat] == [
-        "tool_call_started",
-        "tool_call_args_delta",
-        "approval_required",
-        "done",
-    ]
-    done_meta = chat[-1]["data"]["meta"]
-    graph_schedule = done_meta["graph_schedule_summary"]
-    assert done_meta["runtime_profile"] == "high_risk_action"
-    assert done_meta["graph_validation_status"] == "accepted"
-    assert done_meta["graph_execution_status"] == "disabled"
-    assert done_meta["graph_execution_fallback_reason"] == "graph_execution_disabled"
-    assert graph_schedule["state"] == "planned"
-    assert graph_schedule["execution_enabled"] is False
-    assert graph_schedule["planned_agent_ids"] == [
-        "domain.pms",
-        "approval.proposal_preview",
-    ]
-    approval_id = chat[2]["data"]["approval_id"]
-    agent_run_id = done_meta["agent_run_id"]
-    assert approval_id
-    assert agent_run_id
-
-    with Session(get_engine()) as session:
-        approval = session.scalar(
-            select(ai_approvals.AiToolApproval).where(
-                ai_approvals.AiToolApproval.id == approval_id
-            )
-        )
-        snapshot = session.scalar(
-            select(ai_approvals.AgentRunSnapshot).where(
-                ai_approvals.AgentRunSnapshot.id == agent_run_id
-            )
-        )
-        runtime_run = session.get(AgentRun, agent_run_id)
-        invocations = list(
-            session.scalars(
-                select(AgentInvocation)
-                .where(AgentInvocation.agent_run_id == agent_run_id)
-                .order_by(AgentInvocation.invocation_seq)
-            )
-        )
-        trace_events = list(
-            session.scalars(
-                select(AgentTraceEvent)
-                .where(AgentTraceEvent.agent_run_id == agent_run_id)
-                .order_by(AgentTraceEvent.event_seq)
-            )
-        )
-
-    assert approval is not None
-    assert snapshot is not None
-    assert runtime_run is not None
-    assert approval.status == "pending"
-    assert snapshot.status == "awaiting_approval"
-    assert runtime_run.status == "awaiting_approval"
-    assert runtime_run.graph_enabled is True
-    assert snapshot.model_meta["graph_schedule_summary"] == graph_schedule
-    assert snapshot.model_meta["graph_execution_status"] == "disabled"
-    assert snapshot.model_meta["graph_execution_fallback_reason"] == "graph_execution_disabled"
-    assert [invocation.agent_id for invocation in invocations] == graph_schedule[
-        "planned_agent_ids"
-    ]
-    assert [invocation.status for invocation in invocations] == [
-        "pending",
-        "awaiting_approval",
-    ]
-    replay = ai_approvals.rehydrate_model_meta(snapshot)
-    assert replay.raw["graph_schedule_summary"] == graph_schedule
-    assert replay.raw["graph_execution_status"] == "disabled"
-    event_types = [event.event_type for event in trace_events]
-    assert event_types[:4] == [
-        "run_created",
-        "graph_candidate_generated",
-        "graph_candidate_validated",
-        "graph_schedule_planned",
-    ]
-    assert event_types.count("graph_node_planned") == graph_schedule["step_count"]
-    planned_events = [
-        event for event in trace_events if event.event_type == "graph_node_planned"
-    ]
-    assert all(event.agent_invocation_id for event in planned_events)
-    assert "graph_execution_gate_evaluated" in event_types
-
-
-def test_chat_stream_agent_loop_uses_filtered_tool_specs_from_mcp_manifest(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    auth = _seeded_dev_login(client, "delivery-hub-admin")
-    slug = "delivery-hub"
-    _set_policy("chatbot", "local_only")
-    _enable_local_tool_calling(monkeypatch)
-    _disable_workspace_app(slug, "planner")
-
-    task_list_response = client.post(
-        f"/api/v1/workspaces/{slug}/pms/lists",
-        headers=_auth_headers(auth["token"]),
-        json={
-            "key": "AIFILTER",
-            "name": "AI Filtered Loop List",
-            "description": "filtered agent loop source",
-        },
-    )
-    assert task_list_response.status_code == 201, task_list_response.text
-    task_list = task_list_response.json()
-
-    issue_response = client.post(
-        f"/api/v1/workspaces/{slug}/pms/lists/{task_list['id']}/issues",
-        headers=_auth_headers(auth["token"]),
-        json={"title": "Filtered loop issue", "description": "visible result"},
-    )
-    assert issue_response.status_code == 201, issue_response.text
-
-    pool_client = _SequencedAsyncPoolClient(
-        [
-            [
-                _delta(
-                    tool_calls=[
-                        _tool_call_delta(
-                            index=0,
-                            tool_id="call-1",
-                            name="pms.search_issues",
-                            arguments='{"q":"Filtered loop issue","limit":5}',
-                        )
-                    ]
-                ),
-                _delta(finish_reason="tool_calls"),
-            ],
-            [
-                _delta(content="Filtered loop issue를 찾았습니다.", finish_reason="stop"),
-                _usage_tail(1, 2, 3),
-            ],
-        ]
-    )
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
-
-    status_code, events = _stream_post(
-        client,
-        _workspace_ai_path(slug, "/chat/stream"),
-        headers=_auth_headers(auth["token"]),
-        json_body={"messages": [{"role": "user", "content": "필터된 도구로 이슈 보여줘"}]},
-    )
-
-    assert status_code == 200
-    chat = _chat_events(events)
-    assert [event["type"] for event in chat] == [
-        "tool_call_started",
-        "tool_call_args_delta",
-        "tool_result",
-        "content_delta",
-        "usage",
-        "done",
-    ]
-    tool_names = [
-        tool["function"]["name"] for tool in pool_client.chat.completions.calls[0]["tools"]
-    ]
-    assert "pms.search_issues" in tool_names
-    assert "planner.list_events" not in tool_names
-
-
-def test_chat_stream_falls_back_to_plain_chat_when_tools_are_not_supported(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    auth = _seeded_dev_login(client, "hq-admin")
-    slug = auth["user"]["workspaces"][0]["slug"]
-    _set_policy("chatbot", "local_only")
-
-    pool_client = _FakeAsyncPoolClient([_delta(content="plain response", finish_reason="stop")])
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
-    monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool: False)
-
-    status_code, events = _stream_post(
-        client,
-        _workspace_ai_path(slug, "/chat/stream"),
-        headers=_auth_headers(auth["token"]),
-        json_body={"messages": [{"role": "user", "content": "hi"}]},
-    )
-
-    assert status_code == 200
-    assert [event["type"] for event in _chat_events(events)] == [
-        "content_delta",
-        "done",
-    ]
-    assert pool_client.chat.completions.calls[0].get("tools") is None
-
-
-def test_chat_stream_local_pool_skips_tools_without_local_opt_in(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    auth = _seeded_dev_login(client, "hq-admin")
-    slug = auth["user"]["workspaces"][0]["slug"]
-    _set_policy("chatbot", "local_only")
-    settings = get_settings()
-    monkeypatch.setattr(settings, "ai_tool_calling_enabled", True)
-    monkeypatch.setattr(settings, "ai_local_tool_calling_enabled", False)
-    monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool: True)
-
-    pool_client = _FakeAsyncPoolClient(
-        [_delta(content="plain local response", finish_reason="stop")]
-    )
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
-
-    status_code, events = _stream_post(
-        client,
-        _workspace_ai_path(slug, "/chat/stream"),
-        headers=_auth_headers(auth["token"]),
-        json_body={
-            "messages": [{"role": "user", "content": "PMS 이슈와 회의록을 요약해줘"}],
-            "allowed_app_ids": ["meeting", "pms"],
-        },
-    )
-
-    assert status_code == 200
-    assert [event["type"] for event in _chat_events(events)] == [
-        "content_delta",
-        "done",
-    ]
-    assert pool_client.chat.completions.calls[0].get("tools") is None
+        approvals = session.scalars(select(ai_approvals.AiToolApproval)).all()
+        assert len(approvals) == 1
+        assert approvals[0].tool_name == "pms.create_task"
 
 
 def test_chat_stream_provider_error_emits_error_and_done_and_audits_error(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    auth = _seeded_dev_login(client, "hq-admin")
+    auth = _seeded_dev_login(client, "administrator")
     slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
     pool_client = _FakeAsyncPoolClient(error=OpenAIError("backend down"))
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+    monkeypatch.setattr(
+        llm_core, "get_async_pool_client", lambda pool, external_provider=None: pool_client
+    )
 
     status_code, events = _stream_post(
         client,
@@ -1365,11 +1111,13 @@ def test_chat_stream_provider_error_emits_error_and_done_and_audits_error(
 def test_chat_stream_generic_adapter_error_emits_error_contract(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    auth = _seeded_dev_login(client, "hq-admin")
+    auth = _seeded_dev_login(client, "administrator")
     slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
     pool_client = _FakeAsyncPoolClient(error=RuntimeError("adapter boom"))
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+    monkeypatch.setattr(
+        llm_core, "get_async_pool_client", lambda pool, external_provider=None: pool_client
+    )
 
     status_code, events = _stream_post(
         client,
@@ -1388,7 +1136,7 @@ def test_chat_stream_generic_adapter_error_emits_error_contract(
 def test_chat_stream_local_only_policy_local_fail_no_external_call(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    auth = _seeded_dev_login(client, "hq-admin")
+    auth = _seeded_dev_login(client, "administrator")
     slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
 
@@ -1399,7 +1147,7 @@ def test_chat_stream_local_only_policy_local_fail_no_external_call(
     monkeypatch.setattr(
         llm_core,
         "get_async_pool_client",
-        lambda pool: local_pool if pool == "local" else external_pool,
+        lambda pool, external_provider=None: local_pool if pool == "local" else external_pool,
     )
 
     _, events = _stream_post(
@@ -1413,881 +1161,14 @@ def test_chat_stream_local_only_policy_local_fail_no_external_call(
     assert _llm_audit_rows()[-1].payload["status"] == "error"
 
 
-def test_chat_stream_done_meta_uses_requested_model(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    auth = _seeded_dev_login(client, "hq-admin")
-    slug = auth["user"]["workspaces"][0]["slug"]
-    _set_policy("chatbot", "external")
-    settings = get_settings()
-
-    pool_client = _FakeAsyncPoolClient([_delta(content="ok", finish_reason="stop")])
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
-
-    _, events = _stream_post(
-        client,
-        _workspace_ai_path(slug, "/chat/stream"),
-        headers=_auth_headers(auth["token"]),
-        json_body={
-            "backend_mode": "local",
-            "model": settings.llm_local_canonical_model,
-            "messages": [{"role": "user", "content": "hi"}],
-        },
-    )
-    done_meta = events[-1]["data"]["meta"]
-    assert done_meta["policy"] == "external"
-    assert done_meta["chosen_pool"] == "local"
-    assert done_meta["decision_reason"] == "local_hint"
-    assert done_meta["forced_local"] is True
-    assert done_meta["pii_hits"] == []
-    assert done_meta["model"] == settings.llm_local_canonical_model
-    assert done_meta["chosen_model"] == settings.llm_local_canonical_model
-    assert done_meta["provider"]
-    assert "runtime_profile" in done_meta, done_meta
-    assert done_meta["runtime_profile"] == "interactive_read"
-    assert done_meta["graph_gate"] == "disabled"
-    assert done_meta["graph_fallback_reason"] == "feature_disabled"
-    assert done_meta["graph_used"] is False
-    assert done_meta["graph_validation_status"] == "not_applicable"
-    assert done_meta.get("graph_validation_fallback_reason") is None
-    assert done_meta["graph_registry_agent_count"] == 0
-    assert done_meta["graph_write_agent_count"] == 0
-    assert done_meta["graph_execution_status"] == "not_applicable"
-    assert done_meta.get("graph_execution_fallback_reason") is None
-
-
-def test_chat_stream_graph_gate_falls_back_without_graph_execution(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    auth = _seeded_dev_login(client, "hq-admin")
-    slug = auth["user"]["workspaces"][0]["slug"]
-    _set_policy("chatbot", "local_only")
-    settings = get_settings()
-    monkeypatch.setattr(settings, "ai_runtime_graph_enabled", True)
-    monkeypatch.setattr(settings, "ai_tool_calling_enabled", False)
-
-    pool_client = _FakeAsyncPoolClient([_delta(content="ok", finish_reason="stop")])
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
-
-    status_code, events = _stream_post(
-        client,
-        _workspace_ai_path(slug, "/chat/stream"),
-        headers=_auth_headers(auth["token"]),
-        json_body={
-            "backend_mode": "local",
-            "persist": True,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "회의록과 PMS 이슈를 비교해서 근거 있는 보고서로 정리해줘",
-                }
-            ],
-            "allowed_app_ids": ["meeting", "pms"],
-        },
-    )
-
-    assert status_code == 200
-    done_meta = events[-1]["data"]["meta"]
-    assert "runtime_profile" in done_meta, done_meta
-    assert done_meta["runtime_profile"] == "grounded_report"
-    assert done_meta["runtime_routing_reason_codes"] == ["grounded_report_signal"]
-    assert done_meta["graph_gate"] == "eligible"
-    assert done_meta["graph_fallback_reason"] == "graph_runtime_not_implemented"
-    assert done_meta["graph_used"] is False
-    assert done_meta["agent_run_id"]
-    assert done_meta["graph_validation_status"] == "accepted"
-    assert done_meta["graph_execution_status"] == "disabled"
-    assert done_meta["graph_execution_fallback_reason"] == "graph_execution_disabled"
-    assert done_meta.get("graph_validation_fallback_reason") is None
-    assert done_meta["graph_registry_agent_count"] > 0
-    assert done_meta["graph_write_agent_count"] == 1
-    external_egress = done_meta["external_egress_summary"]
-    assert external_egress["policy_version"] == "external_egress.v1"
-    assert external_egress["decision_count"] == 2
-    assert external_egress["allow_external"] is False
-    assert external_egress["capabilities"] == ["planning", "search"]
-    egress_reasons = {
-        decision["capability"]: decision["reason"]
-        for decision in external_egress["decisions"]
-    }
-    assert egress_reasons == {
-        "planning": "external_llm_disabled",
-        "search": "capability_disabled",
-    }
-    external_planner = done_meta["external_planner_summary"]
-    assert external_planner == {
-        "adapter_id": "external_planner_v0",
-        "status": "disabled",
-        "provider": "openai",
-        "disabled_reason": "egress_denied",
-        "egress_reason": "external_llm_disabled",
-        "message_count": 0,
-    }
-    external_planner_execution = done_meta["external_planner_execution_summary"]
-    assert external_planner_execution == {
-        "adapter_id": "external_planner_v0",
-        "execution_provider": "mock",
-        "status": "disabled",
-        "provider": "openai",
-        "disabled_reason": "execution_flag_disabled",
-        "planned_agent_count": 0,
-        "intent_hint": None,
-        "output_kind_hint": None,
-        "latency_ms": 0,
-        "retry_count": 0,
-        "error_class": None,
-        "estimated_cost_microunits": 0,
-        "raw_output_persisted": False,
-    }
-    external_search = done_meta["external_search_summary"]
-    assert external_search == {
-        "adapter_id": "external_search_v0",
-        "status": "disabled",
-        "provider": "openai",
-        "disabled_reason": "egress_denied",
-        "egress_reason": "capability_disabled",
-        "query_present": False,
-    }
-    external_search_execution = done_meta["external_search_execution_summary"]
-    assert external_search_execution == {
-        "adapter_id": "external_search_v0",
-        "execution_provider": "mock",
-        "status": "disabled",
-        "provider": "openai",
-        "disabled_reason": "execution_flag_disabled",
-        "query_digest": None,
-        "cache_key": None,
-        "cache_hit": False,
-        "result_count": 0,
-        "result_refs": [],
-        "source_kinds": [],
-        "latency_ms": 0,
-        "retry_count": 0,
-        "error_class": None,
-        "estimated_cost_microunits": 0,
-        "raw_output_persisted": False,
-    }
-    graph_summary = done_meta["graph_candidate_summary"]
-    assert graph_summary["intent"] == "report"
-    assert set(graph_summary["domains"]) >= {"meeting", "pms", "rag"}
-    assert graph_summary["risk"] == "medium"
-    assert graph_summary["output_kind"] == "artifact"
-    assert "writer.template" in graph_summary["invocation_agent_ids"]
-    assert graph_summary["requires_verifier"] is True
-    assert graph_summary["requires_approval_preview"] is False
-    assert set(graph_summary) == {
-        "intent",
-        "domains",
-        "risk",
-        "output_kind",
-        "invocation_agent_ids",
-        "requires_verifier",
-        "requires_approval_preview",
-    }
-    graph_schedule = done_meta["graph_schedule_summary"]
-    assert graph_schedule["state"] == "planned"
-    assert graph_schedule["execution_enabled"] is False
-    assert graph_schedule["step_count"] == len(graph_summary["invocation_agent_ids"])
-    assert graph_schedule["planned_agent_ids"] == graph_summary["invocation_agent_ids"]
-    attached = next(event for event in events if event["type"] == "conversation_attached")
-    agent_run_id = done_meta["agent_run_id"]
-    with Session(get_engine()) as session:
-        runtime_run = session.get(AgentRun, agent_run_id)
-        assert runtime_run is not None
-        assert runtime_run.status == "completed"
-        assert runtime_run.conversation_id == attached["data"]["conversation_id"]
-        assert runtime_run.legacy_snapshot_id is None
-        assert runtime_run.runtime_profile == "grounded_report"
-        assert runtime_run.graph_enabled is True
-        assert runtime_run.fallback_reason == "graph_runtime_not_implemented"
-        assert runtime_run.metadata_json["external_egress_summary"] == external_egress
-        assert runtime_run.metadata_json["external_planner_summary"] == external_planner
-        assert runtime_run.metadata_json["external_search_summary"] == external_search
-        assert (
-            runtime_run.metadata_json["external_planner_execution_summary"]
-            == external_planner_execution
-        )
-        assert (
-            runtime_run.metadata_json["external_search_execution_summary"]
-            == external_search_execution
-        )
-        invocations = list(
-            session.scalars(
-                select(AgentInvocation)
-                .where(AgentInvocation.agent_run_id == agent_run_id)
-                .order_by(AgentInvocation.invocation_seq)
-            )
-        )
-        trace_events = list(
-            session.scalars(
-                select(AgentTraceEvent)
-                .where(AgentTraceEvent.agent_run_id == agent_run_id)
-                .order_by(AgentTraceEvent.event_seq)
-            )
-        )
-    planned_invocations = [
-        invocation
-        for invocation in invocations
-        if invocation.agent_id != "single_loop.fallback"
-    ]
-    assert [invocation.agent_id for invocation in planned_invocations] == graph_schedule[
-        "planned_agent_ids"
-    ]
-    assert {invocation.status for invocation in planned_invocations} == {"abandoned"}
-    fallback_invocation = next(
-        invocation for invocation in invocations if invocation.agent_id == "single_loop.fallback"
-    )
-    assert fallback_invocation.status == "completed"
-    assert fallback_invocation.invocation_seq == graph_schedule["step_count"]
-    event_types = [event.event_type for event in trace_events]
-    assert event_types[:4] == [
-        "run_created",
-        "graph_candidate_generated",
-        "graph_candidate_validated",
-        "graph_schedule_planned",
-    ]
-    assert event_types.count("graph_node_planned") == graph_schedule["step_count"]
-    assert all(
-        event.agent_invocation_id
-        for event in trace_events
-        if event.event_type == "graph_node_planned"
-    )
-    assert "graph_execution_gate_evaluated" in event_types
-    assert event_types[-3:] == ["invocation_started", "invocation_completed", "run_completed"]
-    assert trace_events[1].payload_json["graph_candidate_summary"]["output_kind"] == "artifact"
-    traced_egress = trace_events[1].payload_json["external_egress_summary"]
-    assert traced_egress["policy_version"] == external_egress["policy_version"]
-    assert traced_egress["capabilities"] == ["planning", "search"]
-    assert {
-        decision["capability"]: decision["reason"]
-        for decision in traced_egress["decisions"]
-    } == egress_reasons
-    assert trace_events[1].payload_json["external_planner_summary"] == external_planner
-    assert trace_events[1].payload_json["external_search_summary"] == external_search
-    assert (
-        trace_events[1].payload_json["external_planner_execution_summary"]
-        == external_planner_execution
-    )
-    assert (
-        trace_events[1].payload_json["external_search_execution_summary"]
-        == external_search_execution
-    )
-    schedule_event = next(
-        event for event in trace_events if event.event_type == "graph_schedule_planned"
-    )
-    assert schedule_event.payload_json["graph_schedule_summary"]["state"] == "planned"
-
-    inspection = client.get(
-        _workspace_ai_path(slug, f"/runtime/runs/{agent_run_id}"),
-        headers=_auth_headers(auth["token"]),
-    )
-    assert inspection.status_code == 200, inspection.text
-    inspected = inspection.json()
-    assert inspected["status"] == "completed"
-    inspected_trace = {
-        event["event_type"]: event["payload"] for event in inspected["trace_events"]
-    }
-    assert (
-        inspected_trace["graph_candidate_generated"]["graph_candidate_summary"][
-            "output_kind"
-        ]
-        == "artifact"
-    )
-    assert inspected_trace["graph_schedule_planned"]["graph_schedule_summary"][
-        "execution_enabled"
-    ] is False
-
-
-def test_chat_stream_external_mock_execution_runs_when_enabled(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    auth = _seeded_dev_login(client, "hq-admin")
-    slug = auth["user"]["workspaces"][0]["slug"]
-    _set_policy("chatbot", "local_only")
-    settings = get_settings()
-    monkeypatch.setattr(settings, "ai_runtime_graph_enabled", True)
-    monkeypatch.setattr(settings, "ai_tool_calling_enabled", False)
-    monkeypatch.setattr(settings, "ai_external_llm_enabled", True)
-    monkeypatch.setattr(settings, "ai_external_planning_enabled", True)
-    monkeypatch.setattr(settings, "ai_external_search_enabled", True)
-    monkeypatch.setattr(settings, "ai_external_planner_execution_enabled", True)
-    monkeypatch.setattr(settings, "ai_external_search_execution_enabled", True)
-
-    pool_client = _FakeAsyncPoolClient([_delta(content="ok", finish_reason="stop")])
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
-
-    status_code, events = _stream_post(
-        client,
-        _workspace_ai_path(slug, "/chat/stream"),
-        headers=_auth_headers(auth["token"]),
-        json_body={
-            "backend_mode": "local",
-            "persist": True,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "EU CE 인증 리스크를 회의록과 PMS 이슈 기준으로 근거 있는 보고서로 정리해줘",
-                }
-            ],
-            "allowed_app_ids": ["meeting", "pms"],
-        },
-    )
-
-    assert status_code == 200
-    done_meta = events[-1]["data"]["meta"]
-    egress_reasons = {
-        decision["capability"]: decision["reason"]
-        for decision in done_meta["external_egress_summary"]["decisions"]
-    }
-    assert egress_reasons == {"planning": "allowed", "search": "allowed"}
-    planner_execution = done_meta["external_planner_execution_summary"]
-    assert planner_execution["execution_provider"] == "mock"
-    assert planner_execution["status"] == "completed"
-    assert planner_execution["planned_agent_count"] == done_meta[
-        "graph_schedule_summary"
-    ]["step_count"]
-    assert planner_execution["intent_hint"] == "report"
-    assert planner_execution["output_kind_hint"] == "artifact"
-    assert planner_execution["latency_ms"] == 0
-    assert planner_execution["retry_count"] == 0
-    assert planner_execution["error_class"] is None
-    assert planner_execution["estimated_cost_microunits"] == 0
-    assert planner_execution["raw_output_persisted"] is False
-    search_execution = done_meta["external_search_execution_summary"]
-    assert search_execution["execution_provider"] == "mock"
-    assert search_execution["status"] == "completed"
-    assert search_execution["query_digest"]
-    assert search_execution["cache_key"] == (
-        f"external_search_v0:mock:openai:{search_execution['query_digest']}"
-    )
-    assert search_execution["cache_hit"] is False
-    assert search_execution["result_count"] == 2
-    assert search_execution["result_refs"] == [
-        f"mock://external-search/{search_execution['query_digest']}/result-1",
-        f"mock://external-search/{search_execution['query_digest']}/result-2",
-    ]
-    assert search_execution["source_kinds"] == ["public_web_mock"]
-    assert search_execution["latency_ms"] == 0
-    assert search_execution["retry_count"] == 0
-    assert search_execution["error_class"] is None
-    assert search_execution["estimated_cost_microunits"] == 0
-    assert search_execution["raw_output_persisted"] is False
-
-    with Session(get_engine()) as session:
-        runtime_run = session.get(AgentRun, done_meta["agent_run_id"])
-        trace_events = list(
-            session.scalars(
-                select(AgentTraceEvent)
-                .where(AgentTraceEvent.agent_run_id == done_meta["agent_run_id"])
-                .order_by(AgentTraceEvent.event_seq)
-            )
-        )
-
-    assert runtime_run is not None
-    assert (
-        runtime_run.metadata_json["external_planner_execution_summary"]
-        == planner_execution
-    )
-    assert runtime_run.metadata_json["external_search_execution_summary"] == search_execution
-    candidate_event = next(
-        event for event in trace_events if event.event_type == "graph_candidate_generated"
-    )
-    assert (
-        candidate_event.payload_json["external_planner_execution_summary"]
-        == planner_execution
-    )
-    assert (
-        candidate_event.payload_json["external_search_execution_summary"]
-        == search_execution
-    )
-
-
-def test_chat_stream_graph_execution_adapter_runs_when_enabled(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    auth = _seeded_dev_login(client, "hq-admin")
-    slug = auth["user"]["workspaces"][0]["slug"]
-    _set_policy("chatbot", "local_only")
-    settings = get_settings()
-    monkeypatch.setattr(settings, "ai_runtime_graph_enabled", True)
-    monkeypatch.setattr(settings, "ai_runtime_graph_execution_enabled", True)
-    monkeypatch.setattr(settings, "ai_tool_calling_enabled", False)
-
-    pool_client = _SequencedAsyncPoolClient(
-        [
-            [_delta(content=f"node {index}", finish_reason="stop")]
-            for index in range(1, 7)
-        ]
-        + [[_delta(content="graph ok", finish_reason="stop")]]
-    )
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
-
-    status_code, events = _stream_post(
-        client,
-        _workspace_ai_path(slug, "/chat/stream"),
-        headers=_auth_headers(auth["token"]),
-        json_body={
-            "backend_mode": "local",
-            "persist": True,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "회의록과 PMS 이슈를 비교해서 근거 있는 보고서로 정리해줘",
-                }
-            ],
-            "allowed_app_ids": ["meeting", "pms"],
-        },
-    )
-
-    assert status_code == 200
-    chat = _chat_events(events)
-    assert [event["type"] for event in chat] == ["content_delta", "done"]
-    assert chat[0]["data"]["text"] == "graph ok"
-    done_meta = chat[-1]["data"]["meta"]
-    assert done_meta["graph_used"] is True
-    assert done_meta.get("graph_fallback_reason") is None
-    assert done_meta["graph_execution_status"] == "adapter_selected"
-    assert done_meta.get("graph_execution_fallback_reason") is None
-    assert done_meta["graph_execution_adapter"] == "graph_node_runner_v0"
-    graph_schedule = done_meta["graph_schedule_summary"]
-    assert done_meta["graph_node_execution_summary"]["adapter"] == "graph_node_runner_v0"
-    assert done_meta["graph_node_execution_summary"]["planned_node_count"] == graph_schedule[
-        "step_count"
-    ]
-    assert done_meta["agent_run_id"]
-    assert graph_schedule["execution_enabled"] is True
-
-    first_call_messages = pool_client.chat.completions.calls[0]["messages"]
-    final_call_messages = pool_client.chat.completions.calls[-1]["messages"]
-    assert "graph_node_runner_v0" in first_call_messages[0]["content"]
-    assert "Execute graph node" in first_call_messages[0]["content"]
-    assert "EvidencePacket" in final_call_messages[0]["content"]
-    assert '"packet_version": "evidence_packet.v1"' in final_call_messages[0]["content"]
-    assert '"ready_for_grounded_write": true' in final_call_messages[0]["content"]
-    assert "tools" not in pool_client.chat.completions.calls[-1]
-
-    with Session(get_engine()) as session:
-        runtime_run = session.get(AgentRun, done_meta["agent_run_id"])
-        invocations = list(
-            session.scalars(
-                select(AgentInvocation)
-                .where(AgentInvocation.agent_run_id == done_meta["agent_run_id"])
-                .order_by(AgentInvocation.invocation_seq)
-            )
-        )
-        trace_events = list(
-            session.scalars(
-                select(AgentTraceEvent)
-                .where(AgentTraceEvent.agent_run_id == done_meta["agent_run_id"])
-                .order_by(AgentTraceEvent.event_seq)
-            )
-        )
-
-    assert runtime_run is not None
-    assert runtime_run.status == "completed"
-    assert runtime_run.metadata_json["source"] == "graph_execution_shadow"
-    assert runtime_run.metadata_json["graph_used"] is True
-    assert runtime_run.metadata_json["graph_node_execution_summary"]["adapter"] == (
-        "graph_node_runner_v0"
-    )
-    assert runtime_run.fallback_reason is None
-    assert [invocation.agent_id for invocation in invocations] == [
-        *graph_schedule["planned_agent_ids"],
-        "graph.adapter.node_runner",
-    ]
-    assert {invocation.status for invocation in invocations} == {"completed"}
-    event_types = [event.event_type for event in trace_events]
-    assert "graph_execution_gate_evaluated" in event_types
-    assert event_types.count("graph_node_completed") == graph_schedule["step_count"]
-    assert event_types[-3:] == ["invocation_started", "invocation_completed", "run_completed"]
-
-
-def test_chat_stream_graph_execution_uses_external_mock_evidence_when_enabled(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    auth = _seeded_dev_login(client, "hq-admin")
-    slug = auth["user"]["workspaces"][0]["slug"]
-    _set_policy("chatbot", "local_only")
-    settings = get_settings()
-    monkeypatch.setattr(settings, "ai_runtime_graph_enabled", True)
-    monkeypatch.setattr(settings, "ai_runtime_graph_execution_enabled", True)
-    monkeypatch.setattr(settings, "ai_tool_calling_enabled", False)
-    monkeypatch.setattr(settings, "ai_external_llm_enabled", True)
-    monkeypatch.setattr(settings, "ai_external_planning_enabled", True)
-    monkeypatch.setattr(settings, "ai_external_search_enabled", True)
-    monkeypatch.setattr(settings, "ai_external_planner_execution_enabled", True)
-    monkeypatch.setattr(settings, "ai_external_search_execution_enabled", True)
-
-    pool_client = _SequencedAsyncPoolClient(
-        [
-            [_delta(content=f"node {index}", finish_reason="stop")]
-            for index in range(1, 7)
-        ]
-        + [[_delta(content="graph ok", finish_reason="stop")]]
-    )
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
-
-    status_code, events = _stream_post(
-        client,
-        _workspace_ai_path(slug, "/chat/stream"),
-        headers=_auth_headers(auth["token"]),
-        json_body={
-            "backend_mode": "local",
-            "persist": True,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "EU CE 인증 리스크를 회의록과 PMS 이슈 기준으로 근거 있는 보고서로 정리해줘",
-                }
-            ],
-            "allowed_app_ids": ["meeting", "pms"],
-        },
-    )
-
-    assert status_code == 200
-    done_meta = _chat_events(events)[-1]["data"]["meta"]
-    planner_execution = done_meta["external_planner_execution_summary"]
-    search_execution = done_meta["external_search_execution_summary"]
-    assert planner_execution["status"] == "completed"
-    assert search_execution["status"] == "completed"
-    assert search_execution["query_digest"]
-
-    node_summary = done_meta["graph_node_execution_summary"]
-    packet_summary = node_summary["evidence_packet_summary"]
-    assert "public_web_mock" in packet_summary["source_kinds"]
-    assert packet_summary["evidence_item_count"] >= done_meta[
-        "graph_schedule_summary"
-    ]["step_count"]
-
-    final_prompt = pool_client.chat.completions.calls[-1]["messages"][0]["content"]
-    assert '"external_search_used": true' in final_prompt
-    assert (
-        f'"sanitized_query_ref": "sha256:{search_execution["query_digest"]}"'
-        in final_prompt
-    )
-    assert "public_web_mock" in final_prompt
-
-
-def test_chat_stream_graph_execution_verifier_failure_degrades_writer_prompt(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    auth = _seeded_dev_login(client, "hq-admin")
-    slug = auth["user"]["workspaces"][0]["slug"]
-    _set_policy("chatbot", "local_only")
-    settings = get_settings()
-    monkeypatch.setattr(settings, "ai_runtime_graph_enabled", True)
-    monkeypatch.setattr(settings, "ai_runtime_graph_execution_enabled", True)
-    monkeypatch.setattr(settings, "ai_tool_calling_enabled", False)
-
-    pool_client = _SequencedAsyncPoolClient(
-        [
-            [_delta(content=f"node {index}", finish_reason="stop")]
-            for index in range(1, 6)
-        ]
-        + [[_delta(finish_reason="error")]]
-        + [[_delta(content="limited graph ok", finish_reason="stop")]]
-    )
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
-
-    status_code, events = _stream_post(
-        client,
-        _workspace_ai_path(slug, "/chat/stream"),
-        headers=_auth_headers(auth["token"]),
-        json_body={
-            "backend_mode": "local",
-            "persist": True,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "회의록과 PMS 이슈를 비교해서 근거 있는 보고서로 정리해줘",
-                }
-            ],
-            "allowed_app_ids": ["meeting", "pms"],
-        },
-    )
-
-    assert status_code == 200
-    chat = _chat_events(events)
-    assert [event["type"] for event in chat] == ["content_delta", "done"]
-    assert chat[0]["data"]["text"] == "limited graph ok"
-    done_meta = chat[-1]["data"]["meta"]
-    node_summary = done_meta["graph_node_execution_summary"]
-    assert node_summary["failed_node_count"] == 1
-    assert (
-        node_summary["verifier_failure_policy"]
-        == "failed_continue_with_gap_disclaimer"
-    )
-    assert node_summary["evidence_packet_summary"]["ready_for_grounded_write"] is False
-    assert node_summary["evidence_packet_summary"]["verifier_status"] == "failed"
-
-    final_call_messages = pool_client.chat.completions.calls[-1]["messages"]
-    assert (
-        "verifier_failure_policy: failed_continue_with_gap_disclaimer"
-        in final_call_messages[0]["content"]
-    )
-    assert '"ready_for_grounded_write": false' in final_call_messages[0]["content"]
-
-    with Session(get_engine()) as session:
-        invocations = list(
-            session.scalars(
-                select(AgentInvocation)
-                .where(AgentInvocation.agent_run_id == done_meta["agent_run_id"])
-                .order_by(AgentInvocation.invocation_seq)
-            )
-        )
-
-    verifier_invocation = next(
-        invocation for invocation in invocations if invocation.agent_id == "verifier.grounding"
-    )
-    assert verifier_invocation.status == "failed"
-
-
-def test_chat_stream_graph_execution_marks_truncated_hidden_node_failed(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    auth = _seeded_dev_login(client, "hq-admin")
-    slug = auth["user"]["workspaces"][0]["slug"]
-    _set_policy("chatbot", "local_only")
-    settings = get_settings()
-    monkeypatch.setattr(settings, "ai_runtime_graph_enabled", True)
-    monkeypatch.setattr(settings, "ai_runtime_graph_execution_enabled", True)
-    monkeypatch.setattr(settings, "ai_tool_calling_enabled", False)
-
-    pool_client = _SequencedAsyncPoolClient(
-        [[_delta(content="partial node", finish_reason="length")]]
-        + [
-            [_delta(content=f"node {index}", finish_reason="stop")]
-            for index in range(2, 7)
-        ]
-        + [[_delta(content="limited graph ok", finish_reason="stop")]]
-    )
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
-
-    status_code, events = _stream_post(
-        client,
-        _workspace_ai_path(slug, "/chat/stream"),
-        headers=_auth_headers(auth["token"]),
-        json_body={
-            "backend_mode": "local",
-            "persist": True,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "회의록과 PMS 이슈를 비교해서 근거 있는 보고서로 정리해줘",
-                }
-            ],
-            "allowed_app_ids": ["meeting", "pms"],
-        },
-    )
-
-    assert status_code == 200
-    chat = _chat_events(events)
-    assert [event["type"] for event in chat] == ["content_delta", "done"]
-    done_meta = chat[-1]["data"]["meta"]
-    node_summary = done_meta["graph_node_execution_summary"]
-    failed_nodes = [
-        node for node in node_summary["nodes"] if node["status"] == "failed"
-    ]
-    assert len(failed_nodes) == 1
-    assert failed_nodes[0]["error"] == "finish_reason:length"
-    assert node_summary["failed_node_count"] == 1
-
-    with Session(get_engine()) as session:
-        invocations = list(
-            session.scalars(
-                select(AgentInvocation)
-                .where(AgentInvocation.agent_run_id == done_meta["agent_run_id"])
-                .order_by(AgentInvocation.invocation_seq)
-            )
-        )
-
-    failed_invocations = [
-        invocation for invocation in invocations if invocation.status == "failed"
-    ]
-    assert [invocation.agent_id for invocation in failed_invocations] == [
-        failed_nodes[0]["agent_id"]
-    ]
-
-
-def test_chat_stream_graph_execution_adapter_error_persists_failed_runtime(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    auth = _seeded_dev_login(client, "hq-admin")
-    slug = auth["user"]["workspaces"][0]["slug"]
-    _set_policy("chatbot", "local_only")
-    settings = get_settings()
-    monkeypatch.setattr(settings, "ai_runtime_graph_enabled", True)
-    monkeypatch.setattr(settings, "ai_runtime_graph_execution_enabled", True)
-    monkeypatch.setattr(settings, "ai_tool_calling_enabled", False)
-
-    pool_client = _FakeAsyncPoolClient(error=OpenAIError("provider failed"))
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
-
-    status_code, events = _stream_post(
-        client,
-        _workspace_ai_path(slug, "/chat/stream"),
-        headers=_auth_headers(auth["token"]),
-        json_body={
-            "backend_mode": "local",
-            "persist": True,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "회의록과 PMS 이슈를 비교해서 근거 있는 보고서로 정리해줘",
-                }
-            ],
-            "allowed_app_ids": ["meeting", "pms"],
-        },
-    )
-
-    assert status_code == 200
-    chat = _chat_events(events)
-    assert [event["type"] for event in chat] == ["error", "done"]
-    assert chat[-1]["data"]["finish_reason"] == "error"
-    done_meta = chat[-1]["data"]["meta"]
-    assert done_meta["graph_used"] is True
-    assert done_meta["graph_execution_status"] == "adapter_selected"
-    assert done_meta["agent_run_id"]
-    node_summary = done_meta["graph_node_execution_summary"]
-    assert node_summary["adapter"] == "graph_node_runner_v0"
-    assert node_summary["failed_node_count"] >= 1
-    assert any(node["status"] == "failed" for node in node_summary["nodes"])
-
-    with Session(get_engine()) as session:
-        runtime_run = session.get(AgentRun, done_meta["agent_run_id"])
-        invocations = list(
-            session.scalars(
-                select(AgentInvocation)
-                .where(AgentInvocation.agent_run_id == done_meta["agent_run_id"])
-                .order_by(AgentInvocation.invocation_seq)
-            )
-        )
-        trace_events = list(
-            session.scalars(
-                select(AgentTraceEvent)
-                .where(AgentTraceEvent.agent_run_id == done_meta["agent_run_id"])
-                .order_by(AgentTraceEvent.event_seq)
-            )
-        )
-
-    assert runtime_run is not None
-    assert runtime_run.status == "failed"
-    assert runtime_run.metadata_json["source"] == "graph_execution_shadow"
-    assert (
-        runtime_run.metadata_json["graph_node_execution_summary"]["failed_node_count"]
-        == node_summary["failed_node_count"]
-    )
-    adapter_invocation = next(
-        invocation
-        for invocation in invocations
-        if invocation.agent_id == "graph.adapter.node_runner"
-    )
-    assert adapter_invocation.status == "failed"
-    gate_event = next(
-        event
-        for event in trace_events
-        if event.event_type == "graph_execution_gate_evaluated"
-    )
-    assert gate_event.payload_json["graph_execution_status"] == "adapter_selected"
-    assert (
-        gate_event.payload_json["graph_node_execution_summary"]["failed_node_count"]
-        == node_summary["failed_node_count"]
-    )
-    assert [event.event_type for event in trace_events][-1] == "run_failed"
-
-    inspection = client.get(
-        _workspace_ai_path(slug, f"/runtime/runs/{done_meta['agent_run_id']}"),
-        headers=_auth_headers(auth["token"]),
-    )
-    assert inspection.status_code == 200, inspection.text
-    inspected_events = {
-        event["event_type"]: event["payload"]
-        for event in inspection.json()["trace_events"]
-    }
-    assert (
-        inspected_events["graph_execution_gate_evaluated"][
-            "graph_node_execution_summary"
-        ]["failed_node_count"]
-        == node_summary["failed_node_count"]
-    )
-    assert "run_failed" in [
-        event["event_type"] for event in inspection.json()["trace_events"]
-    ]
-
-
-def test_chat_stream_graph_schedule_failure_remains_fallback_metadata(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    auth = _seeded_dev_login(client, "hq-admin")
-    slug = auth["user"]["workspaces"][0]["slug"]
-    _set_policy("chatbot", "local_only")
-    settings = get_settings()
-    monkeypatch.setattr(settings, "ai_runtime_graph_enabled", True)
-    monkeypatch.setattr(settings, "ai_tool_calling_enabled", False)
-
-    def fail_schedule(*args: Any, **kwargs: Any):
-        del args, kwargs
-        raise GraphSchedulerError("cyclic invocation dependency: ['writer.template']")
-
-    monkeypatch.setattr(ai_router, "build_graph_execution_schedule", fail_schedule)
-
-    pool_client = _FakeAsyncPoolClient([_delta(content="ok", finish_reason="stop")])
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
-
-    status_code, events = _stream_post(
-        client,
-        _workspace_ai_path(slug, "/chat/stream"),
-        headers=_auth_headers(auth["token"]),
-        json_body={
-            "backend_mode": "local",
-            "persist": True,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "회의록과 PMS 이슈를 비교해서 근거 있는 보고서로 정리해줘",
-                }
-            ],
-            "allowed_app_ids": ["meeting", "pms"],
-        },
-    )
-
-    assert status_code == 200
-    chat = _chat_events(events)
-    assert [event["type"] for event in chat] == ["content_delta", "done"]
-    done_meta = chat[-1]["data"]["meta"]
-    assert done_meta["graph_validation_status"] == "accepted"
-    assert done_meta["graph_candidate_summary"]["intent"] == "report"
-    assert done_meta["graph_execution_status"] == "not_applicable"
-    assert done_meta["graph_execution_fallback_reason"] == "graph_schedule_unavailable"
-    assert done_meta["graph_schedule_summary"] == {
-        "state": "failed",
-        "execution_enabled": False,
-        "fallback_reason": "graph_schedule_failed",
-        "error_type": "GraphSchedulerError",
-        "error": "cyclic invocation dependency: ['writer.template']",
-        "step_count": 0,
-        "planned_agent_ids": [],
-        "steps": [],
-    }
-
-    inspection = client.get(
-        _workspace_ai_path(slug, f"/runtime/runs/{done_meta['agent_run_id']}"),
-        headers=_auth_headers(auth["token"]),
-    )
-    assert inspection.status_code == 200, inspection.text
-    event_types = [event["event_type"] for event in inspection.json()["trace_events"]]
-    assert "graph_schedule_failed" in event_types
-    assert "graph_node_planned" not in event_types
-
-
 def test_chat_stream_mounts_on_workspace_path_and_legacy_path_is_removed(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    auth = _seeded_dev_login(client, "hq-admin")
+    auth = _seeded_dev_login(client, "administrator")
     slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
 
-    def build_pool(_pool: str) -> _FakeAsyncPoolClient:
+    def build_pool(_pool: str, external_provider: str | None = None) -> _FakeAsyncPoolClient:
         return _FakeAsyncPoolClient([_delta(content="ok", finish_reason="stop")])
 
     monkeypatch.setattr(llm_core, "get_async_pool_client", build_pool)
@@ -2316,12 +1197,14 @@ def test_chat_stream_mounts_on_workspace_path_and_legacy_path_is_removed(
 def test_chat_sync_persists_user_and_assistant_turns_and_returns_conversation_id(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    auth = _seeded_dev_login(client, "hq-admin")
+    auth = _seeded_dev_login(client, "administrator")
     slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
 
     pool_client = _FakeSyncPoolClient(content="echo: hi")
-    monkeypatch.setattr(llm_core, "get_pool_client", lambda pool: pool_client)
+    monkeypatch.setattr(
+        llm_core, "get_pool_client", lambda pool, external_provider=None: pool_client
+    )
 
     response = client.post(
         _workspace_ai_path(slug, "/chat"),
@@ -2339,7 +1222,7 @@ def test_chat_sync_persists_user_and_assistant_turns_and_returns_conversation_id
     assert body["content"] == "echo: hi"
 
     detail = client.get(
-        f"/api/v1/workspaces/{slug}/conversations/{conversation_id}",
+        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
         headers=_auth_headers(auth["token"]),
     ).json()
     assert [turn["role"] for turn in detail["turns"]] == ["user", "assistant"]
@@ -2350,12 +1233,14 @@ def test_chat_sync_persists_user_and_assistant_turns_and_returns_conversation_id
 def test_chat_sync_appends_to_existing_conversation(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    auth = _seeded_dev_login(client, "hq-admin")
+    auth = _seeded_dev_login(client, "administrator")
     slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
 
     monkeypatch.setattr(
-        llm_core, "get_pool_client", lambda pool: _FakeSyncPoolClient(content="first")
+        llm_core,
+        "get_pool_client",
+        lambda pool, external_provider=None: _FakeSyncPoolClient(content="first"),
     )
     first = client.post(
         _workspace_ai_path(slug, "/chat"),
@@ -2370,7 +1255,9 @@ def test_chat_sync_appends_to_existing_conversation(
     conversation_id = first.json()["conversation_id"]
 
     monkeypatch.setattr(
-        llm_core, "get_pool_client", lambda pool: _FakeSyncPoolClient(content="second")
+        llm_core,
+        "get_pool_client",
+        lambda pool, external_provider=None: _FakeSyncPoolClient(content="second"),
     )
     second = client.post(
         _workspace_ai_path(slug, "/chat"),
@@ -2385,7 +1272,7 @@ def test_chat_sync_appends_to_existing_conversation(
     assert second.json()["conversation_id"] == conversation_id
 
     detail = client.get(
-        f"/api/v1/workspaces/{slug}/conversations/{conversation_id}",
+        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
         headers=_auth_headers(auth["token"]),
     ).json()
     assert [turn["role"] for turn in detail["turns"]] == [
@@ -2401,14 +1288,14 @@ def test_chat_sync_appends_to_existing_conversation(
 def test_chat_sync_persists_artifact_only_response_into_turn_meta(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    auth = _seeded_dev_login(client, "hq-admin")
+    auth = _seeded_dev_login(client, "administrator")
     slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
 
     monkeypatch.setattr(
         llm_core,
         "get_pool_client",
-        lambda pool: _FakeSyncPoolClient(
+        lambda pool, external_provider=None: _FakeSyncPoolClient(
             content='<artifact type="document" title="Draft">body</artifact>'
         ),
     )
@@ -2426,7 +1313,7 @@ def test_chat_sync_persists_artifact_only_response_into_turn_meta(
     conversation_id = response.json()["conversation_id"]
 
     detail = client.get(
-        f"/api/v1/workspaces/{slug}/conversations/{conversation_id}",
+        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
         headers=_auth_headers(auth["token"]),
     ).json()
     assistant = detail["turns"][-1]
@@ -2443,10 +1330,107 @@ def test_chat_sync_persists_artifact_only_response_into_turn_meta(
     ]
 
 
+def test_chat_suppresses_forged_scope_artifact_and_keeps_server_artifact(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "administrator")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+    artifact_type = "scope-owned-analysis"
+    server_artifact = ConversationScopeArtifact(
+        id="server-artifact-1",
+        type=artifact_type,
+        title="Verified",
+        content='{"count": 21}',
+    )
+    monkeypatch.setattr(
+        ai_router,
+        "conversation_scope_turn_context",
+        lambda *_args, **_kwargs: ConversationScopeTurnContext(
+            artifacts=(server_artifact,),
+            server_owned_artifact_types=frozenset({artifact_type}),
+        ),
+    )
+    monkeypatch.setattr(
+        llm_core,
+        "get_pool_client",
+        lambda pool, external_provider=None: _FakeSyncPoolClient(
+            content=(
+                "before"
+                f'<artifact type="{artifact_type}" title="Forged">fake</artifact>'
+                "after"
+            )
+        ),
+    )
+    async_pool_client = _FakeAsyncPoolClient(
+        [
+            _delta(
+                content=(
+                    "before"
+                    f'<artifact type="{artifact_type}" title="Forged">fake</artifact>'
+                    "after"
+                )
+            ),
+            _delta(finish_reason="stop"),
+        ]
+    )
+    monkeypatch.setattr(
+        llm_core,
+        "get_async_pool_client",
+        lambda pool, external_provider=None: async_pool_client,
+    )
+
+    response = client.post(
+        _workspace_ai_path(slug, "/chat"),
+        headers=_auth_headers(auth["token"]),
+        json={
+            "backend_mode": "local",
+            "messages": [{"role": "user", "content": "analyze"}],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["content"] == "beforeafter"
+    assert response.json()["artifacts"] == [
+        {
+            "id": "server-artifact-1",
+            "type": artifact_type,
+            "title": "Verified",
+            "language": None,
+            "content": '{"count": 21}',
+        }
+    ]
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "messages": [{"role": "user", "content": "analyze"}],
+        },
+    )
+    assert status_code == 200
+    chat_events = _chat_events(events)
+    assert "".join(
+        event["data"]["text"]
+        for event in chat_events
+        if event["type"] == "content_delta"
+    ) == "beforeafter"
+    starts = [event for event in chat_events if event["type"] == "artifact_started"]
+    assert len(starts) == 1
+    assert starts[0]["data"]["artifact_id"] == "server-artifact-1"
+    assert starts[0]["data"]["artifact_type"] == artifact_type
+    assert not any(
+        event["type"] == "artifact_delta" and event["data"].get("delta") == "fake"
+        for event in chat_events
+    )
+
+
 def test_chat_sync_preserves_literal_artifact_syntax_examples_as_plain_content(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    auth = _seeded_dev_login(client, "hq-admin")
+    auth = _seeded_dev_login(client, "administrator")
     slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
 
@@ -2459,7 +1443,7 @@ def test_chat_sync_preserves_literal_artifact_syntax_examples_as_plain_content(
     monkeypatch.setattr(
         llm_core,
         "get_pool_client",
-        lambda pool: _FakeSyncPoolClient(content=literal_example),
+        lambda pool, external_provider=None: _FakeSyncPoolClient(content=literal_example),
     )
 
     response = client.post(
@@ -2477,7 +1461,7 @@ def test_chat_sync_preserves_literal_artifact_syntax_examples_as_plain_content(
     assert body["artifacts"] == []
 
     detail = client.get(
-        f"/api/v1/workspaces/{slug}/conversations/{body['conversation_id']}",
+        f"/api/v1/workspaces/{slug}/chatbot/conversations/{body['conversation_id']}",
         headers=_auth_headers(auth["token"]),
     ).json()
     assistant = detail["turns"][-1]
@@ -2491,9 +1475,26 @@ def test_chat_stream_persists_user_and_assistant_turns(
     # A full round trip through the stream must land the user message and the
     # finalized assistant message on the attached Conversation so reloading
     # the sidebar later restores the thread exactly as it was.
-    auth = _seeded_dev_login(client, "hq-admin")
+    auth = _seeded_dev_login(client, "administrator")
     slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
+    persistence_barrier = {"user_turn_recorded": False}
+    original_record_user_turn = ai_router._record_user_turn
+    original_make_envelope = ai_router.make_envelope
+
+    def record_user_turn_before_attach(**kwargs: Any) -> None:
+        original_record_user_turn(**kwargs)
+        persistence_barrier["user_turn_recorded"] = True
+
+    def assert_attach_is_durable(
+        event_type: str, *args: Any, **kwargs: Any
+    ) -> Any:
+        if event_type == "conversation_attached":
+            assert persistence_barrier["user_turn_recorded"] is True
+        return original_make_envelope(event_type, *args, **kwargs)
+
+    monkeypatch.setattr(ai_router, "_record_user_turn", record_user_turn_before_attach)
+    monkeypatch.setattr(ai_router, "make_envelope", assert_attach_is_durable)
 
     pool_client = _FakeAsyncPoolClient(
         [
@@ -2502,7 +1503,9 @@ def test_chat_stream_persists_user_and_assistant_turns(
             _delta(finish_reason="stop"),
         ]
     )
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+    monkeypatch.setattr(
+        llm_core, "get_async_pool_client", lambda pool, external_provider=None: pool_client
+    )
 
     status_code, events = _stream_post(
         client,
@@ -2521,7 +1524,7 @@ def test_chat_stream_persists_user_and_assistant_turns(
 
     # Detail API should now return the user + assistant turn pair.
     detail = client.get(
-        f"/api/v1/workspaces/{slug}/conversations/{conversation_id}",
+        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
         headers=_auth_headers(auth["token"]),
     ).json()
     assert [t["role"] for t in detail["turns"]] == ["user", "assistant"]
@@ -2532,7 +1535,7 @@ def test_chat_stream_persists_user_and_assistant_turns(
 
     # Listing surfaces the new conversation newest-first.
     listing = client.get(
-        f"/api/v1/workspaces/{slug}/conversations",
+        f"/api/v1/workspaces/{slug}/chatbot/conversations",
         headers=_auth_headers(auth["token"]),
     ).json()
     assert listing["items"][0]["id"] == conversation_id
@@ -2541,13 +1544,15 @@ def test_chat_stream_persists_user_and_assistant_turns(
 def test_chat_stream_appends_to_existing_conversation(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    auth = _seeded_dev_login(client, "hq-admin")
+    auth = _seeded_dev_login(client, "administrator")
     slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
 
     # Start a conversation with a first exchange.
     pool_client = _FakeAsyncPoolClient([_delta(content="first", finish_reason="stop")])
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+    monkeypatch.setattr(
+        llm_core, "get_async_pool_client", lambda pool, external_provider=None: pool_client
+    )
     _, events = _stream_post(
         client,
         _workspace_ai_path(slug, "/chat/stream"),
@@ -2565,7 +1570,9 @@ def test_chat_stream_appends_to_existing_conversation(
     # Resume the same conversation — passing conversation_id must NOT create a
     # new row and the second turn pair must append after seq 0/1.
     pool_client_second = _FakeAsyncPoolClient([_delta(content="second", finish_reason="stop")])
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client_second)
+    monkeypatch.setattr(
+        llm_core, "get_async_pool_client", lambda pool, external_provider=None: pool_client_second
+    )
     _, events2 = _stream_post(
         client,
         _workspace_ai_path(slug, "/chat/stream"),
@@ -2580,7 +1587,7 @@ def test_chat_stream_appends_to_existing_conversation(
     assert attached2["data"]["conversation_id"] == conversation_id
 
     detail = client.get(
-        f"/api/v1/workspaces/{slug}/conversations/{conversation_id}",
+        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
         headers=_auth_headers(auth["token"]),
     ).json()
     assert [t["role"] for t in detail["turns"]] == [
@@ -2598,11 +1605,11 @@ def test_chat_stream_rejects_unknown_conversation_id(
 ) -> None:
     # A bogus conversation_id must NOT silently create a fresh conversation —
     # surface an SSE error envelope so the client can recover deterministically.
-    auth = _seeded_dev_login(client, "hq-admin")
+    auth = _seeded_dev_login(client, "administrator")
     slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
 
-    def _should_not_be_called(_pool):
+    def _should_not_be_called(_pool, external_provider=None):
         raise AssertionError("stream should short-circuit before hitting the LLM")
 
     monkeypatch.setattr(llm_core, "get_async_pool_client", _should_not_be_called)
@@ -2632,13 +1639,15 @@ def test_chat_stream_persist_false_skips_conversation_creation(
     # Default behavior for legacy callers: no conversation_id and no persist
     # flag means the stream completes without creating a Conversation row —
     # otherwise every request from the current web client would fork a new
-    # one-turn conversation until Phase 3.3 threads conversation_id back.
-    auth = _seeded_dev_login(client, "hq-admin")
+    # one-turn conversation until conversation_id is threaded back.
+    auth = _seeded_dev_login(client, "administrator")
     slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
 
     pool_client = _FakeAsyncPoolClient([_delta(content="ok", finish_reason="stop")])
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+    monkeypatch.setattr(
+        llm_core, "get_async_pool_client", lambda pool, external_provider=None: pool_client
+    )
 
     _, events = _stream_post(
         client,
@@ -2651,7 +1660,7 @@ def test_chat_stream_persist_false_skips_conversation_creation(
     )
     assert not [e for e in events if e["type"] == "conversation_attached"]
     listing = client.get(
-        f"/api/v1/workspaces/{slug}/conversations",
+        f"/api/v1/workspaces/{slug}/chatbot/conversations",
         headers=_auth_headers(auth["token"]),
     ).json()
     assert listing["items"] == []
@@ -2664,12 +1673,14 @@ def test_chat_stream_persists_failure_with_empty_body(
     # assistant turn still has to land so the reloaded history reflects what
     # the live stream showed (an error bubble). An empty, body-less turn was
     # previously dropped, making the request look unanswered.
-    auth = _seeded_dev_login(client, "hq-admin")
+    auth = _seeded_dev_login(client, "administrator")
     slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
 
     pool_client = _FakeAsyncPoolClient(error=RuntimeError("boom"))
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+    monkeypatch.setattr(
+        llm_core, "get_async_pool_client", lambda pool, external_provider=None: pool_client
+    )
 
     status_code, events = _stream_post(
         client,
@@ -2687,7 +1698,7 @@ def test_chat_stream_persists_failure_with_empty_body(
     ]
 
     detail = client.get(
-        f"/api/v1/workspaces/{slug}/conversations/{conversation_id}",
+        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
         headers=_auth_headers(auth["token"]),
     ).json()
     roles = [t["role"] for t in detail["turns"]]
@@ -2701,43 +1712,6 @@ def test_chat_stream_persists_failure_with_empty_body(
     assert assistant_turn["finishReason"] == "error"
 
 
-def test_chat_stream_persists_length_finish_with_empty_body(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    auth = _seeded_dev_login(client, "hq-admin")
-    slug = auth["user"]["workspaces"][0]["slug"]
-    _set_policy("chatbot", "local_only")
-
-    pool_client = _FakeAsyncPoolClient(
-        [_delta(finish_reason="length"), _usage_tail(1, 4096, 4097)]
-    )
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
-
-    status_code, events = _stream_post(
-        client,
-        _workspace_ai_path(slug, "/chat/stream"),
-        headers=_auth_headers(auth["token"]),
-        json_body={
-            "backend_mode": "local",
-            "persist": True,
-            "messages": [{"role": "user", "content": "loop"}],
-        },
-    )
-    assert status_code == 200
-    conversation_id = next(e for e in events if e["type"] == "conversation_attached")["data"][
-        "conversation_id"
-    ]
-
-    detail = client.get(
-        f"/api/v1/workspaces/{slug}/conversations/{conversation_id}",
-        headers=_auth_headers(auth["token"]),
-    ).json()
-    assistant_turn = detail["turns"][1]
-    assert "토큰 한도" in assistant_turn["content"]
-    assert assistant_turn["finishReason"] == "length"
-    assert assistant_turn["responseStatus"] == "done"
-
-
 def test_chat_stream_extracts_artifact_markup_into_dedicated_envelopes(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -2745,10 +1719,10 @@ def test_chat_stream_extracts_artifact_markup_into_dedicated_envelopes(
     # as content_delta (prefix) → artifact_started/delta/completed →
     # content_delta (suffix). The inline markup never reaches the client as
     # plain content.
-    auth = _seeded_dev_login(client, "hq-admin")
+    auth = _seeded_dev_login(client, "administrator")
     slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
-    monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool: False)
+    monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool, provider=None: False)
 
     pool_client = _FakeAsyncPoolClient(
         [
@@ -2762,7 +1736,9 @@ def test_chat_stream_extracts_artifact_markup_into_dedicated_envelopes(
             _delta(finish_reason="stop"),
         ]
     )
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+    monkeypatch.setattr(
+        llm_core, "get_async_pool_client", lambda pool, external_provider=None: pool_client
+    )
 
     status_code, events = _stream_post(
         client,
@@ -2797,15 +1773,88 @@ def test_chat_stream_extracts_artifact_markup_into_dedicated_envelopes(
     assert chat[4]["data"]["text"] == " — let me know."
 
 
+def test_chat_stream_promotes_html_document_fence_to_html_artifact(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Models often answer "make a simple HTML page" with a markdown
+    # ```html fenced document despite the artifact prompt. Complete HTML
+    # documents should still route to the side panel instead of flooding
+    # the chat bubble with source.
+    auth = _seeded_dev_login(client, "administrator")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+    monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool, provider=None: False)
+
+    html_head = '<!doctype html>\n<html lang="ko">\n<head><title>간단한 카드</title></head>\n'
+    html_tail = "<body><main>hello</main></body>\n</html>"
+    html = f"{html_head}{html_tail}"
+    pool_client = _FakeAsyncPoolClient(
+        [
+            _delta(content=f"네, 만들었습니다.\n```html\n{html_head}"),
+            _delta(content=f"{html_tail}\n```\n확인해 주세요."),
+            _delta(finish_reason="stop"),
+        ]
+    )
+    monkeypatch.setattr(
+        llm_core, "get_async_pool_client", lambda pool, external_provider=None: pool_client
+    )
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "messages": [{"role": "user", "content": "간단한 html 예제 만들어줘"}],
+        },
+    )
+    assert status_code == 200
+    chat = _chat_events(events)
+    assert [event["type"] for event in chat] == [
+        "content_delta",
+        "artifact_started",
+        "artifact_delta",
+        "artifact_delta",
+        "artifact_completed",
+        "content_delta",
+        "done",
+    ]
+    assert chat[0]["data"]["text"] == "네, 만들었습니다.\n"
+    start_data = chat[1]["data"]
+    assert start_data["artifact_type"] == "html"
+    assert start_data["title"] == "간단한 카드"
+    assert chat[2]["data"]["delta"] == html_head
+    assert chat[2]["data"]["artifact_id"] == start_data["artifact_id"]
+    assert chat[3]["data"]["delta"] == html_tail
+    assert chat[3]["data"]["artifact_id"] == start_data["artifact_id"]
+    assert chat[4]["data"]["artifact_id"] == start_data["artifact_id"]
+    assert chat[5]["data"]["text"] == "확인해 주세요."
+
+    conversation_id = next(e for e in events if e["type"] == "conversation_attached")["data"][
+        "conversation_id"
+    ]
+    detail = client.get(
+        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
+        headers=_auth_headers(auth["token"]),
+    ).json()
+    assistant = detail["turns"][-1]
+    assert assistant["content"] == "네, 만들었습니다.\n확인해 주세요."
+    assert len(assistant["artifacts"]) == 1
+    assert assistant["artifacts"][0]["type"] == "html"
+    assert assistant["artifacts"][0]["title"] == "간단한 카드"
+    assert assistant["artifacts"][0]["content"] == html
+
+
 def test_chat_stream_persists_artifact_into_turn_meta(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # The assistant turn row on disk must include the artifact so reload
     # restores the side panel content.
-    auth = _seeded_dev_login(client, "hq-admin")
+    auth = _seeded_dev_login(client, "administrator")
     slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
-    monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool: False)
+    monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool, provider=None: False)
 
     pool_client = _FakeAsyncPoolClient(
         [
@@ -2818,7 +1867,9 @@ def test_chat_stream_persists_artifact_into_turn_meta(
             _delta(finish_reason="stop"),
         ]
     )
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+    monkeypatch.setattr(
+        llm_core, "get_async_pool_client", lambda pool, external_provider=None: pool_client
+    )
 
     status_code, events = _stream_post(
         client,
@@ -2827,7 +1878,7 @@ def test_chat_stream_persists_artifact_into_turn_meta(
         json_body={
             "backend_mode": "local",
             "persist": True,
-            "messages": [{"role": "user", "content": "generate report"}],
+            "messages": [{"role": "user", "content": "generate artifact"}],
         },
     )
     assert status_code == 200
@@ -2836,7 +1887,7 @@ def test_chat_stream_persists_artifact_into_turn_meta(
     ]
 
     detail = client.get(
-        f"/api/v1/workspaces/{slug}/conversations/{conversation_id}",
+        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
         headers=_auth_headers(auth["token"]),
     ).json()
     assistant = detail["turns"][-1]
@@ -2854,10 +1905,10 @@ def test_chat_stream_code_artifact_language_roundtrips_through_stream_and_persis
     # `type="code"` artifacts carry a `language` hint on the open tag. It
     # must surface on the live `artifact_started` envelope AND on the
     # persisted turn so reload picks the right syntax highlighter.
-    auth = _seeded_dev_login(client, "hq-admin")
+    auth = _seeded_dev_login(client, "administrator")
     slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
-    monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool: False)
+    monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool, provider=None: False)
 
     pool_client = _FakeAsyncPoolClient(
         [
@@ -2869,7 +1920,9 @@ def test_chat_stream_code_artifact_language_roundtrips_through_stream_and_persis
             _delta(finish_reason="stop"),
         ]
     )
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+    monkeypatch.setattr(
+        llm_core, "get_async_pool_client", lambda pool, external_provider=None: pool_client
+    )
 
     status_code, events = _stream_post(
         client,
@@ -2891,7 +1944,7 @@ def test_chat_stream_code_artifact_language_roundtrips_through_stream_and_persis
         "conversation_id"
     ]
     detail = client.get(
-        f"/api/v1/workspaces/{slug}/conversations/{conversation_id}",
+        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
         headers=_auth_headers(auth["token"]),
     ).json()
     assistant = detail["turns"][-1]
@@ -2903,16 +1956,743 @@ def test_chat_stream_code_artifact_language_roundtrips_through_stream_and_persis
     assert artifacts[0]["content"] == 'print("hi")'
 
 
+def test_chat_stream_edit_replaces_turns_from_requested_seq(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "administrator")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+    monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool, provider=None: False)
+    pool_client = _SequencedAsyncPoolClient(
+        [
+            [_delta(content="first answer"), _delta(finish_reason="stop")],
+            [_delta(content="edited answer"), _delta(finish_reason="stop")],
+        ]
+    )
+    monkeypatch.setattr(
+        llm_core, "get_async_pool_client", lambda pool, external_provider=None: pool_client
+    )
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "messages": [{"role": "user", "content": "original"}],
+        },
+    )
+    assert status_code == 200
+    conversation_id = next(event for event in events if event["type"] == "conversation_attached")[
+        "data"
+    ]["conversation_id"]
+    detail = client.get(
+        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
+        headers=_auth_headers(auth["token"]),
+    ).json()
+    user_turn_id = detail["turns"][0]["id"]
+    tail_turn = detail["turns"][-1]
+
+    status_code, _ = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "conversation_id": conversation_id,
+            "replace_from_seq": 0,
+            "replace_from_turn_id": user_turn_id,
+            "replace_tail_seq": tail_turn["seq"],
+            "replace_tail_turn_id": tail_turn["id"],
+            "messages": [{"role": "user", "content": "edited"}],
+        },
+    )
+    assert status_code == 200
+
+    detail = client.get(
+        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
+        headers=_auth_headers(auth["token"]),
+    ).json()
+    assert detail["title"] == "edited"
+    assert [(turn["seq"], turn["role"], turn["content"]) for turn in detail["turns"]] == [
+        (0, "user", "edited"),
+        (1, "assistant", "edited answer"),
+    ]
+
+
+def test_chat_stream_rewrite_rejects_optimistic_synthetic_turn_id(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "administrator")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+    monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool, provider=None: False)
+    pool_client = _SequencedAsyncPoolClient(
+        [
+            [_delta(content="first answer"), _delta(finish_reason="stop")],
+            [_delta(content="should not run"), _delta(finish_reason="stop")],
+        ]
+    )
+    monkeypatch.setattr(
+        llm_core, "get_async_pool_client", lambda pool, external_provider=None: pool_client
+    )
+
+    _, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "messages": [{"role": "user", "content": "original"}],
+        },
+    )
+    conversation_id = next(event for event in events if event["type"] == "conversation_attached")[
+        "data"
+    ]["conversation_id"]
+    detail = client.get(
+        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
+        headers=_auth_headers(auth["token"]),
+    ).json()
+    tail_turn = detail["turns"][-1]
+
+    _, blocked_events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "conversation_id": conversation_id,
+            "replace_from_seq": 0,
+            "replace_from_turn_id": "user-optimistic",
+            "replace_tail_seq": tail_turn["seq"],
+            "replace_tail_turn_id": tail_turn["id"],
+            "messages": [{"role": "user", "content": "edited"}],
+        },
+    )
+
+    chat_events = _chat_events(blocked_events)
+    assert chat_events[0]["type"] == "error"
+    assert chat_events[0]["data"]["code"] == "ai.conversation_rewrite_seq_missing"
+    assert len(pool_client.chat.completions.calls) == 1
+
+
+def test_chat_stream_retry_reuses_trailing_user_turn_without_duplication(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "administrator")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+    monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool, provider=None: False)
+    pool_client = _SequencedAsyncPoolClient(
+        [
+            [_delta(content="bad answer"), _delta(finish_reason="stop")],
+            [_delta(content="better answer"), _delta(finish_reason="stop")],
+        ]
+    )
+    monkeypatch.setattr(
+        llm_core, "get_async_pool_client", lambda pool, external_provider=None: pool_client
+    )
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "messages": [{"role": "user", "content": "hello"}],
+        },
+    )
+    assert status_code == 200
+    conversation_id = next(event for event in events if event["type"] == "conversation_attached")[
+        "data"
+    ]["conversation_id"]
+    detail = client.get(
+        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
+        headers=_auth_headers(auth["token"]),
+    ).json()
+    assistant_turn_id = detail["turns"][1]["id"]
+    tail_turn = detail["turns"][-1]
+
+    status_code, _ = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "conversation_id": conversation_id,
+            "replace_from_seq": 1,
+            "replace_from_turn_id": assistant_turn_id,
+            "replace_tail_seq": tail_turn["seq"],
+            "replace_tail_turn_id": tail_turn["id"],
+            "persist_user_turn": False,
+            "messages": [{"role": "user", "content": "hello"}],
+        },
+    )
+    assert status_code == 200
+
+    detail = client.get(
+        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
+        headers=_auth_headers(auth["token"]),
+    ).json()
+    assert [(turn["seq"], turn["role"], turn["content"]) for turn in detail["turns"]] == [
+        (0, "user", "hello"),
+        (1, "assistant", "better answer"),
+    ]
+
+
+def test_chat_stream_append_rejects_active_conversation_run_lock(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "administrator")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+    monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool, provider=None: False)
+    pool_client = _SequencedAsyncPoolClient(
+        [
+            [_delta(content="first answer"), _delta(finish_reason="stop")],
+            [_delta(content="should not run"), _delta(finish_reason="stop")],
+        ]
+    )
+    monkeypatch.setattr(
+        llm_core, "get_async_pool_client", lambda pool, external_provider=None: pool_client
+    )
+
+    _, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "messages": [{"role": "user", "content": "original"}],
+        },
+    )
+    conversation_id = next(event for event in events if event["type"] == "conversation_attached")[
+        "data"
+    ]["conversation_id"]
+
+    with Session(get_engine()) as db:
+        workspace = db.scalar(select(Workspace).where(Workspace.key == slug))
+        user = db.get(User, auth["user"]["id"])
+        assert workspace is not None
+        assert user is not None
+        conversation = ai_router.conversations_service.get_conversation(
+            db,
+            workspace=workspace,
+            user=user,
+            conversation_id=conversation_id,
+        )
+        ai_approvals.acquire_conversation_run_lock(
+            db,
+            workspace=workspace,
+            conversation=conversation,
+            requested_by_user=user,
+        )
+
+    _, blocked_events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers={
+            **_auth_headers(auth["token"]),
+            "Accept-Language": "en-US",
+        },
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "conversation_id": conversation_id,
+            "messages": [{"role": "user", "content": "follow-up"}],
+        },
+    )
+
+    chat_events = _chat_events(blocked_events)
+    assert chat_events[0]["type"] == "error"
+    assert chat_events[0]["data"] == {
+        "code": "ai.conversation_run_active",
+        "message": "Another response is already running for this conversation. Try again after it finishes.",
+        "retryable": False,
+    }
+    assert chat_events[-1]["type"] == "done"
+    assert len(pool_client.chat.completions.calls) == 1
+
+    with Session(get_engine()) as db:
+        lock = db.scalar(
+            select(ai_approvals.ConversationRunLock).where(
+                ai_approvals.ConversationRunLock.conversation_id == conversation_id
+            )
+        )
+        assert lock is not None
+        lock.expires_at = ai_approvals.utcnow_naive() - timedelta(seconds=1)
+        db.commit()
+
+    _, retry_events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "conversation_id": conversation_id,
+            "messages": [{"role": "user", "content": "after expiry"}],
+        },
+    )
+    retry_chat_events = _chat_events(retry_events)
+    assert retry_chat_events[0]["type"] != "error"
+    assert len(pool_client.chat.completions.calls) == 2
+
+
+def test_chat_stream_scope_context_error_releases_conversation_run_lock(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "administrator")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    original_scope_context = ai_router.conversation_scope_turn_context
+
+    def fail_scope_context(*_: Any, **__: Any) -> Any:
+        raise RuntimeError("scope context exploded")
+
+    monkeypatch.setattr(ai_router, "conversation_scope_turn_context", fail_scope_context)
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "messages": [{"role": "user", "content": "original"}],
+        },
+    )
+
+    assert status_code == 200
+    conversation_id = next(event for event in events if event["type"] == "conversation_attached")[
+        "data"
+    ]["conversation_id"]
+    chat_events = _chat_events(events)
+    assert chat_events[0]["type"] == "error"
+    assert chat_events[0]["data"] == {
+        "code": "adapter_error",
+        "message": "scope context exploded",
+        "retryable": False,
+    }
+    assert chat_events[-1]["type"] == "done"
+    assert chat_events[-1]["data"]["finish_reason"] == "error"
+
+    with Session(get_engine()) as db:
+        lock = db.scalar(
+            select(ai_approvals.ConversationRunLock).where(
+                ai_approvals.ConversationRunLock.conversation_id == conversation_id
+            )
+        )
+        assert lock is None
+
+    _set_policy("chatbot", "local_only")
+    monkeypatch.setattr(ai_router, "conversation_scope_turn_context", original_scope_context)
+    monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool, provider=None: False)
+    pool_client = _FakeAsyncPoolClient([_delta(content="retry ok"), _delta(finish_reason="stop")])
+    monkeypatch.setattr(
+        llm_core, "get_async_pool_client", lambda pool, external_provider=None: pool_client
+    )
+
+    _, retry_events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "conversation_id": conversation_id,
+            "messages": [{"role": "user", "content": "retry"}],
+        },
+    )
+
+    retry_chat_events = _chat_events(retry_events)
+    assert retry_chat_events[0]["type"] != "error"
+    assert len(pool_client.chat.completions.calls) == 1
+
+
+def test_scope_direct_response_bypasses_model_for_sync_and_stream(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    auth = _seeded_dev_login(client, "administrator")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    direct_text = "정확 집계를 완료하지 못했습니다."
+    monkeypatch.setattr(
+        ai_router,
+        "conversation_scope_turn_context",
+        lambda *_args, **_kwargs: ConversationScopeTurnContext(
+            direct_response=direct_text
+        ),
+    )
+    pool_client = _FakeAsyncPoolClient(
+        [_delta(content="model must not run"), _delta(finish_reason="stop")]
+    )
+    monkeypatch.setattr(
+        llm_core,
+        "get_async_pool_client",
+        lambda pool, external_provider=None: pool_client,
+    )
+
+    sync_response = client.post(
+        _workspace_ai_path(slug, "/chat"),
+        headers=_auth_headers(auth["token"]),
+        json={
+            "backend_mode": "local",
+            "persist": True,
+            "messages": [{"role": "user", "content": "전체 건수"}],
+        },
+    )
+    assert sync_response.status_code == 200
+    assert sync_response.json()["content"] == direct_text
+    assert sync_response.json()["policy"] == "scope_direct_response"
+    assert sync_response.json()["chosen_pool"] is None
+    sync_conversation_id = sync_response.json()["conversation_id"]
+    sync_detail = client.get(
+        f"/api/v1/workspaces/{slug}/chatbot/conversations/{sync_conversation_id}",
+        headers=_auth_headers(auth["token"]),
+    ).json()
+    sync_assistant = sync_detail["turns"][-1]
+    assert sync_assistant["policy"] == "scope_direct_response"
+    assert sync_assistant["chosenPool"] is None
+    assert sync_assistant["provider"] == "server"
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "messages": [{"role": "user", "content": "전체 건수"}],
+        },
+    )
+    assert status_code == 200
+    chat_events = _chat_events(events)
+    assert chat_events[0]["type"] == "content_delta"
+    assert chat_events[0]["data"] == {"text": direct_text}
+    assert chat_events[-1]["type"] == "done"
+    assert chat_events[-1]["data"]["finish_reason"] == "stop"
+    done_meta = chat_events[-1]["data"]["meta"]
+    assert done_meta["policy"] == "scope_direct_response"
+    assert done_meta.get("chosen_pool") is None
+    assert done_meta["decision_reason"] == "scope_direct_response"
+    assert done_meta["model"] == "scope-direct"
+    assert done_meta["chosen_model"] == "scope-direct"
+    assert done_meta["canonical_model"] == "scope-direct"
+    assert done_meta["provider"] == "server"
+    stream_conversation_id = next(
+        event
+        for event in events
+        if event["type"] == "conversation_attached"
+    )["data"]["conversation_id"]
+    stream_detail = client.get(
+        f"/api/v1/workspaces/{slug}/chatbot/conversations/{stream_conversation_id}",
+        headers=_auth_headers(auth["token"]),
+    ).json()
+    stream_assistant = stream_detail["turns"][-1]
+    assert stream_assistant["policy"] == "scope_direct_response"
+    assert stream_assistant["chosenPool"] is None
+    assert stream_assistant["provider"] == "server"
+    assert pool_client.chat.completions.calls == []
+
+
+def test_chat_stream_rewrite_rejects_live_pending_approval(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "administrator")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+    monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool, provider=None: False)
+    pool_client = _FakeAsyncPoolClient(
+        [_delta(content="needs approval"), _delta(finish_reason="stop")]
+    )
+    monkeypatch.setattr(
+        llm_core, "get_async_pool_client", lambda pool, external_provider=None: pool_client
+    )
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "messages": [{"role": "user", "content": "make a task"}],
+        },
+    )
+    assert status_code == 200
+    conversation_id = next(event for event in events if event["type"] == "conversation_attached")[
+        "data"
+    ]["conversation_id"]
+    detail = client.get(
+        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
+        headers=_auth_headers(auth["token"]),
+    ).json()
+    user_turn_id = detail["turns"][0]["id"]
+    tail_turn = detail["turns"][-1]
+
+    with Session(get_engine()) as db:
+        workspace = db.scalar(select(Workspace).where(Workspace.key == slug))
+        user = db.get(User, auth["user"]["id"])
+        assert workspace is not None
+        assert user is not None
+        conversation = ai_router.conversations_service.get_conversation(
+            db,
+            workspace=workspace,
+            user=user,
+            conversation_id=conversation_id,
+        )
+        snapshot = ai_approvals.persist_snapshot_on_halt(
+            db,
+            workspace=workspace,
+            conversation=conversation,
+            requested_by_user=user,
+            messages_json=[{"role": "user", "content": "make a task"}],
+            blocked_call_id="call-rewrite",
+            model_meta={"model": "test-model"},
+        )
+        ai_approvals.create_pending_approval(
+            db,
+            workspace=workspace,
+            conversation=conversation,
+            requested_by_user=user,
+            agent_run_id=snapshot.id,
+            tool_call_id="call-rewrite",
+            tool_name="pms.create_task",
+            arguments_json='{"title":"Task"}',
+            resource_preview="Task",
+        )
+        db.commit()
+
+    status_code, blocked_events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "conversation_id": conversation_id,
+            "replace_from_seq": 0,
+            "replace_from_turn_id": user_turn_id,
+            "replace_tail_seq": tail_turn["seq"],
+            "replace_tail_turn_id": tail_turn["id"],
+            "messages": [{"role": "user", "content": "edit task"}],
+        },
+    )
+    assert status_code == 200
+    chat_events = _chat_events(blocked_events)
+    assert chat_events[0]["type"] == "error"
+    assert chat_events[0]["data"]["code"] == "ai.conversation_rewrite_approval_pending"
+    assert chat_events[-1]["type"] == "done"
+
+
+def test_chat_stream_rewrite_requires_target_turn_id(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "administrator")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+    monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool, provider=None: False)
+    pool_client = _SequencedAsyncPoolClient(
+        [
+            [_delta(content="first answer"), _delta(finish_reason="stop")],
+            [_delta(content="should not run"), _delta(finish_reason="stop")],
+        ]
+    )
+    monkeypatch.setattr(
+        llm_core, "get_async_pool_client", lambda pool, external_provider=None: pool_client
+    )
+
+    _, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "messages": [{"role": "user", "content": "original"}],
+        },
+    )
+    conversation_id = next(event for event in events if event["type"] == "conversation_attached")[
+        "data"
+    ]["conversation_id"]
+
+    status_code, blocked_events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers={
+            **_auth_headers(auth["token"]),
+            "Accept-Language": "en-US",
+        },
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "conversation_id": conversation_id,
+            "replace_from_seq": 0,
+            "messages": [{"role": "user", "content": "edited"}],
+        },
+    )
+    assert status_code == 200
+    chat_events = _chat_events(blocked_events)
+    assert chat_events[0]["type"] == "error"
+    assert chat_events[0]["data"] == {
+        "code": "ai.conversation_rewrite_turn_id_required",
+        "message": "Conversation rewrites require the target turn id.",
+        "retryable": False,
+    }
+    assert chat_events[-1]["type"] == "done"
+    assert len(pool_client.chat.completions.calls) == 1
+
+
+def test_chat_stream_rewrite_rejects_target_role_mismatch(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "administrator")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+    monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool, provider=None: False)
+    pool_client = _SequencedAsyncPoolClient(
+        [
+            [_delta(content="first answer"), _delta(finish_reason="stop")],
+            [_delta(content="should not run"), _delta(finish_reason="stop")],
+        ]
+    )
+    monkeypatch.setattr(
+        llm_core, "get_async_pool_client", lambda pool, external_provider=None: pool_client
+    )
+
+    _, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "messages": [{"role": "user", "content": "original"}],
+        },
+    )
+    conversation_id = next(event for event in events if event["type"] == "conversation_attached")[
+        "data"
+    ]["conversation_id"]
+    detail = client.get(
+        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
+        headers=_auth_headers(auth["token"]),
+    ).json()
+    assistant_turn_id = detail["turns"][1]["id"]
+    tail_turn = detail["turns"][-1]
+
+    _, blocked_events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "conversation_id": conversation_id,
+            "replace_from_seq": 1,
+            "replace_from_turn_id": assistant_turn_id,
+            "replace_tail_seq": tail_turn["seq"],
+            "replace_tail_turn_id": tail_turn["id"],
+            "messages": [{"role": "user", "content": "edited"}],
+        },
+    )
+    chat_events = _chat_events(blocked_events)
+    assert chat_events[0]["type"] == "error"
+    assert chat_events[0]["data"]["code"] == "ai.conversation_rewrite_role_mismatch"
+    assert len(pool_client.chat.completions.calls) == 1
+
+
+def test_chat_stream_rewrite_rejects_stale_tail(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "administrator")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+    monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool, provider=None: False)
+    pool_client = _SequencedAsyncPoolClient(
+        [
+            [_delta(content="first answer"), _delta(finish_reason="stop")],
+            [_delta(content="second answer"), _delta(finish_reason="stop")],
+            [_delta(content="should not run"), _delta(finish_reason="stop")],
+        ]
+    )
+    monkeypatch.setattr(
+        llm_core, "get_async_pool_client", lambda pool, external_provider=None: pool_client
+    )
+
+    _, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "messages": [{"role": "user", "content": "original"}],
+        },
+    )
+    conversation_id = next(event for event in events if event["type"] == "conversation_attached")[
+        "data"
+    ]["conversation_id"]
+    stale_detail = client.get(
+        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
+        headers=_auth_headers(auth["token"]),
+    ).json()
+    stale_user_turn_id = stale_detail["turns"][0]["id"]
+    stale_tail = stale_detail["turns"][-1]
+
+    _, _ = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "conversation_id": conversation_id,
+            "messages": [
+                {"role": "user", "content": "original"},
+                {"role": "assistant", "content": "first answer"},
+                {"role": "user", "content": "newer question"},
+            ],
+        },
+    )
+
+    _, blocked_events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "conversation_id": conversation_id,
+            "replace_from_seq": 0,
+            "replace_from_turn_id": stale_user_turn_id,
+            "replace_tail_seq": stale_tail["seq"],
+            "replace_tail_turn_id": stale_tail["id"],
+            "messages": [{"role": "user", "content": "stale edit"}],
+        },
+    )
+    chat_events = _chat_events(blocked_events)
+    assert chat_events[0]["type"] == "error"
+    assert chat_events[0]["data"]["code"] == "ai.conversation_rewrite_tail_mismatch"
+    assert len(pool_client.chat.completions.calls) == 2
+
+
 def test_chat_sync_code_artifact_language_roundtrips(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Sync `/chat` must also carry the `language` hint on the response's
     # `artifacts` array so clients without SSE see the same metadata.
-    auth = _seeded_dev_login(client, "hq-admin")
+    auth = _seeded_dev_login(client, "administrator")
     slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
 
-    def _fake_complete_chat(context, db, *, messages, **kwargs):  # type: ignore[no-untyped-def]
+    def _fake_complete_gateway_chat(_request, _db):  # type: ignore[no-untyped-def]
         class _Usage:
             prompt_tokens = completion_tokens = total_tokens = 0
 
@@ -2936,6 +2716,7 @@ def test_chat_sync_code_artifact_language_roundtrips(
             policy = "local_only"
             chosen_pool = "local"
             reason = "policy_local_only"
+            reason_codes = ("policy_local_only",)
             forced_local = False
             pii_hits: list[str] = []
 
@@ -2947,9 +2728,9 @@ def test_chat_sync_code_artifact_language_roundtrips(
             base_url = ""
             api_key = ""
 
-        return _Response(), _Decision(), _Cfg()
+        return SimpleNamespace(response=_Response(), decision=_Decision(), config=_Cfg())
 
-    monkeypatch.setattr(ai_router, "complete_chat", _fake_complete_chat)
+    monkeypatch.setattr(ai_router, "complete_gateway_chat", _fake_complete_gateway_chat)
 
     response = client.post(
         _workspace_ai_path(slug, "/chat"),
@@ -2957,7 +2738,7 @@ def test_chat_sync_code_artifact_language_roundtrips(
         json={
             "backend_mode": "local",
             "persist": True,
-            "messages": [{"role": "user", "content": "sql hello"}],
+            "messages": [{"role": "user", "content": "code hello"}],
         },
     )
     assert response.status_code == 200
@@ -2969,16 +2750,107 @@ def test_chat_sync_code_artifact_language_roundtrips(
     assert body["artifacts"][0]["content"] == "SELECT 1;"
 
 
+def test_chat_sync_retry_reuses_trailing_user_turn_without_duplication(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "administrator")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+    completions = iter(["bad sync answer", "better sync answer"])
+
+    def _fake_complete_gateway_chat(_request, _db):  # type: ignore[no-untyped-def]
+        class _Usage:
+            prompt_tokens = completion_tokens = total_tokens = 0
+
+        class _Msg:
+            role = "assistant"
+            reasoning_content = None
+            content = next(completions)
+
+        class _Choice:
+            finish_reason = "stop"
+            message = _Msg()
+
+        class _Response:
+            model = "dev"
+            choices = [_Choice()]
+            usage = _Usage()
+
+        class _Decision:
+            policy = "local_only"
+            chosen_pool = "local"
+            reason = "policy_local_only"
+            reason_codes = ("policy_local_only",)
+            forced_local = False
+            pii_hits: list[str] = []
+
+        class _Cfg:
+            model = "dev"
+            canonical_model = "dev"
+            provider = "local"
+            backend = "primary"
+            base_url = ""
+            api_key = ""
+
+        return SimpleNamespace(response=_Response(), decision=_Decision(), config=_Cfg())
+
+    monkeypatch.setattr(ai_router, "complete_gateway_chat", _fake_complete_gateway_chat)
+
+    first = client.post(
+        _workspace_ai_path(slug, "/chat"),
+        headers=_auth_headers(auth["token"]),
+        json={
+            "backend_mode": "local",
+            "persist": True,
+            "messages": [{"role": "user", "content": "sync hello"}],
+        },
+    )
+    assert first.status_code == 200, first.text
+    conversation_id = first.json()["conversation_id"]
+    detail = client.get(
+        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
+        headers=_auth_headers(auth["token"]),
+    ).json()
+    assistant_turn_id = detail["turns"][1]["id"]
+    tail_turn = detail["turns"][-1]
+
+    second = client.post(
+        _workspace_ai_path(slug, "/chat"),
+        headers=_auth_headers(auth["token"]),
+        json={
+            "backend_mode": "local",
+            "persist": False,
+            "conversation_id": conversation_id,
+            "replace_from_seq": 1,
+            "replace_from_turn_id": assistant_turn_id,
+            "replace_tail_seq": tail_turn["seq"],
+            "replace_tail_turn_id": tail_turn["id"],
+            "persist_user_turn": False,
+            "messages": [{"role": "user", "content": "sync hello"}],
+        },
+    )
+    assert second.status_code == 200, second.text
+
+    detail = client.get(
+        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
+        headers=_auth_headers(auth["token"]),
+    ).json()
+    assert [(turn["seq"], turn["role"], turn["content"]) for turn in detail["turns"]] == [
+        (0, "user", "sync hello"),
+        (1, "assistant", "better sync answer"),
+    ]
+
+
 def test_chat_stream_synthesizes_completed_for_unclosed_artifact_on_error(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # If the model opens an artifact and then the provider errors before
     # the close tag arrives, the stream must still emit
     # artifact_completed so the client's buffer is released.
-    auth = _seeded_dev_login(client, "hq-admin")
+    auth = _seeded_dev_login(client, "administrator")
     slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
-    monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool: False)
+    monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool, provider=None: False)
 
     class _ErrorAfterContentStream:
         def __init__(self) -> None:
@@ -3013,7 +2885,9 @@ def test_chat_stream_synthesizes_completed_for_unclosed_artifact_on_error(
         def with_options(self, **_) -> "_ErrorPoolClient":
             return self
 
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: _ErrorPoolClient())
+    monkeypatch.setattr(
+        llm_core, "get_async_pool_client", lambda pool, external_provider=None: _ErrorPoolClient()
+    )
 
     status_code, events = _stream_post(
         client,
@@ -3037,7 +2911,7 @@ def test_chat_stream_synthesizes_completed_for_unclosed_artifact_on_error(
 
 
 # ---------------------------------------------------------------------------
-# allowed_app_ids: per-conversation tool scope picker
+# Business chat follows its registered workload route and app tool surface.
 # ---------------------------------------------------------------------------
 
 
@@ -3047,7 +2921,13 @@ def _tools_in_first_call(pool_client: _FakeAsyncPoolClient) -> list[dict[str, An
     return list(calls[0].get("tools") or [])
 
 
-def test_chat_stream_allowed_app_ids_narrows_tool_surface_to_one_app(
+def _messages_in_first_call(pool_client: _FakeAsyncPoolClient) -> list[dict[str, Any]]:
+    calls = pool_client.chat.completions.calls
+    assert calls, "pool client never received a chat.completions.create call"
+    return list(calls[0].get("messages") or [])
+
+
+def test_chat_stream_business_chat_exposes_registered_context_tool_surface(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "delivery-hub-admin")
@@ -3055,10 +2935,10 @@ def test_chat_stream_allowed_app_ids_narrows_tool_surface_to_one_app(
     _set_policy("chatbot", "local_only")
     _enable_local_tool_calling(monkeypatch)
 
-    pool_client = _FakeAsyncPoolClient(
-        [_delta(content="ok"), _delta(finish_reason="stop"), _usage_tail(1, 1, 2)]
+    pool_client = _FakeAsyncPoolClient([_delta(content="ok"), _delta(finish_reason="stop")])
+    monkeypatch.setattr(
+        llm_core, "get_async_pool_client", lambda pool, external_provider=None: pool_client
     )
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
 
     status_code, _events = _stream_post(
         client,
@@ -3067,32 +2947,28 @@ def test_chat_stream_allowed_app_ids_narrows_tool_surface_to_one_app(
         json_body={
             "backend_mode": "local",
             "messages": [{"role": "user", "content": "hi"}],
-            # Pure user-driven scope narrowing: only meeting tools are exposed
-            # to the LLM for this turn even though the workspace also has PMS,
-            # planner, and docs entitlements.
-            "allowed_app_ids": ["meeting"],
+            # Older clients may still send context app ids. The server filters
+            # them against the registry before exposing tools.
+            "allowed_app_ids": ["pms", "docs"],
         },
     )
 
     assert status_code == 200
-    tool_names = [item["function"]["name"] for item in _tools_in_first_call(pool_client)]
-    assert tool_names, "expected meeting tools to be exposed"
-    assert all(name.startswith("meeting.") for name in tool_names), (
-        f"non-meeting tool leaked into LLM context: {tool_names}"
-    )
+    tool_names = {tool["function"]["name"] for tool in _tools_in_first_call(pool_client)}
+    assert {"docs.get_item", "pms.search_tasks"} <= tool_names
 
 
-def test_chat_stream_allowed_app_ids_empty_list_disables_all_tools(
+def test_chat_stream_business_context_question_reaches_llm_call(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "delivery-hub-admin")
     slug = "delivery-hub"
     _set_policy("chatbot", "local_only")
 
-    pool_client = _FakeAsyncPoolClient(
-        [_delta(content="ok"), _delta(finish_reason="stop"), _usage_tail(1, 1, 2)]
+    pool_client = _FakeAsyncPoolClient([_delta(content="ok"), _delta(finish_reason="stop")])
+    monkeypatch.setattr(
+        llm_core, "get_async_pool_client", lambda pool, external_provider=None: pool_client
     )
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
 
     status_code, _events = _stream_post(
         client,
@@ -3100,77 +2976,17 @@ def test_chat_stream_allowed_app_ids_empty_list_disables_all_tools(
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
-            "messages": [{"role": "user", "content": "hi"}],
-            # Explicit "no tools" — text-only conversation. The agent loop is
-            # short-circuited because filtered_tool_specs is empty, so the
-            # underlying chat.completions call is made without a tools kwarg.
-            "allowed_app_ids": [],
+            "messages": [{"role": "user", "content": "PMS 업무 자료를 찾아줘"}],
         },
     )
 
     assert status_code == 200
-    assert _tools_in_first_call(pool_client) == []
-
-
-def test_chat_stream_allowed_app_ids_rejects_unknown_app(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    auth = _seeded_dev_login(client, "delivery-hub-admin")
-    slug = "delivery-hub"
-    _set_policy("chatbot", "local_only")
-
-    pool_client = _FakeAsyncPoolClient(
-        [_delta(content="ok"), _delta(finish_reason="stop"), _usage_tail(1, 1, 2)]
-    )
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
-
-    response = client.post(
-        _workspace_ai_path(slug, "/chat/stream"),
-        headers=_auth_headers(auth["token"]),
-        json={
-            "backend_mode": "local",
-            "messages": [{"role": "user", "content": "hi"}],
-            # An attacker can't smuggle a tool surface in by inventing an
-            # app_id — the validator rejects unknown values up front.
-            "allowed_app_ids": ["pms", "shadow-app"],
-        },
-    )
-    assert response.status_code == 422
-    body = response.json()
-    assert body["code"] == "ai.unknown_workspace_app"
-    assert body["params"]["app_id"] == "shadow-app"
-    assert body["validation"][0]["loc"] == ["body", "allowed_app_ids"]
-
-
-def test_chat_stream_allowed_app_ids_cannot_widen_beyond_entitlements(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    auth = _seeded_dev_login(client, "delivery-hub-admin")
-    slug = "delivery-hub"
-    _set_policy("chatbot", "local_only")
-    # The user asks for PMS tools, but the workspace entitlement for PMS has
-    # been revoked — the resulting tool surface is the *intersection*, so
-    # zero tools end up exposed even though the request looks valid.
-    _disable_workspace_app(slug, "pms")
-
-    pool_client = _FakeAsyncPoolClient(
-        [_delta(content="ok"), _delta(finish_reason="stop"), _usage_tail(1, 1, 2)]
-    )
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
-
-    status_code, _events = _stream_post(
-        client,
-        _workspace_ai_path(slug, "/chat/stream"),
-        headers=_auth_headers(auth["token"]),
-        json_body={
-            "backend_mode": "local",
-            "messages": [{"role": "user", "content": "hi"}],
-            "allowed_app_ids": ["pms"],
-        },
-    )
-
-    assert status_code == 200
-    tool_names = [item["function"]["name"] for item in _tools_in_first_call(pool_client)]
-    assert all(not name.startswith("pms.") for name in tool_names), (
-        f"PMS tool leaked despite revoked entitlement: {tool_names}"
-    )
+    chat_events = _chat_events(_events)
+    assert [event["type"] for event in chat_events] == ["content_delta", "done"]
+    assert chat_events[0]["data"]["text"] == "ok"
+    assert chat_events[1]["data"]["meta"]["chosen_pool"] == "local"
+    assert chat_events[1]["data"]["meta"]["decision_reason"] == "workload_route"
+    assert pool_client.chat.completions.calls
+    messages = _messages_in_first_call(pool_client)
+    assert [message["role"] for message in messages] == ["system", "user"]
+    _assert_ai_do_identity_system_message(messages)

@@ -1,14 +1,12 @@
-const appModuleIds = [
-  'home',
-  'ai',
-  'pms',
-  'docs',
-  'whiteboard',
-  'planner',
-  'meeting',
-  'learning',
-  'settings',
-];
+const fs = require('node:fs');
+const path = require('node:path');
+
+const appModulesRoot = path.join(__dirname, 'apps/web/src/app-modules');
+const appModuleIds = fs
+  .readdirSync(appModulesRoot, { withFileTypes: true })
+  .filter((entry) => entry.isDirectory())
+  .map((entry) => entry.name)
+  .sort();
 
 const privateAppModuleEntry = (appId) =>
   `^apps/web/src/app-modules/${appId}/(?:api|lib|model|pages|routes|sidebar|ui|views)(?:[/.]|$)`;

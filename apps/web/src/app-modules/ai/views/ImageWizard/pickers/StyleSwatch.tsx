@@ -1,5 +1,7 @@
+// i18n-exempt-file: SVG swatch artwork uses fixed decorative text marks.
 import { useTranslation } from 'react-i18next';
 
+import { IMAGE_STYLE_SWATCH_COLORS } from '../image-wizard-colors';
 import type { StylePreset, StyleShape } from '../style-presets';
 
 interface StyleSwatchProps {
@@ -10,7 +12,9 @@ interface StyleSwatchProps {
 
 export function StyleSwatch({ preset, selected, onToggle }: StyleSwatchProps) {
   const { t } = useTranslation('apps');
-  const label = t(`ai.imageWizard.style.chips.${preset.id}`, { defaultValue: preset.id });
+  const label = t(`ai.imageWizard.style.chips.${preset.id}`, {
+    defaultValue: preset.id,
+  });
 
   return (
     <button
@@ -23,20 +27,20 @@ export function StyleSwatch({ preset, selected, onToggle }: StyleSwatchProps) {
           : 'border-app-border bg-app-surface-sidebar hover:border-app-accent/50'
       }`}
     >
-      <span className="block h-11 w-11 overflow-hidden rounded">
+      <span className="block size-11 overflow-hidden rounded">
         <ShapeArt shape={preset.id} palette={preset.palette} />
       </span>
       <span className="flex gap-0.5">
         {preset.palette.map((color, idx) => (
           <span
             key={`${color}-${idx}`}
-            className="block h-1.5 w-1.5 rounded-full"
+            className="block size-1.5 rounded-full"
             style={{ background: color }}
             aria-hidden
           />
         ))}
       </span>
-      <span className="line-clamp-1 text-center text-[10px] leading-tight text-app-ink/70 group-hover:text-app-ink">
+      <span className="line-clamp-1 text-center text-[12px] leading-tight text-app-ink/70 group-hover:text-app-ink">
         {label}
       </span>
     </button>
@@ -66,7 +70,14 @@ function ShapeArt({ shape, palette }: ShapeArtProps) {
       return (
         <svg viewBox="0 0 44 44" width="44" height="44" aria-hidden>
           <rect width="44" height="44" fill={c} />
-          <text x="6" y="20" fill={a} fontFamily="serif" fontWeight="700" fontSize="18">
+          <text
+            x="6"
+            y="20"
+            fill={a}
+            fontFamily="serif"
+            fontWeight="700"
+            fontSize="18"
+          >
             Aa
           </text>
           <rect x="6" y="26" width="32" height="2" fill={a} />
@@ -79,19 +90,34 @@ function ShapeArt({ shape, palette }: ShapeArtProps) {
       return (
         <svg viewBox="0 0 44 44" width="44" height="44" aria-hidden>
           <rect width="44" height="44" fill={c} />
-          <text x="6" y="13" fill={a} fontFamily="serif" fontWeight="900" fontSize="9">
+          <text
+            x="6"
+            y="13"
+            fill={a}
+            fontFamily="serif"
+            fontWeight="900"
+            fontSize="9"
+          >
             {'HEAD'}
           </text>
           <rect x="6" y="17" width="32" height="0.6" fill={a} />
           {Array.from({ length: 7 }).map((_, idx) => (
-            <rect key={idx} x="6" y={20 + idx * 3} width="32" height="0.6" fill={b} opacity="0.6" />
+            <rect
+              key={idx}
+              x="6"
+              y={20 + idx * 3}
+              width="32"
+              height="0.6"
+              fill={b}
+              opacity="0.6"
+            />
           ))}
         </svg>
       );
     case 'bauhaus':
       return (
         <svg viewBox="0 0 44 44" width="44" height="44" aria-hidden>
-          <rect width="44" height="44" fill={d === '#0A0A0A' ? '#fafafa' : '#fafafa'} />
+          <rect width="44" height="44" fill={IMAGE_STYLE_SWATCH_COLORS.paper} />
           <circle cx="14" cy="22" r="11" fill={a} />
           <rect x="22" y="6" width="16" height="16" fill={b} />
           <polygon points="22,38 38,22 38,38" fill={c} />
@@ -111,40 +137,111 @@ function ShapeArt({ shape, palette }: ShapeArtProps) {
         <svg viewBox="0 0 44 44" width="44" height="44" aria-hidden>
           <rect width="44" height="44" fill={a} />
           {Array.from({ length: 6 }).map((_, idx) => (
-            <line key={`h${idx}`} x1="0" y1={idx * 8 + 2} x2="44" y2={idx * 8 + 2} stroke={b} strokeWidth="0.4" opacity="0.4" />
+            <line
+              key={`h${idx}`}
+              x1="0"
+              y1={idx * 8 + 2}
+              x2="44"
+              y2={idx * 8 + 2}
+              stroke={b}
+              strokeWidth="0.4"
+              opacity="0.4"
+            />
           ))}
           {Array.from({ length: 6 }).map((_, idx) => (
-            <line key={`v${idx}`} x1={idx * 8 + 2} y1="0" x2={idx * 8 + 2} y2="44" stroke={b} strokeWidth="0.4" opacity="0.4" />
+            <line
+              key={`v${idx}`}
+              x1={idx * 8 + 2}
+              y1="0"
+              x2={idx * 8 + 2}
+              y2="44"
+              stroke={b}
+              strokeWidth="0.4"
+              opacity="0.4"
+            />
           ))}
-          <rect x="10" y="14" width="20" height="14" stroke={c} strokeWidth="1.2" fill="none" />
+          <rect
+            x="10"
+            y="14"
+            width="20"
+            height="14"
+            stroke={c}
+            strokeWidth="1.2"
+            fill="none"
+          />
           <line x1="14" y1="18" x2="26" y2="18" stroke={c} strokeWidth="0.8" />
         </svg>
       );
-    case 'dataviz':
+    case 'infographic':
       return (
         <svg viewBox="0 0 44 44" width="44" height="44" aria-hidden>
-          <rect width="44" height="44" fill="#0F172A" opacity="0.05" />
+          <rect
+            width="44"
+            height="44"
+            fill={IMAGE_STYLE_SWATCH_COLORS.ink}
+            opacity="0.05"
+          />
           <rect x="6" y="26" width="6" height="12" fill={a} />
           <rect x="14" y="18" width="6" height="20" fill={b} />
           <rect x="22" y="22" width="6" height="16" fill={c} />
           <rect x="30" y="14" width="6" height="24" fill={d} />
-          <line x1="6" y1="40" x2="38" y2="40" stroke="#0F172A" strokeWidth="0.6" opacity="0.4" />
+          <line
+            x1="6"
+            y1="40"
+            x2="38"
+            y2="40"
+            stroke={IMAGE_STYLE_SWATCH_COLORS.ink}
+            strokeWidth="0.6"
+            opacity="0.4"
+          />
         </svg>
       );
     case 'wireframe':
       return (
         <svg viewBox="0 0 44 44" width="44" height="44" aria-hidden>
           <rect width="44" height="44" fill={c} />
-          <rect x="6" y="6" width="32" height="6" stroke={a} strokeWidth="0.8" fill="none" />
-          <rect x="6" y="16" width="14" height="22" stroke={a} strokeWidth="0.8" fill="none" />
-          <rect x="22" y="16" width="16" height="10" stroke={a} strokeWidth="0.8" fill="none" />
-          <rect x="22" y="28" width="16" height="10" stroke={a} strokeWidth="0.8" fill="none" />
+          <rect
+            x="6"
+            y="6"
+            width="32"
+            height="6"
+            stroke={a}
+            strokeWidth="0.8"
+            fill="none"
+          />
+          <rect
+            x="6"
+            y="16"
+            width="14"
+            height="22"
+            stroke={a}
+            strokeWidth="0.8"
+            fill="none"
+          />
+          <rect
+            x="22"
+            y="16"
+            width="16"
+            height="10"
+            stroke={a}
+            strokeWidth="0.8"
+            fill="none"
+          />
+          <rect
+            x="22"
+            y="28"
+            width="16"
+            height="10"
+            stroke={a}
+            strokeWidth="0.8"
+            fill="none"
+          />
         </svg>
       );
     case 'isometric':
       return (
         <svg viewBox="0 0 44 44" width="44" height="44" aria-hidden>
-          <rect width="44" height="44" fill="#fafafa" />
+          <rect width="44" height="44" fill={IMAGE_STYLE_SWATCH_COLORS.paper} />
           <polygon points="22,8 36,16 22,24 8,16" fill={a} opacity="0.85" />
           <polygon points="22,24 36,16 36,32 22,40" fill={b} opacity="0.7" />
           <polygon points="22,24 8,16 8,32 22,40" fill={c} opacity="0.5" />
@@ -164,7 +261,7 @@ function ShapeArt({ shape, palette }: ShapeArtProps) {
     case 'mindmap':
       return (
         <svg viewBox="0 0 44 44" width="44" height="44" aria-hidden>
-          <rect width="44" height="44" fill="#fafafa" />
+          <rect width="44" height="44" fill={IMAGE_STYLE_SWATCH_COLORS.paper} />
           <circle cx="22" cy="22" r="6" fill={a} />
           <circle cx="8" cy="10" r="3.5" fill={b} />
           <circle cx="36" cy="10" r="3.5" fill={c} />
@@ -194,7 +291,11 @@ function ShapeArt({ shape, palette }: ShapeArtProps) {
     case 'flat':
       return (
         <svg viewBox="0 0 44 44" width="44" height="44" aria-hidden>
-          <rect width="44" height="44" fill="#FAF5FF" />
+          <rect
+            width="44"
+            height="44"
+            fill={IMAGE_STYLE_SWATCH_COLORS.lavenderPaper}
+          />
           <circle cx="14" cy="20" r="8" fill={a} />
           <rect x="22" y="14" width="14" height="14" rx="3" fill={b} />
           <path d="M6 38 L20 30 L38 38 Z" fill={c} />
@@ -204,16 +305,38 @@ function ShapeArt({ shape, palette }: ShapeArtProps) {
       return (
         <svg viewBox="0 0 44 44" width="44" height="44" aria-hidden>
           <rect width="44" height="44" fill={b} />
-          <path d="M8 12 Q14 6, 22 12 T36 12" stroke={a} strokeWidth="1.2" fill="none" strokeLinecap="round" />
-          <circle cx="14" cy="24" r="4" stroke={a} strokeWidth="1" fill="none" />
-          <path d="M22 22 L34 22 L30 30 L22 30 Z" stroke={a} strokeWidth="1" fill="none" />
+          <path
+            d="M8 12 Q14 6, 22 12 T36 12"
+            stroke={a}
+            strokeWidth="1.2"
+            fill="none"
+            strokeLinecap="round"
+          />
+          <circle
+            cx="14"
+            cy="24"
+            r="4"
+            stroke={a}
+            strokeWidth="1"
+            fill="none"
+          />
+          <path
+            d="M22 22 L34 22 L30 30 L22 30 Z"
+            stroke={a}
+            strokeWidth="1"
+            fill="none"
+          />
           <circle cx="34" cy="34" r="2" fill={c} />
         </svg>
       );
     case 'watercolor':
       return (
         <svg viewBox="0 0 44 44" width="44" height="44" aria-hidden>
-          <rect width="44" height="44" fill="#FFFBF5" />
+          <rect
+            width="44"
+            height="44"
+            fill={IMAGE_STYLE_SWATCH_COLORS.warmPaper}
+          />
           <circle cx="14" cy="16" r="11" fill={a} opacity="0.7" />
           <circle cx="28" cy="22" r="9" fill={b} opacity="0.6" />
           <circle cx="20" cy="32" r="10" fill={c} opacity="0.55" />
@@ -225,8 +348,24 @@ function ShapeArt({ shape, palette }: ShapeArtProps) {
         <svg viewBox="0 0 44 44" width="44" height="44" aria-hidden>
           <rect width="44" height="44" fill={c} />
           <circle cx="18" cy="20" r="10" fill={a} opacity="0.85" />
-          <circle cx="26" cy="24" r="10" fill={b} opacity="0.7" style={{ mixBlendMode: 'multiply' }} />
-          <text x="6" y="40" fontFamily="monospace" fontWeight="700" fontSize="6" fill={d}>RISO</text>
+          <circle
+            cx="26"
+            cy="24"
+            r="10"
+            fill={b}
+            opacity="0.7"
+            style={{ mixBlendMode: 'multiply' }}
+          />
+          <text
+            x="6"
+            y="40"
+            fontFamily="monospace"
+            fontWeight="700"
+            fontSize="6"
+            fill={d}
+          >
+            RISO
+          </text>
         </svg>
       );
     case 'cutpaper':
@@ -242,8 +381,22 @@ function ShapeArt({ shape, palette }: ShapeArtProps) {
       return (
         <svg viewBox="0 0 44 44" width="44" height="44" aria-hidden>
           <rect width="44" height="44" fill={b} />
-          <path d="M6 6 L24 6 L28 14 L24 22 L6 22 Z" fill={c} stroke={d} strokeWidth="1.4" />
-          <text x="10" y="17" fontWeight="900" fontSize="9" fill={d} fontFamily="sans-serif">POW!</text>
+          <path
+            d="M6 6 L24 6 L28 14 L24 22 L6 22 Z"
+            fill={c}
+            stroke={d}
+            strokeWidth="1.4"
+          />
+          <text
+            x="10"
+            y="17"
+            fontWeight="900"
+            fontSize="9"
+            fill={d}
+            fontFamily="sans-serif"
+          >
+            POW!
+          </text>
           <circle cx="34" cy="32" r="8" fill={a} stroke={d} strokeWidth="1.4" />
         </svg>
       );
@@ -275,9 +428,25 @@ function ShapeArt({ shape, palette }: ShapeArtProps) {
         <svg viewBox="0 0 44 44" width="44" height="44" aria-hidden>
           <rect width="44" height="44" fill={c} />
           <circle cx="22" cy="24" r="12" fill={a} />
-          <circle cx="17" cy="22" r="1.4" fill="#1F2937" />
-          <circle cx="27" cy="22" r="1.4" fill="#1F2937" />
-          <path d="M18 27 Q22 30, 26 27" stroke="#1F2937" strokeWidth="1" fill="none" strokeLinecap="round" />
+          <circle
+            cx="17"
+            cy="22"
+            r="1.4"
+            fill={IMAGE_STYLE_SWATCH_COLORS.faceInk}
+          />
+          <circle
+            cx="27"
+            cy="22"
+            r="1.4"
+            fill={IMAGE_STYLE_SWATCH_COLORS.faceInk}
+          />
+          <path
+            d="M18 27 Q22 30, 26 27"
+            stroke={IMAGE_STYLE_SWATCH_COLORS.faceInk}
+            strokeWidth="1"
+            fill="none"
+            strokeLinecap="round"
+          />
           <circle cx="14" cy="26" r="1.5" fill={d} />
           <circle cx="30" cy="26" r="1.5" fill={d} />
         </svg>
@@ -289,7 +458,16 @@ function ShapeArt({ shape, palette }: ShapeArtProps) {
           <rect x="6" y="10" width="32" height="2" fill={a} opacity="0.9" />
           <rect x="6" y="14" width="20" height="1" fill={b} opacity="0.6" />
           <rect x="6" y="22" width="32" height="3" fill={c} />
-          <text x="6" y="36" fontFamily="monospace" fontWeight="700" fontSize="7" fill={a}>{'> NEON'}</text>
+          <text
+            x="6"
+            y="36"
+            fontFamily="monospace"
+            fontWeight="700"
+            fontSize="7"
+            fill={a}
+          >
+            {'> NEON'}
+          </text>
         </svg>
       );
     case 'y2k':
@@ -312,7 +490,16 @@ function ShapeArt({ shape, palette }: ShapeArtProps) {
         <svg viewBox="0 0 44 44" width="44" height="44" aria-hidden>
           <rect width="44" height="44" fill={c} />
           <rect x="0" y="0" width="44" height="6" fill={a} />
-          <text x="6" y="22" fontFamily="serif" fontWeight="700" fontSize="14" fill={a}>韓</text>
+          <text
+            x="6"
+            y="22"
+            fontFamily="serif"
+            fontWeight="700"
+            fontSize="14"
+            fill={a}
+          >
+            韓
+          </text>
           <rect x="6" y="28" width="20" height="1.5" fill={b} />
           <rect x="6" y="32" width="28" height="1" fill={d} />
           <circle cx="34" cy="32" r="3" fill={d} />
@@ -320,5 +507,3 @@ function ShapeArt({ shape, palette }: ShapeArtProps) {
       );
   }
 }
-
-export default StyleSwatch;

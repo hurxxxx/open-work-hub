@@ -1,11 +1,37 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from ai_do_api.domains.auth.security import new_id
-from ai_do_api.domains.whiteboard.models import Whiteboard, WhiteboardContainer, empty_scene
+from ai_do_api.domains.whiteboard.models import Whiteboard, WhiteboardTarget, empty_scene
+
+
+@dataclass(frozen=True)
+class WhiteboardPrimaryTargetInput:
+    app: str
+    type: str
+    id: str
+    sort_order: int
+
+
+PrimaryTargetInput = WhiteboardPrimaryTargetInput | tuple[str, str, str, int]
+
+
+def normalize_primary_target_input(
+    value: PrimaryTargetInput,
+) -> WhiteboardPrimaryTargetInput:
+    if isinstance(value, WhiteboardPrimaryTargetInput):
+        return value
+    target_app, target_type, target_id, sort_order = value
+    return WhiteboardPrimaryTargetInput(
+        app=target_app,
+        type=target_type,
+        id=target_id,
+        sort_order=sort_order,
+    )
 
 
 def create_whiteboard_for_user(
@@ -19,7 +45,7 @@ def create_whiteboard_for_user(
     source_kind: str = "manual",
     source_ref: str | None = None,
     generation_kind: str = "human",
-    primary_container: tuple[str, str, str, int] | None = None,
+    primary_target: PrimaryTargetInput | None = None,
 ) -> Whiteboard:
     whiteboard = Whiteboard(
         id=new_id(),
@@ -33,17 +59,17 @@ def create_whiteboard_for_user(
         generation_kind=generation_kind,
     )
     db.add(whiteboard)
-    if primary_container is not None:
-        container_app, container_type, container_id, sort_order = primary_container
+    if primary_target is not None:
+        target = normalize_primary_target_input(primary_target)
         db.add(
-            WhiteboardContainer(
+            WhiteboardTarget(
                 id=new_id(),
                 whiteboard_id=whiteboard.id,
-                container_app=container_app,
-                container_type=container_type,
-                container_id=container_id,
+                target_app=target.app,
+                target_type=target.type,
+                target_id=target.id,
                 is_primary=True,
-                sort_order=sort_order,
+                sort_order=target.sort_order,
                 created_by_id=owner_id,
             )
         )

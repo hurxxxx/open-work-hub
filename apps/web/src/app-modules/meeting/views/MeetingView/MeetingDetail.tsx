@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   CheckSquare,
@@ -15,14 +15,22 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { Button, Dialog, useConfirm } from '@ai-do/ui';
+import { Button, Dialog, InlineNotice, useConfirm } from '@ai-do/ui';
 import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   LinkedRecordingList,
+  RecordingRecoveryBanner,
+  getRecordingRecoveryAction,
+  planRecordingRecoverySession,
+  runRecordingRecoveryAction,
+  useRecordingRecovery,
+  useResilientRecorder,
   type LinkedRecordingListItem,
-} from '@/src/app-modules/recording/views/LinkedRecordingsList';
+  type RecordingRecoveryAction,
+  type RecordingTargetRef,
+} from '@/src/app-modules/recording/public-api';
 import { formatDateTime, normalizeTimeZone } from '@/src/platform/time/time-utils';
 import {
   RAIL_VISIBLE_STATUSES,
@@ -33,12 +41,10 @@ import {
   detachDocFromMeeting,
   detachTaskFromMeeting,
   getMeeting,
-  parseServerDateTime,
   deleteMeetingRecording,
   retryMeetingRecording,
   uploadMeetingFile,
   type MeetingDetail as MeetingDetailType,
-  type MeetingRecording,
 } from '../../api/meeting-api';
 import {
   canAttachToMeeting,
@@ -56,11 +62,14 @@ import { TaskPickerModal } from './TaskPickerModal';
 import { DocPickerModal } from './DocPickerModal';
 import { RecordingControls } from './RecordingControls';
 import { RecordingProgressRail } from './RecordingProgressRail';
-import { RecordingRecoveryBanner } from './RecordingRecoveryBanner';
+import {
+  activeRecordingLockForOtherUser,
+  formatMeetingFileSize,
+  formatMeetingRange,
+  transcriptStatusKey,
+} from './meeting-detail-model';
 import { openMeetingInsightInChat } from './openMeetingInsightInChat';
-import { useChunkedRecorder } from './useChunkedRecorder';
 import { useRecordingPoll } from './useRecordingPoll';
-import { useRecordingRecovery } from './useRecordingRecovery';
 import {
   WhiteboardEditorSurface,
   WhiteboardPickerModal,
@@ -87,49 +96,43 @@ const STATUS_TRANSLATION_KEYS: Record<string, string> = {
   cancelled: 'meeting.cancelled',
 };
 
-const TRANSCRIPT_EXTRACTED_STATUSES = new Set([
-  'summarizing',
-  'extracting_insights',
-  'generating_doc',
-  'done',
-]);
+type MeetingDataUpdate =
+  | MeetingDetailType
+  | null
+  | ((current: MeetingDetailType | null) => MeetingDetailType | null);
 
-function transcriptStatusKey(recording: MeetingRecording): string {
-  if (
-    recording.transcript_extracted === true ||
-    TRANSCRIPT_EXTRACTED_STATUSES.has(recording.transcription_status)
-  ) {
-    return 'meeting.recordingStatus.transcriptExtracted';
-  }
-  if (recording.transcription_status === 'transcribing') {
-    return 'meeting.recordingStatus.transcriptExtracting';
-  }
-  if (recording.transcription_status === 'failed') {
-    return 'meeting.recordingStatus.transcriptFailed';
-  }
-  return 'meeting.recordingStatus.transcriptQueued';
+interface MeetingDataState {
+  meeting: MeetingDetailType | null;
+  error: string | null;
 }
 
-function formatRange(start: string, end: string, timeZone: string, locale: string): string {
-  const s = parseServerDateTime(start);
-  const e = parseServerDateTime(end);
-  return `${formatDateTime(s, {
-    locale,
-    month: 'short',
-    day: 'numeric',
-    weekday: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone,
-  })} – ${formatDateTime(e, {
-    hour: '2-digit',
-    locale,
-    minute: '2-digit',
-    timeZone,
-  })}`;
+type MeetingDataAction =
+  | { type: 'meeting:set'; next: MeetingDataUpdate }
+  | { type: 'error:set'; message: string | null };
+
+const INITIAL_MEETING_DATA_STATE: MeetingDataState = {
+  meeting: null,
+  error: null,
+};
+
+function meetingDataReducer(
+  state: MeetingDataState,
+  action: MeetingDataAction,
+): MeetingDataState {
+  switch (action.type) {
+    case 'meeting:set': {
+      const meeting =
+        typeof action.next === 'function' ? action.next(state.meeting) : action.next;
+      return { ...state, meeting };
+    }
+    case 'error:set':
+      return { ...state, error: action.message };
+    default:
+      return state;
+  }
 }
 
-export function MeetingDetail({
+function useMeetingDetailElement({
   workspaceSlug,
   meetingId,
   onClose,
@@ -142,9 +145,17 @@ export function MeetingDetail({
   const timeZone = normalizeTimeZone(user?.time_zone);
   const navigate = useNavigate();
   const { confirm, confirmDialog } = useConfirm();
-  const [meeting, setMeeting] = useState<MeetingDetailType | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [meetingData, dispatchMeetingData] = useReducer(
+    meetingDataReducer,
+    INITIAL_MEETING_DATA_STATE,
+  );
+  const { meeting, error } = meetingData;
+  const setMeeting = useCallback((next: MeetingDataUpdate) => {
+    dispatchMeetingData({ type: 'meeting:set', next });
+  }, []);
+  const setError = useCallback((message: string | null) => {
+    dispatchMeetingData({ type: 'error:set', message });
+  }, []);
   const [taskPickerOpen, setTaskPickerOpen] = useState(false);
   const [docPickerOpen, setDocPickerOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -158,7 +169,6 @@ export function MeetingDetail({
 
   const refresh = useCallback(async () => {
     if (!token) return;
-    setLoading(true);
     setError(null);
     try {
       const detail = await getMeeting(token, workspaceSlug, meetingId);
@@ -166,26 +176,49 @@ export function MeetingDetail({
     } catch (err) {
       setError(err instanceof Error ? err.message : t('meeting.detail.loadFailed'));
       setMeeting(null);
-    } finally {
-      setLoading(false);
     }
-  }, [meetingId, t, token, workspaceSlug]);
+  }, [meetingId, setError, setMeeting, t, token, workspaceSlug]);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
 
-  const recovery = useRecordingRecovery(workspaceSlug, meetingId, token);
-  const recorder = useChunkedRecorder({
+  const recordingTarget = useMemo<RecordingTargetRef>(
+    () => ({ app: 'meeting', type: 'meeting', id: meetingId }),
+    [meetingId],
+  );
+  const recovery = useRecordingRecovery({
     workspaceSlug,
-    meetingId,
     token,
-    onMeetingUpdated: (updated) => {
-      setMeeting(updated);
+    initialTarget: recordingTarget,
+  });
+  const recorder = useResilientRecorder({
+    workspaceSlug,
+    token,
+    initialTarget: recordingTarget,
+    source: 'live_recording',
+    title: meeting?.title ?? null,
+    onRecordingSaved: async () => {
+      await refresh();
       void recovery.refresh();
       onChanged();
     },
   });
+
+  function handleRecoveryAction(action: RecordingRecoveryAction) {
+    void runRecordingRecoveryAction(
+      action,
+      {
+        resumeUpload: recorder.resumeUpload,
+        continueRecording: recorder.continueRecording,
+        downloadOriginal: recorder.downloadRecoveredSession,
+        importOriginal: recorder.importRecoveredSession,
+        finalizeUploaded: recorder.finalizeUploadedOnly,
+        discard: recorder.discardSession,
+      },
+      recovery.refresh,
+    );
+  }
 
   useRecordingPoll(
     token,
@@ -203,11 +236,10 @@ export function MeetingDetail({
   // local user cannot start a new recording — RecordingControls disables
   // the start button and renders an inline notice. Auto-clears when the
   // server stops returning the lock (recorder finishes OR stale window).
-  const lockedByOther = (() => {
-    if (!meeting?.active_recording_lock || !user) return null;
-    if (meeting.active_recording_lock.user_id === user.id) return null;
-    return meeting.active_recording_lock;
-  })();
+  const lockedByOther = activeRecordingLockForOtherUser(
+    meeting?.active_recording_lock,
+    user?.id,
+  );
 
   const editable = canEditMeeting(user, meeting);
   const canAttach = canAttachToMeeting(user, meeting);
@@ -233,16 +265,16 @@ export function MeetingDetail({
         },
       };
     });
-  }, [user?.id]);
+  }, [setMeeting, user?.id]);
 
-  async function handleAttachTask(issue: { id: string }) {
+  async function handleAttachTask(task: { id: string }) {
     if (!token) return;
-    const updated = await attachTaskToMeeting(token, workspaceSlug, meetingId, issue.id);
+    const updated = await attachTaskToMeeting(token, workspaceSlug, meetingId, task.id);
     setMeeting(updated);
     onChanged();
   }
 
-  async function handleDetachTask(issueId: string) {
+  async function handleDetachTask(taskId: string) {
     if (!token) return;
     setBusy(true);
     try {
@@ -250,7 +282,7 @@ export function MeetingDetail({
         token,
         workspaceSlug,
         meetingId,
-        issueId,
+        taskId,
       );
       setMeeting(updated);
       onChanged();
@@ -380,16 +412,9 @@ export function MeetingDetail({
     }
   }
 
-  function formatFileSize(bytes: number): string {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  }
-
-  // Force a real file download instead of opening in a new tab. We fetch the
-  // MinIO presigned URL as a blob and trigger a synthetic anchor click with
-  // the original filename. The <a download> attribute is ignored on cross-
-  // origin URLs, which is why we take the blob roundtrip.
+  // Force a real file download instead of opening in a new tab. The API
+  // returns a short-lived content URL, and the blob roundtrip preserves the
+  // original filename across browsers.
   async function handleFileDownload(file: {
     download_url: string;
     filename: string;
@@ -483,7 +508,7 @@ export function MeetingDetail({
     }
   }
 
-  if (loading && meeting === null) {
+  if (token && !error && meeting === null) {
     return (
       <div className="flex h-full items-center justify-center text-app-ink/40">
         <Loader2 size={18} className="animate-spin" />
@@ -526,7 +551,7 @@ export function MeetingDetail({
             {meeting.title}
           </h2>
           <p className="app-text-caption mt-1 text-app-ink/60 dark:text-app-ink/70">
-            {formatRange(meeting.start_at, meeting.end_at, timeZone, i18n.language)} · {meeting.organizer_name}
+            {formatMeetingRange(meeting.start_at, meeting.end_at, timeZone, i18n.language)} · {meeting.organizer_name}
           </p>
         </div>
         <div className="ml-3 flex shrink-0 items-center gap-1">
@@ -556,12 +581,13 @@ export function MeetingDetail({
 
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-6">
         {error ? (
-          <div
+          <InlineNotice
             role="alert"
-            className="app-text-body rounded-md border border-[var(--ui-color-danger)]/30 bg-[var(--ui-color-danger)]/10 px-3 py-2 text-[var(--ui-color-danger)]"
+            className="app-text-body"
+            tone="danger"
           >
             {error}
-          </div>
+          </InlineNotice>
         ) : null}
 
         <Section
@@ -583,22 +609,22 @@ export function MeetingDetail({
                   <div className="min-w-0">
                     <p className="app-text-body line-clamp-1 text-app-ink">
                       <Link
-                        to={buildWorkspaceAppPath(workspaceSlug, 'pms', `?issue=${encodeURIComponent(link.issue_id)}`)}
+                        to={buildWorkspaceAppPath(workspaceSlug, 'pms', `?task=${encodeURIComponent(link.task_id)}`)}
                         className="hover:text-app-accent hover:underline"
                       >
-                        {link.issue_title || t('meeting.detail.untitled')}
+                        {link.task_title || t('meeting.detail.untitled')}
                       </Link>
                     </p>
                     <p className="app-text-caption text-app-ink/40">
                       {link.list_key
-                        ? `${link.list_key}-${link.issue_number}`
+                        ? `${link.list_key}-${link.task_number}`
                         : '#'}
                     </p>
                     </div>
                   {canRemoveAttachment(user, meeting, link) ? (
                     <button
                       type="button"
-                      onClick={() => handleDetachTask(link.issue_id)}
+                      onClick={() => handleDetachTask(link.task_id)}
                       disabled={busy}
                       className="ml-2 shrink-0 text-app-ink/40 hover:text-[var(--ui-color-danger)] disabled:opacity-40"
                       aria-label={t('meeting.detail.detachTask')}
@@ -759,6 +785,7 @@ export function MeetingDetail({
           <input
             ref={fileInputRef}
             type="file"
+            aria-label={t('meeting.detail.files')}
             className="hidden"
             onChange={handleFileChange}
           />
@@ -782,7 +809,7 @@ export function MeetingDetail({
                       {file.filename}
                     </a>
                     <p className="app-text-caption text-app-ink/40">
-                      {formatFileSize(file.size_bytes)} · {file.added_by_name}
+                      {formatMeetingFileSize(file.size_bytes)} · {file.added_by_name}
                     </p>
                   </div>
                   <div className="ml-2 flex shrink-0 items-center gap-0.5">
@@ -825,10 +852,19 @@ export function MeetingDetail({
               queuedBytes={recorder.queuedBytes}
               uploadedBytes={recorder.uploadedBytes}
               persistWarning={recorder.persistWarning}
+              wakeLockWarning={recorder.wakeLockWarning}
+              inputWarning={recorder.inputWarning}
               lockedByOther={lockedByOther}
-              onStart={(linkedTaskId) => recorder.startRecording(linkedTaskId)}
+              onStart={(linkedTaskId) => recorder.startRecording({
+                linkedTaskId,
+                title: meeting.title,
+              })}
               onStop={recorder.stopRecording}
-              onImportFile={(file, linkedTaskId) => recorder.importAudioFile(file, linkedTaskId)}
+              onImportFile={(file, linkedTaskId) => recorder.importAudioFile(file, {
+                linkedTaskId,
+                title: meeting.title,
+                source: 'manual_upload',
+              })}
             />
           ) : null}
 
@@ -839,64 +875,27 @@ export function MeetingDetail({
           {recovery.items.length > 0 ? (
             <div className="mt-3 space-y-2">
               {recovery.items.map((item) => {
-                const localSession = item.localSession;
-                const remoteStaging = item.remoteStaging;
+                const plan = planRecordingRecoverySession(item);
+                const resumeAction = getRecordingRecoveryAction(plan, 'resume-upload');
+                const continueAction = getRecordingRecoveryAction(plan, 'continue-recording');
+                const downloadAction = getRecordingRecoveryAction(plan, 'download-original');
+                const importAction = getRecordingRecoveryAction(plan, 'import-original');
+                const discardAction = getRecordingRecoveryAction(plan, 'discard');
+                const finalizeAction = getRecordingRecoveryAction(plan, 'finalize-uploaded');
                 return (
                   <RecordingRecoveryBanner
                     key={item.stagingId}
                     item={item}
-                    onResumeUpload={
-                      localSession && remoteStaging
-                        ? () => {
-                            void recorder.resumeUpload(item.stagingId);
-                          }
-                        : undefined
-                    }
+                    plan={plan}
+                    onResumeUpload={resumeAction ? () => handleRecoveryAction(resumeAction) : undefined}
                     onContinueRecording={
-                      localSession && remoteStaging
-                        ? () => {
-                            void recorder.continueRecording({
-                              stagingId: item.stagingId,
-                              idempotencyKey: localSession.idempotencyKey,
-                              mimeType: localSession.mimeType,
-                              linkedTaskId: localSession.linkedTaskId,
-                              highestSeq: Math.max(
-                                localSession.lastChunkSeq,
-                                remoteStaging.highest_seq,
-                              ),
-                            });
-                          }
-                        : undefined
+                      continueAction ? () => handleRecoveryAction(continueAction) : undefined
                     }
-                    onDownload={
-                      localSession
-                        ? () => {
-                            void recorder.downloadRecoveredSession(item.stagingId);
-                          }
-                        : undefined
-                    }
-                    onImport={
-                      localSession
-                        ? () => {
-                            void recorder
-                              .importRecoveredSession(item.stagingId, localSession.linkedTaskId)
-                              .then(() => recovery.refresh());
-                          }
-                        : undefined
-                    }
-                    onDiscard={() => {
-                      void recorder
-                        .discardSession(item.stagingId, Boolean(remoteStaging))
-                        .then(() => recovery.refresh());
-                    }}
+                    onDownload={downloadAction ? () => handleRecoveryAction(downloadAction) : undefined}
+                    onImport={importAction ? () => handleRecoveryAction(importAction) : undefined}
+                    onDiscard={discardAction ? () => handleRecoveryAction(discardAction) : undefined}
                     onFinalizeUploadedOnly={
-                      !localSession && remoteStaging
-                        ? () => {
-                            void recorder
-                              .finalizeUploadedOnly(item.stagingId)
-                              .then(() => recovery.refresh());
-                          }
-                        : undefined
+                      finalizeAction ? () => handleRecoveryAction(finalizeAction) : undefined
                     }
                   />
                 );
@@ -935,7 +934,7 @@ export function MeetingDetail({
                   return {
                     id: recording.id,
                     title: recordingLabel,
-                    subtitle: `${formatFileSize(recording.file_size)} · ${recording.mime_type}`,
+                    subtitle: `${formatMeetingFileSize(recording.file_size)} · ${recording.mime_type}`,
                     detailHref: buildWorkspaceAppPath(workspaceSlug, 'recording', recording.id),
                     statusLine: `${t('meeting.recordingStatus.audioSaved')} · ${t(transcriptStatusKey(recording))}`,
                     rawTranscriptDocId: recording.raw_transcript_doc_id,
@@ -1047,7 +1046,7 @@ export function MeetingDetail({
         isOpen={taskPickerOpen}
         onClose={() => setTaskPickerOpen(false)}
         onPick={handleAttachTask}
-        excludeIssueIds={meeting.task_links.map((link) => link.issue_id)}
+        excludeTaskIds={meeting.task_links.map((link) => link.task_id)}
         workspaceSlug={workspaceSlug}
       />
       <DocPickerModal
@@ -1121,4 +1120,8 @@ export function MeetingDetail({
       {confirmDialog}
     </div>
   );
+}
+
+export function MeetingDetail(props: MeetingDetailProps) {
+  return useMeetingDetailElement(props);
 }

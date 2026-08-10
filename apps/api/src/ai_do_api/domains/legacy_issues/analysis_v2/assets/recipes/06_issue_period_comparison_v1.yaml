@@ -1,0 +1,22 @@
+{
+  "recipe_id": "issue_period_comparison",
+  "version": 1,
+  "title": "과거차 문제점 두 기간 비교",
+  "description": "서로 다른 두 기간의 고유 문제점 건수를 같은 기준으로 비교한다.",
+  "result_shape": "comparison",
+  "counting_unit": "issues",
+  "source_views": ["legacy_issue_analysis.issue_records_v1"],
+  "sql_template": "SELECT CASE WHEN i.occurrence_date BETWEEN :period_a_from AND :period_a_to THEN 'period_a' ELSE 'period_b' END AS period_key, COUNT(DISTINCT i.issue_id) AS issue_count FROM legacy_issue_analysis.issue_records_v1 AS i WHERE ((i.occurrence_date BETWEEN :period_a_from AND :period_a_to) OR (i.occurrence_date BETWEEN :period_b_from AND :period_b_to)) AND {{filters}} GROUP BY CASE WHEN i.occurrence_date BETWEEN :period_a_from AND :period_a_to THEN 'period_a' ELSE 'period_b' END ORDER BY period_key",
+  "parameters": [
+    {"name": "period_a_from", "value_type": "date", "placement": "bind", "description": "첫 번째 기간 시작일", "required": true},
+    {"name": "period_a_to", "value_type": "date", "placement": "bind", "description": "첫 번째 기간 종료일", "required": true},
+    {"name": "period_b_from", "value_type": "date", "placement": "bind", "description": "두 번째 기간 시작일", "required": true},
+    {"name": "period_b_to", "value_type": "date", "placement": "bind", "description": "두 번째 기간 종료일", "required": true},
+    {"name": "vehicle_models", "value_type": "string_list", "placement": "filter", "description": "차종 목록", "column": "i.vehicle_model", "operator": "in"},
+    {"name": "regions", "value_type": "string_list", "placement": "filter", "description": "권역 목록", "column": "i.region_zone", "operator": "in"},
+    {"name": "module_keys", "value_type": "string_list", "placement": "filter", "description": "모듈 목록", "column": "i.module_key", "operator": "in"},
+    {"name": "issue_types", "value_type": "string_list", "placement": "filter", "description": "문제 유형 목록", "column": "i.issue_type", "operator": "in"},
+    {"name": "query_text", "value_type": "string", "placement": "filter", "description": "문제 내용 포함 검색어", "column": "i.search_text", "operator": "contains"}
+  ],
+  "tags": ["comparison", "period", "before", "after"]
+}

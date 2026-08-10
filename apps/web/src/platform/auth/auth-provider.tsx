@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
-import { useEffect, useRef, useState } from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   changePassword as changePasswordRequest,
@@ -16,47 +15,53 @@ import {
   logout as logoutRequest,
   revokeSession as revokeSessionRequest,
   setupFirstUser as setupFirstUserRequest,
+  signup as signupRequest,
   updatePreferences as updatePreferencesRequest,
+  type AuthSessionResponse,
   type AuthUser,
   type ChangePasswordPayload,
-  type DevLoginAccount,
   type LoginPayload,
   type SetupFirstUserPayload,
+  type SignupPayload,
   type UpdatePreferencesPayload,
 } from './auth-api';
+import { AuthContext } from './auth-context';
 import {
-  AuthContext,
-  useAuth as useAuthContext,
-  type AuthSessionStatus,
-} from './auth-context';
+  initialAuthState,
+  projectRefreshSession,
+  toAuthenticatedAuthState,
+  type AuthState,
+} from './auth-session-model';
 import {
   clearStoredAuthToken,
-  consumePostLogoutHomeRedirect,
   markPostLogoutHomeRedirect,
   persistAuthToken,
   readStoredAuthToken,
 } from './auth-storage';
-import { LoginScreen } from './login-screen';
+import { resolveMatomoUserIdentity } from './auth-matomo';
+import {
+  syncDesktopLoginSession,
+  syncDesktopLogoutSession,
+} from './desktop-session-sync';
 import { i18n, syncLocale } from '@/src/platform/i18n';
+import {
+  syncDateFormatPreference,
+  syncTimeZonePreference,
+} from '@/src/platform/time/time-utils';
+import {
+  clearMatomoUser,
+  identifyMatomoUser,
+} from '@/src/platform/analytics/matomo';
 
 export { useAuth } from './auth-context';
-
-interface AuthState {
-  status: AuthSessionStatus;
-  user: AuthUser | null;
-  token: string | null;
-  requiresSetup: boolean;
-  devAdminLoginAvailable: boolean;
-  devLoginAccounts: DevLoginAccount[];
-  bootstrapError: string | null;
-}
+export { AuthLoadingScreen } from './auth-loading-screen';
+export { LoginRoute } from './login-route';
+export { RequireAuth } from './require-auth';
 
 const PERMISSION_ROLE_MAP: Record<string, string[]> = {
   'admin.access': ['platform_admin'],
   'user.read': ['platform_admin'],
   'user.write': ['platform_admin'],
-  'group.read': ['platform_admin'],
-  'group.write': ['platform_admin'],
   'org_unit.read': ['platform_admin'],
   'org_unit.write': ['platform_admin'],
   'workspace.read': ['platform_admin'],
@@ -65,6 +70,7 @@ const PERMISSION_ROLE_MAP: Record<string, string[]> = {
   'team.write': ['platform_admin'],
   'audit.read': ['platform_admin'],
   'session.revoke': ['platform_admin'],
+  'user.impersonate': ['platform_admin'],
 };
 
 function errorMessage(caughtError: unknown, fallback: string): string {
@@ -75,71 +81,12 @@ function errorMessage(caughtError: unknown, fallback: string): string {
   return fallback;
 }
 
-function nextAuthenticatedState(
-  user: AuthUser,
-  token: string,
-  devAdminLoginAvailable: boolean,
-  devLoginAccounts: DevLoginAccount[],
-): AuthState {
-  return {
-    status: 'authenticated',
-    user,
-    token,
-    requiresSetup: false,
-    devAdminLoginAvailable,
-    devLoginAccounts,
-    bootstrapError: null,
-  };
-}
-
-function sanitizeRedirectTarget(
-  state: unknown,
-  fallback = '/',
-): string {
-  if (
-    state &&
-    typeof state === 'object' &&
-    'from' in state &&
-    typeof state.from === 'string' &&
-    state.from.startsWith('/') &&
-    state.from !== '/login'
-  ) {
-    return state.from;
-  }
-
-  return fallback;
-}
-
-export function AuthLoadingScreen() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-[var(--ui-color-bg)] px-6">
-      <div
-        aria-live="polite"
-        className="grid w-full max-w-sm gap-2 rounded-[var(--ui-radius-lg)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface)] p-5 text-center shadow-[var(--ui-shadow-sm)]"
-        role="status"
-      >
-        <p className="m-0 text-[0.72rem] font-semibold uppercase tracking-[0.1em] text-[var(--ui-color-ink-subtle)]">
-          {i18n.t('auth:loading.eyebrow')}
-        </p>
-        <strong className="text-[1rem] text-[var(--ui-color-ink)]">{i18n.t('auth:loading.title')}</strong>
-        <p className="m-0 text-[0.84rem] text-[var(--ui-color-ink-muted)]">
-          {i18n.t('auth:loading.description')}
-        </p>
-      </div>
-    </div>
-  );
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<AuthState>({
-    status: 'bootstrapping',
-    user: null,
-    token: null,
-    requiresSetup: false,
-    devAdminLoginAvailable: false,
-    devLoginAccounts: [],
-    bootstrapError: null,
-  });
+  return useAuthProviderElement(children);
+}
+
+function useAuthProviderElement(children: ReactNode) {
+  const [state, setState] = useState<AuthState>(() => initialAuthState());
   const mountedRef = useRef(true);
   const requestIdRef = useRef(0);
 
@@ -151,7 +98,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  async function refreshSession() {
+  const requestIsCurrent = useCallback(
+    (requestId: number) =>
+      mountedRef.current && requestIdRef.current === requestId,
+    [],
+  );
+
+  const applyAuthenticatedSession = useCallback(
+    (session: { token: string; user: AuthUser }) => {
+      persistAuthToken(session.token);
+      void syncDesktopLoginSession(session.token).catch(() => undefined);
+      syncLocale(session.user.locale);
+      syncDateFormatPreference(session.user.date_format);
+      syncTimeZonePreference(session.user.time_zone);
+      identifyMatomoUser(resolveMatomoUserIdentity(session.user));
+      setState((current) =>
+        toAuthenticatedAuthState({
+          user: session.user,
+          token: session.token,
+          devAdminLoginAvailable: current.devAdminLoginAvailable,
+          devLoginAccounts: current.devLoginAccounts,
+        }),
+      );
+    },
+    [],
+  );
+
+  const refreshSession = useCallback(async () => {
     const requestId = ++requestIdRef.current;
     const storedToken = readStoredAuthToken();
     setState((current) => ({
@@ -165,144 +138,116 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       storedToken ? getCurrentUser(storedToken) : Promise.resolve(null),
     ]);
 
-    if (!mountedRef.current || requestIdRef.current !== requestId) {
-      return;
-    }
+    if (requestIsCurrent(requestId)) {
+      let bootstrapError: string | null = null;
+      const bootstrapStatus =
+        bootstrapResult.status === 'fulfilled' ? bootstrapResult.value : null;
 
-    let bootstrapError: string | null = null;
-    let requiresSetup = false;
-    let devAdminLoginAvailable = false;
-    let devLoginAccounts: DevLoginAccount[] = [];
+      if (bootstrapResult.status === 'rejected') {
+        bootstrapError = errorMessage(
+          bootstrapResult.reason,
+          i18n.t('auth:errors.bootstrap'),
+        );
+      }
 
-    if (bootstrapResult.status === 'fulfilled') {
-      requiresSetup = bootstrapResult.value.requires_setup;
-      devAdminLoginAvailable = Boolean(bootstrapResult.value.dev_admin_login_available);
-      devLoginAccounts = bootstrapResult.value.dev_login_accounts ?? [];
-    } else {
-      bootstrapError = errorMessage(
-        bootstrapResult.reason,
-        i18n.t('auth:errors.bootstrap'),
-      );
-    }
-
-    if (
-      storedToken &&
-      currentUserResult.status === 'fulfilled' &&
-      currentUserResult.value
-    ) {
-      syncLocale(currentUserResult.value.locale);
-      setState({
-        status: 'authenticated',
-        user: currentUserResult.value,
-        token: storedToken,
-        requiresSetup,
-        devAdminLoginAvailable,
-        devLoginAccounts,
-        bootstrapError: null,
+      const projection = projectRefreshSession({
+        storedToken,
+        bootstrapStatus,
+        bootstrapError,
+        currentUser:
+          currentUserResult.status === 'fulfilled'
+            ? currentUserResult.value
+            : null,
       });
-      return;
-    }
 
-    if (storedToken) {
-      clearStoredAuthToken();
-    }
+      if (projection.sessionToSync) {
+        syncLocale(projection.sessionToSync.user.locale);
+        syncDateFormatPreference(projection.sessionToSync.user.date_format);
+        syncTimeZonePreference(projection.sessionToSync.user.time_zone);
+        identifyMatomoUser(
+          resolveMatomoUserIdentity(projection.sessionToSync.user),
+        );
+      }
 
-    setState({
-      status: 'unauthenticated',
-      user: null,
-      token: null,
-      requiresSetup,
-      devAdminLoginAvailable,
-      devLoginAccounts,
-      bootstrapError,
-    });
-  }
+      if (projection.shouldClearStoredToken) {
+        clearStoredAuthToken();
+        clearMatomoUser();
+      }
+
+      setState(projection.state);
+    }
+  }, [requestIsCurrent]);
 
   useEffect(() => {
     void refreshSession();
-  }, []);
+  }, [refreshSession]);
 
-  async function login(payload: LoginPayload) {
-    const requestId = ++requestIdRef.current;
-    const session = await loginRequest(payload);
+  const login = useCallback(
+    async (payload: LoginPayload) => {
+      const requestId = ++requestIdRef.current;
+      const session = await loginRequest(payload);
 
-    if (!mountedRef.current || requestIdRef.current !== requestId) {
-      return;
-    }
+      if (requestIsCurrent(requestId)) {
+        applyAuthenticatedSession(session);
+      }
+    },
+    [applyAuthenticatedSession, requestIsCurrent],
+  );
 
-    persistAuthToken(session.token);
-    syncLocale(session.user.locale);
-    setState(
-      nextAuthenticatedState(
-        session.user,
-        session.token,
-        state.devAdminLoginAvailable,
-        state.devLoginAccounts,
-      ),
-    );
-  }
+  const signup = useCallback(
+    async (payload: SignupPayload) => {
+      const requestId = ++requestIdRef.current;
+      const session = await signupRequest(payload);
 
-  async function loginAsDevelopmentAdmin() {
+      if (requestIsCurrent(requestId)) {
+        applyAuthenticatedSession(session);
+      }
+    },
+    [applyAuthenticatedSession, requestIsCurrent],
+  );
+
+  const loginAsDevelopmentAdmin = useCallback(async () => {
     const requestId = ++requestIdRef.current;
     const session = await developmentAdminLoginRequest();
 
-    if (!mountedRef.current || requestIdRef.current !== requestId) {
-      return;
+    if (requestIsCurrent(requestId)) {
+      applyAuthenticatedSession(session);
     }
+  }, [applyAuthenticatedSession, requestIsCurrent]);
 
-    persistAuthToken(session.token);
-    syncLocale(session.user.locale);
-    setState(
-      nextAuthenticatedState(
-        session.user,
-        session.token,
-        state.devAdminLoginAvailable,
-        state.devLoginAccounts,
-      ),
-    );
-  }
+  const loginAsDevelopmentAccount = useCallback(
+    async (accountKey: string) => {
+      const requestId = ++requestIdRef.current;
+      const session = await developmentAccountLoginRequest(accountKey);
 
-  async function loginAsDevelopmentAccount(accountKey: string) {
-    const requestId = ++requestIdRef.current;
-    const session = await developmentAccountLoginRequest(accountKey);
+      if (requestIsCurrent(requestId)) {
+        applyAuthenticatedSession(session);
+      }
+    },
+    [applyAuthenticatedSession, requestIsCurrent],
+  );
 
-    if (!mountedRef.current || requestIdRef.current !== requestId) {
-      return;
-    }
+  const setupFirstUser = useCallback(
+    async (payload: SetupFirstUserPayload) => {
+      const requestId = ++requestIdRef.current;
+      const session = await setupFirstUserRequest(payload);
 
-    persistAuthToken(session.token);
-    syncLocale(session.user.locale);
-    setState(
-      nextAuthenticatedState(
-        session.user,
-        session.token,
-        state.devAdminLoginAvailable,
-        state.devLoginAccounts,
-      ),
-    );
-  }
+      if (requestIsCurrent(requestId)) {
+        applyAuthenticatedSession(session);
+      }
+    },
+    [applyAuthenticatedSession, requestIsCurrent],
+  );
 
-  async function setupFirstUser(payload: SetupFirstUserPayload) {
-    const requestId = ++requestIdRef.current;
-    const session = await setupFirstUserRequest(payload);
+  const switchSession = useCallback(
+    (session: AuthSessionResponse) => {
+      requestIdRef.current += 1;
+      applyAuthenticatedSession(session);
+    },
+    [applyAuthenticatedSession],
+  );
 
-    if (!mountedRef.current || requestIdRef.current !== requestId) {
-      return;
-    }
-
-    persistAuthToken(session.token);
-    syncLocale(session.user.locale);
-    setState(
-      nextAuthenticatedState(
-        session.user,
-        session.token,
-        state.devAdminLoginAvailable,
-        state.devLoginAccounts,
-      ),
-    );
-  }
-
-  async function logout() {
+  const logout = useCallback(async () => {
     const requestId = ++requestIdRef.current;
     const sessionToken = state.token;
 
@@ -313,158 +258,148 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       clearStoredAuthToken();
       markPostLogoutHomeRedirect();
+      syncDesktopLogoutSession();
+      clearMatomoUser();
     }
 
-    if (!mountedRef.current || requestIdRef.current !== requestId) {
-      return;
+    if (requestIsCurrent(requestId)) {
+      setState({
+        status: 'unauthenticated',
+        user: null,
+        token: null,
+        requiresSetup: false,
+        devAdminLoginAvailable: state.devAdminLoginAvailable,
+        devLoginAccounts: state.devLoginAccounts,
+        bootstrapError: null,
+      });
     }
+  }, [
+    requestIsCurrent,
+    state.devAdminLoginAvailable,
+    state.devLoginAccounts,
+    state.token,
+  ]);
 
-    setState({
-      status: 'unauthenticated',
-      user: null,
-      token: null,
-      requiresSetup: false,
-      devAdminLoginAvailable: state.devAdminLoginAvailable,
-      devLoginAccounts: state.devLoginAccounts,
-      bootstrapError: null,
-    });
-  }
+  const updatePreferences = useCallback(
+    async (payload: UpdatePreferencesPayload) => {
+      if (!state.token) {
+        throw new Error(i18n.t('auth:errors.noActiveSession'));
+      }
 
-  async function updatePreferences(payload: UpdatePreferencesPayload) {
-    if (!state.token) {
-      throw new Error(i18n.t('auth:errors.noActiveSession'));
-    }
+      const user = await updatePreferencesRequest(state.token, payload);
+      if (mountedRef.current) {
+        syncLocale(user.locale);
+        syncDateFormatPreference(user.date_format);
+        syncTimeZonePreference(user.time_zone);
+        identifyMatomoUser(resolveMatomoUserIdentity(user));
+        setState((current) =>
+          toAuthenticatedAuthState({
+            user,
+            token: current.token ?? state.token ?? '',
+            devAdminLoginAvailable: current.devAdminLoginAvailable,
+            devLoginAccounts: current.devLoginAccounts,
+          }),
+        );
+      }
+    },
+    [state.token],
+  );
 
-    const user = await updatePreferencesRequest(state.token, payload);
-    if (!mountedRef.current) {
-      return;
-    }
+  const changePassword = useCallback(
+    async (payload: ChangePasswordPayload) => {
+      if (!state.token) {
+        throw new Error(i18n.t('auth:errors.noActiveSession'));
+      }
 
-    syncLocale(user.locale);
-    setState((current) => (
-      nextAuthenticatedState(
-        user,
-        current.token ?? state.token ?? '',
-        current.devAdminLoginAvailable,
-        current.devLoginAccounts,
-      )
-    ));
-  }
+      await changePasswordRequest(state.token, payload);
+      if (mountedRef.current) {
+        await refreshSession();
+      }
+    },
+    [refreshSession, state.token],
+  );
 
-  async function changePassword(payload: ChangePasswordPayload) {
-    if (!state.token) {
-      throw new Error(i18n.t('auth:errors.noActiveSession'));
-    }
-
-    await changePasswordRequest(state.token, payload);
-    if (!mountedRef.current) {
-      return;
-    }
-
-    await refreshSession();
-  }
-
-  async function listSessions() {
+  const listSessions = useCallback(async () => {
     if (!state.token) {
       throw new Error(i18n.t('auth:errors.noActiveSession'));
     }
 
     const response = await listSessionsRequest(state.token);
     return response.items;
-  }
+  }, [state.token]);
 
-  async function revokeSession(sessionId: string) {
-    if (!state.token) {
-      throw new Error(i18n.t('auth:errors.noActiveSession'));
-    }
+  const revokeSession = useCallback(
+    async (sessionId: string) => {
+      if (!state.token) {
+        throw new Error(i18n.t('auth:errors.noActiveSession'));
+      }
 
-    await revokeSessionRequest(state.token, sessionId);
+      await revokeSessionRequest(state.token, sessionId);
 
-    if (!mountedRef.current) {
-      return;
-    }
-
-    await refreshSession();
-  }
-
-  function hasPermission(permission: string) {
-    const roles = PERMISSION_ROLE_MAP[permission];
-    if (!roles) {
-      return false;
-    }
-    return hasAnySystemRole(state.user, roles);
-  }
-
-  function hasFeature(featureCode: string, workspaceSlug?: string | null) {
-    if (featureCode === 'nav.admin') {
-      return hasAdminConsoleAccess(state.user);
-    }
-    return hasWorkspaceMembership(state.user, workspaceSlug);
-  }
-
-  return (
-    <AuthContext.Provider
-      value={{
-        ...state,
-        login,
-        loginAsDevelopmentAdmin,
-        loginAsDevelopmentAccount,
-        setupFirstUser,
-        logout,
-        refreshSession,
-        updatePreferences,
-        changePassword,
-        listSessions,
-        revokeSession,
-        hasPermission,
-        hasFeature,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+      if (mountedRef.current) {
+        await refreshSession();
+      }
+    },
+    [refreshSession, state.token],
   );
-}
 
-export function RequireAuth({ children }: { children: ReactNode }) {
-  const auth = useAuthContext();
-  const location = useLocation();
+  const hasPermission = useCallback(
+    (permission: string) => {
+      const roles = PERMISSION_ROLE_MAP[permission];
+      if (!roles) {
+        return false;
+      }
+      return hasAnySystemRole(state.user, roles);
+    },
+    [state.user],
+  );
 
-  if (auth.status === 'bootstrapping') {
-    return <AuthLoadingScreen />;
-  }
+  const hasFeature = useCallback(
+    (featureCode: string, workspaceSlug?: string | null) => {
+      if (featureCode === 'nav.admin') {
+        return hasAdminConsoleAccess(state.user);
+      }
+      return hasWorkspaceMembership(state.user, workspaceSlug);
+    },
+    [state.user],
+  );
 
-  if (auth.status !== 'authenticated') {
-    return (
-      <Navigate
-        replace
-        state={{
-          from: `${location.pathname}${location.search}${location.hash}`,
-        }}
-        to="/login"
-      />
-    );
-  }
+  const value = useMemo(
+    () => ({
+      ...state,
+      login,
+      signup,
+      loginAsDevelopmentAdmin,
+      loginAsDevelopmentAccount,
+      setupFirstUser,
+      switchSession,
+      logout,
+      refreshSession,
+      updatePreferences,
+      changePassword,
+      listSessions,
+      revokeSession,
+      hasPermission,
+      hasFeature,
+    }),
+    [
+      state,
+      login,
+      signup,
+      loginAsDevelopmentAdmin,
+      loginAsDevelopmentAccount,
+      setupFirstUser,
+      switchSession,
+      logout,
+      refreshSession,
+      updatePreferences,
+      changePassword,
+      listSessions,
+      revokeSession,
+      hasPermission,
+      hasFeature,
+    ],
+  );
 
-  return children;
-}
-
-export function LoginRoute() {
-  const auth = useAuthContext();
-  const location = useLocation();
-  const [redirectToHomeAfterLogout] = useState(() => consumePostLogoutHomeRedirect());
-
-  if (auth.status === 'bootstrapping') {
-    return <AuthLoadingScreen />;
-  }
-
-  if (auth.status === 'authenticated') {
-    return (
-      <Navigate
-        replace
-        to={redirectToHomeAfterLogout ? '/' : sanitizeRedirectTarget(location.state)}
-      />
-    );
-  }
-
-  return <LoginScreen />;
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

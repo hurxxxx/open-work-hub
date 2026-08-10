@@ -3,7 +3,18 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, JSON, LargeBinary, String, UniqueConstraint, text
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    JSON,
+    LargeBinary,
+    String,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ai_do_api.core.db import Base
@@ -19,15 +30,25 @@ def empty_scene() -> dict[str, Any]:
 
 class Whiteboard(Base):
     __tablename__ = "whiteboards"
+    __table_args__ = (
+        Index("ix_whiteboards_owner_created", "owner_id", "created_at"),
+        Index("ix_whiteboards_workspace_updated", "workspace_id", "updated_at"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), index=True)
     owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     title: Mapped[str] = mapped_column(String(200))
-    source_app: Mapped[str] = mapped_column(String(64), default="whiteboard", nullable=False, index=True)
-    source_kind: Mapped[str] = mapped_column(String(64), default="manual", nullable=False, index=True)
+    source_app: Mapped[str] = mapped_column(
+        String(64), default="whiteboard", nullable=False, index=True
+    )
+    source_kind: Mapped[str] = mapped_column(
+        String(64), default="manual", nullable=False, index=True
+    )
     source_ref: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
-    generation_kind: Mapped[str] = mapped_column(String(32), default="human", nullable=False, index=True)
+    generation_kind: Mapped[str] = mapped_column(
+        String(32), default="human", nullable=False, index=True
+    )
     scene: Mapped[dict[str, Any]] = mapped_column(JSON, default=empty_scene, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
@@ -40,7 +61,7 @@ class Whiteboard(Base):
 
     workspace = relationship("Workspace")
     owner = relationship("User")
-    containers: Mapped[list["WhiteboardContainer"]] = relationship(
+    targets: Mapped[list["WhiteboardTarget"]] = relationship(
         back_populates="whiteboard",
         cascade="all, delete-orphan",
     )
@@ -54,17 +75,17 @@ class Whiteboard(Base):
     )
 
 
-class WhiteboardContainer(Base):
-    __tablename__ = "whiteboard_containers"
+class WhiteboardTarget(Base):
+    __tablename__ = "whiteboard_targets"
     __table_args__ = (
         Index(
-            "ix_whiteboard_containers_lookup",
-            "container_app",
-            "container_type",
-            "container_id",
+            "ix_whiteboard_targets_target_lookup",
+            "target_app",
+            "target_type",
+            "target_id",
         ),
         Index(
-            "uq_whiteboard_containers_primary",
+            "uq_whiteboard_targets_primary",
             "whiteboard_id",
             unique=True,
             postgresql_where=text("is_primary IS TRUE"),
@@ -72,39 +93,41 @@ class WhiteboardContainer(Base):
         ),
         UniqueConstraint(
             "whiteboard_id",
-            "container_app",
-            "container_type",
-            "container_id",
-            name="uq_whiteboard_containers_board_container",
+            "target_app",
+            "target_type",
+            "target_id",
+            name="uq_whiteboard_targets_board_target",
         ),
         Index(
-            "uq_whiteboard_containers_meeting_slot",
-            "container_app",
-            "container_type",
-            "container_id",
+            "uq_whiteboard_targets_meeting_target_slot",
+            "target_app",
+            "target_type",
+            "target_id",
             unique=True,
-            postgresql_where=text("container_app = 'meeting' AND container_type = 'meeting'"),
-            sqlite_where=text("container_app = 'meeting' AND container_type = 'meeting'"),
+            postgresql_where=text("target_app = 'meeting' AND target_type = 'meeting'"),
+            sqlite_where=text("target_app = 'meeting' AND target_type = 'meeting'"),
         ),
         Index(
-            "uq_whiteboard_containers_pms_task_list_slot",
-            "container_app",
-            "container_type",
-            "container_id",
+            "uq_whiteboard_targets_pms_task_list_target_slot",
+            "target_app",
+            "target_type",
+            "target_id",
             unique=True,
-            postgresql_where=text("container_app = 'pms' AND container_type = 'task_list'"),
-            sqlite_where=text("container_app = 'pms' AND container_type = 'task_list'"),
+            postgresql_where=text("target_app = 'pms' AND target_type = 'task_list'"),
+            sqlite_where=text("target_app = 'pms' AND target_type = 'task_list'"),
         ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     whiteboard_id: Mapped[str] = mapped_column(ForeignKey("whiteboards.id"), index=True)
-    container_app: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    container_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    container_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    target_app: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    target_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    target_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     is_primary: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    created_by_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    created_by_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
@@ -113,7 +136,7 @@ class WhiteboardContainer(Base):
         nullable=False,
     )
 
-    whiteboard: Mapped[Whiteboard] = relationship(back_populates="containers")
+    whiteboard: Mapped[Whiteboard] = relationship(back_populates="targets")
     created_by = relationship("User")
 
 
@@ -137,9 +160,7 @@ class WhiteboardUserShare(Base):
 
 class WhiteboardLinkShare(Base):
     __tablename__ = "whiteboard_link_shares"
-    __table_args__ = (
-        UniqueConstraint("whiteboard_id", name="uq_whiteboard_link_share_board"),
-    )
+    __table_args__ = (UniqueConstraint("whiteboard_id", name="uq_whiteboard_link_share_board"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     whiteboard_id: Mapped[str] = mapped_column(ForeignKey("whiteboards.id"), index=True)

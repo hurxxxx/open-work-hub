@@ -1,11 +1,10 @@
 import { cva, type VariantProps } from 'class-variance-authority';
-import type { ButtonHTMLAttributes } from 'react';
-import { forwardRef } from 'react';
+import type { ButtonHTMLAttributes, Ref } from 'react';
 
 import { cn } from '../utils/cn';
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[var(--ui-radius-sm)] border text-[0.84rem] font-semibold transition-colors duration-[var(--ui-motion-fast)] disabled:cursor-not-allowed disabled:opacity-50',
+  'ui-primitive-control inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[var(--ui-radius-sm)] border text-[length:var(--ui-text-caption)] font-semibold transition-colors duration-[var(--ui-motion-fast)] disabled:cursor-not-allowed disabled:opacity-50',
   {
     variants: {
       variant: {
@@ -36,22 +35,20 @@ const buttonVariants = cva(
 
 export interface ButtonProps
   extends ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {}
+    VariantProps<typeof buttonVariants> {
+  ref?: Ref<HTMLButtonElement>;
+}
 
-export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, fullWidth, type = 'button', ...props }, ref) => {
-    return (
-      <button
-        ref={ref}
-        type={type}
-        className={cn(buttonVariants({ variant, size, fullWidth }), className)}
-        {...props}
-      />
-    );
-  },
-);
-
-Button.displayName = 'Button';
+export function Button({ className, variant, size, fullWidth, type = 'button', ref, ...props }: ButtonProps) {
+  return (
+    <button
+      ref={ref}
+      type={type}
+      className={cn(buttonVariants({ variant, size, fullWidth }), className)}
+      {...props}
+    />
+  );
+}
 
 export function IconButton(props: Omit<ButtonProps, 'size'>) {
   return <Button size="icon" {...props} />;

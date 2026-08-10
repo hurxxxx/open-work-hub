@@ -6,37 +6,46 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from ai_do_api.domains.auth.models import Team, Workspace
-from ai_do_api.domains.pms.models import Issue, IssueComment, IssueLabel, IssueUserAccess
+from ai_do_api.domains.pms.models import (
+    Task,
+    TaskAssignee,
+    TaskComment,
+    TaskFollower,
+    TaskLabel,
+    TaskUserAccess,
+)
 from ai_do_api.domains.rag.contracts import RagProjection
-from ai_do_api.domains.rag.projection import build_projection
+from ai_do_api.domains.rag.projection_builders import build_text_projection
+from ai_do_api.domains.source_access.resource_types import PMS_TASK_RESOURCE_TYPE
 
 
-PMS_ISSUE_RESOURCE_TYPE = "pms_issue"
-PMS_ISSUE_SOURCE_KIND = "pms_issue"
+PMS_TASK_SOURCE_KIND = "pms_task"
 
 
-def load_issue_projection(
+def load_task_projection(
     db: Session,
     *,
-    issue_id: str,
+    task_id: str,
 ) -> RagProjection | None:
-    issue = db.scalar(
-        select(Issue)
+    task = db.scalar(
+        select(Task)
         .options(
-            selectinload(Issue.task_list),
-            selectinload(Issue.milestone),
-            selectinload(Issue.assignee),
-            selectinload(Issue.reporter),
-            selectinload(Issue.comments).selectinload(IssueComment.author),
-            selectinload(Issue.label_links).selectinload(IssueLabel.label),
-            selectinload(Issue.user_access_grants).selectinload(IssueUserAccess.user),
+            selectinload(Task.task_list),
+            selectinload(Task.milestone),
+            selectinload(Task.assignee),
+            selectinload(Task.reporter),
+            selectinload(Task.assignee_links).selectinload(TaskAssignee.user),
+            selectinload(Task.follower_links).selectinload(TaskFollower.user),
+            selectinload(Task.comments).selectinload(TaskComment.author),
+            selectinload(Task.label_links).selectinload(TaskLabel.label),
+            selectinload(Task.user_access_grants).selectinload(TaskUserAccess.user),
         )
-        .where(Issue.id == issue_id)
+        .where(Task.id == task_id)
     )
-    if issue is None:
+    if task is None:
         return None
-    task_list = issue.task_list
-    if task_list is None or task_list.team_id is None:
+    task_list = task.task_list
+    if task.archived or task_list is None or task_list.archived or task_list.team_id is None:
         return None
     team = db.scalar(
         select(Team).where(
@@ -48,76 +57,90 @@ def load_issue_projection(
     )
     if team is None:
         return None
-    return build_issue_projection(issue, team=team)
+    return build_task_projection(task, team=team)
 
 
-def build_issue_projection(issue: Issue, *, team: Team) -> RagProjection:
-    comments_text = "\n\n".join(_comment_text(comment) for comment in issue.comments if _comment_text(comment))
-    label_names = [link.label.name for link in issue.label_links if link.label is not None]
+def build_task_projection(task: Task, *, team: Team) -> RagProjection:
+    comments_text = "\n\n".join(
+        _comment_text(comment) for comment in task.comments if _comment_text(comment)
+    )
+    label_names = [link.label.name for link in task.label_links if link.label is not None]
+    assignee_names = [link.user.full_name for link in task.assignee_links if link.user is not None]
+    assignee_ids = [link.user_id for link in task.assignee_links]
+    if not assignee_ids and task.assignee_id:
+        assignee_ids = [task.assignee_id]
+        assignee_names = [getattr(task.assignee, "full_name", None) or task.assignee_id]
+    follower_names = [link.user.full_name for link in task.follower_links if link.user is not None]
     text_sections = [
-        issue.title.strip(),
-        issue.description.strip(),
-        _extract_blocks_text(issue.description_blocks),
+        task.title.strip(),
+        task.description.strip(),
+        _extract_blocks_text(task.description_blocks),
         comments_text,
         " ".join(label_names),
+        " ".join(assignee_names),
+        " ".join(follower_names),
     ]
 
-    return build_projection(
+    return build_text_projection(
         workspace_id=team.workspace_id,
-        resource_type=PMS_ISSUE_RESOURCE_TYPE,
-        resource_id=issue.id,
-        source_kind=PMS_ISSUE_SOURCE_KIND,
-        title=issue.title,
-        summary=_build_summary(issue, label_names=label_names),
-        text_content="\n\n".join(section for section in text_sections if section),
-        owner_label=getattr(issue.reporter, "full_name", None),
-        visibility_refs=_build_visibility_refs(issue, team=team),
+        resource_type=PMS_TASK_RESOURCE_TYPE,
+        resource_id=task.id,
+        source_kind=PMS_TASK_SOURCE_KIND,
+        title=task.title,
+        summary=_build_summary(task, label_names=label_names),
+        text_sections=text_sections,
+        owner_label=getattr(task.reporter, "full_name", None),
+        visibility_refs=_build_visibility_refs(task, team=team),
         metadata={
             "team_id": team.id,
-            "list_id": issue.list_id,
-            "issue_number": issue.issue_number,
-            "status": issue.status,
-            "priority": issue.priority,
-            "archived": issue.archived,
-            "milestone_title": getattr(issue.milestone, "title", None),
-            "assignee_id": issue.assignee_id,
-            "assignee_name": getattr(issue.assignee, "full_name", None),
-            "reporter_id": issue.reporter_id,
-            "list_name": getattr(issue.task_list, "name", None),
-            "list_key": getattr(issue.task_list, "key", None),
+            "list_id": task.list_id,
+            "task_number": task.task_number,
+            "status": task.status,
+            "priority": task.priority,
+            "archived": task.archived,
+            "milestone_title": getattr(task.milestone, "title", None),
+            "assignee_id": task.assignee_id,
+            "assignee_name": getattr(task.assignee, "full_name", None),
+            "assignee_ids": assignee_ids,
+            "assignee_names": assignee_names,
+            "follower_ids": [link.user_id for link in task.follower_links],
+            "follower_names": follower_names,
+            "reporter_id": task.reporter_id,
+            "list_name": getattr(task.task_list, "name", None),
+            "list_key": getattr(task.task_list, "key", None),
             "label_names": label_names,
         },
     )
 
 
-def _build_summary(issue: Issue, *, label_names: list[str]) -> str | None:
+def _build_summary(task: Task, *, label_names: list[str]) -> str | None:
     parts = [
-        issue.description.strip(),
-        f"status:{issue.status}",
-        f"priority:{issue.priority}",
-        getattr(issue.milestone, "title", None),
+        task.description.strip(),
+        f"status:{task.status}",
+        f"priority:{task.priority}",
+        getattr(task.milestone, "title", None),
         ",".join(label_names) if label_names else None,
     ]
     summary = " | ".join(part for part in parts if part)
-    return summary or issue.title.strip() or None
+    return summary or task.title.strip() or None
 
 
-def _build_visibility_refs(issue: Issue, *, team: Team) -> list[str]:
+def _build_visibility_refs(task: Task, *, team: Team) -> list[str]:
     refs = {
         f"workspace:{team.workspace_id}",
         f"team:{team.id}",
-        f"list:{issue.list_id}",
+        f"list:{task.list_id}",
     }
-    for grant in issue.user_access_grants:
+    for grant in task.user_access_grants:
         if grant.revoked_at is not None:
             continue
-        refs.add(f"issue_grant:{grant.user_id}")
+        refs.add(f"task_grant:{grant.user_id}")
         if grant.granted_by_meeting_id:
             refs.add(f"meeting_source:{grant.granted_by_meeting_id}")
     return sorted(refs)
 
 
-def _comment_text(comment: IssueComment) -> str:
+def _comment_text(comment: TaskComment) -> str:
     parts = [
         getattr(comment.author, "full_name", None),
         comment.body.strip(),

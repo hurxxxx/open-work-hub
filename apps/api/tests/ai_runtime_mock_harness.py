@@ -7,13 +7,8 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 import pytest
-from sqlalchemy import select
-from sqlalchemy.orm import Session
-
 from ai_do_api.core import llm as llm_core
-from ai_do_api.core.db import get_engine
 from ai_do_api.core.settings import get_settings
-from ai_do_api.domains.ai.models import LlmPolicy
 from test_meeting import _auth_headers, _bootstrap_admin_session, _dev_login
 
 
@@ -44,7 +39,7 @@ def run_mock_external_graph_stream(
     planner_execution_enabled: bool = True,
     search_execution_enabled: bool = True,
 ) -> MockExternalGraphRun:
-    auth = _seeded_dev_login(client, "hq-admin")
+    auth = _seeded_dev_login(client, "administrator")
     workspace_slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
     _enable_mock_external_graph_runtime(
@@ -56,7 +51,11 @@ def run_mock_external_graph_stream(
     )
 
     pool_client = MockGraphAsyncPoolClient()
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+    monkeypatch.setattr(
+        llm_core,
+        "get_async_pool_client",
+        lambda *args, **kwargs: pool_client,
+    )
 
     status_code, events = _stream_post(
         client,
@@ -211,7 +210,7 @@ def _first_message_content(messages: Any) -> str:
 
 
 def _workspace_ai_path(slug: str, suffix: str) -> str:
-    return f"/api/v1/workspaces/{slug}/ai{suffix}"
+    return f"/api/v1/workspaces/{slug}/chatbot{suffix}"
 
 
 def _seeded_dev_login(client: TestClient, account_key: str) -> dict[str, Any]:
@@ -220,12 +219,8 @@ def _seeded_dev_login(client: TestClient, account_key: str) -> dict[str, Any]:
 
 
 def _set_policy(task_kind: str, mode: str) -> None:
-    with Session(get_engine()) as session:
-        policy = session.scalar(select(LlmPolicy).where(LlmPolicy.task_kind == task_kind))
-        assert policy is not None
-        policy.policy_mode = mode
-        session.add(policy)
-        session.commit()
+    # Legacy test shim: registered workload routing is no longer DB task-policy driven.
+    _ = (task_kind, mode)
 
 
 def _stream_post(

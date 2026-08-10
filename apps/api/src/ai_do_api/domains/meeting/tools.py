@@ -18,7 +18,7 @@ from ai_do_api.domains.ai.registry import (
     WorkspaceContext,
 )
 from ai_do_api.domains.auth.models import User, Workspace
-from ai_do_api.domains.planner.service import parse_iso_or_date
+from ai_do_api.domains.planner.event_time import parse_iso_or_date
 
 
 class _ToolArgsModel(BaseModel):
@@ -303,21 +303,26 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
         task_kind="meeting_summary",
         default_policy="local_only",
         description="Meeting transcript summarization (worker)",
+        # recording.py(녹취 분석)도 같은 task_kind 로 요약을 호출하므로 recording 앱을 함께 선언한다.
+        app_ids=("meeting", "recording"),
     )
     registry.register_llm_task(
         task_kind="meeting_insight_actions",
         default_policy="local_only",
         description="Meeting action-item extraction (worker/read refresh)",
+        app_ids=("meeting",),
     )
     registry.register_llm_task(
         task_kind="meeting_insight_decisions",
         default_policy="local_only",
         description="Meeting decision extraction (worker/read refresh)",
+        app_ids=("meeting",),
     )
     registry.register_llm_task(
         task_kind="meeting_insight_followup",
         default_policy="local_only",
         description="Meeting follow-up schedule extraction (worker/read refresh)",
+        app_ids=("meeting",),
     )
     registry.register_preview_builder(
         preview_builder_id="meeting.create_meeting_preview",

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
 from typing import Any
 
 from fastapi import status
@@ -13,9 +12,10 @@ from ai_do_api.domains.ai.registry import AiCapabilityRegistry
 from ai_do_api.domains.auth.models import User, Workspace
 from ai_do_api.domains.rag.contracts import RagAnswerMode
 from ai_do_api.domains.rag.filters import RagQueryFilters
-
-
-SEARCHABLE_APP_IDS = frozenset({"docs", "meeting", "pms", "planner"})
+from ai_do_api.domains.rag.default_source_adapters import (
+    ensure_rag_source_adapters_registered,
+    registered_searchable_rag_app_ids,
+)
 
 
 class RagQueryToolArgs(BaseModel):
@@ -41,10 +41,11 @@ def _query(
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     from ai_do_api.domains.rag import application as rag_application
+    from ai_do_api.domains.retrieval import application as retrieval_application
 
     tool_context = current_tool_execution_context()
     try:
-        response = rag_application.query_workspace_rag(
+        response = retrieval_application.query_workspace_rag_response(
             db,
             workspace=workspace,
             user=user,
@@ -86,9 +87,10 @@ def _list_sources(
 ) -> dict[str, Any]:
     del principal, arguments
     from ai_do_api.domains.rag import application as rag_application
+    from ai_do_api.domains.retrieval import application as retrieval_application
 
     try:
-        sources = rag_application.list_workspace_rag_sources(
+        sources = retrieval_application.list_workspace_rag_sources_response(
             db,
             workspace=workspace,
             user=user,
@@ -110,104 +112,46 @@ def _list_sources(
     return {"sources": sources}
 
 
+def _rag_enabled(_principal, _workspace, entitlements) -> bool:
+    ensure_rag_source_adapters_registered()
+    return bool(
+        get_settings().rag_enabled
+        and registered_searchable_rag_app_ids().intersection(entitlements.enabled_app_ids)
+    )
+
+
 def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
-    if not get_settings().rag_enabled:
-        return
     registry.register_discoverability_predicate(
         predicate_id="rag.enabled",
-        predicate=lambda principal, workspace, entitlements: (
-            "ai" in entitlements.enabled_app_ids
-            and any(app_id in entitlements.enabled_app_ids for app_id in SEARCHABLE_APP_IDS)
-        ),
+        predicate=_rag_enabled,
     )
     registry.register_llm_task(
         task_kind="rag_grounded_answer",
         default_policy="local_only",
         description="Grounded answer synthesis for workspace RAG queries.",
+        app_ids=("rag", "qa-assistant"),
     )
     registry.register_tool(
         name="rag.query",
-        description="Search indexed workspace knowledge across docs, meetings, PMS, and planner data.",
-        owner_domain="ai",
+        description=(
+            "Search workspace-readable official Docs sources when the user asks for "
+            "internal document or knowledge evidence. "
+            "Results are limited by the current workspace, app enablement, and ACL."
+        ),
+        owner_domain="chatbot",
         handler=_query,
         args_model=RagQueryToolArgs,
         discoverability_predicate_id="rag.enabled",
     )
     registry.register_tool(
         name="rag.list_sources",
-        description="List searchable source kinds for the current workspace.",
-        owner_domain="ai",
+        description=(
+            "List source kinds the current user can search in the current workspace. "
+            "Use this before RAG search when the user asks what internal document "
+            "sources are available."
+        ),
+        owner_domain="chatbot",
         handler=_list_sources,
         args_model=RagListSourcesArgs,
         discoverability_predicate_id="rag.enabled",
     )
-
-
-_RAG_QUERY_INTENT_TERMS = (
-    "검색",
-    "찾",
-    "근거",
-    "출처",
-    "정리",
-    "요약",
-    "보여",
-    "알려",
-    "확인",
-    "search",
-    "find",
-    "lookup",
-    "look up",
-    "grounded",
-    "citation",
-    "evidence",
-)
-
-_RAG_SOURCE_HINT_TERMS = (
-    "문서",
-    "docs",
-    "회의",
-    "meeting",
-    "pms",
-    "이슈",
-    "issue",
-    "planner",
-    "일정",
-    "페이지",
-    "page",
-    "노트",
-)
-
-
-def should_expose_rag_tools_for_messages(messages: Sequence[Mapping[str, Any]] | None) -> bool:
-    latest_user_text = _latest_user_text(messages)
-    if not latest_user_text:
-        return False
-    lowered = latest_user_text.lower()
-    if lowered.startswith("/tool "):
-        return False
-    has_intent_hint = any(term in lowered for term in _RAG_QUERY_INTENT_TERMS)
-    has_source_hint = any(term in lowered for term in _RAG_SOURCE_HINT_TERMS)
-    has_cross_source_hint = "기준으로" in lowered or "based on" in lowered or "바탕으로" in lowered
-    return (has_intent_hint and has_source_hint) or (has_source_hint and has_cross_source_hint)
-
-
-def _latest_user_text(messages: Sequence[Mapping[str, Any]] | None) -> str:
-    if not messages:
-        return ""
-    for message in reversed(messages):
-        if message.get("role") != "user":
-            continue
-        content = message.get("content")
-        if isinstance(content, str):
-            return " ".join(content.split())
-        if isinstance(content, Sequence):
-            parts: list[str] = []
-            for item in content:
-                if not isinstance(item, Mapping):
-                    continue
-                text = item.get("text")
-                if isinstance(text, str) and text.strip():
-                    parts.append(text.strip())
-            if parts:
-                return " ".join(parts)
-    return ""

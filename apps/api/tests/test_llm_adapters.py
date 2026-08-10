@@ -15,16 +15,22 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ai_do_api.core import llm as llm_core
+from ai_do_api.core import llm_execution_adapters
 from ai_do_api.core.db import get_engine
-from ai_do_api.core.llm import LlmTaskContext, complete_chat_stream
-from ai_do_api.core.llm_adapters import (
-    MlxLmStreamAdapter,
-    OpenRouterStreamAdapter,
-    StreamChunk,
+from ai_do_api.core.llm import (
+    LlmProviderError,
+    LlmTaskContext,
+    ResolvedLlmExecution,
+    complete_chat_stream,
+    resolve_registered_chat_execution,
 )
-from ai_do_api.domains.ai.models import LlmPolicy
+from ai_do_api.core.llm_adapters import StreamChunk, _close_stream
+from ai_do_api.domains.ai.gateway import (
+    LlmWorkloadContext,
+    build_llm_workload_request,
+    resolve_gateway_execution,
+)
 from ai_do_api.domains.auth.models import AuditLog
-from ai_do_api.core.settings import get_settings
 
 
 pytestmark = pytest.mark.anyio
@@ -109,113 +115,6 @@ class _FakeAsyncPoolClient:
         return self
 
 
-async def _collect_chunks(generator) -> list[StreamChunk]:
-    return [chunk async for chunk in generator]
-
-
-async def test_mlx_lm_adapter_yields_reasoning_then_content_then_done() -> None:
-    chunks = [
-        _delta_chunk(reasoning_content="think"),
-        _delta_chunk(content="Hi"),
-        _delta_chunk(content=" there"),
-        _delta_chunk(finish_reason="stop"),
-    ]
-    client = _FakeAsyncPoolClient(_FakeAsyncChatCompletions(chunks))
-    out = await _collect_chunks(
-        MlxLmStreamAdapter().open_stream(client, {"model": "m", "messages": []})
-    )
-    kinds_texts = [(chunk.kind, chunk.text) for chunk in out]
-    assert kinds_texts == [
-        ("reasoning", "think"),
-        ("content", "Hi"),
-        ("content", " there"),
-        ("done", None),
-    ]
-    assert out[-1].finish_reason == "stop"
-    call = client.chat.completions.calls[0]
-    assert call["stream"] is True
-    assert call["stream_options"] == {"include_usage": True}
-
-
-async def test_openrouter_adapter_handles_string_reasoning() -> None:
-    chunks = [
-        _delta_chunk(reasoning="think"),
-        _delta_chunk(content="ok", finish_reason="stop"),
-    ]
-    client = _FakeAsyncPoolClient(_FakeAsyncChatCompletions(chunks))
-    out = await _collect_chunks(
-        OpenRouterStreamAdapter().open_stream(
-            client, {"model": "m", "messages": []}
-        )
-    )
-    assert [(chunk.kind, chunk.text) for chunk in out if chunk.kind != "done"] == [
-        ("reasoning", "think"),
-        ("content", "ok"),
-    ]
-
-
-async def test_openrouter_adapter_handles_object_reasoning() -> None:
-    chunks = [
-        _delta_chunk(reasoning={"content": "think"}),
-        _delta_chunk(content="ok", finish_reason="stop"),
-    ]
-    client = _FakeAsyncPoolClient(_FakeAsyncChatCompletions(chunks))
-    out = await _collect_chunks(
-        OpenRouterStreamAdapter().open_stream(
-            client, {"model": "m", "messages": []}
-        )
-    )
-    assert out[0] == StreamChunk(kind="reasoning", text="think")
-
-
-async def test_adapter_skips_empty_and_none_deltas() -> None:
-    chunks = [
-        _delta_chunk(content=""),
-        _delta_chunk(reasoning_content=""),
-        _delta_chunk(content=None),
-        _delta_chunk(content="real", finish_reason="stop"),
-    ]
-    client = _FakeAsyncPoolClient(_FakeAsyncChatCompletions(chunks))
-    out = await _collect_chunks(
-        MlxLmStreamAdapter().open_stream(client, {"model": "m", "messages": []})
-    )
-    assert [chunk.kind for chunk in out] == ["content", "done"]
-    assert out[0].text == "real"
-
-
-async def test_adapter_emits_usage_from_tail_chunk_before_done() -> None:
-    chunks = [
-        _delta_chunk(content="hi", finish_reason="stop"),
-        _usage_tail(prompt_tokens=1, completion_tokens=2, total_tokens=3),
-    ]
-    client = _FakeAsyncPoolClient(_FakeAsyncChatCompletions(chunks))
-    out = await _collect_chunks(
-        MlxLmStreamAdapter().open_stream(client, {"model": "m", "messages": []})
-    )
-    assert [chunk.kind for chunk in out] == ["content", "usage", "done"]
-    assert out[1].usage == {
-        "prompt_tokens": 1,
-        "completion_tokens": 2,
-        "total_tokens": 3,
-    }
-
-
-async def test_adapter_close_called_even_when_consumer_breaks_early() -> None:
-    chunks = [
-        _delta_chunk(content="a"),
-        _delta_chunk(content="b"),
-        _delta_chunk(content="c", finish_reason="stop"),
-    ]
-    completions = _FakeAsyncChatCompletions(chunks)
-    client = _FakeAsyncPoolClient(completions)
-    gen = MlxLmStreamAdapter().open_stream(client, {"model": "m", "messages": []})
-    first = await gen.__anext__()
-    assert first.kind == "content"
-    await gen.aclose()
-    assert completions.last_stream is not None
-    assert completions.last_stream.closed is True
-
-
 def _tool_call_delta(
     *,
     index: int,
@@ -230,45 +129,15 @@ def _tool_call_delta(
     )
 
 
-async def test_adapter_emits_tool_call_chunks_and_done_tool_calls() -> None:
-    chunks = [
-        _delta_chunk(
-            tool_calls=[
-                _tool_call_delta(
-                    index=0,
-                    tool_id="call-1",
-                    name="pms.search_issues",
-                    arguments='{"q":"AI',
-                )
-            ]
-        ),
-        _delta_chunk(
-            tool_calls=[
-                _tool_call_delta(
-                    index=0,
-                    tool_id="call-1",
-                    arguments=' bug"}',
-                )
-            ]
-        ),
-        _delta_chunk(finish_reason="tool_calls"),
-    ]
-    client = _FakeAsyncPoolClient(_FakeAsyncChatCompletions(chunks))
-    out = await _collect_chunks(
-        MlxLmStreamAdapter().open_stream(client, {"model": "m", "messages": []})
-    )
-    assert [chunk.kind for chunk in out] == [
-        "tool_call_start",
-        "tool_call_args",
-        "tool_call_args",
-        "tool_call_end",
-        "done",
-    ]
-    assert out[0].tool_call_id == "call-1"
-    assert out[0].tool_name == "pms.search_issues"
-    assert out[1].args_delta == '{"q":"AI'
-    assert out[2].args_delta == ' bug"}'
-    assert out[-1].finish_reason == "tool_calls"
+class _CloseReturnsCoroutineStream:
+    def __init__(self) -> None:
+        self.closed = False
+
+    def close(self):
+        async def mark_closed() -> None:
+            self.closed = True
+
+        return mark_closed()
 
 
 def _ctx() -> LlmTaskContext:
@@ -277,11 +146,37 @@ def _ctx() -> LlmTaskContext:
         actor_user_id=None,
         workspace_id="ws-stream-test",
         task_kind="chatbot",
+        app_id="chatbot",
+        workload_id="chatbot",
     )
+
+
+async def test_close_stream_awaits_close_coroutine_result() -> None:
+    stream = _CloseReturnsCoroutineStream()
+
+    await _close_stream(stream)
+
+    assert stream.closed is True
 
 
 def _make_db_session() -> Session:
     return Session(get_engine())
+
+
+def _resolve_database_execution(
+    db: Session,
+    *,
+    messages: list[dict[str, Any]],
+    max_tokens: int,
+) -> ResolvedLlmExecution:
+    request = build_llm_workload_request(
+        "chatbot",
+        LlmWorkloadContext.from_task_context(_ctx()),
+        db,
+        messages=messages,
+        max_tokens=max_tokens,
+    )
+    return resolve_gateway_execution(request, db).llm_execution
 
 
 def _install_fake_pool(
@@ -292,26 +187,17 @@ def _install_fake_pool(
 ) -> _FakeAsyncChatCompletions:
     completions = _FakeAsyncChatCompletions(chunks, error=error)
     client = _FakeAsyncPoolClient(completions)
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: client)
+    monkeypatch.setattr(
+        llm_core,
+        "_new_async_pool_client",
+        lambda _config: client,
+    )
     return completions
 
 
 def _set_policy(task_kind: str, mode: str) -> None:
-    with _make_db_session() as session:
-        policy = session.scalar(
-            select(LlmPolicy).where(LlmPolicy.task_kind == task_kind)
-        )
-        assert policy is not None
-        policy.policy_mode = mode
-        session.add(policy)
-        session.commit()
-
-
-def _configure_external_pool(monkeypatch: pytest.MonkeyPatch) -> None:
-    settings = get_settings()
-    monkeypatch.setattr(settings, "llm_external_api_key", "test-external-key")
-    monkeypatch.setattr(settings, "llm_external_default_model", "openai/gpt-5.4-mini")
-    monkeypatch.setattr(settings, "llm_external_canonical_model", "openai/gpt-5.4-mini")
+    # Legacy test shim: registered workload routing is no longer DB task-policy driven.
+    _ = (task_kind, mode)
 
 
 def _audit_rows() -> list[AuditLog]:
@@ -326,18 +212,23 @@ def _audit_rows() -> list[AuditLog]:
 
 
 async def _drain(**kwargs: Any) -> list[StreamChunk]:
+    kwargs.setdefault("max_tokens", 32_768)
     db = _make_db_session()
     try:
-        return [
-            chunk
-            async for chunk, _, _ in complete_chat_stream(_ctx(), db, **kwargs)
-        ]
+        if "resolved_execution" not in kwargs:
+            kwargs["resolved_execution"] = _resolve_database_execution(
+                db,
+                messages=kwargs["messages"],
+                max_tokens=kwargs["max_tokens"],
+            )
+        return [chunk async for chunk, _, _ in complete_chat_stream(_ctx(), db, **kwargs)]
     finally:
         db.close()
 
 
+@pytest.mark.usefixtures("client_seed_workspace")
 async def test_complete_chat_stream_commits_ok_audit_on_normal_finish(
-    monkeypatch: pytest.MonkeyPatch, client_seed_workspace: None
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _set_policy("chatbot", "local_only")
     _install_fake_pool(
@@ -359,19 +250,20 @@ async def test_complete_chat_stream_commits_ok_audit_on_normal_finish(
         "completion_tokens": 2,
         "total_tokens": 3,
     }
-    assert payload["max_tokens"] == llm_core.LOCAL_TASK_MAX_TOKENS["chatbot"]
+    assert payload["max_tokens"] == 32_768
     assert payload["finish_reason"] == "stop"
     assert payload["source"] == "test.stream"
     assert payload["chosen_pool"] == "local"
 
 
+@pytest.mark.usefixtures("client_seed_workspace")
 async def test_complete_chat_stream_audits_error_and_reraises_on_provider_failure(
-    monkeypatch: pytest.MonkeyPatch, client_seed_workspace: None
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _set_policy("chatbot", "local_only")
     _install_fake_pool(monkeypatch, [], error=OpenAIError("provider down"))
     before = len(_audit_rows())
-    with pytest.raises(OpenAIError, match="provider down"):
+    with pytest.raises(LlmProviderError, match="provider down"):
         await _drain(messages=[{"role": "user", "content": "hi"}])
     rows = _audit_rows()
     assert len(rows) == before + 1
@@ -380,8 +272,9 @@ async def test_complete_chat_stream_audits_error_and_reraises_on_provider_failur
     assert "provider down" in payload["error"]
 
 
+@pytest.mark.usefixtures("client_seed_workspace")
 async def test_complete_chat_stream_audits_cancelled_on_generator_close(
-    monkeypatch: pytest.MonkeyPatch, client_seed_workspace: None
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _set_policy("chatbot", "local_only")
     _install_fake_pool(
@@ -396,7 +289,15 @@ async def test_complete_chat_stream_audits_cancelled_on_generator_close(
     before = len(_audit_rows())
     try:
         gen = complete_chat_stream(
-            _ctx(), db, messages=[{"role": "user", "content": "hi"}]
+            _ctx(),
+            db,
+            messages=[{"role": "user", "content": "hi"}],
+            max_tokens=32_768,
+            resolved_execution=_resolve_database_execution(
+                db,
+                messages=[{"role": "user", "content": "hi"}],
+                max_tokens=32_768,
+            ),
         )
         first = await gen.__anext__()
         second = await gen.__anext__()
@@ -410,8 +311,9 @@ async def test_complete_chat_stream_audits_cancelled_on_generator_close(
     assert rows[-1].payload["status"] == "cancelled"
 
 
+@pytest.mark.usefixtures("client_seed_workspace")
 async def test_complete_chat_stream_treats_tool_calls_finish_as_ok_for_audit(
-    monkeypatch: pytest.MonkeyPatch, client_seed_workspace: None
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _set_policy("chatbot", "local_only")
     _install_fake_pool(
@@ -439,142 +341,161 @@ async def test_complete_chat_stream_treats_tool_calls_finish_as_ok_for_audit(
     assert rows[-1].payload["finish_reason"] == "tool_calls"
 
 
-async def test_complete_chat_stream_unconfigured_pool_audits_error_and_raises(
-    monkeypatch: pytest.MonkeyPatch, client_seed_workspace: None
-) -> None:
+@pytest.mark.usefixtures("client_seed_workspace")
+async def test_complete_chat_stream_unconfigured_pool_audits_error_and_raises() -> None:
     _set_policy("chatbot", "local_only")
-
-    def fake_get_pool_config(pool, settings=None):  # type: ignore[override]
-        return llm_core.LlmPoolConfig(
-            pool=pool,
+    unconfigured_execution = resolve_registered_chat_execution(
+        _ctx(),
+        config=llm_core.LlmPoolConfig(
+            pool="local",
             provider="mlx-lm",
             base_url="",
             api_key="",
             default_model="",
             canonical_model="x",
+            healthcheck_timeout_seconds=1.0,
             long_generation_timeout_seconds=1.0,
             enabled=True,
-        )
-
-    monkeypatch.setattr(llm_core, "get_pool_config", fake_get_pool_config)
+        ),
+        max_tokens=32_768,
+    )
     before = len(_audit_rows())
-    with pytest.raises(OpenAIError, match="not configured"):
-        await _drain(messages=[{"role": "user", "content": "hi"}])
+    with pytest.raises(LlmProviderError, match="not configured"):
+        await _drain(
+            messages=[{"role": "user", "content": "hi"}],
+            resolved_execution=unconfigured_execution,
+        )
     rows = _audit_rows()
     assert len(rows) == before + 1
     assert rows[-1].payload["status"] == "error"
     assert "not configured" in rows[-1].payload["error"]
 
 
-async def test_complete_chat_stream_passes_reasoning_effort_extra_body_for_local(
-    monkeypatch: pytest.MonkeyPatch, client_seed_workspace: None
+async def test_official_provider_execution_adapter_streams_provider_chunks(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _set_policy("chatbot", "local_only")
-    completions = _install_fake_pool(
-        monkeypatch,
-        [_delta_chunk(content="x", finish_reason="stop")],
-    )
-    await _drain(
-        messages=[{"role": "user", "content": "hi"}],
-        reasoning_effort="medium",
-    )
-    call = completions.calls[0]
-    assert call["extra_body"] == {"reasoning_effort": "medium"}
-    assert call["stream"] is True
+    captured: dict[str, Any] = {}
 
-
-async def test_complete_chat_stream_suppresses_reasoning_payload_when_stream_reasoning_off(
-    monkeypatch: pytest.MonkeyPatch, client_seed_workspace: None
-) -> None:
-    _set_policy("chatbot", "local_only")
-    completions = _install_fake_pool(
-        monkeypatch,
-        [_delta_chunk(content="x", finish_reason="stop")],
-    )
-    await _drain(
-        messages=[{"role": "user", "content": "hi"}],
-        reasoning_effort="medium",
-        stream_reasoning=False,
-    )
-    assert completions.calls[0]["extra_body"] == {"think": False}
-
-
-async def test_complete_chat_stream_uses_external_reasoning_shape(
-    monkeypatch: pytest.MonkeyPatch, client_seed_workspace: None
-) -> None:
-    _set_policy("chatbot", "external")
-    _configure_external_pool(monkeypatch)
-    completions = _install_fake_pool(
-        monkeypatch,
-        [_delta_chunk(content="x", finish_reason="stop")],
-    )
-    await _drain(
-        messages=[{"role": "user", "content": "hi"}],
-        reasoning_effort="low",
-    )
-    assert completions.calls[0]["extra_body"] == {"reasoning": {"effort": "low"}}
-
-
-async def test_complete_chat_stream_uses_local_defaults_when_unset(
-    monkeypatch: pytest.MonkeyPatch, client_seed_workspace: None
-) -> None:
-    _set_policy("chatbot", "local_only")
-    completions = _install_fake_pool(
-        monkeypatch,
-        [_delta_chunk(content="x", finish_reason="stop")],
-    )
-    await _drain(messages=[{"role": "user", "content": "hi"}])
-    call = completions.calls[0]
-    assert call["max_tokens"] == llm_core.LOCAL_TASK_MAX_TOKENS["chatbot"]
-    assert call["extra_body"] == {"think": False}
-
-
-async def test_complete_chat_stream_uses_external_defaults_when_unset(
-    monkeypatch: pytest.MonkeyPatch, client_seed_workspace: None
-) -> None:
-    _set_policy("chatbot", "external")
-    _configure_external_pool(monkeypatch)
-    completions = _install_fake_pool(
-        monkeypatch,
-        [_delta_chunk(content="x", finish_reason="stop")],
-    )
-    await _drain(messages=[{"role": "user", "content": "hi"}])
-    call = completions.calls[0]
-    assert call["max_tokens"] == llm_core.EXTERNAL_TASK_MAX_TOKENS["chatbot"]
-    assert call["extra_body"] == {"reasoning": {"effort": "medium"}}
-
-
-async def test_complete_chat_stream_keeps_long_budget_for_batch_generation(
-    monkeypatch: pytest.MonkeyPatch, client_seed_workspace: None
-) -> None:
-    _set_policy("batch_generation", "local_only")
-    completions = _install_fake_pool(
-        monkeypatch,
-        [_delta_chunk(content="x", finish_reason="stop")],
-    )
-    context = LlmTaskContext(
-        source="test.stream",
-        actor_user_id=None,
-        workspace_id="ws-stream-test",
-        task_kind="batch_generation",
-    )
-    db = _make_db_session()
-    try:
-        await _collect_chunks(
-            complete_chat_stream(
-                context,
-                db,
-                messages=[{"role": "user", "content": "write report"}],
-            )
+    def fake_provider_stream(config, payload, *, timeout_seconds):  # type: ignore[no-untyped-def]
+        captured["provider"] = config.provider
+        captured["payload"] = payload
+        captured["timeout_seconds"] = timeout_seconds
+        yield StreamChunk(kind="content", text="hel")
+        yield StreamChunk(kind="content", text="lo")
+        yield StreamChunk(
+            kind="usage",
+            usage={"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3},
         )
-    finally:
-        db.close()
-    call = completions.calls[0]
-    assert call["max_tokens"] == llm_core.LOCAL_DEFAULT_MAX_TOKENS
+        yield StreamChunk(kind="done", finish_reason="stop")
+
+    monkeypatch.setattr(
+        llm_execution_adapters,
+        "stream_official_provider_chat",
+        fake_provider_stream,
+    )
+
+    adapter = llm_execution_adapters.OfficialProviderLlmExecutionAdapter()
+    chunks = [
+        chunk
+        async for chunk in adapter.stream(
+            SimpleNamespace(
+                pool="external",
+                provider="anthropic",
+                base_url="",
+                api_key="test-key",
+                default_model="claude-test",
+                canonical_model="claude-test",
+                healthcheck_timeout_seconds=1.0,
+                long_generation_timeout_seconds=7.0,
+            ),
+            {
+                "model": "claude-test",
+                "messages": [{"role": "user", "content": "hi"}],
+                "max_tokens": 11,
+            },
+            timeout_seconds=7.0,
+            sync_client_factory=lambda *_args: pytest.fail(
+                "official stream must not use OpenAI client"
+            ),
+            async_client_factory=lambda *_args: pytest.fail(
+                "official stream must not use OpenAI async client"
+            ),
+        )
+    ]
+
+    assert captured == {
+        "provider": "anthropic",
+        "payload": {
+            "model": "claude-test",
+            "messages": [{"role": "user", "content": "hi"}],
+            "max_tokens": 11,
+        },
+        "timeout_seconds": 7.0,
+    }
+    assert [chunk.kind for chunk in chunks] == ["content", "content", "usage", "done"]
+    assert [chunk.text for chunk in chunks[:2]] == ["hel", "lo"]
+
+
+async def test_official_provider_execution_adapter_wraps_provider_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_provider_complete(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+        raise RuntimeError("anthropic down")
+
+    def fake_provider_stream(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+        yield StreamChunk(kind="content", text="partial")
+        raise RuntimeError("gemini down")
+
+    monkeypatch.setattr(
+        llm_execution_adapters,
+        "complete_official_provider_chat",
+        fake_provider_complete,
+    )
+    monkeypatch.setattr(
+        llm_execution_adapters,
+        "stream_official_provider_chat",
+        fake_provider_stream,
+    )
+
+    config = SimpleNamespace(
+        pool="external",
+        provider="anthropic",
+        base_url="",
+        api_key="test-key",
+        default_model="claude-test",
+        canonical_model="claude-test",
+        healthcheck_timeout_seconds=1.0,
+        long_generation_timeout_seconds=7.0,
+    )
+    adapter = llm_execution_adapters.OfficialProviderLlmExecutionAdapter()
+
+    with pytest.raises(LlmProviderError, match="anthropic down"):
+        adapter.complete(
+            config,
+            {"model": "claude-test", "messages": [], "max_tokens": 11},
+            timeout_seconds=7.0,
+            sync_client_factory=lambda *_args: pytest.fail(
+                "official complete must not use OpenAI client"
+            ),
+        )
+
+    with pytest.raises(LlmProviderError, match="gemini down"):
+        async for _chunk in adapter.stream(
+            config,
+            {"model": "claude-test", "messages": [], "max_tokens": 11},
+            timeout_seconds=7.0,
+            sync_client_factory=lambda *_args: pytest.fail(
+                "official stream must not use OpenAI client"
+            ),
+            async_client_factory=lambda *_args: pytest.fail(
+                "official stream must not use OpenAI async client"
+            ),
+        ):
+            pass
 
 
 @pytest.fixture(name="client_seed_workspace")
-def _client_seed_workspace(client):
-    """Reuse the existing app bootstrap to ensure seed policies exist."""
+def _client_seed_workspace(configured_local_llm_control_plane: None) -> None:
+    """Use the explicit DB-managed local model for LLM execution tests."""
 
-    return client
+    return configured_local_llm_control_plane

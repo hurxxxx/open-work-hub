@@ -90,7 +90,7 @@ export function TemplateCard({
             event.stopPropagation();
             setLargePreviewOpen(true);
           }}
-          className="absolute left-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md border border-app-border bg-app-surface/95 text-app-ink/60 shadow-sm opacity-0 transition-opacity hover:border-app-accent hover:text-app-accent group-hover:opacity-100 focus:opacity-100"
+          className="absolute left-2 top-2 inline-flex size-8 items-center justify-center rounded-md border border-app-border bg-app-surface/95 text-app-ink/60 shadow-sm opacity-0 transition-opacity hover:border-app-accent hover:text-app-accent group-hover:opacity-100 focus:opacity-100"
           aria-label={previewLabel}
           title={previewLabel}
         >
@@ -106,7 +106,7 @@ export function TemplateCard({
             onRemove();
           }}
           disabled={removeBusy}
-          className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md border border-app-border bg-app-surface/95 text-app-ink/60 shadow-sm hover:border-[var(--ui-color-danger)] hover:text-[var(--ui-color-danger)] disabled:opacity-60"
+          className="absolute right-2 top-2 inline-flex size-8 items-center justify-center rounded-md border border-app-border bg-app-surface/95 text-app-ink/60 shadow-sm hover:border-[var(--ui-color-danger)] hover:text-[var(--ui-color-danger)] disabled:opacity-60"
           aria-label={removeLabel}
           title={removeLabel}
         >
@@ -116,5 +116,3 @@ export function TemplateCard({
     </article>
   );
 }
-
-export default TemplateCard;

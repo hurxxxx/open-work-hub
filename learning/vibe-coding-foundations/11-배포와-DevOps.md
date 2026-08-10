@@ -58,8 +58,8 @@ Docker는 컨테이너를 **쉽게 만들고 돌리는 도구** 입니다. 업�
 
 여러 컨테이너를 한 번에 올리는 도구. 우리 프로젝트는 이걸 씁니다.
 
-- `compose.postgres.yml` — PostgreSQL만.
-- `compose.dev.yml` — Postgres + Redis + MinIO + Nginx를 한 묶음으로 띄움.
+- `ops/compose/ai-do-dev.infra.yml` — Redis, MinIO, OpenSearch, Qdrant, Nginx 등을 한 묶음으로 띄움.
+- PostgreSQL은 Docker Compose가 아니라 서버 native PostgreSQL(`127.0.0.1:5432`)을 씀.
 
 **"dev"** 는 "운영과 비슷한" 이라는 뜻이며, 개발자 PC에서 **운영과 최대한 같은 상태를 재현하기 위한 환경** 입니다. 운영에서만 터지는 버그를 개발에서 미리 잡기 위한 장치입니다.
 
@@ -84,7 +84,7 @@ Docker는 컨테이너를 **쉽게 만들고 돌리는 도구** 입니다. 업�
 ### 2.6 🛠️ 5분 실습
 
 - 프로젝트 루트에서 `docker ps` 실행 → 현재 돌고 있는 컨테이너 목록 확인.
-- `compose.dev.yml` 파일을 열어 정의된 서비스 이름(예: `postgres`, `redis`, `minio`, `nginx`)을 눈으로 훑어 본다.
+- `ops/compose/ai-do-dev.infra.yml` 파일을 열어 정의된 서비스 이름(예: `redis`, `minio`, `nginx`)을 눈으로 훑어 본다.
 - "이 파일 한 줄 한 줄이 컨테이너 하나"라는 감각을 얻는다.
 
 ---

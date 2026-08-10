@@ -12,10 +12,11 @@ from ai_do_api.domains.auth.access import (
 )
 from ai_do_api.domains.auth.models import Team, User, Workspace
 from ai_do_api.domains.auth.security import new_id
-from ai_do_api.domains.docs.models import NativeDoc, NativeDocContainer, NativeDocPage
+from ai_do_api.domains.docs.models import NativeDoc, NativeDocTarget, NativeDocPage
 from ai_do_api.domains.meeting.models import Meeting, MeetingAttendee, MeetingRecording
 from ai_do_api.domains.planner.models import PlannerEvent
-from ai_do_api.domains.pms.models import Issue, IssueComment, TaskList
+from ai_do_api.domains.pms.models import Task, TaskComment, TaskList
+from ai_do_api.domains.retrieval.partitioning import assign_default_partition
 from ai_do_api.domains.search.service import refresh_workspace_keyword_index
 
 
@@ -29,7 +30,7 @@ TOPICS = [
     ("예산 리스크", "공급사 단가 변경과 환율 변동으로 예산 리스크가 증가했습니다."),
     ("고객 이탈", "고객 이탈 징후가 반복되어 계정 담당자 후속 조치가 필요합니다."),
     ("납기 지연", "부품 승인 지연으로 납기 지연 가능성이 높아졌습니다."),
-    ("배터리 발열", "배터리 발열 이슈가 재현되어 QA 재검증을 요청합니다."),
+    ("배터리 발열", "배터리 발열 태스크가 재현되어 QA 재검증을 요청합니다."),
     ("런칭 체크리스트", "런칭 체크리스트의 보안 승인과 공지 문안이 남아 있습니다."),
     ("온보딩", "신규 파트너 온보딩 자료와 교육 일정이 업데이트되었습니다."),
     ("품질 감사", "품질 감사에서 발견된 문서 누락 항목을 보완해야 합니다."),
@@ -50,7 +51,7 @@ def main() -> None:
         created = {
             "docs": _seed_docs(db, workspace, admin, task_list),
             "meetings": _seed_meetings(db, workspace, admin, admin),
-            "issues": _seed_issues(db, task_list, admin, admin),
+            "tasks": _seed_tasks(db, workspace, task_list, admin, admin),
             "events": _seed_events(db, workspace, admin),
         }
         db.flush()
@@ -115,13 +116,13 @@ def _clear_previous_samples(db: Session, workspace: Workspace) -> None:
         ).all()
     ]
     if list_ids:
-        for issue in db.scalars(
-            select(Issue).where(
-                Issue.list_id.in_(list_ids),
-                Issue.title.like(f"{SAMPLE_PREFIX}%"),
+        for task in db.scalars(
+            select(Task).where(
+                Task.list_id.in_(list_ids),
+                Task.title.like(f"{SAMPLE_PREFIX}%"),
             )
         ).all():
-            db.delete(issue)
+            db.delete(task)
 
     for event in db.scalars(
         select(PlannerEvent).where(
@@ -147,6 +148,13 @@ def _seed_docs(db: Session, workspace: Workspace, owner: User, task_list: TaskLi
             source_ref=f"{SOURCE_REF_PREFIX}:doc:{index + 1:02d}",
             generation_kind="human",
         )
+        assign_default_partition(
+            db,
+            target=doc,
+            source_namespace="docs",
+            candidate_scope_kind="workspace",
+            workspace_id=workspace.id,
+        )
         db.add(doc)
         db.add(
             NativeDocPage(
@@ -161,21 +169,21 @@ def _seed_docs(db: Session, workspace: Workspace, owner: User, task_list: TaskLi
                     _paragraph(sentence),
                     _paragraph(
                         f"{topic} 관련 담당자는 매일 오전 스탠드업에서 상태를 공유하고, "
-                        "차단 요인은 PMS 이슈와 회의록에 연결합니다."
+                        "차단 요인은 PMS 태스크와 회의록에 연결합니다."
                     ),
                     _paragraph(
-                        "검색 검증용 데이터로 문서 제목, 본문, 컨테이너 facet 확인에 사용합니다."
+                        "검색 검증용 데이터로 문서 제목, 본문, 대상 facet 확인에 사용합니다."
                     ),
                 ],
             )
         )
         db.add(
-            NativeDocContainer(
+            NativeDocTarget(
                 id=new_id(),
                 doc_id=doc.id,
-                container_app="pms",
-                container_type="list",
-                container_id=task_list.id,
+                target_app="pms",
+                target_type="list",
+                target_id=task_list.id,
                 is_primary=True,
                 sort_order=index,
             )
@@ -197,6 +205,13 @@ def _seed_meetings(db: Session, workspace: Workspace, organizer: User, attendee:
             start_at=start_at,
             end_at=start_at + timedelta(minutes=45),
             status="completed" if index % 3 else "scheduled",
+        )
+        assign_default_partition(
+            db,
+            target=meeting,
+            source_namespace="meeting",
+            candidate_scope_kind="workspace",
+            workspace_id=workspace.id,
         )
         db.add(meeting)
         db.flush()
@@ -222,7 +237,7 @@ def _seed_meetings(db: Session, workspace: Workspace, organizer: User, attendee:
                 progress_pct=100,
                 transcript_text=(
                     f"{sentence} 참석자는 {topic} 우선순위를 재정렬하고 "
-                    "다음 회의 전까지 차단 이슈를 업데이트하기로 했습니다."
+                    "다음 회의 전까지 차단 태스크를 업데이트하기로 했습니다."
                 ),
                 summary_text=f"{topic} 회의 요약: 핵심 리스크와 실행 항목을 확정했습니다.",
                 transcribe_started_at=start_at,
@@ -232,19 +247,25 @@ def _seed_meetings(db: Session, workspace: Workspace, organizer: User, attendee:
     return 24
 
 
-def _seed_issues(db: Session, task_list: TaskList, reporter: User, assignee: User) -> int:
+def _seed_tasks(
+    db: Session,
+    workspace: Workspace,
+    task_list: TaskList,
+    reporter: User,
+    assignee: User,
+) -> int:
     max_number = (
-        db.scalar(select(func.max(Issue.issue_number)).where(Issue.list_id == task_list.id)) or 0
+        db.scalar(select(func.max(Task.task_number)).where(Task.list_id == task_list.id)) or 0
     )
-    statuses = ["backlog", "todo", "in_progress", "done", "canceled"]
+    statuses = ["todo", "in_progress", "done", "canceled"]
     priorities = ["low", "medium", "high", "urgent"]
     today = date.today()
     for index in range(48):
         topic, sentence = TOPICS[index % len(TOPICS)]
-        issue = Issue(
+        task = Task(
             id=new_id(),
             list_id=task_list.id,
-            issue_number=max_number + index + 1,
+            task_number=max_number + index + 1,
             title=f"{SAMPLE_PREFIX} {topic} 실행 과제 {index + 1:02d}",
             description=(
                 f"{sentence} 담당자는 원인, 영향도, 완료 기준을 정리해야 합니다. "
@@ -258,15 +279,21 @@ def _seed_issues(db: Session, task_list: TaskList, reporter: User, assignee: Use
             start_date=today + timedelta(days=index % 10),
             due_date=today + timedelta(days=3 + index % 21),
             board_position=index,
-            estimate_hours=float((index % 8) + 1),
             archived=False,
         )
-        db.add(issue)
+        assign_default_partition(
+            db,
+            target=task,
+            source_namespace="pms",
+            candidate_scope_kind="workspace",
+            workspace_id=workspace.id,
+        )
+        db.add(task)
         db.flush()
         db.add(
-            IssueComment(
+            TaskComment(
                 id=new_id(),
-                issue_id=issue.id,
+                task_id=task.id,
                 author_id=assignee.id,
                 body=f"{topic} 후속 확인: 고객 영향도와 릴리스 차단 여부를 업데이트했습니다.",
                 body_blocks=[_paragraph(f"{topic} 코멘트 검색 검증")],
@@ -280,20 +307,26 @@ def _seed_events(db: Session, workspace: Workspace, owner: User) -> int:
     for index in range(30):
         topic, sentence = TOPICS[index % len(TOPICS)]
         start_at = now + timedelta(days=index - 3, hours=10 + (index % 4))
-        db.add(
-            PlannerEvent(
-                id=new_id(),
-                workspace_id=workspace.id,
-                owner_id=owner.id,
-                title=f"{SAMPLE_PREFIX} {topic} 일정 {index + 1:02d}",
-                description=f"{sentence} 캘린더 검색에서 start_date와 visibility facet을 확인합니다.",
-                location="AI-DO HQ 5F" if index % 2 == 0 else "Remote",
-                visibility="public" if index % 3 == 0 else "private",
-                all_day=index % 7 == 0,
-                start_at=start_at,
-                end_at=start_at + timedelta(hours=1),
-            )
+        event = PlannerEvent(
+            id=new_id(),
+            workspace_id=workspace.id,
+            owner_id=owner.id,
+            title=f"{SAMPLE_PREFIX} {topic} 일정 {index + 1:02d}",
+            description=f"{sentence} 캘린더 검색에서 start_date와 visibility facet을 확인합니다.",
+            location="AI-DO HQ 5F" if index % 2 == 0 else "Remote",
+            visibility="public" if index % 3 == 0 else "private",
+            all_day=index % 7 == 0,
+            start_at=start_at,
+            end_at=start_at + timedelta(hours=1),
         )
+        assign_default_partition(
+            db,
+            target=event,
+            source_namespace="planner",
+            candidate_scope_kind="personal",
+            user_id=owner.id,
+        )
+        db.add(event)
     return 30
 
 

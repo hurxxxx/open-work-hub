@@ -9,6 +9,7 @@ export * from './lib/primitives/toolbar';
 export * from './lib/primitives/filter-bar';
 export * from './lib/primitives/tabs';
 export * from './lib/primitives/select';
+export * from './lib/primitives/range-slider';
 export * from './lib/primitives/tooltip';
 export * from './lib/primitives/dialog';
 export * from './lib/primitives/dropdown-menu';

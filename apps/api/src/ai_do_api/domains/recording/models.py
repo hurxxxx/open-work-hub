@@ -30,6 +30,8 @@ class Recording(Base):
         Index("ix_recordings_workspace_owner_started", "workspace_id", "owner_id", "started_at"),
         Index("ix_recordings_workspace_audio_status", "workspace_id", "audio_status"),
         Index("ix_recordings_workspace_transcript_status", "workspace_id", "transcript_status"),
+        Index("ix_recordings_minutes_doc_id", "minutes_doc_id"),
+        Index("ix_recordings_raw_transcript_doc_id", "raw_transcript_doc_id"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -84,7 +86,7 @@ class Recording(Base):
     owner = relationship("User", foreign_keys=[owner_id])
     raw_transcript_doc = relationship(NativeDoc, foreign_keys=[raw_transcript_doc_id])
     minutes_doc = relationship(NativeDoc, foreign_keys=[minutes_doc_id])
-    containers: Mapped[list["RecordingContainer"]] = relationship(
+    targets: Mapped[list["RecordingTarget"]] = relationship(
         back_populates="recording",
         cascade="all, delete-orphan",
     )
@@ -100,14 +102,15 @@ class RecordingStaging(Base):
             name="uq_recording_staging_workspace_uploader_idempotency",
         ),
         Index(
-            "ix_recording_staging_initial_container",
+            "ix_recording_staging_initial_target",
             "workspace_id",
-            "initial_container_app",
-            "initial_container_type",
-            "initial_container_id",
+            "initial_target_app",
+            "initial_target_type",
+            "initial_target_id",
             "completed_at",
         ),
         Index("ix_recording_staging_workspace_started", "workspace_id", "started_at"),
+        Index("ix_recording_staging_promoted_recording", "promoted_recording_id"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -133,36 +136,36 @@ class RecordingStaging(Base):
     promoted_recording_id: Mapped[str | None] = mapped_column(
         ForeignKey("recordings.id"), nullable=True
     )
-    initial_container_app: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    initial_container_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    initial_container_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    initial_target_app: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    initial_target_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    initial_target_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
     workspace = relationship("Workspace")
     uploaded_by = relationship("User")
     promoted_recording = relationship("Recording")
 
 
-class RecordingContainer(Base):
-    __tablename__ = "recording_containers"
+class RecordingTarget(Base):
+    __tablename__ = "recording_targets"
     __table_args__ = (
         Index(
-            "ix_recording_containers_lookup",
-            "container_app",
-            "container_type",
-            "container_id",
+            "ix_recording_targets_lookup",
+            "target_app",
+            "target_type",
+            "target_id",
         ),
         Index(
-            "uq_recording_containers_primary",
+            "uq_recording_targets_primary",
             "recording_id",
             unique=True,
             postgresql_where=text("is_primary IS TRUE"),
         ),
         UniqueConstraint(
             "recording_id",
-            "container_app",
-            "container_type",
-            "container_id",
-            name="uq_recording_containers_recording_container",
+            "target_app",
+            "target_type",
+            "target_id",
+            name="uq_recording_targets_recording_target",
         ),
     )
 
@@ -170,13 +173,13 @@ class RecordingContainer(Base):
     recording_id: Mapped[str] = mapped_column(
         ForeignKey("recordings.id", ondelete="CASCADE"), index=True, nullable=False
     )
-    container_app: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    container_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    container_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    target_app: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    target_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    target_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     is_primary: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     added_by_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
 
-    recording: Mapped[Recording] = relationship(back_populates="containers")
+    recording: Mapped[Recording] = relationship(back_populates="targets")
     added_by = relationship("User")

@@ -7,8 +7,7 @@ from threading import Event
 import time
 
 import pytest
-from alembic import command
-from sqlalchemy import create_engine, inspect, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -19,13 +18,11 @@ from ai_do_api.domains.ai.runtime.models import (
     AgentTraceEvent,
 )
 from ai_do_api.domains.ai.runtime.persistence import (
-    append_graph_schedule_trace_events,
     append_trace_event,
     prepare_trace_payload,
-    persist_graph_schedule_invocation_skeletons,
-    scrub_completed_runtime_records,
     scrub_trace_payload,
 )
+from ai_do_api.domains.ai.runtime.retention import scrub_completed_runtime_records
 from ai_do_api.domains.auth.models import User, Workspace
 from ai_do_api.domains.auth.security import new_id
 from ai_do_api.domains.conversations.models import Conversation
@@ -35,30 +32,27 @@ from ai_do_api.domains.meeting.models import utcnow_naive
 @pytest.fixture
 def runtime_session_factory(
     monkeypatch: pytest.MonkeyPatch,
-    postgres_dsn: str,
+    application_postgres_dsn: str,
 ) -> Iterator[sessionmaker[Session]]:
-    monkeypatch.setenv("DOOWON_POSTGRES_DSN", postgres_dsn)
-    monkeypatch.setenv("DOOWON_LLM_HEALTHCHECK_ON_STARTUP", "0")
+    monkeypatch.setenv("AI_DO_POSTGRES_DSN", application_postgres_dsn)
+    monkeypatch.setenv("AI_DO_LLM_HEALTHCHECK_ON_STARTUP", "0")
 
-    from ai_do_api.core.db import _alembic_config, get_engine, get_session_factory
+    from ai_do_api.core.db import get_engine, get_session_factory
     from ai_do_api.core.settings import get_settings
 
     get_settings.cache_clear()
     get_engine.cache_clear()
     get_session_factory.cache_clear()
 
-    engine = create_engine(postgres_dsn)
-    with engine.begin() as connection:
-        connection.exec_driver_sql("DROP SCHEMA public CASCADE")
-        connection.exec_driver_sql("CREATE SCHEMA public")
-    engine.dispose()
-
-    command.upgrade(_alembic_config(), "head")
-    yield get_session_factory()
-
-    get_session_factory.cache_clear()
-    get_engine.cache_clear()
-    get_settings.cache_clear()
+    factory = get_session_factory()
+    engine = factory.kw["bind"]
+    try:
+        yield factory
+    finally:
+        engine.dispose()
+        get_session_factory.cache_clear()
+        get_engine.cache_clear()
+        get_settings.cache_clear()
 
 
 def _seed_scope(db: Session) -> tuple[Workspace, User, Conversation]:
@@ -71,6 +65,7 @@ def _seed_scope(db: Session) -> tuple[Workspace, User, Conversation]:
     )
     user = User(
         id=new_id(),
+        login_id=f"runtime-{suffix}",
         email=f"runtime-{suffix}@ai-do.local",
         full_name="Runtime Test User",
         password_hash="test",
@@ -105,33 +100,15 @@ def _runtime_run(
     )
 
 
-def test_runtime_migration_creates_kernel_tables(
-    runtime_session_factory: sessionmaker[Session],
-) -> None:
-    engine = runtime_session_factory.kw["bind"]
-    inspector = inspect(engine)
-    table_names = set(inspector.get_table_names())
-
-    assert {
-        "ai_agent_runs",
-        "ai_agent_invocations",
-        "ai_agent_trace_events",
-    }.issubset(table_names)
-
-
-def test_runtime_migration_downgrade_upgrade_round_trip(
-    runtime_session_factory: sessionmaker[Session],
-) -> None:
-    from ai_do_api.core.db import _alembic_config
-
-    command.downgrade(_alembic_config(), "-1")
-    command.upgrade(_alembic_config(), "head")
-
-    engine = runtime_session_factory.kw["bind"]
-    inspector = inspect(engine)
-    table_names = set(inspector.get_table_names())
-    assert "ai_agent_runs" in table_names
-    assert "ai_agent_trace_events" in table_names
+def _trace_events_by_type(db: Session, run_id: str) -> dict[str, AgentTraceEvent]:
+    trace_events = list(
+        db.scalars(
+            select(AgentTraceEvent)
+            .where(AgentTraceEvent.agent_run_id == run_id)
+            .order_by(AgentTraceEvent.event_seq)
+        )
+    )
+    return {event.event_type: event for event in trace_events}
 
 
 def test_agent_run_allows_only_one_live_run_per_conversation(
@@ -223,70 +200,6 @@ def test_agent_invocation_rejects_negative_invocation_seq(
             db.commit()
 
 
-def test_graph_schedule_persistence_skips_negative_invocation_seq(
-    runtime_session_factory: sessionmaker[Session],
-) -> None:
-    with runtime_session_factory() as db:
-        workspace, user, conversation = _seed_scope(db)
-        run = _runtime_run(workspace=workspace, user=user, conversation=conversation)
-        db.add(run)
-        db.flush()
-
-        runtime_metadata = {
-            "graph_schedule_summary": {
-                "state": "planned",
-                "steps": [
-                    {"invocation_seq": -1, "agent_id": "domain.meeting"},
-                    {"invocation_seq": "invalid", "agent_id": "domain.docs"},
-                    {"invocation_seq": 0, "agent_id": "domain.pms"},
-                ],
-            }
-        }
-
-        invocations_by_seq = persist_graph_schedule_invocation_skeletons(
-            db,
-            agent_run_id=run.id,
-            workspace_id=workspace.id,
-            conversation_id=conversation.id,
-            runtime_metadata=runtime_metadata,
-        )
-        append_graph_schedule_trace_events(
-            db,
-            agent_run_id=run.id,
-            workspace_id=workspace.id,
-            conversation_id=conversation.id,
-            runtime_metadata=runtime_metadata,
-            graph_invocations_by_seq=invocations_by_seq,
-        )
-        db.commit()
-
-        invocations = list(
-            db.scalars(
-                select(AgentInvocation)
-                .where(AgentInvocation.agent_run_id == run.id)
-                .order_by(AgentInvocation.invocation_seq)
-            )
-        )
-        trace_events = list(
-            db.scalars(
-                select(AgentTraceEvent)
-                .where(AgentTraceEvent.agent_run_id == run.id)
-                .order_by(AgentTraceEvent.event_seq)
-            )
-        )
-
-        assert list(invocations_by_seq) == [0]
-        assert [(invocation.invocation_seq, invocation.agent_id) for invocation in invocations] == [
-            (0, "domain.pms")
-        ]
-        assert [event.event_type for event in trace_events] == [
-            "graph_schedule_planned",
-            "graph_node_planned",
-        ]
-        assert trace_events[1].invocation_seq == 0
-        assert trace_events[1].payload_json["agent_id"] == "domain.pms"
-
-
 def test_legacy_approval_allows_only_one_pending_approval_per_snapshot(
     runtime_session_factory: sessionmaker[Session],
 ) -> None:
@@ -312,7 +225,7 @@ def test_legacy_approval_allows_only_one_pending_approval_per_snapshot(
                 conversation_id=conversation.id,
                 agent_run_id=snapshot.id,
                 tool_call_id="call-1",
-                tool_name="pms.create_issue",
+                tool_name="pms.create_task",
                 arguments_json="{}",
                 status="pending",
                 requested_by_user_id=user.id,
@@ -328,7 +241,7 @@ def test_legacy_approval_allows_only_one_pending_approval_per_snapshot(
                 conversation_id=conversation.id,
                 agent_run_id=snapshot.id,
                 tool_call_id="call-2",
-                tool_name="pms.create_issue",
+                tool_name="pms.create_task",
                 arguments_json="{}",
                 status="pending",
                 requested_by_user_id=user.id,
@@ -337,57 +250,6 @@ def test_legacy_approval_allows_only_one_pending_approval_per_snapshot(
         )
         with pytest.raises(IntegrityError):
             db.commit()
-
-
-def test_legacy_snapshot_status_update_tolerates_missing_runtime_shadow(
-    runtime_session_factory: sessionmaker[Session],
-) -> None:
-    with runtime_session_factory() as db:
-        workspace, user, conversation = _seed_scope(db)
-        snapshot = ai_approvals.AgentRunSnapshot(
-            id=new_id(),
-            conversation_id=conversation.id,
-            workspace_id=workspace.id,
-            requested_by_user_id=user.id,
-            status="awaiting_approval",
-            messages_json=[{"role": "user", "content": "legacy pending approval"}],
-            blocked_call_id="call-legacy",
-        )
-        db.add(snapshot)
-        db.commit()
-
-        ai_approvals.mark_snapshot_resumed(db, snapshot)
-        db.commit()
-        ai_approvals.mark_snapshot_completed(db, snapshot)
-        db.commit()
-
-        assert db.get(AgentRun, snapshot.id) is None
-
-
-def test_snapshot_shadow_uses_runtime_profile_from_model_meta(
-    runtime_session_factory: sessionmaker[Session],
-) -> None:
-    with runtime_session_factory() as db:
-        workspace, user, conversation = _seed_scope(db)
-
-        snapshot = ai_approvals.persist_snapshot_on_halt(
-            db,
-            workspace=workspace,
-            conversation=conversation,
-            requested_by_user=user,
-            messages_json=[{"role": "user", "content": "보고서 작성"}],
-            blocked_call_id="call-profile",
-            model_meta={
-                "model": "local/current-moe-test-profile",
-                "runtime_profile": "grounded_report",
-                "runtime_routing_reason_codes": ["grounded_report_signal"],
-            },
-        )
-        db.commit()
-
-        runtime_run = db.get(AgentRun, snapshot.id)
-        assert runtime_run is not None
-        assert runtime_run.runtime_profile == "grounded_report"
 
 
 def test_trace_events_are_uniquely_ordered_per_run(

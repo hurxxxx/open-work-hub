@@ -1,0 +1,18 @@
+{
+  "name": "invalid destructive app sandbox migration",
+  "declaredLane": "app-sandbox",
+  "changes": [
+    {
+      "status": "A",
+      "path": "apps/api/alembic/versions/deadbeef0001_drop_workspace_column.py"
+    }
+  ],
+  "sources": {
+    "apps/api/alembic/versions/deadbeef0001_drop_workspace_column.py": "from alembic import op\n\ndef upgrade() -> None:\n    op.drop_column('workspaces', 'legacy_flag')\n"
+  },
+  "expect": {
+    "ok": false,
+    "failureCodes": ["migration-escalation"]
+  }
+}
+

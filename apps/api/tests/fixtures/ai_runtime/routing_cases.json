@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "suite": "routing",
-  "description": "Synthetic Korean routing cases for Phase 0 fast-path and graph-path gates.",
+  "description": "Synthetic Korean routing cases for scope and size driven runtime gates.",
   "cases": [
     {
       "id": "routing-meeting-scoped-summary",
@@ -11,7 +11,10 @@
       "input": {
         "user_message": "이 회의의 결정사항만 요약해줘.",
         "allowed_app_ids": ["meeting"],
-        "conversation_scope": {"kind": "meeting", "ref": "fixture-meeting-001"}
+        "conversation_scope": {
+          "kind": "meeting",
+          "ref": "fixture-meeting-001"
+        }
       },
       "expected": {
         "route": "fast_path",
@@ -27,8 +30,11 @@
       "tags": ["pms", "docs", "graph_path", "grounded_report"],
       "input": {
         "user_message": "가상 프로젝트 A의 이슈와 관련 문서를 함께 보고 리스크 보고서 초안을 만들어줘.",
-        "allowed_app_ids": ["pms", "docs", "ai"],
-        "conversation_scope": {"kind": "workspace", "ref": "fixture-workspace"}
+        "allowed_app_ids": ["pms", "docs", "chatbot"],
+        "conversation_scope": {
+          "kind": "workspace",
+          "ref": "fixture-workspace"
+        }
       },
       "expected": {
         "route": "graph_path",

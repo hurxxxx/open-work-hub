@@ -1,0 +1,79 @@
+import { useCallback, useEffect, useReducer, type SetStateAction } from 'react';
+
+import {
+  getTaskDetail,
+  listTaskActivityLogs,
+  type PmsAttachment,
+  type PmsChecklistItem,
+  type PmsComment,
+  type PmsTask,
+  type PmsTaskDocLink,
+} from '../api/pms-api';
+import {
+  INITIAL_TASK_DETAIL_RESOURCES_STATE,
+  taskDetailResourcesReducer,
+} from './task-detail-resources-model';
+export {
+  INITIAL_TASK_DETAIL_RESOURCES_STATE,
+  taskDetailResourcesReducer,
+  taskDetailResourcesFromLoaded,
+} from './task-detail-resources-model';
+export type {
+  TaskDetailResourcesAction,
+  TaskDetailResourcesState,
+} from './task-detail-resources-model';
+
+export function useTaskDetailResources({
+  taskId,
+  token,
+  workspaceSlug,
+}: {
+  taskId: string;
+  token: string | null;
+  workspaceSlug: string | null;
+}) {
+  const [state, dispatch] = useReducer(
+    taskDetailResourcesReducer,
+    INITIAL_TASK_DETAIL_RESOURCES_STATE,
+  );
+
+  useEffect(() => {
+    if (!token) return;
+    dispatch({ type: 'loading', value: true });
+    Promise.all([
+      getTaskDetail(token, taskId, workspaceSlug),
+      listTaskActivityLogs(token, taskId),
+    ])
+      .then(([detail, logs]) => dispatch({ type: 'loaded', detail, logs }))
+      .finally(() => dispatch({ type: 'loading', value: false }));
+  }, [token, taskId, workspaceSlug]);
+
+  return {
+    state,
+    setAttachments: useCallback(
+      (value: SetStateAction<PmsAttachment[]>) =>
+        dispatch({ type: 'attachments', value }),
+      [],
+    ),
+    setChecklistItems: useCallback(
+      (value: SetStateAction<PmsChecklistItem[]>) =>
+        dispatch({ type: 'checklistItems', value }),
+      [],
+    ),
+    setComments: useCallback(
+      (value: SetStateAction<PmsComment[]>) =>
+        dispatch({ type: 'comments', value }),
+      [],
+    ),
+    setLinkedDocs: useCallback(
+      (value: SetStateAction<PmsTaskDocLink[]>) =>
+        dispatch({ type: 'linkedDocs', value }),
+      [],
+    ),
+    setSubtasks: useCallback(
+      (value: SetStateAction<PmsTask[]>) =>
+        dispatch({ type: 'subtasks', value }),
+      [],
+    ),
+  };
+}

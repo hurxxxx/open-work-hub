@@ -23,7 +23,7 @@ class RagQueryFilters(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     resource_type: str | None = Field(default=None, min_length=1, max_length=64)
-    resource_id: str | None = Field(default=None, min_length=1, max_length=128)
+    resource_id: str | None = Field(default=None, min_length=1, max_length=255)
     visibility_refs_contains: str | None = Field(default=None, min_length=1, max_length=256)
     metadata: dict[str, FilterValue] = Field(default_factory=dict)
 

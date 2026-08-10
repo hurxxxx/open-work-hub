@@ -9,5 +9,14 @@ export type { BlockViewerProps } from './block-viewer';
 
 export { CollaborativeBlockEditor } from './collaborative-block-editor';
 export type { CollaborativeBlockEditorProps } from './collaborative-block-editor';
+export {
+  colorForCollaborativeUser,
+  hashCollaborativeUserId,
+} from './collaborative-session';
 
-export type { BlockContent, MentionSuggestion, TaskRefSuggestion } from './types';
+export { blockContentToMarkdown, markdownToBlockContent } from './markdown';
+export type {
+  BlockContent,
+  MentionSuggestion,
+  TaskRefSuggestion,
+} from './types';

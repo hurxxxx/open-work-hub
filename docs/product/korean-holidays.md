@@ -6,19 +6,17 @@ Planner 캘린더는 한국 공식 관보(官報)를 그대로 따르는
 
 ## 동작 방식
 
-- 패키지는 연도별로 정적 데이터셋(`y2024`, `y2025`, `y2026`, …)을 export 한다.
+- 패키지는 연도별로 정적 데이터셋(`y2025`, `y2026`, `y2027`, …)을 export 한다.
 - 모든 데이터는 빌드 타임에 클라이언트 번들에 포함되므로 외부 API 호출이 없다.
 - 헬퍼 모듈: [`apps/web/src/lib/korean-holidays.ts`](../../apps/web/src/lib/korean-holidays.ts)
   - `getKoreanHolidayNames(year, month, day)` — 동기 lookup, 휴일이면 한국어 명칭
     배열을 반환하고 아니면 `null`
-  - `isKoreanHoliday(year, month, day)` — boolean 헬퍼
-  - `KOREAN_HOLIDAY_MIN_YEAR` / `KOREAN_HOLIDAY_MAX_YEAR` 상수
-- Planner 사용처: [`apps/web/src/components/views/PlannerView.tsx`](../../apps/web/src/components/views/PlannerView.tsx)
-  의 Month / Week / Day 뷰. 휴일은 빨간색으로 강조된다.
+  - 지원 연도 범위를 벗어난 lookup 은 개발 콘솔에 1회 warning 을 남긴다.
+- 사용처: Planner / PMS 공통 캘린더와 홈 오늘 패널. 휴일은 빨간색으로 강조된다.
 
 ## 데이터 신뢰 범위
 
-현재 패키지는 **2018 ~ 2026년** 데이터만 포함한다.
+현재 패키지는 **2018 ~ 2027년** 데이터만 포함한다.
 범위를 벗어난 날짜를 lookup 하면 `null`을 돌려준다 (휴일 없음으로 처리).
 캘린더 자체는 동작하지만 강조 표시가 사라지므로, 새 연도가 시작되기 전에 반드시
 패키지를 업그레이드해야 한다.
@@ -26,7 +24,7 @@ Planner 캘린더는 한국 공식 관보(官報)를 그대로 따르는
 ## 새 연도 추가 절차
 
 대한민국 정부는 매년 7~8월경 다음 해 공휴일을 관보로 고시하며, 패키지 메인테이너는
-관보 고시 직후 새 minor 버전(예: `4.2027.0`)을 npm 에 올린다.
+관보 고시 직후 새 버전(예: `5.2028.0`)을 npm 에 올린다.
 
 새 연도 데이터를 통합하는 절차:
 
@@ -42,7 +40,7 @@ Planner 캘린더는 한국 공식 관보(官報)를 그대로 따르는
    pnpm view @hyunbinseo/holidays-kr version
    ```
 
-   버전 형식이 `4.YYYY.0` 이고 `YYYY` 가 추가하려는 연도인지 확인한다.
+   버전 형식에 추가하려는 연도(`YYYY`)가 포함되어 있는지 확인한다.
 
 3. **헬퍼 모듈 업데이트** —
    [`apps/web/src/lib/korean-holidays.ts`](../../apps/web/src/lib/korean-holidays.ts)
@@ -50,15 +48,19 @@ Planner 캘린더는 한국 공식 관보(官報)를 그대로 따르는
    - 새 연도 export 를 import 에 추가:
 
      ```ts
-     import { …, y2027 } from '@hyunbinseo/holidays-kr';
+     import { …, y2028 } from '@hyunbinseo/holidays-kr/all';
      ```
+
+     연도별 export 는 `@hyunbinseo/holidays-kr/all` 하위 경로에서 가져온다.
+     기본 export 는 async API 이므로, 동기 lookup 을 유지하려면 `all` export 를
+     사용해야 한다.
 
    - `HOLIDAYS_BY_YEAR` 매핑에 항목 추가:
 
      ```ts
      const HOLIDAYS_BY_YEAR = {
        …,
-       2027: y2027,
+       2028: y2028,
      };
      ```
 

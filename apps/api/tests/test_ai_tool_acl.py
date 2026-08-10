@@ -5,23 +5,20 @@ from types import SimpleNamespace
 from typing import Any
 
 from fastapi.testclient import TestClient
+import pytest
+
+from dev_accounts import dev_login
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ai_do_api.core import llm as llm_core
-from ai_do_api.core.db import get_engine, get_session_factory
+from ai_do_api.core.db import get_engine
 from ai_do_api.core.settings import get_settings
-from ai_do_api.domains.ai.models import LlmPolicy
-from ai_do_api.domains.auth.access import ensure_dev_login_seed_data
 from ai_do_api.domains.auth.models import AuditLog
 
 
 def _dev_login(client: TestClient, account_key: str) -> dict:
-    with get_session_factory()() as db:
-        ensure_dev_login_seed_data(db)
-    response = client.post("/api/v1/auth/dev-login", json={"account_key": account_key})
-    assert response.status_code == 200, response.text
-    return response.json()
+    return dev_login(client, account_key)
 
 
 def _auth_headers(token: str) -> dict[str, str]:
@@ -29,22 +26,16 @@ def _auth_headers(token: str) -> dict[str, str]:
 
 
 def _workspace_tool_path(workspace_slug: str, tool_name: str) -> str:
-    return f"/api/v1/workspaces/{workspace_slug}/ai/tools/{tool_name}/invoke"
+    return f"/api/v1/workspaces/{workspace_slug}/chatbot/tools/{tool_name}/invoke"
 
 
 def _workspace_ai_path(slug: str, suffix: str) -> str:
-    return f"/api/v1/workspaces/{slug}/ai{suffix}"
+    return f"/api/v1/workspaces/{slug}/chatbot{suffix}"
 
 
 def _set_policy(task_kind: str, mode: str) -> None:
-    with Session(get_engine()) as session:
-        policy = session.scalar(
-            select(LlmPolicy).where(LlmPolicy.task_kind == task_kind)
-        )
-        assert policy is not None
-        policy.policy_mode = mode
-        session.add(policy)
-        session.commit()
+    # Legacy test shim: registered workload routing is no longer DB task-policy driven.
+    _ = (task_kind, mode)
 
 
 def _tool_audit_rows() -> list[AuditLog]:
@@ -106,15 +97,18 @@ class _SequencedAsyncChatCompletions:
 
 class _SequencedAsyncPoolClient:
     def __init__(self, chunk_sequences: list[list[Any]]) -> None:
-        self.chat = SimpleNamespace(
-            completions=_SequencedAsyncChatCompletions(chunk_sequences)
-        )
+        self.chat = SimpleNamespace(completions=_SequencedAsyncChatCompletions(chunk_sequences))
 
     def with_options(self, **_: Any) -> "_SequencedAsyncPoolClient":
         return self
 
 
-def _delta(*, content: str | None = None, tool_calls: list[Any] | None = None, finish_reason: str | None = None) -> SimpleNamespace:
+def _delta(
+    *,
+    content: str | None = None,
+    tool_calls: list[Any] | None = None,
+    finish_reason: str | None = None,
+) -> SimpleNamespace:
     delta = SimpleNamespace(
         content=content,
         reasoning_content=None,
@@ -178,6 +172,7 @@ def test_docs_tool_invoke_blocks_cross_workspace_page_access_and_audits_error(
     assert audit_payload["status"] == "error"
 
 
+@pytest.mark.usefixtures("configured_local_llm_control_plane")
 def test_agent_loop_tool_error_does_not_leak_cross_workspace_doc_content(
     client: TestClient,
     monkeypatch,
@@ -226,18 +221,24 @@ def test_agent_loop_tool_error_does_not_leak_cross_workspace_doc_content(
             ],
         ]
     )
-    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+    monkeypatch.setattr(
+        llm_core,
+        "_new_async_pool_client",
+        lambda config: pool_client,
+    )
 
     response = client.post(
         _workspace_ai_path("knowledge-base", "/chat/stream"),
         headers=_auth_headers(outsider["token"]),
-        json={"messages": [{"role": "user", "content": "문서를 읽어줘"}]},
+        json={
+            "messages": [{"role": "user", "content": "문서를 읽어줘"}],
+            "allowed_app_ids": ["docs"],
+        },
     )
 
     assert response.status_code == 200
     events = _parse_sse(response.text)
     assert any(
-        event["type"] == "tool_result" and event["data"]["status"] == "error"
-        for event in events
-    )
+        event["type"] == "tool_result" and event["data"]["status"] == "error" for event in events
+    ), events
     assert "secret agent body" not in response.text

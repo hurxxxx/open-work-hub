@@ -1,4 +1,4 @@
-import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
+import { apiFetchJsonWithMappedError } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
@@ -18,14 +18,12 @@ async function request<T>(
   workspaceSlug?: string | null,
 ): Promise<T> {
   const resolvedPath = resolveDocsPath(path, workspaceSlug);
-  try {
-    return await apiFetchJson<T>(resolvedPath, token, init);
-  } catch (error) {
-    if (error instanceof ApiRequestError) {
-      throw new DocsApiError(error.status, error.message);
-    }
-    throw error;
-  }
+  return apiFetchJsonWithMappedError<T>(
+    resolvedPath,
+    token,
+    init,
+    (error) => new DocsApiError(error.status, error.message),
+  );
 }
 
 function withShareToken(path: string, shareToken?: string | null): string {
@@ -38,8 +36,8 @@ function withShareToken(path: string, shareToken?: string | null): string {
 
 function resolveDocsPath(path: string, workspaceSlug?: string | null): string {
   if (
-    path.startsWith('/api/v1/docs/shared-links/')
-    || path.includes('share_token=')
+    path.startsWith('/api/v1/docs/shared-links/') ||
+    path.includes('share_token=')
   ) {
     return path;
   }
@@ -47,13 +45,24 @@ function resolveDocsPath(path: string, workspaceSlug?: string | null): string {
 }
 
 export type DocsShareSummary = ApiSchema<'DocsShareSummary'>;
-export type DocsPrimaryContainer = ApiSchema<'DocsPrimaryContainer'>;
+export type DocsPrimaryTarget = ApiSchema<'DocsPrimaryTarget'>;
+export type DocsDocType = ApiSchema<'DocsHubItem'>['doc_type'];
+export type DocsContentFormat = ApiSchema<'DocsPageItem'>['content_format'];
+export type DocsHubContentFormat = ApiSchema<'DocsHubItem'>['content_format'];
+export type DocsCollectionSummary = ApiSchema<'DocsCollectionSummary'>;
 export type DocsHubItem = Omit<
   ApiSchema<'DocsHubItem'>,
-  'last_viewed_at' | 'primary_container' | 'sharing_summary' | 'source_deeplink' | 'source_ref' | 'trashed_at'
+  | 'collection'
+  | 'last_viewed_at'
+  | 'primary_target'
+  | 'sharing_summary'
+  | 'source_deeplink'
+  | 'source_ref'
+  | 'trashed_at'
 > & {
   source_ref: string | null;
-  primary_container: DocsPrimaryContainer | null;
+  collection: DocsCollectionSummary | null;
+  primary_target: DocsPrimaryTarget | null;
   source_deeplink: string | null;
   trashed_at: string | null;
   last_viewed_at: string | null;
@@ -63,56 +72,70 @@ export type DocsHubResponse = Omit<ApiSchema<'DocsHubResponse'>, 'items'> & {
   items: DocsHubItem[];
 };
 
-export function getDocsItemPrimaryContainerId(
+export function getDocsItemPrimaryTargetId(
   item: DocsHubItem,
   app?: string,
   type?: string,
 ): string | null {
-  const container = item.primary_container;
-  if (!container) {
+  const target = item.primary_target;
+  if (!target) {
     return null;
   }
-  if (app && container.app !== app) {
+  if (app && target.app !== app) {
     return null;
   }
-  if (type && container.type !== type) {
+  if (type && target.type !== type) {
     return null;
   }
-  return container.id;
+  return target.id;
 }
 
-export function getDocsItemPrimaryContainerSortOrder(item: DocsHubItem): number {
-  return item.primary_container?.sort_order ?? 0;
+export function getDocsItemPrimaryTargetSortOrder(
+  item: DocsHubItem,
+): number {
+  return item.primary_target?.sort_order ?? 0;
 }
 
-export function withDocsItemPrimaryContainerSortOrder(
+export function withDocsItemPrimaryTargetSortOrder(
   item: DocsHubItem,
   sortOrder: number,
 ): DocsHubItem {
-  if (!item.primary_container) {
+  if (!item.primary_target) {
     return item;
   }
   return {
     ...item,
-    primary_container: {
-      ...item.primary_container,
+    primary_target: {
+      ...item.primary_target,
       sort_order: sortOrder,
     },
   };
 }
 
-export type DocsPageItem = Omit<ApiSchema<'DocsPageItem'>, 'content_blocks' | 'parent_id' | 'trashed_at'> & {
+export type DocsPageItem = Omit<
+  ApiSchema<'DocsPageItem'>,
+  'content_blocks' | 'content_text' | 'parent_id' | 'trashed_at'
+> & {
   parent_id: string | null;
   content_blocks: Record<string, unknown>[] | null;
+  content_text: string | null;
   trashed_at: string | null;
 };
-export type DocsPageListResponse = Omit<ApiSchema<'DocsPageListResponse'>, 'items'> & {
+export type DocsPageListResponse = Omit<
+  ApiSchema<'DocsPageListResponse'>,
+  'items'
+> & {
   items: DocsPageItem[];
 };
+export type DocsPagesEventPayload = {
+  doc_id?: string;
+  action?: 'created' | 'updated' | 'deleted';
+  page_id?: string | null;
+  parent_id?: string | null;
+  actor_user_id?: string | null;
+};
 
-export function mediaResourceTypeForDocsPage(
-  sourceType: DocsPageItem['source_type'],
-): 'docs_native_page' {
+export function mediaResourceTypeForDocsPage(): 'docs_native_page' {
   return 'docs_native_page';
 }
 
@@ -124,7 +147,8 @@ export type DocsCollabSession = Omit<
   snapshot_content_blocks: Record<string, unknown>[] | null;
   yjs_state: string | null;
 };
-export type DocsCollabSnapshotResponse = ApiSchema<'DocsCollabSnapshotResponse'>;
+export type DocsCollabSnapshotResponse =
+  ApiSchema<'DocsCollabSnapshotResponse'>;
 export type FavoriteDocItem = ApiSchema<'FavoriteDocItem'>;
 export type RecentPageItem = ApiSchema<'RecentPageItem'>;
 export type ShareableUserItem = ApiSchema<'ShareableUserItem'>;
@@ -132,6 +156,50 @@ export type NativeUserShareItem = ApiSchema<'NativeUserShareItem'>;
 export type NativeLinkShareItem = ApiSchema<'NativeLinkShareItem'>;
 export type NativeDocSharingResponse = ApiSchema<'NativeDocSharingResponse'>;
 export type ResolveSharedLinkResponse = ApiSchema<'ResolveSharedLinkResponse'>;
+export type RelatedPmsTaskItem = ApiSchema<'RelatedPmsTaskItem'>;
+export type RelatedPmsTasksResponse = Omit<
+  ApiSchema<'RelatedPmsTasksResponse'>,
+  'items'
+> & {
+  items: RelatedPmsTaskItem[];
+};
+
+export const DOC_CONTENT_FORMAT_VALUES = ['block', 'html'] as const;
+export const DOC_HUB_CONTENT_FORMAT_VALUES = [
+  'block',
+  'html',
+  'mixed',
+] as const;
+
+export function isDocsContentFormat(
+  value: unknown,
+): value is DocsContentFormat {
+  return DOC_CONTENT_FORMAT_VALUES.includes(value as DocsContentFormat);
+}
+
+export function resolveDocsContentFormat(
+  page?: { content_format?: DocsContentFormat | null } | null,
+): DocsContentFormat {
+  if (isDocsContentFormat(page?.content_format)) {
+    return page.content_format;
+  }
+  return 'block';
+}
+
+export function isDocsHubContentFormat(
+  value: unknown,
+): value is DocsHubContentFormat {
+  return DOC_HUB_CONTENT_FORMAT_VALUES.includes(value as DocsHubContentFormat);
+}
+
+export function resolveDocsHubContentFormat(
+  doc?: { content_format?: DocsHubContentFormat | null } | null,
+): DocsHubContentFormat {
+  if (isDocsHubContentFormat(doc?.content_format)) {
+    return doc.content_format;
+  }
+  return 'block';
+}
 
 export function listDocsHub(
   token: string,
@@ -144,9 +212,8 @@ export function listDocsHub(
     page_size?: number;
     source_app?: string;
     source_kind?: string;
-    container_app?: string;
-    container_type?: string;
-    container_id?: string;
+    doc_type?: DocsDocType;
+    space_id?: string;
   } = {},
   workspaceSlug?: string | null,
 ): Promise<DocsHubResponse> {
@@ -159,10 +226,14 @@ export function listDocsHub(
   if (params.page_size) qs.set('page_size', String(params.page_size));
   if (params.source_app) qs.set('source_app', params.source_app);
   if (params.source_kind) qs.set('source_kind', params.source_kind);
-  if (params.container_app) qs.set('container_app', params.container_app);
-  if (params.container_type) qs.set('container_type', params.container_type);
-  if (params.container_id) qs.set('container_id', params.container_id);
-  return request<DocsHubResponse>(`/api/v1/docs/hub?${qs}`, token, {}, workspaceSlug);
+  if (params.doc_type) qs.set('doc_type', params.doc_type);
+  if (params.space_id) qs.set('space_id', params.space_id);
+  return request<DocsHubResponse>(
+    `/api/v1/docs/hub?${qs}`,
+    token,
+    {},
+    workspaceSlug,
+  );
 }
 
 export function createNativeDoc(
@@ -174,7 +245,10 @@ export function createNativeDoc(
     source_kind?: string;
     source_ref?: string | null;
     generation_kind?: string;
-    primary_container?: {
+    doc_type?: DocsDocType;
+    content_format?: DocsContentFormat;
+    first_page_content_text?: string | null;
+    primary_target?: {
       app: string;
       type: string;
       id: string;
@@ -208,10 +282,57 @@ export function getDocsItem(
   );
 }
 
+export function listDocPmsTasks(
+  token: string,
+  itemId: string,
+  workspaceSlug?: string | null,
+): Promise<RelatedPmsTasksResponse> {
+  return request<RelatedPmsTasksResponse>(
+    `/api/v1/docs/items/${itemId}/pms-tasks`,
+    token,
+    {},
+    workspaceSlug,
+  );
+}
+
+export function attachDocPmsTask(
+  token: string,
+  itemId: string,
+  taskId: string,
+  workspaceSlug?: string | null,
+): Promise<RelatedPmsTasksResponse> {
+  return request<RelatedPmsTasksResponse>(
+    `/api/v1/docs/items/${itemId}/pms-tasks`,
+    token,
+    {
+      method: 'POST',
+      body: JSON.stringify({ task_id: taskId }),
+    },
+    workspaceSlug,
+  );
+}
+
+export function detachDocPmsTask(
+  token: string,
+  itemId: string,
+  taskId: string,
+  workspaceSlug?: string | null,
+): Promise<RelatedPmsTasksResponse> {
+  return request<RelatedPmsTasksResponse>(
+    `/api/v1/docs/items/${itemId}/pms-tasks/${taskId}`,
+    token,
+    { method: 'DELETE' },
+    workspaceSlug,
+  );
+}
+
 export function updateDocsItem(
   token: string,
   itemId: string,
-  payload: { title?: string },
+  payload: {
+    title?: string;
+    doc_type?: DocsDocType;
+  },
   shareToken?: string | null,
   workspaceSlug?: string | null,
 ): Promise<DocsHubItem> {
@@ -226,20 +347,36 @@ export function updateDocsItem(
   );
 }
 
-export function deleteDocsItem(token: string, itemId: string, shareToken?: string | null): Promise<void> {
-  return request<void>(withShareToken(`/api/v1/docs/items/${itemId}`, shareToken), token, {
-    method: 'DELETE',
-  });
+export function deleteDocsItem(
+  token: string,
+  itemId: string,
+  shareToken?: string | null,
+  workspaceSlug?: string | null,
+): Promise<void> {
+  return request<void>(
+    withShareToken(`/api/v1/docs/items/${itemId}`, shareToken),
+    token,
+    {
+      method: 'DELETE',
+    },
+    workspaceSlug,
+  );
 }
 
 export function duplicateDocsItem(
   token: string,
   itemId: string,
   shareToken?: string | null,
+  workspaceSlug?: string | null,
 ): Promise<DocsHubItem> {
-  return request<DocsHubItem>(withShareToken(`/api/v1/docs/items/${itemId}/duplicate`, shareToken), token, {
-    method: 'POST',
-  });
+  return request<DocsHubItem>(
+    withShareToken(`/api/v1/docs/items/${itemId}/duplicate`, shareToken),
+    token,
+    {
+      method: 'POST',
+    },
+    workspaceSlug,
+  );
 }
 
 export function listDocPages(
@@ -262,15 +399,23 @@ export function createDocPage(
   payload: {
     title: string;
     parent_id?: string | null;
+    content_format?: DocsContentFormat;
     content_blocks?: Record<string, unknown>[] | null;
+    content_text?: string | null;
     sort_order?: number | null;
   },
   shareToken?: string | null,
+  workspaceSlug?: string | null,
 ): Promise<DocsPageItem> {
-  return request<DocsPageItem>(withShareToken(`/api/v1/docs/items/${itemId}/pages`, shareToken), token, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
+  return request<DocsPageItem>(
+    withShareToken(`/api/v1/docs/items/${itemId}/pages`, shareToken),
+    token,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+    workspaceSlug,
+  );
 }
 
 export function updateDocPage(
@@ -280,6 +425,7 @@ export function updateDocPage(
     title?: string;
     parent_id?: string | null;
     content_blocks?: Record<string, unknown>[] | null;
+    content_text?: string | null;
     sort_order?: number | null;
   },
   shareToken?: string | null,
@@ -303,7 +449,7 @@ export function makeDocsPageRef(
   return `${sourceType}__${sourcePageId}`;
 }
 
-export function updateDocContainer(
+export function updateDocTarget(
   token: string,
   itemId: string,
   payload: {
@@ -315,7 +461,7 @@ export function updateDocContainer(
   workspaceSlug?: string | null,
 ): Promise<DocsHubItem> {
   return request<DocsHubItem>(
-    `/api/v1/docs/items/${itemId}/container`,
+    `/api/v1/docs/items/${itemId}/target`,
     token,
     {
       method: 'PUT',
@@ -325,13 +471,13 @@ export function updateDocContainer(
   );
 }
 
-export function deleteDocContainer(
+export function deleteDocTarget(
   token: string,
   itemId: string,
   workspaceSlug?: string | null,
 ): Promise<DocsHubItem> {
   return request<DocsHubItem>(
-    `/api/v1/docs/items/${itemId}/container`,
+    `/api/v1/docs/items/${itemId}/target`,
     token,
     { method: 'DELETE' },
     workspaceSlug,
@@ -359,6 +505,7 @@ export function saveDocsCollabSnapshot(
     yjs_state?: string | null;
   },
   workspaceSlug?: string | null,
+  init?: RequestInit,
 ): Promise<DocsCollabSnapshotResponse> {
   return request<DocsCollabSnapshotResponse>(
     `/api/v1/docs/collab/pages/${encodeURIComponent(pageRef)}/snapshot`,
@@ -366,21 +513,41 @@ export function saveDocsCollabSnapshot(
     {
       method: 'PUT',
       body: JSON.stringify(payload),
+      ...(init ?? {}),
     },
     workspaceSlug,
   );
 }
 
-export function deleteDocPage(token: string, pageId: string, shareToken?: string | null): Promise<void> {
-  return request<void>(withShareToken(`/api/v1/docs/pages/${pageId}`, shareToken), token, {
-    method: 'DELETE',
-  });
+export function deleteDocPage(
+  token: string,
+  pageId: string,
+  shareToken?: string | null,
+  workspaceSlug?: string | null,
+): Promise<void> {
+  return request<void>(
+    withShareToken(`/api/v1/docs/pages/${pageId}`, shareToken),
+    token,
+    {
+      method: 'DELETE',
+    },
+    workspaceSlug,
+  );
 }
 
-export function toggleDocFavorite(token: string, itemId: string): Promise<{ is_favorite: boolean }> {
-  return request<{ is_favorite: boolean }>(`/api/v1/docs/items/${itemId}/favorite`, token, {
-    method: 'PATCH',
-  });
+export function toggleDocFavorite(
+  token: string,
+  itemId: string,
+  workspaceSlug?: string | null,
+): Promise<{ is_favorite: boolean }> {
+  return request<{ is_favorite: boolean }>(
+    `/api/v1/docs/items/${itemId}/favorite`,
+    token,
+    {
+      method: 'PATCH',
+    },
+    workspaceSlug,
+  );
 }
 
 export function recordDocView(
@@ -401,8 +568,16 @@ export function recordDocView(
   );
 }
 
-export function listFavoriteDocs(token: string): Promise<FavoriteDocItem[]> {
-  return request<FavoriteDocItem[]>('/api/v1/docs/favorites', token);
+export function listFavoriteDocs(
+  token: string,
+  workspaceSlug?: string | null,
+): Promise<FavoriteDocItem[]> {
+  return request<FavoriteDocItem[]>(
+    '/api/v1/docs/favorites',
+    token,
+    {},
+    workspaceSlug,
+  );
 }
 
 export function listRecentPages(
@@ -410,16 +585,39 @@ export function listRecentPages(
   limit = 10,
   workspaceSlug?: string | null,
 ): Promise<RecentPageItem[]> {
-  return request<RecentPageItem[]>(`/api/v1/docs/recent-pages?limit=${limit}`, token, {}, workspaceSlug);
+  return request<RecentPageItem[]>(
+    `/api/v1/docs/recent-pages?limit=${limit}`,
+    token,
+    {},
+    workspaceSlug,
+  );
 }
 
-export function listShareableUsers(token: string, q?: string): Promise<ShareableUserItem[]> {
+export function listShareableUsers(
+  token: string,
+  q?: string,
+  workspaceSlug?: string | null,
+): Promise<ShareableUserItem[]> {
   const suffix = q ? `?q=${encodeURIComponent(q)}` : '';
-  return request<ShareableUserItem[]>(`/api/v1/docs/shareable-users${suffix}`, token);
+  return request<ShareableUserItem[]>(
+    `/api/v1/docs/shareable-users${suffix}`,
+    token,
+    {},
+    workspaceSlug,
+  );
 }
 
-export function getDocSharing(token: string, itemId: string): Promise<NativeDocSharingResponse> {
-  return request<NativeDocSharingResponse>(`/api/v1/docs/items/${itemId}/sharing`, token);
+export function getDocSharing(
+  token: string,
+  itemId: string,
+  workspaceSlug?: string | null,
+): Promise<NativeDocSharingResponse> {
+  return request<NativeDocSharingResponse>(
+    `/api/v1/docs/items/${itemId}/sharing`,
+    token,
+    {},
+    workspaceSlug,
+  );
 }
 
 export function upsertDocUserShare(
@@ -427,40 +625,77 @@ export function upsertDocUserShare(
   itemId: string,
   userId: string,
   accessLevel: 'read' | 'edit',
+  workspaceSlug?: string | null,
 ): Promise<NativeDocSharingResponse> {
-  return request<NativeDocSharingResponse>(`/api/v1/docs/items/${itemId}/sharing/users/${userId}`, token, {
-    method: 'PUT',
-    body: JSON.stringify({ access_level: accessLevel }),
-  });
+  return request<NativeDocSharingResponse>(
+    `/api/v1/docs/items/${itemId}/sharing/users/${userId}`,
+    token,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ access_level: accessLevel }),
+    },
+    workspaceSlug,
+  );
 }
 
 export function deleteDocUserShare(
   token: string,
   itemId: string,
   userId: string,
+  workspaceSlug?: string | null,
 ): Promise<NativeDocSharingResponse> {
-  return request<NativeDocSharingResponse>(`/api/v1/docs/items/${itemId}/sharing/users/${userId}`, token, {
-    method: 'DELETE',
-  });
+  return request<NativeDocSharingResponse>(
+    `/api/v1/docs/items/${itemId}/sharing/users/${userId}`,
+    token,
+    {
+      method: 'DELETE',
+    },
+    workspaceSlug,
+  );
 }
 
 export function upsertDocLinkShare(
   token: string,
   itemId: string,
-  payload: { access_level: 'read' | 'edit'; active: boolean; regenerate_token?: boolean },
+  payload: {
+    access_level: 'read' | 'edit';
+    active: boolean;
+    regenerate_token?: boolean;
+  },
+  workspaceSlug?: string | null,
 ): Promise<NativeDocSharingResponse> {
-  return request<NativeDocSharingResponse>(`/api/v1/docs/items/${itemId}/sharing/link`, token, {
-    method: 'PUT',
-    body: JSON.stringify(payload),
-  });
+  return request<NativeDocSharingResponse>(
+    `/api/v1/docs/items/${itemId}/sharing/link`,
+    token,
+    {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    },
+    workspaceSlug,
+  );
 }
 
-export function deleteDocLinkShare(token: string, itemId: string): Promise<NativeDocSharingResponse> {
-  return request<NativeDocSharingResponse>(`/api/v1/docs/items/${itemId}/sharing/link`, token, {
-    method: 'DELETE',
-  });
+export function deleteDocLinkShare(
+  token: string,
+  itemId: string,
+  workspaceSlug?: string | null,
+): Promise<NativeDocSharingResponse> {
+  return request<NativeDocSharingResponse>(
+    `/api/v1/docs/items/${itemId}/sharing/link`,
+    token,
+    {
+      method: 'DELETE',
+    },
+    workspaceSlug,
+  );
 }
 
-export function resolveSharedLink(token: string, shareToken: string): Promise<ResolveSharedLinkResponse> {
-  return request<ResolveSharedLinkResponse>(`/api/v1/docs/shared-links/${shareToken}`, token);
+export function resolveSharedLink(
+  token: string,
+  shareToken: string,
+): Promise<ResolveSharedLinkResponse> {
+  return request<ResolveSharedLinkResponse>(
+    `/api/v1/docs/shared-links/${shareToken}`,
+    token,
+  );
 }

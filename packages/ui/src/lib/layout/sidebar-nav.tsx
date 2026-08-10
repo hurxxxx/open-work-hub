@@ -27,20 +27,20 @@ export function SidebarNav({
       )}
     >
       <div className="grid gap-1 border-b border-b-white/10 px-1.5 pb-2 pt-1">
-        <p className="m-0 text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-white/56">
+        <p className="m-0 text-[length:var(--ui-text-overline)] font-semibold uppercase tracking-[0.08em] text-white/56">
           {brand.eyebrow}
         </p>
-        <strong className="text-[1rem] tracking-[-0.01em] text-white">{brand.title}</strong>
+        <strong className="text-[length:var(--ui-text-h3)] tracking-[-0.01em] text-white">{brand.title}</strong>
       </div>
 
       {launcher ? (
         <button
           type="button"
           onClick={launcher.onSelect}
-          className="flex min-h-[32px] items-center justify-between rounded-[var(--ui-radius-sm)] border border-white/10 bg-white/5 px-2.5 text-left text-[0.86rem] font-medium text-white/88"
+          className="ui-primitive-control-body flex min-h-[32px] items-center justify-between rounded-[var(--ui-radius-sm)] border border-white/10 bg-white/5 px-2.5 text-left text-[length:var(--ui-text-body)] font-medium text-white/88"
         >
           <span>{launcher.label}</span>
-          {launcher.hint ? <span className="text-[0.72rem] text-white/48">{launcher.hint}</span> : null}
+          {launcher.hint ? <span className="text-[length:var(--ui-text-caption)] text-white/48">{launcher.hint}</span> : null}
         </button>
       ) : (
         <div />
@@ -49,7 +49,7 @@ export function SidebarNav({
       <nav aria-label={ariaLabel} className="flex flex-col gap-2.5 self-start">
         {sections.map((section) => (
           <div key={section.id} className="grid content-start gap-1">
-            <p className="m-0 px-2 text-[0.64rem] font-semibold uppercase tracking-[0.08em] text-white/42">
+            <p className="m-0 px-2 text-[length:var(--ui-text-overline)] font-semibold uppercase tracking-[0.08em] text-white/42">
               {section.label}
             </p>
             {section.items.map((item) => (
@@ -58,12 +58,12 @@ export function SidebarNav({
                 type="button"
                 onClick={item.onSelect}
                 className={cn(
-                  'flex min-h-[30px] items-center justify-between rounded-[var(--ui-radius-sm)] px-2 text-left text-[0.86rem] text-white/76 transition-colors duration-[var(--ui-motion-fast)] hover:bg-white/7 hover:text-white',
+                  'ui-primitive-control-body-normal flex min-h-[30px] items-center justify-between rounded-[var(--ui-radius-sm)] px-2 text-left text-[length:var(--ui-text-body)] text-white/76 transition-colors duration-[var(--ui-motion-fast)] hover:bg-white/7 hover:text-white',
                   item.active ? 'bg-white/10 text-white' : '',
                 )}
               >
                 <span>{item.label}</span>
-                {item.hint ? <span className="text-[0.68rem] text-white/38">{item.hint}</span> : null}
+                {item.hint ? <span className="text-[length:var(--ui-text-caption)] text-white/38">{item.hint}</span> : null}
               </button>
             ))}
           </div>

@@ -22,11 +22,19 @@
         "cwd": "."
       }
     },
+    "test": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "options": {
+        "command": "env NODE_OPTIONS=--no-experimental-webstorage vitest",
+        "cwd": "apps/web"
+      }
+    },
     "e2e-shell": {
       "executor": "nx:run-commands",
       "cache": false,
       "options": {
-        "command": "pnpm exec playwright test --config apps/web/playwright.config.ts apps/web/e2e/app-boundary-smoke.spec.ts",
+        "command": "pnpm exec playwright test --config apps/web/playwright.config.ts apps/web/e2e/app-boundary-smoke.spec.ts apps/web/e2e/docs-content-format.spec.ts apps/web/e2e/release-note-announcement-layout.spec.ts",
         "cwd": "."
       }
     }

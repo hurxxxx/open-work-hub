@@ -1,46 +1,95 @@
 export const AUTH_TOKEN_STORAGE_KEY = 'ai-do.auth.token';
-export const AUTH_POST_LOGOUT_HOME_REDIRECT_STORAGE_KEY = 'ai-do.auth.post-logout-home';
+const AUTH_POST_LOGOUT_HOME_REDIRECT_STORAGE_KEY = 'ai-do.auth.post-logout-home';
 
-export function readStoredAuthToken(): string | null {
+type BrowserStorageName = 'localStorage' | 'sessionStorage';
+
+interface BrowserStorageItem {
+  read(): string | null;
+  write(value: string): void;
+  clear(): void;
+}
+
+function resolveBrowserStorage(storageName: BrowserStorageName): Storage | null {
   if (typeof window === 'undefined') {
     return null;
   }
 
-  return window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+  try {
+    return window[storageName];
+  } catch {
+    return null;
+  }
+}
+
+function withBrowserStorage<Result>(
+  storageName: BrowserStorageName,
+  fallback: Result,
+  operation: (storage: Storage) => Result,
+): Result {
+  const storage = resolveBrowserStorage(storageName);
+  if (!storage) {
+    return fallback;
+  }
+
+  try {
+    return operation(storage);
+  } catch {
+    return fallback;
+  }
+}
+
+function createBrowserStorageItem(
+  storageName: BrowserStorageName,
+  key: string,
+): BrowserStorageItem {
+  return {
+    read() {
+      return withBrowserStorage(storageName, null, (storage) =>
+        storage.getItem(key),
+      );
+    },
+    write(value) {
+      withBrowserStorage(storageName, undefined, (storage) => {
+        storage.setItem(key, value);
+      });
+    },
+    clear() {
+      withBrowserStorage(storageName, undefined, (storage) => {
+        storage.removeItem(key);
+      });
+    },
+  };
+}
+
+const authTokenStorage = createBrowserStorageItem(
+  'localStorage',
+  AUTH_TOKEN_STORAGE_KEY,
+);
+const postLogoutHomeRedirectStorage = createBrowserStorageItem(
+  'sessionStorage',
+  AUTH_POST_LOGOUT_HOME_REDIRECT_STORAGE_KEY,
+);
+
+export function readStoredAuthToken(): string | null {
+  return authTokenStorage.read();
 }
 
 export function persistAuthToken(token: string): void {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
+  authTokenStorage.write(token);
 }
 
 export function clearStoredAuthToken(): void {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+  authTokenStorage.clear();
 }
 
 export function markPostLogoutHomeRedirect(): void {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  window.sessionStorage.setItem(AUTH_POST_LOGOUT_HOME_REDIRECT_STORAGE_KEY, '1');
+  postLogoutHomeRedirectStorage.write('1');
 }
 
 export function consumePostLogoutHomeRedirect(): boolean {
-  if (typeof window === 'undefined') {
-    return false;
-  }
-
-  const marked = window.sessionStorage.getItem(AUTH_POST_LOGOUT_HOME_REDIRECT_STORAGE_KEY) === '1';
+  const marked = postLogoutHomeRedirectStorage.read() === '1';
   if (marked) {
-    window.sessionStorage.removeItem(AUTH_POST_LOGOUT_HOME_REDIRECT_STORAGE_KEY);
+    postLogoutHomeRedirectStorage.clear();
   }
 
   return marked;

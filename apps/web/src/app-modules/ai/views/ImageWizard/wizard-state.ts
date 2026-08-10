@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { i18n } from '@/src/platform/i18n';
@@ -38,15 +38,147 @@ interface UseWizardStateOpts {
   onIdChange: (newId: string) => void;
 }
 
+interface WizardLoadState {
+  row: ImageGeneration | null;
+  loading: boolean;
+  error: string | null;
+}
+
+type WizardLoadAction =
+  | { type: 'reset' }
+  | { type: 'loading' }
+  | { type: 'loaded'; row: ImageGeneration }
+  | { type: 'loadFailed'; error: string }
+  | { type: 'rowUpdated'; row: ImageGeneration }
+  | { type: 'saveFailed'; error: string }
+  | { type: 'errorCleared' };
+
+function getInitialLoadState(generationId: string | null): WizardLoadState {
+  return {
+    row: null,
+    loading: Boolean(generationId),
+    error: null,
+  };
+}
+
+function wizardLoadReducer(
+  state: WizardLoadState,
+  action: WizardLoadAction,
+): WizardLoadState {
+  switch (action.type) {
+    case 'reset':
+      return {
+        row: null,
+        loading: false,
+        error: null,
+      };
+    case 'loading':
+      return {
+        ...state,
+        loading: true,
+      };
+    case 'loaded':
+      return {
+        row: action.row,
+        loading: false,
+        error: null,
+      };
+    case 'loadFailed':
+      return {
+        ...state,
+        loading: false,
+        error: action.error,
+      };
+    case 'rowUpdated':
+      return {
+        ...state,
+        row: action.row,
+      };
+    case 'saveFailed':
+      return {
+        ...state,
+        error: action.error,
+      };
+    case 'errorCleared':
+      return state.error ? { ...state, error: null } : state;
+  }
+}
+
+function mergeDraftPayload(
+  current: ImageGenerationCreatePayload,
+  patch: ImageGenerationCreatePayload,
+): ImageGenerationCreatePayload {
+  return {
+    ...current,
+    ...patch,
+    ...(patch.style !== undefined
+      ? { style: { ...(current.style ?? {}), ...patch.style } }
+      : {}),
+    ...(patch.layout !== undefined
+      ? { layout: { ...(current.layout ?? {}), ...patch.layout } }
+      : {}),
+    ...(patch.details !== undefined
+      ? { details: { ...(current.details ?? {}), ...patch.details } }
+      : {}),
+  };
+}
+
+export function hasGenerationPatch(patch: ImageGenerationPatchPayload): boolean {
+  return Object.keys(patch).length > 0;
+}
+
+export function mergeGenerationPatchPayload(
+  current: ImageGenerationPatchPayload,
+  patch: ImageGenerationPatchPayload,
+): ImageGenerationPatchPayload {
+  return mergeDraftPayload(current, patch);
+}
+
+export function mergeGenerationCreatePayload(
+  current: ImageGenerationCreatePayload | null,
+  patch: ImageGenerationCreatePayload,
+): ImageGenerationCreatePayload {
+  return mergeDraftPayload(current ?? {}, patch);
+}
+
+export function applyLocalPatch(
+  current: ImageGeneration,
+  patch: ImageGenerationPatchPayload,
+): ImageGeneration {
+  return {
+    ...current,
+    ...(patch.template_id !== undefined ? { template_id: patch.template_id } : {}),
+    ...(patch.is_template !== undefined ? { is_template: patch.is_template } : {}),
+    ...(patch.use_case !== undefined ? { use_case: patch.use_case } : {}),
+    ...(patch.use_case_other !== undefined
+      ? { use_case_other: patch.use_case_other }
+      : {}),
+    ...(patch.style !== undefined
+      ? { style: { ...current.style, ...patch.style } }
+      : {}),
+    ...(patch.layout !== undefined
+      ? { layout: { ...current.layout, ...patch.layout } }
+      : {}),
+    ...(patch.details !== undefined
+      ? { details: { ...current.details, ...patch.details } }
+      : {}),
+    ...(patch.context_refs !== undefined
+      ? { context_refs: patch.context_refs }
+      : {}),
+  };
+}
+
 export function useWizardState({
   workspaceSlug,
   generationId,
   onIdChange,
 }: UseWizardStateOpts): WizardStateApi {
   const { token } = useAuth();
-  const [row, setRow] = useState<ImageGeneration | null>(null);
-  const [loading, setLoading] = useState<boolean>(Boolean(generationId));
-  const [error, setError] = useState<string | null>(null);
+  const [loadState, dispatchLoadState] = useReducer(
+    wizardLoadReducer,
+    generationId,
+    getInitialLoadState,
+  );
   const [autosave, setAutosave] = useState<AutosaveState>('idle');
 
   const pendingPatch = useRef<ImageGenerationPatchPayload>({});
@@ -55,43 +187,42 @@ export function useWizardState({
   const inflight = useRef<Promise<void> | null>(null);
   const rowRef = useRef<ImageGeneration | null>(null);
 
-  rowRef.current = row;
+  rowRef.current = loadState.row;
 
   // Initial / id-change load.
   useEffect(() => {
     if (!token) return;
     if (!generationId) {
-      setRow(null);
-      setLoading(false);
-      setError(null);
+      dispatchLoadState({ type: 'reset' });
       return;
     }
     let cancelled = false;
-    setLoading(true);
+    dispatchLoadState({ type: 'loading' });
     getImageGeneration(token, workspaceSlug, generationId)
       .then((fetched) => {
         if (cancelled) return;
-        setRow(fetched);
-        setError(null);
+        dispatchLoadState({ type: 'loaded', row: fetched });
       })
       .catch((err: Error) => {
         if (cancelled) return;
-        setError(err.message);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+        dispatchLoadState({ type: 'loadFailed', error: err.message });
       });
     return () => {
       cancelled = true;
     };
   }, [token, workspaceSlug, generationId]);
 
-  const flushNow = useCallback(async () => {
-    if (!token) return;
-    if (debounceTimer.current) {
-      clearTimeout(debounceTimer.current);
+  const clearDebounceTimer = useCallback(() => {
+    const timer = debounceTimer.current;
+    if (timer) {
+      clearTimeout(timer);
       debounceTimer.current = null;
     }
+  }, []);
+
+  const flushNow = useCallback(async () => {
+    if (!token) return;
+    clearDebounceTimer();
     if (inflight.current) {
       await inflight.current;
     }
@@ -99,63 +230,65 @@ export function useWizardState({
     const patch = pendingPatch.current;
     pendingPatch.current = {};
     pendingCreate.current = null;
-    if (!create && Object.keys(patch).length === 0) return;
+    if (!create && !hasGenerationPatch(patch)) return;
 
     setAutosave('saving');
     const work = (async () => {
       try {
         let workingRow = rowRef.current;
         if (!workingRow) {
-          const initial: ImageGenerationCreatePayload = { ...(create ?? {}), ...patch };
+          const initial = mergeGenerationCreatePayload(create, patch);
           workingRow = await createImageGeneration(token, workspaceSlug, initial);
           rowRef.current = workingRow;
-          setRow(workingRow);
+          dispatchLoadState({ type: 'rowUpdated', row: workingRow });
           onIdChange(workingRow.id);
-        } else if (Object.keys(patch).length > 0) {
+        } else if (hasGenerationPatch(patch)) {
           const updated = await patchImageGeneration(token, workspaceSlug, workingRow.id, patch);
           rowRef.current = updated;
-          setRow(updated);
+          dispatchLoadState({ type: 'rowUpdated', row: updated });
         }
         setAutosave('saved');
-        setError(null);
+        dispatchLoadState({ type: 'errorCleared' });
       } catch (err) {
         setAutosave('error');
-        setError(err instanceof Error ? err.message : i18n.t('apps:ai.imageWizard.errors.saveFailed'));
+        dispatchLoadState({
+          type: 'saveFailed',
+          error: err instanceof Error
+            ? err.message
+            : i18n.t('apps:ai.imageWizard.errors.saveFailed'),
+        });
       } finally {
         inflight.current = null;
       }
     })();
     inflight.current = work;
     await work;
-  }, [token, workspaceSlug, onIdChange]);
+  }, [clearDebounceTimer, token, workspaceSlug, onIdChange]);
 
   const schedule = useCallback(() => {
     setAutosave('pending');
-    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    clearDebounceTimer();
     debounceTimer.current = setTimeout(() => {
       void flushNow();
     }, PATCH_DEBOUNCE_MS);
-  }, [flushNow]);
+  }, [clearDebounceTimer, flushNow]);
 
   const update = useCallback<WizardStateApi['update']>(
     (patch, options) => {
-      pendingPatch.current = { ...pendingPatch.current, ...patch };
+      pendingPatch.current = mergeGenerationPatchPayload(pendingPatch.current, patch);
       if (options?.initialCreate) {
-        pendingCreate.current = { ...(pendingCreate.current ?? {}), ...options.initialCreate };
+        pendingCreate.current = mergeGenerationCreatePayload(
+          pendingCreate.current,
+          options.initialCreate,
+        );
       }
       // Optimistically reflect in local state if row exists.
-      setRow((prev) => {
-        if (!prev) return prev;
-        const merged: ImageGeneration = { ...prev };
-        for (const key of Object.keys(patch) as (keyof ImageGenerationPatchPayload)[]) {
-          const value = patch[key];
-          if (value !== undefined) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (merged as any)[key] = value;
-          }
-        }
-        return merged;
-      });
+      const currentRow = rowRef.current;
+      if (currentRow) {
+        const nextRow = applyLocalPatch(currentRow, patch);
+        rowRef.current = nextRow;
+        dispatchLoadState({ type: 'rowUpdated', row: nextRow });
+      }
       schedule();
     },
     [schedule],
@@ -163,58 +296,51 @@ export function useWizardState({
 
   const applyServer = useCallback((next: ImageGeneration) => {
     rowRef.current = next;
-    setRow(next);
+    dispatchLoadState({ type: 'rowUpdated', row: next });
   }, []);
 
   const startNew = useCallback<WizardStateApi['startNew']>(
     async (payload) => {
       if (!token) throw new Error(i18n.t('auth:errors.noActiveSession'));
-      if (debounceTimer.current) {
-        clearTimeout(debounceTimer.current);
-        debounceTimer.current = null;
-      }
+      clearDebounceTimer();
       pendingPatch.current = {};
       pendingCreate.current = null;
       setAutosave('saving');
       try {
         const created = await createImageGeneration(token, workspaceSlug, payload);
         rowRef.current = created;
-        setRow(created);
+        dispatchLoadState({ type: 'rowUpdated', row: created });
         onIdChange(created.id);
         setAutosave('saved');
-        setError(null);
+        dispatchLoadState({ type: 'errorCleared' });
         return created;
       } catch (err) {
         setAutosave('error');
         const message =
           err instanceof Error ? err.message : i18n.t('apps:ai.imageWizard.errors.startFailed');
-        setError(message);
+        dispatchLoadState({ type: 'saveFailed', error: message });
         throw err;
       }
     },
-    [token, workspaceSlug, onIdChange],
+    [clearDebounceTimer, token, workspaceSlug, onIdChange],
   );
 
   // Unmount: flush pending.
   useEffect(() => {
-    return () => {
-      if (debounceTimer.current) {
-        clearTimeout(debounceTimer.current);
-      }
-    };
-  }, []);
+    return clearDebounceTimer;
+  }, [clearDebounceTimer]);
 
   return useMemo(
     () => ({
-      row,
-      loading,
-      error,
+      row: loadState.row,
+      loading: loadState.loading,
+      error: loadState.error,
       autosave,
       update,
       flush: flushNow,
       applyServer,
       startNew,
     }),
-    [row, loading, error, autosave, update, flushNow, applyServer, startNew],
+    [loadState, autosave, update, flushNow, applyServer, startNew],
   );
 }

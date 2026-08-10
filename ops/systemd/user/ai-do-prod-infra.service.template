@@ -1,0 +1,18 @@
+[Unit]
+Description=AI-DO Production Infrastructure
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=__AI_DO_ROOT__
+Environment=AI_DO_INFRA_BIND_HOST=0.0.0.0
+ExecStart=__AI_DO_ROOT__/scripts/infra-stack.sh prod up
+ExecStop=__AI_DO_ROOT__/scripts/infra-stack.sh prod stop
+RemainAfterExit=yes
+UMask=0077
+TimeoutStartSec=600
+TimeoutStopSec=180
+
+[Install]
+WantedBy=default.target

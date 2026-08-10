@@ -1,13 +1,11 @@
 // Calendar events API client. Talks to the unified events endpoint
-// (Phase 2: GET /api/v1/calendar/events) which JOINs Meeting + PMS issues
+// (Phase 2: GET /api/v1/calendar/events) which JOINs Meeting + PMS tasks
 // scoped to the current authenticated user.
 //
 // During Phase 1.3 the backend endpoint does not yet exist. The hook in
 // use-calendar-events.ts can fall back to MOCK_CALENDAR_EVENTS until Phase 2 lands.
-import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
-import type { ApiSchema } from '@/src/platform/api/types';
+import { apiFetchJsonWithMappedError } from '@/src/platform/api/client';
 import { i18n } from '@/src/platform/i18n';
-import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
 import {
   ALL_CALENDAR_SOURCES,
@@ -16,7 +14,7 @@ import {
   type CalendarSourceFilter,
 } from './calendar-types';
 
-export class CalendarApiError extends Error {
+class CalendarApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
     super(message);
@@ -26,16 +24,17 @@ export class CalendarApiError extends Error {
 }
 
 export interface ListCalendarEventsOptions {
-  from: string;          // ISO date (YYYY-MM-DD) or full ISO datetime
-  to: string;            // exclusive
+  from: string; // ISO date (YYYY-MM-DD) or full ISO datetime
+  to: string; // exclusive
   sources?: CalendarSourceFilter;
 }
 
-export type CalendarEventsResponse = ApiSchema<'CalendarEventsResponse'>;
+export interface CalendarEventsResponse {
+  items: CalendarEvent[];
+}
 
 export async function listCalendarEvents(
   token: string,
-  workspaceSlug: string,
   options: ListCalendarEventsOptions,
 ): Promise<CalendarEventsResponse> {
   const params = new URLSearchParams();
@@ -45,21 +44,17 @@ export async function listCalendarEvents(
   if (sources.length > 0) {
     params.set('sources', sources.join(','));
   }
-  const path = rewriteWorkspaceApiPath(
-    `/api/v1/calendar/events?${params.toString()}`,
-    workspaceSlug,
-  );
-  try {
-    return await apiFetchJson<CalendarEventsResponse>(path, token);
-  } catch (error) {
-    if (error instanceof ApiRequestError) {
-      throw new CalendarApiError(
+  const path = `/api/v1/calendar/events?${params.toString()}`;
+  return apiFetchJsonWithMappedError<CalendarEventsResponse>(
+    path,
+    token,
+    {},
+    (error) =>
+      new CalendarApiError(
         error.status,
         error.message || `Calendar events request failed with ${error.status}.`,
-      );
-    }
-    throw error;
-  }
+      ),
+  );
 }
 
 // Mock fixture used while the backend endpoint is not yet wired (Phase 1.3 → Phase 2).
@@ -94,6 +89,7 @@ export function buildMockCalendarEvents(): CalendarEvent[] {
       sourceType: 'meeting',
       sourceId: 'mock-meeting-1',
       color: CALENDAR_SOURCE_COLORS.meeting,
+      workspace: null,
       metadata: { meetingId: 'mock-meeting-1', attendeeCount: 5 },
     },
     {
@@ -105,6 +101,7 @@ export function buildMockCalendarEvents(): CalendarEvent[] {
       sourceType: 'meeting',
       sourceId: 'mock-meeting-2',
       color: CALENDAR_SOURCE_COLORS.meeting,
+      workspace: null,
       metadata: { meetingId: 'mock-meeting-2', attendeeCount: 3 },
     },
     {
@@ -114,9 +111,14 @@ export function buildMockCalendarEvents(): CalendarEvent[] {
       end: isoDate(2),
       allDay: true,
       sourceType: 'pms_due',
-      sourceId: 'mock-issue-12',
+      sourceId: 'mock-task-12',
       color: CALENDAR_SOURCE_COLORS.pms_due,
-      metadata: { taskListKey: 'INDUSTRIAL', issueNumber: 12, status: 'in_progress' },
+      workspace: null,
+      metadata: {
+        taskListKey: 'INDUSTRIAL',
+        taskNumber: 12,
+        status: 'in_progress',
+      },
     },
     {
       id: 'mock-pms-block-1',
@@ -125,9 +127,10 @@ export function buildMockCalendarEvents(): CalendarEvent[] {
       end: isoDate(5),
       allDay: true,
       sourceType: 'pms_block',
-      sourceId: 'mock-issue-15',
+      sourceId: 'mock-task-15',
       color: CALENDAR_SOURCE_COLORS.pms_block,
-      metadata: { taskListKey: 'INDUSTRIAL', issueNumber: 15, status: 'todo' },
+      workspace: null,
+      metadata: { taskListKey: 'INDUSTRIAL', taskNumber: 15, status: 'todo' },
     },
     {
       id: 'mock-meeting-3',
@@ -138,6 +141,7 @@ export function buildMockCalendarEvents(): CalendarEvent[] {
       sourceType: 'meeting',
       sourceId: 'mock-meeting-3',
       color: CALENDAR_SOURCE_COLORS.meeting,
+      workspace: null,
       metadata: { meetingId: 'mock-meeting-3', attendeeCount: 2 },
     },
   ];

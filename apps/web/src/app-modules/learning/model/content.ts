@@ -1,3 +1,5 @@
+import { createLearningContentCatalog } from './learning-content-catalog';
+
 // Bundle every learning/**/*.md file at build time as a raw string. The
 // glob walks the repo-root `learning/` directory recursively, so new
 // courses added under `learning/<course-slug>/` are picked up with no
@@ -24,64 +26,22 @@ const assetModules = import.meta.glob(
   },
 ) as Record<string, string>;
 
-// Keys are keyed by path relative to `learning/` (e.g.
-// `vibe-coding-foundations/01-오리엔테이션.md`) so the manifest can
-// address any lesson regardless of nesting depth.
-const LEARNING_DIR_MARKER = '/learning/';
-const byRelativePath: Record<string, () => Promise<string>> = {};
-for (const [absPath, loadBody] of Object.entries(modules)) {
-  const markerIndex = absPath.lastIndexOf(LEARNING_DIR_MARKER);
-  if (markerIndex < 0) continue;
-  const relative = absPath.slice(markerIndex + LEARNING_DIR_MARKER.length);
-  // Skip repo-root README at `learning/README.md` — it's author-facing
-  // documentation, not a lesson. Anything inside a course folder is
-  // kept (two or more path segments, e.g. `vcf/00-index.md`).
-  if (!relative.includes('/')) continue;
-  byRelativePath[relative] = loadBody;
-}
-
-const assetByRelativePath: Record<string, string> = {};
-for (const [absPath, assetUrl] of Object.entries(assetModules)) {
-  const markerIndex = absPath.lastIndexOf(LEARNING_DIR_MARKER);
-  if (markerIndex < 0) continue;
-  const relative = absPath.slice(markerIndex + LEARNING_DIR_MARKER.length);
-  assetByRelativePath[relative] = assetUrl;
-}
+const catalog = createLearningContentCatalog({
+  lessonModules: modules,
+  assetModules,
+});
 
 export async function loadLessonBody(file: string): Promise<string | null> {
-  const loadBody = byRelativePath[file];
-  if (!loadBody) return null;
-  return loadBody();
+  return catalog.loadLessonBody(file);
 }
 
 export function listAvailableLessonFiles(): string[] {
-  return Object.keys(byRelativePath).sort();
+  return catalog.listAvailableLessonFiles();
 }
 
-const ABSOLUTE_OR_SPECIAL_SRC = /^(?:[a-z][a-z\d+.-]*:|\/\/|\/)/i;
-
-function normalizeRelativePath(path: string): string {
-  const segments: string[] = [];
-  for (const segment of path.split('/')) {
-    if (!segment || segment === '.') continue;
-    if (segment === '..') {
-      segments.pop();
-      continue;
-    }
-    segments.push(segment);
-  }
-  return segments.join('/');
-}
-
-export function resolveLessonAsset(lessonFile: string, src: string | undefined): string | undefined {
-  if (!src || ABSOLUTE_OR_SPECIAL_SRC.test(src)) return src;
-
-  const suffixStart = src.search(/[?#]/);
-  const pathPart = suffixStart >= 0 ? src.slice(0, suffixStart) : src;
-  const suffix = suffixStart >= 0 ? src.slice(suffixStart) : '';
-  const lessonDir = lessonFile.slice(0, lessonFile.lastIndexOf('/') + 1);
-  const resolvedPath = normalizeRelativePath(`${lessonDir}${pathPart}`);
-  const assetUrl = assetByRelativePath[resolvedPath];
-
-  return assetUrl ? `${assetUrl}${suffix}` : src;
+export function resolveLessonAsset(
+  lessonFile: string,
+  src: string | undefined,
+): string | undefined {
+  return catalog.resolveLessonAsset(lessonFile, src);
 }

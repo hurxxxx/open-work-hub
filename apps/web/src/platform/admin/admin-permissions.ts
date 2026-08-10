@@ -1,34 +1,50 @@
-export const ADMIN_SECTION_ROLES = {
-  general: ['platform_admin'],
-  people: ['platform_admin'],
-  workspaces: ['platform_admin'],
-  security: ['platform_admin'],
-  audit: ['platform_admin'],
-} as const;
+import { createCoreAdminSectionRegistry } from '@ai-do/core-web/admin';
 
-export type AdminSection = keyof typeof ADMIN_SECTION_ROLES;
+import { ADMIN_SECTION_DEFINITIONS, type AdminSection } from './admin-sections';
 
-export function hasAnyAdminReadPermission(systemRoles: readonly string[]): boolean {
-  const allowedRoles = new Set<string>(Object.values(ADMIN_SECTION_ROLES).flat());
-  return systemRoles.some((role) => allowedRoles.has(role));
+export type { AdminSection } from './admin-sections';
+
+const ADMIN_SECTION_REGISTRY = createCoreAdminSectionRegistry(
+  ADMIN_SECTION_DEFINITIONS,
+);
+
+export const ADMIN_SECTION_POLICIES = ADMIN_SECTION_REGISTRY.sections;
+
+export type AdminSectionAccessResolver = (
+  systemRoles: readonly string[],
+  section: string,
+) => boolean;
+
+export type DefaultAdminPathResolver = (
+  systemRoles: readonly string[],
+) => string;
+
+export function hasAnyAdminReadPermission(
+  systemRoles: readonly string[],
+): boolean {
+  return ADMIN_SECTION_REGISTRY.hasAnyAdminReadPermission(systemRoles);
 }
 
 export function hasAdminSectionAccess(
   systemRoles: readonly string[],
   section: AdminSection,
 ): boolean {
-  return ADMIN_SECTION_ROLES[section].some((role) => systemRoles.includes(role));
+  return ADMIN_SECTION_REGISTRY.hasAdminSectionAccess(systemRoles, section);
 }
 
-export function getDefaultAdminPath(systemRoles: readonly string[]): string {
-  const orderedSections: AdminSection[] = [
-    'general',
-    'people',
-    'workspaces',
-    'security',
-    'audit',
-  ];
+export const hasConfiguredAdminSectionAccess: AdminSectionAccessResolver = (
+  systemRoles,
+  section,
+) => {
+  if (!ADMIN_SECTION_REGISTRY.sectionById.has(section as AdminSection)) {
+    return false;
+  }
+  return ADMIN_SECTION_REGISTRY.hasAdminSectionAccess(
+    systemRoles,
+    section as AdminSection,
+  );
+};
 
-  const section = orderedSections.find((item) => hasAdminSectionAccess(systemRoles, item));
-  return section ? `/admin/${section}` : '/admin/general';
+export function getDefaultAdminPath(systemRoles: readonly string[]): string {
+  return ADMIN_SECTION_REGISTRY.getDefaultAdminPath(systemRoles);
 }

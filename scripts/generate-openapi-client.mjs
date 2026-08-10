@@ -7,10 +7,16 @@ import path from 'node:path';
 
 const repoRoot = process.cwd();
 const checkOnly = process.argv.includes('--check');
-const targetPath = path.join(repoRoot, 'apps/web/src/platform/api/openapi.generated.d.ts');
+const noSync = process.argv.includes('--no-sync');
+const targetPath = path.join(
+  repoRoot,
+  'packages/contracts/src/openapi.generated.d.ts',
+);
 const tempDir = mkdtempSync(path.join(tmpdir(), 'ai-do-openapi-'));
 const schemaPath = path.join(tempDir, 'openapi.json');
-const generatedPath = checkOnly ? path.join(tempDir, 'openapi.generated.d.ts') : targetPath;
+const generatedPath = checkOnly
+  ? path.join(tempDir, 'openapi.generated.d.ts')
+  : targetPath;
 
 function run(command, args, options = {}) {
   execFileSync(command, args, {
@@ -25,6 +31,7 @@ try {
     'uv',
     [
       'run',
+      ...(noSync ? ['--no-sync'] : []),
       '--python',
       '3.12',
       'python',
@@ -48,10 +55,10 @@ try {
       env: {
         ...process.env,
         AI_DO_OPENAPI_OUTPUT: schemaPath,
-        DOOWON_POSTGRES_DSN:
-          process.env.DOOWON_POSTGRES_DSN
-          ?? 'postgresql+psycopg://openapi:openapi@127.0.0.1:1/openapi',
-        DOOWON_LLM_HEALTHCHECK_ON_STARTUP: '0',
+        AI_DO_POSTGRES_DSN:
+          process.env.AI_DO_POSTGRES_DSN ??
+          'postgresql+psycopg://openapi:openapi@127.0.0.1:1/openapi',
+        AI_DO_LLM_HEALTHCHECK_ON_STARTUP: '0',
       },
     },
   );

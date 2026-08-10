@@ -1,7 +1,15 @@
 import { useState } from 'react';
 import { Download, Expand, ImageIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+
+import { UserDateTime } from '@/src/components/date/UserDateTime';
 import { ImageLightbox } from './ImageLightbox';
+import {
+  buildRevisionImagePreviewDescriptor,
+  getRevisionImageDownloadName,
+  resolveImagePreviewDescriptor,
+  type ResolvedImagePreviewDescriptor,
+} from './image-result-turn-model';
 
 export interface ImageRevisionGalleryItem {
   id: string;
@@ -18,12 +26,7 @@ interface ImageRevisionGalleryProps {
 
 export function ImageRevisionGallery({ items, loadError }: ImageRevisionGalleryProps) {
   const { t } = useTranslation('apps');
-  const [preview, setPreview] = useState<{
-    imageUrl: string;
-    alt: string;
-    title: string;
-    downloadName: string;
-  } | null>(null);
+  const [preview, setPreview] = useState<ResolvedImagePreviewDescriptor | null>(null);
 
   if (items.length === 0 && !loadError) return null;
 
@@ -60,17 +63,12 @@ export function ImageRevisionGallery({ items, loadError }: ImageRevisionGalleryP
                 <button
                   type="button"
                   onClick={() => {
-                    const title = t('ai.imageWizard.step4.revisionLabel', {
-                      index: index + 1,
-                    });
-                    setPreview({
-                      imageUrl: item.imageUrl ?? '',
-                      alt: t('ai.imageWizard.step4.revisionImageAlt', {
-                        index: index + 1,
-                      }),
-                      title,
-                      downloadName: `generated-image-${index + 1}.png`,
-                    });
+                    setPreview(
+                      resolveImagePreviewDescriptor(
+                        buildRevisionImagePreviewDescriptor(item.imageUrl ?? '', index),
+                        t,
+                      ),
+                    );
                   }}
                   className="group relative block w-full"
                   aria-label={t('ai.imageWizard.step4.openLargePreview')}
@@ -80,7 +78,7 @@ export function ImageRevisionGallery({ items, loadError }: ImageRevisionGalleryP
                     alt={t('ai.imageWizard.step4.revisionImageAlt', { index: index + 1 })}
                     className="h-40 w-full object-contain"
                   />
-                  <span className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100">
+                  <span className="absolute right-2 top-2 inline-flex size-8 items-center justify-center rounded-md bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100">
                     <Expand size={15} />
                   </span>
                 </button>
@@ -101,13 +99,13 @@ export function ImageRevisionGallery({ items, loadError }: ImageRevisionGalleryP
                       ) : null}
                     </p>
                     <p className="app-text-caption text-app-ink/45">
-                      {new Date(item.createdAt).toLocaleString()}
+                      <UserDateTime value={item.createdAt} />
                     </p>
                   </div>
                   {item.imageUrl ? (
                     <a
                       href={item.imageUrl}
-                      download={`generated-image-${index + 1}.png`}
+                      download={getRevisionImageDownloadName(index)}
                       className="inline-flex shrink-0 items-center justify-center rounded-md border border-app-border p-2 text-app-ink/65 hover:border-app-accent hover:text-app-accent"
                       aria-label={t('ai.imageWizard.step4.downloadRevision')}
                     >
@@ -128,5 +126,3 @@ export function ImageRevisionGallery({ items, loadError }: ImageRevisionGalleryP
     </section>
   );
 }
-
-export default ImageRevisionGallery;

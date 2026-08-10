@@ -1,27 +1,63 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 @plugin "@tailwindcss/typography";
+@source ".";
 @source "../../../packages/ui/src";
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --font-sans: "Pretendard Variable", "Pretendard", "IBM Plex Sans KR", "IBM Plex Sans", sans-serif;
+  --font-sans:
+    'Pretendard Variable', 'Pretendard', 'IBM Plex Sans KR', 'IBM Plex Sans',
+    sans-serif;
 
   /* App-level color tokens — aliased to the canonical --ui-color-* design tokens
      defined in packages/ui/styles.css. Single source of truth lives there. */
   --color-app-bg: var(--ui-color-bg);
   --color-app-bg-strong: var(--ui-color-bg-strong);
+  --color-app-static-white: var(--ui-color-static-white);
+  --color-app-static-black: var(--ui-color-static-black);
   --color-app-surface: var(--ui-color-surface);
   --color-app-surface-raised: var(--ui-color-surface-raised);
+  --color-app-surface-subtle: var(--ui-color-surface-subtle);
   --color-app-surface-sidebar: var(--ui-color-surface-sidebar);
   --color-app-surface-hover: var(--ui-color-surface-hover);
   --color-app-border: var(--ui-color-border);
+  --color-app-border-strong: var(--ui-color-border-strong);
   --color-app-ink: var(--ui-color-ink);
+  --color-app-ink-muted: var(--ui-color-ink-muted);
+  --color-app-ink-subtle: var(--ui-color-ink-subtle);
   --color-app-accent: var(--ui-color-accent);
   --color-app-accent-hover: var(--ui-color-accent-hover);
+  --color-app-accent-weak: var(--ui-color-accent-weak);
   --color-app-accent-fg: var(--ui-color-accent-fg);
+  --color-app-info: var(--ui-color-info);
+  --color-app-info-bg: var(--ui-color-info-bg);
+  --color-app-info-border: var(--ui-color-info-border);
+  --color-app-info-text: var(--ui-color-info-text);
+  --color-app-success: var(--ui-color-success);
+  --color-app-success-bg: var(--ui-color-success-bg);
+  --color-app-success-border: var(--ui-color-success-border);
+  --color-app-success-text: var(--ui-color-success-text);
+  --color-app-warning: var(--ui-color-warning);
+  --color-app-warning-bg: var(--ui-color-warning-bg);
+  --color-app-warning-border: var(--ui-color-warning-border);
+  --color-app-warning-text: var(--ui-color-warning-text);
+  --color-app-danger: var(--ui-color-danger);
+  --color-app-danger-bg: var(--ui-color-danger-bg);
+  --color-app-danger-border: var(--ui-color-danger-border);
+  --color-app-danger-text: var(--ui-color-danger-text);
+  --color-app-chart-1: var(--ui-color-chart-1);
+  --color-app-chart-2: var(--ui-color-chart-2);
+  --color-app-chart-3: var(--ui-color-chart-3);
+  --color-app-chart-4: var(--ui-color-chart-4);
+  --color-app-chart-5: var(--ui-color-chart-5);
+  --color-app-chart-6: var(--ui-color-chart-6);
+  --color-app-chart-7: var(--ui-color-chart-7);
+  --color-app-chart-8: var(--ui-color-chart-8);
 
   /* Register --ui-* tokens so Tailwind v4 resolves bg-[var(--ui-*)] as colors */
   --color-ui-bg: var(--ui-color-bg);
+  --color-ui-static-white: var(--ui-color-static-white);
+  --color-ui-static-black: var(--ui-color-static-black);
   --color-ui-surface: var(--ui-color-surface);
   --color-ui-surface-raised: var(--ui-color-surface-raised);
   --color-ui-surface-subtle: var(--ui-color-surface-subtle);
@@ -34,9 +70,30 @@
   --color-ui-accent: var(--ui-color-accent);
   --color-ui-accent-hover: var(--ui-color-accent-hover);
   --color-ui-accent-weak: var(--ui-color-accent-weak);
+  --color-ui-info: var(--ui-color-info);
+  --color-ui-info-bg: var(--ui-color-info-bg);
+  --color-ui-info-border: var(--ui-color-info-border);
+  --color-ui-info-text: var(--ui-color-info-text);
   --color-ui-success: var(--ui-color-success);
+  --color-ui-success-bg: var(--ui-color-success-bg);
+  --color-ui-success-border: var(--ui-color-success-border);
+  --color-ui-success-text: var(--ui-color-success-text);
   --color-ui-warning: var(--ui-color-warning);
+  --color-ui-warning-bg: var(--ui-color-warning-bg);
+  --color-ui-warning-border: var(--ui-color-warning-border);
+  --color-ui-warning-text: var(--ui-color-warning-text);
   --color-ui-danger: var(--ui-color-danger);
+  --color-ui-danger-bg: var(--ui-color-danger-bg);
+  --color-ui-danger-border: var(--ui-color-danger-border);
+  --color-ui-danger-text: var(--ui-color-danger-text);
+  --color-ui-chart-1: var(--ui-color-chart-1);
+  --color-ui-chart-2: var(--ui-color-chart-2);
+  --color-ui-chart-3: var(--ui-color-chart-3);
+  --color-ui-chart-4: var(--ui-color-chart-4);
+  --color-ui-chart-5: var(--ui-color-chart-5);
+  --color-ui-chart-6: var(--ui-color-chart-6);
+  --color-ui-chart-7: var(--ui-color-chart-7);
+  --color-ui-chart-8: var(--ui-color-chart-8);
 }
 
 @layer base {
@@ -52,6 +109,7 @@
 
   body {
     @apply bg-app-bg text-app-ink font-sans antialiased transition-colors duration-300;
+    font-size: var(--ui-text-body);
   }
 
   button,
@@ -78,10 +136,8 @@
   }
   :where(.dark, .dark *)
     input[type='datetime-local']::-webkit-calendar-picker-indicator,
-  :where(.dark, .dark *)
-    input[type='date']::-webkit-calendar-picker-indicator,
-  :where(.dark, .dark *)
-    input[type='time']::-webkit-calendar-picker-indicator {
+  :where(.dark, .dark *) input[type='date']::-webkit-calendar-picker-indicator,
+  :where(.dark, .dark *) input[type='time']::-webkit-calendar-picker-indicator {
     filter: invert(1);
   }
 
@@ -100,13 +156,21 @@
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     background: var(--ui-color-surface-hover);
   }
+
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 @layer components {
   .sidebar-item {
-    @apply flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors cursor-pointer hover:bg-app-surface-hover text-app-ink/55 dark:text-app-ink/65 no-underline;
+    @apply flex items-center gap-2 px-3 py-1.5 rounded-md text-[12px] leading-5 transition-colors cursor-pointer hover:bg-app-surface-hover text-app-ink/55 dark:text-app-ink/65 no-underline;
   }
-  
+
   .sidebar-item.active {
     @apply bg-app-surface-hover text-app-ink font-medium;
   }
@@ -128,7 +192,7 @@
   }
 
   .sidebar-submenu-meta {
-    @apply shrink-0 text-[11px] leading-5 text-app-ink/50 dark:text-app-ink/60;
+    @apply shrink-0 text-[12px] leading-5 text-app-ink/50 dark:text-app-ink/60;
   }
 
   .sidebar-section-header {
@@ -146,9 +210,10 @@
     max-height: 2.75rem;
     margin: 0.25rem 0.75rem 0.25rem 0;
     padding: 0.45rem 0.65rem;
-    border: 1px solid rgba(15, 23, 42, 0.12);
+    border: 1px solid
+      color-mix(in srgb, var(--ui-color-static-black) 12%, transparent);
     border-radius: 0.375rem;
-    background: #fff;
+    background: var(--ui-color-static-white);
     object-fit: contain;
     vertical-align: middle;
     box-sizing: content-box;
@@ -160,8 +225,12 @@
   }
 
   :where(.dark, .dark *) .learning-markdown-logo {
-    border-color: rgba(255, 255, 255, 0.18);
-    background: #fff;
+    border-color: color-mix(
+      in srgb,
+      var(--ui-color-static-white) 18%,
+      transparent
+    );
+    background: var(--ui-color-static-white);
   }
 
   .learning-image-preview-trigger {
@@ -192,7 +261,7 @@
    * Learning page-note typography helpers. Stackable:
    *
    *   .learning-note-readable
-   *     High-contrast body color (#000 / #fff) + BlockNote's built-in
+   *     High-contrast body color + BlockNote's built-in
    *     horizontal gutters stripped so text hugs the container edges.
    *     Use on every learning-note viewer/editor regardless of width.
    *
@@ -201,23 +270,23 @@
    *     Skip this class inside the fullscreen overlay so long-form
    *     reading/writing gets the library's normal sizing.
    */
-  .learning-note-readable .bn-container,
+  .learning-note-readable .bn-root,
   .learning-note-readable .bn-editor,
   .learning-note-readable .bn-block-content,
   .learning-note-readable .bn-inline-content,
   .learning-note-readable .bn-editor p,
   .learning-note-readable .bn-editor li,
   .learning-note-readable .bn-editor span {
-    color: #000 !important;
+    color: var(--ui-color-static-black) !important;
   }
-  .dark .learning-note-readable .bn-container,
+  .dark .learning-note-readable .bn-root,
   .dark .learning-note-readable .bn-editor,
   .dark .learning-note-readable .bn-block-content,
   .dark .learning-note-readable .bn-inline-content,
   .dark .learning-note-readable .bn-editor p,
   .dark .learning-note-readable .bn-editor li,
   .dark .learning-note-readable .bn-editor span {
-    color: #fff !important;
+    color: var(--ui-color-static-white) !important;
   }
   .learning-note-readable .bn-container,
   .learning-note-readable .bn-editor {
@@ -227,8 +296,8 @@
   .learning-note-readable .bn-block-outer,
   .learning-note-readable .bn-block,
   .learning-note-readable .bn-block-content,
-  .learning-note-readable [class*="blockOuter"],
-  .learning-note-readable [class*="blockContent"] {
+  .learning-note-readable [class*='blockOuter'],
+  .learning-note-readable [class*='blockContent'] {
     padding-left: 0 !important;
     padding-right: 0 !important;
     margin-left: 0 !important;
@@ -236,7 +305,7 @@
   }
 
   .learning-note-dense {
-    font-size: 13px;
+    font-size: var(--ui-text-body-sm);
     line-height: 1.55;
   }
 
@@ -296,7 +365,7 @@
   }
 
   .sidebar-section-label {
-    font-size: 11px;
+    font-size: var(--ui-text-caption);
     line-height: 1.3;
     font-weight: 600;
     letter-spacing: 0;
@@ -305,20 +374,243 @@
   }
 
   .app-text-control {
-    font-size: var(--ui-text-body);
-    line-height: 1.4;
-    font-weight: 500;
-  }
-
-  .app-text-control-sm {
     font-size: var(--ui-text-body-sm);
     line-height: 1.4;
     font-weight: 500;
   }
 
+  .app-text-control-sm {
+    font-size: var(--ui-text-caption);
+    line-height: 1.4;
+    font-weight: 500;
+  }
+
+  .app-control {
+    min-height: var(--ui-density-dense);
+    font-size: var(--ui-text-caption);
+    line-height: 1.4;
+    font-weight: 500;
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md border border-app-border bg-app-bg px-2.5 text-app-ink transition-colors hover:bg-app-surface-hover disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .app-control-active {
+    @apply border-app-accent bg-app-accent/10 text-app-accent;
+  }
+
+  .app-control-primary {
+    min-height: var(--ui-density-dense);
+    font-size: var(--ui-text-caption);
+    line-height: 1.4;
+    font-weight: 600;
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md border border-app-accent bg-app-accent px-2.5 text-app-accent-fg transition-colors hover:bg-app-accent-hover disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .app-control-ghost {
+    min-height: var(--ui-density-dense);
+    font-size: var(--ui-text-caption);
+    line-height: 1.4;
+    font-weight: 500;
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md border border-transparent bg-transparent px-2.5 text-app-ink/65 transition-colors hover:bg-app-surface-hover hover:text-app-ink disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .app-field-input {
+    min-height: var(--ui-density-comfortable);
+    font-size: var(--ui-text-body-sm);
+    line-height: 1.45;
+    @apply w-full rounded-md border border-app-border bg-app-bg px-2.5 text-app-ink outline-none transition-colors placeholder:text-app-ink/40 focus:border-app-accent disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .app-field-input-sm {
+    min-height: var(--ui-density-dense);
+    font-size: var(--ui-text-caption);
+    line-height: 1.4;
+    @apply w-full rounded-md border border-app-border bg-app-bg px-2 text-app-ink outline-none transition-colors placeholder:text-app-ink/40 focus:border-app-accent disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .app-menu-item {
+    font-size: var(--ui-text-caption);
+    line-height: 1.4;
+    font-weight: 400;
+    @apply flex min-h-8 w-full items-center gap-2 px-3 py-1.5 text-left text-app-ink transition-colors hover:bg-app-surface-hover disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .app-menu-item-muted {
+    @apply text-app-ink/50;
+  }
+
+  .app-menu-item-selected {
+    @apply text-app-accent;
+  }
+
+  .app-menu-checkbox-item {
+    font-size: var(--ui-text-caption);
+    line-height: 1.4;
+    font-weight: 400;
+    @apply flex min-h-8 w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-app-ink transition-colors hover:bg-app-surface-hover;
+  }
+
+  .app-menu-search-input {
+    font-size: var(--ui-text-caption);
+    line-height: 1.4;
+    font-weight: 400;
+    @apply w-full min-w-0 bg-transparent text-app-ink outline-none placeholder:text-app-ink/35 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
   .card {
     @apply bg-app-surface border border-app-border rounded-lg p-4 shadow-sm dark:shadow-none;
   }
+}
+
+/* Form controls receive `font: inherit` from reset styles inside CSS layers.
+   Keep semantic app typography tokens unlayered so buttons and inputs do not
+   fall back to the browser/default body font. */
+.sidebar-item,
+.sidebar-submenu-item,
+.sidebar-submenu-group,
+.sidebar-submenu-label,
+.sidebar-submenu-meta {
+  font-size: var(--ui-text-caption);
+  line-height: 1.4;
+}
+
+.sidebar-item.active {
+  font-weight: 500;
+}
+
+.sidebar-section-label,
+.app-text-caption,
+.app-text-label,
+.app-text-overline,
+.app-text-control-sm {
+  font-size: var(--ui-text-caption);
+}
+
+.app-text-micro {
+  font-size: var(--ui-text-micro);
+  line-height: 1.35;
+}
+
+.app-text-body,
+.artifact-markdown table {
+  font-size: var(--ui-text-body);
+}
+
+.app-text-body-sm,
+.app-text-control,
+.artifact-code pre code.hljs {
+  font-size: var(--ui-text-body-sm);
+}
+
+.app-text-title-xl {
+  font-size: var(--ui-text-h1);
+  line-height: 1.1;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.app-text-title-lg {
+  font-size: var(--ui-text-h2);
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.app-text-title-md {
+  font-size: var(--ui-text-h3);
+  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.app-text-body,
+.app-text-body-sm {
+  line-height: 1.45;
+}
+
+.app-text-caption {
+  line-height: 1.4;
+}
+
+.app-text-label {
+  line-height: 1.35;
+  font-weight: 600;
+}
+
+.app-text-overline {
+  line-height: 1.3;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.app-text-control,
+.app-text-control-sm {
+  line-height: 1.4;
+  font-weight: 500;
+}
+
+.app-control,
+.app-control-ghost,
+.app-menu-item,
+.app-menu-checkbox-item,
+.app-menu-search-input,
+.app-field-input-sm {
+  font-size: var(--ui-text-caption);
+  line-height: 1.4;
+}
+
+.app-control,
+.app-control-ghost {
+  font-weight: 500;
+}
+
+.app-control-primary {
+  font-size: var(--ui-text-caption);
+  line-height: 1.4;
+  font-weight: 600;
+}
+
+.app-field-input {
+  font-size: var(--ui-text-body-sm);
+  line-height: 1.45;
+}
+
+.app-menu-item,
+.app-menu-checkbox-item,
+.app-menu-search-input {
+  font-weight: 400;
+}
+
+/* Light-mode legibility floor. Many dense app screens intentionally use
+   text-app-ink/30..70 for metadata, table headers, icons, and placeholders.
+   On white surfaces those alpha utilities blend too close to the background,
+   so keep them as solid muted ink tones in light mode while leaving dark mode
+   and true opacity utilities untouched. */
+:root:not(.dark) .text-app-ink\/20,
+:root:not(.dark) .text-app-ink\/25,
+:root:not(.dark) .text-app-ink\/30,
+:root:not(.dark) .text-app-ink\/35,
+:root:not(.dark) .text-app-ink\/40,
+:root:not(.dark) .text-app-ink\/45 {
+  color: var(--ui-color-ink-subtle);
+}
+
+:root:not(.dark) .text-app-ink\/50,
+:root:not(.dark) .text-app-ink\/55,
+:root:not(.dark) .text-app-ink\/60,
+:root:not(.dark) .text-app-ink\/65 {
+  color: var(--ui-color-ink-muted);
+}
+
+:root:not(.dark) .text-app-ink\/70,
+:root:not(.dark) .text-app-ink\/75 {
+  color: var(--ui-color-ink);
+}
+
+:root:not(.dark) .placeholder\:text-app-ink\/30::placeholder,
+:root:not(.dark) .placeholder\:text-app-ink\/35::placeholder,
+:root:not(.dark) .placeholder\:text-app-ink\/40::placeholder {
+  color: var(--ui-color-ink-subtle);
 }
 
 @media print {
@@ -343,12 +635,12 @@
 /* ArtifactPanel markdown tuning. The Tailwind `prose` class already covers
    most typography. GFM tables need explicit borders to look like data
    tables (prose leaves them bare), and fenced code blocks get a light
-   bordered card — highlight.js/styles/github.css already provides the
-   light `#f6f8fa` token background, so we only layer the shell here. */
+   bordered card — highlight.js/styles/github.css already provides a light
+   token background, so we only layer the shell here. */
 .artifact-markdown table {
   border-collapse: collapse;
   width: 100%;
-  font-size: 0.875rem;
+  font-size: var(--ui-text-body);
 }
 .artifact-markdown th,
 .artifact-markdown td {
@@ -370,7 +662,7 @@
 .artifact-markdown pre code.hljs {
   display: block;
   padding: 0;
-  font-size: 0.75rem;
+  font-size: var(--ui-text-caption);
   line-height: 1.55;
 }
 .artifact-markdown :not(pre) > code {
@@ -379,24 +671,59 @@
   border-radius: 0.25rem;
   font-size: 0.85em;
 }
+.artifact-markdown .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 0.125rem;
+}
+.artifact-markdown .contains-task-list {
+  padding-left: 1.25rem;
+}
+.artifact-markdown .task-list-item {
+  list-style: none;
+}
+.artifact-markdown .task-list-item > input[type='checkbox'] {
+  margin-right: 0.375rem;
+}
+.chat-message-markdown {
+  overflow-wrap: anywhere;
+}
+.chat-message-markdown > :first-child {
+  margin-top: 0;
+}
+.chat-message-markdown > :last-child {
+  margin-bottom: 0;
+}
+.chat-message-markdown pre {
+  max-width: 100%;
+}
+.markdown-code-block pre {
+  margin: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 1rem 3rem 1rem 1rem;
+}
 
 /* highlight.js dark-mode overrides — we ship github.css (light) as the
-   base theme. In dark mode its `#24292e` tokens disappear against the
+   base theme. In dark mode its built-in dark text disappears against the
    dark panel, so we layer github-dark's palette under the app's `.dark`
    variant. Kept scoped to artifact containers so this doesn't bleed
    into any other syntax block a neighbour feature might introduce. */
 :where(.dark, .dark *) .artifact-markdown .hljs,
 :where(.dark, .dark *) .artifact-code .hljs {
-  color: #c9d1d9;
-  background: #0d1117;
+  color: var(--ui-color-syntax-text);
+  background: var(--ui-color-syntax-surface);
 }
 :where(.dark, .dark *) .artifact-markdown pre,
 :where(.dark, .dark *) .artifact-code pre {
-  background-color: #0d1117;
+  background-color: var(--ui-color-syntax-surface);
 }
 :where(.dark, .dark *) .artifact-markdown .hljs-comment,
 :where(.dark, .dark *) .artifact-code .hljs-comment {
-  color: #8b949e;
+  color: var(--ui-color-syntax-comment);
 }
 :where(.dark, .dark *) .artifact-markdown .hljs-keyword,
 :where(.dark, .dark *) .artifact-markdown .hljs-doctag,
@@ -410,7 +737,7 @@
 :where(.dark, .dark *) .artifact-code .hljs-template-variable,
 :where(.dark, .dark *) .artifact-code .hljs-type,
 :where(.dark, .dark *) .artifact-code .hljs-variable.language_ {
-  color: #ff7b72;
+  color: var(--ui-color-syntax-keyword);
 }
 :where(.dark, .dark *) .artifact-markdown .hljs-title,
 :where(.dark, .dark *) .artifact-markdown .hljs-title.class_,
@@ -418,7 +745,7 @@
 :where(.dark, .dark *) .artifact-code .hljs-title,
 :where(.dark, .dark *) .artifact-code .hljs-title.class_,
 :where(.dark, .dark *) .artifact-code .hljs-title.function_ {
-  color: #d2a8ff;
+  color: var(--ui-color-syntax-title);
 }
 :where(.dark, .dark *) .artifact-markdown .hljs-attr,
 :where(.dark, .dark *) .artifact-markdown .hljs-attribute,
@@ -438,7 +765,7 @@
 :where(.dark, .dark *) .artifact-code .hljs-selector-attr,
 :where(.dark, .dark *) .artifact-code .hljs-selector-class,
 :where(.dark, .dark *) .artifact-code .hljs-selector-id {
-  color: #79c0ff;
+  color: var(--ui-color-syntax-literal);
 }
 :where(.dark, .dark *) .artifact-markdown .hljs-regexp,
 :where(.dark, .dark *) .artifact-markdown .hljs-string,
@@ -446,13 +773,13 @@
 :where(.dark, .dark *) .artifact-code .hljs-regexp,
 :where(.dark, .dark *) .artifact-code .hljs-string,
 :where(.dark, .dark *) .artifact-code .hljs-meta .hljs-string {
-  color: #a5d6ff;
+  color: var(--ui-color-syntax-string);
 }
 :where(.dark, .dark *) .artifact-markdown .hljs-built_in,
 :where(.dark, .dark *) .artifact-markdown .hljs-symbol,
 :where(.dark, .dark *) .artifact-code .hljs-built_in,
 :where(.dark, .dark *) .artifact-code .hljs-symbol {
-  color: #ffa657;
+  color: var(--ui-color-syntax-built-in);
 }
 :where(.dark, .dark *) .artifact-markdown .hljs-name,
 :where(.dark, .dark *) .artifact-markdown .hljs-quote,
@@ -460,36 +787,36 @@
 :where(.dark, .dark *) .artifact-code .hljs-name,
 :where(.dark, .dark *) .artifact-code .hljs-quote,
 :where(.dark, .dark *) .artifact-code .hljs-selector-tag {
-  color: #7ee787;
+  color: var(--ui-color-syntax-name);
 }
 :where(.dark, .dark *) .artifact-markdown .hljs-section,
 :where(.dark, .dark *) .artifact-code .hljs-section {
-  color: #1f6feb;
+  color: var(--ui-color-syntax-section);
   font-weight: 700;
 }
 :where(.dark, .dark *) .artifact-markdown .hljs-bullet,
 :where(.dark, .dark *) .artifact-code .hljs-bullet {
-  color: #f2cc60;
+  color: var(--ui-color-syntax-bullet);
 }
 :where(.dark, .dark *) .artifact-markdown .hljs-emphasis,
 :where(.dark, .dark *) .artifact-code .hljs-emphasis {
-  color: #c9d1d9;
+  color: var(--ui-color-syntax-text);
   font-style: italic;
 }
 :where(.dark, .dark *) .artifact-markdown .hljs-strong,
 :where(.dark, .dark *) .artifact-code .hljs-strong {
-  color: #c9d1d9;
+  color: var(--ui-color-syntax-text);
   font-weight: 700;
 }
 :where(.dark, .dark *) .artifact-markdown .hljs-addition,
 :where(.dark, .dark *) .artifact-code .hljs-addition {
-  color: #aff5b4;
-  background-color: #033a16;
+  color: var(--ui-color-syntax-addition-text);
+  background-color: var(--ui-color-syntax-addition-bg);
 }
 :where(.dark, .dark *) .artifact-markdown .hljs-deletion,
 :where(.dark, .dark *) .artifact-code .hljs-deletion {
-  color: #ffdcd7;
-  background-color: #67060c;
+  color: var(--ui-color-syntax-deletion-text);
+  background-color: var(--ui-color-syntax-deletion-bg);
 }
 
 /* Full-document code artifact (type="code"). Same light treatment as the
@@ -507,7 +834,7 @@
 .artifact-code pre code.hljs {
   display: block;
   padding: 0;
-  font-size: 0.8125rem;
+  font-size: var(--ui-text-body-sm);
   line-height: 1.6;
 }
 

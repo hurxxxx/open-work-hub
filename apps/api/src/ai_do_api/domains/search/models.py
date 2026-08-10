@@ -2,7 +2,18 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, JSON, String, Text, text
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    JSON,
+    String,
+    Text,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -17,16 +28,16 @@ class SearchIndexJob(Base):
     __tablename__ = "search_index_jobs"
     __table_args__ = (
         CheckConstraint(
-            "entity_type IN ('doc','meeting','pms_issue','planner_event')",
-            name="ck_search_index_jobs_entity_type",
-        ),
-        CheckConstraint(
             "operation IN ('upsert','delete')",
             name="ck_search_index_jobs_operation",
         ),
         CheckConstraint(
             "status IN ('pending','processing','succeeded','failed','cancelled')",
             name="ck_search_index_jobs_status",
+        ),
+        CheckConstraint(
+            "desired_state IS NULL OR desired_state IN ('active','deleted')",
+            name="ck_search_index_jobs_desired_state",
         ),
         Index(
             "ix_search_index_jobs_workspace_status_retry",
@@ -41,6 +52,15 @@ class SearchIndexJob(Base):
             "status",
         ),
         Index(
+            "ix_search_index_jobs_entity_created_active",
+            "workspace_id",
+            "entity_type",
+            "entity_id",
+            "created_at",
+            "id",
+            postgresql_where=text("status <> 'cancelled'"),
+        ),
+        Index(
             "uq_search_index_jobs_pending_entity",
             "workspace_id",
             "entity_type",
@@ -48,6 +68,20 @@ class SearchIndexJob(Base):
             unique=True,
             postgresql_where=text("status = 'pending'"),
             sqlite_where=text("status = 'pending'"),
+        ),
+        Index(
+            "uq_search_index_jobs_pending_resource_fenced",
+            "resource_type",
+            "entity_id",
+            unique=True,
+            postgresql_where=text(
+                "status = 'pending' AND resource_type IS NOT NULL "
+                "AND projection_version IS NOT NULL"
+            ),
+            sqlite_where=text(
+                "status = 'pending' AND resource_type IS NOT NULL "
+                "AND projection_version IS NOT NULL"
+            ),
         ),
     )
 
@@ -57,8 +91,20 @@ class SearchIndexJob(Base):
         nullable=False,
         index=True,
     )
-    entity_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
-    entity_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    retrieval_partition_id: Mapped[str | None] = mapped_column(
+        ForeignKey("retrieval_partitions.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    resource_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    projection_event_sequence: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("retrieval_projection_events.event_sequence", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    projection_version: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    desired_state: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    entity_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    entity_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     operation: Mapped[str] = mapped_column(
         String(16),
         nullable=False,

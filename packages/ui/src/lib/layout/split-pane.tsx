@@ -27,7 +27,7 @@ export function SplitPane({
         <>
           <div className="grid content-start gap-3 max-[1080px]:hidden">{aside}</div>
           <details className="hidden rounded-[var(--ui-radius-lg)] border border-[var(--ui-color-border)] bg-ui-surface p-3.5 max-[1080px]:block">
-            <summary className="cursor-pointer list-none text-[0.86rem] font-semibold text-[var(--ui-color-ink)]">
+            <summary className="cursor-pointer list-none text-[length:var(--ui-text-body)] font-semibold text-[var(--ui-color-ink)]">
               {mobileAsideLabel}
             </summary>
             <div className="mt-3 grid content-start gap-4">{aside}</div>

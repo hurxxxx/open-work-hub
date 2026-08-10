@@ -1,67 +1,150 @@
-import { useState, useEffect } from 'react';
-import { Calendar, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
+import { Calendar, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/platform/auth/auth-provider';
-import { normalizeTimeZone, zonedDateKey } from '@/src/platform/time/time-utils';
-import { listPmsTaskLists, listTaskListIssues, type PmsIssue } from '../api/pms-api';
-import { initials, formatDate } from './pms-constants';
+import {
+  normalizeTimeZone,
+  zonedDateKey,
+} from '@/src/platform/time/time-utils';
+import {
+  listAllPmsTaskLists,
+  listAllTodayOverdueTasks,
+  type PmsTask,
+  type PmsTaskList,
+} from '../api/pms-api';
+import { formatDate } from './pms-constants';
+import { PmsCenteredLoadingState } from './PmsCenteredStateBlock';
+import { TaskAssigneeStack } from './TaskAssigneeStack';
+import { buildPmsTaskContextLabel } from './pms-task-context';
+import { buildPmsTaskListToolPath } from './pms-view-route';
+import { buildTodayOverdueTaskGroups } from './today-overdue-model';
+import { usePmsTaskListChangeSubscription } from './usePmsTaskListChangeSubscription';
 
-export const TodayOverdueView = () => {
+type TodayOverdueTaskLoadResult = {
+  taskLists: PmsTaskList[];
+  tasks: PmsTask[];
+};
+
+export async function loadTodayOverdueTasks(
+  token: string,
+  today: string,
+  workspaceSlug?: string | null,
+): Promise<TodayOverdueTaskLoadResult> {
+  const [taskListResponse, taskResponse] = await Promise.all([
+    listAllPmsTaskLists(token, undefined, workspaceSlug),
+    listAllTodayOverdueTasks(token, today, workspaceSlug),
+  ]);
+  return {
+    taskLists: taskListResponse.items,
+    tasks: taskResponse.items,
+  };
+}
+
+export const TodayOverdueView = ({
+  workspaceSlug: workspaceSlugProp = null,
+}: {
+  workspaceSlug?: string | null;
+}) => {
   const { t } = useTranslation('apps');
   const { token, user } = useAuth();
-  const [issues, setIssues] = useState<PmsIssue[]>([]);
+  const { workspaceSlug: routeWorkspaceSlug } = useParams();
+  const workspaceSlug = workspaceSlugProp ?? routeWorkspaceSlug ?? null;
+  const [data, setData] = useState<TodayOverdueTaskLoadResult>({
+    taskLists: [],
+    tasks: [],
+  });
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!token) return;
-    setLoading(true);
-    listPmsTaskLists(token)
-      .then(async (res) => {
-        const allIssues: PmsIssue[] = [];
-        for (const taskList of res.items) {
-          const issueRes = await listTaskListIssues(token, taskList.id);
-          allIssues.push(...issueRes.items);
-        }
-        setIssues(allIssues);
-      })
-      .finally(() => setLoading(false));
-  }, [token]);
-
+  const loadGenerationRef = useRef(0);
   const today = zonedDateKey(new Date(), normalizeTimeZone(user?.time_zone));
 
-  const overdue = issues.filter(
-    i => i.due_date && i.due_date < today && i.status !== 'done' && i.status !== 'canceled',
+  const reloadTodayOverdueTasks = useCallback(async () => {
+    if (!token) return;
+    const loadGeneration = loadGenerationRef.current + 1;
+    loadGenerationRef.current = loadGeneration;
+    setLoading(true);
+    try {
+      const nextData = await loadTodayOverdueTasks(
+        token,
+        today,
+        workspaceSlug,
+      );
+      if (loadGeneration === loadGenerationRef.current) setData(nextData);
+    } finally {
+      if (loadGeneration === loadGenerationRef.current) setLoading(false);
+    }
+  }, [today, token, workspaceSlug]);
+
+  useEffect(() => {
+    void reloadTodayOverdueTasks();
+  }, [reloadTodayOverdueTasks]);
+
+  usePmsTaskListChangeSubscription(
+    useCallback(() => {
+      void reloadTodayOverdueTasks();
+    }, [reloadTodayOverdueTasks]),
   );
-  const todayIssues = issues.filter(
-    i => i.due_date === today && i.status !== 'done' && i.status !== 'canceled',
+
+  const { overdue, today: todayIssues } = buildTodayOverdueTaskGroups(
+    data.tasks,
+    today,
   );
+  const fallbackSpaceName = t('pms.spaceOverview.fallbackSpaceName');
+  const taskContextLabel = (task: PmsTask) =>
+    buildPmsTaskContextLabel({
+      fallbackSpaceName,
+      task,
+      taskLists: data.taskLists,
+    });
+  const taskPath = (task: PmsTask) =>
+    buildPmsTaskListToolPath({
+      taskId: task.id,
+      taskListId: task.list_id,
+      workspaceSlug,
+    });
 
   return (
     <div className="h-full flex flex-col relative">
       <header className="bg-app-bg border-b border-app-border px-8 pt-6 pb-4">
-        <h1 className="app-text-title-lg text-app-ink">{t('pms.todayOverdue.title')}</h1>
-        <p className="app-text-body mt-1 text-gray-500">{t('pms.todayOverdue.description')}</p>
+        <h1 className="app-text-title-lg text-app-ink">
+          {t('pms.todayOverdue.title')}
+        </h1>
+        <p className="app-text-body mt-1 text-app-ink/55">
+          {t('pms.todayOverdue.description')}
+        </p>
       </header>
 
       <main className="flex-1 overflow-y-auto p-8 custom-scrollbar">
         {loading ? (
-          <div className="flex justify-center py-16"><Loader2 size={24} className="animate-spin text-app-accent" /></div>
+          <PmsCenteredLoadingState minHeightClassName="py-16" />
         ) : (
           <div className="max-w-4xl mx-auto space-y-8">
             {/* Overdue */}
             <section>
-              <div className="flex items-center gap-2 mb-4 text-red-500">
+              <div className="flex items-center gap-2 mb-4 text-app-danger">
                 <AlertCircle size={18} />
-                <h2 className="app-text-title-md">{t('pms.todayOverdue.overdue')}</h2>
-                <span className="app-text-label rounded-full bg-red-500/10 px-2 py-0.5 text-red-500">{overdue.length}</span>
+                <h2 className="app-text-title-md">
+                  {t('pms.todayOverdue.overdue')}
+                </h2>
+                <span className="app-text-label rounded-full bg-app-danger/10 px-2 py-0.5 text-app-danger">
+                  {overdue.length}
+                </span>
               </div>
               <div className="space-y-2">
-                {overdue.map(issue => (
-                  <IssueAgendaItem key={issue.id} issue={issue} isOverdue />
+                {overdue.map((task) => (
+                  <IssueAgendaItem
+                    key={task.id}
+                    contextLabel={taskContextLabel(task)}
+                    isOverdue
+                    task={task}
+                    to={taskPath(task)}
+                  />
                 ))}
                 {overdue.length === 0 && (
-                  <p className="app-text-body text-app-ink/40">{t('pms.todayOverdue.noOverdue')}</p>
+                  <p className="app-text-body text-app-ink/40">
+                    {t('pms.todayOverdue.noOverdue')}
+                  </p>
                 )}
               </div>
             </section>
@@ -70,15 +153,26 @@ export const TodayOverdueView = () => {
             <section>
               <div className="flex items-center gap-2 mb-4 text-blue-400">
                 <Calendar size={18} />
-                <h2 className="app-text-title-md">{t('pms.todayOverdue.today')}</h2>
-                <span className="app-text-label rounded-full bg-blue-400/10 px-2 py-0.5 text-blue-400">{todayIssues.length}</span>
+                <h2 className="app-text-title-md">
+                  {t('pms.todayOverdue.today')}
+                </h2>
+                <span className="app-text-label rounded-full bg-blue-400/10 px-2 py-0.5 text-blue-400">
+                  {todayIssues.length}
+                </span>
               </div>
               <div className="space-y-2">
-                {todayIssues.map(issue => (
-                  <IssueAgendaItem key={issue.id} issue={issue} />
+                {todayIssues.map((task) => (
+                  <IssueAgendaItem
+                    key={task.id}
+                    contextLabel={taskContextLabel(task)}
+                    task={task}
+                    to={taskPath(task)}
+                  />
                 ))}
                 {todayIssues.length === 0 && (
-                  <p className="app-text-body text-app-ink/40">{t('pms.todayOverdue.noToday')}</p>
+                  <p className="app-text-body text-app-ink/40">
+                    {t('pms.todayOverdue.noToday')}
+                  </p>
                 )}
               </div>
             </section>
@@ -89,35 +183,53 @@ export const TodayOverdueView = () => {
   );
 };
 
-const IssueAgendaItem = ({ issue, isOverdue = false }: { issue: PmsIssue; isOverdue?: boolean }) => (
-  <div className="flex items-center justify-between p-4 bg-app-surface-sidebar border border-app-border rounded-lg hover:border-gray-600 transition-colors group cursor-pointer">
-    <div className="flex items-center gap-4">
-      <button className="text-gray-500 hover:text-green-500 transition-colors">
+const IssueAgendaItem = ({
+  contextLabel,
+  task,
+  to,
+  isOverdue = false,
+}: {
+  contextLabel: string | null;
+  task: PmsTask;
+  to: string;
+  isOverdue?: boolean;
+}) => (
+  <Link
+    className="group flex items-center justify-between rounded-lg border border-app-border bg-app-surface-sidebar p-4 transition-colors hover:border-app-border-strong"
+    to={to}
+  >
+    <div className="flex min-w-0 items-center gap-4">
+      <span className="shrink-0 text-app-ink/55 transition-colors group-hover:text-app-success">
         <CheckCircle2 size={20} />
-      </button>
-      <div>
+      </span>
+      <div className="min-w-0">
         <div className="flex items-center gap-2">
-          <span className="app-text-micro text-app-ink/40">{issue.reference}</span>
-          <h3 className="app-text-body font-medium text-app-ink transition-colors group-hover:text-app-accent">{issue.title}</h3>
+          <h3 className="app-text-body truncate font-medium text-app-ink transition-colors group-hover:text-app-accent">
+            {task.title}
+          </h3>
         </div>
-        <div className="app-text-caption mt-1 flex items-center gap-3 text-gray-500">
-          <span className={cn("flex items-center gap-1", isOverdue ? "text-red-500" : "")}>
+        <div className="app-text-caption mt-1 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-app-ink/55">
+          <span
+            className={cn(
+              'flex shrink-0 items-center gap-1',
+              isOverdue ? 'text-app-danger' : '',
+            )}
+          >
             <Calendar size={12} />
-            {formatDate(issue.due_date)}
+            {formatDate(task.due_date)}
           </span>
-          {issue.labels.length > 0 && (
-            <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-blue-500" />
-              {issue.labels[0].name}
+          {contextLabel ? (
+            <span className="min-w-0 truncate">{contextLabel}</span>
+          ) : null}
+          {task.labels.length > 0 && (
+            <span className="flex shrink-0 items-center gap-1">
+              <span className="size-2 rounded-full bg-app-info" />
+              {task.labels[0].name}
             </span>
           )}
         </div>
       </div>
     </div>
-    {issue.assignee_name && (
-      <div className="app-text-micro flex h-6 w-6 items-center justify-center rounded-full bg-app-accent font-medium text-app-accent-fg">
-        {initials(issue.assignee_name)}
-      </div>
-    )}
-  </div>
+    <TaskAssigneeStack task={task} />
+  </Link>
 );

@@ -8,17 +8,36 @@ from typing import Any
 
 from fastapi import HTTPException, status
 from fastapi.encoders import jsonable_encoder
-from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
 
-from ai_do_api.core.i18n import LocalizedApiMessage, localized_http_exception
+from ai_do_api.core.i18n import localized_http_exception
 from ai_do_api.core.telemetry import get_tracer
 from ai_do_api.core.principal import CallerPrincipal
 from ai_do_api.domains.ai import approvals as ai_approvals
 from ai_do_api.domains.ai.audit import log_llm_tool_call
+from ai_do_api.domains.ai.tool_error_projection import tool_http_exception_message
+from ai_do_api.domains.ai.tool_argument_validation import (
+    ToolArgumentValidationFailure,
+    validate_tool_arguments,
+)
+from ai_do_api.domains.ai.tool_approval_gate import (
+    ToolRequiresApproval as ToolRequiresApproval,
+    approval_required_http_exception as approval_required_http_exception,
+    build_rejected_approval_payload,
+    build_tool_requires_approval,
+    validate_replayed_approval,
+)
 from ai_do_api.domains.ai.tool_context import ToolExecutionContext, bind_tool_execution_context
+from ai_do_api.domains.ai.tool_result_projection import (
+    dump_json as dump_json,
+    preview_text as preview_text,
+    render_tool_result_message as render_tool_result_message,
+    sanitize_reject_reason_for_llm as sanitize_reject_reason_for_llm,
+    serialize_rejected_tool_result_for_llm as serialize_rejected_tool_result_for_llm,
+    serialize_tool_result_for_llm as serialize_tool_result_for_llm,
+    tool_result_preview as tool_result_preview,
+)
 from ai_do_api.domains.ai.registry import (
-    ApprovalPreview,
     build_workspace_context,
     get_ai_capability_registry,
     resolve_workspace_entitlement_view,
@@ -26,37 +45,21 @@ from ai_do_api.domains.ai.registry import (
 from ai_do_api.domains.auth.models import User, Workspace
 
 
-_LOCALIZED_TOOL_VALIDATION_ERROR_TYPES = frozenset(
+_AUDIT_TEXT_ARGUMENT_KEYS = frozenset(
     {
-        "planner.update_mutable_field_required",
-        "planner.update_start_at_end_at_required",
-        "pms.update_mutable_field_required",
+        "body",
+        "content",
+        "message",
+        "messages",
+        "prompt",
+        "q",
+        "query",
+        "question",
+        "summary",
+        "text",
+        "title",
     }
 )
-
-
-class ToolRequiresApproval(Exception):
-    def __init__(
-        self,
-        *,
-        tool_call_id: str,
-        tool_name: str,
-        arguments_json: str,
-        resource_preview: str | None,
-    ) -> None:
-        super().__init__(f"AI tool requires approval before execution: {tool_name}")
-        self.tool_call_id = tool_call_id
-        self.tool_name = tool_name
-        self.arguments_json = arguments_json
-        self.resource_preview = resource_preview
-
-
-def approval_required_http_exception(error: ToolRequiresApproval) -> HTTPException:
-    return localized_http_exception(
-        status_code=status.HTTP_409_CONFLICT,
-        code="ai.tool_requires_approval",
-        tool_name=error.tool_name,
-    )
 
 
 def execute_tool(
@@ -79,7 +82,7 @@ def execute_tool(
     definition = registry.tools.get(tool_name)
     descriptor = registry.get_descriptor(tool_name)
     args_summary = preview_text(
-        json.dumps(dict(arguments), ensure_ascii=False, default=str),
+        json.dumps(_audit_argument_summary(arguments), ensure_ascii=False, default=str),
         limit=500,
     )
     if definition is None:
@@ -172,46 +175,39 @@ def execute_tool(
             code="ai.tool_not_executable",
             tool_name=tool_name,
         )
-    validated_arguments = dict(arguments)
-    validated: BaseModel | None = None
     args_model = descriptor.ai_input_model if descriptor is not None else definition.args_model
-    if args_model is not None:
-        try:
-            validated = args_model.model_validate(dict(arguments))
-        except ValidationError as error:
-            message = _validation_error_message(error)
-            _log_tool_call(
-                source=source,
-                principal=principal,
-                workspace=workspace,
-                tool_name=tool_name,
-                args_summary=args_summary,
-                status="error",
-                latency_ms=_elapsed_ms(started),
-                call_id=call_id,
-                error=message,
-                agent_run_id=agent_run_id,
-                conversation_id=conversation_id,
-            )
-            localized_validation = _localized_tool_validation_error(error)
-            if localized_validation is not None:
-                code, params = localized_validation
-                raise localized_http_exception(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    code=code,
-                    **params,
-                ) from error
+    try:
+        argument_validation = validate_tool_arguments(
+            args_model=args_model,
+            arguments=arguments,
+        )
+    except ToolArgumentValidationFailure as error:
+        _log_tool_call(
+            source=source,
+            principal=principal,
+            workspace=workspace,
+            tool_name=tool_name,
+            args_summary=args_summary,
+            status="error",
+            latency_ms=_elapsed_ms(started),
+            call_id=call_id,
+            error=error.message,
+            agent_run_id=agent_run_id,
+            conversation_id=conversation_id,
+        )
+        if error.localized_error is not None:
+            code, params = error.localized_error
             raise localized_http_exception(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                code="ai.invalid_tool_arguments",
-                reason=message.removeprefix("Invalid tool arguments: "),
-            ) from error
-        assert validated is not None
-        validated_arguments = validated.model_dump(
-            mode="python",
-            by_alias=True,
-            exclude_none=True,
-        )
+                code=code,
+                **params,
+            ) from error.validation_error
+        raise localized_http_exception(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="ai.invalid_tool_arguments",
+            reason=error.generic_reason,
+        ) from error.validation_error
+    validated_arguments = argument_validation.validated_arguments
 
     approval_required = (
         descriptor.approval_policy == "required"
@@ -251,20 +247,14 @@ def execute_tool(
                 agent_run_id=agent_run_id,
                 conversation_id=conversation_id,
             )
-            raise ToolRequiresApproval(
+            raise build_tool_requires_approval(
                 tool_call_id=call_id or "",
                 tool_name=tool_name,
-                arguments_json=json.dumps(
-                    jsonable_encoder(validated_arguments),
-                    ensure_ascii=False,
-                    sort_keys=True,
-                ),
-                resource_preview=_build_resource_preview(
-                    descriptor=descriptor,
-                    workspace=workspace,
-                    principal=principal,
-                    parsed_args=validated if args_model is not None else validated_arguments,
-                ),
+                validated_arguments=validated_arguments,
+                descriptor=descriptor,
+                workspace=workspace,
+                principal=principal,
+                parsed_args=argument_validation.parsed_args,
             )
 
         approval = ai_approvals.get_approval(
@@ -274,7 +264,7 @@ def execute_tool(
             approval_id=approved_call_id,
             for_update=True,
         )
-        _validate_replayed_approval(
+        validate_replayed_approval(
             approval=approval,
             tool_name=tool_name,
             call_id=call_id,
@@ -282,15 +272,12 @@ def execute_tool(
         if approval.status == "approved":
             pass
         elif approval.status == "rejected":
-            payload = {
-                "tool": definition.name,
-                "owner_domain": definition.owner_domain,
-                "approval_required": approval_required,
-                "result": {
-                    "status": "rejected",
-                    "reason": approval.reject_reason,
-                },
-            }
+            payload = build_rejected_approval_payload(
+                tool_name=definition.name,
+                owner_domain=definition.owner_domain,
+                approval_required=approval_required,
+                reject_reason=approval.reject_reason,
+            )
             ai_approvals.record_approval_execution_result(
                 db,
                 approval=approval,
@@ -362,10 +349,10 @@ def execute_tool(
                     approval=approval,
                     execution_result={
                         "status": "error",
-                        "error": _error_message(error),
+                        "error": tool_http_exception_message(error),
                     },
                     status="failed",
-                    error_message=_error_message(error),
+                    error_message=tool_http_exception_message(error),
                 )
             _log_tool_call(
                 source=source,
@@ -377,7 +364,7 @@ def execute_tool(
                 latency_ms=_elapsed_ms(started),
                 call_id=call_id,
                 approval_id=approval.id if approval is not None else None,
-                error=_error_message(error),
+                error=tool_http_exception_message(error),
                 agent_run_id=agent_run_id,
                 conversation_id=conversation_id,
             )
@@ -441,100 +428,45 @@ def execute_tool(
     return payload
 
 
-def dump_json(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True)
-
-
-def preview_text(text: str, *, limit: int) -> str:
-    if len(text) <= limit:
-        return text
-    return f"{text[: limit - 1]}…"
-
-
-def render_tool_result_message(tool_name: str, result: Any) -> str:
-    return f"도구 {tool_name} 실행 결과입니다.\n{preview_text(dump_json(result), limit=4000)}"
-
-
-def serialize_tool_result_for_llm(
-    *,
-    tool_name: str,
-    result: Any | None = None,
-    error: str | None = None,
-    limit: int = 4000,
-) -> str:
-    if error is not None:
-        return dump_json(
-            {
-                "tool": tool_name,
-                "status": "error",
-                "error": preview_text(error, limit=max(64, limit - 96)),
-            }
-        )
-
-    if result is None:
-        return dump_json({"tool": tool_name, "status": "ok", "result": None})
-
-    candidate = {
-        "tool": tool_name,
-        "status": "ok",
-        "result": result,
-    }
-    dumped = dump_json(candidate)
-    if len(dumped) <= limit:
-        return dumped
-
-    return dump_json(
-        {
-            "tool": tool_name,
-            "status": "ok",
-            "result_preview": preview_text(dump_json(result), limit=max(256, limit - 128)),
-            "truncated": True,
-        }
-    )
-
-
-def tool_result_preview(result: Any) -> str:
-    return preview_text(dump_json(result), limit=1200)
-
-
-def sanitize_reject_reason_for_llm(reason: str | None, *, limit: int = 280) -> str | None:
-    if reason is None:
-        return None
-    collapsed = " ".join(reason.split())
-    if not collapsed:
-        return None
-    return preview_text(collapsed, limit=limit)
-
-
-def serialize_rejected_tool_result_for_llm(
-    *,
-    tool_name: str,
-    reason: str | None,
-) -> str:
-    return dump_json(
-        {
-            "tool": tool_name,
-            "status": "rejected",
-            "reason": sanitize_reject_reason_for_llm(reason),
-        }
-    )
-
-
 def _extract_resource_ids(result: Any) -> list[str]:
     resource_ids: list[str] = []
-    if isinstance(result, Mapping):
-        top_level_id = result.get("id")
-        if isinstance(top_level_id, str):
-            resource_ids.append(top_level_id)
-        items = result.get("items")
-        if isinstance(items, list):
-            for item in items:
-                if not isinstance(item, Mapping):
-                    continue
-                item_id = item.get("id")
-                if isinstance(item_id, str):
-                    resource_ids.append(item_id)
+    seen: set[str] = set()
+
+    def add(value: Any) -> None:
+        if not isinstance(value, str) or not value or value in seen:
+            return
+        seen.add(value)
+        resource_ids.append(value)
+
+    def visit(value: Any) -> None:
+        if isinstance(value, Mapping):
+            explicit_resource_ids = value.get("resource_ids")
+            if isinstance(explicit_resource_ids, list):
+                for resource_id in explicit_resource_ids:
+                    add(resource_id)
+            for nested_key in ("result", "aggregate_result", "items"):
+                nested = value.get(nested_key)
+                if isinstance(nested, (Mapping, list)):
+                    visit(nested)
+        elif isinstance(value, list):
+            for item in value:
+                visit(item)
+
+    visit(result)
     return resource_ids
+
+
+def _audit_argument_summary(value: Any, *, key: str | None = None) -> Any:
+    if isinstance(value, Mapping):
+        return {
+            str(item_key): _audit_argument_summary(item_value, key=str(item_key))
+            for item_key, item_value in value.items()
+        }
+    if isinstance(value, list):
+        return [_audit_argument_summary(item, key=key) for item in value]
+    if isinstance(value, str) and key is not None and key in _AUDIT_TEXT_ARGUMENT_KEYS:
+        return f"<text:{len(value)} chars>"
+    return value
 
 
 def _invoke_tool_handler(
@@ -559,89 +491,6 @@ def _invoke_tool_handler(
         validated_arguments,
         **kwargs,
     )
-
-
-def _build_resource_preview(
-    *,
-    descriptor,
-    workspace: Workspace,
-    principal: CallerPrincipal,
-    parsed_args: BaseModel | Mapping[str, Any],
-) -> str | None:
-    if descriptor is None or descriptor.preview_builder_id is None:
-        return None
-    registry = get_ai_capability_registry()
-    builder = registry.resolve_preview_builder(descriptor.preview_builder_id)
-    if builder is None:
-        return None
-    preview = builder(principal, build_workspace_context(workspace), parsed_args)
-    return _render_approval_preview(preview)
-
-
-def _render_approval_preview(preview: ApprovalPreview | None) -> str | None:
-    if preview is None:
-        return None
-    lines = [preview.title.strip(), preview.summary.strip()]
-    for field in preview.fields:
-        label = field.label.strip()
-        value = field.value.strip()
-        if label or value:
-            lines.append(f"{label}: {value}".strip(": "))
-    rendered = "\n".join(line for line in lines if line)
-    return rendered or None
-
-
-def _validate_replayed_approval(
-    *,
-    approval: ai_approvals.AiToolApproval,
-    tool_name: str,
-    call_id: str | None,
-) -> None:
-    if approval.tool_name != tool_name:
-        raise localized_http_exception(
-            status_code=status.HTTP_409_CONFLICT,
-            code="ai.approval_tool_mismatch",
-        )
-    if call_id is not None and approval.tool_call_id != call_id:
-        raise localized_http_exception(
-            status_code=status.HTTP_409_CONFLICT,
-            code="ai.approval_tool_call_mismatch",
-        )
-
-
-def _validation_error_message(error: ValidationError) -> str:
-    parts: list[str] = []
-    for item in error.errors():
-        location = ".".join(str(part) for part in item.get("loc", []))
-        message = item.get("msg", "Invalid value.")
-        if location:
-            parts.append(f"{location}: {message}")
-        else:
-            parts.append(str(message))
-    if not parts:
-        return "Invalid tool arguments."
-    return "Invalid tool arguments: " + "; ".join(parts)
-
-
-def _localized_tool_validation_error(error: ValidationError) -> tuple[str, dict[str, Any]] | None:
-    errors = error.errors()
-    if len(errors) != 1:
-        return None
-    item = errors[0]
-    error_type = item.get("type")
-    if not isinstance(error_type, str) or error_type not in _LOCALIZED_TOOL_VALIDATION_ERROR_TYPES:
-        return None
-    params = item.get("ctx") if isinstance(item.get("ctx"), dict) else {}
-    return error_type, dict(params)
-
-
-def _error_message(error: HTTPException) -> str:
-    detail = error.detail
-    if isinstance(detail, str):
-        return detail
-    if isinstance(detail, LocalizedApiMessage):
-        return detail.code
-    return "AI tool execution failed."
 
 
 def _log_tool_call(

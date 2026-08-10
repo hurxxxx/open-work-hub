@@ -1,8 +1,6 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import type * as React from 'react';
-import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'motion/react';
+import { AnimatePresence, LazyMotion, domAnimation, m } from 'motion/react';
 import { useTranslation } from 'react-i18next';
 import {
   DndContext,
@@ -17,26 +15,17 @@ import {
 import {
   SortableContext,
   sortableKeyboardCoordinates,
-  useSortable,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 import {
-  ArrowDown,
-  ArrowUp,
   ArrowUpDown,
+  Archive,
   ChevronDown,
   ChevronRight,
   Layout,
-  List as ListIcon,
   FolderOpen,
-  FileText,
   MoreHorizontal,
-  PencilRuler,
-  Pencil,
   Plus,
-  Trash2,
-  Users,
 } from 'lucide-react';
 
 import { cn } from '@/src/lib/utils';
@@ -44,560 +33,196 @@ import {
   resolveFlatDropZone,
   type FlatDropZone,
 } from '../api/pms-sidebar-reorder';
-import {
-  getDocsItemPrimaryContainerId,
-  getDocsItemPrimaryContainerSortOrder,
-  type DocsHubItem,
-} from '@/src/app-modules/docs/public-api';
-import type { PmsFolder, PmsTaskList } from '../api/pms-api';
+import { taskListRoleAllows } from '../api/pms-permissions';
+import type { DocsHubItem } from '@/src/app-modules/docs/public-api';
+import type { PmsTaskList } from '../api/pms-api';
+import { sortSpaceDocs, type FolderWithLists } from './space-tree-model';
+import { FolderAddPopover } from './FolderAddPopover';
+import { FolderContextMenu } from './FolderContextMenu';
+import { SortableDocLink } from './SortableDocLink';
+import { SortableListLink } from './SortableListLink';
+import { SpaceAddPopover } from './SpaceAddPopover';
+import { SpaceContextMenu } from './SpaceContextMenu';
 
-export const SPACE_COLORS = [
-  'bg-emerald-500',
-  'bg-blue-500',
-  'bg-amber-500',
-  'bg-rose-500',
-  'bg-violet-500',
-];
-
-export function getSpaceDocSpaceId(doc: DocsHubItem): string {
-  return getDocsItemPrimaryContainerId(doc, 'pms', 'space') ?? '';
-}
-
-export function getSpaceDocSortOrder(doc: DocsHubItem): number {
-  return getDocsItemPrimaryContainerSortOrder(doc);
-}
-
-export function sortSpaceDocs(items: DocsHubItem[], locale = 'ko-KR'): DocsHubItem[] {
-  return [...items].sort(
-    (left, right) => getSpaceDocSortOrder(left) - getSpaceDocSortOrder(right)
-      || left.title.localeCompare(right.title, locale),
-  );
-}
-
-const SpaceAddPopover = ({
-  open,
-  anchorRef,
-  onClose,
-  onCreateList,
-  onCreateFolder,
-  onOpenDocs,
-  onCreateWhiteboard,
-}: {
-  open: boolean;
-  anchorRef: React.RefObject<HTMLButtonElement | null>;
-  onClose: () => void;
-  onCreateList: () => void;
-  onCreateFolder: () => void;
+type SpaceItemProps = {
+  spaceId: string;
+  name: string;
+  iconColor: string;
+  rootLists: PmsTaskList[];
+  archivedLists: PmsTaskList[];
+  folders: FolderWithLists[];
+  expanded: boolean;
+  onToggle: () => void;
+  onNavigate: () => void;
+  onAddList: () => void;
+  onAddListToFolder: (folderId: string) => void;
+  onAddFolder: () => void;
   onOpenDocs: () => void;
-  onCreateWhiteboard: () => void;
-}) => {
-  const { t } = useTranslation('apps');
-  const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState({ top: 0, left: 0 });
-
-  useEffect(() => {
-    if (!open || !anchorRef.current) return;
-    const rect = anchorRef.current.getBoundingClientRect();
-    setPos({ top: rect.top, left: rect.right + 4 });
-  }, [open, anchorRef]);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (event: MouseEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) onClose();
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open, onClose]);
-
-  if (!open) return null;
-
-  return createPortal(
-    <div
-      ref={ref}
-      style={{ top: pos.top, left: pos.left }}
-      className="fixed z-[9999] w-52 bg-app-bg border border-app-border rounded-lg shadow-xl py-1"
-    >
-      <div className="app-text-overline px-3 py-1.5 text-gray-500">
-        {t('common:actions.create')}
-      </div>
-      <button
-        onClick={() => { onCreateList(); onClose(); }}
-        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors"
-      >
-        <ListIcon size={16} className="text-gray-400" />
-        <div className="text-left">
-          <div className="app-text-control-sm text-app-ink">{t('pms.spaceTree.list')}</div>
-          <div className="app-text-micro text-app-ink/40">{t('pms.spaceTree.listDescription')}</div>
-        </div>
-      </button>
-      <button
-        onClick={() => { onCreateFolder(); onClose(); }}
-        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors"
-      >
-        <FolderOpen size={16} className="text-gray-400" />
-        <div className="text-left">
-          <div className="app-text-control-sm text-app-ink">{t('pms.spaceTree.folder')}</div>
-          <div className="app-text-micro text-app-ink/40">{t('pms.spaceTree.folderDescription')}</div>
-        </div>
-      </button>
-      <button
-        onClick={() => { onOpenDocs(); onClose(); }}
-        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors"
-      >
-        <FileText size={16} className="text-gray-400" />
-        <div className="text-left">
-          <div className="app-text-control-sm text-app-ink">{t('pms.spaceTree.doc')}</div>
-          <div className="app-text-micro text-app-ink/40">{t('pms.spaceTree.docDescription')}</div>
-        </div>
-      </button>
-      <button
-        onClick={() => { onCreateWhiteboard(); onClose(); }}
-        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors"
-      >
-        <PencilRuler size={16} className="text-gray-400" />
-        <div className="text-left">
-          <div className="app-text-control-sm text-app-ink">{t('pms.spaceTree.whiteboard')}</div>
-          <div className="app-text-micro text-app-ink/40">{t('pms.spaceTree.whiteboardDescription')}</div>
-        </div>
-      </button>
-    </div>,
-    document.body,
-  );
-};
-
-const FolderAddPopover = ({
-  open,
-  anchorRef,
-  onClose,
-  onCreateList,
-  onCreateDoc,
-}: {
-  open: boolean;
-  anchorRef: React.RefObject<HTMLButtonElement | null>;
-  onClose: () => void;
-  onCreateList: () => void;
-  onCreateDoc: () => void;
-}) => {
-  const { t } = useTranslation('apps');
-  const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState({ top: 0, left: 0 });
-
-  useEffect(() => {
-    if (!open || !anchorRef.current) return;
-    const rect = anchorRef.current.getBoundingClientRect();
-    setPos({ top: rect.top, left: rect.right + 4 });
-  }, [open, anchorRef]);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (event: MouseEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) onClose();
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open, onClose]);
-
-  if (!open) return null;
-
-  return createPortal(
-    <div
-      ref={ref}
-      style={{ top: pos.top, left: pos.left }}
-      className="fixed z-[9999] w-48 bg-app-bg border border-app-border rounded-lg shadow-xl py-1"
-    >
-      <div className="app-text-overline px-3 py-1.5 text-gray-500">
-        {t('common:actions.create')}
-      </div>
-      <button
-        onClick={() => { onCreateList(); onClose(); }}
-        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors"
-      >
-        <ListIcon size={14} className="text-gray-400" />
-        <div className="app-text-control-sm text-app-ink">{t('pms.spaceTree.list')}</div>
-      </button>
-      <button
-        onClick={() => { onCreateDoc(); onClose(); }}
-        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors"
-      >
-        <FileText size={14} className="text-gray-400" />
-        <div className="app-text-control-sm text-app-ink">{t('pms.spaceTree.doc')}</div>
-      </button>
-    </div>,
-    document.body,
-  );
-};
-
-const FolderContextMenu = ({
-  open,
-  anchorRef,
-  onClose,
-  onMoveUp,
-  onMoveDown,
-  canMoveUp = false,
-  canMoveDown = false,
-  onRename,
-  onDelete,
-}: {
-  open: boolean;
-  anchorRef: React.RefObject<HTMLButtonElement | null>;
-  onClose: () => void;
-  onMoveUp?: () => void;
-  onMoveDown?: () => void;
-  canMoveUp?: boolean;
-  canMoveDown?: boolean;
-  onRename: () => void;
-  onDelete: () => void;
-}) => {
-  const { t } = useTranslation('apps');
-  const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState({ top: 0, left: 0 });
-
-  useEffect(() => {
-    if (!open || !anchorRef.current) return;
-    const rect = anchorRef.current.getBoundingClientRect();
-    setPos({ top: rect.top, left: rect.right + 4 });
-  }, [open, anchorRef]);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (event: MouseEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) onClose();
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open, onClose]);
-
-  if (!open) return null;
-
-  return createPortal(
-    <div
-      ref={ref}
-      style={{ top: pos.top, left: pos.left }}
-      className="fixed z-[9999] w-44 bg-app-bg border border-app-border rounded-lg shadow-xl py-1"
-    >
-      {onMoveUp ? (
-        <button
-          onClick={() => { onMoveUp(); onClose(); }}
-          disabled={!canMoveUp}
-          className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <ArrowUp size={14} className="text-gray-400" />
-          <span className="app-text-control-sm text-app-ink">{t('pms.orderEditor.moveUp')}</span>
-        </button>
-      ) : null}
-      {onMoveDown ? (
-        <button
-          onClick={() => { onMoveDown(); onClose(); }}
-          disabled={!canMoveDown}
-          className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <ArrowDown size={14} className="text-gray-400" />
-          <span className="app-text-control-sm text-app-ink">{t('pms.orderEditor.moveDown')}</span>
-        </button>
-      ) : null}
-      <button
-        onClick={() => { onRename(); onClose(); }}
-        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors"
-      >
-        <Pencil size={14} className="text-gray-400" />
-        <span className="app-text-control-sm text-app-ink">{t('common:actions.rename')}</span>
-      </button>
-      <button
-        onClick={() => { onDelete(); onClose(); }}
-        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors"
-      >
-        <Trash2 size={14} className="text-red-400" />
-        <span className="app-text-control-sm text-red-400">{t('common:actions.delete')}</span>
-      </button>
-    </div>,
-    document.body,
-  );
-};
-
-const SpaceContextMenu = ({
-  open,
-  anchorRef,
-  onClose,
-  onRename,
-  onManageMembers,
-  canManage,
-  onDelete,
-}: {
-  open: boolean;
-  anchorRef: React.RefObject<HTMLButtonElement | null>;
-  onClose: () => void;
-  onRename: () => void;
+  onMoveFolder: (folderId: string, direction: 'up' | 'down') => void;
+  onRenameFolder: (folderId: string, currentName: string) => void;
+  onDeleteFolder: (folderId: string) => void;
+  onRenameList: (listId: string, currentName: string) => void;
+  onDeleteList: (listId: string, currentName: string) => void;
+  onArchiveList: (listId: string, currentName: string) => void;
+  onRestoreList: (listId: string, currentName: string) => void;
+  onOpenListSettings: (listId: string) => void;
+  onRenameSpace: (newName: string) => void;
+  onDeleteSpace: () => void;
   onManageMembers: () => void;
-  canManage: boolean;
-  onDelete: () => void;
-}) => {
-  const { t } = useTranslation('apps');
-  const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState({ top: 0, left: 0 });
+  onOpenOrderEditor: () => void;
+  spaceDocs: DocsHubItem[];
+  onRenameDoc: (docId: string, newTitle: string) => void;
+  onDeleteDoc: (docId: string) => void;
+  onReorderList: (
+    activeListId: string,
+    overListId: string,
+    zone: FlatDropZone,
+  ) => Promise<void>;
+  onReorderDoc: (
+    activeDocId: string,
+    overDocId: string,
+    zone: FlatDropZone,
+  ) => Promise<void>;
+  activeNavItemId: string;
+  currentWorkspaceSlug: string | null;
+  canCreateSpaceContent: boolean;
+  canManageSpace: boolean;
+  canManageCollections: boolean;
+};
 
-  useEffect(() => {
-    if (!open || !anchorRef.current) return;
-    const rect = anchorRef.current.getBoundingClientRect();
-    setPos({ top: rect.top, left: rect.right + 4 });
-  }, [open, anchorRef]);
+type SpaceTreeDragKind = 'list' | 'doc';
+type SpaceTreeDropIndicator = {
+  overId: string;
+  zone: FlatDropZone;
+} | null;
 
-  useEffect(() => {
-    if (!open) return;
-    const handler = (event: MouseEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) onClose();
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open, onClose]);
+export function SpaceItem(props: SpaceItemProps) {
+  return useSpaceItemContent(props);
+}
 
-  if (!open) return null;
-
-  return createPortal(
-    <div
-      ref={ref}
-      style={{ top: pos.top, left: pos.left }}
-      className="fixed z-[9999] w-44 bg-app-bg border border-app-border rounded-lg shadow-xl py-1"
-    >
-      <button
-        onClick={() => { onRename(); onClose(); }}
-        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors"
-      >
-        <Pencil size={14} className="text-gray-400" />
-        <span className="app-text-control-sm text-app-ink">{t('common:actions.rename')}</span>
-      </button>
-      <button
-        onClick={() => { onManageMembers(); onClose(); }}
-        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors"
-      >
-        <Users size={14} className="text-gray-400" />
-        <span className="app-text-control-sm text-app-ink">
-          {canManage ? t('pms.spaceMembers.titleSuffix') : t('pms.spaceMembers.viewMembers')}
-        </span>
-      </button>
-      <button
-        onClick={() => { onDelete(); onClose(); }}
-        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors"
-      >
-        <Trash2 size={14} className="text-red-400" />
-        <span className="app-text-control-sm text-red-400">{t('common:actions.delete')}</span>
-      </button>
-    </div>,
-    document.body,
+function useSpaceTreeReorderDnd({
+  folders,
+  onReorderDoc,
+  onReorderList,
+  rootLists,
+  spaceDocs,
+}: Pick<
+  SpaceItemProps,
+  'folders' | 'onReorderDoc' | 'onReorderList' | 'rootLists' | 'spaceDocs'
+>) {
+  const [dropIndicator, setDropIndicator] =
+    useState<SpaceTreeDropIndicator>(null);
+  const dragPointerYRef = useRef<number>(0);
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
   );
-};
-
-export type FolderWithLists = {
-  folder: PmsFolder;
-  lists: PmsTaskList[];
-};
-
-function useSuppressClickAfterDrag(isDragging: boolean) {
-  const justDraggedRef = useRef(false);
-  useEffect(() => {
-    if (isDragging) {
-      justDraggedRef.current = true;
+  const allListsInSpace = useMemo(() => {
+    const out: PmsTaskList[] = [...rootLists];
+    for (const folder of folders) out.push(...folder.lists);
+    return out;
+  }, [folders, rootLists]);
+  const sortableItemIds = useMemo(
+    () => [
+      ...allListsInSpace.map((list) => list.id),
+      ...spaceDocs.map((doc) => doc.id),
+    ],
+    [allListsInSpace, spaceDocs],
+  );
+  const handleDragPointerMove = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      dragPointerYRef.current = event.clientY;
+    },
+    [],
+  );
+  const handleDragStart = useCallback(() => {
+    setDropIndicator(null);
+  }, []);
+  const handleDragCancel = useCallback(() => {
+    setDropIndicator(null);
+  }, []);
+  const handleDragOver = useCallback((event: DragOverEvent) => {
+    const { active, over } = event;
+    if (!over || !active || over.id === active.id) {
+      setDropIndicator(null);
       return;
     }
-    if (!justDraggedRef.current) return;
-    const timer = setTimeout(() => {
-      justDraggedRef.current = false;
-    }, 150);
-    return () => clearTimeout(timer);
-  }, [isDragging]);
-  return useCallback((event: React.MouseEvent) => {
-    if (justDraggedRef.current) {
-      event.preventDefault();
-      event.stopPropagation();
+    const activeKind = active.data.current?.kind as
+      | SpaceTreeDragKind
+      | undefined;
+    const overKind = over.data.current?.kind as SpaceTreeDragKind | undefined;
+    if (!activeKind || !overKind || activeKind !== overKind) {
+      setDropIndicator(null);
+      return;
     }
+    const overRect = over.rect;
+    if (!overRect) return;
+    const pointerY = dragPointerYRef.current;
+    const pointerWithinRow =
+      pointerY >= overRect.top && pointerY <= overRect.top + overRect.height;
+    let zone: FlatDropZone;
+    if (pointerWithinRow) {
+      zone = resolveFlatDropZone(pointerY, {
+        top: overRect.top,
+        height: overRect.height,
+      });
+    } else {
+      const activeRect =
+        active.rect?.current?.translated ??
+        active.rect?.current?.initial ??
+        null;
+      if (!activeRect) return;
+      zone = overRect.top < activeRect.top ? 'before' : 'after';
+    }
+    setDropIndicator((current) =>
+      current && current.overId === over.id && current.zone === zone
+        ? current
+        : { overId: String(over.id), zone },
+    );
   }, []);
+  const handleDragEnd = useCallback(
+    async (event: DragEndEvent) => {
+      const indicator = dropIndicator;
+      setDropIndicator(null);
+      if (!indicator) return;
+      const activeId = String(event.active.id);
+      if (activeId === indicator.overId) return;
+      const activeKind = event.active.data.current?.kind as
+        | SpaceTreeDragKind
+        | undefined;
+      const overKind = event.over?.data.current?.kind as
+        | SpaceTreeDragKind
+        | undefined;
+      if (!activeKind || activeKind !== overKind) return;
+      if (activeKind === 'list') {
+        await onReorderList(activeId, indicator.overId, indicator.zone);
+      } else {
+        await onReorderDoc(activeId, indicator.overId, indicator.zone);
+      }
+    },
+    [dropIndicator, onReorderDoc, onReorderList],
+  );
+
+  return {
+    dndSensors,
+    dropIndicator,
+    handleDragCancel,
+    handleDragEnd,
+    handleDragOver,
+    handleDragPointerMove,
+    handleDragStart,
+    sortableItemIds,
+  };
 }
 
-const SortableListLink = ({
-  list,
-  activeNavItemId,
-  canDrag,
-  dropZone,
-}: {
-  list: PmsTaskList;
-  activeNavItemId: string;
-  canDrag: boolean;
-  dropZone: FlatDropZone | null;
-}) => {
-  const navigate = useNavigate();
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: list.id,
-    disabled: !canDrag,
-    data: { kind: 'list', parentId: list.folder_id ?? null },
-  });
-  const suppressClick = useSuppressClickAfterDrag(isDragging);
-  const handleClick = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
-    suppressClick(event);
-    if (event.defaultPrevented) return;
-    navigate(`/tool/pms-list-${list.id}`);
-  }, [list.id, navigate, suppressClick]);
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
-      className={cn('relative', isDragging && 'opacity-30', canDrag && 'touch-none')}
-    >
-      {dropZone === 'before' ? (
-        <div className="pointer-events-none absolute inset-x-1 top-0 z-10 h-0.5 rounded bg-app-accent" />
-      ) : null}
-      <button
-        type="button"
-        onClick={handleClick}
-        className={cn(
-          'sidebar-submenu-item w-full text-left',
-          activeNavItemId === `pms-list-${list.id}` && 'sidebar-submenu-item-active',
-        )}
-      >
-        <ListIcon size={13} className="text-gray-500 shrink-0" />
-        <span className="sidebar-submenu-label">{list.name}</span>
-        <span className="sidebar-submenu-meta">({list.issue_count})</span>
-      </button>
-      {dropZone === 'after' ? (
-        <div className="pointer-events-none absolute inset-x-1 bottom-0 z-10 h-0.5 rounded bg-app-accent" />
-      ) : null}
-    </div>
-  );
-};
-
-const SortableDocLink = ({
-  doc,
-  spaceId,
-  activeNavItemId,
-  canDrag,
-  canManageCollections,
-  dropZone,
-  isRenaming,
-  docRenameValue,
-  docRenameInputRef,
-  docMenuBtnRefs,
-  isMenuOpen,
-  onRenameValueChange,
-  onCommitRename,
-  onCancelRename,
-  onBeginRename,
-  onDelete,
-  onToggleMenu,
-  onCloseMenu,
-}: {
-  doc: DocsHubItem;
-  spaceId: string;
-  activeNavItemId: string;
-  canDrag: boolean;
-  canManageCollections: boolean;
-  dropZone: FlatDropZone | null;
-  isRenaming: boolean;
-  docRenameValue: string;
-  docRenameInputRef: React.RefObject<HTMLInputElement | null>;
-  docMenuBtnRefs: React.MutableRefObject<Map<string, HTMLButtonElement>>;
-  isMenuOpen: boolean;
-  onRenameValueChange: (value: string) => void;
-  onCommitRename: () => void;
-  onCancelRename: () => void;
-  onBeginRename: () => void;
-  onDelete: () => void;
-  onToggleMenu: () => void;
-  onCloseMenu: () => void;
-}) => {
-  const { t } = useTranslation('apps');
-  const navigate = useNavigate();
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: doc.id,
-    disabled: !canDrag || isRenaming,
-    data: { kind: 'doc', parentId: getSpaceDocSpaceId(doc) },
-  });
-  const suppressClick = useSuppressClickAfterDrag(isDragging);
-  const style = { transform: CSS.Transform.toString(transform), transition };
-  const docNavId = `pms-space-${spaceId}-docs-${doc.id}`;
-  const handleClick = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
-    suppressClick(event);
-    if (event.defaultPrevented) return;
-    navigate(`/tool/${docNavId}`);
-  }, [docNavId, navigate, suppressClick]);
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
-      className={cn('group/doc relative flex items-center', isDragging && 'opacity-30', canDrag && !isRenaming && 'touch-none')}
-    >
-      {dropZone === 'before' ? (
-        <div className="pointer-events-none absolute inset-x-1 top-0 z-10 h-0.5 rounded bg-app-accent" />
-      ) : null}
-      {isRenaming ? (
-        <div className="sidebar-submenu-item flex-1 min-w-0">
-          <FileText size={13} className="text-gray-500 shrink-0" />
-          <input
-            ref={docRenameInputRef}
-            value={docRenameValue}
-            onChange={(e) => onRenameValueChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') onCommitRename();
-              else if (e.key === 'Escape') onCancelRename();
-            }}
-            onBlur={onCommitRename}
-            className="app-text-body-sm flex-1 min-w-0 rounded border border-blue-500 bg-transparent px-1 py-0.5 text-app-ink outline-none"
-            autoFocus
-          />
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={handleClick}
-          className={cn('sidebar-submenu-item flex-1 min-w-0 text-left', activeNavItemId === docNavId && 'sidebar-submenu-item-active')}
-        >
-          <FileText size={13} className="text-gray-500 shrink-0" />
-          <span className="sidebar-submenu-label">{doc.title || t('pms.orderEditor.untitled')}</span>
-        </button>
-      )}
-      {canManageCollections && !isRenaming ? (
-        <>
-          <div className={cn('items-center gap-0.5 pr-1 shrink-0', isMenuOpen ? 'flex' : 'hidden group-hover/doc:flex')}>
-            <button
-              ref={(el) => { if (el) docMenuBtnRefs.current.set(doc.id, el); }}
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleMenu();
-              }}
-              className="p-0.5 hover:bg-app-surface-hover rounded text-gray-600 dark:text-gray-300 hover:text-app-ink dark:hover:text-white transition-colors"
-              title={t('pms.spaceTree.docOptions')}
-            >
-              <MoreHorizontal size={12} />
-            </button>
-          </div>
-          <FolderContextMenu
-            open={isMenuOpen}
-            anchorRef={{ current: docMenuBtnRefs.current.get(doc.id) ?? null }}
-            onClose={onCloseMenu}
-            onRename={onBeginRename}
-            onDelete={onDelete}
-          />
-        </>
-      ) : null}
-      {dropZone === 'after' ? (
-        <div className="pointer-events-none absolute inset-x-1 bottom-0 z-10 h-0.5 rounded bg-app-accent" />
-      ) : null}
-    </div>
-  );
-};
-
-export const SpaceItem = ({
+function useSpaceItemContent({
   spaceId,
   name,
   iconColor,
   rootLists,
+  archivedLists,
   folders,
   expanded,
   onToggle,
@@ -606,11 +231,14 @@ export const SpaceItem = ({
   onAddListToFolder,
   onAddFolder,
   onOpenDocs,
-  onCreateWhiteboard,
-  onOpenWhiteboards,
   onMoveFolder,
   onRenameFolder,
   onDeleteFolder,
+  onRenameList,
+  onDeleteList,
+  onArchiveList,
+  onRestoreList,
+  onOpenListSettings,
   onRenameSpace,
   onDeleteSpace,
   onManageMembers,
@@ -621,77 +249,92 @@ export const SpaceItem = ({
   onReorderList,
   onReorderDoc,
   activeNavItemId,
+  currentWorkspaceSlug,
   canCreateSpaceContent,
   canManageSpace,
   canManageCollections,
-}: {
-  spaceId: string;
-  name: string;
-  iconColor: string;
-  rootLists: PmsTaskList[];
-  folders: FolderWithLists[];
-  expanded: boolean;
-  onToggle: () => void;
-  onNavigate: () => void;
-  onAddList: () => void;
-  onAddListToFolder: (folderId: string) => void;
-  onAddFolder: () => void;
-  onOpenDocs: () => void;
-  onCreateWhiteboard: () => void;
-  onOpenWhiteboards: () => void;
-  onMoveFolder: (folderId: string, direction: 'up' | 'down') => void;
-  onRenameFolder: (folderId: string, currentName: string) => void;
-  onDeleteFolder: (folderId: string) => void;
-  onRenameSpace: (newName: string) => void;
-  onDeleteSpace: () => void;
-  onManageMembers: () => void;
-  onOpenOrderEditor: () => void;
-  spaceDocs: DocsHubItem[];
-  onRenameDoc: (docId: string, newTitle: string) => void;
-  onDeleteDoc: (docId: string) => void;
-  onReorderList: (activeListId: string, overListId: string, zone: FlatDropZone) => Promise<void>;
-  onReorderDoc: (activeDocId: string, overDocId: string, zone: FlatDropZone) => Promise<void>;
-  activeNavItemId: string;
-  canCreateSpaceContent: boolean;
-  canManageSpace: boolean;
-  canManageCollections: boolean;
-}) => {
+}: SpaceItemProps) {
   const { t, i18n } = useTranslation('apps');
   const locale = i18n.resolvedLanguage ?? i18n.language;
   const [addPopoverOpen, setAddPopoverOpen] = useState(false);
   const [spaceMenuOpen, setSpaceMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
-  const [renameValue, setRenameValue] = useState(name);
+  const [renameDraft, setRenameDraft] = useState({
+    sourceName: '',
+    value: '',
+  });
   const renameInputRef = useRef<HTMLInputElement>(null);
   const addBtnRef = useRef<HTMLButtonElement>(null);
   const spaceMenuBtnRef = useRef<HTMLButtonElement>(null);
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
-    () => new Set(folders.map((f) => f.folder.id)),
+  const [collapsedFolderIds, setCollapsedFolderIds] = useState<Set<string>>(
+    () => new Set(),
   );
-  const [folderPopoverOpen, setFolderPopoverOpen] = useState<string | null>(null);
+  const [folderPopoverOpen, setFolderPopoverOpen] = useState<string | null>(
+    null,
+  );
   const [folderMenuOpen, setFolderMenuOpen] = useState<string | null>(null);
   const folderMenuBtnRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
   const folderAddBtnRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const [listMenuOpen, setListMenuOpen] = useState<string | null>(null);
+  const [archivedListsExpanded, setArchivedListsExpanded] = useState(false);
+  const listMenuBtnRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
   const [docMenuOpen, setDocMenuOpen] = useState<string | null>(null);
   const docMenuBtnRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
   const [renamingDocId, setRenamingDocId] = useState<string | null>(null);
   const [docRenameValue, setDocRenameValue] = useState('');
   const docRenameInputRef = useRef<HTMLInputElement>(null);
+  const {
+    dndSensors,
+    dropIndicator,
+    handleDragCancel,
+    handleDragEnd,
+    handleDragOver,
+    handleDragPointerMove,
+    handleDragStart,
+    sortableItemIds,
+  } = useSpaceTreeReorderDnd({
+    folders,
+    onReorderDoc,
+    onReorderList,
+    rootLists,
+    spaceDocs,
+  });
 
+  if (!renaming && renameDraft.sourceName !== name) {
+    setRenameDraft({ sourceName: name, value: name });
+  }
+
+  const renameValue = renameDraft.value;
+  const setRenameValue = useCallback((value: string) => {
+    setRenameDraft((current) => ({ ...current, value }));
+  }, []);
 
   const spaceOverviewToolId = `pms-space-${spaceId}`;
-  const spaceWhiteboardsToolId = `pms-space-${spaceId}-whiteboards`;
-  const spaceActive = activeNavItemId === spaceOverviewToolId
-    || activeNavItemId.startsWith(`pms-space-${spaceId}-docs-`)
-    || activeNavItemId === spaceWhiteboardsToolId
-    || activeNavItemId.startsWith(`${spaceWhiteboardsToolId}-`)
-    || rootLists.some((list) => activeNavItemId === `pms-list-${list.id}`)
-    || folders.some(({ lists }) => lists.some((list) => activeNavItemId === `pms-list-${list.id}`));
+  const spaceActive =
+    activeNavItemId === spaceOverviewToolId ||
+    activeNavItemId.startsWith(`pms-space-${spaceId}-docs`) ||
+    activeNavItemId.startsWith(`pms-space-${spaceId}-whiteboards`) ||
+    rootLists.some((list) => activeNavItemId === `pms-list-${list.id}`) ||
+    folders.some(({ lists }) =>
+      lists.some((list) => activeNavItemId === `pms-list-${list.id}`),
+    ) ||
+    archivedLists.some((list) => activeNavItemId === `pms-list-${list.id}`);
+
+  useEffect(() => {
+    if (
+      archivedLists.some((list) => activeNavItemId === `pms-list-${list.id}`)
+    ) {
+      setArchivedListsExpanded(true);
+    }
+  }, [activeNavItemId, archivedLists]);
 
   const rootListsOrdered = useMemo(
-    () => [...rootLists].sort(
-      (left, right) => left.sort_order - right.sort_order || left.name.localeCompare(right.name, locale),
-    ),
+    () =>
+      Array.from(rootLists).sort(
+        (left, right) =>
+          left.sort_order - right.sort_order ||
+          left.name.localeCompare(right.name, locale),
+      ),
     [rootLists, locale],
   );
   const rootDocsOrdered = useMemo(
@@ -699,91 +342,24 @@ export const SpaceItem = ({
     [spaceDocs, locale],
   );
 
-  useEffect(() => {
-    setExpandedFolders((prev) => {
-      const next = new Set(prev);
-      for (const { folder } of folders) {
-        if (!prev.has(folder.id)) next.add(folder.id);
+  const expandedFolders = useMemo(() => {
+    const next = new Set<string>();
+    for (const { folder } of folders) {
+      if (!collapsedFolderIds.has(folder.id)) {
+        next.add(folder.id);
       }
-      return next.size === prev.size ? prev : next;
-    });
-  }, [folders]);
+    }
+    return next;
+  }, [collapsedFolderIds, folders]);
 
   const toggleFolder = (folderId: string) => {
-    setExpandedFolders((prev) => {
+    setCollapsedFolderIds((prev) => {
       const next = new Set(prev);
       if (next.has(folderId)) next.delete(folderId);
       else next.add(folderId);
       return next;
     });
   };
-
-  const [dropIndicator, setDropIndicator] = useState<{ overId: string; zone: FlatDropZone } | null>(null);
-  const dragPointerYRef = useRef<number>(0);
-  const dndSensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
-  const handleDragPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    dragPointerYRef.current = event.clientY;
-  }, []);
-  const allListsInSpace = useMemo(() => {
-    const out: PmsTaskList[] = [...rootLists];
-    for (const folder of folders) out.push(...folder.lists);
-    return out;
-  }, [folders, rootLists]);
-  const sortableItemIds = useMemo(
-    () => [...allListsInSpace.map((list) => list.id), ...spaceDocs.map((doc) => doc.id)],
-    [allListsInSpace, spaceDocs],
-  );
-  const handleDragStart = useCallback(() => {
-    setDropIndicator(null);
-  }, []);
-  const handleDragOver = useCallback((event: DragOverEvent) => {
-    const { active, over } = event;
-    if (!over || !active || over.id === active.id) {
-      setDropIndicator(null);
-      return;
-    }
-    const activeKind = active.data.current?.kind as 'list' | 'doc' | undefined;
-    const overKind = over.data.current?.kind as 'list' | 'doc' | undefined;
-    if (!activeKind || !overKind || activeKind !== overKind) {
-      setDropIndicator(null);
-      return;
-    }
-    const overRect = over.rect;
-    if (!overRect) return;
-    const pointerY = dragPointerYRef.current;
-    const pointerWithinRow = pointerY >= overRect.top && pointerY <= overRect.top + overRect.height;
-    let zone: FlatDropZone;
-    if (pointerWithinRow) {
-      zone = resolveFlatDropZone(pointerY, { top: overRect.top, height: overRect.height });
-    } else {
-      const activeRect = active.rect?.current?.translated ?? active.rect?.current?.initial ?? null;
-      if (!activeRect) return;
-      zone = overRect.top < activeRect.top ? 'before' : 'after';
-    }
-    setDropIndicator((current) => (
-      current && current.overId === over.id && current.zone === zone
-        ? current
-        : { overId: String(over.id), zone }
-    ));
-  }, []);
-  const handleDragEnd = useCallback(async (event: DragEndEvent) => {
-    const indicator = dropIndicator;
-    setDropIndicator(null);
-    if (!indicator) return;
-    const activeId = String(event.active.id);
-    if (activeId === indicator.overId) return;
-    const activeKind = event.active.data.current?.kind as 'list' | 'doc' | undefined;
-    const overKind = event.over?.data.current?.kind as 'list' | 'doc' | undefined;
-    if (!activeKind || activeKind !== overKind) return;
-    if (activeKind === 'list') {
-      await onReorderList(activeId, indicator.overId, indicator.zone);
-    } else {
-      await onReorderDoc(activeId, indicator.overId, indicator.zone);
-    }
-  }, [dropIndicator, onReorderDoc, onReorderList]);
 
   return (
     <div className="space-y-0.5">
@@ -795,22 +371,40 @@ export const SpaceItem = ({
           )}
         >
           <button
+            type="button"
+            aria-label={
+              expanded
+                ? t('pms.spaceTree.collapseSpace')
+                : t('pms.spaceTree.expandSpace')
+            }
             onClick={onToggle}
             className={cn(
               'ml-1 flex h-7 w-6 shrink-0 items-center justify-center rounded transition-colors',
-              spaceActive ? 'text-app-ink/50' : 'text-gray-600 dark:text-gray-300 hover:text-app-ink dark:hover:text-white',
+              spaceActive
+                ? 'text-app-ink/50'
+                : 'text-app-ink/70 dark:text-app-ink/80 hover:text-app-ink dark:hover:text-white',
             )}
-            title={expanded ? t('pms.spaceTree.collapseSpace') : t('pms.spaceTree.expandSpace')}
+            title={
+              expanded
+                ? t('pms.spaceTree.collapseSpace')
+                : t('pms.spaceTree.expandSpace')
+            }
           >
             {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
           </button>
 
           {renaming ? (
             <div className="flex min-w-0 flex-1 items-center gap-2 py-1.5 pl-0.5 pr-2">
-              <div className={cn('h-5 w-5 shrink-0 rounded flex items-center justify-center', iconColor)}>
+              <div
+                className={cn(
+                  'flex size-5 shrink-0 items-center justify-center rounded',
+                  iconColor,
+                )}
+              >
                 <Layout size={12} className="text-white" />
               </div>
               <input
+                aria-label={t('common:actions.rename')}
                 ref={renameInputRef}
                 value={renameValue}
                 onChange={(e) => setRenameValue(e.target.value)}
@@ -830,36 +424,62 @@ export const SpaceItem = ({
                   setRenaming(false);
                 }}
                 className="app-text-control-sm flex-1 min-w-0 rounded border border-blue-500 bg-transparent px-1 py-0.5 text-app-ink outline-none"
-                autoFocus
               />
             </div>
           ) : (
             <button
-              onClick={() => { if (!expanded) onToggle(); onNavigate(); }}
+              type="button"
+              onClick={() => {
+                if (!expanded) onToggle();
+                onNavigate();
+              }}
               className={cn(
                 'flex min-w-0 flex-1 items-center gap-2 py-1.5 pl-0.5 pr-2 text-left',
-                spaceActive ? 'text-app-ink' : 'text-gray-600 dark:text-gray-300 group-hover:text-app-ink dark:group-hover:text-white',
+                spaceActive
+                  ? 'text-app-ink'
+                  : 'text-app-ink/70 dark:text-app-ink/80 group-hover:text-app-ink dark:group-hover:text-white',
               )}
             >
-              <div className={cn('h-5 w-5 shrink-0 rounded flex items-center justify-center', iconColor)}>
+              <div
+                className={cn(
+                  'flex size-5 shrink-0 items-center justify-center rounded',
+                  iconColor,
+                )}
+              >
                 <Layout size={12} className="text-white" />
               </div>
-              <span className={cn('app-text-control-sm truncate', spaceActive && 'font-medium')}>{name}</span>
+              <span
+                className={cn(
+                  'app-text-control-sm truncate',
+                  spaceActive && 'font-medium',
+                )}
+              >
+                {name}
+              </span>
             </button>
           )}
         </div>
 
         {canCreateSpaceContent || canManageSpace ? (
           <>
-            <div className={cn('items-center gap-0.5 pr-1 shrink-0', addPopoverOpen || spaceMenuOpen ? 'flex' : 'hidden group-hover:flex')}>
+            <div
+              className={cn(
+                'items-center gap-0.5 pr-1 shrink-0',
+                addPopoverOpen || spaceMenuOpen
+                  ? 'flex'
+                  : 'hidden group-hover:flex',
+              )}
+            >
               {canCreateSpaceContent ? (
                 <button
+                  type="button"
+                  aria-label={t('pms.orderEditor.title', { spaceName: name })}
                   onClick={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
                     onOpenOrderEditor();
                   }}
-                  className="p-0.5 hover:bg-app-surface-hover rounded text-gray-600 dark:text-gray-300 hover:text-app-ink dark:hover:text-white transition-colors"
+                  className="p-0.5 hover:bg-app-surface-hover rounded text-app-ink/70 dark:text-app-ink/80 hover:text-app-ink dark:hover:text-white transition-colors"
                   title={t('pms.orderEditor.title', { spaceName: name })}
                 >
                   <ArrowUpDown size={14} />
@@ -867,13 +487,15 @@ export const SpaceItem = ({
               ) : null}
               {canManageSpace ? (
                 <button
+                  type="button"
+                  aria-label={t('pms.taskDetail.moreOptions')}
                   ref={spaceMenuBtnRef}
                   onClick={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
                     setSpaceMenuOpen((current) => !current);
                   }}
-                  className="p-0.5 hover:bg-app-surface-hover rounded text-gray-600 dark:text-gray-300 hover:text-app-ink dark:hover:text-white transition-colors"
+                  className="p-0.5 hover:bg-app-surface-hover rounded text-app-ink/70 dark:text-app-ink/80 hover:text-app-ink dark:hover:text-white transition-colors"
                   title={t('pms.taskDetail.moreOptions')}
                 >
                   <MoreHorizontal size={14} />
@@ -881,13 +503,15 @@ export const SpaceItem = ({
               ) : null}
               {canCreateSpaceContent ? (
                 <button
+                  type="button"
+                  aria-label={t('common:actions.add')}
                   ref={addBtnRef}
                   onClick={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
                     setAddPopoverOpen((current) => !current);
                   }}
-                  className="p-0.5 hover:bg-app-surface-hover rounded text-gray-600 dark:text-gray-300 hover:text-app-ink dark:hover:text-white transition-colors"
+                  className="p-0.5 hover:bg-app-surface-hover rounded text-app-ink/70 dark:text-app-ink/80 hover:text-app-ink dark:hover:text-white transition-colors"
                   title={t('common:actions.add')}
                 >
                   <Plus size={14} />
@@ -899,7 +523,10 @@ export const SpaceItem = ({
               open={spaceMenuOpen}
               anchorRef={spaceMenuBtnRef}
               onClose={() => setSpaceMenuOpen(false)}
-              onRename={() => { setRenameValue(name); setRenaming(true); }}
+              onRename={() => {
+                setRenameValue(name);
+                setRenaming(true);
+              }}
               onManageMembers={onManageMembers}
               canManage={canManageSpace}
               onDelete={onDeleteSpace}
@@ -911,189 +538,386 @@ export const SpaceItem = ({
               onCreateList={onAddList}
               onCreateFolder={onAddFolder}
               onOpenDocs={onOpenDocs}
-              onCreateWhiteboard={onCreateWhiteboard}
             />
           </>
         ) : null}
       </div>
 
-      <AnimatePresence initial={false}>
-        {expanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden"
-          >
-            <DndContext
-              sensors={dndSensors}
-              collisionDetection={closestCenter}
-              onDragStart={handleDragStart}
-              onDragOver={handleDragOver}
-              onDragEnd={handleDragEnd}
-              onDragCancel={() => setDropIndicator(null)}
+      <LazyMotion features={domAnimation}>
+        <AnimatePresence initial={false}>
+          {expanded && (
+            <m.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden"
             >
-              <SortableContext items={sortableItemIds} strategy={verticalListSortingStrategy}>
-                <div
-                  className="ml-4 pl-3 border-l border-app-border space-y-1"
-                  onPointerMove={handleDragPointerMove}
+              <DndContext
+                sensors={dndSensors}
+                collisionDetection={closestCenter}
+                onDragStart={handleDragStart}
+                onDragOver={handleDragOver}
+                onDragEnd={handleDragEnd}
+                onDragCancel={handleDragCancel}
+              >
+                <SortableContext
+                  items={sortableItemIds}
+                  strategy={verticalListSortingStrategy}
                 >
-              {folders.map(({ folder, lists }, folderIndex) => {
-                const isFolderExpanded = expandedFolders.has(folder.id);
-                const isFolderPopoverOpen = folderPopoverOpen === folder.id;
-                const isFolderMenuOpen = folderMenuOpen === folder.id;
-                const hasAnyPopup = isFolderPopoverOpen || isFolderMenuOpen;
-                const canMoveUp = folderIndex > 0;
-                const canMoveDown = folderIndex < folders.length - 1;
-                return (
-                  <div key={folder.id}>
-                    <div className="group/folder flex items-center">
-                      <button
-                        onClick={() => toggleFolder(folder.id)}
-                        className="sidebar-submenu-item flex-1 min-w-0"
-                      >
-                        <span className="relative flex h-[13px] w-[13px] shrink-0 items-center justify-center text-gray-500">
-                          <FolderOpen size={13} className="transition-opacity group-hover/folder:opacity-0" />
-                          <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover/folder:opacity-100">
-                            {isFolderExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-                          </span>
-                        </span>
-                        <span className="sidebar-submenu-label">{folder.name}</span>
-                      </button>
-                      {canCreateSpaceContent || canManageSpace ? (
-                        <>
-                          <div className={cn('items-center gap-0.5 pr-1 shrink-0', hasAnyPopup ? 'flex' : 'hidden group-hover/folder:flex')}>
-                            {canManageSpace ? (
-                              <button
-                                ref={(el) => { if (el) folderMenuBtnRefs.current.set(folder.id, el); }}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  setFolderMenuOpen((current) => (current === folder.id ? null : folder.id));
-                                }}
-                                className="p-0.5 hover:bg-app-surface-hover rounded text-gray-600 dark:text-gray-300 hover:text-app-ink dark:hover:text-white transition-colors"
-                                title={t('pms.spaceTree.folderOptions')}
-                              >
-                                <MoreHorizontal size={12} />
-                              </button>
-                            ) : null}
-                            {canCreateSpaceContent ? (
-                              <button
-                                ref={(el) => { if (el) folderAddBtnRefs.current.set(folder.id, el); }}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  setFolderPopoverOpen((current) => (current === folder.id ? null : folder.id));
-                                }}
-                                className="p-0.5 hover:bg-app-surface-hover rounded text-gray-600 dark:text-gray-300 hover:text-app-ink dark:hover:text-white transition-colors"
-                                title={t('pms.spaceTree.addToFolder')}
-                              >
-                                <Plus size={12} />
-                              </button>
+                  <div
+                    className="ml-4 pl-3 border-l border-app-border space-y-1"
+                    onPointerMove={handleDragPointerMove}
+                  >
+                    {folders.map(({ folder, lists }, folderIndex) => {
+                      const isFolderExpanded = expandedFolders.has(folder.id);
+                      const isFolderPopoverOpen =
+                        folderPopoverOpen === folder.id;
+                      const isFolderMenuOpen = folderMenuOpen === folder.id;
+                      const hasAnyPopup =
+                        isFolderPopoverOpen || isFolderMenuOpen;
+                      const canMoveUp = folderIndex > 0;
+                      const canMoveDown = folderIndex < folders.length - 1;
+                      return (
+                        <div key={folder.id}>
+                          <div className="group/folder flex items-center">
+                            <button
+                              type="button"
+                              aria-label={
+                                isFolderExpanded
+                                  ? t('pms.spaceTree.collapseSpace')
+                                  : t('pms.spaceTree.expandSpace')
+                              }
+                              onClick={() => toggleFolder(folder.id)}
+                              className="sidebar-submenu-item flex-1 min-w-0"
+                            >
+                              <span className="relative flex size-[13px] shrink-0 items-center justify-center text-app-ink/55">
+                                <FolderOpen
+                                  size={13}
+                                  className="transition-opacity group-hover/folder:opacity-0"
+                                />
+                                <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover/folder:opacity-100">
+                                  {isFolderExpanded ? (
+                                    <ChevronDown size={13} />
+                                  ) : (
+                                    <ChevronRight size={13} />
+                                  )}
+                                </span>
+                              </span>
+                              <span className="sidebar-submenu-label">
+                                {folder.name}
+                              </span>
+                            </button>
+                            {canCreateSpaceContent || canManageSpace ? (
+                              <>
+                                <div
+                                  className={cn(
+                                    'items-center gap-0.5 pr-1 shrink-0',
+                                    hasAnyPopup
+                                      ? 'flex'
+                                      : 'hidden group-hover/folder:flex',
+                                  )}
+                                >
+                                  {canManageSpace ? (
+                                    <button
+                                      type="button"
+                                      aria-label={t(
+                                        'pms.spaceTree.folderOptions',
+                                      )}
+                                      ref={(el) => {
+                                        if (el)
+                                          folderMenuBtnRefs.current.set(
+                                            folder.id,
+                                            el,
+                                          );
+                                      }}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        setFolderMenuOpen((current) =>
+                                          current === folder.id
+                                            ? null
+                                            : folder.id,
+                                        );
+                                      }}
+                                      className="p-0.5 hover:bg-app-surface-hover rounded text-app-ink/70 dark:text-app-ink/80 hover:text-app-ink dark:hover:text-white transition-colors"
+                                      title={t('pms.spaceTree.folderOptions')}
+                                    >
+                                      <MoreHorizontal size={12} />
+                                    </button>
+                                  ) : null}
+                                  {canCreateSpaceContent ? (
+                                    <button
+                                      type="button"
+                                      aria-label={t(
+                                        'pms.spaceTree.addToFolder',
+                                      )}
+                                      ref={(el) => {
+                                        if (el)
+                                          folderAddBtnRefs.current.set(
+                                            folder.id,
+                                            el,
+                                          );
+                                      }}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        setFolderPopoverOpen((current) =>
+                                          current === folder.id
+                                            ? null
+                                            : folder.id,
+                                        );
+                                      }}
+                                      className="p-0.5 hover:bg-app-surface-hover rounded text-app-ink/70 dark:text-app-ink/80 hover:text-app-ink dark:hover:text-white transition-colors"
+                                      title={t('pms.spaceTree.addToFolder')}
+                                    >
+                                      <Plus size={12} />
+                                    </button>
+                                  ) : null}
+                                </div>
+                                <FolderAddPopover
+                                  open={isFolderPopoverOpen}
+                                  anchorRef={{
+                                    current:
+                                      folderAddBtnRefs.current.get(folder.id) ??
+                                      null,
+                                  }}
+                                  onClose={() => setFolderPopoverOpen(null)}
+                                  onCreateList={() =>
+                                    onAddListToFolder(folder.id)
+                                  }
+                                  onCreateDoc={onOpenDocs}
+                                />
+                                <FolderContextMenu
+                                  open={isFolderMenuOpen}
+                                  anchorRef={{
+                                    current:
+                                      folderMenuBtnRefs.current.get(
+                                        folder.id,
+                                      ) ?? null,
+                                  }}
+                                  onClose={() => setFolderMenuOpen(null)}
+                                  onMoveUp={() => onMoveFolder(folder.id, 'up')}
+                                  onMoveDown={() =>
+                                    onMoveFolder(folder.id, 'down')
+                                  }
+                                  canMoveUp={canMoveUp}
+                                  canMoveDown={canMoveDown}
+                                  onRename={() =>
+                                    onRenameFolder(folder.id, folder.name)
+                                  }
+                                  onDelete={() => onDeleteFolder(folder.id)}
+                                />
+                              </>
                             ) : null}
                           </div>
-                          <FolderAddPopover
-                            open={isFolderPopoverOpen}
-                            anchorRef={{ current: folderAddBtnRefs.current.get(folder.id) ?? null }}
-                            onClose={() => setFolderPopoverOpen(null)}
-                            onCreateList={() => onAddListToFolder(folder.id)}
-                            onCreateDoc={onOpenDocs}
-                          />
-                          <FolderContextMenu
-                            open={isFolderMenuOpen}
-                            anchorRef={{ current: folderMenuBtnRefs.current.get(folder.id) ?? null }}
-                            onClose={() => setFolderMenuOpen(null)}
-                            onMoveUp={() => onMoveFolder(folder.id, 'up')}
-                            onMoveDown={() => onMoveFolder(folder.id, 'down')}
-                            canMoveUp={canMoveUp}
-                            canMoveDown={canMoveDown}
-                            onRename={() => onRenameFolder(folder.id, folder.name)}
-                            onDelete={() => onDeleteFolder(folder.id)}
-                          />
-                        </>
-                      ) : null}
-                    </div>
-                    <AnimatePresence initial={false}>
-                      {isFolderExpanded && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          className="overflow-hidden"
+                          <AnimatePresence initial={false}>
+                            {isFolderExpanded && (
+                              <m.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: 'auto', opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                className="overflow-hidden"
+                              >
+                                <div className="ml-4 space-y-0.5">
+                                  {lists.map((list) => (
+                                    <SortableListLink
+                                      key={list.id}
+                                      list={list}
+                                      activeNavItemId={activeNavItemId}
+                                      workspaceSlug={currentWorkspaceSlug}
+                                      canDrag={false}
+                                      dropZone={
+                                        dropIndicator &&
+                                        dropIndicator.overId === list.id
+                                          ? dropIndicator.zone
+                                          : null
+                                      }
+                                      menu={{
+                                        buttonRefs: listMenuBtnRefs,
+                                        isOpen: listMenuOpen === list.id,
+                                        onClose: () => setListMenuOpen(null),
+                                        onToggle: () =>
+                                          setListMenuOpen((current) =>
+                                            current === list.id
+                                              ? null
+                                              : list.id,
+                                          ),
+                                      }}
+                                      onArchive={
+                                        taskListRoleAllows(list.role, 'admin')
+                                          ? () =>
+                                              onArchiveList(list.id, list.name)
+                                          : undefined
+                                      }
+                                      onSettings={
+                                        taskListRoleAllows(list.role, 'admin')
+                                          ? () => onOpenListSettings(list.id)
+                                          : undefined
+                                      }
+                                      onRename={
+                                        taskListRoleAllows(list.role, 'admin')
+                                          ? () =>
+                                              onRenameList(list.id, list.name)
+                                          : undefined
+                                      }
+                                    />
+                                  ))}
+                                </div>
+                              </m.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      );
+                    })}
+
+                    {rootListsOrdered.map((list) => (
+                      <SortableListLink
+                        key={`list-${list.id}`}
+                        list={list}
+                        activeNavItemId={activeNavItemId}
+                        workspaceSlug={currentWorkspaceSlug}
+                        canDrag={false}
+                        dropZone={
+                          dropIndicator && dropIndicator.overId === list.id
+                            ? dropIndicator.zone
+                            : null
+                        }
+                        menu={{
+                          buttonRefs: listMenuBtnRefs,
+                          isOpen: listMenuOpen === list.id,
+                          onClose: () => setListMenuOpen(null),
+                          onToggle: () =>
+                            setListMenuOpen((current) =>
+                              current === list.id ? null : list.id,
+                            ),
+                        }}
+                        onArchive={
+                          taskListRoleAllows(list.role, 'admin')
+                            ? () => onArchiveList(list.id, list.name)
+                            : undefined
+                        }
+                        onSettings={
+                          taskListRoleAllows(list.role, 'admin')
+                            ? () => onOpenListSettings(list.id)
+                            : undefined
+                        }
+                        onRename={
+                          taskListRoleAllows(list.role, 'admin')
+                            ? () => onRenameList(list.id, list.name)
+                            : undefined
+                        }
+                      />
+                    ))}
+
+                    {rootDocsOrdered.map((doc) => (
+                      <SortableDocLink
+                        key={`doc-${doc.id}`}
+                        doc={doc}
+                        spaceId={spaceId}
+                        activeNavItemId={activeNavItemId}
+                        workspaceSlug={currentWorkspaceSlug}
+                        dropZone={
+                          dropIndicator && dropIndicator.overId === doc.id
+                            ? dropIndicator.zone
+                            : null
+                        }
+                        menu={{
+                          buttonRefs: docMenuBtnRefs,
+                          isOpen: docMenuOpen === doc.id,
+                          onClose: () => setDocMenuOpen(null),
+                          onToggle: () =>
+                            setDocMenuOpen((current) =>
+                              current === doc.id ? null : doc.id,
+                            ),
+                        }}
+                        onDelete={() => onDeleteDoc(doc.id)}
+                        permissions={{
+                          canDrag: false,
+                          canManageCollections,
+                        }}
+                        rename={{
+                          inputRef: docRenameInputRef,
+                          isRenaming: renamingDocId === doc.id,
+                          onBegin: () => {
+                            setDocRenameValue(doc.title);
+                            setRenamingDocId(doc.id);
+                          },
+                          onCancel: () => setRenamingDocId(null),
+                          onCommit: () => {
+                            const trimmed = docRenameValue.trim();
+                            if (trimmed && trimmed !== doc.title) {
+                              onRenameDoc(doc.id, trimmed);
+                            }
+                            setRenamingDocId(null);
+                          },
+                          onValueChange: setDocRenameValue,
+                          value: docRenameValue,
+                        }}
+                      />
+                    ))}
+
+                    {archivedLists.length > 0 ? (
+                      <div className="pt-1">
+                        <button
+                          type="button"
+                          aria-expanded={archivedListsExpanded}
+                          onClick={() =>
+                            setArchivedListsExpanded((current) => !current)
+                          }
+                          className="sidebar-submenu-item w-full text-app-ink/60"
                         >
+                          {archivedListsExpanded ? (
+                            <ChevronDown size={13} />
+                          ) : (
+                            <ChevronRight size={13} />
+                          )}
+                          <Archive size={13} />
+                          <span className="sidebar-submenu-label">
+                            {t('pms.archive.groupLabel', {
+                              count: archivedLists.length,
+                            })}
+                          </span>
+                        </button>
+                        {archivedListsExpanded ? (
                           <div className="ml-4 space-y-0.5">
-                            {lists.map((list) => (
+                            {archivedLists.map((list) => (
                               <SortableListLink
-                                key={list.id}
+                                key={`archived-list-${list.id}`}
                                 list={list}
                                 activeNavItemId={activeNavItemId}
+                                workspaceSlug={currentWorkspaceSlug}
                                 canDrag={false}
-                                dropZone={dropIndicator && dropIndicator.overId === list.id ? dropIndicator.zone : null}
+                                dropZone={null}
+                                menu={{
+                                  buttonRefs: listMenuBtnRefs,
+                                  isOpen: listMenuOpen === list.id,
+                                  onClose: () => setListMenuOpen(null),
+                                  onToggle: () =>
+                                    setListMenuOpen((current) =>
+                                      current === list.id ? null : list.id,
+                                    ),
+                                }}
+                                onRestore={
+                                  taskListRoleAllows(list.role, 'admin')
+                                    ? () => onRestoreList(list.id, list.name)
+                                    : undefined
+                                }
+                                onDelete={
+                                  taskListRoleAllows(list.role, 'admin')
+                                    ? () => onDeleteList(list.id, list.name)
+                                    : undefined
+                                }
                               />
                             ))}
                           </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
-                );
-              })}
-
-              {rootListsOrdered.map((list) => (
-                <SortableListLink
-                  key={`list-${list.id}`}
-                  list={list}
-                  activeNavItemId={activeNavItemId}
-                  canDrag={false}
-                  dropZone={dropIndicator && dropIndicator.overId === list.id ? dropIndicator.zone : null}
-                />
-              ))}
-
-              {rootDocsOrdered.map((doc) => (
-                <SortableDocLink
-                  key={`doc-${doc.id}`}
-                  doc={doc}
-                  spaceId={spaceId}
-                  activeNavItemId={activeNavItemId}
-                  canDrag={false}
-                  canManageCollections={canManageCollections}
-                  dropZone={dropIndicator && dropIndicator.overId === doc.id ? dropIndicator.zone : null}
-                  isRenaming={renamingDocId === doc.id}
-                  docRenameValue={docRenameValue}
-                  docRenameInputRef={docRenameInputRef}
-                  docMenuBtnRefs={docMenuBtnRefs}
-                  isMenuOpen={docMenuOpen === doc.id}
-                  onRenameValueChange={setDocRenameValue}
-                  onCommitRename={() => {
-                    const trimmed = docRenameValue.trim();
-                    if (trimmed && trimmed !== doc.title) onRenameDoc(doc.id, trimmed);
-                    setRenamingDocId(null);
-                  }}
-                  onCancelRename={() => setRenamingDocId(null)}
-                  onBeginRename={() => { setDocRenameValue(doc.title); setRenamingDocId(doc.id); }}
-                  onDelete={() => onDeleteDoc(doc.id)}
-                  onToggleMenu={() => setDocMenuOpen((c) => (c === doc.id ? null : doc.id))}
-                  onCloseMenu={() => setDocMenuOpen(null)}
-                />
-              ))}
-
-              <button
-                type="button"
-                onClick={onOpenWhiteboards}
-                className={cn(
-                  'sidebar-submenu-item w-full text-left',
-                  (activeNavItemId === spaceWhiteboardsToolId
-                    || activeNavItemId.startsWith(`${spaceWhiteboardsToolId}-`))
-                    && 'sidebar-submenu-item-active',
-                )}
-              >
-                <PencilRuler size={13} className="text-gray-500 shrink-0" />
-                <span className="sidebar-submenu-label">{t('pms.spaceOverview.whiteboards')}</span>
-              </button>
-                </div>
-              </SortableContext>
-            </DndContext>
-          </motion.div>
-        )}
-      </AnimatePresence>
+                </SortableContext>
+              </DndContext>
+            </m.div>
+          )}
+        </AnimatePresence>
+      </LazyMotion>
     </div>
   );
-};
+}

@@ -12,14 +12,15 @@ from sqlalchemy.orm import Session
 from ai_do_api.core.i18n import localized_http_exception
 from ai_do_api.core.principal import CallerPrincipal
 from ai_do_api.core.settings import get_settings
-from ai_do_api.domains.ai.registry import (
-    AiCapabilityRegistry,
-    ApprovalPreview,
-    PreviewField,
-    WorkspaceContext,
-)
+from ai_do_api.domains.ai.registry import AiCapabilityRegistry
 from ai_do_api.domains.auth.models import User, Workspace
 from ai_do_api.domains.planner import service as planner_service
+from ai_do_api.domains.planner.approval_preview import (
+    build_create_event_preview,
+    build_delete_event_preview,
+    build_update_event_preview,
+)
+from ai_do_api.domains.planner.event_time import parse_iso_or_date
 
 
 class _ToolArgsModel(BaseModel):
@@ -46,7 +47,6 @@ class UpdateEventArgs(_ToolArgsModel):
     start_at: datetime | None = None
     end_at: datetime | None = None
     description: str | None = Field(default=None, max_length=4000)
-    visibility: Literal["private", "public"] | None = None
     location: str | None = Field(default=None, max_length=240)
 
     @model_validator(mode="after")
@@ -58,7 +58,7 @@ class UpdateEventArgs(_ToolArgsModel):
                 {},
             )
         if self.model_fields_set.intersection(
-            {"title", "start_at", "end_at", "description", "visibility", "location"}
+            {"title", "start_at", "end_at", "description", "location"}
         ):
             return self
         raise PydanticCustomError(
@@ -77,7 +77,7 @@ def _parse_optional_range_arg(arguments: Mapping[str, Any], key: str):
     if value is None:
         return None
     try:
-        return planner_service.parse_iso_or_date(str(value))
+        return parse_iso_or_date(str(value))
     except ValueError as exc:
         raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -94,9 +94,9 @@ def _list_events(
     user: User,
     arguments: Mapping[str, Any],
 ) -> dict[str, Any]:
+    del workspace
     result = planner_service.list_events(
         db,
-        workspace=workspace,
         principal=principal,
         user=user,
         from_at=_parse_optional_range_arg(arguments, "from"),
@@ -148,7 +148,6 @@ def _update_event(
         start_at=arguments.get("start_at"),
         end_at=arguments.get("end_at"),
         description=arguments.get("description"),
-        visibility=arguments.get("visibility"),
         location=arguments.get("location"),
         approved_call_id=approved_call_id,
     )
@@ -173,84 +172,22 @@ def _delete_event(
     )
 
 
-def _preview_values(parsed_args: BaseModel | Mapping[str, Any]) -> dict[str, Any]:
-    if isinstance(parsed_args, BaseModel):
-        return parsed_args.model_dump(mode="python", by_alias=True, exclude_none=True)
-    return dict(parsed_args)
-
-
-def _build_create_event_preview(
-    principal: CallerPrincipal,
-    workspace: WorkspaceContext,
-    parsed_args: BaseModel | Mapping[str, Any],
-) -> ApprovalPreview:
-    values = _preview_values(parsed_args)
-    return ApprovalPreview(
-        title=f"[{workspace.display_name}] Create planner event",
-        summary=str(values.get("description") or "Create a planner event from AI.").strip()
-        or "Create a planner event from AI.",
-        fields=(
-            PreviewField(label="Title", value=str(values.get("title", "-"))),
-            PreviewField(label="Start", value=str(values.get("start_at", "-"))),
-            PreviewField(label="Scope", value=str(values.get("scope", "personal"))),
-        ),
-    )
-
-
-def _build_update_event_preview(
-    principal: CallerPrincipal,
-    workspace: WorkspaceContext,
-    parsed_args: BaseModel | Mapping[str, Any],
-) -> ApprovalPreview:
-    values = _preview_values(parsed_args)
-    fields: list[PreviewField] = [
-        PreviewField(label="Event ID", value=str(values.get("event_id", "-"))),
-    ]
-    if values.get("title") is not None:
-        fields.append(PreviewField(label="Title", value=str(values["title"])))
-    if values.get("start_at") is not None:
-        fields.append(PreviewField(label="Start", value=str(values["start_at"])))
-    if values.get("visibility") is not None:
-        fields.append(PreviewField(label="Visibility", value=str(values["visibility"])))
-    return ApprovalPreview(
-        title=f"[{workspace.display_name}] Update planner event",
-        summary=str(values.get("description") or "Update a planner event from AI.").strip()
-        or "Update a planner event from AI.",
-        fields=tuple(fields),
-    )
-
-
-def _build_delete_event_preview(
-    principal: CallerPrincipal,
-    workspace: WorkspaceContext,
-    parsed_args: BaseModel | Mapping[str, Any],
-) -> ApprovalPreview:
-    values = _preview_values(parsed_args)
-    return ApprovalPreview(
-        title=f"[{workspace.display_name}] Delete planner event",
-        summary="Delete a planner event from AI.",
-        fields=(
-            PreviewField(label="Event ID", value=str(values.get("event_id", "-"))),
-        ),
-    )
-
-
 def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
     registry.register_preview_builder(
         preview_builder_id="planner.create_event_preview",
-        builder=_build_create_event_preview,
+        builder=build_create_event_preview,
     )
     registry.register_preview_builder(
         preview_builder_id="planner.update_event_preview",
-        builder=_build_update_event_preview,
+        builder=build_update_event_preview,
     )
     registry.register_preview_builder(
         preview_builder_id="planner.delete_event_preview",
-        builder=_build_delete_event_preview,
+        builder=build_delete_event_preview,
     )
     registry.register_tool(
         name="planner.list_events",
-        description="List the caller's planner events in the current workspace.",
+        description="List the caller's personal planner events.",
         owner_domain="planner",
         handler=_list_events,
         args_model=ListEventsArgs,
@@ -259,7 +196,7 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
         return
     registry.register_tool(
         name="planner.create_event",
-        description="Create a planner event in the current workspace.",
+        description="Create an event in the caller's personal planner.",
         owner_domain="planner",
         handler=_create_event,
         args_model=CreateEventArgs,
@@ -270,7 +207,7 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
     )
     registry.register_tool(
         name="planner.update_event",
-        description="Update one planner event in the current workspace.",
+        description="Update one event in the caller's personal planner.",
         owner_domain="planner",
         handler=_update_event,
         args_model=UpdateEventArgs,
@@ -281,7 +218,7 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
     )
     registry.register_tool(
         name="planner.delete_event",
-        description="Delete one planner event in the current workspace.",
+        description="Delete one event in the caller's personal planner.",
         owner_domain="planner",
         handler=_delete_event,
         args_model=DeleteEventArgs,

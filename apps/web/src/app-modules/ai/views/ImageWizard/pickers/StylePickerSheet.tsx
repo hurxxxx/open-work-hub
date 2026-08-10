@@ -94,5 +94,3 @@ export function StylePickerSheet({
     </Dialog>
   );
 }
-
-export default StylePickerSheet;

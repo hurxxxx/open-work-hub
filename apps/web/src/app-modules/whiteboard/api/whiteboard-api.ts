@@ -2,6 +2,18 @@ import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
+import {
+  normalizeWhiteboardScene as normalizeWhiteboardSceneValue,
+  type WhiteboardScene,
+} from './whiteboard-scene-codec';
+import {
+  whiteboardApiRoutes,
+  type WhiteboardHubRouteParams,
+} from './whiteboard-routes';
+
+export type { WhiteboardScene } from './whiteboard-scene-codec';
+export type WhiteboardVisibility = 'personal' | 'workspace';
+
 export class WhiteboardApiError extends Error {
   constructor(
     public readonly status: number,
@@ -18,7 +30,11 @@ async function request<T>(
   workspaceSlug?: string | null,
 ): Promise<T> {
   try {
-    return await apiFetchJson<T>(rewriteWorkspaceApiPath(path, workspaceSlug), token, init);
+    return await apiFetchJson<T>(
+      rewriteWorkspaceApiPath(path, workspaceSlug),
+      token,
+      init,
+    );
   } catch (error) {
     if (error instanceof ApiRequestError) {
       throw new WhiteboardApiError(error.status, error.message);
@@ -27,40 +43,48 @@ async function request<T>(
   }
 }
 
-export interface WhiteboardScene {
-  elements: unknown[];
-  appState: Record<string, unknown>;
-  files: Record<string, unknown>;
-  [key: string]: unknown;
-}
-
-export type WhiteboardPrimaryContainer = ApiSchema<'WhiteboardPrimaryContainer'>;
-export type WhiteboardContainerItem = ApiSchema<'WhiteboardContainerItem'>;
+export type WhiteboardPrimaryTarget = ApiSchema<'WhiteboardPrimaryTarget'>;
+export type WhiteboardTargetItem = ApiSchema<'WhiteboardTargetItem'>;
 export type WhiteboardHubItem = Omit<
   ApiSchema<'WhiteboardHubItem'>,
-  'containers' | 'last_viewed_at' | 'primary_container' | 'source_deeplink' | 'source_ref' | 'trashed_at'
+  | 'targets'
+  | 'last_viewed_at'
+  | 'primary_target'
+  | 'source_deeplink'
+  | 'source_ref'
+  | 'trashed_at'
 > & {
   source_ref: string | null;
-  primary_container: WhiteboardPrimaryContainer | null;
-  containers: WhiteboardContainerItem[];
+  primary_target: WhiteboardPrimaryTarget | null;
+  targets: WhiteboardTargetItem[];
   source_deeplink: string | null;
   trashed_at: string | null;
   last_viewed_at: string | null;
 };
-export type WhiteboardDetail = WhiteboardHubItem & Omit<ApiSchema<'WhiteboardDetail'>, keyof WhiteboardHubItem | 'scene'> & {
-  scene: WhiteboardScene;
-};
-export type WhiteboardHubResponse = Omit<ApiSchema<'WhiteboardHubResponse'>, 'items'> & {
+export type WhiteboardDetail = WhiteboardHubItem &
+  Omit<ApiSchema<'WhiteboardDetail'>, keyof WhiteboardHubItem | 'scene'> & {
+    scene: WhiteboardScene;
+  };
+export type WhiteboardHubResponse = Omit<
+  ApiSchema<'WhiteboardHubResponse'>,
+  'items'
+> & {
   items: WhiteboardHubItem[];
 };
-export type WhiteboardContextSlotResponse = Omit<ApiSchema<'WhiteboardContextSlotResponse'>, 'item'> & {
+export type WhiteboardContextSlotResponse = Omit<
+  ApiSchema<'WhiteboardContextSlotResponse'>,
+  'item'
+> & {
   item: WhiteboardDetail | null;
 };
 export type ShareableUserItem = ApiSchema<'ShareableUserItem'>;
 export type WhiteboardUserShareItem = ApiSchema<'WhiteboardUserShareItem'>;
 export type WhiteboardLinkShareItem = ApiSchema<'WhiteboardLinkShareItem'>;
 export type WhiteboardSharingResponse = ApiSchema<'WhiteboardSharingResponse'>;
-export type ResolveWhiteboardSharedLinkResponse = Omit<ApiSchema<'ResolveWhiteboardSharedLinkResponse'>, 'item'> & {
+export type ResolveWhiteboardSharedLinkResponse = Omit<
+  ApiSchema<'ResolveWhiteboardSharedLinkResponse'>,
+  'item'
+> & {
   item: WhiteboardHubItem;
 };
 export type WhiteboardCollabSession = Omit<
@@ -71,102 +95,24 @@ export type WhiteboardCollabSession = Omit<
   snapshot_scene: WhiteboardScene | null;
   yjs_state: string | null;
 };
-export type WhiteboardCollabSnapshotResponse = ApiSchema<'WhiteboardCollabSnapshotResponse'>;
-
-function sceneElementId(element: unknown): string | null {
-  if (!element || typeof element !== 'object') return null;
-  const id = (element as { id?: unknown }).id;
-  return typeof id === 'string' && id ? id : null;
-}
-
-function compactSceneElements(elements: unknown[]): unknown[] {
-  const orderedIds: string[] = [];
-  const byId = new Map<string, unknown>();
-  const anonymous: unknown[] = [];
-
-  for (const element of elements) {
-    const id = sceneElementId(element);
-    if (!id) {
-      anonymous.push(element);
-      continue;
-    }
-    if (!byId.has(id)) {
-      orderedIds.push(id);
-    }
-    byId.set(id, element);
-  }
-
-  return [
-    ...orderedIds.map((id) => byId.get(id)).filter((element): element is unknown => element !== undefined),
-    ...anonymous,
-  ];
-}
+export type WhiteboardCollabSnapshotResponse =
+  ApiSchema<'WhiteboardCollabSnapshotResponse'>;
 
 export function normalizeWhiteboardScene(value: unknown): WhiteboardScene {
-  if (!value || typeof value !== 'object') {
-    return { elements: [], appState: {}, files: {} };
-  }
-  const scene = value as Record<string, unknown>;
-  return {
-    ...scene,
-    elements: compactSceneElements(Array.isArray(scene.elements) ? scene.elements : []),
-    appState: scene.appState && typeof scene.appState === 'object'
-      ? scene.appState as Record<string, unknown>
-      : {},
-    files: scene.files && typeof scene.files === 'object'
-      ? scene.files as Record<string, unknown>
-      : {},
-  };
-}
-
-export function getWhiteboardItemPrimaryContainerId(
-  item: Pick<WhiteboardHubItem, 'primary_container'>,
-  app?: string,
-  type?: string,
-): string | null {
-  const container = item.primary_container;
-  if (!container) return null;
-  if (app && container.app !== app) return null;
-  if (type && container.type !== type) return null;
-  return container.id;
-}
-
-export function getWhiteboardItemPrimaryContainerSortOrder(
-  item: Pick<WhiteboardHubItem, 'containers' | 'primary_container'>,
-): number {
-  return item.primary_container?.sort_order ?? item.containers[0]?.sort_order ?? 0;
+  return normalizeWhiteboardSceneValue(value);
 }
 
 export function listWhiteboardHub(
   token: string,
-  params: {
-    view?: string;
-    q?: string;
-    sort_by?: string;
-    sort_dir?: string;
-    page?: number;
-    page_size?: number;
-    source_app?: string;
-    source_kind?: string;
-    container_app?: string;
-    container_type?: string;
-    container_id?: string;
-  } = {},
+  params: WhiteboardHubRouteParams = {},
   workspaceSlug?: string | null,
 ): Promise<WhiteboardHubResponse> {
-  const qs = new URLSearchParams();
-  if (params.view) qs.set('view', params.view);
-  if (params.q) qs.set('q', params.q);
-  if (params.sort_by) qs.set('sort_by', params.sort_by);
-  if (params.sort_dir) qs.set('sort_dir', params.sort_dir);
-  if (params.page) qs.set('page', String(params.page));
-  if (params.page_size) qs.set('page_size', String(params.page_size));
-  if (params.source_app) qs.set('source_app', params.source_app);
-  if (params.source_kind) qs.set('source_kind', params.source_kind);
-  if (params.container_app) qs.set('container_app', params.container_app);
-  if (params.container_type) qs.set('container_type', params.container_type);
-  if (params.container_id) qs.set('container_id', params.container_id);
-  return request<WhiteboardHubResponse>(`/api/v1/whiteboard/hub?${qs}`, token, {}, workspaceSlug);
+  return request<WhiteboardHubResponse>(
+    whiteboardApiRoutes.hub(params),
+    token,
+    {},
+    workspaceSlug,
+  );
 }
 
 export function createWhiteboard(
@@ -178,7 +124,7 @@ export function createWhiteboard(
     source_kind?: string;
     source_ref?: string | null;
     generation_kind?: string;
-    primary_container?: {
+    primary_target?: {
       app: string;
       type: string;
       id: string;
@@ -188,7 +134,7 @@ export function createWhiteboard(
   workspaceSlug?: string | null,
 ): Promise<WhiteboardDetail> {
   return request<WhiteboardDetail>(
-    '/api/v1/whiteboard/items',
+    whiteboardApiRoutes.items(),
     token,
     {
       method: 'POST',
@@ -204,7 +150,7 @@ export function getWhiteboard(
   workspaceSlug?: string | null,
 ): Promise<WhiteboardDetail> {
   return request<WhiteboardDetail>(
-    `/api/v1/whiteboard/items/${itemId}`,
+    whiteboardApiRoutes.item(itemId),
     token,
     {},
     workspaceSlug,
@@ -216,7 +162,7 @@ export function getSharedWhiteboard(
   shareToken: string,
 ): Promise<WhiteboardDetail> {
   return request<WhiteboardDetail>(
-    `/api/v1/whiteboard/shared-links/${shareToken}/item`,
+    whiteboardApiRoutes.sharedLinkItem(shareToken),
     token,
   );
 }
@@ -231,7 +177,7 @@ export function updateWhiteboard(
   workspaceSlug?: string | null,
 ): Promise<WhiteboardDetail> {
   return request<WhiteboardDetail>(
-    `/api/v1/whiteboard/items/${itemId}`,
+    whiteboardApiRoutes.item(itemId),
     token,
     {
       method: 'PATCH',
@@ -250,7 +196,7 @@ export function updateSharedWhiteboard(
   },
 ): Promise<WhiteboardDetail> {
   return request<WhiteboardDetail>(
-    `/api/v1/whiteboard/shared-links/${shareToken}/item`,
+    whiteboardApiRoutes.sharedLinkItem(shareToken),
     token,
     {
       method: 'PATCH',
@@ -265,7 +211,7 @@ export function getWhiteboardCollabSession(
   workspaceSlug?: string | null,
 ): Promise<WhiteboardCollabSession> {
   return request<WhiteboardCollabSession>(
-    `/api/v1/whiteboard/collab/items/${itemId}/session`,
+    whiteboardApiRoutes.collabSession(itemId),
     token,
     {},
     workspaceSlug,
@@ -282,7 +228,7 @@ export function saveWhiteboardCollabSnapshot(
   workspaceSlug?: string | null,
 ): Promise<WhiteboardCollabSnapshotResponse> {
   return request<WhiteboardCollabSnapshotResponse>(
-    `/api/v1/whiteboard/collab/items/${itemId}/snapshot`,
+    whiteboardApiRoutes.collabSnapshot(itemId),
     token,
     {
       method: 'PUT',
@@ -298,7 +244,55 @@ export function deleteWhiteboard(
   workspaceSlug?: string | null,
 ): Promise<void> {
   return request<void>(
-    `/api/v1/whiteboard/items/${itemId}`,
+    whiteboardApiRoutes.item(itemId),
+    token,
+    { method: 'DELETE' },
+    workspaceSlug,
+  );
+}
+
+export function restoreWhiteboard(
+  token: string,
+  itemId: string,
+  workspaceSlug?: string | null,
+): Promise<WhiteboardDetail> {
+  return request<WhiteboardDetail>(
+    whiteboardApiRoutes.itemRestore(itemId),
+    token,
+    { method: 'POST' },
+    workspaceSlug,
+  );
+}
+
+export function updateWhiteboardTarget(
+  token: string,
+  itemId: string,
+  payload: {
+    app: string;
+    type: string;
+    id: string;
+    sort_order?: number;
+  },
+  workspaceSlug?: string | null,
+): Promise<WhiteboardDetail> {
+  return request<WhiteboardDetail>(
+    whiteboardApiRoutes.itemTarget(itemId),
+    token,
+    {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    },
+    workspaceSlug,
+  );
+}
+
+export function deleteWhiteboardTarget(
+  token: string,
+  itemId: string,
+  workspaceSlug?: string | null,
+): Promise<WhiteboardDetail> {
+  return request<WhiteboardDetail>(
+    whiteboardApiRoutes.itemTarget(itemId),
     token,
     { method: 'DELETE' },
     workspaceSlug,
@@ -311,7 +305,7 @@ export function permanentlyDeleteWhiteboard(
   workspaceSlug?: string | null,
 ): Promise<void> {
   return request<void>(
-    `/api/v1/whiteboard/items/${itemId}/permanent`,
+    whiteboardApiRoutes.itemPermanent(itemId),
     token,
     { method: 'DELETE' },
     workspaceSlug,
@@ -324,7 +318,7 @@ export function toggleWhiteboardFavorite(
   workspaceSlug?: string | null,
 ): Promise<{ is_favorite: boolean }> {
   return request<{ is_favorite: boolean }>(
-    `/api/v1/whiteboard/items/${itemId}/favorite`,
+    whiteboardApiRoutes.itemFavorite(itemId),
     token,
     { method: 'PATCH' },
     workspaceSlug,
@@ -337,7 +331,7 @@ export function recordWhiteboardView(
   workspaceSlug?: string | null,
 ): Promise<void> {
   return request<void>(
-    `/api/v1/whiteboard/items/${itemId}/view`,
+    whiteboardApiRoutes.itemView(itemId),
     token,
     { method: 'POST' },
     workspaceSlug,
@@ -348,11 +342,9 @@ export function recordSharedWhiteboardView(
   token: string,
   shareToken: string,
 ): Promise<void> {
-  return request<void>(
-    `/api/v1/whiteboard/shared-links/${shareToken}/view`,
-    token,
-    { method: 'POST' },
-  );
+  return request<void>(whiteboardApiRoutes.sharedLinkView(shareToken), token, {
+    method: 'POST',
+  });
 }
 
 export function getWhiteboardContextSlot(
@@ -360,9 +352,8 @@ export function getWhiteboardContextSlot(
   context: { app: string; type: string; id: string },
   workspaceSlug?: string | null,
 ): Promise<WhiteboardContextSlotResponse> {
-  const qs = new URLSearchParams(context);
   return request<WhiteboardContextSlotResponse>(
-    `/api/v1/whiteboard/contexts/slot?${qs}`,
+    whiteboardApiRoutes.contextSlot(context),
     token,
     {},
     workspaceSlug,
@@ -375,7 +366,7 @@ export function createWhiteboardContextSlot(
   workspaceSlug?: string | null,
 ): Promise<WhiteboardDetail> {
   return request<WhiteboardDetail>(
-    '/api/v1/whiteboard/contexts/slot',
+    whiteboardApiRoutes.contextSlot(),
     token,
     {
       method: 'POST',
@@ -391,7 +382,7 @@ export function attachWhiteboardContextSlot(
   workspaceSlug?: string | null,
 ): Promise<WhiteboardDetail> {
   return request<WhiteboardDetail>(
-    '/api/v1/whiteboard/contexts/slot',
+    whiteboardApiRoutes.contextSlot(),
     token,
     {
       method: 'PUT',
@@ -406,9 +397,8 @@ export function detachWhiteboardContextSlot(
   context: { app: string; type: string; id: string },
   workspaceSlug?: string | null,
 ): Promise<void> {
-  const qs = new URLSearchParams(context);
   return request<void>(
-    `/api/v1/whiteboard/contexts/slot?${qs}`,
+    whiteboardApiRoutes.contextSlot(context),
     token,
     { method: 'DELETE' },
     workspaceSlug,
@@ -420,10 +410,8 @@ export function listWhiteboardShareableUsers(
   q = '',
   workspaceSlug?: string | null,
 ): Promise<ShareableUserItem[]> {
-  const qs = new URLSearchParams();
-  if (q) qs.set('q', q);
   return request<ShareableUserItem[]>(
-    `/api/v1/whiteboard/shareable-users?${qs}`,
+    whiteboardApiRoutes.shareableUsers(q),
     token,
     {},
     workspaceSlug,
@@ -436,7 +424,7 @@ export function getWhiteboardSharing(
   workspaceSlug?: string | null,
 ): Promise<WhiteboardSharingResponse> {
   return request<WhiteboardSharingResponse>(
-    `/api/v1/whiteboard/items/${itemId}/sharing`,
+    whiteboardApiRoutes.sharing(itemId),
     token,
     {},
     workspaceSlug,
@@ -451,7 +439,7 @@ export function upsertWhiteboardUserShare(
   workspaceSlug?: string | null,
 ): Promise<WhiteboardSharingResponse> {
   return request<WhiteboardSharingResponse>(
-    `/api/v1/whiteboard/items/${itemId}/sharing/users/${userId}`,
+    whiteboardApiRoutes.userShare(itemId, userId),
     token,
     {
       method: 'PUT',
@@ -468,7 +456,7 @@ export function deleteWhiteboardUserShare(
   workspaceSlug?: string | null,
 ): Promise<WhiteboardSharingResponse> {
   return request<WhiteboardSharingResponse>(
-    `/api/v1/whiteboard/items/${itemId}/sharing/users/${userId}`,
+    whiteboardApiRoutes.userShare(itemId, userId),
     token,
     { method: 'DELETE' },
     workspaceSlug,
@@ -478,11 +466,15 @@ export function deleteWhiteboardUserShare(
 export function upsertWhiteboardLinkShare(
   token: string,
   itemId: string,
-  payload: { access_level: 'read' | 'edit'; active?: boolean; regenerate_token?: boolean },
+  payload: {
+    access_level: 'read' | 'edit';
+    active?: boolean;
+    regenerate_token?: boolean;
+  },
   workspaceSlug?: string | null,
 ): Promise<WhiteboardSharingResponse> {
   return request<WhiteboardSharingResponse>(
-    `/api/v1/whiteboard/items/${itemId}/sharing/link`,
+    whiteboardApiRoutes.linkShare(itemId),
     token,
     {
       method: 'PUT',
@@ -498,7 +490,7 @@ export function deleteWhiteboardLinkShare(
   workspaceSlug?: string | null,
 ): Promise<WhiteboardSharingResponse> {
   return request<WhiteboardSharingResponse>(
-    `/api/v1/whiteboard/items/${itemId}/sharing/link`,
+    whiteboardApiRoutes.linkShare(itemId),
     token,
     { method: 'DELETE' },
     workspaceSlug,
@@ -510,7 +502,7 @@ export function resolveWhiteboardSharedLink(
   shareToken: string,
 ): Promise<ResolveWhiteboardSharedLinkResponse> {
   return request<ResolveWhiteboardSharedLinkResponse>(
-    `/api/v1/whiteboard/shared-links/${shareToken}`,
+    whiteboardApiRoutes.sharedLink(shareToken),
     token,
   );
 }

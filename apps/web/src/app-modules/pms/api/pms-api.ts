@@ -1,14 +1,21 @@
-import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
+import { apiFetchJsonWithMappedError } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
 import { i18n } from '@/src/platform/i18n';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
-export type PmsTaskList = Omit<ApiSchema<'TaskListItem'>, 'folder_id' | 'folder_name'> & {
+export type PmsTaskList = Omit<
+  ApiSchema<'TaskListItem'>,
+  'folder_id' | 'folder_name'
+> & {
   folder_id: string | null;
   folder_name: string | null;
+  status_mode: 'inherit' | 'custom';
 };
 
-export type PmsTaskListsResponse = Omit<ApiSchema<'TaskListsResponse'>, 'items'> & {
+export type PmsTaskListsResponse = Omit<
+  ApiSchema<'TaskListsResponse'>,
+  'items'
+> & {
   items: PmsTaskList[];
 };
 
@@ -18,7 +25,10 @@ export type PmsSpaceMember = ApiSchema<'SpaceMemberItem'>;
 
 export type PmsTaskListMember = PmsSpaceMember;
 
-export type PmsSpaceMembersResponse = Omit<ApiSchema<'SpaceMemberListResponse'>, 'items'> & {
+export type PmsSpaceMembersResponse = Omit<
+  ApiSchema<'SpaceMemberListResponse'>,
+  'items'
+> & {
   items: PmsSpaceMember[];
 };
 
@@ -26,36 +36,67 @@ export type PmsUserSummary = ApiSchema<'SpaceUserItem'>;
 
 export type PmsMilestone = ApiSchema<'MilestoneItem'>;
 
-export type PmsMilestonesResponse = Omit<ApiSchema<'MilestoneListResponse'>, 'items'> & {
+export type PmsMilestonesResponse = Omit<
+  ApiSchema<'MilestoneListResponse'>,
+  'items'
+> & {
   items: PmsMilestone[];
 };
 
 export type PmsLabel = ApiSchema<'LabelItem'>;
 
-export type PmsIssue = Omit<
-  ApiSchema<'IssueListItem'>,
-  'description_blocks' | 'estimate_hours' | 'labels' | 'parent_id' | 'recurrence_rule'
+export type PmsTask = Omit<
+  ApiSchema<'TaskItem'>,
+  'description_blocks' | 'labels' | 'parent_id' | 'recurrence_rule'
 > & {
   description_blocks: Record<string, unknown>[] | null;
   parent_id: string | null;
-  estimate_hours: number | null;
   recurrence_rule: string | null;
   labels: PmsLabel[];
 };
 
-export type PmsIssuesResponse = Omit<ApiSchema<'IssueListResponse'>, 'items'> & {
-  items: PmsIssue[];
+export type PmsTasksResponse = Omit<ApiSchema<'TaskItemsResponse'>, 'items'> & {
+  items: PmsTask[];
 };
 
-export type PmsDependency = ApiSchema<'DependencyItem'>;
+export type PmsWorkspaceRef = {
+  id: string;
+  slug: string;
+  name: string;
+  role?: string | null;
+};
 
-export type PmsComment = Omit<ApiSchema<'IssueCommentItem'>, 'body_blocks'> & {
+export type PersonalPmsTask = PmsTask & {
+  workspace: PmsWorkspaceRef;
+};
+
+export type PersonalPmsAssignedTasksResponse = {
+  items: PersonalPmsTask[];
+  total: number;
+  page: number;
+  page_size: number;
+  workspaces: PmsWorkspaceRef[];
+};
+
+export type PmsTaskDocLink = ApiSchema<'TaskDocLinkItem'>;
+
+export type PmsTaskDocLinksResponse = Omit<
+  ApiSchema<'TaskDocLinksResponse'>,
+  'items'
+> & {
+  items: PmsTaskDocLink[];
+};
+
+export type PmsComment = Omit<ApiSchema<'TaskCommentItem'>, 'body_blocks'> & {
   body_blocks: Record<string, unknown>[] | null;
 };
 
 export type PmsActivityLog = ApiSchema<'ActivityLogItem'>;
 
-export type PmsActivityLogsResponse = Omit<ApiSchema<'ActivityLogListResponse'>, 'items'> & {
+export type PmsActivityLogsResponse = Omit<
+  ApiSchema<'ActivityLogListResponse'>,
+  'items'
+> & {
   items: PmsActivityLog[];
 };
 
@@ -63,26 +104,31 @@ export type PmsAttachment = ApiSchema<'AttachmentItem'>;
 
 export type PmsChecklistItem = ApiSchema<'ChecklistItemResponse'>;
 
-export type PmsTimeEntry = ApiSchema<'TimeEntryItem'>;
-
-export type PmsIssueDetail = Omit<
-  ApiSchema<'IssueDetailResponse'>,
-  'attachments' | 'checklist_items' | 'comments' | 'dependencies' | 'issue' | 'subtasks' | 'time_entries'
+export type PmsTaskDetail = Omit<
+  ApiSchema<'TaskDetailResponse'>,
+  | 'attachments'
+  | 'checklist_items'
+  | 'comments'
+  | 'linked_docs'
+  | 'task'
+  | 'subtasks'
 > & {
-  issue: PmsIssue;
+  task: PmsTask;
   comments: PmsComment[];
-  dependencies: PmsDependency[];
-  subtasks: PmsIssue[];
+  linked_docs: PmsTaskDocLink[];
+  subtasks: PmsTask[];
   attachments: PmsAttachment[];
   checklist_items: PmsChecklistItem[];
-  time_entries: PmsTimeEntry[];
 };
 
-export type PmsLabelsResponse = Omit<ApiSchema<'LabelListResponse'>, 'items'> & {
+export type PmsLabelsResponse = Omit<
+  ApiSchema<'LabelListResponse'>,
+  'items'
+> & {
   items: PmsLabel[];
 };
 
-export type IssueArchivedState = 'active' | 'archived' | 'all';
+export type TaskArchivedState = 'active' | 'archived' | 'all';
 
 export type PmsDashboardStatusCount = ApiSchema<'StatusCountItem'>;
 
@@ -106,27 +152,42 @@ export type PmsDashboardSummary = Omit<
 
 export type PmsFolder = ApiSchema<'FolderItem'>;
 
-export type PmsFoldersResponse = Omit<ApiSchema<'FolderListResponse'>, 'items'> & {
+export type PmsFoldersResponse = Omit<
+  ApiSchema<'FolderListResponse'>,
+  'items'
+> & {
   items: PmsFolder[];
 };
 
 // ── Task Templates ──────────────────────────────────────────────────
 
-export type PmsTaskTemplate = Omit<ApiSchema<'TaskTemplateItem'>, 'checklist_items'> & {
+export type PmsTaskTemplate = Omit<
+  ApiSchema<'TaskTemplateItem'>,
+  'checklist_items'
+> & {
   checklist_items: { text: string }[] | null;
 };
 
-export type PmsTaskTemplatesResponse = Omit<ApiSchema<'TaskTemplateListResponse'>, 'items'> & {
+export type PmsTaskTemplatesResponse = Omit<
+  ApiSchema<'TaskTemplateListResponse'>,
+  'items'
+> & {
   items: PmsTaskTemplate[];
 };
 
 // ── Custom Fields ───────────────────────────────────────────────────
 
-export type PmsCustomField = Omit<ApiSchema<'CustomFieldItem'>, 'field_type'> & {
+export type PmsCustomField = Omit<
+  ApiSchema<'CustomFieldItem'>,
+  'field_type'
+> & {
   field_type: 'text' | 'number' | 'date' | 'select';
 };
 
-export type PmsCustomFieldsResponse = Omit<ApiSchema<'CustomFieldListResponse'>, 'items'> & {
+export type PmsCustomFieldsResponse = Omit<
+  ApiSchema<'CustomFieldListResponse'>,
+  'items'
+> & {
   items: PmsCustomField[];
 };
 
@@ -134,12 +195,60 @@ export type PmsCustomFieldValue = ApiSchema<'CustomFieldValueItem'>;
 
 // ── Task List Custom Statuses ───────────────────────────────────────
 
-export type PmsTaskListStatus = Omit<ApiSchema<'TaskListStatusItem'>, 'category'> & {
-  category: 'backlog' | 'active' | 'done' | 'canceled';
+export type PmsStatusCategory = 'not_started' | 'active' | 'done' | 'closed';
+
+export type PmsTaskListStatus = Omit<
+  ApiSchema<'TaskListStatusItem'>,
+  'category'
+> & {
+  category: PmsStatusCategory;
 };
 
-export type PmsTaskListStatusesResponse = Omit<ApiSchema<'TaskListStatusesResponse'>, 'items'> & {
+export type PmsTaskListStatusesResponse = {
+  mode: 'inherit' | 'custom';
+  source: 'space' | 'list';
   items: PmsTaskListStatus[];
+};
+
+export type PmsSpaceStatusesResponse = {
+  items: PmsTaskListStatus[];
+};
+
+export type PmsViewPreferences = ApiSchema<'PmsViewPreferencesResponse'>;
+
+export type PmsTaskListGroupBy = PmsViewPreferences['task_list_group_by'];
+
+export type PmsTaskSortField =
+  | 'board_position'
+  | 'completed_date'
+  | 'created_at'
+  | 'due_date'
+  | 'start_date';
+export type PmsTaskSortDirection = 'asc' | 'desc';
+export type PmsTaskSort = {
+  field: PmsTaskSortField;
+  direction: PmsTaskSortDirection;
+};
+
+export const DEFAULT_PMS_TASK_SORT: PmsTaskSort = {
+  direction: 'asc',
+  field: 'board_position',
+};
+
+const PMS_MAX_PAGE_SIZE = 100;
+const PMS_ASSIGNED_PAGE_SIZE = 50;
+
+type PmsPageOptions = {
+  page?: number;
+  pageSize?: number;
+};
+
+type PmsTaskListQueryOptions = PmsPageOptions & {
+  archived?: boolean;
+};
+
+type PmsTaskListPageOptions = PmsPageOptions & {
+  sort?: PmsTaskSort;
 };
 
 class PmsApiError extends Error {
@@ -157,14 +266,12 @@ async function request<T>(
   init: RequestInit = {},
   workspaceSlug?: string | null,
 ): Promise<T> {
-  try {
-    return await apiFetchJson<T>(resolvePmsPath(path, workspaceSlug), token, init);
-  } catch (error) {
-    if (error instanceof ApiRequestError) {
-      throw new PmsApiError(error.status, error.message);
-    }
-    throw error;
-  }
+  return apiFetchJsonWithMappedError<T>(
+    resolvePmsPath(path, workspaceSlug),
+    token,
+    init,
+    (error) => new PmsApiError(error.status, error.message),
+  );
 }
 
 function resolvePmsPath(path: string, workspaceSlug?: string | null): string {
@@ -175,10 +282,50 @@ export function listPmsTaskLists(
   token: string,
   teamId?: string,
   workspaceSlug?: string | null,
+  options: PmsTaskListQueryOptions = {},
 ): Promise<PmsTaskListsResponse> {
-  const params = new URLSearchParams({ page: '1', page_size: '50' });
+  const params = new URLSearchParams({
+    archived: String(options.archived ?? false),
+    page: String(options.page ?? 1),
+    page_size: String(options.pageSize ?? 50),
+  });
   if (teamId) params.set('team_id', teamId);
-  return request<PmsTaskListsResponse>(`/api/v1/pms/lists?${params}`, token, {}, workspaceSlug);
+  return request<PmsTaskListsResponse>(
+    `/api/v1/pms/lists?${params}`,
+    token,
+    {},
+    workspaceSlug,
+  );
+}
+
+export async function listAllPmsTaskLists(
+  token: string,
+  teamId?: string,
+  workspaceSlug?: string | null,
+  options: Pick<PmsTaskListQueryOptions, 'archived'> = {},
+): Promise<PmsTaskListsResponse> {
+  const items: PmsTaskList[] = [];
+  let page = 1;
+  let lastResponse: PmsTaskListsResponse | null = null;
+  do {
+    lastResponse = await listPmsTaskLists(token, teamId, workspaceSlug, {
+      archived: options.archived,
+      page,
+      pageSize: PMS_MAX_PAGE_SIZE,
+    });
+    items.push(...lastResponse.items);
+    if (items.length >= lastResponse.total || lastResponse.items.length === 0) {
+      break;
+    }
+    page += 1;
+  } while (lastResponse);
+
+  return {
+    items,
+    total: lastResponse?.total ?? 0,
+    page: 1,
+    page_size: PMS_MAX_PAGE_SIZE,
+  };
 }
 
 export function listSpaces(
@@ -188,18 +335,60 @@ export function listSpaces(
   return request<PmsSpace[]>('/api/v1/pms/spaces', token, {}, workspaceSlug);
 }
 
-export function listPmsUsers(token: string): Promise<PmsUserSummary[]> {
-  return request<PmsUserSummary[]>('/api/v1/pms/users', token);
+export function listPmsUsers(
+  token: string,
+  workspaceSlug?: string | null,
+): Promise<PmsUserSummary[]> {
+  return request<PmsUserSummary[]>(
+    '/api/v1/pms/users',
+    token,
+    {},
+    workspaceSlug,
+  );
+}
+
+export function getPmsViewPreferences(
+  token: string,
+  workspaceSlug?: string | null,
+): Promise<PmsViewPreferences> {
+  return request<PmsViewPreferences>(
+    '/api/v1/pms/view-preferences',
+    token,
+    {},
+    workspaceSlug,
+  );
+}
+
+export function updatePmsViewPreferences(
+  token: string,
+  payload: PmsViewPreferences,
+  workspaceSlug?: string | null,
+): Promise<PmsViewPreferences> {
+  return request<PmsViewPreferences>(
+    '/api/v1/pms/view-preferences',
+    token,
+    {
+      body: JSON.stringify(payload),
+      method: 'PATCH',
+    },
+    workspaceSlug,
+  );
 }
 
 export function createSpace(
   token: string,
   payload: { name: string; description?: string },
+  workspaceSlug?: string | null,
 ): Promise<PmsSpace> {
-  return request<PmsSpace>('/api/v1/pms/spaces', token, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
+  return request<PmsSpace>(
+    '/api/v1/pms/spaces',
+    token,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+    workspaceSlug,
+  );
 }
 
 export function updateSpace(
@@ -214,7 +403,9 @@ export function updateSpace(
 }
 
 export function deleteSpace(token: string, spaceId: string): Promise<void> {
-  return request<void>(`/api/v1/pms/spaces/${spaceId}`, token, { method: 'DELETE' });
+  return request<void>(`/api/v1/pms/spaces/${spaceId}`, token, {
+    method: 'DELETE',
+  });
 }
 
 export function listSpaceMembers(
@@ -236,10 +427,15 @@ export function addSpaceMember(
   payload: { user_id: string; role: string },
   workspaceSlug?: string | null,
 ): Promise<PmsSpaceMember> {
-  return request<PmsSpaceMember>(`/api/v1/pms/spaces/${spaceId}/members`, token, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  }, workspaceSlug);
+  return request<PmsSpaceMember>(
+    `/api/v1/pms/spaces/${spaceId}/members`,
+    token,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+    workspaceSlug,
+  );
 }
 
 export function updateSpaceMemberRole(
@@ -249,10 +445,15 @@ export function updateSpaceMemberRole(
   role: string,
   workspaceSlug?: string | null,
 ): Promise<PmsSpaceMember> {
-  return request<PmsSpaceMember>(`/api/v1/pms/spaces/${spaceId}/members/${userId}`, token, {
-    method: 'PATCH',
-    body: JSON.stringify({ role }),
-  }, workspaceSlug);
+  return request<PmsSpaceMember>(
+    `/api/v1/pms/spaces/${spaceId}/members/${userId}`,
+    token,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ role }),
+    },
+    workspaceSlug,
+  );
 }
 
 export function removeSpaceMember(
@@ -269,13 +470,22 @@ export function removeSpaceMember(
   );
 }
 
-export function getPmsTaskList(token: string, taskListId: string): Promise<PmsTaskList> {
+export function getPmsTaskList(
+  token: string,
+  taskListId: string,
+): Promise<PmsTaskList> {
   return request<PmsTaskList>(`/api/v1/pms/lists/${taskListId}`, token);
 }
 
 export function createPmsTaskList(
   token: string,
-  payload: { key?: string; name: string; description?: string; team_id?: string | null; folder_id?: string | null },
+  payload: {
+    key?: string;
+    name: string;
+    description?: string;
+    team_id?: string | null;
+    folder_id?: string | null;
+  },
 ): Promise<PmsTaskList> {
   return request<PmsTaskList>('/api/v1/pms/lists', token, {
     method: 'POST',
@@ -301,6 +511,15 @@ export function updatePmsTaskList(
   });
 }
 
+export function deletePmsTaskList(
+  token: string,
+  taskListId: string,
+): Promise<void> {
+  return request<void>(`/api/v1/pms/lists/${taskListId}`, token, {
+    method: 'DELETE',
+  });
+}
+
 export function reorderPmsTaskLists(
   token: string,
   spaceId: string,
@@ -323,7 +542,10 @@ export function getPmsDashboardSummary(
   taskListId?: string,
 ): Promise<PmsDashboardSummary> {
   const suffix = taskListId ? `?list_id=${encodeURIComponent(taskListId)}` : '';
-  return request<PmsDashboardSummary>(`/api/v1/pms/dashboard/summary${suffix}`, token);
+  return request<PmsDashboardSummary>(
+    `/api/v1/pms/dashboard/summary${suffix}`,
+    token,
+  );
 }
 
 export function listTaskListMilestones(
@@ -346,13 +568,17 @@ export function createTaskListMilestone(
     due_date: string | null;
   },
 ): Promise<PmsMilestone> {
-  return request<PmsMilestone>(`/api/v1/pms/lists/${taskListId}/milestones`, token, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
+  return request<PmsMilestone>(
+    `/api/v1/pms/lists/${taskListId}/milestones`,
+    token,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
-export interface IssueFilterParams {
+export interface TaskFilterParams {
   q?: string;
   status?: string[];
   priority?: string;
@@ -363,60 +589,212 @@ export interface IssueFilterParams {
   due_date_to?: string;
   start_date_from?: string;
   start_date_to?: string;
-  archived_state?: IssueArchivedState;
+  archived_state?: TaskArchivedState;
 }
 
-export function listTaskListIssues(
+export function listTaskListTasks(
   token: string,
   taskListId: string,
-  params: IssueFilterParams = {},
+  params: TaskFilterParams = {},
   workspaceSlug?: string | null,
-): Promise<PmsIssuesResponse> {
+  options: PmsTaskListPageOptions = {},
+): Promise<PmsTasksResponse> {
+  const sort = options.sort ?? DEFAULT_PMS_TASK_SORT;
   const search = new URLSearchParams({
-    page: '1',
-    page_size: '100',
-    sort_by: 'board_position',
-    sort_dir: 'asc',
+    page: String(options.page ?? 1),
+    page_size: String(options.pageSize ?? PMS_MAX_PAGE_SIZE),
+    sort_by: sort.field,
+    sort_dir: sort.direction,
   });
   if (params.q) search.set('q', params.q);
-  if (params.priority && params.priority !== 'all') search.set('priority', params.priority);
+  if (params.priority && params.priority !== 'all')
+    search.set('priority', params.priority);
   if (params.assignee_id) search.set('assignee_id', params.assignee_id);
   if (params.label_id) search.set('label_id', params.label_id);
   if (params.milestone_id) search.set('milestone_id', params.milestone_id);
   if (params.due_date_from) search.set('due_date_from', params.due_date_from);
   if (params.due_date_to) search.set('due_date_to', params.due_date_to);
-  if (params.start_date_from) search.set('start_date_from', params.start_date_from);
+  if (params.start_date_from)
+    search.set('start_date_from', params.start_date_from);
   if (params.start_date_to) search.set('start_date_to', params.start_date_to);
   if (params.archived_state === 'active') search.set('archived', 'false');
   if (params.archived_state === 'archived') search.set('archived', 'true');
   params.status?.forEach((value) => search.append('status', value));
 
-  return request<PmsIssuesResponse>(
-    `/api/v1/pms/lists/${taskListId}/issues?${search.toString()}`,
+  return request<PmsTasksResponse>(
+    `/api/v1/pms/lists/${taskListId}/tasks?${search.toString()}`,
     token,
     {},
     workspaceSlug,
   );
 }
 
-export function listAssignedIssues(
+export async function listAllTaskListTasks(
   token: string,
-  options: { limit?: number; workspaceSlug?: string | null } = {},
-): Promise<PmsIssuesResponse> {
+  taskListId: string,
+  params: TaskFilterParams = {},
+  workspaceSlug?: string | null,
+  options: Pick<PmsTaskListPageOptions, 'sort'> = {},
+): Promise<PmsTasksResponse> {
+  if (params.status && params.status.length === 0) {
+    return { items: [], total: 0, page: 1, page_size: PMS_MAX_PAGE_SIZE };
+  }
+  const items: PmsTask[] = [];
+  let page = 1;
+  let lastResponse: PmsTasksResponse | null = null;
+  do {
+    lastResponse = await listTaskListTasks(
+      token,
+      taskListId,
+      params,
+      workspaceSlug,
+      {
+        page,
+        pageSize: PMS_MAX_PAGE_SIZE,
+        sort: options.sort,
+      },
+    );
+    items.push(...lastResponse.items);
+    if (items.length >= lastResponse.total || lastResponse.items.length === 0) {
+      break;
+    }
+    page += 1;
+  } while (lastResponse);
+
+  return {
+    items,
+    total: lastResponse?.total ?? 0,
+    page: 1,
+    page_size: PMS_MAX_PAGE_SIZE,
+  };
+}
+
+export function listAssignedTasks(
+  token: string,
+  options: {
+    limit?: number;
+    workspaceSlug?: string | null;
+  } & PmsPageOptions = {},
+): Promise<PmsTasksResponse> {
   const search = new URLSearchParams();
-  if (options.limit !== undefined) {
+  if (options.page !== undefined) {
+    search.set('page', String(options.page));
+    search.set('page_size', String(options.pageSize ?? PMS_ASSIGNED_PAGE_SIZE));
+  } else if (options.limit !== undefined) {
     search.set('limit', String(options.limit));
   }
   const query = search.toString();
-  return request<PmsIssuesResponse>(
-    `/api/v1/pms/issues/assigned${query ? `?${query}` : ''}`,
+  return request<PmsTasksResponse>(
+    `/api/v1/pms/tasks/assigned${query ? `?${query}` : ''}`,
     token,
     {},
     options.workspaceSlug,
   );
 }
 
-export function createTaskListIssue(
+export async function listAllAssignedTasks(
+  token: string,
+  workspaceSlug?: string | null,
+): Promise<PmsTasksResponse> {
+  const items: PmsTask[] = [];
+  let page = 1;
+  let lastResponse: PmsTasksResponse | null = null;
+  do {
+    lastResponse = await listAssignedTasks(token, {
+      page,
+      pageSize: PMS_ASSIGNED_PAGE_SIZE,
+      workspaceSlug,
+    });
+    items.push(...lastResponse.items);
+    if (items.length >= lastResponse.total || lastResponse.items.length === 0) {
+      break;
+    }
+    page += 1;
+  } while (lastResponse);
+
+  return {
+    items,
+    total: lastResponse?.total ?? 0,
+    page: 1,
+    page_size: PMS_ASSIGNED_PAGE_SIZE,
+  };
+}
+
+export async function listPersonalPmsAssignedTasks(
+  token: string,
+): Promise<PersonalPmsAssignedTasksResponse> {
+  const items: PersonalPmsTask[] = [];
+  let page = 1;
+  let lastResponse: PersonalPmsAssignedTasksResponse | null = null;
+  do {
+    lastResponse = await request<PersonalPmsAssignedTasksResponse>(
+      `/api/v1/personal-widgets/pms/tasks/assigned?page=${page}&page_size=${PMS_ASSIGNED_PAGE_SIZE}`,
+      token,
+    );
+    items.push(...lastResponse.items);
+    if (items.length >= lastResponse.total || lastResponse.items.length === 0) {
+      break;
+    }
+    page += 1;
+  } while (lastResponse);
+
+  return {
+    items,
+    total: lastResponse?.total ?? 0,
+    page: 1,
+    page_size: PMS_ASSIGNED_PAGE_SIZE,
+    workspaces: lastResponse?.workspaces ?? [],
+  };
+}
+
+export function listTodayOverdueTasks(
+  token: string,
+  today: string,
+  options: { workspaceSlug?: string | null } & PmsPageOptions = {},
+): Promise<PmsTasksResponse> {
+  const search = new URLSearchParams({
+    today,
+    page: String(options.page ?? 1),
+    page_size: String(options.pageSize ?? PMS_ASSIGNED_PAGE_SIZE),
+  });
+  return request<PmsTasksResponse>(
+    `/api/v1/pms/tasks/today-overdue?${search.toString()}`,
+    token,
+    {},
+    options.workspaceSlug,
+  );
+}
+
+export async function listAllTodayOverdueTasks(
+  token: string,
+  today: string,
+  workspaceSlug?: string | null,
+): Promise<PmsTasksResponse> {
+  const items: PmsTask[] = [];
+  let page = 1;
+  let lastResponse: PmsTasksResponse | null = null;
+  do {
+    lastResponse = await listTodayOverdueTasks(token, today, {
+      page,
+      pageSize: PMS_ASSIGNED_PAGE_SIZE,
+      workspaceSlug,
+    });
+    items.push(...lastResponse.items);
+    if (items.length >= lastResponse.total || lastResponse.items.length === 0) {
+      break;
+    }
+    page += 1;
+  } while (lastResponse);
+
+  return {
+    items,
+    total: lastResponse?.total ?? 0,
+    page: 1,
+    page_size: PMS_ASSIGNED_PAGE_SIZE,
+  };
+}
+
+export function createTaskListTask(
   token: string,
   taskListId: string,
   payload: {
@@ -427,49 +805,73 @@ export function createTaskListIssue(
     priority: string;
     assignee_id: string | null;
     milestone_id: string | null;
+    start_date?: string | null;
     due_date: string | null;
     parent_id?: string | null;
   },
-): Promise<PmsIssue> {
-  return request<PmsIssue>(`/api/v1/pms/lists/${taskListId}/issues`, token, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export function getIssueDetail(
-  token: string,
-  issueId: string,
   workspaceSlug?: string | null,
-): Promise<PmsIssueDetail> {
-  return request<PmsIssueDetail>(`/api/v1/pms/issues/${issueId}`, token, {}, workspaceSlug);
+): Promise<PmsTask> {
+  return request<PmsTask>(
+    `/api/v1/pms/lists/${taskListId}/tasks`,
+    token,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+    workspaceSlug,
+  );
 }
 
-export function updateIssue(
+export function getTaskDetail(
   token: string,
-  issueId: string,
+  taskId: string,
+  workspaceSlug?: string | null,
+): Promise<PmsTaskDetail> {
+  return request<PmsTaskDetail>(
+    `/api/v1/pms/tasks/${taskId}`,
+    token,
+    {},
+    workspaceSlug,
+  );
+}
+
+export function updateTask(
+  token: string,
+  taskId: string,
   payload: Record<string, unknown>,
-): Promise<PmsIssue> {
-  return request<PmsIssue>(`/api/v1/pms/issues/${issueId}`, token, {
-    method: 'PATCH',
-    body: JSON.stringify(payload),
-  });
+  workspaceSlug?: string | null,
+): Promise<PmsTask> {
+  return request<PmsTask>(
+    `/api/v1/pms/tasks/${taskId}`,
+    token,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    },
+    workspaceSlug,
+  );
 }
 
-export function createIssueComment(
+export function createTaskComment(
   token: string,
-  issueId: string,
+  taskId: string,
   body: string,
   bodyBlocks?: Record<string, unknown>[] | null,
 ): Promise<PmsComment> {
-  return request<PmsComment>(`/api/v1/pms/issues/${issueId}/comments`, token, {
+  return request<PmsComment>(`/api/v1/pms/tasks/${taskId}/comments`, token, {
     method: 'POST',
     body: JSON.stringify({ body, body_blocks: bodyBlocks ?? null }),
   });
 }
 
-export function listTaskListLabels(token: string, taskListId: string): Promise<PmsLabelsResponse> {
-  return request<PmsLabelsResponse>(`/api/v1/pms/lists/${taskListId}/labels?page=1&page_size=100`, token);
+export function listTaskListLabels(
+  token: string,
+  taskListId: string,
+): Promise<PmsLabelsResponse> {
+  return request<PmsLabelsResponse>(
+    `/api/v1/pms/lists/${taskListId}/labels?page=1&page_size=100`,
+    token,
+  );
 }
 
 export function createTaskListLabel(
@@ -500,69 +902,101 @@ export function deleteLabel(token: string, labelId: string): Promise<void> {
   });
 }
 
-export function deleteIssue(token: string, issueId: string): Promise<void> {
-  return request<void>(`/api/v1/pms/issues/${issueId}`, token, {
+export function deleteTask(token: string, taskId: string): Promise<void> {
+  return request<void>(`/api/v1/pms/tasks/${taskId}`, token, {
     method: 'DELETE',
   });
 }
 
-export function listIssueActivityLogs(
+export function listTaskActivityLogs(
   token: string,
-  issueId: string,
+  taskId: string,
 ): Promise<PmsActivityLogsResponse> {
   return request<PmsActivityLogsResponse>(
-    `/api/v1/pms/issues/${issueId}/activity-logs?page=1&page_size=50`,
+    `/api/v1/pms/tasks/${taskId}/activity-logs?page=1&page_size=50`,
     token,
   );
 }
 
 export async function uploadAttachment(
   token: string,
-  issueId: string,
+  taskId: string,
   file: File,
 ): Promise<PmsAttachment> {
   const formData = new FormData();
   formData.append('file', file);
-  try {
-    return await apiFetchJson<PmsAttachment>(
-      resolvePmsPath(`/api/v1/pms/issues/${issueId}/attachments`),
-      token,
-      {
-        method: 'POST',
-        body: formData,
-      },
-    );
-  } catch (error) {
-    if (error instanceof ApiRequestError) {
-      throw new PmsApiError(error.status, error.message);
-    }
-    throw error;
-  }
+  return apiFetchJsonWithMappedError<PmsAttachment>(
+    resolvePmsPath(`/api/v1/pms/tasks/${taskId}/attachments`),
+    token,
+    {
+      method: 'POST',
+      body: formData,
+    },
+    (error) => new PmsApiError(error.status, error.message),
+  );
 }
 
-export function deleteAttachment(token: string, attachmentId: string): Promise<void> {
-  return request<void>(`/api/v1/pms/attachments/${attachmentId}`, token, { method: 'DELETE' });
-}
-
-// ── Dependencies ────────────────────────────────────────────────────
-
-export function createDependency(
+export function deleteAttachment(
   token: string,
-  payload: { predecessor_id: string; successor_id: string },
-): Promise<PmsDependency> {
-  return request<PmsDependency>('/api/v1/pms/dependencies', token, {
-    method: 'POST',
-    body: JSON.stringify(payload),
+  attachmentId: string,
+): Promise<void> {
+  return request<void>(`/api/v1/pms/attachments/${attachmentId}`, token, {
+    method: 'DELETE',
   });
 }
 
-export function deleteDependency(token: string, dependencyId: string): Promise<void> {
-  return request<void>(`/api/v1/pms/dependencies/${dependencyId}`, token, { method: 'DELETE' });
+// ── Linked Docs ─────────────────────────────────────────────────────
+
+export function listTaskDocs(
+  token: string,
+  taskId: string,
+  workspaceSlug?: string | null,
+): Promise<PmsTaskDocLinksResponse> {
+  return request<PmsTaskDocLinksResponse>(
+    `/api/v1/pms/tasks/${taskId}/docs`,
+    token,
+    {},
+    workspaceSlug,
+  );
+}
+
+export function attachTaskDoc(
+  token: string,
+  taskId: string,
+  docId: string,
+  workspaceSlug?: string | null,
+): Promise<PmsTaskDocLinksResponse> {
+  return request<PmsTaskDocLinksResponse>(
+    `/api/v1/pms/tasks/${taskId}/docs`,
+    token,
+    {
+      method: 'POST',
+      body: JSON.stringify({ doc_id: docId }),
+    },
+    workspaceSlug,
+  );
+}
+
+export function detachTaskDoc(
+  token: string,
+  taskId: string,
+  docId: string,
+  workspaceSlug?: string | null,
+): Promise<PmsTaskDocLinksResponse> {
+  return request<PmsTaskDocLinksResponse>(
+    `/api/v1/pms/tasks/${taskId}/docs/${docId}`,
+    token,
+    { method: 'DELETE' },
+    workspaceSlug,
+  );
 }
 
 // ── Bulk Operations ─────────────────────────────────────────────────
 
-export type BulkUpdatePayload = Omit<ApiSchema<'BulkUpdateRequest'>, 'delete' | 'priority' | 'status'> & {
+export type BulkUpdatePayload = Omit<
+  ApiSchema<'BulkUpdateRequest'>,
+  'delete' | 'priority' | 'status'
+> & {
   status?: string;
   priority?: string;
   delete?: boolean;
@@ -570,28 +1004,67 @@ export type BulkUpdatePayload = Omit<ApiSchema<'BulkUpdateRequest'>, 'delete' | 
 
 export type BulkUpdateResult = ApiSchema<'BulkUpdateResponse'>;
 
-export function bulkUpdateIssues(
+export type TaskReorderPayload = Omit<
+  ApiSchema<'TaskReorderRequest'>,
+  'items'
+> & {
+  items: ApiSchema<'TaskReorderItem'>[];
+};
+
+export type TaskReorderResult = Omit<
+  ApiSchema<'TaskReorderResponse'>,
+  'items'
+> & {
+  items: PmsTask[];
+};
+
+export function bulkUpdateTasks(
   token: string,
   taskListId: string,
   payload: BulkUpdatePayload,
 ): Promise<BulkUpdateResult> {
-  return request<BulkUpdateResult>(`/api/v1/pms/lists/${taskListId}/issues/bulk`, token, {
-    method: 'PATCH',
-    body: JSON.stringify(payload),
-  });
+  return request<BulkUpdateResult>(
+    `/api/v1/pms/lists/${taskListId}/tasks/bulk`,
+    token,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function reorderTaskListTasks(
+  token: string,
+  taskListId: string,
+  payload: TaskReorderPayload,
+  workspaceSlug?: string | null,
+): Promise<TaskReorderResult> {
+  return request<TaskReorderResult>(
+    `/api/v1/pms/lists/${taskListId}/tasks/reorder`,
+    token,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    },
+    workspaceSlug,
+  );
 }
 
 // ── Checklist ───────────────────────────────────────────────────────
 
 export function createChecklistItem(
   token: string,
-  issueId: string,
+  taskId: string,
   payload: { text: string; sort_order?: number },
 ): Promise<PmsChecklistItem> {
-  return request<PmsChecklistItem>(`/api/v1/pms/issues/${issueId}/checklist`, token, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
+  return request<PmsChecklistItem>(
+    `/api/v1/pms/tasks/${taskId}/checklist`,
+    token,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export function updateChecklistItem(
@@ -605,36 +1078,13 @@ export function updateChecklistItem(
   });
 }
 
-export function deleteChecklistItem(token: string, itemId: string): Promise<void> {
-  return request<void>(`/api/v1/pms/checklist/${itemId}`, token, { method: 'DELETE' });
-}
-
-// ── Time Tracking ───────────────────────────────────────────────────
-
-export function createTimeEntry(
+export function deleteChecklistItem(
   token: string,
-  issueId: string,
-  payload: { duration_minutes: number; description: string; entry_date: string },
-): Promise<PmsTimeEntry> {
-  return request<PmsTimeEntry>(`/api/v1/pms/issues/${issueId}/time-entries`, token, {
-    method: 'POST',
-    body: JSON.stringify(payload),
+  itemId: string,
+): Promise<void> {
+  return request<void>(`/api/v1/pms/checklist/${itemId}`, token, {
+    method: 'DELETE',
   });
-}
-
-export function updateTimeEntry(
-  token: string,
-  entryId: string,
-  payload: { duration_minutes?: number; description?: string; entry_date?: string },
-): Promise<PmsTimeEntry> {
-  return request<PmsTimeEntry>(`/api/v1/pms/time-entries/${entryId}`, token, {
-    method: 'PATCH',
-    body: JSON.stringify(payload),
-  });
-}
-
-export function deleteTimeEntry(token: string, entryId: string): Promise<void> {
-  return request<void>(`/api/v1/pms/time-entries/${entryId}`, token, { method: 'DELETE' });
 }
 
 // ── Notifications ───────────────────────────────────────────────────
@@ -716,51 +1166,161 @@ export function markAllNotificationsRead(
 export function listTaskListStatuses(
   token: string,
   taskListId: string,
+  workspaceSlug?: string | null,
 ): Promise<PmsTaskListStatusesResponse> {
   return request<PmsTaskListStatusesResponse>(
     `/api/v1/pms/lists/${taskListId}/statuses`,
     token,
+    {},
+    workspaceSlug,
   );
+}
+
+export function updateTaskListStatusMode(
+  token: string,
+  taskListId: string,
+  mode: 'inherit' | 'custom',
+): Promise<PmsTaskListStatusesResponse> {
+  return request<PmsTaskListStatusesResponse>(
+    `/api/v1/pms/lists/${taskListId}/status-mode`,
+    token,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ mode }),
+    },
+  );
+}
+
+export function listSpaceStatuses(
+  token: string,
+  spaceId: string,
+): Promise<PmsSpaceStatusesResponse> {
+  return request<PmsSpaceStatusesResponse>(
+    `/api/v1/pms/spaces/${spaceId}/statuses`,
+    token,
+  );
+}
+
+export function createSpaceStatus(
+  token: string,
+  spaceId: string,
+  payload: {
+    name: string;
+    color?: string;
+    category?: PmsStatusCategory;
+    sort_order?: number;
+  },
+): Promise<PmsTaskListStatus> {
+  return request<PmsTaskListStatus>(
+    `/api/v1/pms/spaces/${spaceId}/statuses`,
+    token,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function updateSpaceStatus(
+  token: string,
+  statusId: string,
+  payload: {
+    name?: string;
+    color?: string;
+    category?: PmsStatusCategory;
+    sort_order?: number;
+  },
+): Promise<PmsTaskListStatus> {
+  return request<PmsTaskListStatus>(
+    `/api/v1/pms/space-statuses/${statusId}`,
+    token,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function deleteSpaceStatus(
+  token: string,
+  statusId: string,
+): Promise<void> {
+  return request<void>(`/api/v1/pms/space-statuses/${statusId}`, token, {
+    method: 'DELETE',
+  });
 }
 
 export function createTaskListStatus(
   token: string,
   taskListId: string,
-  payload: { name: string; color?: string; category?: string; sort_order?: number },
+  payload: {
+    name: string;
+    color?: string;
+    category?: PmsStatusCategory;
+    sort_order?: number;
+  },
 ): Promise<PmsTaskListStatus> {
-  return request<PmsTaskListStatus>(`/api/v1/pms/lists/${taskListId}/statuses`, token, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
+  return request<PmsTaskListStatus>(
+    `/api/v1/pms/lists/${taskListId}/statuses`,
+    token,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export function updateTaskListStatus(
   token: string,
   statusId: string,
-  payload: { name?: string; color?: string; category?: string; sort_order?: number },
+  payload: {
+    name?: string;
+    color?: string;
+    category?: PmsStatusCategory;
+    sort_order?: number;
+  },
 ): Promise<PmsTaskListStatus> {
-  return request<PmsTaskListStatus>(`/api/v1/pms/task-list-statuses/${statusId}`, token, {
-    method: 'PATCH',
-    body: JSON.stringify(payload),
-  });
+  return request<PmsTaskListStatus>(
+    `/api/v1/pms/task-list-statuses/${statusId}`,
+    token,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
-export function deleteTaskListStatus(token: string, statusId: string): Promise<void> {
-  return request<void>(`/api/v1/pms/task-list-statuses/${statusId}`, token, { method: 'DELETE' });
+export function deleteTaskListStatus(
+  token: string,
+  statusId: string,
+): Promise<void> {
+  return request<void>(`/api/v1/pms/task-list-statuses/${statusId}`, token, {
+    method: 'DELETE',
+  });
 }
 
 // ── Export ──────────────────────────────────────────────────────────
 
-export async function exportTaskListCsv(token: string, taskListId: string): Promise<void> {
-  const response = await fetch(resolvePmsPath(`/api/v1/pms/lists/${taskListId}/export?format=csv`), {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!response.ok) throw new PmsApiError(response.status, i18n.t('apps:pms.errors.exportFailed'));
+export async function exportTaskListCsv(
+  token: string,
+  taskListId: string,
+): Promise<void> {
+  const response = await fetch(
+    resolvePmsPath(`/api/v1/pms/lists/${taskListId}/export?format=csv`),
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
+  if (!response.ok)
+    throw new PmsApiError(
+      response.status,
+      i18n.t('apps:pms.errors.exportFailed'),
+    );
   const blob = await response.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `issues_export.csv`;
+  a.download = `tasks_export.csv`;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -772,8 +1332,14 @@ export async function exportTaskListCsv(token: string, taskListId: string): Prom
 export function listTaskTemplates(
   token: string,
   taskListId: string,
+  workspaceSlug?: string | null,
 ): Promise<PmsTaskTemplatesResponse> {
-  return request<PmsTaskTemplatesResponse>(`/api/v1/pms/lists/${taskListId}/templates`, token);
+  return request<PmsTaskTemplatesResponse>(
+    `/api/v1/pms/lists/${taskListId}/templates`,
+    token,
+    {},
+    workspaceSlug,
+  );
 }
 
 export function createTaskTemplate(
@@ -787,14 +1353,23 @@ export function createTaskTemplate(
     checklist_items?: { text: string }[];
   },
 ): Promise<PmsTaskTemplate> {
-  return request<PmsTaskTemplate>(`/api/v1/pms/lists/${taskListId}/templates`, token, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
+  return request<PmsTaskTemplate>(
+    `/api/v1/pms/lists/${taskListId}/templates`,
+    token,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
-export function deleteTaskTemplate(token: string, templateId: string): Promise<void> {
-  return request<void>(`/api/v1/pms/templates/${templateId}`, token, { method: 'DELETE' });
+export function deleteTaskTemplate(
+  token: string,
+  templateId: string,
+): Promise<void> {
+  return request<void>(`/api/v1/pms/templates/${templateId}`, token, {
+    method: 'DELETE',
+  });
 }
 
 // ── Custom Fields ──────────────────────────────────────────────────
@@ -803,62 +1378,116 @@ export function listCustomFields(
   token: string,
   taskListId: string,
 ): Promise<PmsCustomFieldsResponse> {
-  return request<PmsCustomFieldsResponse>(`/api/v1/pms/lists/${taskListId}/custom-fields`, token);
+  return request<PmsCustomFieldsResponse>(
+    `/api/v1/pms/lists/${taskListId}/custom-fields`,
+    token,
+  );
 }
 
 export function createCustomField(
   token: string,
   taskListId: string,
-  payload: { name: string; field_type: string; options?: string[]; sort_order?: number },
+  payload: {
+    name: string;
+    field_type: string;
+    options?: string[];
+    sort_order?: number;
+  },
 ): Promise<PmsCustomField> {
-  return request<PmsCustomField>(`/api/v1/pms/lists/${taskListId}/custom-fields`, token, {
-    method: 'POST',
-    body: JSON.stringify(payload),
+  return request<PmsCustomField>(
+    `/api/v1/pms/lists/${taskListId}/custom-fields`,
+    token,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function deleteCustomField(
+  token: string,
+  fieldId: string,
+): Promise<void> {
+  return request<void>(`/api/v1/pms/custom-fields/${fieldId}`, token, {
+    method: 'DELETE',
   });
 }
 
-export function deleteCustomField(token: string, fieldId: string): Promise<void> {
-  return request<void>(`/api/v1/pms/custom-fields/${fieldId}`, token, { method: 'DELETE' });
-}
-
-export function listIssueCustomFieldValues(
+export function listTaskCustomFieldValues(
   token: string,
-  issueId: string,
+  taskId: string,
 ): Promise<PmsCustomFieldValue[]> {
-  return request<PmsCustomFieldValue[]>(`/api/v1/pms/issues/${issueId}/custom-field-values`, token);
+  return request<PmsCustomFieldValue[]>(
+    `/api/v1/pms/tasks/${taskId}/custom-field-values`,
+    token,
+  );
 }
 
-export function setIssueCustomFieldValue(
+export function setTaskCustomFieldValue(
   token: string,
-  issueId: string,
+  taskId: string,
   payload: { field_id: string; value: string },
 ): Promise<PmsCustomFieldValue> {
-  return request<PmsCustomFieldValue>(`/api/v1/pms/issues/${issueId}/custom-field-values`, token, {
-    method: 'PUT',
-    body: JSON.stringify(payload),
-  });
+  return request<PmsCustomFieldValue>(
+    `/api/v1/pms/tasks/${taskId}/custom-field-values`,
+    token,
+    {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
-// ── Issue Assignees (Multiple) ─────────────────────────────────────
+// ── Task Assignees (Multiple) ─────────────────────────────────────
 
-export type PmsIssueAssignee = ApiSchema<'IssueAssigneeItem'>;
+export type PmsTaskAssignee = ApiSchema<'TaskAssigneeItem'>;
 
-export function setIssueAssignees(
+export function setTaskAssignees(
   token: string,
-  issueId: string,
+  taskId: string,
   userIds: string[],
-): Promise<PmsIssueAssignee[]> {
-  return request<PmsIssueAssignee[]>(`/api/v1/pms/issues/${issueId}/assignees`, token, {
-    method: 'PUT',
-    body: JSON.stringify({ user_ids: userIds }),
-  });
+): Promise<PmsTaskAssignee[]> {
+  return request<PmsTaskAssignee[]>(
+    `/api/v1/pms/tasks/${taskId}/assignees`,
+    token,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ user_ids: userIds }),
+    },
+  );
+}
+
+export type PmsTaskFollower = ApiSchema<'TaskFollowerItem'>;
+
+export function setTaskFollowers(
+  token: string,
+  taskId: string,
+  userIds: string[],
+): Promise<PmsTaskFollower[]> {
+  return request<PmsTaskFollower[]>(
+    `/api/v1/pms/tasks/${taskId}/followers`,
+    token,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ user_ids: userIds }),
+    },
+  );
 }
 
 // ── Folders ─────────────────────────────────────────────────────────
 
-export function listFolders(token: string, teamId?: string): Promise<PmsFoldersResponse> {
+export function listFolders(
+  token: string,
+  teamId?: string,
+  workspaceSlug?: string | null,
+): Promise<PmsFoldersResponse> {
   const params = teamId ? `?team_id=${encodeURIComponent(teamId)}` : '';
-  return request<PmsFoldersResponse>(`/api/v1/pms/folders${params}`, token);
+  return request<PmsFoldersResponse>(
+    `/api/v1/pms/folders${params}`,
+    token,
+    {},
+    workspaceSlug,
+  );
 }
 
 export function createFolder(
@@ -883,5 +1512,7 @@ export function updateFolder(
 }
 
 export function deleteFolder(token: string, folderId: string): Promise<void> {
-  return request<void>(`/api/v1/pms/folders/${folderId}`, token, { method: 'DELETE' });
+  return request<void>(`/api/v1/pms/folders/${folderId}`, token, {
+    method: 'DELETE',
+  });
 }

@@ -1,126 +1,110 @@
 # Project Agent Rules
 
-## 1. Think Before Coding
+## Scope And Safety
 
-**Don't assume. Don't hide confusion. Surface tradeoffs.**
+- 이 파일이 프로젝트 에이전트 지시의 정본이다. 일반 지시를 `AGENTS.md`, `CLAUDE.md`,
+  `.codex/` 등에 복제하지 않는다. `CLAUDE.md`에는 Claude Code 실행 환경 노트만 둔다.
+- 요청에 필요한 최소 변경만 수행하고 사용자 변경을 보존한다. 결과·권한·외부 상태를 크게
+  바꾸는 모호함만 확인하고, 나머지는 안전한 가정을 밝힌 뒤 진행한다.
+- 프로젝트 소유 경로(`/projects/ai-do/dev`, 명시된 worktree, 운영 점검 목적의
+  `/projects/ai-do/prod`) 밖은 읽기 전용이다. 파괴적 작업 전에는 대상 `realpath`와 symlink
+  경계를 확인한다.
+- 시크릿, 운영 데이터, 토큰, 비밀번호를 코드·문서·로그·프롬프트·fixture·diff에 노출하지
+  않는다. 런타임 설정은 typed settings, `AI_DO_*` 환경변수, GitLab 보호 저장소만 사용한다.
+- 특정 질문·키워드·차종·필드·사례를 맞추는 AI/RAG 분기를 만들지 않는다. Planner schema와
+  범용 operator로 모델링한다.
 
-Before implementing:
-- State your assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them - don't pick silently.
-- If a simpler approach exists, say so. Push back when warranted.
-- If something is unclear, stop. Name what's confusing. Ask.
+## Context And Skills
 
-## 2. Simplicity First
+- 기본 컨텍스트는 사용자 요청과 현재 코드·테스트다. 필요한 경우에만 관련 owner 문서나 ADR
+  하나로 내려간다. `docs/current/` 전체, 관련 없는 앱, 과거 계획, raw benchmark,
+  `learning/**/*.md`를 관성적으로 읽지 않는다.
+- 한 작업에는 요청을 완전히 다루는 최소 skill 집합만 사용한다. 사용자가 skill을 지목했거나
+  description의 작업 유형이 정확히 일치하거나, 해당 skill이 보호하는 운영·보안 상태 변경을
+  실제로 수행할 때만 연다.
+- 파일명이나 도메인 단어가 언급됐다는 이유만으로 broad skill을 적용하지 않는다. 기존
+  scaffold 안의 단순 UI/버그 수정은 app-delivery skill을, 일반 구현은 MR-review skill을,
+  깨끗한 `dev`에서의 평범한 편집은 worktree skill을 자동으로 요구하지 않는다.
+- 한 skill이 다른 문서나 skill을 언급해도 연쇄 로딩하지 않는다. 현재 변경 표면에 필요한
+  branch/reference만 읽는다. 단순 설명·상태 확인에는 구현 workflow skill을 붙이지 않는다.
+- Skill은 workflow와 프로젝트 고유 판단만 담고, 결정론적 규칙은 script/test가 소유한다.
 
-**Minimum code that solves the problem. Nothing speculative.**
+### Owner Routing
 
-- No features beyond what was asked.
-- No abstractions for single-use code.
-- No "flexibility" or "configurability" that wasn't requested.
-- No error handling for impossible scenarios.
-- If you write 200 lines and it could be 50, rewrite it.
+| 변경 표면 | 필요할 때 읽을 정본 |
+| --- | --- |
+| 코드 구조·추상화 | `docs/agents/llm-friendly-development.md` |
+| 검증 깊이·MR 전달 | `docs/agents/vibe-coding-harness.md` |
+| 앱 identity·registration | `docs/domains/app-platform/README.md` |
+| UI 컴포넌트·시간·알림 | `docs/agents/ui-components.md`, `docs/product/ui-design-principles.md` |
+| AI capability·LLM workload | `adr/0002-mcp-capability-platform.md`, `adr/0005-registered-llm-workload.md` |
+| 검색·RAG·projection | `docs/domains/retrieval/README.md`, `adr/0009-retrieval-partition-projection-generations.md` |
+| 운영·배포 | `docs/domains/release/production-deployment-layout.md`와 해당 운영 skill |
 
-Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+문서 소유권과 전체 색인은 `docs/README.md`, `docs/agents/domain.md`에서 찾는다.
 
-## 3. Surgical Changes
+## Work And Git
 
-**Touch only what you must. Clean up only your own mess.**
+- `/projects/ai-do/dev`는 live `dev` checkout이다. 여기서 checkout/switch/rebase하지 않는다.
+  기존 MR branch 수정이나 사용자가 명시한 병렬 작업만 별도 worktree에서 수행한다.
+- dirty checkout에서 branch를 바꾸거나 사용자 변경을 되돌리지 않는다.
+- 별도 요청 없이는 commit/push하지 않는다. 기능 MR은 `feature` → `dev`, 운영 승격은
+  `dev` → protected `main`만 사용한다.
+- MR 하나는 하나의 완결된 사용자 결과를 전달한다. 같은 결과를 완성하는 구현·리뷰·검증 수정은
+  새 MR로 만들지 말고 기존 MR에 계속 반영한다. 무관한 기능, 독립 배포 단위, 다른 소유 경계만
+  별도 branch/MR로 분리한다.
+- 파이프라인이나 리뷰가 실패하면 현재 SHA의 review/release-validation 로그·finding을 먼저 수집해
+  원인군별로 한 번에 수정한다. 두 번째 실패 후에는 새 MR이나 즉시 patch를 만들지 말고,
+  재현 가능한 preflight 또는 staging 검증을 만든 뒤 계속한다.
+- 기능 MR 등록 명령은
+  `pnpm mr:publish -- --title "<title>" --description-file /tmp/ai-do-mr.md`다.
+  Publisher가 target·mergeability·diff·lane metadata를 확인한다. Feature MR pipeline은
+  Codex review만, `dev → main` pipeline은 비-Codex 전체 검증만 수행한다. 수동 lane,
+  직접 `glab mr create`, GitLab UI/API, 생성 즉시 auto-merge로 우회하지 않는다.
+- Branch/worktree 조작이 실제로 필요할 때만
+  `.agents/skills/ai-do-worktree-management/SKILL.md`를 적용한다.
 
-When editing existing code:
-- Don't "improve" adjacent code, comments, or formatting.
-- Don't refactor things that aren't broken.
-- Match existing style, even if you'd do it differently.
-- If you notice unrelated dead code, mention it - don't delete it.
+## Platform Boundaries
 
-When your changes create orphans:
-- Remove imports/variables/functions that YOUR changes made unused.
-- Don't remove pre-existing dead code unless asked.
+- 현재 target의 extension point를 사용한다. 임의 상수, deep import, local rewrite, ad hoc
+  registry, 수동 generated artifact로 기존 composition root나 public contract를 우회하지 않는다.
+- App 화면·route·sidebar·API client는 `app-modules/<appId>/` 경계에 두고 외부 공유는 manifest,
+  public API, bootstrap DTO로 노출한다. FastAPI router는 `ai_do_api.api_registry`에서 조립한다.
+- API/request·response, persistence, i18n key, RBAC/workspace scope, worker registration,
+  generated client는 기능 계약의 일부다. OpenAPI generated type은 재생성하고 새 DB schema는
+  Alembic migration으로 관리한다.
+- 공유/감사 가능 데이터는 승인된 DB/object-store를 정본으로 사용한다. UI 권한 숨김,
+  `/tmp`, process-local state, JSON load-modify-write, client local storage를 공유 권한·데이터의
+  정본으로 쓰지 않는다.
+- 새 앱·포팅 또는 app identity/manifest, protected API composition, 공용 data/RBAC,
+  worker bootstrap, file/network pipeline, AI extension point를 바꾸는 작업에만
+  `ai-do-vibe-app-delivery`를 적용한다. 기존 scaffold 내부의 copy·번역·app-local UI·명확한
+  버그 수정에는 자동 적용하지 않는다.
+- 필요한 protected scaffold가 없으면 기능 구현을 확대하지 말고 Core Enablement로 분리한다.
+  기능을 통과시키기 위해 같은 변경에서 CI, agent 지침, checker, guardrail exclusion,
+  CODEOWNERS를 약화하지 않는다.
+- 모든 생성형 LLM 실행은 등록된 `RegisteredLlmWorkload`와 공통 실행 interface를 사용한다.
+  App code가 provider/model/pool을 선택하거나 direct SDK/HTTP, low-level gateway, cross-route
+  fallback을 추가하지 않는다.
+- Retrieval partition은 후보 범위일 뿐 권한 grant가 아니다. Source-owned ACL과 stable
+  resource identity, versioned projection/outbox, generation cutover 계약은 ADR 0009를 따른다.
 
-The test: Every changed line should trace directly to the user's request.
+## Validation And Review
 
-## 4. Goal-Driven Execution
+- 검증은 변경 위험에 비례한다. 관련 없는 API/DB/browser/full suite를 관성적으로 실행하지
+  않고, shared·migration·external·불확실한 blast radius에서만 넓힌다.
+- `pnpm ci:harness`는 정적 repository 계약이지 app merge-ready 증거가 아니다. 실제로 바뀐
+  API/Web/worker/migration/file/network/user flow의 focused evidence를 사용한다.
+- `dev` MR lane은 app delivery, protected platform, migration/generated/shared runtime,
+  혼합 integration 경계를 바꿀 때만 필수다. 문서·번역·env 계약·harness/CI·단순 app-local
+  변경에서는 advisory다. Draft/Ready 상태 자체는 검증 또는 병합 차단 조건이 아니다.
+- MR review/merge 판단을 사용자가 요청하거나 review finding을 수정할 때만
+  `ai-do-mr-review-validation`을 사용한다. 일반 구현 완료를 이유로 자동 로딩하지 않는다.
+- Review와 evidence는 최신 source SHA와 target merge result에 결합한다. Source가 바뀌면
+  affected evidence를 갱신하고, target이 바뀌어 영향 표면이 달라지면 다시 확인한다.
 
-**Define success criteria. Loop until verified.**
+## Parallel Work
 
-Transform tasks into verifiable goals:
-- "Add validation" → "Write tests for invalid inputs, then make them pass"
-- "Fix the bug" → "Write a test that reproduces it, then make it pass"
-- "Refactor X" → "Ensure tests pass before and after"
-
-For multi-step tasks, state a brief plan:
-```
-1. [Step] → verify: [check]
-2. [Step] → verify: [check]
-3. [Step] → verify: [check]
-```
-
-Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
-
----
-
-## Project-Specific Rules
-
-### Source of Truth
-- 활성 에이전트 지시는 루트 `agents.md` 하나만 사용한다. `AGENTS.md`, `CLAUDE.md`, `.claude/`, `.codex/` 등 도구별 경로를 다시 만들지 않는다.
-- 과거 지시 파일이 필요하면 Git 히스토리에서 복원한다 (`git log --all -- <path>` → `git restore --source <commit> -- <path>`).
-
-### Git
-- 별도 요청이 없으면 `git commit` / `git push` 를 하지 않는다.
-- 명시적 요청 시 브랜치 미지정이면 기본 대상은 `main`.
-
-### Legacy
-- `legacy_ai_portal_prototype/` 는 보관용. 새 구현의 기준 구조나 재사용 소스로 삼지 않고, 요청이 없으면 수정하지 않는다. 흐름·화면·프롬프트·샘플 데이터 확인 용도로만 참고한다.
-
-### UI
-- 통계 카드 남발, BoxShadow 카드, 두꺼운 외곽선 지양.
-- ClickUp/Jira 류의 평면 레이아웃, 넉넉한 여백, dense typography 우선.
-
-### Web App Boundaries
-- web 앱별 화면, 라우트, 사이드바 구현은 `apps/web/src/app-modules/<appId>/` 내부에 둔다.
-- 다른 앱이나 shell 은 app module 내부(`routes`, `sidebar`, `views`)를 직접 import 하지 않고 public root 또는 `manifest` 경계만 사용한다.
-- 앱 전용 API 는 해당 `app-modules/<appId>/api` 내부에 두고, 외부 공유가 필요하면 `<appId>/public-api` 로만 노출한다. `apps/web/src/domains/*` 경로를 새 진입점으로 만들지 않는다.
-- 공용 코드는 실제로 여러 앱에서 쓰이는 순수 UI/유틸만 `shared`, `components`, `lib`, `platform` 쪽에 둔다. 특정 앱 전용이면 해당 app module 로 이동한다.
-- web 구조 변경 후에는 `pnpm check:web-architecture` 와 필요한 경우 `pnpm nx e2e-shell web` 을 함께 확인한다.
-
-### API Boundaries
-- FastAPI router 등록은 `ai_do_api.api_registry` 를 composition root 로 사용한다. domain service/module 에서 `*.router` 를 import 하지 않는다.
-- 재사용 가능한 domain 로직은 router 가 아니라 `service`, `read_model`, 또는 명시적인 helper 모듈에 둔다.
-- OpenAPI 타입은 `pnpm generate:api-client` 로 갱신하고, 사람이 `apps/web/src/platform/api/openapi.generated.d.ts` 를 직접 수정하지 않는다.
-- API 계약/경계 변경 후에는 `pnpm check:api-contract` 와 `pnpm check:api-architecture` 를 확인한다.
-
-### Context
-- 기본은 코드와 현재 작업 파일. `/docs` 는 보관용 참고 자료.
-- `docs/planning/`, `docs/product/`, `docs/meetings/` 는 사용자가 지목한 경우에만 읽는다.
-- 명시 없으면 문서보다 현재 코드/테스트 우선.
-
-### Review Method
-사용자가 리뷰를 요청하면 구현 성격에 맞는 방법을 먼저 고르고, 그 방법의 불변식 기준으로 findings 를 정리한다.
-- 상태 전이·승인 게이트·스트리밍·워크플로·재시도·async orchestration → **상태기계/불변식 리뷰**
-- API·이벤트·스키마·DB 모델·외부 계약 변경 → **계약 기반 리뷰**
-- 트랜잭션·락·경쟁 조건·idempotency → **동시성/원자성 리뷰**
-- 파서·변환기·정규화·diff/merge → **property/edge-case 리뷰**
-- UI·상호작용·네비게이션·권한 차단 → **사용자 흐름/E2E 리뷰**
-
-테스트는 happy path 개수가 아니라 **핵심 불변식을 실제로 검증하는지**로 판단한다.
-
-### AI Capability Platform
-정본은 [`adr/0002-mcp-capability-platform.md`](./adr/0002-mcp-capability-platform.md).
-- 새 AI tool/capability 는 ad-hoc 분기 대신 `register_ai_capabilities(registry)` + `AiCapabilityRegistry` 경로 사용.
-- 인간용 REST request model 재사용 금지, **AI 전용 DTO** 로 정의.
-- handler 는 router 로직 복제 대신 **application service 경계** 호출.
-- write capability 는 승인 게이트 우회 금지. `approval_required=True` 면 preview builder + discoverability predicate 같이 등록.
-- capability 계약 변경 PR 은 ADR/테스트도 같은 PR 에서 갱신.
-
-### UI E2E
-- 실제 UI/E2E 요청 시 로컬 서버 + `agent-browser` 로 상호작용 기반 점검. CLI surface 가 불명확하면 `agent-browser --help` 먼저 확인.
-- 기본 포트: web `127.0.0.1:4200`, api `127.0.0.1:8000`. 안 떠 있으면 `pnpm nx dev web` / `pnpm nx dev api`.
-- named session 사용 (예: `--session doowon-e2e`).
-- ref (`@e1` 류) 안정성을 위해 한 셸 호출 안에서 `open → wait → snapshot → click/fill/upload → wait → snapshot` 으로 묶는다.
-- 매 점검에서 URL (`get url`), snapshot, console, errors 를 함께 확인한다.
-- 파일 업로드/다운로드 화면은 실제 왕복 한 번 확인. 임시 산출물은 `/tmp` 아래.
-- seed quick-login 카드 클릭이 불안정하면 이메일/비밀번호 직접 입력으로 진행.
-- workspace shell 회귀 점검:
-  - legacy 최상위 경로 (`/meeting`, `/docs`, `/pms`, `/planner`, `/ai`) 는 PR1 `cfe4215` 에서 제거. 진입은 `/w/:workspaceSlug/<app>` 만 사용하고, 위 경로는 `NotFoundView` 로 떨어져야 정상 (자동 리다이렉트 없음).
-  - 접근 가능 / 불가 workspace·app 조합 양쪽 확인.
-  - `/w/:workspaceSlug/settings` 와 `/admin/workspaces` 의 detail/member flow.
-- 브라우저 기반 점검 결과는 작업 기록 문서에 간단히 남겨 다음 세션이 이어받을 수 있게 한다.
+- 읽기·감사·로그 분석처럼 독립적인 workstream은 runtime 정책이 허용할 때 병렬 sub-agent를
+  사용한다. 외부 권한, 시크릿, 파괴적 작업, 겹치는 파일 쓰기가 필요한 경우에는 위임하지 않는다.
+- Main agent가 최종 범위, 통합, 변경, 검증 판단과 사용자 보고를 소유한다.

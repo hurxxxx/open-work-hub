@@ -1,0 +1,125 @@
+name: ai-do-prod
+
+services:
+  redis:
+    image: redis:7
+    container_name: ai-do-prod-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${AI_DO_INFRA_BIND_HOST:-0.0.0.0}:${AI_DO_INFRA_REDIS_PORT:-56379}:6379"
+    volumes:
+      - ai-do-prod-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - ai-do-prod-infra
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    container_name: ai-do-prod-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${AI_DO_INFRA_MINIO_ROOT_USER:-ai_do_prod_minio}
+      MINIO_ROOT_PASSWORD: ${AI_DO_INFRA_MINIO_ROOT_PASSWORD:-ai_do_prod_minio}
+    command: server /data --console-address :9001
+    ports:
+      - "${AI_DO_INFRA_BIND_HOST:-0.0.0.0}:${AI_DO_INFRA_MINIO_PORT:-59000}:9000"
+      - "${AI_DO_INFRA_BIND_HOST:-0.0.0.0}:${AI_DO_INFRA_MINIO_CONSOLE_PORT:-59001}:9001"
+    volumes:
+      - ai-do-prod-minio-data:/data
+    networks:
+      - ai-do-prod-infra
+
+  opensearch:
+    build:
+      context: ../..
+      dockerfile: ops/opensearch/Dockerfile
+    image: ai-do-opensearch:3.3.2-nori
+    container_name: ai-do-prod-opensearch
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      DISABLE_SECURITY_PLUGIN: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "${AI_DO_INFRA_BIND_HOST:-0.0.0.0}:${AI_DO_INFRA_OPENSEARCH_PORT:-59200}:9200"
+      - "${AI_DO_INFRA_BIND_HOST:-0.0.0.0}:${AI_DO_INFRA_OPENSEARCH_PERF_PORT:-59600}:9600"
+    volumes:
+      - ai-do-prod-opensearch-data:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9200 >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks:
+      - ai-do-prod-infra
+
+  qdrant:
+    image: qdrant/qdrant:v1.17.1
+    container_name: ai-do-prod-qdrant
+    restart: unless-stopped
+    environment:
+      QDRANT__SERVICE__API_KEY: ${AI_DO_INFRA_QDRANT_API_KEY:-ai_do_prod_qdrant}
+    ports:
+      - "${AI_DO_INFRA_BIND_HOST:-0.0.0.0}:${AI_DO_INFRA_QDRANT_PORT:-6333}:6333"
+      - "${AI_DO_INFRA_BIND_HOST:-0.0.0.0}:${AI_DO_INFRA_QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - ai-do-prod-qdrant-data:/qdrant/storage
+    networks:
+      - ai-do-prod-infra
+
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: ai-do-prod-livekit
+    profiles: ["video-chat"]
+    restart: unless-stopped
+    environment:
+      LIVEKIT_CONFIG: |
+        port: 7880
+        log_level: info
+        rtc:
+          tcp_port: ${AI_DO_LIVEKIT_RTC_TCP_PORT:-7881}
+          port_range_start: ${AI_DO_LIVEKIT_RTC_PORT_RANGE_START:-52000}
+          port_range_end: ${AI_DO_LIVEKIT_RTC_PORT_RANGE_END:-52100}
+          use_external_ip: true
+        keys:
+          ${AI_DO_LIVEKIT_API_KEY}: ${AI_DO_LIVEKIT_API_SECRET}
+    ports:
+      - "${AI_DO_INFRA_BIND_HOST:-0.0.0.0}:${AI_DO_LIVEKIT_PORT:-7880}:7880"
+      - "${AI_DO_INFRA_BIND_HOST:-0.0.0.0}:${AI_DO_LIVEKIT_RTC_TCP_PORT:-7881}:${AI_DO_LIVEKIT_RTC_TCP_PORT:-7881}/tcp"
+      - "${AI_DO_INFRA_BIND_HOST:-0.0.0.0}:${AI_DO_LIVEKIT_RTC_PORT_RANGE_START:-52000}-${AI_DO_LIVEKIT_RTC_PORT_RANGE_END:-52100}:${AI_DO_LIVEKIT_RTC_PORT_RANGE_START:-52000}-${AI_DO_LIVEKIT_RTC_PORT_RANGE_END:-52100}/udp"
+    networks:
+      - ai-do-prod-infra
+
+  drawio:
+    image: jgraph/drawio:${AI_DO_DRAWIO_IMAGE_TAG:-30.2.5}
+    container_name: ai-do-prod-drawio
+    restart: unless-stopped
+    ports:
+      - "${AI_DO_DRAWIO_BIND_HOST:-127.0.0.1}:${AI_DO_DRAWIO_PORT:-18083}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/ >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks:
+      - ai-do-prod-infra
+
+networks:
+  ai-do-prod-infra:
+    name: ai-do-prod-infra
+
+volumes:
+  ai-do-prod-redis-data:
+    name: ai-do-prod-redis-data
+  ai-do-prod-minio-data:
+    name: ai-do-prod-minio-data
+  ai-do-prod-opensearch-data:
+    name: ai-do-prod-opensearch-data
+  ai-do-prod-qdrant-data:
+    name: ai-do-prod-qdrant-data

@@ -1,14 +1,20 @@
-import { ApiRequestError, apiFetchJson, jsonHeaders } from '@/src/platform/api/client';
+import { apiFetchJsonWithMappedError, jsonHeaders } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
 export type Recording = ApiSchema<'RecordingOut'>;
-export type RecordingContainer = ApiSchema<'RecordingContainerOut'>;
+export type RecordingTarget = ApiSchema<'RecordingTargetOut'>;
 export type RecordingListResponse = ApiSchema<'RecordingListResponse'>;
 export type RecordingPlaybackResponse = ApiSchema<'RecordingPlaybackResponse'>;
 export type RecordingUpload = ApiSchema<'RecordingUploadOut'>;
-export type RecordingUploadChunkAck = ApiSchema<'RecordingUploadChunkAck'>;
 export type RecordingViewFilter = 'mine' | 'needs_review' | 'processing' | 'failed' | 'archived';
+const TUS_RESUMABLE_VERSION = '1.0.0';
+
+export interface RecordingTargetRef {
+  app: string;
+  type: string;
+  id: string;
+}
 
 export class RecordingApiError extends Error {
   status: number;
@@ -25,14 +31,12 @@ async function request<T>(
   workspaceSlug: string,
   init: RequestInit = {},
 ): Promise<T> {
-  try {
-    return await apiFetchJson<T>(rewriteWorkspaceApiPath(path, workspaceSlug), token, init);
-  } catch (error) {
-    if (error instanceof ApiRequestError) {
-      throw new RecordingApiError(error.status, error.message);
-    }
-    throw error;
-  }
+  return apiFetchJsonWithMappedError<T>(
+    rewriteWorkspaceApiPath(path, workspaceSlug),
+    token,
+    init,
+    (error) => new RecordingApiError(error.status, error.message),
+  );
 }
 
 export function listRecordings(
@@ -42,9 +46,9 @@ export function listRecordings(
     view?: RecordingViewFilter;
     from?: string;
     to?: string;
-    container_app?: string;
-    container_type?: string;
-    container_id?: string;
+    target_app?: string;
+    target_type?: string;
+    target_id?: string;
   } = {},
 ): Promise<RecordingListResponse> {
   const params = new URLSearchParams();
@@ -53,9 +57,9 @@ export function listRecordings(
   }
   if (options.from) params.set('from', options.from);
   if (options.to) params.set('to', options.to);
-  if (options.container_app) params.set('container_app', options.container_app);
-  if (options.container_type) params.set('container_type', options.container_type);
-  if (options.container_id) params.set('container_id', options.container_id);
+  if (options.target_app) params.set('target_app', options.target_app);
+  if (options.target_type) params.set('target_type', options.target_type);
+  if (options.target_id) params.set('target_id', options.target_id);
   const query = params.toString();
   return request<RecordingListResponse>(
     `/api/v1/recording/recordings${query ? `?${query}` : ''}`,
@@ -119,20 +123,20 @@ export function retryRecording(
   );
 }
 
-export function attachRecordingContainer(
+export function attachRecordingTarget(
   token: string,
   workspaceSlug: string,
   recordingId: string,
   payload: {
-    container_app: string;
-    container_type: string;
-    container_id: string;
+    target_app: string;
+    target_type: string;
+    target_id: string;
     is_primary?: boolean;
     sort_order?: number;
   },
 ): Promise<Recording> {
   return request<Recording>(
-    `/api/v1/recording/recordings/${recordingId}/containers`,
+    `/api/v1/recording/recordings/${recordingId}/targets`,
     token,
     workspaceSlug,
     {
@@ -142,14 +146,14 @@ export function attachRecordingContainer(
   );
 }
 
-export function detachRecordingContainer(
+export function detachRecordingTarget(
   token: string,
   workspaceSlug: string,
   recordingId: string,
-  containerId: string,
+  targetId: string,
 ): Promise<Recording> {
   return request<Recording>(
-    `/api/v1/recording/recordings/${recordingId}/containers/${containerId}`,
+    `/api/v1/recording/recordings/${recordingId}/targets/${targetId}`,
     token,
     workspaceSlug,
     { method: 'DELETE' },
@@ -163,9 +167,9 @@ export function initRecordingUpload(
     idempotency_key: string;
     mime_type: string;
     title?: string | null;
-    initial_container_app?: string | null;
-    initial_container_type?: string | null;
-    initial_container_id?: string | null;
+    initial_target_app?: string | null;
+    initial_target_type?: string | null;
+    initial_target_id?: string | null;
     linked_task_id?: string | null;
   },
 ): Promise<RecordingUpload> {
@@ -180,28 +184,83 @@ export function initRecordingUpload(
   );
 }
 
-export async function uploadRecordingChunk(
+function hexToBase64(hex: string): string {
+  const bytes = hex.match(/.{1,2}/g)?.map((value) => Number.parseInt(value, 16)) ?? [];
+  let binary = '';
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary);
+}
+
+function readTusOffset(response: Response): number {
+  const raw = response.headers.get('Upload-Offset');
+  const offset = raw == null ? NaN : Number.parseInt(raw, 10);
+  if (!Number.isFinite(offset) || offset < 0) {
+    throw new RecordingApiError(response.status, 'Tus response did not include a valid upload offset.');
+  }
+  return offset;
+}
+
+async function tusFetch(
   token: string,
   workspaceSlug: string,
   stagingId: string,
-  seq: number,
-  blob: Blob,
-  chunkSha256: string,
-): Promise<RecordingUploadChunkAck> {
-  const formData = new FormData();
-  formData.append('file', blob, `chunk-${seq}.webm`);
-  return request<RecordingUploadChunkAck>(
-    `/api/v1/recording/recordings/staging/${stagingId}/chunks/${seq}`,
-    token,
-    workspaceSlug,
+  init: RequestInit,
+): Promise<Response> {
+  const response = await fetch(
+    rewriteWorkspaceApiPath(`/api/v1/recording/recordings/staging/${stagingId}/tus`, workspaceSlug),
     {
-      method: 'PUT',
+      ...init,
       headers: {
-        'X-Chunk-Sha256': chunkSha256,
+        ...jsonHeaders(token, { 'Tus-Resumable': TUS_RESUMABLE_VERSION }),
+        ...(init.headers ?? {}),
       },
-      body: formData,
+      cache: 'no-store',
     },
   );
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new RecordingApiError(
+      response.status,
+      typeof payload?.detail === 'string'
+        ? payload.detail
+        : `Tus upload failed with ${response.status}.`,
+    );
+  }
+  return response;
+}
+
+export async function headRecordingTusUpload(
+  token: string,
+  workspaceSlug: string,
+  stagingId: string,
+): Promise<number> {
+  const response = await tusFetch(token, workspaceSlug, stagingId, { method: 'HEAD' });
+  return readTusOffset(response);
+}
+
+export async function uploadRecordingTusChunk(
+  token: string,
+  workspaceSlug: string,
+  stagingId: string,
+  offset: number,
+  blob: Blob,
+  chunkSha256: string | null,
+): Promise<number> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/offset+octet-stream',
+    'Upload-Offset': String(offset),
+  };
+  if (chunkSha256) {
+    headers['Upload-Checksum'] = `sha256 ${hexToBase64(chunkSha256)}`;
+  }
+  const response = await tusFetch(token, workspaceSlug, stagingId, {
+    method: 'PATCH',
+    headers,
+    body: blob,
+  });
+  return readTusOffset(response);
 }
 
 export function completeRecordingUpload(
@@ -225,15 +284,15 @@ export function listRecordingUploads(
   token: string,
   workspaceSlug: string,
   options: {
-    initial_container_app?: string;
-    initial_container_type?: string;
-    initial_container_id?: string;
+    initial_target_app?: string;
+    initial_target_type?: string;
+    initial_target_id?: string;
   } = {},
 ): Promise<RecordingUpload[]> {
   const params = new URLSearchParams();
-  if (options.initial_container_app) params.set('initial_container_app', options.initial_container_app);
-  if (options.initial_container_type) params.set('initial_container_type', options.initial_container_type);
-  if (options.initial_container_id) params.set('initial_container_id', options.initial_container_id);
+  if (options.initial_target_app) params.set('initial_target_app', options.initial_target_app);
+  if (options.initial_target_type) params.set('initial_target_type', options.initial_target_type);
+  if (options.initial_target_id) params.set('initial_target_id', options.initial_target_id);
   const query = params.toString();
   return request<RecordingUpload[]>(
     `/api/v1/recording/recordings/staging${query ? `?${query}` : ''}`,
@@ -265,6 +324,8 @@ export async function importRecording(
     endedAt?: Date | null;
     durationSec?: number | null;
     source?: 'quick_record' | 'manual_upload';
+    initialTarget?: RecordingTargetRef | null;
+    linkedTaskId?: string | null;
   } = {},
 ): Promise<Recording> {
   const formData = new FormData();
@@ -283,6 +344,14 @@ export async function importRecording(
     formData.append('duration_sec', String(Math.max(0, Math.round(options.durationSec))));
   }
   formData.append('source', options.source ?? 'quick_record');
+  if (options.initialTarget) {
+    formData.append('initial_target_app', options.initialTarget.app);
+    formData.append('initial_target_type', options.initialTarget.type);
+    formData.append('initial_target_id', options.initialTarget.id);
+  }
+  if (options.linkedTaskId) {
+    formData.append('linked_task_id', options.linkedTaskId);
+  }
 
   return request<Recording>(
     '/api/v1/recording/recordings/import',

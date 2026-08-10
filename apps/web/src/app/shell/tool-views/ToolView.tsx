@@ -1,4 +1,4 @@
-import { motion } from 'motion/react';
+import { LazyMotion, domAnimation, m } from 'motion/react';
 import { useTranslation } from 'react-i18next';
 import { 
   Share2, 
@@ -20,11 +20,12 @@ export const ToolView = ({ item }: { item: NavItem }) => {
     : '';
 
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="p-8 max-w-5xl mx-auto"
-    >
+    <LazyMotion features={domAnimation}>
+      <m.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="p-8 max-w-5xl mx-auto"
+      >
       <div className="card space-y-8">
         <header className="flex items-start justify-between">
           <div className="flex items-center gap-4">
@@ -33,14 +34,14 @@ export const ToolView = ({ item }: { item: NavItem }) => {
             </div>
             <div>
               <h1 className="app-text-title-lg mb-2 text-app-ink">{title}</h1>
-              <p className="app-text-body text-gray-500 dark:text-gray-400">{description}</p>
+              <p className="app-text-body text-app-ink/55 dark:text-app-ink/65">{description}</p>
             </div>
           </div>
           <div className="flex gap-2">
-            <button className="p-2 hover:bg-app-surface-hover rounded-md border border-app-border text-gray-500 dark:text-gray-400">
+            <button type="button" aria-label={t('common:actions.share')} className="p-2 hover:bg-app-surface-hover rounded-md border border-app-border text-app-ink/55 dark:text-app-ink/65">
               <Share2 size={18} />
             </button>
-            <button className="p-2 hover:bg-app-surface-hover rounded-md border border-app-border text-gray-500 dark:text-gray-400">
+            <button type="button" aria-label={t('apps:toolView.recentWork')} className="p-2 hover:bg-app-surface-hover rounded-md border border-app-border text-app-ink/55 dark:text-app-ink/65">
               <History size={18} />
             </button>
           </div>
@@ -49,24 +50,25 @@ export const ToolView = ({ item }: { item: NavItem }) => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="md:col-span-2 space-y-6">
             <div className="space-y-4">
-              <label className="app-text-control text-gray-500 dark:text-gray-400">{t('apps:toolView.inputContent')}</label>
+              <label className="app-text-control text-app-ink/55 dark:text-app-ink/65">{t('apps:toolView.inputContent')}</label>
               <textarea 
+                aria-label={t('apps:toolView.inputContent')}
                 className="app-text-body h-64 w-full resize-none rounded-xl border border-app-border bg-app-bg p-6 leading-relaxed text-app-ink transition-all focus:border-app-accent focus:outline-none"
                 placeholder={t('apps:toolView.inputPlaceholder')}
               />
             </div>
             <div className="flex items-center justify-between">
               <div className="flex gap-2">
-                <button className="app-text-control flex items-center gap-2 rounded-lg border border-app-border bg-app-surface-sidebar px-4 py-2 text-app-ink transition-all hover:bg-app-surface-hover">
+                <button type="button" className="app-text-control flex items-center gap-2 rounded-lg border border-app-border bg-app-surface-sidebar px-4 py-2 text-app-ink transition-all hover:bg-app-surface-hover">
                   <FilePlus size={18} />
                   <span>{t('apps:toolView.uploadFile')}</span>
                 </button>
-                <button className="app-text-control flex items-center gap-2 rounded-lg border border-app-border bg-app-surface-sidebar px-4 py-2 text-app-ink transition-all hover:bg-app-surface-hover">
+                <button type="button" className="app-text-control flex items-center gap-2 rounded-lg border border-app-border bg-app-surface-sidebar px-4 py-2 text-app-ink transition-all hover:bg-app-surface-hover">
                   <Mic size={18} />
                   <span>{t('apps:toolView.voiceInput')}</span>
                 </button>
               </div>
-              <button className="app-text-control flex items-center gap-2 rounded-lg bg-app-accent px-8 py-2.5 font-semibold text-app-accent-fg shadow-sm transition-all hover:bg-opacity-90">
+              <button type="button" className="app-text-control flex items-center gap-2 rounded-lg bg-app-accent px-8 py-2.5 font-semibold text-app-accent-fg shadow-sm transition-all hover:bg-opacity-90">
                 <Brain size={18} />
                 <span>{t('apps:toolView.runAi')}</span>
               </button>
@@ -82,12 +84,12 @@ export const ToolView = ({ item }: { item: NavItem }) => {
               <div className="space-y-3">
                 {[1, 2, 3].map(i => (
                   <div key={i} className="flex items-center gap-3 p-2 hover:bg-app-surface-hover rounded-md transition-colors cursor-pointer group">
-                    <div className="w-8 h-8 rounded bg-app-surface-sidebar border border-app-border flex items-center justify-center">
-                      <FileText size={14} className="text-gray-500 group-hover:text-app-accent" />
+                    <div className="flex size-8 items-center justify-center rounded border border-app-border bg-app-surface-sidebar">
+                      <FileText size={14} className="text-app-ink/55 group-hover:text-app-accent" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="app-text-caption truncate text-app-ink">{t('apps:toolView.recentDocument', { index: i })}</div>
-                      <div className="app-text-micro text-gray-500">{t('apps:toolView.recentTime')}</div>
+                      <div className="app-text-micro text-app-ink/55">{t('apps:toolView.recentTime')}</div>
                     </div>
                   </div>
                 ))}
@@ -99,13 +101,14 @@ export const ToolView = ({ item }: { item: NavItem }) => {
                 <HelpCircle size={16} className="text-app-accent" />
                 {t('apps:toolView.help')}
               </h3>
-              <p className="app-text-caption leading-relaxed text-gray-500">
+              <p className="app-text-caption leading-relaxed text-app-ink/55">
                 {t('apps:toolView.helpDescription')}
               </p>
             </div>
           </div>
         </div>
       </div>
-    </motion.div>
+      </m.div>
+    </LazyMotion>
   );
 };

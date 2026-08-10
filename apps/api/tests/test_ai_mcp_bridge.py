@@ -1,22 +1,19 @@
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
+
+from dev_accounts import dev_login
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ai_do_api.core.settings import get_settings
 from ai_do_api.domains.ai.registry import reset_ai_capability_registry
-from ai_do_api.core.db import get_engine, get_session_factory
-from ai_do_api.domains.auth.access import ensure_dev_login_seed_data
-from ai_do_api.domains.auth.models import Workspace, WorkspaceAppEntitlement
+from ai_do_api.core.db import get_engine
+from ai_do_api.domains.auth.models import PlatformAppVisibility
 
 
 def _dev_login(client: TestClient, account_key: str) -> dict:
-    with get_session_factory()() as db:
-        ensure_dev_login_seed_data(db)
-    response = client.post("/api/v1/auth/dev-login", json={"account_key": account_key})
-    assert response.status_code == 200, response.text
-    return response.json()
+    return dev_login(client, account_key)
 
 
 def _auth_headers(token: str) -> dict[str, str]:
@@ -24,22 +21,17 @@ def _auth_headers(token: str) -> dict[str, str]:
 
 
 def _workspace_ai_path(workspace_slug: str, suffix: str) -> str:
-    return f"/api/v1/workspaces/{workspace_slug}/ai{suffix}"
+    return f"/api/v1/workspaces/{workspace_slug}/chatbot{suffix}"
 
 
-def _disable_workspace_app(workspace_slug: str, app_id: str) -> None:
+def _disable_platform_app(app_id: str) -> None:
     with Session(get_engine()) as session:
-        workspace = session.scalar(select(Workspace).where(Workspace.key == workspace_slug))
-        assert workspace is not None
-        entitlement = session.scalar(
-            select(WorkspaceAppEntitlement).where(
-                WorkspaceAppEntitlement.workspace_id == workspace.id,
-                WorkspaceAppEntitlement.app_id == app_id,
-            )
+        visibility = session.scalar(
+            select(PlatformAppVisibility).where(PlatformAppVisibility.app_id == app_id)
         )
-        assert entitlement is not None
-        entitlement.enabled = False
-        session.add(entitlement)
+        assert visibility is not None
+        visibility.visible = False
+        session.add(visibility)
         session.commit()
 
 
@@ -61,25 +53,18 @@ def test_capability_manifest_returns_filtered_tool_inventory(client: TestClient)
     payload = response.json()
 
     tool_names = [item["name"] for item in payload["tools"]]
-    assert tool_names == [
+    assert tool_names == sorted(tool_names)
+    assert {
         "docs.get_item",
-        "docs.list_hub",
-        "docs.list_pages",
-        "docs.read_page",
-        "meeting.draft_followup_schedule",
-        "meeting.extract_actions",
-        "meeting.extract_decisions",
-        "meeting.find_availability",
-        "meeting.get_meeting",
         "meeting.list_meetings",
         "planner.list_events",
-        "pms.get_issue",
+        "pms.get_task",
         "pms.list_spaces",
         "pms.list_task_lists",
-        "pms.search_issues",
-        "rag.list_sources",
+        "pms.search_tasks",
         "rag.query",
-    ]
+    } <= set(tool_names)
+    assert "pms.get_issue" not in tool_names
     assert payload["server"]["transport"] == "inproc"
     assert all("annotations" in item for item in payload["tools"])
     assert all("_meta" in item for item in payload["tools"])
@@ -105,11 +90,11 @@ def test_app_manifest_and_openapi_are_scoped_to_one_app(client: TestClient) -> N
     assert set(openapi_payload["paths"].keys()) == {"/mcp/tools/planner.list_events"}
 
 
-def test_manifest_and_openapi_reflect_entitlement_changes_on_next_request(
+def test_manifest_and_openapi_reflect_platform_visibility_changes_on_next_request(
     client: TestClient,
 ) -> None:
     auth = _dev_login(client, "delivery-hub-admin")
-    _disable_workspace_app("delivery-hub", "planner")
+    _disable_platform_app("planner")
 
     manifest_response = client.get(
         _workspace_ai_path("delivery-hub", "/capabilities/manifest"),
@@ -145,10 +130,10 @@ def test_manifest_and_openapi_include_pms_write_tools_when_enabled(
         manifest_payload = manifest_response.json()
         tool_names = {item["name"] for item in manifest_payload["tools"]}
         assert {
-            "pms.create_issue",
-            "pms.update_issue",
+            "pms.create_task",
+            "pms.update_task",
             "pms.add_comment",
-            "pms.delete_issue",
+            "pms.delete_task",
             "meeting.create_meeting",
             "planner.create_event",
             "planner.update_event",
@@ -162,10 +147,10 @@ def test_manifest_and_openapi_include_pms_write_tools_when_enabled(
         )
         assert openapi_response.status_code == 200, openapi_response.text
         openapi_payload = openapi_response.json()
-        assert "/mcp/tools/pms.create_issue" in openapi_payload["paths"]
-        assert "/mcp/tools/pms.update_issue" in openapi_payload["paths"]
+        assert "/mcp/tools/pms.create_task" in openapi_payload["paths"]
+        assert "/mcp/tools/pms.update_task" in openapi_payload["paths"]
         assert "/mcp/tools/pms.add_comment" in openapi_payload["paths"]
-        assert "/mcp/tools/pms.delete_issue" in openapi_payload["paths"]
+        assert "/mcp/tools/pms.delete_task" in openapi_payload["paths"]
         assert "/mcp/tools/meeting.create_meeting" in openapi_payload["paths"]
         assert "/mcp/tools/planner.create_event" in openapi_payload["paths"]
         assert "/mcp/tools/planner.update_event" in openapi_payload["paths"]

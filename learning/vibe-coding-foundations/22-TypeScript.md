@@ -78,7 +78,7 @@ Microsoft 연구에 따르면 JS→TS 전환 시 **전체 버그의 약 15%가 �
 
 **상황:** 백엔드에서 AI 채팅 응답 구조를 `{ text }` 에서 `{ text, citations: Source[] }` 로 바꾸기로 했다.
 
-- 변경 파일: `apps/web/src/domains/ai/api/chat.ts` 의 응답 타입 `ChatResponse`.
+- 변경 파일: `apps/web/src/app-modules/ai/api/ai-api.ts` 의 응답 타입.
 - TypeScript가 **즉시** 이 타입을 참조하는 **모든 컴포넌트·훅에 빨간 밑줄**을 긋는다. "이 자리에서 `citations`를 안 쓰고 있는데?"
 - 개발자는 **"빨간 줄이 난 곳만 한 바퀴 돌며"** 수정한다. 타입이 없었다면 **실제 배포 후 사용자가 기능 깨진 걸 발견**하는 시나리오가 흔하다.
 - AI 도구에게 "ChatResponse 바꿨으니 영향 받는 파일 전부 수정" 이라고만 지시해도, 타입이 명확할수록 AI가 정확히 해 준다.
@@ -205,7 +205,7 @@ Record<string, number>  // {key: value} 맵
 백엔드가 반환하는 JSON을 프런트가 타입으로 받습니다. 현재는 수작업으로 정의하지만, 장기적으로는 `packages/contracts`에서 **OpenAPI 스키마로 자동 생성** 하는 것이 목표입니다.
 
 ```ts
-// apps/web/src/domains/auth/api/auth-api.ts
+// apps/web/src/platform/auth/auth-api.ts
 interface LoginResponse {
   userId: string;
   sessionId: string;
@@ -238,7 +238,7 @@ function Button({ label, variant = 'primary', onClick }: ButtonProps) {
 ### 6.3 도메인 엔티티
 
 ```ts
-// apps/web/src/domains/pms/types.ts (가상)
+// apps/web/src/app-modules/pms/api/pms-api.ts (가상)
 export type IssueStatus = 'todo' | 'doing' | 'review' | 'done';
 
 export interface Issue {
@@ -301,7 +301,7 @@ TypeScript의 에러 메시지는 초보에게 **난해하게** 보일 수 있�
 
 ## 8.5 🛠️ 5분 실습 — 타입 실수를 눈으로 보기
 
-1. 사용 중인 코드 에디터에서 `apps/web/src/domains/` 아무 `.ts` 파일을 연다.
+1. 사용 중인 코드 에디터에서 `apps/web/src/app-modules/` 아무 `.ts` 파일을 연다.
 2. 임의의 변수 선언 아래에 `const x: number = "hello";` 을 한 줄 적어 본다.
 3. **저장도 하기 전에** 편집기가 빨간 밑줄을 그어 "Type 'string' is not assignable to type 'number'" 메시지를 띄우는 것 확인.
 4. 같은 줄의 타입 주석을 지우고 `const x = "hello";` 로 바꾸면 에러가 사라진다 — 이것이 **타입 추론(type inference — 문맥에서 자동으로 타입을 유추)**.
@@ -359,7 +359,7 @@ TypeScript는 현대 웹 생태계에서 매우 널리 쓰입니다. 학습 투�
 
 **상황:** AX TF에 합류한 신규 인턴이 "회의실 목록 화면의 정렬 기능" 수정을 맡았다.
 
-1. 인턴은 `domains/meeting/api/rooms.ts` 의 `fetchRooms()` 함수 시그니처만 봐도 **반환 타입(`RoomListResponse`)** 에서 정렬 가능 필드를 바로 파악한다.
+1. 인턴은 `apps/web/src/app-modules/meeting/`의 API 함수 시그니처만 봐도 **반환 타입(`RoomListResponse`)** 에서 정렬 가능 필드를 바로 파악한다.
 2. 정렬 파라미터를 추가하려고 해당 함수에 `sort: 'name' | 'capacity'` 인자를 넣자마자 **호출하는 모든 화면에서 빨간 밑줄** — "어, sort 인자가 필요한데 안 넣었네?"
 3. 인턴은 그 곳들을 돌며 필수 인자를 채우고, 전체 타입이 맞춰진 순간 **앱은 컴파일 성공**.
 4. 리뷰어는 타입 선언만 봐도 **변경 의도**를 이해. 문서 없이도 의사소통이 됨.

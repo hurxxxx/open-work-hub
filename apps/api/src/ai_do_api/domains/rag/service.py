@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 import time
 
 from ai_do_api.domains.rag.contracts import (
     RagDeleteRequest,
     RagProjection,
+    RagScopeKind,
     RagSyncOperation,
     RagSyncResult,
     RagUpsertRequest,
-    RagVectorRecord,
 )
 from ai_do_api.domains.rag.metrics import (
     record_embedding_latency,
@@ -18,12 +19,17 @@ from ai_do_api.domains.rag.metrics import (
     record_provider_timeout,
 )
 from ai_do_api.domains.rag.projection import projection_to_chunks
+from ai_do_api.domains.rag.providers import RagProviderConfigurationError
 from ai_do_api.domains.rag.providers.base import (
     AsrClient,
     EmbeddingClient,
     OcrClient,
     RerankClient,
     VectorIndexClient,
+)
+from ai_do_api.domains.rag.vector_records import (
+    build_rag_vector_records,
+    projection_dense_dimensions,
 )
 
 
@@ -36,7 +42,7 @@ class RagService:
         ocr_client: OcrClient | None = None,
         asr_client: AsrClient | None = None,
         rerank_client: RerankClient | None = None,
-        default_collection: str = "ai-do-rag-dev",
+        default_collection: str = "ai-do-dev-rag-dev",
     ) -> None:
         self._vector_index = vector_index
         self._embedding_client = embedding_client
@@ -45,18 +51,53 @@ class RagService:
         self._rerank_client = rerank_client
         self._default_collection = default_collection
 
+    @property
+    def ocr_provider_name(self) -> str | None:
+        if self._ocr_client is None:
+            return None
+        return _provider_name(self._ocr_client)
+
     def sync_projection(
         self,
         projection: RagProjection,
         *,
         collection: str | None = None,
     ) -> RagSyncResult:
+        return self._sync_projection(
+            projection,
+            collection=collection,
+            before_vector_write=None,
+        )
+
+    def sync_projection_with_fence(
+        self,
+        projection: RagProjection,
+        *,
+        collection: str | None = None,
+        before_vector_write: Callable[[], None],
+    ) -> RagSyncResult:
+        """Embed first, then acquire the caller's final fence before vector mutation."""
+
+        return self._sync_projection(
+            projection,
+            collection=collection,
+            before_vector_write=before_vector_write,
+        )
+
+    def _sync_projection(
+        self,
+        projection: RagProjection,
+        *,
+        collection: str | None,
+        before_vector_write: Callable[[], None] | None,
+    ) -> RagSyncResult:
         started = time.perf_counter()
         resolved_collection = collection or self._default_collection
         chunks = projection_to_chunks(projection)
+        index_texts = [chunk.index_text or chunk.text for chunk in chunks]
         embedding_started = time.perf_counter()
         try:
-            embeddings = self._embedding_client.embed_texts([chunk.text for chunk in chunks])
+            embeddings = self._embedding_client.embed_texts(index_texts)
         except Exception as error:
             _record_provider_failure(
                 provider_name=_provider_name(self._embedding_client),
@@ -75,25 +116,21 @@ class RagService:
             resource_type=projection.resource_type,
             source_kind=projection.source_kind,
         )
-        dense_dimensions = len(embeddings[0]) if embeddings else 0
+        dense_dimensions = projection_dense_dimensions(embeddings)
+        records = build_rag_vector_records(
+            projection=projection,
+            chunks=chunks,
+            index_texts=index_texts,
+            embeddings=embeddings,
+        )
+        if before_vector_write is not None:
+            before_vector_write()
         try:
             self._vector_index.ensure_collection(
                 collection=resolved_collection,
                 dense_dimensions=dense_dimensions,
                 sparse_enabled=True,
             )
-            records = [
-                RagVectorRecord(
-                    chunk_id=chunk.chunk_id,
-                    text=chunk.text,
-                    summary=chunk.summary,
-                    embedding=embedding,
-                    sparse_terms=_build_sparse_terms(chunk.text),
-                    projection=projection,
-                    metadata=dict(chunk.metadata),
-                )
-                for chunk, embedding in zip(chunks, embeddings, strict=True)
-            ]
             request = RagUpsertRequest(
                 collection=resolved_collection,
                 projection=projection,
@@ -103,6 +140,8 @@ class RagService:
             stale_deleted = self._vector_index.delete_chunks_at_or_after(
                 request=RagDeleteRequest(
                     collection=resolved_collection,
+                    retrieval_partition_id=projection.retrieval_partition_id,
+                    scope_kind=projection.scope_kind,
                     workspace_id=projection.workspace_id,
                     resource_type=projection.resource_type,
                     resource_id=projection.resource_id,
@@ -136,15 +175,19 @@ class RagService:
     def delete_projection(
         self,
         *,
-        workspace_id: str,
+        workspace_id: str | None,
+        scope_kind: RagScopeKind = RagScopeKind.WORKSPACE,
         resource_type: str,
         resource_id: str,
         collection: str | None = None,
+        retrieval_partition_id: str | None = None,
     ) -> RagSyncResult:
         resolved_collection = collection or self._default_collection
         deleted = self._vector_index.delete_resource(
             request=RagDeleteRequest(
                 collection=resolved_collection,
+                retrieval_partition_id=retrieval_partition_id,
+                scope_kind=scope_kind,
                 workspace_id=workspace_id,
                 resource_type=resource_type,
                 resource_id=resource_id,
@@ -156,6 +199,11 @@ class RagService:
             deleted_count=deleted,
         )
 
+    def delete_collection(self, *, collection: str) -> bool:
+        """Delete one explicitly named collection owned by a bounded workflow."""
+
+        return self._vector_index.delete_collection(collection=collection)
+
     def extract_text(
         self,
         *,
@@ -166,7 +214,7 @@ class RagService:
         source_kind: str | None = None,
     ) -> str:
         if self._ocr_client is None:
-            raise RuntimeError("OCR client is not configured for RagService")
+            raise RagProviderConfigurationError("OCR client is not configured for RagService")
         started = time.perf_counter()
         try:
             text = self._ocr_client.extract_text(content=content, content_type=content_type)
@@ -188,16 +236,6 @@ class RagService:
             source_kind=source_kind,
         )
         return text
-
-
-def _build_sparse_terms(text: str) -> dict[str, float]:
-    sparse_terms: dict[str, float] = {}
-    for token in text.lower().replace("\n", " ").split(" "):
-        normalized = token.strip()
-        if not normalized:
-            continue
-        sparse_terms[normalized] = sparse_terms.get(normalized, 0.0) + 1.0
-    return sparse_terms
 
 
 def _provider_name(provider: object) -> str | None:

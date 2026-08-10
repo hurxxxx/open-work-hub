@@ -11,6 +11,17 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ImageLightbox } from './ImageLightbox';
+import {
+  buildEditedImagePreviewDescriptor,
+  buildSourceImagePreviewDescriptor,
+  canSubmitImageEdit,
+  getImageResultMode,
+  getImageTemplateToggleLabelKey,
+  getNextImageTemplateState,
+  getTrimmedImageEditInstruction,
+  resolveImagePreviewDescriptor,
+  type ResolvedImagePreviewDescriptor,
+} from './image-result-turn-model';
 
 interface ImageResultTurnProps {
   imageUrl: string | null;
@@ -45,21 +56,22 @@ export function ImageResultTurn({
 }: ImageResultTurnProps) {
   const { t } = useTranslation('apps');
   const [editText, setEditText] = useState('');
-  const [preview, setPreview] = useState<{
-    imageUrl: string;
-    alt: string;
-    title: string;
-    downloadName: string;
-  } | null>(null);
+  const [preview, setPreview] = useState<ResolvedImagePreviewDescriptor | null>(null);
+  const mode = getImageResultMode({
+    failureReason,
+    imageUrl,
+    loadError,
+    loading,
+  });
 
   async function submitEdit() {
-    const trimmed = editText.trim();
+    const trimmed = getTrimmedImageEditInstruction(editText);
     if (!trimmed) return;
     await onEditImage(trimmed);
     setEditText('');
   }
 
-  if (failureReason) {
+  if (mode === 'failed') {
     return (
       <article className="space-y-2 rounded-lg border border-[var(--ui-color-danger)]/30 bg-[var(--ui-color-danger)]/10 p-4 text-[var(--ui-color-danger)]">
         <p className="app-text-body font-medium">{t('ai.imageWizard.step4.failed')}</p>
@@ -69,7 +81,7 @@ export function ImageResultTurn({
       </article>
     );
   }
-  if (loading) {
+  if (mode === 'loading') {
     return (
       <article className="flex items-center gap-3 rounded-lg border border-app-border bg-app-surface p-4 text-app-ink/65 shadow-sm">
         <Loader2 size={16} className="animate-spin text-app-accent" />
@@ -77,7 +89,7 @@ export function ImageResultTurn({
       </article>
     );
   }
-  if (loadError) {
+  if (mode === 'loadError') {
     return (
       <article className="space-y-3 rounded-lg border border-[var(--ui-color-danger)]/30 bg-[var(--ui-color-danger)]/10 p-4 text-[var(--ui-color-danger)]">
         <p className="app-text-body font-medium">{t('ai.imageWizard.step4.imageLoadFailed')}</p>
@@ -103,10 +115,8 @@ export function ImageResultTurn({
       </article>
     );
   }
-  if (!imageUrl) return null;
-  const templateLabel = isTemplate
-    ? t('ai.imageWizard.step4.removeFromTemplates')
-    : t('ai.imageWizard.step4.saveCurrentAsTemplate');
+  if (mode === 'empty' || !imageUrl) return null;
+  const templateLabel = t(getImageTemplateToggleLabelKey(isTemplate));
   return (
     <article className="space-y-3 rounded-lg border border-app-border bg-app-surface p-4 shadow-sm">
       {preview ? (
@@ -127,12 +137,12 @@ export function ImageResultTurn({
             <button
               type="button"
               onClick={() =>
-                setPreview({
-                  imageUrl: sourceImageUrl,
-                  alt: t('ai.imageWizard.step4.sourceImageAltText'),
-                  title: t('ai.imageWizard.step4.sourceImageLabel'),
-                  downloadName: 'generated-image-source.png',
-                })
+                setPreview(
+                  resolveImagePreviewDescriptor(
+                    buildSourceImagePreviewDescriptor(sourceImageUrl),
+                    t,
+                  ),
+                )
               }
               className="group relative block w-full"
               aria-label={t('ai.imageWizard.step4.openLargePreview')}
@@ -142,7 +152,7 @@ export function ImageResultTurn({
                 alt={t('ai.imageWizard.step4.sourceImageAltText')}
                 className="max-h-[420px] w-full rounded-md border border-app-border object-contain"
               />
-              <span className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100">
+              <span className="absolute right-2 top-2 inline-flex size-8 items-center justify-center rounded-md bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100">
                 <Expand size={15} />
               </span>
             </button>
@@ -155,12 +165,12 @@ export function ImageResultTurn({
               <button
                 type="button"
                 onClick={() =>
-                  setPreview({
-                    imageUrl,
-                    alt: t('ai.imageWizard.step4.altText'),
-                    title: t('ai.imageWizard.step4.editedImageLabel'),
-                    downloadName: 'generated-image.png',
-                  })
+                  setPreview(
+                    resolveImagePreviewDescriptor(
+                      buildEditedImagePreviewDescriptor(imageUrl, 'comparison'),
+                      t,
+                    ),
+                  )
                 }
                 className="group block w-full"
                 aria-label={t('ai.imageWizard.step4.openLargePreview')}
@@ -170,7 +180,7 @@ export function ImageResultTurn({
                   alt={t('ai.imageWizard.step4.altText')}
                   className="max-h-[420px] w-full rounded-md border border-app-border object-contain"
                 />
-                <span className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100">
+                <span className="absolute right-2 top-2 inline-flex size-8 items-center justify-center rounded-md bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100">
                   <Expand size={15} />
                 </span>
               </button>
@@ -188,12 +198,12 @@ export function ImageResultTurn({
           <button
             type="button"
             onClick={() =>
-              setPreview({
-                imageUrl,
-                alt: t('ai.imageWizard.step4.altText'),
-                title: t('ai.imageWizard.step4.altText'),
-                downloadName: 'generated-image.png',
-              })
+              setPreview(
+                resolveImagePreviewDescriptor(
+                  buildEditedImagePreviewDescriptor(imageUrl, 'solo'),
+                  t,
+                ),
+              )
             }
             className="group block w-full"
             aria-label={t('ai.imageWizard.step4.openLargePreview')}
@@ -203,7 +213,7 @@ export function ImageResultTurn({
               alt={t('ai.imageWizard.step4.altText')}
               className="max-h-[480px] w-full rounded-md border border-app-border object-contain"
             />
-            <span className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100">
+            <span className="absolute right-2 top-2 inline-flex size-8 items-center justify-center rounded-md bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100">
               <Expand size={15} />
             </span>
           </button>
@@ -266,7 +276,7 @@ export function ImageResultTurn({
           <button
             type="button"
             onClick={() => void submitEdit()}
-            disabled={editingImage || !editText.trim()}
+            disabled={!canSubmitImageEdit({ editText, editingImage })}
             className="flex items-center justify-center gap-1 rounded-md bg-app-ink px-3 py-2 app-text-control-sm font-medium text-app-surface transition-colors hover:bg-app-ink/90 disabled:border disabled:border-app-border disabled:bg-app-surface-sidebar disabled:text-app-ink/65 disabled:opacity-100"
           >
             {editingImage ? (
@@ -300,7 +310,7 @@ function TemplateToggleButton({
   return (
     <button
       type="button"
-      onClick={() => void onToggle(!isTemplate)}
+      onClick={() => void onToggle(getNextImageTemplateState(isTemplate))}
       disabled={busy}
       aria-pressed={isTemplate}
       className="absolute bottom-3 left-3 inline-flex max-w-[calc(100%-1.5rem)] items-center gap-1.5 rounded-md border border-app-border bg-app-surface/95 px-3 py-2 app-text-control-sm font-medium text-app-ink shadow-sm hover:border-app-accent hover:text-app-accent disabled:opacity-70"
@@ -316,5 +326,3 @@ function TemplateToggleButton({
     </button>
   );
 }
-
-export default ImageResultTurn;

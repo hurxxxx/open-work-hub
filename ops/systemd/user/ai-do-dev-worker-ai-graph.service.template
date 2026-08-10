@@ -1,0 +1,23 @@
+[Unit]
+Description=AI-DO Development Worker - Durable AI Graph
+Wants=network-online.target ai-do-dev-app.service
+After=network-online.target ai-do-dev-app.service
+
+[Service]
+Type=simple
+WorkingDirectory=__AI_DO_ROOT__/apps/worker
+Environment=PYTHONPATH=__AI_DO_ROOT__/apps/worker/src
+Environment=AI_DO_WORKER_QUEUE_GROUP=ai_graph
+Environment=AI_DO_RUNTIME_REVISION=__AI_DO_RUNTIME_REVISION__
+ExecStart=/usr/bin/env bash -lc 'source "__AI_DO_ROOT__/scripts/dev-env.sh" && cd "__AI_DO_ROOT__/apps/worker" && exec uv run --python 3.12 celery -A ai_do_worker.celery_app:celery_app worker --loglevel=info --hostname=ai-do-dev-worker-ai-graph@%H -Q __AI_DO_WORKER_AI_GRAPH_QUEUE_NAMES__ --concurrency __AI_DO_WORKER_AI_GRAPH_CONCURRENCY__ --prefetch-multiplier 1'
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0077
+Restart=always
+RestartSec=10
+TimeoutStartSec=300
+TimeoutStopSec=1500
+KillMode=mixed
+
+[Install]
+WantedBy=default.target

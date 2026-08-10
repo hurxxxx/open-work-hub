@@ -4,8 +4,9 @@ from datetime import datetime, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Form, Header, Query, Response, UploadFile, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, contains_eager
 
 from ai_do_api.core.db import get_db_session
 from ai_do_api.core.i18n import localized_http_exception
@@ -15,11 +16,15 @@ from ai_do_api.domains.auth.dependencies import (
     require_current_workspace,
 )
 from ai_do_api.domains.auth.models import (
+    OrgUnit,
     User,
     Workspace,
 )
+from ai_do_api.domains.auth.workspace_app_gate import require_workspace_app_enabled
 from ai_do_api.domains.meeting import recordings as recording_service
 from ai_do_api.domains.meeting import service as meeting_service
+from ai_do_api.domains.meeting.app_catalog import MEETING_WORKSPACE_APP
+from ai_do_api.domains.meeting.availability_projection import workspace_meeting_user_ids_subquery
 from ai_do_api.domains.meeting.schemas import (
     MeetingAvailabilityResponse,
     MeetingAttendeesAddRequest,
@@ -36,10 +41,20 @@ from ai_do_api.domains.meeting.schemas import (
     MeetingUpdateRequest,
     MeetingUserItem,
 )
-from ai_do_api.domains.planner.service import parse_iso_or_date
+from ai_do_api.domains.planner.event_time import parse_iso_or_date
 
+
+require_meeting_app_enabled = require_workspace_app_enabled(
+    MEETING_WORKSPACE_APP.app_id,
+    error_code="workspace.app_disabled",
+)
 
 router = APIRouter(
+    prefix="/meeting",
+    tags=["meeting"],
+    dependencies=[Depends(require_meeting_app_enabled)],
+)
+public_router = APIRouter(
     prefix="/meeting",
     tags=["meeting"],
 )
@@ -180,23 +195,23 @@ def attach_task(
     workspace: Workspace = Depends(require_current_workspace),
 ) -> MeetingDetail:
     return meeting_service.attach_task(
-        db, workspace=workspace, user=current_user, meeting_id=meeting_id, issue_id=payload.issue_id
+        db, workspace=workspace, user=current_user, meeting_id=meeting_id, task_id=payload.task_id
     )
 
 
 @router.delete(
-    "/meetings/{meeting_id}/tasks/{issue_id}",
+    "/meetings/{meeting_id}/tasks/{task_id}",
     response_model=MeetingDetail,
 )
 def detach_task(
     meeting_id: str,
-    issue_id: str,
+    task_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
 ) -> MeetingDetail:
     return meeting_service.detach_task(
-        db, workspace=workspace, user=current_user, meeting_id=meeting_id, issue_id=issue_id
+        db, workspace=workspace, user=current_user, meeting_id=meeting_id, task_id=task_id
     )
 
 
@@ -255,6 +270,28 @@ def detach_file(
 ) -> MeetingDetail:
     return meeting_service.detach_file(
         db, workspace=workspace, user=current_user, meeting_id=meeting_id, file_id=file_id
+    )
+
+
+@public_router.get("/files/{file_id}/content")
+def proxy_file_attachment_content(
+    file_id: str,
+    expires: int = Query(..., ge=1),
+    signature: str = Query(..., min_length=1),
+    disposition: meeting_service.MeetingAttachmentDisposition = "attachment",
+    db: Session = Depends(get_db_session),
+) -> StreamingResponse:
+    content = meeting_service.open_file_attachment_content(
+        db,
+        file_id=file_id,
+        expires=expires,
+        signature=signature,
+        disposition=disposition,
+    )
+    return StreamingResponse(
+        content.body,
+        media_type=content.media_type,
+        headers=content.headers,
     )
 
 
@@ -471,10 +508,12 @@ def list_meeting_users(
     workspace: Workspace = Depends(require_current_workspace),
 ) -> list[MeetingUserItem]:
     """Search workspace members for meeting attendee selection."""
-    member_user_ids = meeting_service.workspace_meeting_user_ids_subquery(workspace.id)
+    member_user_ids = workspace_meeting_user_ids_subquery(workspace.id)
     query = (
         select(User)
         .join(member_user_ids, member_user_ids.c.user_id == User.id)
+        .outerjoin(OrgUnit, User.primary_org_unit_id == OrgUnit.id)
+        .options(contains_eager(User.primary_org_unit))
         .where(User.status == "active")
     )
     search = q.strip()
@@ -485,12 +524,18 @@ def list_meeting_users(
                 User.full_name.ilike(like),
                 User.email.ilike(like),
                 User.display_name.ilike(like),
+                OrgUnit.name.ilike(like),
             )
         )
     query = query.order_by(User.full_name.asc(), User.email.asc()).limit(limit)
     users = db.scalars(query).all()
     return [
-        MeetingUserItem(id=user.id, email=user.email, full_name=user.full_name)
+        MeetingUserItem(
+            id=user.id,
+            email=user.email,
+            full_name=user.full_name,
+            primary_org_unit_name=(user.primary_org_unit.name if user.primary_org_unit else None),
+        )
         for user in users
     ]
 

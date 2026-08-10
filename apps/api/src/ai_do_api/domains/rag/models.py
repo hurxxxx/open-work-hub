@@ -2,7 +2,18 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, JSON, String, Text, text
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    JSON,
+    String,
+    Text,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -28,8 +39,17 @@ class RagSyncJob(Base):
             "status IN ('pending','processing','succeeded','failed','cancelled')",
             name="ck_rag_sync_jobs_status",
         ),
+        CheckConstraint(
+            "scope_kind IN ('workspace','company')",
+            name="ck_rag_sync_jobs_scope_kind",
+        ),
+        CheckConstraint(
+            "desired_state IS NULL OR desired_state IN ('active','deleted')",
+            name="ck_rag_sync_jobs_desired_state",
+        ),
         Index(
             "ix_rag_sync_jobs_workspace_lane_status_retry",
+            "scope_kind",
             "workspace_id",
             "lane",
             "status",
@@ -42,23 +62,83 @@ class RagSyncJob(Base):
             "status",
         ),
         Index(
-            "uq_rag_sync_jobs_pending_resource_lane",
+            "ix_rag_sync_jobs_workspace_lane_status_created",
+            "scope_kind",
+            "workspace_id",
+            "lane",
+            "status",
+            "created_at",
+        ),
+        Index(
+            "ix_rag_sync_jobs_lane_status_updated",
+            "lane",
+            "status",
+            "updated_at",
+        ),
+        Index(
+            "uq_rag_sync_jobs_pending_workspace_resource_lane",
+            "scope_kind",
             "workspace_id",
             "lane",
             "resource_type",
             "resource_id",
             unique=True,
-            postgresql_where=text("status = 'pending'"),
-            sqlite_where=text("status = 'pending'"),
+            postgresql_where=text(
+                "status = 'pending' AND workspace_id IS NOT NULL AND projection_version IS NULL"
+            ),
+            sqlite_where=text(
+                "status = 'pending' AND workspace_id IS NOT NULL AND projection_version IS NULL"
+            ),
+        ),
+        Index(
+            "uq_rag_sync_jobs_pending_company_resource_lane",
+            "scope_kind",
+            "lane",
+            "resource_type",
+            "resource_id",
+            unique=True,
+            postgresql_where=text(
+                "status = 'pending' AND workspace_id IS NULL AND projection_version IS NULL"
+            ),
+            sqlite_where=text(
+                "status = 'pending' AND workspace_id IS NULL AND projection_version IS NULL"
+            ),
+        ),
+        Index(
+            "uq_rag_sync_jobs_pending_versioned_resource_lane",
+            "lane",
+            "resource_type",
+            "resource_id",
+            unique=True,
+            postgresql_where=text("status = 'pending' AND projection_version IS NOT NULL"),
+            sqlite_where=text("status = 'pending' AND projection_version IS NOT NULL"),
         ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id"),
+    scope_kind: Mapped[str] = mapped_column(
+        String(16),
         nullable=False,
+        default="workspace",
+        server_default=text("'workspace'"),
         index=True,
     )
+    workspace_id: Mapped[str | None] = mapped_column(
+        ForeignKey("workspaces.id"),
+        nullable=True,
+        index=True,
+    )
+    retrieval_partition_id: Mapped[str | None] = mapped_column(
+        ForeignKey("retrieval_partitions.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    projection_event_sequence: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("retrieval_projection_events.event_sequence", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    projection_version: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    desired_state: Mapped[str | None] = mapped_column(String(16), nullable=True)
     lane: Mapped[str] = mapped_column(
         String(16),
         nullable=False,
@@ -67,7 +147,7 @@ class RagSyncJob(Base):
         index=True,
     )
     resource_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    resource_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    resource_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     operation: Mapped[str] = mapped_column(
         String(24),
         nullable=False,
@@ -121,6 +201,11 @@ class RagVisibilityRecomputeJob(Base):
             "status",
         ),
         Index(
+            "ix_rag_visibility_jobs_status_updated",
+            "status",
+            "updated_at",
+        ),
+        Index(
             "uq_rag_visibility_recompute_jobs_pending_scope",
             "workspace_id",
             "scope_type",
@@ -138,7 +223,7 @@ class RagVisibilityRecomputeJob(Base):
         index=True,
     )
     scope_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    scope_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    scope_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     trace_context: Mapped[dict | None] = mapped_column(JSONB_COMPAT, nullable=True)
     cursor: Mapped[dict | None] = mapped_column(JSONB_COMPAT, nullable=True)
     status: Mapped[str] = mapped_column(

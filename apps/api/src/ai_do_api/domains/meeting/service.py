@@ -1,49 +1,64 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
-from io import BytesIO
-from typing import Iterable
-from zoneinfo import ZoneInfo
+import base64
+from dataclasses import dataclass
+from datetime import UTC, datetime
+import hashlib
+import hmac
+import time
+from typing import Iterable, Literal
+from urllib.parse import quote
 
 from fastapi import UploadFile, status
-from sqlalchemy import or_, select, union
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from ai_do_api.core.i18n import localized_http_exception
 from ai_do_api.core.principal import CallerPrincipal
 from ai_do_api.core.settings import get_settings
-from ai_do_api.core.storage import get_minio_client
 from ai_do_api.domains.auth.access import (
     bind_current_workspace,
     resolve_workspace_role,
 )
 from ai_do_api.domains.auth.models import (
     User,
-    UserAccessGroup,
     Workspace,
-    WorkspaceGroupBinding,
-    WorkspaceUserBinding,
 )
 from ai_do_api.domains.auth.security import new_id
-from ai_do_api.domains.docs.access_grants import (
-    bump_doc_grant_expiry_for_meeting,
-    grant_doc_access,
-    revoke_doc_grants_for_attachment,
-    revoke_doc_grants_for_meeting,
-    revoke_doc_grants_for_meeting_attendee,
-)
-from ai_do_api.domains.docs.models import DocMeetingAccess, NativeDoc, NativeDocPage
+from ai_do_api.domains.retrieval.partitioning import assign_default_partition
+from ai_do_api.domains.docs.models import NativeDoc
 from ai_do_api.domains.docs.rag_sync import (
     collect_meeting_visibility_doc_ids,
     enqueue_meeting_visibility_recompute,
 )
-from ai_do_api.domains.docs.service import create_native_doc_for_user
+from ai_do_api.domains.meeting import file_storage
+from ai_do_api.domains.meeting.attachment_grants import (
+    bump_attachment_grant_expiry_for_meeting,
+    detach_deleted_meeting_grant_fks,
+    grant_doc_attachment_to_attendees,
+    grant_existing_attachments_to_new_attendees,
+    grant_task_attachment_to_attendees,
+    revoke_attachment_grants_for_deleted_meeting,
+    revoke_attachment_grants_for_removed_attendee,
+    revoke_doc_attachment_grants,
+    revoke_task_attachment_grants,
+)
+from ai_do_api.domains.meeting import notes_lifecycle
+from ai_do_api.domains.meeting.availability_projection import build_meeting_availability
 from ai_do_api.domains.meeting.models import (
     Meeting,
     MeetingAttendee,
     MeetingDocLink,
     MeetingFileAttachment,
     MeetingTaskLink,
+)
+from ai_do_api.domains.meeting.detail_projection import (
+    build_meeting_detail,
+    serialize_attendee,
+    serialize_doc_link,
+    serialize_file_attachment,
+    serialize_task_link,
+    serialize_whiteboard_link,
 )
 from ai_do_api.domains.meeting.permissions import (
     ensure_doc_attachable,
@@ -52,8 +67,6 @@ from ai_do_api.domains.meeting.permissions import (
 )
 from ai_do_api.domains.meeting.rag_sync import enqueue_meeting_rag_sync
 from ai_do_api.domains.meeting.schemas import (
-    MeetingAvailabilityBlock,
-    MeetingAvailabilityItem,
     MeetingAvailabilityResponse,
     MeetingAttendeeInput,
     MeetingAttendeeOut,
@@ -67,23 +80,25 @@ from ai_do_api.domains.meeting.schemas import (
     MeetingUpdateRequest,
     MeetingWhiteboardLinkOut,
 )
-from ai_do_api.domains.pms.access import ensure_issue_attachable, has_list_access
-from ai_do_api.domains.pms.access_grants import (
-    bump_grant_expiry_for_meeting,
-    grant_issue_access,
-    revoke_grants_for_issue_attachment,
-    revoke_grants_for_meeting,
-    revoke_grants_for_meeting_attendee,
-)
-from ai_do_api.domains.pms.models import Issue, IssueUserAccess
-from ai_do_api.domains.planner.models import PlannerEvent
+from ai_do_api.domains.pms.access import ensure_task_attachable
+from ai_do_api.domains.pms.models import Task
 from ai_do_api.domains.rag.contracts import RagSyncOperation
 from ai_do_api.domains.recording import service as recording_service
-from ai_do_api.domains.whiteboard.models import Whiteboard, WhiteboardContainer
+from ai_do_api.domains.source_access import can_read_meeting
+from ai_do_api.domains.whiteboard.models import Whiteboard, WhiteboardTarget
 
 
 MAX_FILE_UPLOAD_SIZE = 100 * 1024 * 1024  # 100 MB
-LOCAL_TIMEZONE = ZoneInfo("Asia/Seoul")
+MEETING_ATTACHMENT_CONTENT_URL_EXPIRES_SECONDS = 60 * 60
+MEETING_ATTACHMENT_CONTENT_CHUNK_SIZE = 1024 * 1024
+MeetingAttachmentDisposition = Literal["attachment", "inline"]
+
+
+@dataclass(frozen=True)
+class MeetingAttachmentContent:
+    body: Iterable[bytes]
+    media_type: str
+    headers: dict[str, str]
 
 
 def _bind_workspace_context(
@@ -107,29 +122,11 @@ def _bind_workspace_context(
 
 
 def _meeting_notes_doc_title(meeting: Meeting) -> str:
-    return f"회의 메모: {meeting.title} ({meeting.start_at:%Y-%m-%d})"
+    return notes_lifecycle.meeting_notes_doc_title(meeting)
 
 
 def _meeting_notes_page_title() -> str:
-    return "회의 메모"
-
-
-def workspace_meeting_user_ids_subquery(workspace_id: str):
-    direct_member_ids = select(WorkspaceUserBinding.user_id.label("user_id")).where(
-        WorkspaceUserBinding.workspace_id == workspace_id
-    )
-    group_member_ids = (
-        select(UserAccessGroup.user_id.label("user_id"))
-        .join(
-            WorkspaceGroupBinding,
-            WorkspaceGroupBinding.group_id == UserAccessGroup.group_id,
-        )
-        .where(WorkspaceGroupBinding.workspace_id == workspace_id)
-    )
-    return union(
-        direct_member_ids,
-        group_member_ids,
-    ).subquery()
+    return notes_lifecycle.meeting_notes_page_title()
 
 
 def _validate_time_range(start_at: datetime, end_at: datetime) -> None:
@@ -148,10 +145,6 @@ def _require_user_write_principal(principal: CallerPrincipal) -> None:
         )
 
 
-def _meeting_grant_expires_at(meeting: Meeting) -> datetime:
-    return meeting.end_at + timedelta(days=7)
-
-
 def _validate_attendee_users(
     db: Session,
     user_ids: Iterable[str],
@@ -161,9 +154,7 @@ def _validate_attendee_users(
     unique_ids = list({uid for uid in user_ids})
     if not unique_ids:
         return {}
-    users = db.scalars(
-        select(User).where(User.id.in_(unique_ids), User.status == "active")
-    ).all()
+    users = db.scalars(select(User).where(User.id.in_(unique_ids), User.status == "active")).all()
     found = {user.id: user for user in users}
     missing = set(unique_ids) - set(found.keys())
     if missing:
@@ -184,52 +175,6 @@ def _validate_attendee_users(
     return found
 
 
-def _grant_issue_to_attendee(
-    db: Session,
-    *,
-    meeting: Meeting,
-    issue: Issue,
-    attendee_user: User,
-    granted_by_user_id: str,
-) -> None:
-    if attendee_user.id == granted_by_user_id:
-        return
-    if has_list_access(db, attendee_user, issue.list_id):
-        return
-    grant_issue_access(
-        db,
-        issue_id=issue.id,
-        user_id=attendee_user.id,
-        granted_by_user_id=granted_by_user_id,
-        granted_by_meeting_id=meeting.id,
-        reason="meeting_attendee",
-        expires_at=_meeting_grant_expires_at(meeting),
-    )
-
-
-def _grant_doc_to_attendee(
-    db: Session,
-    *,
-    meeting: Meeting,
-    doc: NativeDoc,
-    attendee_user: User,
-    granted_by_user_id: str,
-) -> None:
-    if attendee_user.id == granted_by_user_id:
-        return
-    if attendee_user.id == doc.owner_id:
-        return
-    grant_doc_access(
-        db,
-        doc_id=doc.id,
-        user_id=attendee_user.id,
-        granted_by_user_id=granted_by_user_id,
-        granted_by_meeting_id=meeting.id,
-        reason="meeting_attendee",
-        expires_at=_meeting_grant_expires_at(meeting),
-    )
-
-
 def _grant_notes_doc_to_attendee(
     db: Session,
     *,
@@ -238,140 +183,40 @@ def _grant_notes_doc_to_attendee(
     attendee_user: User,
     granted_by_user_id: str,
 ) -> None:
-    if attendee_user.id == granted_by_user_id:
-        return
-    if attendee_user.id == doc.owner_id:
-        return
-    grant_doc_access(
+    notes_lifecycle.grant_notes_doc_to_attendee(
         db,
-        doc_id=doc.id,
-        user_id=attendee_user.id,
+        meeting=meeting,
+        doc=doc,
+        attendee_user=attendee_user,
         granted_by_user_id=granted_by_user_id,
-        granted_by_meeting_id=meeting.id,
-        reason="meeting_notes",
-        access_level="edit",
-        expires_at=None,
     )
 
 
-def _load_active_native_doc(db: Session, *, workspace_id: str, doc_id: str | None) -> NativeDoc | None:
-    if not doc_id:
-        return None
-    return db.scalar(
-        select(NativeDoc).where(
-            NativeDoc.id == doc_id,
-            NativeDoc.workspace_id == workspace_id,
-            NativeDoc.trashed_at.is_(None),
-        )
-    )
-
-
-def _load_active_native_doc_page(
-    db: Session,
-    *,
-    doc_id: str,
-    page_id: str | None,
-) -> NativeDocPage | None:
-    if not page_id:
-        return None
-    return db.scalar(
-        select(NativeDocPage).where(
-            NativeDocPage.id == page_id,
-            NativeDocPage.doc_id == doc_id,
-            NativeDocPage.trashed_at.is_(None),
-        )
-    )
-
-
-def _create_meeting_notes_assets(
-    db: Session,
-    *,
-    meeting: Meeting,
-) -> tuple[NativeDoc, NativeDocPage]:
-    return create_native_doc_for_user(
-        db,
-        workspace_id=meeting.workspace_id,
-        owner_id=meeting.organizer_id,
-        title=_meeting_notes_doc_title(meeting),
-        first_page_title=_meeting_notes_page_title(),
-        content_blocks=[],
-        source_app="meeting",
-        source_kind="meeting_notes",
-        source_ref=meeting.id,
-    )
-
-
-def _sync_notes_doc_access(
-    db: Session,
-    *,
-    meeting: Meeting,
-    doc: NativeDoc,
-) -> None:
-    for attendee in meeting.attendees:
-        if attendee.user is None:
-            continue
-        _grant_notes_doc_to_attendee(
-            db,
-            meeting=meeting,
-            doc=doc,
-            attendee_user=attendee.user,
-            granted_by_user_id=meeting.organizer_id,
-        )
+def _load_active_native_doc(
+    db: Session, *, workspace_id: str, doc_id: str | None
+) -> NativeDoc | None:
+    return notes_lifecycle.load_active_native_doc(db, workspace_id=workspace_id, doc_id=doc_id)
 
 
 def _ensure_meeting_notes_state(
     db: Session,
     *,
     meeting: Meeting,
-) -> tuple[NativeDoc, NativeDocPage]:
-    # Serialize concurrent notes-ensure calls. Without this lock, two
-    # simultaneous requests (e.g. the meeting modal opening + the collab
-    # session call firing in parallel) would both observe
-    # ``meeting.notes_doc_id is None`` and both call
-    # ``_create_meeting_notes_assets``, leaving one orphan NativeDoc row
-    # visible in the user's Docs hub forever.
-    db.execute(
-        select(Meeting.id).where(Meeting.id == meeting.id).with_for_update()
-    )
-    db.refresh(meeting, attribute_names=["notes_doc_id", "notes_page_id"])
-
-    doc = _load_active_native_doc(db, workspace_id=meeting.workspace_id, doc_id=meeting.notes_doc_id)
-    if doc is None:
-        doc, page = _create_meeting_notes_assets(db, meeting=meeting)
-    else:
-        page = _load_active_native_doc_page(db, doc_id=doc.id, page_id=meeting.notes_page_id)
-        if page is None:
-            page = NativeDocPage(
-                id=new_id(),
-                doc_id=doc.id,
-                parent_id=None,
-                title=_meeting_notes_page_title(),
-                content_blocks=[],
-                sort_order=0,
-                created_by_id=meeting.organizer_id,
-            )
-            db.add(page)
-            db.flush()
-
-    meeting.notes_doc_id = doc.id
-    meeting.notes_page_id = page.id
-    db.add(meeting)
-    db.flush()
-    _sync_notes_doc_access(db, meeting=meeting, doc=doc)
-    return doc, page
+):
+    return notes_lifecycle.ensure_meeting_notes_state(db, meeting=meeting)
 
 
-def _attach_issue_link(
+def _attach_task_link(
     db: Session,
     *,
     meeting: Meeting,
-    issue: Issue,
+    task: Task,
     added_by_id: str,
 ) -> None:
     existing = db.scalar(
         select(MeetingTaskLink).where(
             MeetingTaskLink.meeting_id == meeting.id,
-            MeetingTaskLink.issue_id == issue.id,
+            MeetingTaskLink.task_id == task.id,
         )
     )
     if existing is None:
@@ -379,22 +224,18 @@ def _attach_issue_link(
             MeetingTaskLink(
                 id=new_id(),
                 meeting_id=meeting.id,
-                issue_id=issue.id,
+                task_id=task.id,
                 added_by_id=added_by_id,
             )
         )
         db.flush()
 
-    for attendee in meeting.attendees:
-        if attendee.user is None:
-            continue
-        _grant_issue_to_attendee(
-            db,
-            meeting=meeting,
-            issue=issue,
-            attendee_user=attendee.user,
-            granted_by_user_id=added_by_id,
-        )
+    grant_task_attachment_to_attendees(
+        db,
+        meeting=meeting,
+        task=task,
+        added_by_id=added_by_id,
+    )
 
 
 def _attach_doc_link(
@@ -421,47 +262,24 @@ def _attach_doc_link(
         )
         db.flush()
 
-    for attendee in meeting.attendees:
-        if attendee.user is None:
-            continue
-        _grant_doc_to_attendee(
-            db,
-            meeting=meeting,
-            doc=doc,
-            attendee_user=attendee.user,
-            granted_by_user_id=added_by_id,
-        )
+    grant_doc_attachment_to_attendees(
+        db,
+        meeting=meeting,
+        doc=doc,
+        added_by_id=added_by_id,
+    )
 
 
 def _serialize_attendee(attendee: MeetingAttendee) -> MeetingAttendeeOut:
-    return MeetingAttendeeOut(
-        id=attendee.id,
-        user_id=attendee.user_id,
-        email=attendee.user.email,
-        full_name=attendee.user.full_name,
-        role=attendee.role,  # type: ignore[arg-type]
-        response=attendee.response,  # type: ignore[arg-type]
-    )
+    return serialize_attendee(attendee)
 
 
 def _serialize_task_link(
     link: MeetingTaskLink,
     *,
-    issues_by_id: dict[str, Issue],
+    tasks_by_id: dict[str, Task],
 ) -> MeetingTaskLinkOut:
-    issue = issues_by_id.get(link.issue_id)
-    list_key = issue.task_list.key if issue and issue.task_list else ""
-    issue_title = issue.title if issue is not None else ""
-    issue_number = issue.issue_number if issue is not None else 0
-    return MeetingTaskLinkOut(
-        id=link.id,
-        issue_id=link.issue_id,
-        issue_title=issue_title,
-        list_key=list_key,
-        issue_number=issue_number,
-        added_by_id=link.added_by_id,
-        created_at=link.created_at,
-    )
+    return serialize_task_link(link, tasks_by_id=tasks_by_id)
 
 
 def _serialize_doc_link(
@@ -469,29 +287,20 @@ def _serialize_doc_link(
     *,
     docs_by_id: dict[str, NativeDoc],
 ) -> MeetingDocLinkOut:
-    doc = docs_by_id.get(link.doc_id)
-    return MeetingDocLinkOut(
-        id=link.id,
-        doc_id=link.doc_id,
-        doc_title=doc.title if doc is not None else "",
-        added_by_id=link.added_by_id,
-        created_at=link.created_at,
-    )
+    return serialize_doc_link(link, docs_by_id=docs_by_id)
 
 
-def _load_task_link_issue_map(
+def _load_task_link_task_map(
     db: Session,
     task_links: list[MeetingTaskLink],
-) -> dict[str, Issue]:
-    issue_ids = [link.issue_id for link in task_links]
-    if not issue_ids:
+) -> dict[str, Task]:
+    task_ids = [link.task_id for link in task_links]
+    if not task_ids:
         return {}
-    issues = db.scalars(
-        select(Issue)
-        .where(Issue.id.in_(issue_ids))
-        .options(selectinload(Issue.task_list))
+    tasks = db.scalars(
+        select(Task).where(Task.id.in_(task_ids)).options(selectinload(Task.task_list))
     ).all()
-    return {issue.id: issue for issue in issues}
+    return {task.id: task for task in tasks}
 
 
 def _load_doc_link_doc_map(
@@ -505,56 +314,132 @@ def _load_doc_link_doc_map(
     return {doc.id: doc for doc in docs}
 
 
-def _build_file_download_url(storage_key: str) -> str:
-    """Issue a 1-hour presigned GET URL for a meeting file attachment.
-
-    Wrapped in a module-level function so tests can monkeypatch it without
-    spinning up a real MinIO container.
-    """
-    settings = get_settings()
-    client = get_minio_client()
-    return client.presigned_get_object(
-        settings.minio_bucket,
-        storage_key,
-        expires=timedelta(hours=1),
+def _build_file_download_url(
+    attachment: MeetingFileAttachment,
+    *,
+    disposition: MeetingAttachmentDisposition = "attachment",
+    now: float | None = None,
+    expires_seconds: int = MEETING_ATTACHMENT_CONTENT_URL_EXPIRES_SECONDS,
+) -> str:
+    expires = int(time.time() if now is None else now) + expires_seconds
+    signature = _sign_file_content_url(
+        attachment,
+        expires=expires,
+        disposition=disposition,
+    )
+    return (
+        f"{get_settings().api_prefix}/meeting/files/{attachment.id}/content"
+        f"?expires={expires}&signature={signature}&disposition={disposition}"
     )
 
 
 def _serialize_file_attachment(
     attachment: MeetingFileAttachment,
 ) -> MeetingFileAttachmentOut:
-    return MeetingFileAttachmentOut(
-        id=attachment.id,
-        filename=attachment.filename,
-        content_type=attachment.content_type,
-        size_bytes=attachment.size_bytes,
-        download_url=_build_file_download_url(attachment.storage_key),
-        added_by_id=attachment.added_by_id,
-        added_by_name=(
-            attachment.added_by.full_name if attachment.added_by else ""
-        ),
-        created_at=attachment.created_at,
+    return serialize_file_attachment(
+        attachment,
+        download_url=_build_file_download_url(attachment),
     )
 
 
-def _load_whiteboard_link(db: Session, meeting: Meeting) -> tuple[WhiteboardContainer, Whiteboard] | None:
+def _sign_file_content_url(
+    attachment: MeetingFileAttachment,
+    *,
+    expires: int,
+    disposition: MeetingAttachmentDisposition,
+) -> str:
+    secret = get_settings().minio_secret_key.encode("utf-8")
+    message = (
+        f"v1:{attachment.id}:{attachment.meeting_id}:{attachment.storage_key}:"
+        f"{expires}:{disposition}"
+    ).encode("utf-8")
+    digest = hmac.new(secret, message, hashlib.sha256).digest()
+    return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
+
+
+def _validate_file_content_signature(
+    attachment: MeetingFileAttachment,
+    *,
+    expires: int,
+    disposition: MeetingAttachmentDisposition,
+    signature: str,
+    now: float | None = None,
+) -> bool:
+    if expires < int(time.time() if now is None else now):
+        return False
+    expected = _sign_file_content_url(
+        attachment,
+        expires=expires,
+        disposition=disposition,
+    )
+    return hmac.compare_digest(signature, expected)
+
+
+def open_file_attachment_content(
+    db: Session,
+    *,
+    file_id: str,
+    expires: int,
+    signature: str,
+    disposition: MeetingAttachmentDisposition,
+) -> MeetingAttachmentContent:
+    attachment = db.get(MeetingFileAttachment, file_id)
+    if attachment is None:
+        raise localized_http_exception(status_code=404, code="meeting.file_not_found")
+    if not _validate_file_content_signature(
+        attachment,
+        expires=expires,
+        disposition=disposition,
+        signature=signature,
+    ):
+        raise localized_http_exception(
+            status_code=403,
+            code="meeting.file_proxy_url_invalid",
+        )
+
+    try:
+        body = file_storage.open_attachment_object(
+            storage_key=attachment.storage_key,
+            chunk_size=MEETING_ATTACHMENT_CONTENT_CHUNK_SIZE,
+        )
+    except Exception as exc:
+        raise localized_http_exception(
+            status_code=502,
+            code="meeting.file_download_failed",
+        ) from exc
+
+    encoded_filename = quote(attachment.filename or "attachment", safe="")
+    return MeetingAttachmentContent(
+        body=body,
+        media_type=attachment.content_type or file_storage.DEFAULT_ATTACHMENT_CONTENT_TYPE,
+        headers={
+            "Cache-Control": "private, max-age=300",
+            "Content-Disposition": (f"{disposition}; filename*=UTF-8''{encoded_filename}"),
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+def _load_whiteboard_link(
+    db: Session, meeting: Meeting
+) -> tuple[WhiteboardTarget, Whiteboard] | None:
     row = db.execute(
-        select(WhiteboardContainer, Whiteboard)
-        .join(Whiteboard, Whiteboard.id == WhiteboardContainer.whiteboard_id)
+        select(WhiteboardTarget, Whiteboard)
+        .join(Whiteboard, Whiteboard.id == WhiteboardTarget.whiteboard_id)
         .where(
-            WhiteboardContainer.container_app == "meeting",
-            WhiteboardContainer.container_type == "meeting",
-            WhiteboardContainer.container_id == meeting.id,
+            WhiteboardTarget.target_app == "meeting",
+            WhiteboardTarget.target_type == "meeting",
+            WhiteboardTarget.target_id == meeting.id,
             Whiteboard.workspace_id == meeting.workspace_id,
             Whiteboard.trashed_at.is_(None),
         )
-        .order_by(WhiteboardContainer.created_at.asc())
+        .order_by(WhiteboardTarget.created_at.asc())
         .limit(1)
     ).first()
     if row is None:
         return None
-    container, whiteboard = row
-    return container, whiteboard
+    target, whiteboard = row
+    return target, whiteboard
 
 
 def _serialize_whiteboard_link(
@@ -564,52 +449,20 @@ def _serialize_whiteboard_link(
     loaded = _load_whiteboard_link(db, meeting)
     if loaded is None:
         return None
-    container, whiteboard = loaded
-    return MeetingWhiteboardLinkOut(
-        id=container.id,
-        whiteboard_id=whiteboard.id,
-        whiteboard_title=whiteboard.title,
-        added_by_id=container.created_by_id,
-        updated_at=whiteboard.updated_at,
-        created_at=container.created_at,
-    )
-
-
-def _utc_iso(value: datetime) -> str:
-    if value.tzinfo is None:
-        return value.replace(tzinfo=UTC).isoformat()
-    return value.astimezone(UTC).isoformat()
-
-
-def _local_date_string(value: datetime) -> str:
-    aware = value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
-    return aware.astimezone(LOCAL_TIMEZONE).date().isoformat()
+    target, whiteboard = loaded
+    return serialize_whiteboard_link(target=target, whiteboard=whiteboard)
 
 
 def _serialize_meeting(db: Session, meeting: Meeting) -> MeetingDetail:
-    issues_by_id = _load_task_link_issue_map(db, meeting.task_links)
+    tasks_by_id = _load_task_link_task_map(db, meeting.task_links)
     docs_by_id = _load_doc_link_doc_map(db, meeting.doc_links)
-    return MeetingDetail(
-        id=meeting.id,
-        workspace_id=meeting.workspace_id,
-        organizer_id=meeting.organizer_id,
-        organizer_name=meeting.organizer.full_name if meeting.organizer else "",
-        notes_doc_id=meeting.notes_doc_id,
-        notes_page_id=meeting.notes_page_id,
-        title=meeting.title,
-        agenda=meeting.agenda,
-        start_at=meeting.start_at,
-        end_at=meeting.end_at,
-        status=meeting.status,  # type: ignore[arg-type]
+    return build_meeting_detail(
+        meeting=meeting,
         attendees=[_serialize_attendee(a) for a in meeting.attendees],
         task_links=[
-            _serialize_task_link(link, issues_by_id=issues_by_id)
-            for link in meeting.task_links
+            _serialize_task_link(link, tasks_by_id=tasks_by_id) for link in meeting.task_links
         ],
-        doc_links=[
-            _serialize_doc_link(link, docs_by_id=docs_by_id)
-            for link in meeting.doc_links
-        ],
+        doc_links=[_serialize_doc_link(link, docs_by_id=docs_by_id) for link in meeting.doc_links],
         whiteboard_link=_serialize_whiteboard_link(db, meeting),
         file_attachments=[
             _serialize_file_attachment(att)
@@ -617,45 +470,6 @@ def _serialize_meeting(db: Session, meeting: Meeting) -> MeetingDetail:
         ],
         recordings=recording_service.list_meeting_recording_outs(db, meeting=meeting),
         active_recording_lock=recording_service.resolve_active_recording_lock(db, meeting=meeting),
-        created_at=meeting.created_at,
-        updated_at=meeting.updated_at,
-    )
-
-
-def _resolve_active_recording_lock(meeting: Meeting):
-    """Return the active staging row that holds the single-recorder lock, if any.
-
-    Stale stagings (no chunk uploaded for ``RECORDING_STALE_AFTER_SECONDS``)
-    are treated as released so a crashed recorder doesn't permanently block
-    other participants. The abandoned row stays in the DB; only the lock
-    relaxes — see ``recordings._staging_is_stale``.
-
-    Used by the frontend to gate the start-recording button so other
-    participants see "X 님이 녹음 중" instead of getting a 409 mid-click,
-    and to auto-clear the lock client-side when the recorder dies.
-    """
-    from ai_do_api.domains.meeting.recordings import _staging_is_stale
-    from ai_do_api.domains.meeting.schemas import ActiveRecordingLockOut
-
-    if not meeting.recording_staging:
-        return None
-    active = next(
-        (
-            s
-            for s in meeting.recording_staging
-            if s.completed_at is None and not _staging_is_stale(s)
-        ),
-        None,
-    )
-    if active is None:
-        return None
-    user_name = active.uploaded_by.full_name if active.uploaded_by is not None else ""
-    return ActiveRecordingLockOut(
-        staging_id=active.id,
-        user_id=active.uploaded_by_id,
-        user_name=user_name,
-        started_at=active.started_at,
-        last_active_at=active.last_chunk_at,
     )
 
 
@@ -668,9 +482,7 @@ def _load_meeting(db: Session, workspace: Workspace, meeting_id: str) -> Meeting
             selectinload(Meeting.attendees).selectinload(MeetingAttendee.user),
             selectinload(Meeting.task_links),
             selectinload(Meeting.doc_links),
-            selectinload(Meeting.file_attachments).selectinload(
-                MeetingFileAttachment.added_by
-            ),
+            selectinload(Meeting.file_attachments).selectinload(MeetingFileAttachment.added_by),
             selectinload(Meeting.recordings),
             selectinload(Meeting.recording_staging).selectinload(
                 MeetingRecordingStaging.uploaded_by
@@ -708,17 +520,12 @@ def can_read_meeting_for_rag(
     workspace_id: str,
     meeting_id: str,
 ) -> bool:
-    meeting = db.scalar(
-        select(Meeting)
-        .options(selectinload(Meeting.attendees))
-        .where(
-            Meeting.id == meeting_id,
-            Meeting.workspace_id == workspace_id,
-        )
+    return can_read_meeting(
+        db,
+        user=user,
+        workspace_id=workspace_id,
+        meeting_id=meeting_id,
     )
-    if meeting is None:
-        return False
-    return meeting.organizer_id == user.id or any(att.user_id == user.id for att in meeting.attendees)
 
 
 def _replace_attendees(
@@ -740,14 +547,7 @@ def _replace_attendees(
 
     for user_id, attendee in list(existing_by_user.items()):
         if user_id not in incoming_user_ids:
-            revoke_grants_for_meeting_attendee(
-                db,
-                meeting_id=meeting.id,
-                user_id=user_id,
-                revoked_by_user_id=acting_user_id,
-                reason="attendee_removed",
-            )
-            revoke_doc_grants_for_meeting_attendee(
+            revoke_attachment_grants_for_removed_attendee(
                 db,
                 meeting_id=meeting.id,
                 user_id=user_id,
@@ -784,48 +584,18 @@ def _replace_attendees(
     if not added_user_ids:
         return
 
-    issues_by_id = {
-        issue.id: issue
-        for issue in db.scalars(
-            select(Issue).where(
-                Issue.id.in_([link.issue_id for link in meeting.task_links] or ["__none__"])
-            )
-        )
-    }
-    docs_by_id = {
-        doc.id: doc
-        for doc in db.scalars(
-            select(NativeDoc).where(
-                NativeDoc.id.in_([link.doc_id for link in meeting.doc_links] or ["__none__"])
-            )
-        )
-    }
-    notes_doc = _load_active_native_doc(db, workspace_id=meeting.workspace_id, doc_id=meeting.notes_doc_id)
+    grant_existing_attachments_to_new_attendees(
+        db,
+        meeting=meeting,
+        attendee_user_ids=added_user_ids,
+        granted_by_user_id=acting_user_id,
+    )
+    notes_doc = _load_active_native_doc(
+        db, workspace_id=meeting.workspace_id, doc_id=meeting.notes_doc_id
+    )
     for attendee in meeting.attendees:
         if attendee.user_id not in added_user_ids or attendee.user is None:
             continue
-        for link in meeting.task_links:
-            issue = issues_by_id.get(link.issue_id)
-            if issue is None:
-                continue
-            _grant_issue_to_attendee(
-                db,
-                meeting=meeting,
-                issue=issue,
-                attendee_user=attendee.user,
-                granted_by_user_id=acting_user_id,
-            )
-        for link in meeting.doc_links:
-            doc = docs_by_id.get(link.doc_id)
-            if doc is None:
-                continue
-            _grant_doc_to_attendee(
-                db,
-                meeting=meeting,
-                doc=doc,
-                attendee_user=attendee.user,
-                granted_by_user_id=acting_user_id,
-            )
         if notes_doc is not None:
             _grant_notes_doc_to_attendee(
                 db,
@@ -859,9 +629,7 @@ def create_meeting(
 
     attendees_input = list(payload.attendees)
     if not any(item.user_id == organizer.id for item in attendees_input):
-        attendees_input.append(
-            MeetingAttendeeInput(user_id=organizer.id, role="required")
-        )
+        attendees_input.append(MeetingAttendeeInput(user_id=organizer.id, role="required"))
     _validate_attendee_users(
         db,
         [item.user_id for item in attendees_input],
@@ -878,6 +646,13 @@ def create_meeting(
         end_at=payload.end_at,
         status="scheduled",
     )
+    assign_default_partition(
+        db,
+        target=meeting,
+        source_namespace="meeting",
+        candidate_scope_kind="workspace",
+        workspace_id=workspace.id,
+    )
     db.add(meeting)
     db.flush()
 
@@ -888,21 +663,19 @@ def create_meeting(
                 meeting_id=meeting.id,
                 user_id=item.user_id,
                 role=item.role,
-                response=(
-                    "accepted" if item.user_id == organizer.id else "pending"
-                ),
+                response=("accepted" if item.user_id == organizer.id else "pending"),
             )
         )
     db.flush()
     meeting = _load_meeting(db, workspace, meeting.id)
 
-    issues = [ensure_issue_attachable(db, organizer, issue_id) for issue_id in payload.task_ids]
+    tasks = [ensure_task_attachable(db, organizer, task_id) for task_id in payload.task_ids]
     docs = [
         ensure_doc_attachable(db, organizer, doc_id, workspace=workspace)
         for doc_id in payload.doc_ids
     ]
-    for issue in issues:
-        _attach_issue_link(db, meeting=meeting, issue=issue, added_by_id=organizer.id)
+    for task in tasks:
+        _attach_task_link(db, meeting=meeting, task=task, added_by_id=organizer.id)
     for doc in docs:
         _attach_doc_link(db, meeting=meeting, doc=doc, added_by_id=organizer.id)
     enqueue_meeting_rag_sync(
@@ -995,9 +768,7 @@ def update_meeting(
         attendees_input = list(payload.attendees)
         if not any(item.user_id == meeting.organizer_id for item in attendees_input):
             attendees_input.append(
-                MeetingAttendeeInput(
-                    user_id=meeting.organizer_id, role="required"
-                )
+                MeetingAttendeeInput(user_id=meeting.organizer_id, role="required")
             )
         _replace_attendees(
             db,
@@ -1007,12 +778,7 @@ def update_meeting(
         )
 
     if meeting.end_at != original_end_at:
-        bump_grant_expiry_for_meeting(
-            db,
-            meeting_id=meeting.id,
-            new_end_at=meeting.end_at,
-        )
-        bump_doc_grant_expiry_for_meeting(
+        bump_attachment_grant_expiry_for_meeting(
             db,
             meeting_id=meeting.id,
             new_end_at=meeting.end_at,
@@ -1045,19 +811,13 @@ def delete_meeting(db: Session, *, workspace: Workspace, user: User, meeting_id:
     ensure_meeting_organizer(db, user, meeting)
     cleanup_meeting_recordings(db, meeting=meeting)
     affected_doc_ids = collect_meeting_visibility_doc_ids(db, meeting_id=meeting.id)
-    revoke_grants_for_meeting(
+    revoke_attachment_grants_for_deleted_meeting(
         db,
         meeting_id=meeting.id,
         revoked_by_user_id=user.id,
         reason="meeting_deleted",
     )
-    revoke_doc_grants_for_meeting(
-        db,
-        meeting_id=meeting.id,
-        revoked_by_user_id=user.id,
-        reason="meeting_deleted",
-    )
-    _detach_meeting_access_grants(db, meeting_id=meeting.id)
+    detach_deleted_meeting_grant_fks(db, meeting_id=meeting.id)
     if affected_doc_ids:
         enqueue_meeting_visibility_recompute(
             db,
@@ -1065,14 +825,14 @@ def delete_meeting(db: Session, *, workspace: Workspace, user: User, meeting_id:
             meeting_id=meeting.id,
             doc_ids=affected_doc_ids,
         )
-    for container in db.scalars(
-        select(WhiteboardContainer).where(
-            WhiteboardContainer.container_app == "meeting",
-            WhiteboardContainer.container_type == "meeting",
-            WhiteboardContainer.container_id == meeting.id,
+    for target in db.scalars(
+        select(WhiteboardTarget).where(
+            WhiteboardTarget.target_app == "meeting",
+            WhiteboardTarget.target_type == "meeting",
+            WhiteboardTarget.target_id == meeting.id,
         )
     ):
-        db.delete(container)
+        db.delete(target)
     enqueue_meeting_rag_sync(
         db,
         meeting=meeting,
@@ -1080,19 +840,6 @@ def delete_meeting(db: Session, *, workspace: Workspace, user: User, meeting_id:
     )
     db.delete(meeting)
     db.commit()
-
-
-def _detach_meeting_access_grants(db: Session, *, meeting_id: str) -> None:
-    for grant in db.scalars(
-        select(IssueUserAccess).where(IssueUserAccess.granted_by_meeting_id == meeting_id)
-    ):
-        grant.granted_by_meeting_id = None
-        db.add(grant)
-    for grant in db.scalars(
-        select(DocMeetingAccess).where(DocMeetingAccess.granted_by_meeting_id == meeting_id)
-    ):
-        grant.granted_by_meeting_id = None
-        db.add(grant)
 
 
 def get_meeting(
@@ -1222,9 +969,7 @@ def list_meetings(
         pass
     elif scope == "upcoming":
         now = datetime.now(UTC).replace(tzinfo=None)
-        base = base.where(
-            Meeting.end_at >= now
-        )
+        base = base.where(Meeting.end_at >= now)
     elif scope == "all":
         pass
     else:
@@ -1276,102 +1021,14 @@ def list_meeting_availability(
     to_at: datetime,
 ) -> MeetingAvailabilityResponse:
     _bind_workspace_context(db, workspace=workspace, principal=principal, user=viewer)
-    unique_user_ids = list(dict.fromkeys(user_ids))
-    if not unique_user_ids:
-        return MeetingAvailabilityResponse(items=[])
-
-    member_user_ids = workspace_meeting_user_ids_subquery(workspace.id)
-    users = db.scalars(
-        select(User)
-        .join(member_user_ids, member_user_ids.c.user_id == User.id)
-        .where(User.status == "active", User.id.in_(unique_user_ids))
-        .order_by(User.full_name.asc(), User.email.asc())
-    ).all()
-    users_by_id = {member.id: member for member in users}
-    missing = [user_id for user_id in unique_user_ids if user_id not in users_by_id]
-    if missing:
-        raise localized_http_exception(
-            status_code=422,
-            code="meeting.requested_users_workspace_required",
-            user_ids=", ".join(missing),
-        )
-
-    blocks_by_user_id: dict[str, list[MeetingAvailabilityBlock]] = {
-        user_id: []
-        for user_id in unique_user_ids
-    }
-
-    attendee_meeting_ids = select(MeetingAttendee.meeting_id).where(
-        MeetingAttendee.user_id.in_(unique_user_ids)
+    return build_meeting_availability(
+        db,
+        workspace=workspace,
+        viewer=viewer,
+        user_ids=user_ids,
+        from_at=from_at,
+        to_at=to_at,
     )
-    meetings = db.scalars(
-        select(Meeting)
-        .where(Meeting.workspace_id == workspace.id)
-        .where(
-            or_(
-                Meeting.organizer_id.in_(unique_user_ids),
-                Meeting.id.in_(attendee_meeting_ids),
-            )
-        )
-        .where(Meeting.end_at > from_at, Meeting.start_at < to_at)
-        .options(selectinload(Meeting.attendees))
-        .order_by(Meeting.start_at.asc())
-    ).all()
-    for meeting in meetings:
-        participant_ids = {meeting.organizer_id}
-        participant_ids.update(attendee.user_id for attendee in meeting.attendees)
-        for user_id in unique_user_ids:
-            if user_id not in participant_ids:
-                continue
-            blocks_by_user_id[user_id].append(
-                MeetingAvailabilityBlock(
-                    id=f"meeting-{meeting.id}",
-                    start=_utc_iso(meeting.start_at),
-                    end=_utc_iso(meeting.end_at),
-                    all_day=False,
-                    source_type="meeting",
-                    masked=True,
-                    title=None,
-                    location=None,
-                )
-            )
-
-    planner_events = db.scalars(
-        select(PlannerEvent)
-        .where(
-            PlannerEvent.workspace_id == workspace.id,
-            PlannerEvent.owner_id.in_(unique_user_ids),
-        )
-        .where(PlannerEvent.end_at > from_at, PlannerEvent.start_at < to_at)
-        .order_by(PlannerEvent.start_at.asc())
-    ).all()
-    for event in planner_events:
-        masked = event.visibility != "public" and event.owner_id != viewer.id
-        blocks_by_user_id[event.owner_id].append(
-            MeetingAvailabilityBlock(
-                id=f"planner-event-{event.id}",
-                start=_local_date_string(event.start_at) if event.all_day else _utc_iso(event.start_at),
-                end=_local_date_string(event.end_at) if event.all_day else _utc_iso(event.end_at),
-                all_day=event.all_day,
-                source_type="planner_event",
-                masked=masked,
-                title=None if masked else event.title,
-                location=None if masked or not event.location else event.location,
-            )
-        )
-
-    def _sort_key(block: MeetingAvailabilityBlock) -> str:
-        return f"{block.start}|{block.end}|{block.id}"
-
-    items = [
-        MeetingAvailabilityItem(
-            user_id=user_id,
-            full_name=users_by_id[user_id].full_name,
-            blocks=sorted(blocks_by_user_id[user_id], key=_sort_key),
-        )
-        for user_id in unique_user_ids
-    ]
-    return MeetingAvailabilityResponse(items=items)
 
 
 def add_attendees(
@@ -1423,12 +1080,12 @@ def add_attendees(
 
 
 def attach_task(
-    db: Session, *, workspace: Workspace, user: User, meeting_id: str, issue_id: str
+    db: Session, *, workspace: Workspace, user: User, meeting_id: str, task_id: str
 ) -> MeetingDetail:
     meeting = _load_meeting(db, workspace, meeting_id)
     ensure_meeting_participant(db, user, meeting)
-    issue = ensure_issue_attachable(db, user, issue_id)
-    _attach_issue_link(db, meeting=meeting, issue=issue, added_by_id=user.id)
+    task = ensure_task_attachable(db, user, task_id)
+    _attach_task_link(db, meeting=meeting, task=task, added_by_id=user.id)
     enqueue_meeting_rag_sync(
         db,
         meeting=meeting,
@@ -1441,22 +1098,22 @@ def attach_task(
 
 
 def detach_task(
-    db: Session, *, workspace: Workspace, user: User, meeting_id: str, issue_id: str
+    db: Session, *, workspace: Workspace, user: User, meeting_id: str, task_id: str
 ) -> MeetingDetail:
     meeting = _load_meeting(db, workspace, meeting_id)
 
     link = db.scalar(
         select(MeetingTaskLink).where(
             MeetingTaskLink.meeting_id == meeting_id,
-            MeetingTaskLink.issue_id == issue_id,
+            MeetingTaskLink.task_id == task_id,
         )
     )
     if link is not None:
         ensure_link_remover(db, user, meeting, link.added_by_id)
-        revoke_grants_for_issue_attachment(
+        revoke_task_attachment_grants(
             db,
             meeting_id=meeting.id,
-            issue_id=issue_id,
+            task_id=task_id,
             revoked_by_user_id=user.id,
             reason="detach",
         )
@@ -1508,7 +1165,7 @@ def detach_doc(
     )
     if link is not None:
         ensure_link_remover(db, user, meeting, link.added_by_id)
-        revoke_doc_grants_for_attachment(
+        revoke_doc_attachment_grants(
             db,
             meeting_id=meeting.id,
             doc_id=doc_id,
@@ -1554,29 +1211,30 @@ async def attach_file(
             limit_mb=MAX_FILE_UPLOAD_SIZE // (1024 * 1024),
         )
 
-    settings = get_settings()
-    client = get_minio_client()
     attachment_id = new_id()
     safe_name = upload.filename or "unnamed"
-    storage_key = f"meeting/{meeting.id}/{attachment_id}/{safe_name}"
-    client.put_object(
-        settings.minio_bucket,
-        storage_key,
-        BytesIO(data),
-        length=len(data),
-        content_type=upload.content_type or "application/octet-stream",
+    storage_key = file_storage.attachment_storage_key(
+        meeting_id=meeting.id,
+        attachment_id=attachment_id,
+        filename=safe_name,
+    )
+    file_storage.put_attachment_object(
+        storage_key=storage_key,
+        data=data,
+        content_type=upload.content_type,
     )
 
     attachment = MeetingFileAttachment(
         id=attachment_id,
         meeting_id=meeting.id,
         filename=safe_name,
-        content_type=upload.content_type or "application/octet-stream",
+        content_type=upload.content_type or file_storage.DEFAULT_ATTACHMENT_CONTENT_TYPE,
         size_bytes=len(data),
         storage_key=storage_key,
         added_by_id=user.id,
     )
     db.add(attachment)
+    db.flush()
     db.commit()
 
     fresh = _load_meeting(db, workspace, meeting_id)
@@ -1604,10 +1262,8 @@ def detach_file(
 
     ensure_link_remover(db, user, meeting, attachment.added_by_id)
 
-    settings = get_settings()
-    client = get_minio_client()
     try:
-        client.remove_object(settings.minio_bucket, attachment.storage_key)
+        file_storage.remove_attachment_object(attachment.storage_key)
     except Exception:
         # If the storage object is already gone we still want to drop the
         # database row so the UI no longer shows a phantom attachment.

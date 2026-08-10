@@ -4,6 +4,7 @@ from datetime import UTC, date, datetime
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
@@ -15,7 +16,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, foreign, mapped_column, relationship
 
 from ai_do_api.core.db import Base
 
@@ -24,15 +25,19 @@ def utcnow_naive() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
+def _native_doc_model() -> type[object]:
+    from ai_do_api.domains.docs.models import NativeDoc
+
+    return NativeDoc
+
+
 class Folder(Base):
     """Intermediate grouping: Space > Folder > List."""
 
     __tablename__ = "pms_folders"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    team_id: Mapped[str | None] = mapped_column(
-        ForeignKey("teams.id"), nullable=True, index=True
-    )
+    team_id: Mapped[str | None] = mapped_column(ForeignKey("teams.id"), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(140))
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(
@@ -43,6 +48,66 @@ class Folder(Base):
     task_lists: Mapped[list["TaskList"]] = relationship(back_populates="folder")
 
 
+class PmsViewPreference(Base):
+    """Workspace-scoped PMS presentation preferences for one user."""
+
+    __tablename__ = "pms_view_preferences"
+    __table_args__ = (
+        CheckConstraint(
+            "task_list_group_by IN ('none', 'status', 'assignee')",
+            name="ck_pms_view_preferences_task_list_group_by",
+        ),
+    )
+
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    task_list_group_by: Mapped[str] = mapped_column(
+        String(16),
+        default="status",
+        server_default=text("'status'"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        onupdate=utcnow_naive,
+        nullable=False,
+    )
+
+
+class SpaceStatus(Base):
+    """Default workflow statuses for a PMS Space."""
+
+    __tablename__ = "pms_space_statuses"
+    __table_args__ = (UniqueConstraint("team_id", "slug", name="uq_pms_space_status_slug"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    team_id: Mapped[str] = mapped_column(ForeignKey("teams.id"), index=True)
+    slug: Mapped[str] = mapped_column(String(40), index=True)
+    name: Mapped[str] = mapped_column(String(60))
+    color: Mapped[str] = mapped_column(String(24), default="#6b7280")
+    category: Mapped[str] = mapped_column(
+        String(24), default="active"
+    )  # not_started | active | done | closed
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        nullable=False,
+    )
+
+
 class TaskList(Base):
     __tablename__ = "pms_task_lists"
 
@@ -51,10 +116,9 @@ class TaskList(Base):
     name: Mapped[str] = mapped_column(String(140), index=True)
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
     status: Mapped[str] = mapped_column(String(24), default="active", index=True)
+    status_mode: Mapped[str] = mapped_column(String(16), default="custom", nullable=False)
     archived: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
-    team_id: Mapped[str | None] = mapped_column(
-        ForeignKey("teams.id"), nullable=True, index=True
-    )
+    team_id: Mapped[str | None] = mapped_column(ForeignKey("teams.id"), nullable=True, index=True)
     folder_id: Mapped[str | None] = mapped_column(
         ForeignKey("pms_folders.id"), nullable=True, index=True
     )
@@ -79,11 +143,7 @@ class TaskList(Base):
         back_populates="task_list",
         cascade="all, delete-orphan",
     )
-    issues: Mapped[list["Issue"]] = relationship(
-        back_populates="task_list",
-        cascade="all, delete-orphan",
-    )
-    dependencies: Mapped[list["ScheduleDependency"]] = relationship(
+    tasks: Mapped[list["Task"]] = relationship(
         back_populates="task_list",
         cascade="all, delete-orphan",
     )
@@ -91,6 +151,11 @@ class TaskList(Base):
         back_populates="task_list",
         cascade="all, delete-orphan",
         order_by="TaskListStatus.sort_order",
+    )
+    space_statuses: Mapped[list[SpaceStatus]] = relationship(
+        primaryjoin=lambda: TaskList.team_id == foreign(SpaceStatus.team_id),
+        viewonly=True,
+        order_by="SpaceStatus.sort_order",
     )
     folder: Mapped[Folder | None] = relationship(back_populates="task_lists")
     task_templates: Mapped[list["TaskTemplate"]] = relationship(
@@ -107,9 +172,7 @@ class TaskListStatus(Base):
     """Custom workflow statuses per task list."""
 
     __tablename__ = "pms_task_list_statuses"
-    __table_args__ = (
-        UniqueConstraint("list_id", "slug", name="uq_pms_task_list_status_slug"),
-    )
+    __table_args__ = (UniqueConstraint("list_id", "slug", name="uq_pms_task_list_status_slug"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     list_id: Mapped[str] = mapped_column(ForeignKey("pms_task_lists.id"), index=True)
@@ -118,7 +181,7 @@ class TaskListStatus(Base):
     color: Mapped[str] = mapped_column(String(24), default="#6b7280")
     category: Mapped[str] = mapped_column(
         String(24), default="active"
-    )  # backlog | active | done | canceled
+    )  # not_started | active | done | closed
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
@@ -151,7 +214,7 @@ class Milestone(Base):
         nullable=False,
     )
     task_list: Mapped[TaskList] = relationship(back_populates="milestones")
-    issues: Mapped[list["Issue"]] = relationship(back_populates="milestone")
+    tasks: Mapped[list["Task"]] = relationship(back_populates="milestone")
 
 
 class Label(Base):
@@ -168,32 +231,47 @@ class Label(Base):
         nullable=False,
     )
     task_list: Mapped[TaskList] = relationship(back_populates="labels")
-    issue_links: Mapped[list["IssueLabel"]] = relationship(
+    task_links: Mapped[list["TaskLabel"]] = relationship(
         back_populates="label",
         cascade="all, delete-orphan",
     )
 
 
-class Issue(Base):
-    __tablename__ = "pms_issues"
+class Task(Base):
+    __tablename__ = "pms_tasks"
     __table_args__ = (
-        UniqueConstraint("list_id", "issue_number", name="uq_pms_issue_number"),
-        Index("ix_pms_issues_due_date", "due_date"),
-        Index("ix_pms_issues_start_date", "start_date"),
+        UniqueConstraint("list_id", "task_number", name="uq_pms_task_number"),
+        Index("ix_pms_tasks_due_date", "due_date"),
+        Index("ix_pms_tasks_start_date", "start_date"),
+        Index(
+            "ix_pms_tasks_list_archived_board",
+            "list_id",
+            "archived",
+            "board_position",
+            "task_number",
+        ),
+        Index("ix_pms_tasks_list_archived_updated", "list_id", "archived", "updated_at"),
+        Index("ix_pms_tasks_reporter_archived_created", "reporter_id", "archived", "created_at"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     list_id: Mapped[str] = mapped_column(ForeignKey("pms_task_lists.id"), index=True)
-    issue_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    retrieval_partition_id: Mapped[str | None] = mapped_column(
+        ForeignKey("retrieval_partitions.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    task_number: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str] = mapped_column(String(180), index=True)
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
     description_blocks: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
-    status: Mapped[str] = mapped_column(String(24), default="backlog", index=True)
+    status: Mapped[str] = mapped_column(String(24), default="todo", index=True)
     priority: Mapped[str] = mapped_column(String(24), default="medium", index=True)
-    assignee_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    assignee_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True, index=True
+    )
     reporter_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     parent_id: Mapped[str | None] = mapped_column(
-        ForeignKey("pms_issues.id"),
+        ForeignKey("pms_tasks.id"),
         nullable=True,
         index=True,
     )
@@ -204,8 +282,8 @@ class Issue(Base):
     )
     start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    completed_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     board_position: Mapped[int] = mapped_column(Integer, default=0)
-    estimate_hours: Mapped[float | None] = mapped_column(nullable=True)
     recurrence_rule: Mapped[str | None] = mapped_column(String(120), nullable=True)
     archived: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -219,67 +297,74 @@ class Issue(Base):
         onupdate=utcnow_naive,
         nullable=False,
     )
-    task_list: Mapped[TaskList] = relationship(back_populates="issues")
-    parent: Mapped["Issue | None"] = relationship(
+    task_list: Mapped[TaskList] = relationship(back_populates="tasks")
+    parent: Mapped["Task | None"] = relationship(
         back_populates="subtasks",
-        remote_side="Issue.id",
+        remote_side="Task.id",
     )
-    subtasks: Mapped[list["Issue"]] = relationship(
+    subtasks: Mapped[list["Task"]] = relationship(
         back_populates="parent",
         cascade="all, delete-orphan",
     )
-    milestone: Mapped[Milestone | None] = relationship(back_populates="issues")
+    milestone: Mapped[Milestone | None] = relationship(back_populates="tasks")
     assignee = relationship("User", foreign_keys=[assignee_id])
     reporter = relationship("User", foreign_keys=[reporter_id])
-    comments: Mapped[list["IssueComment"]] = relationship(
-        back_populates="issue",
+    comments: Mapped[list["TaskComment"]] = relationship(
+        back_populates="task",
         cascade="all, delete-orphan",
     )
-    activity_logs: Mapped[list["IssueActivityLog"]] = relationship(
-        back_populates="issue",
+    activity_logs: Mapped[list["TaskActivityLog"]] = relationship(
+        back_populates="task",
         cascade="all, delete-orphan",
     )
-    label_links: Mapped[list["IssueLabel"]] = relationship(
-        back_populates="issue",
+    label_links: Mapped[list["TaskLabel"]] = relationship(
+        back_populates="task",
         cascade="all, delete-orphan",
     )
     attachments: Mapped[list["Attachment"]] = relationship(
-        back_populates="issue",
+        back_populates="task",
         cascade="all, delete-orphan",
     )
     checklist_items: Mapped[list["ChecklistItem"]] = relationship(
-        back_populates="issue",
+        back_populates="task",
         cascade="all, delete-orphan",
     )
-    time_entries: Mapped[list["TimeEntry"]] = relationship(
-        back_populates="issue",
+    assignee_links: Mapped[list["TaskAssignee"]] = relationship(
         cascade="all, delete-orphan",
     )
-    assignee_links: Mapped[list["IssueAssignee"]] = relationship(
+    follower_links: Mapped[list["TaskFollower"]] = relationship(
         cascade="all, delete-orphan",
     )
-    user_access_grants: Mapped[list["IssueUserAccess"]] = relationship(
-        back_populates="issue",
+    user_access_grants: Mapped[list["TaskUserAccess"]] = relationship(
+        back_populates="task",
+        cascade="all, delete-orphan",
+    )
+    doc_links: Mapped[list["TaskDocLink"]] = relationship(
+        back_populates="task",
         cascade="all, delete-orphan",
     )
 
 
-class IssueLabel(Base):
-    __tablename__ = "pms_issue_labels"
-    __table_args__ = (UniqueConstraint("issue_id", "label_id", name="uq_pms_issue_label"),)
+class TaskLabel(Base):
+    __tablename__ = "pms_task_labels"
+    __table_args__ = (
+        UniqueConstraint("task_id", "label_id", name="uq_pms_task_label"),
+        Index("ix_pms_task_labels_label_task", "label_id", "task_id"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    issue_id: Mapped[str] = mapped_column(ForeignKey("pms_issues.id"), index=True)
+    task_id: Mapped[str] = mapped_column(ForeignKey("pms_tasks.id"), index=True)
     label_id: Mapped[str] = mapped_column(ForeignKey("pms_labels.id"), index=True)
-    issue: Mapped[Issue] = relationship(back_populates="label_links")
-    label: Mapped[Label] = relationship(back_populates="issue_links")
+    task: Mapped[Task] = relationship(back_populates="label_links")
+    label: Mapped[Label] = relationship(back_populates="task_links")
 
 
-class IssueComment(Base):
-    __tablename__ = "pms_issue_comments"
+class TaskComment(Base):
+    __tablename__ = "pms_task_comments"
+    __table_args__ = (Index("ix_pms_task_comments_author_created", "author_id", "created_at"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    issue_id: Mapped[str] = mapped_column(ForeignKey("pms_issues.id"), index=True)
+    task_id: Mapped[str] = mapped_column(ForeignKey("pms_tasks.id"), index=True)
     author_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     body: Mapped[str] = mapped_column(Text)
     body_blocks: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
@@ -288,53 +373,37 @@ class IssueComment(Base):
         default=utcnow_naive,
         nullable=False,
     )
-    issue: Mapped[Issue] = relationship(back_populates="comments")
+    task: Mapped[Task] = relationship(back_populates="comments")
     author = relationship("User")
 
 
-class IssueActivityLog(Base):
-    __tablename__ = "pms_issue_activity_logs"
+class TaskActivityLog(Base):
+    __tablename__ = "pms_task_activity_logs"
+    __table_args__ = (Index("ix_pms_task_activity_logs_actor_created", "actor_id", "created_at"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    issue_id: Mapped[str] = mapped_column(ForeignKey("pms_issues.id"), index=True)
+    task_id: Mapped[str] = mapped_column(ForeignKey("pms_tasks.id"), index=True)
     actor_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     action: Mapped[str] = mapped_column(String(40), index=True)
     field_name: Mapped[str | None] = mapped_column(String(40), nullable=True)
-    from_value: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    to_value: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    from_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    to_value: Mapped[str | None] = mapped_column(Text, nullable=True)
     message: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=utcnow_naive,
         nullable=False,
     )
-    issue: Mapped[Issue] = relationship(back_populates="activity_logs")
+    task: Mapped[Task] = relationship(back_populates="activity_logs")
     actor = relationship("User")
-
-
-class ScheduleDependency(Base):
-    __tablename__ = "pms_schedule_dependencies"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    list_id: Mapped[str] = mapped_column(ForeignKey("pms_task_lists.id"), index=True)
-    predecessor_kind: Mapped[str] = mapped_column(String(24), default="issue")
-    predecessor_id: Mapped[str] = mapped_column(String(36), index=True)
-    successor_kind: Mapped[str] = mapped_column(String(24), default="issue")
-    successor_id: Mapped[str] = mapped_column(String(36), index=True)
-    relation_type: Mapped[str] = mapped_column(String(24), default="blocks")
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        default=utcnow_naive,
-        nullable=False,
-    )
-    task_list: Mapped[TaskList] = relationship(back_populates="dependencies")
 
 
 class Attachment(Base):
     __tablename__ = "pms_attachments"
+    __table_args__ = (Index("ix_pms_attachments_uploaded_created", "uploaded_by_id", "created_at"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    issue_id: Mapped[str] = mapped_column(ForeignKey("pms_issues.id"), index=True)
+    task_id: Mapped[str] = mapped_column(ForeignKey("pms_tasks.id"), index=True)
     filename: Mapped[str] = mapped_column(String(255))
     content_type: Mapped[str] = mapped_column(String(120), default="application/octet-stream")
     size_bytes: Mapped[int] = mapped_column(Integer, default=0)
@@ -345,7 +414,7 @@ class Attachment(Base):
         default=utcnow_naive,
         nullable=False,
     )
-    issue: Mapped[Issue] = relationship(back_populates="attachments")
+    task: Mapped[Task] = relationship(back_populates="attachments")
     uploaded_by = relationship("User")
 
 
@@ -353,7 +422,7 @@ class ChecklistItem(Base):
     __tablename__ = "pms_checklist_items"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    issue_id: Mapped[str] = mapped_column(ForeignKey("pms_issues.id"), index=True)
+    task_id: Mapped[str] = mapped_column(ForeignKey("pms_tasks.id"), index=True)
     text: Mapped[str] = mapped_column(String(500))
     completed: Mapped[bool] = mapped_column(Boolean, default=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
@@ -362,36 +431,38 @@ class ChecklistItem(Base):
         default=utcnow_naive,
         nullable=False,
     )
-    issue: Mapped[Issue] = relationship(back_populates="checklist_items")
-
-
-class TimeEntry(Base):
-    __tablename__ = "pms_time_entries"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    issue_id: Mapped[str] = mapped_column(ForeignKey("pms_issues.id"), index=True)
-    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
-    duration_minutes: Mapped[int] = mapped_column(Integer)
-    description: Mapped[str] = mapped_column(Text, default="", nullable=False)
-    entry_date: Mapped[date] = mapped_column(Date)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        default=utcnow_naive,
-        nullable=False,
-    )
-    issue: Mapped[Issue] = relationship(back_populates="time_entries")
-    user = relationship("User")
+    task: Mapped[Task] = relationship(back_populates="checklist_items")
 
 
 class Notification(Base):
     __tablename__ = "pms_notifications"
+    __table_args__ = (
+        Index(
+            "ix_pms_notifications_user_created_global",
+            "user_id",
+            "created_at",
+            postgresql_where=text("type <> 'dm_message'"),
+        ),
+        Index(
+            "ix_pms_notifications_user_unread_global",
+            "user_id",
+            postgresql_where=text("is_read = false AND type <> 'dm_message'"),
+        ),
+        Index(
+            "ix_pms_notifications_dm_thread_unread",
+            "user_id",
+            "reference_type",
+            "reference_id",
+            postgresql_where=text("is_read = false"),
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     type: Mapped[str] = mapped_column(String(40), index=True)
     title: Mapped[str] = mapped_column(String(255))
     body: Mapped[str] = mapped_column(Text, default="")
-    reference_type: Mapped[str] = mapped_column(String(24), default="issue")
+    reference_type: Mapped[str] = mapped_column(String(24), default="task")
     reference_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     action_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
@@ -403,7 +474,7 @@ class Notification(Base):
 
 
 class TaskTemplate(Base):
-    """Reusable issue templates per task list."""
+    """Reusable task templates per task list."""
 
     __tablename__ = "pms_task_templates"
 
@@ -411,7 +482,7 @@ class TaskTemplate(Base):
     list_id: Mapped[str] = mapped_column(ForeignKey("pms_task_lists.id"), index=True)
     name: Mapped[str] = mapped_column(String(140))
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
-    default_status: Mapped[str] = mapped_column(String(40), default="backlog")
+    default_status: Mapped[str] = mapped_column(String(40), default="todo")
     default_priority: Mapped[str] = mapped_column(String(24), default="medium")
     checklist_items: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -442,50 +513,61 @@ class CustomField(Base):
 
 
 class CustomFieldValue(Base):
-    """Custom field values per issue."""
+    """Custom field values per task."""
 
     __tablename__ = "pms_custom_field_values"
-    __table_args__ = (
-        UniqueConstraint("issue_id", "field_id", name="uq_pms_cf_value"),
-    )
+    __table_args__ = (UniqueConstraint("task_id", "field_id", name="uq_pms_cf_value"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    issue_id: Mapped[str] = mapped_column(ForeignKey("pms_issues.id"), index=True)
+    task_id: Mapped[str] = mapped_column(ForeignKey("pms_tasks.id"), index=True)
     field_id: Mapped[str] = mapped_column(ForeignKey("pms_custom_fields.id"), index=True)
     value: Mapped[str] = mapped_column(Text, default="")
 
 
-class IssueAssignee(Base):
-    """Multiple assignees per issue (junction table)."""
+class TaskAssignee(Base):
+    """Multiple assignees per task (junction table)."""
 
-    __tablename__ = "pms_issue_assignees"
+    __tablename__ = "pms_task_assignees"
     __table_args__ = (
-        UniqueConstraint("issue_id", "user_id", name="uq_pms_issue_assignee"),
+        UniqueConstraint("task_id", "user_id", name="uq_pms_task_assignee"),
+        Index("ix_pms_task_assignees_user_task", "user_id", "task_id"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    issue_id: Mapped[str] = mapped_column(ForeignKey("pms_issues.id"), index=True)
+    task_id: Mapped[str] = mapped_column(ForeignKey("pms_tasks.id"), index=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     user = relationship("User")
 
 
-class IssueUserAccess(Base):
-    __tablename__ = "pms_issue_user_access"
+class TaskFollower(Base):
+    """Users following an task for updates."""
+
+    __tablename__ = "pms_task_followers"
+    __table_args__ = (UniqueConstraint("task_id", "user_id", name="uq_pms_task_follower"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    task_id: Mapped[str] = mapped_column(ForeignKey("pms_tasks.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    user = relationship("User")
+
+
+class TaskUserAccess(Base):
+    __tablename__ = "pms_task_user_access"
     __table_args__ = (
-        Index("ix_pms_issue_user_access_user_revoked", "user_id", "revoked_at"),
+        Index("ix_pms_task_user_access_user_revoked", "user_id", "revoked_at"),
         Index(
-            "ix_pms_issue_user_access_meeting_revoked",
+            "ix_pms_task_user_access_meeting_revoked",
             "granted_by_meeting_id",
             "revoked_at",
         ),
         Index(
-            "ix_pms_issue_user_access_expires_active",
+            "ix_pms_task_user_access_expires_active",
             "expires_at",
             postgresql_where=text("revoked_at IS NULL"),
         ),
         Index(
-            "uq_pms_issue_user_access_active",
-            "issue_id",
+            "uq_pms_task_user_access_active",
+            "task_id",
             "user_id",
             "granted_by_meeting_id",
             unique=True,
@@ -494,7 +576,7 @@ class IssueUserAccess(Base):
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    issue_id: Mapped[str] = mapped_column(ForeignKey("pms_issues.id"), index=True)
+    task_id: Mapped[str] = mapped_column(ForeignKey("pms_tasks.id"), index=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     access_level: Mapped[str] = mapped_column(String(16), default="read")
     granted_by_meeting_id: Mapped[str | None] = mapped_column(
@@ -524,7 +606,30 @@ class IssueUserAccess(Base):
         nullable=False,
     )
 
-    issue: Mapped[Issue] = relationship(back_populates="user_access_grants")
+    task: Mapped[Task] = relationship(back_populates="user_access_grants")
     user = relationship("User", foreign_keys=[user_id])
     granted_by_user = relationship("User", foreign_keys=[granted_by_user_id])
     revoked_by_user = relationship("User", foreign_keys=[revoked_by_user_id])
+
+
+class TaskDocLink(Base):
+    __tablename__ = "pms_task_doc_links"
+    __table_args__ = (
+        UniqueConstraint("task_id", "doc_id", name="uq_pms_task_doc_link"),
+        Index("ix_pms_task_doc_links_task_created", "task_id", "created_at"),
+        Index("ix_pms_task_doc_links_doc_created", "doc_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    task_id: Mapped[str] = mapped_column(ForeignKey("pms_tasks.id"), index=True)
+    doc_id: Mapped[str] = mapped_column(ForeignKey("docs_native_docs.id"), index=True)
+    created_by_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        nullable=False,
+    )
+
+    task: Mapped[Task] = relationship(back_populates="doc_links")
+    doc = relationship(_native_doc_model)
+    created_by = relationship("User")

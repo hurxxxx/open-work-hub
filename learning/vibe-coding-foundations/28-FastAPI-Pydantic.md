@@ -243,7 +243,7 @@ FastAPI 자체는 "프레임워크"이고, 실제로 요청을 받는 "서버"�
 - Hypercorn: HTTP/2·QUIC 지원.
 - Daphne: Django Channels 중심.
 
-운영 배포 시에는 Uvicorn 앞에 **Gunicorn + Uvicorn worker** 또는 **Uvicorn multi-process** 로 프로세스를 여러 개 띄웁니다. `scripts/dev-api.sh` 가 바로 이 역할을 합니다(포트 8001, 8002 등).
+운영 배포 시에는 Uvicorn 앞에 **Gunicorn + Uvicorn worker** 또는 **Uvicorn multi-process** 로 프로세스를 여러 개 띄울 수 있습니다. 개발 환경에서는 `scripts/dev-api.sh` 로 API 인스턴스를 포트별로 나눠 띄웁니다(8001, 8002 등).
 
 ### 6.1 SSE(서버 전송 이벤트)·파일 업로드 관련 패키지
 
@@ -273,7 +273,7 @@ apps/api/
 │       │   ├── router.py    HTTP 엔드포인트
 │       │   ├── service.py   비즈니스 로직
 │       │   ├── models.py    DB 모델
-│       │   ├── schemas.py   Pydantic 입출력 스키마
+│       │   ├── schemas.py   Pydantic 입출력 스키마(도메인에 따라 router.py에 둘 수도 있음)
 │       │   ├── registry.py  AI 능력 레지스트리
 │       │   └── ...
 │       ├── auth/
@@ -294,14 +294,14 @@ apps/api/
 - **Router** (`router.py`): HTTP 엔드포인트 정의. 입출력 Pydantic 스키마 연결. 권한 가드.
 - **Service** (`service.py`): 비즈니스 로직. DB 접근·외부 호출. 재사용 가능한 단위.
 - **Model** (`models.py`): SQLAlchemy ORM 모델(DB 테이블 매핑).
-- **Schema** (`schemas.py`): Pydantic 모델(외부 입출력).
+- **Schema** (`schemas.py` 또는 `router.py`): Pydantic 모델(외부 입출력).
 
 이 4-파일 패턴은 **이해하기 쉽고, 테스트하기 쉽고, AI가 잘 생성합니다**.
 
 ### 7.2 예시 흐름 (가상)
 
 ```python
-# apps/api/src/ai_do_api/domains/pms/schemas.py
+# apps/api/src/ai_do_api/domains/pms/router.py
 class IssueCreate(BaseModel):
     title: str
     board_id: str
@@ -340,7 +340,7 @@ async def post_issue(
 
 **케이스 — 채팅 답변을 한 글자씩 보여주는 "스트리밍 응답"**
 - `POST /ai/chat` 라우터가 `sse-starlette`의 `EventSourceResponse`를 반환.
-- Service는 OpenAI 호출을 비동기 제너레이터로 받아 이벤트를 쏩니다.
+- Service는 LLM provider 호출을 비동기 제너레이터로 받아 이벤트를 쏩니다.
 - 프런트에서는 `eventsource-parser`로 한 청크씩 받아 BlockNote 에디터에 append.
 - Pydantic 스키마는 **요청에만** 엄격 적용, 응답은 스트림 청크이므로 `response_model`을 쓰지 않고 SSE 커스텀 포맷을 씁니다(라우터마다 응답 스타일이 다를 수 있음을 보여주는 예).
 
@@ -448,7 +448,7 @@ def test_create_issue(client, auth_header):
 
 ### 11.7 🛠️ 5분 실습 — `/docs`에서 엔드포인트 한 번 호출해 보기
 
-1. 로컬에서 `pnpm api:dev`(또는 `scripts/dev-api.sh`)로 API를 띄웁니다.
+1. 로컬에서 `pnpm dev:api`(또는 `scripts/dev-api.sh`)로 API를 띄웁니다.
 2. 브라우저에서 `http://localhost:8000/docs` 열기.
 3. 아무 `GET` 엔드포인트의 "Try it out" 누르고, 필요한 파라미터를 채운 뒤 "Execute".
 4. 응답 JSON과 curl 명령 예시가 자동 생성되는 걸 확인. 이것이 **Pydantic 스키마가 곧 문서**인 이유.

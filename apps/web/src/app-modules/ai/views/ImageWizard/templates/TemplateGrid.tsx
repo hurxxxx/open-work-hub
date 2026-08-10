@@ -35,5 +35,3 @@ export function TemplateGrid({
     </div>
   );
 }
-
-export default TemplateGrid;

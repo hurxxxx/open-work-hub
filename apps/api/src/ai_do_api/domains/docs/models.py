@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
@@ -11,6 +12,7 @@ from sqlalchemy import (
     JSON,
     LargeBinary,
     String,
+    Text,
     UniqueConstraint,
     text,
 )
@@ -25,19 +27,46 @@ def utcnow_naive() -> datetime:
 
 class NativeDoc(Base):
     __tablename__ = "docs_native_docs"
+    __table_args__ = (
+        CheckConstraint(
+            "doc_type IN ('general', 'meeting_notes', 'project_brief', 'spec', 'policy', 'guide', 'memo')",
+            name="ck_docs_native_docs_doc_type",
+        ),
+        CheckConstraint(
+            "rag_scope IN ('official', 'personal', 'excluded')",
+            name="ck_docs_native_docs_rag_scope",
+        ),
+        Index("ix_docs_native_docs_owner_created", "owner_id", "created_at"),
+        Index("ix_docs_native_docs_workspace_updated", "workspace_id", "updated_at"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), index=True)
+    retrieval_partition_id: Mapped[str | None] = mapped_column(
+        ForeignKey("retrieval_partitions.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
     owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    collection_id: Mapped[str | None] = mapped_column(
+        ForeignKey("docs_collections.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     title: Mapped[str] = mapped_column(String(200))
+    doc_type: Mapped[str] = mapped_column(String(40), default="general", nullable=False, index=True)
     source_app: Mapped[str] = mapped_column(String(64), default="docs", nullable=False, index=True)
-    source_kind: Mapped[str] = mapped_column(String(64), default="manual", nullable=False, index=True)
+    source_kind: Mapped[str] = mapped_column(
+        String(64), default="manual", nullable=False, index=True
+    )
     source_ref: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     generation_kind: Mapped[str] = mapped_column(
         String(32),
         default="human",
         nullable=False,
         index=True,
+    )
+    rag_scope: Mapped[str] = mapped_column(
+        String(24), default="official", nullable=False, index=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
@@ -53,11 +82,12 @@ class NativeDoc(Base):
     trashed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
     workspace = relationship("Workspace")
     owner = relationship("User")
+    collection: Mapped["DocsCollection | None"] = relationship(back_populates="docs")
     pages: Mapped[list["NativeDocPage"]] = relationship(
         back_populates="doc",
         cascade="all, delete-orphan",
     )
-    containers: Mapped[list["NativeDocContainer"]] = relationship(
+    targets: Mapped[list["NativeDocTarget"]] = relationship(
         back_populates="doc",
         cascade="all, delete-orphan",
     )
@@ -75,35 +105,67 @@ class NativeDoc(Base):
     )
 
 
-class NativeDocContainer(Base):
-    __tablename__ = "docs_doc_containers"
+class DocsCollection(Base):
+    __tablename__ = "docs_collections"
+    __table_args__ = (
+        CheckConstraint("scope IN ('workspace', 'private')", name="ck_docs_collections_scope"),
+        CheckConstraint("length(trim(name)) > 0", name="ck_docs_collections_name_not_blank"),
+        Index(
+            "ix_docs_collections_workspace_scope_owner",
+            "workspace_id",
+            "scope",
+            "owner_id",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), index=True)
+    scope: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
+    owner_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    name: Mapped[str] = mapped_column(String(140))
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        onupdate=utcnow_naive,
+        nullable=False,
+    )
+
+    workspace = relationship("Workspace")
+    owner = relationship("User")
+    docs: Mapped[list[NativeDoc]] = relationship(back_populates="collection")
+
+
+class NativeDocTarget(Base):
+    __tablename__ = "docs_doc_targets"
     __table_args__ = (
         Index(
-            "ix_docs_doc_containers_lookup",
-            "container_app",
-            "container_type",
-            "container_id",
+            "ix_docs_doc_targets_target_lookup",
+            "target_app",
+            "target_type",
+            "target_id",
         ),
         Index(
-            "uq_docs_doc_containers_primary",
+            "uq_docs_doc_targets_primary",
             "doc_id",
             unique=True,
             postgresql_where=text("is_primary IS TRUE"),
         ),
         UniqueConstraint(
             "doc_id",
-            "container_app",
-            "container_type",
-            "container_id",
-            name="uq_docs_doc_containers_doc_container",
+            "target_app",
+            "target_type",
+            "target_id",
+            name="uq_docs_doc_targets_doc_target",
         ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     doc_id: Mapped[str] = mapped_column(ForeignKey("docs_native_docs.id"), index=True)
-    container_app: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    container_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    container_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    target_app: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    target_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    target_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     is_primary: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
@@ -114,11 +176,17 @@ class NativeDocContainer(Base):
         nullable=False,
     )
 
-    doc: Mapped[NativeDoc] = relationship(back_populates="containers")
+    doc: Mapped[NativeDoc] = relationship(back_populates="targets")
 
 
 class NativeDocPage(Base):
     __tablename__ = "docs_native_doc_pages"
+    __table_args__ = (
+        CheckConstraint(
+            "content_format IN ('block', 'html')",
+            name="ck_docs_native_doc_pages_content_format",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     doc_id: Mapped[str] = mapped_column(ForeignKey("docs_native_docs.id"), index=True)
@@ -128,7 +196,11 @@ class NativeDocPage(Base):
         index=True,
     )
     title: Mapped[str] = mapped_column(String(200))
+    content_format: Mapped[str] = mapped_column(
+        String(24), default="block", nullable=False, index=True
+    )
     content_blocks: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
+    content_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_by_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -157,9 +229,7 @@ class NativeDocPage(Base):
 
 class NativeDocUserShare(Base):
     __tablename__ = "docs_native_doc_user_shares"
-    __table_args__ = (
-        UniqueConstraint("doc_id", "user_id", name="uq_docs_native_doc_user_share"),
-    )
+    __table_args__ = (UniqueConstraint("doc_id", "user_id", name="uq_docs_native_doc_user_share"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     doc_id: Mapped[str] = mapped_column(ForeignKey("docs_native_docs.id"), index=True)
@@ -178,9 +248,7 @@ class NativeDocUserShare(Base):
 
 class NativeDocLinkShare(Base):
     __tablename__ = "docs_native_doc_link_shares"
-    __table_args__ = (
-        UniqueConstraint("doc_id", name="uq_docs_native_doc_link_share_doc"),
-    )
+    __table_args__ = (UniqueConstraint("doc_id", name="uq_docs_native_doc_link_share_doc"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     doc_id: Mapped[str] = mapped_column(ForeignKey("docs_native_docs.id"), index=True)

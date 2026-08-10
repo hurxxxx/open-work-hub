@@ -9,14 +9,14 @@
       "executor": "nx:run-commands",
       "options": {
         "cwd": "apps/api",
-        "command": "DOOWON_API_AUTO_MIGRATE=1 uv run --python 3.12 uvicorn ai_do_api.main:app --app-dir src --host 127.0.0.1 --port 8000 --reload"
+        "command": "AI_DO_API_AUTO_MIGRATE=${AI_DO_API_AUTO_MIGRATE:-1} uv run --python 3.12 uvicorn ai_do_api.main:app --app-dir src --host ${AI_DO_DEV_API_HOST:-127.0.0.1} --port ${AI_DO_API_DEV_PORT:-8001} --reload"
       }
     },
     "serve": {
       "executor": "nx:run-commands",
       "options": {
         "cwd": "apps/api",
-        "command": "uv run --python 3.12 uvicorn ai_do_api.main:app --app-dir src --host 127.0.0.1 --port 8000"
+        "command": "uv run --python 3.12 uvicorn ai_do_api.main:app --app-dir src --host 127.0.0.1 --port ${AI_DO_API_DEV_PORT:-8001}"
       }
     },
     "lint": {
@@ -30,7 +30,62 @@
       "executor": "nx:run-commands",
       "options": {
         "cwd": "apps/api",
-        "command": "uv run --python 3.12 --group dev python -m pytest"
+        "command": "uv run --python 3.12 --group dev python -m pytest -n ${AI_DO_API_PYTEST_WORKERS:-8} --dist=worksteal -m 'not slow and not external_integration and not migration'"
+      }
+    },
+    "test-budget": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "cwd": "apps/api",
+        "command": "uv run --python 3.12 --group dev python ../../scripts/check-api-test-budget.py --output ../../api-test-report.json"
+      }
+    },
+    "test-affected": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "cwd": ".",
+        "command": "node scripts/run-affected-api-tests.mjs standard"
+      }
+    },
+    "test-migrations": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "cwd": "apps/api",
+        "command": "uv run --python 3.12 --group dev python -m pytest -m migration -q"
+      }
+    },
+    "test-full": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "cwd": "apps/api",
+        "command": "uv run --python 3.12 --group dev python ../../scripts/check-api-test-budget.py --output ../../api-test-report.json && uv run --python 3.12 --group dev python -m pytest -n ${AI_DO_API_PYTEST_WORKERS:-8} --dist=worksteal -m 'not slow and not external_integration and not migration' && uv run --python 3.12 --group dev python -m pytest -m 'slow and not external_integration and not migration' && uv run --python 3.12 --group dev python -m pytest -m migration && bash ../../scripts/api-test-vm.sh -m external_integration"
+      }
+    },
+    "test-slow": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/api",
+        "command": "uv run --python 3.12 --group dev python -m pytest -m 'slow and not external_integration and not migration'"
+      }
+    },
+    "test-integration": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "cwd": "apps/api",
+        "command": "bash ../../scripts/api-test-vm.sh -m external_integration"
+      }
+    },
+    "test-integration-affected": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "cwd": ".",
+        "command": "node scripts/run-affected-api-tests.mjs external"
       }
     },
     "typecheck": {
@@ -52,6 +107,61 @@
         "cwd": ".",
         "command": "pnpm check:api-architecture"
       }
+    },
+    "contract-openapi": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "cwd": ".",
+        "command": "UV_PROJECT_ENVIRONMENT=../../.runtime/ci-api-venv node scripts/generate-openapi-client.mjs --check --no-sync"
+      }
+    },
+    "contract-architecture": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "cwd": ".",
+        "command": "python3 scripts/check-api-i18n-messages.py && cd apps/api && UV_PROJECT_ENVIRONMENT=../../.runtime/ci-api-venv uv run --no-sync --frozen --python 3.12 --group dev lint-imports"
+      }
+    },
+    "contract-lint": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "cwd": "apps/api",
+        "command": "UV_PROJECT_ENVIRONMENT=../../.runtime/ci-api-venv uv run --no-sync --frozen --python 3.12 --group dev ruff check ."
+      }
+    },
+    "contract-typecheck": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "cwd": "apps/api",
+        "command": "UV_PROJECT_ENVIRONMENT=../../.runtime/ci-api-venv uv run --no-sync --frozen --python 3.12 python -m compileall src"
+      }
+    },
+    "contract-tests": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "cwd": "apps/api",
+        "command": "UV_PROJECT_ENVIRONMENT=../../.runtime/ci-api-venv uv run --no-sync --frozen --python 3.12 --group dev python -m pytest tests/test_platform_adapter_registries.py tests/test_workspace_keyword_search_registry.py tests/test_ai_gateway_direct_call_guard.py -q"
+      }
+    },
+    "ci-contracts": {
+      "executor": "nx:noop",
+      "cache": false,
+      "dependsOn": [
+        "contract-openapi",
+        "contract-architecture",
+        "contract-lint",
+        "contract-typecheck",
+        "contract-tests",
+        {
+          "projects": ["worker"],
+          "target": "contract-tests"
+        }
+      ]
     }
   }
 }

@@ -6,19 +6,50 @@ import tailwindcss from '@tailwindcss/vite';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 import { nxCopyAssetsPlugin } from '@nx/vite/plugins/nx-copy-assets.plugin';
 
-const apiProxyTarget = process.env.DOOWON_WEB_API_PROXY_TARGET ?? 'http://127.0.0.1:8000';
+const apiProxyTarget = process.env.AI_DO_WEB_API_PROXY_TARGET ?? 'http://127.0.0.1:8001';
+const drawioProxyTarget =
+  process.env.AI_DO_WEB_DRAWIO_PROXY_TARGET ??
+  `http://127.0.0.1:${process.env.AI_DO_DRAWIO_PORT ?? 18082}`;
+const webDevPort = Number(process.env.AI_DO_WEB_DEV_PORT ?? 4200);
+const webBuildOutDir = '../../dist/apps/web';
+const drawioBrowserUrl =
+  process.env.VITE_AI_DO_DRAWIO_URL ?? process.env.AI_DO_DRAWIO_SERVER_URL ?? '';
+const drawioBrowserPort = String(process.env.AI_DO_DRAWIO_PORT ?? 18082);
+const apiProxyTimeoutMs = 0;
+const drawioProxyTimeoutMs = 0;
+const drawioProxyHeaders = {
+  'X-Forwarded-Prefix': '/drawio',
+};
+const rewriteDrawioProxyPath = (requestPath: string) =>
+  requestPath.replace(/^\/drawio(?=\/|$)/, '') || '/';
 
 export default defineConfig(() => ({
   root: import.meta.dirname,
   cacheDir: '../../node_modules/.vite/apps/web',
+  define: {
+    __VUE_OPTIONS_API__: true,
+    __VUE_PROD_DEVTOOLS__: false,
+    __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: false,
+    'import.meta.env.VITE_AI_DO_DRAWIO_PORT': JSON.stringify(drawioBrowserPort),
+    'import.meta.env.VITE_AI_DO_DRAWIO_URL': JSON.stringify(drawioBrowserUrl),
+  },
   server: {
-    port: 4200,
+    port: webDevPort,
     host: '0.0.0.0',
-    allowedHosts: ['dwdcc.lumejs.com'],
     proxy: {
       '/api': {
         target: apiProxyTarget,
+        timeout: apiProxyTimeoutMs,
+        proxyTimeout: apiProxyTimeoutMs,
         ws: true,
+      },
+      '/drawio': {
+        target: drawioProxyTarget,
+        changeOrigin: true,
+        headers: drawioProxyHeaders,
+        timeout: drawioProxyTimeoutMs,
+        proxyTimeout: drawioProxyTimeoutMs,
+        rewrite: rewriteDrawioProxyPath,
       },
     },
     fs: {
@@ -28,13 +59,22 @@ export default defineConfig(() => ({
     },
   },
   preview: {
-    port: 4200,
+    port: webDevPort,
     host: '0.0.0.0',
-    allowedHosts: ['dwdcc.lumejs.com'],
     proxy: {
       '/api': {
         target: apiProxyTarget,
+        timeout: apiProxyTimeoutMs,
+        proxyTimeout: apiProxyTimeoutMs,
         ws: true,
+      },
+      '/drawio': {
+        target: drawioProxyTarget,
+        changeOrigin: true,
+        headers: drawioProxyHeaders,
+        timeout: drawioProxyTimeoutMs,
+        proxyTimeout: drawioProxyTimeoutMs,
+        rewrite: rewriteDrawioProxyPath,
       },
     },
   },
@@ -45,12 +85,15 @@ export default defineConfig(() => ({
     },
   },
   plugins: [react(), tailwindcss(), nxViteTsPaths(), nxCopyAssetsPlugin(['*.md'])],
+  optimizeDeps: {
+    include: ['@hyunbinseo/holidays-kr/all'],
+  },
   // Uncomment this if you are using workers.
   // worker: {
   //   plugins: () => [ nxViteTsPaths() ],
   // },
   build: {
-    outDir: '../../dist/apps/web',
+    outDir: webBuildOutDir,
     emptyOutDir: true,
     reportCompressedSize: true,
     chunkSizeWarningLimit: 2200,

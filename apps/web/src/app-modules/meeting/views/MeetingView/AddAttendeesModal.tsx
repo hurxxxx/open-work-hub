@@ -3,19 +3,22 @@
 // MeetingEditModal which is organizer-only and edits everything.
 //
 // Backed by POST /meeting/meetings/{id}/attendees which is participant-permissioned.
-import { useEffect, useMemo, useState } from 'react';
-import { Button, Dialog } from '@ai-do/ui';
-import { X, UserPlus } from 'lucide-react';
+import { useEffect, useMemo, useReducer } from 'react';
+import { InlineNotice } from '@ai-do/ui';
+import { UserPlus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
+import { FormDialog, FormFieldRow } from '@/src/components/form/FormDialog';
 import { useAuth } from '@/src/platform/auth/auth-provider';
+import { UserSearchMultiSelect } from '@/src/platform/users/UserSearchMultiSelect';
+import type { UserOptionLike } from '@/src/platform/users/user-option-picker-model';
 import {
   addMeetingAttendees,
-  listMeetingUsers,
   type MeetingAttendeeInput,
   type MeetingDetail,
   type MeetingUser,
 } from '../../api/meeting-api';
+import { useMeetingUserSearch } from './useMeetingUserSearch';
 
 interface AddAttendeesModalProps {
   isOpen: boolean;
@@ -23,6 +26,91 @@ interface AddAttendeesModalProps {
   workspaceSlug: string;
   onClose: () => void;
   onAdded: (updated: MeetingDetail) => void;
+}
+
+interface AddAttendeesModalState {
+  pending: MeetingAttendeeInput[];
+  pendingMeta: Record<string, MeetingUser>;
+  query: string;
+  queryFocused: boolean;
+  results: MeetingUser[];
+  searching: boolean;
+  submitting: boolean;
+  error: string | null;
+}
+
+type AddAttendeesModalAction =
+  | { type: 'reset' }
+  | { type: 'setQuery'; value: string }
+  | { type: 'setQueryFocused'; value: boolean }
+  | { type: 'searchIdle' }
+  | { type: 'searchStarted' }
+  | { type: 'searchLoaded'; results: MeetingUser[] }
+  | { type: 'searchFailed' }
+  | { type: 'addCandidate'; candidate: MeetingUser }
+  | { type: 'removePending'; userId: string }
+  | { type: 'saveStarted' }
+  | { type: 'saveFailed'; message: string }
+  | { type: 'saveFinished' };
+
+const INITIAL_ADD_ATTENDEES_MODAL_STATE: AddAttendeesModalState = {
+  pending: [],
+  pendingMeta: {},
+  query: '',
+  queryFocused: false,
+  results: [],
+  searching: false,
+  submitting: false,
+  error: null,
+};
+
+function addAttendeesModalReducer(
+  state: AddAttendeesModalState,
+  action: AddAttendeesModalAction,
+): AddAttendeesModalState {
+  switch (action.type) {
+    case 'reset':
+      return INITIAL_ADD_ATTENDEES_MODAL_STATE;
+    case 'setQuery':
+      return { ...state, query: action.value };
+    case 'setQueryFocused':
+      return { ...state, queryFocused: action.value };
+    case 'searchIdle':
+      return { ...state, results: [], searching: false };
+    case 'searchStarted':
+      return { ...state, searching: true };
+    case 'searchLoaded':
+      return { ...state, results: action.results, searching: false };
+    case 'searchFailed':
+      return { ...state, results: [], searching: false };
+    case 'addCandidate':
+      return {
+        ...state,
+        pending: [
+          ...state.pending,
+          { user_id: action.candidate.id, role: 'required' },
+        ],
+        pendingMeta: {
+          ...state.pendingMeta,
+          [action.candidate.id]: action.candidate,
+        },
+        query: '',
+        results: [],
+      };
+    case 'removePending':
+      return {
+        ...state,
+        pending: state.pending.filter((item) => item.user_id !== action.userId),
+      };
+    case 'saveStarted':
+      return { ...state, submitting: true, error: null };
+    case 'saveFailed':
+      return { ...state, submitting: false, error: action.message };
+    case 'saveFinished':
+      return { ...state, submitting: false };
+    default:
+      return state;
+  }
 }
 
 export function AddAttendeesModal({
@@ -34,55 +122,37 @@ export function AddAttendeesModal({
 }: AddAttendeesModalProps) {
   const { t } = useTranslation('apps');
   const { token } = useAuth();
-  const [pending, setPending] = useState<MeetingAttendeeInput[]>([]);
-  const [pendingMeta, setPendingMeta] = useState<Record<string, MeetingUser>>({});
-  const [query, setQuery] = useState('');
-  const [queryFocused, setQueryFocused] = useState(false);
-  const [results, setResults] = useState<MeetingUser[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [
+    {
+      pending,
+      pendingMeta,
+      query,
+      queryFocused,
+      results,
+      searching,
+      submitting,
+      error,
+    },
+    dispatch,
+  ] = useReducer(addAttendeesModalReducer, INITIAL_ADD_ATTENDEES_MODAL_STATE);
 
   // Reset state whenever the modal opens (so a new meeting context starts fresh).
   useEffect(() => {
     if (!isOpen) return;
-    setPending([]);
-    setPendingMeta({});
-    setQuery('');
-    setQueryFocused(false);
-    setResults([]);
-    setError(null);
-    setSubmitting(false);
+    dispatch({ type: 'reset' });
   }, [isOpen, meeting.id]);
 
-  // Debounced server search.
-  useEffect(() => {
-    if (!isOpen || !token || !queryFocused) return;
-    const trimmed = query.trim();
-    if (!trimmed) {
-      setResults([]);
-      setSearching(false);
-      return;
-    }
-    let cancelled = false;
-    setSearching(true);
-    const handle = window.setTimeout(() => {
-      listMeetingUsers(token, workspaceSlug, { q: trimmed, limit: 30 })
-        .then((response) => {
-          if (!cancelled) setResults(response);
-        })
-        .catch(() => {
-          if (!cancelled) setResults([]);
-        })
-        .finally(() => {
-          if (!cancelled) setSearching(false);
-        });
-    }, 100);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(handle);
-    };
-  }, [isOpen, token, query, queryFocused, workspaceSlug]);
+  useMeetingUserSearch({
+    focused: queryFocused,
+    isOpen,
+    query,
+    token,
+    workspaceSlug,
+    onIdle: () => dispatch({ type: 'searchIdle' }),
+    onStarted: () => dispatch({ type: 'searchStarted' }),
+    onLoaded: (results) => dispatch({ type: 'searchLoaded', results }),
+    onFailed: () => dispatch({ type: 'searchFailed' }),
+  });
 
   // Hide users who are already meeting attendees + already in the pending bucket.
   const existingIds = useMemo(() => {
@@ -97,25 +167,38 @@ export function AddAttendeesModal({
   const candidates = useMemo(() => {
     const pendingIds = new Set(pending.map((item) => item.user_id));
     return results
-      .filter((candidate) => !existingIds.has(candidate.id) && !pendingIds.has(candidate.id))
+      .filter(
+        (candidate) =>
+          !existingIds.has(candidate.id) && !pendingIds.has(candidate.id),
+      )
       .slice(0, 8);
   }, [results, existingIds, pending]);
 
+  const selectedUsers = useMemo(
+    () =>
+      pending.map((item): UserOptionLike => {
+        const meta = pendingMeta[item.user_id];
+        return {
+          id: item.user_id,
+          email: meta?.email ?? '',
+          full_name: meta?.full_name ?? item.user_id,
+          primary_org_unit_name: meta?.primary_org_unit_name ?? null,
+        };
+      }),
+    [pending, pendingMeta],
+  );
+
   function addCandidate(candidate: MeetingUser) {
-    setPending((prev) => [...prev, { user_id: candidate.id, role: 'required' }]);
-    setPendingMeta((prev) => ({ ...prev, [candidate.id]: candidate }));
-    setQuery('');
-    setResults([]);
+    dispatch({ type: 'addCandidate', candidate });
   }
 
   function removePending(userId: string) {
-    setPending((prev) => prev.filter((item) => item.user_id !== userId));
+    dispatch({ type: 'removePending', userId });
   }
 
   async function handleSave() {
     if (!token || pending.length === 0) return;
-    setSubmitting(true);
-    setError(null);
+    dispatch({ type: 'saveStarted' });
     try {
       const updated = await addMeetingAttendees(
         token,
@@ -125,149 +208,81 @@ export function AddAttendeesModal({
       );
       onAdded(updated);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('meeting.addAttendees.failed'));
+      dispatch({
+        type: 'saveFailed',
+        message:
+          err instanceof Error ? err.message : t('meeting.addAttendees.failed'),
+      });
     } finally {
-      setSubmitting(false);
+      dispatch({ type: 'saveFinished' });
     }
   }
 
   return (
-    <Dialog
-        closeLabel={t('common:actions.close')}
+    <FormDialog
+      cancelLabel={t('common:actions.cancel')}
+      closeLabel={t('common:actions.close')}
       open={isOpen}
-      onOpenChange={(next) => {
-        if (!next) onClose();
-      }}
+      onCancel={onClose}
+      onPrimary={() => void handleSave()}
       title={t('meeting.addAttendees.title')}
       description={t('meeting.addAttendees.description')}
       maxWidth="max-w-md"
       dismissOnInteractOutside={false}
-      actions={
-        <div className="flex w-full items-center justify-end gap-3">
-          <Button variant="secondary" onClick={onClose}>
-            {t('common:actions.cancel')}
-          </Button>
-          <Button
-            variant="primary"
-            onClick={handleSave}
-            disabled={pending.length === 0 || submitting}
-          >
-            {submitting
-              ? t('meeting.addAttendees.adding')
-              : t('meeting.addAttendees.addCount', { count: pending.length })}
-          </Button>
-        </div>
-      }
+      primaryDisabled={pending.length === 0}
+      primaryLabel={t('meeting.addAttendees.addCount', {
+        count: pending.length,
+      })}
+      primaryPendingLabel={t('meeting.addAttendees.adding')}
+      submitting={submitting}
     >
       <div className="space-y-4 text-app-ink">
         {error ? (
-          <div
-            role="alert"
-            className="app-text-body rounded-md border border-[var(--ui-color-danger)]/30 bg-[var(--ui-color-danger)]/10 px-3 py-2 text-[var(--ui-color-danger)]"
-          >
+          <InlineNotice role="alert" tone="danger">
             {error}
-          </div>
+          </InlineNotice>
         ) : null}
 
-        <div className="space-y-2">
-          <label className="app-text-overline block text-app-ink/60" htmlFor="add-attendee-search">
-            {t('meeting.addAttendees.searchLabel')}
-          </label>
-          <div className="relative">
-            <input
-              id="add-attendee-search"
-              type="text"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              onFocus={() => setQueryFocused(true)}
-              onBlur={() => window.setTimeout(() => setQueryFocused(false), 150)}
-              placeholder={t('meeting.addAttendees.searchPlaceholder')}
-              className="app-text-body w-full rounded-md border border-app-border bg-app-surface px-3 py-2 text-app-ink placeholder:text-app-ink/30 focus:border-app-accent focus:outline-none"
-              autoComplete="off"
-            />
-            {queryFocused && query.trim() ? (
-              <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-64 overflow-y-auto rounded-md border border-app-border bg-app-surface shadow-lg">
-                {searching ? (
-                  <div className="app-text-caption px-3 py-2 text-app-ink/50">
-                    {t('meeting.addAttendees.searching')}
-                  </div>
-                ) : candidates.length === 0 ? (
-                  <div className="app-text-caption px-3 py-2 text-app-ink/50">
-                    {t('common:empty.noResults')}
-                  </div>
-                ) : (
-                  <ul>
-                    {candidates.map((candidate) => (
-                      <li key={candidate.id}>
-                        <button
-                          type="button"
-                          onMouseDown={(event) => {
-                            // Prevent input blur from closing the dropdown
-                            // before the click registers.
-                            event.preventDefault();
-                          }}
-                          onClick={() => addCandidate(candidate)}
-                          className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-app-surface-hover"
-                        >
-                          <div className="min-w-0">
-                            <p className="app-text-body line-clamp-1 text-app-ink">
-                              {candidate.full_name}
-                            </p>
-                            <p className="app-text-caption text-app-ink/50">
-                              {candidate.email}
-                            </p>
-                          </div>
-                          <UserPlus size={14} className="shrink-0 text-app-accent" />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="space-y-2">
+        <FormFieldRow
+          htmlFor="add-attendee-search"
+          label={t('meeting.addAttendees.searchLabel')}
+        >
           <div className="app-text-overline text-app-ink/60">
             {t('meeting.addAttendees.pendingCount', { count: pending.length })}
           </div>
+          <UserSearchMultiSelect
+            autoFocus
+            candidates={candidates}
+            inputId="add-attendee-search"
+            labels={{
+              noUserMatch: t('common:empty.noResults'),
+              removeItem: (name) =>
+                `${t('meeting.addAttendees.remove')} ${name}`,
+              searchPlaceholder: t('meeting.addAttendees.searchPlaceholder'),
+              searchPrompt: t('meeting.form.searchUsersPrompt'),
+              searching: t('meeting.addAttendees.searching'),
+            }}
+            loading={searching}
+            onAddUser={addCandidate}
+            onQueryChange={(value) => dispatch({ type: 'setQuery', value })}
+            onQueryFocusChange={(value) =>
+              dispatch({ type: 'setQueryFocused', value })
+            }
+            onRemoveUser={removePending}
+            query={query}
+            queryFocused={queryFocused}
+            renderCandidateTrailing={() => (
+              <UserPlus size={14} className="shrink-0 text-app-accent" />
+            )}
+            selectedUsers={selectedUsers}
+          />
           {pending.length === 0 ? (
-            <div className="app-text-caption rounded-md border border-dashed border-app-border px-3 py-3 text-center text-app-ink/40">
+            <div className="app-text-caption rounded-md border border-dashed border-app-border p-3 text-center text-app-ink/40">
               {t('meeting.addAttendees.noneSelected')}
             </div>
-          ) : (
-            <ul className="space-y-1">
-              {pending.map((item) => {
-                const meta = pendingMeta[item.user_id];
-                return (
-                  <li
-                    key={item.user_id}
-                    className="flex items-center justify-between gap-2 rounded-md bg-app-surface-sidebar px-3 py-2"
-                  >
-                    <div className="min-w-0">
-                      <p className="app-text-body line-clamp-1 text-app-ink">
-                        {meta?.full_name ?? item.user_id}
-                      </p>
-                      <p className="app-text-caption text-app-ink/50">
-                        {meta?.email ?? ''}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removePending(item.user_id)}
-                      aria-label={t('meeting.addAttendees.remove')}
-                      className="rounded p-1 text-app-ink/40 hover:bg-app-surface-hover hover:text-app-ink"
-                    >
-                      <X size={14} />
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
+          ) : null}
+        </FormFieldRow>
       </div>
-    </Dialog>
+    </FormDialog>
   );
 }

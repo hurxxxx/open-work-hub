@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useReducer } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
@@ -7,6 +7,7 @@ import {
   parseServerDateTime,
   type MeetingAvailabilityBlock,
   type MeetingAvailabilityItem,
+  type MeetingUser,
 } from '../../api/meeting-api';
 import {
   DEFAULT_TIME_ZONE,
@@ -24,12 +25,6 @@ const DEFAULT_AVAILABILITY_BLOCK_LABELS: AvailabilityBlockLabels = {
   schedule: 'Schedule',
 };
 
-export const HALF_HOUR_MS = 30 * 60 * 1000;
-/** Legacy fixed-width constants — still referenced by inline previews that
- *  use pixel-based layouts. The main availability modal now lays out the
- *  week strip responsively with percentages. */
-export const DAY_WIDTH_PX = 192;
-export const SLOT_WIDTH_PX = DAY_WIDTH_PX / 48;
 export const AVAILABILITY_NAME_COLUMN_PX = 208;
 
 export interface AvailabilityConflictItem {
@@ -37,6 +32,77 @@ export interface AvailabilityConflictItem {
   fullName: string;
   block: MeetingAvailabilityBlock;
   label: string;
+}
+
+export type MeetingAvailabilityPanelDisplayState =
+  | { type: 'invalid-window' }
+  | { type: 'no-attendees' }
+  | { type: 'loading' }
+  | { type: 'error'; message: string }
+  | { type: 'no-conflicts' }
+  | { type: 'conflicts'; count: number };
+
+export interface MeetingAvailabilityPanelQueryProjection {
+  attendeeIds: string[];
+  canQuery: boolean;
+  rangeEnd: Date | null;
+  rangeStart: Date | null;
+  validMeetingWindow: boolean;
+}
+
+interface MeetingAvailabilityQueryState {
+  items: MeetingAvailabilityItem[];
+  loading: boolean;
+  error: string | null;
+}
+
+type MeetingAvailabilityQueryAction =
+  | { type: 'idle' }
+  | { type: 'loading' }
+  | { type: 'loaded'; items: MeetingAvailabilityItem[] }
+  | { type: 'failed'; message: string };
+
+const INITIAL_MEETING_AVAILABILITY_QUERY_STATE: MeetingAvailabilityQueryState =
+  {
+    items: [],
+    loading: false,
+    error: null,
+  };
+
+function meetingAvailabilityQueryReducer(
+  state: MeetingAvailabilityQueryState,
+  action: MeetingAvailabilityQueryAction,
+): MeetingAvailabilityQueryState {
+  switch (action.type) {
+    case 'idle':
+      if (!state.loading && state.error === null && state.items.length === 0) {
+        return state;
+      }
+      return INITIAL_MEETING_AVAILABILITY_QUERY_STATE;
+    case 'loading':
+      if (state.loading && state.error === null) {
+        return state;
+      }
+      return {
+        ...state,
+        loading: true,
+        error: null,
+      };
+    case 'loaded':
+      return {
+        items: action.items,
+        loading: false,
+        error: null,
+      };
+    case 'failed':
+      return {
+        items: [],
+        loading: false,
+        error: action.message,
+      };
+    default:
+      return state;
+  }
 }
 
 export function startOfAvailabilityWeek(date: Date): Date {
@@ -52,13 +118,83 @@ export function addLocalDays(date: Date, days: number): Date {
   return next;
 }
 
-function formatShortDate(date: Date, timeZone: string): string {
-  return formatDateTime(date, {
-    day: 'numeric',
-    locale: 'ko-KR',
-    month: 'numeric',
-    timeZone,
-  });
+export function isValidMeetingAvailabilityWindow(
+  start: Date | null,
+  end: Date | null,
+): boolean {
+  return Boolean(start && end && end > start);
+}
+
+export function projectMeetingAvailabilityAttendeeIds(
+  attendeeUsers: Pick<MeetingUser, 'id'>[],
+): string[] {
+  return Array.from(
+    new Set(attendeeUsers.map((user) => user.id).filter(Boolean)),
+  );
+}
+
+export function deriveMeetingAvailabilityQueryRange(
+  meetingStart: Date | null,
+): {
+  rangeEnd: Date | null;
+  rangeStart: Date | null;
+} {
+  const rangeStart = meetingStart
+    ? startOfAvailabilityWeek(meetingStart)
+    : null;
+  return {
+    rangeEnd: rangeStart ? addLocalDays(rangeStart, 7) : null,
+    rangeStart,
+  };
+}
+
+export function projectMeetingAvailabilityPanelQuery(options: {
+  attendeeUsers: Pick<MeetingUser, 'id'>[];
+  meetingEnd: Date | null;
+  meetingStart: Date | null;
+}): MeetingAvailabilityPanelQueryProjection {
+  const attendeeIds = projectMeetingAvailabilityAttendeeIds(
+    options.attendeeUsers,
+  );
+  const { rangeEnd, rangeStart } = deriveMeetingAvailabilityQueryRange(
+    options.meetingStart,
+  );
+  const validMeetingWindow = isValidMeetingAvailabilityWindow(
+    options.meetingStart,
+    options.meetingEnd,
+  );
+  return {
+    attendeeIds,
+    canQuery: validMeetingWindow && attendeeIds.length > 0,
+    rangeEnd,
+    rangeStart,
+    validMeetingWindow,
+  };
+}
+
+export function selectMeetingAvailabilityPanelDisplayState(options: {
+  attendeeCount: number;
+  conflictCount: number;
+  error: string | null;
+  loading: boolean;
+  validMeetingWindow: boolean;
+}): MeetingAvailabilityPanelDisplayState {
+  if (!options.validMeetingWindow) {
+    return { type: 'invalid-window' };
+  }
+  if (options.attendeeCount === 0) {
+    return { type: 'no-attendees' };
+  }
+  if (options.loading) {
+    return { type: 'loading' };
+  }
+  if (options.error) {
+    return { type: 'error', message: options.error };
+  }
+  if (options.conflictCount === 0) {
+    return { type: 'no-conflicts' };
+  }
+  return { type: 'conflicts', count: options.conflictCount };
 }
 
 export function formatAvailabilityWeekLabel(
@@ -67,12 +203,13 @@ export function formatAvailabilityWeekLabel(
   locale = 'ko-KR',
 ): string {
   const weekEndInclusive = addLocalDays(weekStart, 6);
-  const format = (date: Date) => formatDateTime(date, {
-    day: 'numeric',
-    locale,
-    month: 'numeric',
-    timeZone,
-  });
+  const format = (date: Date) =>
+    formatDateTime(date, {
+      day: 'numeric',
+      locale,
+      month: 'numeric',
+      timeZone,
+    });
   return `${format(weekStart)} - ${format(weekEndInclusive)}`;
 }
 
@@ -81,14 +218,17 @@ function parseLocalDateOnly(value: string): Date {
   return new Date(year, month - 1, day);
 }
 
-export function parseAvailabilityBoundary(value: string, allDay: boolean): Date {
+export function parseAvailabilityBoundary(
+  value: string,
+  allDay: boolean,
+): Date {
   if (allDay || !value.includes('T')) {
     return parseLocalDateOnly(value);
   }
   return parseServerDateTime(value);
 }
 
-export function blockOverlapsRange(
+function blockOverlapsRange(
   block: MeetingAvailabilityBlock,
   rangeStart: Date,
   rangeEnd: Date,
@@ -153,7 +293,9 @@ export function buildAvailabilityConflicts(
   labels = DEFAULT_AVAILABILITY_BLOCK_LABELS,
 ): AvailabilityConflictItem[] {
   return items.flatMap((item) => {
-    const matching = item.blocks.filter((block) => blockOverlapsRange(block, meetingStart, meetingEnd));
+    const matching = item.blocks.filter((block) =>
+      blockOverlapsRange(block, meetingStart, meetingEnd),
+    );
     if (matching.length === 0) {
       return [];
     }
@@ -162,7 +304,12 @@ export function buildAvailabilityConflicts(
         userId: item.userId,
         fullName: item.fullName,
         block: matching[0],
-        label: formatAvailabilityBlockLabel(matching[0], timeZone, locale, labels),
+        label: formatAvailabilityBlockLabel(
+          matching[0],
+          timeZone,
+          locale,
+          labels,
+        ),
       },
     ];
   });
@@ -184,9 +331,10 @@ export function useMeetingAvailabilityQuery(options: {
     rangeEnd,
     enabled = true,
   } = options;
-  const [items, setItems] = useState<MeetingAvailabilityItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [{ items, loading, error }, dispatch] = useReducer(
+    meetingAvailabilityQueryReducer,
+    INITIAL_MEETING_AVAILABILITY_QUERY_STATE,
+  );
 
   const userIdsKey = useMemo(
     () => Array.from(new Set(userIds.filter(Boolean))).join('\u0000'),
@@ -202,23 +350,20 @@ export function useMeetingAvailabilityQuery(options: {
   useEffect(() => {
     let cancelled = false;
     if (
-      !enabled
-      || !token
-      || !workspaceSlug
-      || uniqueUserIds.length === 0
-      || rangeStartMs === null
-      || rangeEndMs === null
+      !enabled ||
+      !token ||
+      !workspaceSlug ||
+      uniqueUserIds.length === 0 ||
+      rangeStartMs === null ||
+      rangeEndMs === null
     ) {
-      setItems([]);
-      setLoading(false);
-      setError(null);
+      dispatch({ type: 'idle' });
       return () => {
         cancelled = true;
       };
     }
 
-    setLoading(true);
-    setError(null);
+    dispatch({ type: 'loading' });
     getMeetingAvailability(token, workspaceSlug, {
       userIds: uniqueUserIds,
       from: new Date(rangeStartMs).toISOString(),
@@ -226,21 +371,29 @@ export function useMeetingAvailabilityQuery(options: {
     })
       .then((response) => {
         if (cancelled) return;
-        setItems(response.items);
+        dispatch({ type: 'loaded', items: response.items });
       })
       .catch((err: Error) => {
         if (cancelled) return;
-        setError(err.message ?? t('meeting.availabilityLoadFailed'));
-        setItems([]);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+        dispatch({
+          type: 'failed',
+          message: err.message ?? t('meeting.availabilityLoadFailed'),
+        });
       });
 
     return () => {
       cancelled = true;
     };
-  }, [enabled, token, workspaceSlug, uniqueUserIds, userIdsKey, rangeStartMs, rangeEndMs, t]);
+  }, [
+    enabled,
+    token,
+    workspaceSlug,
+    uniqueUserIds,
+    userIdsKey,
+    rangeStartMs,
+    rangeEndMs,
+    t,
+  ]);
 
   return {
     items,

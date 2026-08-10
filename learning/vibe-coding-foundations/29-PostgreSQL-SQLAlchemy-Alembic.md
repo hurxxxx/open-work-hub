@@ -67,7 +67,7 @@
 - Celery 결과 저장(부분적)·감사 로그.
 - 필요 시 `pgvector`로 임베딩 저장.
 
-`docker-compose.yml` 에는 공식 `postgres` 이미지(통상 16 또는 17 태그)로 뜨며, `POSTGRES_USER`, `POSTGRES_DB` 환경변수로 초기화됩니다.
+AI-DO 서버의 dev/prod PostgreSQL은 Docker 컨테이너가 아니라 native PostgreSQL service로 `127.0.0.1:5432`에서 실행됩니다. 애플리케이션은 `.env`의 `AI_DO_POSTGRES_DSN`으로 접속하고, `pgvector`와 `pg_trgm` 확장을 같은 DB 안에서 사용합니다.
 
 ### 2.5 대안
 
@@ -75,7 +75,7 @@
 - **SQLite** — 파일 한 개 DB. 로컬 개발·모바일에 훌륭. 서버 앱엔 부적합.
 - **CockroachDB / YugabyteDB** — 분산 RDBMS. PG 호환. 대규모에서 유용.
 - **MongoDB(NoSQL)** — 스키마가 자주 바뀌는 문서 저장엔 좋음. 관계·트랜잭션 약점.
-- **Supabase / Neon / Aurora Postgres** — 관리형 PostgreSQL. 우리는 사내 운영이 필요해 자체 Docker 이미지를 사용하지만, 장기적으로 이중화 옵션으로 고려 가능.
+- **Supabase / Neon / Aurora Postgres** — 관리형 PostgreSQL. 우리는 사내 운영이 필요해 서버 native PostgreSQL을 사용하지만, 장기적으로 이중화 옵션으로 고려 가능.
 
 ### 2.6 🏢 업무 시나리오
 

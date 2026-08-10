@@ -1,16 +1,24 @@
 import { useState, useRef, useEffect } from 'react';
 import { X, ChevronDown, Trash2, Archive } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { bulkUpdateIssues, type PmsTaskListMember, type PmsLabel, type PmsTaskListStatus } from '../api/pms-api';
+import { UserOptionRow } from '@/src/platform/users/UserSearchMultiSelect';
+import { selectUserOptionsForPicker } from '@/src/platform/users/user-option-picker-model';
+import {
+  bulkUpdateTasks,
+  type PmsTaskListMember,
+  type PmsLabel,
+  type PmsTaskListStatus,
+} from '../api/pms-api';
 import { useAuth } from '@/src/platform/auth/auth-provider';
-
-const DEFAULT_STATUS_OPTIONS = [
-  { value: 'backlog', labelKey: 'pms.filter.status.backlog' },
-  { value: 'todo', labelKey: 'pms.filter.status.todo' },
-  { value: 'in_progress', labelKey: 'pms.filter.status.inProgress' },
-  { value: 'done', labelKey: 'pms.filter.status.done' },
-  { value: 'canceled', labelKey: 'pms.filter.status.canceled' },
-] as const;
+import { StatusIconGlyph } from './StatusIcon';
+import {
+  buildBulkActionPayload,
+  buildBulkLabelActions,
+  buildBulkStatusOptions,
+  buildBulkUpdateRequest,
+  selectedTaskIdsToArray,
+  type BulkUpdateActionPayload,
+} from './bulk-action-bar-model';
 
 const PRIORITY_OPTIONS = [
   { value: 'low', labelKey: 'pms.priorityLow' },
@@ -18,6 +26,12 @@ const PRIORITY_OPTIONS = [
   { value: 'high', labelKey: 'pms.priorityHigh' },
   { value: 'critical', labelKey: 'pms.priorityCritical' },
 ] as const;
+
+type MemberUserOption = PmsTaskListMember & { id: string };
+
+function memberUserOption(member: PmsTaskListMember): MemberUserOption {
+  return { ...member, id: member.user_id };
+}
 
 function ActionDropdown({
   label,
@@ -31,7 +45,8 @@ function ActionDropdown({
 
   useEffect(() => {
     function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node))
+        setOpen(false);
     }
     if (open) document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -41,7 +56,7 @@ function ActionDropdown({
     <div ref={ref} className="relative">
       <button
         type="button"
-        onClick={() => setOpen(o => !o)}
+        onClick={() => setOpen((o) => !o)}
         className="app-text-control-sm flex items-center gap-1 rounded px-3 py-1.5 text-white/80 transition-colors hover:bg-white/10 hover:text-white"
       >
         {label}
@@ -78,23 +93,33 @@ export const BulkActionBar = ({
   taskListStatuses?: PmsTaskListStatus[];
 }) => {
   const { t } = useTranslation('apps');
-  const statusOptions = taskListStatuses && taskListStatuses.length > 0
-    ? taskListStatuses.map(s => ({ value: s.slug, label: s.name }))
-    : DEFAULT_STATUS_OPTIONS.map((option) => ({
-        value: option.value,
-        label: t(option.labelKey),
-      }));
-  const { token } = useAuth();
+  const statusOptions = buildBulkStatusOptions({
+    taskListStatuses,
+    translate: t,
+  });
+  const labelActions = buildBulkLabelActions(labels);
+  const { token, user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [assigneeQuery, setAssigneeQuery] = useState('');
 
-  const ids = Array.from(selectedIds);
+  const ids = selectedTaskIdsToArray(selectedIds);
+  const assigneeOptions = selectUserOptionsForPicker({
+    users: members.map(memberUserOption),
+    query: assigneeQuery,
+    currentUserId: user?.id,
+    limit: 12,
+  });
 
-  const exec = async (payload: Record<string, unknown>) => {
+  const exec = async (payload: BulkUpdateActionPayload) => {
     if (!token || ids.length === 0) return;
     setLoading(true);
     try {
-      await bulkUpdateIssues(token, taskListId, { issue_ids: ids, ...payload });
+      await bulkUpdateTasks(
+        token,
+        taskListId,
+        buildBulkUpdateRequest(ids, payload),
+      );
       onDone();
     } finally {
       setLoading(false);
@@ -102,33 +127,54 @@ export const BulkActionBar = ({
   };
 
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 px-4 py-2 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl shadow-black/40">
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 px-4 py-2 bg-app-bg-strong border border-app-border-strong rounded-xl shadow-2xl shadow-black/40">
       <span className="app-text-control-sm mr-2 whitespace-nowrap font-medium text-white">
         {t('pms.bulk.selectedCount', { count: selectedIds.size })}
       </span>
 
-      <div className="h-4 w-px bg-gray-700 mx-1" />
+      <div className="h-4 w-px bg-app-border-strong mx-1" />
 
-      <button type="button" onClick={onSelectAll} className="app-text-caption whitespace-nowrap px-2 py-1 text-white/60 transition-colors hover:text-white">
+      <button
+        type="button"
+        onClick={onSelectAll}
+        className="app-text-caption whitespace-nowrap px-2 py-1 text-white/60 transition-colors hover:text-white"
+      >
         {t('pms.bulk.selectAll', { count: totalCount })}
       </button>
-      <button type="button" onClick={onDeselectAll} className="app-text-caption whitespace-nowrap px-2 py-1 text-white/60 transition-colors hover:text-white">
+      <button
+        type="button"
+        onClick={onDeselectAll}
+        className="app-text-caption whitespace-nowrap px-2 py-1 text-white/60 transition-colors hover:text-white"
+      >
         {t('pms.bulk.selectNone')}
       </button>
 
-      <div className="h-4 w-px bg-gray-700 mx-1" />
+      <div className="h-4 w-px bg-app-border-strong mx-1" />
 
       {/* Status */}
       <ActionDropdown label={t('pms.filter.statusLabel')}>
         {(close) => (
           <>
-            {statusOptions.map(opt => (
+            {statusOptions.map((opt) => (
               <button
                 key={opt.value}
                 type="button"
-                onClick={() => { exec({ status: opt.value }); close(); }}
-                className="app-text-body-sm w-full px-3 py-1.5 text-left text-app-ink hover:bg-app-surface-hover"
+                onClick={() => {
+                  exec(
+                    buildBulkActionPayload({
+                      type: 'status',
+                      status: opt.value,
+                    }),
+                  );
+                  close();
+                }}
+                className="app-text-control-sm flex w-full items-center gap-2 px-3 py-1.5 text-left text-app-ink hover:bg-app-surface-hover"
               >
+                <StatusIconGlyph
+                  label={opt.label}
+                  status={opt.value}
+                  taskListStatuses={taskListStatuses}
+                />
                 {opt.label}
               </button>
             ))}
@@ -140,12 +186,20 @@ export const BulkActionBar = ({
       <ActionDropdown label={t('pms.filter.priorityLabel')}>
         {(close) => (
           <>
-            {PRIORITY_OPTIONS.map(opt => (
+            {PRIORITY_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
                 type="button"
-                onClick={() => { exec({ priority: opt.value }); close(); }}
-                className="app-text-body-sm w-full px-3 py-1.5 text-left text-app-ink hover:bg-app-surface-hover"
+                onClick={() => {
+                  exec(
+                    buildBulkActionPayload({
+                      type: 'priority',
+                      priority: opt.value,
+                    }),
+                  );
+                  close();
+                }}
+                className="app-text-control-sm w-full px-3 py-1.5 text-left text-app-ink hover:bg-app-surface-hover"
               >
                 {t(opt.labelKey)}
               </button>
@@ -158,23 +212,53 @@ export const BulkActionBar = ({
       <ActionDropdown label={t('pms.filter.assigneeLabel')}>
         {(close) => (
           <>
+            <div className="px-2 py-1">
+              <input
+                aria-label={t('pms.searchUser')}
+                className="app-field-input-sm bg-app-surface-sidebar py-1.5"
+                onChange={(event) => setAssigneeQuery(event.target.value)}
+                placeholder={t('pms.searchUser')}
+                value={assigneeQuery}
+              />
+            </div>
             <button
               type="button"
-              onClick={() => { exec({ assignee_id: null }); close(); }}
-              className="app-text-body-sm w-full px-3 py-1.5 text-left text-app-ink/50 hover:bg-app-surface-hover"
+              onClick={() => {
+                exec(
+                  buildBulkActionPayload({
+                    type: 'assignee',
+                    assigneeId: null,
+                  }),
+                );
+                close();
+              }}
+              className="app-text-control-sm w-full px-3 py-1.5 text-left text-app-ink/50 hover:bg-app-surface-hover"
             >
               {t('pms.bulk.unassign')}
             </button>
-            {members.map(m => (
-              <button
-                key={m.user_id}
-                type="button"
-                onClick={() => { exec({ assignee_id: m.user_id }); close(); }}
-                className="app-text-body-sm w-full px-3 py-1.5 text-left text-app-ink hover:bg-app-surface-hover"
-              >
-                {m.full_name}
-              </button>
+            {assigneeOptions.map((member) => (
+              <UserOptionRow
+                key={member.user_id}
+                currentUserId={user?.id}
+                currentUserLabel={t('pms.taskDetail.me')}
+                density="compact"
+                onClick={() => {
+                  exec(
+                    buildBulkActionPayload({
+                      type: 'assignee',
+                      assigneeId: member.user_id,
+                    }),
+                  );
+                  close();
+                }}
+                user={member}
+              />
             ))}
+            {assigneeOptions.length === 0 ? (
+              <p className="app-text-caption px-3 py-2 text-app-ink/40">
+                {t('pms.noMatchingUsers')}
+              </p>
+            ) : null}
           </>
         )}
       </ActionDropdown>
@@ -184,29 +268,45 @@ export const BulkActionBar = ({
         <ActionDropdown label={t('pms.bulk.labelsLabel')}>
           {(close) => (
             <>
-              <div className="app-text-overline px-3 py-1 text-app-ink/40">{t('common:actions.add')}</div>
-              {labels.map(l => (
+              <div className="app-text-overline px-3 py-1 text-app-ink/40">
+                {t('common:actions.add')}
+              </div>
+              {labelActions.add.map((action) => (
                 <button
-                  key={`add-${l.id}`}
+                  key={action.key}
                   type="button"
-                  onClick={() => { exec({ add_label_ids: [l.id] }); close(); }}
-                  className="app-text-body-sm flex w-full items-center gap-2 px-3 py-1.5 text-left text-app-ink hover:bg-app-surface-hover"
+                  onClick={() => {
+                    exec(action.payload);
+                    close();
+                  }}
+                  className="app-text-control-sm flex w-full items-center gap-2 px-3 py-1.5 text-left text-app-ink hover:bg-app-surface-hover"
                 >
-                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: l.color }} />
-                  {l.name}
+                  <span
+                    className="size-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: action.label.color }}
+                  />
+                  {action.label.name}
                 </button>
               ))}
               <hr className="border-app-border my-1" />
-              <div className="app-text-overline px-3 py-1 text-app-ink/40">{t('pms.bulk.remove')}</div>
-              {labels.map(l => (
+              <div className="app-text-overline px-3 py-1 text-app-ink/40">
+                {t('pms.bulk.remove')}
+              </div>
+              {labelActions.remove.map((action) => (
                 <button
-                  key={`rm-${l.id}`}
+                  key={action.key}
                   type="button"
-                  onClick={() => { exec({ remove_label_ids: [l.id] }); close(); }}
-                  className="app-text-body-sm flex w-full items-center gap-2 px-3 py-1.5 text-left text-red-400/70 hover:bg-app-surface-hover"
+                  onClick={() => {
+                    exec(action.payload);
+                    close();
+                  }}
+                  className="app-text-control-sm flex w-full items-center gap-2 px-3 py-1.5 text-left text-app-danger-text/70 hover:bg-app-surface-hover"
                 >
-                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: l.color }} />
-                  {l.name}
+                  <span
+                    className="size-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: action.label.color }}
+                  />
+                  {action.label.name}
                 </button>
               ))}
             </>
@@ -214,12 +314,12 @@ export const BulkActionBar = ({
         </ActionDropdown>
       )}
 
-      <div className="h-4 w-px bg-gray-700 mx-1" />
+      <div className="h-4 w-px bg-app-border-strong mx-1" />
 
       {/* Archive */}
       <button
         type="button"
-        onClick={() => exec({ archived: true })}
+        onClick={() => exec(buildBulkActionPayload({ type: 'archive' }))}
         disabled={loading}
         className="app-text-control-sm flex items-center gap-1 rounded px-3 py-1.5 text-white/60 transition-colors hover:bg-white/10 hover:text-yellow-400"
       >
@@ -228,9 +328,9 @@ export const BulkActionBar = ({
       </button>
       <button
         type="button"
-        onClick={() => exec({ archived: false })}
+        onClick={() => exec(buildBulkActionPayload({ type: 'restore' }))}
         disabled={loading}
-        className="app-text-control-sm flex items-center gap-1 rounded px-3 py-1.5 text-white/60 transition-colors hover:bg-white/10 hover:text-emerald-400"
+        className="app-text-control-sm flex items-center gap-1 rounded px-3 py-1.5 text-white/60 transition-colors hover:bg-white/10 hover:text-app-success-text"
       >
         <Archive size={13} />
         {t('pms.bulk.restore')}
@@ -241,9 +341,12 @@ export const BulkActionBar = ({
         <div className="flex items-center gap-1">
           <button
             type="button"
-            onClick={() => { exec({ delete: true }); setConfirmDelete(false); }}
+            onClick={() => {
+              exec(buildBulkActionPayload({ type: 'delete' }));
+              setConfirmDelete(false);
+            }}
             disabled={loading}
-            className="app-text-control-sm rounded px-3 py-1.5 font-medium text-red-400 transition-colors hover:bg-red-500/20"
+            className="app-text-control-sm rounded px-3 py-1.5 font-medium text-app-danger-text transition-colors hover:bg-app-danger/20"
           >
             {t('pms.bulk.confirm')}
           </button>
@@ -260,17 +363,22 @@ export const BulkActionBar = ({
           type="button"
           onClick={() => setConfirmDelete(true)}
           disabled={loading}
-          className="app-text-control-sm flex items-center gap-1 rounded px-3 py-1.5 text-white/60 transition-colors hover:bg-white/10 hover:text-red-400"
+          className="app-text-control-sm flex items-center gap-1 rounded px-3 py-1.5 text-white/60 transition-colors hover:bg-white/10 hover:text-app-danger-text"
         >
           <Trash2 size={13} />
           {t('common:actions.delete')}
         </button>
       )}
 
-      <div className="h-4 w-px bg-gray-700 mx-1" />
+      <div className="h-4 w-px bg-app-border-strong mx-1" />
 
       {/* Close */}
-      <button type="button" onClick={onDeselectAll} className="p-1 text-white/40 hover:text-white transition-colors" aria-label={t('pms.bulk.closeSelection')}>
+      <button
+        type="button"
+        onClick={onDeselectAll}
+        className="p-1 text-white/40 hover:text-white transition-colors"
+        aria-label={t('pms.bulk.closeSelection')}
+      >
         <X size={14} />
       </button>
     </div>

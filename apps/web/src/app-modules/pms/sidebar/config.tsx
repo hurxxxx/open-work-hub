@@ -1,12 +1,11 @@
 import { Link } from 'react-router-dom';
-import { CheckSquare, Layout } from 'lucide-react';
 
 import type {
   AppSidebarConfig,
   AppSidebarRenderContext,
 } from '@/src/app/shell/sidebar-types';
-import { resolveNavItemHref } from '@/src/platform/workspaces/workspace-utils';
 import { cn } from '@/src/lib/utils';
+import { projectPersonalSidebarItems } from './pms-sidebar-config-model';
 import { PmsSidebarSpaces } from './PmsSidebarSpaces';
 
 function renderPersonalCategory({
@@ -15,74 +14,76 @@ function renderPersonalCategory({
   filteredItems,
   user,
 }: AppSidebarRenderContext) {
-  const personalItems = filteredItems.filter((item) => item.category === 'Personal');
+  const personalItems = projectPersonalSidebarItems({
+    activeNavItemId,
+    currentWorkspaceSlug,
+    filteredItems,
+    user,
+  });
 
   return (
     <>
       {personalItems.map((item) => {
-        if (item.id === 'pms-tasks') {
-          const subTasks = personalItems.filter((entry) =>
-            entry.id.startsWith('pms-tasks-'),
-          );
-          const isMyTasksActive =
-            activeNavItemId === 'pms-tasks' ||
-            activeNavItemId.startsWith('pms-tasks-');
+        const Icon = item.item.icon;
+
+        if (item.kind === 'taskGroup') {
           return (
-            <div key={item.id} className="space-y-1">
+            <div key={item.item.id} className="space-y-1">
               <div
                 className={cn(
                   'sidebar-submenu-group ml-1 cursor-default',
-                  isMyTasksActive && 'sidebar-submenu-item-active',
+                  item.isActive && 'sidebar-submenu-item-active',
                 )}
               >
-                <item.icon
+                <Icon
                   size={16}
                   className={cn(
-                    'text-gray-500 dark:text-gray-400',
-                    isMyTasksActive && 'text-app-accent',
+                    'text-app-ink/55 dark:text-app-ink/65',
+                    item.isActive && 'text-app-accent',
                   )}
                 />
-                <span className="sidebar-submenu-label">{item.title}</span>
+                <span className="sidebar-submenu-label">{item.item.title}</span>
               </div>
               <div className="ml-6 space-y-1 border-l border-app-border pl-2">
-                {subTasks.map((sub) => (
-                  <Link
-                    key={sub.id}
-                    to={`/tool/${sub.id}`}
-                    className={cn(
-                      'sidebar-submenu-item',
-                      activeNavItemId === sub.id &&
-                        'sidebar-submenu-item-active',
-                    )}
-                  >
-                    <sub.icon
-                      size={14}
-                      className="text-gray-500 dark:text-gray-400"
-                    />
-                    <span className="sidebar-submenu-label">{sub.title}</span>
-                  </Link>
-                ))}
+                {item.children.map((child) => {
+                  const ChildIcon = child.item.icon;
+
+                  return (
+                    <Link
+                      key={child.item.id}
+                      to={child.href}
+                      className={cn(
+                        'sidebar-submenu-item',
+                        child.isActive && 'sidebar-submenu-item-active',
+                      )}
+                    >
+                      <ChildIcon
+                        size={14}
+                        className="text-app-ink/55 dark:text-app-ink/65"
+                      />
+                      <span className="sidebar-submenu-label">
+                        {child.item.title}
+                      </span>
+                    </Link>
+                  );
+                })}
               </div>
             </div>
           );
         }
 
-        if (item.id.startsWith('pms-tasks-')) {
-          return null;
-        }
-
         return (
           <Link
-            key={item.id}
-            to={resolveNavItemHref(item, currentWorkspaceSlug, user)}
+            key={item.item.id}
+            to={item.href}
             className={cn(
               'sidebar-submenu-item ml-1',
-              activeNavItemId === item.id && 'sidebar-submenu-item-active',
-              item.comingSoon && 'opacity-60',
+              item.isActive && 'sidebar-submenu-item-active',
+              item.isComingSoon && 'opacity-60',
             )}
           >
-            <item.icon size={16} className="text-gray-500 dark:text-gray-400" />
-            <span className="sidebar-submenu-label">{item.title}</span>
+            <Icon size={16} className="text-app-ink/55 dark:text-app-ink/65" />
+            <span className="sidebar-submenu-label">{item.item.title}</span>
           </Link>
         );
       })}
@@ -91,32 +92,15 @@ function renderPersonalCategory({
 }
 
 export const pmsSidebarConfig: AppSidebarConfig = {
-  createActions: () => [
-    {
-      id: 'pms-create-task',
-      label: 'pms-create-task',
-      labelKey: 'sidebarActions.pms-create-task',
-      icon: CheckSquare,
-      run: () => {
-        window.dispatchEvent(new CustomEvent('pms:create-task'));
-      },
-    },
-    {
-      id: 'pms-create-space',
-      label: 'pms-create-space',
-      labelKey: 'sidebarActions.pms-create-space',
-      icon: Layout,
-      run: () => {
-        window.dispatchEvent(new CustomEvent('pms:create-space'));
-      },
-    },
-  ],
   extendCategories: (categories, { canReadWorkspace }) => {
     if (!canReadWorkspace) {
       return categories;
     }
 
-    return ['Spaces', ...categories.filter((category) => category !== 'Spaces')];
+    return [
+      'Spaces',
+      ...categories.filter((category) => category !== 'Spaces'),
+    ];
   },
   renderCategory: (category, context) => {
     if (category === 'Spaces') {

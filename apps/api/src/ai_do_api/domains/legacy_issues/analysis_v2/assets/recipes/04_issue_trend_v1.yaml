@@ -1,0 +1,22 @@
+{
+  "recipe_id": "issue_trend",
+  "version": 1,
+  "title": "과거차 문제점 기간 추이",
+  "description": "일·주·월·분기·연 단위 기간과 선택한 업무 차원별 문제점 발생 추이를 계산한다.",
+  "result_shape": "timeseries",
+  "counting_unit": "issues",
+  "source_views": ["legacy_issue_analysis.issue_records_v1"],
+  "sql_template": "SELECT DATE_TRUNC(:grain, i.occurrence_date) AS period_start, i.{{dimension}} AS dimension_value, COUNT(DISTINCT i.issue_id) AS issue_count FROM legacy_issue_analysis.issue_records_v1 AS i WHERE i.occurrence_date IS NOT NULL AND {{filters}} GROUP BY DATE_TRUNC(:grain, i.occurrence_date), i.{{dimension}} ORDER BY period_start, dimension_value LIMIT :limit",
+  "parameters": [
+    {"name": "grain", "value_type": "string", "placement": "bind", "description": "기간 단위", "default": "month", "allowed_values": ["day", "week", "month", "quarter", "year"]},
+    {"name": "dimension", "value_type": "string", "placement": "identifier", "description": "추이를 나눌 차원", "default": "issue_type", "allowed_values": ["vehicle_model", "region_zone", "module_key", "major_category", "middle_category", "occurrence_stage", "occurrence_type", "issue_type", "cause_type", "supplier", "severity_grade", "applied"]},
+    {"name": "limit", "value_type": "integer", "placement": "bind", "description": "표시할 최대 시계열 행 수", "default": 240, "minimum": 1, "maximum": 1000},
+    {"name": "date_from", "value_type": "date", "placement": "filter", "description": "발생일 시작일", "column": "i.occurrence_date", "operator": "gte"},
+    {"name": "date_to", "value_type": "date", "placement": "filter", "description": "발생일 종료일", "column": "i.occurrence_date", "operator": "lte"},
+    {"name": "vehicle_models", "value_type": "string_list", "placement": "filter", "description": "차종 목록", "column": "i.vehicle_model", "operator": "in"},
+    {"name": "regions", "value_type": "string_list", "placement": "filter", "description": "권역 목록", "column": "i.region_zone", "operator": "in"},
+    {"name": "module_keys", "value_type": "string_list", "placement": "filter", "description": "모듈 목록", "column": "i.module_key", "operator": "in"},
+    {"name": "query_text", "value_type": "string", "placement": "filter", "description": "문제 내용 포함 검색어", "column": "i.search_text", "operator": "contains"}
+  ],
+  "tags": ["trend", "time", "period", "increase", "decrease"]
+}

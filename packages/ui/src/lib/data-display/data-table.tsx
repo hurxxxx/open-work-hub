@@ -5,11 +5,17 @@ import {
   useReactTable,
   type SortingState,
 } from '@tanstack/react-table';
-import { useState, type ReactNode } from 'react';
+import { useState, type KeyboardEvent, type ReactNode } from 'react';
 
 import type { DataTableColumn, Density } from '../types';
 import { cn } from '../utils/cn';
 import { Skeleton } from './skeleton';
+import {
+  getDataTableRowPadding,
+  getDataTableSortIndicator,
+  isDataTableRowSelected,
+  shouldActivateDataTableRowKey,
+} from './data-table-model';
 
 export interface DataTableProps<TData extends object> {
   columns: DataTableColumn<TData>[];
@@ -17,6 +23,7 @@ export interface DataTableProps<TData extends object> {
   density?: Density;
   emptyState?: ReactNode;
   loading?: boolean;
+  loadingLabel?: string;
   selection?: {
     selectedRowId?: string;
     onRowClick?: (row: TData) => void;
@@ -38,12 +45,18 @@ export function DataTableToolbar({
   return (
     <div className="mb-2 flex items-center justify-between gap-3 max-[720px]:flex-col max-[720px]:items-start">
       <div className="grid gap-0.5">
-        <strong className="text-[0.84rem] text-[var(--ui-color-ink)]">{title}</strong>
+        <strong className="text-[length:var(--ui-text-body-sm)] text-[var(--ui-color-ink)]">
+          {title}
+        </strong>
         {meta ? (
-          <span className="text-[0.72rem] text-[var(--ui-color-ink-subtle)]">{meta}</span>
+          <span className="text-[length:var(--ui-text-caption)] text-[var(--ui-color-ink-subtle)]">
+            {meta}
+          </span>
         ) : null}
       </div>
-      {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+      {actions ? (
+        <div className="flex flex-wrap items-center gap-2">{actions}</div>
+      ) : null}
     </div>
   );
 }
@@ -54,11 +67,11 @@ export function DataTable<TData extends object>({
   density = 'dense',
   emptyState,
   loading = false,
+  loadingLabel,
   selection,
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>([]);
-  const rowPadding =
-    density === 'dense' ? 'px-3 py-1.5 text-[0.82rem]' : 'px-4 py-3 text-[0.86rem]';
+  const rowPadding = getDataTableRowPadding(density);
 
   const table = useReactTable({
     data: rows,
@@ -75,11 +88,14 @@ export function DataTable<TData extends object>({
 
   if (loading) {
     return (
-      <div className="grid gap-2 rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-ui-surface-raised p-4">
+      <output
+        aria-label={loadingLabel}
+        className="grid gap-2 rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-ui-surface-raised p-4"
+      >
         <Skeleton className="h-8 w-full" />
         <Skeleton className="h-12 w-full" />
         <Skeleton className="h-12 w-full" />
-      </div>
+      </output>
     );
   }
 
@@ -95,37 +111,58 @@ export function DataTable<TData extends object>({
     <div className="overflow-hidden rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-ui-surface-raised">
       <div className="grid gap-3 p-3 min-[721px]:hidden">
         {table.getRowModel().rows.map((row) => {
-          const rowId = selection?.getRowId?.(row.original);
-          const isSelected =
-            selection?.selectedRowId && rowId === selection.selectedRowId;
+          const isSelected = isDataTableRowSelected(row.original, selection);
+          const handleRowAction = () => selection?.onRowClick?.(row.original);
+          const rowInteractionProps = selection?.onRowClick
+            ? {
+                onClick: handleRowAction,
+                onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => {
+                  if (!shouldActivateDataTableRowKey(event.key)) return;
+                  event.preventDefault();
+                  handleRowAction();
+                },
+                role: 'button' as const,
+                tabIndex: 0,
+              }
+            : {};
 
           return (
-            <article
+            <div
               key={row.id}
               className={cn(
-                'grid gap-3 rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-white px-3 py-2.5',
-                selection?.onRowClick ? 'cursor-pointer active:scale-[0.995]' : '',
-                isSelected ? 'border-[var(--ui-color-border-strong)] bg-ui-accent-weak' : '',
+                'grid gap-3 rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-ui-surface-raised px-3 py-2.5',
+                selection?.onRowClick
+                  ? 'cursor-pointer active:scale-[0.995]'
+                  : '',
+                isSelected
+                  ? 'border-[var(--ui-color-border-strong)] bg-ui-accent-weak'
+                  : '',
               )}
-              onClick={() => selection?.onRowClick?.(row.original)}
+              {...rowInteractionProps}
             >
               {row.getVisibleCells().map((cell) => {
                 const header = headersByColumnId.get(cell.column.id);
 
                 return (
                   <div key={cell.id} className="grid gap-1.5">
-                    <span className="text-[0.62rem] font-semibold uppercase tracking-[0.08em] text-[var(--ui-color-ink-subtle)]">
+                    <span className="text-[length:var(--ui-text-overline)] font-semibold uppercase tracking-[0.08em] text-[var(--ui-color-ink-subtle)]">
                       {header
-                        ? flexRender(header.column.columnDef.header, header.getContext())
+                        ? flexRender(
+                            header.column.columnDef.header,
+                            header.getContext(),
+                          )
                         : cell.column.id}
                     </span>
-                    <div className="text-[0.84rem] text-[var(--ui-color-ink)]">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    <div className="text-[length:var(--ui-text-body-sm)] text-[var(--ui-color-ink)]">
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext(),
+                      )}
                     </div>
                   </div>
                 );
               })}
-            </article>
+            </div>
           );
         })}
       </div>
@@ -134,21 +171,26 @@ export function DataTable<TData extends object>({
         <table className="w-full border-collapse">
           <thead>
             {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id} className="border-b border-b-[var(--ui-color-border)] bg-ui-surface-subtle">
+              <tr
+                key={headerGroup.id}
+                className="border-b border-b-[var(--ui-color-border)] bg-ui-surface-subtle"
+              >
                 {headerGroup.headers.map((header) => (
                   <th
                     key={header.id}
                     className={cn(
                       rowPadding,
-                      'text-left text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-[var(--ui-color-ink-subtle)]',
+                      'text-left text-[length:var(--ui-text-overline)] font-semibold uppercase tracking-[0.08em] text-[var(--ui-color-ink-subtle)]',
                     )}
                     onClick={header.column.getToggleSortingHandler()}
                   >
                     {header.isPlaceholder
                       ? null
-                      : flexRender(header.column.columnDef.header, header.getContext())}
-                    {header.column.getIsSorted() === 'asc' ? ' ↑' : null}
-                    {header.column.getIsSorted() === 'desc' ? ' ↓' : null}
+                      : flexRender(
+                          header.column.columnDef.header,
+                          header.getContext(),
+                        )}
+                    {getDataTableSortIndicator(header.column.getIsSorted())}
                   </th>
                 ))}
               </tr>
@@ -156,16 +198,19 @@ export function DataTable<TData extends object>({
           </thead>
           <tbody>
             {table.getRowModel().rows.map((row) => {
-              const rowId = selection?.getRowId?.(row.original);
-              const isSelected =
-                selection?.selectedRowId && rowId === selection.selectedRowId;
+              const isSelected = isDataTableRowSelected(
+                row.original,
+                selection,
+              );
 
               return (
                 <tr
                   key={row.id}
                   className={cn(
                     'border-b border-b-[var(--ui-color-border)] last:border-b-0',
-                    selection?.onRowClick ? 'cursor-pointer hover:bg-ui-surface-subtle' : '',
+                    selection?.onRowClick
+                      ? 'cursor-pointer hover:bg-ui-surface-subtle'
+                      : '',
                     isSelected ? 'bg-ui-accent-weak' : '',
                   )}
                   onClick={() => selection?.onRowClick?.(row.original)}
@@ -173,9 +218,15 @@ export function DataTable<TData extends object>({
                   {row.getVisibleCells().map((cell) => (
                     <td
                       key={cell.id}
-                      className={cn(rowPadding, 'align-top text-[var(--ui-color-ink)]')}
+                      className={cn(
+                        rowPadding,
+                        'align-top text-[var(--ui-color-ink)]',
+                      )}
                     >
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext(),
+                      )}
                     </td>
                   ))}
                 </tr>

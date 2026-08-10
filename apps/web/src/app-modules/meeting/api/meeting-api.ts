@@ -1,4 +1,4 @@
-import { ApiRequestError, apiFetchJson, jsonHeaders } from '@/src/platform/api/client';
+import { apiFetchJsonWithMappedError, jsonHeaders } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
 import { parseApiDateTime } from '@/src/platform/time/time-utils';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
@@ -154,14 +154,12 @@ async function request<T>(
   workspaceSlug: string,
   init: RequestInit = {},
 ): Promise<T> {
-  try {
-    return await apiFetchJson<T>(resolveMeetingPath(path, workspaceSlug), token, init);
-  } catch (error) {
-    if (error instanceof ApiRequestError) {
-      throw new MeetingApiError(error.status, error.message);
-    }
-    throw error;
-  }
+  return apiFetchJsonWithMappedError<T>(
+    resolveMeetingPath(path, workspaceSlug),
+    token,
+    init,
+    (error) => new MeetingApiError(error.status, error.message),
+  );
 }
 
 async function multipartRequest<T>(
@@ -299,7 +297,7 @@ export function attachTaskToMeeting(
   token: string,
   workspaceSlug: string,
   meetingId: string,
-  issueId: string,
+  taskId: string,
 ): Promise<MeetingDetail> {
   return request<MeetingDetail>(
     `/api/v1/meeting/meetings/${meetingId}/tasks`,
@@ -307,7 +305,7 @@ export function attachTaskToMeeting(
     workspaceSlug,
     {
       method: 'POST',
-      body: JSON.stringify({ issue_id: issueId }),
+      body: JSON.stringify({ task_id: taskId }),
     },
   );
 }
@@ -316,10 +314,10 @@ export function detachTaskFromMeeting(
   token: string,
   workspaceSlug: string,
   meetingId: string,
-  issueId: string,
+  taskId: string,
 ): Promise<MeetingDetail> {
   return request<MeetingDetail>(
-    `/api/v1/meeting/meetings/${meetingId}/tasks/${issueId}`,
+    `/api/v1/meeting/meetings/${meetingId}/tasks/${taskId}`,
     token,
     workspaceSlug,
     { method: 'DELETE' },

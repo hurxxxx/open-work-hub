@@ -1,44 +1,58 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
-from fastapi import status
 from sqlalchemy import select
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.orm import Session
 
-from ai_do_api.core.i18n import localized_http_exception
 from ai_do_api.core.principal import CallerPrincipal
-from ai_do_api.domains.auth.access import bind_current_workspace, get_current_workspace, resolve_workspaces
 from ai_do_api.domains.auth.models import User, Workspace
 from ai_do_api.domains.auth.security import new_id
-from ai_do_api.domains.docs.collab import sync_collab_record_from_rest_patch
+from ai_do_api.domains.docs.access_context import (
+    SOURCE_NATIVE_DOC,
+    NativeAccess,
+    ensure_docs_workspace_access as _ensure_docs_workspace_access,
+    ensure_workspace_for_item_request as _ensure_workspace_for_item_request,
+    ensure_workspace_for_page_request as _ensure_workspace_for_page_request,
+    load_accessible_native_docs as _load_accessible_native_docs,
+    native_doc_from_item_or_404 as _native_doc_from_item_or_404,
+    native_page_context_from_page_or_404 as _native_page_context_from_page_or_404,
+    primary_target as _primary_target,
+    resolve_native_doc_access as _resolve_native_doc_access,
+    workspace_for_doc as _workspace_for_doc,
+)
+from ai_do_api.domains.docs.hub_projection import (
+    serialize_native_hub_item,
+    serialize_native_page,
+)
 from ai_do_api.domains.docs.models import (
-    DocMeetingAccess,
     DocsUserItemPref,
     NativeDoc,
-    NativeDocContainer,
-    NativeDocLinkShare,
+    NativeDocTarget,
     NativeDocPage,
 )
+from ai_do_api.domains.docs.partitioning import ensure_native_doc_partition
 from ai_do_api.domains.docs.rag_sync import enqueue_native_doc_rag_sync
-from ai_do_api.domains.docs.registry import (
-    ContainerRef,
-    describe_source,
-    project_container_access,
-    resolve_container_label,
-)
-from ai_do_api.domains.media.service import sync_embedded_media
+from ai_do_api.domains.docs.registry import describe_source
+from ai_do_api.domains.pms.models import Task, TaskDocLink, TaskList
 from ai_do_api.domains.rag.contracts import RagSyncOperation
+from ai_do_api.domains.rag.source_registry import RAG_SCOPE_OFFICIAL, RAG_SCOPE_VALUES
+from ai_do_api.domains.source_access import can_read_native_doc
+from ai_do_api.domains.source_access.targets import resolve_target_label
+from ai_do_api.domains.source_access.policy import SourceAclPolicy
 
 
-TEAM_ACCESS_LEVEL_RANK = {
-    "read": 10,
-    "edit": 20,
+DOC_TYPE_VALUES = {
+    "general",
+    "meeting_notes",
+    "project_brief",
+    "spec",
+    "policy",
+    "guide",
+    "memo",
 }
-SOURCE_NATIVE_DOC = "native_doc"
-PAGE_SOURCE_NATIVE_DOC = "native_doc_page"
+DOC_CONTENT_FORMAT_VALUES = {"block", "html"}
 
 
 def create_native_doc_for_user(
@@ -53,38 +67,58 @@ def create_native_doc_for_user(
     source_kind: str = "manual",
     source_ref: str | None = None,
     generation_kind: str = "human",
-    primary_container: tuple[str, str, str, int] | None = None,
+    rag_scope: str = RAG_SCOPE_OFFICIAL,
+    doc_type: str | None = None,
+    content_format: str = "block",
+    content_text: str | None = None,
+    primary_target: tuple[str, str, str, int] | None = None,
 ) -> tuple[NativeDoc, NativeDocPage]:
+    resolved_doc_type = doc_type or _default_doc_type_for_source(source_app, source_kind)
+    if resolved_doc_type not in DOC_TYPE_VALUES:
+        raise ValueError(f"Unsupported docs doc_type: {resolved_doc_type}")
+    if content_format not in DOC_CONTENT_FORMAT_VALUES:
+        raise ValueError(f"Unsupported docs content_format: {content_format}")
+    if content_format == "block" and content_text is not None:
+        raise ValueError("Block docs do not accept content_text")
+    if content_format != "block" and content_blocks is not None:
+        raise ValueError(f"{content_format} docs do not accept content_blocks")
+    if rag_scope not in RAG_SCOPE_VALUES:
+        raise ValueError(f"Unsupported docs rag_scope: {rag_scope}")
     doc = NativeDoc(
         id=new_id(),
         workspace_id=workspace_id,
         owner_id=owner_id,
         title=title.strip(),
+        doc_type=resolved_doc_type,
         source_app=source_app,
         source_kind=source_kind,
         source_ref=source_ref,
         generation_kind=generation_kind,
+        rag_scope=rag_scope,
     )
+    ensure_native_doc_partition(db, doc=doc)
     db.add(doc)
     page = NativeDocPage(
         id=new_id(),
         doc_id=doc.id,
         parent_id=None,
         title=(first_page_title or title).strip(),
-        content_blocks=content_blocks or [],
+        content_format=content_format,
+        content_blocks=(content_blocks or []) if content_format == "block" else None,
+        content_text=content_text if content_format != "block" else None,
         sort_order=0,
         created_by_id=owner_id,
     )
     db.add(page)
-    if primary_container is not None:
-        container_app, container_type, container_id, sort_order = primary_container
+    if primary_target is not None:
+        target_app, target_type, target_id, sort_order = primary_target
         db.add(
-            NativeDocContainer(
+            NativeDocTarget(
                 id=new_id(),
                 doc_id=doc.id,
-                container_app=container_app,
-                container_type=container_type,
-                container_id=container_id,
+                target_app=target_app,
+                target_type=target_type,
+                target_id=target_id,
                 is_primary=True,
                 sort_order=sort_order,
             )
@@ -98,74 +132,10 @@ def create_native_doc_for_user(
     return doc, page
 
 
-def _utcnow() -> datetime:
-    return datetime.now(UTC).replace(tzinfo=None)
-
-
-def _split_prefixed_id(value: str) -> tuple[str | None, str]:
-    if "__" not in value:
-        return None, value
-    prefix, raw_id = value.split("__", 1)
-    return prefix, raw_id
-
-
-def _normalize_doc_id(value: str) -> str:
-    prefix, raw_id = _split_prefixed_id(value)
-    if prefix not in {None, "native_doc"}:
-        raise localized_http_exception(status_code=404, code="docs.doc_not_found")
-    return raw_id
-
-
-def _normalize_page_id(value: str) -> str:
-    prefix, raw_id = _split_prefixed_id(value)
-    if prefix not in {None, "native_doc_page"}:
-        raise localized_http_exception(status_code=404, code="docs.page_not_found")
-    return raw_id
-
-
-def _max_access_level(*levels: str | None) -> str | None:
-    ranked = [level for level in levels if level in TEAM_ACCESS_LEVEL_RANK]
-    if not ranked:
-        return None
-    return max(ranked, key=lambda item: TEAM_ACCESS_LEVEL_RANK[item])
-
-
-@dataclass
-class NativeAccess:
-    access_level: str | None
-    can_view: bool
-    can_edit: bool
-    can_share: bool
-    can_manage: bool
-    matched_link: NativeDocLinkShare | None
-
-
-def _bind_workspace_context(
-    db: Session,
-    *,
-    workspace: Workspace,
-    principal: CallerPrincipal,
-    user: User,
-) -> None:
-    bind_current_workspace(db, workspace)
-    if principal.workspace_id != workspace.id:
-        raise localized_http_exception(
-            status_code=status.HTTP_403_FORBIDDEN,
-            code="docs.principal_workspace_mismatch",
-        )
-    if principal.kind == "user" and principal.user_id not in {None, user.id}:
-        raise localized_http_exception(
-            status_code=status.HTTP_403_FORBIDDEN,
-            code="docs.principal_user_mismatch",
-        )
-
-
-def _require_user_write_principal(principal: CallerPrincipal) -> None:
-    if principal.kind != "user":
-        raise localized_http_exception(
-            status_code=status.HTTP_403_FORBIDDEN,
-            code="docs.write_user_principal_required",
-        )
+def _default_doc_type_for_source(source_app: str, source_kind: str) -> str:
+    if source_app == "meeting" or source_kind == "meeting_notes":
+        return "meeting_notes"
+    return "general"
 
 
 def _paragraph_block(text: str) -> dict[str, Any]:
@@ -181,6 +151,16 @@ def _heading_block(text: str, *, level: int) -> dict[str, Any]:
         "props": {"level": level},
         "content": [{"type": "text", "text": text}],
     }
+
+
+def _list_item_block(block_type: str, text: str, *, checked: bool | None = None) -> dict[str, Any]:
+    block: dict[str, Any] = {
+        "type": block_type,
+        "content": [{"type": "text", "text": text}],
+    }
+    if checked is not None:
+        block["props"] = {"checked": checked}
+    return block
 
 
 def _markdown_to_blocks(content_markdown: str | None) -> list[dict[str, Any]] | None:
@@ -201,132 +181,20 @@ def _markdown_to_blocks(content_markdown: str | None) -> list[dict[str, Any]] | 
         if line.startswith("# "):
             blocks.append(_heading_block(line[2:].strip(), level=1))
             continue
+        if line.startswith("- [ ] "):
+            blocks.append(_list_item_block("checkListItem", line[6:].strip(), checked=False))
+            continue
+        if line.startswith("- [x] ") or line.startswith("- [X] "):
+            blocks.append(_list_item_block("checkListItem", line[6:].strip(), checked=True))
+            continue
+        if line.startswith("- ") or line.startswith("* "):
+            blocks.append(_list_item_block("bulletListItem", line[2:].strip()))
+            continue
+        if len(line) > 3 and line[0].isdigit() and ". " in line[:4]:
+            blocks.append(_list_item_block("numberedListItem", line.split(". ", 1)[1].strip()))
+            continue
         blocks.append(_paragraph_block(line))
     return blocks
-
-
-def _workspace_for_doc(db: Session, doc: NativeDoc) -> Workspace:
-    current_workspace = get_current_workspace(db)
-    if current_workspace is not None and current_workspace.id == doc.workspace_id:
-        return current_workspace
-    workspace = db.scalar(
-        select(Workspace).where(
-            Workspace.id == doc.workspace_id,
-            Workspace.active.is_(True),
-        )
-    )
-    if workspace is None:
-        raise localized_http_exception(status_code=404, code="workspace.not_found")
-    return workspace
-
-
-def _container_access_level(
-    db: Session,
-    doc: NativeDoc,
-    user: User,
-) -> tuple[str | None, bool]:
-    workspace = _workspace_for_doc(db, doc)
-    best_level: str | None = None
-    can_manage = False
-    for container in doc.containers:
-        projection = project_container_access(
-            db=db,
-            user=user,
-            workspace=workspace,
-            ref=ContainerRef(
-                app=container.container_app,
-                type=container.container_type,
-                id=container.container_id,
-            ),
-        )
-        if projection.can_manage:
-            can_manage = True
-        candidate = (
-            "edit"
-            if projection.can_edit or projection.can_manage
-            else "read" if projection.can_view else None
-        )
-        best_level = _max_access_level(best_level, candidate)
-    return best_level, can_manage
-
-
-def _resolve_native_doc_access(
-    db: Session,
-    doc: NativeDoc,
-    user: User,
-    *,
-    share_token: str | None = None,
-) -> NativeAccess:
-    if doc.owner_id == user.id:
-        link_match = next((item for item in doc.link_shares if item.active), None)
-        return NativeAccess(
-            access_level="edit",
-            can_view=True,
-            can_edit=True,
-            can_share=True,
-            can_manage=True,
-            matched_link=link_match,
-        )
-
-    direct_share = next((item for item in doc.user_shares if item.user_id == user.id), None)
-    matched_link = next(
-        (
-            item
-            for item in doc.link_shares
-            if item.active and share_token and item.token == share_token
-        ),
-        None,
-    )
-    meeting_grant = db.scalar(
-        select(DocMeetingAccess).where(
-            DocMeetingAccess.doc_id == doc.id,
-            DocMeetingAccess.user_id == user.id,
-            DocMeetingAccess.revoked_at.is_(None),
-            (
-                DocMeetingAccess.expires_at.is_(None)
-                | (DocMeetingAccess.expires_at > _utcnow())
-            ),
-        )
-    )
-    container_access_level, container_can_manage = _container_access_level(db, doc, user)
-    access_level = _max_access_level(
-        getattr(direct_share, "access_level", None),
-        getattr(matched_link, "access_level", None),
-        getattr(meeting_grant, "access_level", None),
-        container_access_level,
-    )
-    return NativeAccess(
-        access_level=access_level,
-        can_view=access_level in TEAM_ACCESS_LEVEL_RANK,
-        can_edit=access_level == "edit",
-        can_share=container_can_manage,
-        can_manage=container_can_manage,
-        matched_link=matched_link,
-    )
-
-
-def _doc_query():
-    return (
-        select(NativeDoc)
-        .options(
-            selectinload(NativeDoc.owner),
-            selectinload(NativeDoc.pages).selectinload(NativeDocPage.created_by),
-            selectinload(NativeDoc.user_shares),
-            selectinload(NativeDoc.link_shares),
-            selectinload(NativeDoc.containers),
-        )
-    )
-
-
-def _load_native_doc_for_access(
-    db: Session,
-    doc_id: str,
-) -> NativeDoc | None:
-    current_workspace = get_current_workspace(db)
-    query = _doc_query().where(NativeDoc.id == doc_id)
-    if current_workspace is not None:
-        query = query.where(NativeDoc.workspace_id == current_workspace.id)
-    return db.scalar(query)
 
 
 def can_read_native_doc_for_rag(
@@ -335,247 +203,50 @@ def can_read_native_doc_for_rag(
     user: User,
     doc_id: str,
 ) -> bool:
-    doc = _load_native_doc_for_access(db, doc_id)
-    if doc is None:
-        return False
-    return _resolve_native_doc_access(db, doc, user).can_view
+    return can_read_native_doc(db, user=user, doc_id=doc_id)
 
 
-def _load_native_page(db: Session, page_id: str) -> NativeDocPage | None:
-    return db.scalar(
-        select(NativeDocPage)
-        .options(selectinload(NativeDocPage.created_by), joinedload(NativeDocPage.doc))
-        .where(NativeDocPage.id == page_id)
-    )
-
-
-def _serialize_native_page(
-    page: NativeDocPage,
-    *,
-    can_edit: bool,
-) -> dict[str, Any]:
-    return {
-        "id": page.id,
-        "doc_id": page.doc_id,
-        "source_type": "native_doc_page",
-        "source_page_id": page.id,
-        "parent_id": page.parent_id,
-        "title": page.title,
-        "content_blocks": page.content_blocks,
-        "sort_order": page.sort_order,
-        "created_by_id": page.created_by_id,
-        "created_by_name": getattr(page.created_by, "full_name", ""),
-        "created_at": page.created_at,
-        "updated_at": page.updated_at,
-        "trashed_at": page.trashed_at,
-        "can_edit": can_edit,
-        "realtime_collab": True,
-    }
-
-
-def _validate_native_parent(
-    doc: NativeDoc,
-    parent_id: str | None,
-    *,
-    page_id: str | None = None,
-) -> None:
-    if parent_id is None:
-        return
-    active_pages = {
-        page.id: page
-        for page in doc.pages
-        if page.trashed_at is None
-    }
-    parent = active_pages.get(parent_id)
-    if parent is None:
-        raise localized_http_exception(status_code=404, code="docs.parent_page_not_found")
-    if page_id is not None and parent.id == page_id:
-        raise localized_http_exception(status_code=409, code="docs.page_cannot_be_own_parent")
-
-    ancestor = parent
-    visited: set[str] = set()
-    while ancestor is not None:
-        if ancestor.id in visited:
-            raise localized_http_exception(
-                status_code=409,
-                code="docs.page_parent_cycle",
-            )
-        visited.add(ancestor.id)
-        if page_id is not None and ancestor.parent_id == page_id:
-            raise localized_http_exception(
-                status_code=409,
-                code="docs.page_parent_cycle",
-            )
-        if ancestor.parent_id is None:
-            break
-        ancestor = active_pages.get(ancestor.parent_id)
-
-
-def _native_doc_from_item_or_404(
-    db: Session,
-    item_id: str,
-    current_user: User,
-    *,
-    share_token: str | None,
-) -> tuple[NativeDoc, NativeAccess]:
-    doc = _load_native_doc_for_access(db, _normalize_doc_id(item_id))
-    if doc is None:
-        raise localized_http_exception(status_code=404, code="docs.doc_not_found")
-    access = _resolve_native_doc_access(db, doc, current_user, share_token=share_token)
-    if not access.can_view or (doc.trashed_at is not None and not access.can_manage):
-        raise localized_http_exception(status_code=404, code="docs.doc_not_found")
-    return doc, access
-
-
-def _share_token_allows_item_without_docs_access(item_id: str) -> bool:
-    prefix, _raw_id = _split_prefixed_id(item_id)
-    return prefix in {None, SOURCE_NATIVE_DOC}
-
-
-def _share_token_allows_page_without_docs_access(page_id: str) -> bool:
-    prefix, _raw_id = _split_prefixed_id(page_id)
-    return prefix in {None, PAGE_SOURCE_NATIVE_DOC}
-
-
-def _ensure_docs_workspace_access(db: Session, user: User) -> Workspace:
-    current_workspace = get_current_workspace(db)
-    if current_workspace is not None:
-        return current_workspace
-
-    for summary in resolve_workspaces(db, user):
-        workspace = db.scalar(
-            select(Workspace).where(
-                Workspace.id == summary["id"],
-                Workspace.active.is_(True),
-            )
-        )
-        if workspace is None:
-            continue
-        bind_current_workspace(db, workspace)
-        return workspace
-
-    raise localized_http_exception(
-        status_code=status.HTTP_403_FORBIDDEN,
-        code="docs.requests_workspace_context_required",
-    )
-
-
-def _primary_container(doc: NativeDoc) -> NativeDocContainer | None:
-    active = list(doc.containers)
-    if not active:
-        return None
-    active.sort(
-        key=lambda item: (
-            0 if item.is_primary else 1,
-            item.sort_order,
-            item.created_at,
-        )
-    )
-    return active[0]
-
-
-def _load_accessible_native_docs(db: Session, user: User) -> list[NativeDoc]:
-    current_workspace = get_current_workspace(db)
-    if current_workspace is None:
-        return []
-    docs = list(db.scalars(_doc_query().where(NativeDoc.workspace_id == current_workspace.id)))
-    return [doc for doc in docs if _resolve_native_doc_access(db, doc, user).can_view]
+def _serialize_native_page(page: NativeDocPage, *, can_edit: bool) -> dict[str, Any]:
+    return serialize_native_page(page, can_edit=can_edit)
 
 
 def _get_pref_map(
     db: Session,
     user_id: str,
 ) -> dict[tuple[str, str], DocsUserItemPref]:
-    rows = list(
-        db.scalars(
-            select(DocsUserItemPref).where(DocsUserItemPref.user_id == user_id)
-        )
-    )
+    rows = list(db.scalars(select(DocsUserItemPref).where(DocsUserItemPref.user_id == user_id)))
     return {(row.source_type, row.source_doc_id): row for row in rows}
-
-
-def _serialize_primary_container(container: NativeDocContainer | None) -> dict[str, Any] | None:
-    if container is None:
-        return None
-    return {
-        "app": container.container_app,
-        "type": container.container_type,
-        "id": container.container_id,
-        "sort_order": container.sort_order,
-    }
-
-
-def _serialize_native_share_summary(doc: NativeDoc) -> dict[str, Any]:
-    active_link = next((item for item in doc.link_shares if item.active), None)
-    user_share_count = len(doc.user_shares)
-    primary_container = _primary_container(doc)
-    is_container_shared = primary_container is not None
-    is_meeting_note = doc.source_app == "meeting" and doc.source_kind == "meeting_notes"
-    return {
-        "visibility": (
-            "shared"
-            if user_share_count > 0
-            or active_link is not None
-            or is_container_shared
-            or is_meeting_note
-            else "private"
-        ),
-        "user_share_count": user_share_count,
-        "link_active": active_link is not None,
-        "link_access_level": active_link.access_level if active_link is not None else None,
-    }
 
 
 def _serialize_native_item(
     db: Session,
     doc: NativeDoc,
+    user: User,
     access: NativeAccess,
     pref: DocsUserItemPref | None,
 ) -> dict[str, Any]:
     workspace = _workspace_for_doc(db, doc)
-    primary_container = _primary_container(doc)
-    location_label = resolve_container_label(
+    primary_target = _primary_target(doc)
+    location_label = resolve_target_label(
         db=db,
         workspace=workspace,
-        container=primary_container,
+        target=primary_target,
     )
     source = describe_source(
         workspace=workspace,
         doc=doc,
-        primary_container=primary_container,
+        primary_target=primary_target,
     )
-    active_pages = [page for page in doc.pages if page.trashed_at is None]
-    sharing_summary = _serialize_native_share_summary(doc)
-    return {
-        "id": doc.id,
-        "source_app": doc.source_app,
-        "source_type": SOURCE_NATIVE_DOC,
-        "source_id": doc.id,
-        "source_kind": doc.source_kind,
-        "source_ref": doc.source_ref,
-        "generation_kind": doc.generation_kind,
-        "structure_kind": "page_tree",
-        "location_label": location_label,
-        "container_label": location_label,
-        "primary_container": _serialize_primary_container(primary_container),
-        "source_badge": source.badge,
-        "source_deeplink": source.deep_link,
-        "title": doc.title,
-        "page_count": len(active_pages),
-        "created_by_id": doc.owner_id,
-        "created_by_name": getattr(doc.owner, "full_name", ""),
-        "created_at": doc.created_at,
-        "updated_at": doc.updated_at,
-        "trashed_at": doc.trashed_at,
-        "is_favorite": bool(pref and pref.is_favorite),
-        "is_private": sharing_summary["visibility"] == "private",
-        "last_viewed_at": pref.last_viewed_at if pref else None,
-        "can_view": access.can_view,
-        "can_edit": access.can_edit,
-        "can_share": access.can_share,
-        "can_manage": access.can_manage,
-        "sharing_summary": sharing_summary,
-    }
+    return serialize_native_hub_item(
+        doc=doc,
+        user=user,
+        access=access,
+        pref=pref,
+        location_label=location_label,
+        source_badge=source.badge,
+        source_deeplink=source.deep_link,
+        primary_target=primary_target,
+    )
 
 
 def _lookup_item(
@@ -595,6 +266,7 @@ def _lookup_item(
     return _serialize_native_item(
         db,
         doc,
+        current_user,
         access,
         pref_map.get((SOURCE_NATIVE_DOC, doc.id)),
     )
@@ -605,75 +277,144 @@ def _filter_docs(
     *,
     current_user_id: str,
     query: dict[str, Any],
+    matching_space_doc_ids: set[str],
 ) -> list[dict[str, Any]]:
-    filtered = docs
-    view = query["view"]
+    search = query["q"].strip().lower()
+    return [
+        item
+        for item in docs
+        if _matches_doc_view(item, view=query["view"], current_user_id=current_user_id)
+        and _matches_doc_source_filters(item, query)
+        and _matches_doc_collection_filter(item, query["collection_id"])
+        and _matches_doc_type_filter(item, query["doc_type"])
+        and _matches_doc_space_filter(item, query["space_id"], matching_space_doc_ids)
+        and _matches_doc_search(item, search)
+    ]
+
+
+def _matches_doc_view(
+    item: dict[str, Any],
+    *,
+    view: str,
+    current_user_id: str,
+) -> bool:
     if view == "mine":
-        filtered = [
-            item
-            for item in filtered
-            if item["trashed_at"] is None and item["created_by_id"] == current_user_id
-        ]
-    elif view == "shared":
-        filtered = [
-            item
-            for item in filtered
-            if item["trashed_at"] is None and item["created_by_id"] != current_user_id
-        ]
-    elif view == "private":
-        filtered = [
-            item
-            for item in filtered
-            if item["trashed_at"] is None
+        return item["trashed_at"] is None and item["created_by_id"] == current_user_id
+    if view == "shared":
+        return item["trashed_at"] is None and item["created_by_id"] != current_user_id
+    if view == "private":
+        return (
+            item["trashed_at"] is None
             and item["created_by_id"] == current_user_id
             and item["is_private"]
-        ]
-    elif view == "meeting_notes":
-        filtered = [
-            item
-            for item in filtered
-            if item["trashed_at"] is None
+        )
+    if view == "meeting_notes":
+        return (
+            item["trashed_at"] is None
             and item["source_app"] == "meeting"
             and item["source_kind"] == "meeting_notes"
-        ]
-    elif view == "recent":
-        filtered = [
-            item
-            for item in filtered
-            if item["trashed_at"] is None and item["last_viewed_at"] is not None
-        ]
-    elif view == "archived":
-        filtered = [item for item in filtered if item["trashed_at"] is not None]
-    else:
-        filtered = [item for item in filtered if item["trashed_at"] is None]
+        )
+    if view == "recent":
+        return item["trashed_at"] is None and item["last_viewed_at"] is not None
+    if view == "archived":
+        return item["trashed_at"] is not None
+    return item["trashed_at"] is None
 
+
+def _matches_doc_source_filters(
+    item: dict[str, Any],
+    query: dict[str, Any],
+) -> bool:
     for key in ("source_app", "source_kind"):
-        if query[key]:
-            filtered = [item for item in filtered if item[key] == query[key]]
+        if query[key] and item[key] != query[key]:
+            return False
+    return True
 
-    for query_key, container_key in (
-        ("container_app", "app"),
-        ("container_type", "type"),
-        ("container_id", "id"),
-    ):
-        if query[query_key]:
-            filtered = [
-                item
-                for item in filtered
-                if item["primary_container"] is not None
-                and item["primary_container"][container_key] == query[query_key]
-            ]
 
-    search = query["q"].strip().lower()
-    if search:
-        filtered = [
-            item
-            for item in filtered
-            if search in item["title"].lower()
-            or search in item["location_label"].lower()
-            or search in item["source_badge"].lower()
-        ]
-    return filtered
+def _matches_doc_collection_filter(
+    item: dict[str, Any],
+    collection_id: str | None,
+) -> bool:
+    if not collection_id:
+        return True
+    return item["collection"] is not None and item["collection"]["id"] == collection_id
+
+
+def _matches_doc_type_filter(item: dict[str, Any], doc_type: str | None) -> bool:
+    return not doc_type or item["doc_type"] == doc_type
+
+
+def _matches_doc_space_filter(
+    item: dict[str, Any],
+    space_id: str | None,
+    matching_space_doc_ids: set[str],
+) -> bool:
+    return not space_id or item["id"] in matching_space_doc_ids
+
+
+def _linked_pms_space_doc_ids(
+    db: Session,
+    *,
+    user: User,
+    workspace: Workspace,
+    space_id: str | None,
+) -> set[str]:
+    if not space_id:
+        return set()
+
+    from ai_do_api.domains.pms.source_access import accessible_pms_task_query
+
+    policy = SourceAclPolicy.for_workspace(db, workspace=workspace, user=user)
+    accessible_task_ids = accessible_pms_task_query(policy).subquery()
+    doc_ids = db.scalars(
+        select(TaskDocLink.doc_id)
+        .join(accessible_task_ids, TaskDocLink.task_id == accessible_task_ids.c.id)
+        .join(Task, Task.id == TaskDocLink.task_id)
+        .join(TaskList, TaskList.id == Task.list_id)
+        .where(TaskList.team_id == space_id)
+        .distinct()
+    )
+    return {str(doc_id) for doc_id in doc_ids if doc_id}
+
+
+def _direct_space_doc_ids(db: Session, space_id: str | None) -> set[str]:
+    if not space_id:
+        return set()
+    doc_ids = db.scalars(
+        select(NativeDocTarget.doc_id)
+        .where(
+            NativeDocTarget.target_app == "pms",
+            NativeDocTarget.target_type == "space",
+            NativeDocTarget.target_id == space_id,
+        )
+        .distinct()
+    )
+    return {str(doc_id) for doc_id in doc_ids if doc_id}
+
+
+def _matching_space_doc_ids(
+    db: Session,
+    *,
+    user: User,
+    workspace: Workspace,
+    space_id: str | None,
+) -> set[str]:
+    return _direct_space_doc_ids(db, space_id) | _linked_pms_space_doc_ids(
+        db,
+        user=user,
+        workspace=workspace,
+        space_id=space_id,
+    )
+
+
+def _matches_doc_search(item: dict[str, Any], search: str) -> bool:
+    if not search:
+        return True
+    return (
+        search in item["title"].lower()
+        or search in item["location_label"].lower()
+        or search in item["source_badge"].lower()
+    )
 
 
 def _sort_docs(
@@ -691,8 +432,8 @@ def _sort_docs(
             return item["created_at"]
         if sort_by == "last_viewed_at":
             return item["last_viewed_at"] or datetime.min
-        if sort_by == "container_sort_order":
-            return item["primary_container"]["sort_order"] if item["primary_container"] else 0
+        if sort_by == "target_sort_order":
+            return item["primary_target"]["sort_order"] if item["primary_target"] else 0
         return item["updated_at"]
 
     return sorted(docs, key=sort_key, reverse=reverse)
@@ -710,71 +451,19 @@ def create_page(
     parent_id: str | None = None,
     approved_call_id: str | None = None,
 ) -> dict[str, Any]:
-    _require_user_write_principal(principal)
-    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
+    from ai_do_api.domains.docs.page_mutations import create_native_page_from_markdown
 
-    if approved_call_id is not None:
-        existing_page = _load_native_page(db, approved_call_id)
-        if existing_page is not None and existing_page.doc is not None:
-            existing_doc = _load_native_doc_for_access(db, existing_page.doc_id)
-            if existing_doc is not None:
-                access = _resolve_native_doc_access(db, existing_doc, user, share_token=None)
-                if access.can_view:
-                    return _serialize_native_page(
-                        existing_page,
-                        can_edit=access.can_edit,
-                    )
-
-    doc, access = _native_doc_from_item_or_404(
+    return create_native_page_from_markdown(
         db,
-        hub_id,
-        user,
-        share_token=None,
+        workspace=workspace,
+        principal=principal,
+        user=user,
+        hub_id=hub_id,
+        title=title,
+        content_markdown=content_markdown,
+        parent_id=parent_id,
+        approved_call_id=approved_call_id,
     )
-    if not access.can_edit:
-        raise localized_http_exception(
-            status_code=status.HTTP_403_FORBIDDEN,
-            code="docs.doc_edit_access_required",
-        )
-
-    normalized_parent_id = _normalize_page_id(parent_id) if parent_id else None
-    _validate_native_parent(doc, normalized_parent_id)
-    sibling_count = len(
-        [
-            page
-            for page in doc.pages
-            if page.trashed_at is None and page.parent_id == normalized_parent_id
-        ]
-    )
-    content_blocks = _markdown_to_blocks(content_markdown)
-    page = NativeDocPage(
-        id=approved_call_id or new_id(),
-        doc_id=doc.id,
-        parent_id=normalized_parent_id,
-        title=title.strip(),
-        content_blocks=content_blocks,
-        sort_order=sibling_count,
-        created_by_id=user.id,
-    )
-    db.add(page)
-    db.flush()
-    if content_blocks is not None:
-        sync_embedded_media(db, content_blocks, "docs_native_page", page.id, user)
-        sync_collab_record_from_rest_patch(
-            db,
-            source_type="native_doc_page",
-            source_page_id=page.id,
-            snapshot_content_blocks=content_blocks,
-        )
-    enqueue_native_doc_rag_sync(
-        db,
-        doc=doc,
-        operation=RagSyncOperation.UPSERT,
-    )
-    db.commit()
-    page = _load_native_page(db, page.id)
-    assert page is not None
-    return _serialize_native_page(page, can_edit=access.can_edit)
 
 
 def list_hub(
@@ -789,11 +478,11 @@ def list_hub(
     page_size: int = 50,
     source_app: str | None = None,
     source_kind: str | None = None,
-    container_app: str | None = None,
-    container_type: str | None = None,
-    container_id: str | None = None,
+    collection_id: str | None = None,
+    doc_type: str | None = None,
+    space_id: str | None = None,
 ) -> dict[str, Any]:
-    _ensure_docs_workspace_access(db, user)
+    workspace = _ensure_docs_workspace_access(db, user)
     query = {
         "view": view,
         "q": q,
@@ -803,21 +492,33 @@ def list_hub(
         "page_size": page_size,
         "source_app": source_app,
         "source_kind": source_kind,
-        "container_app": container_app,
-        "container_type": container_type,
-        "container_id": container_id,
+        "collection_id": collection_id,
+        "doc_type": doc_type,
+        "space_id": space_id,
     }
     pref_map = _get_pref_map(db, user.id)
     docs = [
         _serialize_native_item(
             db,
             doc,
+            user,
             _resolve_native_doc_access(db, doc, user),
             pref_map.get((SOURCE_NATIVE_DOC, doc.id)),
         )
         for doc in _load_accessible_native_docs(db, user)
     ]
-    docs = _filter_docs(docs, current_user_id=user.id, query=query)
+    matching_space_doc_ids = _matching_space_doc_ids(
+        db,
+        user=user,
+        workspace=workspace,
+        space_id=space_id,
+    )
+    docs = _filter_docs(
+        docs,
+        current_user_id=user.id,
+        query=query,
+        matching_space_doc_ids=matching_space_doc_ids,
+    )
     docs = _sort_docs(docs, sort_by=sort_by, sort_dir=sort_dir)
     total = len(docs)
     start = (page - 1) * page_size
@@ -837,8 +538,7 @@ def get_item(
     item_id: str,
     share_token: str | None = None,
 ) -> dict[str, Any]:
-    if share_token is None or not _share_token_allows_item_without_docs_access(item_id):
-        _ensure_docs_workspace_access(db, user)
+    _ensure_workspace_for_item_request(db, user, item_id=item_id, share_token=share_token)
     return _lookup_item(db, item_id, user, share_token=share_token)
 
 
@@ -849,8 +549,7 @@ def list_pages(
     item_id: str,
     share_token: str | None = None,
 ) -> dict[str, Any]:
-    if share_token is None or not _share_token_allows_item_without_docs_access(item_id):
-        _ensure_docs_workspace_access(db, user)
+    _ensure_workspace_for_item_request(db, user, item_id=item_id, share_token=share_token)
     doc, access = _native_doc_from_item_or_404(db, item_id, user, share_token=share_token)
     pages = [
         _serialize_native_page(page, can_edit=access.can_edit)
@@ -873,15 +572,12 @@ def read_page(
     page_id: str,
     share_token: str | None = None,
 ) -> dict[str, Any]:
-    if share_token is None or not _share_token_allows_page_without_docs_access(page_id):
-        _ensure_docs_workspace_access(db, user)
-    page = _load_native_page(db, _normalize_page_id(page_id))
-    if page is None or page.doc is None:
-        raise localized_http_exception(status_code=404, code="docs.page_not_found")
-    doc = _load_native_doc_for_access(db, page.doc_id)
-    if doc is None:
-        raise localized_http_exception(status_code=404, code="docs.page_not_found")
-    access = _resolve_native_doc_access(db, doc, user, share_token=share_token)
-    if not access.can_view or page.trashed_at is not None or doc.trashed_at is not None:
-        raise localized_http_exception(status_code=403, code="docs.page_access_required")
-    return _serialize_native_page(page, can_edit=access.can_edit)
+    _ensure_workspace_for_page_request(db, user, page_id=page_id, share_token=share_token)
+    context = _native_page_context_from_page_or_404(
+        db,
+        page_id=page_id,
+        user=user,
+        share_token=share_token,
+        require="view",
+    )
+    return _serialize_native_page(context.page, can_edit=context.access.can_edit)

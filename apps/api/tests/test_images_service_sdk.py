@@ -3,13 +3,17 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
+from ai_do_api.domains.ai import external_gateway
 from ai_do_api.domains.images import service
+from ai_do_api.domains.images.agent_runtime import (
+    ImageBriefRuntimeResult,
+    register_image_agent_runtime_adapter,
+    reset_image_agent_runtime_adapters,
+)
+from ai_do_api.domains.images.execution_profile import build_image_execution_profile
 from ai_do_api.domains.images.template_catalog import BUILTIN_IMAGE_TEMPLATES
 from ai_do_api.domains.images.prompt import (
-    BRIEF_SYSTEM_PROMPT,
-    build_direct_edit_prompt,
     build_agent_prompt,
-    build_brief_messages,
     sanitize_image_plan_text,
 )
 
@@ -25,7 +29,7 @@ def test_builtin_template_catalog_assets_exist() -> None:
 
 def test_brief_input_skips_system_message() -> None:
     assert (
-        service._brief_input_from_messages(
+        service.brief_input_from_messages(
             [
                 {"role": "system", "content": "rules"},
                 {"role": "user", "content": "make a product launch image"},
@@ -37,6 +41,12 @@ def test_brief_input_skips_system_message() -> None:
 
 def test_run_brief_agent_uses_agents_sdk_provider(monkeypatch) -> None:
     captured = {}
+    audit_records: list[dict] = []
+    monkeypatch.setattr(
+        external_gateway,
+        "log_ai_external_call",
+        lambda **kwargs: audit_records.append(kwargs),
+    )
 
     def fake_run_sync(agent, *, input, max_turns, run_config):
         captured["agent"] = agent
@@ -49,7 +59,8 @@ def test_run_brief_agent_uses_agents_sdk_provider(monkeypatch) -> None:
 
     monkeypatch.setattr(Runner, "run_sync", fake_run_sync)
 
-    result = service._run_brief_agent(
+    result = service.run_brief_agent(
+        provider_id="openai",
         input_text="brief context",
         model="gpt-5.5",
         api_key="test-key",
@@ -60,7 +71,7 @@ def test_run_brief_agent_uses_agents_sdk_provider(monkeypatch) -> None:
         enable_web_search=True,
     )
 
-    assert service._extract_agent_text(result) == "TITLE: SDK brief"
+    assert result.text == "TITLE: SDK brief"
     assert captured["agent"].model == "gpt-5.5"
     assert captured["agent"].model_settings.tool_choice == "auto"
     assert [tool.name for tool in captured["agent"].tools] == ["web_search"]
@@ -68,34 +79,127 @@ def test_run_brief_agent_uses_agents_sdk_provider(monkeypatch) -> None:
     assert captured["max_turns"] == 10
     assert type(captured["run_config"].model_provider).__name__ == "OpenAIProvider"
     assert captured["run_config"].workflow_name == "AI-DO Image Plan"
+    assert audit_records[0]["status"] == "ok"
+    assert audit_records[0]["capability"] == "image_brief"
 
 
-def test_image_plan_prompt_forbids_placeholder_tokens() -> None:
-    assert "write a placeholder" not in BRIEF_SYSTEM_PROMPT
-    assert "Never output placeholder tokens" in BRIEF_SYSTEM_PROMPT
-    assert "Act like an autonomous planning agent" in BRIEF_SYSTEM_PROMPT
-    assert "Use available tools when the provided context is not enough" in BRIEF_SYSTEM_PROMPT
-    assert "Do not treat templates as content" in BRIEF_SYSTEM_PROMPT
+def test_run_brief_agent_delegates_empty_api_key_to_extension_provider() -> None:
+    captured = {}
+    execution_profile = {
+        "version": "image_execution_profile.v1",
+        "provider_id": "local",
+        "adapter_id": "local",
+    }
+
+    class ExtensionImageRuntimeAdapter:
+        provider_id = "local"
+
+        def run_brief(self, **kwargs) -> ImageBriefRuntimeResult:
+            captured.update(kwargs)
+            return ImageBriefRuntimeResult(text="local brief")
+
+        async def generate_image(self, **kwargs):
+            del kwargs
+            raise AssertionError("generate_image should not run")
+
+    reset_image_agent_runtime_adapters()
+    try:
+        register_image_agent_runtime_adapter(ExtensionImageRuntimeAdapter())
+
+        result = service.run_brief_agent(
+            provider_id="local",
+            input_text="brief context",
+            model="local-planner",
+            api_key="",
+            base_url="",
+            workspace_id="workspace-1",
+            user_id="user-1",
+            generation_id="generation-1",
+            enable_web_search=False,
+            execution_profile=execution_profile,
+        )
+
+        assert result.text == "local brief"
+        assert captured["api_key"] == ""
+        assert captured["execution_profile"] == execution_profile
+    finally:
+        reset_image_agent_runtime_adapters()
 
 
-def test_brief_messages_describe_template_without_raw_id() -> None:
-    messages = build_brief_messages(
-        use_case="status_report",
-        use_case_other="",
-        style={"chips": ["dataviz"], "palette": "brand", "background": "white"},
-        layout={"layout_id": "top_title_grid", "aspect": "1536x1024"},
-        details={"audience": "", "notes": ""},
-        context_refs=[],
-        reference_image_count=0,
-        template_name="meeting_deck_kpi",
-        current_date="2026-05-03",
+def test_run_brief_agent_threads_security_db_to_runtime_adapter() -> None:
+    captured = {}
+    security_db = object()
+
+    class ExtensionImageRuntimeAdapter:
+        provider_id = "local"
+
+        def run_brief(self, **kwargs) -> ImageBriefRuntimeResult:
+            captured.update(kwargs)
+            return ImageBriefRuntimeResult(text="local brief")
+
+        async def generate_image(self, **kwargs):
+            del kwargs
+            raise AssertionError("generate_image should not run")
+
+    reset_image_agent_runtime_adapters()
+    try:
+        register_image_agent_runtime_adapter(ExtensionImageRuntimeAdapter())
+
+        result = service.run_brief_agent(
+            provider_id="local",
+            input_text="brief context",
+            model="local-planner",
+            api_key="",
+            base_url="",
+            workspace_id="workspace-1",
+            user_id="user-1",
+            generation_id="generation-1",
+            enable_web_search=False,
+            db=security_db,
+        )
+
+        assert result.text == "local brief"
+        assert captured["db"] is security_db
+    finally:
+        reset_image_agent_runtime_adapters()
+
+
+def test_image_execution_profile_snapshots_db_resolved_runtime_without_secret() -> None:
+    resolved = SimpleNamespace(
+        provider_id="openai",
+        adapter_id="openai",
+        supervisor_model_id="configured-supervisor",
+        generation_model_id="configured-image-model",
+        generation_web_search_enabled=False,
+        max_iterations=7,
+    )
+    row = SimpleNamespace(
+        style={"background": "transparent", "quality": "high"},
+        layout={"aspect": "1536x1024"},
     )
 
-    user_message = messages[1]["content"]
-    assert "현재 날짜: 2026-05-03" in user_message
-    assert "KPI slide" in user_message
-    assert "template sample image" in user_message
-    assert "meeting_deck_kpi" not in user_message
+    profile = build_image_execution_profile(
+        row,
+        resolved,
+        max_reference_uploads=3,
+    )
+
+    assert profile == {
+        "version": "image_execution_profile.v2",
+        "provider_id": "openai",
+        "adapter_id": "openai",
+        "credential_ref": "image-provider:openai",
+        "generation_model_id": "configured-image-model",
+        "supervisor_model_id": "configured-supervisor",
+        "requested_options": {
+            "background": "transparent",
+            "quality": "high",
+            "aspect": "1536x1024",
+            "web_search_enabled": False,
+            "max_iterations": 7,
+            "max_reference_uploads": 3,
+        },
+    }
 
 
 def test_sanitize_image_plan_text_removes_placeholder_tokens() -> None:
@@ -128,30 +232,3 @@ def test_build_agent_prompt_sanitizes_approved_plan() -> None:
     assert "<metric>" not in approved_block
     assert "metric" not in approved_block
     assert "클라이언트" in approved_block
-
-
-def test_build_agent_prompt_calls_out_template_sample_reference() -> None:
-    prompt = build_agent_prompt(
-        brief_text="구성: 4개 KPI 카드를 보여준다\n화면에 넣을 텍스트: 없음",
-        style={"chips": ["dataviz"], "palette": "brand", "background": "white"},
-        layout={"layout_id": "top_title_grid", "aspect": "1536x1024"},
-        reference_roles=["template composition"],
-    )
-
-    assert "[템플릿 샘플 이미지]" in prompt
-    assert "임시 문구" in prompt
-    assert "template composition" in prompt
-    assert "자리표시자로 대체하지 마세요" in prompt
-
-
-def test_build_direct_edit_prompt_uses_instruction_without_placeholders() -> None:
-    prompt = build_direct_edit_prompt(
-        edit_instruction="배경을 더 밝게 하고 <metric>은 넣지 마세요",
-        style={"chips": ["corporate"], "palette": "auto", "background": "auto"},
-    )
-
-    assert "수정 요청:" in prompt
-    assert "배경을 더 밝게" in prompt
-    assert "<metric>" not in prompt
-    assert "composition 참고 이미지" in prompt
-    assert "사용 가능한 도구" in prompt

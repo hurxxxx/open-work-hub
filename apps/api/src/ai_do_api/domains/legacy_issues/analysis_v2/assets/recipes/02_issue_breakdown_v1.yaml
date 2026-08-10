@@ -1,0 +1,21 @@
+{
+  "recipe_id": "issue_breakdown",
+  "version": 1,
+  "title": "과거차 문제점 단일 기준 분포",
+  "description": "선택한 업무 차원별 고유 문제점 건수, 같은 범위의 전체 건수와 그룹 비중을 집계하고 상위 결과를 반환한다.",
+  "result_shape": "table",
+  "counting_unit": "issues",
+  "source_views": ["legacy_issue_analysis.issue_records_v1"],
+  "sql_template": "SELECT COALESCE(NULLIF(TRIM(i.{{dimension}}), ''), '미입력') AS dimension_value, i.{{dimension}} IS NULL OR TRIM(i.{{dimension}}) = '' AS dimension_missing, COUNT(DISTINCT i.issue_id) AS issue_count, SUM(COUNT(DISTINCT i.issue_id)) OVER () AS total_issue_count, ROUND(100.0 * COUNT(DISTINCT i.issue_id) / NULLIF(SUM(COUNT(DISTINCT i.issue_id)) OVER (), 0), 2) AS issue_share FROM legacy_issue_analysis.issue_records_v1 AS i WHERE {{filters}} GROUP BY COALESCE(NULLIF(TRIM(i.{{dimension}}), ''), '미입력'), i.{{dimension}} IS NULL OR TRIM(i.{{dimension}}) = '' ORDER BY issue_count DESC, dimension_value LIMIT :limit",
+  "parameters": [
+    {"name": "dimension", "value_type": "string", "placement": "identifier", "description": "집계 차원", "default": "issue_type", "allowed_values": ["vehicle_model", "region_zone", "module_key", "department", "major_category", "middle_category", "occurrence_stage", "occurrence_type", "issue_type", "cause_type", "supplier", "process_name", "severity_grade", "applied"]},
+    {"name": "limit", "value_type": "integer", "placement": "bind", "description": "표시할 최대 그룹 수", "default": 50, "minimum": 1, "maximum": 200},
+    {"name": "date_from", "value_type": "date", "placement": "filter", "description": "발생일 시작일", "column": "i.occurrence_date", "operator": "gte"},
+    {"name": "date_to", "value_type": "date", "placement": "filter", "description": "발생일 종료일", "column": "i.occurrence_date", "operator": "lte"},
+    {"name": "vehicle_models", "value_type": "string_list", "placement": "filter", "description": "차종 목록", "column": "i.vehicle_model", "operator": "in"},
+    {"name": "regions", "value_type": "string_list", "placement": "filter", "description": "권역 목록", "column": "i.region_zone", "operator": "in"},
+    {"name": "module_keys", "value_type": "string_list", "placement": "filter", "description": "모듈 목록", "column": "i.module_key", "operator": "in"},
+    {"name": "query_text", "value_type": "string", "placement": "filter", "description": "문제 내용 포함 검색어", "column": "i.search_text", "operator": "contains"}
+  ],
+  "tags": ["group", "distribution", "ranking", "dimension"]
+}

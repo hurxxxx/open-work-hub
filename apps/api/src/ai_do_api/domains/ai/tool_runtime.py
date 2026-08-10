@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import time
-from collections.abc import Iterator, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -10,15 +10,15 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from ai_do_api.core.principal import CallerPrincipal
-from ai_do_api.domains.ai.events import AgentEventEnvelope, EnvelopeEncoder, make_envelope
-from ai_do_api.domains.ai.tool_service import (
-    ToolRequiresApproval,
-    execute_tool,
-    preview_text,
+from ai_do_api.domains.ai.tool_call_event_projection import iter_tool_call_events
+from ai_do_api.domains.ai.tool_error_projection import tool_http_exception_message
+from ai_do_api.domains.ai.tool_result_projection import (
+    is_rejected_tool_response,
+    rejected_tool_reason_from_response,
     serialize_rejected_tool_result_for_llm,
     serialize_tool_result_for_llm,
-    tool_result_preview,
 )
+from ai_do_api.domains.ai.tool_service import ToolRequiresApproval, execute_tool
 from ai_do_api.domains.auth.models import User, Workspace
 from ai_do_api.domains.auth.security import new_id
 
@@ -46,16 +46,9 @@ class ToolCallExecution:
                 result=self.response["result"],
             )
         if self.status == "rejected":
-            reason = None
-            if self.response is not None:
-                result = self.response.get("result")
-                if isinstance(result, Mapping):
-                    raw_reason = result.get("reason")
-                    if isinstance(raw_reason, str):
-                        reason = raw_reason
             return serialize_rejected_tool_result_for_llm(
                 tool_name=self.tool_name,
-                reason=reason,
+                reason=rejected_tool_reason_from_response(self.response),
             )
         return serialize_tool_result_for_llm(
             tool_name=self.tool_name,
@@ -113,120 +106,20 @@ def execute_tool_call(
             tool_name=tool_name,
             arguments_json=arguments_json,
             status="error",
-            error_message=_error_message(error),
+            error_message=tool_http_exception_message(error),
         )
 
     return ToolCallExecution(
         call_id=resolved_call_id,
         tool_name=tool_name,
         arguments_json=arguments_json,
-        status=(
-            "rejected"
-            if isinstance(response.get("result"), Mapping)
-            and response["result"].get("status") == "rejected"
-            else "ok"
-        ),
+        status="rejected" if is_rejected_tool_response(response) else "ok",
         response=response,
     )
 
-
-def iter_tool_call_events(
-    *,
-    encoder: EnvelopeEncoder,
-    execution: ToolCallExecution,
-    include_call_frames: bool = True,
-) -> Iterator[AgentEventEnvelope]:
-    if include_call_frames:
-        yield make_envelope(
-            "tool_call_started",
-            encoder.next_seq(),
-            {
-                "call_id": execution.call_id,
-                "name": execution.tool_name,
-                "args_preview": preview_text(execution.arguments_json, limit=240),
-            },
-        )
-        yield make_envelope(
-            "tool_call_args_delta",
-            encoder.next_seq(),
-            {
-                "call_id": execution.call_id,
-                "delta": execution.arguments_json,
-            },
-        )
-    if execution.status == "blocked":
-        yield make_envelope(
-            "approval_required",
-            encoder.next_seq(),
-            {
-                "approval_id": execution.approval_id or new_id(),
-                "call_id": execution.call_id,
-                "tool": execution.tool_name,
-                "resource_preview": execution.resource_preview
-                or preview_text(execution.arguments_json, limit=240),
-                # Non-agent callers may surface a blocked tool call without a
-                # persisted approval row. In that case we only have a
-                # placeholder TTL; the agent halt path overrides this with the
-                # real approval.expires_at from the database.
-                "expires_at_ms": execution.approval_expires_at_ms or int(time.time() * 1000) + 86_400_000,
-            },
-        )
-        return
-
-    if execution.status == "error":
-        yield make_envelope(
-            "tool_result",
-            encoder.next_seq(),
-            {
-                "call_id": execution.call_id,
-                "status": "error",
-                "error": execution.error_message or "AI tool execution failed.",
-            },
-        )
-        return
-
-    if execution.status == "rejected":
-        rejection_reason = None
-        if execution.response is not None:
-            result = execution.response.get("result")
-            if isinstance(result, Mapping):
-                raw_reason = result.get("reason")
-                if isinstance(raw_reason, str):
-                    rejection_reason = raw_reason
-        yield make_envelope(
-            "tool_result",
-            encoder.next_seq(),
-            {
-                "call_id": execution.call_id,
-                "status": "rejected",
-                "error": rejection_reason or "Approval request was rejected.",
-                "result_preview": (
-                    tool_result_preview(execution.response["result"])
-                    if execution.response is not None
-                    else None
-                ),
-            },
-        )
-        return
-
-    assert execution.response is not None
-    yield make_envelope(
-        "tool_result",
-        encoder.next_seq(),
-        {
-            "call_id": execution.call_id,
-            "status": "ok",
-            "result_preview": tool_result_preview(execution.response["result"]),
-        },
-    )
-
-
-def _error_message(error: HTTPException) -> str:
-    detail = error.detail
-    if isinstance(detail, str):
-        return detail
-    if isinstance(detail, dict):
-        message = detail.get("message")
-        if isinstance(message, str) and message.strip():
-            return message
-    return "AI tool execution failed."
+__all__ = [
+    "ToolCallExecution",
+    "ToolCallStatus",
+    "execute_tool_call",
+    "iter_tool_call_events",
+]

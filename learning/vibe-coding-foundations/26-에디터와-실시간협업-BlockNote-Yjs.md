@@ -58,7 +58,7 @@ Notion이 대중화한 "블록"이란 단위로 문서를 관리. 각 블록은 
 - **Novel**, **Plate** — 비슷한 접근.
 - **Milkdown** — 마크다운 지향 편집기.
 
-우리 프로젝트의 초기 문서(`docs/product/ai_portal.md`)에서는 "wiki는 milkdown 기반"이라고 적혀 있었는데, 실제 구현은 **BlockNote**로 정착했습니다. 이유는 아마도 Notion식 UX(블록 드래그, 슬래시 메뉴)가 **협업 환경에 더 자연스럽기** 때문입니다.
+초기 아이디어 단계에서는 Markdown 지향 편집기도 검토했지만, 실제 구현은 **BlockNote**로 정착했습니다. 이유는 아마도 Notion식 UX(블록 드래그, 슬래시 메뉴)가 **협업 환경에 더 자연스럽기** 때문입니다.
 
 ---
 
@@ -204,13 +204,13 @@ const provider = new WebsocketProvider(
 
 ### 5.4 멀티 인스턴스 문제
 
-API 서버를 여러 개 띄우면(예: `pnpm dev:api:1`, `:2`) 서로 다른 서버에 붙은 사용자들 사이에서 동기화가 안 될 수 있습니다. 해법: **Redis pub/sub**로 서버끼리 업데이트를 중계. `.env.example` 에 `DOOWON_COLLAB_RELAY_URL=redis://...` 같은 설정이 있을 수 있습니다.
+API 서버를 여러 개 띄우면(예: `pnpm dev:api:1`, `:2`) 서로 다른 서버에 붙은 사용자들 사이에서 동기화가 안 될 수 있습니다. 해법: **Redis pub/sub**로 서버끼리 업데이트를 중계. `.env.example` 의 `AI_DO_API_COLLAB_REDIS_URL` 이 이 경로의 기준 변수입니다.
 
 ---
 
 ## 6. DocsCollabHub — 프로젝트 구현의 중심
 
-백엔드 쪽의 `apps/api/src/ai_do_api/domains/docs/collab.py`(조사 결과) 가 **DocsCollabHub**라는 클래스로 이 전체 릴레이를 관리합니다. 주요 책임:
+백엔드 쪽의 `apps/api/src/ai_do_api/domains/docs/collab.py`가 **DocsCollabHub**라는 클래스로 이 전체 릴레이를 관리합니다. 주요 책임:
 
 - WebSocket 연결 수락/정리
 - 방(room)별 Yjs 상태 유지

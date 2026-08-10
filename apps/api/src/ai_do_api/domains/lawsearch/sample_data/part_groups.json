@@ -1,0 +1,4 @@
+[
+  { "id": "common", "name_ko": "공통",             "icon": "🧬", "order": 1 },
+  { "id": "hvac",   "name_ko": "자동차 공조 부품", "icon": "🚗", "order": 2 }
+]

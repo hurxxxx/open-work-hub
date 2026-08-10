@@ -1,3 +1,5 @@
+# ruff: noqa: E402
+
 from __future__ import annotations
 
 import importlib
@@ -5,8 +7,19 @@ import sqlite3
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
+
+WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
+API_SRC = WORKSPACE_ROOT / "apps" / "api" / "src"
+if str(API_SRC) not in sys.path:
+    sys.path.insert(0, str(API_SRC))
+
+import ai_do_api.platform_extensions as platform_extensions  # noqa: E402
+
+
+REQUIRED_PROVIDER_IDS = ("anthropic", "gemini", "local", "openai")
 
 
 def _worker_db_path(tmp_path: Path) -> Path:
@@ -20,97 +33,33 @@ def _worker_dsn(db_path: Path) -> str:
 def _init_worker_db(
     db_path: Path,
     *,
-    create_policy_table: bool,
-    seed_policy_rows: bool,
+    create_routing_tables: bool,
+    seed_provider_rows: bool,
 ) -> None:
     connection = sqlite3.connect(db_path)
     try:
-        if create_policy_table:
+        if create_routing_tables:
             connection.execute(
                 """
-                CREATE TABLE llm_policies (
-                    id TEXT PRIMARY KEY,
-                    task_kind TEXT NOT NULL,
-                    policy_mode TEXT NOT NULL,
-                    description TEXT NOT NULL,
-                    updated_by TEXT NULL,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
+                CREATE TABLE ai_model_provider_configs (
+                    provider_id TEXT PRIMARY KEY
                 )
                 """
             )
-        if seed_policy_rows:
+            connection.execute("CREATE TABLE ai_model_catalog_entries (id TEXT PRIMARY KEY)")
+            connection.execute(
+                "CREATE TABLE ai_model_route_overrides (workload_id TEXT PRIMARY KEY)"
+            )
+            connection.execute(
+                "CREATE TABLE image_model_provider_configs (provider_id TEXT PRIMARY KEY)"
+            )
+            connection.execute(
+                "CREATE TABLE image_model_profiles (profile_id TEXT PRIMARY KEY)"
+            )
+        if seed_provider_rows:
             connection.executemany(
-                """
-                INSERT INTO llm_policies (
-                    id, task_kind, policy_mode, description, updated_by, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                [
-                    (
-                        "1",
-                        "chatbot",
-                        "local_only",
-                        "Interactive chat — user-facing",
-                        None,
-                        "2026-04-18T00:00:00",
-                        "2026-04-18T00:00:00",
-                    ),
-                    (
-                        "2",
-                        "meeting_summary",
-                        "local_only",
-                        "Meeting transcript summarization (worker)",
-                        None,
-                        "2026-04-18T00:00:00",
-                        "2026-04-18T00:00:00",
-                    ),
-                    (
-                        "3",
-                        "meeting_insight_actions",
-                        "local_only",
-                        "Meeting action-item extraction (worker/read refresh)",
-                        None,
-                        "2026-04-18T00:00:00",
-                        "2026-04-18T00:00:00",
-                    ),
-                    (
-                        "4",
-                        "meeting_insight_decisions",
-                        "local_only",
-                        "Meeting decision extraction (worker/read refresh)",
-                        None,
-                        "2026-04-18T00:00:00",
-                        "2026-04-18T00:00:00",
-                    ),
-                    (
-                        "5",
-                        "meeting_insight_followup",
-                        "local_only",
-                        "Meeting follow-up schedule extraction (worker/read refresh)",
-                        None,
-                        "2026-04-18T00:00:00",
-                        "2026-04-18T00:00:00",
-                    ),
-                    (
-                        "6",
-                        "rag_grounded_answer",
-                        "local_only",
-                        "Grounded RAG answer synthesis",
-                        None,
-                        "2026-04-18T00:00:00",
-                        "2026-04-18T00:00:00",
-                    ),
-                    (
-                        "7",
-                        "batch_generation",
-                        "local_only",
-                        "Long-form batch generation (reports etc.)",
-                        None,
-                        "2026-04-18T00:00:00",
-                        "2026-04-18T00:00:00",
-                    ),
-                ],
+                "INSERT INTO ai_model_provider_configs (provider_id) VALUES (?)",
+                [(provider_id,) for provider_id in REQUIRED_PROVIDER_IDS],
             )
         connection.commit()
     finally:
@@ -124,21 +73,40 @@ def _reload_worker_module(module_name: str):
     return importlib.import_module(module_name)
 
 
-def test_celery_app_fails_fast_when_llm_policy_table_is_missing(
+def test_celery_app_fails_fast_when_llm_routing_tables_are_missing(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     db_path = _worker_db_path(tmp_path)
     _init_worker_db(
         db_path,
-        create_policy_table=False,
-        seed_policy_rows=False,
+        create_routing_tables=False,
+        seed_provider_rows=False,
     )
-    monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("AI_DO_WORKER_QUEUE_GROUP", "all")
 
     with pytest.raises(RuntimeError, match="Run API migrations before starting the worker"):
         _reload_worker_module("ai_do_worker.celery_app")
+
+
+def test_celery_app_skips_llm_routing_precheck_for_non_llm_queue_group(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    db_path = _worker_db_path(tmp_path)
+    _init_worker_db(
+        db_path,
+        create_routing_tables=False,
+        seed_provider_rows=False,
+    )
+    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("AI_DO_WORKER_QUEUE_GROUP", "default")
+
+    celery_module = _reload_worker_module("ai_do_worker.celery_app")
+
+    assert celery_module.settings.queue_group == "default"
+    assert celery_module.celery_app.main == "ai_do_worker"
 
 
 def test_meeting_summarize_uses_complete_chat_without_local_precheck(
@@ -148,11 +116,11 @@ def test_meeting_summarize_uses_complete_chat_without_local_precheck(
     db_path = _worker_db_path(tmp_path)
     _init_worker_db(
         db_path,
-        create_policy_table=True,
-        seed_policy_rows=True,
+        create_routing_tables=True,
+        seed_provider_rows=True,
     )
-    monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
 
     meeting_module = _reload_worker_module("ai_do_worker.tasks.meeting")
 
@@ -182,39 +150,92 @@ def test_meeting_summarize_uses_complete_chat_without_local_precheck(
             return None
 
     fake_session = FakeSession()
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
 
     monkeypatch.setattr(meeting_module, "_db_session", lambda: fake_session)
     monkeypatch.setattr(meeting_module, "_load_active_recording", lambda *_args: recording)
     monkeypatch.setattr(meeting_module, "_heartbeat", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(meeting_module, "_mark_failed", lambda *_args, **_kwargs: None)
 
-    def fake_complete_chat(context, db, **kwargs):
+    def fake_execute_llm(workload_id, context, db, **kwargs):
+        captured["workload_id"] = workload_id
         captured["context"] = context
         captured["db"] = db
         captured["messages"] = kwargs["messages"]
-        return (
-            SimpleNamespace(
-                choices=[SimpleNamespace(message=SimpleNamespace(content="요약 결과"))]
+        return SimpleNamespace(
+            completion=SimpleNamespace(text="요약 결과"),
+            decision=SimpleNamespace(
+                policy="local_only", chosen_pool="local", forced_local=False, pii_hits=[]
             ),
-            SimpleNamespace(
-                policy="local_only",
-                chosen_pool="local",
-                forced_local=False,
-                pii_hits=[],
-            ),
-            SimpleNamespace(provider="mlx-lm", canonical_model="qwen/qwen3.6-35b-a3b"),
+            config=SimpleNamespace(provider="local-runtime", canonical_model="local/test-model"),
         )
 
-    monkeypatch.setattr(meeting_module, "complete_chat", fake_complete_chat)
+    monkeypatch.setattr(
+        meeting_module,
+        "execute_llm",
+        fake_execute_llm,
+    )
 
     result = meeting_module.summarize_recording.run("rec-1")
 
     assert result == "rec-1"
     assert recording.summary_text == "요약 결과"
     assert captured["db"] is fake_session
-    assert captured["context"].task_kind == "meeting_summary"
+    assert captured["workload_id"] == "meeting_summary"
+    assert captured["context"].app_id == "meeting"
     assert captured["context"].workspace_id == "ws-1"
+
+
+def test_mail_sync_task_imports_after_control_plane_ready(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    db_path = _worker_db_path(tmp_path)
+    _init_worker_db(
+        db_path,
+        create_routing_tables=True,
+        seed_provider_rows=True,
+    )
+    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
+
+    mail_module = _reload_worker_module("ai_do_worker.tasks.mail")
+
+    assert mail_module.sync_mail_job.name == "mail.sync_job"
+    assert mail_module.sync_mail_account.name == "mail.sync_account"
+    assert mail_module.dispatch_due_sync_jobs.name == "mail.dispatch_due_sync_jobs"
+
+
+def test_celery_app_initializes_platform_extensions_with_worker_settings(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    db_path = _worker_db_path(tmp_path)
+    _init_worker_db(
+        db_path,
+        create_routing_tables=True,
+        seed_provider_rows=True,
+    )
+    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("AI_DO_AI_DEFAULT_EXTERNAL_LLM_PROVIDER", "openai")
+
+    captured: dict[str, Any] = {}
+
+    def fake_initialize_platform_extensions(settings) -> object:
+        captured["settings"] = settings
+        return object()
+
+    monkeypatch.setattr(
+        platform_extensions,
+        "initialize_platform_extensions",
+        fake_initialize_platform_extensions,
+    )
+
+    _reload_worker_module("ai_do_worker.celery_app")
+
+    settings = captured["settings"]
+    assert settings.__class__.__module__ == "ai_do_worker.settings"
+    assert settings.ai_default_external_llm_provider == "openai"
 
 
 def test_meeting_extract_insights_invokes_worker_service_without_stopping_pipeline(
@@ -224,11 +245,11 @@ def test_meeting_extract_insights_invokes_worker_service_without_stopping_pipeli
     db_path = _worker_db_path(tmp_path)
     _init_worker_db(
         db_path,
-        create_policy_table=True,
-        seed_policy_rows=True,
+        create_routing_tables=True,
+        seed_provider_rows=True,
     )
-    monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
 
     meeting_module = _reload_worker_module("ai_do_worker.tasks.meeting")
 
@@ -278,7 +299,7 @@ def test_meeting_extract_insights_invokes_worker_service_without_stopping_pipeli
 
     monkeypatch.setattr(
         meeting_module,
-        "_meeting_insights_module",
+        "meeting_insights_module",
         lambda: SimpleNamespace(extract_and_persist_meeting_insights=fake_extract),
     )
 
@@ -303,14 +324,58 @@ def test_meeting_insights_module_imports_under_worker_env(
     db_path = _worker_db_path(tmp_path)
     _init_worker_db(
         db_path,
-        create_policy_table=True,
-        seed_policy_rows=True,
+        create_routing_tables=True,
+        seed_provider_rows=True,
     )
-    monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
 
     meeting_module = _reload_worker_module("ai_do_worker.tasks.meeting")
 
-    imported = meeting_module._meeting_insights_module()
+    imported = meeting_module.meeting_insights_module()
 
     assert imported.__name__ == "ai_do_api.domains.meeting.insights"
+
+
+def test_meeting_mark_failed_rolls_back_pending_transaction(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    db_path = _worker_db_path(tmp_path)
+    _init_worker_db(
+        db_path,
+        create_routing_tables=True,
+        seed_provider_rows=True,
+    )
+    monkeypatch.setenv("AI_DO_POSTGRES_DSN", _worker_dsn(db_path))
+
+    meeting_module = _reload_worker_module("ai_do_worker.tasks.meeting")
+    recording = SimpleNamespace(
+        transcription_status="summarizing",
+        failure_reason=None,
+    )
+
+    class FakeSession:
+        def __init__(self) -> None:
+            self.events: list[str] = []
+
+        def rollback(self) -> None:
+            self.events.append("rollback")
+
+        def get(self, _model, _recording_id):
+            self.events.append("get")
+            return recording
+
+        def add(self, _value) -> None:
+            self.events.append("add")
+
+        def commit(self) -> None:
+            self.events.append("commit")
+
+    session = FakeSession()
+
+    meeting_module._mark_failed(session, "rec-1", "provider failed")
+
+    assert session.events == ["rollback", "get", "add", "commit"]
+    assert recording.transcription_status == "failed"
+    assert recording.failure_reason == "provider failed"

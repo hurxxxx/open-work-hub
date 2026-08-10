@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 
 import type { StepId } from './wizard-state';
 
-export const STEP_IDS: StepId[] = [1, 2, 3, 4];
+const STEP_IDS: StepId[] = [1, 2, 3, 4];
 
 interface WizardStepperProps {
   current: StepId;
@@ -57,5 +57,3 @@ export function WizardStepper({ current, highest, onJump }: WizardStepperProps) 
     </ol>
   );
 }
-
-export default WizardStepper;

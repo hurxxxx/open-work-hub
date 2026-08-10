@@ -1,0 +1,1209 @@
+[
+  {
+    "id": "reg-0001",
+    "name": "EPA SNAP 프로그램 - MAC 시스템 냉매",
+    "name_en": "EPA SNAP Program for Motor Vehicle A/C",
+    "type": "regulation",
+    "part_ids": [
+      "refrigerant"
+    ],
+    "region_ids": [
+      "us"
+    ],
+    "description": "미국 환경보호청(EPA)이 자동차 에어컨 시스템에 사용 가능한 냉매를 SNAP(Significant New Alternatives Policy)으로 승인·관리하는 프로그램. R-1234yf는 Rule 17(2011)로 MVAC 대체냉매로 등재, Rule 24(2022)로 Nonroad 차량까지 확대. R-134a는 EPA가 직접 금지하지 않으나 AIM Act 등 별도 규제·CARB(캘리포니아)·OEM 전환 흐름으로 단계적 퇴출.",
+    "caution": "신차 등 신규 적용처별로 SNAP unacceptable / acceptable subject to use conditions 분류 확인 필수. EU MAC Directive(GWP 150 한도)와는 별개 규제.",
+    "effective_date": "2011-03-29",
+    "revision_date": "2022-06-03",
+    "source_url": "https://www.epa.gov/snap/regulations-proposed-rules-and-final-rules-determined-epa",
+    "note": "Rule 17(2011-03-29 MVAC HFO-1234yf 등재) → Rule 24(2022-06-03 Nonroad) → Rule 27 proposed(2025)",
+    "history": [
+      {
+        "version": "Rule 27 (proposed)",
+        "date": "2025-11-10",
+        "status": "draft",
+        "summary": "Retrofit LMDV / 신차 버스·HD on-highway MVAC에 HFO-1234yf 사용 조건부 승인 (제안 단계)"
+      },
+      {
+        "version": "Rule 24",
+        "date": "2022-06-03",
+        "status": "current",
+        "summary": "Nonroad 차량(농업용 트랙터 등) MVAC에 HFO-1234yf 사용 승인. 소형 냉매캔용 전용 서비스 피팅 요구"
+      },
+      {
+        "version": "Rule 21 (servicing)",
+        "date": "2021-03-24",
+        "status": "previous",
+        "summary": "MVAC 시스템 정비 — 회수 장비 표준 (SAE J2843·J2851·J3030) 채택"
+      },
+      {
+        "version": "Rule 17",
+        "date": "2011-03-29",
+        "status": "previous",
+        "summary": "HFO-1234yf를 경량 승용·소형 트럭 MVAC용 신규 대체냉매로 SNAP 최초 등재"
+      }
+    ],
+    "created_at": "2026-05-20T00:00:00Z",
+    "updated_at": "2026-05-20T00:00:00Z"
+  },
+  {
+    "id": "reg-0002",
+    "name": "EU MAC Directive 2006/40/EC",
+    "name_en": "EU Mobile Air Conditioning Directive 2006/40/EC",
+    "type": "law",
+    "part_ids": [
+      "refrigerant"
+    ],
+    "region_ids": [
+      "eu"
+    ],
+    "description": "EU 신규 승용차·소형 상용차의 에어컨 냉매 GWP 상한을 150으로 제한. 2017년부터 모든 신차에 전면 적용.",
+    "caution": "GWP 150 초과 냉매(R-134a 등) 신차 사용 전면 금지. 차종 형식 승인 거부 사유.",
+    "effective_date": "2017-01-01",
+    "revision_date": "",
+    "source_url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32006L0040",
+    "note": "2006-05-17 채택, 2008-06-21 신차 type approval 거부, 2017-01-01 전면 발효. R-1234yf 또는 R-744(CO2) 시스템 사용",
+    "history": [
+      {
+        "version": "전면 발효",
+        "date": "2017-01-01",
+        "status": "current",
+        "summary": "모든 신차에 GWP 150 초과 냉매(R-134a) 사용 전면 금지"
+      },
+      {
+        "version": "신차 의무 적용",
+        "date": "2011-01-01",
+        "status": "previous",
+        "summary": "신규 차종(new type)에 저GWP 냉매 필수 적용 시작"
+      },
+      {
+        "version": "신차 type approval 거부",
+        "date": "2008-06-21",
+        "status": "previous",
+        "summary": "GWP 150 초과 MAC 장착 신차는 type approval 신청 불가"
+      },
+      {
+        "version": "Directive 채택",
+        "date": "2006-05-17",
+        "status": "previous",
+        "summary": "EU 의회·이사회 채택 (OJ L 161, 2006-06-14 발행). 70/156/EEC 개정"
+      }
+    ],
+    "created_at": "2026-05-20T00:00:00Z",
+    "updated_at": "2026-05-20T00:00:00Z"
+  },
+  {
+    "id": "reg-0003",
+    "name": "환경부 고시 - 차량용 냉매 회수·재활용",
+    "name_en": "MOE Notice - Vehicle Refrigerant Recovery & Recycling",
+    "type": "regulation",
+    "part_ids": [
+      "refrigerant"
+    ],
+    "region_ids": [
+      "kr"
+    ],
+    "description": "환경부 고시에 따라 폐차·정비 시 차량 냉매를 대기 방출 없이 회수·재활용 또는 적정 처리해야 한다. 자동차 정비업·폐차업체는 회수 장비와 자격을 갖추어야 함.",
+    "caution": "위반 시 과태료 부과. 회수 실적 보고 의무.",
+    "effective_date": "",
+    "revision_date": "",
+    "source_url": "https://easylaw.go.kr/CSP/CnpClsMain.laf?csmSeq=1452&ccfNo=2&cciNo=2&cnpClsNo=2",
+    "note": "「전기·전자제품 및 자동차의 자원순환에 관한 법률 시행령」 제27조·별표 7의2. ⚠ 발효일/개정일 검증 필요",
+    "created_at": "2026-05-20T00:00:00Z",
+    "updated_at": "2026-05-20T00:00:00Z"
+  },
+  {
+    "id": "reg-0004",
+    "name": "SAE J639 - 자동차 에어컨 안전 표준",
+    "name_en": "SAE J639 - Safety Standards for Motor Vehicle Refrigerant Vapor Compression Systems",
+    "type": "standard",
+    "part_ids": [
+      "refrigerant",
+      "safety",
+      "hvac_system",
+      "compressor",
+      "hose_pipe"
+    ],
+    "region_ids": [
+      "us",
+      "eu",
+      "kr",
+      "jp"
+    ],
+    "description": "자동차 냉매 증기압축 시스템의 안전 표준. 압력 한계, 안전장치, 누설 시험, 표시 라벨 등을 규정. 대부분의 글로벌 OEM이 채택.",
+    "caution": "압력 안전밸브 의무 장착. 라벨 부착 위치·내용 규정 준수.",
+    "effective_date": "2005-06-20",
+    "revision_date": "2020-11-09",
+    "source_url": "https://www.sae.org/standards/content/j639_202011/",
+    "note": "산업 표준이나 사실상 강제",
+    "history": [
+      {
+        "version": "J639_202011",
+        "date": "2020-11-09",
+        "status": "current",
+        "summary": "R-1234yf 적용 확대 반영, 압력 안전장치·라벨링 요구사항 종합 개정"
+      },
+      {
+        "version": "J639_201112",
+        "date": "2011-12-19",
+        "status": "previous",
+        "summary": "고압측 압력 안전 요구사항 강화, 서비스 포트 규격 명확화"
+      },
+      {
+        "version": "J639_201102",
+        "date": "2011-02-04",
+        "status": "previous",
+        "summary": "R-1234yf 신규 냉매 추가 반영"
+      },
+      {
+        "version": "J639_200506",
+        "date": "2005-06-20",
+        "status": "previous",
+        "summary": "초판 발행. MAC 시스템 안전 표준 정립"
+      }
+    ],
+    "created_at": "2026-05-20T00:00:00Z",
+    "updated_at": "2026-05-20T00:00:00Z"
+  },
+  {
+    "id": "reg-0005",
+    "name": "FMVSS 302 - 실내재료 가연성",
+    "name_en": "FMVSS 302 - Flammability of Interior Materials",
+    "type": "law",
+    "part_ids": [
+      "hvac_ctrl",
+      "blower",
+      "evaporator"
+    ],
+    "region_ids": [
+      "us"
+    ],
+    "description": "미국 연방 자동차 안전기준. 차량 실내 노출 재료의 연소 속도를 102mm/min 이하로 제한. HVAC 모듈, 블로워 케이스, 에바포레이터 케이스 등 실내 노출부 적용.",
+    "caution": "수평 연소 속도 시험 합격 필수. 미준수 시 차량 인증 불가.",
+    "effective_date": "1972-09-01",
+    "revision_date": "",
+    "source_url": "https://www.ecfr.gov/current/title-49/subtitle-B/chapter-V/part-571/subpart-B/section-571.302",
+    "note": "1971년 NHTSA 채택, 1972-09-01 발효. 글로벌 OEM이 사실상 글로벌 표준으로 적용. ⚠ 최근 개정일 검증 필요",
+    "created_at": "2026-05-20T00:00:00Z",
+    "updated_at": "2026-05-20T00:00:00Z"
+  },
+  {
+    "id": "reg-0006",
+    "name": "JIS D 1601 - 자동차 부품 진동 시험",
+    "name_en": "JIS D 1601 - Vibration Testing Methods for Automobile Parts",
+    "type": "standard",
+    "part_ids": [
+      "compressor",
+      "hvac_ctrl",
+      "blower"
+    ],
+    "region_ids": [
+      "jp"
+    ],
+    "description": "일본공업표준. 차량 탑재 부품의 진동 시험 방법을 규정. 진동 주파수, 가속도, 방향 등 시험 조건 명시. 일본 OEM 납품 부품 필수.",
+    "caution": "장착 위치별 가속도 등급(A~F) 적용. 시험 후 외관·기능 정상 동작 확인.",
+    "effective_date": "1995-01-01",
+    "revision_date": "",
+    "source_url": "https://www.jisc.go.jp",
+    "note": "1995-01-01 발행 (JIS D 1601:1995). 토요타·혼다·닛산 표준으로 확장. ⚠ 이후 개정 여부 검증 필요",
+    "created_at": "2026-05-20T00:00:00Z",
+    "updated_at": "2026-05-20T00:00:00Z"
+  },
+  {
+    "id": "reg-0007",
+    "name": "GB 38031 - 전기차 안전 강제표준",
+    "name_en": "GB 38031 - EV Battery Safety Requirements",
+    "type": "law",
+    "part_ids": [
+      "refrigerant",
+      "safety",
+      "hvac_system",
+      "hvac_ctrl"
+    ],
+    "region_ids": [
+      "cn"
+    ],
+    "description": "중국 강제 국가표준. 전기차 배터리 시스템 안전 요구사항. 배터리 열관리 시스템(공조·냉매 회로) 포함. 열폭주 발생 시 5분 이내 경고 의무.",
+    "caution": "전기차 공조 시스템은 배터리 열관리와 연동 설계 필수. 열폭주 시험 강제.",
+    "effective_date": "2021-01-01",
+    "revision_date": "",
+    "source_url": "https://www.codeofchina.com/standard/GB38031-2020.html",
+    "note": "2020-05-12 발행, 2021-01-01 시행. GB 38031-2025 개정판 2026-07-01 시행 예정",
+    "history": [
+      {
+        "version": "GB 38031-2025",
+        "date": "2026-07-01",
+        "status": "upcoming",
+        "summary": "(시행 예정) 열폭주 시험 강화, 배터리 안전 요구 추가 보강"
+      },
+      {
+        "version": "GB 38031-2020",
+        "date": "2021-01-01",
+        "status": "current",
+        "summary": "발행 2020-05-12 · 시행 2021-01-01. 열폭주 발생 시 5분 이내 경고 의무, 열관리(공조 연동) 요구 도입"
+      },
+      {
+        "version": "GB/T 31485-2015 등",
+        "date": "2015-01-01",
+        "status": "previous",
+        "summary": "(이전 비강제 표준 시리즈) GB/T 31485·31486·31467로 분산되어 있던 배터리 안전 시험을 GB 38031로 통합·강제화"
+      }
+    ],
+    "created_at": "2026-05-20T00:00:00Z",
+    "updated_at": "2026-05-20T00:00:00Z"
+  },
+  {
+    "id": "reg-0008",
+    "name": "AIS-156 - L 카테고리 전기차 안전 표준 (인도)",
+    "name_en": "AIS-156 - Specific Requirements for L Category Electric Power Train Vehicles",
+    "type": "regulation",
+    "part_ids": [
+      "refrigerant",
+      "safety",
+      "hvac_system",
+      "hvac_ctrl"
+    ],
+    "region_ids": [
+      "in"
+    ],
+    "description": "인도 자동차 표준. L 카테고리(이륜·삼륜) 전기 파워트레인 차량의 안전 요구사항. 2022년 EV 화재 사고 이후 배터리·열관리 요구 대폭 강화. 공조 시스템도 절연·과열 보호 대상. ※ M·N 카테고리(승용·상용)는 AIS-038 Rev 2 등 별도 표준 적용.",
+    "caution": "Phase 2 (2023.10) 이후 신차 의무. 미준수 시 인도 시장 판매 불가.",
+    "effective_date": "",
+    "revision_date": "2023-12-01",
+    "source_url": "https://www.araiindia.com/downloads/ais-downloads",
+    "note": "L 카테고리 EV 전용 표준. 원본 AIS-156:2020 발행. Amd3 Phase1 2022-12-01·Phase2 2023-03-31, Amd4 2023-12. ⚠ 원본 발행 정확일 검증 필요",
+    "history": [
+      {
+        "version": "Amendment 4",
+        "date": "2023-12-01",
+        "status": "current",
+        "summary": "셀 수준 안전 요구 추가, 시험 절차 세부화 (2023-12 발행)"
+      },
+      {
+        "version": "Amendment 3 Phase 2",
+        "date": "2023-03-31",
+        "status": "previous",
+        "summary": "Earth leakage detection charger, BMS의 EMC(AIS-004), NABL 인증 셀(IS 16893), 열폭주 시험, 음성·시각 열폭주 경고, BMS 4개 온도센서, 능동 병렬 회로 의무"
+      },
+      {
+        "version": "Amendment 3 Phase 1",
+        "date": "2022-12-01",
+        "status": "previous",
+        "summary": "2022년 EV 화재 사고 후속 강화 1차 — 기본 안전 요구 도입"
+      },
+      {
+        "version": "AIS-156:2020 (원본)",
+        "date": "2020-10-01",
+        "status": "previous",
+        "summary": "L 카테고리 (이륜·삼륜) EV 안전 요구 초판 발행. ⚠ 정확일 검증 필요"
+      }
+    ],
+    "created_at": "2026-05-20T00:00:00Z",
+    "updated_at": "2026-05-20T00:00:00Z"
+  },
+  {
+    "id": "reg-0009",
+    "name": "KMVSS 84 - 자동차 안전기준 (한국)",
+    "name_en": "KMVSS 84 - Korea Motor Vehicle Safety Standard",
+    "type": "law",
+    "part_ids": [
+      "hvac_ctrl",
+      "blower"
+    ],
+    "region_ids": [
+      "kr"
+    ],
+    "description": "국토교통부 자동차 안전기준. 실내 공기질, 환기, 김서림 방지 장치 등 공조 관련 요구사항. 시야 확보를 위한 디포그 성능 시험 의무.",
+    "caution": "디포그·디아이서 성능 시험 합격. 실내 자동 환기 모드 제공 권고.",
+    "effective_date": "",
+    "revision_date": "",
+    "source_url": "https://www.law.go.kr/LSW/lsEfInfoP.do?lsiSeq=137717",
+    "note": "「자동차 및 자동차부품의 성능과 기준에 관한 규칙」 국토교통부령. ⚠ 84조 신설·최근 개정일 검증 필요",
+    "created_at": "2026-05-20T00:00:00Z",
+    "updated_at": "2026-05-20T00:00:00Z"
+  },
+  {
+    "id": "reg-0010",
+    "name": "UNECE R10 - 전자파 적합성 (EMC)",
+    "name_en": "UNECE Regulation No.10 - Electromagnetic Compatibility",
+    "type": "regulation",
+    "part_ids": [
+      "hvac_ctrl",
+      "blower",
+      "compressor"
+    ],
+    "region_ids": [
+      "eu",
+      "kr",
+      "jp",
+      "ru"
+    ],
+    "description": "UN 산하 자동차 전자파 적합성 규제. 차량 탑재 전자제어장치(ECU) 및 모터의 EMC 시험. HVAC 컨트롤러, BLDC 블로워, 전동 컴프레서 등 적용.",
+    "caution": "방사 노이즈/방사 내성/전도 노이즈 시험 필수. 차량 형식 승인 조건.",
+    "effective_date": "2019-10-15",
+    "revision_date": "2022-10-08",
+    "source_url": "https://unece.org/transport/vehicle-regulations",
+    "note": "Revision 6 (2019-10-15) 기준. Supplement 2 Amd (2022-10-08). EU 및 협정국 형식 승인 필수. Revision 7 작업 중",
+    "history": [
+      {
+        "version": "Revision 7 (작업 중)",
+        "date": "",
+        "status": "draft",
+        "summary": "고전압 EV·자율주행 ECU의 EMC 요구 보강 (작업 중)"
+      },
+      {
+        "version": "Rev 6 Supplement 2",
+        "date": "2022-10-08",
+        "status": "current",
+        "summary": "Supplement 2 Amendment 발효. ECE/TRANS/WP.29/2022/33"
+      },
+      {
+        "version": "Rev 6 Supplement 1",
+        "date": "2020-09-25",
+        "status": "previous",
+        "summary": "Supplement 1 Amendment 발효. ECE/TRANS/WP.29/2020/30"
+      },
+      {
+        "version": "Revision 6",
+        "date": "2019-10-15",
+        "status": "previous",
+        "summary": "Revision 6 발행. 05 series 개정 통합"
+      },
+      {
+        "version": "Revision 5 / 04 series",
+        "date": "2014-07-09",
+        "status": "previous",
+        "summary": "전기 파워트레인·하이브리드 차량 EMC 요구 신설"
+      }
+    ],
+    "created_at": "2026-05-20T00:00:00Z",
+    "updated_at": "2026-05-20T00:00:00Z"
+  },
+  {
+    "id": "reg-0012",
+    "name": "GOST 33670 - 차량 안전 평가 (러시아)",
+    "name_en": "GOST 33670 - Vehicle Safety Assessment",
+    "type": "regulation",
+    "part_ids": [
+      "hvac_ctrl",
+      "evaporator",
+      "heater"
+    ],
+    "region_ids": [
+      "ru"
+    ],
+    "description": "러시아·EAEU 차량 안전 표준. 차량 인증 시 실내 환기, 난방, 김서림 방지 성능 평가. 한랭 환경(영하 30℃) 시동·난방 성능 시험 포함.",
+    "caution": "한랭 시동 시험(영하 25℃) 의무. PTC 히터 성능 영향 큼.",
+    "effective_date": "",
+    "revision_date": "",
+    "source_url": "",
+    "note": "EAEU(러·벨·카자) 공통 적용. ⚠ 발효일/개정일 검증 필요 GOST 공식 포털(gost.ru) 비공개·접속 제한. 본문은 rostekhregulirovaniye(RST.gov.ru) 또는 codeofchina/IHS 경유 입수",
+    "created_at": "2026-05-20T00:00:00Z",
+    "updated_at": "2026-05-20T00:00:00Z"
+  },
+  {
+    "id": "reg-0013",
+    "name": "INMETRO Portaria 31 - 브라질 차량 인증",
+    "name_en": "INMETRO Portaria 31 - Brazilian Vehicle Certification",
+    "type": "regulation",
+    "part_ids": [
+      "refrigerant"
+    ],
+    "region_ids": [
+      "br"
+    ],
+    "description": "브라질 국가계량품질기술원(INMETRO)의 차량 부품 인증. 자동차 에어컨 시스템 부품도 인증 대상. 라벨링·에너지 효율 등급 의무.",
+    "caution": "현지 인증 기관 시험 필수. 인증 마크 미부착 시 통관 불가.",
+    "effective_date": "",
+    "revision_date": "",
+    "source_url": "https://www.gov.br/inmetro",
+    "note": "Mercosur(메르코수르) 협정국 일부 인정. ⚠ Portaria 31 발효일·개정일·정확한 공식 URL 모두 검증 필요",
+    "created_at": "2026-05-20T00:00:00Z",
+    "updated_at": "2026-05-20T00:00:00Z"
+  },
+  {
+    "id": "reg-0014",
+    "name": "ISO 13043 - 차량 MAC 시스템 안전 요구사항",
+    "name_en": "ISO 13043 - Road vehicles — Refrigerant systems used in mobile air conditioning systems (MAC) — Safety requirements",
+    "type": "standard",
+    "part_ids": [
+      "refrigerant",
+      "safety",
+      "hvac_system",
+      "compressor",
+      "condenser",
+      "evaporator",
+      "txv",
+      "hose_pipe"
+    ],
+    "region_ids": [
+      "eu",
+      "us",
+      "kr",
+      "jp"
+    ],
+    "description": "승용차 MAC(모바일 에어컨) 시스템 냉매 회로의 안전 요구사항 국제 표준. R-134a / R-1234yf / R-744(CO2) 냉매 적용. 고압 안전(파편·유체 분출 방지), 누설 방지, 독성 물질·분해 산물 노출 방지를 위한 부품·시스템 설계 요구사항. OEM·aftermarket 부품 모두 대상.",
+    "caution": "히터·블로워·공기 분배 부품 등 냉매 회로와 무관한 HVAC 부품은 적용 제외. 신뢰성·내환경 시험은 별도 표준(ISO 16750 등)에서 다룸. ⚠ 누설 한계·압력 시험 배수 등 구체 수치는 표준 본문에서 직접 확인 필요.",
+    "effective_date": "2011-04-15",
+    "revision_date": "",
+    "source_url": "https://www.iso.org/standard/52449.html",
+    "note": "ISO 13043:2011 발행 (2011-04-15). OEM 사양서 기반 표준. 새 Working Draft 진행 중",
+    "created_at": "2026-05-20T00:00:00Z",
+    "updated_at": "2026-05-20T00:00:00Z"
+  },
+  {
+    "id": "reg-0015",
+    "name": "NOM-163-SEMARNAT (멕시코 CO2 배출)",
+    "name_en": "NOM-163-SEMARNAT-ENER-SCFI - Vehicle CO2 Emissions",
+    "type": "law",
+    "part_ids": [
+      "compressor",
+      "refrigerant"
+    ],
+    "region_ids": [
+      "mx"
+    ],
+    "description": "멕시코 신차 CO2 배출·연비 기준. 공조 시스템(특히 컴프레서·냉매)의 효율이 차량 연비에 미치는 영향 반영. 2025년 강화 예정.",
+    "caution": "연비·CO2 라벨 의무. 가변 용량 컴프레서, 저GWP 냉매 우대.",
+    "effective_date": "",
+    "revision_date": "",
+    "source_url": "https://www.gob.mx/semarnat",
+    "note": "미국·캐나다와 USMCA 협정 영향. ⚠ NOM-163-SEMARNAT-ENER-SCFI 발효일/개정일 검증 필요",
+    "created_at": "2026-05-20T00:00:00Z",
+    "updated_at": "2026-05-20T00:00:00Z"
+  },
+  {
+    "id": "reg-0016",
+    "name": "GMW3172 - GM 전기·전자 부품 일반 검증 사양",
+    "name_en": "GMW3172 - General Specification for Electrical/Electronic Component Analytical/Development/Validation",
+    "type": "oem",
+    "part_ids": [
+      "hvac_ctrl",
+      "blower",
+      "compressor",
+      "safety"
+    ],
+    "region_ids": [
+      "us",
+      "kr"
+    ],
+    "description": "General Motors의 전기·전자 부품 개발·검증 일반 사양. 환경(온도·습도·진동·EMC·먼지) 시험 조건, 전기적 시험, 기능 안전 등 종합 요구. HVAC 컨트롤러·블로워 BLDC·전동 컴프레서 등 차량 전장 부품에 광범위 적용.",
+    "caution": "GM 협력사 납품 시 필수. 시험 조건이 ISO 16750·LV 124보다 가혹한 항목 다수.",
+    "effective_date": "",
+    "revision_date": "",
+    "source_url": "",
+    "note": "OEM 자체 표준 (납품 시 강제). 최신 개정본은 GM Supplier Portal 접근 필요. ⚠ 정확한 개정일·세부 조항 검증 필요 GM Supplier Portal(gmsupplier.com → 현 gmsupplypower.com) 자격 필요. IHS Standards Manager 경유 입수 가능",
+    "created_at": "2026-05-27T00:00:00Z",
+    "updated_at": "2026-05-27T00:00:00Z"
+  },
+  {
+    "id": "reg-0017",
+    "name": "현대·기아 ES 95400 시리즈 - 자동차 공조 사양",
+    "name_en": "Hyundai/Kia Engineering Standard ES 95400 - HVAC System Specifications",
+    "type": "oem",
+    "part_ids": [
+      "hvac_system",
+      "compressor",
+      "evaporator",
+      "blower",
+      "hvac_ctrl"
+    ],
+    "region_ids": [
+      "kr"
+    ],
+    "description": "현대자동차·기아 Engineering Standard. HVAC 시스템·부품의 성능·내구·시험 방법 사양. ES 95400 계열(공조 시스템), ES 95401(컴프레서), ES 95410(콘덴서), ES 95420(에바포레이터) 등 세부 표준 다수.",
+    "caution": "현대·기아 1차 협력사 납품 필수. 차종(승용·SUV·EV)별 적용 ES 번호 상이.",
+    "effective_date": "",
+    "revision_date": "",
+    "source_url": "",
+    "note": "OEM 자체 표준 (납품 시 강제). ⚠ 정확한 ES 번호·개정일은 현대 협력사 포털 확인 필요 현대·기아 협력사 포털(hkmc-suppliers.com) 자격 필요. ES 번호별 본문 비공개",
+    "created_at": "2026-05-27T00:00:00Z",
+    "updated_at": "2026-05-27T00:00:00Z"
+  },
+  {
+    "id": "reg-0018",
+    "name": "VW TL 시리즈 - 폭스바겐 부품 시험 사양",
+    "name_en": "VW TL Series - Volkswagen Technische Lieferbedingungen (Technical Supply Conditions)",
+    "type": "oem",
+    "part_ids": [
+      "hvac_ctrl",
+      "blower",
+      "coolant_module"
+    ],
+    "region_ids": [
+      "eu"
+    ],
+    "description": "Volkswagen Group(VW·Audi·Porsche·Skoda 등) 부품 납품용 기술 사양. TL 82066(쿨런트), TL 226(HVAC 시험), VW 80000(LV 124 기반 전장 시험) 등. PV(Prüfvorschrift, 시험 사양) 시리즈와 짝.",
+    "caution": "VW Group 협력사 납품 필수. LV 124(독일 OEM 공통)보다 엄격한 항목 다수.",
+    "effective_date": "",
+    "revision_date": "",
+    "source_url": "https://www.volkswagengroupsupply.com/",
+    "note": "OEM 자체 표준. ⚠ TL 번호별 정확한 개정일은 VW One Group Supplier Platform 확인 필요",
+    "created_at": "2026-05-27T00:00:00Z",
+    "updated_at": "2026-05-27T00:00:00Z"
+  },
+  {
+    "id": "reg-0019",
+    "name": "Ford WSS-M / ES - 포드 공조·재료 사양",
+    "name_en": "Ford WSS-M / Engineering Specification - HVAC & Material Specifications",
+    "type": "oem",
+    "part_ids": [
+      "hvac_system",
+      "evaporator",
+      "blower",
+      "coolant_module"
+    ],
+    "region_ids": [
+      "us"
+    ],
+    "description": "Ford Worldwide Sustainability Specifications (WSS-M) 및 Engineering Specifications. HVAC 시스템·부품·재료 사양과 시험 방법. CETP(Corporate Engineering Test Procedure) 시리즈로 시험 절차 명시.",
+    "caution": "Ford 협력사 납품 필수. 재료의 친환경 요구(REACH·재활용성)도 포함.",
+    "effective_date": "",
+    "revision_date": "",
+    "source_url": "",
+    "note": "OEM 자체 표준. ⚠ WSS-M / CETP 번호별 정확한 개정일 검증 필요 Ford Supplier Portal(fordsupplier.com → 현 covisint.ford.com) 자격 필요. CETP/WSS-M 본문 비공개",
+    "created_at": "2026-05-27T00:00:00Z",
+    "updated_at": "2026-05-27T00:00:00Z"
+  },
+  {
+    "id": "reg-0020",
+    "name": "Toyota TSC - 토요타 부품 사양 표준",
+    "name_en": "Toyota Technical Standard (TSC) - Component & Material Specifications",
+    "type": "oem",
+    "part_ids": [
+      "hvac_system",
+      "evaporator",
+      "hvac_ctrl"
+    ],
+    "region_ids": [
+      "jp"
+    ],
+    "description": "Toyota 자체 부품·재료 사양 표준. HVAC 시스템 신뢰성·내구·환경 시험 요구. DENSO·Sanden 등 일본 공조 공급사가 Toyota 사양에 맞춰 제품 개발.",
+    "caution": "Toyota 1차 협력사 납품 필수. JIS 기반이지만 시험 조건 일부 가혹.",
+    "effective_date": "",
+    "revision_date": "",
+    "source_url": "",
+    "note": "OEM 자체 표준. ⚠ TSC 번호 체계·개정일 공개 제한 Toyota Supplier Portal(toyotasupplier.com) 자격 필요. TSC 번호 체계·본문 비공개",
+    "created_at": "2026-05-27T00:00:00Z",
+    "updated_at": "2026-05-27T00:00:00Z"
+  },
+  {
+    "id": "reg-0022",
+    "name": "GMW17583 - GM 부품 사양 (HVAC 관련 추정)",
+    "name_en": "GMW17583 - GM Worldwide Engineering Standard",
+    "type": "oem",
+    "part_ids": [
+      "hvac_system",
+      "hvac_ctrl",
+      "blower"
+    ],
+    "region_ids": [
+      "us",
+      "kr"
+    ],
+    "description": "General Motors Worldwide Engineering Standard. GM 협력사 납품용 부품·시스템 사양. ⚠ 표준 본문은 GM Restricted/Confidential 분류로 공개 정보로는 정확한 scope 확인 불가. 일반적으로 GMW1xxxx 대역은 부품·재료·시험 절차 사양에 사용됨.",
+    "caution": "GM Supplier Portal 접근 권한 필요. 정확한 적용 범위는 GM 담당자 또는 IHS Standards Manager Web을 통해서만 확인 가능.",
+    "effective_date": "",
+    "revision_date": "",
+    "source_url": "",
+    "note": "⚠ GMW17583 표준 본문 비공개. scope·개정일·구체 요구사항은 사용자 추가 정보 필요 GM Supplier Portal 자격 필요. GMW17583 본문 비공개",
+    "created_at": "2026-05-27T00:00:00Z",
+    "updated_at": "2026-05-27T00:00:00Z"
+  },
+  {
+    "id": "reg-0021",
+    "name": "BMW GS - BMW 그룹 부품 표준",
+    "name_en": "BMW Group Standard (GS) - Component Specifications",
+    "type": "oem",
+    "part_ids": [
+      "hvac_ctrl",
+      "blower",
+      "coolant_module"
+    ],
+    "region_ids": [
+      "eu"
+    ],
+    "description": "BMW Group Standard. HVAC·열관리 부품 사양. GS 95024(전장 환경 시험, LV 124 기반), GS 93008(차량 내 EMC) 등 다수.",
+    "caution": "BMW Group 협력사 납품 필수. EV/PHEV 열관리 시스템 요구 강화 중.",
+    "effective_date": "",
+    "revision_date": "",
+    "source_url": "https://b2b.bmwgroup.com/",
+    "note": "OEM 자체 표준. ⚠ GS 번호별 정확한 개정일 검증 필요",
+    "created_at": "2026-05-27T00:00:00Z",
+    "updated_at": "2026-05-27T00:00:00Z"
+  },
+  {
+    "id": "reg-0023",
+    "name": "SAE J2727 - MAC 시스템 냉매 누설 시험",
+    "name_en": "SAE J2727 - HFC-134a Mobile Air Conditioning System Refrigerant Leakage",
+    "type": "standard",
+    "part_ids": [
+      "refrigerant",
+      "hvac_system",
+      "hose_pipe",
+      "condenser",
+      "evaporator"
+    ],
+    "region_ids": [
+      "us",
+      "eu",
+      "kr",
+      "jp"
+    ],
+    "description": "모바일 에어컨(MAC) 시스템의 냉매 누설량 측정 시험 방법. SHED(Sealed Housing for Evaporative Determination) 챔버에서 시스템 전체 누설량을 g/year 단위로 평가. EPA SNAP Credit 및 EU MAC Directive 형식 승인의 실측 근거로 사용된다.",
+    "caution": "누설 한계 권고 ≤ 5 g/year (industry best practice). 차량 단위(SHED) 시험과 부품 단위(hose/연결부) 시험을 구분해서 적용.",
+    "effective_date": "2004-09-01",
+    "revision_date": "2023-09-01",
+    "source_url": "https://www.sae.org/standards/content/j2727_202309/",
+    "note": "SAE J2727 (2004) → J2727_201210 → J2727_202309 개정",
+    "history": [
+      {
+        "version": "J2727_202309",
+        "date": "2023-09-01",
+        "status": "current",
+        "summary": "최신 개정. SHED 시험 절차 및 데이터 해석 명확화"
+      },
+      {
+        "version": "J2727_201210",
+        "date": "2012-10-01",
+        "status": "previous",
+        "summary": "R-1234yf 적용 가능하도록 적용 범위 확장"
+      },
+      {
+        "version": "J2727",
+        "date": "2004-09-01",
+        "status": "previous",
+        "summary": "초판. MAC 시스템 누설 시험 절차 정립"
+      }
+    ],
+    "created_at": "2026-06-01T00:00:00Z",
+    "updated_at": "2026-06-01T00:00:00Z"
+  },
+  {
+    "id": "reg-0024",
+    "name": "SAE J2842 - HFO-1234yf 냉매 식별 표준",
+    "name_en": "SAE J2842 - HFO-1234yf Refrigerant Identification",
+    "type": "standard",
+    "part_ids": [
+      "refrigerant"
+    ],
+    "region_ids": [
+      "us",
+      "eu",
+      "kr",
+      "jp"
+    ],
+    "description": "HFO-1234yf 냉매 식별 표준. 차량 라벨링 위치·내용, 서비스 포트 규격·색상 코드, 식별 방법 규정. R-134a 시스템과 물리적/화학적 호환 불가하므로 식별 표시 필수.",
+    "caution": "신차 라벨링 위치·내용 준수. 서비스 포트 색상 코드(R-1234yf = 그레이) 적용. R-134a 시스템에 혼유 시 컴프레서·시스템 손상.",
+    "effective_date": "2010-04-01",
+    "revision_date": "2020-08-01",
+    "source_url": "https://www.sae.org/standards/content/j2842_202008/",
+    "note": "MAC 산업 R-1234yf 전환을 위한 식별·라벨링 기반 표준",
+    "created_at": "2026-06-01T00:00:00Z",
+    "updated_at": "2026-06-01T00:00:00Z"
+  },
+  {
+    "id": "reg-0025",
+    "name": "SAE J2843 - R-1234yf 회수·재생 장비 표준",
+    "name_en": "SAE J2843 - R-1234yf Recovery/Recycling Equipment for MAC",
+    "type": "standard",
+    "part_ids": [
+      "refrigerant",
+      "safety"
+    ],
+    "region_ids": [
+      "us",
+      "eu",
+      "kr",
+      "jp"
+    ],
+    "description": "R-1234yf 냉매 회수/재생/충전 장비의 성능·안전 표준. 회수율, 정화 수준, 누설 감지, A2L 가연성 안전 요구를 규정. R-1234yf는 A2L 등급 가연성 냉매라 일반 R-134a 장비와 분리 운용 필수.",
+    "caution": "A2L 가연성 — 작업 공간 환기, 점화원 차단, 누설 감지기 필수. 작업자 자격 인증(SAE J2845) 연계.",
+    "effective_date": "2010-12-01",
+    "revision_date": "2022-04-01",
+    "source_url": "https://www.sae.org/standards/content/j2843_202204/",
+    "note": "EPA Rule 21 (2021) 에서 MVAC 서비스 장비 표준으로 채택",
+    "created_at": "2026-06-01T00:00:00Z",
+    "updated_at": "2026-06-01T00:00:00Z"
+  },
+  {
+    "id": "reg-0026",
+    "name": "AIM Act - 미국 HFC 단계적 감축법",
+    "name_en": "American Innovation and Manufacturing Act (AIM Act)",
+    "type": "law",
+    "part_ids": [
+      "refrigerant"
+    ],
+    "region_ids": [
+      "us"
+    ],
+    "description": "2020년 미국 의회 통과. HFC(R-134a 포함)를 2036년까지 85% 단계적 감축. EPA 가 HFC Allowance Program 시행 규칙을 발표. MAC 산업에 직접 영향: R-1234yf, R-744(CO2), R-290 등 저GWP 냉매 전환을 가속.",
+    "caution": "2025년부터 신차 MAC 시스템에 R-134a 신규 사용 제한(Phasedown Rule). 위반 시 제조사·수입사 과징금.",
+    "effective_date": "2020-12-27",
+    "revision_date": "2023-10-05",
+    "source_url": "https://www.epa.gov/climate-hfcs-reduction/aim-act",
+    "note": "EPA 시행 규칙은 Phase 1(2021) → Phase 2(2023) → 추가 Phase 진행 중",
+    "history": [
+      {
+        "version": "Final Rule Phase 2",
+        "date": "2023-10-05",
+        "status": "current",
+        "summary": "특정 sector(MAC/냉장 등)별 HFC 사용 제한 강화. R-134a 신차 MAC 단계적 금지 일정 확정"
+      },
+      {
+        "version": "Initial Phasedown Rule",
+        "date": "2021-10-05",
+        "status": "previous",
+        "summary": "HFC 생산·수입 baseline 설정, allowance allocation 시작"
+      },
+      {
+        "version": "AIM Act 통과",
+        "date": "2020-12-27",
+        "status": "previous",
+        "summary": "Consolidated Appropriations Act 일부로 통과. HFC 2036년까지 85% 감축 목표 설정"
+      }
+    ],
+    "created_at": "2026-06-01T00:00:00Z",
+    "updated_at": "2026-06-01T00:00:00Z"
+  },
+  {
+    "id": "reg-0027",
+    "name": "CARB - 캘리포니아 자동차 냉매 규제",
+    "name_en": "CARB Mobile Air Conditioning Refrigerant Regulation",
+    "type": "regulation",
+    "part_ids": [
+      "refrigerant",
+      "hvac_system"
+    ],
+    "region_ids": [
+      "us"
+    ],
+    "description": "캘리포니아 대기자원위원회(CARB) 자동차 에어컨 냉매 규제. 신차 MAC 시스템 GWP 한도, 누설량 신고 의무, 서비스 시 회수 의무. 미국 내에서 가장 먼저 R-1234yf 도입 의무화. EPA SNAP 보다 엄격.",
+    "caution": "캘리포니아 판매 신차는 별도 인증 필요. CARB 인증이 미국 17개 주(Section 177 states) 에 영향.",
+    "effective_date": "2009-01-01",
+    "revision_date": "2023-11-01",
+    "source_url": "https://ww2.arb.ca.gov/our-work/programs/refrigerant-management-program",
+    "note": "Advanced Clean Cars II (2022) 및 후속 개정으로 강화 진행 중",
+    "created_at": "2026-06-01T00:00:00Z",
+    "updated_at": "2026-06-01T00:00:00Z"
+  },
+  {
+    "id": "reg-0028",
+    "name": "EU F-gas Regulation - 불소화 온실가스 규제",
+    "name_en": "EU F-gas Regulation 517/2014 (Revision 2024/573)",
+    "type": "law",
+    "part_ids": [
+      "refrigerant"
+    ],
+    "region_ids": [
+      "eu"
+    ],
+    "description": "EU 불소화 온실가스(F-gas) 규제. 자동차 에어컨 냉매 R-134a(GWP 1430)를 신차에 단계적 금지(MAC Directive 와 연계). 2024년 개정(2024/573)으로 HFC 단계적 감축 가속 및 2050년까지 사실상 phase-out.",
+    "caution": "F-gas 등록·라벨·누설 점검 의무. 위반 시 회원국별 과징금. 자동차 분야 외에 산업·상업 냉장도 포함.",
+    "effective_date": "2015-01-01",
+    "revision_date": "2024-03-11",
+    "source_url": "https://eur-lex.europa.eu/eli/reg/2024/573/oj",
+    "note": "Regulation (EU) 2024/573 가 517/2014 를 대체",
+    "history": [
+      {
+        "version": "Regulation 2024/573",
+        "date": "2024-03-11",
+        "status": "current",
+        "summary": "HFC 단계적 감축 가속 및 2050년 사실상 phase-out 목표 신설"
+      },
+      {
+        "version": "Regulation 517/2014",
+        "date": "2015-01-01",
+        "status": "previous",
+        "summary": "Regulation 842/2006 대체. 자동차 MAC R-134a phase-out 일정 확정"
+      },
+      {
+        "version": "Regulation 842/2006",
+        "date": "2006-07-04",
+        "status": "previous",
+        "summary": "EU F-gas 규제 초판. 누설 점검·자격 인증·라벨링 의무 도입"
+      }
+    ],
+    "created_at": "2026-06-01T00:00:00Z",
+    "updated_at": "2026-06-01T00:00:00Z"
+  },
+  {
+    "id": "reg-0029",
+    "name": "GB/T 26920 - 중국 자동차 공조 시스템 표준",
+    "name_en": "GB/T 26920 - Performance Requirements for Vehicle Air Conditioning System",
+    "type": "standard",
+    "part_ids": [
+      "hvac_system",
+      "compressor",
+      "refrigerant",
+      "evaporator",
+      "condenser"
+    ],
+    "region_ids": [
+      "cn"
+    ],
+    "description": "중국 국가 권장 표준(T = 권장). 자동차 공조 시스템 성능·시험 방법 규정. 냉방 능력, 에너지 효율, 소음, 응답성, 신뢰성 시험 포함. 국가 강제 표준은 아니나 OEM 이 사실상 채택.",
+    "caution": "중국 시장 진입 신차 OEM 사양으로 준수 권장. GB 강제표준(GB 38031 등) 과 연계 적용.",
+    "effective_date": "2011-12-30",
+    "revision_date": "",
+    "source_url": "https://openstd.samr.gov.cn/bzgk/gb/",
+    "note": "⚠ 최신 개정 여부 SAMR 포털에서 검증 필요",
+    "created_at": "2026-06-01T00:00:00Z",
+    "updated_at": "2026-06-01T00:00:00Z"
+  },
+  {
+    "id": "reg-0030",
+    "name": "KS R 0078 - 자동차 에어컨디셔너 시험 방법",
+    "name_en": "KS R 0078 - Method of Testing Automotive Air Conditioners",
+    "type": "standard",
+    "part_ids": [
+      "hvac_system",
+      "compressor",
+      "evaporator"
+    ],
+    "region_ids": [
+      "kr"
+    ],
+    "description": "한국산업표준(KS). 자동차 에어컨디셔너의 냉방 능력, 소음, 응답성, 누설량 시험 방법 규정. 국내 OEM(현대·기아) 및 1차 협력사 표준 기반.",
+    "caution": "KS 자율 표준이나 국내 OEM 사양과 연계 적용. ES 95400 시리즈와 일부 시험 조건 공유.",
+    "effective_date": "1991-05-25",
+    "revision_date": "2017-12-31",
+    "source_url": "https://e-ks.kr/",
+    "note": "KS표준정보망(e-ks.kr) 에서 본문 확인",
+    "created_at": "2026-06-01T00:00:00Z",
+    "updated_at": "2026-06-01T00:00:00Z"
+  },
+  {
+    "id": "reg-0031",
+    "name": "JASO M 309 - 자동차용 냉매 호스 표준",
+    "name_en": "JASO M 309 - Automobile Refrigerant Hoses",
+    "type": "standard",
+    "part_ids": [
+      "hose_pipe",
+      "refrigerant"
+    ],
+    "region_ids": [
+      "jp"
+    ],
+    "description": "일본자동차기술회(JASO) 표준. 자동차 에어컨 냉매 호스(R-134a/R-1234yf)의 누설, 압력, 진동, 내환경 시험 규정. 일본 OEM(Toyota, Honda, Nissan) 자체 사양 기반.",
+    "caution": "일본계 OEM 1차 협력사 납품 필수. SAE J2064 와 시험 조건 일부 호환.",
+    "effective_date": "1992-01-01",
+    "revision_date": "2021-04-01",
+    "source_url": "https://www.jsae.or.jp/01info/jaso/",
+    "note": "JSAE 회원 포털에서 본문 입수",
+    "created_at": "2026-06-01T00:00:00Z",
+    "updated_at": "2026-06-01T00:00:00Z"
+  },
+  {
+    "id": "reg-0032",
+    "name": "ISO 16750 - 자동차 전기·전자 환경 조건·시험",
+    "name_en": "ISO 16750 - Environmental conditions and testing for automotive electrical and electronic equipment",
+    "type": "standard",
+    "part_ids": [
+      "hvac_ctrl",
+      "blower",
+      "compressor"
+    ],
+    "region_ids": [
+      "us",
+      "eu",
+      "kr",
+      "jp"
+    ],
+    "description": "자동차 탑재 전기·전자 부품의 환경 조건(온도·습도·진동·전압·EMC)과 시험 방법 국제 표준. ISO 16750-1~5 시리즈로 구분(기능·전기·기계·기후·화학). HVAC 컨트롤러·전동 컴프레서·블로워 BLDC 등 차량 전장 부품 사실상 모든 영역에 적용.",
+    "caution": "OEM 자체 표준(LV 124, GMW3172 등)이 ISO 16750 을 기반으로 더 가혹한 조건을 추가.",
+    "effective_date": "2003-04-01",
+    "revision_date": "2023-05-01",
+    "source_url": "https://www.iso.org/standard/79615.html",
+    "note": "Part 별 개정 시점이 다름. Part 2/4 가 가장 최근 갱신",
+    "history": [
+      {
+        "version": "Part 4 (climatic) Rev",
+        "date": "2023-05-01",
+        "status": "current",
+        "summary": "기후 시험(온도·습도·태양광·먼지) 절차 갱신"
+      },
+      {
+        "version": "Part 2 (electric) Rev",
+        "date": "2022-04-01",
+        "status": "previous",
+        "summary": "전기적 시험(전원·과전압·서지) 절차 정비. 48V 전장 대응"
+      },
+      {
+        "version": "Part 3 (mechanical)",
+        "date": "2012-12-01",
+        "status": "previous",
+        "summary": "기계적 시험(진동·충격·자유낙하) 강화"
+      },
+      {
+        "version": "ISO 16750-1 초판",
+        "date": "2003-04-01",
+        "status": "previous",
+        "summary": "Part 1(General) 초판 발행"
+      }
+    ],
+    "created_at": "2026-06-01T00:00:00Z",
+    "updated_at": "2026-06-01T00:00:00Z"
+  },
+  {
+    "id": "reg-0033",
+    "name": "UNECE R100 - 전기 파워트레인 차량 안전 규제",
+    "name_en": "UNECE Regulation No.100 - Electric Power Train Vehicle Safety",
+    "type": "regulation",
+    "part_ids": [
+      "refrigerant",
+      "safety",
+      "hvac_system",
+      "compressor"
+    ],
+    "region_ids": [
+      "eu",
+      "kr",
+      "jp",
+      "ru"
+    ],
+    "description": "UN 산하 전기차 안전 규제. 배터리 충돌·열폭주·절연·열관리 안전 요구. 자동차 공조 시스템이 배터리 열관리(쿨링 플레이트, 전동 컴프레서, R-1234yf 또는 R-744 직접 냉각)에 통합되므로 적용 대상.",
+    "caution": "차량 형식 승인(WP.29) 필수. 02 series 이후 배터리 열관리(공조 연동) 요구 강화. EU·한국·일본은 R100 채택, 미국은 FMVSS 305 별도.",
+    "effective_date": "2013-12-04",
+    "revision_date": "2022-09-28",
+    "source_url": "https://unece.org/transport/vehicle-regulations-wp29/standards/addenda-1958-agreement-regulations-101-120",
+    "note": "Rev 2 (02 series) 가 EV 안전 강화의 핵심 개정",
+    "history": [
+      {
+        "version": "02 series Supplement",
+        "date": "2022-09-28",
+        "status": "current",
+        "summary": "열폭주 경고·전파 시간, 충돌 후 전기 안전 강화"
+      },
+      {
+        "version": "Revision 02 series",
+        "date": "2016-01-26",
+        "status": "previous",
+        "summary": "배터리 열관리·열폭주 시험 도입"
+      },
+      {
+        "version": "Revision 01",
+        "date": "2013-12-04",
+        "status": "previous",
+        "summary": "초판 강제 적용. 절연 저항·과전류 보호 요구"
+      }
+    ],
+    "created_at": "2026-06-01T00:00:00Z",
+    "updated_at": "2026-06-01T00:00:00Z"
+  },
+  {
+    "id": "reg-0034",
+    "name": "AEC-Q100 - 자동차 IC 신뢰성 시험",
+    "name_en": "AEC-Q100 - Stress Test Qualification for Integrated Circuits",
+    "type": "standard",
+    "part_ids": [
+      "hvac_ctrl"
+    ],
+    "region_ids": [
+      "us",
+      "eu",
+      "kr",
+      "jp"
+    ],
+    "description": "AEC(Automotive Electronics Council) 자동차용 집적회로 신뢰성 시험 규격. HVAC 컨트롤러 ECU 의 마이크로컨트롤러·전력 IC·센서 IC 등에 적용. 등급 0~3(사용 온도 범위)으로 구분.",
+    "caution": "차량용 IC는 등급 1(-40~125℃) 이상 의무. 등급 0(-40~150℃) 은 엔진룸·언더후드 모듈에 적용. AEC-Q101(개별소자)·Q200(passive)·Q104(MCM) 와 시리즈.",
+    "effective_date": "1994-07-01",
+    "revision_date": "2014-09-11",
+    "source_url": "https://www.aecouncil.com/AECDocuments.html",
+    "note": "Rev H (2014-09-11) 가 현재 본문. 차세대 Rev I 개정 작업 중",
+    "created_at": "2026-06-01T00:00:00Z",
+    "updated_at": "2026-06-01T00:00:00Z"
+  },
+  {
+    "id": "reg-0035",
+    "name": "EN 378 - 냉동 시스템 안전·환경 요구사항",
+    "name_en": "EN 378 - Refrigerating systems and heat pumps - Safety and environmental requirements",
+    "type": "standard",
+    "part_ids": [
+      "refrigerant",
+      "hvac_system",
+      "safety",
+      "compressor"
+    ],
+    "region_ids": [
+      "eu"
+    ],
+    "description": "유럽 냉동·열펌프 시스템 안전·환경 표준. EN 378-1(기본 분류) / -2(설계·제작) / -3(설치·인적 보호) / -4(운용·유지) 시리즈. 자동차 MAC 시스템에 가연성 냉매(A2L: R-1234yf, A3: R-290) 사용 시 위험 평가 근거.",
+    "caution": "R-1234yf 등 A2L 냉매 적용 시 EN 378-3 위험 평가 필수. 충전량 한도(차종별)·환기·점화원 차단 요구.",
+    "effective_date": "2008-09-01",
+    "revision_date": "2016-10-01",
+    "source_url": "https://www.cen.eu/work/areas/HVAC/Pages/default.aspx",
+    "note": "EN 378:2016 + A1:2020 (개정) 가 현행. 자동차 MAC 에는 부분 적용",
+    "created_at": "2026-06-01T00:00:00Z",
+    "updated_at": "2026-06-01T00:00:00Z"
+  },
+  {
+    "id": "reg-0036",
+    "name": "SAE J2064 - 자동차 R-134a/R-1234yf 냉매 호스",
+    "name_en": "SAE J2064 - R-134a / R-1234yf Refrigerant Automotive Hose",
+    "type": "standard",
+    "part_ids": [
+      "hose_pipe",
+      "refrigerant"
+    ],
+    "region_ids": [
+      "us",
+      "eu",
+      "kr",
+      "jp"
+    ],
+    "description": "자동차 에어컨 냉매 호스의 누설·압력·진동·내환경 성능 시험 표준. R-134a / R-1234yf 호환. 글로벌 호스 제조사(Hutchinson, Continental, Eaton, DENSO Hose 등) 사실상 채택.",
+    "caution": "누설 한계 < 14 g/year (Class A). 시험 후 외관·인장 강도·기능 정상 확인.",
+    "effective_date": "1993-01-01",
+    "revision_date": "2024-04-01",
+    "source_url": "https://www.sae.org/standards/content/j2064_202404/",
+    "note": "J2064_202404 이 R-1234yf 가속 노화·permeation 시험 추가",
+    "created_at": "2026-06-01T00:00:00Z",
+    "updated_at": "2026-06-01T00:00:00Z"
+  },
+  {
+    "id": "reg-0037",
+    "name": "SAE J2845 - HFO-1234yf 정비 작업자 자격",
+    "name_en": "SAE J2845 - Technician Training and Certification for HFO-1234yf",
+    "type": "standard",
+    "part_ids": [
+      "refrigerant",
+      "safety"
+    ],
+    "region_ids": [
+      "us",
+      "eu",
+      "kr",
+      "jp"
+    ],
+    "description": "R-1234yf MAC 시스템 정비 작업자 교육·자격 인증 표준. 가연성(A2L) 냉매 취급 안전, 회수·재생·충전 절차, 누설 점검·식별 절차 포함.",
+    "caution": "EPA Section 609 자격 + J2845 인증을 통합한 형태로 운영. 작업자 미인증 시 R-1234yf MAC 시스템 정비 불가.",
+    "effective_date": "2010-09-01",
+    "revision_date": "2021-08-01",
+    "source_url": "https://www.sae.org/standards/content/j2845_202108/",
+    "note": "EPA Section 608/609 통합 인증으로 시장 정착",
+    "created_at": "2026-06-01T00:00:00Z",
+    "updated_at": "2026-06-01T00:00:00Z"
+  },
+  {
+    "id": "reg-0038",
+    "name": "REACH 규제 (EC 1907/2006) - EU 화학물질 등록·평가·인증·규제",
+    "name_en": "REACH - Registration, Evaluation, Authorisation and Restriction of Chemicals",
+    "type": "law",
+    "part_ids": ["oil", "refrigerant", "hose_pipe", "hvac_system"],
+    "region_ids": ["eu"],
+    "description": "EU 화학물질 등록·평가·인증·제한 규제. 자동차 공조 시스템의 PAG/POE 윤활유, R-1234yf 분해 산물(TFA·HF), 호스·O링 고무, 가스켓 등 모든 화학물질이 적용 대상. 연 1톤 이상 제조·수입 화학물질은 ECHA에 등록 의무. SVHC(Substances of Very High Concern) 후보 물질 정기 갱신.",
+    "caution": "EU 시장 진입 시 공조 부품에 사용된 화학물질·첨가제의 REACH 등록 증빙 필수. SVHC 0.1 wt% 초과 시 공급망 통보·소비자 정보 제공 의무. 위반 시 회원국별 과징금 + 시장 출하 정지.",
+    "effective_date": "2007-06-01",
+    "revision_date": "2024-04-25",
+    "source_url": "https://eur-lex.europa.eu/eli/reg/2006/1907/oj",
+    "note": "PAG 오일·고무 가소제 등 자동차 공조 부품의 잔여 화학물질 전반에 영향. Annex XVII 제한 목록·SVHC 후보 목록 정기 모니터링 필요",
+    "history": [
+      { "version": "Annex XVII 개정 2024",  "date": "2024-04-25", "status": "current",  "summary": "PFAS 광범위 제한 확장 (자동차 윤활유·실링재 첨가제 일부 포함)" },
+      { "version": "SVHC 후보 추가",        "date": "2023-06-14", "status": "previous", "summary": "SVHC 후보 목록 240여 종으로 확대. 공조 부품 PVC·고무 가소제 일부 포함" },
+      { "version": "REACH 초판 발효",       "date": "2007-06-01", "status": "previous", "summary": "Regulation (EC) No 1907/2006 발효. EU 화학물질 등록·평가 의무 도입" }
+    ],
+    "created_at": "2026-06-01T00:00:00Z",
+    "updated_at": "2026-06-01T00:00:00Z"
+  },
+  {
+    "id": "reg-0039",
+    "name": "CLP 규제 (EC 1272/2008) - 화학물질 분류·라벨링·포장",
+    "name_en": "CLP Regulation - Classification, Labelling and Packaging (GHS in EU)",
+    "type": "regulation",
+    "part_ids": ["oil", "refrigerant"],
+    "region_ids": ["eu"],
+    "description": "EU 화학물질 분류·라벨링·포장 규제. GHS(Globally Harmonized System)를 EU 법규화. 자동차 공조 PAG/POE 오일, R-1234yf(가연성 A2L) 등의 위험 분류·픽토그램·MSDS 양식 통일. CLP Annex VI 에 분류된 물질은 강제 분류.",
+    "caution": "PAG 오일 MSDS·라벨 양식 CLP 준수 필수. R-1234yf 가연성 픽토그램 (GHS02 화염) 의무. 위반 시 시장 출하·운송 정지.",
+    "effective_date": "2009-01-20",
+    "revision_date": "2024-03-20",
+    "source_url": "https://eur-lex.europa.eu/eli/reg/2008/1272/oj",
+    "note": "REACH 와 짝을 이루는 EU 화학물질 핵심 규제. ATP(Adaptation to Technical Progress) 정기 개정으로 분류 갱신",
+    "created_at": "2026-06-01T00:00:00Z",
+    "updated_at": "2026-06-01T00:00:00Z"
+  },
+  {
+    "id": "reg-0040",
+    "name": "K-REACH (화학물질의 등록 및 평가 등에 관한 법률)",
+    "name_en": "K-REACH - Act on Registration and Evaluation of Chemicals",
+    "type": "law",
+    "part_ids": ["oil", "refrigerant", "hose_pipe", "hvac_system"],
+    "region_ids": ["kr"],
+    "description": "한국판 REACH 법률. 환경부 소관. 연 1톤 이상 제조·수입 화학물질의 등록 의무, 유해성 평가·위해성 평가, 허가·제한 물질 지정. 자동차 공조 PAG 오일, 냉매, 호스 고무 가소제·접착제 등 모든 화학물질에 적용.",
+    "caution": "기존 화학물질도 톤수별 등록 시한 도래(1톤 이상은 2030-12-31). 미등록 시 제조·수입 금지. 신규 화학물질은 100kg 이상 시 별도 신고 의무.",
+    "effective_date": "2015-01-01",
+    "revision_date": "2024-08-07",
+    "source_url": "https://kreach.me.go.kr/",
+    "note": "「화학물질의 등록 및 평가 등에 관한 법률」 (법률 제15511호) + 시행령·시행규칙",
+    "history": [
+      { "version": "K-REACH 개정 2024",   "date": "2024-08-07", "status": "current",  "summary": "기존 화학물질 등록 시한 명확화, 안전성 정보 보고 의무 강화" },
+      { "version": "전부 개정 시행",       "date": "2019-01-01", "status": "previous", "summary": "기존 화학물질 등록 대상 확대(연 1톤 이상 전부). 등록 톤수별 단계적 시한 도입" },
+      { "version": "K-REACH 초판 발효",    "date": "2015-01-01", "status": "previous", "summary": "한국 REACH 법률 초판 시행" }
+    ],
+    "created_at": "2026-06-01T00:00:00Z",
+    "updated_at": "2026-06-01T00:00:00Z"
+  },
+  {
+    "id": "reg-0041",
+    "name": "TSCA - 미국 독성물질 관리법",
+    "name_en": "Toxic Substances Control Act (TSCA)",
+    "type": "law",
+    "part_ids": ["oil", "refrigerant"],
+    "region_ids": ["us"],
+    "description": "미국 EPA 가 집행하는 독성물질 관리법. 자동차 공조 PAG/POE 오일, 윤활유 첨가제, 냉매 분해 산물(TFA 등) 의 제조·수입·사용에 영향. 2016년 Lautenberg 개정으로 EPA 권한 강화 — 기존 화학물질도 위해성 평가 후 제한 가능.",
+    "caution": "미국 수출 자동차 부품에 사용된 화학물질의 TSCA 인벤토리(Active TSCA Inventory) 등재 필수. PFAS 류·HFC 류 단계적 사용 제한 진행 중.",
+    "effective_date": "1976-10-11",
+    "revision_date": "2024-04-19",
+    "source_url": "https://www.epa.gov/laws-regulations/summary-toxic-substances-control-act",
+    "note": "Lautenberg Chemical Safety Act (2016) 로 대폭 강화. 자동차 공조 윤활유 첨가제·가소제 중 일부 위해성 평가 진행",
+    "created_at": "2026-06-01T00:00:00Z",
+    "updated_at": "2026-06-01T00:00:00Z"
+  },
+  {
+    "id": "reg-0042",
+    "name": "SAE J2670 - MAC 윤활유 안정성·호환성 시험",
+    "name_en": "SAE J2670 - Stability and Compatibility Criteria for Additives and Flushing Materials Intended for Use in Vehicle MAC Systems",
+    "type": "standard",
+    "part_ids": ["oil", "compressor", "refrigerant"],
+    "region_ids": ["us", "eu", "kr", "jp"],
+    "description": "자동차 에어컨(MAC) 시스템의 윤활유·첨가제·플러싱(세척) 물질 안정성·호환성 시험 표준. PAG/POE 오일이 냉매(R-134a/R-1234yf)·금속(Al/Cu/Fe)·고무(NBR/HNBR/EPDM)와 장기간 접촉 시 화학적 안정성 평가. 컴프레서 손상 방지의 핵심 표준.",
+    "caution": "OEM·1차 협력사가 윤활유 변경 시 J2670 시험 통과 필수. 잘못된 첨가제 사용 시 시스템 전체 손상.",
+    "effective_date": "2008-12-01",
+    "revision_date": "2017-06-01",
+    "source_url": "https://www.sae.org/standards/content/j2670_201706/",
+    "note": "DENSO ND-OIL, Nippon Oil, ExxonMobil 등 PAG 오일 메이커가 J2670 통과 인증 표기",
+    "created_at": "2026-06-01T00:00:00Z",
+    "updated_at": "2026-06-01T00:00:00Z"
+  },
+  {
+    "id": "reg-0043",
+    "name": "ISO 6743-3 - 윤활유 분류 (Family L, Class D 컴프레서용)",
+    "name_en": "ISO 6743-3 - Lubricants, industrial oils - Family L (Class D - Compressors)",
+    "type": "standard",
+    "part_ids": ["oil", "compressor"],
+    "region_ids": ["us", "eu", "kr", "jp"],
+    "description": "공업용 윤활유 분류 국제 표준 — 컴프레서용 윤활유 분류 (Family L, Class D). 자동차 에어컨 컴프레서 PAG·POE 오일을 DAA·DAB·DAC 등 사용 환경별로 분류. ISO 6743 시리즈는 윤활유 family 전체를 다루며 자동차 공조는 Class D.",
+    "caution": "오일 사양서·MSDS 에 ISO 6743-3 분류 코드 명기 권장. 글로벌 OEM 사양과 호환성 비교 기준.",
+    "effective_date": "1988-01-01",
+    "revision_date": "2021-12-01",
+    "source_url": "https://www.iso.org/standard/77019.html",
+    "note": "ISO 6743-3:2021 가 현행. 자동차 MAC 외 산업 냉장·열펌프 컴프레서도 포함",
+    "created_at": "2026-06-01T00:00:00Z",
+    "updated_at": "2026-06-01T00:00:00Z"
+  },
+  {
+    "id": "reg-0044",
+    "name": "RoHS Directive 2011/65/EU - 전기·전자 유해물질 제한",
+    "name_en": "RoHS Directive 2011/65/EU - Restriction of Hazardous Substances",
+    "type": "law",
+    "part_ids": ["hvac_ctrl", "blower", "compressor"],
+    "region_ids": ["eu"],
+    "description": "EU 전기·전자 기기 유해물질 제한 지침. 자동차 HVAC 컨트롤러 PCB, 전동 컴프레서 인버터, 블로워 BLDC 등 전기·전자 부품에 납·카드뮴·수은·6가크롬·PBB·PBDE + (RoHS3, 2019) 4종 프탈레이트 제한.",
+    "caution": "원래 자동차는 RoHS 적용 제외(ELV Directive 별도)였으나, 차량용 전기·전자 모듈을 별도 부품으로 공급할 때 영향. EU 인증 마크(CE) 필수.",
+    "effective_date": "2013-01-02",
+    "revision_date": "2019-07-22",
+    "source_url": "https://eur-lex.europa.eu/eli/dir/2011/65/oj",
+    "note": "RoHS 3 (2019/07) 가 현행. ELV Directive (2000/53/EC) 와 함께 적용",
+    "created_at": "2026-06-01T00:00:00Z",
+    "updated_at": "2026-06-01T00:00:00Z"
+  }
+]

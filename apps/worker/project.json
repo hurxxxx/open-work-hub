@@ -8,11 +8,11 @@
     "dev": {
       "executor": "nx:run-commands",
       "options": {
-      "cwd": "apps/worker",
-      "commands": [
-        "uv run --python 3.12 celery -A ai_do_worker.celery_app:celery_app worker --loglevel=info -Q celery,meeting_transcribe,image_generation,rag_sync_realtime,rag_sync_backfill,rag_visibility_recompute,search_index_realtime",
-        "uv run --python 3.12 celery -A ai_do_worker.celery_app:celery_app beat --loglevel=info"
-      ],
+        "cwd": "apps/worker",
+        "commands": [
+          "queues=\"$(uv run --python 3.12 python -m ai_do_worker.queue_contract --celery-queues)\" && AI_DO_WORKER_QUEUE_GROUP=all uv run --python 3.12 celery -A ai_do_worker.celery_app:celery_app worker --loglevel=info -Q \"$queues\"",
+          "AI_DO_WORKER_QUEUE_GROUP=beat uv run --python 3.12 celery -A ai_do_worker.celery_app:celery_app beat --loglevel=info"
+        ],
         "parallel": true
       }
     },
@@ -28,6 +28,14 @@
       "options": {
         "cwd": "apps/worker",
         "command": "uv run --python 3.12 python -m compileall src"
+      }
+    },
+    "contract-tests": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "cwd": "apps/worker",
+        "command": "AI_DO_WORKER_BROKER_URL=memory:// AI_DO_WORKER_RESULT_BACKEND=cache+memory:// UV_PROJECT_ENVIRONMENT=../../.runtime/ci-worker-venv uv run --no-sync --frozen --python 3.12 --group dev python -m pytest tests -q"
       }
     }
   }

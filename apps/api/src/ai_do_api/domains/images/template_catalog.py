@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Mapping
 
 
 USER_TEMPLATE_PREFIX = "user_template:"
@@ -14,7 +15,71 @@ class BuiltinImageTemplate:
     guidance: str
 
 
-_GUIDANCE: dict[str, tuple[str, str]] = {
+@dataclass(frozen=True)
+class ImageTemplateCatalog:
+    builtin_templates: dict[str, BuiltinImageTemplate]
+    user_template_prefix: str = USER_TEMPLATE_PREFIX
+
+    @classmethod
+    def from_guidance(
+        cls,
+        guidance: Mapping[str, tuple[str, str]],
+    ) -> ImageTemplateCatalog:
+        return cls(
+            builtin_templates={
+                template_id: BuiltinImageTemplate(
+                    id=template_id,
+                    label=label,
+                    asset_path=f"/image-wizard/templates/{template_id}.png",
+                    guidance=template_guidance,
+                )
+                for template_id, (label, template_guidance) in guidance.items()
+            }
+        )
+
+    def get_builtin_template(self, template_id: str | None) -> BuiltinImageTemplate | None:
+        normalized_id = self._normalize_template_id(template_id)
+        if not normalized_id:
+            return None
+        return self.builtin_templates.get(normalized_id)
+
+    def make_user_template_id(self, generation_id: str) -> str:
+        return f"{self.user_template_prefix}{generation_id.strip()}"
+
+    def get_user_template_source_id(self, template_id: str | None) -> str | None:
+        normalized_id = self._normalize_template_id(template_id)
+        if not normalized_id or not normalized_id.startswith(self.user_template_prefix):
+            return None
+        source_id = normalized_id[len(self.user_template_prefix) :].strip()
+        return source_id or None
+
+    def describe_template_for_prompt(self, template_id: str | None) -> str:
+        template = self.get_builtin_template(template_id)
+        if template:
+            return (
+                f"Selected template: {template.label}. {template.guidance} "
+                "A high-quality template sample image will be attached as a composition reference. "
+                "Use that sample for layout, polish, hierarchy, and style direction only. "
+                "Do not copy any filler text, numbers, logos, or sample facts from the template image."
+            )
+        if self.get_user_template_source_id(template_id):
+            return (
+                "Selected template: a user-saved generated image. The saved image will be attached "
+                "as a composition reference. Reuse its layout, polish, hierarchy, and style direction, "
+                "but do not copy its old text, numbers, logos, or facts unless the current approved "
+                "plan explicitly asks for them."
+            )
+        return ""
+
+    @staticmethod
+    def _normalize_template_id(template_id: str | None) -> str | None:
+        if template_id is None:
+            return None
+        normalized_id = template_id.strip()
+        return normalized_id or None
+
+
+_BUILTIN_TEMPLATE_GUIDANCE: dict[str, tuple[str, str]] = {
     "meeting_deck_title": (
         "Deck title slide",
         "A polished executive cover slide with a strong title area, restrained subtitle lines, and one confident visual panel.",
@@ -106,48 +171,24 @@ _GUIDANCE: dict[str, tuple[str, str]] = {
 }
 
 
-BUILTIN_IMAGE_TEMPLATES: dict[str, BuiltinImageTemplate] = {
-    template_id: BuiltinImageTemplate(
-        id=template_id,
-        label=label,
-        asset_path=f"/image-wizard/templates/{template_id}.png",
-        guidance=guidance,
-    )
-    for template_id, (label, guidance) in _GUIDANCE.items()
-}
+_IMAGE_TEMPLATE_CATALOG = ImageTemplateCatalog.from_guidance(_BUILTIN_TEMPLATE_GUIDANCE)
+
+BUILTIN_IMAGE_TEMPLATES: dict[str, BuiltinImageTemplate] = (
+    _IMAGE_TEMPLATE_CATALOG.builtin_templates
+)
 
 
 def get_builtin_template(template_id: str | None) -> BuiltinImageTemplate | None:
-    if not template_id:
-        return None
-    return BUILTIN_IMAGE_TEMPLATES.get(template_id)
+    return _IMAGE_TEMPLATE_CATALOG.get_builtin_template(template_id)
 
 
 def make_user_template_id(generation_id: str) -> str:
-    return f"{USER_TEMPLATE_PREFIX}{generation_id}"
+    return _IMAGE_TEMPLATE_CATALOG.make_user_template_id(generation_id)
 
 
 def get_user_template_source_id(template_id: str | None) -> str | None:
-    if not template_id or not template_id.startswith(USER_TEMPLATE_PREFIX):
-        return None
-    source_id = template_id[len(USER_TEMPLATE_PREFIX) :].strip()
-    return source_id or None
+    return _IMAGE_TEMPLATE_CATALOG.get_user_template_source_id(template_id)
 
 
 def describe_template_for_prompt(template_id: str | None) -> str:
-    template = get_builtin_template(template_id)
-    if template:
-        return (
-            f"Selected template: {template.label}. {template.guidance} "
-            "A high-quality template sample image will be attached as a composition reference. "
-            "Use that sample for layout, polish, hierarchy, and style direction only. "
-            "Do not copy any filler text, numbers, logos, or sample facts from the template image."
-        )
-    if get_user_template_source_id(template_id):
-        return (
-            "Selected template: a user-saved generated image. The saved image will be attached "
-            "as a composition reference. Reuse its layout, polish, hierarchy, and style direction, "
-            "but do not copy its old text, numbers, logos, or facts unless the current approved "
-            "plan explicitly asks for them."
-        )
-    return ""
+    return _IMAGE_TEMPLATE_CATALOG.describe_template_for_prompt(template_id)

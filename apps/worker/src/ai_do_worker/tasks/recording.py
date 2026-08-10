@@ -2,33 +2,22 @@ from __future__ import annotations
 
 import logging
 import os
-import sys
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from celery.exceptions import Ignore
-from openai import OpenAIError
-from sqlalchemy import create_engine, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from ai_do_worker.celery_app import celery_app
+from ai_do_worker.runtime import (
+    db_session as _db_session,
+    ensure_api_src_on_path as _ensure_api_src_on_path,
+    minio_client as _minio_client,
+)
 from ai_do_worker.settings import get_settings
-
-
-def _workspace_root() -> Path:
-    current = Path(__file__).resolve()
-    for parent in current.parents:
-        if (parent / "pnpm-workspace.yaml").exists():
-            return parent
-    return current.parents[5]
-
-
-def _ensure_api_src_on_path() -> None:
-    api_src = _workspace_root() / "apps" / "api" / "src"
-    if str(api_src) not in sys.path:
-        sys.path.insert(0, str(api_src))
 
 
 _ensure_api_src_on_path()
@@ -39,9 +28,13 @@ from ai_do_api.core.asr import (  # noqa: E402
     check_asr_health,
     get_asr_backend,
 )
-from ai_do_api.core.llm import LlmTaskContext, complete_chat  # noqa: E402
+from ai_do_api.core.llm import LlmRuntimeError, LlmTaskContext  # noqa: E402
+from ai_do_api.domains.ai.gateway import (  # noqa: E402
+    LlmWorkloadContext,
+    execute_llm,
+)
 from ai_do_api.domains.auth.security import new_id  # noqa: E402
-from ai_do_api.domains.docs.models import NativeDoc, NativeDocContainer, NativeDocPage  # noqa: E402
+from ai_do_api.domains.docs.models import NativeDoc, NativeDocPage, NativeDocTarget  # noqa: E402
 from ai_do_api.domains.docs.rag_sync import enqueue_native_doc_rag_sync  # noqa: E402
 from ai_do_api.domains.meeting.models import Meeting  # noqa: E402
 from ai_do_api.domains.rag.contracts import RagSyncOperation  # noqa: E402
@@ -55,33 +48,10 @@ def _utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
-def _db_session() -> Session:
-    settings = get_settings()
-    engine = create_engine(settings.postgres_dsn, pool_pre_ping=True)
-    return Session(engine)
-
-
-def _minio_client():
-    from urllib.parse import urlparse
-
-    from minio import Minio
-
-    settings = get_settings()
-    parsed = urlparse(settings.minio_endpoint)
-    secure = parsed.scheme == "https"
-    host = parsed.netloc or parsed.path
-    return Minio(
-        host,
-        access_key=settings.minio_access_key,
-        secret_key=settings.minio_secret_key,
-        secure=secure,
-    )
-
-
 def _load_active_recording(session: Session, recording_id: str) -> Recording | None:
     recording = session.scalar(
         select(Recording)
-        .options(selectinload(Recording.containers))
+        .options(selectinload(Recording.targets))
         .where(Recording.id == recording_id)
     )
     if recording is None:
@@ -145,48 +115,39 @@ def _download_recording_to_tmp(recording: Recording) -> str:
     return handle.name
 
 
-def _response_content(response: Any) -> str:
-    choices = getattr(response, "choices", None) or []
-    if not choices:
-        return ""
-    message = getattr(choices[0], "message", None)
-    content = getattr(message, "content", None)
-    return content if isinstance(content, str) else ""
-
-
 def _recording_title(recording: Recording) -> str:
     return recording.title.strip() or f"Recording {recording.started_at:%Y-%m-%d %H:%M:%S}"
 
 
-def _primary_doc_container(recording: Recording) -> tuple[str, str, str, int] | None:
-    if not recording.containers:
+def _primary_doc_target(recording: Recording) -> tuple[str, str, str, int] | None:
+    if not recording.targets:
         return None
-    primary = next((container for container in recording.containers if container.is_primary), None)
-    container = primary or sorted(recording.containers, key=lambda item: item.created_at)[0]
+    primary = next((target for target in recording.targets if target.is_primary), None)
+    target = primary or sorted(recording.targets, key=lambda item: item.created_at)[0]
     return (
-        container.container_app,
-        container.container_type,
-        container.container_id,
-        container.sort_order,
+        target.target_app,
+        target.target_type,
+        target.target_id,
+        target.sort_order,
     )
 
 
 def _primary_meeting_id(recording: Recording) -> str | None:
     primary = next(
         (
-            container
-            for container in recording.containers
-            if container.is_primary
-            and container.container_app == "meeting"
-            and container.container_type == "meeting"
+            target
+            for target in recording.targets
+            if target.is_primary
+            and target.target_app == "meeting"
+            and target.target_type == "meeting"
         ),
         None,
     )
     if primary is not None:
-        return primary.container_id
-    for container in recording.containers:
-        if container.container_app == "meeting" and container.container_type == "meeting":
-            return container.container_id
+        return primary.target_id
+    for target in recording.targets:
+        if target.target_app == "meeting" and target.target_type == "meeting":
+            return target.target_id
     return None
 
 
@@ -273,16 +234,16 @@ def _create_recording_doc(
             created_by_id=recording.owner_id,
         )
     )
-    primary_container = _primary_doc_container(recording)
-    if primary_container is not None:
-        container_app, container_type, container_id, sort_order = primary_container
+    primary_target = _primary_doc_target(recording)
+    if primary_target is not None:
+        target_app, target_type, target_id, sort_order = primary_target
         session.add(
-            NativeDocContainer(
+            NativeDocTarget(
                 id=new_id(),
                 doc_id=doc.id,
-                container_app=container_app,
-                container_type=container_type,
-                container_id=container_id,
+                target_app=target_app,
+                target_type=target_type,
+                target_id=target_id,
                 is_primary=True,
                 sort_order=sort_order,
             )
@@ -296,7 +257,9 @@ def _create_recording_doc(
     return doc
 
 
-def _attach_minutes_doc_to_meeting(session: Session, *, recording: Recording, doc: NativeDoc) -> None:
+def _attach_minutes_doc_to_meeting(
+    session: Session, *, recording: Recording, doc: NativeDoc
+) -> None:
     meeting_id = _primary_meeting_id(recording)
     if meeting_id is None:
         return
@@ -354,12 +317,7 @@ def _verification_messages(transcript: str, summary: str) -> list[dict[str, str]
         },
         {
             "role": "user",
-            "content": (
-                "Transcript:\n"
-                f"{transcript[:24000]}\n\n"
-                "Summary:\n"
-                f"{summary}"
-            ),
+            "content": (f"Transcript:\n{transcript[:24000]}\n\nSummary:\n{summary}"),
         },
     ]
 
@@ -377,20 +335,21 @@ def _complete_local_agent(
         actor_user_id=None,
         workspace_id=workspace_id,
         task_kind="meeting_summary",
+        app_id="recording",
     )
     try:
-        response, _decision, _config = complete_chat(
-            context,
+        completion = execute_llm(
+            "meeting_summary",
+            LlmWorkloadContext.from_task_context(context),
             session,
             messages=messages,
             temperature=0.1,
             max_tokens=max_tokens,
             reasoning_effort="none",
-            pool_hint="local",
-        )
-    except OpenAIError as error:
+        ).completion
+    except LlmRuntimeError as error:
         raise TransientError(str(error)) from error
-    result = _response_content(response).strip()
+    result = completion.text.strip()
     if not result:
         raise PermanentError("Local transcript agent returned an empty result.")
     return result
@@ -417,9 +376,11 @@ def transcribe_recording(self, recording_id: str) -> str:
 
         if recording.transcribe_started_at is None:
             recording.transcribe_started_at = _utcnow()
-        _heartbeat(session, recording, max(recording.progress_pct, 10), transcript_status="transcribing")
+        _heartbeat(
+            session, recording, max(recording.progress_pct, 10), transcript_status="transcribing"
+        )
 
-        health = check_asr_health()
+        health = check_asr_health(deep=True)
         if not health.ready:
             raise TransientError(health.detail or "ASR backend is not ready.")
 

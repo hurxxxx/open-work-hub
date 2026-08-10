@@ -44,7 +44,7 @@ export function Section({
 
 export function EmptyRow({ text }: { text: string }) {
   return (
-    <p className="app-text-caption rounded-md border border-dashed border-app-border px-3 py-3 text-center text-app-ink/50 dark:text-app-ink/60">
+    <p className="app-text-caption rounded-md border border-dashed border-app-border p-3 text-center text-app-ink/50 dark:text-app-ink/60">
       {text}
     </p>
   );

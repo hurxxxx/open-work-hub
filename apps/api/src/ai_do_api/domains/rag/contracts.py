@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class RagSyncOperation(StrEnum):
@@ -15,6 +15,11 @@ class RagSyncOperation(StrEnum):
 class RagSyncLane(StrEnum):
     REALTIME = "realtime"
     BACKFILL = "backfill"
+
+
+class RagScopeKind(StrEnum):
+    WORKSPACE = "workspace"
+    COMPANY = "company"
 
 
 class RagJobStatus(StrEnum):
@@ -30,6 +35,18 @@ class RagAnswerMode(StrEnum):
     GROUNDED_ANSWER = "grounded-answer"
 
 
+class RagVectorSearchMode(StrEnum):
+    """Internal vector retrieval mode.
+
+    ``DENSE_SPARSE_RRF`` preserves the legacy Generic RAG behavior.  The
+    canonical Retrieval Module uses ``DENSE`` because its lexical candidate
+    set comes from OpenSearch BM25 and is fused across backends there.
+    """
+
+    DENSE = "dense"
+    DENSE_SPARSE_RRF = "dense_sparse_rrf"
+
+
 class RagTraceContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -38,10 +55,23 @@ class RagTraceContext(BaseModel):
     baggage: dict[str, str] = Field(default_factory=dict)
 
 
+class RagChunk(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    chunk_id: str
+    text: str
+    summary: str | None = None
+    index_text: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class RagProjection(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    workspace_id: str
+    retrieval_partition_id: str | None = None
+    projection_version: int | None = Field(default=None, ge=1)
+    scope_kind: RagScopeKind = RagScopeKind.WORKSPACE
+    workspace_id: str | None = None
     resource_type: str
     resource_id: str
     source_kind: str
@@ -51,15 +81,25 @@ class RagProjection(BaseModel):
     owner_label: str | None = None
     visibility_refs: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
+    chunks: list[RagChunk] = Field(default_factory=list)
 
+    @field_validator("retrieval_partition_id")
+    @classmethod
+    def _validate_retrieval_partition_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("retrieval_partition_id must not be blank")
+        return normalized
 
-class RagChunk(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    chunk_id: str
-    text: str
-    summary: str | None = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    @model_validator(mode="after")
+    def _validate_projection_fence(self) -> RagProjection:
+        if (self.retrieval_partition_id is None) != (self.projection_version is None):
+            raise ValueError(
+                "retrieval_partition_id and projection_version must be provided together"
+            )
+        return self
 
 
 class RagVectorRecord(BaseModel):
@@ -87,7 +127,9 @@ class RagDeleteRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     collection: str
-    workspace_id: str
+    retrieval_partition_id: str | None = None
+    scope_kind: RagScopeKind = RagScopeKind.WORKSPACE
+    workspace_id: str | None = None
     resource_type: str
     resource_id: str
     trace_context: RagTraceContext | None = None
@@ -98,12 +140,28 @@ class RagVectorSearchRequest(BaseModel):
 
     collection: str
     query: str
-    workspace_id: str
+    scope_kind: RagScopeKind = RagScopeKind.WORKSPACE
+    workspace_id: str | None = None
     query_embedding: list[float] = Field(default_factory=list)
+    retrieval_partition_ids: list[str] | None = None
     source_kinds: list[str] = Field(default_factory=list)
     metadata_filter: dict[str, Any] = Field(default_factory=dict)
+    search_mode: RagVectorSearchMode = RagVectorSearchMode.DENSE_SPARSE_RRF
     top_k: int = Field(default=10, ge=1, le=100)
     trace_context: RagTraceContext | None = None
+
+    @field_validator("retrieval_partition_ids")
+    @classmethod
+    def _validate_retrieval_partition_ids(
+        cls,
+        value: list[str] | None,
+    ) -> list[str] | None:
+        if value is None:
+            return None
+        normalized = [partition_id.strip() for partition_id in value]
+        if not normalized or any(not partition_id for partition_id in normalized):
+            raise ValueError("retrieval_partition_ids must contain non-blank ids")
+        return list(dict.fromkeys(normalized))
 
 
 class RagVectorSearchHit(BaseModel):
@@ -140,7 +198,9 @@ class RagQueryRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     collection: str
-    workspace_id: str
+    scope_kind: RagScopeKind = RagScopeKind.WORKSPACE
+    workspace_id: str | None = None
+    retrieval_partition_ids: list[str] | None = None
     query: str
     answer_mode: RagAnswerMode = RagAnswerMode.SEARCH_ONLY
     source_kinds: list[str] = Field(default_factory=list)
@@ -149,16 +209,31 @@ class RagQueryRequest(BaseModel):
     include_binary_hits: bool = False
     trace_context: RagTraceContext | None = None
 
+    @field_validator("retrieval_partition_ids")
+    @classmethod
+    def _validate_retrieval_partition_ids(
+        cls,
+        value: list[str] | None,
+    ) -> list[str] | None:
+        if value is None:
+            return None
+        normalized = [partition_id.strip() for partition_id in value]
+        if not normalized or any(not partition_id for partition_id in normalized):
+            raise ValueError("retrieval_partition_ids must contain non-blank ids")
+        return list(dict.fromkeys(normalized))
+
 
 class RagQueryHit(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    scope_kind: RagScopeKind = RagScopeKind.WORKSPACE
     source_kind: str
     resource_type: str
     resource_id: str
-    workspace_id: str
+    workspace_id: str | None = None
     title: str | None = None
     summary: str | None = None
+    excerpt: str | None = None
     score: float
     citation: str | None = None
     owner_label: str | None = None

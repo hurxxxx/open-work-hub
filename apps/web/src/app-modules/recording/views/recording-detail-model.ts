@@ -1,0 +1,124 @@
+import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
+
+import type { Recording, RecordingTarget } from '../api/recording-api';
+
+export type RecordingStageState = 'done' | 'inProgress' | 'pending' | 'failed';
+export type RecordingStageKey =
+  | 'audio'
+  | 'transcript'
+  | 'rawDoc'
+  | 'minutesDoc';
+
+export interface RecordingStage {
+  key: RecordingStageKey;
+  state: RecordingStageState;
+}
+
+export interface RecordingStageSummary {
+  stages: RecordingStage[];
+  failedStage: RecordingStage | null;
+  activeStage: RecordingStage | null;
+  allDone: boolean;
+}
+
+export interface RecordingTargetGroups {
+  meetingTargets: RecordingTarget[];
+  taskTargets: RecordingTarget[];
+  otherTargets: RecordingTarget[];
+}
+
+export function recordingPipelineState(value: string): RecordingStageState {
+  if (value === 'done') return 'done';
+  if (value === 'failed') return 'failed';
+  if (value === 'creating' || value === 'transcribing') return 'inProgress';
+  return 'pending';
+}
+
+export function deriveRecordingStages(recording: Recording): RecordingStage[] {
+  return [
+    { key: 'audio', state: 'done' },
+    {
+      key: 'transcript',
+      state: recordingPipelineState(recording.transcript_status),
+    },
+    {
+      key: 'rawDoc',
+      state: recordingPipelineState(recording.raw_transcript_doc_status),
+    },
+    {
+      key: 'minutesDoc',
+      state: recordingPipelineState(recording.minutes_doc_status),
+    },
+  ];
+}
+
+export function summarizeRecordingStages(
+  recording: Recording,
+): RecordingStageSummary {
+  const stages = deriveRecordingStages(recording);
+  const failedStage = stages.find((stage) => stage.state === 'failed') ?? null;
+  const activeStage = failedStage
+    ? null
+    : (stages.find((stage) => stage.state === 'inProgress') ?? null);
+
+  return {
+    stages,
+    failedStage,
+    activeStage,
+    allDone: stages.every((stage) => stage.state === 'done'),
+  };
+}
+
+export function isRecordingRetryable(recording: Recording): boolean {
+  return [
+    recording.transcript_status,
+    recording.raw_transcript_doc_status,
+    recording.minutes_doc_status,
+  ].some((status) => status === 'failed');
+}
+
+export function groupRecordingTargets(
+  targets: RecordingTarget[] | null | undefined,
+): RecordingTargetGroups {
+  const groups: RecordingTargetGroups = {
+    meetingTargets: [],
+    taskTargets: [],
+    otherTargets: [],
+  };
+
+  for (const target of targets ?? []) {
+    if (target.target_app === 'meeting') {
+      groups.meetingTargets.push(target);
+    } else if (target.target_app === 'pms') {
+      groups.taskTargets.push(target);
+    } else {
+      groups.otherTargets.push(target);
+    }
+  }
+
+  return groups;
+}
+
+export function recordingTargetHref(
+  workspaceSlug: string,
+  target: RecordingTarget,
+): string | null {
+  if (target.target_app === 'meeting') {
+    return buildWorkspaceAppPath(
+      workspaceSlug,
+      'meeting',
+      target.target_id,
+    );
+  }
+  if (target.target_app === 'pms') {
+    return buildWorkspaceAppPath(
+      workspaceSlug,
+      'pms',
+      `?task=${encodeURIComponent(target.target_id)}`,
+    );
+  }
+  if (target.target_app === 'docs') {
+    return buildWorkspaceAppPath(workspaceSlug, 'docs', target.target_id);
+  }
+  return null;
+}

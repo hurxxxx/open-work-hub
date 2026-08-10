@@ -12,7 +12,7 @@ export const Mention = createReactInlineContentSpec(
   {
     render: (props) => (
       <span
-        className="inline-flex items-center gap-1 rounded bg-blue-500/20 px-1.5 py-0.5 text-xs font-medium text-blue-300 cursor-default"
+        className="inline-flex items-center gap-1 rounded bg-app-info/20 px-1.5 py-0.5 text-[length:var(--ui-text-caption)] font-medium text-app-info-text cursor-default"
         data-user-id={props.inlineContent.props.userId}
       >
         @{props.inlineContent.props.displayName || 'Unknown'}

@@ -4,12 +4,14 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 import hashlib
 import hmac
+import re
 import secrets
 import uuid
 
 
 PASSWORD_SCHEME = "pbkdf2_sha256"
 PASSWORD_ITERATIONS = 600_000
+LOGIN_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{2,39}$")
 
 
 @dataclass(frozen=True)
@@ -21,6 +23,26 @@ class IssuedToken:
 
 def normalize_email(value: str) -> str:
     return value.strip().lower()
+
+
+def normalize_login_id(value: str) -> str:
+    return value.strip().lower()
+
+
+def is_valid_login_id(value: str) -> bool:
+    return LOGIN_ID_PATTERN.fullmatch(value) is not None
+
+
+def derive_login_id_from_email(email: str) -> str:
+    local_part = normalize_email(email).split("@", 1)[0]
+    candidate = re.sub(r"[^a-z0-9._-]+", "-", normalize_login_id(local_part))
+    candidate = candidate.strip("._-")[:40]
+    if len(candidate) < 3:
+        candidate = f"user-{candidate}" if candidate else "user"
+    candidate = candidate[:40].strip("._-")
+    if not candidate or not candidate[0].isalnum():
+        candidate = f"user-{candidate}"[:40].strip("._-")
+    return candidate if is_valid_login_id(candidate) else "user"
 
 
 def hash_password(password: str) -> str:

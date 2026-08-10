@@ -2,31 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { AlertTriangle, CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
 
 import type { Recording } from '../api/recording-api';
-
-type StageState = 'done' | 'inProgress' | 'pending' | 'failed';
-
-type StageKey = 'audio' | 'transcript' | 'rawDoc' | 'minutesDoc';
-
-interface Stage {
-  key: StageKey;
-  state: StageState;
-}
-
-function pipelineState(value: string): StageState {
-  if (value === 'done') return 'done';
-  if (value === 'failed') return 'failed';
-  if (value === 'creating' || value === 'transcribing') return 'inProgress';
-  return 'pending';
-}
-
-function deriveStages(recording: Recording): Stage[] {
-  return [
-    { key: 'audio', state: 'done' },
-    { key: 'transcript', state: pipelineState(recording.transcript_status) },
-    { key: 'rawDoc', state: pipelineState(recording.raw_transcript_doc_status) },
-    { key: 'minutesDoc', state: pipelineState(recording.minutes_doc_status) },
-  ];
-}
+import { summarizeRecordingStages } from './recording-detail-model';
 
 export function RecordingStageRail({
   recording,
@@ -38,14 +14,16 @@ export function RecordingStageRail({
   onRetry?: () => void;
 }) {
   const { t } = useTranslation('apps');
-  const stages = deriveStages(recording);
-  const failedStage = stages.find((stage) => stage.state === 'failed');
-  const activeStage = !failedStage ? stages.find((stage) => stage.state === 'inProgress') : undefined;
-  const allDone = stages.every((stage) => stage.state === 'done');
+  const { activeStage, allDone, failedStage, stages } =
+    summarizeRecordingStages(recording);
   const statusLabel = failedStage
-    ? t('recording.status.failedLabel', { stage: t(`recording.status.stages.${failedStage.key}`) })
+    ? t('recording.status.failedLabel', {
+        stage: t(`recording.status.stages.${failedStage.key}`),
+      })
     : activeStage
-      ? t('recording.status.progressLabel', { stage: t(`recording.status.stages.${activeStage.key}`) })
+      ? t('recording.status.progressLabel', {
+          stage: t(`recording.status.stages.${activeStage.key}`),
+        })
       : allDone
         ? t('recording.status.allDone')
         : t('recording.status.pendingLabel');
@@ -117,5 +95,3 @@ export function RecordingStageRail({
     </div>
   );
 }
-
-export default RecordingStageRail;

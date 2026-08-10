@@ -1,0 +1,23 @@
+[Unit]
+Description=AI-DO Production Worker - Durable AI Graph
+Wants=network-online.target ai-do-prod-infra.service ai-do-prod-api.service
+After=network-online.target ai-do-prod-infra.service ai-do-prod-api.service
+
+[Service]
+Type=simple
+WorkingDirectory=__AI_DO_ROOT__/apps/worker
+Environment=PYTHONPATH=__AI_DO_ROOT__/apps/worker/src
+Environment=AI_DO_WORKER_QUEUE_GROUP=ai_graph
+Environment=AI_DO_RUNTIME_REVISION=__AI_DO_RUNTIME_REVISION__
+ExecStart=__AI_DO_ROOT__/apps/worker/.venv/bin/python -m celery -A ai_do_worker.celery_app:celery_app worker --loglevel=info --hostname=ai-do-prod-worker-ai-graph@%H -Q __AI_DO_WORKER_AI_GRAPH_QUEUE_NAMES__ --concurrency __AI_DO_WORKER_AI_GRAPH_CONCURRENCY__ --prefetch-multiplier 1
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0077
+Restart=always
+RestartSec=10
+TimeoutStartSec=300
+TimeoutStopSec=1500
+KillMode=mixed
+
+[Install]
+WantedBy=default.target

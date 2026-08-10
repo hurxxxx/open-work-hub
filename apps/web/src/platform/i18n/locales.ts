@@ -1,3 +1,12 @@
+import {
+  isSupportedLocale,
+  normalizeLocale as normalizeLocaleSession,
+  persistLocale as persistLocaleSession,
+  readStoredLocale as readStoredLocaleSession,
+  type LocaleSessionConfig,
+  type LocaleStoreDependencies,
+} from './locale-session';
+
 export const DEFAULT_LOCALE = 'ko-KR';
 export const SUPPORTED_LOCALES = ['ko-KR', 'en-US'] as const;
 export const LOCALE_STORAGE_KEY = 'ai-do:locale';
@@ -9,32 +18,31 @@ export const LOCALE_OPTIONS: Array<{ value: AppLocale; label: string }> = [
   { value: 'en-US', label: 'English' },
 ];
 
-export function isAppLocale(value: string | null | undefined): value is AppLocale {
-  return (SUPPORTED_LOCALES as readonly string[]).includes(value ?? '');
+export const LOCALE_SESSION_CONFIG = {
+  defaultLocale: DEFAULT_LOCALE,
+  supportedLocales: SUPPORTED_LOCALES,
+  storageKey: LOCALE_STORAGE_KEY,
+} satisfies LocaleSessionConfig<AppLocale>;
+
+export function isAppLocale(
+  value: string | null | undefined,
+): value is AppLocale {
+  return isSupportedLocale(value, LOCALE_SESSION_CONFIG);
 }
 
 export function normalizeLocale(value: string | null | undefined): AppLocale {
-  return isAppLocale(value) ? value : DEFAULT_LOCALE;
+  return normalizeLocaleSession(value, LOCALE_SESSION_CONFIG);
 }
 
-export function readStoredLocale(): AppLocale {
-  if (typeof window === 'undefined') {
-    return DEFAULT_LOCALE;
-  }
-  try {
-    return normalizeLocale(window.localStorage.getItem(LOCALE_STORAGE_KEY));
-  } catch {
-    return DEFAULT_LOCALE;
-  }
+export function readStoredLocale(
+  dependencies?: LocaleStoreDependencies,
+): AppLocale {
+  return readStoredLocaleSession(LOCALE_SESSION_CONFIG, dependencies);
 }
 
-export function persistLocale(locale: AppLocale): void {
-  if (typeof window === 'undefined') {
-    return;
-  }
-  try {
-    window.localStorage.setItem(LOCALE_STORAGE_KEY, locale);
-  } catch {
-    return;
-  }
+export function persistLocale(
+  locale: AppLocale,
+  dependencies?: LocaleStoreDependencies,
+): void {
+  persistLocaleSession(locale, LOCALE_SESSION_CONFIG, dependencies);
 }

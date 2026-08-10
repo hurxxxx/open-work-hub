@@ -1,0 +1,8 @@
+[
+  { "id": "denso",   "name_ko": "DENSO",   "name_en": "DENSO Corporation",   "country": "jp", "flag": "🇯🇵", "order": 1, "note": "글로벌 1위 OEM 공조 공급사 (Toyota 계열)" },
+  { "id": "sanden",  "name_ko": "Sanden",  "name_en": "Sanden Holdings",     "country": "jp", "flag": "🇯🇵", "order": 2, "note": "MAC 컴프레서 주요 공급사" },
+  { "id": "hanon",   "name_ko": "Hanon",   "name_en": "Hanon Systems",       "country": "kr", "flag": "🇰🇷", "order": 3, "note": "한국 HVAC 1위, 글로벌 2위 (구 한라공조)" },
+  { "id": "valeo",   "name_ko": "Valeo",   "name_en": "Valeo Thermal Systems","country": "fr", "flag": "🇫🇷", "order": 4, "note": "유럽 1위 thermal system 공급사" },
+  { "id": "mahle",   "name_ko": "MAHLE",   "name_en": "MAHLE Behr",          "country": "de", "flag": "🇩🇪", "order": 5, "note": "독일 thermal management 강자 (Behr 인수)" },
+  { "id": "visteon", "name_ko": "Visteon", "name_en": "Visteon",             "country": "us", "flag": "🇺🇸", "order": 6, "note": "구 Ford 자회사, 현재는 전장·인포테인먼트 중심" }
+]

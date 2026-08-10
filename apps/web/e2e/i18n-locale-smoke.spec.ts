@@ -122,10 +122,10 @@ test.describe('i18n locale smoke', () => {
         },
       },
       {
-        path: '/w/hq/ai',
+        path: '/w/hq/chatbot',
         assert: async (current) => {
           await expect(
-            current.getByText('Hello, I can help with your work.'),
+            current.getByRole('heading', { name: 'I-Do Chatbot' }),
           ).toBeVisible();
         },
       },
@@ -157,7 +157,7 @@ test.describe('i18n locale smoke', () => {
             current.getByRole('button', { name: 'Month' }),
           ).toBeVisible();
           await expect(
-            current.getByRole('button', { name: 'Today' }),
+            current.getByRole('button', { name: 'Today', exact: true }),
           ).toBeVisible();
         },
       },
@@ -198,7 +198,7 @@ test.describe('i18n locale smoke', () => {
           ).toBeVisible();
           await expect(
             current.getByPlaceholder(
-              'Search docs, meetings, issues, and schedules',
+              'Search docs, meetings, tasks, and schedules',
             ),
           ).toBeVisible();
         },

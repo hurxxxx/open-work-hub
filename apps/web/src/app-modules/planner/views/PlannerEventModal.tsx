@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useReducer } from 'react';
 import { Button, Dialog } from '@ai-do/ui';
 import { useTranslation } from 'react-i18next';
+import { CalendarDays, Clock3 } from 'lucide-react';
 
+import { DateInput } from '@/src/components/date/DateInput';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   createPlannerEvent,
@@ -9,251 +11,168 @@ import {
   getPlannerEvent,
   updatePlannerEvent,
   type PlannerEvent,
-  type PlannerEventVisibility,
 } from '../api/planner-api';
+import {
+  buildPlannerEventSavePayload,
+  canSave as canSavePlannerEventModal,
+  initialPlannerEventModalState,
+  plannerEventModalReducer,
+  plannerEventModalSessionKey,
+  type PlannerEventModalRange,
+} from './planner-event-modal-model';
 
 interface PlannerEventModalProps {
+  contentClassName?: string;
   isOpen: boolean;
   onClose: () => void;
-  workspaceSlug: string | undefined;
   eventId?: string | null;
-  initialRange?: {
-    start: Date;
-    end: Date;
-    allDay: boolean;
-  } | null;
+  initialRange?: PlannerEventModalRange | null;
   onSaved?: (event: PlannerEvent) => void;
   onDeleted?: (eventId: string) => void;
-}
-
-function pad(value: number): string {
-  return String(value).padStart(2, '0');
-}
-
-function formatDateInputValue(date: Date): string {
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-}
-
-function formatDateTimeInputValue(date: Date): string {
-  return `${formatDateInputValue(date)}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-function parseLocalDate(value: string): Date {
-  const [year, month, day] = value.split('-').map(Number);
-  return new Date(year, month - 1, day);
-}
-
-function addLocalDays(date: Date, days: number): Date {
-  const next = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  next.setDate(next.getDate() + days);
-  return next;
-}
-
-function incrementYmd(value: string): string {
-  return formatDateInputValue(addLocalDays(parseLocalDate(value), 1));
-}
-
-function decrementYmd(value: string): string {
-  return formatDateInputValue(addLocalDays(parseLocalDate(value), -1));
-}
-
-function defaultTimedRange() {
-  const start = new Date();
-  start.setMinutes(0, 0, 0);
-  start.setHours(start.getHours() + 1);
-  const end = new Date(start.getTime());
-  end.setHours(end.getHours() + 1);
-  return { start, end };
-}
-
-function buildDraftFromRange(range?: { start: Date; end: Date; allDay: boolean } | null) {
-  if (range?.allDay) {
-    return {
-      allDay: true,
-      startValue: formatDateInputValue(range.start),
-      endValue: decrementYmd(formatDateInputValue(range.end)),
-    };
-  }
-  if (range) {
-    return {
-      allDay: false,
-      startValue: formatDateTimeInputValue(range.start),
-      endValue: formatDateTimeInputValue(range.end),
-    };
-  }
-  const fallback = defaultTimedRange();
-  return {
-    allDay: false,
-    startValue: formatDateTimeInputValue(fallback.start),
-    endValue: formatDateTimeInputValue(fallback.end),
-  };
-}
-
-function plannerEventToDraft(event: PlannerEvent) {
-  if (event.allDay) {
-    return {
-      allDay: true,
-      startValue: event.start,
-      endValue: decrementYmd(event.end),
-    };
-  }
-  return {
-    allDay: false,
-    startValue: formatDateTimeInputValue(new Date(event.start)),
-    endValue: formatDateTimeInputValue(new Date(event.end)),
-  };
+  overlayClassName?: string;
 }
 
 export function PlannerEventModal({
   isOpen,
+  eventId,
+  initialRange,
+  ...props
+}: PlannerEventModalProps) {
+  if (!isOpen) {
+    return null;
+  }
+  return (
+    <PlannerEventModalContent
+      key={plannerEventModalSessionKey(eventId, initialRange)}
+      eventId={eventId}
+      initialRange={initialRange}
+      {...props}
+    />
+  );
+}
+
+type PlannerEventModalContentProps = Omit<PlannerEventModalProps, 'isOpen'>;
+
+function PlannerEventModalContent(props: PlannerEventModalContentProps) {
+  return usePlannerEventModalElement(props);
+}
+
+function usePlannerEventModalElement({
   onClose,
-  workspaceSlug,
+  contentClassName,
   eventId,
   initialRange,
   onSaved,
   onDeleted,
-}: PlannerEventModalProps) {
+  overlayClassName,
+}: PlannerEventModalContentProps) {
   const { t } = useTranslation(['apps', 'common']);
   const { token } = useAuth();
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [location, setLocation] = useState('');
-  const [visibility, setVisibility] = useState<PlannerEventVisibility>('private');
-  const [allDay, setAllDay] = useState(false);
-  const [startValue, setStartValue] = useState('');
-  const [endValue, setEndValue] = useState('');
+  const [state, dispatch] = useReducer(
+    plannerEventModalReducer,
+    initialRange,
+    initialPlannerEventModalState,
+  );
+  const {
+    loading,
+    saving,
+    deleting,
+    error,
+    title,
+    description,
+    location,
+    allDay,
+    startDateValue,
+    startTimeValue,
+    endDateValue,
+    endTimeValue,
+  } = state;
 
   const isEditMode = Boolean(eventId);
 
   useEffect(() => {
-    if (!isOpen) return;
-    const draft = buildDraftFromRange(initialRange);
-    setTitle('');
-    setDescription('');
-    setLocation('');
-    setVisibility('private');
-    setAllDay(draft.allDay);
-    setStartValue(draft.startValue);
-    setEndValue(draft.endValue);
-    setError(null);
-    setSaving(false);
-    setDeleting(false);
-
-    if (!eventId || !token || !workspaceSlug) {
-      setLoading(false);
+    if (!eventId || !token) {
       return;
     }
     let cancelled = false;
-    setLoading(true);
-    getPlannerEvent(token, workspaceSlug, eventId)
+    dispatch({ type: 'loadStart' });
+    getPlannerEvent(token, eventId)
       .then((event) => {
         if (cancelled) return;
-        const eventDraft = plannerEventToDraft(event);
-        setTitle(event.title);
-        setDescription(event.description);
-        setLocation(event.location);
-        setVisibility(event.visibility);
-        setAllDay(eventDraft.allDay);
-        setStartValue(eventDraft.startValue);
-        setEndValue(eventDraft.endValue);
+        dispatch({ type: 'loadSuccess', event });
       })
       .catch((err: Error) => {
         if (cancelled) return;
-        setError(err.message ?? t('apps:planner.loadFailed'));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+        dispatch({
+          type: 'loadFailure',
+          error: err.message ?? t('apps:planner.loadFailed'),
+        });
       });
     return () => {
       cancelled = true;
     };
-  }, [eventId, initialRange, isOpen, t, token, workspaceSlug]);
+  }, [eventId, t, token]);
 
   const canSave = useMemo(() => {
-    if (!title.trim()) return false;
-    if (allDay) {
-      return Boolean(startValue && endValue && parseLocalDate(endValue) >= parseLocalDate(startValue));
-    }
-    return Boolean(startValue && endValue && new Date(endValue) > new Date(startValue));
-  }, [allDay, endValue, startValue, title]);
+    return canSavePlannerEventModal(state);
+  }, [state]);
 
   function toggleAllDay(nextAllDay: boolean) {
-    if (nextAllDay === allDay) return;
-    if (nextAllDay) {
-      const nextStart = startValue ? new Date(startValue) : defaultTimedRange().start;
-      const nextEnd = endValue ? new Date(endValue) : defaultTimedRange().end;
-      setAllDay(true);
-      setStartValue(formatDateInputValue(nextStart));
-      setEndValue(formatDateInputValue(nextEnd));
-      return;
-    }
-    const startDate = startValue ? parseLocalDate(startValue) : new Date();
-    const endDate = endValue ? parseLocalDate(endValue) : addLocalDays(startDate, 1);
-    const nextStart = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate(), 9, 0, 0, 0);
-    const nextEnd = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 10, 0, 0, 0);
-    setAllDay(false);
-    setStartValue(formatDateTimeInputValue(nextStart));
-    setEndValue(
-      formatDateTimeInputValue(
-        nextEnd > nextStart ? nextEnd : new Date(nextStart.getTime() + (60 * 60 * 1000)),
-      ),
-    );
+    dispatch({ type: 'setAllDay', allDay: nextAllDay });
   }
 
   async function handleSave() {
-    if (!token || !workspaceSlug || !canSave) return;
-    setSaving(true);
-    setError(null);
-    const payload = {
-      title: title.trim(),
-      description: description.trim(),
-      location: location.trim(),
-      visibility,
-      allDay,
-      start: allDay ? startValue : new Date(startValue).toISOString(),
-      end: allDay ? incrementYmd(endValue) : new Date(endValue).toISOString(),
-    };
+    if (!token || !canSave) return;
+    dispatch({ type: 'saveStart' });
+    const payload = buildPlannerEventSavePayload(state);
     try {
       const event = eventId
-        ? await updatePlannerEvent(token, workspaceSlug, eventId, payload)
-        : await createPlannerEvent(token, workspaceSlug, payload);
+        ? await updatePlannerEvent(token, eventId, payload)
+        : await createPlannerEvent(token, payload);
       onSaved?.(event);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('apps:planner.saveFailed'));
+      dispatch({
+        type: 'setError',
+        error:
+          err instanceof Error ? err.message : t('apps:planner.saveFailed'),
+      });
     } finally {
-      setSaving(false);
+      dispatch({ type: 'saveDone' });
     }
   }
 
   async function handleDelete() {
-    if (!token || !workspaceSlug || !eventId) return;
-    setDeleting(true);
-    setError(null);
+    if (!token || !eventId) return;
+    dispatch({ type: 'deleteStart' });
     try {
-      await deletePlannerEvent(token, workspaceSlug, eventId);
+      await deletePlannerEvent(token, eventId);
       onDeleted?.(eventId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('apps:planner.deleteFailed'));
+      dispatch({
+        type: 'setError',
+        error:
+          err instanceof Error ? err.message : t('apps:planner.deleteFailed'),
+      });
     } finally {
-      setDeleting(false);
+      dispatch({ type: 'deleteDone' });
     }
   }
 
   return (
     <Dialog
-        closeLabel={t('common:actions.close')}
-      open={isOpen}
+      closeLabel={t('common:actions.close')}
+      open
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      title={isEditMode ? t('apps:planner.editEvent') : t('apps:planner.newEvent')}
+      title={
+        isEditMode ? t('apps:planner.editEvent') : t('apps:planner.newEvent')
+      }
       description={t('apps:planner.eventDescription')}
       maxWidth="max-w-xl"
       dismissOnInteractOutside={false}
+      contentClassName={contentClassName}
+      overlayClassName={overlayClassName}
       actions={
         <div className="flex w-full items-center justify-between gap-3">
           <div>
@@ -264,16 +183,28 @@ export function PlannerEventModal({
                 disabled={deleting || saving}
                 className="text-[var(--ui-color-danger)]"
               >
-                {deleting ? t('apps:planner.deletePending') : t('common:actions.delete')}
+                {deleting
+                  ? t('apps:planner.deletePending')
+                  : t('common:actions.delete')}
               </Button>
             ) : null}
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="secondary" onClick={onClose} disabled={saving || deleting}>
+            <Button
+              variant="secondary"
+              onClick={onClose}
+              disabled={saving || deleting}
+            >
               {t('common:actions.cancel')}
             </Button>
-            <Button variant="primary" onClick={() => void handleSave()} disabled={!canSave || saving || loading || deleting}>
-              {saving ? t('apps:planner.savePending') : t('common:actions.save')}
+            <Button
+              variant="primary"
+              onClick={() => void handleSave()}
+              disabled={!canSave || saving || loading || deleting}
+            >
+              {saving
+                ? t('apps:planner.savePending')
+                : t('common:actions.save')}
             </Button>
           </div>
         </div>
@@ -297,79 +228,155 @@ export function PlannerEventModal({
           <>
             <div className="space-y-1">
               <label className="app-text-control-sm text-app-ink/70">
-                {t('apps:planner.title')} <span className="text-[var(--ui-color-danger)]">*</span>
+                {t('apps:planner.title')}{' '}
+                <span className="text-[var(--ui-color-danger)]">*</span>
               </label>
               <input
                 type="text"
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                onChange={(e) =>
+                  dispatch({ type: 'setTitle', title: e.target.value })
+                }
                 maxLength={200}
-                autoFocus
+                aria-label={t('apps:planner.title')}
                 placeholder={t('apps:planner.titlePlaceholder')}
                 className="app-text-body w-full rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink placeholder:text-app-ink/30 focus:border-app-accent focus:outline-none"
               />
             </div>
 
-            <div className="flex items-center gap-3">
-              <label className="app-text-control-sm text-app-ink/70">{t('apps:planner.allDay')}</label>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={allDay}
-                onClick={() => toggleAllDay(!allDay)}
-                className={`relative h-6 w-11 rounded-full transition-colors ${allDay ? 'bg-app-accent' : 'bg-app-border'}`}
+            <div className="space-y-2">
+              <span className="app-text-control-sm text-app-ink/70">
+                {t('apps:planner.eventTimeMode')}
+              </span>
+              <div
+                aria-label={t('apps:planner.eventTimeMode')}
+                className="grid grid-cols-2 gap-1 rounded-md border border-app-border bg-app-surface-sidebar p-1"
+                role="radiogroup"
               >
-                <span
-                  className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${allDay ? 'translate-x-5' : 'translate-x-0.5'}`}
-                />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="app-text-control-sm text-app-ink/70">{allDay ? t('apps:planner.startDate') : t('apps:planner.start')}</label>
-                <input
-                  type={allDay ? 'date' : 'datetime-local'}
-                  value={startValue}
-                  onChange={(e) => setStartValue(e.target.value)}
-                  className="app-text-body w-full rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink focus:border-app-accent focus:outline-none"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="app-text-control-sm text-app-ink/70">{allDay ? t('apps:planner.endDate') : t('apps:planner.end')}</label>
-                <input
-                  type={allDay ? 'date' : 'datetime-local'}
-                  value={endValue}
-                  onChange={(e) => setEndValue(e.target.value)}
-                  className="app-text-body w-full rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink focus:border-app-accent focus:outline-none"
-                />
-                {allDay ? (
-                  <p className="app-text-caption text-app-ink/45">
-                    {t('apps:planner.endDateHint')}
-                  </p>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="app-text-control-sm text-app-ink/70">{t('apps:planner.visibility')}</label>
-                <select
-                  value={visibility}
-                  onChange={(e) => setVisibility(e.target.value as PlannerEventVisibility)}
-                  className="app-text-body w-full rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink focus:border-app-accent focus:outline-none"
+                <button
+                  aria-checked={!allDay}
+                  className={`app-text-control-sm inline-flex h-9 items-center justify-center gap-2 rounded-[5px] px-3 transition-colors ${
+                    !allDay
+                      ? 'bg-app-accent text-app-accent-fg shadow-sm'
+                      : 'text-app-ink/60 hover:bg-app-surface-hover hover:text-app-ink'
+                  }`}
+                  onClick={() => toggleAllDay(false)}
+                  role="radio"
+                  type="button"
                 >
-                  <option value="private">{t('ai.search.visibilityPrivate')}</option>
-                  <option value="public">{t('ai.search.visibilityPublic')}</option>
-                </select>
+                  <Clock3 aria-hidden="true" size={15} />
+                  <span>{t('apps:planner.timedEvent')}</span>
+                </button>
+                <button
+                  aria-checked={allDay}
+                  className={`app-text-control-sm inline-flex h-9 items-center justify-center gap-2 rounded-[5px] px-3 transition-colors ${
+                    allDay
+                      ? 'bg-app-accent text-app-accent-fg shadow-sm'
+                      : 'text-app-ink/60 hover:bg-app-surface-hover hover:text-app-ink'
+                  }`}
+                  onClick={() => toggleAllDay(true)}
+                  role="radio"
+                  type="button"
+                >
+                  <CalendarDays aria-hidden="true" size={15} />
+                  <span>{t('apps:planner.allDay')}</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="app-text-control-sm text-app-ink/70">
+                  {t('apps:planner.startDate')}
+                </label>
+                <DateInput
+                  value={startDateValue}
+                  aria-label={t('apps:planner.startDate')}
+                  onValueChange={(value) =>
+                    dispatch({
+                      type: 'setStartDateValue',
+                      startDateValue: value,
+                    })
+                  }
+                  className="app-text-body w-full rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink focus:border-app-accent focus:outline-none"
+                />
               </div>
               <div className="space-y-1">
-                <label className="app-text-control-sm text-app-ink/70">{t('apps:planner.location')}</label>
+                <label className="app-text-control-sm text-app-ink/70">
+                  {t('apps:planner.endDate')}
+                </label>
+                <DateInput
+                  value={endDateValue}
+                  aria-label={t('apps:planner.endDate')}
+                  onValueChange={(value) =>
+                    dispatch({ type: 'setEndDateValue', endDateValue: value })
+                  }
+                  className="app-text-body w-full rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink focus:border-app-accent focus:outline-none"
+                />
+              </div>
+            </div>
+
+            {allDay ? (
+              <p className="app-text-caption text-app-ink/45">
+                {t('apps:planner.endDateHint')}
+              </p>
+            ) : (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="app-text-control-sm text-app-ink/70">
+                      {t('apps:planner.startTime')}
+                    </label>
+                    <input
+                      aria-label={t('apps:planner.startTime')}
+                      className="app-text-body w-full rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink focus:border-app-accent focus:outline-none"
+                      onChange={(e) =>
+                        dispatch({
+                          type: 'setStartTimeValue',
+                          startTimeValue: e.target.value,
+                        })
+                      }
+                      type="time"
+                      value={startTimeValue}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="app-text-control-sm text-app-ink/70">
+                      {t('apps:planner.endTime')}
+                    </label>
+                    <input
+                      aria-label={t('apps:planner.endTime')}
+                      className="app-text-body w-full rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink focus:border-app-accent focus:outline-none"
+                      onChange={(e) =>
+                        dispatch({
+                          type: 'setEndTimeValue',
+                          endTimeValue: e.target.value,
+                        })
+                      }
+                      type="time"
+                      value={endTimeValue}
+                    />
+                  </div>
+                </div>
+                <p className="app-text-caption text-app-ink/45">
+                  {t('apps:planner.optionalTimeHint')}
+                </p>
+              </div>
+            )}
+
+            <div>
+              <div className="space-y-1">
+                <label className="app-text-control-sm text-app-ink/70">
+                  {t('apps:planner.location')}
+                </label>
                 <input
                   type="text"
                   value={location}
-                  onChange={(e) => setLocation(e.target.value)}
+                  onChange={(e) =>
+                    dispatch({ type: 'setLocation', location: e.target.value })
+                  }
                   maxLength={240}
+                  aria-label={t('apps:planner.location')}
                   placeholder={t('apps:planner.locationPlaceholder')}
                   className="app-text-body w-full rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink placeholder:text-app-ink/30 focus:border-app-accent focus:outline-none"
                 />
@@ -377,11 +384,19 @@ export function PlannerEventModal({
             </div>
 
             <div className="space-y-1">
-              <label className="app-text-control-sm text-app-ink/70">{t('apps:planner.description')}</label>
+              <label className="app-text-control-sm text-app-ink/70">
+                {t('apps:planner.description')}
+              </label>
               <textarea
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                onChange={(e) =>
+                  dispatch({
+                    type: 'setDescription',
+                    description: e.target.value,
+                  })
+                }
                 rows={4}
+                aria-label={t('apps:planner.description')}
                 placeholder={t('apps:planner.descriptionPlaceholder')}
                 className="app-text-body w-full resize-none rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink placeholder:text-app-ink/30 focus:border-app-accent focus:outline-none"
               />

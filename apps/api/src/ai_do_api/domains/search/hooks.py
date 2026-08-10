@@ -1,29 +1,42 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from typing import Any
+
 from sqlalchemy.orm import Session
 
-from ai_do_api.domains.auth.models import Team
-from ai_do_api.domains.docs.models import NativeDoc
-from ai_do_api.domains.meeting.models import Meeting
-from ai_do_api.domains.planner.models import PlannerEvent
-from ai_do_api.domains.pms.models import Issue, IssueLabel, Label, TaskList, TaskListStatus
-from ai_do_api.domains.search.outbox import enqueue_search_index_job
-from ai_do_api.domains.search.schemas import SearchEntityType
+from ai_do_api.domains.retrieval.projection_fencing import ProjectionEventRef
+from ai_do_api.domains.search.default_index_hook_adapters import (
+    ensure_search_index_hooks_registered,
+)
+from ai_do_api.domains.search.hook_registry import resolve_search_index_hook
+
+
+def _call_hook(name: str, *args: Any, **kwargs: Any) -> Any:
+    ensure_search_index_hooks_registered()
+    return resolve_search_index_hook(name)(*args, **kwargs)
+
+
+def _projection_event_kwargs(
+    projection_event: ProjectionEventRef | None,
+) -> dict[str, ProjectionEventRef]:
+    # Keep compatibility with app-owned hooks that have not adopted the
+    # additive versioned-event argument yet.
+    return {"projection_event": projection_event} if projection_event is not None else {}
 
 
 def enqueue_doc_search_index(
     db: Session,
     *,
-    doc: NativeDoc,
+    doc: Any,
     operation: str = "upsert",
+    projection_event: ProjectionEventRef | None = None,
 ) -> None:
-    enqueue_search_index_job(
+    _call_hook(
+        "docs.enqueue_doc_search_index",
         db,
-        workspace_id=doc.workspace_id,
-        entity_type=SearchEntityType.DOC,
-        entity_id=doc.id,
+        doc=doc,
         operation=operation,
+        **_projection_event_kwargs(projection_event),
     )
 
 
@@ -32,25 +45,30 @@ def enqueue_doc_search_index_by_id(
     *,
     doc_id: str,
     operation: str = "upsert",
+    projection_event: ProjectionEventRef | None = None,
 ) -> None:
-    doc = db.get(NativeDoc, doc_id)
-    if doc is None:
-        return
-    enqueue_doc_search_index(db, doc=doc, operation=operation)
+    _call_hook(
+        "docs.enqueue_doc_search_index_by_id",
+        db,
+        doc_id=doc_id,
+        operation=operation,
+        **_projection_event_kwargs(projection_event),
+    )
 
 
 def enqueue_meeting_search_index(
     db: Session,
     *,
-    meeting: Meeting,
+    meeting: Any,
     operation: str = "upsert",
+    projection_event: ProjectionEventRef | None = None,
 ) -> None:
-    enqueue_search_index_job(
+    _call_hook(
+        "meeting.enqueue_meeting_search_index",
         db,
-        workspace_id=meeting.workspace_id,
-        entity_type=SearchEntityType.MEETING,
-        entity_id=meeting.id,
+        meeting=meeting,
         operation=operation,
+        **_projection_event_kwargs(projection_event),
     )
 
 
@@ -59,131 +77,101 @@ def enqueue_meeting_search_index_by_id(
     *,
     meeting_id: str,
     operation: str = "upsert",
+    projection_event: ProjectionEventRef | None = None,
 ) -> None:
-    meeting = db.get(Meeting, meeting_id)
-    if meeting is None:
-        return
-    enqueue_meeting_search_index(db, meeting=meeting, operation=operation)
+    _call_hook(
+        "meeting.enqueue_meeting_search_index_by_id",
+        db,
+        meeting_id=meeting_id,
+        operation=operation,
+        **_projection_event_kwargs(projection_event),
+    )
 
 
-def enqueue_issue_search_index(
+def enqueue_task_search_index(
     db: Session,
     *,
-    issue: Issue,
+    task: Any,
+    operation: str = "upsert",
+    projection_event: ProjectionEventRef | None = None,
+) -> None:
+    _call_hook(
+        "pms.enqueue_task_search_index",
+        db,
+        task=task,
+        operation=operation,
+        **_projection_event_kwargs(projection_event),
+    )
+
+
+def enqueue_task_search_index_by_id(
+    db: Session,
+    *,
+    task_id: str,
+    operation: str = "upsert",
+    projection_event: ProjectionEventRef | None = None,
+) -> None:
+    _call_hook(
+        "pms.enqueue_task_search_index_by_id",
+        db,
+        task_id=task_id,
+        operation=operation,
+        **_projection_event_kwargs(projection_event),
+    )
+
+
+def enqueue_task_list_task_search_recompute(
+    db: Session,
+    *,
+    task_list: Any,
     operation: str = "upsert",
 ) -> None:
-    workspace_id = load_issue_workspace_id(db, issue_id=issue.id)
-    if workspace_id is None:
-        return
-    enqueue_search_index_job(
+    _call_hook(
+        "pms.enqueue_task_list_task_search_recompute",
         db,
-        workspace_id=workspace_id,
-        entity_type=SearchEntityType.PMS_ISSUE,
-        entity_id=issue.id,
+        task_list=task_list,
         operation=operation,
     )
 
 
-def enqueue_issue_search_index_by_id(
+def enqueue_label_task_search_recompute(
     db: Session,
     *,
-    issue_id: str,
+    label: Any,
+    task_ids: list[str] | None = None,
     operation: str = "upsert",
 ) -> None:
-    workspace_id = load_issue_workspace_id(db, issue_id=issue_id)
-    if workspace_id is None:
-        return
-    enqueue_search_index_job(
+    _call_hook(
+        "pms.enqueue_label_task_search_recompute",
         db,
-        workspace_id=workspace_id,
-        entity_type=SearchEntityType.PMS_ISSUE,
-        entity_id=issue_id,
+        label=label,
+        task_ids=task_ids,
         operation=operation,
     )
 
 
-def enqueue_planner_event_search_index(
+def enqueue_task_list_status_task_search_recompute(
     db: Session,
     *,
-    event: PlannerEvent,
+    task_status: Any,
     operation: str = "upsert",
 ) -> None:
-    enqueue_search_index_job(
+    _call_hook(
+        "pms.enqueue_task_list_status_task_search_recompute",
         db,
-        workspace_id=event.workspace_id,
-        entity_type=SearchEntityType.PLANNER_EVENT,
-        entity_id=event.id,
+        task_status=task_status,
         operation=operation,
     )
 
 
-def enqueue_task_list_issue_search_recompute(
-    db: Session,
-    *,
-    task_list: TaskList,
-    operation: str = "upsert",
-) -> None:
-    workspace_id = load_task_list_workspace_id(db, list_id=task_list.id)
-    if workspace_id is None:
-        return
-    issue_ids = db.scalars(select(Issue.id).where(Issue.list_id == task_list.id)).all()
-    for issue_id in sorted(issue_id for issue_id in issue_ids if issue_id):
-        enqueue_search_index_job(
-            db,
-            workspace_id=workspace_id,
-            entity_type=SearchEntityType.PMS_ISSUE,
-            entity_id=str(issue_id),
-            operation=operation,
-        )
-
-
-def enqueue_label_issue_search_recompute(
-    db: Session,
-    *,
-    label: Label,
-    issue_ids: list[str] | None = None,
-    operation: str = "upsert",
-) -> None:
-    workspace_id = load_task_list_workspace_id(db, list_id=label.list_id)
-    if workspace_id is None:
-        return
-    resolved_issue_ids = issue_ids
-    if resolved_issue_ids is None:
-        resolved_issue_ids = list(db.scalars(select(IssueLabel.issue_id).where(IssueLabel.label_id == label.id)))
-    for issue_id in sorted({issue_id for issue_id in resolved_issue_ids if issue_id}):
-        enqueue_search_index_job(
-            db,
-            workspace_id=workspace_id,
-            entity_type=SearchEntityType.PMS_ISSUE,
-            entity_id=issue_id,
-            operation=operation,
-        )
-
-
-def enqueue_task_list_status_issue_search_recompute(
-    db: Session,
-    *,
-    task_status: TaskListStatus,
-    operation: str = "upsert",
-) -> None:
-    task_list = db.get(TaskList, task_status.list_id)
-    if task_list is None:
-        return
-    enqueue_task_list_issue_search_recompute(db, task_list=task_list, operation=operation)
-
-
-def load_issue_workspace_id(db: Session, *, issue_id: str) -> str | None:
-    return db.scalar(
-        select(Team.workspace_id)
-        .join(TaskList, TaskList.team_id == Team.id)
-        .join(Issue, Issue.list_id == TaskList.id)
-        .where(Issue.id == issue_id)
-    )
-
-
-def load_task_list_workspace_id(db: Session, *, list_id: str) -> str | None:
-    return db.scalar(
-        select(Team.workspace_id)
-        .join(TaskList, TaskList.team_id == Team.id)
-        .where(TaskList.id == list_id)
-    )
+__all__ = [
+    "enqueue_doc_search_index",
+    "enqueue_doc_search_index_by_id",
+    "enqueue_label_task_search_recompute",
+    "enqueue_meeting_search_index",
+    "enqueue_meeting_search_index_by_id",
+    "enqueue_task_list_status_task_search_recompute",
+    "enqueue_task_list_task_search_recompute",
+    "enqueue_task_search_index",
+    "enqueue_task_search_index_by_id",
+]

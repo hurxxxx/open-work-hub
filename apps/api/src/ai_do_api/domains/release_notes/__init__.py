@@ -1,0 +1,1 @@
+"""Release note announcement domain."""

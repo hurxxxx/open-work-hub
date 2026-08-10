@@ -9,6 +9,7 @@ protected_modules =
     ai_do_api.domains.auth.workspace_router
 allowed_importers =
     ai_do_api.api_registry
+    ai_do_api.installed_extension_apps
 as_packages = false
 
 [importlinter:contract:domains_do_not_import_composition_roots]

@@ -1,3 +1,8 @@
 export { docsManifest } from './manifest';
-export { docsGlobalRoutes, docsToolElement, docsWorkspaceRoutes } from './routes';
-export { DocsSidebarExtras, docsSidebarConfig } from './sidebar';
+export {
+  docsGlobalRoutes,
+  docsToolElement,
+  docsToolViewRoutes,
+  docsWorkspaceRoutes,
+} from './routes';
+export { docsSidebarConfig } from './sidebar-config';

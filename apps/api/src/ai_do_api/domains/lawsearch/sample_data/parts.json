@@ -1,0 +1,15 @@
+[
+  { "id": "refrigerant", "group": "common", "name_ko": "냉매",          "name_en": "Refrigerant",          "icon": "🧪", "order": 1 },
+  { "id": "oil",         "group": "common", "name_ko": "오일",          "name_en": "Oil",                  "icon": "🛢", "order": 2 },
+  { "id": "safety",      "group": "common", "name_ko": "안전",          "name_en": "Safety",               "icon": "🛡", "order": 3 },
+  { "id": "hvac_system", "group": "hvac",   "name_ko": "공조 시스템",   "name_en": "HVAC System (전체)",   "icon": "🌐", "order": 10 },
+  { "id": "compressor",  "group": "hvac",   "name_ko": "컴프레서",      "name_en": "Compressor",           "icon": "🌀", "order": 11 },
+  { "id": "condenser",   "group": "hvac",   "name_ko": "콘덴서",        "name_en": "Condenser",            "icon": "🧊", "order": 12 },
+  { "id": "evaporator",  "group": "hvac",   "name_ko": "에바포레이터",  "name_en": "Evaporator",           "icon": "❄",  "order": 13 },
+  { "id": "heater",      "group": "hvac",   "name_ko": "히터/PTC",      "name_en": "Heater Core / PTC",    "icon": "🔥", "order": 14 },
+  { "id": "blower",      "group": "hvac",   "name_ko": "블로워 모터",   "name_en": "Blower Motor",         "icon": "💨", "order": 15 },
+  { "id": "hvac_ctrl",   "group": "hvac",   "name_ko": "HVAC 컨트롤",   "name_en": "HVAC Control",         "icon": "🎛", "order": 16 },
+  { "id": "txv",         "group": "hvac",   "name_ko": "익스팬션 밸브", "name_en": "Expansion Valve",      "icon": "⚙",  "order": 17 },
+  { "id": "hose_pipe",       "group": "hvac",   "name_ko": "호스/파이프",   "name_en": "Hose & Pipe",          "icon": "🔗", "order": 18 },
+  { "id": "coolant_module",  "group": "hvac",   "name_ko": "냉각수 모듈",   "name_en": "Coolant Module",       "icon": "💧", "order": 19 }
+]

@@ -1,1 +1,1 @@
-"""Auth domain for local AI-DO accounts."""
+"""Auth domain for AI-DO local accounts."""

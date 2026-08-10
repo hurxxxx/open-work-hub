@@ -1,117 +1,63 @@
 from __future__ import annotations
 
-import subprocess
-import time
+from collections.abc import Iterator
+from typing import Protocol
 import uuid
 
 from fastapi.testclient import TestClient
-import httpx
 import pytest
 from sqlalchemy import select
 
 from conftest import (
     _build_client,
-    _docker_command,
-    _docker_network_args,
-    _docker_publish_args,
-    _docker_rm,
-    _docker_uses_host_network,
-    _ensure_docker_image,
-    _find_free_port,
     _teardown_client_state,
 )
+from dev_accounts import create_workspace_user_session, dev_login
 from ai_do_api.core.db import get_session_factory
 from ai_do_api.domains.auth.access import ensure_dev_login_seed_data
 from ai_do_api.domains.auth.models import Workspace
 from ai_do_api.domains.docs import service as docs_service
-from ai_do_api.domains.pms.access_grants import grant_issue_access, revoke_issue_access
+from ai_do_api.domains.pms.access_grants import grant_task_access, revoke_task_access
 from ai_do_api.domains.search.indexing import process_search_index_job
 from ai_do_api.domains.search.models import SearchIndexJob
 
 
-OPENSEARCH_IMAGE = "opensearchproject/opensearch:3.3.2"
+pytestmark = pytest.mark.external_integration("opensearch")
 
 
-@pytest.fixture(scope="session")
-def opensearch_url() -> str:
-    _ensure_docker_image(OPENSEARCH_IMAGE)
-    port = _find_free_port()
-    transport_port = _find_free_port()
-    container_name = f"ai-do-opensearch-test-{uuid.uuid4().hex[:10]}"
-    url = f"http://127.0.0.1:{port}"
-    subprocess.run(
-        [
-            *_docker_command(),
-            "run",
-            "--rm",
-            "-d",
-            "--name",
-            container_name,
-            *_docker_network_args(),
-            "-e",
-            "discovery.type=single-node",
-            "-e",
-            "DISABLE_SECURITY_PLUGIN=true",
-            "-e",
-            "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m",
-            *_docker_publish_args(port, 9200),
-            OPENSEARCH_IMAGE,
-            *(
-                []
-                if not _docker_uses_host_network()
-                else ["opensearch", f"-Ehttp.port={port}", f"-Etransport.port={transport_port}"]
-            ),
-        ],
-        check=True,
-    )
-    try:
-        _wait_for_opensearch(url)
-        yield url
-    finally:
-        _docker_rm(container_name)
+class _IntegrationInfra(Protocol):
+    opensearch_url: str
+
+    def new_opensearch_index_prefix(self) -> str: ...
+
+    def cleanup_opensearch_indices(self, prefix: str) -> None: ...
 
 
 @pytest.fixture
 def search_client(
     monkeypatch: pytest.MonkeyPatch,
-    postgres_dsn: str,
-    redis_url: str,
-    minio_endpoint: str,
-    opensearch_url: str,
-) -> TestClient:
-    monkeypatch.setenv("DOOWON_OPENSEARCH_URL", opensearch_url)
-    monkeypatch.setenv("DOOWON_OPENSEARCH_INDEX_PREFIX", f"ai_do_test_{uuid.uuid4().hex[:10]}")
-    test_client = _build_client(
-        monkeypatch,
-        postgres_dsn=postgres_dsn,
-        collab_redis_url=redis_url,
-        minio_endpoint=minio_endpoint,
-    )
-    with test_client:
-        yield test_client
-    _teardown_client_state()
-
-
-def _wait_for_opensearch(url: str, timeout_seconds: int = 90) -> None:
-    deadline = time.time() + timeout_seconds
-    last_error: Exception | None = None
-    while time.time() < deadline:
+    application_postgres_dsn: str,
+    integration_infra: _IntegrationInfra,
+) -> Iterator[TestClient]:
+    index_prefix = integration_infra.new_opensearch_index_prefix()
+    monkeypatch.setenv("AI_DO_OPENSEARCH_URL", integration_infra.opensearch_url)
+    monkeypatch.setenv("AI_DO_OPENSEARCH_INDEX_PREFIX", index_prefix)
+    try:
+        test_client = _build_client(
+            monkeypatch,
+            postgres_dsn=application_postgres_dsn,
+        )
+        with test_client:
+            yield test_client
+    finally:
         try:
-            response = httpx.get(url, timeout=2.0)
-            if response.status_code == 200:
-                return
-        except Exception as error:  # pragma: no cover - exercised in retry loop
-            last_error = error
-        time.sleep(1)
-    raise RuntimeError(f"Timed out waiting for OpenSearch: {last_error}")
+            _teardown_client_state()
+        finally:
+            integration_infra.cleanup_opensearch_indices(index_prefix)
 
 
 def _dev_login(client: TestClient, account_key: str = "delivery-hub-member") -> dict:
-    with get_session_factory()() as db:
-        ensure_dev_login_seed_data(db)
-    response = client.post("/api/v1/auth/dev-login", json={"account_key": account_key})
-    assert response.status_code == 200, response.text
-    return response.json()
+    return dev_login(client, account_key)
 
 
 def _headers(token: str) -> dict[str, str]:
@@ -210,7 +156,7 @@ def _create_pms_task_list(
     return response.json()
 
 
-def _create_pms_issue(
+def _create_pms_task(
     client: TestClient,
     *,
     token: str,
@@ -219,12 +165,12 @@ def _create_pms_issue(
     title: str,
 ) -> dict:
     response = client.post(
-        f"/api/v1/workspaces/{workspace_key}/pms/lists/{list_id}/issues",
+        f"/api/v1/workspaces/{workspace_key}/pms/lists/{list_id}/tasks",
         headers=_headers(token),
         json={
             "title": title,
             "description": "E2E issue body",
-            "status": "backlog",
+            "status": "todo",
             "priority": "medium",
             "label_ids": [],
         },
@@ -233,105 +179,9 @@ def _create_pms_issue(
     return response.json()
 
 
-def test_keyword_search_does_not_refresh_workspace_index_on_query(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    from ai_do_api.domains.search import service as search_service
-
-    session = _dev_login(client)
-    token = session["token"]
-    with get_session_factory()() as db:
-        workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
-        assert workspace is not None
-        workspace_id = workspace.id
-
-    class _FakeSearchClient:
-        def index_exists(self) -> bool:
-            return True
-
-        def count_workspace_documents(self, *, workspace_id: str) -> int:
-            return 1
-
-        def search(self, body: dict) -> dict:
-            return {"hits": {"hits": []}}
-
-    def _fail_refresh(*args, **kwargs) -> None:
-        raise AssertionError("refresh_workspace_keyword_index must not be called from search query")
-
-    monkeypatch.setattr(search_service, "_search_client", lambda: _FakeSearchClient())
-    monkeypatch.setattr(search_service, "refresh_workspace_keyword_index", _fail_refresh)
-
-    response = client.post(
-        "/api/v1/workspaces/delivery-hub/search/query",
-        headers=_headers(token),
-        json={
-            "workspace_id": workspace_id,
-            "query": "anything",
-            "entity_types": ["doc"],
-            "sort": {"field": "relevance", "direction": "desc"},
-            "limit": 20,
-            "offset": 0,
-        },
-    )
-
-    assert response.status_code == 200, response.text
-    assert response.json()["total"] == 0
-
-
-@pytest.mark.parametrize(
-    ("index_exists", "workspace_count", "expected_reason"),
-    [
-        (False, 0, "Keyword search index is not initialized. Run keyword search backfill first."),
-        (True, 0, "Keyword search index is empty for this workspace. Run keyword search backfill first."),
-    ],
-)
-def test_keyword_search_returns_503_when_index_requires_backfill(
-    client: TestClient,
-    monkeypatch: pytest.MonkeyPatch,
-    index_exists: bool,
-    workspace_count: int,
-    expected_reason: str,
+def test_keyword_search_returns_contract_facets_snippets_and_deep_links(
+    search_client: TestClient,
 ) -> None:
-    from ai_do_api.domains.search import service as search_service
-
-    session = _dev_login(client)
-    token = session["token"]
-    with get_session_factory()() as db:
-        workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
-        assert workspace is not None
-        workspace_id = workspace.id
-
-    class _FakeSearchClient:
-        def index_exists(self) -> bool:
-            return index_exists
-
-        def count_workspace_documents(self, *, workspace_id: str) -> int:
-            return workspace_count
-
-        def search(self, body: dict) -> dict:
-            raise AssertionError("search must not run when keyword index is not ready")
-
-    monkeypatch.setattr(search_service, "_search_client", lambda: _FakeSearchClient())
-
-    response = client.post(
-        "/api/v1/workspaces/delivery-hub/search/query",
-        headers=_headers(token),
-        json={
-            "workspace_id": workspace_id,
-            "query": "anything",
-            "entity_types": ["doc"],
-            "sort": {"field": "relevance", "direction": "desc"},
-            "limit": 20,
-            "offset": 0,
-        },
-    )
-
-    assert response.status_code == 503, response.text
-    body = response.json()
-    assert body["code"] == "search.keyword_backend_unavailable"
-    assert body["params"]["reason"] == expected_reason
-    assert expected_reason in body["detail"]
-
-
-def test_keyword_search_returns_contract_facets_snippets_and_deep_links(search_client: TestClient) -> None:
     session = _dev_login(search_client)
     token = session["token"]
     user_id = session["user"]["id"]
@@ -339,7 +189,7 @@ def test_keyword_search_returns_contract_facets_snippets_and_deep_links(search_c
         workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
         assert workspace is not None
         workspace_id = workspace.id
-        docs_service.create_native_doc_for_user(
+        doc, page = docs_service.create_native_doc_for_user(
             db,
             workspace_id=workspace.id,
             owner_id=user_id,
@@ -347,10 +197,13 @@ def test_keyword_search_returns_contract_facets_snippets_and_deep_links(search_c
             content_blocks=[
                 {
                     "type": "paragraph",
-                    "content": [{"type": "text", "text": "공급사 단가 변경으로 예산 리스크가 증가했습니다."}],
+                    "content": [
+                        {"type": "text", "text": "공급사 단가 변경으로 예산 리스크가 증가했습니다."}
+                    ],
                 }
             ],
         )
+        expected_deep_link = f"/w/delivery-hub/docs/{doc.id}?page={page.id}"
         db.commit()
     _process_pending_search_jobs()
 
@@ -374,64 +227,25 @@ def test_keyword_search_returns_contract_facets_snippets_and_deep_links(search_c
     assert payload["facets"]["entity_types"][0]["value"] == "doc"
     hit = payload["hits"][0]
     assert hit["entity_type"] == "doc"
-    assert hit["deep_link"].startswith("/w/delivery-hub/docs/")
+    assert hit["deep_link"] == expected_deep_link
     assert hit["snippet"]["text"]
     assert "highlights" in hit["snippet"]
 
 
-def test_keyword_search_matches_korean_substring_in_doc_body(search_client: TestClient) -> None:
-    session = _dev_login(search_client)
-    token = session["token"]
-    user_id = session["user"]["id"]
-    with get_session_factory()() as db:
-        workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
-        assert workspace is not None
-        workspace_id = workspace.id
-        docs_service.create_native_doc_for_user(
-            db,
-            workspace_id=workspace.id,
-            owner_id=user_id,
-            title="강아지 기록",
-            content_blocks=[
-                {
-                    "type": "paragraph",
-                    "content": [{"type": "text", "text": "우리집 강아지는 복슬강아지"}],
-                }
-            ],
-        )
-        db.commit()
-    _process_pending_search_jobs()
-
-    response = search_client.post(
-        "/api/v1/workspaces/delivery-hub/search/query",
-        headers=_headers(token),
-        json={
-            "workspace_id": workspace_id,
-            "query": "복슬",
-            "entity_types": ["doc"],
-            "sort": {"field": "relevance", "direction": "desc"},
-            "limit": 20,
-            "offset": 0,
-        },
-    )
-
-    assert response.status_code == 200, response.text
-    payload = response.json()
-    assert payload["total"] >= 1
-    assert any(hit["title"] == "강아지 기록" for hit in payload["hits"])
-    target = next(hit for hit in payload["hits"] if hit["title"] == "강아지 기록")
-    assert "복슬강아지" in target["snippet"]["text"]
-    assert target["snippet"]["highlights"]
-
-
 def test_keyword_search_filters_private_docs_by_acl(search_client: TestClient) -> None:
-    owner_session = _dev_login(search_client, "hq-admin")
-    viewer_session = _dev_login(search_client, "hq-member")
+    owner_session = _dev_login(search_client, "administrator")
+    viewer_session = create_workspace_user_session(
+        search_client,
+        workspace_key="administrator",
+        login_id="searchviewer",
+        email="search-viewer@ai-do.local",
+        full_name="Search Viewer",
+    )
     owner_token = owner_session["token"]
     viewer_token = viewer_session["token"]
     owner_id = owner_session["user"]["id"]
     with get_session_factory()() as db:
-        workspace = db.scalar(select(Workspace).where(Workspace.key == "hq"))
+        workspace = db.scalar(select(Workspace).where(Workspace.key == "administrator"))
         assert workspace is not None
         workspace_id = workspace.id
         docs_service.create_native_doc_for_user(
@@ -458,12 +272,12 @@ def test_keyword_search_filters_private_docs_by_acl(search_client: TestClient) -
         "offset": 0,
     }
     owner_response = search_client.post(
-        "/api/v1/workspaces/hq/search/query",
+        "/api/v1/workspaces/administrator/search/query",
         headers=_headers(owner_token),
         json=payload,
     )
     viewer_response = search_client.post(
-        "/api/v1/workspaces/hq/search/query",
+        "/api/v1/workspaces/administrator/search/query",
         headers=_headers(viewer_token),
         json=payload,
     )
@@ -475,14 +289,16 @@ def test_keyword_search_filters_private_docs_by_acl(search_client: TestClient) -
     assert any(hit["title"] == "비공개 강아지 메모" for hit in owner_payload["hits"])
     assert all(hit["title"] != "비공개 강아지 메모" for hit in viewer_payload["hits"])
     assert viewer_payload["total"] == 0
-    assert viewer_payload["facets"] == {"entity_types": [], "status": [], "containers": []}
+    assert viewer_payload["facets"] == {"entity_types": [], "status": [], "targets": []}
 
 
-def test_keyword_search_doc_acl_grant_revoke_and_crud_updates_index(search_client: TestClient) -> None:
+def test_keyword_search_doc_acl_grant_revoke_and_crud_updates_index(
+    search_client: TestClient,
+) -> None:
     workspace_key = "delivery-hub"
-    workspace_id = _workspace_id(workspace_key)
     admin = _dev_login(search_client, "delivery-hub-admin")
     member = _dev_login(search_client, "delivery-hub-member")
+    workspace_id = _workspace_id(workspace_key)
     suffix = uuid.uuid4().hex[:8]
     original_title = f"ACL 문서 검색 원본 {suffix}"
     updated_title = f"ACL 문서 검색 수정 {suffix}"
@@ -606,11 +422,13 @@ def test_keyword_search_doc_acl_grant_revoke_and_crud_updates_index(search_clien
     )
 
 
-def test_keyword_search_meeting_attendee_acl_add_remove_updates_index(search_client: TestClient) -> None:
+def test_keyword_search_meeting_attendee_acl_add_remove_updates_index(
+    search_client: TestClient,
+) -> None:
     workspace_key = "delivery-hub"
-    workspace_id = _workspace_id(workspace_key)
     admin = _dev_login(search_client, "delivery-hub-admin")
     member = _dev_login(search_client, "delivery-hub-member")
+    workspace_id = _workspace_id(workspace_key)
     title = f"ACL 회의 검색 {uuid.uuid4().hex[:8]}"
 
     create_response = search_client.post(
@@ -688,11 +506,13 @@ def test_keyword_search_meeting_attendee_acl_add_remove_updates_index(search_cli
     )
 
 
-def test_keyword_search_pms_issue_grant_revoke_and_archive_restore_updates_index(search_client: TestClient) -> None:
+def test_keyword_search_pms_task_grant_revoke_and_archive_restore_updates_index(
+    search_client: TestClient,
+) -> None:
     workspace_key = "delivery-hub"
-    workspace_id = _workspace_id(workspace_key)
     admin = _dev_login(search_client, "delivery-hub-admin")
     member = _dev_login(search_client, "delivery-hub-member")
+    workspace_id = _workspace_id(workspace_key)
     suffix = uuid.uuid4().hex[:8]
     title = f"ACL PMS 검색 원본 {suffix}"
     updated_title = f"ACL PMS 검색 수정 {suffix}"
@@ -717,7 +537,7 @@ def test_keyword_search_pms_issue_grant_revoke_and_archive_restore_updates_index
         key=f"S{suffix[:5]}",
         name=f"Search ACL List {suffix}",
     )
-    issue = _create_pms_issue(
+    issue = _create_pms_task(
         search_client,
         token=admin["token"],
         workspace_key=workspace_key,
@@ -733,7 +553,7 @@ def test_keyword_search_pms_issue_grant_revoke_and_archive_restore_updates_index
             workspace_key=workspace_key,
             workspace_id=workspace_id,
             query=title,
-            entity_types=["pms_issue"],
+            entity_types=["pms_task"],
         )
     )
     assert issue["id"] not in _hit_ids(
@@ -743,14 +563,14 @@ def test_keyword_search_pms_issue_grant_revoke_and_archive_restore_updates_index
             workspace_key=workspace_key,
             workspace_id=workspace_id,
             query=title,
-            entity_types=["pms_issue"],
+            entity_types=["pms_task"],
         )
     )
 
     with get_session_factory()() as db:
-        grant_issue_access(
+        grant_task_access(
             db,
-            issue_id=issue["id"],
+            task_id=issue["id"],
             user_id=member["user"]["id"],
             granted_by_user_id=admin["user"]["id"],
             granted_by_meeting_id=None,
@@ -765,15 +585,15 @@ def test_keyword_search_pms_issue_grant_revoke_and_archive_restore_updates_index
             workspace_key=workspace_key,
             workspace_id=workspace_id,
             query=title,
-            entity_types=["pms_issue"],
+            entity_types=["pms_task"],
         )
     )
 
     with get_session_factory()() as db:
         assert (
-            revoke_issue_access(
+            revoke_task_access(
                 db,
-                issue_id=issue["id"],
+                task_id=issue["id"],
                 user_id=member["user"]["id"],
                 revoked_by_user_id=admin["user"]["id"],
                 reason="manual_revoke",
@@ -789,12 +609,12 @@ def test_keyword_search_pms_issue_grant_revoke_and_archive_restore_updates_index
             workspace_key=workspace_key,
             workspace_id=workspace_id,
             query=title,
-            entity_types=["pms_issue"],
+            entity_types=["pms_task"],
         )
     )
 
     update_response = search_client.patch(
-        f"/api/v1/workspaces/{workspace_key}/pms/issues/{issue['id']}",
+        f"/api/v1/workspaces/{workspace_key}/pms/tasks/{issue['id']}",
         headers=_headers(admin["token"]),
         json={"title": updated_title},
     )
@@ -807,7 +627,7 @@ def test_keyword_search_pms_issue_grant_revoke_and_archive_restore_updates_index
             workspace_key=workspace_key,
             workspace_id=workspace_id,
             query=updated_title,
-            entity_types=["pms_issue"],
+            entity_types=["pms_task"],
         )
     )
     assert issue["id"] not in _hit_ids(
@@ -817,12 +637,12 @@ def test_keyword_search_pms_issue_grant_revoke_and_archive_restore_updates_index
             workspace_key=workspace_key,
             workspace_id=workspace_id,
             query=title,
-            entity_types=["pms_issue"],
+            entity_types=["pms_task"],
         )
     )
 
     archive_response = search_client.patch(
-        f"/api/v1/workspaces/{workspace_key}/pms/issues/{issue['id']}",
+        f"/api/v1/workspaces/{workspace_key}/pms/tasks/{issue['id']}",
         headers=_headers(admin["token"]),
         json={"archived": True},
     )
@@ -835,14 +655,14 @@ def test_keyword_search_pms_issue_grant_revoke_and_archive_restore_updates_index
             workspace_key=workspace_key,
             workspace_id=workspace_id,
             query=updated_title,
-            entity_types=["pms_issue"],
+            entity_types=["pms_task"],
         )
     )
 
     restore_response = search_client.patch(
-        f"/api/v1/workspaces/{workspace_key}/pms/lists/{task_list['id']}/issues/bulk",
+        f"/api/v1/workspaces/{workspace_key}/pms/lists/{task_list['id']}/tasks/bulk",
         headers=_headers(admin["token"]),
-        json={"issue_ids": [issue["id"]], "archived": False},
+        json={"task_ids": [issue["id"]], "archived": False},
     )
     assert restore_response.status_code == 200, restore_response.text
     _process_pending_search_jobs()
@@ -853,26 +673,67 @@ def test_keyword_search_pms_issue_grant_revoke_and_archive_restore_updates_index
             workspace_key=workspace_key,
             workspace_id=workspace_id,
             query=updated_title,
-            entity_types=["pms_issue"],
+            entity_types=["pms_task"],
+        )
+    )
+
+    archive_list_response = search_client.patch(
+        f"/api/v1/workspaces/{workspace_key}/pms/lists/{task_list['id']}",
+        headers=_headers(admin["token"]),
+        json={"archived": True},
+    )
+    assert archive_list_response.status_code == 200, archive_list_response.text
+    _process_pending_search_jobs()
+    assert issue["id"] not in _hit_ids(
+        _search(
+            search_client,
+            token=admin["token"],
+            workspace_key=workspace_key,
+            workspace_id=workspace_id,
+            query=updated_title,
+            entity_types=["pms_task"],
+        )
+    )
+
+    restore_list_response = search_client.patch(
+        f"/api/v1/workspaces/{workspace_key}/pms/lists/{task_list['id']}",
+        headers=_headers(admin["token"]),
+        json={"archived": False},
+    )
+    assert restore_list_response.status_code == 200, restore_list_response.text
+    _process_pending_search_jobs()
+    assert issue["id"] in _hit_ids(
+        _search(
+            search_client,
+            token=admin["token"],
+            workspace_key=workspace_key,
+            workspace_id=workspace_id,
+            query=updated_title,
+            entity_types=["pms_task"],
         )
     )
 
 
-def test_keyword_search_planner_visibility_public_private_updates_index(search_client: TestClient) -> None:
+def test_keyword_search_excludes_personal_planner_events(search_client: TestClient) -> None:
     workspace_key = "delivery-hub"
-    workspace_id = _workspace_id(workspace_key)
     admin = _dev_login(search_client, "delivery-hub-admin")
     member = _dev_login(search_client, "delivery-hub-member")
+    workspace_id = _workspace_id(workspace_key)
     title = f"ACL 플래너 검색 {uuid.uuid4().hex[:8]}"
+    _create_sentinel_doc(
+        search_client,
+        token=admin["token"],
+        workspace_key=workspace_key,
+        title=f"Planner search index sentinel {uuid.uuid4().hex[:8]}",
+    )
 
     create_response = search_client.post(
-        f"/api/v1/workspaces/{workspace_key}/planner/events",
+        "/api/v1/planner/events",
         headers=_headers(admin["token"]),
         json={
             "title": title,
             "description": "Planner ACL search body",
             "location": "Seoul",
-            "visibility": "private",
             "allDay": False,
             "start": "2026-05-04T01:00:00+00:00",
             "end": "2026-05-04T02:00:00+00:00",
@@ -882,7 +743,7 @@ def test_keyword_search_planner_visibility_public_private_updates_index(search_c
     event = create_response.json()
     _process_pending_search_jobs()
 
-    assert event["id"] in _hit_ids(
+    assert event["id"] not in _hit_ids(
         _search(
             search_client,
             token=admin["token"],
@@ -892,42 +753,6 @@ def test_keyword_search_planner_visibility_public_private_updates_index(search_c
             entity_types=["planner_event"],
         )
     )
-    assert event["id"] not in _hit_ids(
-        _search(
-            search_client,
-            token=member["token"],
-            workspace_key=workspace_key,
-            workspace_id=workspace_id,
-            query=title,
-            entity_types=["planner_event"],
-        )
-    )
-
-    public_response = search_client.patch(
-        f"/api/v1/workspaces/{workspace_key}/planner/events/{event['id']}",
-        headers=_headers(admin["token"]),
-        json={"visibility": "public"},
-    )
-    assert public_response.status_code == 200, public_response.text
-    _process_pending_search_jobs()
-    assert event["id"] in _hit_ids(
-        _search(
-            search_client,
-            token=member["token"],
-            workspace_key=workspace_key,
-            workspace_id=workspace_id,
-            query=title,
-            entity_types=["planner_event"],
-        )
-    )
-
-    private_response = search_client.patch(
-        f"/api/v1/workspaces/{workspace_key}/planner/events/{event['id']}",
-        headers=_headers(admin["token"]),
-        json={"visibility": "private"},
-    )
-    assert private_response.status_code == 200, private_response.text
-    _process_pending_search_jobs()
     assert event["id"] not in _hit_ids(
         _search(
             search_client,

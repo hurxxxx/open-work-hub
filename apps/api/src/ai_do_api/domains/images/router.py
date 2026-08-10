@@ -10,7 +10,9 @@ from ai_do_api.core.i18n import localized_http_exception
 from ai_do_api.core.settings import get_settings
 from ai_do_api.domains.auth.dependencies import require_current_user, require_current_workspace
 from ai_do_api.domains.auth.models import User, Workspace
+from ai_do_api.domains.auth.workspace_app_gate import require_workspace_app_enabled
 from ai_do_api.domains.images import service as images_service
+from ai_do_api.domains.images.app_catalog import IMAGE_WIZARD_WORKSPACE_APP
 from ai_do_api.domains.images.schemas import (
     BriefRequest,
     BriefVersionOut,
@@ -24,7 +26,16 @@ from ai_do_api.domains.images.schemas import (
 )
 
 
-router = APIRouter(prefix="/images", tags=["images"])
+require_image_wizard_app_enabled = require_workspace_app_enabled(
+    IMAGE_WIZARD_WORKSPACE_APP.app_id,
+    error_code="images.app_disabled",
+)
+
+router = APIRouter(
+    prefix="/images",
+    tags=["images"],
+    dependencies=[Depends(require_image_wizard_app_enabled)],
+)
 
 _UPLOAD_CHUNK_BYTES = 1024 * 1024
 
@@ -67,9 +78,7 @@ def create_generation(
 @router.get("/generations", response_model=ImageGenerationListResponse)
 def list_generations(
     limit: int = Query(default=20, ge=1, le=100),
-    image_status: Literal[
-        "idle", "queued", "running", "succeeded", "failed", "cancelled"
-    ]
+    image_status: Literal["idle", "queued", "running", "succeeded", "failed", "cancelled"]
     | None = Query(default=None),
     use_case: str | None = Query(default=None, max_length=64),
     is_template: bool | None = Query(default=None),

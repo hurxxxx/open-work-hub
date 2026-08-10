@@ -1,34 +1,71 @@
 import { Navigate, useLocation, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
-import { getNavItem } from '@/src/app/shell/app-registry';
-import { imageWizardToolElement, ragSearchToolElement } from '@/src/app-modules/ai/routes';
-import { docsToolElement } from '@/src/app-modules/docs/routes';
-import { pmsToolElement } from '@/src/app-modules/pms/routes';
-import { whiteboardToolElement } from '@/src/app-modules/whiteboard/routes';
 import { hasWorkspaceMembership } from '@/src/platform/auth/auth-api';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { AccessDeniedView } from '@/src/platform/auth/settings-pages';
-import {
-  canUseWorkspaceSearchTool,
-  isWorkspaceAppEnabled,
-} from '@/src/platform/rag/rag-ui-access';
 import { useWorkspaceBootstrapContext } from '@/src/platform/workspaces/workspace-bootstrap-context';
 import {
+  getRequestedToolWorkspaceSlugFromSearch,
   getToolWorkspaceSlugFromSearch,
-  resolveDefaultWorkspaceAppPath,
   resolveShellWorkspaceSlug,
 } from '@/src/platform/workspaces/workspace-utils';
+import {
+  resolveToolRedirectAppRootPath,
+  resolveToolViewRouteDecision,
+} from './tool-view-route-model';
+import type {
+  ToolViewAccessDeniedReason,
+  ToolViewRouteDefinition,
+} from './route-types';
+import type { NavItem } from './navigation-types';
 import { ComingSoonView } from './tool-views/ComingSoonView';
+import { ToolGuideLauncher } from './tool-views/ToolGuideLauncher';
 import { ToolView } from './tool-views/ToolView';
+import {
+  EMPTY_FEATURE_GUIDE_TOOL_IDS,
+  type FeatureGuideToolIds,
+} from './ai-feature-guides';
 
-export function ToolViewWrapper() {
+const ACCESS_DENIED_DESCRIPTION_KEYS: Record<
+  ToolViewAccessDeniedReason,
+  string
+> = {
+  app_disabled: 'shell:gates.appDisabled',
+  image_wizard_disabled: 'shell:gates.imageWizardDisabled',
+  tool_workspace_denied: 'shell:gates.toolWorkspaceDenied',
+  workspace_search_disabled: 'shell:gates.workspaceSearchDisabled',
+};
+
+const getNoopNavItem = () => null;
+const getNoopToolViewRoute = () => null;
+
+export interface ToolViewWrapperProps {
+  featureGuideToolIds?: FeatureGuideToolIds;
+  getNavItem?: (itemId: string) => NavItem | null;
+  getToolViewRoute?: ({
+    item,
+    toolId,
+  }: {
+    item: NavItem | null;
+    toolId: string;
+  }) => ToolViewRouteDefinition | null;
+}
+
+export function ToolViewWrapper({
+  featureGuideToolIds = EMPTY_FEATURE_GUIDE_TOOL_IDS,
+  getNavItem = getNoopNavItem,
+  getToolViewRoute = getNoopToolViewRoute,
+}: ToolViewWrapperProps = {}) {
   const auth = useAuth();
   const { t } = useTranslation(['apps', 'shell']);
   const location = useLocation();
   const { toolId } = useParams();
   const workspaceBootstrap = useWorkspaceBootstrapContext();
-  const pmsRoot = resolveDefaultWorkspaceAppPath(auth.user, 'pms');
+  const requestedToolWorkspaceSlug = getRequestedToolWorkspaceSlugFromSearch(
+    location.pathname,
+    location.search,
+  );
   const toolWorkspaceSlug =
     workspaceBootstrap.data?.workspace.slug ??
     getToolWorkspaceSlugFromSearch(
@@ -36,89 +73,103 @@ export function ToolViewWrapper() {
       location.pathname,
       location.search,
     ) ??
-    resolveShellWorkspaceSlug(auth.user, null);
-  const enabledBootstrapApps = workspaceBootstrap.data?.apps ?? null;
-
-  if (toolId === 'pms-space-team') {
-    return (
-      <Navigate replace to={{ pathname: pmsRoot, search: location.search }} />
-    );
-  }
-
-  if (toolId?.startsWith('pms-list-') || /^pms-space-.+/.test(toolId ?? '')) {
-    if (!hasWorkspaceMembership(auth.user)) {
-      return (
-        <AccessDeniedView description={t('shell:gates.toolWorkspaceDenied')} />
-      );
-    }
-    return pmsToolElement;
-  }
-
+    (requestedToolWorkspaceSlug
+      ? null
+      : resolveShellWorkspaceSlug(auth.user, null));
+  const enabledBootstrapApps = workspaceBootstrap.data
+    ? workspaceBootstrap.data.apps
+    : null;
+  const enabledBootstrapNav = workspaceBootstrap.data?.nav ?? null;
   const item = toolId ? getNavItem(toolId) : null;
-  if (!item) {
-    return <div className="p-8 text-gray-500">{t('apps:toolView.toolNotFound')}</div>;
-  }
+  const matchedToolRoute = toolId ? getToolViewRoute({ item, toolId }) : null;
+  const decision = resolveToolViewRouteDecision({
+    enabledBootstrapApps,
+    enabledBootstrapNav,
+    hasAnyWorkspaceMembership: hasWorkspaceMembership(auth.user),
+    hasRequestedWorkspaceMembership: hasWorkspaceMembership(
+      auth.user,
+      requestedToolWorkspaceSlug,
+    ),
+    hasToolWorkspaceMembership: hasWorkspaceMembership(
+      auth.user,
+      toolWorkspaceSlug,
+    ),
+    item,
+    matchedToolRoute,
+    requestedToolWorkspaceSlug,
+    toolId,
+    workspaceBootstrapError: workspaceBootstrap.error,
+    workspaceBootstrapLoading: workspaceBootstrap.loading,
+    workspaceKeywordSearchEntityTypes:
+      workspaceBootstrap.data?.keyword_search?.entity_types ?? [],
+  });
 
-  if (item.appId !== 'home' && !hasWorkspaceMembership(auth.user)) {
+  if (decision.type === 'redirect_app_root') {
     return (
-      <AccessDeniedView description={t('shell:gates.toolWorkspaceDenied')} />
+      <Navigate
+        replace
+        to={{
+          pathname: resolveToolRedirectAppRootPath({
+            appId: decision.appId,
+            toolWorkspaceSlug,
+            user: auth.user,
+          }),
+          search: location.search,
+        }}
+      />
     );
   }
 
-  if (item.appId === 'ai') {
-    if (!hasWorkspaceMembership(auth.user, toolWorkspaceSlug)) {
+  if (decision.type === 'not_found') {
+    return (
+      <div className="p-8 text-app-ink/55">
+        {t('apps:toolView.toolNotFound')}
+      </div>
+    );
+  }
+
+  if (decision.type === 'access_denied') {
+    return (
+      <AccessDeniedView
+        description={t(ACCESS_DENIED_DESCRIPTION_KEYS[decision.reason])}
+      />
+    );
+  }
+
+  if (decision.type === 'access_denied_message') {
+    return <AccessDeniedView description={decision.message} />;
+  }
+
+  if (decision.type === 'loading') {
+    return (
+      <div className="p-8 text-app-ink/55">
+        {t('shell:gates.workspaceLoading')}
+      </div>
+    );
+  }
+
+  if (decision.type === 'tool_element') {
+    const element =
+      matchedToolRoute?.id === decision.routeId &&
+      matchedToolRoute.type === 'element'
+        ? matchedToolRoute.element
+        : null;
+    if (element && toolId) {
       return (
-        <AccessDeniedView description={t('shell:gates.toolWorkspaceDenied')} />
+        <ToolGuideLauncher
+          featureGuideToolIds={featureGuideToolIds}
+          toolId={toolId}
+        >
+          {element}
+        </ToolGuideLauncher>
       );
     }
-    if (workspaceBootstrap.loading || enabledBootstrapApps === null) {
-      return (
-        <div className="p-8 text-gray-500">
-          {t('shell:gates.workspaceLoading')}
-        </div>
-      );
-    }
-    if (workspaceBootstrap.error) {
-      return <AccessDeniedView description={workspaceBootstrap.error} />;
-    }
-    if (!isWorkspaceAppEnabled(enabledBootstrapApps, 'ai')) {
-      return (
-        <AccessDeniedView description={t('shell:gates.appDisabled')} />
-      );
-    }
+    return element;
   }
 
-  if (item.appId === 'pms') {
-    return pmsToolElement;
-  }
-
-  if (item.appId === 'docs') {
-    return docsToolElement;
-  }
-
-  if (item.appId === 'whiteboard') {
-    return whiteboardToolElement;
-  }
-
-  if (toolId === 'search') {
-    if (!canUseWorkspaceSearchTool(enabledBootstrapApps)) {
-      return (
-        <AccessDeniedView description={t('shell:gates.workspaceSearchDisabled')} />
-      );
-    }
-    return ragSearchToolElement;
-  }
-
-  if (toolId === 'image-wizard') {
-    if (!isWorkspaceAppEnabled(enabledBootstrapApps, 'ai')) {
-      return <AccessDeniedView description={t('shell:gates.appDisabled')} />;
-    }
-    return imageWizardToolElement;
-  }
-
-  if (item.comingSoon) {
+  if (decision.type === 'coming_soon' && item) {
     return <ComingSoonView item={item} />;
   }
 
-  return <ToolView item={item} />;
+  return item ? <ToolView item={item} /> : null;
 }

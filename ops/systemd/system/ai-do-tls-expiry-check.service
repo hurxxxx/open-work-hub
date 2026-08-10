@@ -1,0 +1,17 @@
+[Unit]
+Description=Check the public AI-DO TLS certificate expiry and SAN contract
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+DynamicUser=yes
+ExecStart=/usr/bin/python3 /usr/local/libexec/ai-do/check_live_tls_expiry.py --host=dwdcc.kr --required-san=dwdcc.kr --required-san=*.dwdcc.kr --threshold-days=30
+TimeoutStartSec=30s
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+RestrictAddressFamilies=AF_INET AF_INET6
+UMask=0077

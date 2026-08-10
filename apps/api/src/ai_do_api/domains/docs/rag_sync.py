@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ai_do_api.core.settings import get_settings
 from ai_do_api.domains.docs.models import DocMeetingAccess, NativeDoc
+from ai_do_api.domains.docs.partitioning import ensure_native_doc_partition
 from ai_do_api.domains.meeting.models import Meeting, MeetingDocLink
 from ai_do_api.domains.rag.contracts import RagSyncOperation
 from ai_do_api.domains.rag.docs_projection import NATIVE_DOC_RESOURCE_TYPE
@@ -12,10 +15,17 @@ from ai_do_api.domains.rag.outbox import (
     enqueue_rag_sync_job,
     enqueue_rag_visibility_recompute_job,
 )
+from ai_do_api.domains.retrieval.projection_fencing import record_projection_event
 from ai_do_api.domains.search.hooks import enqueue_doc_search_index, enqueue_doc_search_index_by_id
 
 
 MEETING_VISIBILITY_SCOPE = "meeting"
+
+
+@dataclass(frozen=True, slots=True)
+class _MeetingVisibilityTargets:
+    search_doc_ids: list[str]
+    cursor_doc_ids: list[str]
 
 
 def enqueue_native_doc_rag_sync(
@@ -24,10 +34,21 @@ def enqueue_native_doc_rag_sync(
     doc: NativeDoc,
     operation: RagSyncOperation,
 ) -> None:
+    partition_id = ensure_native_doc_partition(db, doc=doc)
+    projection_event = record_projection_event(
+        db,
+        resource_type=NATIVE_DOC_RESOURCE_TYPE,
+        resource_id=doc.id,
+        retrieval_partition_id=partition_id,
+        change_kind=("delete" if operation == RagSyncOperation.DELETE else "content"),
+        desired_state=("deleted" if operation == RagSyncOperation.DELETE else "active"),
+        diagnostic_workspace_id=doc.workspace_id,
+    )
     enqueue_doc_search_index(
         db,
         doc=doc,
         operation=_search_operation(operation),
+        projection_event=projection_event,
     )
     if not get_settings().rag_enabled:
         return
@@ -38,6 +59,7 @@ def enqueue_native_doc_rag_sync(
         resource_type=NATIVE_DOC_RESOURCE_TYPE,
         resource_id=doc.id,
         operation=operation,
+        projection_event=projection_event,
     )
 
 
@@ -47,9 +69,7 @@ def enqueue_native_doc_rag_sync_by_id(
     doc_id: str,
     operation: RagSyncOperation,
 ) -> None:
-    doc = db.scalar(
-        select(NativeDoc).where(NativeDoc.id == doc_id)
-    )
+    doc = db.scalar(select(NativeDoc).where(NativeDoc.id == doc_id))
     if doc is None:
         return
     enqueue_native_doc_rag_sync(
@@ -63,8 +83,10 @@ def collect_meeting_visibility_doc_ids(
     db: Session,
     *,
     meeting_id: str,
+    cursor: dict | None = None,
 ) -> list[str]:
-    doc_ids = set(
+    doc_ids = {str(doc_id) for doc_id in (cursor or {}).get("doc_ids", []) if doc_id}
+    doc_ids.update(
         db.scalars(select(MeetingDocLink.doc_id).where(MeetingDocLink.meeting_id == meeting_id))
     )
     doc_ids.update(
@@ -87,8 +109,8 @@ def enqueue_meeting_visibility_recompute(
     meeting_id: str,
     doc_ids: list[str] | None = None,
 ) -> None:
-    affected_doc_ids = collect_meeting_visibility_doc_ids(db, meeting_id=meeting_id) if doc_ids is None else doc_ids
-    for doc_id in affected_doc_ids:
+    targets = _meeting_visibility_targets(db, meeting_id=meeting_id, doc_ids=doc_ids)
+    for doc_id in targets.search_doc_ids:
         enqueue_doc_search_index_by_id(
             db,
             doc_id=doc_id,
@@ -97,8 +119,7 @@ def enqueue_meeting_visibility_recompute(
     if not get_settings().rag_enabled:
         return
 
-    normalized_doc_ids = sorted({doc_id for doc_id in doc_ids or [] if doc_id})
-    cursor = {"doc_ids": normalized_doc_ids} if normalized_doc_ids else None
+    cursor = {"doc_ids": targets.cursor_doc_ids} if targets.cursor_doc_ids else None
     enqueue_rag_visibility_recompute_job(
         db,
         workspace_id=workspace_id,
@@ -106,6 +127,27 @@ def enqueue_meeting_visibility_recompute(
         scope_id=meeting_id,
         cursor=cursor,
     )
+
+
+def _meeting_visibility_targets(
+    db: Session,
+    *,
+    meeting_id: str,
+    doc_ids: list[str] | None,
+) -> _MeetingVisibilityTargets:
+    if doc_ids is None:
+        return _MeetingVisibilityTargets(
+            search_doc_ids=collect_meeting_visibility_doc_ids(db, meeting_id=meeting_id),
+            cursor_doc_ids=[],
+        )
+    return _MeetingVisibilityTargets(
+        search_doc_ids=doc_ids,
+        cursor_doc_ids=_normalize_doc_ids(doc_ids),
+    )
+
+
+def _normalize_doc_ids(doc_ids: list[str]) -> list[str]:
+    return sorted({doc_id for doc_id in doc_ids if doc_id})
 
 
 def _search_operation(operation: RagSyncOperation) -> str:

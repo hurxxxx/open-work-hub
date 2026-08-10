@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from datetime import datetime, time
+from dataclasses import dataclass, replace
 from typing import Any
 
 from fastapi import status
@@ -11,39 +11,49 @@ from sqlalchemy.orm import Session
 from ai_do_api.core.i18n import localized_http_exception
 from ai_do_api.core.settings import get_settings
 from ai_do_api.core.telemetry import current_trace_id
-from ai_do_api.domains.auth.models import Team, TeamMember, User, Workspace
-from ai_do_api.domains.rag.access_filter import can_user_access_resource
-from ai_do_api.domains.search.opensearch import OpenSearchError, OpenSearchKeywordClient
-from ai_do_api.domains.search.projections import all_workspace_search_documents
-from ai_do_api.domains.search.schemas import (
-    ContainerFacet,
-    EntityTypeFacet,
-    KeywordSearchRequest,
-    KeywordSearchResponse,
-    SearchContainerRef,
-    SearchEntityType,
-    SearchFacets,
-    SearchHighlight,
-    SearchHit,
-    SearchPerson,
-    SearchSnippet,
-    StatusFacet,
+from ai_do_api.domains.auth.models import User, Workspace
+from ai_do_api.domains.auth.access import resolve_workspace_enabled_app_ids
+from ai_do_api.domains.docs.content_text import extract_page_text
+from ai_do_api.domains.docs.models import NativeDocPage
+from ai_do_api.domains.files.search_projection import (
+    hydrate_file_search_rows_from_source,
 )
+from ai_do_api.domains.search.backend_contracts import (
+    KeywordAclFilter,
+    KeywordSearchBackendError,
+    KeywordSearchClient,
+    KeywordSearchTextOperator,
+)
+from ai_do_api.domains.search.backend_factory import build_keyword_search_client
+from ai_do_api.domains.search.projections import all_workspace_search_documents
+from ai_do_api.domains.search.entity_adapter_registry import (
+    WorkspaceKeywordSearchScope,
+    resolve_workspace_keyword_search_scope,
+)
+from ai_do_api.domains.search.query_policy import (
+    DEFAULT_KEYWORD_SEARCH_CANDIDATE_SIZE,
+    build_keyword_search_query,
+    filter_and_sort_keyword_search_rows,
+)
+from ai_do_api.domains.search.result_projection import project_keyword_search_response
+from ai_do_api.domains.search.schemas import KeywordSearchRequest, KeywordSearchResponse
+from ai_do_api.domains.search.resource_mapping import maybe_resource_type_for_search_entity
+from ai_do_api.domains.retrieval.partitioning import (
+    flatten_read_scope,
+    resolve_resource_read_scope,
+)
+from ai_do_api.domains.source_access import SourceAclPolicy
 
 
-ENTITY_LABELS = {
-    SearchEntityType.DOC: "문서",
-    SearchEntityType.MEETING: "회의",
-    SearchEntityType.PMS_ISSUE: "PMS",
-    SearchEntityType.PLANNER_EVENT: "일정",
-}
+_MAX_KEYWORD_ACL_REFILL_PAGES = 5
+_KEYWORD_PIT_KEEP_ALIVE = "1m"
 
-RESOURCE_TYPE_BY_ENTITY = {
-    SearchEntityType.DOC: "docs_native_doc",
-    SearchEntityType.MEETING: "meeting",
-    SearchEntityType.PMS_ISSUE: "pms_issue",
-    SearchEntityType.PLANNER_EVENT: "planner_event",
-}
+
+@dataclass(frozen=True)
+class KeywordIndexRefreshSummary:
+    total: int
+    entity_counts: dict[str, int]
+
 
 def query_workspace_keyword_search(
     db: Session,
@@ -51,321 +61,409 @@ def query_workspace_keyword_search(
     workspace: Workspace,
     user: User,
     request: KeywordSearchRequest,
+    backend_timeout_seconds: float | None = None,
+    client: KeywordSearchClient | None = None,
+    evaluation_entity_types: tuple[str, ...] = (),
+    text_operator: KeywordSearchTextOperator = "and",
+    text_minimum_should_match: str | int | None = None,
+    backend_candidate_size: int | None = None,
+    partitioned_generation: bool = False,
 ) -> KeywordSearchResponse:
-    if request.workspace_id and request.workspace_id != workspace.id:
-        # Route workspace remains authoritative; mismatches simply cannot widen scope.
-        request.workspace_id = workspace.id
-    try:
-        _ensure_workspace_keyword_index_ready(workspace_id=workspace.id)
-        candidate_rows = _load_ranked_candidates(
-            workspace_id=workspace.id,
-            user_acl=_build_user_acl_scope(db, user=user, workspace_id=workspace.id),
-            request=request,
+    scope = resolve_workspace_keyword_search_scope(
+        resolve_workspace_enabled_app_ids(db, workspace.id),
+        include_inactive_entity_types=evaluation_entity_types,
+    )
+    if not scope.has_sources:
+        raise localized_http_exception(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code="search.workspace_keyword_search_disabled",
         )
-    except OpenSearchError as error:
+    requested_entity_types = tuple(request.entity_types)
+    allowed_entity_types = scope.constrain_entity_types(requested_entity_types)
+    effective_request = request.model_copy(
+        update={
+            "workspace_id": workspace.id,
+            "entity_types": list(allowed_entity_types),
+        }
+    )
+    if requested_entity_types and not allowed_entity_types:
+        return project_keyword_search_response(
+            [],
+            [],
+            request=effective_request,
+            trace_id=current_trace_id(),
+            doc_page_lookup=lambda _doc_id: [],
+        )
+
+    retrieval_partition_ids = _resolve_keyword_partition_ids(
+        db,
+        scope=scope,
+        allowed_entity_types=allowed_entity_types,
+        workspace=workspace,
+        user=user,
+        partitioned_generation=partitioned_generation,
+    )
+    if partitioned_generation and not retrieval_partition_ids:
+        return project_keyword_search_response(
+            [],
+            [],
+            request=effective_request,
+            trace_id=current_trace_id(),
+            doc_page_lookup=lambda _doc_id: [],
+        )
+
+    policy = SourceAclPolicy.for_workspace(db, workspace=workspace, user=user)
+    resolved_client = client or _search_client()
+    try:
+        _ensure_workspace_keyword_index_ready(
+            workspace_id=workspace.id,
+            client=resolved_client,
+        )
+        accessible_rows = _load_authorized_ranked_candidates(
+            workspace_id=workspace.id,
+            # A partitioned generation uses its partition predicate as the
+            # complete candidate envelope. Legacy backend ACL fields are only
+            # stale hints after workspace/company transitions and may not
+            # remove candidates before the source-owned final ACL.
+            acl_filter=(
+                None
+                if retrieval_partition_ids is not None
+                else policy.build_keyword_acl_filter()
+            ),
+            policy=policy,
+            allowed_entity_types=frozenset(allowed_entity_types),
+            request=effective_request,
+            backend_timeout_seconds=backend_timeout_seconds,
+            client=resolved_client,
+            text_operator=text_operator,
+            text_minimum_should_match=text_minimum_should_match,
+            size=backend_candidate_size or DEFAULT_KEYWORD_SEARCH_CANDIDATE_SIZE,
+            retrieval_partition_ids=retrieval_partition_ids,
+        )
+    except KeywordSearchBackendError as error:
         raise localized_http_exception(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             code="search.keyword_backend_unavailable",
             reason=str(error),
         ) from error
-    accessible_rows = [
-        row
-        for row in candidate_rows
-        if can_user_access_resource(
+    if retrieval_partition_ids is not None:
+        accessible_rows = hydrate_file_search_rows_from_source(
             db,
-            user=user,
-            workspace_id=str(row["workspace_id"]),
-            resource_type=RESOURCE_TYPE_BY_ENTITY[SearchEntityType(str(row["entity_type"]))],
-            resource_id=str(row["entity_id"]),
+            rows=accessible_rows,
+            execution_workspace=workspace,
         )
+    # Recheck immediately before facets/counts/highlights and response
+    # projection so a concurrent revoke cannot leak derived information.
+    accessible_rows = _filter_accessible_search_rows(
+        accessible_rows,
+        policy,
+        workspace_id=workspace.id,
+        allowed_entity_types=frozenset(allowed_entity_types),
+        authorized_partition_ids=retrieval_partition_ids,
+    )
+    page_rows = accessible_rows[
+        effective_request.offset : effective_request.offset + effective_request.limit
     ]
-    total = len(accessible_rows)
-    page_rows = accessible_rows[request.offset : request.offset + request.limit]
-    hits = [_hit_from_row(row, query=request.query) for row in page_rows]
-    next_offset = request.offset + request.limit if request.offset + request.limit < total else None
-    return KeywordSearchResponse(
-        query=request.query,
-        hits=hits,
-        facets=_build_facets(accessible_rows),
-        total=total,
-        has_more=next_offset is not None,
-        next_offset=next_offset,
+    return project_keyword_search_response(
+        accessible_rows,
+        page_rows,
+        request=effective_request,
         trace_id=current_trace_id(),
+        doc_page_lookup=lambda doc_id: _load_doc_pages_for_link(db, doc_id=doc_id),
     )
 
 
-def refresh_workspace_keyword_index(db: Session, *, workspace: Workspace) -> None:
+def refresh_workspace_keyword_index(
+    db: Session,
+    *,
+    workspace: Workspace,
+    client: KeywordSearchClient | None = None,
+) -> KeywordIndexRefreshSummary:
     rows = all_workspace_search_documents(db, workspace=workspace)
-    _search_client().rebuild_workspace(workspace_id=workspace.id, documents=rows)
+    (client or _search_client()).rebuild_workspace(
+        workspace_id=workspace.id,
+        documents=rows,
+    )
+    return KeywordIndexRefreshSummary(
+        total=len(rows),
+        entity_counts=dict(
+            sorted(Counter(str(row.get("entity_type") or "") for row in rows).items())
+        ),
+    )
 
 
-def _ensure_workspace_keyword_index_ready(*, workspace_id: str) -> None:
-    client = _search_client()
-    if not client.index_exists():
-        raise OpenSearchError("Keyword search index is not initialized. Run keyword search backfill first.")
-    if client.count_workspace_documents(workspace_id=workspace_id) == 0:
-        raise OpenSearchError("Keyword search index is empty for this workspace. Run keyword search backfill first.")
+def _ensure_workspace_keyword_index_ready(
+    *,
+    workspace_id: str,
+    client: KeywordSearchClient | None = None,
+) -> None:
+    del workspace_id
+    resolved_client = client or _search_client()
+    if not resolved_client.index_exists():
+        raise KeywordSearchBackendError(
+            "Keyword search index is not initialized. Run keyword search backfill first."
+        )
 
 
 def _load_ranked_candidates(
     *,
     workspace_id: str,
-    user_acl: dict[str, Any],
+    acl_filter: KeywordAclFilter | None,
     request: KeywordSearchRequest,
+    backend_timeout_seconds: float | None = None,
+    client: KeywordSearchClient | None = None,
+    text_operator: KeywordSearchTextOperator = "and",
+    text_minimum_should_match: str | int | None = None,
+    size: int = DEFAULT_KEYWORD_SEARCH_CANDIDATE_SIZE,
+    retrieval_partition_ids: tuple[str, ...] | None = None,
 ) -> list[dict[str, Any]]:
-    query_text = request.query.strip()
-    filters: list[dict[str, Any]] = [{"term": {"workspace_id": workspace_id}}]
-    if request.entity_types:
-        filters.append({"terms": {"entity_type": [item.value for item in request.entity_types]}})
-    filters.append(_acl_filter(user_acl))
-
-    if query_text:
-        query: dict[str, Any] = {
-            "bool": {
-                "filter": filters,
-                "must": [
-                    {
-                        "multi_match": {
-                            "query": query_text,
-                            "fields": ["title^5", "keywords^3", "summary^2", "body", "search_text"],
-                            "operator": "and",
-                            "type": "best_fields",
-                        }
-                    }
-                ],
-            }
-        }
-    else:
-        query = {"bool": {"filter": filters, "must": [{"match_all": {}}]}}
-
-    if request.sort.field == "updated_at":
-        sort_spec: list[dict[str, Any]] = [
-            {"source_updated_at": {"order": request.sort.direction, "unmapped_type": "date"}},
-            {"_score": {"order": "desc"}},
-        ]
-    elif request.sort.field == "created_at":
-        sort_spec = [
-            {"created_at": {"order": request.sort.direction, "unmapped_type": "date"}},
-            {"_score": {"order": "desc"}},
-        ]
-    else:
-        sort_spec = [{"_score": {"order": "desc"}}, {"source_updated_at": {"order": "desc", "unmapped_type": "date"}}]
-
-    response = _search_client().search(
-        {
-            "track_total_hits": True,
-            "query": query,
-            "sort": sort_spec,
-            "size": 10000,
-        }
+    rows, _, _ = _load_ranked_candidate_page(
+        workspace_id=workspace_id,
+        acl_filter=acl_filter,
+        request=request,
+        backend_timeout_seconds=backend_timeout_seconds,
+        client=client,
+        text_operator=text_operator,
+        text_minimum_should_match=text_minimum_should_match,
+        size=size,
+        retrieval_partition_ids=retrieval_partition_ids,
     )
+    return rows
+
+
+def _load_authorized_ranked_candidates(
+    *,
+    workspace_id: str,
+    acl_filter: KeywordAclFilter | None,
+    policy: SourceAclPolicy,
+    allowed_entity_types: frozenset[str],
+    request: KeywordSearchRequest,
+    backend_timeout_seconds: float | None,
+    client: KeywordSearchClient,
+    text_operator: KeywordSearchTextOperator,
+    text_minimum_should_match: str | int | None,
+    size: int,
+    retrieval_partition_ids: tuple[str, ...] | None = None,
+) -> list[dict[str, Any]]:
+    open_pit = getattr(client, "open_point_in_time", None)
+    close_pit = getattr(client, "close_point_in_time", None)
+    point_in_time_id = (
+        open_pit(keep_alive=_KEYWORD_PIT_KEEP_ALIVE)
+        if callable(open_pit) and callable(close_pit)
+        else None
+    )
+    search_after: tuple[Any, ...] = ()
+    accessible_rows: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    required_count = request.offset + request.limit
+    try:
+        for _page in range(_MAX_KEYWORD_ACL_REFILL_PAGES):
+            rows, next_search_after, exhausted = _load_ranked_candidate_page(
+                workspace_id=workspace_id,
+                acl_filter=acl_filter,
+                request=request,
+                backend_timeout_seconds=backend_timeout_seconds,
+                client=client,
+                text_operator=text_operator,
+                text_minimum_should_match=text_minimum_should_match,
+                size=size,
+                search_after=search_after,
+                point_in_time_id=point_in_time_id,
+                retrieval_partition_ids=retrieval_partition_ids,
+            )
+            new_rows = []
+            for row in rows:
+                identity = (
+                    str(row.get("entity_type") or ""),
+                    str(row.get("entity_id") or ""),
+                )
+                if identity in seen:
+                    continue
+                seen.add(identity)
+                new_rows.append(row)
+            accessible_rows.extend(
+                _filter_accessible_search_rows(
+                    new_rows,
+                    policy,
+                    workspace_id=workspace_id,
+                    allowed_entity_types=allowed_entity_types,
+                    authorized_partition_ids=retrieval_partition_ids,
+                )
+            )
+            if len(accessible_rows) >= required_count or exhausted:
+                break
+            if point_in_time_id is None:
+                break
+            if not next_search_after:
+                raise KeywordSearchBackendError(
+                    "Keyword ACL refill requires a stable search_after cursor"
+                )
+            search_after = next_search_after
+    finally:
+        if point_in_time_id is not None and callable(close_pit):
+            try:
+                close_pit(point_in_time_id)
+            except KeywordSearchBackendError:
+                # PITs expire server-side; closing is best effort after the
+                # response snapshot has already been consumed.
+                pass
+    return filter_and_sort_keyword_search_rows(accessible_rows, request)
+
+
+def _load_ranked_candidate_page(
+    *,
+    workspace_id: str,
+    acl_filter: KeywordAclFilter | None,
+    request: KeywordSearchRequest,
+    backend_timeout_seconds: float | None,
+    client: KeywordSearchClient | None,
+    text_operator: KeywordSearchTextOperator,
+    text_minimum_should_match: str | int | None,
+    size: int,
+    search_after: tuple[Any, ...] = (),
+    point_in_time_id: str | None = None,
+    retrieval_partition_ids: tuple[str, ...] | None = None,
+) -> tuple[list[dict[str, Any]], tuple[Any, ...], bool]:
+    query = build_keyword_search_query(
+        workspace_id=workspace_id,
+        acl_filter=acl_filter,
+        request=request,
+        retrieval_partition_ids=retrieval_partition_ids,
+        request_timeout_seconds=backend_timeout_seconds,
+        text_operator=text_operator,
+        text_minimum_should_match=text_minimum_should_match,
+        size=size,
+    )
+    result = (client or _search_client()).search(
+        replace(
+            query,
+            search_after=search_after,
+            point_in_time_id=point_in_time_id,
+            point_in_time_keep_alive=_KEYWORD_PIT_KEEP_ALIVE,
+        )
+    )
+    next_search_after = result.hits[-1].sort_values if result.hits else ()
     rows: list[dict[str, Any]] = []
-    for hit in response.get("hits", {}).get("hits", []):
-        source = dict(hit.get("_source") or {})
-        source["_search_score"] = float(hit.get("_score") or 0.0)
-        if _matches_request_filters(source, request):
-            rows.append(source)
-    return _sort_rows(rows, request)
+    for hit in result.hits:
+        source = dict(hit.document)
+        source["_search_score"] = hit.score
+        if hit.sort_values:
+            source["_search_sort"] = list(hit.sort_values)
+        rows.append(source)
+    return (
+        filter_and_sort_keyword_search_rows(rows, request),
+        next_search_after,
+        len(result.hits) < size,
+    )
 
 
-def _date_marker_value(value: datetime) -> str:
-    return value.date().isoformat() if value.time() == time.min else value.isoformat()
+def _filter_accessible_search_rows(
+    candidate_rows: list[dict[str, Any]],
+    policy: SourceAclPolicy,
+    *,
+    workspace_id: str,
+    allowed_entity_types: frozenset[str],
+    authorized_partition_ids: tuple[str, ...] | None = None,
+) -> list[dict[str, Any]]:
+    candidates: list[tuple[dict[str, Any], str, str]] = []
+    for row in candidate_rows:
+        if authorized_partition_ids is None:
+            if str(row.get("workspace_id") or "") != workspace_id:
+                continue
+        elif str(row.get("retrieval_partition_id") or "") not in authorized_partition_ids:
+            continue
+        if str(row.get("entity_type") or "") not in allowed_entity_types:
+            continue
+        resource_type = maybe_resource_type_for_search_entity(row.get("entity_type"))
+        if resource_type is None:
+            continue
+        resource_id = str(row.get("entity_id") or "")
+        if resource_id:
+            candidates.append((row, resource_type, resource_id))
+    authorize_many = getattr(policy, "authorize_many_resources", None)
+    if callable(authorize_many):
+        allowed = authorize_many(
+            (resource_type, resource_id) for _, resource_type, resource_id in candidates
+        )
+    else:
+        allowed = {
+            (resource_type, resource_id)
+            for _, resource_type, resource_id in candidates
+            if policy.can_read_resource(resource_type, resource_id)
+        }
+    return [
+        row
+        for row, resource_type, resource_id in candidates
+        if (resource_type, resource_id) in allowed
+    ]
 
 
-def _build_user_acl_scope(db: Session, *, user: User, workspace_id: str) -> dict[str, Any]:
-    team_ids = db.scalars(
-        select(TeamMember.team_id)
-        .join(Team, TeamMember.team_id == Team.id)
-        .where(
-            TeamMember.user_id == user.id,
-            Team.workspace_id == workspace_id,
-            Team.active.is_(True),
-            Team.trashed_at.is_(None),
+def _resolve_keyword_partition_ids(
+    db: Session,
+    *,
+    scope: WorkspaceKeywordSearchScope,
+    allowed_entity_types: tuple[str, ...],
+    workspace: Workspace,
+    user: User,
+    partitioned_generation: bool,
+) -> tuple[str, ...] | None:
+    if not partitioned_generation:
+        return None
+    allowed = frozenset(allowed_entity_types)
+    resource_types = [
+        descriptor.resource_type
+        for descriptor in scope.descriptors
+        if descriptor.entity_type in allowed
+    ]
+    read_scope = resolve_resource_read_scope(
+        db,
+        resource_types=resource_types,
+        workspace_id=workspace.id,
+        user_id=user.id,
+    )
+    return tuple(str(partition_id) for partition_id in flatten_read_scope(read_scope))
+
+
+def _search_client() -> KeywordSearchClient:
+    return build_keyword_search_client(get_settings())
+
+
+def _load_doc_pages_for_link(db: Session, *, doc_id: str) -> list[dict[str, str]]:
+    pages = db.scalars(
+        select(NativeDocPage)
+        .where(NativeDocPage.doc_id == doc_id, NativeDocPage.trashed_at.is_(None))
+        .order_by(
+            NativeDocPage.sort_order.asc(), NativeDocPage.created_at.asc(), NativeDocPage.id.asc()
         )
     ).all()
-    return {"user_id": user.id, "team_ids": [team_id for team_id in team_ids if team_id]}
-
-
-def _acl_filter(user_acl: dict[str, Any]) -> dict[str, Any]:
-    user_id = str(user_acl["user_id"])
-    team_ids = [str(team_id) for team_id in user_acl.get("team_ids", []) if team_id]
-    branches = [
-        _entity_acl_branch(
-            SearchEntityType.DOC,
-            [
-                {"term": {"owner_user_id": user_id}},
-                {"term": {"shared_user_ids": user_id}},
-                {"term": {"granted_user_ids": user_id}},
-                *([{"terms": {"team_ids": team_ids}}] if team_ids else []),
-            ],
-        ),
-        _entity_acl_branch(
-            SearchEntityType.MEETING,
-            [
-                {"term": {"owner_user_id": user_id}},
-                {"term": {"participant_user_ids": user_id}},
-            ],
-        ),
-        _entity_acl_branch(
-            SearchEntityType.PMS_ISSUE,
-            [
-                {"term": {"granted_user_ids": user_id}},
-                *([{"terms": {"team_ids": team_ids}}] if team_ids else []),
-            ],
-        ),
-        _entity_acl_branch(
-            SearchEntityType.PLANNER_EVENT,
-            [
-                {"term": {"owner_user_id": user_id}},
-                {"term": {"visibility": "public"}},
-            ],
-        ),
-    ]
-    return {"bool": {"should": branches, "minimum_should_match": 1}}
-
-
-def _entity_acl_branch(entity_type: SearchEntityType, clauses: list[dict[str, Any]]) -> dict[str, Any]:
-    return {
-        "bool": {
-            "filter": [{"term": {"entity_type": entity_type.value}}],
-            "should": clauses,
-            "minimum_should_match": 1,
+    return [
+        {
+            "id": page.id,
+            "title": page.title,
+            "text": extract_page_text(
+                content_format=page.content_format,
+                content_blocks=page.content_blocks,
+                content_text=page.content_text,
+                block_extractor=_extract_blocks_text,
+            ),
         }
-    }
+        for page in pages
+    ]
 
 
-def _matches_request_filters(row: dict[str, Any], request: KeywordSearchRequest) -> bool:
-    if request.entity_types and row.get("entity_type") not in {item.value for item in request.entity_types}:
-        return False
-    for entity_type, statuses in request.status_by_type.items():
-        if statuses and row.get("entity_type") == entity_type.value and row.get("status") not in statuses:
-            return False
-    if request.people.user_ids:
-        people = row.get("people") or []
-        wanted_users = set(request.people.user_ids)
-        if request.people.role == "any":
-            if not any(person.get("user_id") in wanted_users for person in people):
-                return False
-        elif not any(
-            person.get("role") == request.people.role and person.get("user_id") in wanted_users
-            for person in people
-        ):
-            return False
-    if request.container_refs:
-        wanted_keys = {f"{item.type}:{item.id}" for item in request.container_refs}
-        if not wanted_keys.intersection(set(row.get("container_keys") or [])):
-            return False
-    for date_filter in request.date_filters:
-        value = _row_date_value(row, date_filter.field)
-        if not value:
-            return False
-        if date_filter.from_ is not None and value < _date_marker_value(date_filter.from_):
-            return False
-        if date_filter.to is not None and value > _date_marker_value(date_filter.to):
-            return False
-    return True
+def _extract_blocks_text(blocks: Any) -> str:
+    parts: list[str] = []
 
+    def visit(value: Any) -> None:
+        if isinstance(value, dict):
+            text = value.get("text")
+            if isinstance(text, str):
+                parts.append(text)
+            for child in value.values():
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
 
-def _row_date_value(row: dict[str, Any], field: str) -> str | None:
-    if field == "updated_at":
-        value = row.get("source_updated_at")
-    elif field == "created_at":
-        value = row.get("created_at")
-    else:
-        value = (row.get("date_markers") or {}).get(field)
-    return str(value) if value else None
-
-
-def _sort_rows(rows: list[dict[str, Any]], request: KeywordSearchRequest) -> list[dict[str, Any]]:
-    if request.sort.field == "updated_at":
-        return sorted(
-            rows,
-            key=lambda row: (str(row.get("source_updated_at") or ""), float(row.get("_search_score") or 0.0)),
-            reverse=request.sort.direction == "desc",
-        )
-    if request.sort.field == "created_at":
-        return sorted(
-            rows,
-            key=lambda row: (str(row.get("created_at") or ""), float(row.get("_search_score") or 0.0)),
-            reverse=request.sort.direction == "desc",
-        )
-    return sorted(
-        rows,
-        key=lambda row: (float(row.get("_search_score") or 0.0), str(row.get("source_updated_at") or "")),
-        reverse=True,
-    )
-
-
-def _search_client() -> OpenSearchKeywordClient:
-    settings = get_settings()
-    return OpenSearchKeywordClient(base_url=settings.opensearch_url, index_prefix=settings.opensearch_index_prefix)
-
-
-def _build_facets(rows: list[dict[str, Any]]) -> SearchFacets:
-    entity_counts = Counter(str(row.get("entity_type") or "") for row in rows)
-    status_counts: Counter[tuple[str, str, str]] = Counter()
-    container_counts: Counter[tuple[str, str, str]] = Counter()
-    for row in rows:
-        if row.get("status"):
-            status_counts[(str(row["entity_type"]), str(row["status"]), str(row.get("status_label") or row["status"]))] += 1
-        for container in row.get("containers") or []:
-            container_counts[
-                (
-                    str(container.get("type") or ""),
-                    str(container.get("id") or ""),
-                    str(container.get("label") or container.get("id") or ""),
-                )
-            ] += 1
-
-    return SearchFacets(
-        entity_types=[
-            EntityTypeFacet(value=entity_type, label=ENTITY_LABELS[entity_type], count=entity_counts[entity_type.value])
-            for entity_type in SearchEntityType
-            if entity_counts[entity_type.value] > 0
-        ],
-        status=[
-            StatusFacet(entity_type=SearchEntityType(entity_type), value=value, label=label, count=count)
-            for (entity_type, value, label), count in sorted(status_counts.items())
-        ],
-        containers=[
-            ContainerFacet(type=kind, id=item_id, label=label, count=count)
-            for (kind, item_id, label), count in sorted(container_counts.items())
-            if kind and item_id
-        ],
-    )
-
-
-def _hit_from_row(row: dict[str, Any], *, query: str) -> SearchHit:
-    return SearchHit(
-        entity_type=SearchEntityType(str(row["entity_type"])),
-        entity_id=str(row["entity_id"]),
-        workspace_id=str(row["workspace_id"]),
-        title=str(row.get("title") or "Untitled"),
-        summary=str(row.get("summary") or ""),
-        snippet=_build_snippet(row, query=query),
-        score=float(row.get("_search_score") or 0.0),
-        status=row.get("status"),
-        status_label=row.get("status_label"),
-        visibility=row.get("visibility"),
-        updated_at=row["source_updated_at"],
-        created_at=row["created_at"],
-        date_markers=dict(row.get("date_markers") or {}),
-        people=[SearchPerson.model_validate(item) for item in row.get("people") or []],
-        containers=[SearchContainerRef.model_validate(item) for item in row.get("containers") or []],
-        deep_link=str(row["deep_link"]),
-        preview_url=row.get("preview_url"),
-        metadata=dict(row.get("metadata") or {}),
-    )
-
-
-def _build_snippet(row: dict[str, Any], *, query: str) -> SearchSnippet:
-    source = str(row.get("summary") or row.get("body") or row.get("title") or "")
-    text_value = " ".join(source.split())[:420]
-    lowered = text_value.lower()
-    highlights: list[SearchHighlight] = []
-    for token in [part for part in query.lower().split() if part]:
-        start = lowered.find(token)
-        if start >= 0:
-            highlights.append(SearchHighlight(start=start, end=start + len(token)))
-            break
-    return SearchSnippet(text=text_value, highlights=highlights)
+    visit(blocks)
+    return " ".join(part.strip() for part in parts if part and part.strip())

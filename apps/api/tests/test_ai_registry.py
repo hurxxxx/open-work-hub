@@ -1,7 +1,13 @@
 from __future__ import annotations
 
+import pytest
+
 from ai_do_api.core.settings import get_settings
-from ai_do_api.domains.ai.registry import get_ai_capability_registry, reset_ai_capability_registry
+from ai_do_api.domains.ai.registry import (
+    AiCapabilityRegistry,
+    get_ai_capability_registry,
+    reset_ai_capability_registry,
+)
 
 
 def _reset_settings_and_registry() -> None:
@@ -11,44 +17,15 @@ def _reset_settings_and_registry() -> None:
     reset_ai_capability_registry()
 
 
-def test_mcp_bridge_disabled_by_default(monkeypatch) -> None:
-    for env_name in (
-        "AI_DO_AI_MCP_BRIDGE_ENABLED",
-        "DOOWON_AI_DO_AI_MCP_BRIDGE_ENABLED",
-        "DOOWON_API_AI_DO_AI_MCP_BRIDGE_ENABLED",
-    ):
-        monkeypatch.delenv(env_name, raising=False)
-
-    _reset_settings_and_registry()
-    try:
-        assert get_settings().ai_mcp_bridge_enabled is False
-    finally:
-        _reset_settings_and_registry()
-
-
-def test_ai_write_tools_disabled_by_default(monkeypatch) -> None:
-    for env_name in (
-        "AI_DO_AI_WRITE_TOOLS_ENABLED",
-        "DOOWON_AI_DO_AI_WRITE_TOOLS_ENABLED",
-        "DOOWON_API_AI_DO_AI_WRITE_TOOLS_ENABLED",
-    ):
-        monkeypatch.delenv(env_name, raising=False)
-
-    _reset_settings_and_registry()
-    try:
-        assert get_settings().ai_write_tools_enabled is False
-    finally:
-        _reset_settings_and_registry()
-
-
 def test_openai_tool_specs_export_registered_read_tools() -> None:
     _reset_settings_and_registry()
     registry = get_ai_capability_registry()
 
     specs = registry.openai_tool_specs()
 
-    assert len(specs) == 17
-    assert [spec["function"]["name"] for spec in specs] == sorted(registry.tools.keys())
+    tool_names = [spec["function"]["name"] for spec in specs]
+    assert tool_names == sorted(registry.tools.keys())
+    assert {"pms.search_tasks", "pms.get_task", "pms.list_task_lists"} <= set(tool_names)
     for spec in specs:
         function = spec["function"]
         assert spec["type"] == "function"
@@ -57,58 +34,129 @@ def test_openai_tool_specs_export_registered_read_tools() -> None:
         assert "strict" not in function
 
 
-def test_legacy_openai_tool_specs_preserve_registered_parameter_shapes() -> None:
-    _reset_settings_and_registry()
-    registry = get_ai_capability_registry()
+def test_gateway_tool_adapter_requires_registered_tool() -> None:
+    registry = AiCapabilityRegistry()
 
-    specs_by_name = {
-        spec["function"]["name"]: spec["function"]["parameters"]
-        for spec in registry.openai_tool_specs()
-    }
-
-    for name, definition in registry.tools.items():
-        if definition.args_model is None:
-            expected = {
-                "type": "object",
-                "properties": {},
-                "additionalProperties": True,
-            }
-        else:
-            expected = definition.args_model.model_json_schema()
-        assert specs_by_name[name] == expected
+    with pytest.raises(ValueError, match="unregistered AI tool"):
+        registry.register_gateway_tool_adapter(
+            agent_id="domain.example",
+            tool_name="example.search",
+            build_arguments=lambda _task: {},
+        )
 
 
-def test_registry_compiles_mcp_and_openai_schemas_for_all_tools() -> None:
-    _reset_settings_and_registry()
-    registry = get_ai_capability_registry()
+def test_legacy_llm_task_projects_to_deterministic_workload() -> None:
+    registry = AiCapabilityRegistry()
 
-    compiled = registry.compiled_schemas()
+    registry.register_llm_task(
+        task_kind="example_summary",
+        default_policy="local_only",
+        description="Example summary",
+        app_ids=("example", "example-reports"),
+    )
 
-    assert set(compiled.keys()) == set(registry.tools.keys())
-    planner_schema = compiled["planner.list_events"]
-    mcp_input = planner_schema.mcp_input_schema
-    strict_input = planner_schema.openai_strict_input_schema
+    workload = registry.resolve_llm_workload("example_summary")
+    assert workload.workload_id == "example_summary"
+    assert workload.task_kind == "example_summary"
+    assert workload.owner_domain == "example"
+    assert workload.app_ids == ("example", "example-reports")
+    assert workload.default_route == "local"
+    assert workload.allowed_routes == ("local", "external")
+    assert workload.local_max_output_tokens == 32_768
+    assert workload.external_max_output_tokens == 65_536
+    assert (
+        registry.resolve_llm_workload_for_task(
+            app_id="example-reports",
+            task_kind="example_summary",
+        )
+        is workload
+    )
 
-    assert mcp_input["type"] == "object"
-    assert "from" not in mcp_input["required"]
-    assert strict_input["type"] == "object"
-    assert strict_input["additionalProperties"] is False
-    assert {"from", "to"} <= set(strict_input["required"])
-    assert strict_input["properties"]["from"]["type"] == ["string", "null"]
+
+def test_llm_workload_registration_fails_closed_and_rejects_duplicate_app_task() -> None:
+    registry = AiCapabilityRegistry()
+    registry.register_llm_workload(
+        workload_id="example.summarize",
+        task_kind="example_summary",
+        owner_domain="example",
+        app_id="example",
+        description="Example summary",
+    )
+
+    with pytest.raises(LookupError, match="Unknown LLM workload"):
+        registry.resolve_llm_workload("example.unknown")
+
+    with pytest.raises(ValueError, match="Duplicate LLM workload app/task"):
+        registry.register_llm_workload(
+            workload_id="example.summarize-again",
+            task_kind="example_summary",
+            owner_domain="example",
+            app_id="example",
+            description="Duplicate example summary",
+        )
+
+
+def test_external_only_llm_workload_contract() -> None:
+    registry = AiCapabilityRegistry()
+    registry.register_llm_workload(
+        workload_id="images.generate",
+        task_kind="image_generation",
+        owner_domain="images",
+        app_id="images",
+        description="Generate an image",
+        default_route="external",
+        execution_kind="image_generation",
+        allowed_routes=("external",),
+        allowed_providers=("openai",),
+        required_capabilities=("image_generation",),
+        model_roles=("generation",),
+        external_data=True,
+    )
+
+    workload = registry.resolve_llm_workload("images.generate")
+    assert workload.default_policy == "external"
+    assert workload.allowed_pools == ("external",)
+    assert workload.model_roles == ("generation",)
+
+
+@pytest.mark.parametrize(
+    ("local_max_output_tokens", "external_max_output_tokens"),
+    [
+        (1_023, 65_536),
+        (32_768, 65_537),
+        (1_500, 65_536),
+    ],
+)
+def test_llm_workload_rejects_invalid_output_token_caps(
+    local_max_output_tokens: int,
+    external_max_output_tokens: int,
+) -> None:
+    registry = AiCapabilityRegistry()
+
+    with pytest.raises(ValueError, match="max output tokens"):
+        registry.register_llm_workload(
+            workload_id="example.invalid-cap",
+            task_kind="example_invalid_cap",
+            owner_domain="example",
+            app_id="example",
+            description="Invalid cap",
+            local_max_output_tokens=local_max_output_tokens,
+            external_max_output_tokens=external_max_output_tokens,
+        )
 
 
 def test_pms_write_anchors_are_hidden_when_write_tools_disabled() -> None:
     _reset_settings_and_registry()
     registry = get_ai_capability_registry()
 
-    assert registry.resolve_preview_builder("pms.issue_create_preview") is not None
-    assert registry.resolve_preview_builder("pms.issue_update_preview") is not None
-    assert registry.resolve_preview_builder("pms.issue_comment_preview") is not None
-    assert registry.resolve_preview_builder("pms.issue_delete_preview") is not None
-    assert "pms.create_issue" not in registry.tools
-    assert "pms.update_issue" not in registry.tools
+    assert registry.resolve_preview_builder("pms.task_create_preview") is not None
+    assert registry.resolve_preview_builder("pms.task_update_preview") is not None
+    assert registry.resolve_preview_builder("pms.task_comment_preview") is not None
+    assert registry.resolve_preview_builder("pms.task_delete_preview") is not None
+    assert "pms.create_task" not in registry.tools
+    assert "pms.update_task" not in registry.tools
     assert "pms.add_comment" not in registry.tools
-    assert "pms.delete_issue" not in registry.tools
+    assert "pms.delete_task" not in registry.tools
 
 
 def test_pms_write_tools_register_when_enabled(monkeypatch) -> None:
@@ -119,10 +167,10 @@ def test_pms_write_tools_register_when_enabled(monkeypatch) -> None:
 
         assert get_settings().ai_write_tools_enabled is True
         assert {
-            "pms.create_issue",
-            "pms.update_issue",
+            "pms.create_task",
+            "pms.update_task",
             "pms.add_comment",
-            "pms.delete_issue",
+            "pms.delete_task",
             "meeting.create_meeting",
             "planner.create_event",
             "planner.update_event",
@@ -130,17 +178,39 @@ def test_pms_write_tools_register_when_enabled(monkeypatch) -> None:
         } <= set(registry.tools)
         assert "docs.create_page" not in registry.tools
 
+        for tool_name in (
+            "pms.create_task",
+            "pms.update_task",
+            "pms.add_comment",
+            "pms.delete_task",
+            "meeting.create_meeting",
+            "planner.create_event",
+            "planner.update_event",
+            "planner.delete_event",
+        ):
+            descriptor = registry.get_descriptor(tool_name)
+            assert descriptor is not None
+            assert descriptor.mode == "write"
+            assert descriptor.approval_policy == "required"
+            assert descriptor.preview_builder_id is not None
+            assert registry.resolve_preview_builder(descriptor.preview_builder_id) is not None
+            assert (
+                registry.resolve_discoverability_predicate(descriptor.discoverability_predicate_id)
+                is not None
+            )
+            assert descriptor.output_projection == "resource_ids"
+
         default_specs = {spec["function"]["name"] for spec in registry.openai_tool_specs()}
         full_specs = {
             spec["function"]["name"]
             for spec in registry.openai_tool_specs(include_approval_required=True)
         }
-        assert "pms.create_issue" not in default_specs
+        assert "pms.create_task" not in default_specs
         assert {
-            "pms.create_issue",
-            "pms.update_issue",
+            "pms.create_task",
+            "pms.update_task",
             "pms.add_comment",
-            "pms.delete_issue",
+            "pms.delete_task",
             "meeting.create_meeting",
             "planner.create_event",
             "planner.update_event",

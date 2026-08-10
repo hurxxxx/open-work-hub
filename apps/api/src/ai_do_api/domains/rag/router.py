@@ -17,6 +17,7 @@ from ai_do_api.domains.auth.models import User, Workspace
 from ai_do_api.domains.rag import application as rag_application
 from ai_do_api.domains.rag.contracts import RagAnswerMode, RagQueryResponse
 from ai_do_api.domains.rag.filters import RagQueryFilters
+from ai_do_api.domains.retrieval import application as retrieval_application
 
 
 class RagQueryRestRequest(BaseModel):
@@ -64,7 +65,7 @@ def query_workspace_rag(
     current_workspace: Workspace = Depends(require_current_workspace),
 ) -> RagQueryResponse:
     try:
-        return rag_application.query_workspace_rag(
+        return retrieval_application.query_workspace_rag_response(
             db,
             workspace=current_workspace,
             user=current_user,
@@ -99,7 +100,7 @@ def list_workspace_rag_sources(
 ) -> RagSourceListResponse:
     try:
         return RagSourceListResponse(
-            sources=rag_application.list_workspace_rag_sources(
+            sources=retrieval_application.list_workspace_rag_sources_response(
                 db,
                 workspace=current_workspace,
                 user=current_user,

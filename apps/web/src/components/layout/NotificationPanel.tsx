@@ -1,17 +1,27 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useReducer } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'motion/react';
+import { LazyMotion, domAnimation, m } from 'motion/react';
 import { X, Check, CheckCheck, Loader2 } from 'lucide-react';
 import { Button } from '@ai-do/ui/primitives/button';
 import { useAuth } from '@/src/platform/auth/auth-provider';
-import { formatRelativeTime, normalizeTimeZone } from '@/src/platform/time/time-utils';
+import { FLOATING_DM_OPEN_EVENT } from '@/src/platform/personal-widgets/floating-panel-events';
+import {
+  formatRelativeTime,
+  normalizeTimeZone,
+} from '@/src/platform/time/time-utils';
 import {
   listNotifications,
   markNotificationRead,
   markAllNotificationsRead,
   type WorkspaceNotification,
 } from '@/src/platform/notifications/notifications-api';
+import {
+  INITIAL_NOTIFICATION_PANEL_STATE,
+  countUnreadNotifications,
+  notificationPanelReducer,
+  resolveNotificationAction,
+} from './notification-panel-model';
 
 function timeAgo(dateStr: string, timeZone: string, locale: string): string {
   return formatRelativeTime(dateStr, { locale, timeZone });
@@ -21,73 +31,109 @@ export function NotificationPanel({
   onClose,
   onNavigateToIssue,
   onCountChange,
+  refreshKey = 0,
   workspaceSlug,
 }: {
   onClose: () => void;
-  onNavigateToIssue?: (issueId: string) => void;
+  onNavigateToIssue?: (taskId: string) => void;
   onCountChange?: (count: number) => void;
+  refreshKey?: number;
   workspaceSlug: string | null;
 }) {
   const { token, user } = useAuth();
   const { t, i18n } = useTranslation('shell');
   const navigate = useNavigate();
   const timeZone = normalizeTimeZone(user?.time_zone);
-  const [notifications, setNotifications] = useState<WorkspaceNotification[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [{ loading, notifications }, dispatch] = useReducer(
+    notificationPanelReducer,
+    INITIAL_NOTIFICATION_PANEL_STATE,
+  );
 
   useEffect(() => {
-    if (!token || !workspaceSlug) {
-      setNotifications([]);
-      setLoading(false);
+    if (!token) {
+      dispatch({ type: 'signed-out' });
       return;
     }
-    setLoading(true);
-    listNotifications(token, 1, workspaceSlug)
-      .then(res => setNotifications(res.items))
-      .finally(() => setLoading(false));
-  }, [token, workspaceSlug]);
+    dispatch({ type: 'loading' });
+    listNotifications(token, 1, workspaceSlug).then((response) =>
+      dispatch({
+        type: 'loaded',
+        notifications: response.items,
+      }),
+    );
+  }, [refreshKey, token, workspaceSlug]);
 
-  const handleRead = useCallback(async (n: WorkspaceNotification) => {
-    if (!token || !workspaceSlug || n.is_read) return;
-    await markNotificationRead(token, n.id, workspaceSlug);
-    setNotifications(prev => prev.map(item => item.id === n.id ? { ...item, is_read: true } : item));
-    onCountChange?.(-1);
-  }, [token, onCountChange, workspaceSlug]);
+  const handleRead = useCallback(
+    async (n: WorkspaceNotification) => {
+      if (!token || n.is_read) return;
+      await markNotificationRead(token, n.id, workspaceSlug);
+      dispatch({
+        type: 'mark-read',
+        notificationId: n.id,
+      });
+      onCountChange?.(-1);
+    },
+    [token, onCountChange, workspaceSlug],
+  );
 
-  const handleClick = useCallback((n: WorkspaceNotification) => {
-    void handleRead(n);
-    if (n.action_url && n.action_url.startsWith('/')) {
-      navigate(n.action_url);
-      onClose();
-      return;
-    }
-    if (n.reference_id && onNavigateToIssue) {
-      onNavigateToIssue(n.reference_id);
-      onClose();
-    }
-  }, [handleRead, navigate, onNavigateToIssue, onClose]);
+  const handleClick = useCallback(
+    (n: WorkspaceNotification) => {
+      void handleRead(n);
+      const action = resolveNotificationAction(n);
+      if (action.kind === 'dm') {
+        window.dispatchEvent(
+          new CustomEvent(FLOATING_DM_OPEN_EVENT, {
+            detail: { threadId: action.threadId },
+          }),
+        );
+        onClose();
+      } else if (action.kind === 'route') {
+        navigate(action.to);
+        onClose();
+      } else if (action.kind === 'issue' && onNavigateToIssue) {
+        onNavigateToIssue(action.taskId);
+        onClose();
+      }
+    },
+    [handleRead, navigate, onClose, onNavigateToIssue],
+  );
 
   const handleReadAll = useCallback(async () => {
-    if (!token || !workspaceSlug) return;
+    if (!token) return;
     await markAllNotificationsRead(token, workspaceSlug);
-    const unreadCount = notifications.filter(n => !n.is_read).length;
-    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+    const unreadCount = countUnreadNotifications(notifications);
+    dispatch({ type: 'mark-all-read' });
     onCountChange?.(-unreadCount);
   }, [token, notifications, onCountChange, workspaceSlug]);
 
   return (
-    <>
-      <div className="fixed inset-0 z-40" onClick={onClose} />
-      <motion.div
+    <LazyMotion features={domAnimation}>
+      <button
+        type="button"
+        aria-label={t('notifications.closePanel', {
+          defaultValue: t('notifications.title'),
+        })}
+        className="fixed inset-0 z-40 cursor-default"
+        onClick={onClose}
+        tabIndex={-1}
+      />
+      <m.div
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -8 }}
         className="fixed left-3 right-3 top-16 z-50 flex max-h-[min(480px,calc(100vh-5rem))] flex-col overflow-hidden rounded-xl border border-app-border bg-app-bg shadow-2xl lg:bottom-16 lg:left-20 lg:right-auto lg:top-auto lg:w-80"
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-app-border shrink-0">
-          <h3 className="app-text-title-md text-app-ink">{t('notifications.title')}</h3>
+          <h3 className="app-text-title-md text-app-ink">
+            {t('notifications.title')}
+          </h3>
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" onClick={handleReadAll} title={t('notifications.markAllAsRead')}>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleReadAll}
+              title={t('notifications.markAllAsRead')}
+            >
               <CheckCheck size={14} />
             </Button>
             <Button variant="ghost" size="icon" onClick={onClose}>
@@ -102,14 +148,14 @@ export function NotificationPanel({
               <Loader2 size={18} className="animate-spin text-app-ink/40" />
             </div>
           ) : notifications.length === 0 ? (
-            <p className="app-text-body text-center text-app-ink/30 py-8">{t('notifications.empty')}</p>
+            <p className="app-text-body text-center text-app-ink/30 py-8">
+              {t('notifications.empty')}
+            </p>
           ) : (
-            notifications.map(n => (
+            notifications.map((n) => (
               <div
                 key={n.id}
-                className={`w-full text-left px-4 py-3 border-b border-app-border hover:bg-app-surface-hover transition-colors ${
-                  n.is_read ? 'opacity-60' : ''
-                }`}
+                className="w-full border-b border-app-border px-4 py-3 text-left transition-colors hover:bg-app-surface-hover"
               >
                 <div className="flex items-start gap-2">
                   <button
@@ -117,17 +163,29 @@ export function NotificationPanel({
                     className="flex min-w-0 flex-1 items-start gap-2 text-left"
                     type="button"
                   >
-                    {!n.is_read && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-app-accent" />}
+                    {!n.is_read && (
+                      <span className="mt-1.5 size-2 shrink-0 rounded-full bg-app-accent" />
+                    )}
                     <div className="flex-1 min-w-0">
-                      <p className="app-text-body truncate font-medium text-app-ink">{n.title}</p>
-                      <p className="app-text-caption mt-0.5 truncate text-app-ink/50">{n.body}</p>
-                      <span className="app-text-micro text-app-ink/30">{timeAgo(n.created_at, timeZone, i18n.language)}</span>
+                      <p
+                        className={`app-text-body truncate font-medium ${
+                          n.is_read ? 'text-app-ink/85' : 'text-app-ink'
+                        }`}
+                      >
+                        {n.title}
+                      </p>
+                      <p className="app-text-caption mt-0.5 truncate text-app-ink/75">
+                        {n.body}
+                      </p>
+                      <span className="app-text-micro text-app-ink/70">
+                        {timeAgo(n.created_at, timeZone, i18n.language)}
+                      </span>
                     </div>
                   </button>
                   {!n.is_read && (
                     <button
                       onClick={() => void handleRead(n)}
-                      className="mt-1 shrink-0 text-app-ink/30 hover:text-app-accent"
+                      className="mt-1 shrink-0 text-app-ink/70 hover:text-app-accent"
                       title={t('notifications.markAsRead')}
                       type="button"
                     >
@@ -139,7 +197,7 @@ export function NotificationPanel({
             ))
           )}
         </div>
-      </motion.div>
-    </>
+      </m.div>
+    </LazyMotion>
   );
 }

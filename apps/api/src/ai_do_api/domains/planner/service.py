@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, time, timedelta
-from zoneinfo import ZoneInfo
+from datetime import datetime, timedelta
 
 from fastapi import status
 from sqlalchemy import select
@@ -9,147 +8,49 @@ from sqlalchemy.orm import Session, selectinload
 
 from ai_do_api.core.i18n import localized_http_exception
 from ai_do_api.core.principal import CallerPrincipal
-from ai_do_api.domains.auth.access import bind_current_workspace, resolve_workspace_role
 from ai_do_api.domains.auth.models import User, Workspace
 from ai_do_api.domains.auth.security import new_id
+from ai_do_api.domains.planner.event_access import (
+    ensure_planner_principal_user,
+    require_planner_user_write_principal,
+)
+from ai_do_api.domains.planner.event_application import (
+    PlannerEventCreateCommand,
+    PlannerEventUpdateCommand,
+    apply_planner_event_update,
+    new_planner_event,
+)
+from ai_do_api.domains.planner.event_time import utc_iso
+from ai_do_api.domains.planner.event_projection import (
+    project_deleted_planner_event,
+    project_planner_event,
+    project_planner_event_for_ai,
+)
+from ai_do_api.domains.retrieval.partitioning import assign_default_partition
 
 from .models import PlannerEvent
-from .schemas import (
-    PlannerEventCreateRequest,
-    PlannerEventOut,
-    PlannerEventsResponse,
-    PlannerEventUpdateRequest,
-)
+from .schemas import PlannerEventOut, PlannerEventsResponse
 
 
-LOCAL_TIMEZONE = ZoneInfo("Asia/Seoul")
 MAX_LIST_RANGE_DAYS = 366
 
 
-def _bind_workspace_context(
-    db: Session,
-    *,
-    workspace: Workspace,
-    principal: CallerPrincipal,
-    user: User,
-) -> None:
-    bind_current_workspace(db, workspace)
-    if principal.workspace_id != workspace.id:
-        raise localized_http_exception(
-            status_code=status.HTTP_403_FORBIDDEN,
-            code="planner.principal_workspace_mismatch",
-        )
-    if principal.kind == "user" and principal.user_id not in {None, user.id}:
-        raise localized_http_exception(
-            status_code=status.HTTP_403_FORBIDDEN,
-            code="planner.principal_user_mismatch",
-        )
-
-
-def _require_user_write_principal(principal: CallerPrincipal) -> None:
-    if principal.kind != "user":
-        raise localized_http_exception(
-            status_code=status.HTTP_403_FORBIDDEN,
-            code="planner.write_user_principal_required",
-        )
-
-
-def parse_iso_or_date(value: str) -> datetime:
-    try:
-        parsed = datetime.fromisoformat(value)
-    except ValueError as exc:
-        try:
-            only_date = date.fromisoformat(value)
-            return datetime.combine(only_date, time.min)
-        except ValueError:
-            raise exc
-    if parsed.tzinfo is not None:
-        return parsed.astimezone(UTC).replace(tzinfo=None)
-    return parsed
-
-
-def _utc_iso(value: datetime) -> str:
-    if value.tzinfo is None:
-        return value.replace(tzinfo=UTC).isoformat()
-    return value.astimezone(UTC).isoformat()
-
-
-def _to_local_date_string(value: datetime) -> str:
-    aware = value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
-    return aware.astimezone(LOCAL_TIMEZONE).date().isoformat()
-
-
-def _parse_event_bounds(
-    *,
-    all_day: bool,
-    start: str,
-    end: str,
-) -> tuple[datetime, datetime]:
-    if all_day:
-        try:
-            start_date = date.fromisoformat(start)
-            end_date = date.fromisoformat(end)
-        except ValueError as exc:
-            raise localized_http_exception(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                code="planner.all_day_date_required",
-            ) from exc
-        if end_date <= start_date:
-            raise localized_http_exception(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                code="planner.event_end_after_start",
-            )
-        start_local = datetime.combine(start_date, time.min, tzinfo=LOCAL_TIMEZONE)
-        end_local = datetime.combine(end_date, time.min, tzinfo=LOCAL_TIMEZONE)
-        return (
-            start_local.astimezone(UTC).replace(tzinfo=None),
-            end_local.astimezone(UTC).replace(tzinfo=None),
-        )
-
-    if "T" not in start or "T" not in end:
-        raise localized_http_exception(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            code="planner.timed_datetime_required",
-        )
-    start_at = parse_iso_or_date(start)
-    end_at = parse_iso_or_date(end)
-    if end_at <= start_at:
-        raise localized_http_exception(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            code="planner.event_end_after_start",
-        )
-    return start_at, end_at
-
-
-def _serialize_event(event: PlannerEvent) -> PlannerEventOut:
-    return PlannerEventOut(
-        id=event.id,
-        workspace_id=event.workspace_id,
-        owner_id=event.owner_id,
-        owner_name=event.owner.full_name if event.owner else event.owner_id,
-        title=event.title,
-        description=event.description,
-        location=event.location,
-        visibility=event.visibility,
-        all_day=event.all_day,
-        start=_to_local_date_string(event.start_at) if event.all_day else _utc_iso(event.start_at),
-        end=_to_local_date_string(event.end_at) if event.all_day else _utc_iso(event.end_at),
-        created_at=event.created_at,
-        updated_at=event.updated_at,
+def _ensure_event_partition(db: Session, event: PlannerEvent) -> None:
+    assign_default_partition(
+        db,
+        target=event,
+        source_namespace="planner",
+        candidate_scope_kind="personal",
+        user_id=event.owner_id,
     )
 
 
-def _load_event(
-    db: Session,
-    *,
-    workspace: Workspace,
-    event_id: str,
-) -> PlannerEvent:
+def _load_event(db: Session, *, user: User, event_id: str) -> PlannerEvent:
     event = db.scalar(
         select(PlannerEvent)
         .where(
             PlannerEvent.id == event_id,
-            PlannerEvent.workspace_id == workspace.id,
+            PlannerEvent.owner_id == user.id,
         )
         .options(selectinload(PlannerEvent.owner))
     )
@@ -161,84 +62,69 @@ def _load_event(
     return event
 
 
-def _ensure_owner(user: User, event: PlannerEvent) -> None:
-    if event.owner_id != user.id:
-        raise localized_http_exception(
-            status_code=status.HTTP_403_FORBIDDEN,
-            code="planner.owner_modify_required",
-        )
-
-
 def can_read_planner_event_for_rag(
     db: Session,
     *,
     user: User,
-    workspace_id: str,
     event_id: str,
+    workspace_id: str | None = None,
 ) -> bool:
-    event = db.scalar(
-        select(PlannerEvent).where(
-            PlannerEvent.id == event_id,
-            PlannerEvent.workspace_id == workspace_id,
+    del workspace_id
+    return (
+        db.scalar(
+            select(PlannerEvent.id)
+            .where(
+                PlannerEvent.id == event_id,
+                PlannerEvent.owner_id == user.id,
+            )
+            .limit(1)
         )
+        is not None
     )
-    if event is None:
-        return False
-    if event.owner_id == user.id:
-        return True
-    if event.visibility != "public":
-        return False
-    return resolve_workspace_role(db, user, workspace_id) is not None
 
 
 def create_event(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
-    payload: PlannerEventCreateRequest,
+    command: PlannerEventCreateCommand,
     event_id: str | None = None,
 ) -> PlannerEventOut:
-    if event_id is not None:
-        existing = db.scalar(
-            select(PlannerEvent).where(
-                PlannerEvent.id == event_id,
-                PlannerEvent.workspace_id == workspace.id,
-            )
+    if event_id is not None and command.event_id is not None and event_id != command.event_id:
+        raise ValueError("event_id and command.event_id must match")
+    resolved_command = (
+        command
+        if event_id is None or command.event_id == event_id
+        else PlannerEventCreateCommand(
+            title=command.title,
+            description=command.description,
+            location=command.location,
+            all_day=command.all_day,
+            start=command.start,
+            end=command.end,
+            time_zone=command.time_zone,
+            event_id=event_id,
         )
+    )
+    if event_id is not None:
+        existing = db.scalar(select(PlannerEvent).where(PlannerEvent.id == event_id))
         if existing is not None:
-            fresh = _load_event(db, workspace=workspace, event_id=existing.id)
-            return _serialize_event(fresh)
-    start_at, end_at = _parse_event_bounds(
-        all_day=payload.all_day,
-        start=payload.start,
-        end=payload.end,
-    )
-    event = PlannerEvent(
-        id=event_id or new_id(),
-        workspace_id=workspace.id,
+            authorized_existing = _load_event(db, user=user, event_id=existing.id)
+            if authorized_existing.retrieval_partition_id is None:
+                _ensure_event_partition(db, authorized_existing)
+                db.commit()
+            return project_planner_event(
+                _load_event(db, user=user, event_id=authorized_existing.id)
+            )
+    event = new_planner_event(
         owner_id=user.id,
-        title=payload.title.strip(),
-        description=payload.description.strip(),
-        location=payload.location.strip(),
-        visibility=payload.visibility,
-        all_day=payload.all_day,
-        start_at=start_at,
-        end_at=end_at,
+        command=resolved_command,
+        id_factory=new_id,
     )
+    _ensure_event_partition(db, event)
     db.add(event)
-    db.flush()
-    from ai_do_api.domains.planner.rag_sync import enqueue_planner_event_rag_sync
-    from ai_do_api.domains.rag.contracts import RagSyncOperation
-
-    enqueue_planner_event_rag_sync(
-        db,
-        event=event,
-        operation=RagSyncOperation.UPSERT,
-    )
     db.commit()
-    fresh = _load_event(db, workspace=workspace, event_id=event.id)
-    return _serialize_event(fresh)
+    return project_planner_event(_load_event(db, user=user, event_id=event.id))
 
 
 def create_event_for_ai(
@@ -255,8 +141,9 @@ def create_event_for_ai(
     description: str = "",
     approved_call_id: str | None = None,
 ) -> dict[str, object]:
-    _require_user_write_principal(principal)
-    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
+    del workspace
+    require_planner_user_write_principal(principal)
+    ensure_planner_principal_user(principal=principal, user=user)
     normalized_scope = scope.strip().lower()
     if normalized_scope != "personal":
         raise localized_http_exception(
@@ -268,37 +155,34 @@ def create_event_for_ai(
             status_code=status.HTTP_400_BAD_REQUEST,
             code="planner.team_id_unsupported",
         )
-    payload = PlannerEventCreateRequest(
+    command = PlannerEventCreateCommand(
         title=title,
         description=description,
         location="",
-        visibility="private",
         all_day=False,
-        start=_utc_iso(start_at),
-        end=_utc_iso(end_at),
+        start=utc_iso(start_at),
+        end=utc_iso(end_at),
+        time_zone=user.time_zone,
     )
     result = create_event(
         db,
-        workspace=workspace,
         user=user,
-        payload=payload,
+        command=command,
         event_id=approved_call_id,
     )
-    return result.model_dump(mode="json", by_alias=True)
+    return project_planner_event_for_ai(result)
 
 
 def get_event(
     db: Session,
     *,
-    workspace: Workspace,
-    principal: CallerPrincipal,
     user: User,
     event_id: str,
+    principal: CallerPrincipal | None = None,
 ) -> PlannerEventOut:
-    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
-    event = _load_event(db, workspace=workspace, event_id=event_id)
-    _ensure_owner(user, event)
-    return _serialize_event(event)
+    if principal is not None:
+        ensure_planner_principal_user(principal=principal, user=user)
+    return project_planner_event(_load_event(db, user=user, event_id=event_id))
 
 
 def update_event_for_ai(
@@ -312,35 +196,27 @@ def update_event_for_ai(
     start_at: datetime | None = None,
     end_at: datetime | None = None,
     description: str | None = None,
-    visibility: str | None = None,
     location: str | None = None,
     approved_call_id: str | None = None,
 ) -> dict[str, object]:
-    del approved_call_id
-    _require_user_write_principal(principal)
-    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
+    del approved_call_id, workspace
+    require_planner_user_write_principal(principal)
+    ensure_planner_principal_user(principal=principal, user=user)
     if (start_at is None) != (end_at is None):
         raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
             code="planner.update_start_at_end_at_required",
         )
-    payload = PlannerEventUpdateRequest(
+    command = PlannerEventUpdateCommand(
         title=title,
         description=description,
         location=location,
-        visibility=visibility,
         all_day=False if start_at is not None else None,
-        start=_utc_iso(start_at) if start_at is not None else None,
-        end=_utc_iso(end_at) if end_at is not None else None,
+        start=utc_iso(start_at) if start_at is not None else None,
+        end=utc_iso(end_at) if end_at is not None else None,
     )
-    result = update_event(
-        db,
-        workspace=workspace,
-        user=user,
-        event_id=event_id,
-        payload=payload,
-    )
-    return result.model_dump(mode="json", by_alias=True)
+    result = update_event(db, user=user, event_id=event_id, command=command)
+    return project_planner_event_for_ai(result)
 
 
 def delete_event_for_ai(
@@ -352,28 +228,23 @@ def delete_event_for_ai(
     event_id: str,
     approved_call_id: str | None = None,
 ) -> dict[str, object]:
-    del approved_call_id
-    _require_user_write_principal(principal)
-    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
-    delete_event(
-        db,
-        workspace=workspace,
-        user=user,
-        event_id=event_id,
-    )
-    return {"id": event_id, "deleted": True}
+    del approved_call_id, workspace
+    require_planner_user_write_principal(principal)
+    ensure_planner_principal_user(principal=principal, user=user)
+    delete_event(db, user=user, event_id=event_id)
+    return project_deleted_planner_event(event_id)
 
 
 def list_events(
     db: Session,
     *,
-    workspace: Workspace,
-    principal: CallerPrincipal,
     user: User,
     from_at: datetime | None = None,
     to_at: datetime | None = None,
+    principal: CallerPrincipal | None = None,
 ) -> PlannerEventsResponse:
-    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
+    if principal is not None:
+        ensure_planner_principal_user(principal=principal, user=user)
     if (from_at is None) != (to_at is None):
         raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -381,10 +252,7 @@ def list_events(
         )
     query = (
         select(PlannerEvent)
-        .where(
-            PlannerEvent.workspace_id == workspace.id,
-            PlannerEvent.owner_id == user.id,
-        )
+        .where(PlannerEvent.owner_id == user.id)
         .options(selectinload(PlannerEvent.owner))
         .order_by(PlannerEvent.start_at.asc())
     )
@@ -402,88 +270,26 @@ def list_events(
             )
         query = query.where(PlannerEvent.end_at > from_at, PlannerEvent.start_at < to_at)
     events = db.scalars(query).all()
-    return PlannerEventsResponse(items=[_serialize_event(event) for event in events])
+    return PlannerEventsResponse(items=[project_planner_event(event) for event in events])
 
 
 def update_event(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     event_id: str,
-    payload: PlannerEventUpdateRequest,
+    command: PlannerEventUpdateCommand,
 ) -> PlannerEventOut:
-    event = _load_event(db, workspace=workspace, event_id=event_id)
-    _ensure_owner(user, event)
-    from ai_do_api.domains.planner.rag_sync import enqueue_planner_event_rag_sync
-    from ai_do_api.domains.rag.contracts import RagSyncOperation
-
-    operation: RagSyncOperation | None = None
-
-    next_all_day = payload.all_day if payload.all_day is not None else event.all_day
-    next_start = payload.start
-    next_end = payload.end
-    if (next_start is None) != (next_end is None):
-        raise localized_http_exception(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            code="planner.update_start_end_required",
-        )
-    if payload.all_day is not None and next_start is None:
-        next_start = _to_local_date_string(event.start_at) if next_all_day else _utc_iso(event.start_at)
-        next_end = _to_local_date_string(event.end_at) if next_all_day else _utc_iso(event.end_at)
-    if next_start is not None and next_end is not None:
-        event.start_at, event.end_at = _parse_event_bounds(
-            all_day=next_all_day,
-            start=next_start,
-            end=next_end,
-        )
-        operation = RagSyncOperation.UPSERT
-    event.all_day = next_all_day
-    if payload.all_day is not None:
-        operation = RagSyncOperation.UPSERT
-
-    if payload.title is not None:
-        event.title = payload.title.strip()
-        operation = RagSyncOperation.UPSERT
-    if payload.description is not None:
-        event.description = payload.description.strip()
-        operation = RagSyncOperation.UPSERT
-    if payload.location is not None:
-        event.location = payload.location.strip()
-        operation = RagSyncOperation.UPSERT
-    if payload.visibility is not None:
-        event.visibility = payload.visibility
-        if operation is None:
-            operation = RagSyncOperation.VISIBILITY_UPDATE
-
+    event = _load_event(db, user=user, event_id=event_id)
+    _ensure_event_partition(db, event)
+    apply_planner_event_update(event, command)
     db.add(event)
-    if operation is not None:
-        enqueue_planner_event_rag_sync(
-            db,
-            event=event,
-            operation=operation,
-        )
     db.commit()
-    fresh = _load_event(db, workspace=workspace, event_id=event.id)
-    return _serialize_event(fresh)
+    return project_planner_event(_load_event(db, user=user, event_id=event.id))
 
 
-def delete_event(
-    db: Session,
-    *,
-    workspace: Workspace,
-    user: User,
-    event_id: str,
-) -> None:
-    event = _load_event(db, workspace=workspace, event_id=event_id)
-    _ensure_owner(user, event)
-    from ai_do_api.domains.planner.rag_sync import enqueue_planner_event_rag_sync
-    from ai_do_api.domains.rag.contracts import RagSyncOperation
-
-    enqueue_planner_event_rag_sync(
-        db,
-        event=event,
-        operation=RagSyncOperation.DELETE,
-    )
+def delete_event(db: Session, *, user: User, event_id: str) -> None:
+    event = _load_event(db, user=user, event_id=event_id)
+    _ensure_event_partition(db, event)
     db.delete(event)
     db.commit()

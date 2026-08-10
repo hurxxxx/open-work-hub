@@ -1,7 +1,7 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
 
 from fastapi import FastAPI, Request, Response, status
 from fastapi.exception_handlers import http_exception_handler
@@ -11,6 +11,7 @@ from opentelemetry.trace import SpanKind
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from ai_do_api.api_registry import register_api_routers
+from ai_do_api.client_build import ClientBuildGuardMiddleware, read_frontend_build_id
 from ai_do_api.core.db import get_session_factory, init_db
 from ai_do_api.core.i18n import (
     ERROR_CODE_HEADER,
@@ -18,9 +19,11 @@ from ai_do_api.core.i18n import (
     select_locale,
     translate_message,
 )
-from ai_do_api.core.llm import (
-    check_all_pools_health,
-    check_effective_llm_readiness,
+from ai_do_api.core.logging_security import install_sensitive_http_logging_guard
+from ai_do_api.core.request_validation_errors import build_request_validation_error_body
+from ai_do_api.core.runtime_diagnostics import (
+    install_stack_dump_signal,
+    start_event_loop_lag_watchdog,
 )
 from ai_do_api.core.settings import get_settings
 from ai_do_api.core.storage import ensure_bucket
@@ -30,74 +33,30 @@ from ai_do_api.core.telemetry import (
     extract_trace_context,
     get_tracer,
 )
-from ai_do_api.domains.ai.registry import initialize_ai_capability_registry
+from ai_do_api.ai_do_desktop_updates import (
+    mount_ai_do_desktop_update_feeds,
+    prepare_ai_do_desktop_update_dirs,
+)
+from ai_do_api.frontend import mount_frontend
 from ai_do_api.domains.ai.runtime.registry_validation import RuntimeRegistryValidationError
-from ai_do_api.domains.docs.collab import DocsCollabHub
-from ai_do_api.domains.rag.runtime import close_rag_runtime_resources, get_rag_runtime_health
-from ai_do_api.domains.whiteboard.collab import WhiteboardCollabHub
+from ai_do_api.domains.ai.runtime_status import inspect_registered_llm_runtime
+from ai_do_api.domains.ai.privacy_filter import (
+    check_privacy_filter_health,
+    prepare_privacy_filter,
+)
+from ai_do_api.domains.rag.runtime import (
+    attach_rag_queue_health,
+    close_rag_runtime_resources,
+    get_rag_runtime_health,
+    preload_rag_runtime,
+)
+from ai_do_api.external_runtime import ApiExternalRuntime, ProductionApiExternalRuntime
 from ai_do_api.openapi_contract import stable_operation_id
+from ai_do_api.platform_extensions import initialize_platform_extensions
+from ai_do_api.version import RUNTIME_REVISION, VERSION as APP_VERSION
 
 
 logger = logging.getLogger(__name__)
-LOCALIZED_VALIDATION_ERROR_TYPES = frozenset(
-    {
-        "admin.invalid_workspace_role",
-        "ai.unknown_workspace_app",
-        "auth.invalid_locale",
-        "auth.invalid_time_zone",
-        "auth.valid_email_required",
-        "conversations.scope_pair_required",
-        "conversations.unsupported_scope",
-        "rag.metadata_filter_key_invalid",
-        "rag.metadata_filter_key_length",
-        "rag.metadata_filter_key_reserved",
-        "rag.metadata_filter_list_empty",
-        "rag.metadata_filter_list_scalar_required",
-        "rag.metadata_filter_value_invalid",
-    }
-)
-GENERIC_VALIDATION_ERROR_TYPES: dict[str, str] = {
-    "bool_parsing": "validation.bool_type",
-    "bool_type": "validation.bool_type",
-    "date_from_datetime_inexact": "validation.date_type",
-    "date_from_datetime_parsing": "validation.date_type",
-    "date_parsing": "validation.date_type",
-    "date_type": "validation.date_type",
-    "datetime_from_date_parsing": "validation.datetime_type",
-    "datetime_parsing": "validation.datetime_type",
-    "datetime_type": "validation.datetime_type",
-    "dict_type": "validation.object_type",
-    "extra_forbidden": "validation.extra_forbidden",
-    "float_parsing": "validation.float_type",
-    "float_type": "validation.float_type",
-    "greater_than": "validation.greater_than",
-    "greater_than_equal": "validation.greater_than_equal",
-    "int_parsing": "validation.integer_type",
-    "int_type": "validation.integer_type",
-    "less_than": "validation.less_than",
-    "less_than_equal": "validation.less_than_equal",
-    "list_type": "validation.array_type",
-    "literal_error": "validation.literal_error",
-    "missing": "validation.field_required",
-    "model_attributes_type": "validation.object_type",
-    "string_too_long": "validation.string_too_long",
-    "string_too_short": "validation.string_too_short",
-    "string_type": "validation.string_type",
-    "too_long": "validation.too_long",
-    "too_short": "validation.too_short",
-}
-GENERIC_VALIDATION_PARAM_KEYS = frozenset(
-    {
-        "actual_length",
-        "expected",
-        "ge",
-        "gt",
-        "le",
-        "lt",
-        "max_length",
-        "min_length",
-    }
-)
 
 
 def _request_locale(request: Request) -> str:
@@ -141,84 +100,43 @@ async def localized_request_validation_exception_handler(
     exc: RequestValidationError,
 ) -> JSONResponse:
     locale = _request_locale(request)
-    first_message = _first_domain_validation_message(exc.errors())
-    if first_message is None:
-        first_message = LocalizedApiMessage(code="validation.request_invalid")
-
-    body: dict[str, object] = {
-        "detail": translate_message(first_message, locale),
-        "code": first_message.code,
-        "validation": [_localized_validation_item(error, locale) for error in exc.errors()],
-    }
-    if first_message.params:
-        body["params"] = first_message.params
+    body, error_code = build_request_validation_error_body(exc.errors(), locale)
     return JSONResponse(
         status_code=422,
         content=body,
-        headers={ERROR_CODE_HEADER: first_message.code},
+        headers={ERROR_CODE_HEADER: error_code},
     )
 
 
-def _first_domain_validation_message(
-    errors: list[dict[str, Any]],
-) -> LocalizedApiMessage | None:
-    for error in errors:
-        error_type = error.get("type")
-        if not isinstance(error_type, str) or error_type not in LOCALIZED_VALIDATION_ERROR_TYPES:
-            continue
-        params = error.get("ctx") if isinstance(error.get("ctx"), dict) else {}
-        return LocalizedApiMessage(code=error_type, params=dict(params))
-    return None
-
-
-def _localized_validation_item(error: dict[str, Any], locale: str) -> dict[str, object]:
-    error_type = error.get("type")
-    message = _validation_message_for_error(error)
-    return {
-        "loc": list(error.get("loc", ())),
-        "type": error_type if isinstance(error_type, str) else "unknown",
-        "message": translate_message(message, locale),
-    }
-
-
-def _validation_message_for_error(error: dict[str, Any]) -> LocalizedApiMessage:
-    error_type = error.get("type")
-    if isinstance(error_type, str) and error_type in LOCALIZED_VALIDATION_ERROR_TYPES:
-        params = error.get("ctx") if isinstance(error.get("ctx"), dict) else {}
-        return LocalizedApiMessage(code=error_type, params=dict(params))
-    code = (
-        GENERIC_VALIDATION_ERROR_TYPES.get(error_type)
-        if isinstance(error_type, str)
-        else None
-    ) or "validation.value_invalid"
-    return LocalizedApiMessage(code=code, params=_generic_validation_params(error))
-
-
-def _generic_validation_params(error: dict[str, Any]) -> dict[str, object]:
-    ctx = error.get("ctx")
-    if not isinstance(ctx, dict):
-        return {}
-    return {
-        key: value
-        for key, value in ctx.items()
-        if key in GENERIC_VALIDATION_PARAM_KEYS and isinstance(value, str | int | float | bool)
-    }
-
-
-def create_app(*, initialize_runtime: bool = True) -> FastAPI:
+def create_app(
+    *,
+    initialize_runtime: bool = True,
+    external_runtime: ApiExternalRuntime | None = None,
+) -> FastAPI:
+    install_sensitive_http_logging_guard()
     settings = get_settings()
+    frontend_build_id = read_frontend_build_id(settings.frontend_dist_dir)
+    ai_do_desktop_update_dirs = prepare_ai_do_desktop_update_dirs(settings)
     telemetry_enabled = bootstrap_telemetry(
         service_name="ai-do-api",
+        service_version=APP_VERSION,
         enabled=settings.otel_enabled,
         enable_console_exporter=settings.otel_console_exporter,
         enable_otlp_exporter=settings.otel_otlp_exporter_enabled,
         metrics_export_interval_ms=settings.otel_metrics_export_interval_ms,
     )
     telemetry_tracer = get_tracer("ai_do_api.http")
+    selected_external_runtime = external_runtime
     if initialize_runtime:
-        initialize_ai_capability_registry()
+        if selected_external_runtime is None:
+            selected_external_runtime = ProductionApiExternalRuntime(
+                settings,
+                storage_prepare=ensure_bucket,
+            )
+        install_stack_dump_signal()
+        initialize_platform_extensions(settings)
         init_db()
-        ensure_bucket()
+        selected_external_runtime.prepare()
         Path(settings.recording_spool_dir).expanduser().mkdir(parents=True, exist_ok=True)
 
     @asynccontextmanager
@@ -226,33 +144,57 @@ def create_app(*, initialize_runtime: bool = True) -> FastAPI:
         if not initialize_runtime:
             yield
             return
-        app.state.docs_collab = DocsCollabHub()
-        await app.state.docs_collab.startup()
-        app.state.whiteboard_collab = WhiteboardCollabHub()
-        await app.state.whiteboard_collab.startup()
-        if settings.llm_healthcheck_on_startup:
-            dual = check_all_pools_health(settings)
-            with get_session_factory()() as session:
-                effective = check_effective_llm_readiness(session, settings)
-            app.state.llm_health = dual.public_dict()
-            app.state.llm_effective = effective.public_dict()
-            if settings.llm_required and not effective.ready:
-                logger.warning(
-                    "LLM effective readiness check failed: %s", effective.public_dict()
-                )
-        yield
-        await app.state.whiteboard_collab.shutdown()
-        await app.state.docs_collab.shutdown()
-        close_rag_runtime_resources()
+        assert selected_external_runtime is not None
+        try:
+            async with selected_external_runtime.activate(app):
+                if settings.llm_healthcheck_on_startup:
+                    with get_session_factory()() as session:
+                        llm_status = inspect_registered_llm_runtime(
+                            session,
+                            settings=settings,
+                            probe="live",
+                        )
+                    app.state.llm_health = llm_status.pools.public_dict()
+                    app.state.llm_effective = llm_status.workloads.public_dict()
+                    if settings.llm_required and not llm_status.workloads.ready:
+                        logger.warning(
+                            "LLM effective readiness check failed: %s",
+                            llm_status.workloads.public_dict(),
+                        )
+                if settings.opf_healthcheck_on_startup:
+                    privacy_filter = prepare_privacy_filter(
+                        settings=settings,
+                        download=settings.opf_download_on_startup,
+                    )
+                    app.state.privacy_filter_health = privacy_filter
+                    if settings.opf_required and not privacy_filter.ready:
+                        logger.warning("Privacy Filter readiness check failed: %s", privacy_filter)
+                if settings.rag_enabled and settings.rag_preload_on_startup:
+                    app.state.rag_preload = preload_rag_runtime(settings)
+                loop_lag_watchdog = start_event_loop_lag_watchdog(settings)
+                app.state.loop_lag_watchdog = loop_lag_watchdog
+                try:
+                    yield
+                finally:
+                    loop_lag_watchdog.cancel()
+                    await asyncio.gather(loop_lag_watchdog, return_exceptions=True)
+                    app.state.loop_lag_watchdog = None
+        finally:
+            close_rag_runtime_resources()
 
     app = FastAPI(
         title=settings.app_name,
-        version="0.1.0",
+        version=APP_VERSION,
         docs_url="/docs",
         redoc_url="/redoc",
         lifespan=lifespan,
         generate_unique_id_function=stable_operation_id,
     )
+    app.add_middleware(
+        ClientBuildGuardMiddleware,
+        expected_build_id=frontend_build_id,
+    )
+    app.state.frontend_build_id = frontend_build_id
     app.state.telemetry_enabled = telemetry_enabled
     app.add_exception_handler(
         RuntimeRegistryValidationError,
@@ -301,31 +243,65 @@ def create_app(*, initialize_runtime: bool = True) -> FastAPI:
     def healthz() -> dict[str, str]:
         return {
             "status": "ok",
+            "version": APP_VERSION,
             "environment": settings.environment,
             "instance_id": settings.instance_id,
+            "runtime_revision": RUNTIME_REVISION,
         }
 
     @app.get("/readyz", tags=["system"])
     def readyz(request: Request, response: Response) -> dict[str, object]:
-        dual = check_all_pools_health(settings)
         with get_session_factory()() as session:
-            effective = check_effective_llm_readiness(session, settings)
+            llm_status = inspect_registered_llm_runtime(
+                session,
+                settings=settings,
+                probe="configured",
+            )
+        dual = llm_status.pools
+        effective = llm_status.workloads
+        rag = get_rag_runtime_health()
+        if rag.get("enabled"):
+            with get_session_factory()() as session:
+                rag = attach_rag_queue_health(rag, db=session)
         locale = _request_locale(request)
         ready = effective.ready or not settings.llm_required
-        rag = get_rag_runtime_health()
         if rag.get("enabled") and not rag.get("ready", False):
+            ready = False
+        privacy_filter = check_privacy_filter_health(settings=settings)
+        if settings.opf_required and not privacy_filter.ready:
+            ready = False
+        app_realtime = getattr(request.app.state, "app_realtime", None)
+        realtime = {
+            "redis_available": bool(
+                app_realtime is None or getattr(app_realtime, "redis_available", False)
+            )
+        }
+        if not realtime["redis_available"]:
             ready = False
         if not ready:
             response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
 
         return {
             "status": "ok" if ready else "degraded",
+            "version": APP_VERSION,
             "environment": settings.environment,
             "instance_id": settings.instance_id,
-            "llm": dual.public_dict(locale=locale),
+            "runtime_revision": RUNTIME_REVISION,
+            "llm": dual.public_dict(locale=locale, include_base_url=False),
             "llm_effective": effective.public_dict(locale=locale),
+            "privacy_filter": {
+                "enabled": privacy_filter.enabled,
+                "ready": privacy_filter.ready,
+                "status": privacy_filter.status,
+                "checkpoint": privacy_filter.checkpoint,
+                "device": privacy_filter.device,
+                "detail": privacy_filter.detail,
+            },
             "rag": rag,
+            "realtime": realtime,
         }
 
     register_api_routers(app, settings)
+    mount_ai_do_desktop_update_feeds(app, settings, ai_do_desktop_update_dirs)
+    mount_frontend(app, settings)
     return app

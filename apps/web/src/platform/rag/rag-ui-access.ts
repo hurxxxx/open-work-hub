@@ -1,30 +1,13 @@
-import type { WorkspaceBootstrapApp } from '@/src/platform/workspaces/workspaces-api';
+import type { WorkspaceBootstrapNavItem } from '@/src/platform/workspaces/workspaces-api';
 
-export const SEARCHABLE_RAG_APP_IDS = ['docs', 'meeting', 'pms', 'planner'] as const;
+export {
+  getEnabledWorkspaceAppIds,
+  isWorkspaceAppEnabled,
+} from '@/src/platform/workspaces/workspace-app-access';
 
-export function getEnabledWorkspaceAppIds(
-  apps: Pick<WorkspaceBootstrapApp, 'app_id' | 'enabled'>[] | null | undefined,
-): Set<string> {
-  return new Set(
-    (apps ?? [])
-      .filter((app) => app.enabled)
-      .map((app) => app.app_id),
-  );
-}
-
-export function isWorkspaceAppEnabled(
-  apps: Pick<WorkspaceBootstrapApp, 'app_id' | 'enabled'>[] | null | undefined,
-  appId: string,
+export function isWorkspaceNavItemEnabled(
+  nav: readonly Pick<WorkspaceBootstrapNavItem, 'id'>[] | null | undefined,
+  itemId: string,
 ): boolean {
-  return getEnabledWorkspaceAppIds(apps).has(appId);
-}
-
-export function canUseWorkspaceSearchTool(
-  apps: Pick<WorkspaceBootstrapApp, 'app_id' | 'enabled'>[] | null | undefined,
-): boolean {
-  const enabledAppIds = getEnabledWorkspaceAppIds(apps);
-  return (
-    enabledAppIds.has('ai')
-    && SEARCHABLE_RAG_APP_IDS.some((appId) => enabledAppIds.has(appId))
-  );
+  return (nav ?? []).some((item) => item.id === itemId);
 }

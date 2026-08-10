@@ -6,6 +6,7 @@ import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 import { fullSchema } from './schema';
 import { useResolvedTheme } from './use-theme';
+import { blockNoteInteractionPolicy } from './blocknote-interaction-policy';
 import type { BlockContent } from './types';
 
 export interface BlockViewerProps {
@@ -18,21 +19,28 @@ export interface BlockViewerProps {
  * Read-only block content renderer.
  * Used in list views, board cards, activity feeds.
  */
-export function BlockViewer({ content, className, resolveFileUrl }: BlockViewerProps) {
+export function BlockViewer({
+  content,
+  className,
+  resolveFileUrl,
+}: BlockViewerProps) {
   const theme = useResolvedTheme();
 
   const editor = useCreateBlockNote({
     schema: fullSchema,
-    initialContent: content?.length ? content as any : undefined,
+    initialContent: content?.length ? (content as never) : undefined,
     resolveFileUrl,
   });
 
   return (
-    <div className={`[&_.bn-container]:!bg-transparent [&_.bn-editor]:!bg-transparent ${className ?? ''}`}>
+    <div
+      className={`ui-block-editor [&_.bn-root]:!bg-transparent [&_.bn-container]:!bg-transparent [&_.bn-editor]:!bg-transparent ${className ?? ''}`}
+    >
       <MantineProvider forceColorScheme={theme}>
         <BlockNoteView
           editor={editor}
           editable={false}
+          onCopy={blockNoteInteractionPolicy.normalizeCopyPlainText}
           theme={theme}
         />
       </MantineProvider>

@@ -33,7 +33,7 @@
 
 ## 2. 이 프로젝트의 컨테이너 구성
 
-`docker-compose.yml` / `docker-compose.prod.yml` 에 다음 서비스들이 정의됩니다(프로젝트 구조 기반).
+현재 개발/운영 인프라 Compose 파일은 `ops/compose/ai-do-dev.infra.yml`, `ops/compose/ai-do-prod.infra.yml`이 기준입니다. PostgreSQL은 Docker 컨테이너가 아니라 서버 native PostgreSQL service로 실행합니다.
 
 | 서비스 | 이미지 | 역할 |
 |---|---|---|
@@ -41,13 +41,12 @@
 | `api` | 자체 빌드 | FastAPI (gunicorn/uvicorn) |
 | `worker` | 자체 빌드 | Celery 워커 |
 | `beat` | 자체 빌드 | Celery Beat 스케줄러 |
-| `postgres` | `postgres:18` | DB |
 | `redis` | `redis:7-alpine` | 브로커·캐시 |
 | `minio` | `minio/minio` | 객체 저장소 |
 | `nginx` | `nginx:1.27` | 리버스 프록시 · TLS |
 | `collab` | 자체 빌드 | `packages/docs-collab-hub` y-websocket 서버 |
 
-각 서비스는 **같은 Docker 네트워크**를 공유해 `postgres:5432`, `redis:6379` 처럼 **서비스 이름**으로 서로를 찾습니다.
+컨테이너 서비스는 **같은 Docker 네트워크**를 공유해 `redis:6379` 처럼 **서비스 이름**으로 서로를 찾습니다. 애플리케이션은 PostgreSQL만 `.env`의 `AI_DO_POSTGRES_DSN`을 통해 host native DB(`127.0.0.1:5432`)에 접속합니다.
 
 ---
 
@@ -94,7 +93,7 @@ Node_modules·`.venv`·`dist` 같은 큰 폴더를 이미지에 넣지 않도록
 
 ### 4.1 개념
 
-`docker-compose.yml` 한 파일에 서비스·볼륨·네트워크를 선언하고, `docker compose up` 한 줄로 전부 기동.
+Compose 파일 하나에 서비스·볼륨·네트워크를 선언하고, `docker compose -f compose.local.yml up` 같은 명령으로 전부 기동.
 
 ### 4.2 단순 예
 
@@ -104,17 +103,10 @@ services:
   api:
     build: ./apps/api
     env_file: .env
-    depends_on: [postgres, redis]
+    depends_on: [redis]
     ports: ["8000:8000"]
-  postgres:
-    image: postgres:18
-    environment:
-      POSTGRES_USER: ai-do
-      POSTGRES_PASSWORD: ...
-      POSTGRES_DB: ai-do
-    volumes: [pg_data:/var/lib/postgresql/data]
-volumes:
-  pg_data:
+  redis:
+    image: redis:7-alpine
 ```
 
 ### 4.3 개발 vs 운영
@@ -124,7 +116,7 @@ volumes:
 - **dev**: 코드 볼륨 마운트(핫 리로드), 디버그 포트 오픈, MinIO 웹 콘솔 노출.
 - **prod**: 이미지 빌드 후 실행, 볼륨 대신 내장, HTTPS, 시크릿 관리.
 
-`docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d` 처럼 **여러 파일을 합쳐** 구성.
+필요하면 `docker compose -f compose.local.yml -f <override>.yml up -d`처럼 **여러 파일을 합쳐** 구성한다. 현재 운영용 override는 확정 전 계획안 단계다.
 
 ### 4.4 `.env` 와 시크릿
 
@@ -248,11 +240,11 @@ Nginx는 가장 보편적이고 자료가 풍부해 장기 유지에 유리합�
 
 1. 새 서버에 Docker 설치.
 2. Git 저장소 클론 + `.env`만 복사(비밀값은 시크릿 매니저에서 받아오기).
-3. `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d`.
+3. 현재 로컬 기준이면 `docker compose -f compose.local.yml up -d`, 운영 기준이면 확정된 release compose 파일로 기동.
 4. DB 덤프 복원, Alembic 마이그레이션.
 5. DNS를 새 서버 IP로 변경.
 
-**이게 왜 AI-DO Portal에 중요한가**: 클라우드 비용 최적화로 인스턴스 사이즈를 바꾸거나, 리전 이전을 해야 할 때 **반나절에 끝낼 수 있는 루틴**이 된다는 뜻입니다. 수동 서버 구축이었다면 며칠이 걸립니다.
+**이게 왜 AI-DO에 중요한가**: 클라우드 비용 최적화로 인스턴스 사이즈를 바꾸거나, 리전 이전을 해야 할 때 **반나절에 끝낼 수 있는 루틴**이 된다는 뜻입니다. 수동 서버 구축이었다면 며칠이 걸립니다.
 
 ### 🛠️ 5분 실습 — 컨테이너 안 탐험
 
@@ -301,7 +293,7 @@ docker compose logs -f api
 
 ## 8. 보안 원칙(인프라 편)
 
-- **원칙적으로 비공개**: 내부 서비스(redis, postgres, minio API)는 호스트 외부로 포트를 열지 않음.
+- **원칙적으로 비공개**: 내부 서비스(redis, minio API)는 호스트 외부로 포트를 열지 않음. PostgreSQL은 native service로 `127.0.0.1:5432`에만 묶음.
 - **비밀번호·API 키**: `.env`는 절대 공개 저장소에 커밋 금지.
 - **HTTPS 필수**: 운영에선 Let's Encrypt 자동 갱신.
 - **이미지 취약점 스캔**: Trivy 같은 도구 주기 실행.

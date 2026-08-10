@@ -10,30 +10,51 @@ import {
 export const SpaceWhiteboardsView = ({
   spaceId,
   whiteboardId,
+  workspaceSlug: workspaceSlugProp,
 }: {
   spaceId: string;
   spaceName?: string | null;
   whiteboardId?: string | null;
+  workspaceSlug?: string | null;
 }) => {
   const navigate = useNavigate();
-  const { workspaceSlug } = useParams();
+  const { workspaceSlug: routeWorkspaceSlug } = useParams();
   const { user } = useAuth();
+  const workspaceSlug = workspaceSlugProp ?? routeWorkspaceSlug ?? null;
 
   useEffect(() => {
-    const search = new URLSearchParams({
-      container_app: 'pms',
-      container_type: 'space',
-      container_id: spaceId,
-    });
-    const target = whiteboardId
-      ? (workspaceSlug
-        ? buildWorkspaceAppPath(workspaceSlug, 'whiteboard', `/${whiteboardId}?${search}`)
-        : resolveDefaultWorkspaceAppPath(user, 'whiteboard', `/${whiteboardId}?${search}`))
-      : (workspaceSlug
-        ? buildWorkspaceAppPath(workspaceSlug, 'whiteboard', `?view=all&${search}`)
-        : resolveDefaultWorkspaceAppPath(user, 'whiteboard', `?view=all&${search}`));
-    navigate(target, { replace: true });
+    navigate(
+      resolveSpaceWhiteboardsRedirectPath({
+        spaceId,
+        user,
+        whiteboardId,
+        workspaceSlug,
+      }),
+      { replace: true },
+    );
   }, [navigate, spaceId, user, whiteboardId, workspaceSlug]);
 
   return null;
 };
+
+type WorkspaceUser = Parameters<typeof resolveDefaultWorkspaceAppPath>[0];
+
+export function resolveSpaceWhiteboardsRedirectPath({
+  spaceId,
+  user,
+  whiteboardId,
+  workspaceSlug,
+}: {
+  spaceId: string;
+  user: WorkspaceUser;
+  whiteboardId?: string | null;
+  workspaceSlug: string | null;
+}): string {
+  const search = new URLSearchParams({ space_id: spaceId });
+  const suffix = whiteboardId
+    ? `/${whiteboardId}?${search}`
+    : `?view=all&${search}`;
+  return workspaceSlug
+    ? buildWorkspaceAppPath(workspaceSlug, 'whiteboard', suffix)
+    : resolveDefaultWorkspaceAppPath(user, 'whiteboard', suffix);
+}

@@ -4,9 +4,30 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
+source "$ROOT_DIR/scripts/dev-env.sh"
+
+if [[ -n "${HOME:-}" && -d "$HOME/.local/bin" ]]; then
+  case ":${PATH:-}:" in
+    *":$HOME/.local/bin:"*) ;;
+    *) export PATH="$HOME/.local/bin:${PATH:-}" ;;
+  esac
+fi
+
+if [[ "$(basename "$ROOT_DIR")" == "prod" && "${AI_DO_ALLOW_PROD_DEV_SH:-0}" != "1" ]]; then
+  echo "Refusing to run dev.sh from the production checkout." >&2
+  echo "Use ./prod.sh for production, or set AI_DO_ALLOW_PROD_DEV_SH=1 explicitly for one-off diagnostics." >&2
+  exit 1
+fi
 
 # The Nx daemon is unstable in this environment; use direct Nx execution.
 export NX_DAEMON=false
+# dev-env.sh already loads the checkout .env. Letting Nx load .env.local again
+# can make the API process disagree with scripts/dev-smoke.sh.
+export NX_LOAD_DOT_ENV_FILES=false
+WEB_DEV_PORT="${AI_DO_WEB_DEV_PORT:-4200}"
+API_DEV_PORT="${AI_DO_API_DEV_PORT:-8001}"
+export AI_DO_WEB_DEV_PORT="$WEB_DEV_PORT"
+export AI_DO_WEB_API_PROXY_TARGET="${AI_DO_WEB_API_PROXY_TARGET:-http://127.0.0.1:${API_DEV_PORT}}"
 
 usage() {
   cat <<'EOF'
@@ -26,11 +47,11 @@ Options:
 
 Defaults:
   - Starts `web` and `api`
-  - Boots the dev docker infra (redis; postgres/minio when DOOWON_DEV_USE_LOCAL_* is on)
-    so features like the docs collab relay can reach redis at 127.0.0.1:56379
+  - Boots the dev docker infra (redis/search/vector; postgres/minio when AI_DO_INFRA_USE_LOCAL_* is on)
+    so features like the docs collab relay can reach redis at 127.0.0.1:56380
   - Uses `dynamic-legacy` Nx output for readable local logs
   - Stops all child servers when you press Ctrl+C or close the session
-    (docker infra keeps running across sessions; stop it with `docker compose -f compose.dev.yml stop`)
+    (docker infra keeps running across sessions; stop it with `scripts/infra-stack.sh dev stop`)
 EOF
 }
 
@@ -104,18 +125,18 @@ show_project_status() {
 
   case "$project" in
     web)
-      listeners="$(find_listener 4200)"
+      listeners="$(find_listener "$WEB_DEV_PORT")"
       if [[ -n "$listeners" ]]; then
-        echo "web    running  http://localhost:4200"
+        echo "web    running  http://localhost:${WEB_DEV_PORT}"
         echo "$listeners"
       else
         echo "web    stopped"
       fi
       ;;
     api)
-      listeners="$(find_listener 8000)"
+      listeners="$(find_listener "$API_DEV_PORT")"
       if [[ -n "$listeners" ]]; then
-        echo "api    running  http://127.0.0.1:8000/docs"
+        echo "api    running  http://127.0.0.1:${API_DEV_PORT}/docs"
         echo "$listeners"
       else
         echo "api    stopped"
@@ -133,6 +154,17 @@ show_project_status() {
   esac
 }
 
+project_selected() {
+  local needle="$1"
+  local project
+  for project in "${projects[@]}"; do
+    if [[ "$project" == "$needle" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 require_free_port() {
   local port="$1"
   local label="$2"
@@ -147,6 +179,26 @@ require_free_port() {
     echo "Stop the existing process or change the port before running ./dev.sh again." >&2
     exit 1
   fi
+}
+
+run_api_migration_preflight() {
+  if [[ "${AI_DO_DEV_API_MIGRATION_PREFLIGHT:-1}" == "0" ]]; then
+    return 0
+  fi
+
+  local auto_migrate
+  auto_migrate="$(printf '%s' "${AI_DO_API_AUTO_MIGRATE:-1}" | tr '[:upper:]' '[:lower:]')"
+  case "$auto_migrate" in
+    1|true|yes) ;;
+    *) return 0 ;;
+  esac
+
+  echo "Checking API migrations before starting dev server..."
+  (
+    cd "$ROOT_DIR/apps/api"
+    AI_DO_API_AUTO_MIGRATE=0 uv run --python 3.12 alembic upgrade head
+  )
+  export AI_DO_API_AUTO_MIGRATE=0
 }
 
 kill_if_running() {
@@ -167,17 +219,20 @@ start_dev_infra() {
   fi
 
   local desired=(redis)
-  case "${DOOWON_DEV_USE_LOCAL_POSTGRES:-}" in
-    1|true|yes|on) desired+=(postgres) ;;
-  esac
-  case "${DOOWON_DEV_USE_LOCAL_MINIO:-}" in
-    1|true|yes|on) desired+=(minio) ;;
-  esac
+  desired+=(opensearch qdrant)
+  if [[ "$(printf '%s' "${AI_DO_API_VIDEO_CHAT_ENABLED:-true}" | tr '[:upper:]' '[:lower:]')" != "false" ]]; then
+    desired+=(livekit)
+  fi
+  if dev_use_local_postgres; then
+    desired+=(postgres)
+  fi
+  if dev_use_local_minio; then
+    desired+=(minio)
+  fi
 
-  # dev-nginx binds to 4200 (IPv6) and collides with the web dev server (IPv4).
-  # Since macOS resolves localhost to ::1 first, browsers would hit nginx and 502.
-  # Stop it defensively and clear its restart policy so Docker Desktop doesn't
-  # bring it back under us.
+  # Stop dev-nginx only when it is configured to collide with the web dev server.
+  local dev_nginx_container="${AI_DO_INFRA_CONTAINER_PREFIX:-ai-do-dev}-nginx"
+  local dev_nginx_port="${AI_DO_INFRA_NGINX_PORT:-14200}"
   local web_in_projects=0
   local project
   for project in "${projects[@]}"; do
@@ -186,20 +241,23 @@ start_dev_infra() {
       break
     fi
   done
-  if (( web_in_projects )); then
-    if dev_docker inspect doowon-dev-nginx >/dev/null 2>&1; then
-      echo "Neutralizing dev-nginx (conflicts with web dev server on 4200)..."
-      dev_docker update --restart=no doowon-dev-nginx >/dev/null 2>&1 || true
-      dev_docker stop doowon-dev-nginx >/dev/null 2>&1 || true
+  if (( web_in_projects )) && [[ "$dev_nginx_port" == "$WEB_DEV_PORT" ]]; then
+    if dev_docker inspect "$dev_nginx_container" >/dev/null 2>&1; then
+      echo "Neutralizing ${dev_nginx_container} (conflicts with web dev server on ${WEB_DEV_PORT})..."
+      dev_docker update --restart=no "$dev_nginx_container" >/dev/null 2>&1 || true
+      dev_docker stop "$dev_nginx_container" >/dev/null 2>&1 || true
     fi
   fi
 
   # If a service's host port is already bound (e.g., a sibling repo's compose
   # project started redis under the same fixed container name), reuse it
   # instead of colliding on `docker compose up`.
-  local redis_port="${DOOWON_DEV_REDIS_PORT:-56379}"
-  local postgres_port="${DOOWON_DEV_POSTGRES_PORT:-55432}"
-  local minio_port="${DOOWON_DEV_MINIO_PORT:-59000}"
+  local redis_port="${AI_DO_INFRA_REDIS_PORT:-56380}"
+  local postgres_port="${AI_DO_INFRA_POSTGRES_PORT:-55433}"
+  local minio_port="${AI_DO_INFRA_MINIO_PORT:-59010}"
+  local opensearch_port="${AI_DO_INFRA_OPENSEARCH_PORT:-59210}"
+  local qdrant_port="${AI_DO_INFRA_QDRANT_PORT:-16333}"
+  local livekit_port="${AI_DO_LIVEKIT_PORT:-7880}"
   local services=()
   local skipped=()
   local svc
@@ -209,6 +267,9 @@ start_dev_infra() {
       redis) port="$redis_port" ;;
       postgres) port="$postgres_port" ;;
       minio) port="$minio_port" ;;
+      opensearch) port="$opensearch_port" ;;
+      qdrant) port="$qdrant_port" ;;
+      livekit) port="$livekit_port" ;;
     esac
     if [[ -n "$port" && -n "$(find_listener "$port")" ]]; then
       skipped+=("${svc}(:${port})")
@@ -226,7 +287,9 @@ start_dev_infra() {
   fi
 
   echo "Starting dev infra: ${services[*]}"
-  if ! dev_docker compose -f compose.dev.yml up -d "${services[@]}"; then
+  local compose_file
+  compose_file="$(dev_compose_file)"
+  if ! dev_docker compose --env-file "$ROOT_DIR/.env" -f "$compose_file" up -d "${services[@]}"; then
     echo "Failed to start dev infra via docker compose." >&2
     exit 1
   fi
@@ -241,7 +304,7 @@ start_dev_infra() {
   if (( started_redis )); then
     local attempts=0
     while (( attempts < 30 )); do
-      if dev_docker compose -f compose.dev.yml exec -T redis redis-cli ping >/dev/null 2>&1; then
+      if dev_docker compose --env-file "$ROOT_DIR/.env" -f "$compose_file" exec -T redis redis-cli ping >/dev/null 2>&1; then
         return 0
       fi
       attempts=$((attempts + 1))
@@ -258,23 +321,27 @@ stop_project_processes() {
   case "$project" in
     web)
       local web_pid
-      web_pid="$(lsof -tiTCP:4200 -sTCP:LISTEN 2>/dev/null | head -n 1 || true)"
+      web_pid="$(lsof -tiTCP:"$WEB_DEV_PORT" -sTCP:LISTEN 2>/dev/null | head -n 1 || true)"
       if [[ -n "$web_pid" ]]; then
         kill_if_running "$web_pid"
         stopped=1
       fi
-      pkill -TERM -f "pnpm exec nx dev web" 2>/dev/null || true
-      pkill -TERM -f "nx.js dev web" 2>/dev/null || true
       ;;
     api)
-      pkill -TERM -f "uvicorn ai_do_api.main:app" 2>/dev/null || true
-      pkill -TERM -f "pnpm exec nx dev api" 2>/dev/null || true
-      stopped=1
+      local api_pid
+      api_pid="$(lsof -tiTCP:"$API_DEV_PORT" -sTCP:LISTEN 2>/dev/null | head -n 1 || true)"
+      if [[ -n "$api_pid" ]]; then
+        kill_if_running "$api_pid"
+        stopped=1
+      fi
       ;;
     worker)
-      pkill -TERM -f "celery -A ai_do_worker.celery_app:celery_app worker" 2>/dev/null || true
-      pkill -TERM -f "pnpm exec nx dev worker" 2>/dev/null || true
-      stopped=1
+      pgrep -af "celery -A ai_do_worker.celery_app:celery_app" 2>/dev/null | while read -r pid args; do
+        if [[ "$args" == *"$ROOT_DIR/apps/worker"* ]]; then
+          kill_if_running "$pid"
+          stopped=1
+        fi
+      done
       ;;
   esac
 
@@ -324,19 +391,23 @@ fi
 for project in "${projects[@]}"; do
   case "$project" in
     web)
-      require_free_port 4200 "web dev server"
+      require_free_port "$WEB_DEV_PORT" "web dev server"
       ;;
     api)
-      require_free_port 8000 "api dev server"
+      require_free_port "$API_DEV_PORT" "api dev server"
       ;;
   esac
 done
 
+if project_selected api; then
+  run_api_migration_preflight
+fi
+
 cat <<EOF
 Starting AI-DO development servers
   projects : ${project_csv}
-  web      : http://localhost:4200
-  api      : http://127.0.0.1:8000/docs
+  web      : http://localhost:${WEB_DEV_PORT}
+  api      : http://127.0.0.1:${API_DEV_PORT}/docs
 
 Press Ctrl+C to stop all running servers.
 EOF

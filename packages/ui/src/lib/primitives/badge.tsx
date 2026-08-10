@@ -1,25 +1,20 @@
 import { cva, type VariantProps } from 'class-variance-authority';
 import type { HTMLAttributes } from 'react';
 
+import { uiToneClasses } from '../tone-classes';
 import { cn } from '../utils/cn';
 
 const badgeVariants = cva(
-  'inline-flex items-center gap-1 rounded-[var(--ui-radius-sm)] border px-2 py-0.5 text-[0.72rem] font-semibold leading-none',
+  'inline-flex items-center gap-1 rounded-[var(--ui-radius-sm)] border px-2 py-0.5 text-[length:var(--ui-text-caption)] font-semibold leading-none',
   {
     variants: {
       tone: {
-        neutral:
-          'border-[var(--ui-color-border)] bg-ui-surface-subtle text-[var(--ui-color-ink-muted)]',
-        accent:
-          'border-[var(--ui-color-border)] bg-ui-accent-weak text-[var(--ui-color-accent)]',
-        success:
-          'border-transparent bg-[color-mix(in_oklab,var(--ui-color-success)_12%,white)] text-[var(--ui-color-success)]',
-        warning:
-          'border-transparent bg-[color-mix(in_oklab,var(--ui-color-warning)_14%,white)] text-[var(--ui-color-warning)]',
-        danger:
-          'border-transparent bg-[color-mix(in_oklab,var(--ui-color-danger)_14%,white)] text-[var(--ui-color-danger)]',
-        inverse:
-          'border-white/10 bg-white/6 text-white/76',
+        neutral: uiToneClasses.neutral,
+        accent: uiToneClasses.accent,
+        success: uiToneClasses.success,
+        warning: uiToneClasses.warning,
+        danger: uiToneClasses.danger,
+        inverse: uiToneClasses.inverse,
       },
     },
     defaultVariants: {

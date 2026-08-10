@@ -4,10 +4,12 @@ import json
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
+
+from dev_accounts import dev_login
 from sqlalchemy import select
 
 from ai_do_api.core.db import get_session_factory
-from ai_do_api.domains.auth.access import ensure_dev_login_seed_data, load_user_graph
+from ai_do_api.domains.auth.access import load_user_graph
 from ai_do_api.domains.auth.models import AuditLog, Workspace
 from ai_do_api.domains.auth.security import new_id
 from ai_do_api.domains.meeting import insights as meeting_insights
@@ -17,15 +19,11 @@ from ai_do_api.domains.meeting.models import (
     MeetingInsight,
     MeetingRecording,
 )
-from ai_do_api.domains.planner.service import parse_iso_or_date
+from ai_do_api.domains.planner.event_time import parse_iso_or_date
 
 
 def _dev_login(client: TestClient, account_key: str) -> dict:
-    with get_session_factory()() as db:
-        ensure_dev_login_seed_data(db)
-    response = client.post("/api/v1/auth/dev-login", json={"account_key": account_key})
-    assert response.status_code == 200, response.text
-    return response.json()
+    return dev_login(client, account_key)
 
 
 def _create_meeting_and_recording(
@@ -82,25 +80,22 @@ def _create_meeting_and_recording(
 
 
 def _response_with_content(content: str):
-    return (
-        SimpleNamespace(
-            choices=[SimpleNamespace(message=SimpleNamespace(content=content))]
-        ),
-        None,
-        None,
-    )
+    return SimpleNamespace(completion=SimpleNamespace(text=content))
 
 
 def test_extract_and_persist_meeting_insights_persists_valid_types_and_skips_invalid(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    session, recording_id = _create_meeting_and_recording(client, recording_id="recording-insight-1")
+    session, recording_id = _create_meeting_and_recording(
+        client, recording_id="recording-insight-1"
+    )
     task_kinds: list[str] = []
 
-    def fake_complete_chat(context, _db, **_kwargs):
-        task_kinds.append(context.task_kind)
-        if context.task_kind == "meeting_insight_actions":
+    def fake_execute_llm(workload_id, context, _db, **kwargs):
+        del context, kwargs
+        task_kinds.append(workload_id)
+        if workload_id == "meeting_insight_actions":
             return _response_with_content(
                 json.dumps(
                     {
@@ -119,7 +114,7 @@ def test_extract_and_persist_meeting_insights_persists_valid_types_and_skips_inv
                     }
                 )
             )
-        if context.task_kind == "meeting_insight_decisions":
+        if workload_id == "meeting_insight_decisions":
             return _response_with_content("not-json")
         return _response_with_content(
             json.dumps(
@@ -142,7 +137,11 @@ def test_extract_and_persist_meeting_insights_persists_valid_types_and_skips_inv
             )
         )
 
-    monkeypatch.setattr(meeting_insights, "complete_chat", fake_complete_chat)
+    monkeypatch.setattr(
+        meeting_insights,
+        "execute_llm",
+        fake_execute_llm,
+    )
 
     with get_session_factory()() as db:
         result = meeting_insights.extract_and_persist_meeting_insights(
@@ -160,9 +159,7 @@ def test_extract_and_persist_meeting_insights_persists_valid_types_and_skips_inv
                 .order_by(MeetingInsight.insight_type.asc())
             )
         )
-        audit = db.scalar(
-            select(AuditLog).where(AuditLog.action == "ai_meeting_insight_created")
-        )
+        audit = db.scalar(select(AuditLog).where(AuditLog.action == "ai_meeting_insight_created"))
 
     assert task_kinds == [
         "meeting_insight_actions",
@@ -180,10 +177,13 @@ def test_extract_and_persist_meeting_insights_refresh_supersedes_existing_drafts
     client: TestClient,
     monkeypatch,
 ) -> None:
-    _session, recording_id = _create_meeting_and_recording(client, recording_id="recording-insight-2")
+    _session, recording_id = _create_meeting_and_recording(
+        client, recording_id="recording-insight-2"
+    )
 
-    def fake_complete_chat(context, _db, **_kwargs):
-        assert context.task_kind == "meeting_insight_actions"
+    def fake_execute_llm(workload_id, context, _db, **kwargs):
+        del context, kwargs
+        assert workload_id == "meeting_insight_actions"
         return _response_with_content(
             json.dumps(
                 {
@@ -198,7 +198,11 @@ def test_extract_and_persist_meeting_insights_refresh_supersedes_existing_drafts
             )
         )
 
-    monkeypatch.setattr(meeting_insights, "complete_chat", fake_complete_chat)
+    monkeypatch.setattr(
+        meeting_insights,
+        "execute_llm",
+        fake_execute_llm,
+    )
 
     with get_session_factory()() as db:
         recording = db.get(MeetingRecording, recording_id)
@@ -254,13 +258,20 @@ def test_extract_and_persist_meeting_insights_refresh_with_empty_items_keeps_exi
     client: TestClient,
     monkeypatch,
 ) -> None:
-    _session, recording_id = _create_meeting_and_recording(client, recording_id="recording-insight-3")
+    _session, recording_id = _create_meeting_and_recording(
+        client, recording_id="recording-insight-3"
+    )
 
-    def fake_complete_chat(context, _db, **_kwargs):
-        assert context.task_kind == "meeting_insight_actions"
+    def fake_execute_llm(workload_id, context, _db, **kwargs):
+        del context, kwargs
+        assert workload_id == "meeting_insight_actions"
         return _response_with_content(json.dumps({"items": []}))
 
-    monkeypatch.setattr(meeting_insights, "complete_chat", fake_complete_chat)
+    monkeypatch.setattr(
+        meeting_insights,
+        "execute_llm",
+        fake_execute_llm,
+    )
 
     with get_session_factory()() as db:
         recording = db.get(MeetingRecording, recording_id)
@@ -315,11 +326,13 @@ def test_extract_and_persist_meeting_insights_reuses_existing_recording_insights
     client: TestClient,
     monkeypatch,
 ) -> None:
-    _session, recording_id = _create_meeting_and_recording(client, recording_id="recording-insight-4")
+    _session, recording_id = _create_meeting_and_recording(
+        client, recording_id="recording-insight-4"
+    )
 
     monkeypatch.setattr(
         meeting_insights,
-        "complete_chat",
+        "execute_llm",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("LLM should not run")),
     )
 

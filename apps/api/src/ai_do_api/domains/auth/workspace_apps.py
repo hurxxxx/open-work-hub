@@ -1,455 +1,112 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-
-
-@dataclass(frozen=True)
-class WorkspaceNavCatalogItem:
-    id: str
-    app_id: str
-    title: str
-    category: str
-    icon_key: str
-    link_app_id: str | None = None
-    path_suffix: str | None = None
-    absolute_path: str | None = None
-    coming_soon: bool = False
-
-
-@dataclass(frozen=True)
-class WorkspaceAppCatalogItem:
-    app_id: str
-    title: str
-    route_base: str
-    icon_key: str
-    enabled_by_default: bool = True
-    nav_items: tuple[WorkspaceNavCatalogItem, ...] = ()
-
-
-WORKSPACE_APP_CATALOG: tuple[WorkspaceAppCatalogItem, ...] = (
-    WorkspaceAppCatalogItem(
-        app_id="home",
-        title="HOME",
-        route_base="/home",
-        icon_key="home",
-    ),
-    WorkspaceAppCatalogItem(
-        app_id="ai",
-        title="AI",
-        route_base="/ai",
-        icon_key="brain",
-        nav_items=(
-            WorkspaceNavCatalogItem(
-                id="chatbot",
-                app_id="ai",
-                title="AI 챗봇",
-                category="Core Tools",
-                icon_key="message-square",
-            ),
-            WorkspaceNavCatalogItem(
-                id="search",
-                app_id="ai",
-                title="AI-DO 통합검색",
-                category="Core Tools",
-                icon_key="search",
-            ),
-            WorkspaceNavCatalogItem(
-                id="drafting",
-                app_id="ai",
-                title="기안작성 도우미",
-                category="Core Tools",
-                icon_key="file-text",
-                coming_soon=True,
-            ),
-            WorkspaceNavCatalogItem(
-                id="translate",
-                app_id="ai",
-                title="문서 번역/요약",
-                category="Core Tools",
-                icon_key="languages",
-                coming_soon=True,
-            ),
-            WorkspaceNavCatalogItem(
-                id="spec-compare",
-                app_id="ai",
-                title="규격서 비교",
-                category="Core Tools",
-                icon_key="file-search",
-                coming_soon=True,
-            ),
-            WorkspaceNavCatalogItem(
-                id="fmea-compare",
-                app_id="ai",
-                title="FMEA 비교",
-                category="Core Tools",
-                icon_key="alert-triangle",
-                coming_soon=True,
-            ),
-            WorkspaceNavCatalogItem(
-                id="meeting-minutes",
-                app_id="ai",
-                title="회의록",
-                category="Assistants",
-                icon_key="mic",
-                link_app_id="meeting",
-                path_suffix="?tab=recordings",
-            ),
-            WorkspaceNavCatalogItem(
-                id="image-wizard",
-                app_id="ai",
-                title="이미지 위저드",
-                category="Assistants",
-                icon_key="image",
-            ),
-            WorkspaceNavCatalogItem(
-                id="email-assistant",
-                app_id="ai",
-                title="메일 작성 도우미",
-                category="Assistants",
-                icon_key="mail",
-                coming_soon=True,
-            ),
-            WorkspaceNavCatalogItem(
-                id="ppt-assistant",
-                app_id="ai",
-                title="PPT 발표 도우미",
-                category="Assistants",
-                icon_key="presentation",
-                coming_soon=True,
-            ),
-            WorkspaceNavCatalogItem(
-                id="qa-assistant",
-                app_id="ai",
-                title="사내 관리팀 Q&A",
-                category="Assistants",
-                icon_key="help-circle",
-                coming_soon=True,
-            ),
-            WorkspaceNavCatalogItem(
-                id="news",
-                app_id="ai",
-                title="뉴스",
-                category="Assistants",
-                icon_key="newspaper",
-                coming_soon=True,
-            ),
-            WorkspaceNavCatalogItem(
-                id="industry-report",
-                app_id="ai",
-                title="산업 리포트",
-                category="Assistants",
-                icon_key="bar-chart-3",
-                coming_soon=True,
-            ),
-            WorkspaceNavCatalogItem(
-                id="patent-interpret",
-                app_id="ai",
-                title="특허 해석 도우미",
-                category="Patent",
-                icon_key="gavel",
-                coming_soon=True,
-            ),
-            WorkspaceNavCatalogItem(
-                id="patent-apply",
-                app_id="ai",
-                title="특허 출원 도우미",
-                category="Patent",
-                icon_key="file-plus",
-                coming_soon=True,
-            ),
-            WorkspaceNavCatalogItem(
-                id="patent-report",
-                app_id="ai",
-                title="AI 특허 보고서",
-                category="Patent",
-                icon_key="file-bar-chart",
-                coming_soon=True,
-            ),
-        ),
-    ),
-    WorkspaceAppCatalogItem(
-        app_id="pms",
-        title="PMS",
-        route_base="/pms",
-        icon_key="folder-kanban",
-        nav_items=(
-            WorkspaceNavCatalogItem(
-                id="pms-inbox",
-                app_id="pms",
-                title="Inbox",
-                category="Personal",
-                icon_key="inbox",
-            ),
-            WorkspaceNavCatalogItem(
-                id="pms-tasks",
-                app_id="pms",
-                title="My Tasks",
-                category="Personal",
-                icon_key="check-circle-2",
-                path_suffix="/assigned",
-            ),
-            WorkspaceNavCatalogItem(
-                id="pms-tasks-assigned",
-                app_id="pms",
-                title="Assigned to me",
-                category="Personal",
-                icon_key="user",
-                path_suffix="/assigned",
-            ),
-            WorkspaceNavCatalogItem(
-                id="pms-tasks-today",
-                app_id="pms",
-                title="Today & Overdue",
-                category="Personal",
-                icon_key="calendar",
-                path_suffix="/today",
-            ),
-            WorkspaceNavCatalogItem(
-                id="pms-tasks-personal",
-                app_id="pms",
-                title="Personal List",
-                category="Personal",
-                icon_key="list",
-                path_suffix="/personal",
-            ),
-        ),
-    ),
-    WorkspaceAppCatalogItem(
-        app_id="docs",
-        title="DOCS",
-        route_base="/docs",
-        icon_key="files",
-        nav_items=(
-            WorkspaceNavCatalogItem(
-                id="docs-all",
-                app_id="docs",
-                title="All Docs",
-                category="Library",
-                icon_key="files",
-            ),
-            WorkspaceNavCatalogItem(
-                id="docs-my",
-                app_id="docs",
-                title="My Docs",
-                category="Library",
-                icon_key="user",
-            ),
-            WorkspaceNavCatalogItem(
-                id="docs-shared",
-                app_id="docs",
-                title="Shared with me",
-                category="Library",
-                icon_key="share-2",
-            ),
-            WorkspaceNavCatalogItem(
-                id="docs-private",
-                app_id="docs",
-                title="Private",
-                category="Library",
-                icon_key="lock",
-            ),
-            WorkspaceNavCatalogItem(
-                id="docs-notes",
-                app_id="docs",
-                title="Meeting Notes",
-                category="Library",
-                icon_key="mic",
-            ),
-            WorkspaceNavCatalogItem(
-                id="docs-recent",
-                app_id="docs",
-                title="Recent Pages",
-                category="Library",
-                icon_key="history",
-            ),
-            WorkspaceNavCatalogItem(
-                id="docs-archived",
-                app_id="docs",
-                title="Archived",
-                category="Library",
-                icon_key="history",
-            ),
-        ),
-    ),
-    WorkspaceAppCatalogItem(
-        app_id="whiteboard",
-        title="WHITEBOARD",
-        route_base="/whiteboard",
-        icon_key="pencil-ruler",
-        nav_items=(
-            WorkspaceNavCatalogItem(
-                id="whiteboard-all",
-                app_id="whiteboard",
-                title="All Whiteboards",
-                category="Library",
-                icon_key="pencil-ruler",
-            ),
-            WorkspaceNavCatalogItem(
-                id="whiteboard-my",
-                app_id="whiteboard",
-                title="My Whiteboards",
-                category="Library",
-                icon_key="user",
-            ),
-            WorkspaceNavCatalogItem(
-                id="whiteboard-recent",
-                app_id="whiteboard",
-                title="Recent",
-                category="Library",
-                icon_key="history",
-            ),
-            WorkspaceNavCatalogItem(
-                id="whiteboard-archived",
-                app_id="whiteboard",
-                title="Archived",
-                category="Library",
-                icon_key="history",
-            ),
-        ),
-    ),
-    WorkspaceAppCatalogItem(
-        app_id="planner",
-        title="Planner",
-        route_base="/planner",
-        icon_key="calendar",
-        nav_items=(
-            WorkspaceNavCatalogItem(
-                id="planner-calendar",
-                app_id="planner",
-                title="캘린더",
-                category="Schedule",
-                icon_key="calendar",
-            ),
-            WorkspaceNavCatalogItem(
-                id="planner-timeline",
-                app_id="planner",
-                title="타임라인",
-                category="Schedule",
-                icon_key="activity",
-                path_suffix="?view=timeline",
-            ),
-        ),
-    ),
-    WorkspaceAppCatalogItem(
-        app_id="meeting",
-        title="MEETING",
-        route_base="/meeting",
-        icon_key="users",
-        nav_items=(
-            WorkspaceNavCatalogItem(
-                id="meeting-upcoming",
-                app_id="meeting",
-                title="Upcoming",
-                category="Meetings",
-                icon_key="calendar",
-            ),
-            WorkspaceNavCatalogItem(
-                id="meeting-mine",
-                app_id="meeting",
-                title="My Meetings",
-                category="Meetings",
-                icon_key="user",
-                path_suffix="?scope=mine",
-            ),
-            WorkspaceNavCatalogItem(
-                id="meeting-recordings",
-                app_id="meeting",
-                title="Recordings",
-                category="Meetings",
-                icon_key="video",
-                path_suffix="?tab=recordings",
-            ),
-        ),
-    ),
-    WorkspaceAppCatalogItem(
-        app_id="recording",
-        title="RECORDING",
-        route_base="/recording",
-        icon_key="mic",
-        nav_items=(
-            WorkspaceNavCatalogItem(
-                id="recording-quick",
-                app_id="recording",
-                title="Quick Record",
-                category="Recordings",
-                icon_key="mic",
-            ),
-            WorkspaceNavCatalogItem(
-                id="recording-mine",
-                app_id="recording",
-                title="My Recordings",
-                category="Recordings",
-                icon_key="list-music",
-                path_suffix="?view=mine",
-            ),
-            WorkspaceNavCatalogItem(
-                id="recording-meeting",
-                app_id="recording",
-                title="Meeting Recordings",
-                category="Recording Categories",
-                icon_key="users",
-                path_suffix="?view=mine&category=meeting",
-            ),
-            WorkspaceNavCatalogItem(
-                id="recording-task",
-                app_id="recording",
-                title="Task Recordings",
-                category="Recording Categories",
-                icon_key="check-circle-2",
-                path_suffix="?view=mine&category=task",
-            ),
-            WorkspaceNavCatalogItem(
-                id="recording-unlinked",
-                app_id="recording",
-                title="Unlinked",
-                category="Recording Categories",
-                icon_key="inbox",
-                path_suffix="?view=mine&category=unlinked",
-            ),
-            WorkspaceNavCatalogItem(
-                id="recording-processing",
-                app_id="recording",
-                title="Processing",
-                category="Recording Status",
-                icon_key="clock-3",
-                path_suffix="?view=processing",
-            ),
-            WorkspaceNavCatalogItem(
-                id="recording-failed",
-                app_id="recording",
-                title="Failed",
-                category="Recording Status",
-                icon_key="alert-triangle",
-                path_suffix="?view=failed",
-            ),
-            WorkspaceNavCatalogItem(
-                id="recording-archived",
-                app_id="recording",
-                title="Archived",
-                category="Recording Status",
-                icon_key="archive",
-                path_suffix="?view=archived",
-            ),
-        ),
-    ),
-    WorkspaceAppCatalogItem(
-        app_id="learning",
-        title="학습",
-        route_base="/learning",
-        icon_key="graduation-cap",
-        nav_items=(
-            WorkspaceNavCatalogItem(
-                id="learning-all",
-                app_id="learning",
-                title="전체 코스",
-                category="Courses",
-                icon_key="graduation-cap",
-            ),
-        ),
-    ),
+from ai_do_api.core.workspace_app_registry import (
+    WorkspaceAppCatalogItem,
+    WorkspaceAppRegistration,
+    WorkspaceNavCatalogItem,
+    compile_workspace_app_registry,
+)
+from ai_do_api.domains.community.app_catalog import COMMUNITY_WORKSPACE_APP
+from ai_do_api.domains.commute.app_catalog import PERSONAL_ATTENDANCE_WORKSPACE_APP
+from ai_do_api.domains.conversations.app_catalog import CHATBOT_WORKSPACE_APP
+from ai_do_api.domains.dataviz.app_catalog import DATA_VIZ_WORKSPACE_APP
+from ai_do_api.domains.diagrams.app_catalog import DIAGRAMS_WORKSPACE_APP
+from ai_do_api.domains.docs.app_catalog import DOCS_WORKSPACE_APP
+from ai_do_api.domains.document_translate.app_catalog import (
+    DOCUMENT_TRANSLATE_WORKSPACE_APP,
+)
+from ai_do_api.domains.files.app_catalog import FILES_WORKSPACE_APP
+from ai_do_api.domains.fmea_compare.app_catalog import FMEA_COMPARE_WORKSPACE_APP
+from ai_do_api.domains.images.app_catalog import IMAGE_WIZARD_WORKSPACE_APP
+from ai_do_api.domains.imds_minerals.app_catalog import IMDS_MINERALS_WORKSPACE_APP
+from ai_do_api.domains.lawsearch.app_catalog import LAW_SEARCH_WORKSPACE_APP
+from ai_do_api.domains.learning_notes.app_catalog import LEARNING_WORKSPACE_APP
+from ai_do_api.domains.legacy_issues.app_catalog import LEGACY_ISSUES_WORKSPACE_APP
+from ai_do_api.domains.mail.app_catalog import MAIL_WORKSPACE_APP
+from ai_do_api.domains.management_tasks.app_catalog import (
+    MANAGEMENT_TASKS_WORKSPACE_APP,
+)
+from ai_do_api.domains.meal_invoice_ocr.app_catalog import (
+    MEAL_INVOICE_OCR_WORKSPACE_APP,
+)
+from ai_do_api.domains.meeting.app_catalog import MEETING_WORKSPACE_APP
+from ai_do_api.domains.news.app_catalog import NEWS_WORKSPACE_APP
+from ai_do_api.domains.patent.app_catalog import PATENT_WORKSPACE_APPS
+from ai_do_api.domains.patent_automation.app_catalog import (
+    PATENT_AUTOMATION_WORKSPACE_APP,
+)
+from ai_do_api.domains.patent_prior_art.app_catalog import (
+    PATENT_PRIOR_ART_WORKSPACE_APP,
+)
+from ai_do_api.domains.planner.app_catalog import PLANNER_WORKSPACE_APP
+from ai_do_api.domains.plm.app_catalog import PLM_WORKSPACE_APP
+from ai_do_api.domains.pms.app_catalog import PMS_WORKSPACE_APP
+from ai_do_api.domains.ppt_generator.app_catalog import PPT_ASSISTANT_WORKSPACE_APP
+from ai_do_api.domains.qna.app_catalog import QA_ASSISTANT_WORKSPACE_APP
+from ai_do_api.domains.recording.app_catalog import RECORDING_WORKSPACE_APP
+from ai_do_api.domains.retrieval.app_catalog import RETRIEVAL_SEARCH_WORKSPACE_APP
+from ai_do_api.domains.spec_compare.app_catalog import SPEC_COMPARE_WORKSPACE_APP
+from ai_do_api.domains.video_chat.app_catalog import VIDEO_CHAT_WORKSPACE_APP
+from ai_do_api.domains.web_search.app_catalog import WEB_SEARCH_WORKSPACE_APPS
+from ai_do_api.domains.whiteboard.app_catalog import WHITEBOARD_WORKSPACE_APP
+from ai_do_api.domains.writing_assistant.app_catalog import (
+    DRAFTING_WORKSPACE_APP,
+    EMAIL_ASSISTANT_WORKSPACE_APP,
 )
 
-WORKSPACE_APP_IDS = tuple(item.app_id for item in WORKSPACE_APP_CATALOG)
+from .home_app_catalog import HOME_WORKSPACE_APP
+
+
+_WORKSPACE_APP_REGISTRATIONS = (
+    HOME_WORKSPACE_APP,
+    CHATBOT_WORKSPACE_APP,
+    *WEB_SEARCH_WORKSPACE_APPS,
+    PMS_WORKSPACE_APP,
+    DOCS_WORKSPACE_APP,
+    FILES_WORKSPACE_APP,
+    MAIL_WORKSPACE_APP,
+    MANAGEMENT_TASKS_WORKSPACE_APP,
+    COMMUNITY_WORKSPACE_APP,
+    PLM_WORKSPACE_APP,
+    WHITEBOARD_WORKSPACE_APP,
+    DIAGRAMS_WORKSPACE_APP,
+    PLANNER_WORKSPACE_APP,
+    PERSONAL_ATTENDANCE_WORKSPACE_APP,
+    MEETING_WORKSPACE_APP,
+    VIDEO_CHAT_WORKSPACE_APP,
+    RECORDING_WORKSPACE_APP,
+    LEARNING_WORKSPACE_APP,
+    NEWS_WORKSPACE_APP,
+    DRAFTING_WORKSPACE_APP,
+    DOCUMENT_TRANSLATE_WORKSPACE_APP,
+    SPEC_COMPARE_WORKSPACE_APP,
+    FMEA_COMPARE_WORKSPACE_APP,
+    IMDS_MINERALS_WORKSPACE_APP,
+    IMAGE_WIZARD_WORKSPACE_APP,
+    EMAIL_ASSISTANT_WORKSPACE_APP,
+    PPT_ASSISTANT_WORKSPACE_APP,
+    RETRIEVAL_SEARCH_WORKSPACE_APP,
+    LAW_SEARCH_WORKSPACE_APP,
+    *PATENT_WORKSPACE_APPS,
+    PATENT_PRIOR_ART_WORKSPACE_APP,
+    PATENT_AUTOMATION_WORKSPACE_APP,
+    MEAL_INVOICE_OCR_WORKSPACE_APP,
+    DATA_VIZ_WORKSPACE_APP,
+    LEGACY_ISSUES_WORKSPACE_APP,
+    QA_ASSISTANT_WORKSPACE_APP,
+)
+_WORKSPACE_APP_REGISTRY = compile_workspace_app_registry(_WORKSPACE_APP_REGISTRATIONS)
+_WORKSPACE_APP_REGISTRATIONS_BY_ID = {
+    registration.app_id: registration for registration in _WORKSPACE_APP_REGISTRATIONS
+}
+
+WORKSPACE_APP_CATALOG = _WORKSPACE_APP_REGISTRY.catalog
+WORKSPACE_APP_IDS = _WORKSPACE_APP_REGISTRY.app_ids
+WORKSPACE_APP_BAR_FIXED_APP_IDS = _WORKSPACE_APP_REGISTRY.launcher_fixed_app_ids
+WORKSPACE_APP_BAR_PINNED_BY_DEFAULT_APP_IDS = (
+    _WORKSPACE_APP_REGISTRY.launcher_pinned_by_default_app_ids
+)
+WORKSPACE_APP_BAR_PERSONAL_TOOLS_APP_IDS = _WORKSPACE_APP_REGISTRY.launcher_personal_tools_app_ids
 
 
 def iter_workspace_app_catalog() -> tuple[WorkspaceAppCatalogItem, ...]:
@@ -457,7 +114,23 @@ def iter_workspace_app_catalog() -> tuple[WorkspaceAppCatalogItem, ...]:
 
 
 def get_workspace_app_catalog_item(app_id: str) -> WorkspaceAppCatalogItem | None:
-    for item in WORKSPACE_APP_CATALOG:
-        if item.app_id == app_id:
-            return item
-    return None
+    return _WORKSPACE_APP_REGISTRY.by_app_id.get(app_id)
+
+
+def get_workspace_app_registration(app_id: str) -> WorkspaceAppRegistration | None:
+    return _WORKSPACE_APP_REGISTRATIONS_BY_ID.get(app_id)
+
+
+__all__ = [
+    "WORKSPACE_APP_CATALOG",
+    "WORKSPACE_APP_BAR_FIXED_APP_IDS",
+    "WORKSPACE_APP_BAR_PINNED_BY_DEFAULT_APP_IDS",
+    "WORKSPACE_APP_BAR_PERSONAL_TOOLS_APP_IDS",
+    "WORKSPACE_APP_IDS",
+    "WorkspaceAppCatalogItem",
+    "WorkspaceAppRegistration",
+    "WorkspaceNavCatalogItem",
+    "get_workspace_app_catalog_item",
+    "get_workspace_app_registration",
+    "iter_workspace_app_catalog",
+]

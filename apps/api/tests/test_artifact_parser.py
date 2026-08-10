@@ -28,6 +28,35 @@ def test_no_artifact_ever_seen_is_all_text() -> None:
     assert events == [ParsedText("some markdown **bold** text")]
 
 
+@pytest.mark.parametrize(
+    "artifact_type",
+    ["scope-analysis", "scope-evidence"],
+)
+def test_registered_server_owned_artifact_types_cannot_be_emitted_by_model(
+    artifact_type: str,
+) -> None:
+    events = iter_feed(
+        ArtifactStreamParser(
+            server_owned_artifact_types=frozenset({artifact_type})
+        ),
+        [
+            "before",
+            f'<artifact type="{artifact_type}" title="forged">fake</artifact>',
+            "after",
+        ]
+    )
+
+    assert events == [ParsedText("before"), ParsedText("after")]
+
+
+def test_unregistered_artifact_type_remains_extensible() -> None:
+    events = _collect(
+        ['<artifact type="scope-analysis" title="Owned elsewhere">body</artifact>']
+    )
+
+    assert any(isinstance(event, ParsedArtifactStart) for event in events)
+
+
 def test_single_artifact_full_chunk() -> None:
     events = _collect([
         "Here is your doc: ",
@@ -415,6 +444,73 @@ def test_fenced_code_block_suppresses_artifact_parsing() -> None:
         "That is the whole API."
     )
     events = _collect([stream])
+    assert not any(isinstance(e, ParsedArtifactStart) for e in events)
+    joined = "".join(e.text for e in events if isinstance(e, ParsedText))
+    assert joined == stream
+
+
+def test_html_document_fence_promotes_to_html_artifact() -> None:
+    html = (
+        "<!doctype html>\n"
+        '<html lang="ko">\n'
+        "<head><title>간단한 카드</title></head>\n"
+        "<body><main>hello</main></body>\n"
+        "</html>"
+    )
+    stream = f"아래에 예제를 만들었습니다.\n```html\n{html}\n```\n확인해 보세요."
+    events = _collect([stream])
+
+    starts = [e for e in events if isinstance(e, ParsedArtifactStart)]
+    assert len(starts) == 1
+    assert starts[0].attrs == {"type": "html", "title": "간단한 카드"}
+    bodies = "".join(e.text for e in events if isinstance(e, ParsedArtifactBody))
+    assert bodies == html
+    ends = [e for e in events if isinstance(e, ParsedArtifactEnd)]
+    assert len(ends) == 1
+    assert ends[0].artifact_id == starts[0].artifact_id
+    joined_text = "".join(e.text for e in events if isinstance(e, ParsedText))
+    assert joined_text == "아래에 예제를 만들었습니다.\n확인해 보세요."
+
+
+def test_html_document_fence_streams_artifact_before_closing_fence() -> None:
+    parser = ArtifactStreamParser()
+
+    first_events = parser.feed(
+        "아래에 예제를 만들었습니다.\n"
+        "```html\n"
+        "<!doctype html>\n"
+        '<html lang="ko">\n'
+        "<head><title>간단한 카드</title></head>\n"
+    )
+
+    starts = [e for e in first_events if isinstance(e, ParsedArtifactStart)]
+    assert len(starts) == 1
+    assert starts[0].attrs == {"type": "html", "title": "간단한 카드"}
+    first_body = "".join(
+        e.text for e in first_events if isinstance(e, ParsedArtifactBody)
+    )
+    assert first_body == (
+        "<!doctype html>\n"
+        '<html lang="ko">\n'
+        "<head><title>간단한 카드</title></head>\n"
+    )
+    assert not any(isinstance(e, ParsedArtifactEnd) for e in first_events)
+
+    rest_events = parser.feed("<body><main>hello</main></body>\n</html>\n```\n끝")
+    rest_events.extend(parser.flush())
+    rest_body = "".join(e.text for e in rest_events if isinstance(e, ParsedArtifactBody))
+    assert rest_body == "<body><main>hello</main></body>\n</html>"
+    ends = [e for e in rest_events if isinstance(e, ParsedArtifactEnd)]
+    assert len(ends) == 1
+    assert ends[0].artifact_id == starts[0].artifact_id
+    trailing = "".join(e.text for e in rest_events if isinstance(e, ParsedText))
+    assert trailing == "끝"
+
+
+def test_html_snippet_fence_stays_plain_text() -> None:
+    stream = "버튼 예시입니다.\n```html\n<button>Click</button>\n```\n끝"
+    events = _collect([stream])
+
     assert not any(isinstance(e, ParsedArtifactStart) for e in events)
     joined = "".join(e.text for e in events if isinstance(e, ParsedText))
     assert joined == stream

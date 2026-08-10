@@ -17,15 +17,15 @@ export function Topbar({
     <header className="sticky top-0 z-20 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-[var(--ui-color-border)] bg-ui-bg/97 py-1 backdrop-blur max-[980px]:grid-cols-1">
       <div className="grid gap-0 self-center">
         {breadcrumb ? (
-          <p className="m-0 text-[0.62rem] font-medium uppercase tracking-[0.05em] text-[var(--ui-color-ink-subtle)] max-[720px]:hidden">
+          <p className="m-0 text-[length:var(--ui-text-overline)] font-medium uppercase tracking-[0.05em] text-[var(--ui-color-ink-subtle)] max-[720px]:hidden">
             {breadcrumb}
           </p>
         ) : null}
-        <h1 className="m-0 text-[clamp(0.98rem,1.2vw,1.12rem)] font-semibold tracking-[-0.02em] text-[var(--ui-color-ink)]">
+        <h1 className="m-0 text-[length:var(--ui-text-h3)] font-semibold tracking-[-0.02em] text-[var(--ui-color-ink)]">
           {title}
         </h1>
         {description ? (
-          <p className="m-0 max-w-[64ch] text-[0.76rem] text-[var(--ui-color-ink-muted)] max-[820px]:hidden">
+          <p className="m-0 max-w-[64ch] text-[length:var(--ui-text-caption)] text-[var(--ui-color-ink-muted)] max-[820px]:hidden">
             {description}
           </p>
         ) : null}

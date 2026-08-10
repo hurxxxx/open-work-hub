@@ -18,9 +18,13 @@ from ai_do_api.domains.rag.providers.fake import (
     FakeRerankClient,
     FakeVectorIndexClient,
 )
+from ai_do_api.domains.rag.providers.local import (
+    DoclingOcrClient,
+    LocalCrossEncoderRerankClient,
+    LocalSentenceTransformerEmbeddingClient,
+)
 from ai_do_api.domains.rag.providers.openai_compatible import (
-    DeepInfraEmbeddingClient,
-    DeepInfraRerankClient,
+    InferenceGatewayOcrClient,
     OpenAICompatibleEmbeddingClient,
     OpenAICompatibleRerankClient,
     RagProviderError,
@@ -33,14 +37,16 @@ if TYPE_CHECKING:
 
 __all__ = [
     "AsrClient",
-    "DeepInfraEmbeddingClient",
-    "DeepInfraRerankClient",
+    "DoclingOcrClient",
     "EmbeddingClient",
     "FakeAsrClient",
     "FakeEmbeddingClient",
     "FakeOcrClient",
     "FakeRerankClient",
     "FakeVectorIndexClient",
+    "LocalCrossEncoderRerankClient",
+    "InferenceGatewayOcrClient",
+    "LocalSentenceTransformerEmbeddingClient",
     "OpenAICompatibleEmbeddingClient",
     "OpenAICompatibleRerankClient",
     "OcrClient",

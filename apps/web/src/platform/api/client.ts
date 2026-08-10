@@ -1,8 +1,4 @@
-import createClient from 'openapi-fetch';
-import type { paths } from './openapi.generated';
 import { i18n } from '@/src/platform/i18n';
-
-export const apiClient = createClient<paths>({ baseUrl: '' });
 
 export class ApiRequestError extends Error {
   constructor(
@@ -66,4 +62,20 @@ export async function apiFetchJson<T>(
     cache: init.cache ?? 'no-store',
   });
   return parseJsonResponse<T>(response);
+}
+
+export async function apiFetchJsonWithMappedError<T, TError extends Error = Error>(
+  path: string,
+  token: string | null | undefined,
+  init: RequestInit = {},
+  mapError: (error: ApiRequestError) => TError,
+): Promise<T> {
+  try {
+    return await apiFetchJson<T>(path, token, init);
+  } catch (error) {
+    if (error instanceof ApiRequestError) {
+      throw mapError(error);
+    }
+    throw error;
+  }
 }

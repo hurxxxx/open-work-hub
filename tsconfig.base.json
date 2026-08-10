@@ -3,7 +3,7 @@
     "target": "ES2022",
     "useDefineForClassFields": true,
     "module": "ESNext",
-    "moduleResolution": "Node",
+    "moduleResolution": "Bundler",
     "strict": true,
     "jsx": "react-jsx",
     "allowJs": false,
@@ -11,11 +11,22 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "baseUrl": ".",
     "types": ["node"],
     "paths": {
-      "@ai-do/ui": ["packages/ui/src/index.ts"],
-      "@ai-do/ui/*": ["packages/ui/src/lib/*"]
+      "@ai-do/contracts": ["./packages/contracts/src/index.ts"],
+      "@ai-do/contracts/openapi": [
+        "./packages/contracts/src/openapi.generated.d.ts"
+      ],
+      "@ai-do/contracts/*": ["./packages/contracts/src/*"],
+      "@ai-do/core-web": ["./packages/core-web/src/index.ts"],
+      "@ai-do/core-web/*": ["./packages/core-web/src/*"],
+      "@ai-do/web-shell": ["./apps/web/src/app/shell/AppContent.tsx"],
+      "@ai-do/web/styles.css": ["./apps/web/src/index.css"],
+      "@ai-do/web/fullcalendar-theme.css": [
+        "./apps/web/src/styles/fullcalendar-theme.css"
+      ],
+      "@ai-do/ui": ["./packages/ui/src/index.ts"],
+      "@ai-do/ui/*": ["./packages/ui/src/lib/*"]
     }
   },
   "exclude": ["node_modules", "dist"]

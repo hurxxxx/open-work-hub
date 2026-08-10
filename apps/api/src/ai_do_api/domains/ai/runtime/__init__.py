@@ -36,8 +36,14 @@ from ai_do_api.domains.ai.runtime.external_adapters import (
     ExternalSearchExecutionAdapter,
     UnavailableExternalPlannerAdapter,
     UnavailableExternalSearchAdapter,
+    ensure_default_external_execution_adapters_registered,
+    register_external_planner_execution_adapter,
+    register_external_search_execution_adapter,
+    reset_external_execution_adapters,
     select_external_planner_execution_adapter,
     select_external_search_execution_adapter,
+    supported_external_planner_execution_adapters,
+    supported_external_search_execution_adapters,
 )
 from ai_do_api.domains.ai.runtime.external_planner import (
     EXTERNAL_PLANNER_ADAPTER_ID,
@@ -73,32 +79,39 @@ from ai_do_api.domains.ai.runtime.graph_scheduler import (
     summarize_graph_execution_schedule,
     summarize_graph_schedule_failure,
 )
-from ai_do_api.domains.ai.runtime.graph_execution import (
+from ai_do_api.domains.ai.runtime.graph_execution_fallback_policy import (
     GRAPH_INSTRUCTED_SINGLE_LOOP_ADAPTER_ID,
     GRAPH_NODE_RUNNER_ADAPTER_ID,
-    GRAPH_VERIFIER_AGENT_ID,
-    GRAPH_WRITER_AGENT_ID,
-    GraphNodeOutput,
     GraphExecutionFallbackReason,
     GraphExecutionStatus,
-    GraphVerifierFailurePolicy,
     attach_graph_execution_adapter_decision,
+)
+from ai_do_api.domains.ai.runtime.graph_node_output import GraphNodeOutput
+from ai_do_api.domains.ai.runtime.graph_prompting import (
     build_graph_node_messages,
     build_graph_node_system_prompt,
     build_graph_writer_system_prompt,
     build_graph_execution_system_prompt,
+)
+from ai_do_api.domains.ai.runtime.graph_evidence_packet import (
+    GRAPH_VERIFIER_AGENT_ID,
+    GRAPH_WRITER_AGENT_ID,
+    GraphVerifierFailurePolicy,
     graph_verifier_failure_policy,
     materialize_graph_evidence_packet,
     render_evidence_packet,
     summarize_graph_evidence_packet,
 )
 from ai_do_api.domains.ai.runtime.manager_candidate import (
+    DETERMINISTIC_MANAGER_CANDIDATE_RUNTIME_PROFILES,
     build_deterministic_manager_candidate,
+    supports_deterministic_manager_candidate,
     summarize_execution_graph,
 )
 from ai_do_api.domains.ai.runtime.manager_validation import (
     EXECUTION_GRAPH_SCHEMA_NAME,
     ManagerGraphValidationResult,
+    ManagerGraphValidator,
     build_execution_graph_json_schema,
     build_execution_graph_response_schema,
     validate_manager_graph_candidate,
@@ -114,9 +127,9 @@ from ai_do_api.domains.ai.runtime.persistence import (
     persist_graph_execution_runtime_shadow,
     persist_graph_schedule_invocation_skeletons,
     prepare_trace_payload,
-    scrub_completed_runtime_records,
     scrub_trace_payload,
 )
+from ai_do_api.domains.ai.runtime.retention import scrub_completed_runtime_records
 from ai_do_api.domains.ai.runtime.routing import (
     RuntimeRoutingDecision,
     attach_manager_graph_validation_result,
@@ -127,6 +140,7 @@ from ai_do_api.domains.ai.runtime.trace import RuntimeTraceSequencer
 
 __all__ = [
     "DEFAULT_AGENT_DEFINITIONS",
+    "DETERMINISTIC_MANAGER_CANDIDATE_RUNTIME_PROFILES",
     "AgentDefinition",
     "AgentDefinitionResolver",
     "AgentInvocationContract",
@@ -171,6 +185,7 @@ __all__ = [
     "GraphSchedulerError",
     "GraphVerifierFailurePolicy",
     "ManagerGraphValidationResult",
+    "ManagerGraphValidator",
     "MockExternalPlannerAdapter",
     "MockExternalSearchAdapter",
     "QueryPlan",
@@ -211,9 +226,16 @@ __all__ = [
     "resolve_agent_definitions",
     "scrub_completed_runtime_records",
     "scrub_trace_payload",
+    "ensure_default_external_execution_adapters_registered",
+    "register_external_planner_execution_adapter",
+    "register_external_search_execution_adapter",
+    "reset_external_execution_adapters",
     "select_external_planner_execution_adapter",
     "select_external_search_execution_adapter",
+    "supported_external_planner_execution_adapters",
+    "supported_external_search_execution_adapters",
     "select_runtime_profile",
+    "supports_deterministic_manager_candidate",
     "summarize_graph_evidence_packet",
     "summarize_graph_execution_schedule",
     "summarize_graph_schedule_failure",

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from ai_do_api.core.db import get_session_factory
-from ai_do_api.domains.auth.access import ensure_dev_login_seed_data
+from dev_accounts import dev_login
+
 
 
 def test_whiteboard_reuses_pms_space_acl(client: TestClient) -> None:
@@ -89,13 +89,38 @@ def test_whiteboard_user_and_link_shares_grant_access(client: TestClient) -> Non
     assert recipient_get.status_code == 200, recipient_get.text
     assert recipient_get.json()["can_edit"] is False
 
+    recipient_patch = client.patch(
+        f"/api/v1/workspaces/delivery-hub/whiteboard/items/{whiteboard['id']}",
+        headers=_auth_headers(recipient["token"]),
+        json={"scene": {"elements": [{"id": "user-read-blocked"}], "appState": {}, "files": {}}},
+    )
+    assert recipient_patch.status_code == 403
+    assert recipient_patch.json()["code"] == "whiteboard.edit_access_required"
+
+    read_link_response = client.put(
+        f"/api/v1/workspaces/delivery-hub/whiteboard/items/{whiteboard['id']}/sharing/link",
+        headers=_auth_headers(owner["token"]),
+        json={"access_level": "read"},
+    )
+    assert read_link_response.status_code == 200, read_link_response.text
+    read_share_token = read_link_response.json()["link_share"]["token"]
+
+    read_link_patch = client.patch(
+        f"/api/v1/whiteboard/shared-links/{read_share_token}/item",
+        headers=_auth_headers(recipient["token"]),
+        json={"scene": {"elements": [{"id": "link-read-blocked"}], "appState": {}, "files": {}}},
+    )
+    assert read_link_patch.status_code == 403
+    assert read_link_patch.json()["code"] == "whiteboard.edit_access_required"
+
     link_response = client.put(
         f"/api/v1/workspaces/delivery-hub/whiteboard/items/{whiteboard['id']}/sharing/link",
         headers=_auth_headers(owner["token"]),
-        json={"access_level": "edit"},
+        json={"access_level": "edit", "regenerate_token": True},
     )
     assert link_response.status_code == 200, link_response.text
     share_token = link_response.json()["link_share"]["token"]
+    assert share_token != read_share_token
 
     resolve_response = client.get(
         f"/api/v1/whiteboard/shared-links/{share_token}",
@@ -121,7 +146,7 @@ def _create_space_whiteboard(client: TestClient, token: str, space_id: str) -> d
             "title": "ACL Board",
             "source_app": "pms",
             "source_kind": "manual",
-            "primary_container": {
+            "primary_target": {
                 "app": "pms",
                 "type": "space",
                 "id": space_id,
@@ -167,11 +192,7 @@ def _add_space_member(
 
 
 def _dev_login(client: TestClient, account_key: str) -> dict:
-    with get_session_factory()() as db:
-        ensure_dev_login_seed_data(db)
-    response = client.post("/api/v1/auth/dev-login", json={"account_key": account_key})
-    assert response.status_code == 200, response.text
-    return response.json()
+    return dev_login(client, account_key)
 
 
 def _auth_headers(token: str) -> dict[str, str]:

@@ -17,7 +17,7 @@ export function SearchField({
   return (
     <div
       className={cn(
-        'flex min-h-[var(--ui-density-comfortable)] w-full min-w-0 items-center gap-2 rounded-[var(--ui-radius-sm)] border border-[var(--ui-color-border)] bg-white px-3',
+        'flex min-h-[var(--ui-density-comfortable)] w-full min-w-0 items-center gap-2 rounded-[var(--ui-radius-sm)] border border-[var(--ui-color-border)] bg-ui-surface-raised px-3',
         className,
       )}
     >
@@ -28,7 +28,7 @@ export function SearchField({
       />
       {endAdornment}
       {shortcut ? (
-        <span className="shrink-0 text-xs font-medium text-[var(--ui-color-ink-subtle)] max-[720px]:hidden">
+        <span className="shrink-0 text-[length:var(--ui-text-caption)] font-medium text-[var(--ui-color-ink-subtle)] max-[720px]:hidden">
           {shortcut}
         </span>
       ) : null}

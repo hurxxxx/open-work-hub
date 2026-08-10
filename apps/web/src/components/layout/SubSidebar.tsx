@@ -5,129 +5,445 @@ import {
   useEffect,
   useMemo,
   useRef,
+  type RefObject,
+  type SetStateAction,
 } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { motion, AnimatePresence } from 'motion/react';
-import {
-  ChevronDown,
-  ChevronRight,
-  Plus,
-  PanelLeftClose,
-  PanelLeftOpen,
-} from 'lucide-react';
+import { AnimatePresence, LazyMotion, domAnimation, m } from 'motion/react';
+import { ChevronDown, ChevronRight, Pin, PinOff, Plus } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { APP_BAR_ITEMS, NAV_ITEMS } from '@/src/app/shell/app-registry';
-import { getAppSidebarConfig } from '@/src/app/shell/app-sidebar-registry';
-import {
-  hasAdminSectionAccess,
-  type AdminSection,
-} from '@/src/platform/admin/admin-permissions';
 import { useAuth } from '@/src/platform/auth/auth-provider';
-import { hasWorkspaceMembership } from '@/src/platform/auth/auth-api';
+import {
+  hasWorkspaceMembership,
+  type AuthUser,
+} from '@/src/platform/auth/auth-api';
 import { resolveNavItemHref } from '@/src/platform/workspaces/workspace-utils';
 import type {
   WorkspaceBootstrapApp,
   WorkspaceBootstrapNavItem,
 } from '@/src/platform/workspaces/workspaces-api';
-import type { AppModuleId, NavItem } from '@/src/app/shell/navigation-types';
+import type { AdminSectionAccessResolver } from '@/src/platform/admin/admin-permissions';
 import type {
+  AppBarItem,
+  AppModuleId,
+  LauncherGlobalPaths,
+  NavItem,
+} from '@/src/app/shell/navigation-types';
+import { EMPTY_LAUNCHER_GLOBAL_PATHS } from '@/src/app/shell/navigation-types';
+import type {
+  AppSidebarConfig,
+  AppSidebarCreateAction,
   AppSidebarActionContext,
   AppSidebarRenderContext,
 } from '@/src/app/shell/sidebar-types';
-import { buildSidebarCategories } from './sub-sidebar-categories';
+import {
+  calculateSubSidebarCreateMenuPosition,
+  isSubSidebarCreateMenuOpen,
+  restoreSubSidebarWidth,
+  setSubSidebarCreateMenuOpen,
+  widthFromSubSidebarPointer,
+  SUB_SIDEBAR_DEFAULT_WIDTH,
+} from './sub-sidebar-frame-model';
+import { resolveActiveFeatureAppId } from './sub-sidebar-feature-model';
+import {
+  buildSubSidebarNavigationProjection,
+  normalizeSubSidebarCategoryExpansionState,
+  toggleSubSidebarCategoryExpansion,
+  type SubSidebarCategoryExpansionState,
+} from './sub-sidebar-navigation-model';
+import { resolveSubSidebarTitle } from './sub-sidebar-title-model';
 
-function isDefined<T>(value: T | null): value is T {
-  return value !== null;
-}
+const getNoopAppSidebarConfig = () => null;
 
-export const SubSidebar = ({
+function SubSidebarHeader({
   activeAppId,
-  activeNavItemId,
-  currentWorkspaceSlug,
+  activeFeatureAppId,
+  appBarItems,
+  createActions,
+  createButtonRef,
+  createMenuOpen,
+  createMenuPosition,
+  createMenuRef,
+  isMobile,
+  onCloseCreateMenu,
   onNavigate,
-  variant = 'desktop',
-  workspaceApps,
-  workspaceNavItems,
+  onPinnedChange,
+  onToggleCreateMenu,
+  pinned,
+  sidebarActionContext,
+  workspaceAppRegistry,
 }: {
   activeAppId: string;
-  activeNavItemId: string;
-  currentWorkspaceSlug: string | null;
+  activeFeatureAppId: string | null;
+  appBarItems: readonly AppBarItem[];
+  createActions: AppSidebarCreateAction[];
+  createButtonRef: RefObject<HTMLButtonElement | null>;
+  createMenuOpen: boolean;
+  createMenuPosition: { left: number; top: number } | null;
+  createMenuRef: RefObject<HTMLDivElement | null>;
+  isMobile: boolean;
+  onCloseCreateMenu: () => void;
   onNavigate?: () => void;
-  variant?: 'desktop' | 'mobile';
-  workspaceApps: WorkspaceBootstrapApp[];
-  workspaceNavItems: WorkspaceBootstrapNavItem[];
-}) => {
-  const location = useLocation();
-  const navigate = useNavigate();
+  onPinnedChange?: (pinned: boolean) => void;
+  onToggleCreateMenu: () => void;
+  pinned: boolean;
+  sidebarActionContext: AppSidebarActionContext;
+  workspaceAppRegistry: Map<string, WorkspaceBootstrapApp>;
+}) {
   const { t } = useTranslation('shell');
-  const { user } = useAuth();
-  const isMobile = variant === 'mobile';
-  const canReadTeams = hasWorkspaceMembership(user, currentWorkspaceSlug);
+  const appTitle = resolveSubSidebarTitle({
+    activeAppId,
+    activeFeatureAppId,
+    appBarItems,
+    t,
+    workspaceAppRegistry,
+  });
 
-  const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
-  const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  return (
+    <div className="flex items-center justify-between border-b border-app-border p-4">
+      <h2 className="app-text-overline text-app-ink/70 dark:text-app-ink/80">
+        {appTitle}
+      </h2>
+      <div className="flex items-center gap-1.5">
+        {createActions.length > 0 ? (
+          <div ref={createMenuRef} className="relative">
+            <button
+              ref={createButtonRef}
+              type="button"
+              onClick={onToggleCreateMenu}
+              title={t('sidebar.create')}
+              className="flex size-8 items-center justify-center rounded-md border border-app-border bg-app-surface text-app-ink shadow-sm transition-colors hover:bg-app-surface-hover"
+            >
+              <Plus size={16} />
+            </button>
+            {createMenuOpen ? (
+              <div
+                className="fixed z-50 w-52 rounded-lg border border-app-border bg-app-surface py-1 shadow-xl"
+                style={{
+                  left: createMenuPosition?.left ?? 0,
+                  top: createMenuPosition?.top ?? 0,
+                }}
+              >
+                <div className="app-text-overline px-3 pt-1.5 pb-1 text-app-ink/55">
+                  {t('sidebar.create')}
+                </div>
+                {createActions.map((action) => {
+                  const Icon = action.icon;
+                  return (
+                    <button
+                      key={action.id}
+                      type="button"
+                      onClick={() => {
+                        onCloseCreateMenu();
+                        action.run(sidebarActionContext);
+                        onNavigate?.();
+                      }}
+                      className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover"
+                    >
+                      <Icon size={14} className="text-app-ink/55" />
+                      <span>
+                        {t(action.labelKey ?? `sidebarActions.${action.id}`, {
+                          defaultValue: action.label,
+                        })}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {!isMobile && onPinnedChange ? (
+          <button
+            type="button"
+            onClick={() => onPinnedChange(!pinned)}
+            title={pinned ? t('sidebar.unpin') : t('sidebar.pin')}
+            aria-label={pinned ? t('sidebar.unpin') : t('sidebar.pin')}
+            className={cn(
+              'flex size-8 items-center justify-center rounded-md border shadow-sm transition-colors',
+              pinned
+                ? 'border-app-accent/45 bg-app-accent/15 text-app-accent hover:bg-app-accent/20'
+                : 'border-app-border bg-app-surface text-app-ink/70 hover:border-app-accent/40 hover:bg-app-accent/10 hover:text-app-accent',
+            )}
+          >
+            {pinned ? <PinOff size={15} /> : <Pin size={15} />}
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function SidebarCategorySection({
+  activeNavItemId,
+  category,
+  currentWorkspaceSlug,
+  expanded,
+  filteredItems,
+  launcherGlobalPaths,
+  onNavigate,
+  onToggleCategory,
+  user,
+}: {
+  activeNavItemId: string;
+  category: string;
+  currentWorkspaceSlug: string | null;
+  expanded: boolean;
+  filteredItems: NavItem[];
+  launcherGlobalPaths: LauncherGlobalPaths;
+  onNavigate?: () => void;
+  onToggleCategory: (category: string) => void;
+  user: AuthUser | null;
+}) {
+  const { t } = useTranslation('shell');
+  return (
+    <div className="space-y-1">
+      <button
+        type="button"
+        onClick={() => onToggleCategory(category)}
+        className="sidebar-section-label sidebar-section-header group/section flex w-full items-center gap-1 px-3 py-1"
+      >
+        {expanded ? (
+          <ChevronDown
+            size={11}
+            className="text-app-ink/55 transition-colors group-hover/section:text-app-ink dark:text-app-ink/65 dark:group-hover/section:text-white"
+          />
+        ) : (
+          <ChevronRight
+            size={11}
+            className="text-app-ink/55 transition-colors group-hover/section:text-app-ink dark:text-app-ink/65 dark:group-hover/section:text-white"
+          />
+        )}
+        <span>{category}</span>
+      </button>
+
+      <LazyMotion features={domAnimation}>
+        <AnimatePresence initial={false}>
+          {expanded ? (
+            <m.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden"
+            >
+              {filteredItems.map((item) => {
+                if (item.category !== category) {
+                  return null;
+                }
+                return (
+                  <Link
+                    key={item.id}
+                    to={resolveNavItemHref(
+                      item,
+                      currentWorkspaceSlug,
+                      user,
+                      launcherGlobalPaths,
+                    )}
+                    className={cn(
+                      'sidebar-submenu-item ml-1',
+                      activeNavItemId === item.id &&
+                        'sidebar-submenu-item-active',
+                      item.comingSoon && 'opacity-60',
+                    )}
+                    onClick={onNavigate}
+                  >
+                    <item.icon
+                      size={16}
+                      className="text-app-ink/55 dark:text-app-ink/65"
+                    />
+                    <span className="sidebar-submenu-label">{item.title}</span>
+                    {item.comingSoon ? (
+                      <span className="ml-auto rounded border border-app-border bg-app-bg px-1.5 py-0.5 text-[12px] uppercase tracking-wide text-app-ink/55">
+                        {t('sidebar.comingSoon')}
+                      </span>
+                    ) : null}
+                  </Link>
+                );
+              })}
+            </m.div>
+          ) : null}
+        </AnimatePresence>
+      </LazyMotion>
+    </div>
+  );
+}
+
+function SidebarCategoryList({
+  activeNavItemId,
+  categories,
+  currentWorkspaceSlug,
+  expandedCategories,
+  filteredItems,
+  launcherGlobalPaths,
+  onNavigate,
+  sidebarConfig,
+  sidebarContext,
+  toggleCategory,
+  user,
+}: {
+  activeNavItemId: string;
+  categories: string[];
+  currentWorkspaceSlug: string | null;
+  expandedCategories: string[];
+  filteredItems: NavItem[];
+  launcherGlobalPaths: LauncherGlobalPaths;
+  onNavigate?: () => void;
+  sidebarConfig: AppSidebarConfig | null | undefined;
+  sidebarContext: AppSidebarRenderContext;
+  toggleCategory: (category: string) => void;
+  user: AuthUser | null;
+}) {
+  return (
+    <div className="custom-scrollbar flex-1 space-y-6 overflow-y-auto px-2 py-4">
+      {sidebarConfig?.beforeCategories?.(sidebarContext)}
+      {categories.map((category) => {
+        const customCategory = sidebarConfig?.renderCategory?.(
+          category,
+          sidebarContext,
+        );
+        if (customCategory !== undefined) {
+          return <Fragment key={category}>{customCategory}</Fragment>;
+        }
+
+        return (
+          <SidebarCategorySection
+            key={category}
+            activeNavItemId={activeNavItemId}
+            category={category}
+            currentWorkspaceSlug={currentWorkspaceSlug}
+            expanded={expandedCategories.includes(category)}
+            filteredItems={filteredItems}
+            launcherGlobalPaths={launcherGlobalPaths}
+            onNavigate={onNavigate}
+            onToggleCategory={toggleCategory}
+            user={user}
+          />
+        );
+      })}
+      {sidebarConfig?.afterCategories?.(sidebarContext)}
+    </div>
+  );
+}
+
+function SidebarResizeHandle({
+  isResizing,
+  onStartResize,
+}: {
+  isResizing: boolean;
+  onStartResize: () => void;
+}) {
+  const { t } = useTranslation('shell');
+  return (
+    <button
+      type="button"
+      aria-label={t('sidebar.resize', { defaultValue: 'Resize sidebar' })}
+      onMouseDown={(event) => {
+        event.preventDefault();
+        onStartResize();
+      }}
+      className={cn(
+        'absolute right-0 top-0 h-full w-1 cursor-col-resize border-0 bg-transparent p-0 transition-colors hover:bg-app-accent/30',
+        isResizing && 'bg-app-accent/50',
+      )}
+      title={t('sidebar.resize', { defaultValue: 'Resize sidebar' })}
+    />
+  );
+}
+
+type SubSidebarFrameState = {
+  createButtonRef: RefObject<HTMLButtonElement | null>;
+  createMenuOpen: boolean;
+  createMenuPosition: { left: number; top: number } | null;
+  createMenuRef: RefObject<HTMLDivElement | null>;
+  sidebarRef: RefObject<HTMLDivElement | null>;
+  sidebarWidth: number;
+  isResizing: boolean;
+  closeCreateMenu: () => void;
+  startResize: () => void;
+  toggleCreateMenu: () => void;
+};
+
+function useSubSidebarFrameState(activeAppId: string): SubSidebarFrameState {
+  const [createMenuState, setCreateMenuState] = useState<{
+    appId: string;
+    open: boolean;
+  }>({ appId: activeAppId, open: false });
+  const createMenuOpen = isSubSidebarCreateMenuOpen(
+    createMenuState,
+    activeAppId,
+  );
+  const setCreateMenuOpen = useCallback(
+    (nextOpen: SetStateAction<boolean>) => {
+      setCreateMenuState((prev) => {
+        return setSubSidebarCreateMenuOpen(prev, activeAppId, nextOpen);
+      });
+    },
+    [activeAppId],
+  );
+  const closeCreateMenu = useCallback(
+    () => setCreateMenuOpen(false),
+    [setCreateMenuOpen],
+  );
+  const closeCreateMenuRef = useRef<() => void>(() => undefined);
+  closeCreateMenuRef.current = closeCreateMenu;
+  const [createMenuPosition, setCreateMenuPosition] = useState<{
+    left: number;
+    top: number;
+  } | null>(null);
+  const sidebarRef = useRef<HTMLDivElement>(null);
   const createMenuRef = useRef<HTMLDivElement>(null);
+  const createButtonRef = useRef<HTMLButtonElement>(null);
+
+  const updateCreateMenuPosition = useCallback(() => {
+    const sidebar = sidebarRef.current;
+    const button = createButtonRef.current;
+    if (!sidebar || !button) return;
+
+    setCreateMenuPosition(
+      calculateSubSidebarCreateMenuPosition({
+        sidebarRect: sidebar.getBoundingClientRect(),
+        buttonRect: button.getBoundingClientRect(),
+      }),
+    );
+  }, []);
+  const updateCreateMenuPositionRef = useRef(updateCreateMenuPosition);
+  updateCreateMenuPositionRef.current = updateCreateMenuPosition;
 
   useEffect(() => {
     if (!createMenuOpen) return;
+    const updatePosition = () => updateCreateMenuPositionRef.current();
     function handler(event: MouseEvent) {
       if (
         createMenuRef.current &&
         !createMenuRef.current.contains(event.target as Node)
       ) {
-        setCreateMenuOpen(false);
+        closeCreateMenuRef.current();
       }
     }
     document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    updatePosition();
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
   }, [createMenuOpen]);
 
-  // Reset the menu when switching apps so it doesn't stay open across navigation.
-  useEffect(() => {
-    setCreateMenuOpen(false);
-  }, [activeAppId]);
-
-  // Resizable sidebar width (persisted in localStorage)
-  const SIDEBAR_MIN_WIDTH = 180;
-  const SIDEBAR_MAX_WIDTH = 480;
-  const SIDEBAR_DEFAULT_WIDTH = 240;
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
-    if (typeof window === 'undefined') return SIDEBAR_DEFAULT_WIDTH;
-    const saved = window.localStorage.getItem('ai-do:sub-sidebar-width');
-    const parsed = saved ? parseInt(saved, 10) : NaN;
-    if (
-      Number.isFinite(parsed) &&
-      parsed >= SIDEBAR_MIN_WIDTH &&
-      parsed <= SIDEBAR_MAX_WIDTH
-    ) {
-      return parsed;
-    }
-    return SIDEBAR_DEFAULT_WIDTH;
+    if (typeof window === 'undefined') return SUB_SIDEBAR_DEFAULT_WIDTH;
+    return restoreSubSidebarWidth(
+      window.localStorage.getItem('ai-do:sub-sidebar-width'),
+    );
   });
   const [isResizing, setIsResizing] = useState(false);
-  const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    return window.localStorage.getItem('ai-do:sub-sidebar-collapsed') === '1';
-  });
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem(
-      'ai-do:sub-sidebar-collapsed',
-      isCollapsed ? '1' : '0',
-    );
-  }, [isCollapsed]);
 
   useEffect(() => {
     if (!isResizing) return;
-    const handleMouseMove = (e: MouseEvent) => {
-      // SubSidebar starts after the AppBar (w-16 = 64px)
-      const newWidth = Math.min(
-        SIDEBAR_MAX_WIDTH,
-        Math.max(SIDEBAR_MIN_WIDTH, e.clientX - 64),
-      );
-      setSidebarWidth(newWidth);
+    const handleMouseMove = (event: MouseEvent) => {
+      setSidebarWidth(widthFromSubSidebarPointer(event.clientX));
     };
     const handleMouseUp = () => {
       setIsResizing(false);
@@ -152,310 +468,321 @@ export const SubSidebar = ({
     );
   }, [sidebarWidth]);
 
-  const navItemRegistry = useMemo(
-    () => new Map(NAV_ITEMS.map((item) => [item.id, item])),
-    [],
-  );
-  const workspaceAppRegistry = useMemo(
-    () => new Map(workspaceApps.map((item) => [item.app_id, item])),
-    [workspaceApps],
-  );
+  return {
+    createButtonRef,
+    createMenuOpen,
+    createMenuPosition,
+    createMenuRef,
+    sidebarRef,
+    sidebarWidth,
+    isResizing,
+    closeCreateMenu,
+    startResize: () => setIsResizing(true),
+    toggleCreateMenu: () => {
+      updateCreateMenuPosition();
+      setCreateMenuOpen((open) => !open);
+    },
+  };
+}
+
+type SubSidebarNavigationState = {
+  categories: string[];
+  createActions: AppSidebarCreateAction[];
+  expandedCategories: string[];
+  filteredItems: NavItem[];
+  sidebarActionContext: AppSidebarActionContext;
+  sidebarConfig: AppSidebarConfig | null;
+  sidebarContext: AppSidebarRenderContext;
+  toggleCategory: (category: string) => void;
+};
+
+function useSubSidebarNavigation({
+  activeAppId,
+  activeFeatureAppId,
+  activeNavItemId,
+  canReadTeams,
+  currentWorkspaceSlug,
+  enabledWorkspaceAppIds,
+  getAppSidebarConfig,
+  globalAppIds,
+  hasAdminSectionAccess,
+  locationPathname,
+  navigate,
+  navItems,
+  onNavigate,
+  user,
+  workspaceNavItems,
+}: {
+  activeAppId: string;
+  activeFeatureAppId: string | null;
+  activeNavItemId: string;
+  canReadTeams: boolean;
+  currentWorkspaceSlug: string | null;
+  enabledWorkspaceAppIds: readonly string[];
+  getAppSidebarConfig: (appId: string) => AppSidebarConfig | null;
+  globalAppIds: readonly string[];
+  hasAdminSectionAccess?: AdminSectionAccessResolver;
+  locationPathname: string;
+  navigate: ReturnType<typeof useNavigate>;
+  navItems: readonly NavItem[];
+  onNavigate?: () => void;
+  user: AuthUser | null;
+  workspaceNavItems: WorkspaceBootstrapNavItem[];
+}): SubSidebarNavigationState {
+  const { t } = useTranslation('shell');
+  const [expandedCategoriesState, setExpandedCategoriesState] =
+    useState<SubSidebarCategoryExpansionState>({
+      key: '',
+      expandedCategories: [],
+    });
   const sidebarConfig = getAppSidebarConfig(activeAppId);
 
-  const filteredItems = useMemo(() => {
-    if (activeAppId !== 'settings') {
-      return workspaceNavItems
-        .filter((item) => item.app_id === activeAppId)
-        .map((item) => {
-          const localItem = navItemRegistry.get(item.id);
-          if (!localItem) {
-            return null;
-          }
-          const nextItem: NavItem = {
-            ...localItem,
-            title: t(`nav.${item.id}`, { defaultValue: item.title }),
-            category: t(`categories.${item.category}`, { defaultValue: item.category }),
-          };
-          if (item.path_suffix !== undefined && item.path_suffix !== null) {
-            nextItem.pathSuffix = item.path_suffix;
-          }
-          if (item.absolute_path !== undefined && item.absolute_path !== null) {
-            nextItem.absolutePath = item.absolute_path;
-          }
-          if (item.link_app_id !== undefined && item.link_app_id !== null) {
-            nextItem.linkAppId = item.link_app_id as NavItem['linkAppId'];
-          }
-          if (item.coming_soon) {
-            nextItem.comingSoon = true;
-          }
-          return nextItem;
-        })
-        .filter(isDefined);
-    }
-
-    const items = NAV_ITEMS.filter((item) => item.appId === activeAppId).map((item) => ({
-      ...item,
-      title: t(`nav.${item.id}`, { defaultValue: item.title }),
-      category: t(`categories.${item.category}`, { defaultValue: item.category }),
-    }));
-    const sectionByItemId: Partial<Record<string, AdminSection>> = {
-      'settings-general': 'general',
-      'settings-people': 'people',
-      'settings-workspaces': 'workspaces',
-      'settings-security': 'security',
-      'settings-audit': 'audit',
-    };
-
-    return items.filter((item) => {
-      const section = sectionByItemId[item.id];
-      return section
-        ? hasAdminSectionAccess(user?.system_roles ?? [], section)
-        : false;
-    });
-  }, [activeAppId, navItemRegistry, t, user?.system_roles, workspaceNavItems]);
-  const toggleCategory = useCallback((category: string) => {
-    setExpandedCategories((prev) =>
-      prev.includes(category)
-        ? prev.filter((current) => current !== category)
-        : [...prev, category],
-    );
-  }, []);
-  const isCategoryExpanded = useCallback(
-    (category: string) => expandedCategories.includes(category),
-    [expandedCategories],
+  const navigationProjection = useMemo(
+    () =>
+      buildSubSidebarNavigationProjection({
+        activeAppId,
+        activeFeatureAppId,
+        canReadWorkspace: canReadTeams,
+        extendCategories: sidebarConfig?.extendCategories,
+        globalAppIds,
+        hasAdminSectionAccess,
+        navItems,
+        systemRoles: user?.system_roles ?? [],
+        translate: t,
+        workspaceNavItems,
+      }),
+    [
+      activeAppId,
+      activeFeatureAppId,
+      canReadTeams,
+      hasAdminSectionAccess,
+      globalAppIds,
+      sidebarConfig?.extendCategories,
+      navItems,
+      t,
+      user?.system_roles,
+      workspaceNavItems,
+    ],
   );
+  const { categories, filteredItems } = navigationProjection;
   const sidebarActionContext = useMemo<AppSidebarActionContext>(
     () => ({
-      currentPathname: location.pathname,
+      activeAppId: activeAppId as AppModuleId,
+      activeFeatureAppId,
+      currentPathname: locationPathname,
       currentWorkspaceSlug,
+      enabledWorkspaceAppIds,
       navigate,
       user,
     }),
-    [currentWorkspaceSlug, location.pathname, navigate, user],
+    [
+      activeAppId,
+      activeFeatureAppId,
+      currentWorkspaceSlug,
+      enabledWorkspaceAppIds,
+      locationPathname,
+      navigate,
+      user,
+    ],
+  );
+  const normalizedExpansionState = useMemo(
+    () =>
+      normalizeSubSidebarCategoryExpansionState(
+        expandedCategoriesState,
+        categories,
+      ),
+    [categories, expandedCategoriesState],
+  );
+  const expandedCategories = normalizedExpansionState.expandedCategories;
+  const toggleCategory = useCallback(
+    (category: string) => {
+      setExpandedCategoriesState((prev) => {
+        return toggleSubSidebarCategoryExpansion(prev, categories, category);
+      });
+    },
+    [categories],
+  );
+  const isCategoryExpanded = useCallback(
+    (category: string) => expandedCategories.includes(category),
+    [expandedCategories],
   );
   const sidebarContext = useMemo<AppSidebarRenderContext>(
     () => ({
       ...sidebarActionContext,
       activeAppId: activeAppId as AppModuleId,
+      activeFeatureAppId,
       activeNavItemId,
       canReadWorkspace: canReadTeams,
       filteredItems,
       isCategoryExpanded,
+      onNavigate,
       toggleCategory,
     }),
     [
       activeAppId,
+      activeFeatureAppId,
       activeNavItemId,
       canReadTeams,
       filteredItems,
       isCategoryExpanded,
+      onNavigate,
       sidebarActionContext,
       toggleCategory,
     ],
-  );
-  const baseCategories = useMemo(
-    () => buildSidebarCategories(filteredItems.map((item) => item.category)),
-    [filteredItems],
-  );
-  const categories = useMemo(
-    () =>
-      sidebarConfig?.extendCategories?.(baseCategories, {
-        canReadWorkspace: canReadTeams,
-      }) ??
-      baseCategories,
-    [baseCategories, canReadTeams, sidebarConfig],
   );
   const createActions = useMemo(
     () => sidebarConfig?.createActions?.(sidebarActionContext) ?? [],
     [sidebarActionContext, sidebarConfig],
   );
 
-  useEffect(() => {
-    setExpandedCategories(categories);
-  }, [categories]);
+  return {
+    categories,
+    createActions,
+    expandedCategories,
+    filteredItems,
+    sidebarActionContext,
+    sidebarConfig,
+    sidebarContext,
+    toggleCategory,
+  };
+}
+
+export const SubSidebar = ({
+  activeAppId,
+  activeNavItemId,
+  appBarItems = [],
+  currentWorkspaceSlug,
+  enabledWorkspaceAppIds,
+  getAppSidebarConfig = getNoopAppSidebarConfig,
+  hasAdminSectionAccess,
+  launcherGlobalPaths = EMPTY_LAUNCHER_GLOBAL_PATHS,
+  navItems = [],
+  onNavigate,
+  onPinnedChange,
+  overlay = false,
+  pinned = false,
+  variant = 'desktop',
+  workspaceApps,
+  workspaceNavItems,
+}: {
+  activeAppId: string;
+  activeNavItemId: string;
+  appBarItems?: readonly AppBarItem[];
+  currentWorkspaceSlug: string | null;
+  enabledWorkspaceAppIds?: readonly string[];
+  getAppSidebarConfig?: (appId: string) => AppSidebarConfig | null;
+  hasAdminSectionAccess?: AdminSectionAccessResolver;
+  launcherGlobalPaths?: LauncherGlobalPaths;
+  navItems?: readonly NavItem[];
+  onNavigate?: () => void;
+  onPinnedChange?: (pinned: boolean) => void;
+  overlay?: boolean;
+  pinned?: boolean;
+  variant?: 'desktop' | 'mobile';
+  workspaceApps: WorkspaceBootstrapApp[];
+  workspaceNavItems: WorkspaceBootstrapNavItem[];
+}) => {
+  const { pathname: locationPathname } = useLocation();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const isMobile = variant === 'mobile';
+  const canReadTeams = hasWorkspaceMembership(user, currentWorkspaceSlug);
+  const workspaceAppRegistry = useMemo(
+    () => new Map(workspaceApps.map((item) => [item.app_id, item])),
+    [workspaceApps],
+  );
+  const fallbackEnabledWorkspaceAppIds = useMemo(
+    () => workspaceApps.flatMap((item) => (item.enabled ? [item.app_id] : [])),
+    [workspaceApps],
+  );
+  const resolvedEnabledWorkspaceAppIds =
+    enabledWorkspaceAppIds ?? fallbackEnabledWorkspaceAppIds;
+  const globalAppIds = useMemo(
+    () => Array.from(launcherGlobalPaths.keys()),
+    [launcherGlobalPaths],
+  );
+  const frameState = useSubSidebarFrameState(activeAppId);
+  const activeFeatureAppId = useMemo(
+    () =>
+      resolveActiveFeatureAppId({
+        activeAppId,
+        activeNavItemId,
+        navItems,
+        pathname: locationPathname,
+      }),
+    [activeAppId, activeNavItemId, locationPathname, navItems],
+  );
+  const navigationState = useSubSidebarNavigation({
+    activeAppId,
+    activeFeatureAppId,
+    activeNavItemId,
+    canReadTeams,
+    currentWorkspaceSlug,
+    enabledWorkspaceAppIds: resolvedEnabledWorkspaceAppIds,
+    getAppSidebarConfig,
+    globalAppIds,
+    hasAdminSectionAccess,
+    locationPathname,
+    navigate,
+    navItems,
+    onNavigate,
+    user,
+    workspaceNavItems,
+  });
 
   if (activeAppId === 'home') {
     return null;
   }
 
-  return !isMobile && isCollapsed ? (
-    <div className="relative hidden h-full w-10 shrink-0 flex-col items-center border-r border-app-border bg-app-surface-sidebar pt-4 lg:flex">
-      <button
-        type="button"
-        onClick={() => setIsCollapsed(false)}
-        title={t('sidebar.expand')}
-        aria-label={t('sidebar.expand')}
-        className="flex h-9 w-9 items-center justify-center rounded-lg border border-app-border bg-app-surface text-app-ink shadow-sm transition-colors hover:bg-app-accent/15 hover:text-app-accent hover:border-app-accent/40"
-      >
-        <PanelLeftOpen size={18} />
-      </button>
-    </div>
-  ) : (
+  return (
     <div
       className={cn(
         'relative h-full flex-col overflow-hidden bg-app-surface-sidebar',
-        isMobile ? 'flex w-full' : 'hidden shrink-0 border-r border-app-border lg:flex',
+        isMobile
+          ? 'flex w-full'
+          : 'hidden shrink-0 border-r border-app-border lg:flex',
+        !isMobile && overlay && 'shadow-2xl shadow-black/20',
       )}
-      style={isMobile ? undefined : { width: `${sidebarWidth}px` }}
+      ref={frameState.sidebarRef}
+      style={isMobile ? undefined : { width: `${frameState.sidebarWidth}px` }}
     >
-      <div className="flex items-center justify-between p-4 border-b border-app-border">
-        <h2 className="app-text-overline text-gray-600 dark:text-gray-300">
-          {activeAppId === 'settings'
-            ? t('sidebar.allSettings')
-            : t(`apps.${activeAppId}`, {
-              defaultValue: workspaceAppRegistry.get(activeAppId)?.title ??
-                APP_BAR_ITEMS.find((item) => item.id === activeAppId)?.title,
-            })}
-        </h2>
-        <div className="flex items-center gap-1.5">
-          {createActions.length > 0 ? (
-            <div ref={createMenuRef} className="relative">
-              <button
-                type="button"
-                onClick={() => setCreateMenuOpen((open) => !open)}
-                title={t('sidebar.create')}
-                className="flex h-8 w-8 items-center justify-center rounded-md border border-app-border bg-app-surface text-app-ink shadow-sm transition-colors hover:bg-app-surface-hover"
-              >
-                <Plus size={16} />
-              </button>
-              {createMenuOpen ? (
-                <div className="absolute right-0 top-full mt-1 z-30 w-52 rounded-lg border border-app-border bg-app-surface py-1 shadow-xl">
-                  <div className="app-text-overline px-3 pt-1.5 pb-1 text-gray-500">
-                    {t('sidebar.create')}
-                  </div>
-                  {createActions.map((action) => {
-                    const Icon = action.icon;
-                    return (
-                      <button
-                        key={action.id}
-                        type="button"
-                        onClick={() => {
-                          setCreateMenuOpen(false);
-                          action.run(sidebarActionContext);
-                          onNavigate?.();
-                        }}
-                        className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover"
-                      >
-                        <Icon size={14} className="text-gray-500" />
-                        <span>
-                          {t(action.labelKey ?? `sidebarActions.${action.id}`, {
-                            defaultValue: action.label,
-                          })}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-          {!isMobile ? (
-            <button
-              type="button"
-              onClick={() => setIsCollapsed(true)}
-              title={t('sidebar.collapse')}
-              aria-label={t('sidebar.collapse')}
-              className="flex h-8 w-8 items-center justify-center rounded-md border border-app-border bg-app-surface text-app-ink shadow-sm transition-colors hover:bg-app-accent/15 hover:text-app-accent hover:border-app-accent/40"
-            >
-              <PanelLeftClose size={16} />
-            </button>
-          ) : null}
-        </div>
-      </div>
+      <SubSidebarHeader
+        activeAppId={activeAppId}
+        activeFeatureAppId={activeFeatureAppId}
+        appBarItems={appBarItems}
+        createActions={navigationState.createActions}
+        createButtonRef={frameState.createButtonRef}
+        createMenuOpen={frameState.createMenuOpen}
+        createMenuPosition={frameState.createMenuPosition}
+        createMenuRef={frameState.createMenuRef}
+        isMobile={isMobile}
+        onCloseCreateMenu={frameState.closeCreateMenu}
+        onNavigate={onNavigate}
+        onPinnedChange={onPinnedChange}
+        onToggleCreateMenu={frameState.toggleCreateMenu}
+        pinned={pinned}
+        sidebarActionContext={navigationState.sidebarActionContext}
+        workspaceAppRegistry={workspaceAppRegistry}
+      />
 
-      <div className="flex-1 overflow-y-auto py-4 px-2 space-y-6 custom-scrollbar">
-        {sidebarConfig?.beforeCategories?.(sidebarContext)}
-        {categories.map((category) => {
-          const customCategory = sidebarConfig?.renderCategory?.(
-            category,
-            sidebarContext,
-          );
-          if (customCategory !== undefined) {
-            return <Fragment key={category}>{customCategory}</Fragment>;
-          }
+      <SidebarCategoryList
+        activeNavItemId={activeNavItemId}
+        categories={navigationState.categories}
+        currentWorkspaceSlug={currentWorkspaceSlug}
+        expandedCategories={navigationState.expandedCategories}
+        filteredItems={navigationState.filteredItems}
+        launcherGlobalPaths={launcherGlobalPaths}
+        onNavigate={onNavigate}
+        sidebarConfig={navigationState.sidebarConfig}
+        sidebarContext={navigationState.sidebarContext}
+        toggleCategory={navigationState.toggleCategory}
+        user={user}
+      />
 
-          return (
-            <div key={category} className="space-y-1">
-              <button
-                onClick={() => toggleCategory(category)}
-                className="sidebar-section-label sidebar-section-header group/section flex w-full items-center gap-1 px-3 py-1"
-              >
-                {expandedCategories.includes(category) ? (
-                  <ChevronDown
-                    size={11}
-                    className="text-gray-500 dark:text-gray-400 transition-colors group-hover/section:text-app-ink dark:group-hover/section:text-white"
-                  />
-                ) : (
-                  <ChevronRight
-                    size={11}
-                    className="text-gray-500 dark:text-gray-400 transition-colors group-hover/section:text-app-ink dark:group-hover/section:text-white"
-                  />
-                )}
-                <span>{category}</span>
-              </button>
-
-              <AnimatePresence initial={false}>
-                {expandedCategories.includes(category) && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    className="overflow-hidden"
-                  >
-                    {filteredItems
-                      .filter((item) => item.category === category)
-                      .map((item) => {
-                        return (
-                          <Link
-                            key={item.id}
-                            to={resolveNavItemHref(
-                              item,
-                              currentWorkspaceSlug,
-                              user,
-                            )}
-                            className={cn(
-                              'sidebar-submenu-item ml-1',
-                              activeNavItemId === item.id &&
-                                'sidebar-submenu-item-active',
-                              item.comingSoon && 'opacity-60',
-                            )}
-                            onClick={onNavigate}
-                          >
-                            <item.icon
-                              size={16}
-                              className="text-gray-500 dark:text-gray-400"
-                            />
-                            <span className="sidebar-submenu-label">
-                              {item.title}
-                            </span>
-                            {item.comingSoon ? (
-                              <span className="ml-auto rounded border border-app-border bg-app-bg px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-gray-500">
-                                {t('sidebar.comingSoon')}
-                              </span>
-                            ) : null}
-                          </Link>
-                        );
-                      })}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          );
-        })}
-        {sidebarConfig?.afterCategories?.(sidebarContext)}
-      </div>
-
-      {!isMobile ? (
-        <div
-          onMouseDown={(e) => {
-            e.preventDefault();
-            setIsResizing(true);
-          }}
-          className={cn(
-            'absolute right-0 top-0 h-full w-1 cursor-col-resize transition-colors hover:bg-app-accent/30',
-            isResizing && 'bg-app-accent/50',
-          )}
-          title={t('sidebar.resize')}
+      {!isMobile && pinned ? (
+        <SidebarResizeHandle
+          isResizing={frameState.isResizing}
+          onStartResize={frameState.startResize}
         />
       ) : null}
     </div>

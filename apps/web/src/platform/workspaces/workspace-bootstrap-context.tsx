@@ -1,21 +1,63 @@
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, use, type ReactNode } from 'react';
 
-import type { WorkspaceBootstrapResponse } from './workspaces-api';
+import type {
+  AppsBootstrapResponse,
+  WorkspaceBootstrapResponse,
+} from './workspaces-api';
 
 export interface WorkspaceBootstrapContextValue {
   data: WorkspaceBootstrapResponse | null;
   error: string | null;
   loading: boolean;
+  reload: () => void;
+  reloadGlobalApps?: () => void;
+  globalApps?: AppsBootstrapResponse | null;
+  aiToolAppIds?: readonly string[];
+}
+
+export interface WorkspaceBootstrapContextProjection {
+  apps: WorkspaceBootstrapResponse['apps'];
+  nav: WorkspaceBootstrapResponse['nav'];
+  aiToolAppIds: readonly string[];
+  loading: boolean;
+  error: string | null;
 }
 
 const DEFAULT_VALUE: WorkspaceBootstrapContextValue = {
   data: null,
   error: null,
   loading: false,
+  reload: () => undefined,
+  aiToolAppIds: [],
 };
+
+const EMPTY_WORKSPACE_BOOTSTRAP_APPS: WorkspaceBootstrapResponse['apps'] = [];
+const EMPTY_WORKSPACE_BOOTSTRAP_NAV: WorkspaceBootstrapResponse['nav'] = [];
 
 const WorkspaceBootstrapContext =
   createContext<WorkspaceBootstrapContextValue>(DEFAULT_VALUE);
+
+export function projectWorkspaceBootstrapContext(
+  value: WorkspaceBootstrapContextValue,
+): WorkspaceBootstrapContextProjection {
+  return {
+    apps: value.data?.apps ?? EMPTY_WORKSPACE_BOOTSTRAP_APPS,
+    nav: value.data?.nav ?? EMPTY_WORKSPACE_BOOTSTRAP_NAV,
+    aiToolAppIds: value.aiToolAppIds ?? [],
+    loading: value.loading,
+    error: value.error,
+  };
+}
+
+export function isWorkspaceBootstrapAppEnabled(
+  data: WorkspaceBootstrapResponse | null | undefined,
+  appId: string,
+): boolean {
+  if (!data) {
+    return false;
+  }
+  return data.apps.some((app) => app.app_id === appId && app.enabled);
+}
 
 export function WorkspaceBootstrapProvider({
   value,
@@ -45,5 +87,9 @@ export function WorkspaceBootstrapProvider({
  * loading: false }` so the UI degrades gracefully.
  */
 export function useWorkspaceBootstrapContext(): WorkspaceBootstrapContextValue {
-  return useContext(WorkspaceBootstrapContext);
+  return use(WorkspaceBootstrapContext);
+}
+
+export function useWorkspaceBootstrapProjection(): WorkspaceBootstrapContextProjection {
+  return projectWorkspaceBootstrapContext(useWorkspaceBootstrapContext());
 }

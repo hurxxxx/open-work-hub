@@ -1,0 +1,2 @@
+"""Community app domain."""
+

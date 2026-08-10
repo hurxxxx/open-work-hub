@@ -1,32 +1,27 @@
-// useCalendarEvents — fetch unified calendar events for a date range.
-//
-// Pattern follows the existing useState/useEffect + cancelled flag convention used
-// across the app (see MeetingView.tsx:34-79). Codebase has no React Query, so this
-// hook intentionally avoids it to stay consistent.
-//
 // Mock-mode: when the backend /api/v1/calendar/events endpoint does not yet exist
 // (Phase 1.3), the hook can fall back to MOCK fixture instead of issuing a real
 // request. This mode is opt-in via the `useMockData` option so production code can
 // flip to real-mode just by removing the flag.
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer } from 'react';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { i18n } from '@/src/platform/i18n';
 
-import {
-  buildMockCalendarEvents,
-  listCalendarEvents,
-} from './calendar-api';
+import { buildMockCalendarEvents, listCalendarEvents } from './calendar-api';
 import {
   ALL_CALENDAR_SOURCES,
   type CalendarEvent,
   type CalendarSourceFilter,
 } from './calendar-types';
+import {
+  calendarEventsReducer,
+  getCalendarEventSourcesKey,
+  INITIAL_CALENDAR_EVENTS_STATE,
+} from './calendar-events-session';
 
 export interface UseCalendarEventsOptions {
-  workspaceSlug: string | undefined;
   from: string; // ISO date or datetime
-  to: string;   // exclusive
+  to: string; // exclusive
   sources?: CalendarSourceFilter;
   // Phase 1.3 escape hatch — defaults to true until Phase 2 backend is ready.
   useMockData?: boolean;
@@ -43,70 +38,73 @@ export function useCalendarEvents(
   options: UseCalendarEventsOptions,
 ): UseCalendarEventsResult {
   const { token } = useAuth();
-  const { workspaceSlug, from, to, sources, useMockData = true } = options;
-
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [refreshToken, setRefreshToken] = useState(0);
+  const { from, to, sources, useMockData = true } = options;
+  const [{ error, events, loading, refreshToken }, dispatch] = useReducer(
+    calendarEventsReducer,
+    INITIAL_CALENDAR_EVENTS_STATE,
+  );
 
   // Stable join string so changing source order doesn't refetch.
-  const sourcesKey = useMemo(() => {
-    const list = sources ?? ALL_CALENDAR_SOURCES;
-    return [...list].sort().join(',');
-  }, [sources]);
+  const sourcesKey = useMemo(
+    () => getCalendarEventSourcesKey(sources),
+    [sources],
+  );
 
   useEffect(() => {
     let cancelled = false;
 
     if (useMockData) {
       // Synchronous mock — no loading flicker.
-      setEvents(buildMockCalendarEvents());
-      setLoading(false);
-      setError(null);
+      dispatch({
+        type: 'loaded',
+        events: buildMockCalendarEvents(),
+      });
       return () => {
         cancelled = true;
       };
     }
 
-    if (!token || !workspaceSlug) {
-      setEvents([]);
-      setLoading(false);
-      setError(null);
+    if (!token) {
+      dispatch({ type: 'idle' });
       return () => {
         cancelled = true;
       };
     }
 
-    setLoading(true);
-    setError(null);
-    listCalendarEvents(token, workspaceSlug, {
+    dispatch({ type: 'loading' });
+    listCalendarEvents(token, {
       from,
       to,
       sources: sources ?? ALL_CALENDAR_SOURCES,
     })
       .then((response) => {
         if (cancelled) return;
-        setEvents(response.items);
+        dispatch({
+          type: 'loaded',
+          events: response.items,
+        });
       })
       .catch((err: Error) => {
         if (cancelled) return;
-        setError(err.message ?? i18n.t('apps:planner.loadFailed'));
-        setEvents([]);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+        dispatch({
+          type: 'failed',
+          message: err.message ?? i18n.t('apps:planner.loadFailed'),
+        });
       });
 
     return () => {
       cancelled = true;
     };
-  }, [refreshToken, token, workspaceSlug, from, to, sourcesKey, useMockData, sources]);
+  }, [refreshToken, token, from, to, sourcesKey, useMockData, sources]);
+
+  const refresh = useCallback(() => {
+    dispatch({ type: 'refresh' });
+  }, []);
 
   return {
     events,
     loading,
     error,
-    refresh: () => setRefreshToken((n) => n + 1),
+    refresh,
   };
 }

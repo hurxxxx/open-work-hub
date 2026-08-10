@@ -1,4 +1,4 @@
-import { ApiRequestError, apiFetchJson, jsonHeaders } from '@/src/platform/api/client';
+import { apiFetchJsonWithMappedError, jsonHeaders } from '@/src/platform/api/client';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
 export type ImageBriefStatus = 'drafting' | 'ready' | 'approved';
@@ -132,14 +132,12 @@ async function request<T>(
   workspaceSlug: string,
   init: RequestInit = {},
 ): Promise<T> {
-  try {
-    return await apiFetchJson<T>(rewriteWorkspaceApiPath(path, workspaceSlug), token, init);
-  } catch (error) {
-    if (error instanceof ApiRequestError) {
-      throw new ImageWizardApiError(error.status, error.message);
-    }
-    throw error;
-  }
+  return apiFetchJsonWithMappedError<T>(
+    rewriteWorkspaceApiPath(path, workspaceSlug),
+    token,
+    init,
+    (error) => new ImageWizardApiError(error.status, error.message),
+  );
 }
 
 export function createImageGeneration(
@@ -330,18 +328,6 @@ export function approveImageGeneration(
       method: 'POST',
       body: JSON.stringify({}),
     },
-  );
-}
-
-export function getImageDownloadUrl(
-  token: string,
-  workspaceSlug: string,
-  generationId: string,
-): Promise<ImageDownloadResponse> {
-  return request<ImageDownloadResponse>(
-    `/api/v1/images/generations/${generationId}/download`,
-    token,
-    workspaceSlug,
   );
 }
 

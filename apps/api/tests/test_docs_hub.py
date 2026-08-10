@@ -1,21 +1,20 @@
 from fastapi.testclient import TestClient
 
+from dev_accounts import dev_login
+
 
 def _dev_login(client: TestClient, account_key: str) -> dict:
-    response = client.post(
-        "/api/v1/auth/dev-login",
-        json={"account_key": account_key},
-    )
-    assert response.status_code == 200, response.text
-    return response.json()
+    return dev_login(client, account_key)
 
 
 def test_docs_native_docs_and_direct_user_share_grant_docs_access(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
 
-    owner = _create_user(client, admin["token"], email="docs-owner@ai-do.local", full_name="Docs Owner")
+    owner = _create_user(
+        client, admin["token"], email="docs-owner@ai-do.local", full_name="Docs Owner"
+    )
     owner_id = owner["user"]["id"]
-    _grant_workspace_access(client, admin["token"], owner_id, "docs")
+    _grant_workspace_access(client, admin["token"], owner_id, "administrator")
     owner_token = _login(client, owner["user"]["email"], owner["temporary_password"])
 
     me_response = client.get("/api/v1/auth/me", headers=_auth_headers(owner_token))
@@ -23,12 +22,14 @@ def test_docs_native_docs_and_direct_user_share_grant_docs_access(client: TestCl
     me_payload = me_response.json()
     assert len(me_payload["workspaces"]) == 1
 
-    empty_hub_response = client.get("/api/v1/workspaces/hq/docs/hub", headers=_auth_headers(owner_token))
+    empty_hub_response = client.get(
+        "/api/v1/workspaces/administrator/docs/hub", headers=_auth_headers(owner_token)
+    )
     assert empty_hub_response.status_code == 200
     assert empty_hub_response.json()["items"] == []
 
     create_doc_response = client.post(
-        "/api/v1/workspaces/hq/docs/items",
+        "/api/v1/workspaces/administrator/docs/items",
         headers=_auth_headers(owner_token),
         json={"title": "Private Plan"},
     )
@@ -40,7 +41,7 @@ def test_docs_native_docs_and_direct_user_share_grant_docs_access(client: TestCl
     assert native_doc["is_private"] is True
 
     pages_response = client.get(
-        f"/api/v1/workspaces/hq/docs/items/{native_doc['id']}/pages",
+        f"/api/v1/workspaces/administrator/docs/items/{native_doc['id']}/pages",
         headers=_auth_headers(owner_token),
     )
     assert pages_response.status_code == 200
@@ -53,11 +54,13 @@ def test_docs_native_docs_and_direct_user_share_grant_docs_access(client: TestCl
         full_name="Docs Shared User",
     )
     shared_user_id = shared_user["user"]["id"]
-    _grant_workspace_access(client, admin["token"], shared_user_id, "docs")
-    shared_user_token = _login(client, shared_user["user"]["email"], shared_user["temporary_password"])
+    _grant_workspace_access(client, admin["token"], shared_user_id, "administrator")
+    shared_user_token = _login(
+        client, shared_user["user"]["email"], shared_user["temporary_password"]
+    )
 
     share_response = client.put(
-        f"/api/v1/workspaces/hq/docs/items/{native_doc['id']}/sharing/users/{shared_user_id}",
+        f"/api/v1/workspaces/administrator/docs/items/{native_doc['id']}/sharing/users/{shared_user_id}",
         headers=_auth_headers(owner_token),
         json={"access_level": "read"},
     )
@@ -68,7 +71,9 @@ def test_docs_native_docs_and_direct_user_share_grant_docs_access(client: TestCl
     assert shared_me_response.status_code == 200
     assert len(shared_me_response.json()["workspaces"]) == 1
 
-    shared_hub_response = client.get("/api/v1/workspaces/hq/docs/hub", headers=_auth_headers(shared_user_token))
+    shared_hub_response = client.get(
+        "/api/v1/workspaces/administrator/docs/hub", headers=_auth_headers(shared_user_token)
+    )
     assert shared_hub_response.status_code == 200
     shared_items = shared_hub_response.json()["items"]
     assert [item["id"] for item in shared_items] == [native_doc["id"]]
@@ -76,7 +81,7 @@ def test_docs_native_docs_and_direct_user_share_grant_docs_access(client: TestCl
     assert shared_items[0]["can_share"] is False
 
     shared_page_update_response = client.patch(
-        f"/api/v1/workspaces/hq/docs/pages/{page['id']}",
+        f"/api/v1/workspaces/administrator/docs/pages/{page['id']}",
         headers=_auth_headers(shared_user_token),
         json={"content_blocks": [{"type": "paragraph", "content": "blocked"}]},
     )
@@ -88,7 +93,9 @@ def test_docs_hub_reuses_pms_acl_and_blocks_resharing_of_source_docs(client: Tes
 
     task_list = _create_task_list(client, admin["token"], key="DOCS", name="Docs Source List")
 
-    space_doc = _create_space_doc(client, admin["token"], task_list["team_id"], title="Space Handbook")
+    space_doc = _create_space_doc(
+        client, admin["token"], task_list["team_id"], title="Space Handbook"
+    )
     original_space_page = _create_doc_page(
         client,
         admin["token"],
@@ -97,24 +104,27 @@ def test_docs_hub_reuses_pms_acl_and_blocks_resharing_of_source_docs(client: Tes
         content_blocks=[],
     )
 
-    viewer = _create_user(client, admin["token"], email="docs-viewer@ai-do.local", full_name="Docs Viewer")
-    _grant_workspace_access(client, admin["token"], viewer["user"]["id"], "docs")
-    _grant_workspace_access(client, admin["token"], viewer["user"]["id"], "pms")
+    viewer = _create_user(
+        client, admin["token"], email="docs-viewer@ai-do.local", full_name="Docs Viewer"
+    )
+    _grant_workspace_access(client, admin["token"], viewer["user"]["id"], "administrator")
     _add_task_list_member(client, admin["token"], task_list["id"], viewer["user"]["id"], "viewer")
     viewer_token = _login(client, viewer["user"]["email"], viewer["temporary_password"])
 
-    viewer_hub_response = client.get("/api/v1/workspaces/hq/docs/hub", headers=_auth_headers(viewer_token))
+    viewer_hub_response = client.get(
+        "/api/v1/workspaces/administrator/docs/hub", headers=_auth_headers(viewer_token)
+    )
     assert viewer_hub_response.status_code == 200
     viewer_items = {item["title"]: item for item in viewer_hub_response.json()["items"]}
     assert viewer_items["Space Handbook"]["source_app"] == "pms"
-    assert viewer_items["Space Handbook"]["primary_container"]["app"] == "pms"
-    assert viewer_items["Space Handbook"]["primary_container"]["type"] == "space"
-    assert viewer_items["Space Handbook"]["primary_container"]["id"] == task_list["team_id"]
+    assert viewer_items["Space Handbook"]["primary_target"]["app"] == "pms"
+    assert viewer_items["Space Handbook"]["primary_target"]["type"] == "space"
+    assert viewer_items["Space Handbook"]["primary_target"]["id"] == task_list["team_id"]
     assert viewer_items["Space Handbook"]["can_edit"] is False
     assert viewer_items["Space Handbook"]["can_manage"] is False
 
     viewer_pages_response = client.get(
-        f"/api/v1/workspaces/hq/docs/items/{viewer_items['Space Handbook']['id']}/pages",
+        f"/api/v1/workspaces/administrator/docs/items/{viewer_items['Space Handbook']['id']}/pages",
         headers=_auth_headers(viewer_token),
     )
     assert viewer_pages_response.status_code == 200
@@ -122,73 +132,164 @@ def test_docs_hub_reuses_pms_acl_and_blocks_resharing_of_source_docs(client: Tes
     assert viewer_page["can_edit"] is False
 
     viewer_page_update_response = client.patch(
-        f"/api/v1/workspaces/hq/docs/pages/{viewer_page['id']}",
+        f"/api/v1/workspaces/administrator/docs/pages/{viewer_page['id']}",
         headers=_auth_headers(viewer_token),
         json={"content_blocks": [{"type": "paragraph", "content": "blocked"}]},
     )
     assert viewer_page_update_response.status_code == 403
 
     viewer_share_response = client.get(
-        f"/api/v1/workspaces/hq/docs/items/{viewer_items['Space Handbook']['id']}/sharing",
+        f"/api/v1/workspaces/administrator/docs/items/{viewer_items['Space Handbook']['id']}/sharing",
         headers=_auth_headers(viewer_token),
     )
     assert viewer_share_response.status_code == 403
 
-    member = _create_user(client, admin["token"], email="docs-user@ai-do.local", full_name="Docs User")
-    _grant_workspace_access(client, admin["token"], member["user"]["id"], "docs")
-    _grant_workspace_access(client, admin["token"], member["user"]["id"], "pms")
+    member = _create_user(
+        client, admin["token"], email="docs-user@ai-do.local", full_name="Docs User"
+    )
+    _grant_workspace_access(client, admin["token"], member["user"]["id"], "administrator")
     _add_task_list_member(client, admin["token"], task_list["id"], member["user"]["id"], "member")
     member_token = _login(client, member["user"]["email"], member["temporary_password"])
 
-    member_hub_response = client.get("/api/v1/workspaces/hq/docs/hub", headers=_auth_headers(member_token))
+    member_hub_response = client.get(
+        "/api/v1/workspaces/administrator/docs/hub", headers=_auth_headers(member_token)
+    )
     assert member_hub_response.status_code == 200
     member_items = {item["title"]: item for item in member_hub_response.json()["items"]}
     assert member_items["Space Handbook"]["can_edit"] is True
     assert member_items["Space Handbook"]["can_manage"] is False
 
     member_create_page_response = client.post(
-        f"/api/v1/workspaces/hq/docs/items/{member_items['Space Handbook']['id']}/pages",
+        f"/api/v1/workspaces/administrator/docs/items/{member_items['Space Handbook']['id']}/pages",
         headers=_auth_headers(member_token),
         json={"title": "Member Page"},
     )
     assert member_create_page_response.status_code == 201
+    member_created_page = member_create_page_response.json()
+    assert member_created_page["created_by_id"] == member["user"]["id"]
+    assert member_created_page["created_by_name"] == "Docs User"
 
     member_delete_space_doc_response = client.delete(
-        f"/api/v1/workspaces/hq/docs/items/{member_items['Space Handbook']['id']}",
+        f"/api/v1/workspaces/administrator/docs/items/{member_items['Space Handbook']['id']}",
         headers=_auth_headers(member_token),
     )
     assert member_delete_space_doc_response.status_code == 403
 
     original_space_page_lookup_response = client.get(
-        f"/api/v1/workspaces/hq/docs/items/{member_items['Space Handbook']['id']}/pages",
+        f"/api/v1/workspaces/administrator/docs/items/{member_items['Space Handbook']['id']}/pages",
         headers=_auth_headers(member_token),
     )
     assert original_space_page_lookup_response.status_code == 200
     overview_page = next(
-        item for item in original_space_page_lookup_response.json()["items"]
+        item
+        for item in original_space_page_lookup_response.json()["items"]
         if item["source_page_id"] == original_space_page["id"]
     )
 
     update_space_page_response = client.patch(
-        f"/api/v1/workspaces/hq/docs/pages/{overview_page['id']}",
+        f"/api/v1/workspaces/administrator/docs/pages/{overview_page['id']}",
         headers=_auth_headers(member_token),
         json={"content_blocks": [{"type": "paragraph", "content": "space edit"}]},
     )
     assert update_space_page_response.status_code == 200
 
 
+def test_space_docs_filter_includes_readable_task_linked_docs(client: TestClient) -> None:
+    admin = _bootstrap_admin_session(client)
+
+    task_list = _create_task_list(client, admin["token"], key="AGG", name="Aggregate List")
+    other_space = _create_space(client, admin["token"], name="Outside Space")
+    other_task_list = _create_task_list(
+        client,
+        admin["token"],
+        key="OUT",
+        name="Outside List",
+        team_id=other_space["id"],
+    )
+    space_id = task_list["team_id"]
+
+    task = _create_task(client, admin["token"], task_list["id"], title="Aggregate task")
+    other_task = _create_task(client, admin["token"], other_task_list["id"], title="Outside task")
+
+    direct_space_doc = _create_space_doc(
+        client,
+        admin["token"],
+        space_id,
+        title="Direct Space Doc",
+    )
+    linked_doc = _create_native_doc(client, admin["token"], title="Linked Task Doc")
+    deduped_doc = _create_space_doc(
+        client,
+        admin["token"],
+        space_id,
+        title="Direct And Linked Doc",
+    )
+    secondary_space_doc = _create_space_doc(
+        client,
+        admin["token"],
+        space_id,
+        title="Secondary Space Doc",
+    )
+    _update_doc_target(client, admin["token"], secondary_space_doc["id"], other_space["id"])
+    outside_doc = _create_native_doc(client, admin["token"], title="Outside Task Doc")
+
+    _attach_task_doc(client, admin["token"], task["id"], linked_doc["id"])
+    _attach_task_doc(client, admin["token"], task["id"], deduped_doc["id"])
+    _attach_task_doc(client, admin["token"], other_task["id"], outside_doc["id"])
+
+    admin_items = _list_space_docs(client, admin["token"], space_id)
+    admin_titles = [item["title"] for item in admin_items]
+    assert direct_space_doc["title"] in admin_titles
+    assert linked_doc["title"] in admin_titles
+    assert admin_titles.count(deduped_doc["title"]) == 1
+    assert secondary_space_doc["title"] in admin_titles
+    assert outside_doc["title"] not in admin_titles
+
+    viewer = _create_user(
+        client,
+        admin["token"],
+        email="task-linked-doc-viewer@ai-do.local",
+        full_name="Task Linked Doc Viewer",
+    )
+    _grant_workspace_access(client, admin["token"], viewer["user"]["id"], "administrator")
+    viewer_token = _login(client, viewer["user"]["email"], viewer["temporary_password"])
+
+    share_response = client.put(
+        f"/api/v1/workspaces/administrator/docs/items/{linked_doc['id']}/sharing/users/{viewer['user']['id']}",
+        headers=_auth_headers(admin["token"]),
+        json={"access_level": "read"},
+    )
+    assert share_response.status_code == 200
+
+    viewer_without_task_access = _list_space_docs(client, viewer_token, space_id)
+    assert viewer_without_task_access == []
+
+    _add_task_list_member(client, admin["token"], task_list["id"], viewer["user"]["id"], "viewer")
+
+    viewer_items = _list_space_docs(client, viewer_token, space_id)
+    viewer_titles = [item["title"] for item in viewer_items]
+    assert direct_space_doc["title"] in viewer_titles
+    assert linked_doc["title"] in viewer_titles
+    assert secondary_space_doc["title"] in viewer_titles
+    assert outside_doc["title"] not in viewer_titles
+
+
 def test_internal_shared_links_require_auth_and_honor_read_vs_edit(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
 
-    owner = _create_user(client, admin["token"], email="share-owner@ai-do.local", full_name="Share Owner")
-    _grant_workspace_access(client, admin["token"], owner["user"]["id"], "docs")
+    owner = _create_user(
+        client, admin["token"], email="share-owner@ai-do.local", full_name="Share Owner"
+    )
+    _grant_workspace_access(client, admin["token"], owner["user"]["id"], "administrator")
     owner_token = _login(client, owner["user"]["email"], owner["temporary_password"])
 
-    recipient = _create_user(client, admin["token"], email="share-recipient@ai-do.local", full_name="Share Recipient")
+    recipient = _create_user(
+        client, admin["token"], email="share-recipient@ai-do.local", full_name="Share Recipient"
+    )
     recipient_token = _login(client, recipient["user"]["email"], recipient["temporary_password"])
 
     create_doc_response = client.post(
-        "/api/v1/workspaces/hq/docs/items",
+        "/api/v1/workspaces/administrator/docs/items",
         headers=_auth_headers(owner_token),
         json={"title": "Shared Draft"},
     )
@@ -196,14 +297,14 @@ def test_internal_shared_links_require_auth_and_honor_read_vs_edit(client: TestC
     doc = create_doc_response.json()
 
     pages_response = client.get(
-        f"/api/v1/workspaces/hq/docs/items/{doc['id']}/pages",
+        f"/api/v1/workspaces/administrator/docs/items/{doc['id']}/pages",
         headers=_auth_headers(owner_token),
     )
     assert pages_response.status_code == 200
     page = pages_response.json()["items"][0]
 
     enable_read_link_response = client.put(
-        f"/api/v1/workspaces/hq/docs/items/{doc['id']}/sharing/link",
+        f"/api/v1/workspaces/administrator/docs/items/{doc['id']}/sharing/link",
         headers=_auth_headers(owner_token),
         json={"access_level": "read", "active": True},
     )
@@ -228,7 +329,7 @@ def test_internal_shared_links_require_auth_and_honor_read_vs_edit(client: TestC
     assert read_edit_attempt_response.status_code == 403
 
     enable_edit_link_response = client.put(
-        f"/api/v1/workspaces/hq/docs/items/{doc['id']}/sharing/link",
+        f"/api/v1/workspaces/administrator/docs/items/{doc['id']}/sharing/link",
         headers=_auth_headers(owner_token),
         json={"access_level": "edit", "active": True},
     )
@@ -253,193 +354,56 @@ def test_internal_shared_links_require_auth_and_honor_read_vs_edit(client: TestC
 def test_workspace_scoped_shareable_users_stay_in_requested_docs_workspace(
     client: TestClient,
 ) -> None:
-    _bootstrap_admin_session(client)
-
-    hq_member = _dev_login(client, "hq-member")
-    hq_member_token = hq_member["token"]
-
-    scoped_response = client.get(
-        "/api/v1/workspaces/hq/docs/shareable-users",
-        headers=_auth_headers(hq_member_token),
-        params={"q": "Admin"},
-    )
-    assert scoped_response.status_code == 200
-    scoped_emails = {item["email"] for item in scoped_response.json()}
-    assert "hq-admin@ai-do.local" in scoped_emails
-    assert "innovation-lab-admin@ai-do.local" not in scoped_emails
-
-    legacy_response = client.get(
-        "/api/v1/workspaces/hq/docs/shareable-users",
-        headers=_auth_headers(hq_member_token),
-        params={"q": "Admin"},
-    )
-    assert legacy_response.status_code == 200
-    legacy_emails = {item["email"] for item in legacy_response.json()}
-    assert "hq-admin@ai-do.local" in legacy_emails
-    assert "innovation-lab-admin@ai-do.local" not in legacy_emails
-
-
-def test_duplicate_native_doc_clones_pages_into_new_private_doc(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
 
-    owner = _create_user(client, admin["token"], email="dup-owner@ai-do.local", full_name="Dup Owner")
-    _grant_workspace_access(client, admin["token"], owner["user"]["id"], "docs")
-    owner_token = _login(client, owner["user"]["email"], owner["temporary_password"])
-
-    create_doc_response = client.post(
-        "/api/v1/workspaces/hq/docs/items",
-        headers=_auth_headers(owner_token),
-        json={"title": "Original Doc"},
+    member = _create_user(
+        client,
+        admin["token"],
+        email="administrator-docs-member@ai-do.local",
+        full_name="Administrator Docs Member",
     )
-    assert create_doc_response.status_code == 201
-    original = create_doc_response.json()
+    _grant_workspace_access(client, admin["token"], member["user"]["id"], "administrator")
+    member_token = _login(client, member["user"]["email"], member["temporary_password"])
 
-    # Add a child page so we can verify hierarchy is preserved.
-    pages_response = client.get(
-        f"/api/v1/workspaces/hq/docs/items/{original['id']}/pages",
-        headers=_auth_headers(owner_token),
+    response = client.get(
+        "/api/v1/workspaces/administrator/docs/shareable-users",
+        headers=_auth_headers(member_token),
+        params={"q": "Admin"},
     )
-    root_page = pages_response.json()["items"][0]
-    child_response = client.post(
-        f"/api/v1/workspaces/hq/docs/items/{original['id']}/pages",
-        headers=_auth_headers(owner_token),
-        json={"title": "Child", "parent_id": root_page["id"]},
-    )
-    assert child_response.status_code == 201
-
-    # Duplicate as the owner.
-    duplicate_response = client.post(
-        f"/api/v1/workspaces/hq/docs/items/{original['id']}/duplicate",
-        headers=_auth_headers(owner_token),
-    )
-    assert duplicate_response.status_code == 201
-    duplicate = duplicate_response.json()
-    assert duplicate["id"] != original["id"]
-    assert duplicate["title"] == "Original Doc Copy"
-    assert duplicate["can_manage"] is True
-    assert duplicate["is_private"] is True
-
-    duplicate_pages_response = client.get(
-        f"/api/v1/workspaces/hq/docs/items/{duplicate['id']}/pages",
-        headers=_auth_headers(owner_token),
-    )
-    assert duplicate_pages_response.status_code == 200
-    duplicate_pages = duplicate_pages_response.json()["items"]
-    assert len(duplicate_pages) == 2
-    titles = sorted(page["title"] for page in duplicate_pages)
-    assert titles == ["Child", "Original Doc"]
-    # Hierarchy preserved: child page references a new parent id, not the original.
-    new_child = next(page for page in duplicate_pages if page["title"] == "Child")
-    assert new_child["parent_id"] is not None
-    assert new_child["parent_id"] != root_page["id"]
-
-
-def test_native_doc_page_patch_reorders_and_moves_parent(client: TestClient) -> None:
-    admin = _bootstrap_admin_session(client)
-    owner = _create_user(client, admin["token"], email="reorder-owner@ai-do.local", full_name="Reorder Owner")
-    _grant_workspace_access(client, admin["token"], owner["user"]["id"], "docs")
-    owner_token = _login(client, owner["user"]["email"], owner["temporary_password"])
-
-    doc = client.post(
-        "/api/v1/workspaces/hq/docs/items",
-        headers=_auth_headers(owner_token),
-        json={"title": "Reorder Plan"},
-    ).json()
-
-    # Initial doc already contains a root page; add three more siblings.
-    root_pages = client.get(
-        f"/api/v1/workspaces/hq/docs/items/{doc['id']}/pages",
-        headers=_auth_headers(owner_token),
-    ).json()["items"]
-    assert len(root_pages) == 1
-
-    def _create_page(title: str, parent_id: str | None = None) -> dict:
-        response = client.post(
-            f"/api/v1/workspaces/hq/docs/items/{doc['id']}/pages",
-            headers=_auth_headers(owner_token),
-            json={"title": title, "parent_id": parent_id},
-        )
-        assert response.status_code == 201, response.text
-        return response.json()
-
-    page_a = _create_page("Alpha")
-    page_b = _create_page("Bravo")
-    page_c = _create_page("Charlie")
-
-    # Reorder: drop C before A by setting explicit sort_order gaps.
-    client.patch(
-        f"/api/v1/workspaces/hq/docs/pages/{page_a['id']}",
-        headers=_auth_headers(owner_token),
-        json={"sort_order": 1000},
-    )
-    client.patch(
-        f"/api/v1/workspaces/hq/docs/pages/{page_b['id']}",
-        headers=_auth_headers(owner_token),
-        json={"sort_order": 2000},
-    )
-    patch_c = client.patch(
-        f"/api/v1/workspaces/hq/docs/pages/{page_c['id']}",
-        headers=_auth_headers(owner_token),
-        json={"sort_order": 0},
-    )
-    assert patch_c.status_code == 200
-    assert patch_c.json()["sort_order"] == 0
-
-    listing = client.get(
-        f"/api/v1/workspaces/hq/docs/items/{doc['id']}/pages",
-        headers=_auth_headers(owner_token),
-    ).json()["items"]
-    siblings_order = [
-        page["title"]
-        for page in listing
-        if page["parent_id"] is None and page["title"] in {"Alpha", "Bravo", "Charlie"}
-    ]
-    # API sorts by (parent_id, sort_order, created_at) — grouping by parent.
-    assert siblings_order == ["Charlie", "Alpha", "Bravo"]
-
-    # Move: nest Bravo under Alpha.
-    move_b = client.patch(
-        f"/api/v1/workspaces/hq/docs/pages/{page_b['id']}",
-        headers=_auth_headers(owner_token),
-        json={"parent_id": page_a["id"], "sort_order": 0},
-    )
-    assert move_b.status_code == 200
-    assert move_b.json()["parent_id"] == page_a["id"]
-
-    listing = client.get(
-        f"/api/v1/workspaces/hq/docs/items/{doc['id']}/pages",
-        headers=_auth_headers(owner_token),
-    ).json()["items"]
-    bravo_after = next(page for page in listing if page["id"] == page_b["id"])
-    assert bravo_after["parent_id"] == page_a["id"]
+    assert response.status_code == 200
+    emails = {item["email"] for item in response.json()}
+    assert "admin@ai-do.local" in emails
+    assert "innovation-lab-admin@ai-do.local" not in emails
 
 
 def test_native_doc_page_patch_rejects_cycle(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
-    owner = _create_user(client, admin["token"], email="cycle-owner@ai-do.local", full_name="Cycle Owner")
-    _grant_workspace_access(client, admin["token"], owner["user"]["id"], "docs")
+    owner = _create_user(
+        client, admin["token"], email="cycle-owner@ai-do.local", full_name="Cycle Owner"
+    )
+    _grant_workspace_access(client, admin["token"], owner["user"]["id"], "administrator")
     owner_token = _login(client, owner["user"]["email"], owner["temporary_password"])
 
     doc = client.post(
-        "/api/v1/workspaces/hq/docs/items",
+        "/api/v1/workspaces/administrator/docs/items",
         headers=_auth_headers(owner_token),
         json={"title": "Cycle Plan"},
     ).json()
 
     parent = client.post(
-        f"/api/v1/workspaces/hq/docs/items/{doc['id']}/pages",
+        f"/api/v1/workspaces/administrator/docs/items/{doc['id']}/pages",
         headers=_auth_headers(owner_token),
         json={"title": "Parent"},
     ).json()
     child = client.post(
-        f"/api/v1/workspaces/hq/docs/items/{doc['id']}/pages",
+        f"/api/v1/workspaces/administrator/docs/items/{doc['id']}/pages",
         headers=_auth_headers(owner_token),
         json={"title": "Child", "parent_id": parent["id"]},
     ).json()
 
     # Attempt to move Parent underneath Child — should be rejected as a cycle.
     reject = client.patch(
-        f"/api/v1/workspaces/hq/docs/pages/{parent['id']}",
+        f"/api/v1/workspaces/administrator/docs/pages/{parent['id']}",
         headers=_auth_headers(owner_token),
         json={"parent_id": child["id"]},
     )
@@ -448,7 +412,7 @@ def test_native_doc_page_patch_rejects_cycle(client: TestClient) -> None:
     assert reject.json()["detail"] == "페이지 부모 관계에 순환이 포함될 수 없습니다."
 
     missing_parent = client.post(
-        f"/api/v1/workspaces/hq/docs/items/{doc['id']}/pages",
+        f"/api/v1/workspaces/administrator/docs/items/{doc['id']}/pages",
         headers={**_auth_headers(owner_token), "Accept-Language": "en-US"},
         json={"title": "Invalid child", "parent_id": "missing-parent"},
     )
@@ -457,26 +421,32 @@ def test_native_doc_page_patch_rejects_cycle(client: TestClient) -> None:
     assert missing_parent.json()["detail"] == "Parent page not found."
 
 
-def test_duplicate_doc_via_read_share_creates_private_copy_for_recipient(client: TestClient) -> None:
+def test_duplicate_doc_via_read_share_creates_private_copy_for_recipient(
+    client: TestClient,
+) -> None:
     admin = _bootstrap_admin_session(client)
 
-    owner = _create_user(client, admin["token"], email="dup-share-owner@ai-do.local", full_name="Owner")
-    _grant_workspace_access(client, admin["token"], owner["user"]["id"], "docs")
+    owner = _create_user(
+        client, admin["token"], email="dup-share-owner@ai-do.local", full_name="Owner"
+    )
+    _grant_workspace_access(client, admin["token"], owner["user"]["id"], "administrator")
     owner_token = _login(client, owner["user"]["email"], owner["temporary_password"])
 
-    recipient = _create_user(client, admin["token"], email="dup-share-recipient@ai-do.local", full_name="Recipient")
-    _grant_workspace_access(client, admin["token"], recipient["user"]["id"], "docs")
+    recipient = _create_user(
+        client, admin["token"], email="dup-share-recipient@ai-do.local", full_name="Recipient"
+    )
+    _grant_workspace_access(client, admin["token"], recipient["user"]["id"], "administrator")
     recipient_token = _login(client, recipient["user"]["email"], recipient["temporary_password"])
 
     create_doc_response = client.post(
-        "/api/v1/workspaces/hq/docs/items",
+        "/api/v1/workspaces/administrator/docs/items",
         headers=_auth_headers(owner_token),
         json={"title": "Shared Plan"},
     )
     original = create_doc_response.json()
 
     share_response = client.put(
-        f"/api/v1/workspaces/hq/docs/items/{original['id']}/sharing/users/{recipient['user']['id']}",
+        f"/api/v1/workspaces/administrator/docs/items/{original['id']}/sharing/users/{recipient['user']['id']}",
         headers=_auth_headers(owner_token),
         json={"access_level": "read"},
     )
@@ -484,7 +454,7 @@ def test_duplicate_doc_via_read_share_creates_private_copy_for_recipient(client:
 
     # Recipient with read access can duplicate even though they cannot manage.
     duplicate_response = client.post(
-        f"/api/v1/workspaces/hq/docs/items/{original['id']}/duplicate",
+        f"/api/v1/workspaces/administrator/docs/items/{original['id']}/duplicate",
         headers=_auth_headers(recipient_token),
     )
     assert duplicate_response.status_code == 201
@@ -523,10 +493,21 @@ def _create_user(client: TestClient, token: str, *, email: str, full_name: str) 
 def _login(client: TestClient, email: str, password: str) -> str:
     response = client.post(
         "/api/v1/auth/login",
-        json={"email": email, "password": password},
+        json={"login_id": email.split("@", 1)[0].lower(), "password": password},
     )
     assert response.status_code == 200
     return response.json()["token"]
+
+
+def _first_workspace_slug(client: TestClient, token: str) -> str:
+    response = client.get(
+        "/api/v1/admin/workspaces",
+        headers=_auth_headers(token),
+    )
+    assert response.status_code == 200, response.text
+    workspaces = response.json()
+    assert workspaces
+    return workspaces[0]["key"]
 
 
 def _grant_workspace_access(
@@ -545,9 +526,7 @@ def _grant_workspace_access(
         (item for item in workspaces_response.json() if item["key"] == workspace_key),
         None,
     )
-    if workspace is None:
-        workspace = next(iter(workspaces_response.json()), None)
-    assert workspace is not None
+    assert workspace is not None, f"Unknown workspace key: {workspace_key}"
 
     bindings_response = client.get(
         f"/api/v1/admin/workspaces/{workspace['id']}/bindings",
@@ -561,21 +540,14 @@ def _grant_workspace_access(
         for item in bindings
         if item["subject_type"] == "user"
     ]
-    group_bindings = [
-        {"subject_id": item["subject_id"], "role": item["role"]}
-        for item in bindings
-        if item["subject_type"] == "group"
+    user_bindings = [item for item in user_bindings if item["subject_id"] != user_id] + [
+        {"subject_id": user_id, "role": role}
     ]
-    user_bindings = [
-        item
-        for item in user_bindings
-        if item["subject_id"] != user_id
-    ] + [{"subject_id": user_id, "role": role}]
 
     update_response = client.put(
         f"/api/v1/admin/workspaces/{workspace['id']}/bindings",
         headers=_auth_headers(token),
-        json={"users": user_bindings, "groups": group_bindings},
+        json={"users": user_bindings},
     )
     assert update_response.status_code == 200
 
@@ -586,29 +558,70 @@ def _create_task_list(
     *,
     key: str,
     name: str,
+    team_id: str | None = None,
 ) -> dict:
+    payload = {
+        "key": key,
+        "name": name,
+        "description": f"{name} description",
+    }
+    if team_id is not None:
+        payload["team_id"] = team_id
     response = client.post(
-        "/api/v1/workspaces/hq/pms/lists",
+        "/api/v1/workspaces/administrator/pms/lists",
         headers=_auth_headers(token),
-        json={
-            "key": key,
-            "name": name,
-            "description": f"{name} description",
-        },
+        json=payload,
     )
     assert response.status_code == 201
     return response.json()
 
 
-def _add_task_list_member(client: TestClient, token: str, list_id: str, user_id: str, role: str) -> dict:
+def _create_space(client: TestClient, token: str, *, name: str) -> dict:
+    response = client.post(
+        "/api/v1/workspaces/administrator/pms/spaces",
+        headers=_auth_headers(token),
+        json={"name": name},
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def _create_task(
+    client: TestClient,
+    token: str,
+    list_id: str,
+    *,
+    title: str,
+) -> dict:
+    response = client.post(
+        f"/api/v1/workspaces/administrator/pms/lists/{list_id}/tasks",
+        headers=_auth_headers(token),
+        json={
+            "title": title,
+            "description": "",
+            "status": "todo",
+            "priority": "medium",
+            "assignee_id": None,
+            "milestone_id": None,
+            "parent_id": None,
+            "label_ids": [],
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def _add_task_list_member(
+    client: TestClient, token: str, list_id: str, user_id: str, role: str
+) -> dict:
     list_response = client.get(
-        f"/api/v1/workspaces/hq/pms/lists/{list_id}",
+        f"/api/v1/workspaces/administrator/pms/lists/{list_id}",
         headers=_auth_headers(token),
     )
     assert list_response.status_code == 200
 
     response = client.post(
-        f"/api/v1/workspaces/hq/pms/spaces/{list_response.json()['team_id']}/members",
+        f"/api/v1/workspaces/administrator/pms/spaces/{list_response.json()['team_id']}/members",
         headers=_auth_headers(token),
         json={"user_id": user_id, "role": role},
     )
@@ -618,13 +631,13 @@ def _add_task_list_member(client: TestClient, token: str, list_id: str, user_id:
 
 def _create_space_doc(client: TestClient, token: str, space_id: str, *, title: str) -> dict:
     response = client.post(
-        "/api/v1/workspaces/hq/docs/items",
+        "/api/v1/workspaces/administrator/docs/items",
         headers=_auth_headers(token),
         json={
             "title": title,
             "source_app": "pms",
             "source_kind": "manual",
-            "primary_container": {
+            "primary_target": {
                 "app": "pms",
                 "type": "space",
                 "id": space_id,
@@ -635,37 +648,52 @@ def _create_space_doc(client: TestClient, token: str, space_id: str, *, title: s
     return response.json()
 
 
+def _create_native_doc(client: TestClient, token: str, *, title: str) -> dict:
+    response = client.post(
+        "/api/v1/workspaces/administrator/docs/items",
+        headers=_auth_headers(token),
+        json={"title": title},
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def _attach_task_doc(client: TestClient, token: str, task_id: str, doc_id: str) -> None:
+    response = client.post(
+        f"/api/v1/workspaces/administrator/pms/tasks/{task_id}/docs",
+        headers=_auth_headers(token),
+        json={"doc_id": doc_id},
+    )
+    assert response.status_code == 201, response.text
+
+
+def _update_doc_target(client: TestClient, token: str, doc_id: str, space_id: str) -> None:
+    response = client.put(
+        f"/api/v1/workspaces/administrator/docs/items/{doc_id}/target",
+        headers=_auth_headers(token),
+        json={
+            "app": "pms",
+            "type": "space",
+            "id": space_id,
+        },
+    )
+    assert response.status_code == 200, response.text
+
+
 def _list_space_docs(client: TestClient, token: str, space_id: str) -> list[dict]:
     response = client.get(
-        "/api/v1/workspaces/hq/docs/hub",
+        "/api/v1/workspaces/administrator/docs/hub",
         headers=_auth_headers(token),
         params={
             "view": "all",
-            "container_app": "pms",
-            "container_type": "space",
-            "container_id": space_id,
-            "sort_by": "container_sort_order",
+            "space_id": space_id,
+            "sort_by": "target_sort_order",
             "sort_dir": "asc",
             "page_size": 200,
         },
     )
     assert response.status_code == 200, response.text
     return response.json()["items"]
-
-
-def _update_space_doc_sort_order(client: TestClient, token: str, doc_id: str, *, space_id: str, sort_order: int) -> dict:
-    response = client.put(
-        f"/api/v1/workspaces/hq/docs/items/{doc_id}/container",
-        headers=_auth_headers(token),
-        json={
-            "app": "pms",
-            "type": "space",
-            "id": space_id,
-            "sort_order": sort_order,
-        },
-    )
-    assert response.status_code == 200, response.text
-    return response.json()
 
 
 def _create_doc_page(
@@ -686,7 +714,7 @@ def _create_doc_page(
     if sort_order is not None:
         payload["sort_order"] = sort_order
     response = client.post(
-        f"/api/v1/workspaces/hq/docs/items/{doc_id}/pages",
+        f"/api/v1/workspaces/administrator/docs/items/{doc_id}/pages",
         headers=_auth_headers(token),
         json=payload,
     )
@@ -696,11 +724,26 @@ def _create_doc_page(
 
 def _list_doc_pages(client: TestClient, token: str, doc_id: str) -> list[dict]:
     response = client.get(
-        f"/api/v1/workspaces/hq/docs/items/{doc_id}/pages",
+        f"/api/v1/workspaces/administrator/docs/items/{doc_id}/pages",
         headers=_auth_headers(token),
     )
     assert response.status_code == 200, response.text
     return response.json()["items"]
+
+
+def _get_doc_item(
+    client: TestClient,
+    token: str,
+    doc_id: str,
+    *,
+    workspace_slug: str = "administrator",
+) -> dict:
+    response = client.get(
+        f"/api/v1/workspaces/{workspace_slug}/docs/items/{doc_id}",
+        headers=_auth_headers(token),
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
 
 
 def _auth_headers(token: str) -> dict[str, str]:

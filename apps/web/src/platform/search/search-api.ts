@@ -1,33 +1,33 @@
-import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
+import { apiFetchJsonWithMappedError } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
 import { i18n } from '@/src/platform/i18n';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
-export type KeywordSearchEntityType = ApiSchema<'SearchEntityType'>;
+export type KeywordSearchEntityType = string;
 export type KeywordSearchHighlight = ApiSchema<'SearchHighlight'>;
 export type KeywordSearchSnippet = Omit<ApiSchema<'SearchSnippet'>, 'highlights'> & {
   highlights: KeywordSearchHighlight[];
 };
 export type KeywordSearchPerson = ApiSchema<'SearchPerson'>;
-export type KeywordSearchContainer = ApiSchema<'SearchContainerRef'>;
+export type KeywordSearchTarget = ApiSchema<'SearchTargetRef'>;
 type KeywordSearchHitContract = ApiSchema<'KeywordSearchResponse'>['hits'][number];
 export type KeywordSearchHit = Omit<
   KeywordSearchHitContract,
-  'containers' | 'date_markers' | 'metadata' | 'people' | 'snippet'
+  'targets' | 'date_markers' | 'metadata' | 'people' | 'snippet'
 > & {
   snippet: KeywordSearchSnippet;
   people: KeywordSearchPerson[];
-  containers: KeywordSearchContainer[];
+  targets: KeywordSearchTarget[];
   date_markers: Record<string, unknown>;
   metadata: Record<string, unknown>;
 };
 export type KeywordSearchFacetValue = ApiSchema<'EntityTypeFacet'>;
 export type KeywordSearchStatusFacetValue = ApiSchema<'StatusFacet'>;
-export type KeywordSearchContainerFacetValue = ApiSchema<'ContainerFacet'>;
-export type KeywordSearchFacets = Omit<ApiSchema<'SearchFacets'>, 'containers' | 'entity_types' | 'status'> & {
+export type KeywordSearchTargetFacetValue = ApiSchema<'TargetFacet'>;
+export type KeywordSearchFacets = Omit<ApiSchema<'SearchFacets'>, 'targets' | 'entity_types' | 'status'> & {
   entity_types: KeywordSearchFacetValue[];
   status: KeywordSearchStatusFacetValue[];
-  containers: KeywordSearchContainerFacetValue[];
+  targets: KeywordSearchTargetFacetValue[];
 };
 export type KeywordSearchResponse = Omit<
   ApiSchema<'KeywordSearchResponse'>,
@@ -57,33 +57,27 @@ export async function queryWorkspaceKeywordSearch(
   workspaceSlug?: string | null,
   options?: { signal?: AbortSignal },
 ): Promise<KeywordSearchResponse> {
-  try {
-    return await apiFetchJson<KeywordSearchResponse>(
-      rewriteWorkspaceApiPath('/api/v1/search/query', workspaceSlug),
-      token,
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          query: payload.query,
-          workspace_id: payload.workspace_id ?? null,
-          entity_types: payload.entity_types ?? [],
-          people: payload.people ?? { role: 'any', user_ids: [] },
-          status_by_type: payload.status_by_type ?? {},
-          date_filters: payload.date_filters ?? [],
-          container_refs: payload.container_refs ?? [],
-          sort: payload.sort ?? { field: 'relevance', direction: 'desc' },
-          limit: payload.limit ?? 20,
-          offset: payload.offset ?? 0,
-        }),
-        signal: options?.signal,
-      },
-    );
-  } catch (error) {
-    if (error instanceof ApiRequestError) {
-      throw new SearchApiError(error.status, extractErrorMessage(error.payload, error.status));
-    }
-    throw error;
-  }
+  return apiFetchJsonWithMappedError<KeywordSearchResponse>(
+    rewriteWorkspaceApiPath('/api/v1/search/query', workspaceSlug),
+    token,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        query: payload.query,
+        workspace_id: payload.workspace_id ?? null,
+        entity_types: payload.entity_types ?? [],
+        people: payload.people ?? { role: 'any', user_ids: [] },
+        status_by_type: payload.status_by_type ?? {},
+        date_filters: payload.date_filters ?? [],
+        target_refs: payload.target_refs ?? [],
+        sort: payload.sort ?? { field: 'relevance', direction: 'desc' },
+        limit: payload.limit ?? 20,
+        offset: payload.offset ?? 0,
+      }),
+      signal: options?.signal,
+    },
+    (error) => new SearchApiError(error.status, extractErrorMessage(error.payload, error.status)),
+  );
 }
 
 function extractErrorMessage(payload: unknown, status: number): string {

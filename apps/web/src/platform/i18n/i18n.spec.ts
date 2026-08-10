@@ -1,10 +1,17 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { i18n } from './i18n';
+import { i18n, syncLocale } from './i18n';
+import { LOCALE_STORAGE_KEY } from './locales';
 
 describe('i18n dynamic messages', () => {
   beforeEach(async () => {
+    window.localStorage.removeItem(LOCALE_STORAGE_KEY);
+    document.documentElement.lang = 'ko-KR';
     await i18n.changeLanguage('ko-KR');
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('interpolates runtime values without leaking template tokens', async () => {
@@ -56,5 +63,23 @@ describe('i18n dynamic messages', () => {
     expect(i18n.t('apps:docs.documentCount', { count: 2 })).toBe('2개 문서');
     expect(i18n.t('apps:learning.lessonCount', { count: 1 })).toBe('1개 레슨');
     expect(i18n.t('apps:learning.lessonCount', { count: 3 })).toBe('3개 레슨');
+  });
+
+  it('syncs public locale side effects through the session module', () => {
+    const changeLanguage = vi.spyOn(i18n, 'changeLanguage');
+
+    expect(syncLocale('en-US')).toBe('en-US');
+    expect(changeLanguage).toHaveBeenCalledWith('en-US');
+    expect(window.localStorage.getItem(LOCALE_STORAGE_KEY)).toBe('en-US');
+    expect(document.documentElement.lang).toBe('en-US');
+  });
+
+  it('suppresses redundant public i18n language changes', () => {
+    const changeLanguage = vi.spyOn(i18n, 'changeLanguage');
+
+    expect(syncLocale('ko-KR')).toBe('ko-KR');
+    expect(changeLanguage).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem(LOCALE_STORAGE_KEY)).toBe('ko-KR');
+    expect(document.documentElement.lang).toBe('ko-KR');
   });
 });
