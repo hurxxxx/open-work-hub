@@ -20,8 +20,17 @@ from open_work_hub_api.domains.auth.access import (
     has_system_role,
     slugify,
 )
-from open_work_hub_api.domains.auth.dependencies import require_current_user, require_current_workspace
-from open_work_hub_api.domains.auth.models import Team, TeamMember, User, Workspace, WorkspaceUserBinding
+from open_work_hub_api.domains.auth.dependencies import (
+    require_current_user,
+    require_current_workspace,
+)
+from open_work_hub_api.domains.auth.models import (
+    Team,
+    TeamMember,
+    User,
+    Workspace,
+    WorkspaceUserBinding,
+)
 from open_work_hub_api.domains.auth.security import new_id
 from open_work_hub_api.domains.auth.workspace_app_gate import require_workspace_app_enabled
 from open_work_hub_api.domains.pms.attachments import (
@@ -925,8 +934,8 @@ def _unique_key(db: Session, base_name: str) -> str:
 def _create_default_labels(db: Session, list_id: str) -> None:
     for name, color in [
         ("blocked", "#b45309"),
-        ("customer", "#1d4ed8"),
-        ("qa", "#0f766e"),
+        ("priority", "#1d4ed8"),
+        ("review", "#0f766e"),
     ]:
         db.add(Label(id=new_id(), list_id=list_id, name=name, color=color))
 

@@ -21,7 +21,6 @@ export const PLATFORM_WORKSPACE_API_PREFIXES = [
   '/api/v1/connectors',
   '/api/v1/rag',
   '/api/v1/search',
-  '/api/v1/wiki',
 ] as const;
 
 export function createWorkspaceApiRoutePolicy({

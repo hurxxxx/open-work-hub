@@ -22,7 +22,7 @@ def test_healthz_preserves_inbound_trace_id(client: TestClient) -> None:
     assert response.headers["X-Open-Work-Hub-Trace-Id"] == trace_id
 
 
-def test_auth_bootstrap_and_protected_search(client: TestClient) -> None:
+def test_auth_bootstrap_and_protected_retrieval(client: TestClient) -> None:
     status_response = client.get("/api/v1/auth/bootstrap-status")
     assert status_response.status_code == 200
     assert status_response.json() == {
@@ -31,10 +31,7 @@ def test_auth_bootstrap_and_protected_search(client: TestClient) -> None:
         "dev_login_accounts": [],
     }
 
-    unauthenticated = client.post(
-        "/api/v1/workspaces/administrator/search/documents",
-        json={"query": "compressor specification"},
-    )
+    unauthenticated = client.get("/api/v1/workspaces/administrator/retrieval/sources")
     assert unauthenticated.status_code == 401
 
     setup_response = client.post(
@@ -70,15 +67,12 @@ def test_auth_bootstrap_and_protected_search(client: TestClient) -> None:
     assert me_response.status_code == 200
     assert me_response.json()["email"] == "admin@open-work-hub.local"
 
-    search_response = client.post(
-        "/api/v1/workspaces/administrator/search/documents",
+    retrieval_response = client.get(
+        "/api/v1/workspaces/administrator/retrieval/sources",
         headers={"Authorization": f"Bearer {token}"},
-        json={"query": "compressor specification"},
     )
-    assert search_response.status_code == 200
-    payload = search_response.json()
-    assert payload["scenario_id"] == "documents-demo"
-    assert payload["hits"]
+    assert retrieval_response.status_code == 200
+    assert retrieval_response.json()["sources"]
 
     logout_response = client.post(
         "/api/v1/auth/logout",
@@ -890,8 +884,8 @@ def test_admin_identity_management_endpoints(client: TestClient) -> None:
         "/api/v1/admin/workspaces",
         headers=headers,
         json={
-            "name": "Supplier Portal",
-            "description": "External supplier collaboration surface",
+            "name": "Partner Portal",
+            "description": "External partner collaboration surface",
         },
     )
     assert workspace_response.status_code == 201
@@ -1033,7 +1027,7 @@ def test_workspace_scoped_team_management_requires_workspace_admin_role(client: 
     assert create_team_other_workspace_response.status_code == 403
 
 
-def test_non_workspace_routes_require_workspace_membership(client: TestClient) -> None:
+def test_workspace_routes_require_workspace_membership(client: TestClient) -> None:
     admin_token = _bootstrap_admin(client)
     admin_headers = {"Authorization": f"Bearer {admin_token}"}
 
@@ -1056,17 +1050,11 @@ def test_non_workspace_routes_require_workspace_membership(client: TestClient) -
     user_token = _login(client, user["email"], user_response.json()["temporary_password"])
     user_headers = {"Authorization": f"Bearer {user_token}"}
 
-    documents_forbidden_response = client.post(
-        "/api/v1/workspaces/administrator/search/documents",
+    retrieval_forbidden_response = client.get(
+        "/api/v1/workspaces/administrator/retrieval/sources",
         headers=user_headers,
-        json={"query": "compressor specification"},
     )
-    assert documents_forbidden_response.status_code == 403
-
-    wiki_forbidden_response = client.get(
-        "/api/v1/workspaces/administrator/wiki/pages", headers=user_headers
-    )
-    assert wiki_forbidden_response.status_code == 403
+    assert retrieval_forbidden_response.status_code == 403
 
     ocr_forbidden_response = client.post(
         "/api/v1/workspaces/administrator/connectors/ocr/route",
@@ -1083,17 +1071,11 @@ def test_non_workspace_routes_require_workspace_membership(client: TestClient) -
     )
     assert bind_docs_workspace_response.status_code == 200
 
-    documents_allowed_response = client.post(
-        "/api/v1/workspaces/administrator/search/documents",
+    retrieval_allowed_response = client.get(
+        "/api/v1/workspaces/administrator/retrieval/sources",
         headers=user_headers,
-        json={"query": "compressor specification"},
     )
-    assert documents_allowed_response.status_code == 200
-
-    wiki_allowed_response = client.get(
-        "/api/v1/workspaces/administrator/wiki/pages", headers=user_headers
-    )
-    assert wiki_allowed_response.status_code == 200
+    assert retrieval_allowed_response.status_code == 200
 
     ocr_allowed_response = client.post(
         "/api/v1/workspaces/administrator/connectors/ocr/route",

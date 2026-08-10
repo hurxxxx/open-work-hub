@@ -32,7 +32,7 @@ def test_search_hit_snippet_centers_query_matches_in_body() -> None:
             "entity_type": "file",
             "entity_id": "file-1",
             "workspace_id": "workspace-1",
-            "title": "heater-spec.pptx",
+            "title": "roadmap.pptx",
             "summary": "generic heater system introduction " * 12,
             "body": (
                 ("common heater requirements " * 40)

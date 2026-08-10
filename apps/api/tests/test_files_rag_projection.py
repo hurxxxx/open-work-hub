@@ -45,10 +45,10 @@ def _file(**overrides) -> FileManagerFile:
         "workspace_id": "workspace-1",
         "folder_id": "folder-1",
         "owner_id": "user-1",
-        "filename": "heater-system.pptx",
+        "filename": "quarterly-plan.pptx",
         "content_type": "application/octet-stream",
         "size_bytes": 100,
-        "storage_key": "files/workspace-1/file-1/heater-system.pptx",
+        "storage_key": "files/workspace-1/file-1/quarterly-plan.pptx",
         "visibility": "workspace",
     }
     values.update(overrides)

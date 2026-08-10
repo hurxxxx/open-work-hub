@@ -1515,7 +1515,7 @@ export const resources = {
             },
             blockers: {
               blocking_sensitivity_label: '민감도 라벨',
-              company_sensitive_entity: '회사 민감정보',
+              sensitive_identifier: '내부 식별자',
               credential: '자격증명',
               custom_block_term: '사용자 지정 차단 단어',
               internal_context: '내부 컨텍스트',
@@ -1534,13 +1534,13 @@ export const resources = {
                 patterns:
                   '민감도 라벨 값이 차단 목록과 일치하면 외부 LLM/API로 보내지 않습니다.',
               },
-              company_sensitive_entity: {
+              sensitive_identifier: {
                 description:
-                  '주문번호, 제품코드, 고객명, 가격, 원가, 계약처럼 회사 업무상 민감한 식별자와 비용 정보를 감지합니다.',
+                  '외부로 전송하면 안 되는 내부 프로젝트나 기밀 문서 식별자를 감지합니다.',
                 examples:
-                  '예: ORD-2026-001, PRD-A100, 주요고객, 가격 1,200,000원, 원가, 계약, cost, contract',
+                  '예: INTERNAL-PROJECT-2400, CONFIDENTIAL-REPORT-12',
                 patterns:
-                  'ORD-* 주문번호, 영문-숫자 제품코드, 고객 포함 단어, 가격/원가/계약 관련 한국어와 영어 키워드',
+                  'INTERNAL-* 또는 CONFIDENTIAL-* 형식의 내부 식별자',
               },
               credential: {
                 description:
@@ -1586,8 +1586,8 @@ export const resources = {
             exceptionBlockerHelp: {
               blocking_sensitivity_label:
                 '민감도 라벨 때문에 차단되는 외부 전송만 예외로 허용합니다.',
-              company_sensitive_entity:
-                '주문번호, 제품코드, 가격/원가/계약 같은 회사 민감정보 감지만 예외로 허용합니다.',
+              sensitive_identifier:
+                '내부 프로젝트나 기밀 문서 식별자 감지만 예외로 허용합니다.',
               internal_context:
                 '내부 컨텍스트 출처 때문에 차단되는 외부 전송만 예외로 허용합니다.',
               internal_url:
@@ -1700,8 +1700,8 @@ export const resources = {
               appPolicyDescription:
                 '이 앱에서 외부 호출 직전 위험 항목이 감지되면 아래 설정을 적용합니다.',
               blockerHelp: {
-                company_sensitive_entity:
-                  '주문번호, 제품코드, 고객명, 가격/원가/계약 관련 값',
+                sensitive_identifier:
+                  'INTERNAL-* 또는 CONFIDENTIAL-* 형식의 내부 식별자',
                 internal_url: '사내망, 로컬 개발망, 내부 도메인 URL',
                 pii: '주민등록번호, 이메일, 국내 전화번호',
                 security_document:
@@ -2205,7 +2205,7 @@ export const resources = {
                 appId: '예: chatbot, web-search',
                 capability: '예: llm, web_search',
                 provider: '예: openai, anthropic, gemini',
-                taskKind: '예: qna_answer, web_search_summary',
+                taskKind: '예: mail_compose, web_search_summary',
               },
               removeUser: '{{name}} 선택 해제',
               search: '이름, 적용 대상, 앱, 작업, 기능, 공급자 검색',
@@ -2394,7 +2394,7 @@ export const resources = {
                 provider: '예: openai',
                 sensitivity_labels: '예: confidential, internal',
                 source_kinds: '예: rag, docs, workspace',
-                task_kind: '예: qna_answer',
+                task_kind: '예: mail_compose',
               },
               piiHits: '개인정보 감지',
               privacyFilterStatus: 'Privacy Filter 상태',
@@ -2518,7 +2518,7 @@ export const resources = {
               whiteboards: '화이트보드 조회',
             },
             consumptionDescription:
-              '앱 진입, 문서/뉴스 조회, 검색처럼 콘텐츠를 실제로 소비한 활동입니다.',
+              '앱 진입, 문서/화이트보드 조회, 검색처럼 콘텐츠를 실제로 소비한 활동입니다.',
             consumptionTitle: '콘텐츠 소비',
             emptyDashboard: '표시할 사용 현황 데이터가 없습니다.',
             exclusions: {
@@ -2641,7 +2641,7 @@ export const resources = {
               contentCreated:
                 '문서, 화이트보드, 회의, PMS 태스크, 이미지 생성 건수를 합산합니다.',
               contentViews:
-                '문서, 화이트보드, 뉴스처럼 사용자가 실제 콘텐츠를 연 조회 이벤트 수입니다.',
+                '문서와 화이트보드처럼 사용자가 실제 콘텐츠를 연 조회 이벤트 수입니다.',
               consumption: {
                 appOpens:
                   '앱 라우트에 진입할 때 기록되는 app.open 이벤트 수입니다. 30분 단위로 중복을 줄입니다.',
@@ -2711,8 +2711,6 @@ export const resources = {
               avgLatency: '평균 지연',
               completionTokens: '응답 토큰',
               contentCreated: '콘텐츠 생성',
-              contentViewDetail:
-                '문서 {{docs}}회 / 화이트보드 {{whiteboards}}회 / 뉴스 {{news}}회',
               contentViews: '콘텐츠 조회',
               llmCalls: 'LLM 호출',
               llmTokens: '{{count}} 토큰',
@@ -3767,7 +3765,6 @@ export const resources = {
           search: '검색',
           sessionExpired: '세션이 만료되었습니다. 다시 로그인해주세요.',
           sourceLabels: {
-            documents_demo: 'Documents demo',
             generic_rag: 'Workspace RAG',
             keyword: 'Keyword',
           },
@@ -4311,7 +4308,6 @@ export const resources = {
             engineering: '엔지니어링',
             projectA: 'Project A',
             quality: '품질',
-            supplierQuality: '공급업체 품질',
           },
           selectedDocument: '선택한 문서',
           selectedEvidence: '선택 근거',
@@ -7356,7 +7352,7 @@ export const resources = {
             },
             blockers: {
               blocking_sensitivity_label: 'Blocking sensitivity label',
-              company_sensitive_entity: 'Company-sensitive entity',
+              sensitive_identifier: 'Internal identifier',
               credential: 'Credential',
               custom_block_term: 'Custom block term',
               internal_context: 'Internal context',
@@ -7375,13 +7371,13 @@ export const resources = {
                 patterns:
                   'External LLM/API transfer is blocked when the sensitivity label matches the block list.',
               },
-              company_sensitive_entity: {
+              sensitive_identifier: {
                 description:
-                  'Detects business-sensitive identifiers and cost terms such as order IDs, product codes, customers, prices, costs, and contracts.',
+                  'Detects internal project and confidential document identifiers that must not leave the local boundary.',
                 examples:
-                  'Examples: ORD-2026-001, PRD-A100, key customer, price 1,200,000 KRW, cost, contract',
+                  'Examples: INTERNAL-PROJECT-2400, CONFIDENTIAL-REPORT-12',
                 patterns:
-                  'ORD-* order IDs, alphanumeric product codes, customer terms, and Korean/English price, cost, and contract keywords',
+                  'Internal identifiers using the INTERNAL-* or CONFIDENTIAL-* form',
               },
               credential: {
                 description:
@@ -7427,8 +7423,8 @@ export const resources = {
             exceptionBlockerHelp: {
               blocking_sensitivity_label:
                 'Allows only external transfers blocked by a sensitivity label.',
-              company_sensitive_entity:
-                'Allows only company-sensitive entity detections such as order IDs, product codes, price, cost, or contract terms.',
+              sensitive_identifier:
+                'Allows only internal project or confidential document identifier detections.',
               internal_context:
                 'Allows only external transfers blocked because the content origin is internal context.',
               internal_url:
@@ -7540,8 +7536,8 @@ export const resources = {
               appPolicyDescription:
                 'These settings apply when risky data is detected just before this app makes an external call.',
               blockerHelp: {
-                company_sensitive_entity:
-                  'Order IDs, product codes, customers, prices, costs, and contract values',
+                sensitive_identifier:
+                  'Internal identifiers using the INTERNAL-* or CONFIDENTIAL-* form',
                 internal_url:
                   'Intranet, local development, and internal-domain URLs',
                 pii: 'Korean resident registration numbers, email addresses, and Korean phone numbers',
@@ -8056,7 +8052,7 @@ export const resources = {
                 appId: 'e.g. chatbot, web-search',
                 capability: 'e.g. llm, web_search',
                 provider: 'e.g. openai, anthropic, gemini',
-                taskKind: 'e.g. qna_answer, web_search_summary',
+                taskKind: 'e.g. mail_compose, web_search_summary',
               },
               removeUser: 'Remove {{name}}',
               search: 'Search name, scope, app, task, capability, or provider',
@@ -8246,7 +8242,7 @@ export const resources = {
                 provider: 'e.g. openai',
                 sensitivity_labels: 'e.g. confidential, internal',
                 source_kinds: 'e.g. rag, docs, workspace',
-                task_kind: 'e.g. qna_answer',
+                task_kind: 'e.g. mail_compose',
               },
               piiHits: 'PII hits',
               privacyFilterStatus: 'Privacy Filter status',
@@ -8374,7 +8370,7 @@ export const resources = {
               whiteboards: 'Whiteboard views',
             },
             consumptionDescription:
-              'Activities that show actual content consumption, such as app opens, doc/news views, and searches.',
+              'Activities that show actual content consumption, such as app opens, document/whiteboard views, and searches.',
             consumptionTitle: 'Content consumption',
             emptyDashboard: 'No usage data to show.',
             exclusions: {
@@ -8503,7 +8499,7 @@ export const resources = {
               contentCreated:
                 'Sum of created documents, whiteboards, meetings, PMS tasks, and images.',
               contentViews:
-                'Content view events for documents, whiteboards, news, and similar content.',
+                'Content view events for documents, whiteboards, and similar content.',
               consumption: {
                 appOpens:
                   'app.open events recorded when users enter app routes. Events are deduplicated in 30-minute windows.',
@@ -8572,8 +8568,6 @@ export const resources = {
               avgLatency: 'Average latency',
               completionTokens: 'Completion tokens',
               contentCreated: 'Content created',
-              contentViewDetail:
-                '{{docs}} docs / {{whiteboards}} whiteboards / {{news}} news',
               contentViews: 'Content views',
               llmCalls: 'LLM calls',
               llmTokens: '{{count}} tokens',
@@ -9639,7 +9633,6 @@ export const resources = {
           search: 'Search',
           sessionExpired: 'Your session expired. Sign in again.',
           sourceLabels: {
-            documents_demo: 'Documents demo',
             generic_rag: 'Workspace RAG',
             keyword: 'Keyword',
           },
@@ -10198,7 +10191,6 @@ export const resources = {
             engineering: 'Engineering',
             projectA: 'Project A',
             quality: 'Quality',
-            supplierQuality: 'Supplier quality',
           },
           selectedDocument: 'Selected document',
           selectedEvidence: 'Selected evidence',

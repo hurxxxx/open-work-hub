@@ -198,7 +198,7 @@ def test_keyword_search_returns_contract_facets_snippets_and_deep_links(
                 {
                     "type": "paragraph",
                     "content": [
-                        {"type": "text", "text": "공급사 단가 변경으로 예산 리스크가 증가했습니다."}
+                        {"type": "text", "text": "서비스 요금 변경으로 예산 리스크가 증가했습니다."}
                     ],
                 }
             ],

@@ -4,17 +4,19 @@ import re
 from dataclasses import dataclass
 
 
-SENSITIVE_BLOCK_ENTITY_TYPES = frozenset(
-    {
-        "bom",
-        "cost",
-        "contract_term",
-    }
-)
+SENSITIVE_BLOCK_ENTITY_TYPES = frozenset({"credential"})
 _ENTITY_TOKEN_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("order_id", re.compile(r"\bORD-[A-Z0-9-]+\b", re.IGNORECASE)),
-    ("product_code", re.compile(r"\b[A-Z]{2,}-[A-Z0-9-]*\d[A-Z0-9-]*\b")),
-    ("customer", re.compile(r"[가-힣A-Za-z0-9_-]*고객[A-Za-z0-9_-]*")),
+    (
+        "credential",
+        re.compile(
+            r"\b(?:api[_-]?key|access[_-]?token|secret|password)\s*[:=]\s*[^\s,;]+",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "internal_identifier",
+        re.compile(r"\b(?:INTERNAL|CONFIDENTIAL)-[A-Z0-9-]+\b", re.IGNORECASE),
+    ),
 )
 _NO_EXTERNAL_SEARCH_MARKERS = (
     "no external search",
@@ -63,7 +65,7 @@ class ExternalEgressSanitization:
 
 
 def build_external_egress_sanitization(text: str) -> ExternalEgressSanitization:
-    removed_entity_types = detect_enterprise_entity_types(text)
+    removed_entity_types = detect_sensitive_entity_types(text)
     return ExternalEgressSanitization(
         removed_entity_types=removed_entity_types,
         blocked_entity_types=sorted(
@@ -77,15 +79,8 @@ def build_external_egress_sanitization(text: str) -> ExternalEgressSanitization:
     )
 
 
-def detect_enterprise_entity_types(text: str) -> list[str]:
-    lowered = text.lower()
+def detect_sensitive_entity_types(text: str) -> list[str]:
     entity_types: list[str] = []
-    if "bom" in lowered:
-        entity_types.append("bom")
-    if "원가" in text or "cost" in lowered:
-        entity_types.append("cost")
-    if "계약" in text or "contract" in lowered:
-        entity_types.append("contract_term")
     for entity_type, pattern in _ENTITY_TOKEN_PATTERNS:
         if pattern.search(text):
             entity_types.append(entity_type)
@@ -95,45 +90,26 @@ def detect_enterprise_entity_types(text: str) -> list[str]:
 def explicitly_disallows_external_search(text: str) -> bool:
     lowered = text.lower()
     compact = re.sub(r"\s+", "", lowered)
-    return any(
-        marker in lowered or marker in compact
-        for marker in _NO_EXTERNAL_SEARCH_MARKERS
-    )
+    return any(marker in lowered or marker in compact for marker in _NO_EXTERNAL_SEARCH_MARKERS)
 
 
 def sanitize_external_prompt(text: str) -> str:
-    sanitized = _remove_enterprise_tokens(text)
+    sanitized = _remove_sensitive_tokens(text)
     sanitized = re.sub(r"\s+", " ", sanitized).strip(" .,\n\t")
     return sanitized[:1200]
 
 
 def sanitize_external_search_query(text: str) -> str:
-    entity_types = detect_enterprise_entity_types(text)
+    entity_types = detect_sensitive_entity_types(text)
     if SENSITIVE_BLOCK_ENTITY_TYPES.intersection(entity_types):
         return ""
-    tokens: list[str] = []
-    if "product_code" in entity_types:
-        tokens.extend(["industrial", "electronic", "component"])
-    upper_text = text.upper()
-    if "EU" in upper_text:
-        tokens.append("EU")
-    if "CE" in upper_text:
-        tokens.extend(["CE", "certification"])
-    elif "인증" in text or "certification" in text.lower():
-        tokens.append("certification")
-    if "리스크" in text or "규제" in text or "requirements" in text.lower():
-        tokens.extend(["regulatory", "requirements"])
-    tokens = _dedupe(tokens)
-    if tokens:
-        return " ".join(tokens)
     return sanitize_external_prompt(text)
 
 
-def _remove_enterprise_tokens(text: str) -> str:
+def _remove_sensitive_tokens(text: str) -> str:
     sanitized = text
     for _entity_type, pattern in _ENTITY_TOKEN_PATTERNS:
         sanitized = pattern.sub(" ", sanitized)
-    sanitized = re.sub(r"\b\d+(?:원|krw|usd|eur)?\b", " ", sanitized, flags=re.IGNORECASE)
     return sanitized
 
 
@@ -152,7 +128,7 @@ __all__ = [
     "ExternalEgressSanitization",
     "SENSITIVE_BLOCK_ENTITY_TYPES",
     "build_external_egress_sanitization",
-    "detect_enterprise_entity_types",
+    "detect_sensitive_entity_types",
     "explicitly_disallows_external_search",
     "sanitize_external_prompt",
     "sanitize_external_search_query",

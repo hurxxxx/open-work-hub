@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from open_work_hub_api.domains.retrieval.contracts import RetrievalSourceDescriptor, RetrievalStrategy
+from open_work_hub_api.domains.retrieval.contracts import (
+    RetrievalSourceDescriptor,
+    RetrievalStrategy,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,14 +34,6 @@ _SOURCE_CATALOG: tuple[RetrievalSourceCatalogItem, ...] = (
         scope="workspace",
         backend="keyword_search",
         description="BM25/full-text style keyword search over workspace projections.",
-    ),
-    RetrievalSourceCatalogItem(
-        source="documents_demo",
-        label="Documents demo",
-        scope="workspace",
-        backend="fixture",
-        description="Prototype fixture source retained for audit visibility; not RAG.",
-        active=False,
     ),
 )
 

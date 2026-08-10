@@ -70,7 +70,7 @@ def test_file_chat_evidence_uses_files_only_natural_language_hybrid_contract(
         object(),  # type: ignore[arg-type]
         workspace=SimpleNamespace(id="workspace-1", key="workspace"),
         user=SimpleNamespace(id="user-1"),
-        query="전장 공조 제어 기준은 무엇인가요?",
+        query="접근 권한 관리 기준은 무엇인가요?",
         limit=3,
         conversation_id="conversation-1",
     )
@@ -292,7 +292,9 @@ def test_file_chat_evidence_filters_stale_cross_workspace_candidate_with_source_
 
     with get_session_factory()() as db:
         workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
-        user = db.scalar(select(User).where(User.email == "delivery-hub-member@open-work-hub.local"))
+        user = db.scalar(
+            select(User).where(User.email == "delivery-hub-member@open-work-hub.local")
+        )
         assert workspace is not None and user is not None
         _stub_retrieval(
             monkeypatch,

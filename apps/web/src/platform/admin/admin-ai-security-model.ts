@@ -49,7 +49,7 @@ export const AI_SECURITY_EXCEPTION_BLOCKERS: AiSecurityExternalTransferBlocker[]
   [
     'internal_context',
     'blocking_sensitivity_label',
-    'company_sensitive_entity',
+    'sensitive_identifier',
     'policy_block_external',
     'pii',
     'internal_url',

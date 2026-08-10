@@ -40,9 +40,7 @@ SETTING_ALIASES = {
 
 
 def _settings(**overrides):
-    aliased_overrides = {
-        SETTING_ALIASES.get(key, key): value for key, value in overrides.items()
-    }
+    aliased_overrides = {SETTING_ALIASES.get(key, key): value for key, value in overrides.items()}
     return Settings(
         postgres_dsn="postgresql+psycopg://open_work_hub_test:open_work_hub_test@127.0.0.1:5432/open_work_hub_test",
         **aliased_overrides,
@@ -87,13 +85,8 @@ def test_external_search_provider_can_use_search_execution_adapter_registry() ->
         )
 
         assert normalize_external_provider("vendor-search") is None
-        assert (
-            normalize_external_provider("vendor-search", capability="search")
-            == "vendor-search"
-        )
-        assert allowed_external_providers(settings, capability="search") == (
-            "vendor-search",
-        )
+        assert normalize_external_provider("vendor-search", capability="search") == "vendor-search"
+        assert allowed_external_providers(settings, capability="search") == ("vendor-search",)
 
         decision = evaluate_external_egress(
             capability="search",
@@ -295,9 +288,7 @@ def test_external_egress_blocks_pii_for_planning() -> None:
 
 
 def test_external_search_sanitizer_matches_seed_leakage_cases() -> None:
-    fixture = json.loads(
-        (FIXTURE_DIR / "sanitizer_leakage_cases.json").read_text(encoding="utf-8")
-    )
+    fixture = json.loads((FIXTURE_DIR / "sanitizer_leakage_cases.json").read_text(encoding="utf-8"))
     settings = _settings(ai_external_search_enabled=True)
 
     for case in fixture["cases"]:
@@ -309,23 +300,21 @@ def test_external_search_sanitizer_matches_seed_leakage_cases() -> None:
         )
 
         assert decision.allow_external is case["expected"]["allow_external"]
-        assert set(decision.removed_entity_types) == set(
-            case["expected"]["removed_entity_types"]
-        )
+        assert set(decision.removed_entity_types) == set(case["expected"]["removed_entity_types"])
         assert decision.sanitized_query == case["expected"]["sanitized_query"]
 
 
-def test_external_search_blocks_sensitive_cost_contract_context() -> None:
+def test_external_search_blocks_credentials() -> None:
     decision = evaluate_external_egress(
         capability="search",
         provider="openai",
-        text="BOM 원가 12345원과 계약 조건을 넣어서 공개 공급사 가격을 검색해줘.",
+        text="API_KEY=sk-test-secret 를 포함해서 공개 자료를 검색해줘.",
         settings=_settings(ai_external_search_enabled=True),
     )
 
     assert decision.allow_external is False
     assert decision.reason == "sensitive_entity_blocked"
-    assert decision.blocked_entity_types == ["bom", "contract_term", "cost"]
+    assert decision.blocked_entity_types == ["credential"]
     assert decision.sanitized_query == ""
 
 
@@ -389,7 +378,7 @@ def test_denied_external_egress_decisions_do_not_retain_prompt_or_query() -> Non
         (
             "search",
             "sensitive_entity_blocked",
-            "BOM 원가 12345원과 계약 조건을 넣어서 공개 공급사 가격을 검색해줘.",
+            "API_KEY=sk-test-secret 를 포함해서 공개 자료를 검색해줘.",
             _settings(ai_external_search_enabled=True),
         ),
     )

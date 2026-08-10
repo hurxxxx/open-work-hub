@@ -59,8 +59,8 @@ describe('AiReportArtifact', () => {
       conversationTurnId: 'turn-1',
       kind: 'report',
       status: 'completed',
-      title: '결빙 문제 보고서',
-      contentMarkdown: '# 최종 보고서\n결빙 문제를 요약했습니다.',
+      title: '접속 오류 보고서',
+      contentMarkdown: '# 최종 보고서\n접속 오류를 요약했습니다.',
       createdAt: '2026-07-26T01:00:00Z',
       completedAt: '2026-07-26T01:01:00Z',
     });
@@ -68,15 +68,15 @@ describe('AiReportArtifact', () => {
       {
         id: 'source-1',
         sourceKind: 'query_result',
-        title: '차종별 결빙 발생',
+        title: '지역별 오류 발생',
         columns: [
-          { key: 'vehicle', label: '차종' },
+          { key: 'region', label: '지역' },
           { key: 'count', label: '건수' },
         ],
-        rows: [{ vehicle: 'MODEL-A', count: 12 }],
+        rows: [{ region: '서울', count: 12 }],
         rowCount: 1,
         truncated: false,
-        queryId: 'vehicle-freezing-count',
+        queryId: 'regional-error-count',
       },
     ]);
   });
@@ -96,13 +96,13 @@ describe('AiReportArtifact', () => {
     fireEvent.mouseDown(sourcesTab, { button: 0, ctrlKey: false });
 
     expect(
-      await screen.findByRole('heading', { name: '차종별 결빙 발생' }),
+      await screen.findByRole('heading', { name: '지역별 오류 발생' }),
     ).toBeTruthy();
-    expect(screen.getByRole('columnheader', { name: '차종' })).toBeTruthy();
-    expect(screen.getByRole('cell', { name: 'MODEL-A' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: '지역' })).toBeTruthy();
+    expect(screen.getByRole('cell', { name: '서울' })).toBeTruthy();
     expect(screen.getByRole('cell', { name: '12' })).toBeTruthy();
     expect(screen.queryByText('query_result')).toBeNull();
-    expect(screen.queryByText('vehicle-freezing-count')).toBeNull();
+    expect(screen.queryByText('regional-error-count')).toBeNull();
   });
 
   it('downloads the immutable report with its report number metadata', async () => {
@@ -117,11 +117,11 @@ describe('AiReportArtifact', () => {
       Blob,
       string,
     ];
-    expect(filename).toBe('AIR-20260726-0000000001_결빙-문제-보고서.md');
+    expect(filename).toBe('AIR-20260726-0000000001_접속-오류-보고서.md');
     expect(await readBlobText(blob)).toBe(
       '보고서 번호: AIR-20260726-0000000001\n' +
         '완료 시각: 2026-07-26T01:01:00Z\n\n' +
-        '# 최종 보고서\n결빙 문제를 요약했습니다.',
+        '# 최종 보고서\n접속 오류를 요약했습니다.',
     );
   });
 
@@ -184,7 +184,7 @@ function renderReport(
   const artifact = {
     id: 'report-1',
     type: 'document',
-    title: '결빙 문제 보고서',
+    title: '접속 오류 보고서',
     language: null,
     content: '# 최종 보고서\n초기 내용',
     status: 'closed' as const,

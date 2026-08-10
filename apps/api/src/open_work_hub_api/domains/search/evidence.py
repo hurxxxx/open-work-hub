@@ -163,7 +163,9 @@ class EvidenceRankingPolicy:
     ) -> list[EvidenceCandidate]:
         base_order = {
             candidate.source_id: index
-            for index, candidate in enumerate(self.sort_by_base_score(candidates, question=question))
+            for index, candidate in enumerate(
+                self.sort_by_base_score(candidates, question=question)
+            )
         }
         missing_rank = len(candidates) + 100
 
@@ -213,8 +215,8 @@ class EvidenceRankingPolicy:
             return ":".join(
                 [
                     "record",
-                    _normalize_key_part(_metadata_str(metadata, "issue_no")),
-                    _normalize_key_part(_metadata_str(metadata, "vehicle")),
+                    _normalize_key_part(_metadata_str(metadata, "record_id")),
+                    _normalize_key_part(candidate.resource_type),
                     normalized_title,
                 ]
             )
@@ -414,7 +416,9 @@ def search_semantic_evidence_hits(
     response = get_rag_query_service().query(request, post_filter=post_filter)
     hits = [
         SemanticEvidenceHit(
-            chunk_id=str(hit.metadata.get("chunk_key") or hit.metadata.get("chunk_db_id") or hit.resource_id),
+            chunk_id=str(
+                hit.metadata.get("chunk_key") or hit.metadata.get("chunk_db_id") or hit.resource_id
+            ),
             text=hit.excerpt or hit.summary or "",
             summary=hit.summary,
             score=hit.score,
@@ -448,7 +452,9 @@ def rerank_evidence_candidates(
     ]
     settings = get_settings()
     if settings.rag_rerank_provider in {"", "none", "disabled"}:
-        selected = ranking_policy.select_diverse_sources(limited_candidates, max_sources=max_sources)
+        selected = ranking_policy.select_diverse_sources(
+            limited_candidates, max_sources=max_sources
+        )
         return selected, {
             "applied": False,
             "degraded": False,
@@ -459,7 +465,9 @@ def rerank_evidence_candidates(
     try:
         providers = get_provider_bundle()
         if providers.rerank is None:
-            selected = ranking_policy.select_diverse_sources(limited_candidates, max_sources=max_sources)
+            selected = ranking_policy.select_diverse_sources(
+                limited_candidates, max_sources=max_sources
+            )
             return selected, {
                 "applied": False,
                 "degraded": False,
@@ -481,7 +489,9 @@ def rerank_evidence_candidates(
             source_kind=source_kind,
         )
     except Exception as error:  # noqa: BLE001 - fallback order is still usable.
-        selected = ranking_policy.select_diverse_sources(limited_candidates, max_sources=max_sources)
+        selected = ranking_policy.select_diverse_sources(
+            limited_candidates, max_sources=max_sources
+        )
         return selected, {
             "applied": False,
             "degraded": True,
@@ -502,7 +512,9 @@ def rerank_evidence_candidates(
         rerank_order[candidate.source_id] = len(rerank_order)
         rerank_scores.append(score)
     if _rerank_scores_are_uninformative(rerank_scores):
-        selected = ranking_policy.select_diverse_sources(limited_candidates, max_sources=max_sources)
+        selected = ranking_policy.select_diverse_sources(
+            limited_candidates, max_sources=max_sources
+        )
         return selected, {
             "applied": False,
             "degraded": True,
@@ -541,7 +553,9 @@ def merge_evidence_candidate(
         existing.excerpt = incoming.excerpt
     existing.metadata = {**incoming.metadata, **existing.metadata}
     if incoming.match_reason and incoming.match_reason not in existing.match_reason:
-        existing.match_reason = "; ".join(part for part in [existing.match_reason, incoming.match_reason] if part)
+        existing.match_reason = "; ".join(
+            part for part in [existing.match_reason, incoming.match_reason] if part
+        )
 
 
 def _keyword_search_client() -> KeywordSearchClient:
@@ -582,12 +596,16 @@ def _candidate_to_rag_hit(
 
 
 def _candidate_searchable_text(candidate: EvidenceCandidate) -> str:
-    metadata_text = " ".join(str(value) for value in candidate.metadata.values() if value is not None)
+    metadata_text = " ".join(
+        str(value) for value in candidate.metadata.values() if value is not None
+    )
     return " ".join([candidate.title, candidate.summary, candidate.excerpt, metadata_text])
 
 
 def _is_record_like_candidate(candidate: EvidenceCandidate) -> bool:
-    return bool(_metadata_str(candidate.metadata, "record_id")) or candidate.resource_type.endswith("_record")
+    return bool(_metadata_str(candidate.metadata, "record_id")) or candidate.resource_type.endswith(
+        "_record"
+    )
 
 
 def _rerank_scores_are_uninformative(scores: list[float]) -> bool:

@@ -22,8 +22,8 @@ describe('community URL helpers', () => {
     expect(buildCommunityPostUrl('post-1')).toBe(
       `${COMMUNITY_POST_ROUTE_PREFIX}/post-1`,
     );
-    expect(buildCommunityPostUrl('post 1', 'qna')).toBe(
-      `${COMMUNITY_POST_ROUTE_PREFIX}/post%201?channel=qna`,
+    expect(buildCommunityPostUrl('post 1', 'questions')).toBe(
+      `${COMMUNITY_POST_ROUTE_PREFIX}/post%201?channel=questions`,
     );
   });
 });

@@ -68,12 +68,7 @@ or relationship indexing.
 
 Real Graph RAG requires a separate design and migration plan.
 
-### 5. Demo searches are named by what they are
-
-Fixture document search is a demo surface, not RAG. Its public scenario id is
-`documents-demo`.
-
-### 6. Retrieval owns cross-backend ranking and final grounding
+### 5. Retrieval owns cross-backend ranking and final grounding
 
 Each backend owns ingestion, indexing, ACL enforcement, native candidate
 generation, and compatibility-surface ranking. The canonical retrieval Module

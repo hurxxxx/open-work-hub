@@ -59,12 +59,12 @@ describe('community API channel cache', () => {
     window.dispatchEvent(new Event(COMMUNITY_CHANNELS_CHANGED_EVENT));
 
     mockJsonResponse({
-      channels: [channel({ key: 'qna', name: 'Q&A' })],
+      channels: [channel({ key: 'questions', name: 'Questions' })],
     });
     const afterEvent = await listCommunityChannels('token-1');
 
     expect(fetchMock()).toHaveBeenCalledTimes(3);
-    expect(afterEvent.channels[0].key).toBe('qna');
+    expect(afterEvent.channels[0].key).toBe('questions');
   });
 
   it('resolves community post media with the post password context', async () => {

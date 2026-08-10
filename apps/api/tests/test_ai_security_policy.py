@@ -241,7 +241,7 @@ def test_admin_ai_security_policy_crud_simulation_and_audit_payload(
             "description": "approved scoped exception",
             "enabled": True,
             "workspace_id": workspace_id,
-            "task_kind": "qna_answer",
+            "task_kind": "mail_compose",
             "capability": "llm",
             "allowed_blocker_types": ["internal_context"],
             "reason": "Approved for a short-lived external summarization workflow.",
@@ -251,14 +251,14 @@ def test_admin_ai_security_policy_crud_simulation_and_audit_payload(
     assert exception_response.status_code == 201, exception_response.text
     exception = exception_response.json()
     assert exception["allowed_blocker_types"] == ["internal_context"]
-    assert exception["task_kinds"] == ["qna_answer"]
+    assert exception["task_kinds"] == ["mail_compose"]
 
     exception_simulation_response = client.post(
         "/api/v1/admin/ai-security/simulate",
         headers=headers,
         json={
             "workspace_id": workspace_id,
-            "task_kind": "qna_answer",
+            "task_kind": "mail_compose",
             "capability": "llm",
             "content_origin": "internal_context",
             "sample_text": "internal context without hard blockers",
@@ -795,7 +795,7 @@ def test_admin_ai_security_simulation_blocks_mixed_external_app_blockers(
     simulation = _simulate_ai_security(
         client,
         headers,
-        sample_text="Contact owner@example.com about contract terms",
+        sample_text="Contact owner@example.com about INTERNAL-PROJECT-2400",
     )
 
     assert simulation["effect"] == "inherit"
@@ -804,7 +804,7 @@ def test_admin_ai_security_simulation_blocks_mixed_external_app_blockers(
     assert simulation["mask_applied"] is False
     assert simulation["masked_text_preview"] is None
     assert set(simulation["external_transfer_blocker_types"]) == {
-        "company_sensitive_entity",
+        "sensitive_identifier",
         "pii",
     }
 
@@ -821,7 +821,7 @@ def test_admin_ai_security_simulation_hard_blockers_override_external_app_mask(
         headers,
         external_app_actions={
             "web-search": {
-                "company_sensitive_entity": "mask_and_send",
+                "sensitive_identifier": "mask_and_send",
                 "pii": "mask_and_send",
                 "internal_url": "mask_and_send",
                 "security_document": "mask_and_send",
@@ -1133,7 +1133,7 @@ def test_external_transfer_exception_cannot_bypass_absolute_blocker(
     assert "credential" in decision.hard_blocker_types
 
 
-def test_gateway_external_transfer_exception_allows_company_sensitive_entity(
+def test_gateway_external_transfer_exception_allows_sensitive_identifier(
     client: TestClient,
 ) -> None:
     assert client is not None
@@ -1141,12 +1141,12 @@ def test_gateway_external_transfer_exception_allows_company_sensitive_entity(
         _get_or_create_data_protection_settings(db).enforcement_enabled = True
         exception = AiSecurityExternalTransferException(
             id=new_id(),
-            name="Order summary export",
+            name="Internal reference export",
             description="",
             enabled=True,
             task_kind="files_grounded_chat",
             capability="llm",
-            allowed_blocker_types_json=["company_sensitive_entity"],
+            allowed_blocker_types_json=["sensitive_identifier"],
             reason="approved",
             expires_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(days=1),
         )
@@ -1166,7 +1166,7 @@ def test_gateway_external_transfer_exception_allows_company_sensitive_entity(
                 requested_model="claude-test",
                 requested_provider="anthropic",
                 max_tokens=4_096,
-                messages=[{"role": "user", "content": "Summarize ORD-2026-001"}],
+                messages=[{"role": "user", "content": "Summarize INTERNAL-PROJECT-2400"}],
             ),
             db,
         )
@@ -1494,7 +1494,7 @@ def test_external_capability_blocks_mixed_external_app_blockers(
         "log_ai_external_call",
         lambda **kwargs: records.append(kwargs),
     )
-    sensitive_text = "Contact owner@example.com about contract terms"
+    sensitive_text = "Contact owner@example.com about INTERNAL-PROJECT-2400"
     with get_session_factory()() as db:
         settings = _get_or_create_data_protection_settings(db)
         settings.external_app_actions_json = {"web-search": {"pii": "mask_and_send"}}
@@ -1520,7 +1520,7 @@ def test_external_capability_blocks_mixed_external_app_blockers(
 
     assert records[0]["status"] == "blocked"
     assert records[0]["mask_applied"] is False
-    assert "contract" in records[0]["blocked_entity_types"]
+    assert "internal_identifier" in records[0]["blocked_entity_types"]
     assert "pii:email" in records[0]["blocked_entity_types"]
     assert sensitive_text not in str(_audit_record_without_detected_values(records[0]))
 
@@ -1542,7 +1542,7 @@ def test_external_capability_hard_blockers_override_external_app_mask(
         settings = _get_or_create_data_protection_settings(db)
         settings.external_app_actions_json = {
             "web-search": {
-                "company_sensitive_entity": "mask_and_send",
+                "sensitive_identifier": "mask_and_send",
                 "pii": "mask_and_send",
                 "internal_url": "mask_and_send",
                 "security_document": "mask_and_send",

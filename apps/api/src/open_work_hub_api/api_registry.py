@@ -35,7 +35,6 @@ from open_work_hub_api.domains.community.router import router as community_route
 from open_work_hub_api.domains.docs.router import public_router as docs_public_router
 from open_work_hub_api.domains.docs.router import router as docs_router
 from open_work_hub_api.domains.docs.router import ws_router as docs_ws_router
-from open_work_hub_api.domains.documents.router import router as documents_router
 from open_work_hub_api.domains.diagrams.router import router as diagrams_router
 from open_work_hub_api.domains.dm.router import public_router as dm_public_router
 from open_work_hub_api.domains.dm.router import router as dm_router
@@ -66,7 +65,6 @@ from open_work_hub_api.domains.writing_assistant.router import router as writing
 from open_work_hub_api.domains.whiteboard.router import public_router as whiteboard_public_router
 from open_work_hub_api.domains.whiteboard.router import router as whiteboard_router
 from open_work_hub_api.domains.whiteboard.router import ws_router as whiteboard_ws_router
-from open_work_hub_api.domains.wiki_pms.router import router as wiki_pms_router
 from open_work_hub_api.openapi_contract import PROTECTED_ERROR_RESPONSES
 
 _RouterPrefix = Literal["api", "workspace"]
@@ -138,7 +136,6 @@ def _router_specs() -> list[_RouterSpec]:
         _RouterSpec(realtime_ws_router, "api"),
         _RouterSpec(notifications_router, "api", "protected"),
         _RouterSpec(personal_widgets_router, "api", "protected"),
-        _RouterSpec(documents_router, "workspace", "workspace"),
         _RouterSpec(docs_public_router, "api", "protected"),
         _RouterSpec(docs_router, "workspace", "workspace"),
         _RouterSpec(whiteboard_public_router, "api", "protected"),
@@ -149,7 +146,6 @@ def _router_specs() -> list[_RouterSpec]:
         _RouterSpec(files_router, "workspace", "workspace"),
         _RouterSpec(files_public_router, "api"),
         _RouterSpec(ocr_router, "workspace", "workspace"),
-        _RouterSpec(wiki_pms_router, "workspace", "workspace"),
         _RouterSpec(pms_public_router, "api"),
         _RouterSpec(pms_router, "workspace", "workspace"),
         _RouterSpec(meeting_public_router, "api"),

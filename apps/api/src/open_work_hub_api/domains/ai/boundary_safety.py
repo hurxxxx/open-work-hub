@@ -38,12 +38,10 @@ _SAFE_CONTENT_ORIGINS = frozenset(
 
 
 _FORBIDDEN_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("order_id", re.compile(r"\bORD-[A-Z0-9-]+\b", re.IGNORECASE)),
-    ("product_code", re.compile(r"\b[A-Z]{2,}-[A-Z0-9-]*\d[A-Z0-9-]*\b")),
-    ("customer", re.compile(r"[가-힣A-Za-z0-9_-]*고객[A-Za-z0-9_-]*")),
-    ("price", re.compile(r"(?:\b\d+(?:,\d{3})*\s*원\b|\bprice\b|가격)", re.IGNORECASE)),
-    ("cost", re.compile(r"(?:원가|\bcost\b)", re.IGNORECASE)),
-    ("contract", re.compile(r"(?:계약|\bcontract\b)", re.IGNORECASE)),
+    (
+        "internal_identifier",
+        re.compile(r"\b(?:INTERNAL|CONFIDENTIAL)-[A-Z0-9-]+\b", re.IGNORECASE),
+    ),
     (
         "internal_url",
         re.compile(

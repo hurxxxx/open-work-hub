@@ -107,7 +107,7 @@ def test_files_first_turn_retries_with_recall_optimized_query_after_no_evidence(
                 file_id="file-1",
                 filename="자가 진단_v_1_10.docx",
                 locator="/w/workspace/files?file=file-1",
-                excerpt="냉매 부족 고장 상태",
+                excerpt="권한 설정 오류 상태",
                 methods=("bm25", "dense_vector", "cross_encoder"),
             ),
         )
@@ -118,7 +118,7 @@ def test_files_first_turn_retries_with_recall_optimized_query_after_no_evidence(
         captured_llm["context"] = context
         captured_llm.update(kwargs)
         return SimpleNamespace(
-            completion=SimpleNamespace(text='{"apply":true,"query":"냉기 모듈 장애 관련 문서"}')
+            completion=SimpleNamespace(text='{"apply":true,"query":"접근 권한 오류 관련 문서"}')
         )
 
     def _query(_db, **kwargs):
@@ -132,12 +132,12 @@ def test_files_first_turn_retries_with_recall_optimized_query_after_no_evidence(
 
     context = FilesConversationScopeAdapter().turn_context(
         **_scope_inputs(),
-        messages=[{"role": "user", "content": "냉기 모듈 장애 관련 보고서 찾아줘"}],
+        messages=[{"role": "user", "content": "접근 권한 오류 관련 보고서 찾아줘"}],
     )
 
     assert captured_queries == [
-        "냉기 모듈 장애 관련 보고서 찾아줘",
-        "냉기 모듈 장애 관련 문서",
+        "접근 권한 오류 관련 보고서 찾아줘",
+        "접근 권한 오류 관련 문서",
     ]
     assert captured_llm["workload_id"] == "files.rag_query_rewrite"
     assert captured_llm["context"].source == "files.chat.query_relaxation"
@@ -147,7 +147,7 @@ def test_files_first_turn_retries_with_recall_optimized_query_after_no_evidence(
     assert captured_llm["context_pack"].metadata == {"rewrite_mode": "recall_fallback"}
     assert context.direct_response is None
     assert context.prompt is not None
-    assert "냉매 부족 고장 상태" in context.prompt
+    assert "권한 설정 오류 상태" in context.prompt
     assert len(context.artifacts) == 1
 
 
@@ -206,10 +206,10 @@ def test_files_rejects_relaxation_that_does_not_preserve_query_anchors(
 
     context = FilesConversationScopeAdapter().turn_context(
         **_scope_inputs(),
-        messages=[{"role": "user", "content": "냉기 모듈 장애 관련 보고서 찾아줘"}],
+        messages=[{"role": "user", "content": "접근 권한 오류 관련 보고서 찾아줘"}],
     )
 
-    assert captured_queries == ["냉기 모듈 장애 관련 보고서 찾아줘"]
+    assert captured_queries == ["접근 권한 오류 관련 보고서 찾아줘"]
     assert context.direct_response == "저장된 문서에서 답변할 근거를 찾지 못했습니다."
     assert context.prompt is None
     assert context.artifacts == ()
@@ -234,10 +234,10 @@ def test_files_optional_relaxation_provider_failure_preserves_no_evidence_respon
 
     context = FilesConversationScopeAdapter().turn_context(
         **_scope_inputs(),
-        messages=[{"role": "user", "content": "냉기 모듈 장애 관련 보고서 찾아줘"}],
+        messages=[{"role": "user", "content": "접근 권한 오류 관련 보고서 찾아줘"}],
     )
 
-    assert captured_queries == ["냉기 모듈 장애 관련 보고서 찾아줘"]
+    assert captured_queries == ["접근 권한 오류 관련 보고서 찾아줘"]
     assert context.direct_response == "저장된 문서에서 답변할 근거를 찾지 못했습니다."
     assert context.prompt is None
     assert context.artifacts == ()
@@ -262,7 +262,7 @@ def test_files_optional_relaxation_policy_failure_propagates(
     with pytest.raises(AiGatewayPolicyViolation) as exc_info:
         FilesConversationScopeAdapter().turn_context(
             **_scope_inputs(),
-            messages=[{"role": "user", "content": "냉기 모듈 장애 관련 보고서 찾아줘"}],
+            messages=[{"role": "user", "content": "접근 권한 오류 관련 보고서 찾아줘"}],
         )
     assert exc_info.value.reason_code == "external_transfer_blocked"
 
@@ -357,7 +357,7 @@ def test_files_follow_up_uses_registered_query_rewrite_workload(
         captured_llm["context"] = context
         captured_llm.update(kwargs)
         return SimpleNamespace(
-            completion=SimpleNamespace(text='{"query":"전장 공조 제어 기준의 적용 대상"}')
+            completion=SimpleNamespace(text='{"query":"접근 권한 관리 기준의 적용 대상"}')
         )
 
     def _query(_db, **kwargs):
@@ -370,7 +370,7 @@ def test_files_follow_up_uses_registered_query_rewrite_workload(
     context = FilesConversationScopeAdapter().turn_context(
         **_scope_inputs(),
         messages=[
-            {"role": "user", "content": "전장 공조 제어 기준은?"},
+            {"role": "user", "content": "접근 권한 관리 기준은?"},
             {"role": "assistant", "content": "현재 문서 근거를 요약했습니다."},
             {"role": "user", "content": "그 적용 대상은?"},
         ],
@@ -389,7 +389,7 @@ def test_files_follow_up_uses_registered_query_rewrite_workload(
     assert context_pack.context_strategy == "files_rag_query_rewrite"
     assert context_pack.source_kinds == ("files",)
     assert context_pack.sensitivity_labels == ("internal",)
-    assert captured_retrieval["query"] == "전장 공조 제어 기준의 적용 대상"
+    assert captured_retrieval["query"] == "접근 권한 관리 기준의 적용 대상"
 
 
 def test_files_invalid_rewrite_falls_back_but_gateway_failure_propagates(

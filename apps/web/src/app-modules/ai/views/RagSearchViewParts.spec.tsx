@@ -14,17 +14,17 @@ const hit: KeywordSearchHit = {
   date_markers: {},
   deep_link: '/w/engineering/quality/issues/issue-1',
   entity_id: 'issue-1',
-  entity_type: 'quality_issue',
+  entity_type: 'project_task',
   metadata: {},
   people: [],
   preview_url: null,
   score: 1,
-  snippet: { highlights: [], text: 'Brake vibration investigation' },
+  snippet: { highlights: [], text: 'Deployment failure investigation' },
   status: null,
   status_label: null,
-  summary: 'Brake vibration investigation',
+  summary: 'Deployment failure investigation',
   targets: [],
-  title: 'Investigate brake vibration',
+  title: 'Investigate deployment failure',
   updated_at: '2026-07-20T00:00:00Z',
   visibility: 'shared',
   workspace_id: 'workspace-1',
@@ -32,7 +32,7 @@ const hit: KeywordSearchHit = {
 
 describe('RagSearchViewParts source labels', () => {
   it('uses the bootstrap descriptor label for both result and preview metadata', () => {
-    const entityTypeLabels = new Map([['quality_issue', '품질 이슈']]);
+    const entityTypeLabels = new Map([['project_task', '프로젝트 태스크']]);
 
     render(
       <MemoryRouter>
@@ -52,21 +52,21 @@ describe('RagSearchViewParts source labels', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getAllByText('품질 이슈')).toHaveLength(2);
+    expect(screen.getAllByText('프로젝트 태스크')).toHaveLength(2);
     expect(screen.queryByText('Quality Issue')).toBeNull();
     expect(
       screen.getByRole('button', {
-        name: /품질 이슈.*Investigate brake vibration/,
+        name: /프로젝트 태스크.*Investigate deployment failure/,
       }),
     ).not.toBeNull();
     expect(
       screen.getAllByRole('link', {
-        name: /품질 이슈.*Investigate brake vibration/,
+        name: /프로젝트 태스크.*Investigate deployment failure/,
       }),
     ).toHaveLength(2);
     expect(
       screen.getByRole('region', {
-        name: /품질 이슈.*Investigate brake vibration/,
+        name: /프로젝트 태스크.*Investigate deployment failure/,
       }),
     ).not.toBeNull();
   });
@@ -76,14 +76,14 @@ describe('RagSearchViewParts source labels', () => {
       <SearchEntityFilterButton
         active
         count={2}
-        entityType="quality_issue"
-        label="품질 이슈"
+        entityType="project_task"
+        label="프로젝트 태스크"
         onClick={vi.fn()}
       />,
     );
 
     expect(
-      screen.getByRole('button', { name: '품질 이슈 2', pressed: true }),
+      screen.getByRole('button', { name: '프로젝트 태스크 2', pressed: true }),
     ).not.toBeNull();
   });
 });

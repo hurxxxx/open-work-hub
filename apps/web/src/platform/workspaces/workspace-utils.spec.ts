@@ -278,7 +278,7 @@ describe('resolveNavItemHref', () => {
   it('normalizes workspace-relative pathSuffix values for category sidebar links', () => {
     const item = aiItem({
       id: 'docs-cooling-module',
-      title: '쿨링모듈',
+      title: '프로젝트 알파',
       icon: FileText,
       appId: 'business',
       linkAppId: 'docs',

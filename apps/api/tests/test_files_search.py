@@ -133,7 +133,7 @@ def test_files_search_fails_closed_before_partitioned_generations_are_active(
     response = client.post(
         _FILES_SEARCH_PATH,
         headers=auth_headers(session["token"]),
-        json={"query": "전장 공조 제어", "strategy": "hybrid"},
+        json={"query": "접근 권한 관리", "strategy": "hybrid"},
     )
 
     assert response.status_code == 503, response.text
@@ -425,14 +425,14 @@ def test_keyword_file_search_returns_ranked_source_fresh_snippet(
         "/api/v1/workspaces/administrator/files/upload",
         headers=headers,
         data={"visibility": "workspace", "corpus_id": corpus["id"]},
-        files={"file": ("vehicle-control.txt", b"source", "text/plain")},
+        files={"file": ("access-control.txt", b"source", "text/plain")},
     )
     assert upload_response.status_code == 201, upload_response.text
     uploaded = upload_response.json()
 
     prefix = [f"prefix-{index}" for index in range(70)]
     suffix = [f"suffix-{index}" for index in range(70)]
-    extraction_text = " ".join([*prefix, "전장제어", *suffix])
+    extraction_text = " ".join([*prefix, "접근제어", *suffix])
     with get_session_factory()() as db:
         file = db.get(FileManagerFile, uploaded["id"])
         workspace = db.scalar(select(Workspace).where(Workspace.key == "administrator"))
@@ -460,7 +460,7 @@ def test_keyword_file_search_returns_ranked_source_fresh_snippet(
             _FILES_SEARCH_PATH,
             headers=headers,
             json={
-                "query": "전장제어 suffix-0",
+                "query": "접근제어 suffix-0",
                 "strategy": "keyword",
                 "page": 1,
                 "page_size": 10,
@@ -479,7 +479,7 @@ def test_keyword_file_search_returns_ranked_source_fresh_snippet(
     hit = payload["hits"][0]
     assert hit["rank"] == 1
     assert hit["file_id"] == uploaded["id"]
-    assert hit["filename"] == "vehicle-control.txt"
+    assert hit["filename"] == "access-control.txt"
     assert hit["score"] == 17.25
     assert hit["methods"] == ["bm25"]
     snippet_tokens = hit["snippet"]["text"].split()
@@ -516,7 +516,7 @@ def test_keyword_file_search_drops_a_file_deleted_after_page_source_load(
     )
     assert upload_response.status_code == 201, upload_response.text
     uploaded = upload_response.json()
-    secret_text = "CONCURRENT-DELETE-SECRET vehicle controller evidence"
+    secret_text = "CONCURRENT-DELETE-SECRET access control evidence"
 
     with get_session_factory()() as db:
         file = db.get(FileManagerFile, uploaded["id"])
@@ -569,7 +569,7 @@ def test_keyword_file_search_drops_a_file_deleted_after_page_source_load(
         response = client.post(
             _FILES_SEARCH_PATH,
             headers=headers,
-            json={"query": "vehicle controller", "strategy": "keyword"},
+            json={"query": "access control", "strategy": "keyword"},
         )
     finally:
         event.remove(get_engine(), "before_cursor_execute", delete_before_extraction_query)
@@ -605,7 +605,7 @@ def test_keyword_file_search_refills_page_after_concurrent_revoke_and_recomputes
             files={
                 "file": (
                     f"concurrent-refill-{index}.txt",
-                    f"vehicle controller evidence {index}".encode(),
+                    f"access control evidence {index}".encode(),
                     "text/plain",
                 )
             },
@@ -619,7 +619,7 @@ def test_keyword_file_search_refills_page_after_concurrent_revoke_and_recomputes
             assert file is not None and workspace is not None
             file.extraction_status = "ready"
             file.extraction_content_checksum = str(index + 1) * 64
-            file.extraction_text = f"vehicle controller evidence {index}"
+            file.extraction_text = f"access control evidence {index}"
             file.extraction_blocks = [{"text": file.extraction_text}]
             file.extraction_metadata = {"parser": "plain_text"}
             db.commit()
@@ -666,7 +666,7 @@ def test_keyword_file_search_refills_page_after_concurrent_revoke_and_recomputes
             _FILES_SEARCH_PATH,
             headers=headers,
             json={
-                "query": "vehicle controller",
+                "query": "access control",
                 "strategy": "keyword",
                 "page": 1,
                 "page_size": 2,
@@ -708,7 +708,7 @@ def test_keyword_file_search_recomputes_has_more_after_off_page_revoke(
             files={
                 "file": (
                     f"concurrent-off-page-{index}.txt",
-                    f"vehicle controller evidence {index}".encode(),
+                    f"access control evidence {index}".encode(),
                     "text/plain",
                 )
             },
@@ -722,7 +722,7 @@ def test_keyword_file_search_recomputes_has_more_after_off_page_revoke(
             assert file is not None and workspace is not None
             file.extraction_status = "ready"
             file.extraction_content_checksum = str(index + 4) * 64
-            file.extraction_text = f"vehicle controller evidence {index}"
+            file.extraction_text = f"access control evidence {index}"
             file.extraction_blocks = [{"text": file.extraction_text}]
             file.extraction_metadata = {"parser": "plain_text"}
             db.commit()
@@ -769,7 +769,7 @@ def test_keyword_file_search_recomputes_has_more_after_off_page_revoke(
             _FILES_SEARCH_PATH,
             headers=headers,
             json={
-                "query": "vehicle controller",
+                "query": "access control",
                 "strategy": "keyword",
                 "page": 1,
                 "page_size": 2,
@@ -818,7 +818,7 @@ def test_keyword_file_search_drops_a_file_moved_after_page_source_load(
     )
     assert upload_response.status_code == 201, upload_response.text
     uploaded = upload_response.json()
-    secret_text = "CONCURRENT-TRANSFER-SECRET vehicle controller evidence"
+    secret_text = "CONCURRENT-TRANSFER-SECRET access control evidence"
 
     with get_session_factory()() as db:
         file = db.get(FileManagerFile, uploaded["id"])
@@ -874,7 +874,7 @@ def test_keyword_file_search_drops_a_file_moved_after_page_source_load(
         response = client.post(
             _FILES_SEARCH_PATH,
             headers=headers,
-            json={"query": "vehicle controller", "strategy": "keyword"},
+            json={"query": "access control", "strategy": "keyword"},
         )
     finally:
         event.remove(get_engine(), "before_cursor_execute", transfer_before_extraction_query)
@@ -995,7 +995,7 @@ def test_file_search_has_more_matches_final_authorized_window_for_each_strategy(
     projections: list[RagProjection] = []
     uploaded_ids: set[str] = set()
     for index, score in enumerate((30.0, 20.0, 10.0)):
-        content = f"common semantic vehicle evidence {index}"
+        content = f"common semantic access evidence {index}"
         upload_response = client.post(
             "/api/v1/workspaces/administrator/files/upload",
             headers=headers,
@@ -1078,7 +1078,7 @@ def test_file_search_has_more_matches_final_authorized_window_for_each_strategy(
             _FILES_SEARCH_PATH,
             headers=headers,
             json={
-                "query": "common semantic vehicle",
+                "query": "common semantic access",
                 "strategy": strategy,
                 "page": 1,
                 "page_size": 2,
@@ -1088,7 +1088,7 @@ def test_file_search_has_more_matches_final_authorized_window_for_each_strategy(
             _FILES_SEARCH_PATH,
             headers=headers,
             json={
-                "query": "common semantic vehicle",
+                "query": "common semantic access",
                 "strategy": strategy,
                 "page": 2,
                 "page_size": 2,
@@ -1255,7 +1255,7 @@ def test_hybrid_file_search_tracks_company_scope_round_trip_without_reindexing(
     corpus_response = client.post(
         "/api/v1/workspaces/administrator/files/corpora",
         headers=headers,
-        json={"name": "Company vehicle corpus"},
+        json={"name": "Company knowledge corpus"},
     )
     assert corpus_response.status_code == 201, corpus_response.text
     corpus = corpus_response.json()
@@ -1266,7 +1266,7 @@ def test_hybrid_file_search_tracks_company_scope_round_trip_without_reindexing(
         files={
             "file": (
                 "thermal-controller.txt",
-                "전장 열관리 제어기 진단 사양".encode(),
+                "서비스 장애 진단 사양".encode(),
                 "text/plain",
             )
         },
@@ -1280,7 +1280,7 @@ def test_hybrid_file_search_tracks_company_scope_round_trip_without_reindexing(
         assert file is not None and workspace is not None
         file.extraction_status = "ready"
         file.extraction_content_checksum = "b" * 64
-        file.extraction_text = "전장 열관리 제어기 진단 사양"
+        file.extraction_text = "서비스 장애 진단 사양"
         file.extraction_blocks = [{"text": file.extraction_text}]
         file.extraction_metadata = {"parser": "plain_text"}
         db.commit()
@@ -1298,16 +1298,16 @@ def test_hybrid_file_search_tracks_company_scope_round_trip_without_reindexing(
             resource_id=file.id,
             source_kind="files",
             title=file.filename,
-            summary="전장 열관리 제어기 진단 사양",
-            text_content="전장 열관리 제어기 진단 사양",
+            summary="서비스 장애 진단 사양",
+            text_content="서비스 장애 진단 사양",
             visibility_refs=[f"workspace:{workspace.id}"],
             metadata={"filename": file.filename, "content_modality": "text"},
             chunks=[
                 RagChunk(
                     chunk_id=f"{file.id}:text:0",
-                    text="전장 열관리 제어기 진단 사양",
+                    text="서비스 장애 진단 사양",
                     summary="열관리 제어기",
-                    index_text="전장 열관리 제어기 진단 사양",
+                    index_text="서비스 장애 진단 사양",
                 )
             ],
         )
@@ -1426,7 +1426,7 @@ def test_workspace_transfer_reuses_projections_and_switches_search_and_download_
     )
     assert corpus_response.status_code == 201, corpus_response.text
     corpus = corpus_response.json()
-    content = "전장 통합 제어기의 절전 복귀 진단 기준"
+    content = "통합 서비스의 장애 복구 진단 기준"
     upload_response = client.post(
         "/api/v1/workspaces/administrator/files/upload",
         headers=source_headers,

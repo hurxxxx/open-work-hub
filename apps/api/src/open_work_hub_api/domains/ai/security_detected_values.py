@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from open_work_hub_api.domains.ai.boundary_safety import detect_external_payload_text_spans
 from open_work_hub_api.domains.ai.models import AiSecurityDetectedValue
 from open_work_hub_api.domains.ai.security_policy import (
-    COMPANY_SENSITIVE_ENTITY_TYPES,
+    SENSITIVE_IDENTIFIER_ENTITY_TYPES,
     CUSTOM_BLOCK_ENTITY_TYPE,
     HARD_EXTERNAL_TRANSFER_BLOCKERS,
     MASK_ELIGIBLE_EXTERNAL_TRANSFER_BLOCKERS,
@@ -204,8 +204,8 @@ def _blocker_type_for_entity(entity_type: str) -> str:
     normalized = _normalize_identifier(entity_type)
     if normalized.startswith("pii:"):
         return "pii"
-    if normalized in COMPANY_SENSITIVE_ENTITY_TYPES:
-        return "company_sensitive_entity"
+    if normalized in SENSITIVE_IDENTIFIER_ENTITY_TYPES:
+        return "sensitive_identifier"
     if normalized in HARD_EXTERNAL_TRANSFER_BLOCKERS:
         return normalized
     if normalized in MASK_ELIGIBLE_EXTERNAL_TRANSFER_BLOCKERS:

@@ -152,7 +152,7 @@ def test_projection_event_participates_in_outer_transaction_rollback(
             record_projection_event(
                 db,
                 resource_type="docs_native_doc",
-                resource_id="qna-rollback",
+                resource_id="doc-rollback",
                 retrieval_partition_id=_PARTITION_ID,
                 change_kind="content",
                 desired_state="active",
@@ -160,11 +160,11 @@ def test_projection_event_participates_in_outer_transaction_rollback(
             raise RuntimeError("rollback projection mutation")
 
     with factory() as db:
-        head = db.get(RetrievalProjectionHead, ("docs_native_doc", "qna-rollback"))
+        head = db.get(RetrievalProjectionHead, ("docs_native_doc", "doc-rollback"))
         events = db.scalars(
             select(RetrievalProjectionEvent).where(
                 RetrievalProjectionEvent.resource_type == "docs_native_doc",
-                RetrievalProjectionEvent.resource_id == "qna-rollback",
+                RetrievalProjectionEvent.resource_id == "doc-rollback",
             )
         ).all()
 

@@ -377,44 +377,6 @@ def test_company_rag_reindex_enqueues_company_scope_jobs(monkeypatch) -> None:
     ]
 
 
-def test_company_rag_reindex_skips_disabled_platform_app_before_provider_io(
-    monkeypatch,
-) -> None:
-    adapter = SimpleNamespace(
-        app_id="docs",
-        resource_type="docs_native_doc",
-        company_resource_ids=lambda db: (_ for _ in ()).throw(
-            AssertionError("disabled Q&A reindex must not enumerate resources")
-        ),
-    )
-    monkeypatch.setattr(
-        rag_application,
-        "company_reindex_resource_adapters",
-        lambda app_ids=None: (adapter,),
-    )
-    monkeypatch.setattr(
-        rag_application,
-        "resolve_platform_enabled_app_ids",
-        lambda db: [],
-    )
-
-    def fail_runtime(*_args, **_kwargs):
-        raise AssertionError("disabled Q&A reindex must not initialize providers")
-
-    monkeypatch.setattr(rag_application, "ensure_default_collection_ready", fail_runtime)
-
-    assert rag_application.enqueue_company_rag_reindex(
-        db=object(),
-        settings=SimpleNamespace(rag_enabled=True),
-        app_ids={"docs"},
-    ) == {
-        "lane": "backfill",
-        "scope_kind": "company",
-        "queued_count": 0,
-        "resource_counts": {},
-    }
-
-
 def test_workspace_rag_sources_expose_official_docs(monkeypatch) -> None:
     class StubPolicy:
         def visible_rag_native_doc_source_kinds(self):
@@ -1084,7 +1046,7 @@ def test_company_rag_filter_requires_source_owned_acl(monkeypatch) -> None:
     post_filter = rag_access_filter.build_company_rag_post_filter(
         SimpleNamespace(),
         user=SimpleNamespace(id="user-1"),
-        source_kinds=["qna"],
+        source_kinds=["docs_native_doc"],
     )
 
     def hit(resource_id: str) -> RagVectorSearchHit:
@@ -1097,7 +1059,7 @@ def test_company_rag_filter_requires_source_owned_acl(monkeypatch) -> None:
                 workspace_id=None,
                 resource_type="docs_native_doc",
                 resource_id=resource_id,
-                source_kind="qna",
+                source_kind="docs_native_doc",
                 visibility_refs=["company_public"],
             ),
         )

@@ -9,13 +9,11 @@ import secrets
 from typing import Any, Literal, get_args
 from zoneinfo import ZoneInfo
 
-from celery.exceptions import CeleryError
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from kombu.exceptions import OperationalError as KombuOperationalError
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic_core import PydanticCustomError
 from sqlalchemy import delete as sa_delete
-from sqlalchemy import String, and_, func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy import update as sa_update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload, selectinload
@@ -161,6 +159,8 @@ from open_work_hub_api.domains.web_search.service import iter_web_search_externa
 
 AdminAppVisibilityScope = Literal["core"]
 APP_BAR_ICON_KEY_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
+
+
 def _invalid_workspace_role_error() -> PydanticCustomError:
     return PydanticCustomError(
         "admin.invalid_workspace_role",
@@ -1836,7 +1836,7 @@ def _ai_security_mandatory_blockers() -> list[str]:
         "credential",
         "internal_url",
         "security_document",
-        "company_sensitive_entity",
+        "sensitive_identifier",
     ]
 
 
@@ -1853,7 +1853,7 @@ def _ai_security_exception_eligible_blockers() -> list[AiSecurityExternalTransfe
     ordered: list[AiSecurityExternalTransferBlocker] = [
         "internal_context",
         "blocking_sensitivity_label",
-        "company_sensitive_entity",
+        "sensitive_identifier",
         "policy_block_external",
         "pii",
         "internal_url",
@@ -1866,7 +1866,7 @@ def _ai_security_exception_eligible_blockers() -> list[AiSecurityExternalTransfe
 
 def _ai_security_mask_eligible_blockers() -> list[AiSecurityExternalTransferBlocker]:
     ordered: list[AiSecurityExternalTransferBlocker] = [
-        "company_sensitive_entity",
+        "sensitive_identifier",
         "pii",
         "internal_url",
         "security_document",
@@ -3462,8 +3462,6 @@ def _build_hourly_access(
     ]
 
 
-
-
 def _build_token_rankings(
     user_items: list[AdminUsageUserItemResponse],
     *,
@@ -3772,9 +3770,7 @@ def _build_usage_dashboard(
     target_scope = _usage_target_scope(db)
     excluded_user_ids = _usage_excluded_user_ids(db)
 
-    user_statement = (
-        select(User).where(User.status != "system")
-    )
+    user_statement = select(User).where(User.status != "system")
     if target_scope.user_ids is not None:
         user_statement = user_statement.where(User.id.in_(target_scope.user_ids))
     if excluded_user_ids:
@@ -4194,12 +4190,6 @@ def _build_usage_dashboard(
         ai_team_summary=ai_team_summary,
         recent_audit_logs=[_serialize_audit_log_item(item) for item in recent_logs],
     )
-
-
-
-
-
-
 
 
 @router.get("/app-visibility", response_model=PlatformAppVisibilityResponse)
@@ -4738,12 +4728,6 @@ def delete_user(
         ) from exc
 
 
-
-
-
-
-
-
 @router.get("/workspaces", response_model=list[WorkspaceItemResponse])
 def list_workspaces(
     include_archived: bool = Query(default=False),
@@ -5122,8 +5106,8 @@ def list_workspace_member_candidates(
     _ensure_workspace_scope(db, context.user, workspace_id, min_role="admin")
 
     normalized_query = q.strip() if q else ""
-    query = select(User).where(User.status.in_(("active", "invited"))).order_by(
-        User.full_name.asc()
+    query = (
+        select(User).where(User.status.in_(("active", "invited"))).order_by(User.full_name.asc())
     )
     if normalized_query:
         search_pattern = f"%{normalized_query}%"
@@ -5283,8 +5267,6 @@ def update_team(
         member_count=len(team.members),
         current_user_role=resolve_team_role(db, context.user, team),
     )
-
-
 
 
 @router.delete("/teams/{team_id}", status_code=status.HTTP_204_NO_CONTENT)

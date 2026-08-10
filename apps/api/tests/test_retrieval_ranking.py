@@ -106,7 +106,7 @@ def test_fused_rerank_receives_keyword_and_vector_evidence() -> None:
         source="generic_rag",
         resource_id="shared",
         score=0.99,
-        excerpt="vehicle heater semantic passage",
+        excerpt="workspace policy semantic passage",
         methods=["semantic", "vector"],
     )
     fused = fuse_ranked_hits({"keyword": [keyword], "generic_rag": [dense]})
@@ -117,7 +117,7 @@ def test_fused_rerank_receives_keyword_and_vector_evidence() -> None:
         def rerank(self, *, query, hits, timeout_seconds):
             del query, timeout_seconds
             assert "SAE J3109 J3174 exact lexical evidence" in hits[0].text
-            assert "vehicle heater semantic passage" in hits[0].text
+            assert "workspace policy semantic passage" in hits[0].text
             return hits
 
     result = rerank_hits(
@@ -190,7 +190,7 @@ def test_identity_keeps_different_resource_types_separate() -> None:
         excerpt="one",
         methods=["bm25"],
     )
-    other_type = base.model_copy(update={"resource_type": "docs_native_doc"})
+    other_type = base.model_copy(update={"resource_type": "file"})
 
     assert canonical_resource_identity(base) != canonical_resource_identity(other_type)
     assert len(dedupe_ranked_hits([base, other_type]).hits) == 2
@@ -447,11 +447,11 @@ def test_grounding_keeps_collision_safe_citation_source_and_fused_provenance(
             }
         ),
         _hit(
-            source="qna",
+            source="generic_rag",
             source_kind="docs_native_doc",
             resource_id="same-id",
             score=0.1,
-            excerpt="qna evidence",
+            excerpt="RAG evidence",
             methods=["vector"],
         ),
     ]
@@ -467,7 +467,7 @@ def test_grounding_keeps_collision_safe_citation_source_and_fused_provenance(
                     RagGroundedCitation(
                         resource_id="same-id",
                         source_kind="docs_native_doc",
-                        quote="qna evidence",
+                        quote="RAG evidence",
                     )
                 ],
             )
@@ -488,5 +488,5 @@ def test_grounding_keeps_collision_safe_citation_source_and_fused_provenance(
     )
 
     assert result.answer is not None
-    assert result.answer.citations[0].source == "qna"
-    assert result.answer.sources_used == ["keyword", "generic_rag", "qna"]
+    assert result.answer.citations[0].source == "generic_rag"
+    assert result.answer.sources_used == ["keyword", "generic_rag"]

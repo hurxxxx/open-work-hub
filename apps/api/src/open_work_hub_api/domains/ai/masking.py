@@ -19,7 +19,7 @@ from open_work_hub_api.domains.ai.security_policy import (
     HARD_EXTERNAL_TRANSFER_BLOCKERS,
     MASK_ELIGIBLE_EXTERNAL_TRANSFER_BLOCKERS,
     POLICY_MASK_AND_SEND_REASON,
-    COMPANY_SENSITIVE_ENTITY_TYPES,
+    SENSITIVE_IDENTIFIER_ENTITY_TYPES,
     UNKNOWN_EXTERNAL_ENTITY_BLOCKER,
     external_transfer_blockers_from_safety,
     hard_external_transfer_blockers,
@@ -238,8 +238,8 @@ def _classify_external_payload_span(span: ExternalPayloadTextSpan) -> PayloadMas
     entity_type = span.entity_type.strip().lower().replace("-", "_")
     if entity_type.startswith("pii:"):
         blocker_type = "pii"
-    elif entity_type in COMPANY_SENSITIVE_ENTITY_TYPES:
-        blocker_type = "company_sensitive_entity"
+    elif entity_type in SENSITIVE_IDENTIFIER_ENTITY_TYPES:
+        blocker_type = "sensitive_identifier"
     elif entity_type in HARD_EXTERNAL_TRANSFER_BLOCKERS:
         blocker_type = entity_type
     elif entity_type in MASK_ELIGIBLE_EXTERNAL_TRANSFER_BLOCKERS:
@@ -297,8 +297,8 @@ def _merged_ranges(spans: list[PayloadMaskSpan]) -> list[tuple[int, int, str]]:
 
 
 def _placeholder_blocker(blocker_type: str) -> str:
-    if blocker_type == "company_sensitive_entity":
-        return "company_sensitive_entity"
+    if blocker_type == "sensitive_identifier":
+        return "sensitive_identifier"
     if blocker_type in {"pii", "internal_url", "security_document", "credential"}:
         return blocker_type
     return "sensitive"
@@ -309,7 +309,7 @@ def _more_restrictive_placeholder(left: str, right: str) -> str:
         "credential": 5,
         "security_document": 4,
         "internal_url": 3,
-        "company_sensitive_entity": 2,
+        "sensitive_identifier": 2,
         "pii": 1,
     }
     return left if order.get(left, 0) >= order.get(right, 0) else right

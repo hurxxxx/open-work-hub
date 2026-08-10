@@ -29,7 +29,7 @@ describe('AI artifact API', () => {
           conversation_turn_id: 'turn-1',
           kind: 'report',
           status: 'completed',
-          title: '결빙 문제 보고서',
+          title: '접속 오류 보고서',
           content_markdown: '# 보고서',
           created_at: '2026-07-26T01:00:00Z',
           completed_at: '2026-07-26T01:01:00Z',
@@ -70,7 +70,7 @@ describe('AI artifact API', () => {
         conversationTurnId: 'turn-1',
         kind: 'report',
         status: 'completed',
-        title: '결빙 문제 보고서',
+        title: '접속 오류 보고서',
         contentMarkdown: '# 보고서',
         createdAt: '2026-07-26T01:00:00Z',
         completedAt: '2026-07-26T01:01:00Z',
@@ -185,12 +185,12 @@ describe('AI artifact API', () => {
         {
           id: 'source-current',
           source_kind: 'query_result',
-          title: '차종별 발생 건수',
+          title: '지역별 발생 건수',
           grid_columns: [
-            { key: 'vehicle', label: '차종' },
+            { key: 'region', label: '지역' },
             { key: 'count', label: '건수' },
           ],
-          grid_rows: [{ vehicle: 'SUV', count: 9 }],
+          grid_rows: [{ region: '서울', count: 9 }],
           row_count: 1,
         },
       ],
@@ -204,10 +204,10 @@ describe('AI artifact API', () => {
 
     expect(sources[0]).toMatchObject({
       columns: [
-        { key: 'vehicle', label: '차종' },
+        { key: 'region', label: '지역' },
         { key: 'count', label: '건수' },
       ],
-      rows: [{ vehicle: 'SUV', count: 9 }],
+      rows: [{ region: '서울', count: 9 }],
       rowCount: 1,
     });
   });

@@ -516,7 +516,7 @@ def test_gateway_global_mask_action_masks_pii_when_no_policy_rule(
         gateway_module,
         "ai_security_data_protection_blocker_actions",
         lambda _db: {
-            "company_sensitive_entity": "block",
+            "sensitive_identifier": "block",
             "internal_url": "block",
             "pii": "mask_and_send",
             "security_document": "block",
@@ -553,7 +553,7 @@ def test_gateway_policy_block_external_does_not_reroute_local(
         gateway_module,
         "ai_security_data_protection_blocker_actions",
         lambda _db: {
-            "company_sensitive_entity": "block",
+            "sensitive_identifier": "block",
             "internal_url": "block",
             "pii": "mask_and_send",
             "security_document": "block",
@@ -587,7 +587,7 @@ def test_gateway_inherit_cannot_override_global_block_action(
         gateway_module,
         "ai_security_data_protection_blocker_actions",
         lambda _db: {
-            "company_sensitive_entity": "block",
+            "sensitive_identifier": "block",
             "internal_url": "block",
             "pii": "block",
             "security_document": "block",

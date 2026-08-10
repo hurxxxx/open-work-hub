@@ -196,7 +196,7 @@ def test_bootstrap_is_resumable_and_does_not_duplicate_current_ready_head(
         monkeypatch.setattr(
             rag_projection,
             "read_file_content",
-            lambda file: f"{file.id} 전장 품질 기준".encode(),
+            lambda file: f"{file.id} 접근 권한 기준".encode(),
         )
 
         first = bootstrap_file_extraction_artifacts(

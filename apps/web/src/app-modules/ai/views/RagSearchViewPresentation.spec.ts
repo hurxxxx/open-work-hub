@@ -38,7 +38,7 @@ describe('RagSearchView presentation', () => {
     const labels = buildSearchEntityLabelMap([
       { id: null, label: 'All' },
       { id: 'doc', label: 'Docs' },
-      { id: 'quality_issue', label: 'Quality issues' },
+      { id: 'project_task', label: 'Project tasks' },
     ]);
 
     expect(
@@ -47,7 +47,7 @@ describe('RagSearchView presentation', () => {
         fallback: 'Search work data.',
         workspaceName: 'Engineering',
       }),
-    ).toBe('Engineering · Docs · Quality issues');
+    ).toBe('Engineering · Docs · Project tasks');
   });
 
   it('keeps an extension entity whose real id is all', () => {

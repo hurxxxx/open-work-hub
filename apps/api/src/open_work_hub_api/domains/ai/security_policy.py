@@ -31,7 +31,7 @@ AiSecurityPolicyEffect = Literal[
 AiSecurityExternalTransferBlocker = Literal[
     "internal_context",
     "blocking_sensitivity_label",
-    "company_sensitive_entity",
+    "sensitive_identifier",
     "policy_block_external",
     "pii",
     "credential",
@@ -63,7 +63,7 @@ _EXTERNAL_TRANSFER_BLOCKERS: frozenset[str] = frozenset(
     {
         "internal_context",
         "blocking_sensitivity_label",
-        "company_sensitive_entity",
+        "sensitive_identifier",
         POLICY_BLOCK_EXTERNAL_BLOCKER,
         "pii",
         "credential",
@@ -77,7 +77,7 @@ EXCEPTION_ELIGIBLE_EXTERNAL_TRANSFER_BLOCKERS: frozenset[str] = frozenset(
     {
         "internal_context",
         "blocking_sensitivity_label",
-        "company_sensitive_entity",
+        "sensitive_identifier",
         POLICY_BLOCK_EXTERNAL_BLOCKER,
         "pii",
         "internal_url",
@@ -93,7 +93,7 @@ HARD_EXTERNAL_TRANSFER_BLOCKERS: frozenset[str] = frozenset(
 )
 MASK_ELIGIBLE_EXTERNAL_TRANSFER_BLOCKERS: frozenset[str] = frozenset(
     {
-        "company_sensitive_entity",
+        "sensitive_identifier",
         "pii",
         "internal_url",
         "security_document",
@@ -101,16 +101,7 @@ MASK_ELIGIBLE_EXTERNAL_TRANSFER_BLOCKERS: frozenset[str] = frozenset(
 )
 _DATA_PROTECTION_ACTIONS: frozenset[str] = frozenset({"block", "mask_and_send"})
 _EXTERNAL_APP_ACTIONS: frozenset[str] = frozenset({"block", "mask_and_send"})
-COMPANY_SENSITIVE_ENTITY_TYPES: frozenset[str] = frozenset(
-    {
-        "order_id",
-        "product_code",
-        "customer",
-        "price",
-        "cost",
-        "contract",
-    }
-)
+SENSITIVE_IDENTIFIER_ENTITY_TYPES: frozenset[str] = frozenset({"internal_identifier"})
 _CONSERVATIVE_EFFECT_RANK: dict[AiSecurityPolicyEffect, int] = {
     "block_external": 5,
     "mask_and_send": 4,
@@ -348,9 +339,7 @@ def resolve_ai_security_policy(
     )
     rules = db.scalars(_matching_rules_statement(resolved_context)).all()
     matches = [
-        match
-        for rule in rules
-        if (match := _match_rule(rule, resolved_context)) is not None
+        match for rule in rules if (match := _match_rule(rule, resolved_context)) is not None
     ]
     matches.sort(
         key=lambda item: (
@@ -429,8 +418,8 @@ def external_transfer_blockers_from_safety(
             or normalized in HARD_EXTERNAL_TRANSFER_BLOCKERS
         ):
             blockers.append(normalized)
-        elif normalized in COMPANY_SENSITIVE_ENTITY_TYPES:
-            blockers.append("company_sensitive_entity")
+        elif normalized in SENSITIVE_IDENTIFIER_ENTITY_TYPES:
+            blockers.append("sensitive_identifier")
         elif normalized:
             blockers.append(UNKNOWN_EXTERNAL_ENTITY_BLOCKER)
     return tuple(normalize_external_transfer_blockers(blockers))
@@ -754,7 +743,7 @@ def _dedupe_terms(values: list[str]) -> list[str]:
 
 __all__ = [
     "AI_SECURITY_LLM_CAPABILITY",
-    "COMPANY_SENSITIVE_ENTITY_TYPES",
+    "SENSITIVE_IDENTIFIER_ENTITY_TYPES",
     "CUSTOM_BLOCK_ENTITY_TYPE",
     "CUSTOM_BLOCK_REASON",
     "DATA_PROTECTION_SETTINGS_ID",

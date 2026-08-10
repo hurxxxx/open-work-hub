@@ -1933,23 +1933,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/search/documents": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Search Documents */
-        post: operations["documents_search_documents_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/docs/items/{item_id}": {
         parameters: {
             query?: never;
@@ -3060,23 +3043,6 @@ export interface paths {
         put?: never;
         /** Route Ocr */
         post: operations["ocr_route_ocr_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/wiki/pages": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Pages */
-        get: operations["wiki_pms_list_pages_get"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -6938,11 +6904,11 @@ export interface components {
             /** Mandatory Blockers */
             mandatory_blockers: string[];
             /** Hard Blockers */
-            hard_blockers: ("internal_context" | "blocking_sensitivity_label" | "company_sensitive_entity" | "policy_block_external" | "pii" | "credential" | "internal_url" | "security_document" | "custom_block_term" | "unknown_external_entity")[];
+            hard_blockers: ("internal_context" | "blocking_sensitivity_label" | "sensitive_identifier" | "policy_block_external" | "pii" | "credential" | "internal_url" | "security_document" | "custom_block_term" | "unknown_external_entity")[];
             /** Exception Eligible Blockers */
-            exception_eligible_blockers: ("internal_context" | "blocking_sensitivity_label" | "company_sensitive_entity" | "policy_block_external" | "pii" | "credential" | "internal_url" | "security_document" | "custom_block_term" | "unknown_external_entity")[];
+            exception_eligible_blockers: ("internal_context" | "blocking_sensitivity_label" | "sensitive_identifier" | "policy_block_external" | "pii" | "credential" | "internal_url" | "security_document" | "custom_block_term" | "unknown_external_entity")[];
             /** Mask Eligible Blockers */
-            mask_eligible_blockers: ("internal_context" | "blocking_sensitivity_label" | "company_sensitive_entity" | "policy_block_external" | "pii" | "credential" | "internal_url" | "security_document" | "custom_block_term" | "unknown_external_entity")[];
+            mask_eligible_blockers: ("internal_context" | "blocking_sensitivity_label" | "sensitive_identifier" | "policy_block_external" | "pii" | "credential" | "internal_url" | "security_document" | "custom_block_term" | "unknown_external_entity")[];
             /** Blocker Actions */
             blocker_actions: {
                 [key: string]: "block" | "mask_and_send";
@@ -7097,7 +7063,7 @@ export interface components {
             /** Provider */
             provider?: string | null;
             /** Allowed Blocker Types */
-            allowed_blocker_types: ("internal_context" | "blocking_sensitivity_label" | "company_sensitive_entity" | "policy_block_external" | "pii" | "credential" | "internal_url" | "security_document" | "custom_block_term" | "unknown_external_entity")[];
+            allowed_blocker_types: ("internal_context" | "blocking_sensitivity_label" | "sensitive_identifier" | "policy_block_external" | "pii" | "credential" | "internal_url" | "security_document" | "custom_block_term" | "unknown_external_entity")[];
             /** Reason */
             reason: string;
             /** Expires At */
@@ -7136,7 +7102,7 @@ export interface components {
             /** Provider */
             provider?: string | null;
             /** Allowed Blocker Types */
-            allowed_blocker_types?: ("internal_context" | "blocking_sensitivity_label" | "company_sensitive_entity" | "policy_block_external" | "pii" | "credential" | "internal_url" | "security_document" | "custom_block_term" | "unknown_external_entity")[];
+            allowed_blocker_types?: ("internal_context" | "blocking_sensitivity_label" | "sensitive_identifier" | "policy_block_external" | "pii" | "credential" | "internal_url" | "security_document" | "custom_block_term" | "unknown_external_entity")[];
             /** Reason */
             reason: string;
             /** Expires At */
@@ -7369,9 +7335,9 @@ export interface components {
             /** Blocked Entity Types */
             blocked_entity_types: string[];
             /** External Transfer Blocker Types */
-            external_transfer_blocker_types: ("internal_context" | "blocking_sensitivity_label" | "company_sensitive_entity" | "policy_block_external" | "pii" | "credential" | "internal_url" | "security_document" | "custom_block_term" | "unknown_external_entity")[];
+            external_transfer_blocker_types: ("internal_context" | "blocking_sensitivity_label" | "sensitive_identifier" | "policy_block_external" | "pii" | "credential" | "internal_url" | "security_document" | "custom_block_term" | "unknown_external_entity")[];
             /** Hard Blocker Types */
-            hard_blocker_types: ("internal_context" | "blocking_sensitivity_label" | "company_sensitive_entity" | "policy_block_external" | "pii" | "credential" | "internal_url" | "security_document" | "custom_block_term" | "unknown_external_entity")[];
+            hard_blocker_types: ("internal_context" | "blocking_sensitivity_label" | "sensitive_identifier" | "policy_block_external" | "pii" | "credential" | "internal_url" | "security_document" | "custom_block_term" | "unknown_external_entity")[];
             /** External Transfer Exception Allowed */
             external_transfer_exception_allowed: boolean;
             /** External Transfer Exception Id */
@@ -10176,28 +10142,6 @@ export interface components {
             /** Count */
             count: number;
         };
-        /** GroundedAnswer */
-        GroundedAnswer: {
-            /** Summary */
-            summary: string;
-            /** Key Points */
-            key_points: string[];
-            /** Citations */
-            citations: components["schemas"]["GroundedAnswerCitation"][];
-            /** Next Actions */
-            next_actions: string[];
-        };
-        /** GroundedAnswerCitation */
-        GroundedAnswerCitation: {
-            /** Document Id */
-            document_id: string;
-            /** Title */
-            title: string;
-            /** Page Reference */
-            page_reference: string;
-            /** Quote */
-            quote: string;
-        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -12700,80 +12644,6 @@ export interface components {
             /** To */
             to?: string | null;
         };
-        /** SearchDocumentHit */
-        SearchDocumentHit: {
-            /** Document Id */
-            document_id: string;
-            /** Title */
-            title: string;
-            /** Summary */
-            summary: string;
-            /** Source Type */
-            source_type: string;
-            /** Score */
-            score: number;
-            /** Updated */
-            updated: string;
-            /** Project */
-            project: string;
-            /** Department */
-            department: string;
-            /** Acl */
-            acl: string;
-            /** Owner */
-            owner: string;
-            /** Page Reference */
-            page_reference: string;
-            /** Citation */
-            citation: string;
-            /** Next Actions */
-            next_actions?: string[];
-        };
-        /** SearchDocumentsFilters */
-        SearchDocumentsFilters: {
-            /** Doc Type */
-            doc_type?: string[];
-            /** Project */
-            project?: string[];
-            /** Department */
-            department?: string[];
-        };
-        /** SearchDocumentsRequest */
-        SearchDocumentsRequest: {
-            /** Query */
-            query: string;
-            filters?: components["schemas"]["SearchDocumentsFilters"];
-            /**
-             * Top K
-             * @default 10
-             */
-            top_k: number;
-            /**
-             * Answer Mode
-             * @default search-only
-             * @enum {string}
-             */
-            answer_mode: "search-only" | "grounded-answer";
-        };
-        /** SearchDocumentsResponse */
-        SearchDocumentsResponse: {
-            /**
-             * Scenario Id
-             * @default documents-demo
-             */
-            scenario_id: string;
-            /**
-             * Query Profile
-             * @default fixture lexical demo
-             */
-            query_profile: string;
-            filters_applied: components["schemas"]["SearchDocumentsFilters"];
-            /** Hits */
-            hits: components["schemas"]["SearchDocumentHit"][];
-            /** Next Actions */
-            next_actions: string[];
-            grounded_answer?: components["schemas"]["GroundedAnswer"] | null;
-        };
         /** SearchFacets */
         SearchFacets: {
             /** Entity Types */
@@ -14370,15 +14240,6 @@ export interface components {
              * @enum {string}
              */
             access_level: "read" | "edit";
-        };
-        /** WikiPage */
-        WikiPage: {
-            /** Page Id */
-            page_id: string;
-            /** Title */
-            title: string;
-            /** Status */
-            status: string;
         };
         /** WorkspaceAppVisibilityItemResponse */
         WorkspaceAppVisibilityItemResponse: {
@@ -21244,57 +21105,6 @@ export interface operations {
             };
         };
     };
-    documents_search_documents_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SearchDocumentsRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SearchDocumentsResponse"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     docs_get_shared_doc_item_get: {
         parameters: {
             query: {
@@ -25934,44 +25744,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    wiki_pms_list_pages_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WikiPage"][];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };

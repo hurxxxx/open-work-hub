@@ -12,7 +12,7 @@ const turns: ChatTurn[] = [
   {
     id: 'turn-1',
     role: 'user',
-    content: '결빙 관련 문제 찾아줘',
+    content: '접속 오류 관련 문제 찾아줘',
   },
 ];
 

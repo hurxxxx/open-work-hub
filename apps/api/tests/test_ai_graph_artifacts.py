@@ -112,7 +112,7 @@ def _run_request(*, inputs: dict | None = None) -> AiGraphRunRequest:
         requested_by_user_id="user-1",
         app_id="docs",
         graph=_linear_spec(),
-        inputs=inputs or {"question": "결빙 문제를 보고해줘"},
+        inputs=inputs or {"question": "접속 오류를 보고해줘"},
         conversation_id="conversation-1",
     )
 
@@ -128,7 +128,7 @@ def _artifact_create(
         owner_user_id="user-1",
         app_id="docs",
         artifact_type=artifact_type,
-        title="결빙 문제 분석",
+        title="접속 오류 분석",
         content_text=content_text,
         payload=payload,
         conversation_id="conversation-1",
@@ -257,7 +257,7 @@ def test_graph_llm_adapter_uses_registered_gateway_only(monkeypatch) -> None:
         adapter_module,
         "resolve_llm_workload",
         lambda _workload_id: SimpleNamespace(
-            workload_id="legacy.report",
+            workload_id="report.generate",
             app_ids=("docs",),
         ),
     )
@@ -265,7 +265,7 @@ def test_graph_llm_adapter_uses_registered_gateway_only(monkeypatch) -> None:
     adapter = AiGatewayGraphAdapter(session_factory=lambda: FakeSession())
     result = adapter.invoke(
         AiGraphLlmRequest(
-            workload_id="legacy.report",
+            workload_id="report.generate",
             app_id="docs",
             workspace_id="workspace-1",
             source="worker.test",
@@ -276,7 +276,7 @@ def test_graph_llm_adapter_uses_registered_gateway_only(monkeypatch) -> None:
 
     assert result.text == "grounded"
     assert result.chosen_pool == "local"
-    assert observed["workload_id"] == "legacy.report"
+    assert observed["workload_id"] == "report.generate"
     assert observed["kwargs"]["agent_run_id"] == "run-1"
     assert observed["committed"] is True
 
@@ -289,7 +289,7 @@ def test_projection_progress_and_bootstrap_input_are_idempotent(
         run = run_repository.create(_run_request())
         AiGraphRunInputRepository(db).create(
             graph_run_id=run.id,
-            payload={"question": "결빙"},
+            payload={"question": "접속 오류"},
             schema_version=1,
         )
         run_repository.transition(run.id, "running")
@@ -300,7 +300,7 @@ def test_projection_progress_and_bootstrap_input_are_idempotent(
         assert run.current_step == 1
         assert run.progress_percent == 50
         assert run.stage == "collect"
-        assert db.get(AiGraphRunInput, run.id).payload_json == {"question": "결빙"}
+        assert db.get(AiGraphRunInput, run.id).payload_json == {"question": "접속 오류"}
         assert len(db.query(AiGraphRunNodeProgress).all()) == 1
 
         run_repository.transition(run.id, "completed")
@@ -318,7 +318,7 @@ def test_dispatch_outbox_can_be_claimed_retried_and_acked(
             run_request=_run_request(),
             pending_artifact=_artifact_create(
                 content_text=None,
-                payload={"request": "결빙 문제를 보고해줘"},
+                payload={"request": "접속 오류를 보고해줘"},
             ),
         )
         db.commit()
@@ -345,9 +345,7 @@ def test_dispatch_outbox_can_be_claimed_retried_and_acked(
         assert prepared.outbox.attempts == 2
 
         completed = AiArtifactRepository(db).create_completed(
-            _artifact_create().model_copy(
-                update={"graph_run_id": prepared.graph_run.id}
-            )
+            _artifact_create().model_copy(update={"graph_run_id": prepared.graph_run.id})
         )
         db.commit()
         assert _artifact_ids_by_run(
@@ -355,9 +353,7 @@ def test_dispatch_outbox_can_be_claimed_retried_and_acked(
             [prepared.graph_run.id],
             workspace_id="workspace-1",
             user_id="user-1",
-        ) == {
-            prepared.graph_run.id: completed.id
-        }
+        ) == {prepared.graph_run.id: completed.id}
 
 
 def test_dispatch_rejects_incoherent_artifact_before_staging_rows(
@@ -377,8 +373,7 @@ def test_dispatch_rejects_incoherent_artifact_before_staging_rows(
         with pytest.raises(
             ValueError,
             match=(
-                "workspace_id, app_id, owner_user_id, conversation_id, "
-                "visibility, graph_run_id"
+                "workspace_id, app_id, owner_user_id, conversation_id, visibility, graph_run_id"
             ),
         ):
             stage_graph_dispatch(
@@ -408,9 +403,7 @@ def test_graph_run_artifact_lookup_enforces_acl_and_prefers_completed_artifact(
             )
         )
         preferred = artifacts.create_completed(
-            _artifact_create().model_copy(
-                update={"graph_run_id": preferred_run.id}
-            )
+            _artifact_create().model_copy(update={"graph_run_id": preferred_run.id})
         )
         artifacts.create_completed(
             _artifact_create().model_copy(
@@ -701,20 +694,14 @@ def test_run_graph_logs_terminal_failure_with_run_context(
 
     assert result.status == "failed"
     assert result.errors == {"graph": "graph_execution.RuntimeError"}
-    record = next(
-        extra
-        for message, extra in log_records
-        if message == "AI graph execution failed"
-    )
+    record = next(extra for message, extra in log_records if message == "AI graph execution failed")
     assert record["graph_run_id"] == result.run_id
     assert record["graph_id"] == "test.report"
     assert record["graph_version"] == "1"
     assert record["error_code"] == "graph_execution.RuntimeError"
     assert record["error_detail"] == "fixture_graph_failure"
     node_record = next(
-        extra
-        for message, extra in log_records
-        if message == "AI graph node execution failed"
+        extra for message, extra in log_records if message == "AI graph node execution failed"
     )
     assert node_record["graph_run_id"] == result.run_id
     assert node_record["node_id"] == "collect"
@@ -831,50 +818,50 @@ def test_artifact_persists_grid_query_lineage_and_becomes_immutable(
                     source_kind="document",
                     source_ref="issue:42",
                     grid_columns=[
-                        {"key": "vehicle", "label": "차종"},
+                        {"key": "status", "label": "상태"},
                         {"key": "count", "label": "건수"},
                     ],
-                    grid_rows=[{"vehicle": "A", "count": 3}],
+                    grid_rows=[{"status": "open", "count": 3}],
                     row_count=1,
                 ),
             ),
             queries=(
                 AiArtifactQueryCreate(
                     query_kind="sql_family",
-                    family_id="issues.by_vehicle",
-                    query_spec={"family": "issues.by_vehicle"},
-                    statement_text="SELECT vehicle, count(*) FROM issues WHERE region = :region",
+                    family_id="issues.by_status",
+                    query_spec={"family": "issues.by_status"},
+                    statement_text=(
+                        "SELECT status, count(*) FROM issues WHERE region = :region GROUP BY status"
+                    ),
                     typed_params={"region": {"type": "string", "value": "중부"}},
                     execution_status="completed",
                     result_schema=[
-                        {"name": "vehicle", "type": "string"},
+                        {"name": "status", "type": "string"},
                         {"name": "count", "type": "integer"},
                     ],
-                    result_rows=[{"vehicle": "A", "count": 3}],
+                    result_rows=[{"status": "open", "count": 3}],
                     row_count=1,
                     duration_ms=14,
                     payload_bytes=31,
                     exactness="exact",
                 ),
             ),
-            index_generations=(
-                AiArtifactIndexGenerationCreate(index_generation_id=generation.id),
-            ),
+            index_generations=(AiArtifactIndexGenerationCreate(index_generation_id=generation.id),),
         )
         db.commit()
         loaded = repository.require(artifact.id, eager=True)
 
         assert re.fullmatch(r"AIR-\d{8}-\d{10}", loaded.artifact_number)
         assert loaded.queries[0].typed_params_json["region"]["value"] == "중부"
-        assert loaded.queries[0].result_rows_json == [{"vehicle": "A", "count": 3}]
-        assert loaded.sources[0].grid_rows_json == [{"vehicle": "A", "count": 3}]
+        assert loaded.queries[0].result_rows_json == [{"status": "open", "count": 3}]
+        assert loaded.sources[0].grid_rows_json == [{"status": "open", "count": 3}]
         assert loaded.index_generations[0].index_generation_id == generation.id
         assert loaded.content_sha256
         query_source = _query_source_response(loaded.queries[0], ordinal=1)
         assert query_source.query_id == loaded.queries[0].id
         assert query_source.source_kind == "sql_query"
-        assert query_source.grid_columns[0]["key"] == "vehicle"
-        assert query_source.grid_rows == [{"vehicle": "A", "count": 3}]
+        assert query_source.grid_columns[0]["key"] == "status"
+        assert query_source.grid_rows == [{"status": "open", "count": 3}]
         with pytest.raises(AiArtifactImmutableError):
             repository.add_source(
                 loaded,
@@ -935,9 +922,7 @@ def test_artifact_visibility_change_requires_completed_owned_artifact(
         repository = AiArtifactRepository(db)
         completed = repository.create_completed(_artifact_create())
         building = repository.create_building(
-            _artifact_create(content_text=None).model_copy(
-                update={"conversation_id": None}
-            )
+            _artifact_create(content_text=None).model_copy(update={"conversation_id": None})
         )
         db.commit()
 

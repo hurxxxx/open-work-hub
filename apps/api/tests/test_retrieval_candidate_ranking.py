@@ -87,16 +87,16 @@ def test_bm25_uses_platform_sparse_terms_and_prioritizes_exact_evidence() -> Non
 
     result = service.rank(
         _request(
-            query="열교환기 냉매 압축기",
+            query="배포 승인 접근 권한",
             candidates=(
                 CandidateDocument(
                     candidate_id="exact",
-                    title="열교환기 냉매 회로",
-                    text="냉매 압축기와 열교환기를 연결한다.",
+                    title="배포 승인 정책",
+                    text="배포 승인과 접근 권한 정책을 연결한다.",
                 ),
                 CandidateDocument(
                     candidate_id="partial",
-                    text="압축기를 제어한다.",
+                    text="배포 절차를 설명한다.",
                 ),
                 CandidateDocument(
                     candidate_id="unrelated",

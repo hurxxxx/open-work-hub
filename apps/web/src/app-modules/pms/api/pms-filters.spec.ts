@@ -29,9 +29,9 @@ describe('pms filter helpers', () => {
     expect(createDefaultTaskFilterParams()).toEqual({
       archived_state: 'active',
     });
-    expect(createDefaultTaskFilterParams({ q: 'compressor' })).toEqual({
+    expect(createDefaultTaskFilterParams({ q: 'deployment' })).toEqual({
       archived_state: 'active',
-      q: 'compressor',
+      q: 'deployment',
     });
   });
 

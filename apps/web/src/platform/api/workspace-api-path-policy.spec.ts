@@ -57,16 +57,13 @@ describe('workspace API path policy', () => {
     ).toBe('/api/v1/workspaces/hq/diagrams/hub');
     expect(
       rewriteWorkspaceApiPathForWorkspace(
-        '/api/v1/search/documents/imports',
+        '/api/v1/search/resources/imports',
         'hq',
       ),
-    ).toBe('/api/v1/workspaces/hq/search/documents/imports');
+    ).toBe('/api/v1/workspaces/hq/search/resources/imports');
     expect(
       rewriteWorkspaceApiPathForWorkspace('/api/v1/connectors/ocr/jobs', 'hq'),
     ).toBe('/api/v1/workspaces/hq/connectors/ocr/jobs');
-    expect(
-      rewriteWorkspaceApiPathForWorkspace('/api/v1/wiki/pages', 'hq'),
-    ).toBe('/api/v1/workspaces/hq/wiki/pages');
     expect(
       rewriteWorkspaceApiPathForWorkspace(
         '/api/v1/web-search/ask/stream',
@@ -94,12 +91,10 @@ describe('workspace API path policy', () => {
         '/api/v1/retrieval',
         '/api/v1/search',
         '/api/v1/web-search',
-        '/api/v1/wiki',
       ]),
     );
     expect(getWorkspaceApiPrefixes()).not.toContain('/api/v1/auth');
     expect(getWorkspaceApiPrefixes()).not.toContain('/api/v1/community');
-    expect(getWorkspaceApiPrefixes()).not.toContain('/api/v1/qna');
   });
 
   it('rewrites new app APIs when their manifest contributes a workspace prefix', () => {
@@ -130,9 +125,6 @@ describe('workspace API path policy', () => {
     expect(
       rewriteWorkspaceApiPathForWorkspace('/api/v1/search-preview/query', 'hq'),
     ).toBe('/api/v1/search-preview/query');
-    expect(
-      rewriteWorkspaceApiPathForWorkspace('/api/v1/wiki-public/pages', 'hq'),
-    ).toBe('/api/v1/wiki-public/pages');
   });
 
   it('preserves intentionally public shared-link endpoints', () => {
@@ -188,8 +180,8 @@ describe('workspace API path policy', () => {
       '/api/v1/auth/me',
     );
     expect(
-      rewriteWorkspaceApiPathForWorkspace('/api/v1/qna/documents', 'hq'),
-    ).toBe('/api/v1/qna/documents');
+      rewriteWorkspaceApiPathForWorkspace('/api/v1/unregistered/items', 'hq'),
+    ).toBe('/api/v1/unregistered/items');
     expect(
       rewriteWorkspaceApiPathForWorkspace('https://api.test/api/v1/docs', 'hq'),
     ).toBe('https://api.test/api/v1/docs');

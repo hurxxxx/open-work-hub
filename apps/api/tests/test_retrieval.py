@@ -182,7 +182,7 @@ def _read_source_matrix() -> dict[str, dict[str, object]]:
     return rows
 
 
-def test_retrieval_source_catalog_exposes_active_and_audited_sources() -> None:
+def test_retrieval_source_catalog_exposes_active_sources() -> None:
     sources = {item.source: item for item in iter_retrieval_source_catalog()}
 
     assert default_sources_for_strategy(RetrievalStrategy.HYBRID) == (
@@ -195,7 +195,6 @@ def test_retrieval_source_catalog_exposes_active_and_audited_sources() -> None:
     )
     assert sources["generic_rag"].active is True
     assert sources["keyword"].active is True
-    assert sources["documents_demo"].active is False
     assert source_catalog_item("missing") is None
 
 
@@ -232,43 +231,6 @@ def test_retrieval_contract_rejects_unknown_request_fields() -> None:
         )
 
 
-def test_unified_document_retrieval_filters_disabled_compressor_modules(
-    monkeypatch,
-) -> None:
-    captured: dict[str, object] = {}
-
-    def fake_search(*args, **kwargs):
-        captured.update(kwargs)
-        return [], SimpleNamespace(methods=())
-
-    monkeypatch.setattr(
-        "open_work_hub_api.domains.docs.ai_search.search_document_evidence",
-        fake_search,
-    )
-    monkeypatch.setattr(
-        retrieval_application,
-        "get_settings",
-        lambda: SimpleNamespace(document_compressor_enabled=False),
-    )
-
-    retrieval_application._search_document_evidence(
-        object(),
-        workspace=SimpleNamespace(id="workspace-1"),
-        request=RetrievalQueryRequest(
-            query="compressor evidence",
-            strategy=RetrievalStrategy.HYBRID,
-            sources=["docs"],
-            top_k=5,
-        ),
-    )
-
-    module_keys = captured["module_keys"]
-    assert "compressor-electric" not in module_keys
-    assert "compressor-mechanical" not in module_keys
-    assert "aircon" in module_keys
-    assert "heat-exchanger" in module_keys
-
-
 def test_retrieval_ai_tools_compile_with_ai_specific_dto() -> None:
     reset_ai_capability_registry()
     try:
@@ -299,7 +261,7 @@ def test_retrieval_ai_tools_compile_with_ai_specific_dto() -> None:
         reset_ai_capability_registry()
 
 
-def test_retrieval_tool_is_discoverable_for_platform_qna_only(monkeypatch) -> None:
+def test_retrieval_tool_is_discoverable_for_platform_docs_only(monkeypatch) -> None:
     monkeypatch.setattr(
         retrieval_tools,
         "get_settings",
@@ -330,10 +292,9 @@ def test_retrieval_rest_routes_expose_sources_and_keyword_query(
     )
     assert sources_response.status_code == 200, sources_response.text
     sources = {item["source"]: item for item in sources_response.json()["sources"]}
-    assert {"generic_rag", "keyword", "qna", "docs"} <= set(sources)
+    assert {"generic_rag", "keyword"} == set(sources)
     assert sources["keyword"]["active"] is True
     assert isinstance(sources["keyword"]["available"], bool)
-    assert sources["qna"]["available"] is True
 
     query_response = client.post(
         _workspace_retrieval_path("delivery-hub", "/query"),
@@ -639,43 +600,10 @@ def test_explicit_source_selection_fails_closed() -> None:
 
     with pytest.raises(HTTPException) as unavailable:
         retrieval_application._resolve_request_sources(
-            RetrievalQueryRequest(query="x", sources=["docs"]),
+            RetrievalQueryRequest(query="x", sources=["generic_rag"]),
             enabled_app_ids=set(),
         )
     assert unavailable.value.status_code == 403
-
-
-def test_disabled_platform_qna_source_stops_before_provider_io(monkeypatch) -> None:
-    monkeypatch.setattr(
-        retrieval_application,
-        "resolve_workspace_runtime_enabled_app_ids",
-        lambda *_args, **_kwargs: [],
-    )
-    monkeypatch.setattr(
-        retrieval_application,
-        "get_settings",
-        lambda: SimpleNamespace(rag_enabled=True),
-    )
-
-    def fail_qna_provider(*_args, **_kwargs):
-        raise AssertionError("disabled Q&A source must not reach provider I/O")
-
-    monkeypatch.setattr(retrieval_application, "_query_qna_rag", fail_qna_provider)
-
-    with pytest.raises(HTTPException) as unavailable:
-        retrieval_application.query_retrieval(
-            object(),
-            workspace=SimpleNamespace(id="workspace-1"),
-            user=SimpleNamespace(id="user-1"),
-            request=RetrievalQueryRequest(
-                query="company policy",
-                strategy="semantic",
-                sources=["qna"],
-            ),
-        )
-
-    assert unavailable.value.status_code == 403
-    assert unavailable.value.detail.code == "retrieval.source_unavailable"
 
 
 def test_explicit_source_runtime_failure_is_service_unavailable(monkeypatch) -> None:

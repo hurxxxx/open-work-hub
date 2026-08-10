@@ -301,8 +301,8 @@ def _validate_folder_membership(db: Session, team_id: str, folder_id: str | None
 def _create_default_labels(db: Session, list_id: str) -> None:
     for name, color in [
         ("blocked", "#b45309"),
-        ("customer", "#1d4ed8"),
-        ("qa", "#0f766e"),
+        ("priority", "#1d4ed8"),
+        ("review", "#0f766e"),
     ]:
         db.add(Label(id=new_id(), list_id=list_id, name=name, color=color))
 
@@ -1695,9 +1695,7 @@ def create_task(
     )
     if task_list.team_id is None:
         raise ValueError("PMS task list must belong to a workspace team")
-    task_workspace_id = db.scalar(
-        select(Team.workspace_id).where(Team.id == task_list.team_id)
-    )
+    task_workspace_id = db.scalar(select(Team.workspace_id).where(Team.id == task_list.team_id))
     if task_workspace_id is None:
         raise ValueError("PMS task list team must belong to a workspace")
     assign_default_partition(

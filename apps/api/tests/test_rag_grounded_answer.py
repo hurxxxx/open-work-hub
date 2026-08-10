@@ -92,7 +92,7 @@ def test_query_service_marks_grounded_answer_as_degraded_when_synthesizer_return
             source_kind="manual",
             title="Budget Review",
             summary="Quarterly budget risk and spending review",
-            text_content="Budget risk increased after supplier repricing.",
+            text_content="Budget risk increased after service repricing.",
             visibility_refs=["workspace:ws-1"],
         ),
         collection="rag-grounded-answer",
@@ -216,7 +216,7 @@ def _llm_synthesizer() -> LlmGroundedAnswerSynthesizer:
         actor_user_id="user-1",
         principal_kind="user",
         principal_id="user-1",
-        source="api.qna.ask",
+        source="api.retrieval.query",
     )
 
 
