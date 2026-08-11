@@ -95,9 +95,7 @@
       }
 
       .hero {
-        background:
-          linear-gradient(110deg, rgba(15, 23, 42, 0.9), rgba(15, 118, 110, 0.78)),
-          url("screenshots/07-list-view.png") center / cover;
+        background: linear-gradient(110deg, #0f172a, #0f766e);
         color: white;
         padding: 72px min(7vw, 88px) 84px;
       }
@@ -202,84 +200,6 @@
 
       .card p {
         margin: 0;
-      }
-
-      .shot {
-        position: relative;
-        display: block;
-        border-bottom: 1px solid var(--line);
-        background: var(--soft);
-        cursor: zoom-in;
-        overflow: hidden;
-      }
-
-      .shot img {
-        display: block;
-        width: 100%;
-        height: auto;
-      }
-
-      .pin {
-        position: absolute;
-        left: var(--x);
-        top: var(--y);
-        z-index: 2;
-        display: inline-flex;
-        align-items: center;
-        gap: 7px;
-        max-width: min(260px, 42%);
-        border: 2px solid #fff;
-        border-radius: 999px;
-        background: rgba(15, 23, 42, 0.92);
-        box-shadow: 0 10px 28px rgba(15, 23, 42, 0.22);
-        color: #fff;
-        font-size: 13px;
-        font-weight: 700;
-        line-height: 1.2;
-        padding: 7px 10px 7px 7px;
-        pointer-events: none;
-      }
-
-      .pin::before {
-        content: attr(data-n);
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 22px;
-        height: 22px;
-        flex: 0 0 22px;
-        border-radius: 50%;
-        background: #3b82f6;
-        color: white;
-        font-size: 12px;
-      }
-
-      .pin.teal::before {
-        background: #0f766e;
-      }
-
-      .pin.amber::before {
-        background: #b45309;
-      }
-
-      .pin.rose::before {
-        background: #e11d48;
-      }
-
-      .pin.line::after {
-        content: "";
-        position: absolute;
-        left: 50%;
-        top: 100%;
-        width: 2px;
-        height: 28px;
-        background: #fff;
-        box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.2);
-      }
-
-      .pin.line-up::after {
-        top: auto;
-        bottom: 100%;
       }
 
       .infographic {
@@ -394,69 +314,6 @@
         font-size: 13px;
       }
 
-      .lightbox {
-        position: fixed;
-        inset: 0;
-        z-index: 20;
-        display: grid;
-        grid-template-rows: auto minmax(0, 1fr) auto;
-        gap: 14px;
-        padding: 24px;
-        background: rgba(15, 23, 42, 0.88);
-      }
-
-      .lightbox[hidden] {
-        display: none;
-      }
-
-      .lightbox-bar {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 16px;
-        color: white;
-      }
-
-      .lightbox-title {
-        margin: 0;
-        font-size: 16px;
-        font-weight: 700;
-      }
-
-      .lightbox-close {
-        border: 1px solid rgba(255, 255, 255, 0.55);
-        border-radius: 8px;
-        background: #fff;
-        color: #0f172a;
-        cursor: pointer;
-        font: inherit;
-        font-size: 14px;
-        font-weight: 700;
-        padding: 9px 14px;
-      }
-
-      .lightbox-close:hover {
-        background: #e2e8f0;
-      }
-
-      .lightbox-image {
-        align-self: center;
-        justify-self: center;
-        max-width: 100%;
-        max-height: 100%;
-        border-radius: 8px;
-        background: white;
-        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.35);
-        object-fit: contain;
-      }
-
-      .lightbox-caption {
-        margin: 0;
-        color: #dbeafe;
-        font-size: 13px;
-        text-align: center;
-      }
-
       @media (max-width: 1040px) {
         .shell {
           display: block;
@@ -488,16 +345,8 @@
           grid-template-columns: 1fr;
         }
 
-        .pin {
-          display: none;
-        }
-
         aside nav {
           grid-template-columns: 1fr;
-        }
-
-        .lightbox {
-          padding: 12px;
         }
       }
     </style>
@@ -543,9 +392,6 @@
 
           <div class="grid">
             <figure class="card wide">
-              <a class="shot" href="screenshots/01-login.png">
-                <img src="screenshots/01-login.png" alt="운영 환경 로그인 화면" />
-              </a>
               <figcaption class="card-body">
                 <h3>로그인 화면</h3>
                 <p>
@@ -555,9 +401,6 @@
             </figure>
 
             <figure class="card">
-              <a class="shot" href="screenshots/02-home-after-login.png">
-                <img src="screenshots/02-home-after-login.png" alt="로그인 후 홈 화면" />
-              </a>
               <figcaption class="card-body">
                 <h3>워크스페이스 홈</h3>
                 <p>
@@ -568,12 +411,6 @@
             </figure>
 
             <figure class="card">
-              <a class="shot" href="screenshots/04-workspace-switcher-and-pms-sidebar.png">
-                <img src="screenshots/04-workspace-switcher-and-pms-sidebar.png" alt="워크스페이스 전환과 PMS 사이드바" />
-                <span class="pin" data-n="1" style="--x: 13%; --y: 9%">워크스페이스</span>
-                <span class="pin teal" data-n="2" style="--x: 23%; --y: 41%">PMS</span>
-                <span class="pin amber" data-n="3" style="--x: 23%; --y: 55%">내 업무</span>
-              </a>
               <figcaption class="card-body">
                 <h3>워크스페이스 전환</h3>
                 <p>
@@ -729,13 +566,6 @@
 
           <div class="grid">
             <figure class="card wide">
-              <a class="shot" href="screenshots/06-space-overview.png">
-                <img src="screenshots/06-space-overview.png" alt="PMS 스페이스 Overview" />
-                <span class="pin line" data-n="1" style="--x: 86%; --y: 5%">새 리스트</span>
-                <span class="pin teal" data-n="2" style="--x: 16%; --y: 30%">최근 항목</span>
-                <span class="pin amber" data-n="3" style="--x: 76%; --y: 27%">멤버 관리</span>
-                <span class="pin rose" data-n="4" style="--x: 16%; --y: 48%">리스트 바로 열기</span>
-              </a>
               <figcaption class="card-body">
                 <h3>스페이스 Overview</h3>
                 <p>
@@ -746,9 +576,6 @@
             </figure>
 
             <figure class="card">
-              <a class="shot" href="screenshots/26-create-list-modal.png">
-                <img src="screenshots/26-create-list-modal.png" alt="새 리스트 생성 모달" />
-              </a>
               <figcaption class="card-body">
                 <h3>새 리스트 만들기</h3>
                 <p>
@@ -759,9 +586,6 @@
             </figure>
 
             <figure class="card">
-              <a class="shot" href="screenshots/27-space-members-modal.png">
-                <img src="screenshots/27-space-members-modal.png" alt="스페이스 멤버 관리 모달" />
-              </a>
               <figcaption class="card-body">
                 <h3>스페이스 멤버 관리</h3>
                 <p>
@@ -790,13 +614,6 @@
 
           <div class="grid">
             <figure class="card wide">
-              <a class="shot" href="screenshots/07-list-view.png">
-                <img src="screenshots/07-list-view.png" alt="PMS 리스트 보기" />
-                <span class="pin line" data-n="1" style="--x: 28%; --y: 9%">보기 탭</span>
-                <span class="pin teal" data-n="2" style="--x: 23%; --y: 15%">검색과 필터</span>
-                <span class="pin amber" data-n="3" style="--x: 84%; --y: 5%">새 태스크</span>
-                <span class="pin rose" data-n="4" style="--x: 52%; --y: 40%">태스크 행</span>
-              </a>
               <figcaption class="card-body">
                 <h3>리스트 보기</h3>
                 <p>
@@ -820,12 +637,6 @@
             </article>
 
             <figure class="card">
-              <a class="shot" href="screenshots/08-new-task-modal.png">
-                <img src="screenshots/08-new-task-modal.png" alt="새 태스크 모달" />
-                <span class="pin line" data-n="1" style="--x: 36%; --y: 40%">태스크 이름</span>
-                <span class="pin teal" data-n="2" style="--x: 37%; --y: 50%">설명 입력</span>
-                <span class="pin amber" data-n="3" style="--x: 54%; --y: 62%">일정 지정</span>
-              </a>
               <figcaption class="card-body">
                 <h3>새 태스크</h3>
                 <p>
@@ -836,9 +647,6 @@
             </figure>
 
             <figure class="card">
-              <a class="shot" href="screenshots/14-search-filter-applied.png">
-                <img src="screenshots/14-search-filter-applied.png" alt="태스크 검색어가 적용된 리스트" />
-              </a>
               <figcaption class="card-body">
                 <h3>검색어로 좁히기</h3>
                 <p>
@@ -861,13 +669,6 @@
 
           <div class="grid">
             <figure class="card wide">
-              <a class="shot" href="screenshots/09-task-detail.png">
-                <img src="screenshots/09-task-detail.png" alt="태스크 상세 화면" />
-                <span class="pin line" data-n="1" style="--x: 29%; --y: 19%">상태</span>
-                <span class="pin teal" data-n="2" style="--x: 55%; --y: 18%">담당자</span>
-                <span class="pin amber" data-n="3" style="--x: 40%; --y: 46%">설명·체크리스트</span>
-                <span class="pin rose" data-n="4" style="--x: 78%; --y: 14%">활동 로그</span>
-              </a>
               <figcaption class="card-body">
                 <h3>상세 화면 전체</h3>
                 <p>
@@ -879,9 +680,6 @@
             </figure>
 
             <figure class="card">
-              <a class="shot" href="screenshots/10-task-assignees-picker.png">
-                <img src="screenshots/10-task-assignees-picker.png" alt="태스크 담당자 선택" />
-              </a>
               <figcaption class="card-body">
                 <h3>담당자와 팔로워</h3>
                 <p>
@@ -892,9 +690,6 @@
             </figure>
 
             <figure class="card">
-              <a class="shot" href="screenshots/11-task-label-picker.png">
-                <img src="screenshots/11-task-label-picker.png" alt="태스크 라벨 선택" />
-              </a>
               <figcaption class="card-body">
                 <h3>라벨 지정</h3>
                 <p>
@@ -905,9 +700,6 @@
             </figure>
 
             <figure class="card wide">
-              <a class="shot" href="screenshots/12-task-doc-picker.png">
-                <img src="screenshots/12-task-doc-picker.png" alt="태스크 문서 연결 모달" />
-              </a>
               <figcaption class="card-body">
                 <h3>Docs 문서 연결</h3>
                 <p>
@@ -931,9 +723,6 @@
 
           <div class="grid">
             <figure class="card">
-              <a class="shot" href="screenshots/16-board-view.png">
-                <img src="screenshots/16-board-view.png" alt="PMS 보드 보기" />
-              </a>
               <figcaption class="card-body">
                 <h3>보드</h3>
                 <p>
@@ -944,9 +733,6 @@
             </figure>
 
             <figure class="card">
-              <a class="shot" href="screenshots/17-table-view.png">
-                <img src="screenshots/17-table-view.png" alt="PMS 테이블 보기" />
-              </a>
               <figcaption class="card-body">
                 <h3>테이블</h3>
                 <p>
@@ -957,9 +743,6 @@
             </figure>
 
             <figure class="card">
-              <a class="shot" href="screenshots/18-calendar-view.png">
-                <img src="screenshots/18-calendar-view.png" alt="PMS 캘린더 보기" />
-              </a>
               <figcaption class="card-body">
                 <h3>캘린더</h3>
                 <p>
@@ -970,9 +753,6 @@
             </figure>
 
             <figure class="card">
-              <a class="shot" href="screenshots/19-gantt-view.png">
-                <img src="screenshots/19-gantt-view.png" alt="PMS 간트 보기" />
-              </a>
               <figcaption class="card-body">
                 <h3>간트</h3>
                 <p>
@@ -983,9 +763,6 @@
             </figure>
 
             <figure class="card wide">
-              <a class="shot" href="screenshots/20-whiteboard-context.png">
-                <img src="screenshots/20-whiteboard-context.png" alt="PMS 화이트보드 연결 화면" />
-              </a>
               <figcaption class="card-body">
                 <h3>화이트보드</h3>
                 <p>
@@ -1008,11 +785,6 @@
 
           <div class="grid">
             <figure class="card">
-              <a class="shot" href="screenshots/13-filter-status-popover.png">
-                <img src="screenshots/13-filter-status-popover.png" alt="상태 필터 팝오버" />
-                <span class="pin line" data-n="1" style="--x: 23%; --y: 15%">상태 필터 열기</span>
-                <span class="pin teal" data-n="2" style="--x: 24%; --y: 26%">상태 선택</span>
-              </a>
               <figcaption class="card-body">
                 <h3>상태 필터</h3>
                 <p>
@@ -1023,12 +795,6 @@
             </figure>
 
             <figure class="card">
-              <a class="shot" href="screenshots/15-bulk-actions.png">
-                <img src="screenshots/15-bulk-actions.png" alt="태스크 선택 후 일괄 작업 막대" />
-                <span class="pin line" data-n="1" style="--x: 9%; --y: 40%">태스크 선택</span>
-                <span class="pin teal" data-n="2" style="--x: 38%; --y: 84%">일괄 변경</span>
-                <span class="pin amber" data-n="3" style="--x: 58%; --y: 84%">보관·삭제</span>
-              </a>
               <figcaption class="card-body">
                 <h3>일괄 작업</h3>
                 <p>
@@ -1056,13 +822,6 @@
 
           <div class="grid">
             <figure class="card wide">
-              <a class="shot" href="screenshots/21-list-settings-workflow.png">
-                <img src="screenshots/21-list-settings-workflow.png" alt="리스트 워크플로 설정" />
-                <span class="pin line" data-n="1" style="--x: 36%; --y: 24%">설정 탭</span>
-                <span class="pin teal" data-n="2" style="--x: 34%; --y: 36%">상속/커스텀</span>
-                <span class="pin amber" data-n="3" style="--x: 62%; --y: 50%">상태 단계</span>
-                <span class="pin rose" data-n="4" style="--x: 67%; --y: 81%">변경 적용</span>
-              </a>
               <figcaption class="card-body">
                 <h3>워크플로 설정</h3>
                 <p>
@@ -1073,9 +832,6 @@
             </figure>
 
             <figure class="card">
-              <a class="shot" href="screenshots/22-list-settings-members.png">
-                <img src="screenshots/22-list-settings-members.png" alt="리스트 멤버 설정" />
-              </a>
               <figcaption class="card-body">
                 <h3>리스트 멤버</h3>
                 <p>
@@ -1086,9 +842,6 @@
             </figure>
 
             <figure class="card">
-              <a class="shot" href="screenshots/23-list-settings-labels.png">
-                <img src="screenshots/23-list-settings-labels.png" alt="리스트 라벨 설정" />
-              </a>
               <figcaption class="card-body">
                 <h3>라벨 설정</h3>
                 <p>
@@ -1111,9 +864,6 @@
 
           <div class="grid">
             <figure class="card">
-              <a class="shot" href="screenshots/24-assigned-to-me.png">
-                <img src="screenshots/24-assigned-to-me.png" alt="내게 배정됨 화면" />
-              </a>
               <figcaption class="card-body">
                 <h3>내게 배정됨</h3>
                 <p>
@@ -1124,9 +874,6 @@
             </figure>
 
             <figure class="card">
-              <a class="shot" href="screenshots/25-today-overdue.png">
-                <img src="screenshots/25-today-overdue.png" alt="오늘 및 지연 화면" />
-              </a>
               <figcaption class="card-body">
                 <h3>오늘 및 지연</h3>
                 <p>
@@ -1181,63 +928,5 @@
         </section>
       </main>
     </div>
-    <div class="lightbox" id="imageLightbox" role="dialog" aria-modal="true" aria-labelledby="lightboxTitle" hidden>
-      <div class="lightbox-bar">
-        <p class="lightbox-title" id="lightboxTitle">스크린샷 확대 보기</p>
-        <button class="lightbox-close" type="button">닫기</button>
-      </div>
-      <img class="lightbox-image" alt="" />
-      <p class="lightbox-caption"></p>
-    </div>
-    <script>
-      (() => {
-        const lightbox = document.querySelector("#imageLightbox");
-        const image = lightbox.querySelector(".lightbox-image");
-        const title = lightbox.querySelector(".lightbox-title");
-        const caption = lightbox.querySelector(".lightbox-caption");
-        const closeButton = lightbox.querySelector(".lightbox-close");
-        let lastActive = null;
-
-        const close = () => {
-          lightbox.hidden = true;
-          image.removeAttribute("src");
-          document.body.style.overflow = "";
-          if (lastActive) {
-            lastActive.focus();
-          }
-        };
-
-        document.querySelectorAll("a.shot").forEach((shot) => {
-          shot.addEventListener("click", (event) => {
-            event.preventDefault();
-            lastActive = document.activeElement;
-            const img = shot.querySelector("img");
-            const figure = shot.closest("figure");
-            const heading = figure?.querySelector("figcaption h3")?.textContent?.trim();
-            const alt = img?.getAttribute("alt") || "스크린샷";
-
-            image.src = shot.href;
-            image.alt = alt;
-            title.textContent = heading || alt;
-            caption.textContent = alt;
-            lightbox.hidden = false;
-            document.body.style.overflow = "hidden";
-            closeButton.focus();
-          });
-        });
-
-        closeButton.addEventListener("click", close);
-        lightbox.addEventListener("click", (event) => {
-          if (event.target === lightbox) {
-            close();
-          }
-        });
-        document.addEventListener("keydown", (event) => {
-          if (event.key === "Escape" && !lightbox.hidden) {
-            close();
-          }
-        });
-      })();
-    </script>
   </body>
 </html>

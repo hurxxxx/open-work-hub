@@ -21,9 +21,6 @@ from open_work_hub_api.domains.retrieval.app_catalog import RETRIEVAL_SEARCH_WOR
 from open_work_hub_api.domains.video_chat.app_catalog import VIDEO_CHAT_WORKSPACE_APP
 from open_work_hub_api.domains.web_search.app_catalog import WEB_SEARCH_WORKSPACE_APPS
 from open_work_hub_api.domains.whiteboard.app_catalog import WHITEBOARD_WORKSPACE_APP
-from open_work_hub_api.domains.writing_assistant.app_catalog import (
-    EMAIL_ASSISTANT_WORKSPACE_APP,
-)
 
 from .home_app_catalog import HOME_WORKSPACE_APP
 
@@ -44,7 +41,6 @@ _WORKSPACE_APP_REGISTRATIONS = (
     VIDEO_CHAT_WORKSPACE_APP,
     RECORDING_WORKSPACE_APP,
     IMAGE_WIZARD_WORKSPACE_APP,
-    EMAIL_ASSISTANT_WORKSPACE_APP,
     RETRIEVAL_SEARCH_WORKSPACE_APP,
 )
 _WORKSPACE_APP_REGISTRY = compile_workspace_app_registry(_WORKSPACE_APP_REGISTRATIONS)

@@ -24,7 +24,11 @@ test('buildLegacyPathPattern detects legacy prod and dev checkouts only at path 
 });
 
 test('findLegacyPathReferences detects legacy prod and dev paths from in-memory files', () => {
-  const files = ['scripts/deploy.sh', 'apps/api/config.py', 'apps/web/src/App.tsx'];
+  const files = [
+    'scripts/deploy.sh',
+    'apps/api/config.py',
+    'apps/web/src/App.tsx',
+  ];
   const sources = new Map([
     ['scripts/deploy.sh', `rsync ${legacyPath('prod')}/releases/current\n`],
     ['apps/api/config.py', `DEV_ROOT = "${legacyPath('dev')}"\n`],
@@ -52,22 +56,28 @@ test('findLegacyPathReferences detects legacy prod and dev paths from in-memory 
   ]);
 });
 
-test('findLegacyPathReferences excludes docs reference paths', () => {
+test('findLegacyPathReferences honors explicit excluded paths', () => {
   const files = [
-    'docs/reference/deploy.md',
-    'docs/reference/nested/deploy.md',
-    'docs/runbook.md',
+    'fixtures/deploy.md',
+    'fixtures/nested/deploy.md',
+    'scripts/deploy.md',
   ];
-  const sources = new Map(files.map((file) => [file, `legacy=${legacyPath('prod')}\n`]));
+  const sources = new Map(
+    files.map((file) => [file, `legacy=${legacyPath('prod')}\n`]),
+  );
 
   const findings = findLegacyPathReferences({
     files,
     readFile: (file) => sources.get(file),
+    excludedPathPrefixes: ['fixtures/'],
   });
 
-  assert.deepEqual(findings.map((finding) => finding.file), ['docs/runbook.md']);
-  assert.equal(isExcludedPath('docs/reference/deploy.md'), true);
-  assert.equal(isExcludedPath('docs/runbook.md'), false);
+  assert.deepEqual(
+    findings.map((finding) => finding.file),
+    ['scripts/deploy.md'],
+  );
+  assert.equal(isExcludedPath('fixtures/deploy.md', ['fixtures/']), true);
+  assert.equal(isExcludedPath('scripts/deploy.md', ['fixtures/']), false);
 });
 
 test('formatPathHardcodingFindings preserves git grep style output', () => {
@@ -77,7 +87,10 @@ test('formatPathHardcodingFindings preserves git grep style output', () => {
     readFile: () => `${lineText}\n`,
   });
 
-  assert.equal(formatPathHardcodingFindings(findings), `scripts/dev.sh:1:${lineText}`);
+  assert.equal(
+    formatPathHardcodingFindings(findings),
+    `scripts/dev.sh:1:${lineText}`,
+  );
 });
 
 test('runCli returns existing quiet success and failure report behavior with injected files', () => {
@@ -86,8 +99,9 @@ test('runCli returns existing quiet success and failure report behavior with inj
 
   assert.equal(
     runCli({
-      files: ['docs/reference/deploy.md'],
+      files: ['fixtures/deploy.md'],
       readFile: () => `ROOT="${legacyPath('prod')}"\n`,
+      excludedPathPrefixes: ['fixtures/'],
       stdout: (message) => stdout.push(message),
       stderr: (message) => stderr.push(message),
     }),
@@ -105,6 +119,8 @@ test('runCli returns existing quiet success and failure report behavior with inj
     }),
     1,
   );
-  assert.deepEqual(stdout, [`apps/api/config.py:1:ROOT="${legacyPath('prod')}"`]);
+  assert.deepEqual(stdout, [
+    `apps/api/config.py:1:ROOT="${legacyPath('prod')}"`,
+  ]);
   assert.deepEqual(stderr, [FAILURE_MESSAGE]);
 });

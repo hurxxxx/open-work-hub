@@ -4,7 +4,6 @@ import sys
 from pathlib import Path
 
 from celery import Celery
-from celery.schedules import crontab
 from celery.signals import after_setup_logger, after_setup_task_logger, celeryd_init
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session

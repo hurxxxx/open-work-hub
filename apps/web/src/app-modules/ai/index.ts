@@ -8,7 +8,6 @@ export {
   aiGlobalRoutes,
   aiWorkspaceRoutes,
   aiToolViewRoutes,
-  emailAssistantToolElement,
   imageWizardToolElement,
   ragSearchToolElement,
 } from './routes';

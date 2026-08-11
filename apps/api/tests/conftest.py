@@ -235,7 +235,6 @@ def _create_native_test_database(template_dsn: str, database: str) -> str:
             )
     _wait_for_postgres(test_dsn)
     _ensure_pgvector_extension(test_dsn)
-    _ensure_ai_analysis_reader_role(test_dsn)
     return test_dsn
 
 
@@ -482,53 +481,6 @@ def _ensure_pgvector_extension_with_native_superuser(dsn: str) -> None:
             "Failed to enable pgvector in the native PostgreSQL test database. "
             "Install/enable the native vector extension for this database; "
             f"psql exited with {result.returncode}: {detail}"
-        )
-
-
-def _ensure_ai_analysis_reader_role(dsn: str) -> None:
-    url = make_url(dsn)
-    app_role = url.username
-    database = url.database
-    if not app_role or not database:
-        raise RuntimeError("Native PostgreSQL test DSN requires user and database.")
-    plain_dsn = dsn.replace("postgresql+psycopg://", "postgresql://", 1)
-    try:
-        with psycopg.connect(plain_dsn) as connection:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    "SELECT pg_has_role(current_user, 'open_work_hub_analysis_reader', 'MEMBER')"
-                )
-                if cursor.fetchone() == (True,):
-                    return
-    except errors.UndefinedObject:
-        pass
-
-    result = subprocess.run(
-        [
-            "sudo",
-            "-n",
-            "-u",
-            "postgres",
-            "psql",
-            "-d",
-            database,
-            "-v",
-            "ON_ERROR_STOP=1",
-            "-v",
-            f"app_role={app_role}",
-            "-q",
-            "-f",
-            str(_workspace_root() / "scripts" / "provision-ai-analysis-reader.sql"),
-        ],
-        check=False,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(
-            "Failed to provision the native AI analysis reader role; "
-            f"psql exited with {result.returncode}: {result.stderr.strip()}"
         )
 
 

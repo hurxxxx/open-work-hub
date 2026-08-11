@@ -241,7 +241,7 @@ def test_admin_ai_security_policy_crud_simulation_and_audit_payload(
             "description": "approved scoped exception",
             "enabled": True,
             "workspace_id": workspace_id,
-            "task_kind": "mail_compose",
+            "task_kind": "mail_reply_draft",
             "capability": "llm",
             "allowed_blocker_types": ["internal_context"],
             "reason": "Approved for a short-lived external summarization workflow.",
@@ -251,14 +251,14 @@ def test_admin_ai_security_policy_crud_simulation_and_audit_payload(
     assert exception_response.status_code == 201, exception_response.text
     exception = exception_response.json()
     assert exception["allowed_blocker_types"] == ["internal_context"]
-    assert exception["task_kinds"] == ["mail_compose"]
+    assert exception["task_kinds"] == ["mail_reply_draft"]
 
     exception_simulation_response = client.post(
         "/api/v1/admin/ai-security/simulate",
         headers=headers,
         json={
             "workspace_id": workspace_id,
-            "task_kind": "mail_compose",
+            "task_kind": "mail_reply_draft",
             "capability": "llm",
             "content_origin": "internal_context",
             "sample_text": "internal context without hard blockers",
@@ -381,12 +381,12 @@ def test_admin_ai_security_monitoring_and_blocked_audit_filter(
                     actor_user_id=actor_id,
                     action="llm_call",
                     entity_kind="llm_task",
-                    entity_id="email-assistant",
+                    entity_id="mail",
                     summary="Local LLM call by routing hint",
                     payload={
                         "status": "ok",
-                        "app_id": "email-assistant",
-                        "task_kind": "mail_compose",
+                        "app_id": "mail",
+                        "task_kind": "mail_reply_draft",
                         "chosen_pool": "local",
                         "forced_local": True,
                         "decision_reason": "local_hint",

@@ -318,7 +318,6 @@ export const resources = {
         'video-chat': '화상채팅',
         whiteboard: '화이트보드',
         'image-wizard': '이미지 위저드',
-        'email-assistant': '메일 작성 도우미',
       },
       appDescriptions: {
         chatbot: '사내 데이터와 도구를 활용하는 대화형 어시스턴트',
@@ -334,14 +333,12 @@ export const resources = {
         community: '전사 커뮤니티 게시판을 확인합니다.',
         'video-chat': '브라우저 기반 화상회의를 실행합니다.',
         'image-wizard': '업무용 이미지를 단계별로 생성합니다.',
-        'email-assistant': '업무 메일 초안을 작성합니다.',
         'web-search': '최신 공개 웹 정보를 검색합니다.',
       },
       nav: {
         chatbot: 'AI 챗봇',
         search: 'Open Work Hub 통합검색',
         'image-wizard': '이미지 위저드',
-        'email-assistant': '메일 작성 도우미',
         'retrieval-search': 'Retrieval 진단 검색',
         'web-search': '웹 검색 봇',
         'docs-all': '전체 문서',
@@ -402,7 +399,6 @@ export const resources = {
         search: '사내 문서를 근거 기반으로 찾는 메인 검색 허브',
         'video-chat-room': 'LiveKit OSS 기반 화상 회의 검증',
         'image-wizard': '인포그래픽이나 업무용 이미지를 위저드 형식으로 생성',
-        'email-assistant': '업무 메일 초안 생성',
         'web-search': '최신 공개 웹 정보 검색',
         'retrieval-search': '통합 retrieval source와 profile 진단',
         'recording-quick': '바로 녹음을 시작하고 원본 음성을 저장',
@@ -1537,10 +1533,8 @@ export const resources = {
               sensitive_identifier: {
                 description:
                   '외부로 전송하면 안 되는 내부 프로젝트나 기밀 문서 식별자를 감지합니다.',
-                examples:
-                  '예: INTERNAL-PROJECT-2400, CONFIDENTIAL-REPORT-12',
-                patterns:
-                  'INTERNAL-* 또는 CONFIDENTIAL-* 형식의 내부 식별자',
+                examples: '예: INTERNAL-PROJECT-2400, CONFIDENTIAL-REPORT-12',
+                patterns: 'INTERNAL-* 또는 CONFIDENTIAL-* 형식의 내부 식별자',
               },
               credential: {
                 description:
@@ -2205,7 +2199,7 @@ export const resources = {
                 appId: '예: chatbot, web-search',
                 capability: '예: llm, web_search',
                 provider: '예: openai, anthropic, gemini',
-                taskKind: '예: mail_compose, web_search_summary',
+                taskKind: '예: mail_reply_draft, web_search_summary',
               },
               removeUser: '{{name}} 선택 해제',
               search: '이름, 적용 대상, 앱, 작업, 기능, 공급자 검색',
@@ -2394,7 +2388,7 @@ export const resources = {
                 provider: '예: openai',
                 sensitivity_labels: '예: confidential, internal',
                 source_kinds: '예: rag, docs, workspace',
-                task_kind: '예: mail_compose',
+                task_kind: '예: mail_reply_draft',
               },
               piiHits: '개인정보 감지',
               privacyFilterStatus: 'Privacy Filter 상태',
@@ -2435,7 +2429,6 @@ export const resources = {
             },
             taskDescriptions: {
               chatbot: '사용자와 대화하는 일반 챗봇 응답입니다.',
-              mail_compose: '업무 메일 작성을 지원합니다.',
               mail_reply_draft: '동기화된 메일에 대한 답장 초안을 작성합니다.',
               mail_summarize: '동기화된 메일 메시지를 요약합니다.',
               meeting_insight_actions: '회의록에서 액션 아이템을 추출합니다.',
@@ -2445,8 +2438,6 @@ export const resources = {
               meeting_summary: '회의 음성/대화 기록을 요약합니다.',
               rag_grounded_answer:
                 '워크스페이스 RAG 검색 결과를 근거로 답변을 생성합니다.',
-              writing_translate:
-                '수정된 한국어 기준문을 대상 언어로 다시 번역합니다.',
             },
           },
           usage: {
@@ -3477,56 +3468,6 @@ export const resources = {
           requestFailed: 'AI 요청에 실패했습니다. ({{status}})',
           streamStartFailed: 'AI 스트리밍을 시작하지 못했습니다. ({{status}})',
           streamFailed: 'AI 스트리밍에 실패했습니다.',
-        },
-        writingAssistant: {
-          resultTitle: '작성 결과',
-          referenceTitle: '한국어 번역 (참고용)',
-          translationPlaceholder:
-            '외국어로 작성하면 한국어 번역이 여기에 표시됩니다.',
-          translationMissing:
-            '이번 결과에는 한국어 번역이 포함되지 않았습니다.',
-          syncing: '동기화 중...',
-          syncHint: '한국어 번역을 수정하면 왼쪽 원문이 자동으로 갱신됩니다.',
-          copy: '복사',
-          copied: '복사됨',
-          langs: { ko: '🇰🇷 한국어', en: '🇺🇸 영어', zh: '🇨🇳 중국어' },
-          errors: {
-            connect: '작성 도우미 API 서버에 연결하지 못했습니다.',
-            requestFailed: '요청에 실패했습니다. ({{status}})',
-            downloadFailed: '다운로드에 실패했습니다.',
-            syncFailed: '원문 갱신(재번역)에 실패했습니다.',
-          },
-        },
-        emailAssistant: {
-          title: '메일 작성 도우미',
-          reset: '초기화',
-          originalLabel: '원본 메일 (선택)',
-          originalPlaceholder:
-            '답장할 원본 메일이 있으면 여기에 붙여넣으세요. (선택사항)',
-          toneLabel: '어투',
-          langLabel: '작성 언어',
-          intentLabel: '어떤 내용을 전달하고 싶나요?',
-          intentPlaceholder:
-            '예) 미팅 일정 조율을 요청, 프로젝트 진행 상황 보고',
-          generate: '메일 자동 작성',
-          generating: '메일을 작성 중입니다...',
-          resultPlaceholder:
-            '전달 내용을 입력하고 작성 버튼을 누르면 메일이 여기에 표시됩니다.',
-          filename: '메일',
-          tones: {
-            polite: '공손',
-            friendly: '친근',
-            formal: '격식',
-            concise: '간결',
-            apologize: '사과',
-            report: '보고',
-            assertive: '단호',
-            technical: '기술',
-          },
-          errors: {
-            empty: '전달할 내용을 입력해주세요.',
-            generateFailed: '메일 생성에 실패했습니다.',
-          },
         },
         view: {
           abandonPending: '취소 중...',
@@ -6131,7 +6072,6 @@ export const resources = {
         'video-chat': 'Video Chat',
         whiteboard: 'Whiteboard',
         'image-wizard': 'Image Wizard',
-        'email-assistant': 'Email Assistant',
       },
       appDescriptions: {
         chatbot: 'Conversational assistant using internal data and tools.',
@@ -6147,14 +6087,12 @@ export const resources = {
         community: 'Open company-wide community boards.',
         'video-chat': 'Run browser-based video meetings.',
         'image-wizard': 'Generate work images step by step.',
-        'email-assistant': 'Draft business emails.',
         'web-search': 'Search current public web information.',
       },
       nav: {
         chatbot: 'AI Chatbot',
         search: 'Open Work Hub Search',
         'image-wizard': 'Image Wizard',
-        'email-assistant': 'Email Assistant',
         'retrieval-search': 'Retrieval Diagnostics',
         'web-search': 'Web Search Bot',
         'docs-all': 'All Docs',
@@ -6216,7 +6154,6 @@ export const resources = {
         'video-chat-room': 'Validate LiveKit OSS video meetings',
         'image-wizard':
           'Generate infographic / business document images via a guided wizard',
-        'email-assistant': 'Draft business emails',
         'web-search': 'Search current public web information',
         'retrieval-search': 'Inspect unified retrieval sources and profiles',
         'recording-quick': 'Start recording quickly and save original audio',
@@ -8052,7 +7989,7 @@ export const resources = {
                 appId: 'e.g. chatbot, web-search',
                 capability: 'e.g. llm, web_search',
                 provider: 'e.g. openai, anthropic, gemini',
-                taskKind: 'e.g. mail_compose, web_search_summary',
+                taskKind: 'e.g. mail_reply_draft, web_search_summary',
               },
               removeUser: 'Remove {{name}}',
               search: 'Search name, scope, app, task, capability, or provider',
@@ -8242,7 +8179,7 @@ export const resources = {
                 provider: 'e.g. openai',
                 sensitivity_labels: 'e.g. confidential, internal',
                 source_kinds: 'e.g. rag, docs, workspace',
-                task_kind: 'e.g. mail_compose',
+                task_kind: 'e.g. mail_reply_draft',
               },
               piiHits: 'PII hits',
               privacyFilterStatus: 'Privacy Filter status',
@@ -8284,7 +8221,6 @@ export const resources = {
             },
             taskDescriptions: {
               chatbot: 'User-facing interactive chat responses.',
-              mail_compose: 'Business email composition assistant.',
               mail_reply_draft: 'Drafts replies for synced mail messages.',
               mail_summarize: 'Summarizes synced mail messages.',
               meeting_insight_actions:
@@ -8296,8 +8232,6 @@ export const resources = {
               meeting_summary: 'Summarizes meeting transcripts.',
               rag_grounded_answer:
                 'Synthesizes answers grounded in workspace RAG results.',
-              writing_translate:
-                'Re-translates edited Korean reference text back to the target language.',
             },
           },
           usage: {
@@ -9340,57 +9274,6 @@ export const resources = {
           requestFailed: 'AI request failed. ({{status}})',
           streamStartFailed: 'Could not start AI streaming. ({{status}})',
           streamFailed: 'The AI stream failed.',
-        },
-        writingAssistant: {
-          resultTitle: 'Result',
-          referenceTitle: 'Korean translation (reference)',
-          translationPlaceholder:
-            'The Korean translation appears here for non-Korean output.',
-          translationMissing:
-            'This result did not include a Korean translation.',
-          syncing: 'Syncing...',
-          syncHint:
-            'Editing the Korean translation auto-updates the document on the left.',
-          copy: 'Copy',
-          copied: 'Copied',
-          langs: { ko: '🇰🇷 Korean', en: '🇺🇸 English', zh: '🇨🇳 Chinese' },
-          errors: {
-            connect: 'Could not connect to the writing assistant API.',
-            requestFailed: 'Request failed. ({{status}})',
-            downloadFailed: 'Download failed.',
-            syncFailed: 'Failed to update the document (re-translation).',
-          },
-        },
-        emailAssistant: {
-          title: 'Email Assistant',
-          reset: 'Reset',
-          originalLabel: 'Original email (optional)',
-          originalPlaceholder:
-            'Paste the email you are replying to here. (optional)',
-          toneLabel: 'Tone',
-          langLabel: 'Language',
-          intentLabel: 'What do you want to convey?',
-          intentPlaceholder:
-            'e.g. Request to coordinate a meeting time; report project progress.',
-          generate: 'Generate email',
-          generating: 'Generating the email...',
-          resultPlaceholder:
-            'Enter your intent and click generate — the email appears here.',
-          filename: 'email',
-          tones: {
-            polite: 'Polite',
-            friendly: 'Friendly',
-            formal: 'Formal',
-            concise: 'Concise',
-            apologize: 'Apologize',
-            report: 'Report',
-            assertive: 'Assertive',
-            technical: 'Technical',
-          },
-          errors: {
-            empty: 'Please enter what you want to convey.',
-            generateFailed: 'Failed to generate the email.',
-          },
         },
         view: {
           abandonPending: 'Cancelling...',

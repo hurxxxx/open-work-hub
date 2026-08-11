@@ -2,7 +2,5 @@ packages:
   - "apps/*"
   - "packages/*"
   - "packages/*/*"
-allowBuilds:
-  electron: true
 minimumReleaseAge: 10080
 trustPolicy: no-downgrade

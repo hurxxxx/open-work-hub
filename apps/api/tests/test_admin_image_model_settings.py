@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import os
-
 from fastapi.testclient import TestClient
 import pytest
 
@@ -11,12 +9,7 @@ from open_work_hub_api.domains.images.cutover import (
     ImageModelCutoverError,
     check_image_model_cutover,
 )
-from open_work_hub_api.domains.images.legacy_model_settings_import import (
-    import_legacy_image_model_settings,
-)
 from open_work_hub_api.domains.images.model_settings_models import (
-    IMAGE_MODEL_PROFILE_ID,
-    ImageModelProfile,
     ImageModelProviderConfig,
 )
 from open_work_hub_api.domains.images.model_settings_service import (
@@ -25,28 +18,6 @@ from open_work_hub_api.domains.images.model_settings_service import (
     resolve_profiled_image_execution,
 )
 from tests.dev_accounts import auth_headers, dev_login
-
-
-LEGACY_IMAGE_ENV_KEYS = (
-    "OPEN_WORK_HUB_IMAGE_PROVIDER",
-    "OPEN_WORK_HUB_IMAGE_API_KEY",
-    "OPEN_WORK_HUB_IMAGE_OPENAI_API_KEY",
-    "OPEN_WORK_HUB_IMAGE_PROVIDER_API_KEYS",
-    "OPEN_WORK_HUB_IMAGE_BASE_URL",
-    "OPEN_WORK_HUB_IMAGE_MODEL",
-    "OPEN_WORK_HUB_IMAGE_SUPERVISOR_MODEL",
-    "OPEN_WORK_HUB_IMAGE_BRIEF_WEB_SEARCH_ENABLED",
-    "OPEN_WORK_HUB_IMAGE_AGENT_WEB_SEARCH_ENABLED",
-    "OPEN_WORK_HUB_IMAGE_AGENT_MAX_ITER",
-)
-
-
-def _legacy_image_environment() -> dict[str, str]:
-    return {
-        field: os.environ[field]
-        for field in LEGACY_IMAGE_ENV_KEYS
-        if field in os.environ
-    }
 
 
 def _execution_profile(**overrides: object) -> dict[str, object]:
@@ -176,92 +147,3 @@ def test_admin_image_model_settings_are_separate_and_secret_free(
             credential_error.value.code
             == "admin.image_model_credential_reference_invalid"
         )
-
-
-def test_legacy_image_settings_import_is_preview_first_and_idempotent(
-    client: TestClient,
-    monkeypatch,
-) -> None:
-    del client
-    for key in LEGACY_IMAGE_ENV_KEYS:
-        monkeypatch.delenv(key, raising=False)
-    monkeypatch.setenv("OPEN_WORK_HUB_IMAGE_PROVIDER", "openai")
-    monkeypatch.setenv("OPEN_WORK_HUB_IMAGE_API_KEY", "legacy-image-secret")
-    monkeypatch.setenv("OPEN_WORK_HUB_IMAGE_MODEL", "legacy-image-model")
-    monkeypatch.setenv("OPEN_WORK_HUB_IMAGE_SUPERVISOR_MODEL", "legacy-supervisor-model")
-    monkeypatch.setenv("OPEN_WORK_HUB_IMAGE_AGENT_MAX_ITER", "6")
-
-    with get_session_factory()() as db:
-        preview = import_legacy_image_model_settings(
-            db,
-            environment=_legacy_image_environment(),
-        )
-        assert preview.mode == "preview"
-        assert preview.provider_created is True
-        assert db.get(ImageModelProviderConfig, "openai") is None
-
-    with get_session_factory()() as db:
-        applied = import_legacy_image_model_settings(
-            db,
-            environment=_legacy_image_environment(),
-            apply=True,
-        )
-        assert applied.mode == "apply"
-        assert applied.credential_imported is True
-
-    with get_session_factory()() as db:
-        row = db.get(ImageModelProviderConfig, "openai")
-        profile = db.get(ImageModelProfile, IMAGE_MODEL_PROFILE_ID)
-        assert row is not None and profile is not None
-        ciphertext = row.api_key_ciphertext
-        assert ciphertext and ciphertext != "legacy-image-secret"
-        assert row.generation_model_id == "legacy-image-model"
-        assert row.supervisor_model_id == "legacy-supervisor-model"
-        assert profile.active_provider_id == "openai"
-        assert profile.max_iterations == 6
-
-    with get_session_factory()() as db:
-        repeated = import_legacy_image_model_settings(
-            db,
-            environment=_legacy_image_environment(),
-            apply=True,
-        )
-        row = db.get(ImageModelProviderConfig, "openai")
-        assert repeated.provider_unchanged is True
-        assert row is not None and row.api_key_ciphertext == ciphertext
-
-
-def test_legacy_image_settings_import_enables_existing_provider_before_activation(
-    client: TestClient,
-    monkeypatch,
-) -> None:
-    del client
-    for key in LEGACY_IMAGE_ENV_KEYS:
-        monkeypatch.delenv(key, raising=False)
-    monkeypatch.setenv("OPEN_WORK_HUB_IMAGE_PROVIDER", "openai")
-    monkeypatch.setenv("OPEN_WORK_HUB_IMAGE_API_KEY", "legacy-image-secret")
-    monkeypatch.setenv("OPEN_WORK_HUB_IMAGE_MODEL", "legacy-image-model")
-    monkeypatch.setenv("OPEN_WORK_HUB_IMAGE_SUPERVISOR_MODEL", "legacy-supervisor-model")
-
-    with get_session_factory()() as db:
-        db.add(
-            ImageModelProviderConfig(
-                provider_id="openai",
-                enabled=False,
-                version=1,
-            )
-        )
-        db.commit()
-
-    with get_session_factory()() as db:
-        result = import_legacy_image_model_settings(
-            db,
-            environment=_legacy_image_environment(),
-            apply=True,
-        )
-        row = db.get(ImageModelProviderConfig, "openai")
-        profile = db.get(ImageModelProfile, IMAGE_MODEL_PROFILE_ID)
-        assert result.provider_updated is True
-        assert result.profile_updated is True
-        assert row is not None and row.enabled is True
-        assert profile is not None and profile.active_provider_id == "openai"

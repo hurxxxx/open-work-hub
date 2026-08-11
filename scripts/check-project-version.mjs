@@ -27,11 +27,6 @@ const checks = [
     label: 'worker package version',
   },
   {
-    file: 'apps/ops/pyproject.toml',
-    pattern: /^version = "([^"]+)"/m,
-    label: 'ops package version',
-  },
-  {
     file: 'apps/api/src/open_work_hub_api/version.py',
     pattern: /^VERSION = "([^"]+)"/m,
     label: 'API runtime version',
@@ -45,11 +40,6 @@ const checks = [
     file: 'apps/worker/uv.lock',
     pattern: /name = "open-work-hub-worker"\nversion = "([^"]+)"/,
     label: 'worker lockfile version',
-  },
-  {
-    file: 'apps/ops/uv.lock',
-    pattern: /name = "open-work-hub-ops"\nversion = "([^"]+)"/,
-    label: 'ops lockfile version',
   },
 ];
 

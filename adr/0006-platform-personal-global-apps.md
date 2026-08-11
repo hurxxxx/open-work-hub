@@ -84,5 +84,4 @@ Platform visibility가 off이면 다음 경계를 모두 차단한다.
 ## Related Decisions
 
 - [ADR 0002](0002-mcp-capability-platform.md): AI capability discoverability와 execution gate
-- [ADR 0003](0003-company-scoped-global-apps.md): company resource의 global route와 RAG scope
 - [ADR 0005](0005-registered-llm-workload.md): Mail/Planner LLM workload 실행 계약

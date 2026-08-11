@@ -67,7 +67,7 @@ Frontend manifest의 `resourceScope`는 데이터 소유권을 나타낸다. 현
 따라서 platform availability인 Community는 company resource이고, Mail·Planner는 personal
 resource다. availability scope와 resource scope를 같은 개념으로 취급하지 않는다.
 
-Core Enablement 단계에서 이 객체를
+플랫폼 composition root에서 이 객체를
 `apps/api/src/open_work_hub_api/domains/auth/workspace_apps.py`의 조합 tuple에 import한다.
 `compile_workspace_app_registry()`는 다음 값을 검증하고 파생한다.
 
@@ -180,10 +180,10 @@ Frontend manifest가 아니라 Backend의 app-owned `SearchEntityAdapter`가 정
    재활성화는 기존 index를 재사용한다.
 
 `SearchEntityAdapter` 선언을 다른 파일에 두거나 저수준 descriptor/projection registry를 앱에서
-직접 호출하면 하네스가 실패한다. Search projection/hook/registration 변경은 Core Platform lane과
-workspace keyword search 계약 테스트가 필요하다.
+직접 호출하면 하네스가 실패한다. Search projection/hook/registration 변경은 관련 플랫폼 계약과
+workspace keyword search 테스트를 함께 검증해야 한다.
 
-검색 Core Enablement 검증은 `test_platform_adapter_registries.py`,
+검색 검증은 `test_platform_adapter_registries.py`,
 `test_workspace_keyword_search_registry.py`, `test_search_index_hooks.py`,
 `test_search_opensearch_client.py`, `test_workspace_bootstrap.py`와 `pnpm check:api-contract`,
 `pnpm check:i18n`을 필수로 포함한다. CRUD integration은 실제 operation 직후에 search processing
@@ -194,7 +194,7 @@ assertion helper를 일치하는 `entity_type`과
 
 ## 새 앱 추가 체크리스트
 
-Core Enablement가 다음 scaffold를 먼저 준비한다.
+새 앱을 추가할 때 다음 기반 계약을 먼저 준비한다.
 
 - Backend `app_catalog.py` registration과 `workspace_apps.py` composition
 - server-side entitlement/access gate, bootstrap projection, icon/i18n 계약
@@ -206,9 +206,7 @@ Core Enablement가 다음 scaffold를 먼저 준비한다.
   backfill/rollback 증거
 
 미완성 scaffold는 `enabled_by_default=False`, `visible_by_default=False`로 독립 배포 가능하게
-둔다. 필요한 protected scaffold가 없다면 App Sandbox 작업을 멈추고 core-enablement brief를
-작성한다. App Sandbox는 준비된 app-owned 경계 안의 UI, service, migration과 focused test만
-구현한다.
+둔다. 필요한 server-side gate와 app-owned 경계가 완성되기 전에는 앱을 노출하지 않는다.
 
 앱을 실제 노출할 때는 다음을 함께 확인한다.
 

@@ -115,8 +115,7 @@ Alembic migration 안에서 대형 source table을 한 transaction으로 전체 
 
 ### 8. 기존 ADR 관계
 
-- ADR 0003 section 4의 `workspace_id`/`company_public` backend scope filter mechanism만 이 ADR의 candidate partition mechanism으로 대체한다.
-- ADR 0003의 company ownership, route, admin 규칙은 유지한다.
+- 기존 `workspace_id`/`company_public` backend scope filter mechanism은 이 ADR의 candidate partition mechanism으로 대체한다.
 - ADR 0004의 backend별 candidate generation과 Retrieval canonical caller-facing 역할은 유지한다.
 - ADR 0004의 backend ACL 문구는 backend coarse ACL hint + source-owned PostgreSQL final authorization으로 구체화한다.
 - ADR 0004의 active-source 정책은 유지한다.

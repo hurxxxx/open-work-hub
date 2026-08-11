@@ -171,7 +171,6 @@ describe('app module registry', () => {
       'whiteboard.main',
       'diagrams.main',
       'image-wizard.main',
-      'email-assistant.main',
       'retrieval-search.main',
     ]);
     const pmsItem = getNavItem('pms-inbox');
@@ -216,10 +215,7 @@ describe('app module registry', () => {
   });
 
   it('derives AI tool surfaces from feature module registrations', () => {
-    expect([...WORKSPACE_AI_TOOL_APP_IDS].sort()).toEqual([
-      'email-assistant',
-      'image-wizard',
-    ]);
+    expect([...WORKSPACE_AI_TOOL_APP_IDS]).toEqual(['image-wizard']);
     expect(WORKSPACE_AI_TOOL_APP_IDS).not.toContain('docs');
     expect(WORKSPACE_AI_TOOL_APP_IDS).not.toContain('retrieval-search');
   });
@@ -229,7 +225,6 @@ describe('app module registry', () => {
       'chatbot',
       'search',
       'image-wizard',
-      'email-assistant',
     ]);
   });
 
@@ -621,7 +616,6 @@ describe('app module registry', () => {
 
   it('exposes nav items through the registry public API', () => {
     expect(getNavItem('search')).toBeNull();
-    expect(getNavItem('email-assistant')?.appId).toBe('business');
     expect(getNavItem('retrieval-search')?.appId).toBe('business');
     expect(getNavItem('pms-tasks-assigned')?.appId).toBe('collaboration');
     expect(getNavItem('missing-tool')).toBeNull();

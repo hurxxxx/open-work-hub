@@ -12,10 +12,9 @@ Celery 기반 background worker다.
 - 검색 색인
 - 초안 export
 
-실행:
+저장소 루트에서 실행:
 
 ```bash
-cd /projects/open-work-hub/dev
 ./dev.sh --with-worker
 ```
 

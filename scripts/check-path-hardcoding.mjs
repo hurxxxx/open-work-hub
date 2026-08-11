@@ -10,9 +10,8 @@ const LEGACY_CHECKOUT_BASE = '/projects/open-work-hub-';
 const DEFAULT_LEGACY_PATHS = ['prod', 'dev'].map(
   (suffix) => `${LEGACY_CHECKOUT_BASE}${suffix}`,
 );
-const DEFAULT_EXCLUDED_PATH_PREFIXES = ['docs/reference/'];
-export const FAILURE_MESSAGE =
-  'Found legacy checkout path references outside excluded reference docs.';
+const DEFAULT_EXCLUDED_PATH_PREFIXES = [];
+export const FAILURE_MESSAGE = 'Found legacy checkout path references.';
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -20,15 +19,22 @@ function escapeRegExp(value) {
 
 export function buildLegacyPathPattern(legacyPaths = DEFAULT_LEGACY_PATHS) {
   if (!legacyPaths.length) {
-    throw new Error('buildLegacyPathPattern requires at least one legacy path.');
+    throw new Error(
+      'buildLegacyPathPattern requires at least one legacy path.',
+    );
   }
 
-  const alternates = legacyPaths.map((legacyPath) => escapeRegExp(legacyPath)).join('|');
+  const alternates = legacyPaths
+    .map((legacyPath) => escapeRegExp(legacyPath))
+    .join('|');
   return new RegExp(`(${alternates})([^A-Za-z0-9_-]|$)`);
 }
 
 function normalizeRepoPath(filePath) {
-  return filePath.replace(/\\/g, '/').replaceAll(path.sep, '/').replace(/^\.\//, '');
+  return filePath
+    .replace(/\\/g, '/')
+    .replaceAll(path.sep, '/')
+    .replace(/^\.\//, '');
 }
 
 export function isExcludedPath(
@@ -44,7 +50,10 @@ export function isExcludedPath(
       : `${normalizedPrefix}/`;
     const directoryPath = directoryPrefix.slice(0, -1);
 
-    return normalizedPath === directoryPath || normalizedPath.startsWith(directoryPrefix);
+    return (
+      normalizedPath === directoryPath ||
+      normalizedPath.startsWith(directoryPrefix)
+    );
   });
 }
 
@@ -112,7 +121,10 @@ function displayPath(filePath, repoRoot) {
   return normalizeRepoPath(filePath);
 }
 
-export function formatPathHardcodingFindings(findings, { repoRoot = null } = {}) {
+export function formatPathHardcodingFindings(
+  findings,
+  { repoRoot = null } = {},
+) {
   return findings
     .map((finding) => {
       const filePath = displayPath(finding.file, repoRoot);
@@ -146,7 +158,8 @@ function runPathHardcodingCheck(repoRoot = process.cwd(), options = {}) {
   const findings = findLegacyPathReferences({
     files: scanFiles,
     readFile,
-    excludedPathPrefixes: options.excludedPathPrefixes ?? DEFAULT_EXCLUDED_PATH_PREFIXES,
+    excludedPathPrefixes:
+      options.excludedPathPrefixes ?? DEFAULT_EXCLUDED_PATH_PREFIXES,
     legacyPaths: options.legacyPaths ?? DEFAULT_LEGACY_PATHS,
   });
 
@@ -166,7 +179,11 @@ export function runCli(options = {}) {
     const result = runPathHardcodingCheck(cwd, options);
 
     if (!result.ok) {
-      stdout(formatPathHardcodingFindings(result.findings, { repoRoot: result.repoRoot }));
+      stdout(
+        formatPathHardcodingFindings(result.findings, {
+          repoRoot: result.repoRoot,
+        }),
+      );
       stderr(FAILURE_MESSAGE);
       return 1;
     }
@@ -178,6 +195,9 @@ export function runCli(options = {}) {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   process.exitCode = runCli();
 }

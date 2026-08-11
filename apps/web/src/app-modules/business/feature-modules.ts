@@ -1,4 +1,3 @@
-import { emailAssistantModule } from '@/src/app-modules/email-assistant';
 import { imageWizardModule } from '@/src/app-modules/image-wizard';
 import { retrievalSearchModule } from '@/src/app-modules/retrieval-search';
 import { compileFeatureModuleRegistry } from '@/src/app/shell/feature-module-registry';
@@ -9,7 +8,6 @@ import { compileFeatureModuleRegistry } from '@/src/app/shell/feature-module-reg
  */
 export const businessFeatureModules = [
   imageWizardModule,
-  emailAssistantModule,
   retrievalSearchModule,
 ] as const;
 

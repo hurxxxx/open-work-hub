@@ -8,10 +8,9 @@ FastAPI 기반의 조립 계층이다. 현재 API는 아래를 제공한다.
 - retrieval/search, 템플릿/초안, 문서, PMS 등 범용 도메인 API
 - 도메인 루트와 local rule 파일
 
-서버 dev checkout 실행:
+저장소 루트에서 개발 서버 실행:
 
 ```bash
-cd /projects/open-work-hub/dev
 ./dev.sh --api-only
 ```
 

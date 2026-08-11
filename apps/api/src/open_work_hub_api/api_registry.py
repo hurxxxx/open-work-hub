@@ -61,7 +61,6 @@ from open_work_hub_api.domains.search.router import router as search_router
 from open_work_hub_api.domains.usage.router import router as usage_router
 from open_work_hub_api.domains.video_chat.router import router as video_chat_router
 from open_work_hub_api.domains.web_search.router import router as web_search_router
-from open_work_hub_api.domains.writing_assistant.router import router as writing_assistant_router
 from open_work_hub_api.domains.whiteboard.router import public_router as whiteboard_public_router
 from open_work_hub_api.domains.whiteboard.router import router as whiteboard_router
 from open_work_hub_api.domains.whiteboard.router import ws_router as whiteboard_ws_router
@@ -162,7 +161,6 @@ def _router_specs() -> list[_RouterSpec]:
         _RouterSpec(web_search_router, "workspace", "workspace"),
         _RouterSpec(mail_router, "api", "protected"),
         _RouterSpec(search_router, "workspace", "workspace"),
-        _RouterSpec(writing_assistant_router, "workspace", "workspace"),
         _RouterSpec(media_router, "api", "protected"),
         _RouterSpec(media_public_router, "api"),
     ]

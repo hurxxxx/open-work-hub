@@ -1,9 +1,4 @@
 .DS_Store
-CLAUDE.local.md
-.claude/settings.local.json
-.claude/state/
-.claude/agent-memory-local/
-.claude/skills/
 node_modules/
 dist/
 apps/**/dist-electron/
@@ -42,7 +37,6 @@ data/
 backups/local/
 samples/
 *.png
-!apps/web/public/open-work-hub-1024x1024.png
 !apps/web/public/android-chrome-192x192.png
 !apps/web/public/android-chrome-512x512.png
 !apps/web/public/apple-touch-icon.png

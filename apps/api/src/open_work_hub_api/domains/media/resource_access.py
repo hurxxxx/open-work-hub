@@ -12,7 +12,6 @@ from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.domains.auth.access import (
     is_platform_admin_user,
     resolve_team_role,
-    resolve_workspace_role,
 )
 from open_work_hub_api.domains.auth.models import Team, User, Workspace
 from open_work_hub_api.domains.docs.models import DocMeetingAccess, NativeDocPage, NativeDocUserShare

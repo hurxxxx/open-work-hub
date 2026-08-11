@@ -91,8 +91,7 @@ Launcher category, 정렬과 개인 pin은 표시 구성일 뿐 접근 권한을
 ## Related Decisions
 
 - [ADR 0002: MCP Capability Platform](0002-mcp-capability-platform.md)
-- [ADR 0003: Company-Scoped Global Apps](0003-company-scoped-global-apps.md)
 - [ADR 0006: Platform and Personal Global Apps](0006-platform-personal-global-apps.md)
 
-ADR 0003과 ADR 0006의 global app 계약은 이 tenant 계층 위에서 유지되며 이 ADR이 두 결정을
-대체하지 않는다.
+ADR 0006의 global app 계약은 이 tenant 계층 위에서 유지되며 이 ADR이 해당 결정을 대체하지
+않는다.

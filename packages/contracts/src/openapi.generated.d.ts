@@ -5466,57 +5466,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/writing-assistant/mail/generate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Generate Mail */
-        post: operations["writing_assistant_generate_mail_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/writing-assistant/translate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Translate */
-        post: operations["writing_assistant_translate_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/writing-assistant/download": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Download */
-        post: operations["writing_assistant_download_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/media/upload": {
         parameters: {
             query?: never;
@@ -9603,22 +9552,6 @@ export interface components {
             /** Index Text Max Chars */
             index_text_max_chars: number;
         };
-        /** DocumentDownloadRequest */
-        DocumentDownloadRequest: {
-            /** Content */
-            content: string;
-            /**
-             * Format
-             * @default txt
-             * @enum {string}
-             */
-            format: "txt" | "docx" | "pdf";
-            /**
-             * Filename
-             * @default 문서
-             */
-            filename: string;
-        };
         /** DocumentKeywordIndexStatusResponse */
         DocumentKeywordIndexStatusResponse: {
             /** Provider */
@@ -10751,31 +10684,6 @@ export interface components {
             text_body?: string | null;
             /** Html Body */
             html_body?: string | null;
-        };
-        /** MailGenerateRequest */
-        MailGenerateRequest: {
-            /**
-             * Intent
-             * @description 전달하고 싶은 내용
-             */
-            intent: string;
-            /**
-             * Original Mail
-             * @default
-             */
-            original_mail: string;
-            /**
-             * Tone
-             * @default polite
-             * @enum {string}
-             */
-            tone: "friendly" | "polite" | "formal" | "concise" | "apologize" | "report" | "assertive" | "technical";
-            /**
-             * Lang
-             * @default ko
-             * @enum {string}
-             */
-            lang: "ko" | "en" | "zh";
         };
         /** MailMessageBodyOut */
         MailMessageBodyOut: {
@@ -13655,20 +13563,6 @@ export interface components {
             /** Result */
             result: unknown;
         };
-        /** TranslateRequest */
-        TranslateRequest: {
-            /**
-             * Source
-             * @description 번역할 한국어 본문
-             */
-            source: string;
-            /**
-             * Target Lang
-             * @default en
-             * @enum {string}
-             */
-            target_lang: "en" | "zh" | "ko";
-        };
         /** UnreadCountResponse */
         UnreadCountResponse: {
             /** Count */
@@ -14631,11 +14525,6 @@ export interface components {
              * @default true
              */
             active: boolean;
-        };
-        /** WritingResult */
-        WritingResult: {
-            /** Result */
-            result: string;
         };
     };
     responses: never;
@@ -35398,159 +35287,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["KeywordSearchResponse"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    writing_assistant_generate_mail_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MailGenerateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WritingResult"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    writing_assistant_translate_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TranslateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WritingResult"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    writing_assistant_download_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["DocumentDownloadRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
                 };
             };
             /** @description Authentication required. */

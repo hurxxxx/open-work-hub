@@ -2228,14 +2228,6 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "이미지가 아직 준비되지 않았습니다.",
         "en-US": "Image is not ready yet.",
     },
-    "writing_assistant.download_render_failed": {
-        "ko-KR": "문서를 생성할 수 없습니다.",
-        "en-US": "Unable to render the document.",
-    },
-    "writing_assistant.app_disabled": {
-        "ko-KR": "이 워크스페이스에서 작성 도우미 앱이 비활성화되어 있습니다.",
-        "en-US": "The writing assistant app is disabled for this workspace.",
-    },
 }
 
 

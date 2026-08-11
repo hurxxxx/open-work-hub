@@ -88,7 +88,7 @@ export function SortableDocLink({
         }),
       );
     },
-    [doc.id, docNavId, navigate, spaceId, suppressClick, workspaceSlug],
+    [doc.id, navigate, spaceId, suppressClick, workspaceSlug],
   );
   return (
     <div

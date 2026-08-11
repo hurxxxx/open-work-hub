@@ -146,21 +146,6 @@ section {
   font-size: 14px;
 }
 
-.shot {
-  position: relative;
-  display: block;
-  border-bottom: 1px solid var(--line);
-  background: var(--soft);
-  cursor: zoom-in;
-  overflow: hidden;
-}
-
-.shot img {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-
 .step-list {
   display: grid;
   gap: 12px;
@@ -237,69 +222,6 @@ code {
   font-size: 13px;
 }
 
-.lightbox {
-  position: fixed;
-  inset: 0;
-  z-index: 20;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 14px;
-  padding: 24px;
-  background: rgba(15, 23, 42, 0.88);
-}
-
-.lightbox[hidden] {
-  display: none;
-}
-
-.lightbox-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  color: white;
-}
-
-.lightbox-title {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 700;
-}
-
-.lightbox-close {
-  border: 1px solid rgba(255, 255, 255, 0.55);
-  border-radius: 8px;
-  background: #fff;
-  color: #0f172a;
-  cursor: pointer;
-  font: inherit;
-  font-size: 14px;
-  font-weight: 700;
-  padding: 9px 14px;
-}
-
-.lightbox-close:hover {
-  background: #e2e8f0;
-}
-
-.lightbox-image {
-  align-self: center;
-  justify-self: center;
-  max-width: 100%;
-  max-height: 100%;
-  border-radius: 8px;
-  background: white;
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.35);
-  object-fit: contain;
-}
-
-.lightbox-caption {
-  margin: 0;
-  color: #dbeafe;
-  font-size: 13px;
-  text-align: center;
-}
-
 @media (max-width: 760px) {
   .hero {
     padding: 40px 20px 44px;
@@ -309,9 +231,5 @@ code {
   .footer {
     padding-left: 20px;
     padding-right: 20px;
-  }
-
-  .lightbox {
-    padding: 12px;
   }
 }

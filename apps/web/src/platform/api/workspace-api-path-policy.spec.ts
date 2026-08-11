@@ -23,12 +23,6 @@ describe('workspace API path policy', () => {
       rewriteWorkspaceApiPathForWorkspace('/api/v1/retrieval/query', 'hq'),
     ).toBe('/api/v1/workspaces/hq/retrieval/query');
     expect(
-      rewriteWorkspaceApiPathForWorkspace(
-        '/api/v1/writing-assistant/jobs',
-        'hq',
-      ),
-    ).toBe('/api/v1/workspaces/hq/writing-assistant/jobs');
-    expect(
       rewriteWorkspaceApiPathForWorkspace('/api/v1/meeting/meetings', 'hq'),
     ).toBe('/api/v1/workspaces/hq/meeting/meetings');
     expect(
@@ -70,12 +64,6 @@ describe('workspace API path policy', () => {
         'hq',
       ),
     ).toBe('/api/v1/workspaces/hq/web-search/ask/stream');
-    expect(
-      rewriteWorkspaceApiPathForWorkspace(
-        '/api/v1/writing-assistant/records',
-        'hq',
-      ),
-    ).toBe('/api/v1/workspaces/hq/writing-assistant/records');
   });
 
   it('collects workspace API prefixes from app manifests and platform route policy', () => {
@@ -87,7 +75,6 @@ describe('workspace API path policy', () => {
         '/api/v1/docs',
         '/api/v1/diagrams',
         '/api/v1/pms',
-        '/api/v1/writing-assistant',
         '/api/v1/retrieval',
         '/api/v1/search',
         '/api/v1/web-search',

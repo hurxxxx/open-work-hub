@@ -10,15 +10,3 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
         description="Interactive chat — user-facing",
         app_ids=("chatbot",),
     )
-    registry.register_llm_task(
-        task_kind="mail_compose",
-        default_policy="local_only",
-        description="Business email composition assistant",
-        app_ids=("email-assistant",),
-    )
-    registry.register_llm_task(
-        task_kind="writing_translate",
-        default_policy="local_only",
-        description="Re-translate edited Korean reference back to the target language",
-        app_ids=("email-assistant",),
-    )

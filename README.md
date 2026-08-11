@@ -9,7 +9,6 @@ one extensible product.
 - `apps/web`: React and Vite web application
 - `apps/api`: FastAPI application and database migrations
 - `apps/worker`: background jobs and asynchronous workflows
-- `apps/ops`: operational APIs and administration tools
 - `packages`: shared contracts, UI components, and web platform code
 - `ops`: container and deployment definitions
 

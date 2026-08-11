@@ -20,18 +20,9 @@ const ImageWizardToolView = lazy(() =>
     default: module.ImageWizardToolView,
   })),
 );
-const EmailAssistantView = lazy(() =>
-  import('./views/EmailAssistantView').then((module) => ({
-    default: module.EmailAssistantView,
-  })),
-);
-
 export const ragSearchToolElement = lazyRoute(createElement(RagSearchView));
 export const imageWizardToolElement = lazyRoute(
   createElement(ImageWizardToolView),
-);
-export const emailAssistantToolElement = lazyRoute(
-  createElement(EmailAssistantView),
 );
 export const aiToolViewRoutes: ToolViewRouteDefinition[] = [
   {
