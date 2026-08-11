@@ -110,6 +110,23 @@ services:
     networks:
       - open-work-hub-prod-infra
 
+  bento:
+    build:
+      context: ../..
+      dockerfile: ops/bento/Dockerfile
+    image: open-work-hub-bento:${OPEN_WORK_HUB_BENTO_IMAGE_TAG:-1.0.17}
+    container_name: open-work-hub-prod-bento
+    restart: unless-stopped
+    ports:
+      - "${OPEN_WORK_HUB_BENTO_BIND_HOST:-127.0.0.1}:${OPEN_WORK_HUB_BENTO_PORT:-18084}:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    networks:
+      - open-work-hub-prod-infra
+
 networks:
   open-work-hub-prod-infra:
     name: open-work-hub-prod-infra

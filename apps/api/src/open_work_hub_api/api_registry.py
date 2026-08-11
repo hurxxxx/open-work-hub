@@ -27,6 +27,7 @@ from open_work_hub_api.domains.auth.dependencies import (
 from open_work_hub_api.domains.auth.router import router as auth_router
 from open_work_hub_api.domains.auth.apps_router import router as apps_router
 from open_work_hub_api.domains.auth.workspace_router import router as workspace_router
+from open_work_hub_api.domains.bento.router import router as bento_router
 from open_work_hub_api.domains.calendar.router import router as calendar_router
 from open_work_hub_api.domains.community.router import router as community_router
 from open_work_hub_api.domains.docs.router import public_router as docs_public_router
@@ -134,6 +135,7 @@ def _router_specs() -> list[_RouterSpec]:
         _RouterSpec(docs_router, "workspace", "workspace"),
         _RouterSpec(whiteboard_public_router, "api", "protected"),
         _RouterSpec(whiteboard_router, "workspace", "workspace"),
+        _RouterSpec(bento_router, "workspace", "workspace"),
         _RouterSpec(diagrams_router, "workspace", "workspace"),
         _RouterSpec(docs_ws_router, "workspace"),
         _RouterSpec(whiteboard_ws_router, "workspace"),

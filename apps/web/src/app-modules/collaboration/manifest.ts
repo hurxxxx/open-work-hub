@@ -4,6 +4,7 @@ import type {
   AppModuleManifest,
   NavItem,
 } from '@/src/app/shell/navigation-types';
+import { bentoManifest } from '@/src/app-modules/bento/manifest';
 import { diagramsManifest } from '@/src/app-modules/diagrams/manifest';
 import { docsManifest } from '@/src/app-modules/docs/manifest';
 import { filesManifest } from '@/src/app-modules/files/manifest';
@@ -22,6 +23,7 @@ const COLLABORATION_FEATURE_MANIFESTS = [
   meetingManifest,
   whiteboardManifest,
   diagramsManifest,
+  bentoManifest,
   recordingManifest,
   videoChatManifest,
 ] as const;

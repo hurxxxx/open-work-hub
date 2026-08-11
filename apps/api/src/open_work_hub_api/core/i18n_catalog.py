@@ -1172,6 +1172,38 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "협업 relay를 사용할 수 없습니다.",
         "en-US": "Collaboration relay unavailable.",
     },
+    "bento.not_found": {
+        "ko-KR": "Bento 프레젠테이션을 찾을 수 없습니다.",
+        "en-US": "Bento presentation not found.",
+    },
+    "bento.manage_access_required": {
+        "ko-KR": "Bento 프레젠테이션 관리 권한이 필요합니다.",
+        "en-US": "Bento presentation manage access required.",
+    },
+    "bento.version_conflict": {
+        "ko-KR": "프레젠테이션이 다른 곳에서 먼저 수정되었습니다. 다시 불러온 뒤 저장하세요.",
+        "en-US": "The presentation was modified elsewhere. Reload it before saving.",
+    },
+    "bento.invalid_document": {
+        "ko-KR": "올바른 bento/slides 문서가 아닙니다.",
+        "en-US": "This is not a valid bento/slides document.",
+    },
+    "bento.invalid_document_title": {
+        "ko-KR": "Bento 문서 제목이 올바르지 않습니다.",
+        "en-US": "The Bento document title is invalid.",
+    },
+    "bento.document_too_large": {
+        "ko-KR": "Bento 문서가 허용 크기를 초과했습니다.",
+        "en-US": "The Bento document exceeds the allowed size.",
+    },
+    "bento.archived": {
+        "ko-KR": "보관된 프레젠테이션은 복원한 뒤 수정할 수 있습니다.",
+        "en-US": "Restore the archived presentation before editing it.",
+    },
+    "bento.archive_before_delete": {
+        "ko-KR": "영구 삭제 전에 프레젠테이션을 먼저 보관해야 합니다.",
+        "en-US": "Archive the presentation before permanent deletion.",
+    },
     "diagrams.not_found": {
         "ko-KR": "다이어그램을 찾을 수 없습니다.",
         "en-US": "Diagram not found.",

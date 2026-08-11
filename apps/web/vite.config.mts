@@ -15,6 +15,9 @@ const webBuildOutDir = '../../dist/apps/web';
 const drawioBrowserUrl =
   process.env.VITE_OPEN_WORK_HUB_DRAWIO_URL ?? process.env.OPEN_WORK_HUB_DRAWIO_SERVER_URL ?? '';
 const drawioBrowserPort = String(process.env.OPEN_WORK_HUB_DRAWIO_PORT ?? 18082);
+const bentoBrowserUrl =
+  process.env.VITE_OPEN_WORK_HUB_BENTO_URL ?? process.env.OPEN_WORK_HUB_BENTO_SERVER_URL ?? '';
+const bentoBrowserPort = String(process.env.OPEN_WORK_HUB_BENTO_PORT ?? 18084);
 const apiProxyTimeoutMs = 0;
 const drawioProxyTimeoutMs = 0;
 const drawioProxyHeaders = {
@@ -32,6 +35,8 @@ export default defineConfig(() => ({
     __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: false,
     'import.meta.env.VITE_OPEN_WORK_HUB_DRAWIO_PORT': JSON.stringify(drawioBrowserPort),
     'import.meta.env.VITE_OPEN_WORK_HUB_DRAWIO_URL': JSON.stringify(drawioBrowserUrl),
+    'import.meta.env.VITE_OPEN_WORK_HUB_BENTO_PORT': JSON.stringify(bentoBrowserPort),
+    'import.meta.env.VITE_OPEN_WORK_HUB_BENTO_URL': JSON.stringify(bentoBrowserUrl),
   },
   server: {
     port: webDevPort,

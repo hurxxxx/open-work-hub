@@ -5,6 +5,7 @@ import {
   businessManifest,
   businessModule,
 } from '@/src/app-modules/business';
+import { bentoManifest } from '@/src/app-modules/bento/manifest';
 import { chatbotManifest } from '@/src/app-modules/chatbot/manifest';
 import {
   collaborationManifest,
@@ -34,6 +35,7 @@ export {
   aiManifest,
   announcementsManifest,
   businessManifest,
+  bentoManifest,
   chatbotManifest,
   collaborationManifest,
   communityManifest,

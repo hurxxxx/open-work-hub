@@ -1,5 +1,7 @@
 import { createElement, type ReactNode } from 'react';
 
+import { bentoWorkspaceRoutes } from '@/src/app-modules/bento';
+
 import {
   docsGlobalRoutes,
   docsToolViewRoutes,
@@ -132,6 +134,7 @@ export const collaborationWorkspaceRoutes: WorkspaceRouteDefinition[] = [
   ...diagramsWorkspaceRoutes.map((route) =>
     rewriteWorkspaceRoute('diagrams', route),
   ),
+  ...bentoWorkspaceRoutes.map((route) => rewriteWorkspaceRoute('bento', route)),
   ...recordingWorkspaceRoutes.map((route) =>
     rewriteWorkspaceRoute('recording', route),
   ),

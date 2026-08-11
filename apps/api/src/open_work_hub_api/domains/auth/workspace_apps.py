@@ -6,6 +6,7 @@ from open_work_hub_api.core.workspace_app_registry import (
     WorkspaceNavCatalogItem,
     compile_workspace_app_registry,
 )
+from open_work_hub_api.domains.bento.app_catalog import BENTO_WORKSPACE_APP
 from open_work_hub_api.domains.community.app_catalog import COMMUNITY_WORKSPACE_APP
 from open_work_hub_api.domains.conversations.app_catalog import CHATBOT_WORKSPACE_APP
 from open_work_hub_api.domains.diagrams.app_catalog import DIAGRAMS_WORKSPACE_APP
@@ -35,6 +36,7 @@ _WORKSPACE_APP_REGISTRATIONS = (
     COMMUNITY_WORKSPACE_APP,
     WHITEBOARD_WORKSPACE_APP,
     DIAGRAMS_WORKSPACE_APP,
+    BENTO_WORKSPACE_APP,
     PLANNER_WORKSPACE_APP,
     MEETING_WORKSPACE_APP,
     VIDEO_CHAT_WORKSPACE_APP,

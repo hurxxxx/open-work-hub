@@ -32,7 +32,7 @@ case "$COMMAND" in
     fi
 
     dev_render_nginx_conf
-    services=(redis opensearch qdrant nginx)
+    services=(redis opensearch qdrant bento nginx)
     if dev_use_local_postgres; then
       services=(postgres "${services[@]}")
     fi

@@ -14,6 +14,7 @@
 
 ## 앱별 문서
 
+- [bento/slides](apps/bento/README.md)
 - [Diagrams](apps/diagrams/README.md)
 - [PMS](apps/pms/README.md)
 

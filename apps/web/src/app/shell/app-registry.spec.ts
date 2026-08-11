@@ -128,6 +128,12 @@ describe('app module registry', () => {
     ).toContain('/w/:workspaceSlug/docs');
     expect(
       getAppModuleWorkspaceRoutes('collaboration').map((route) => route.path),
+    ).toContain('/w/:workspaceSlug/bento');
+    expect(
+      getAppModuleWorkspaceRoutes('collaboration').map((route) => route.path),
+    ).toContain('/w/:workspaceSlug/bento/:documentId');
+    expect(
+      getAppModuleWorkspaceRoutes('collaboration').map((route) => route.path),
     ).toContain('/w/:workspaceSlug/pms/lists/:taskListId');
     expect(
       getAppModuleWorkspaceRoutes('business').map((route) => route.path),

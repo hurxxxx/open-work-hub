@@ -361,5 +361,21 @@ def test_canonical_workspace_registry_exposes_all_composed_apps_by_identity() ->
     assert get_workspace_app_catalog_item("unknown-app") is None
 
 
+def test_bento_catalog_exposes_workspace_document_hub() -> None:
+    app = get_workspace_app_catalog_item("bento")
+
+    assert app is not None
+    assert app.route_base == "/bento"
+    assert app.icon_key == "presentation"
+    assert app.enabled_by_default is True
+    assert app.visible_by_default is True
+    assert app.launcher_category is True
+    assert [item.id for item in app.nav_items] == [
+        "bento-all",
+        "bento-mine",
+        "bento-archived",
+    ]
+
+
 def test_personal_tools_apps_are_removed_from_pinned_preferences() -> None:
     assert normalize_app_bar_pinned_app_ids(["mail", "docs", "planner"]) == ["docs"]

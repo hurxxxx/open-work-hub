@@ -11,6 +11,7 @@ def import_all_models() -> None:
     from open_work_hub_api.domains.ai_graph import models as ai_graph_models  # noqa: F401
     from open_work_hub_api.domains.announcements import models as announcements_models  # noqa: F401
     from open_work_hub_api.domains.auth import models as auth_models  # noqa: F401
+    from open_work_hub_api.domains.bento import models as bento_models  # noqa: F401
     from open_work_hub_api.domains.community import models as community_models  # noqa: F401
     from open_work_hub_api.domains.conversations import (  # noqa: F401
         models as conversations_models,
