@@ -23,8 +23,8 @@ function item(
 ): BackgroundWorkItem {
   return {
     id,
-    sourceId: 'images',
-    kind: 'image-generation',
+    sourceId: 'exports',
+    kind: 'report-export',
     title: id,
     status,
     updatedAt,
@@ -59,13 +59,13 @@ describe('background-work-session', () => {
     } as unknown as BackgroundWorkSource;
     const sources: BackgroundWorkSource[] = [
       {
-        appId: 'image-wizard',
-        id: 'image-wizard',
-        requiredNavItemId: 'image-wizard',
+        appId: 'reports',
+        id: 'report-export',
+        requiredNavItemId: 'report-export',
         list: async () => [],
       },
       {
-        appId: 'image-wizard',
+        appId: 'reports',
         id: 'disabled-tool',
         requiredNavItemId: 'disabled-tool',
         list: async () => [],
@@ -76,10 +76,10 @@ describe('background-work-session', () => {
 
     expect(
       filterBackgroundWorkSourcesForWorkspace(sources, {
-        enabledAppIds: ['image-wizard'],
-        enabledNavItemIds: ['image-wizard'],
+        enabledAppIds: ['reports'],
+        enabledNavItemIds: ['report-export'],
       }).map((source) => source.id),
-    ).toEqual(['image-wizard']);
+    ).toEqual(['report-export']);
   });
 
   it('selects active items sorted by most recently updated first', () => {
@@ -93,8 +93,8 @@ describe('background-work-session', () => {
   });
 
   it('emits terminal toast events only when an active item finishes', () => {
-    const running = item('generation-1', 'running', '2026-05-31T09:00:00.000Z');
-    const failed = item('generation-1', 'failed', '2026-05-31T09:01:00.000Z', {
+    const running = item('export-1', 'running', '2026-05-31T09:00:00.000Z');
+    const failed = item('export-1', 'failed', '2026-05-31T09:01:00.000Z', {
       description: 'Prompt rejected',
     });
     const snapshot = buildBackgroundWorkSessionSnapshot({
@@ -104,7 +104,7 @@ describe('background-work-session', () => {
       ],
       previousStatuses: new Map([
         [backgroundWorkItemKey(running), running.status],
-        ['images:already-done', 'succeeded'],
+        ['exports:already-done', 'succeeded'],
       ]),
       cadence: { activePollIntervalMs: 1000, idlePollIntervalMs: 9000 },
     });
@@ -112,23 +112,19 @@ describe('background-work-session', () => {
     expect(snapshot.toastEvents).toEqual([{ type: 'failed', item: failed }]);
     expect(snapshot.nextPollDelayMs).toBe(9000);
     expect([...snapshot.nextStatuses.entries()]).toEqual([
-      ['images:generation-1', 'failed'],
-      ['images:already-done', 'succeeded'],
+      ['exports:export-1', 'failed'],
+      ['exports:already-done', 'succeeded'],
     ]);
   });
 
   it('keeps last-known source items when a source list call fails', () => {
-    const running = item('generation-1', 'running', '2026-05-31T09:00:00.000Z');
-    const completed = item(
-      'generation-1',
-      'succeeded',
-      '2026-05-31T09:01:00.000Z',
-    );
-    const previousItemsBySource = new Map([['images', [running]]]);
+    const running = item('export-1', 'running', '2026-05-31T09:00:00.000Z');
+    const completed = item('export-1', 'succeeded', '2026-05-31T09:01:00.000Z');
+    const previousItemsBySource = new Map([['exports', [running]]]);
     const failedRefresh = mergeBackgroundWorkSourceListResults({
       previousItemsBySource,
       settled: [{ status: 'rejected', reason: new Error('temporary outage') }],
-      sources: [{ id: 'images' }],
+      sources: [{ id: 'exports' }],
     });
 
     expect(failedRefresh.items).toEqual([running]);
@@ -146,7 +142,7 @@ describe('background-work-session', () => {
     const recoveredRefresh = mergeBackgroundWorkSourceListResults({
       previousItemsBySource: failedRefresh.itemsBySource,
       settled: [{ status: 'fulfilled', value: [completed] }],
-      sources: [{ id: 'images' }],
+      sources: [{ id: 'exports' }],
     });
     const recoveredSnapshot = buildBackgroundWorkSessionSnapshot({
       items: recoveredRefresh.items,
@@ -175,14 +171,14 @@ describe('background-work-session', () => {
   });
 
   it('adds and removes cancelling keys without mutating the current set', () => {
-    const target = item('generation-1', 'running', '2026-05-31T09:00:00.000Z');
-    const current = new Set(['images:other']);
+    const target = item('export-1', 'running', '2026-05-31T09:00:00.000Z');
+    const current = new Set(['exports:other']);
 
     const added = addCancellingBackgroundWorkKey(current, target);
     const removed = removeCancellingBackgroundWorkKey(added, target);
 
-    expect([...current]).toEqual(['images:other']);
-    expect([...added].sort()).toEqual(['images:generation-1', 'images:other']);
-    expect([...removed]).toEqual(['images:other']);
+    expect([...current]).toEqual(['exports:other']);
+    expect([...added].sort()).toEqual(['exports:export-1', 'exports:other']);
+    expect([...removed]).toEqual(['exports:other']);
   });
 });

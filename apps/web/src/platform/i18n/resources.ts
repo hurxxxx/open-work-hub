@@ -204,8 +204,6 @@ export const resources = {
         adminSectionDenied:
           '현재 계정에는 이 관리자 섹션을 볼 권한이 없습니다.',
         appDisabled: '현재 workspace에서는 이 앱이 활성화되어 있지 않습니다.',
-        imageWizardDisabled:
-          '현재 워크스페이스에서는 이미지 위저드를 사용할 수 없습니다.',
         noAccessibleWorkspace:
           '워크스페이스 초대를 기다리는 중입니다. 워크스페이스 관리자에게 초대를 요청해 주세요.',
         toolWorkspaceDenied:
@@ -317,7 +315,6 @@ export const resources = {
         settings: '설정',
         'video-chat': '화상채팅',
         whiteboard: '화이트보드',
-        'image-wizard': '이미지 위저드',
       },
       appDescriptions: {
         chatbot: '사내 데이터와 도구를 활용하는 대화형 어시스턴트',
@@ -332,13 +329,11 @@ export const resources = {
         recording: '녹음과 후속 처리 상태를 관리합니다.',
         community: '전사 커뮤니티 게시판을 확인합니다.',
         'video-chat': '브라우저 기반 화상회의를 실행합니다.',
-        'image-wizard': '업무용 이미지를 단계별로 생성합니다.',
         'web-search': '최신 공개 웹 정보를 검색합니다.',
       },
       nav: {
         chatbot: 'AI 챗봇',
         search: 'Open Work Hub 통합검색',
-        'image-wizard': '이미지 위저드',
         'retrieval-search': 'Retrieval 진단 검색',
         'web-search': '웹 검색 봇',
         'docs-all': '전체 문서',
@@ -398,7 +393,6 @@ export const resources = {
         chatbot: '사내 데이터와 도구를 활용하는 대화형 어시스턴트',
         search: '사내 문서를 근거 기반으로 찾는 메인 검색 허브',
         'video-chat-room': 'LiveKit OSS 기반 화상 회의 검증',
-        'image-wizard': '인포그래픽이나 업무용 이미지를 위저드 형식으로 생성',
         'web-search': '최신 공개 웹 정보 검색',
         'retrieval-search': '통합 retrieval source와 profile 진단',
         'recording-quick': '바로 녹음을 시작하고 원본 음성을 저장',
@@ -1384,65 +1378,9 @@ export const resources = {
               title: 'LLM 라우팅',
             },
             tabs: {
-              images: '이미지 모델',
               models: '모델 카탈로그',
               providers: 'LLM Provider',
               routing: 'LLM 라우팅',
-            },
-          },
-          imageModels: {
-            conflict:
-              '다른 관리자가 이미지 모델 설정을 변경했습니다. 최신 설정을 다시 불러왔습니다.',
-            deploymentDisabled:
-              '배포 환경의 이미지 생성 기능이 비활성화되어 있습니다. 설정을 저장할 수 있지만 실행되지는 않습니다.',
-            emptyDescription: '등록된 이미지 모델 제공자 설정이 없습니다.',
-            emptyTitle: '이미지 모델 설정 없음',
-            loadFailed: '이미지 모델 설정을 불러오지 못했습니다.',
-            loadingDescription: '이미지 생성 제공자와 모델 설정을 불러옵니다.',
-            loadingTitle: '이미지 모델 설정 불러오는 중',
-            provider: {
-              apiKey: 'API 키',
-              apiKeyMissing: 'API 키를 입력하세요',
-              apiKeyStored: '저장된 키를 유지하려면 비워 두세요',
-              clearApiKey: '저장된 API 키 삭제',
-              description:
-                '이미지 제공자 연결과 supervisor/generation 모델을 명시적으로 설정합니다.',
-              enabled: '이 제공자 사용 허용',
-              endpoint: 'Endpoint URL',
-              generationModel: '이미지 생성 모델',
-              supervisorModel: 'Supervisor 모델',
-              title: '이미지 제공자 연결',
-            },
-            profile: {
-              activeProvider: '활성 제공자',
-              briefWebSearch: '브리프 작성 시 웹 검색',
-              description:
-                '이미지 생성에 사용할 제공자와 agent 실행 옵션을 선택합니다.',
-              generationWebSearch: '이미지 생성 시 웹 검색',
-              maxIterations: '최대 agent 반복 횟수',
-              selectProvider: '제공자를 선택하세요',
-              title: '이미지 실행 프로필',
-            },
-            readiness: {
-              active_provider_required: '활성 제공자를 선택해야 합니다.',
-              adapter_not_registered:
-                '제공자 실행 Adapter가 등록되지 않았습니다.',
-              credential_required: 'API 키를 저장해야 합니다.',
-              endpoint_required: 'Endpoint URL을 설정해야 합니다.',
-              feature_disabled:
-                '배포 환경의 이미지 생성 기능이 비활성화되어 있습니다.',
-              generation_model_required: '이미지 생성 모델을 설정해야 합니다.',
-              provider_disabled: '선택한 제공자가 비활성화되어 있습니다.',
-              provider_not_allowed:
-                '선택한 제공자는 외부 송신 정책에서 허용되지 않습니다.',
-              provider_not_registered: '선택한 제공자가 등록되지 않았습니다.',
-              supervisor_model_required: 'Supervisor 모델을 설정해야 합니다.',
-            },
-            saveFailed: '이미지 모델 설정을 저장하지 못했습니다.',
-            saved: '이미지 모델 설정을 저장했습니다.',
-            status: {
-              needsSetup: '설정 필요',
-              ready: '사용 가능',
             },
           },
           modelMonitoring: {
@@ -2002,8 +1940,6 @@ export const resources = {
             modelSettings: {
               capabilities: {
                 chat: '채팅',
-                image_generation: '이미지 생성',
-                image_supervisor: '이미지 감독',
                 tool_calling: '도구 호출',
                 vision: '비전',
               },
@@ -2174,7 +2110,7 @@ export const resources = {
                 appId:
                   '특정 앱에서 발생한 요청에만 적용하려면 앱을 검색해 선택합니다. 비워두면 모든 앱에 적용됩니다.',
                 capability:
-                  'web_search, image_generation, llm 같은 기능 단위가 있을 때 입력합니다. 비워두면 모든 기능에 적용됩니다.',
+                  'web_search, tool_calling, llm 같은 기능 단위가 있을 때 입력합니다. 비워두면 모든 기능에 적용됩니다.',
                 customTerms:
                   '이 규칙이 매칭될 때 추가로 검사할 단어입니다. 전역 차단 단어와 합쳐서 적용됩니다.',
                 description:
@@ -2489,7 +2425,6 @@ export const resources = {
             },
             content: {
               docs: '문서 생성',
-              images: '이미지 생성',
               meetings: '회의 생성',
               tasks: 'PMS 태스크 생성',
               whiteboards: '화이트보드 생성',
@@ -2624,13 +2559,12 @@ export const resources = {
               },
               content: {
                 docs: '기간 내 사용자가 새로 만든 문서 수입니다.',
-                images: '기간 내 생성 완료된 이미지 작업 수입니다.',
                 meetings: '기간 내 생성된 회의 수입니다.',
                 tasks: '기간 내 생성된 PMS 태스크 수입니다.',
                 whiteboards: '기간 내 새로 만든 화이트보드 수입니다.',
               },
               contentCreated:
-                '문서, 화이트보드, 회의, PMS 태스크, 이미지 생성 건수를 합산합니다.',
+                '문서, 화이트보드, 회의, PMS 태스크 생성 건수를 합산합니다.',
               contentViews:
                 '문서와 화이트보드처럼 사용자가 실제 콘텐츠를 연 조회 이벤트 수입니다.',
               consumption: {
@@ -3733,338 +3667,6 @@ export const resources = {
           error: '생각 실패',
           idle: '생각',
           streaming: '생각 중...',
-        },
-        imageWizard: {
-          title: '이미지 위저드',
-          wizard: {
-            prev: '이전',
-            next: '다음',
-            skip: '건너뛰기',
-            saving: '저장 중...',
-            saved: '저장됨',
-            saveError: '저장 실패',
-            myImages: '내 이미지',
-            editAction: '변경',
-            noneSelected: '미입력',
-          },
-          steps: {
-            step1: {
-              title: '템플릿',
-              heading: '무엇을 만들까요?',
-              description:
-                '템플릿을 골라 시작하세요. 이후 단계에서 내용을 다듬을 수 있어요.',
-            },
-            step2: {
-              title: '컨텍스트',
-              heading: '어디에 쓰실 건가요?',
-              description:
-                '쓰임새를 한 줄로 알려주시고, 참고할 회의록·태스크·문서가 있으면 첨부해 주세요. 모두 선택 사항입니다.',
-            },
-            step3: {
-              title: '세부 조정',
-              heading: '세부 조정 (선택)',
-              description:
-                '템플릿이 골라둔 기본값으로도 충분합니다. 바꾸고 싶은 항목만 펼쳐서 수정하세요.',
-              stylePanel: '스타일',
-              layoutPanel: '레이아웃 / 비율',
-              refsPanel: '참고 이미지',
-              advancedPanel: '배경 / 품질',
-              reassurance:
-                '그대로 두셔도 좋아요. 템플릿이 어울리는 기본 설정을 이미 골라뒀습니다.',
-            },
-            step4: {
-              title: '계획 & 생성',
-              heading: '이미지 계획 확인',
-              description:
-                'LLM이 정리한 최신 계획만 확인하세요. 그대로 진행하거나 계획을 다시 만들 수 있습니다.',
-              editHeading: '이미지 수정',
-              editDescription:
-                '이전 이미지를 기준으로 수정본을 생성합니다. 큰 변경이나 모호한 요청은 먼저 짧은 계획을 확인합니다.',
-            },
-          },
-          gallery: {
-            myTemplates: '내 템플릿',
-            allHeading: '전체 템플릿',
-            startBlank: '비어있는 캔버스로 시작',
-            categories: {
-              all: '전체',
-              deck: '발표',
-              report: '보고서',
-              diagram: '다이어그램',
-              card: '카드·배너',
-              social: '소셜',
-            },
-            title: '내 이미지',
-            subtitle: '지금까지 만든 이미지와 진행 중인 작업입니다.',
-            empty: '아직 생성한 이미지가 없습니다. 새 이미지를 시작해 보세요.',
-            newAction: '새 이미지 만들기',
-            openImage: '이미지 열기',
-            downloadImage: '이미지 다운로드',
-            thumbnailAlt: '생성된 이미지 미리보기',
-            untitled: '이름 없음',
-            userTemplateName: '내 템플릿 · {{date}}',
-            userTemplateHint: '생성 이미지 기반',
-            userTemplateFallback: '내 템플릿',
-            userTemplateBasedTitle: '내 템플릿 기반 이미지',
-            removeTemplate: '내 템플릿에서 숨기기',
-            previewTemplate: '템플릿 크게 보기: {{name}}',
-            noBrief: '아직 계획이 없습니다',
-            deleteTitle: '이미지 삭제',
-            deleteDescription: '이 작업은 되돌릴 수 없습니다.',
-            status: {
-              idle: '대기',
-              queued: '대기 중',
-              running: '생성 중',
-              succeeded: '완료',
-              failed: '실패',
-              cancelled: '중단됨',
-            },
-          },
-          templates: {
-            meeting_deck_title: {
-              name: '회의 슬라이드 표지',
-              hint: '데크 첫 장',
-            },
-            meeting_deck_kpi: {
-              name: '회의 KPI 슬라이드',
-              hint: '4-up 핵심 지표',
-            },
-            meeting_deck_compare: {
-              name: '비교 슬라이드',
-              hint: 'Before / After',
-            },
-            team_intro: { name: '팀 소개', hint: '4명 프로필 카드' },
-            deck_section_divider: {
-              name: '섹션 구분 슬라이드',
-              hint: '단일 포커스 + 다크',
-            },
-            status_report: { name: '상태 리포트', hint: '한 장 요약' },
-            kpi_dashboard: { name: 'KPI 대시보드', hint: '카드 + 라인 차트' },
-            post_mortem: { name: '포스트모템', hint: 'WHAT / WHY / NEXT' },
-            weekly_brief: { name: '주간 브리프', hint: '3 핵심 항목' },
-            process_flow: { name: '프로세스 흐름도', hint: '단계별 화살표' },
-            swimlane: { name: '스윔레인', hint: '역할별 단계' },
-            mindmap: { name: '마인드맵', hint: '중심 + 가지' },
-            data_pipeline: { name: '데이터 파이프라인', hint: 'Source→Sink' },
-            quote_card: { name: '인용 카드', hint: '한 문장 강조' },
-            announce_card: { name: '공지 카드', hint: '큰 메시지' },
-            badge_celebrate: { name: '뱃지 / 시상', hint: '원형 강조' },
-            doc_hero: { name: '문서 헤더', hint: '히어로 + 본문 미리보기' },
-            blog_header: { name: '블로그 헤더', hint: '왼쪽 비주얼 + 제목' },
-            slack_announcement: { name: '슬랙 공지', hint: '메시지 카드 형태' },
-            social_square: { name: '소셜 정사각', hint: '1:1 인용' },
-            newsletter_top: { name: '뉴스레터 표지', hint: '제호 + 부제' },
-          },
-          style: {
-            sheetTitle: '스타일 선택',
-            sheetDescription:
-              '여러 스타일을 조합할 수 있어요. 가장 마음에 드는 분위기를 골라 주세요.',
-            selectedCount: '{{count}}개 선택됨',
-            openSheet: '24개 스타일에서 고르기',
-            paletteLabel: '팔레트',
-            backgroundLabel: '배경',
-            qualityLabel: '품질',
-            empty: '스타일 미선택',
-            groups: {
-              editorial: '에디토리얼 / 인쇄',
-              diagrammatic: '다이어그램',
-              illustrative: '일러스트',
-              photo: '사진 / 분위기',
-            },
-            chips: {
-              corporate: '깔끔 코퍼레이트',
-              magazine: '에디토리얼 매거진',
-              newspaper: '신문 인쇄',
-              bauhaus: '바우하우스',
-              swiss: '스위스 모던',
-              blueprint: '블루프린트',
-              infographic: '인포그래픽',
-              wireframe: '와이어프레임',
-              isometric: '아이소메트릭 3D',
-              flow: '플로우 다이어그램',
-              mindmap: '마인드맵',
-              flat: '플랫 일러스트',
-              doodle: '손그림 두들',
-              watercolor: '수채화',
-              risograph: '리소그래프',
-              cutpaper: '컷페이퍼',
-              comic: '코믹 / 팝',
-              photoreal: '사진풍 시네마틱',
-              mono: '미니멀 모노',
-              kawaii: '파스텔 카와이',
-              cyberpunk: '사이버펑크 네온',
-              y2k: 'Y2K / 베이퍼웨이브',
-              koreanmodern: '한국 모던',
-            },
-            palette: {
-              auto: '자동',
-              brand: '브랜드 컬러',
-              warm: '따뜻한 톤',
-              cool: '차가운 톤',
-              monochrome: '모노크롬',
-              vivid: '비비드',
-            },
-            background: {
-              auto: '자동',
-              transparent: '투명',
-              white: '흰색',
-              dark: '어두움',
-            },
-            quality: {
-              low: '낮음 (빠름)',
-              medium: '보통',
-              high: '높음 (권장)',
-              auto: '자동',
-            },
-          },
-          layout: {
-            layoutLabel: '레이아웃',
-            aspectLabel: '비율',
-            unset: '레이아웃 미선택',
-            layouts: {
-              single_focus: {
-                label: '단일 포커스',
-                hint: '한 개의 핵심 비주얼',
-              },
-              left_text_right_visual: {
-                label: '좌 텍스트 / 우 비주얼',
-                hint: '설명 + 이미지 분할',
-              },
-              top_title_grid: {
-                label: '상단 제목 + 그리드',
-                hint: '제목 아래 카드 그리드',
-              },
-              three_column: { label: '3 컬럼', hint: '동등한 3개 항목' },
-              two_row_comparison: { label: '2 행 비교', hint: '위/아래 비교' },
-              timeline_horizontal: {
-                label: '가로 타임라인',
-                hint: '왼→오 시간 흐름',
-              },
-              freeform: { label: '자유형', hint: '제약 없이 LLM에 위임' },
-            },
-            aspect: {
-              '1024x1024': '정사각 1024×1024',
-              '1536x1024': '가로 1536×1024',
-              '1024x1536': '세로 1024×1536',
-            },
-          },
-          referenceImages: {
-            roleLabel: '역할',
-            uploadAction: '이미지 업로드',
-            empty: '아직 첨부된 참고 이미지가 없습니다.',
-            fullHint: '최대 개수에 도달했습니다',
-            countSummary: '{{count}}/{{max}}장',
-            requiresGeneration:
-              '이전 단계에서 작업이 시작된 뒤 업로드할 수 있어요.',
-            roles: {
-              style: '스타일 참고',
-              composition: '구도 참고',
-              content: '콘텐츠 참고',
-            },
-          },
-          context: {
-            meetings: '회의록',
-            tasks: 'PMS 태스크',
-            docs: '문서',
-            attachLabel: '참고할 자료 (선택)',
-            audienceLabel: '어디에 쓰실 건가요? (선택)',
-            audiencePlaceholder: '예) 임원 주간 보고용 / 캐주얼한 팀 슬랙용',
-            notesLabel: '기타 메모',
-            notesPlaceholder:
-              '특별히 강조할 내용이나 피해야 할 표현을 적어 주세요',
-            attachedCount: '첨부 {{count}}건',
-            removeReference: '참고 자료 제거',
-            encourageTip:
-              '회의록이나 태스크를 첨부하면 LLM이 실제 데이터를 인용해서 더 정확한 이미지를 만들 수 있어요.',
-          },
-          docPicker: {
-            title: '문서 선택',
-            description: '워크스페이스의 문서를 검색해서 첨부하세요.',
-            searchPlaceholder: '문서 제목으로 검색',
-            untitled: '제목 없음',
-          },
-          step4: {
-            generatingFirstBrief: '이미지 계획을 정리하는 중입니다...',
-            approveAction: '이 계획으로 이미지 만들기',
-            regenerate: '계획 다시 만들기',
-            sendRefinement: '반영',
-            composerHelper:
-              '수정 요청을 자유롭게 적어주세요. 계획이 그대로 좋다면 위 버튼을 누르세요.',
-            composerPlaceholder:
-              '예) 팔레트를 더 따뜻하게, 화면 텍스트는 빼고 도식만 보여줘 (Cmd+Enter로 보내기)',
-            briefSections: {
-              goal: '목표',
-              composition: '구성',
-              visibleText: '화면 텍스트',
-              style: '스타일',
-              review: '확인 필요',
-            },
-            pendingQueued: '이미지 생성 대기 중...',
-            pendingRunning: '이미지 생성 중...',
-            cancelAction: '중단',
-            cancelled: '이미지 생성이 중단되었습니다.',
-            cancelledDescription:
-              '이 작업은 더 이상 진행되지 않습니다. 새 이미지로 다시 시작할 수 있습니다.',
-            startingImageEdit: '수정본 생성을 시작하는 중...',
-            failed: '생성에 실패했습니다.',
-            imageLoading: '생성된 이미지를 불러오는 중...',
-            imageLoadFailed: '생성된 이미지를 불러오지 못했습니다.',
-            downloadAction: '이미지 다운로드',
-            saveCurrentAsTemplate: '이 이미지를 템플릿으로 저장',
-            removeFromTemplates: '내 템플릿에서 제거',
-            openLargePreview: '이미지 크게 보기',
-            closePreview: '크게 보기 닫기',
-            cloneAction: '복제해서 수정',
-            newImageAction: '새 이미지',
-            editImagePromptLabel: '이미지 수정 요청',
-            editImagePromptPlaceholder:
-              '예) 제목은 유지하고 배경을 더 밝게, 오른쪽 카드만 강조해줘 (Cmd+Enter로 보내기)',
-            editImageAction: '수정본 만들기',
-            editImageBusy: '수정본 준비 중...',
-            editImageNotesRequest: '이미지 수정 요청: {{instruction}}',
-            editImageNotesReference:
-              '이전 결과 이미지를 구도와 내용 참고로 사용하고, 요청하지 않은 부분은 가능한 유지하세요.',
-            sourceImageLabel: '이전 이미지',
-            editedImageLabel: '수정본',
-            sourceImageAltText: '수정 전 이미지',
-            sourceImageLoadFailed: '이전 이미지를 불러오지 못했습니다.',
-            revisionGalleryTitle: '생성 이미지 갤러리',
-            revisionGalleryDescription:
-              '이 수정 흐름에서 만들어진 모든 완성 이미지를 보관합니다.',
-            revisionLabel: '버전 {{index}}',
-            currentRevisionBadge: '현재',
-            downloadRevision: '이 버전 다운로드',
-            revisionImageAlt: '생성 이미지 버전 {{index}}',
-            revisionImageLoadFailed: '이미지를 불러오지 못했습니다.',
-            revisionGalleryLoadFailed:
-              '생성 이미지 갤러리를 불러오지 못했습니다.',
-            discardAction: '버리기',
-            altText: '생성된 이미지',
-          },
-          backgroundWork: {
-            title: '이미지 생성',
-            status: {
-              queued: '이미지 생성 대기 중',
-              running: '이미지 생성 중',
-              succeeded: '이미지 생성 완료',
-              failed: '이미지 생성 실패',
-              cancelled: '이미지 생성 중단됨',
-            },
-          },
-          errors: {
-            saveFailed: '저장에 실패했습니다.',
-            startFailed: '작업을 시작하지 못했습니다.',
-            uploadFailed: '업로드에 실패했습니다.',
-            deleteFailed: '삭제에 실패했습니다.',
-            briefFailed: '이미지 계획 생성에 실패했습니다.',
-            approveFailed: '승인에 실패했습니다.',
-            cancelFailed: '이미지 생성을 중단하지 못했습니다.',
-            editImageFailed: '수정본을 시작하지 못했습니다.',
-            briefOutdated:
-              '입력 내용이 바뀌었습니다. 계획을 다시 생성한 뒤 승인해 주세요.',
-            docLoadFailed: '문서 목록을 불러오지 못했습니다.',
-            docAttachFailed: '문서를 첨부하지 못했습니다.',
-          },
         },
       },
       docs: {
@@ -5959,7 +5561,6 @@ export const resources = {
       gates: {
         adminSectionDenied: 'Your account cannot view this admin section.',
         appDisabled: 'This app is not enabled in the current workspace.',
-        imageWizardDisabled: 'Image Wizard is not available in this workspace.',
         noAccessibleWorkspace:
           'Waiting for a workspace invitation. Ask a workspace admin to invite you.',
         toolWorkspaceDenied:
@@ -6071,7 +5672,6 @@ export const resources = {
         settings: 'Settings',
         'video-chat': 'Video Chat',
         whiteboard: 'Whiteboard',
-        'image-wizard': 'Image Wizard',
       },
       appDescriptions: {
         chatbot: 'Conversational assistant using internal data and tools.',
@@ -6086,13 +5686,11 @@ export const resources = {
         recording: 'Manage recordings and processing status.',
         community: 'Open company-wide community boards.',
         'video-chat': 'Run browser-based video meetings.',
-        'image-wizard': 'Generate work images step by step.',
         'web-search': 'Search current public web information.',
       },
       nav: {
         chatbot: 'AI Chatbot',
         search: 'Open Work Hub Search',
-        'image-wizard': 'Image Wizard',
         'retrieval-search': 'Retrieval Diagnostics',
         'web-search': 'Web Search Bot',
         'docs-all': 'All Docs',
@@ -6152,8 +5750,6 @@ export const resources = {
         chatbot: 'Conversational assistant using internal data and tools',
         search: 'Main grounded search hub for internal documents',
         'video-chat-room': 'Validate LiveKit OSS video meetings',
-        'image-wizard':
-          'Generate infographic / business document images via a guided wizard',
         'web-search': 'Search current public web information',
         'retrieval-search': 'Inspect unified retrieval sources and profiles',
         'recording-quick': 'Start recording quickly and save original audio',
@@ -7156,67 +6752,9 @@ export const resources = {
               title: 'LLM routing',
             },
             tabs: {
-              images: 'Image models',
               models: 'Model catalog',
               providers: 'LLM Providers',
               routing: 'LLM Routing',
-            },
-          },
-          imageModels: {
-            conflict:
-              'Another administrator changed the image model settings. The latest settings were loaded.',
-            deploymentDisabled:
-              'Image generation is disabled by the deployment switch. Settings can be saved but will not run.',
-            emptyDescription:
-              'No image model provider settings are registered.',
-            emptyTitle: 'No image model settings',
-            loadFailed: 'Could not load image model settings.',
-            loadingDescription: 'Loading image providers and model settings.',
-            loadingTitle: 'Loading image model settings',
-            provider: {
-              apiKey: 'API key',
-              apiKeyMissing: 'Enter an API key',
-              apiKeyStored: 'Leave blank to keep the stored key',
-              clearApiKey: 'Delete stored API key',
-              description:
-                'Explicitly configure the image provider connection and supervisor/generation models.',
-              enabled: 'Allow this provider',
-              endpoint: 'Endpoint URL',
-              generationModel: 'Image generation model',
-              supervisorModel: 'Supervisor model',
-              title: 'Image provider connection',
-            },
-            profile: {
-              activeProvider: 'Active provider',
-              briefWebSearch: 'Web search while drafting briefs',
-              description:
-                'Choose the provider and agent execution options used for image generation.',
-              generationWebSearch: 'Web search during image generation',
-              maxIterations: 'Maximum agent iterations',
-              selectProvider: 'Select a provider',
-              title: 'Image execution profile',
-            },
-            readiness: {
-              active_provider_required: 'Select an active provider.',
-              adapter_not_registered:
-                'The provider runtime adapter is not registered.',
-              credential_required: 'Store an API key.',
-              endpoint_required: 'Configure an endpoint URL.',
-              feature_disabled:
-                'Image generation is disabled by the deployment switch.',
-              generation_model_required: 'Configure an image generation model.',
-              provider_disabled: 'The selected provider is disabled.',
-              provider_not_allowed:
-                'The selected provider is not allowed by the egress policy.',
-              provider_not_registered:
-                'The selected provider is not registered.',
-              supervisor_model_required: 'Configure a supervisor model.',
-            },
-            saveFailed: 'Could not save image model settings.',
-            saved: 'Image model settings saved.',
-            status: {
-              needsSetup: 'Setup required',
-              ready: 'Ready',
             },
           },
           modelMonitoring: {
@@ -7789,8 +7327,6 @@ export const resources = {
             modelSettings: {
               capabilities: {
                 chat: 'Chat',
-                image_generation: 'Image generation',
-                image_supervisor: 'Image supervisor',
                 tool_calling: 'Tool calling',
                 vision: 'Vision',
               },
@@ -7964,7 +7500,7 @@ export const resources = {
                 appId:
                   'Search and select an app to apply this rule only to requests from that app. Leave blank for every app.',
                 capability:
-                  'Enter a capability such as web_search, image_generation, or llm. Leave blank for every capability.',
+                  'Enter a capability such as web_search, tool_calling, or llm. Leave blank for every capability.',
                 customTerms:
                   'Additional terms checked when this rule matches. They are merged with global block terms.',
                 description:
@@ -8284,7 +7820,6 @@ export const resources = {
             },
             content: {
               docs: 'Docs created',
-              images: 'Images created',
               meetings: 'Meetings created',
               tasks: 'PMS tasks created',
               whiteboards: 'Whiteboards created',
@@ -8424,14 +7959,12 @@ export const resources = {
               },
               content: {
                 docs: 'Documents created by users during the selected period.',
-                images:
-                  'Completed image generation jobs during the selected period.',
                 meetings: 'Meetings created during the selected period.',
                 tasks: 'PMS tasks created during the selected period.',
                 whiteboards: 'Whiteboards created during the selected period.',
               },
               contentCreated:
-                'Sum of created documents, whiteboards, meetings, PMS tasks, and images.',
+                'Sum of created documents, whiteboards, meetings, and PMS tasks.',
               contentViews:
                 'Content view events for documents, whiteboards, and similar content.',
               consumption: {
@@ -9543,348 +9076,6 @@ export const resources = {
           error: 'Thinking failed',
           idle: 'Thinking',
           streaming: 'Thinking...',
-        },
-        imageWizard: {
-          title: 'Image Wizard',
-          wizard: {
-            prev: 'Back',
-            next: 'Next',
-            skip: 'Skip',
-            saving: 'Saving...',
-            saved: 'Saved',
-            saveError: 'Save failed',
-            myImages: 'My images',
-            editAction: 'Edit',
-            noneSelected: 'None',
-          },
-          steps: {
-            step1: {
-              title: 'Template',
-              heading: 'What are you making?',
-              description:
-                'Pick a template to start. You can refine the result in the next steps.',
-            },
-            step2: {
-              title: 'Context',
-              heading: 'Where will this be used?',
-              description:
-                'Tell us in one line and (optionally) attach meetings, tasks or docs.',
-            },
-            step3: {
-              title: 'Refine',
-              heading: 'Refine (optional)',
-              description:
-                "The template's defaults are usually fine. Open any panel to tweak.",
-              stylePanel: 'Style',
-              layoutPanel: 'Layout / aspect',
-              refsPanel: 'Reference images',
-              advancedPanel: 'Background / quality',
-              reassurance:
-                'Leave as-is — the template already picked sensible defaults.',
-            },
-            step4: {
-              title: 'Plan & generate',
-              heading: 'Review the image plan',
-              description:
-                'Review only the latest LLM plan, then generate or regenerate the plan.',
-              editHeading: 'Edit image',
-              editDescription:
-                'A new version is generated from the previous image. Broad or ambiguous edits still show a short plan first.',
-            },
-          },
-          gallery: {
-            myTemplates: 'My templates',
-            allHeading: 'All templates',
-            startBlank: 'Start with a blank canvas',
-            categories: {
-              all: 'All',
-              deck: 'Deck',
-              report: 'Report',
-              diagram: 'Diagram',
-              card: 'Card / Banner',
-              social: 'Social',
-            },
-            title: 'My images',
-            subtitle: 'All images you have generated and works in progress.',
-            empty: 'You have no generated images yet. Start a new one.',
-            newAction: 'New image',
-            openImage: 'Open image',
-            downloadImage: 'Download image',
-            thumbnailAlt: 'Generated image preview',
-            untitled: 'Untitled',
-            userTemplateName: 'My template · {{date}}',
-            userTemplateHint: 'From generated image',
-            userTemplateFallback: 'My template',
-            userTemplateBasedTitle: 'Image from my template',
-            removeTemplate: 'Hide from my templates',
-            previewTemplate: 'View template large: {{name}}',
-            noBrief: 'No plan yet',
-            deleteTitle: 'Delete image',
-            deleteDescription: 'This action cannot be undone.',
-            status: {
-              idle: 'Idle',
-              queued: 'Queued',
-              running: 'Running',
-              succeeded: 'Done',
-              failed: 'Failed',
-              cancelled: 'Cancelled',
-            },
-          },
-          templates: {
-            meeting_deck_title: {
-              name: 'Deck title slide',
-              hint: 'First slide of a deck',
-            },
-            meeting_deck_kpi: { name: 'KPI slide', hint: '4-up key metrics' },
-            meeting_deck_compare: {
-              name: 'Comparison slide',
-              hint: 'Before / After',
-            },
-            team_intro: { name: 'Team intro', hint: '4 profile cards' },
-            deck_section_divider: {
-              name: 'Section divider',
-              hint: 'Single focus + dark',
-            },
-            status_report: { name: 'Status report', hint: 'One-page summary' },
-            kpi_dashboard: {
-              name: 'KPI dashboard',
-              hint: 'Cards + trend line',
-            },
-            post_mortem: { name: 'Post-mortem', hint: 'WHAT / WHY / NEXT' },
-            weekly_brief: { name: 'Weekly brief', hint: '3 key items' },
-            process_flow: { name: 'Process flow', hint: 'Step arrows' },
-            swimlane: { name: 'Swimlane', hint: 'Roles × steps' },
-            mindmap: { name: 'Mindmap', hint: 'Center + branches' },
-            data_pipeline: { name: 'Data pipeline', hint: 'Source→Sink' },
-            quote_card: { name: 'Quote card', hint: 'Highlight one line' },
-            announce_card: { name: 'Announcement card', hint: 'Big message' },
-            badge_celebrate: {
-              name: 'Badge / award',
-              hint: 'Circular highlight',
-            },
-            doc_hero: { name: 'Doc hero', hint: 'Hero + body preview' },
-            blog_header: { name: 'Blog header', hint: 'Visual + title' },
-            slack_announcement: {
-              name: 'Slack announcement',
-              hint: 'Message-card style',
-            },
-            social_square: { name: 'Social square', hint: '1:1 quote' },
-            newsletter_top: {
-              name: 'Newsletter top',
-              hint: 'Masthead + tagline',
-            },
-          },
-          style: {
-            sheetTitle: 'Pick a style',
-            sheetDescription: 'Mix multiple styles. Pick whichever vibe fits.',
-            selectedCount: '{{count}} selected',
-            openSheet: 'Choose from 24 styles',
-            paletteLabel: 'Palette',
-            backgroundLabel: 'Background',
-            qualityLabel: 'Quality',
-            empty: 'No style picked',
-            groups: {
-              editorial: 'Editorial / Print',
-              diagrammatic: 'Diagrammatic',
-              illustrative: 'Illustrative',
-              photo: 'Photo & Vibe',
-            },
-            chips: {
-              corporate: 'Clean corporate',
-              magazine: 'Editorial magazine',
-              newspaper: 'Newspaper print',
-              bauhaus: 'Bauhaus',
-              swiss: 'Swiss modern',
-              blueprint: 'Blueprint',
-              infographic: 'Infographic',
-              wireframe: 'Wireframe',
-              isometric: 'Isometric 3D',
-              flow: 'Flow diagram',
-              mindmap: 'Mindmap',
-              flat: 'Flat illustration',
-              doodle: 'Hand-drawn doodle',
-              watercolor: 'Watercolor',
-              risograph: 'Risograph',
-              cutpaper: 'Cut paper',
-              comic: 'Comic / pop',
-              photoreal: 'Photo-real cinematic',
-              mono: 'Minimal mono',
-              kawaii: 'Pastel kawaii',
-              cyberpunk: 'Cyberpunk neon',
-              y2k: 'Y2K / vaporwave',
-              koreanmodern: 'Korean modern',
-            },
-            palette: {
-              auto: 'Auto',
-              brand: 'Brand colors',
-              warm: 'Warm',
-              cool: 'Cool',
-              monochrome: 'Monochrome',
-              vivid: 'Vivid',
-            },
-            background: {
-              auto: 'Auto',
-              transparent: 'Transparent',
-              white: 'White',
-              dark: 'Dark',
-            },
-            quality: {
-              low: 'Low (faster)',
-              medium: 'Medium',
-              high: 'High (recommended)',
-              auto: 'Auto',
-            },
-          },
-          layout: {
-            layoutLabel: 'Layout',
-            aspectLabel: 'Aspect ratio',
-            unset: 'No layout',
-            layouts: {
-              single_focus: {
-                label: 'Single focus',
-                hint: 'One central visual',
-              },
-              left_text_right_visual: {
-                label: 'Left text / right visual',
-                hint: 'Description + image split',
-              },
-              top_title_grid: {
-                label: 'Top title + grid',
-                hint: 'Title above a card grid',
-              },
-              three_column: { label: '3 columns', hint: 'Three equal items' },
-              two_row_comparison: {
-                label: '2-row comparison',
-                hint: 'Top/bottom contrast',
-              },
-              timeline_horizontal: {
-                label: 'Horizontal timeline',
-                hint: 'Left-to-right time flow',
-              },
-              freeform: { label: 'Freeform', hint: 'Let the LLM decide' },
-            },
-            aspect: {
-              '1024x1024': 'Square 1024×1024',
-              '1536x1024': 'Landscape 1536×1024',
-              '1024x1536': 'Portrait 1024×1536',
-            },
-          },
-          referenceImages: {
-            roleLabel: 'Role',
-            uploadAction: 'Upload image',
-            empty: 'No reference images attached yet.',
-            fullHint: 'Maximum reached',
-            countSummary: '{{count}}/{{max}}',
-            requiresGeneration:
-              'Available once a draft is created in earlier steps.',
-            roles: {
-              style: 'Style ref',
-              composition: 'Composition ref',
-              content: 'Content ref',
-            },
-          },
-          context: {
-            meetings: 'Meetings',
-            tasks: 'PMS tasks',
-            docs: 'Docs',
-            attachLabel: 'Attach references (optional)',
-            audienceLabel: 'Where will this be used? (optional)',
-            audiencePlaceholder: 'e.g. exec readout; casual team Slack',
-            notesLabel: 'Extra notes',
-            notesPlaceholder: 'Anything to emphasize or avoid',
-            attachedCount: '{{count}} attached',
-            removeReference: 'Remove reference',
-            encourageTip:
-              'Attaching meetings or tasks lets the LLM cite real data and produce a more accurate image.',
-          },
-          docPicker: {
-            title: 'Pick a document',
-            description: 'Search the workspace and attach a doc.',
-            searchPlaceholder: 'Search by title',
-            untitled: 'Untitled',
-          },
-          step4: {
-            generatingFirstBrief: 'Drafting your image plan...',
-            approveAction: 'Generate from this plan',
-            regenerate: 'Regenerate plan',
-            sendRefinement: 'Apply',
-            composerHelper:
-              'Type any tweak in plain language. If the plan looks good, hit the button above.',
-            composerPlaceholder:
-              'e.g. make the palette warmer; remove visible text and show only the diagram (Cmd+Enter to send)',
-            briefSections: {
-              goal: 'Goal',
-              composition: 'Composition',
-              visibleText: 'Visible text',
-              style: 'Style',
-              review: 'Needs review',
-            },
-            pendingQueued: 'Queued for image generation...',
-            pendingRunning: 'Generating image...',
-            cancelAction: 'Cancel',
-            cancelled: 'Image generation was cancelled.',
-            cancelledDescription:
-              'This job will not continue. You can start a new image instead.',
-            startingImageEdit: 'Starting the edited image...',
-            failed: 'Generation failed.',
-            imageLoading: 'Loading generated image...',
-            imageLoadFailed: 'Could not load the generated image.',
-            downloadAction: 'Download image',
-            saveCurrentAsTemplate: 'Save this image as template',
-            removeFromTemplates: 'Remove from my templates',
-            openLargePreview: 'View image large',
-            closePreview: 'Close large preview',
-            cloneAction: 'Clone & tweak',
-            newImageAction: 'New image',
-            editImagePromptLabel: 'Edit this image',
-            editImagePromptPlaceholder:
-              'e.g. keep the title, make the background brighter, and emphasize the right card (Cmd+Enter to send)',
-            editImageAction: 'Create edit',
-            editImageBusy: 'Preparing edit...',
-            editImageNotesRequest: 'Image edit request: {{instruction}}',
-            editImageNotesReference:
-              'Use the previous result image as composition and content reference, and preserve anything not explicitly changed.',
-            sourceImageLabel: 'Previous image',
-            editedImageLabel: 'Edited image',
-            sourceImageAltText: 'Image before edits',
-            sourceImageLoadFailed: 'Could not load the previous image.',
-            revisionGalleryTitle: 'Generated image gallery',
-            revisionGalleryDescription:
-              'Keeps every completed image made in this edit flow.',
-            revisionLabel: 'Version {{index}}',
-            currentRevisionBadge: 'Current',
-            downloadRevision: 'Download this version',
-            revisionImageAlt: 'Generated image version {{index}}',
-            revisionImageLoadFailed: 'Could not load this image.',
-            revisionGalleryLoadFailed:
-              'Could not load the generated image gallery.',
-            discardAction: 'Discard',
-            altText: 'Generated image',
-          },
-          backgroundWork: {
-            title: 'Image generation',
-            status: {
-              queued: 'Queued for image generation',
-              running: 'Generating image',
-              succeeded: 'Image generation complete',
-              failed: 'Image generation failed',
-              cancelled: 'Image generation cancelled',
-            },
-          },
-          errors: {
-            saveFailed: 'Failed to save.',
-            startFailed: 'Failed to start.',
-            uploadFailed: 'Upload failed.',
-            deleteFailed: 'Failed to delete.',
-            briefFailed: 'Image plan generation failed.',
-            approveFailed: 'Approval failed.',
-            cancelFailed: 'Failed to cancel image generation.',
-            editImageFailed: 'Failed to start the edited image.',
-            briefOutdated:
-              'Inputs changed. Regenerate the plan before approving.',
-            docLoadFailed: 'Failed to load documents.',
-            docAttachFailed: 'Failed to attach document.',
-          },
         },
       },
       docs: {

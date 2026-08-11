@@ -11,7 +11,6 @@ from open_work_hub_api.domains.conversations.app_catalog import CHATBOT_WORKSPAC
 from open_work_hub_api.domains.diagrams.app_catalog import DIAGRAMS_WORKSPACE_APP
 from open_work_hub_api.domains.docs.app_catalog import DOCS_WORKSPACE_APP
 from open_work_hub_api.domains.files.app_catalog import FILES_WORKSPACE_APP
-from open_work_hub_api.domains.images.app_catalog import IMAGE_WIZARD_WORKSPACE_APP
 from open_work_hub_api.domains.mail.app_catalog import MAIL_WORKSPACE_APP
 from open_work_hub_api.domains.meeting.app_catalog import MEETING_WORKSPACE_APP
 from open_work_hub_api.domains.planner.app_catalog import PLANNER_WORKSPACE_APP
@@ -40,7 +39,6 @@ _WORKSPACE_APP_REGISTRATIONS = (
     MEETING_WORKSPACE_APP,
     VIDEO_CHAT_WORKSPACE_APP,
     RECORDING_WORKSPACE_APP,
-    IMAGE_WIZARD_WORKSPACE_APP,
     RETRIEVAL_SEARCH_WORKSPACE_APP,
 )
 _WORKSPACE_APP_REGISTRY = compile_workspace_app_registry(_WORKSPACE_APP_REGISTRATIONS)

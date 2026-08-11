@@ -750,23 +750,6 @@ class Settings(BaseSettings):
         le=8192,
         validation_alias="OPEN_WORK_HUB_RAG_VISION_OCR_MAX_NEW_TOKENS",
     )
-    # Image generation — wizard-driven image API via the OpenAI Agents SDK.
-    image_enabled: bool = Field(
-        default=False,
-        validation_alias="OPEN_WORK_HUB_IMAGE_ENABLED",
-    )
-    image_max_reference_uploads: int = Field(
-        default=4,
-        ge=1,
-        le=12,
-        validation_alias="OPEN_WORK_HUB_IMAGE_MAX_REFS",
-    )
-    image_reference_max_bytes: int = Field(
-        default=8 * 1024 * 1024,
-        ge=64 * 1024,
-        le=64 * 1024 * 1024,
-        validation_alias="OPEN_WORK_HUB_IMAGE_REFERENCE_MAX_BYTES",
-    )
     otel_enabled: bool = Field(
         default=True,
         validation_alias="OPEN_WORK_HUB_OTEL_ENABLED",

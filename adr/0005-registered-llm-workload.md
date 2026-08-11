@@ -57,9 +57,6 @@ Open Work Hub의 생성형 LLM 호출은 도메인 gateway, provider SDK, worker
   gateway를 직접 호출하지 않는다.
 - 신규 실행 종류나 Adapter가 필요하면 기능 코드에서 우회하지 말고 Core
   Enablement로 먼저 추가한다.
-- 이미지 생성은 supervisor와 generation 모델을 함께 고정하는 provider-native 실행이므로
-  일반 LLM route와 별도 Image Model Settings control plane을 따른다. 다만 Adapter,
-  external payload security, audit, no-fallback 원칙은 동일하게 적용한다.
 - embedding, rerank, OCR, ASR은 이 ADR의 생성형 LLM workload 범위가 아니며
   각 Inference Gateway 계약을 따른다.
 
@@ -81,9 +78,8 @@ Open Work Hub의 생성형 LLM 호출은 도메인 gateway, provider SDK, worker
   - **LLM Providers**: provider 활성화, 기본/override endpoint, API key, 기본 모델과 서버측 모델 discovery
   - **Model Catalog**: discovery inventory 중 서비스 사용 모델과 capability 승인
   - **LLM Routing**: 앱/실제 기능 workload별 local/external, provider/model, 출력 상한
-  - **Image Model Settings**: 이미지 provider endpoint/API key, supervisor/generation 모델, 실행 profile
   - **AI Security**: 이미 external로 선택된 payload의 allow/mask/block/audit와 예외
-- 관리자 정보 구조에서는 LLM Providers, 모델 catalog, LLM Routing, Image Model Settings를 `LLM 관리`
+- 관리자 정보 구조에서는 LLM Providers, 모델 catalog, LLM Routing을 `LLM 관리`
   section에 두고 AI Security에는 외부 전송 보안 기능만 둔다. 감사 이벤트 탐색기는
   전역 `감사 로그`를 단일 Interface로 사용하며 AI Security는 필터된 deep link로 연결한다.
 - 일반 OCR, embedding, rerank, vector/keyword index는 LLM Routing에 노출하지 않는다.
@@ -147,10 +143,8 @@ Registry bootstrap과 계약 테스트가 이 체크리스트를 검증한다. �
 - Legacy `register_llm_task(...)`는 호환 workload를 materialize하되 신규 코드는
   `register_llm_workload(...)`를 사용한다.
 - 기존 Web Search 외부 구현을 workload Adapter 안에 보존한 뒤
-  direct-call guard를 필수 CI로 고정한다. Images는 별도 Image Model Settings resolver와
-  image Adapter를 사용한다.
+  direct-call guard를 필수 CI로 고정한다.
 - Provider-native Adapter도 provider/model/output cap을 환경 변수에서 다시 고르지
-  않는다. 일반 LLM은 등록 workload의 resolved route를, Images는 DB에서 resolve한
-  image execution profile을 입력으로 사용한다.
+  않고 등록 workload의 resolved route를 사용한다.
 - AI Gateway 소유 문서와 관리자 설정 계약은 registry 스키마가 변경될 때 함께
   갱신한다.

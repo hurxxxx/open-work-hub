@@ -8,11 +8,9 @@ export {
   aiGlobalRoutes,
   aiWorkspaceRoutes,
   aiToolViewRoutes,
-  imageWizardToolElement,
   ragSearchToolElement,
 } from './routes';
 export { aiSidebarConfig } from './sidebar-config';
-export { createImageWizardBackgroundWorkSource } from './background-work';
 export { aiShellNavResolver } from './shell-nav';
 
 export const aiModule = {

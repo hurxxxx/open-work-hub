@@ -6,7 +6,6 @@ from collections.abc import Mapping
 
 DEFAULT_QUEUE = "celery"
 MEETING_TRANSCRIBE_QUEUE = "meeting_transcribe"
-IMAGE_GENERATION_QUEUE = "image_generation"
 MAIL_SYNC_QUEUE = "mail_sync"
 RAG_SYNC_REALTIME_QUEUE = "rag_sync_realtime"
 RAG_SYNC_BACKFILL_QUEUE = "rag_sync_backfill"
@@ -16,7 +15,6 @@ AI_GRAPH_QUEUE = "ai-graph"
 
 FILE_STORAGE_CLEANUP_TASK_NAME = "files.cleanup_storage_object"
 FILE_STORAGE_CLEANUP_REPUBLISH_TASK_NAME = "files.republish_storage_cleanup_jobs"
-IMAGE_GENERATION_TASK_NAME = "images.generate_image"
 MAIL_SYNC_TASK_NAME = "mail.sync_job"
 RAG_SYNC_RESOURCE_TASK_NAME = "rag.sync_resource"
 RAG_SYNC_BACKFILL_RESOURCE_TASK_NAME = "rag.sync_backfill_resource"
@@ -51,7 +49,6 @@ TASK_QUEUE_ROUTES: Mapping[str, str] = {
     AI_GRAPH_RUN_TASK_NAME: AI_GRAPH_QUEUE,
     AI_GRAPH_REPUBLISH_TASK_NAME: DEFAULT_QUEUE,
     "search.republish_pending_index_jobs": DEFAULT_QUEUE,
-    IMAGE_GENERATION_TASK_NAME: IMAGE_GENERATION_QUEUE,
     MAIL_SYNC_TASK_NAME: MAIL_SYNC_QUEUE,
     "mail.sync_account": MAIL_SYNC_QUEUE,
     "mail.dispatch_due_sync_jobs": DEFAULT_QUEUE,
@@ -68,7 +65,6 @@ WORKER_QUEUE_GROUPS: Mapping[str, tuple[str, ...]] = {
     ),
     "long": (
         MEETING_TRANSCRIBE_QUEUE,
-        IMAGE_GENERATION_QUEUE,
         RAG_SYNC_BACKFILL_QUEUE,
     ),
     "ai_graph": (AI_GRAPH_QUEUE,),
@@ -171,8 +167,6 @@ __all__ = [
     "DEFAULT_QUEUE",
     "FILE_STORAGE_CLEANUP_REPUBLISH_TASK_NAME",
     "FILE_STORAGE_CLEANUP_TASK_NAME",
-    "IMAGE_GENERATION_QUEUE",
-    "IMAGE_GENERATION_TASK_NAME",
     "LLM_ROUTING_CONTROL_PLANE_WORKER_BOOTSTRAP_GROUPS",
     "MAIL_SYNC_QUEUE",
     "MAIL_SYNC_TASK_NAME",

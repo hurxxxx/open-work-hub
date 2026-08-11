@@ -8,7 +8,6 @@ Celery 기반 background worker다.
 - OCR/문서 추출
 - 회의/녹음 처리
 - 메일 동기화
-- 이미지 생성
 - 검색 색인
 - 초안 export
 

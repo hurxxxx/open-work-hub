@@ -5,17 +5,11 @@ import { useSearchParams } from 'react-router-dom';
 import { Tabs, TabsList, TabsTrigger } from '@open-work-hub/ui';
 
 import { AdminAiModelSettingsSection } from './admin-ai-model-settings-section';
-import { AdminImageModelSettingsSection } from './admin-image-model-settings-section';
 import { AdminLlmProviderSettingsSection } from './admin-llm-provider-settings-section';
 import { AdminLlmRoutingOverview } from './admin-llm-routing-overview';
 import { SurfaceCard } from './admin-shared';
 
-export const LLM_MANAGEMENT_TABS = [
-  'routing',
-  'providers',
-  'models',
-  'images',
-] as const;
+export const LLM_MANAGEMENT_TABS = ['routing', 'providers', 'models'] as const;
 
 export type LlmManagementTab = (typeof LLM_MANAGEMENT_TABS)[number];
 
@@ -62,7 +56,7 @@ export function AdminLlmManagementSection({ token }: { token: string }) {
         value={tab}
         onValueChange={(value) => setTab(value as LlmManagementTab)}
       >
-        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 md:grid-cols-4">
+        <TabsList className="grid h-auto w-full grid-cols-1 gap-1 sm:grid-cols-3">
           {LLM_MANAGEMENT_TABS.map((item) => (
             <TabsTrigger
               className="min-w-0 justify-center whitespace-nowrap px-2"
@@ -87,9 +81,6 @@ export function AdminLlmManagementSection({ token }: { token: string }) {
         <AdminLlmProviderSettingsSection token={token} />
       ) : null}
       {tab === 'models' ? <AdminAiModelSettingsSection token={token} /> : null}
-      {tab === 'images' ? (
-        <AdminImageModelSettingsSection token={token} />
-      ) : null}
     </div>
   );
 }

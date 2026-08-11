@@ -29,7 +29,7 @@ OutputProjection = Literal["summary", "resource_ids", "full"]
 CapabilityKind = Literal["tool", "resource", "prompt"]
 LlmRoute = Literal["local", "external"]
 LlmPolicyMode = Literal["local_only", "external"]
-LlmExecutionKind = Literal["chat", "agent", "image_supervisor", "image_generation"]
+LlmExecutionKind = Literal["chat", "agent"]
 LlmManagementSurface = Literal["llm_routing", "document_processing"]
 
 DEFAULT_LOCAL_MAX_OUTPUT_TOKENS = 32_768
@@ -414,12 +414,7 @@ class AiCapabilityRegistry:
             raise ValueError(f"LLM workload {normalized_workload_id} must declare owner_domain")
         if default_route not in ("local", "external"):
             raise ValueError(f"LLM workload {normalized_workload_id} has invalid default route")
-        if execution_kind not in (
-            "chat",
-            "agent",
-            "image_supervisor",
-            "image_generation",
-        ):
+        if execution_kind not in ("chat", "agent"):
             raise ValueError(f"LLM workload {normalized_workload_id} has invalid execution_kind")
         if management_surface not in ("llm_routing", "document_processing"):
             raise ValueError(

@@ -892,7 +892,6 @@ class AdminUsageTotalsResponse(BaseModel):
     whiteboards_created_count: int
     meetings_created_count: int
     pms_tasks_created_count: int
-    images_created_count: int
     llm_call_count: int
     llm_user_count: int
     llm_success_count: int
@@ -1002,7 +1001,6 @@ class AdminUsageUserItemResponse(BaseModel):
     whiteboards_created_count: int = 0
     meetings_created_count: int = 0
     pms_tasks_created_count: int = 0
-    images_created_count: int = 0
     llm_call_count: int = 0
     llm_total_tokens: int = 0
     llm_average_latency_ms: int | None = None
@@ -3248,7 +3246,6 @@ def _period_activity_rows(
     included_user_ids: set[str] | None = None,
 ) -> list[tuple[str, datetime]]:
     from open_work_hub_api.domains.docs.models import NativeDoc
-    from open_work_hub_api.domains.images.models import ImageGeneration
     from open_work_hub_api.domains.meeting.models import Meeting
     from open_work_hub_api.domains.pms.models import (
         Attachment,
@@ -3279,12 +3276,6 @@ def _period_activity_rows(
         (TaskComment, TaskComment.author_id, TaskComment.created_at, []),
         (TaskActivityLog, TaskActivityLog.actor_id, TaskActivityLog.created_at, []),
         (Attachment, Attachment.uploaded_by_id, Attachment.created_at, []),
-        (
-            ImageGeneration,
-            ImageGeneration.owner_id,
-            ImageGeneration.created_at,
-            [ImageGeneration.trashed_at.is_(None)],
-        ),
     ]
     for model, user_column, time_column, extra_conditions in activity_sources:
         _extend_user_time_rows(
@@ -3748,7 +3739,6 @@ def _build_usage_dashboard(
     limit: int,
 ) -> AdminUsageDashboardResponse:
     from open_work_hub_api.domains.docs.models import NativeDoc
-    from open_work_hub_api.domains.images.models import ImageGeneration
     from open_work_hub_api.domains.meeting.models import Meeting
     from open_work_hub_api.domains.pms.models import Task
     from open_work_hub_api.domains.usage.models import UsageEvent
@@ -3938,18 +3928,6 @@ def _build_usage_dashboard(
         excluded_user_ids=excluded_user_ids,
         included_user_ids=user_ids,
     )
-    image_counts = _count_by_user(
-        db,
-        ImageGeneration,
-        ImageGeneration.owner_id,
-        since=since,
-        until=until,
-        created_column=ImageGeneration.created_at,
-        extra_conditions=[ImageGeneration.trashed_at.is_(None)],
-        excluded_user_ids=excluded_user_ids,
-        included_user_ids=user_ids,
-    )
-
     llm_usage_by_user: dict[str, dict[str, int]] = {}
     llm_latency_by_user: dict[str, dict[str, int]] = {}
     llm_totals = {
@@ -4038,7 +4016,6 @@ def _build_usage_dashboard(
             + count_for(whiteboards_created_counts, user.id)
             + count_for(meeting_counts, user.id)
             + count_for(pms_task_counts, user.id)
-            + count_for(image_counts, user.id)
             + llm_user.get("calls", 0)
         )
         user_items.append(
@@ -4060,7 +4037,6 @@ def _build_usage_dashboard(
                 whiteboards_created_count=count_for(whiteboards_created_counts, user.id),
                 meetings_created_count=count_for(meeting_counts, user.id),
                 pms_tasks_created_count=count_for(pms_task_counts, user.id),
-                images_created_count=count_for(image_counts, user.id),
                 llm_call_count=llm_user.get("calls", 0),
                 llm_total_tokens=llm_user.get("total_tokens", 0),
                 llm_average_latency_ms=_average_ms(
@@ -4153,7 +4129,6 @@ def _build_usage_dashboard(
                 whiteboards_created_counts,
                 meeting_counts,
                 pms_task_counts,
-                image_counts,
             ),
             docs_view_count=sum(docs_view_counts.values()),
             docs_owned_count=sum(docs_owned_counts.values()),
@@ -4163,7 +4138,6 @@ def _build_usage_dashboard(
             whiteboards_created_count=sum(whiteboards_created_counts.values()),
             meetings_created_count=sum(meeting_counts.values()),
             pms_tasks_created_count=sum(pms_task_counts.values()),
-            images_created_count=sum(image_counts.values()),
             llm_call_count=llm_totals["calls"],
             llm_user_count=len(llm_user_ids),
             llm_success_count=llm_totals["success"],

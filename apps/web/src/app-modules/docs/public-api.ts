@@ -16,7 +16,6 @@ export type {
 } from './views/DocsHubPickerModal';
 export {
   EMPTY_DOCS_HUB_PICKER_EXCLUDED_DOC_IDS,
-  buildImageWizardDocsHubPickerAdapter,
   buildMeetingDocsHubPickerAdapter,
   buildPmsTaskDocsHubPickerAdapter,
   pickDocsHubSelectionItem,

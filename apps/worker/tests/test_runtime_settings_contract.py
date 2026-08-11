@@ -72,9 +72,6 @@ SHARED_RUNTIME_SETTING_FIELDS = (
     "opensearch_url",
     "opensearch_index_prefix",
     "keyword_search_backend",
-    "image_enabled",
-    "image_max_reference_uploads",
-    "image_reference_max_bytes",
 )
 
 

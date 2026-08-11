@@ -57,11 +57,11 @@ describe('notification panel model', () => {
     expect(
       resolveNotificationAction(
         notification('route', {
-          action_url: '/tool/image-wizard?workspace=hq',
+          action_url: '/tool/reports?workspace=hq',
           reference_id: 'issue-1',
         }),
       ),
-    ).toEqual({ kind: 'route', to: '/tool/image-wizard?workspace=hq' });
+    ).toEqual({ kind: 'route', to: '/tool/reports?workspace=hq' });
     expect(
       resolveNotificationAction(
         notification('dm', {

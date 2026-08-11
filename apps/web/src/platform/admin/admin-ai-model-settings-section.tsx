@@ -18,13 +18,7 @@ import {
   SurfaceCard,
 } from './admin-shared';
 
-const MODEL_CAPABILITIES = [
-  'chat',
-  'tool_calling',
-  'vision',
-  'image_supervisor',
-  'image_generation',
-] as const;
+const MODEL_CAPABILITIES = ['chat', 'tool_calling', 'vision'] as const;
 
 interface ModelDraft {
   modelKey: string;

@@ -18,7 +18,6 @@ import { diagramsManifest } from '@/src/app-modules/diagrams/manifest';
 import { docsManifest } from '@/src/app-modules/docs/manifest';
 import { filesManifest } from '@/src/app-modules/files/manifest';
 import { homeManifest, homeModule } from '@/src/app-modules/home';
-import { imageWizardManifest } from '@/src/app-modules/image-wizard';
 import { mailManifest, mailModule } from '@/src/app-modules/mail';
 import { meetingManifest } from '@/src/app-modules/meeting/manifest';
 import { plannerManifest, plannerModule } from '@/src/app-modules/planner';
@@ -42,7 +41,6 @@ export {
   docsManifest,
   filesManifest,
   homeManifest,
-  imageWizardManifest,
   mailManifest,
   meetingManifest,
   plannerManifest,

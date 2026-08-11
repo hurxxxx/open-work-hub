@@ -27,29 +27,6 @@ export function pickDocsHubSelectionItem(
   return (selection) => onPick(selection.item);
 }
 
-export function buildImageWizardDocsHubPickerAdapter(
-  t: TFunction,
-): DocsHubPickerAdapter {
-  return {
-    searchMode: 'local',
-    access: 'workspace-membership',
-    copy: {
-      title: t('ai.imageWizard.docPicker.title'),
-      description: t('ai.imageWizard.docPicker.description'),
-      searchPlaceholder: t('ai.imageWizard.docPicker.searchPlaceholder'),
-      empty: t('common:empty.noResults'),
-      loadFailed: t('ai.imageWizard.errors.docLoadFailed'),
-      attachFailed: t('ai.imageWizard.errors.docAttachFailed'),
-      noAccessWorkspaceLabel: t('ai.imageWizard.title'),
-      noAccessAction: t('ai.imageWizard.docPicker.title'),
-      untitled: t('ai.imageWizard.docPicker.untitled'),
-    },
-    renderMeta: renderSourceMetadata,
-    getLoadFailedMessage: buildErrorFallback(t('ai.imageWizard.errors.docLoadFailed')),
-    getAttachFailedMessage: buildErrorFallback(t('ai.imageWizard.errors.docAttachFailed')),
-  };
-}
-
 export function buildMeetingDocsHubPickerAdapter({
   locale,
   t,
@@ -78,7 +55,9 @@ export function buildMeetingDocsHubPickerAdapter({
     listParams: { sort_by: 'updated_at', sort_dir: 'desc' },
     pageSize: 50,
     getLoadFailedMessage: buildErrorFallback(t('meeting.docPicker.loadFailed')),
-    getAttachFailedMessage: buildErrorFallback(t('meeting.docPicker.attachFailed')),
+    getAttachFailedMessage: buildErrorFallback(
+      t('meeting.docPicker.attachFailed'),
+    ),
   };
 }
 
@@ -131,12 +110,15 @@ function renderMeetingMetadata(
   locale: string,
   timeZone: string,
 ): string {
-  return `${item.created_by_name}${METADATA_SEPARATOR}${formatDateTime(item.updated_at, {
-    day: 'numeric',
-    locale,
-    month: 'short',
-    timeZone,
-  })}`;
+  return `${item.created_by_name}${METADATA_SEPARATOR}${formatDateTime(
+    item.updated_at,
+    {
+      day: 'numeric',
+      locale,
+      month: 'short',
+      timeZone,
+    },
+  )}`;
 }
 
 function buildErrorFallback(

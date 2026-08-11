@@ -334,29 +334,6 @@ class Settings(BaseSettings):
         default="opensearch",
         validation_alias="OPEN_WORK_HUB_KEYWORD_SEARCH_BACKEND",
     )
-    image_enabled: bool = Field(
-        default=False,
-        validation_alias="OPEN_WORK_HUB_IMAGE_ENABLED",
-    )
-    image_max_reference_uploads: int = Field(
-        default=4,
-        ge=1,
-        le=12,
-        validation_alias="OPEN_WORK_HUB_IMAGE_MAX_REFS",
-    )
-    image_reference_max_bytes: int = Field(
-        default=8 * 1024 * 1024,
-        ge=64 * 1024,
-        le=64 * 1024 * 1024,
-        validation_alias="OPEN_WORK_HUB_IMAGE_REFERENCE_MAX_BYTES",
-    )
-    image_request_timeout_seconds: float = Field(
-        default=600.0,
-        gt=0,
-        le=3600,
-        validation_alias="OPEN_WORK_HUB_IMAGE_REQUEST_TIMEOUT_SECONDS",
-    )
-
     otel_enabled: bool = Field(
         default=True,
         validation_alias="OPEN_WORK_HUB_OTEL_ENABLED",
@@ -382,6 +359,7 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

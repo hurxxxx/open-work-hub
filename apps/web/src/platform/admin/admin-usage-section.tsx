@@ -112,7 +112,6 @@ interface UsageUserListRow {
   whiteboards_created_count: number;
   meetings_created_count: number;
   pms_tasks_created_count: number;
-  images_created_count: number;
   llm_call_count: number;
   llm_total_tokens: number;
   llm_average_latency_ms?: number | null;
@@ -211,8 +210,7 @@ function usageContentCreated(item: UsageUserListRow): number {
     item.docs_created_count +
     item.whiteboards_created_count +
     item.meetings_created_count +
-    item.pms_tasks_created_count +
-    item.images_created_count
+    item.pms_tasks_created_count
   );
 }
 
@@ -895,7 +893,6 @@ function UsageTargetsDialog({
   );
 }
 
-
 function UsageExcludedUsersDialog({
   onOpenChange,
   onSaved,
@@ -1412,45 +1409,89 @@ function UsageUsersTab({
         <table className="app-text-body-sm w-full min-w-[1120px] table-fixed border-collapse">
           <thead>
             <tr className="sticky top-0 z-10 bg-app-surface-sidebar">
-              <HeadCell className="w-[240px]" dense>{t('admin.console.usage.columns.user')}</HeadCell>
-              <HeadCell className="w-[92px]" dense>{t('admin.console.usage.columns.logins')}</HeadCell>
-              <HeadCell className="w-[120px]" dense>{t('admin.console.usage.columns.content')}</HeadCell>
-              <HeadCell className="w-[120px]" dense>{t('admin.console.usage.columns.owned')}</HeadCell>
-              <HeadCell className="w-[140px]" dense>{t('admin.console.usage.columns.consumption')}</HeadCell>
-              <HeadCell className="w-[140px]" dense>{t('admin.console.usage.columns.llm')}</HeadCell>
-              <HeadCell className="w-[150px]" dense>{t('admin.console.usage.columns.lastLogin')}</HeadCell>
-              <HeadCell className="w-[100px] text-right" dense>{t('admin.console.usage.columns.actions')}</HeadCell>
+              <HeadCell className="w-[240px]" dense>
+                {t('admin.console.usage.columns.user')}
+              </HeadCell>
+              <HeadCell className="w-[92px]" dense>
+                {t('admin.console.usage.columns.logins')}
+              </HeadCell>
+              <HeadCell className="w-[120px]" dense>
+                {t('admin.console.usage.columns.content')}
+              </HeadCell>
+              <HeadCell className="w-[120px]" dense>
+                {t('admin.console.usage.columns.owned')}
+              </HeadCell>
+              <HeadCell className="w-[140px]" dense>
+                {t('admin.console.usage.columns.consumption')}
+              </HeadCell>
+              <HeadCell className="w-[140px]" dense>
+                {t('admin.console.usage.columns.llm')}
+              </HeadCell>
+              <HeadCell className="w-[150px]" dense>
+                {t('admin.console.usage.columns.lastLogin')}
+              </HeadCell>
+              <HeadCell className="w-[100px] text-right" dense>
+                {t('admin.console.usage.columns.actions')}
+              </HeadCell>
             </tr>
           </thead>
           <tbody>
             {dashboardLoading && rows.length === 0 ? (
-              <EmptyRow colSpan={8} description={t('admin.console.usage.loading')} title={t('admin.console.usage.usersLoadingTitle')} />
+              <EmptyRow
+                colSpan={8}
+                description={t('admin.console.usage.loading')}
+                title={t('admin.console.usage.usersLoadingTitle')}
+              />
             ) : rows.length === 0 ? (
-              <EmptyRow colSpan={8} description={t('admin.console.usage.usersEmptyDescription')} title={t('admin.console.usage.usersEmptyTitle')} />
+              <EmptyRow
+                colSpan={8}
+                description={t('admin.console.usage.usersEmptyDescription')}
+                title={t('admin.console.usage.usersEmptyTitle')}
+              />
             ) : (
               rows.map((item) => (
-                <tr className="transition-colors hover:bg-app-surface-hover/40" key={item.user_id}>
+                <tr
+                  className="transition-colors hover:bg-app-surface-hover/40"
+                  key={item.user_id}
+                >
                   <BodyCell dense>
                     <div className="min-w-0">
-                      <div className="truncate font-medium text-app-ink">{item.full_name}</div>
-                      <div className="truncate text-app-ink/55">{item.email}</div>
+                      <div className="truncate font-medium text-app-ink">
+                        {item.full_name}
+                      </div>
+                      <div className="truncate text-app-ink/55">
+                        {item.email}
+                      </div>
                     </div>
                   </BodyCell>
-                  <BodyCell dense>{formatUsageNumber(item.login_count, locale)}</BodyCell>
-                  <BodyCell dense>{formatUsageNumber(usageContentCreated(item), locale)}</BodyCell>
-                  <BodyCell dense>{formatUsageNumber(usageContentOwned(item), locale)}</BodyCell>
                   <BodyCell dense>
-                    <div>{formatUsageNumber(item.content_view_count, locale)}</div>
+                    {formatUsageNumber(item.login_count, locale)}
+                  </BodyCell>
+                  <BodyCell dense>
+                    {formatUsageNumber(usageContentCreated(item), locale)}
+                  </BodyCell>
+                  <BodyCell dense>
+                    {formatUsageNumber(usageContentOwned(item), locale)}
+                  </BodyCell>
+                  <BodyCell dense>
+                    <div>
+                      {formatUsageNumber(item.content_view_count, locale)}
+                    </div>
                     <div className="text-app-ink/55">
                       {t('admin.console.usage.consumption.userDetail', {
                         apps: formatUsageNumber(item.app_open_count, locale),
-                        searches: formatUsageNumber(item.search_query_count, locale),
+                        searches: formatUsageNumber(
+                          item.search_query_count,
+                          locale,
+                        ),
                       })}
                     </div>
                   </BodyCell>
                   <BodyCell dense>
                     <div>{formatUsageNumber(item.llm_call_count, locale)}</div>
-                    <div className="text-app-ink/55">{formatUsageNumber(item.llm_total_tokens, locale)}</div>
+                    <div className="text-app-ink/55">
+                      {formatUsageNumber(item.llm_total_tokens, locale)}
+                    </div>
                   </BodyCell>
                   <BodyCell dense>
                     {item.last_login_at
@@ -1463,7 +1504,11 @@ function UsageUsersTab({
                       : t('admin.console.usage.never')}
                   </BodyCell>
                   <BodyCell className="text-right" dense>
-                    <Button onClick={() => setAuditUser(item)} size="dense" variant="secondary">
+                    <Button
+                      onClick={() => setAuditUser(item)}
+                      size="dense"
+                      variant="secondary"
+                    >
                       <FileSearch size={14} />
                       {t('admin.console.usage.userDetail')}
                     </Button>
@@ -1488,7 +1533,6 @@ function UsageUsersTab({
     </div>
   );
 }
-
 
 export function UsageSection({ token }: { token: string }) {
   const { t, i18n } = useTranslation('apps');
@@ -1689,12 +1733,6 @@ export function UsageSection({ token }: { token: string }) {
           label: t('admin.console.usage.content.tasks'),
           value: totals.pms_tasks_created_count,
           help: t('admin.console.usage.help.content.tasks'),
-        },
-        {
-          key: 'images',
-          label: t('admin.console.usage.content.images'),
-          value: totals.images_created_count,
-          help: t('admin.console.usage.help.content.images'),
         },
       ]
     : [];
@@ -2095,17 +2133,19 @@ export function UsageSection({ token }: { token: string }) {
                     className="flex flex-wrap gap-2"
                     role="group"
                   >
-                    {(
-                      ['feature', 'tokens'] as UsageRankingMode[]
-                    ).map((mode) => (
-                      <Button
-                        key={mode}
-                        onClick={() => setRankingMode(mode)}
-                        variant={rankingMode === mode ? 'primary' : 'secondary'}
-                      >
-                        {t(`admin.console.usage.rankingModes.${mode}`)}
-                      </Button>
-                    ))}
+                    {(['feature', 'tokens'] as UsageRankingMode[]).map(
+                      (mode) => (
+                        <Button
+                          key={mode}
+                          onClick={() => setRankingMode(mode)}
+                          variant={
+                            rankingMode === mode ? 'primary' : 'secondary'
+                          }
+                        >
+                          {t(`admin.console.usage.rankingModes.${mode}`)}
+                        </Button>
+                      ),
+                    )}
                   </div>
                 </div>
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">

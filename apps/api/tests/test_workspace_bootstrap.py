@@ -112,12 +112,12 @@ def test_workspace_bootstrap_projection_builds_apps_and_flat_nav() -> None:
                     path_suffix="?q=1",
                 ),
                 WorkspaceNavCatalogItem(
-                    id="image-wizard",
+                    id="optional-tool",
                     app_id="toolbox",
-                    title="Image Wizard",
+                    title="Optional Tool",
                     category="Core",
-                    icon_key="image",
-                    feature_flag="image_enabled",
+                    icon_key="box",
+                    feature_flag="optional_enabled",
                 ),
                 WorkspaceNavCatalogItem(
                     id="linked-tool",
@@ -157,7 +157,7 @@ def test_workspace_bootstrap_projection_builds_apps_and_flat_nav() -> None:
     projection = project_workspace_bootstrap_apps(
         catalog,
         enabled_app_ids={"toolbox", "docs"},
-        settings={"image_enabled": False},
+        settings={"optional_enabled": False},
     )
 
     assert [item["app_id"] for item in projection.apps] == ["toolbox", "docs"]
@@ -168,7 +168,7 @@ def test_workspace_bootstrap_projection_builds_apps_and_flat_nav() -> None:
     ]
     assert projection.apps[0]["nav_items"] == projection.nav[:2]
     assert projection.apps[1]["nav_items"] == projection.nav[2:]
-    assert all(item["id"] != "image-wizard" for item in projection.nav)
+    assert all(item["id"] != "optional-tool" for item in projection.nav)
     assert all(item["app_id"] != "mail" for item in projection.apps)
 
     search = projection.nav[0]
@@ -194,12 +194,12 @@ def test_workspace_bootstrap_projection_includes_feature_flagged_nav() -> None:
             icon_key="brain",
             nav_items=(
                 WorkspaceNavCatalogItem(
-                    id="image-wizard",
+                    id="optional-tool",
                     app_id="toolbox",
-                    title="Image Wizard",
+                    title="Optional Tool",
                     category="Core",
-                    icon_key="image",
-                    feature_flag="image_enabled",
+                    icon_key="box",
+                    feature_flag="optional_enabled",
                 ),
             ),
         ),
@@ -208,10 +208,10 @@ def test_workspace_bootstrap_projection_includes_feature_flagged_nav() -> None:
     projection = project_workspace_bootstrap_apps(
         catalog,
         enabled_app_ids={"toolbox"},
-        settings={"image_enabled": True},
+        settings={"optional_enabled": True},
     )
 
-    assert [item["id"] for item in projection.nav] == ["image-wizard"]
+    assert [item["id"] for item in projection.nav] == ["optional-tool"]
 
 
 def test_workspace_bootstrap_projection_keeps_app_when_child_flag_is_disabled() -> None:
@@ -251,28 +251,6 @@ def test_workspace_bootstrap_projection_keeps_app_when_child_flag_is_disabled() 
     assert [item["id"] for item in projection.nav] == ["search"]
 
 
-def test_workspace_bootstrap_includes_image_wizard_when_image_feature_enabled(
-    client: TestClient,
-    monkeypatch,
-) -> None:
-    monkeypatch.setenv("OPEN_WORK_HUB_IMAGE_ENABLED", "1")
-    get_settings.cache_clear()
-
-    session = _dev_login(client, "administrator")
-    token = session["token"]
-
-    response = client.get(
-        "/api/v1/workspaces/general/bootstrap",
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert response.status_code == 200
-    payload = response.json()
-
-    assert any(item["id"] == "image-wizard" for item in payload["nav"])
-    assert "image-wizard" in {item["app_id"] for item in payload["apps"]}
-    get_settings.cache_clear()
-
-
 def test_general_workspace_seed_and_admin_membership(client: TestClient) -> None:
     session = _dev_login(client, "administrator")
     token = session["token"]
@@ -300,8 +278,7 @@ def test_general_workspace_seed_and_admin_membership(client: TestClient) -> None
     assert any(item["current_user_role"] == "owner" for item in spaces_response.json())
 
 
-def test_dev_seed_workspaces_expose_every_registered_app(client: TestClient, monkeypatch) -> None:
-    monkeypatch.setenv("OPEN_WORK_HUB_IMAGE_ENABLED", "1")
+def test_dev_seed_workspaces_expose_every_registered_app(client: TestClient) -> None:
     get_settings.cache_clear()
     try:
         session = _dev_login(client, "administrator")

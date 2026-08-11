@@ -99,24 +99,24 @@ def test_llm_workload_registration_fails_closed_and_rejects_duplicate_app_task()
 def test_external_only_llm_workload_contract() -> None:
     registry = AiCapabilityRegistry()
     registry.register_llm_workload(
-        workload_id="images.generate",
-        task_kind="image_generation",
-        owner_domain="images",
-        app_id="images",
-        description="Generate an image",
+        workload_id="web-search.search",
+        task_kind="web_search",
+        owner_domain="web_search",
+        app_id="web-search",
+        description="Search the public web",
         default_route="external",
-        execution_kind="image_generation",
+        execution_kind="agent",
         allowed_routes=("external",),
         allowed_providers=("openai",),
-        required_capabilities=("image_generation",),
-        model_roles=("generation",),
+        required_capabilities=("tool_calling",),
+        model_roles=("default",),
         external_data=True,
     )
 
-    workload = registry.resolve_llm_workload("images.generate")
+    workload = registry.resolve_llm_workload("web-search.search")
     assert workload.default_policy == "external"
     assert workload.allowed_pools == ("external",)
-    assert workload.model_roles == ("generation",)
+    assert workload.model_roles == ("default",)
 
 
 @pytest.mark.parametrize(

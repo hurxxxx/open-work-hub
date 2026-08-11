@@ -15,15 +15,7 @@ const RagSearchView = lazy(() =>
     default: module.RagSearchView,
   })),
 );
-const ImageWizardToolView = lazy(() =>
-  import('./views/ImageWizard/ImageWizardToolView').then((module) => ({
-    default: module.ImageWizardToolView,
-  })),
-);
 export const ragSearchToolElement = lazyRoute(createElement(RagSearchView));
-export const imageWizardToolElement = lazyRoute(
-  createElement(ImageWizardToolView),
-);
 export const aiToolViewRoutes: ToolViewRouteDefinition[] = [
   {
     appId: 'ai',

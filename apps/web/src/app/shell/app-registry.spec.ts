@@ -170,7 +170,6 @@ describe('app module registry', () => {
       'docs.main',
       'whiteboard.main',
       'diagrams.main',
-      'image-wizard.main',
       'retrieval-search.main',
     ]);
     const pmsItem = getNavItem('pms-inbox');
@@ -206,26 +205,17 @@ describe('app module registry', () => {
   });
 
   it('derives background work sources from the app registry', () => {
-    expect(APP_BACKGROUND_WORK_SOURCES.map((source) => source.id)).toEqual([
-      'image-wizard',
-    ]);
-    expect(APP_BACKGROUND_WORK_SOURCES[0]).toMatchObject({
-      appId: 'image-wizard',
-    });
+    expect(APP_BACKGROUND_WORK_SOURCES).toEqual([]);
   });
 
   it('derives AI tool surfaces from feature module registrations', () => {
-    expect([...WORKSPACE_AI_TOOL_APP_IDS]).toEqual(['image-wizard']);
+    expect([...WORKSPACE_AI_TOOL_APP_IDS]).toEqual([]);
     expect(WORKSPACE_AI_TOOL_APP_IDS).not.toContain('docs');
     expect(WORKSPACE_AI_TOOL_APP_IDS).not.toContain('retrieval-search');
   });
 
   it('derives feature guides only from explicit app-local opt-ins', () => {
-    expect([...APP_FEATURE_GUIDE_TOOL_IDS]).toEqual([
-      'chatbot',
-      'search',
-      'image-wizard',
-    ]);
+    expect([...APP_FEATURE_GUIDE_TOOL_IDS]).toEqual(['chatbot', 'search']);
   });
 
   it('derives launcher policy from app-owned manifests', () => {

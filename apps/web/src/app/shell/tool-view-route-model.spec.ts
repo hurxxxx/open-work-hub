@@ -25,18 +25,6 @@ const ragSearchRoute = {
   id: 'ai.workspace-search',
   type: 'element',
 } as const;
-const imageWizardRoute = {
-  appId: 'chatbot',
-  gates: [
-    {
-      deniedReason: 'image_wizard_disabled',
-      navItemId: 'image-wizard',
-      type: 'bootstrap_nav_item',
-    },
-  ],
-  id: 'chatbot.image-wizard',
-  type: 'element',
-} as const;
 const genericBootstrapGatedRoute = {
   appId: 'chatbot',
   gates: [
@@ -67,7 +55,7 @@ function decision(
 ) {
   return resolveToolViewRouteDecision({
     enabledBootstrapApps: enabledApps,
-    enabledBootstrapNav: [{ id: 'image-wizard' }],
+    enabledBootstrapNav: [{ id: 'generic-feature' }],
     hasAnyWorkspaceMembership: true,
     hasRequestedWorkspaceMembership: true,
     hasToolWorkspaceMembership: true,
@@ -290,27 +278,6 @@ describe('tool view route model', () => {
     ).toEqual({
       type: 'access_denied',
       reason: 'workspace_search_disabled',
-    });
-    expect(
-      decision({
-        item: betaItem,
-        matchedToolRoute: imageWizardRoute,
-        toolId: 'image-wizard',
-      }),
-    ).toEqual({
-      routeId: 'chatbot.image-wizard',
-      type: 'tool_element',
-    });
-    expect(
-      decision({
-        enabledBootstrapNav: [],
-        item: betaItem,
-        matchedToolRoute: imageWizardRoute,
-        toolId: 'image-wizard',
-      }),
-    ).toEqual({
-      type: 'access_denied',
-      reason: 'image_wizard_disabled',
     });
     expect(
       decision({

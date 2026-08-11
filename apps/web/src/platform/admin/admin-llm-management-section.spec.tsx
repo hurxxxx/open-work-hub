@@ -20,10 +20,6 @@ vi.mock('./admin-ai-model-settings-section', () => ({
   AdminAiModelSettingsSection: () => <div>model catalog</div>,
 }));
 
-vi.mock('./admin-image-model-settings-section', () => ({
-  AdminImageModelSettingsSection: () => <div>image model settings</div>,
-}));
-
 function LocationHarness() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -51,7 +47,7 @@ describe('LLM management tab routing', () => {
     expect(resolveLlmManagementTab(null)).toBe('routing');
     expect(resolveLlmManagementTab('invalid')).toBe('routing');
     expect(resolveLlmManagementTab('providers')).toBe('providers');
-    expect(resolveLlmManagementTab('images')).toBe('images');
+    expect(resolveLlmManagementTab('obsolete')).toBe('routing');
   });
 
   it('preserves unrelated query parameters when changing tabs', () => {
@@ -70,13 +66,6 @@ describe('LLM management tab routing', () => {
     expect(screen.getByLabelText('location').textContent).toBe(
       '?tab=providers',
     );
-  });
-
-  it('supports a separate image model settings tab', () => {
-    renderAt('/admin/llm?tab=images');
-
-    expect(screen.getByText('image model settings')).toBeTruthy();
-    expect(screen.getByLabelText('location').textContent).toBe('?tab=images');
   });
 
   it('pushes tab changes so browser back restores the previous tab', async () => {

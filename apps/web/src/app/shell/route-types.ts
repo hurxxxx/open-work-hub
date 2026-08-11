@@ -25,8 +25,7 @@ export type ToolViewRouteMatchContext = {
 export type ToolViewAccessDeniedReason =
   | 'tool_workspace_denied'
   | 'app_disabled'
-  | 'workspace_search_disabled'
-  | 'image_wizard_disabled';
+  | 'workspace_search_disabled';
 
 export type ToolViewRouteGate =
   | {

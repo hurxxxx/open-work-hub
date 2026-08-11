@@ -73,10 +73,6 @@ def _seed_llm_routing_control_plane(db_path: Path) -> None:
         )
         connection.execute("CREATE TABLE ai_model_catalog_entries (id TEXT PRIMARY KEY)")
         connection.execute("CREATE TABLE ai_model_route_overrides (workload_id TEXT PRIMARY KEY)")
-        connection.execute(
-            "CREATE TABLE image_model_provider_configs (provider_id TEXT PRIMARY KEY)"
-        )
-        connection.execute("CREATE TABLE image_model_profiles (profile_id TEXT PRIMARY KEY)")
         connection.executemany(
             "INSERT INTO ai_model_provider_configs (provider_id) VALUES (?)",
             [(provider_id,) for provider_id in ("anthropic", "gemini", "local", "openai")],

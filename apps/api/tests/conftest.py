@@ -30,7 +30,9 @@ from integration_infra import (
     stale_resource_cutoff,
 )
 
-TEST_POSTGRES_DSN = "postgresql+psycopg://open_work_hub_test:open_work_hub_test@127.0.0.1:5432/open_work_hub_test"
+TEST_POSTGRES_DSN = (
+    "postgresql+psycopg://open_work_hub_test:open_work_hub_test@127.0.0.1:5432/open_work_hub_test"
+)
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -82,9 +84,7 @@ def _dispose_cached_engine(engine_factory) -> None:
 def _reset_test_database(engine) -> None:
     configured_database = engine.url.database or ""
     if not configured_database.startswith("open_work_hub_test_"):
-        raise RuntimeError(
-            f"Refusing to reset non-test database {configured_database!r}."
-        )
+        raise RuntimeError(f"Refusing to reset non-test database {configured_database!r}.")
 
     with engine.begin() as connection:
         connection.exec_driver_sql("SET LOCAL lock_timeout = '5s'")
@@ -105,9 +105,7 @@ def _truncate_test_database(engine) -> None:
     """Clear application data while preserving the migrated schema."""
     configured_database = engine.url.database or ""
     if not configured_database.startswith("open_work_hub_test_"):
-        raise RuntimeError(
-            f"Refusing to truncate non-test database {configured_database!r}."
-        )
+        raise RuntimeError(f"Refusing to truncate non-test database {configured_database!r}.")
 
     with engine.begin() as connection:
         connection.exec_driver_sql("SET LOCAL lock_timeout = '5s'")
@@ -125,12 +123,8 @@ def _truncate_test_database(engine) -> None:
         ]
         if not table_names:
             return
-        tables = ", ".join(
-            f"{schema}.{preparer.quote(table_name)}" for table_name in table_names
-        )
-        connection.exec_driver_sql(
-            f"TRUNCATE TABLE {tables} RESTART IDENTITY CASCADE"
-        )
+        tables = ", ".join(f"{schema}.{preparer.quote(table_name)}" for table_name in table_names)
+        connection.exec_driver_sql(f"TRUNCATE TABLE {tables} RESTART IDENTITY CASCADE")
 
 
 def _wait_for_postgres(dsn: str, timeout_seconds: int = 45) -> None:
@@ -229,9 +223,7 @@ def _create_native_test_database(template_dsn: str, database: str) -> str:
                 )
             )
             cursor.execute(
-                sql.SQL("ALTER DATABASE {} SET timezone TO 'UTC'").format(
-                    sql.Identifier(database)
-                )
+                sql.SQL("ALTER DATABASE {} SET timezone TO 'UTC'").format(sql.Identifier(database))
             )
     _wait_for_postgres(test_dsn)
     _ensure_pgvector_extension(test_dsn)
@@ -301,7 +293,9 @@ def _initialize_application_test_database(dsn: str) -> None:
     with pytest.MonkeyPatch.context() as monkeypatch:
         monkeypatch.setenv("OPEN_WORK_HUB_POSTGRES_DSN", dsn)
         monkeypatch.setenv("OPEN_WORK_HUB_API_AUTO_MIGRATE", "0")
-        monkeypatch.setenv("OPEN_WORK_HUB_MAIL_CREDENTIAL_ENCRYPTION_KEY", "test-mail-credential-key")
+        monkeypatch.setenv(
+            "OPEN_WORK_HUB_MAIL_CREDENTIAL_ENCRYPTION_KEY", "test-mail-credential-key"
+        )
         monkeypatch.setenv(
             "OPEN_WORK_HUB_AI_MODEL_CREDENTIAL_ENCRYPTION_KEY",
             "test-ai-model-credential-key",
@@ -652,7 +646,6 @@ def _configure_test_application_environment(
     monkeypatch.setenv("OPEN_WORK_HUB_RAG_EMBEDDING_PROVIDER", "fake")
     monkeypatch.setenv("OPEN_WORK_HUB_RAG_RERANK_PROVIDER", "fake")
     monkeypatch.setenv("OPEN_WORK_HUB_RAG_OCR_PROVIDER", "fake")
-    monkeypatch.setenv("OPEN_WORK_HUB_IMAGE_ENABLED", "0")
 
 
 def _prepare_client_process_state() -> None:
@@ -775,8 +768,7 @@ def _assert_reused_application_idle(app: FastAPI) -> None:
     ]
     if active_state_names:
         raise RuntimeError(
-            "Reusable application retained active lifespan state: "
-            + ", ".join(active_state_names)
+            "Reusable application retained active lifespan state: " + ", ".join(active_state_names)
         )
 
 

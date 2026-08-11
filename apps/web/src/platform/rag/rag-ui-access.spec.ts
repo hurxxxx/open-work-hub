@@ -30,11 +30,11 @@ describe('rag-ui-access', () => {
   it('checks a single workspace nav item toggle', () => {
     expect(
       isWorkspaceNavItemEnabled(
-        [{ id: 'search' }, { id: 'image-wizard' }],
-        'image-wizard',
+        [{ id: 'search' }, { id: 'optional-tool' }],
+        'optional-tool',
       ),
     ).toBe(true);
-    expect(isWorkspaceNavItemEnabled([{ id: 'search' }], 'image-wizard')).toBe(
+    expect(isWorkspaceNavItemEnabled([{ id: 'search' }], 'optional-tool')).toBe(
       false,
     );
   });

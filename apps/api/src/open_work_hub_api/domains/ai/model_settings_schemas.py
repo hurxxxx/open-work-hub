@@ -19,8 +19,6 @@ AiModelCapability = Literal[
     "chat",
     "tool_calling",
     "vision",
-    "image_supervisor",
-    "image_generation",
 ]
 
 

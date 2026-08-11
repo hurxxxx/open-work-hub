@@ -76,6 +76,8 @@ def _guard_server_managed_queues(
         env_profile=settings.env_profile,
         root=_workspace_root(),
     )
+
+
 # Keep telemetry bootstrapped before task modules import RAG metric wrappers.
 bootstrap_telemetry(
     service_name="open-work-hub-worker",
@@ -97,17 +99,13 @@ def _assert_llm_routing_control_plane_ready() -> None:
             session.execute(text("SELECT provider_id FROM ai_model_provider_configs LIMIT 1")).all()
             session.execute(text("SELECT id FROM ai_model_catalog_entries LIMIT 1")).all()
             session.execute(text("SELECT workload_id FROM ai_model_route_overrides LIMIT 1")).all()
-            session.execute(
-                text("SELECT provider_id FROM image_model_provider_configs LIMIT 1")
-            ).all()
-            session.execute(text("SELECT profile_id FROM image_model_profiles LIMIT 1")).all()
     except Exception as error:
         raise RuntimeError(
-            "AI model control plane is unavailable. "
-            "Run API migrations before starting the worker."
+            "AI model control plane is unavailable. Run API migrations before starting the worker."
         ) from error
     finally:
         engine.dispose()
+
 
 if worker_bootstrap_group_requires_llm_routing(settings.queue_group):
     _assert_llm_routing_control_plane_ready()

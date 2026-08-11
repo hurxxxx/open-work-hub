@@ -83,19 +83,6 @@ from open_work_hub_api.domains.files.retrieval_contract import (
 from open_work_hub_api.domains.meeting.app_catalog import MEETING_WORKSPACE_APP
 from open_work_hub_api.domains.planner.app_catalog import PLANNER_WORKSPACE_APP
 from open_work_hub_api.domains.pms.app_catalog import PMS_WORKSPACE_APP
-from open_work_hub_api.domains.images.agent_runtime import (
-    ImageBriefRuntimeResult,
-    ImageGenerationRuntimeResult,
-    ensure_builtin_image_agent_runtime_adapters_registered,
-    get_image_agent_runtime_adapter,
-    register_image_agent_runtime_adapter,
-    reset_image_agent_runtime_adapters,
-)
-from open_work_hub_api.domains.images.provider_registry import (
-    ImageProviderDescriptor,
-    register_image_provider,
-    reset_image_providers,
-)
 from open_work_hub_api.domains.rag.default_source_adapters import (
     ensure_rag_source_adapters_registered,
     resolve_rag_resource_types_for_source_kinds,
@@ -200,8 +187,6 @@ def _reset_platform_registries() -> None:
     reset_llm_execution_adapters()
     reset_llm_generation_profiles()
     reset_conversation_scope_adapters()
-    reset_image_agent_runtime_adapters()
-    reset_image_providers()
     reset_rag_source_adapters()
     reset_retrieval_partition_adapters()
     reset_keyword_search_backends()
@@ -215,7 +200,9 @@ def _reset_platform_registries() -> None:
 
 def _test_settings(**overrides) -> Settings:
     return Settings(
-        OPEN_WORK_HUB_POSTGRES_DSN=("postgresql+psycopg://open_work_hub_test:open_work_hub_test@127.0.0.1:5432/open_work_hub_test"),
+        OPEN_WORK_HUB_POSTGRES_DSN=(
+            "postgresql+psycopg://open_work_hub_test:open_work_hub_test@127.0.0.1:5432/open_work_hub_test"
+        ),
         **overrides,
     )
 
@@ -236,8 +223,6 @@ def test_platform_extension_bootstrap_registers_core_adapters_after_reset() -> N
         assert "pms" in snapshot.target_access_app_ids
         assert "files" in snapshot.conversation_scope_refs
         assert "meeting" in snapshot.conversation_scope_refs
-        assert "openai" in snapshot.image_agent_provider_ids
-        assert "openai" in snapshot.image_provider_ids
         assert "opensearch" in snapshot.keyword_search_backend_names
         assert "external:anthropic" in snapshot.llm_execution_adapter_keys
         assert "external:gemini" in snapshot.llm_execution_adapter_keys
@@ -685,29 +670,6 @@ def test_platform_validation_accepts_search_only_external_provider_adapter() -> 
         snapshot = initialize_platform_extensions(settings=settings)
 
         assert "vendor-search" in snapshot.ai_external_search_execution_adapter_names
-    finally:
-        _reset_platform_registries()
-
-
-def test_platform_extension_validation_rejects_enabled_image_provider_without_adapter() -> None:
-    _reset_platform_registries()
-    try:
-        register_image_provider(
-            ImageProviderDescriptor(
-                provider_id="local",
-                display_name="Local",
-                route_mode="local",
-                credential_kind="none",
-                default_endpoint_url=None,
-                adapter_id="local",
-            )
-        )
-
-        with pytest.raises(
-            PlatformExtensionBootstrapError,
-            match="image provider lacks runtime adapter: local/local",
-        ):
-            initialize_platform_extensions(settings=_test_settings())
     finally:
         _reset_platform_registries()
 
@@ -1789,7 +1751,9 @@ def test_default_target_access_adapters_reregister_after_reset() -> None:
 def test_target_access_import_does_not_register_default_adapters() -> None:
     reset_target_access_adapters()
 
-    source_access_targets = importlib.import_module("open_work_hub_api.domains.source_access.targets")
+    source_access_targets = importlib.import_module(
+        "open_work_hub_api.domains.source_access.targets"
+    )
     importlib.reload(source_access_targets)
 
     assert has_target_access_adapter("docs") is False
@@ -1810,15 +1774,6 @@ def test_target_access_lookup_lazy_registers_default_adapters() -> None:
     )
     assert has_target_access_adapter("docs")
     assert has_target_access_adapter("pms")
-
-
-def test_default_image_agent_runtime_adapters_reregister_after_reset() -> None:
-    reset_image_agent_runtime_adapters()
-
-    ensure_builtin_image_agent_runtime_adapters_registered()
-    ensure_builtin_image_agent_runtime_adapters_registered()
-
-    assert get_image_agent_runtime_adapter("openai") is not None
 
 
 def test_default_external_llm_providers_reregister_after_reset() -> None:
@@ -2273,31 +2228,6 @@ def test_llm_generation_profile_registry_accepts_extension_override() -> None:
         assert payload["extra_body"] == {"extension_reasoning": "low"}
     finally:
         reset_llm_generation_profiles()
-
-
-def test_image_agent_runtime_registry_accepts_extension_provider() -> None:
-    class ExtensionImageAgentRuntimeAdapter:
-        provider_id = "local"
-
-        def run_brief(self, **kwargs) -> ImageBriefRuntimeResult:
-            del kwargs
-            return ImageBriefRuntimeResult(text="local brief")
-
-        async def generate_image(self, **kwargs) -> ImageGenerationRuntimeResult:
-            del kwargs
-            return ImageGenerationRuntimeResult(image_bytes=b"png")
-
-    reset_image_agent_runtime_adapters()
-    try:
-        adapter = ExtensionImageAgentRuntimeAdapter()
-        register_image_agent_runtime_adapter(adapter)
-
-        ensure_builtin_image_agent_runtime_adapters_registered()
-
-        assert get_image_agent_runtime_adapter("local") is adapter
-        assert get_image_agent_runtime_adapter("openai") is not None
-    finally:
-        reset_image_agent_runtime_adapters()
 
 
 def test_default_target_access_adapters_allow_partial_app_override() -> None:

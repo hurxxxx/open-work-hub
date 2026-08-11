@@ -21,8 +21,8 @@ function item(
 ): CoreBackgroundWorkItem {
   return {
     id,
-    sourceId: 'images',
-    kind: 'image-generation',
+    sourceId: 'exports',
+    kind: 'document-export',
     title: id,
     status,
     updatedAt,
@@ -74,8 +74,8 @@ describe('core background work session', () => {
   });
 
   it('emits terminal toast events only when an active item finishes', () => {
-    const running = item('generation-1', 'running', '2026-05-31T09:00:00.000Z');
-    const failed = item('generation-1', 'failed', '2026-05-31T09:01:00.000Z');
+    const running = item('export-1', 'running', '2026-05-31T09:00:00.000Z');
+    const failed = item('export-1', 'failed', '2026-05-31T09:01:00.000Z');
     const snapshot = buildCoreBackgroundWorkSessionSnapshot({
       items: [
         failed,
@@ -83,7 +83,7 @@ describe('core background work session', () => {
       ],
       previousStatuses: new Map([
         [coreBackgroundWorkItemKey(running), running.status],
-        ['images:already-done', 'succeeded'],
+        ['exports:already-done', 'succeeded'],
       ]),
       cadence: { activePollIntervalMs: 1000, idlePollIntervalMs: 9000 },
     });
@@ -93,8 +93,8 @@ describe('core background work session', () => {
   });
 
   it('keeps last-known source items when a source list call fails', () => {
-    const running = item('generation-1', 'running', '2026-05-31T09:00:00.000Z');
-    const previousItemsBySource = new Map([['images', [running]]]);
+    const running = item('export-1', 'running', '2026-05-31T09:00:00.000Z');
+    const previousItemsBySource = new Map([['exports', [running]]]);
 
     expect(
       mergeCoreBackgroundWorkSourceListResults({
@@ -102,14 +102,14 @@ describe('core background work session', () => {
         settled: [
           { status: 'rejected', reason: new Error('temporary outage') },
         ],
-        sources: [{ id: 'images' }],
+        sources: [{ id: 'exports' }],
       }).items,
     ).toEqual([running]);
   });
 
   it('selects active items and updates cancelling keys immutably', () => {
-    const target = item('generation-1', 'running', '2026-05-31T09:00:00.000Z');
-    const current = new Set(['images:other']);
+    const target = item('export-1', 'running', '2026-05-31T09:00:00.000Z');
+    const current = new Set(['exports:other']);
     const added = addCancellingCoreBackgroundWorkKey(current, target);
     const removed = removeCancellingCoreBackgroundWorkKey(added, target);
 
@@ -120,8 +120,8 @@ describe('core background work session', () => {
         item('new-queued', 'queued', '2026-05-31T10:00:00.000Z'),
       ]).map((value) => value.id),
     ).toEqual(['new-queued', 'old-running']);
-    expect([...current]).toEqual(['images:other']);
-    expect([...added].sort()).toEqual(['images:generation-1', 'images:other']);
-    expect([...removed]).toEqual(['images:other']);
+    expect([...current]).toEqual(['exports:other']);
+    expect([...added].sort()).toEqual(['exports:export-1', 'exports:other']);
+    expect([...removed]).toEqual(['exports:other']);
   });
 });

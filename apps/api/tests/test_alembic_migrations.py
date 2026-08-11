@@ -14,6 +14,7 @@ def test_repository_has_one_linear_migration_chain() -> None:
     revisions = list(ScriptDirectory.from_config(config).walk_revisions())
 
     assert [revision.revision for revision in revisions] == [
+        "c8a1e4f7b2d9",
         "b7f2d4a9c6e1",
         "a2e6c8f1b3d5",
         "9d4a6f8b2c1e",

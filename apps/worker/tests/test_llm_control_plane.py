@@ -50,12 +50,6 @@ def _init_worker_db(
             connection.execute(
                 "CREATE TABLE ai_model_route_overrides (workload_id TEXT PRIMARY KEY)"
             )
-            connection.execute(
-                "CREATE TABLE image_model_provider_configs (provider_id TEXT PRIMARY KEY)"
-            )
-            connection.execute(
-                "CREATE TABLE image_model_profiles (profile_id TEXT PRIMARY KEY)"
-            )
         if seed_provider_rows:
             connection.executemany(
                 "INSERT INTO ai_model_provider_configs (provider_id) VALUES (?)",

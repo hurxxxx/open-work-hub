@@ -32,7 +32,6 @@ const ACCESS_DENIED_DESCRIPTION_KEYS: Record<
   string
 > = {
   app_disabled: 'shell:gates.appDisabled',
-  image_wizard_disabled: 'shell:gates.imageWizardDisabled',
   tool_workspace_denied: 'shell:gates.toolWorkspaceDenied',
   workspace_search_disabled: 'shell:gates.workspaceSearchDisabled',
 };

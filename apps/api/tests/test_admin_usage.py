@@ -10,10 +10,13 @@ from open_work_hub_api.core.db import get_session_factory
 from open_work_hub_api.domains.auth.access import record_audit_log
 from open_work_hub_api.domains.auth.models import AuthSession, utcnow_naive
 from open_work_hub_api.domains.auth.security import new_id
-from open_work_hub_api.domains.community.models import CommunityChannel, CommunityComment, CommunityPost
+from open_work_hub_api.domains.community.models import (
+    CommunityChannel,
+    CommunityComment,
+    CommunityPost,
+)
 from open_work_hub_api.domains.community.service import DEFAULT_CHANNEL_KEY, ensure_default_channels
 from open_work_hub_api.domains.docs.models import NativeDoc
-from open_work_hub_api.domains.images.models import ImageGeneration
 from open_work_hub_api.domains.meeting.models import Meeting
 from open_work_hub_api.domains.pms.models import Attachment, Task, TaskList
 from open_work_hub_api.domains.usage.models import UsageEvent, UsageExcludedUser
@@ -71,7 +74,6 @@ def test_admin_usage_dashboard_aggregates_user_content_and_llm_usage(
     assert totals["whiteboards_created_count"] == 1
     assert totals["meetings_created_count"] == 1
     assert totals["pms_tasks_created_count"] == 1
-    assert totals["images_created_count"] == 1
     assert totals["app_open_count"] == 1
     assert totals["content_view_count"] == 3
     assert totals["search_query_count"] == 1
@@ -625,14 +627,6 @@ def _seed_usage_rows(*, user_id: str, workspace_id: str) -> None:
                 size_bytes=2048,
                 storage_key=f"pms/{task_id}/usage.pdf",
                 uploaded_by_id=user_id,
-            )
-        )
-        db.add(
-            ImageGeneration(
-                id=new_id(),
-                workspace_id=workspace_id,
-                owner_id=user_id,
-                image_status="completed",
             )
         )
         ensure_default_channels(db)

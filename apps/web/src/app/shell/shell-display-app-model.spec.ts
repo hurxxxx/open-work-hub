@@ -7,9 +7,9 @@ describe('resolveShellDisplayAppId', () => {
     expect(
       resolveShellDisplayAppId({
         activeAppId: 'business',
-        pathname: '/w/delivery-hub/image-wizard',
+        pathname: '/w/delivery-hub/retrieval-search',
       }),
-    ).toBe('image-wizard');
+    ).toBe('retrieval-search');
   });
 
   it('keeps the shell identity outside leaf workspace routes', () => {

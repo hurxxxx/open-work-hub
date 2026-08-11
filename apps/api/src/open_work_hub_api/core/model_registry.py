@@ -19,10 +19,6 @@ def import_all_models() -> None:
     from open_work_hub_api.domains.docs import models as docs_models  # noqa: F401
     from open_work_hub_api.domains.dm import models as dm_models  # noqa: F401
     from open_work_hub_api.domains.files import models as files_models  # noqa: F401
-    from open_work_hub_api.domains.images import models as images_models  # noqa: F401
-    from open_work_hub_api.domains.images import (  # noqa: F401
-        model_settings_models as image_model_settings_models,
-    )
     from open_work_hub_api.domains.mail import models as mail_models  # noqa: F401
     from open_work_hub_api.domains.media import models as media_models  # noqa: F401
     from open_work_hub_api.domains.meeting import models as meeting_models  # noqa: F401

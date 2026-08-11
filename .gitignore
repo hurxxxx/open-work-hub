@@ -48,7 +48,6 @@ samples/
 !apps/web/public/maskable-icon-192x192.png
 !apps/web/public/maskable-icon-512x512.png
 !apps/web/public/mstile-150x150.png
-!apps/web/public/image-wizard/templates/*.png
 
 # Playwright E2E run artifacts
 test-results/

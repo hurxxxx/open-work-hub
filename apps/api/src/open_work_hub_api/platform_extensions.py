@@ -53,18 +53,9 @@ from open_work_hub_api.domains.conversations.scope_registry import (
     conversation_scope_adapters,
     supported_conversation_scope_refs,
 )
-from open_work_hub_api.domains.images.agent_runtime import (
-    ensure_builtin_image_agent_runtime_adapters_registered,
-    get_image_agent_runtime_adapter_by_id,
-    image_agent_runtime_adapter_ids,
-    image_agent_runtime_provider_ids,
+from open_work_hub_api.domains.rag.default_source_adapters import (
+    ensure_rag_source_adapters_registered,
 )
-from open_work_hub_api.domains.images.provider_registry import (
-    ensure_builtin_image_providers_registered,
-    image_provider_descriptors,
-    image_provider_ids,
-)
-from open_work_hub_api.domains.rag.default_source_adapters import ensure_rag_source_adapters_registered
 from open_work_hub_api.domains.rag.provider_factory import get_rag_provider_registry
 from open_work_hub_api.domains.rag.source_adapter_registry import (
     listed_rag_source_adapters,
@@ -147,9 +138,6 @@ class PlatformExtensionRegistrySnapshot:
     ai_external_search_execution_adapter_names: tuple[str, ...]
     target_access_app_ids: tuple[str, ...]
     conversation_scope_refs: tuple[str, ...]
-    image_agent_provider_ids: tuple[str, ...]
-    image_agent_adapter_ids: tuple[str, ...]
-    image_provider_ids: tuple[str, ...]
     keyword_search_backend_names: tuple[str, ...]
     llm_execution_adapter_keys: tuple[str, ...]
     llm_external_provider_ids: tuple[str, ...]
@@ -183,8 +171,6 @@ def initialize_platform_extensions(
     ensure_builtin_target_access_adapters_registered()
     ensure_builtin_source_access_adapters_registered()
     ensure_conversation_scope_adapters_registered()
-    ensure_builtin_image_providers_registered()
-    ensure_builtin_image_agent_runtime_adapters_registered()
     ensure_default_keyword_search_backends_registered()
     ensure_rag_source_adapters_registered()
     return validate_platform_extension_registries(settings)
@@ -201,7 +187,6 @@ def validate_platform_extension_registries(
         *_validate_runtime_config_contracts(snapshot, settings),
         *_validate_external_provider_settings(settings),
         *_validate_llm_registry_contracts(snapshot, settings),
-        *_validate_image_provider_registry_contracts(snapshot),
         *_validate_conversation_scope_registry_contracts(),
         *_validate_retrieval_partition_registry_contracts(),
         *_validate_search_registry_contracts(snapshot),
@@ -233,9 +218,6 @@ def _registry_snapshot() -> PlatformExtensionRegistrySnapshot:
         ai_external_search_execution_adapter_names=(supported_external_search_execution_adapters()),
         target_access_app_ids=target_access_app_ids(),
         conversation_scope_refs=tuple(sorted(supported_conversation_scope_refs())),
-        image_agent_provider_ids=image_agent_runtime_provider_ids(),
-        image_agent_adapter_ids=image_agent_runtime_adapter_ids(),
-        image_provider_ids=image_provider_ids(),
         keyword_search_backend_names=keyword_search_backend_names(),
         llm_execution_adapter_keys=llm_execution_adapter_keys(),
         llm_external_provider_ids=external_llm_provider_ids(official_only=True),
@@ -280,8 +262,6 @@ def _validate_required_registries(
         ),
         "target access registry": snapshot.target_access_app_ids,
         "conversation scope registry": snapshot.conversation_scope_refs,
-        "image agent runtime registry": snapshot.image_agent_provider_ids,
-        "image provider registry": snapshot.image_provider_ids,
         "keyword search backend registry": snapshot.keyword_search_backend_names,
         "LLM execution adapter registry": snapshot.llm_execution_adapter_keys,
         "external LLM provider registry": snapshot.llm_external_provider_ids,
@@ -420,27 +400,6 @@ def _validate_runtime_config_contracts(
         problems.append(
             f"configured keyword search backend is not registered: {keyword_search_backend}"
         )
-    return problems
-
-
-def _validate_image_provider_registry_contracts(
-    snapshot: PlatformExtensionRegistrySnapshot,
-) -> list[str]:
-    problems: list[str] = []
-    adapter_ids = set(snapshot.image_agent_adapter_ids)
-    for descriptor in image_provider_descriptors():
-        if descriptor.adapter_id not in adapter_ids:
-            problems.append(
-                "image provider lacks runtime adapter: "
-                f"{descriptor.provider_id}/{descriptor.adapter_id}"
-            )
-            continue
-        adapter = get_image_agent_runtime_adapter_by_id(descriptor.adapter_id)
-        if adapter is None or str(adapter.provider_id).strip().lower() != descriptor.provider_id:
-            problems.append(
-                "image provider runtime adapter mismatch: "
-                f"{descriptor.provider_id}/{descriptor.adapter_id}"
-            )
     return problems
 
 
