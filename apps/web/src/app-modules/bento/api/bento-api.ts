@@ -3,6 +3,7 @@ import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-uti
 
 export type BentoHubView = 'all' | 'mine' | 'archived';
 export type BentoVisibility = 'personal' | 'workspace';
+export type BentoGenerationLanguage = 'auto' | 'ko' | 'en';
 
 export interface BentoDocumentItem {
   id: string;
@@ -104,6 +105,24 @@ export function createBentoDocument(
   );
 }
 
+export function generateBentoDocument(
+  token: string,
+  payload: {
+    prompt: string;
+    slide_count?: number;
+    language?: BentoGenerationLanguage;
+    visibility?: BentoVisibility;
+  },
+  workspaceSlug?: string | null,
+): Promise<BentoDocumentDetail> {
+  return request<BentoDocumentDetail>(
+    `${API_BASE}/items/generate`,
+    token,
+    { method: 'POST', body: JSON.stringify(payload) },
+    workspaceSlug,
+  );
+}
+
 export function getBentoDocument(
   token: string,
   documentId: string,
@@ -113,6 +132,24 @@ export function getBentoDocument(
     `${API_BASE}/items/${encodeURIComponent(documentId)}`,
     token,
     {},
+    workspaceSlug,
+  );
+}
+
+export function editBentoDocumentWithAi(
+  token: string,
+  documentId: string,
+  payload: {
+    version: number;
+    prompt: string;
+    language?: BentoGenerationLanguage;
+  },
+  workspaceSlug?: string | null,
+): Promise<BentoDocumentDetail> {
+  return request<BentoDocumentDetail>(
+    `${API_BASE}/items/${encodeURIComponent(documentId)}/ai-edit`,
+    token,
+    { method: 'POST', body: JSON.stringify(payload) },
     workspaceSlug,
   );
 }

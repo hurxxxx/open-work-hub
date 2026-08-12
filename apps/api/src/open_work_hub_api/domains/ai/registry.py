@@ -815,6 +815,7 @@ def get_ai_capability_registry() -> AiCapabilityRegistry:
     _register_builtin_predicates(registry)
     for module_name in (
         "open_work_hub_api.domains.ai",
+        "open_work_hub_api.domains.bento",
         "open_work_hub_api.domains.docs",
         "open_work_hub_api.domains.files",
         "open_work_hub_api.domains.mail",

@@ -2705,6 +2705,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_slug}/bento/items/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Generate Bento Document */
+        post: operations["bento_generate_bento_document_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_slug}/bento/items/{document_id}/ai-edit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Edit Bento Document With Ai */
+        post: operations["bento_edit_bento_document_with_ai_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_slug}/bento/items/{document_id}": {
         parameters: {
             query?: never;
@@ -9563,6 +9597,19 @@ export interface components {
             /** Readiness Code */
             readiness_code?: string | null;
         };
+        /** EditBentoDocumentWithAiRequest */
+        EditBentoDocumentWithAiRequest: {
+            /** Version */
+            version: number;
+            /** Prompt */
+            prompt: string;
+            /**
+             * Language
+             * @default auto
+             * @enum {string}
+             */
+            language: "auto" | "ko" | "en";
+        };
         /** EntityTypeFacet */
         EntityTypeFacet: {
             /** Value */
@@ -9928,6 +9975,28 @@ export interface components {
             name?: string | null;
             /** Sort Order */
             sort_order?: number | null;
+        };
+        /** GenerateBentoDocumentRequest */
+        GenerateBentoDocumentRequest: {
+            /** Prompt */
+            prompt: string;
+            /**
+             * Slide Count
+             * @default 6
+             */
+            slide_count: number;
+            /**
+             * Language
+             * @default auto
+             * @enum {string}
+             */
+            language: "auto" | "ko" | "en";
+            /**
+             * Visibility
+             * @default personal
+             * @enum {string}
+             */
+            visibility: "personal" | "workspace";
         };
         /** GlobalNotificationItem */
         GlobalNotificationItem: {
@@ -24053,6 +24122,110 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BentoDocumentDetail"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bento_generate_bento_document_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GenerateBentoDocumentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BentoDocumentDetail"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bento_edit_bento_document_with_ai_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EditBentoDocumentWithAiRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

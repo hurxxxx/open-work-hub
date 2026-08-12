@@ -142,6 +142,18 @@ def ensure_default_llm_generation_profiles_registered() -> None:
         )
     _register_default_profile(
         LlmGenerationProfile(
+            profile_id="local_docker_model_runner",
+            pool="local",
+            provider="docker-model-runner",
+            default_reasoning_effort=LOCAL_DEFAULT_REASONING_EFFORT,
+            # Docker Model Runner forwards Qwen chat-template kwargs. Without
+            # this, Qwen can spend the full output budget on hidden reasoning
+            # and return an empty presentation body.
+            extra_body_builder=_vllm_extra_body,
+        )
+    )
+    _register_default_profile(
+        LlmGenerationProfile(
             profile_id="external_openai_compatible",
             pool="external",
             provider=None,

@@ -1204,6 +1204,22 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "영구 삭제 전에 프레젠테이션을 먼저 보관해야 합니다.",
         "en-US": "Archive the presentation before permanent deletion.",
     },
+    "bento.ai_unavailable": {
+        "ko-KR": "로컬 AI 모델을 사용할 수 없습니다. 모델 실행 및 관리자 설정을 확인하세요.",
+        "en-US": "The local AI model is unavailable. Check the model runtime and admin settings.",
+    },
+    "bento.ai_invalid_response": {
+        "ko-KR": "로컬 AI 응답을 Bento 문서로 변환하지 못했습니다. 자동 교정 후에도 검증에 실패했습니다. 다시 시도하세요.",
+        "en-US": "The local AI response could not be converted into a Bento document. Validation still failed after automatic repair. Try again.",
+    },
+    "bento.ai_document_too_large": {
+        "ko-KR": "이 프레젠테이션은 AI로 수정하기에 너무 큽니다.",
+        "en-US": "This presentation is too large for AI editing.",
+    },
+    "bento.ai_unsupported_document": {
+        "ko-KR": "이 프레젠테이션에는 현재 AI 수정이 지원하지 않는 요소가 포함되어 있습니다.",
+        "en-US": "This presentation contains elements that AI editing does not currently support.",
+    },
     "diagrams.not_found": {
         "ko-KR": "다이어그램을 찾을 수 없습니다.",
         "en-US": "Diagram not found.",

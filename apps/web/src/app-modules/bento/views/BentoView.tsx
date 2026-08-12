@@ -13,8 +13,10 @@ import {
   Presentation,
   Save,
   Search,
+  Sparkles,
   Trash2,
   Users,
+  X,
 } from 'lucide-react';
 import { DropdownMenu, type DropdownItem } from '@open-work-hub/ui';
 
@@ -28,6 +30,8 @@ import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils
 import {
   archiveBentoDocument,
   createBentoDocument,
+  editBentoDocumentWithAi,
+  generateBentoDocument,
   getBentoDocument,
   listBentoDocuments,
   permanentlyDeleteBentoDocument,
@@ -80,6 +84,12 @@ function BentoHub() {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [aiDialogOpen, setAiDialogOpen] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiSlideCount, setAiSlideCount] = useState(6);
+  const [aiVisibility, setAiVisibility] = useState<BentoVisibility>('personal');
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
   const view = viewFromSearch(searchParams.get('view'));
   const archived = view === 'archived';
   const timeZone = normalizeTimeZone(user?.time_zone);
@@ -168,6 +178,44 @@ function BentoHub() {
     },
     [navigate, t, token, workspaceSlug],
   );
+
+  const handleAiGenerate = useCallback(async () => {
+    const prompt = aiPrompt.trim();
+    if (!token || prompt.length < 3 || aiGenerating) return;
+    setAiGenerating(true);
+    setAiError(null);
+    try {
+      const created = await generateBentoDocument(
+        token,
+        {
+          prompt,
+          slide_count: aiSlideCount,
+          language: i18n.language.startsWith('ko') ? 'ko' : 'en',
+          visibility: aiVisibility,
+        },
+        workspaceSlug,
+      );
+      navigate(documentPath(workspaceSlug, created.id));
+    } catch (caught) {
+      setAiError(
+        caught instanceof Error
+          ? caught.message
+          : t('apps:bento.aiGenerateFailed'),
+      );
+    } finally {
+      setAiGenerating(false);
+    }
+  }, [
+    aiGenerating,
+    aiPrompt,
+    aiSlideCount,
+    aiVisibility,
+    i18n.language,
+    navigate,
+    t,
+    token,
+    workspaceSlug,
+  ]);
 
   const updateItem = useCallback((updated: BentoDocumentItem) => {
     setItems((current) =>
@@ -310,6 +358,17 @@ function BentoHub() {
               />
               <button
                 type="button"
+                onClick={() => {
+                  setAiError(null);
+                  setAiDialogOpen(true);
+                }}
+                className="inline-flex h-9 items-center gap-2 rounded-md bg-app-success px-3 text-sm font-semibold text-white hover:bg-app-success/90"
+              >
+                <Sparkles size={15} />
+                {t('apps:bento.aiCreate')}
+              </button>
+              <button
+                type="button"
                 onClick={() => importInputRef.current?.click()}
                 className="inline-flex h-9 items-center gap-2 rounded-md border border-app-border bg-app-surface px-3 text-sm font-medium hover:bg-app-surface-hover"
               >
@@ -398,6 +457,148 @@ function BentoHub() {
           </div>
         )}
       </div>
+
+      {aiDialogOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !aiGenerating) {
+              setAiDialogOpen(false);
+            }
+          }}
+        >
+          <form
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="bento-ai-dialog-title"
+            className="w-full max-w-2xl rounded-xl border border-app-border bg-app-surface p-5 shadow-2xl"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleAiGenerate();
+            }}
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-app-success/10 text-app-success">
+                <Sparkles size={20} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 id="bento-ai-dialog-title" className="app-text-title-sm">
+                  {t('apps:bento.aiDialogTitle')}
+                </h2>
+                <p className="app-text-body-sm mt-1 text-app-ink/55">
+                  {t('apps:bento.aiDialogDescription')}
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label={t('apps:bento.aiClose')}
+                disabled={aiGenerating}
+                onClick={() => setAiDialogOpen(false)}
+                className="inline-flex size-9 items-center justify-center rounded-md text-app-ink/55 hover:bg-app-surface-hover disabled:opacity-40"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <label className="mt-5 block">
+              <span className="app-text-label-sm text-app-ink/75">
+                {t('apps:bento.aiPromptLabel')}
+              </span>
+              <textarea
+                autoFocus
+                value={aiPrompt}
+                disabled={aiGenerating}
+                onChange={(event) => setAiPrompt(event.target.value)}
+                placeholder={t('apps:bento.aiPromptPlaceholder')}
+                rows={8}
+                maxLength={12_000}
+                className="app-text-body-sm mt-2 w-full resize-y rounded-lg border border-app-border bg-app-bg px-3 py-3 text-app-ink outline-none placeholder:text-app-ink/35 focus:border-app-success disabled:opacity-60"
+              />
+            </label>
+
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <label>
+                <span className="app-text-label-sm text-app-ink/75">
+                  {t('apps:bento.aiSlideCount')}
+                </span>
+                <select
+                  value={aiSlideCount}
+                  disabled={aiGenerating}
+                  onChange={(event) =>
+                    setAiSlideCount(Number(event.target.value))
+                  }
+                  className="app-text-body-sm mt-2 h-10 w-full rounded-md border border-app-border bg-app-bg px-3 text-app-ink outline-none focus:border-app-success"
+                >
+                  {[3, 4, 5, 6, 8, 10, 12].map((count) => (
+                    <option key={count} value={count}>
+                      {t('apps:bento.aiSlideCountOption', { count })}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span className="app-text-label-sm text-app-ink/75">
+                  {t('apps:bento.aiVisibility')}
+                </span>
+                <select
+                  value={aiVisibility}
+                  disabled={aiGenerating}
+                  onChange={(event) =>
+                    setAiVisibility(event.target.value as BentoVisibility)
+                  }
+                  className="app-text-body-sm mt-2 h-10 w-full rounded-md border border-app-border bg-app-bg px-3 text-app-ink outline-none focus:border-app-success"
+                >
+                  <option value="personal">
+                    {t('apps:bento.visibilityPersonal')}
+                  </option>
+                  <option value="workspace">
+                    {t('apps:bento.visibilityWorkspace')}
+                  </option>
+                </select>
+              </label>
+            </div>
+
+            {aiError ? (
+              <div className="mt-4 rounded-md border border-app-danger-border bg-app-danger-bg px-3 py-2 text-sm text-app-danger-text">
+                {aiError}
+              </div>
+            ) : null}
+
+            <div className="mt-5 flex items-center justify-between gap-4 border-t border-app-border pt-4">
+              <p className="app-text-caption text-app-ink/45">
+                {aiGenerating
+                  ? t('apps:bento.aiGeneratingHint')
+                  : t('apps:bento.aiLocalHint')}
+              </p>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  disabled={aiGenerating}
+                  onClick={() => setAiDialogOpen(false)}
+                  className="inline-flex h-9 items-center rounded-md border border-app-border px-3 text-sm font-medium text-app-ink/70 disabled:opacity-40"
+                >
+                  {t('apps:bento.aiCancel')}
+                </button>
+                <button
+                  type="submit"
+                  disabled={aiPrompt.trim().length < 3 || aiGenerating}
+                  className="inline-flex h-9 items-center gap-2 rounded-md bg-app-success px-4 text-sm font-semibold text-white hover:bg-app-success/90 disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  {aiGenerating ? (
+                    <Loader2 size={15} className="animate-spin" />
+                  ) : (
+                    <Sparkles size={15} />
+                  )}
+                  {aiGenerating
+                    ? t('apps:bento.aiGenerating')
+                    : t('apps:bento.aiGenerate')}
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      ) : null}
     </main>
   );
 }
@@ -626,7 +827,7 @@ function BentoCard({
 }
 
 function BentoEditor() {
-  const { t } = useTranslation('apps');
+  const { t, i18n } = useTranslation('apps');
   const { token } = useAuth();
   const { workspaceSlug, documentId } = useParams();
   const navigate = useNavigate();
@@ -637,6 +838,11 @@ function BentoEditor() {
   const pendingSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  const documentRequestRef = useRef<{
+    resolve: (documentJson: string) => void;
+    reject: (error: Error) => void;
+    timeout: ReturnType<typeof setTimeout>;
+  } | null>(null);
   const operationChainRef = useRef<Promise<void>>(Promise.resolve());
   const [detail, setDetail] = useState<BentoDocumentDetail | null>(null);
   const [iframeReady, setIframeReady] = useState(false);
@@ -644,6 +850,10 @@ function BentoEditor() {
     'idle' | 'saving' | 'saved' | 'error'
   >('idle');
   const [error, setError] = useState<string | null>(null);
+  const [aiEditOpen, setAiEditOpen] = useState(false);
+  const [aiEditPrompt, setAiEditPrompt] = useState('');
+  const [aiEditing, setAiEditing] = useState(false);
+  const [aiEditError, setAiEditError] = useState<string | null>(null);
   const embedConfig = useMemo(() => currentBentoEmbedConfig(), []);
 
   const applyDetail = useCallback((next: BentoDocumentDetail) => {
@@ -765,6 +975,13 @@ function BentoEditor() {
           message.type === 'save-request') &&
         message.documentJson
       ) {
+        if (message.type === 'save-request' && documentRequestRef.current) {
+          const pending = documentRequestRef.current;
+          documentRequestRef.current = null;
+          clearTimeout(pending.timeout);
+          pending.resolve(message.documentJson);
+          return;
+        }
         queueDocumentSave(
           message.documentJson,
           message.type === 'save-request',
@@ -785,9 +1002,30 @@ function BentoEditor() {
       if (pendingSaveTimerRef.current) {
         clearTimeout(pendingSaveTimerRef.current);
       }
+      if (documentRequestRef.current) {
+        clearTimeout(documentRequestRef.current.timeout);
+        documentRequestRef.current.reject(
+          new Error('Bento document request cancelled'),
+        );
+        documentRequestRef.current = null;
+      }
     },
     [],
   );
+
+  const requestCurrentDocument = useCallback((): Promise<string> => {
+    if (!iframeReady || !embedConfig || documentRequestRef.current) {
+      return Promise.reject(new Error(t('bento.bridgeFailed')));
+    }
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        documentRequestRef.current = null;
+        reject(new Error(t('bento.bridgeFailed')));
+      }, 5_000);
+      documentRequestRef.current = { resolve, reject, timeout };
+      postToBento(buildBentoSaveRequestMessage());
+    });
+  }, [embedConfig, iframeReady, postToBento, t]);
 
   const goBack = useCallback(() => {
     navigate(hubPath(workspaceSlug));
@@ -813,6 +1051,74 @@ function BentoEditor() {
       );
     }
   }, [documentId, goBack, t, token, workspaceSlug]);
+
+  const handleAiEdit = useCallback(async () => {
+    const prompt = aiEditPrompt.trim();
+    if (!token || !documentId || !detail || prompt.length < 3 || aiEditing) {
+      return;
+    }
+    setAiEditing(true);
+    setAiEditError(null);
+    try {
+      await operationChainRef.current.catch(() => undefined);
+      if (pendingSaveTimerRef.current) {
+        clearTimeout(pendingSaveTimerRef.current);
+        pendingSaveTimerRef.current = null;
+      }
+      const currentDocumentJson = await requestCurrentDocument();
+      let current = detailRef.current;
+      if (!current) throw new Error(t('bento.loadFailed'));
+
+      if (currentDocumentJson !== lastSavedJsonRef.current) {
+        setSaveStatus('saving');
+        const saved = await updateBentoDocument(
+          token,
+          documentId,
+          { version: current.version, document_json: currentDocumentJson },
+          workspaceSlug,
+        );
+        applyDetail(saved);
+        detailRef.current = saved;
+        lastSavedJsonRef.current = saved.document_json;
+        current = saved;
+      }
+
+      const revised = await editBentoDocumentWithAi(
+        token,
+        documentId,
+        {
+          version: current.version,
+          prompt,
+          language: i18n.language.startsWith('ko') ? 'ko' : 'en',
+        },
+        workspaceSlug,
+      );
+      loadedDocumentRef.current = null;
+      applyDetail(revised);
+      lastSavedJsonRef.current = revised.document_json;
+      setSaveStatus('saved');
+      setAiEditPrompt('');
+      setAiEditOpen(false);
+    } catch (caught) {
+      setSaveStatus('error');
+      setAiEditError(
+        caught instanceof Error ? caught.message : t('bento.aiEditFailed'),
+      );
+    } finally {
+      setAiEditing(false);
+    }
+  }, [
+    aiEditPrompt,
+    aiEditing,
+    applyDetail,
+    detail,
+    documentId,
+    i18n.language,
+    requestCurrentDocument,
+    t,
+    token,
+    workspaceSlug,
+  ]);
 
   return (
     <main className="flex h-full min-h-0 flex-col overflow-hidden bg-app-bg text-app-ink">
@@ -844,8 +1150,21 @@ function BentoEditor() {
         </div>
         <button
           type="button"
+          onClick={() => {
+            setAiEditError(null);
+            setAiEditOpen(true);
+          }}
+          disabled={!detail || !iframeReady || aiEditing}
+          title={t('bento.aiEdit')}
+          className="inline-flex h-9 items-center gap-2 rounded-md bg-app-success px-3 text-sm font-semibold text-white hover:bg-app-success/90 disabled:opacity-40"
+        >
+          <Sparkles size={16} />
+          <span className="hidden lg:inline">{t('bento.aiEdit')}</span>
+        </button>
+        <button
+          type="button"
           onClick={() => postToBento(buildBentoSaveRequestMessage())}
-          disabled={!iframeReady}
+          disabled={!iframeReady || aiEditing}
           title={t('bento.saveNow')}
           className="inline-flex size-9 items-center justify-center rounded-md border border-app-border bg-app-surface text-app-ink/65 disabled:opacity-40"
         >
@@ -854,7 +1173,7 @@ function BentoEditor() {
         <button
           type="button"
           onClick={() => postToBento(buildBentoExportMessage())}
-          disabled={!iframeReady}
+          disabled={!iframeReady || aiEditing}
           title={t('bento.export')}
           className="inline-flex size-9 items-center justify-center rounded-md border border-app-border bg-app-surface text-app-ink/65 disabled:opacity-40"
         >
@@ -909,29 +1228,118 @@ function BentoEditor() {
         </div>
       ) : null}
 
-      <div className="relative min-h-0 flex-1 bg-white">
-        {!detail || !embedConfig ? (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-app-bg text-app-ink/50">
-            {!embedConfig ? (
-              t('bento.notConfigured')
-            ) : error ? (
-              <Archive size={24} />
-            ) : (
-              <Loader2 size={24} className="animate-spin" />
-            )}
-          </div>
-        ) : null}
-        {embedConfig ? (
-          <iframe
-            ref={iframeRef}
-            title={t('bento.editorTitle')}
-            src={embedConfig.src}
-            className="h-full w-full border-0"
-            sandbox="allow-downloads allow-forms allow-modals allow-pointer-lock allow-popups allow-presentation allow-same-origin allow-scripts"
-            referrerPolicy="strict-origin"
-            allow="clipboard-read; clipboard-write; fullscreen"
-            allowFullScreen
-          />
+      <div className="relative flex min-h-0 flex-1 bg-white">
+        <div className="relative min-w-0 flex-1">
+          {!detail || !embedConfig ? (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-app-bg text-app-ink/50">
+              {!embedConfig ? (
+                t('bento.notConfigured')
+              ) : error ? (
+                <Archive size={24} />
+              ) : (
+                <Loader2 size={24} className="animate-spin" />
+              )}
+            </div>
+          ) : null}
+          {embedConfig ? (
+            <iframe
+              ref={iframeRef}
+              title={t('bento.editorTitle')}
+              src={embedConfig.src}
+              className={cn(
+                'h-full w-full border-0',
+                aiEditing && 'pointer-events-none opacity-80',
+              )}
+              sandbox="allow-downloads allow-forms allow-modals allow-pointer-lock allow-popups allow-presentation allow-same-origin allow-scripts"
+              referrerPolicy="strict-origin"
+              allow="clipboard-read; clipboard-write; fullscreen"
+              allowFullScreen
+            />
+          ) : null}
+        </div>
+
+        {aiEditOpen ? (
+          <aside className="relative z-20 flex w-[min(380px,92vw)] shrink-0 flex-col border-l border-app-border bg-app-bg shadow-xl">
+            <div className="flex items-start gap-3 border-b border-app-border p-4">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-app-success/10 text-app-success">
+                <Sparkles size={18} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 className="app-text-title-sm">{t('bento.aiEditTitle')}</h2>
+                <p className="app-text-caption mt-1 text-app-ink/50">
+                  {t('bento.aiEditDescription')}
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label={t('bento.aiEditClose')}
+                disabled={aiEditing}
+                onClick={() => setAiEditOpen(false)}
+                className="inline-flex size-8 items-center justify-center rounded-md text-app-ink/55 hover:bg-app-surface-hover disabled:opacity-40"
+              >
+                <X size={17} />
+              </button>
+            </div>
+
+            <form
+              className="flex min-h-0 flex-1 flex-col p-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void handleAiEdit();
+              }}
+            >
+              <label className="flex min-h-0 flex-1 flex-col">
+                <span className="app-text-label-sm text-app-ink/75">
+                  {t('bento.aiEditPromptLabel')}
+                </span>
+                <textarea
+                  autoFocus
+                  value={aiEditPrompt}
+                  disabled={aiEditing}
+                  onChange={(event) => setAiEditPrompt(event.target.value)}
+                  placeholder={t('bento.aiEditPromptPlaceholder')}
+                  maxLength={12_000}
+                  className="app-text-body-sm mt-2 min-h-48 flex-1 resize-none rounded-lg border border-app-border bg-app-surface px-3 py-3 text-app-ink outline-none placeholder:text-app-ink/35 focus:border-app-success disabled:opacity-60"
+                />
+              </label>
+
+              {aiEditError ? (
+                <div className="mt-3 rounded-md border border-app-danger-border bg-app-danger-bg px-3 py-2 text-sm text-app-danger-text">
+                  {aiEditError}
+                </div>
+              ) : null}
+
+              <p className="app-text-caption mt-3 text-app-ink/45">
+                {aiEditing
+                  ? t('bento.aiEditingHint')
+                  : t('bento.aiEditHint')}
+              </p>
+              <div className="mt-4 flex justify-end gap-2 border-t border-app-border pt-4">
+                <button
+                  type="button"
+                  disabled={aiEditing}
+                  onClick={() => setAiEditOpen(false)}
+                  className="inline-flex h-9 items-center rounded-md border border-app-border px-3 text-sm font-medium text-app-ink/70 disabled:opacity-40"
+                >
+                  {t('bento.aiCancel')}
+                </button>
+                <button
+                  type="submit"
+                  disabled={aiEditPrompt.trim().length < 3 || aiEditing}
+                  className="inline-flex h-9 items-center gap-2 rounded-md bg-app-success px-4 text-sm font-semibold text-white hover:bg-app-success/90 disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  {aiEditing ? (
+                    <Loader2 size={15} className="animate-spin" />
+                  ) : (
+                    <Sparkles size={15} />
+                  )}
+                  {aiEditing
+                    ? t('bento.aiEditing')
+                    : t('bento.aiEditApply')}
+                </button>
+              </div>
+            </form>
+          </aside>
         ) : null}
       </div>
     </main>

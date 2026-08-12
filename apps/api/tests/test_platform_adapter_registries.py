@@ -47,6 +47,7 @@ from open_work_hub_api.core.llm_model_profiles import (
     register_llm_generation_profile,
     reset_llm_generation_profiles,
     resolve_reasoning_effort,
+    select_llm_generation_profile,
 )
 from open_work_hub_api.domains.ai.runtime.external_adapters import (
     register_external_planner_execution_adapter,
@@ -236,6 +237,7 @@ def test_platform_extension_bootstrap_registers_core_adapters_after_reset() -> N
         assert "external:gemini" in snapshot.llm_generation_profile_keys
         assert "external:openai" in snapshot.llm_generation_profile_keys
         assert "external:*" in snapshot.llm_generation_profile_keys
+        assert "local:docker-model-runner" in snapshot.llm_generation_profile_keys
         assert "local:vllm" in snapshot.llm_generation_profile_keys
         assert "local:*" in snapshot.llm_generation_profile_keys
         assert "external:anthropic" in snapshot.llm_pool_config_resolver_keys
@@ -2089,12 +2091,19 @@ def test_default_llm_generation_profiles_reregister_after_reset() -> None:
         "external:gemini",
         "external:openai",
         "local:*",
+        "local:docker-model-runner",
         "local:vllm",
         "local:vllm-openai",
     )
     assert resolve_reasoning_effort("external", "openai", reasoning_effort=None) == "medium"
+    assert resolve_reasoning_effort("local", "docker-model-runner", reasoning_effort=None) == "none"
     assert resolve_reasoning_effort("local", "vllm", reasoning_effort=None) == "none"
     assert resolve_reasoning_effort("local", "vllm", reasoning_effort="high") == "high"
+
+    docker_profile = select_llm_generation_profile("local", "docker-model-runner")
+    assert docker_profile.extra_body("none") == {
+        "chat_template_kwargs": {"enable_thinking": False}
+    }
 
 
 def test_web_search_workloads_register_as_external_only() -> None:

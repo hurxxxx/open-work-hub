@@ -5359,6 +5359,39 @@ export const resources = {
       },
       bento: {
         actionsMenu: '프레젠테이션 설정',
+        aiCancel: '취소',
+        aiClose: 'AI 생성 창 닫기',
+        aiCreate: 'AI로 만들기',
+        aiDialogDescription:
+          '주제, 대상, 목적과 꼭 담을 내용을 알려주면 편집 가능한 슬라이드 초안을 만듭니다.',
+        aiDialogTitle: '프롬프트로 프레젠테이션 만들기',
+        aiEdit: 'AI로 수정',
+        aiEditApply: '수정 적용',
+        aiEditClose: 'AI 수정 패널 닫기',
+        aiEditDescription:
+          '현재 프레젠테이션을 기준으로 내용과 디자인을 수정합니다.',
+        aiEditFailed: 'AI로 프레젠테이션을 수정할 수 없습니다.',
+        aiEditHint:
+          '현재 편집 내용을 먼저 저장한 뒤 등록된 로컬 AI 모델로 수정합니다.',
+        aiEditPromptLabel: '수정 지시',
+        aiEditPromptPlaceholder:
+          '예: 전체 문장을 더 간결하게 다듬고, 마지막 슬라이드의 다음 행동을 세 가지로 명확하게 정리해줘.',
+        aiEditTitle: 'AI로 프레젠테이션 수정',
+        aiEditing: '수정 중...',
+        aiEditingHint:
+          '로컬 모델이 현재 문서를 다시 구성하고 있습니다. 완료될 때까지 편집이 잠시 중지됩니다.',
+        aiGenerate: '프레젠테이션 생성',
+        aiGenerateFailed: 'AI 프레젠테이션을 만들 수 없습니다.',
+        aiGenerating: '생성 중...',
+        aiGeneratingHint:
+          '로컬 모델이 슬라이드를 구성하고 있습니다. 몇 분 정도 걸릴 수 있습니다.',
+        aiLocalHint: '프롬프트는 등록된 로컬 AI 모델에서 처리됩니다.',
+        aiPromptLabel: '프레젠테이션 내용',
+        aiPromptPlaceholder:
+          '예: 신제품 출시안을 경영진에게 보고할 6장 발표 자료. 시장 문제, 핵심 기능 3가지, 출시 일정, 위험과 다음 결정을 포함하고 간결한 한국어로 작성해줘.',
+        aiSlideCount: '슬라이드 수',
+        aiSlideCountOption: '{{count}}장',
+        aiVisibility: '공개 범위',
         archive: '보관',
         archiveEmpty: '보관된 프레젠테이션이 없습니다',
         archiveFailed: '프레젠테이션을 보관할 수 없습니다.',
@@ -10864,6 +10897,40 @@ export const resources = {
       },
       bento: {
         actionsMenu: 'Presentation settings',
+        aiCancel: 'Cancel',
+        aiClose: 'Close AI generation dialog',
+        aiCreate: 'Create with AI',
+        aiDialogDescription:
+          'Describe the topic, audience, goal, and must-have content to create an editable slide draft.',
+        aiDialogTitle: 'Create a presentation from a prompt',
+        aiEdit: 'Edit with AI',
+        aiEditApply: 'Apply revision',
+        aiEditClose: 'Close AI editing panel',
+        aiEditDescription:
+          'Revise the content and design of the current presentation.',
+        aiEditFailed: 'Could not revise the presentation with AI.',
+        aiEditHint:
+          'Current edits are saved before the registered local AI model revises the deck.',
+        aiEditPromptLabel: 'Revision instruction',
+        aiEditPromptPlaceholder:
+          'Example: Make the copy more concise and turn the final slide into three clear next actions.',
+        aiEditTitle: 'Edit presentation with AI',
+        aiEditing: 'Revising...',
+        aiEditingHint:
+          'The local model is revising the current document. Editing is paused until it finishes.',
+        aiGenerate: 'Generate presentation',
+        aiGenerateFailed: 'Could not generate the AI presentation.',
+        aiGenerating: 'Generating...',
+        aiGeneratingHint:
+          'The local model is composing the slides. This can take a few minutes.',
+        aiLocalHint:
+          'Your prompt is processed by the registered local AI model.',
+        aiPromptLabel: 'Presentation brief',
+        aiPromptPlaceholder:
+          'Example: A six-slide executive launch proposal covering the market problem, three key capabilities, timeline, risks, and the decision required.',
+        aiSlideCount: 'Slide count',
+        aiSlideCountOption: '{{count}} slides',
+        aiVisibility: 'Visibility',
         archive: 'Archive',
         archiveEmpty: 'No archived presentations',
         archiveFailed: 'Could not archive the presentation.',

@@ -20,6 +20,13 @@ from open_work_hub_api.domains.auth.dependencies import (
 from open_work_hub_api.domains.auth.models import User, Workspace
 from open_work_hub_api.domains.auth.workspace_app_gate import require_workspace_app_enabled
 from open_work_hub_api.domains.bento.app_catalog import BENTO_WORKSPACE_APP
+from open_work_hub_api.domains.bento.generation import (
+    BENTO_GENERATION_MAX_SLIDES,
+    BentoGenerationError,
+    BentoGenerationLanguage,
+    generate_bento_document_json,
+    revise_bento_document_json,
+)
 from open_work_hub_api.domains.bento.models import BentoDocument
 
 
@@ -133,6 +140,35 @@ class UpdateBentoDocumentRequest(BaseModel):
         return title
 
 
+class GenerateBentoDocumentRequest(BaseModel):
+    prompt: str = Field(..., min_length=3, max_length=12_000)
+    slide_count: int = Field(default=6, ge=3, le=BENTO_GENERATION_MAX_SLIDES)
+    language: BentoGenerationLanguage = "auto"
+    visibility: BentoVisibility = "personal"
+
+    @field_validator("prompt")
+    @classmethod
+    def validate_prompt(cls, value: str) -> str:
+        prompt = value.strip()
+        if len(prompt) < 3:
+            raise ValueError("prompt must not be blank")
+        return prompt
+
+
+class EditBentoDocumentWithAiRequest(BaseModel):
+    version: int = Field(..., ge=1)
+    prompt: str = Field(..., min_length=3, max_length=12_000)
+    language: BentoGenerationLanguage = "auto"
+
+    @field_validator("prompt")
+    @classmethod
+    def validate_prompt(cls, value: str) -> str:
+        prompt = value.strip()
+        if len(prompt) < 3:
+            raise ValueError("prompt must not be blank")
+        return prompt
+
+
 class BentoDocumentItem(BaseModel):
     id: str
     workspace_id: str
@@ -243,6 +279,37 @@ def _serialize_detail(
     return BentoDocumentDetail(**item.model_dump(), document_json=document.document_json)
 
 
+def _persist_document(
+    db: Session,
+    *,
+    workspace: Workspace,
+    current_user: User,
+    title: str,
+    visibility: BentoVisibility,
+    document_json: str,
+) -> BentoDocument:
+    now = _utcnow()
+    document = BentoDocument(
+        id=str(uuid.uuid4()),
+        workspace_id=workspace.id,
+        owner_id=current_user.id,
+        title=title,
+        visibility=visibility,
+        document_json=document_json,
+        version=1,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(document)
+    db.commit()
+    return _load_or_404(
+        db,
+        workspace_id=workspace.id,
+        document_id=document.id,
+        current_user=current_user,
+    )
+
+
 @router.get("/hub", response_model=BentoHubResponse)
 def list_bento_hub(
     view: BentoHubView = Query(default="all"),
@@ -317,21 +384,136 @@ def create_bento_document(
     document_json, parsed = _validated_document_json(raw_document)
     parsed["title"] = title
     document_json = json.dumps(parsed, ensure_ascii=False, separators=(",", ":"))
-    now = _utcnow()
-    document = BentoDocument(
-        id=str(uuid.uuid4()),
-        workspace_id=workspace.id,
-        owner_id=current_user.id,
+    document = _persist_document(
+        db,
+        workspace=workspace,
+        current_user=current_user,
         title=title,
         visibility=payload.visibility,
         document_json=document_json,
-        version=1,
-        created_at=now,
-        updated_at=now,
     )
-    db.add(document)
-    db.commit()
+    workspace_role = resolve_workspace_role(db, current_user, workspace.id)
+    return _serialize_detail(
+        document,
+        current_user=current_user,
+        workspace_role=workspace_role,
+    )
+
+
+@router.post(
+    "/items/generate",
+    response_model=BentoDocumentDetail,
+    status_code=status.HTTP_201_CREATED,
+)
+def generate_bento_document(
+    payload: GenerateBentoDocumentRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
+) -> BentoDocumentDetail:
+    try:
+        document_json, parsed = generate_bento_document_json(
+            db,
+            workspace_id=workspace.id,
+            actor_user_id=current_user.id,
+            prompt=payload.prompt,
+            slide_count=payload.slide_count,
+            language=payload.language,
+        )
+    except BentoGenerationError as exc:
+        code = (
+            "bento.ai_invalid_response"
+            if str(exc) == "invalid_response"
+            else "bento.ai_unavailable"
+        )
+        raise localized_http_exception(status_code=502, code=code) from exc
+
+    title = str(parsed["title"]).strip()
+    document = _persist_document(
+        db,
+        workspace=workspace,
+        current_user=current_user,
+        title=title,
+        visibility=payload.visibility,
+        document_json=document_json,
+    )
+    workspace_role = resolve_workspace_role(db, current_user, workspace.id)
+    return _serialize_detail(
+        document,
+        current_user=current_user,
+        workspace_role=workspace_role,
+    )
+
+
+@router.post(
+    "/items/{document_id}/ai-edit",
+    response_model=BentoDocumentDetail,
+)
+def edit_bento_document_with_ai(
+    document_id: str,
+    payload: EditBentoDocumentWithAiRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
+) -> BentoDocumentDetail:
     document = _load_or_404(
+        db,
+        workspace_id=workspace.id,
+        document_id=document_id,
+        current_user=current_user,
+    )
+    if document.archived_at is not None:
+        raise localized_http_exception(status_code=409, code="bento.archived")
+    if document.version != payload.version:
+        raise localized_http_exception(status_code=409, code="bento.version_conflict")
+
+    try:
+        document_json, parsed = revise_bento_document_json(
+            db,
+            workspace_id=workspace.id,
+            actor_user_id=current_user.id,
+            prompt=payload.prompt,
+            current_document_json=document.document_json,
+            language=payload.language,
+        )
+    except BentoGenerationError as exc:
+        error = str(exc)
+        if error == "document_too_large":
+            raise localized_http_exception(
+                status_code=413,
+                code="bento.ai_document_too_large",
+            ) from exc
+        if error == "unsupported_document":
+            raise localized_http_exception(
+                status_code=422,
+                code="bento.ai_unsupported_document",
+            ) from exc
+        code = (
+            "bento.ai_invalid_response" if error == "invalid_response" else "bento.ai_unavailable"
+        )
+        raise localized_http_exception(status_code=502, code=code) from exc
+
+    now = _utcnow()
+    result = db.execute(
+        update(BentoDocument)
+        .where(
+            BentoDocument.id == document.id,
+            BentoDocument.workspace_id == workspace.id,
+            BentoDocument.version == payload.version,
+            BentoDocument.archived_at.is_(None),
+        )
+        .values(
+            title=str(parsed["title"]).strip(),
+            document_json=document_json,
+            updated_at=now,
+            version=payload.version + 1,
+        )
+    )
+    if result.rowcount != 1:
+        db.rollback()
+        raise localized_http_exception(status_code=409, code="bento.version_conflict")
+    db.commit()
+    updated_document = _load_or_404(
         db,
         workspace_id=workspace.id,
         document_id=document.id,
@@ -339,7 +521,7 @@ def create_bento_document(
     )
     workspace_role = resolve_workspace_role(db, current_user, workspace.id)
     return _serialize_detail(
-        document,
+        updated_document,
         current_user=current_user,
         workspace_role=workspace_role,
     )

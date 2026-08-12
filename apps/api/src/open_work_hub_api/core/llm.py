@@ -185,11 +185,19 @@ class LlmModelConfigurationError(LlmRuntimeError):
 
 
 @dataclass(frozen=True)
+class LlmToolCall:
+    id: str | None
+    name: str
+    arguments: str
+
+
+@dataclass(frozen=True)
 class LlmCompletionResult:
     text: str
     model: str | None
     usage: Mapping[str, int] | None = None
     finish_reason: str | None = None
+    tool_calls: tuple[LlmToolCall, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1135,6 +1143,7 @@ def completion_result(response: Any) -> LlmCompletionResult:
         model=_response_model(response),
         usage=_extract_usage(response),
         finish_reason=_first_choice_finish_reason(response),
+        tool_calls=completion_tool_calls(response),
     )
 
 
@@ -1158,6 +1167,59 @@ def completion_text(response: Any) -> str:
         message.get("content") if isinstance(message, dict) else getattr(message, "content", None)
     )
     return _message_content_text(content)
+
+
+def completion_tool_calls(response: Any) -> tuple[LlmToolCall, ...]:
+    choices = (
+        response.get("choices")
+        if isinstance(response, dict)
+        else getattr(response, "choices", None)
+    ) or []
+    if not choices:
+        return ()
+    first_choice = choices[0]
+    message = (
+        first_choice.get("message")
+        if isinstance(first_choice, dict)
+        else getattr(first_choice, "message", None)
+    )
+    if message is None:
+        return ()
+    raw_tool_calls = (
+        message.get("tool_calls")
+        if isinstance(message, dict)
+        else getattr(message, "tool_calls", None)
+    ) or []
+    normalized: list[LlmToolCall] = []
+    for raw_call in raw_tool_calls:
+        function = (
+            raw_call.get("function")
+            if isinstance(raw_call, dict)
+            else getattr(raw_call, "function", None)
+        )
+        if function is None:
+            continue
+        name = (
+            function.get("name") if isinstance(function, dict) else getattr(function, "name", None)
+        )
+        arguments = (
+            function.get("arguments")
+            if isinstance(function, dict)
+            else getattr(function, "arguments", None)
+        )
+        if not isinstance(name, str) or not name or not isinstance(arguments, str):
+            continue
+        call_id = (
+            raw_call.get("id") if isinstance(raw_call, dict) else getattr(raw_call, "id", None)
+        )
+        normalized.append(
+            LlmToolCall(
+                id=call_id if isinstance(call_id, str) and call_id else None,
+                name=name,
+                arguments=arguments,
+            )
+        )
+    return tuple(normalized)
 
 
 def _response_model(response: Any) -> str | None:

@@ -571,6 +571,39 @@ def test_completion_result_normalizes_dict_response_with_content_parts() -> None
     }
 
 
+def test_completion_result_normalizes_tool_calls() -> None:
+    response = {
+        "model": "local/qwen",
+        "choices": [
+            {
+                "message": {
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call-1",
+                            "type": "function",
+                            "function": {
+                                "name": "submit_document",
+                                "arguments": '{"document_json":"{}"}',
+                            },
+                        }
+                    ],
+                },
+                "finish_reason": "tool_calls",
+            }
+        ],
+    }
+
+    result = llm.completion_result(response)
+
+    assert result.text == ""
+    assert result.finish_reason == "tool_calls"
+    assert len(result.tool_calls) == 1
+    assert result.tool_calls[0].id == "call-1"
+    assert result.tool_calls[0].name == "submit_document"
+    assert result.tool_calls[0].arguments == '{"document_json":"{}"}'
+
+
 def test_official_anthropic_stream_emits_deltas_usage_and_done(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
