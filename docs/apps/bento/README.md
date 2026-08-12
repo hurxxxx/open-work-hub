@@ -101,12 +101,23 @@ state slide와 link, 차트·표의 실제 JSON 형태, 발표자 노트와 최�
 따라서 생성과 수정 모두 같은 Bento 작성 규칙을 사용하며, 런타임에서 외부 문서를 가져오지 않아
 로컬·오프라인 실행을 유지한다.
 
+새 문서 생성은 에이전트 루프가 아닌 고정된 2단계 로컬 LLM 파이프라인이다. 첫 단계인
+`bento.plan_presentation`은 thinking을 활성화해 사용자 brief를 장별 목적, 핵심 메시지, 서로 다른
+composition, 구체적인 visual anchor, 콘텐츠와 요소 예산을 가진 스토리보드로 만든다. 서버가 계획의
+슬라이드 수와 필수 필드를 검증한 다음에만 두 번째 `bento.generate_presentation` 호출이 계획을
+편집 가능한 요소로 렌더링한다. 렌더링 단계는 숨은 추론이 장문 JSON 출력 예산을 소진하지 않도록
+thinking을 끄며, 계획에 지정된 다이어그램·프로세스·코드 흐름·차트·표를 일반 문단이나 반복 카드로
+축소하지 않도록 요구한다. 생성 시간과 가독성을 위해 한 슬라이드는 최대 24개의 목적 있는 요소를
+목표로 하며, 큰 재귀 트리나 격자는 핵심 상태만 그룹화해 표현한다. 계획 단계가 실패하면 렌더링과
+문서 저장은 수행하지 않는다.
+
 모델 출력은 일반 텍스트 JSON에만 의존하지 않는다. Docker Model Runner에
 `submit_bento_document` 함수 호출과 단일 `document_json` 인자를 강제 요청한다. DMR의 OpenAI
 호환 API는 JSON 모드는 제공하지만 llama.cpp의 JSON Schema 문법 제약을 그대로 노출하지 않고,
 이 Qwen 버전은 복잡한 객체 인자 스키마를 사용할 때 도구 호출 파서와 충돌한다. 따라서 문서 자체는
 직렬화된 문자열 인자로 전달하며, DMR/Qwen이 장문 생성에서 강제 도구 선택을 무시하고 일반 JSON을
-반환하는 경우에도 동일한 검증 경로만 폴백으로 허용한다. 서버는 결과를 다시 파싱하여 요소 종류,
+반환하는 경우를 위해 `json_object` 모드도 함께 요청한다. 일반 JSON 응답은 동일한 검증 경로만
+폴백으로 허용한다. 서버는 결과를 다시 파싱하여 요소 종류,
 좌표, ID, 링크, HTML 안전성 및 슬라이드 수를 전체 검증한다. 검증에 실패하면 같은 로컬 workload가
 실패 사유와 응답을 받아 한 번 자동 교정하며, 교정 결과도 전체 검증을 다시 통과해야 저장한다.
 원본 응답과 프롬프트는 운영 로그나 상호작용 원장에 저장하지 않는다.
@@ -114,10 +125,14 @@ state slide와 link, 차트·표의 실제 JSON 형태, 발표자 노트와 최�
 응답 정규화 단계에서는 역할이 빠진 텍스트에 `title`, `subtitle`, `body`, `kicker` 중 적절한
 `role`을 보완하고, 슬라이드마다 하나뿐인 제목에는 공통 `morphId`를 부여한다. 이전 슬라이드와
 공유되는 morph 키가 하나도 없는데 모델이 `transition: "morph"`만 지정한 경우에는 `fade`로
-낮춰 실제로 작동하지 않는 전환 설정이 저장되지 않게 한다.
+낮춰 실제로 작동하지 않는 전환 설정이 저장되지 않게 한다. Qwen이 자주 생략하는
+`rotation`·`opacity`·shape `radius`는 Bento 기본값으로 보완하고, 선 요소의 0폭·0높이 표현과
+`text` 필드, 표 cell `text`, `sub`·`sup`·목록 HTML은 실행 가능한 콘텐츠를 추가하지 않는 범위에서
+공식 Bento 필드와 안전한 `span`·`br` HTML로 정규화한다.
 
-생성과 수정 호출은 각각 `bento.generate_presentation`, `bento.edit_presentation` workload로
-중앙 AI Gateway에 등록되어 있다. 두 workload는 `local` route만 허용한다. Bento 앱은
+계획·생성·수정 호출은 각각 `bento.plan_presentation`, `bento.generate_presentation`,
+`bento.edit_presentation` workload로 중앙 AI Gateway에 등록되어 있다. 세 workload는 `local`
+route만 허용한다. Bento 앱은
 provider나 모델명을 선택하지 않으며, 관리자 모델 설정의 로컬 provider와 기본 모델 또는
 workload override를 따른다. 모델 호출이나 응답 검증이 실패하면 새 문서나 새 버전을 저장하지
 않는다. 수정 API는 요청 버전과 저장 버전을 모델 호출 전후로 확인해 동시 편집 결과를 덮어쓰지
@@ -150,8 +165,8 @@ pnpm dev:qwen:smoke
 
 1. Local provider endpoint를 위 base URL로 저장하고 `모델 찾기`를 실행한다.
 2. 발견된 Qwen3.6 모델에 `chat` capability를 부여하고 활성화한다.
-3. Local provider 기본 모델로 선택하거나 `bento.generate_presentation`과
-   `bento.edit_presentation` workload의 `default` 역할에 지정한다.
+3. Local provider 기본 모델로 선택하거나 `bento.plan_presentation`,
+   `bento.generate_presentation`, `bento.edit_presentation` workload의 `default` 역할에 지정한다.
 
 모델 선택은 DB 제어 평면이 소유하므로 환경 변수나 Bento 코드에 모델 ID를 넣지 않는다.
 설정 변경 후 API를 재시작할 필요는 없다. 다만 `.env`의 endpoint/profile을 변경했다면 API를

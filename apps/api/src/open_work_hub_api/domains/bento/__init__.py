@@ -14,6 +14,9 @@ BENTO_EDIT_TASK_KIND = "bento_edit_presentation"
 BENTO_GENERATE_WORKLOAD_ID = "bento.generate_presentation"
 BENTO_GENERATE_TASK_KIND = "bento_generate_presentation"
 BENTO_MAX_OUTPUT_TOKENS = 32_768
+BENTO_PLAN_WORKLOAD_ID = "bento.plan_presentation"
+BENTO_PLAN_TASK_KIND = "bento_plan_presentation"
+BENTO_PLAN_MAX_OUTPUT_TOKENS = 16_384
 
 
 def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
@@ -47,6 +50,23 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
         local_max_output_tokens=BENTO_MAX_OUTPUT_TOKENS,
         external_max_output_tokens=BENTO_MAX_OUTPUT_TOKENS,
     )
+    registry.register_llm_workload(
+        workload_id=BENTO_PLAN_WORKLOAD_ID,
+        task_kind=BENTO_PLAN_TASK_KIND,
+        owner_domain=BENTO_APP_ID,
+        app_id=BENTO_APP_ID,
+        description=(
+            "Plan the narrative, visual system, and slide compositions for a Bento presentation."
+        ),
+        default_route="local",
+        execution_kind="chat",
+        allowed_routes=("local",),
+        required_capabilities=("chat",),
+        model_roles=("default",),
+        external_data=False,
+        local_max_output_tokens=BENTO_PLAN_MAX_OUTPUT_TOKENS,
+        external_max_output_tokens=BENTO_PLAN_MAX_OUTPUT_TOKENS,
+    )
 
 
 __all__ = [
@@ -56,5 +76,8 @@ __all__ = [
     "BENTO_GENERATE_TASK_KIND",
     "BENTO_GENERATE_WORKLOAD_ID",
     "BENTO_MAX_OUTPUT_TOKENS",
+    "BENTO_PLAN_MAX_OUTPUT_TOKENS",
+    "BENTO_PLAN_TASK_KIND",
+    "BENTO_PLAN_WORKLOAD_ID",
     "register_ai_capabilities",
 ]

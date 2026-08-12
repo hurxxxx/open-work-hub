@@ -12,6 +12,7 @@ from open_work_hub_api.domains.ai.registry import get_ai_capability_registry
 from open_work_hub_api.domains.bento import (
     BENTO_EDIT_WORKLOAD_ID,
     BENTO_GENERATE_WORKLOAD_ID,
+    BENTO_PLAN_WORKLOAD_ID,
 )
 from open_work_hub_api.domains.bento import generation as bento_generation
 
@@ -111,6 +112,59 @@ def _tool_completion(document_json: str) -> LlmCompletionResult:
     )
 
 
+def _generated_plan(*, title: str, slide_count: int) -> str:
+    return json.dumps(
+        {
+            "deck_title": title,
+            "audience": "General audience",
+            "objective": "Explain the topic clearly with editable visuals.",
+            "narrative_arc": "Orient, explain, and apply.",
+            "visual_system": {
+                "mood": "Editorial and precise",
+                "background": "#101418",
+                "foreground": "#F2F0EA",
+                "accent": "#FF9E8A",
+                "font_family": "system-ui, sans-serif",
+                "motif": "A continuous accent line connects the ideas.",
+            },
+            "slides": [
+                {
+                    "index": index + 1,
+                    "purpose": f"Advance narrative step {index + 1}.",
+                    "headline": f"Planned slide {index + 1}",
+                    "key_message": f"Remember idea {index + 1}.",
+                    "composition": ("editorial-cover" if index == 0 else "process-flow"),
+                    "visual_anchor": "Build a labeled sequence with editable nodes and connectors.",
+                    "content": ["First fact", "Second fact"],
+                    "element_budget": {
+                        "text": 4,
+                        "shape": 4,
+                        "chart": 0,
+                        "table": 0,
+                    },
+                    "notes": f"Delivery guidance for slide {index + 1}.",
+                }
+                for index in range(slide_count)
+            ],
+        }
+    )
+
+
+def _plan_tool_completion(plan_json: str) -> LlmCompletionResult:
+    return LlmCompletionResult(
+        text="",
+        model="local/qwen",
+        finish_reason="tool_calls",
+        tool_calls=(
+            LlmToolCall(
+                id="plan-call-1",
+                name="submit_bento_plan",
+                arguments=json.dumps({"plan_json": plan_json}),
+            ),
+        ),
+    )
+
+
 def test_bento_model_normalizer_supplies_title_and_normalizes_percent_opacity() -> None:
     document = json.loads(_generated_document(title="discarded", slide_count=1))
     document.pop("title")
@@ -118,7 +172,11 @@ def test_bento_model_normalizer_supplies_title_and_normalizes_percent_opacity() 
     document["slides"][0]["speakerNotes"] = document["slides"][0].pop("notes")
     element["opacity"] = 85
     element["html"] = (
-        "<h1 style='font-size:64px'>Title</h1><div><strong>Bold</strong> and <em>italic</em></div>"
+        "<h1 style='font-size:64px'>Title</h1>"
+        "<div><strong>Bold</strong> and <em>italic</em></div>"
+        "<pre><code>while len(items) < n:\n    line 2</code></pre>"
+        "<p>F<sub>n</sub> and 2<sup>n</sup></p>"
+        "<ul><li>First</li><li>Second</li></ul>"
     )
 
     normalized = bento_generation._normalize_model_response(
@@ -134,7 +192,19 @@ def test_bento_model_normalizer_supplies_title_and_normalizes_percent_opacity() 
     normalized_element = normalized["slides"][0]["elements"][0]
     assert normalized_element["opacity"] == 0.85
     assert normalized_element["html"] == (
-        "<span style='font-size:64px'>Title</span><br><span><b>Bold</b> and <i>italic</i></span>"
+        "<span style='font-size:64px'>Title</span><br>"
+        "<span><b>Bold</b> and <i>italic</i></span><br>"
+        "<span><code>while len(items) < n:\n    line 2</code></span><br>"
+        '<span>F<span style="font-size:0.75em;vertical-align:sub">n</span> and 2'
+        '<span style="font-size:0.75em;vertical-align:super">n</span></span><br>'
+        "<span>• First</span><br><span>• Second</span>"
+    )
+    assert (
+        bento_generation._validated_inline_html(
+            "sequence) < n: keep comparison",
+            max_length=500,
+        )
+        == "sequence) < n: keep comparison"
     )
 
     normalized_shape = bento_generation._normalize_element(
@@ -155,6 +225,90 @@ def test_bento_model_normalizer_supplies_title_and_normalizes_percent_opacity() 
         }
     )
     assert normalized_shape["stroke"] == "transparent"
+
+    normalized_table = bento_generation._normalize_element(
+        {
+            "id": "comparison",
+            "type": "table",
+            "x": 96,
+            "y": 400,
+            "w": 1088,
+            "h": 200,
+            "rotation": 0,
+            "opacity": 1,
+            "columns": [{"width": 0.4}, {"width": 0.6}],
+            "rows": [{"cells": ["방법", "특징"]}],
+            "header": {"headerBg": "#302A78", "headerColor": "#FFFFFF"},
+            "style": {"borderColor": "#D9DDE8"},
+        }
+    )
+    assert normalized_table["columns"] == [{"w": 0.4}, {"w": 0.6}]
+    assert normalized_table["rows"] == [{"cells": [{"html": "방법"}, {"html": "특징"}]}]
+    assert normalized_table["header"] is True
+    assert normalized_table["style"]["headerBg"] == "#302A78"
+
+    normalized_labeled_table = bento_generation._normalize_element(
+        {
+            "id": "labeled-comparison",
+            "type": "table",
+            "x": 96,
+            "y": 400,
+            "w": 1088,
+            "h": 200,
+            "rotation": 0,
+            "opacity": 1,
+            "columns": [{"w": 1, "label": "방법"}, {"w": 1, "label": "특징"}],
+            "rows": [{"cells": [{"text": "재귀"}, {"text": "간결함"}]}],
+            "header": True,
+            "style": {"borderColor": "#D9DDE8"},
+        }
+    )
+    assert normalized_labeled_table["columns"] == [{"w": 1}, {"w": 1}]
+    assert normalized_labeled_table["rows"] == [
+        {"cells": [{"html": "방법"}, {"html": "특징"}]},
+        {"cells": [{"text": "재귀", "html": "재귀"}, {"text": "간결함", "html": "간결함"}]},
+    ]
+
+    normalized_text_alias = bento_generation._normalize_element(
+        {
+            "id": "model-text",
+            "type": "text",
+            "x": 96,
+            "y": 96,
+            "w": 500,
+            "h": 100,
+            "rotation": 0,
+            "opacity": 100,
+            "text": "Model used a text field",
+            "fontSize": 24,
+            "fontFamily": "sans-serif",
+            "fontWeight": 400,
+            "color": "#111111",
+            "align": "left",
+            "valign": "top",
+            "lineHeight": 1.2,
+        }
+    )
+    assert normalized_text_alias["html"] == "Model used a text field"
+    assert normalized_text_alias["rotation"] == 0
+    assert normalized_text_alias["opacity"] == 1
+
+    normalized_zero_width_line = bento_generation._normalize_element(
+        {
+            "id": "vertical-connector",
+            "type": "shape",
+            "x": 400,
+            "y": 200,
+            "w": 0,
+            "h": 80,
+            "shape": "line",
+            "fill": "transparent",
+            "stroke": "#111111",
+            "strokeWidth": 2,
+        }
+    )
+    assert normalized_zero_width_line["w"] == 1
+    assert normalized_zero_width_line["radius"] == 0
 
 
 def test_bento_create_update_archive_restore_and_delete(client: TestClient) -> None:
@@ -347,20 +501,31 @@ def test_bento_ai_generation_uses_registered_local_workload_and_persists_documen
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    captured: dict[str, object] = {}
+    captured: list[dict[str, object]] = []
 
     def fake_execute(workload_id, context, db, **kwargs):
         del db
-        captured.update(
-            workload_id=workload_id,
-            context=context,
-            messages=kwargs["messages"],
-            reasoning_effort=kwargs["reasoning_effort"],
-            max_tokens=kwargs["max_tokens"],
-            tools=kwargs["tools"],
-            tool_choice=kwargs["tool_choice"],
-            parallel_tool_calls=kwargs["parallel_tool_calls"],
+        captured.append(
+            {
+                "workload_id": workload_id,
+                "context": context,
+                "messages": kwargs["messages"],
+                "temperature": kwargs["temperature"],
+                "reasoning_effort": kwargs["reasoning_effort"],
+                "stream_reasoning": kwargs["stream_reasoning"],
+                "max_tokens": kwargs["max_tokens"],
+                "tools": kwargs["tools"],
+                "tool_choice": kwargs["tool_choice"],
+                "parallel_tool_calls": kwargs["parallel_tool_calls"],
+                "extra_body": kwargs["extra_body"],
+            }
         )
+        if workload_id == BENTO_PLAN_WORKLOAD_ID:
+            return SimpleNamespace(
+                completion=_plan_tool_completion(
+                    _generated_plan(title="AI launch plan", slide_count=4)
+                )
+            )
         return SimpleNamespace(
             completion=_tool_completion(_generated_document(title="AI launch plan", slide_count=4))
         )
@@ -388,18 +553,35 @@ def test_bento_ai_generation_uses_registered_local_workload_and_persists_documen
     title_elements = [slide["elements"][0] for slide in document["slides"]]
     assert {element["role"] for element in title_elements} == {"title"}
     assert {element["morphId"] for element in title_elements} == {"bento-running-title"}
-    assert captured["workload_id"] == BENTO_GENERATE_WORKLOAD_ID
-    assert captured["reasoning_effort"] == "none"
-    assert captured["max_tokens"] == 32_768
-    assert captured["context"].app_id == "bento"
-    assert captured["tools"][0]["function"]["name"] == "submit_bento_document"
-    assert captured["tool_choice"]["function"]["name"] == "submit_bento_document"
-    assert captured["parallel_tool_calls"] is False
-    system_message = captured["messages"][0]
+    assert [call["workload_id"] for call in captured] == [
+        BENTO_PLAN_WORKLOAD_ID,
+        BENTO_GENERATE_WORKLOAD_ID,
+    ]
+    plan_call, render_call = captured
+    assert plan_call["temperature"] == 0.5
+    assert plan_call["reasoning_effort"] == "medium"
+    assert plan_call["stream_reasoning"] is True
+    assert plan_call["max_tokens"] == 16_384
+    assert plan_call["context"].source == "api.bento.generate.plan"
+    assert plan_call["tools"][0]["function"]["name"] == "submit_bento_plan"
+    assert plan_call["tool_choice"]["function"]["name"] == "submit_bento_plan"
+    assert "topic-specific storyboard" in plan_call["messages"][0]["content"]
+    assert render_call["temperature"] == 0.5
+    assert render_call["reasoning_effort"] == "none"
+    assert render_call["stream_reasoning"] is False
+    assert render_call["max_tokens"] == 32_768
+    assert render_call["context"].app_id == "bento"
+    assert render_call["tools"][0]["function"]["name"] == "submit_bento_document"
+    assert render_call["tool_choice"]["function"]["name"] == "submit_bento_document"
+    assert render_call["parallel_tool_calls"] is False
+    assert render_call["extra_body"] == {"response_format": {"type": "json_object"}}
+    system_message = render_call["messages"][0]
     assert "Morph is Bento's signature" in system_message["content"]
     assert "Two columns: x=96 and 656" in system_message["content"]
-    user_message = captured["messages"][1]
-    assert json.loads(user_message["content"])["brief"] == "신제품 출시 제안서를 작성해줘"
+    user_message = render_call["messages"][1]
+    render_payload = json.loads(user_message["content"])
+    assert render_payload["brief"] == "신제품 출시 제안서를 작성해줘"
+    assert render_payload["presentation_plan"]["slides"][1]["composition"] == "process-flow"
 
 
 def test_bento_ai_generation_rejects_invalid_model_output_without_creating_document(
@@ -408,9 +590,15 @@ def test_bento_ai_generation_rejects_invalid_model_output_without_creating_docum
 ) -> None:
     model_calls = 0
 
-    def fake_invalid_execute(*_args, **_kwargs):
+    def fake_invalid_execute(workload_id, *_args, **_kwargs):
         nonlocal model_calls
         model_calls += 1
+        if workload_id == BENTO_PLAN_WORKLOAD_ID:
+            return SimpleNamespace(
+                completion=_plan_tool_completion(
+                    _generated_plan(title="Invalid output test", slide_count=3)
+                )
+            )
         return SimpleNamespace(completion=LlmCompletionResult(text="not JSON", model="local/qwen"))
 
     monkeypatch.setattr(bento_generation, "execute_llm", fake_invalid_execute)
@@ -427,9 +615,41 @@ def test_bento_ai_generation_rejects_invalid_model_output_without_creating_docum
 
     assert response.status_code == 502
     assert response.json()["code"] == "bento.ai_invalid_response"
-    assert model_calls == 2
+    assert model_calls == 3
     after = client.get(f"{base}/hub", headers=headers).json()["total"]
     assert after == before
+
+
+def test_bento_ai_generation_rejects_invalid_plan_before_rendering(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    def fake_execute(workload_id, *_args, **_kwargs):
+        calls.append(workload_id)
+        return SimpleNamespace(
+            completion=_plan_tool_completion(
+                json.dumps(
+                    {
+                        "deck_title": "Incomplete plan",
+                        "slides": [],
+                    }
+                )
+            )
+        )
+
+    monkeypatch.setattr(bento_generation, "execute_llm", fake_execute)
+    session = dev_login(client, "delivery-hub-admin")
+    response = client.post(
+        "/api/v1/workspaces/delivery-hub/bento/items/generate",
+        headers=_auth_headers(session["token"]),
+        json={"prompt": "invalid plan test", "slide_count": 3},
+    )
+
+    assert response.status_code == 502
+    assert response.json()["code"] == "bento.ai_invalid_response"
+    assert calls == [BENTO_PLAN_WORKLOAD_ID]
 
 
 def test_bento_ai_generation_repairs_invalid_model_output_once(
@@ -454,6 +674,12 @@ def test_bento_ai_generation_repairs_invalid_model_output_once(
                 "tools": kwargs["tools"],
             }
         )
+        if workload_id == BENTO_PLAN_WORKLOAD_ID:
+            return SimpleNamespace(
+                completion=_plan_tool_completion(
+                    _generated_plan(title="Repaired deck", slide_count=3)
+                )
+            )
         return SimpleNamespace(completion=_tool_completion(next(model_responses)))
 
     monkeypatch.setattr(bento_generation, "execute_llm", fake_execute)
@@ -466,11 +692,12 @@ def test_bento_ai_generation_repairs_invalid_model_output_once(
 
     assert response.status_code == 201, response.text
     assert response.json()["title"] == "Repaired deck"
-    assert len(calls) == 2
-    assert calls[0]["workload_id"] == BENTO_GENERATE_WORKLOAD_ID
+    assert len(calls) == 3
+    assert calls[0]["workload_id"] == BENTO_PLAN_WORKLOAD_ID
     assert calls[1]["workload_id"] == BENTO_GENERATE_WORKLOAD_ID
-    assert calls[1]["context"].source == "api.bento.generate.repair"
-    repair_payload = json.loads(calls[1]["messages"][1]["content"])
+    assert calls[2]["workload_id"] == BENTO_GENERATE_WORKLOAD_ID
+    assert calls[2]["context"].source == "api.bento.generate.repair"
+    repair_payload = json.loads(calls[2]["messages"][1]["content"])
     assert repair_payload["invalid_model_response"] == "not JSON"
     assert repair_payload["required_slide_count"] == 3
 
@@ -596,7 +823,7 @@ def test_bento_ai_edit_rejects_stale_version_before_model_call(
 
 @pytest.mark.parametrize(
     "workload_id",
-    [BENTO_EDIT_WORKLOAD_ID, BENTO_GENERATE_WORKLOAD_ID],
+    [BENTO_EDIT_WORKLOAD_ID, BENTO_GENERATE_WORKLOAD_ID, BENTO_PLAN_WORKLOAD_ID],
 )
 def test_bento_ai_workloads_are_registered_local_only(workload_id: str) -> None:
     workload = get_ai_capability_registry().resolve_llm_workload(workload_id)
@@ -604,4 +831,6 @@ def test_bento_ai_workloads_are_registered_local_only(workload_id: str) -> None:
     assert workload.app_ids == ("bento",)
     assert workload.default_route == "local"
     assert workload.allowed_routes == ("local",)
-    assert workload.local_max_output_tokens == 32_768
+    assert workload.local_max_output_tokens == (
+        16_384 if workload_id == BENTO_PLAN_WORKLOAD_ID else 32_768
+    )
