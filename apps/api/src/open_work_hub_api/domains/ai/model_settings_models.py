@@ -143,6 +143,7 @@ class AiModelRouteOverride(Base):
     )
     local_max_output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     external_max_output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    runtime_adapter_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     updated_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)

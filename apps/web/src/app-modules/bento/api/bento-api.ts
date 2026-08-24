@@ -32,6 +32,30 @@ export interface BentoHubResponse {
   total: number;
 }
 
+export type BentoAiJobStatus =
+  | 'queued'
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+  | 'cancelled';
+
+export interface BentoAiJob {
+  id: string;
+  kind: 'create' | 'edit';
+  status: BentoAiJobStatus;
+  runtime_adapter_id: string;
+  stage: string | null;
+  progress_percent: number;
+  status_message_key: string | null;
+  error_code: string | null;
+  target_document_id: string | null;
+  result_document_id: string | null;
+  result_version: number | null;
+  cancellable: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export class BentoApiError extends Error {
   constructor(
     public readonly status: number,
@@ -114,8 +138,8 @@ export function generateBentoDocument(
     visibility?: BentoVisibility;
   },
   workspaceSlug?: string | null,
-): Promise<BentoDocumentDetail> {
-  return request<BentoDocumentDetail>(
+): Promise<BentoAiJob> {
+  return request<BentoAiJob>(
     `${API_BASE}/items/generate`,
     token,
     { method: 'POST', body: JSON.stringify(payload) },
@@ -145,11 +169,44 @@ export function editBentoDocumentWithAi(
     language?: BentoGenerationLanguage;
   },
   workspaceSlug?: string | null,
-): Promise<BentoDocumentDetail> {
-  return request<BentoDocumentDetail>(
+): Promise<BentoAiJob> {
+  return request<BentoAiJob>(
     `${API_BASE}/items/${encodeURIComponent(documentId)}/ai-edit`,
     token,
     { method: 'POST', body: JSON.stringify(payload) },
+    workspaceSlug,
+  );
+}
+
+export function listBentoAiJobs(
+  token: string,
+  workspaceSlug?: string | null,
+): Promise<BentoAiJob[]> {
+  return request<BentoAiJob[]>(`${API_BASE}/ai-jobs`, token, {}, workspaceSlug);
+}
+
+export function getBentoAiJob(
+  token: string,
+  jobId: string,
+  workspaceSlug?: string | null,
+): Promise<BentoAiJob> {
+  return request<BentoAiJob>(
+    `${API_BASE}/ai-jobs/${encodeURIComponent(jobId)}`,
+    token,
+    {},
+    workspaceSlug,
+  );
+}
+
+export function cancelBentoAiJob(
+  token: string,
+  jobId: string,
+  workspaceSlug?: string | null,
+): Promise<BentoAiJob> {
+  return request<BentoAiJob>(
+    `${API_BASE}/ai-jobs/${encodeURIComponent(jobId)}/cancel`,
+    token,
+    { method: 'POST' },
     workspaceSlug,
   );
 }

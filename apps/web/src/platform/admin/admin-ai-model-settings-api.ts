@@ -36,6 +36,7 @@ export interface AiModelRouteOverride {
   model_ids: Record<string, string>;
   local_max_output_tokens: number | null;
   external_max_output_tokens: number | null;
+  runtime_adapter_id: string | null;
   version: number;
   updated_at: string | null;
 }
@@ -58,6 +59,15 @@ export interface AiModelWorkload {
   label_key: string;
   description_key: string;
   execution_kind: string;
+  default_runtime_adapter: string;
+  effective_runtime_adapter: string;
+  allowed_runtime_adapters: string[];
+  runtime_adapters: Array<{
+    adapter_id: string;
+    display_name: string;
+    allowed_routes: AiModelRoute[];
+    allowed_providers: string[];
+  }>;
   default_route: AiModelRoute;
   effective_route: AiModelRoute;
   allowed_routes: AiModelRoute[];
@@ -81,6 +91,7 @@ export interface AiModelOrphanedOverride {
   model_ids: Record<string, string>;
   local_max_output_tokens: number | null;
   external_max_output_tokens: number | null;
+  runtime_adapter_id: string | null;
   version: number;
   updated_at: string | null;
 }
@@ -147,6 +158,7 @@ export interface AiModelRouteUpdate {
   model_ids: Record<string, string>;
   local_max_output_tokens: number | null;
   external_max_output_tokens: number | null;
+  runtime_adapter_id?: string | null;
 }
 
 export class AdminAiModelSettingsApiError extends Error {

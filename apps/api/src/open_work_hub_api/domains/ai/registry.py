@@ -31,6 +31,7 @@ LlmRoute = Literal["local", "external"]
 LlmPolicyMode = Literal["local_only", "external"]
 LlmExecutionKind = Literal["chat", "agent"]
 LlmManagementSurface = Literal["llm_routing", "document_processing"]
+AgentRuntimeAdapterId = str
 
 DEFAULT_LOCAL_MAX_OUTPUT_TOKENS = 32_768
 DEFAULT_EXTERNAL_MAX_OUTPUT_TOKENS = 65_536
@@ -127,6 +128,8 @@ class RegisteredLlmWorkload:
     local_max_output_tokens: int = DEFAULT_LOCAL_MAX_OUTPUT_TOKENS
     external_max_output_tokens: int = DEFAULT_EXTERNAL_MAX_OUTPUT_TOKENS
     management_surface: LlmManagementSurface = "llm_routing"
+    default_runtime_adapter: AgentRuntimeAdapterId = "chat_completion"
+    allowed_runtime_adapters: tuple[AgentRuntimeAdapterId, ...] = ("chat_completion",)
 
     @property
     def app_id(self) -> str:
@@ -400,6 +403,10 @@ class AiCapabilityRegistry:
         local_max_output_tokens: int = DEFAULT_LOCAL_MAX_OUTPUT_TOKENS,
         external_max_output_tokens: int = DEFAULT_EXTERNAL_MAX_OUTPUT_TOKENS,
         management_surface: LlmManagementSurface = "llm_routing",
+        default_runtime_adapter: AgentRuntimeAdapterId = "chat_completion",
+        allowed_runtime_adapters: tuple[AgentRuntimeAdapterId, ...] | list[
+            AgentRuntimeAdapterId
+        ] = ("chat_completion",),
     ) -> None:
         normalized_workload_id = workload_id.strip().lower()
         normalized_task_kind = task_kind.strip().lower().replace("-", "_")
@@ -464,6 +471,24 @@ class AiCapabilityRegistry:
             raise ValueError(
                 f"LLM workload {normalized_workload_id} must declare model capabilities"
             )
+        normalized_runtime_adapters = _normalize_registration_values(
+            allowed_runtime_adapters
+        )
+        normalized_default_runtime_adapter = default_runtime_adapter.strip().lower()
+        if not normalized_runtime_adapters:
+            raise ValueError(
+                f"LLM workload {normalized_workload_id} must allow a runtime adapter"
+            )
+        if normalized_default_runtime_adapter not in normalized_runtime_adapters:
+            raise ValueError(
+                f"LLM workload {normalized_workload_id} default runtime adapter must be allowed"
+            )
+        if execution_kind == "chat" and normalized_runtime_adapters != (
+            "chat_completion",
+        ):
+            raise ValueError(
+                f"Chat workload {normalized_workload_id} only supports chat_completion"
+            )
 
         conflicting = [
             registered.workload_id
@@ -495,6 +520,8 @@ class AiCapabilityRegistry:
             local_max_output_tokens=local_max_output_tokens,
             external_max_output_tokens=external_max_output_tokens,
             management_surface=management_surface,
+            default_runtime_adapter=normalized_default_runtime_adapter,
+            allowed_runtime_adapters=normalized_runtime_adapters,
         )
         existing_task = self.llm_tasks.get(normalized_task_kind)
         if existing_task is None:

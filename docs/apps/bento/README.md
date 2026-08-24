@@ -78,12 +78,14 @@ iframe에 삽입할 수 있도록 프록시의 CSP와 프레임 정책도 함께
 API 스키마를 변경하면 Alembic 마이그레이션을 추가하고 OpenAPI 기반 웹 클라이언트를
 다시 생성한다.
 
-## 로컬 AI로 프레젠테이션 생성
+## AI로 프레젠테이션 생성
 
 허브의 `AI로 만들기`는 프롬프트, 슬라이드 수와 공개 범위를 받아 새 문서를 만든다.
 편집기 상단의 `AI로 수정`은 iframe 브리지에서 최신 문서를 회수해 먼저 저장한 뒤 수정 지시와
-함께 로컬 모델에 전달한다. 검증된 전체 문서를 같은 레코드의 다음 버전으로 저장하고
-`window.bento.loadDoc` 브리지를 통해 열린 편집기에 즉시 다시 로드한다.
+함께 선택된 AI 런타임에 전달한다. 생성과 수정 요청은 `202 Accepted`의 백그라운드 작업으로
+등록되고 창을 닫아도 `ai-graph` worker에서 계속 실행된다. 전역 백그라운드 작업 패널에서
+진행률, 실패 사유, 취소와 완료 문서 링크를 확인한다. 수정 결과는 시작 버전이 그대로일 때만
+같은 레코드의 다음 버전으로 저장하므로 실행 중 다른 편집이 있으면 충돌로 종료한다.
 모델 응답은 데이터베이스에 저장하기 전에 다음 조건을 검증한다.
 
 - 현재 런타임 리비전에 고정된 공식
@@ -101,7 +103,7 @@ state slide와 link, 차트·표의 실제 JSON 형태, 발표자 노트와 최�
 따라서 생성과 수정 모두 같은 Bento 작성 규칙을 사용하며, 런타임에서 외부 문서를 가져오지 않아
 로컬·오프라인 실행을 유지한다.
 
-새 문서 생성은 에이전트 루프가 아닌 고정된 2단계 로컬 LLM 파이프라인이다. 첫 단계인
+기본 실행기는 에이전트 루프가 아닌 고정된 2단계 로컬 LLM 파이프라인이다. 첫 단계인
 `bento.plan_presentation`은 thinking을 활성화해 사용자 brief를 장별 목적, 핵심 메시지, 서로 다른
 composition, 구체적인 visual anchor, 콘텐츠와 요소 예산을 가진 스토리보드로 만든다. 서버가 계획의
 슬라이드 수와 필수 필드를 검증한 다음에만 두 번째 `bento.generate_presentation` 호출이 계획을
@@ -110,6 +112,10 @@ thinking을 끄며, 계획에 지정된 다이어그램·프로세스·코드 �
 축소하지 않도록 요구한다. 생성 시간과 가독성을 위해 한 슬라이드는 최대 24개의 목적 있는 요소를
 목표로 하며, 큰 재귀 트리나 격자는 핵심 상태만 그룹화해 표현한다. 계획 단계가 실패하면 렌더링과
 문서 저장은 수행하지 않는다.
+
+계획 검증은 정확한 슬라이드 수, 순서, composition과 필수 설명을 강제하되 표현상 0인 요소 예산은
+생략할 수 있게 한다. 목록형 주제에서 5개를 넘는 문제명·단계·항목을 계획하는 것도 허용하고,
+누락된 `text`·`shape`·`chart`·`table` 예산은 0으로 정규화한다.
 
 모델 출력은 일반 텍스트 JSON에만 의존하지 않는다. Docker Model Runner에
 `submit_bento_document` 함수 호출과 단일 `document_json` 인자를 강제 요청한다. DMR의 OpenAI
@@ -132,11 +138,24 @@ thinking을 끄며, 계획에 지정된 다이어그램·프로세스·코드 �
 
 계획·생성·수정 호출은 각각 `bento.plan_presentation`, `bento.generate_presentation`,
 `bento.edit_presentation` workload로 중앙 AI Gateway에 등록되어 있다. 세 workload는 `local`
-route만 허용한다. Bento 앱은
-provider나 모델명을 선택하지 않으며, 관리자 모델 설정의 로컬 provider와 기본 모델 또는
-workload override를 따른다. 모델 호출이나 응답 검증이 실패하면 새 문서나 새 버전을 저장하지
-않는다. 수정 API는 요청 버전과 저장 버전을 모델 호출 전후로 확인해 동시 편집 결과를 덮어쓰지
-않는다.
+route를 기본으로 사용한다. 계획 workload는 local chat 전용이고, 생성·수정 workload는
+`fixed_bento_pipeline`과 `codex_sdk` agent runtime을 허용한다. Bento 앱은 provider나 모델명을
+선택하지 않으며 관리자 `LLM Routing` 화면의 runtime/route/provider/model 설정을 따른다.
+runtime 간 자동 fallback은 하지 않는다.
+
+### Codex SDK 에이전트 런타임
+
+관리자는 OpenAI provider에 플랫폼 공용 API key와 승인 모델(권장 `gpt-5.6-sol`)을 등록한 뒤,
+`bento.generate_presentation`과 `bento.edit_presentation`의 runtime을 `Codex SDK agent`로
+선택한다. 이때 route는 external, provider는 OpenAI여야 하며 불일치 설정은 저장되지 않는다.
+
+Codex 작업마다 별도 임시 workspace를 만들고 `document.json`, 사용자 brief와 standalone
+`bento_tool.py`만 넣는다. 에이전트는 문서 읽기, 장별 교체, metadata 변경, 계약 검증,
+overflow/density 검사와 SVG preview 렌더를 반복해서 사용할 수 있다. built-in web search는 live로
+허용하지만 shell network와 승인 요청은 차단하고 sandbox는 임시 workspace 쓰기만 허용한다.
+플랫폼의 다른 소스 트리나 사용자 세션을 컨텍스트로 전달하지 않으며, 셸 환경변수도 상속하지
+않는다. 외부로 보내는 brief와 현재 문서는 동일한 AI Gateway의 보안 검사·마스킹·감사 계약을
+먼저 통과한다. 작업 입력 행은 성공·실패·취소의 terminal 상태에서 삭제한다.
 
 AI 수정 입력에서는 협업 키, 자산, 레이아웃, 댓글과 알 수 없는 확장 필드를 모델에 보내지 않는다.
 이 필드들은 서버가 기존 값 그대로 보존한다. 현재 AI 수정 대상은 1280×720 문서의 편집 가능한

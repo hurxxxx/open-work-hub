@@ -23,7 +23,7 @@ from open_work_hub_api.domains.ai_graph.repository import (
 @dataclass(frozen=True)
 class PreparedGraphDispatch:
     graph_run: AiGraphRun
-    pending_artifact: AiArtifact
+    pending_artifact: AiArtifact | None
     run_input: AiGraphRunInput
     outbox: AiGraphDispatchOutbox
 
@@ -32,7 +32,7 @@ def stage_graph_dispatch(
     db: Session,
     *,
     run_request: AiGraphRunRequest,
-    pending_artifact: AiArtifactCreate,
+    pending_artifact: AiArtifactCreate | None = None,
     payload_ref: str | None = None,
 ) -> PreparedGraphDispatch:
     """Stage run, bootstrap input, placeholder and outbox in the caller transaction.
@@ -41,15 +41,18 @@ def stage_graph_dispatch(
     Mutable execution state belongs exclusively to LangGraph checkpoints.
     """
 
-    _validate_dispatch_coherence(run_request, pending_artifact)
+    if pending_artifact is not None:
+        _validate_dispatch_coherence(run_request, pending_artifact)
     run = AiGraphRunRepository(db).create(run_request)
     run_input = AiGraphRunInputRepository(db).create(
         graph_run_id=run.id,
         payload=run_request.inputs,
         schema_version=run_request.graph.state_schema_version,
     )
-    artifact_request = pending_artifact.model_copy(update={"graph_run_id": run.id})
-    artifact = AiArtifactRepository(db).create_pending(artifact_request)
+    artifact = None
+    if pending_artifact is not None:
+        artifact_request = pending_artifact.model_copy(update={"graph_run_id": run.id})
+        artifact = AiArtifactRepository(db).create_pending(artifact_request)
     outbox = AiGraphDispatchRepository(db).enqueue(
         AiGraphDispatchCreate(
             graph_run_id=run.id,
@@ -91,7 +94,7 @@ def prepare_graph_dispatch(
     db: Session,
     *,
     run_request: AiGraphRunRequest,
-    pending_artifact: AiArtifactCreate,
+    pending_artifact: AiArtifactCreate | None = None,
     payload_ref: str | None = None,
 ) -> PreparedGraphDispatch:
     """Stage and commit the dispatch aggregate before any broker publish."""
@@ -104,7 +107,8 @@ def prepare_graph_dispatch(
     )
     db.commit()
     db.refresh(prepared.graph_run)
-    db.refresh(prepared.pending_artifact)
+    if prepared.pending_artifact is not None:
+        db.refresh(prepared.pending_artifact)
     db.refresh(prepared.run_input)
     db.refresh(prepared.outbox)
     return prepared

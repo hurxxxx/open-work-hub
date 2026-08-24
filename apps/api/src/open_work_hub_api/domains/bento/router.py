@@ -8,6 +8,7 @@ import uuid
 from fastapi import APIRouter, Depends, Query, Response, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from open_work_hub_api.core.db import get_db_session
@@ -22,12 +23,33 @@ from open_work_hub_api.domains.auth.workspace_app_gate import require_workspace_
 from open_work_hub_api.domains.bento.app_catalog import BENTO_WORKSPACE_APP
 from open_work_hub_api.domains.bento.generation import (
     BENTO_GENERATION_MAX_SLIDES,
-    BentoGenerationError,
     BentoGenerationLanguage,
-    generate_bento_document_json,
-    revise_bento_document_json,
 )
-from open_work_hub_api.domains.bento.models import BentoDocument
+from open_work_hub_api.domains.ai.model_settings_service import (
+    AiModelSettingsError,
+    resolve_ai_model_workload_route,
+)
+from open_work_hub_api.domains.ai_graph.contracts import (
+    AiGraphNodeSpec,
+    AiGraphRunRequest,
+    AiGraphSpec,
+)
+from open_work_hub_api.domains.ai_graph.dispatch import stage_graph_dispatch
+from open_work_hub_api.domains.ai_graph.models import AiGraphRun
+from open_work_hub_api.domains.ai_graph.publication import publish_pending_graph_dispatches
+from open_work_hub_api.domains.ai_graph.repository import (
+    AiGraphRunInputRepository,
+    AiGraphRunRepository,
+)
+from open_work_hub_api.domains.bento import (
+    BENTO_EDIT_WORKLOAD_ID,
+    BENTO_GENERATE_WORKLOAD_ID,
+)
+from open_work_hub_api.domains.bento.execution import (
+    BENTO_AGENT_GRAPH_ID,
+    BENTO_AGENT_GRAPH_VERSION,
+)
+from open_work_hub_api.domains.bento.models import BentoAiJob, BentoAiJobInput, BentoDocument
 
 
 require_bento_app_enabled = require_workspace_app_enabled(
@@ -196,6 +218,23 @@ class BentoHubResponse(BaseModel):
     total: int
 
 
+class BentoAiJobResponse(BaseModel):
+    id: str
+    kind: Literal["create", "edit"]
+    status: Literal["queued", "running", "succeeded", "failed", "cancelled"]
+    runtime_adapter_id: str
+    stage: str | None
+    progress_percent: int
+    status_message_key: str | None
+    error_code: str | None
+    target_document_id: str | None
+    result_document_id: str | None
+    result_version: int | None
+    cancellable: bool
+    created_at: datetime
+    updated_at: datetime
+
+
 def _access_clause(current_user: User):
     return or_(
         BentoDocument.owner_id == current_user.id,
@@ -310,6 +349,121 @@ def _persist_document(
     )
 
 
+def _serialize_ai_job(job: BentoAiJob, run: AiGraphRun) -> BentoAiJobResponse:
+    return BentoAiJobResponse(
+        id=job.id,
+        kind=job.kind,  # type: ignore[arg-type]
+        status=job.status,  # type: ignore[arg-type]
+        runtime_adapter_id=job.runtime_adapter_id,
+        stage=run.stage,
+        progress_percent=run.progress_percent,
+        status_message_key=run.status_message_key,
+        error_code=job.error_code or run.error_code,
+        target_document_id=job.target_document_id,
+        result_document_id=job.result_document_id,
+        result_version=job.result_version,
+        cancellable=job.status in {"queued", "running"},
+        created_at=job.created_at,
+        updated_at=max(job.updated_at, run.updated_at),
+    )
+
+
+def _resolve_bento_runtime(db: Session, *, workload_id: str) -> str:
+    try:
+        route = resolve_ai_model_workload_route(db, workload_id=workload_id)
+    except AiModelSettingsError as exc:
+        raise localized_http_exception(status_code=exc.status_code, code=exc.code) from exc
+    return route.runtime_adapter_id
+
+
+def _stage_bento_ai_job(
+    db: Session,
+    *,
+    workspace: Workspace,
+    current_user: User,
+    kind: Literal["create", "edit"],
+    prompt: str,
+    language: BentoGenerationLanguage,
+    runtime_adapter_id: str,
+    visibility: BentoVisibility,
+    slide_count: int | None,
+    target_document: BentoDocument | None = None,
+) -> BentoAiJobResponse:
+    if kind == "edit" and target_document is not None:
+        existing = db.scalar(
+            select(BentoAiJob).where(
+                BentoAiJob.workspace_id == workspace.id,
+                BentoAiJob.target_document_id == target_document.id,
+                BentoAiJob.status.in_(("queued", "running")),
+            )
+        )
+        if existing is not None:
+            raise localized_http_exception(
+                status_code=409,
+                code="bento.ai_edit_already_running",
+            )
+    prepared = stage_graph_dispatch(
+        db,
+        run_request=AiGraphRunRequest(
+            workspace_id=workspace.id,
+            requested_by_user_id=current_user.id,
+            app_id="bento",
+            graph=AiGraphSpec(
+                graph_id=BENTO_AGENT_GRAPH_ID,
+                graph_version=BENTO_AGENT_GRAPH_VERSION,
+                nodes=(
+                    AiGraphNodeSpec(
+                        node_id="bento.agent.run",
+                        purpose="Create or revise and validate an editable Bento document",
+                    ),
+                ),
+            ),
+            inputs={"kind": kind},
+            visibility="private",
+        ),
+    )
+    now = _utcnow()
+    job = BentoAiJob(
+        id=prepared.graph_run.id,
+        workspace_id=workspace.id,
+        requested_by_id=current_user.id,
+        kind=kind,
+        status="queued",
+        runtime_adapter_id=runtime_adapter_id,
+        target_document_id=target_document.id if target_document else None,
+        base_version=target_document.version if target_document else None,
+        visibility=visibility,
+        slide_count=slide_count,
+        language=language,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(job)
+    db.add(
+        BentoAiJobInput(
+            job_id=job.id,
+            prompt=prompt,
+            current_document_json=(target_document.document_json if target_document else None),
+            created_at=now,
+        )
+    )
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        constraint_name = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
+        if constraint_name == "uq_bento_ai_jobs_active_target":
+            raise localized_http_exception(
+                status_code=409,
+                code="bento.ai_edit_already_running",
+            ) from exc
+        raise
+    db.refresh(prepared.graph_run)
+    db.refresh(job)
+    publish_pending_graph_dispatches(db, limit=25)
+    return _serialize_ai_job(job, prepared.graph_run)
+
+
 @router.get("/hub", response_model=BentoHubResponse)
 def list_bento_hub(
     view: BentoHubView = Query(default="all"),
@@ -402,52 +556,34 @@ def create_bento_document(
 
 @router.post(
     "/items/generate",
-    response_model=BentoDocumentDetail,
-    status_code=status.HTTP_201_CREATED,
+    response_model=BentoAiJobResponse,
+    status_code=status.HTTP_202_ACCEPTED,
 )
 def generate_bento_document(
     payload: GenerateBentoDocumentRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
-) -> BentoDocumentDetail:
-    try:
-        document_json, parsed = generate_bento_document_json(
-            db,
-            workspace_id=workspace.id,
-            actor_user_id=current_user.id,
-            prompt=payload.prompt,
-            slide_count=payload.slide_count,
-            language=payload.language,
-        )
-    except BentoGenerationError as exc:
-        code = (
-            "bento.ai_invalid_response"
-            if str(exc) == "invalid_response"
-            else "bento.ai_unavailable"
-        )
-        raise localized_http_exception(status_code=502, code=code) from exc
-
-    title = str(parsed["title"]).strip()
-    document = _persist_document(
+) -> BentoAiJobResponse:
+    return _stage_bento_ai_job(
         db,
         workspace=workspace,
         current_user=current_user,
-        title=title,
+        kind="create",
+        prompt=payload.prompt,
+        language=payload.language,
+        runtime_adapter_id=_resolve_bento_runtime(
+            db, workload_id=BENTO_GENERATE_WORKLOAD_ID
+        ),
         visibility=payload.visibility,
-        document_json=document_json,
-    )
-    workspace_role = resolve_workspace_role(db, current_user, workspace.id)
-    return _serialize_detail(
-        document,
-        current_user=current_user,
-        workspace_role=workspace_role,
+        slide_count=payload.slide_count,
     )
 
 
 @router.post(
     "/items/{document_id}/ai-edit",
-    response_model=BentoDocumentDetail,
+    response_model=BentoAiJobResponse,
+    status_code=status.HTTP_202_ACCEPTED,
 )
 def edit_bento_document_with_ai(
     document_id: str,
@@ -455,7 +591,7 @@ def edit_bento_document_with_ai(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
-) -> BentoDocumentDetail:
+) -> BentoAiJobResponse:
     document = _load_or_404(
         db,
         workspace_id=workspace.id,
@@ -467,64 +603,104 @@ def edit_bento_document_with_ai(
     if document.version != payload.version:
         raise localized_http_exception(status_code=409, code="bento.version_conflict")
 
-    try:
-        document_json, parsed = revise_bento_document_json(
-            db,
-            workspace_id=workspace.id,
-            actor_user_id=current_user.id,
-            prompt=payload.prompt,
-            current_document_json=document.document_json,
-            language=payload.language,
-        )
-    except BentoGenerationError as exc:
-        error = str(exc)
-        if error == "document_too_large":
-            raise localized_http_exception(
-                status_code=413,
-                code="bento.ai_document_too_large",
-            ) from exc
-        if error == "unsupported_document":
-            raise localized_http_exception(
-                status_code=422,
-                code="bento.ai_unsupported_document",
-            ) from exc
-        code = (
-            "bento.ai_invalid_response" if error == "invalid_response" else "bento.ai_unavailable"
-        )
-        raise localized_http_exception(status_code=502, code=code) from exc
-
-    now = _utcnow()
-    result = db.execute(
-        update(BentoDocument)
-        .where(
-            BentoDocument.id == document.id,
-            BentoDocument.workspace_id == workspace.id,
-            BentoDocument.version == payload.version,
-            BentoDocument.archived_at.is_(None),
-        )
-        .values(
-            title=str(parsed["title"]).strip(),
-            document_json=document_json,
-            updated_at=now,
-            version=payload.version + 1,
-        )
-    )
-    if result.rowcount != 1:
-        db.rollback()
-        raise localized_http_exception(status_code=409, code="bento.version_conflict")
-    db.commit()
-    updated_document = _load_or_404(
+    return _stage_bento_ai_job(
         db,
-        workspace_id=workspace.id,
-        document_id=document.id,
+        workspace=workspace,
         current_user=current_user,
+        kind="edit",
+        prompt=payload.prompt,
+        language=payload.language,
+        runtime_adapter_id=_resolve_bento_runtime(db, workload_id=BENTO_EDIT_WORKLOAD_ID),
+        visibility=document.visibility,  # type: ignore[arg-type]
+        slide_count=None,
+        target_document=document,
     )
-    workspace_role = resolve_workspace_role(db, current_user, workspace.id)
-    return _serialize_detail(
-        updated_document,
-        current_user=current_user,
-        workspace_role=workspace_role,
-    )
+
+
+@router.get("/ai-jobs", response_model=list[BentoAiJobResponse])
+def list_bento_ai_jobs(
+    limit: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
+) -> list[BentoAiJobResponse]:
+    rows = db.execute(
+        select(BentoAiJob, AiGraphRun)
+        .join(AiGraphRun, AiGraphRun.id == BentoAiJob.id)
+        .where(
+            BentoAiJob.workspace_id == workspace.id,
+            BentoAiJob.requested_by_id == current_user.id,
+        )
+        .order_by(BentoAiJob.created_at.desc())
+        .limit(limit)
+    ).all()
+    return [_serialize_ai_job(job, run) for job, run in rows]
+
+
+@router.get("/ai-jobs/{job_id}", response_model=BentoAiJobResponse)
+def get_bento_ai_job(
+    job_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
+) -> BentoAiJobResponse:
+    row = db.execute(
+        select(BentoAiJob, AiGraphRun)
+        .join(AiGraphRun, AiGraphRun.id == BentoAiJob.id)
+        .where(
+            BentoAiJob.id == job_id,
+            BentoAiJob.workspace_id == workspace.id,
+            BentoAiJob.requested_by_id == current_user.id,
+        )
+    ).one_or_none()
+    if row is None:
+        raise localized_http_exception(status_code=404, code="bento.ai_job_not_found")
+    return _serialize_ai_job(row[0], row[1])
+
+
+@router.post("/ai-jobs/{job_id}/cancel", response_model=BentoAiJobResponse)
+def cancel_bento_ai_job(
+    job_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
+) -> BentoAiJobResponse:
+    row = db.execute(
+        select(BentoAiJob, AiGraphRun)
+        .join(AiGraphRun, AiGraphRun.id == BentoAiJob.id)
+        .where(
+            BentoAiJob.id == job_id,
+            BentoAiJob.workspace_id == workspace.id,
+            BentoAiJob.requested_by_id == current_user.id,
+        )
+        .with_for_update()
+    ).one_or_none()
+    if row is None:
+        raise localized_http_exception(status_code=404, code="bento.ai_job_not_found")
+    job, run = row
+    if job.status == "queued":
+        now = _utcnow()
+        job.status = "cancelled"
+        job.cancel_requested_at = now
+        job.finished_at = now
+        job.updated_at = now
+        AiGraphRunRepository(db).transition(
+            job.id,
+            "cancelled",
+            stage="bento.ai.cancelled",
+            status_message_key="bento.ai.cancelled",
+        )
+        job_input = db.get(BentoAiJobInput, job.id)
+        if job_input is not None:
+            db.delete(job_input)
+        AiGraphRunInputRepository(db).delete_after_terminal(job.id)
+    elif job.status == "running" and job.cancel_requested_at is None:
+        job.cancel_requested_at = _utcnow()
+        job.updated_at = _utcnow()
+    db.commit()
+    db.refresh(job)
+    db.refresh(run)
+    return _serialize_ai_job(job, run)
 
 
 @router.get("/items/{document_id}", response_model=BentoDocumentDetail)

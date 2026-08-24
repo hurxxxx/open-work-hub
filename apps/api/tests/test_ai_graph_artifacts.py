@@ -387,6 +387,19 @@ def test_dispatch_rejects_incoherent_artifact_before_staging_rows(
         assert db.query(AiGraphDispatchOutbox).count() == 0
 
 
+def test_dispatch_can_stage_artifact_free_app_owned_work(
+    session_factory: sessionmaker[Session],
+) -> None:
+    with session_factory() as db:
+        prepared = stage_graph_dispatch(db, run_request=_run_request())
+        db.commit()
+
+        assert prepared.pending_artifact is None
+        assert prepared.run_input.graph_run_id == prepared.graph_run.id
+        assert prepared.outbox.graph_run_id == prepared.graph_run.id
+        assert db.query(AiArtifact).count() == 0
+
+
 def test_graph_run_artifact_lookup_enforces_acl_and_prefers_completed_artifact(
     session_factory: sessionmaker[Session],
 ) -> None:

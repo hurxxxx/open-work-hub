@@ -116,6 +116,17 @@ def test_admin_ai_model_settings_projects_registry_and_default_catalog(
     assert chatbot["external_max_output_tokens"] == 65_536
     assert chatbot["readiness_code"] == "admin.ai_model_selection_required"
     assert chatbot["resolved_routes"] == []
+    bento_generate = next(
+        item
+        for item in payload["workloads"]
+        if item["workload_id"] == "bento.generate_presentation"
+    )
+    assert bento_generate["default_runtime_adapter"] == "fixed_bento_pipeline"
+    assert bento_generate["effective_runtime_adapter"] == "fixed_bento_pipeline"
+    assert [item["adapter_id"] for item in bento_generate["runtime_adapters"]] == [
+        "fixed_bento_pipeline",
+        "codex_sdk",
+    ]
 
     with get_session_factory()() as db:
         with pytest.raises(AiModelSettingsError) as error:

@@ -2739,6 +2739,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_slug}/bento/ai-jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Bento Ai Jobs */
+        get: operations["bento_list_bento_ai_jobs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_slug}/bento/ai-jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Bento Ai Job */
+        get: operations["bento_get_bento_ai_job_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_slug}/bento/ai-jobs/{job_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Bento Ai Job */
+        post: operations["bento_cancel_bento_ai_job_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_slug}/bento/items/{document_id}": {
         parameters: {
             query?: never;
@@ -6104,6 +6155,17 @@ export interface components {
             /** Page Size */
             page_size: number;
         };
+        /** AiAgentRuntimeAdapterResponse */
+        AiAgentRuntimeAdapterResponse: {
+            /** Adapter Id */
+            adapter_id: string;
+            /** Display Name */
+            display_name: string;
+            /** Allowed Routes */
+            allowed_routes: ("local" | "external")[];
+            /** Allowed Providers */
+            allowed_providers: string[];
+        };
         /** AiArtifactDetailResponse */
         AiArtifactDetailResponse: {
             /** Id */
@@ -6526,6 +6588,8 @@ export interface components {
             local_max_output_tokens?: number | null;
             /** External Max Output Tokens */
             external_max_output_tokens?: number | null;
+            /** Runtime Adapter Id */
+            runtime_adapter_id?: string | null;
             /** Version */
             version: number;
             /** Updated At */
@@ -6623,6 +6687,8 @@ export interface components {
             local_max_output_tokens?: number | null;
             /** External Max Output Tokens */
             external_max_output_tokens?: number | null;
+            /** Runtime Adapter Id */
+            runtime_adapter_id?: string | null;
             /** Version */
             version: number;
             /** Updated At */
@@ -6649,6 +6715,8 @@ export interface components {
             local_max_output_tokens?: number | null;
             /** External Max Output Tokens */
             external_max_output_tokens?: number | null;
+            /** Runtime Adapter Id */
+            runtime_adapter_id?: string | null;
         };
         /** AiModelSettingsResponse */
         AiModelSettingsResponse: {
@@ -6681,6 +6749,14 @@ export interface components {
             description_key: string;
             /** Execution Kind */
             execution_kind: string;
+            /** Default Runtime Adapter */
+            default_runtime_adapter: string;
+            /** Effective Runtime Adapter */
+            effective_runtime_adapter: string;
+            /** Allowed Runtime Adapters */
+            allowed_runtime_adapters: string[];
+            /** Runtime Adapters */
+            runtime_adapters: components["schemas"]["AiAgentRuntimeAdapterResponse"][];
             /**
              * Default Route
              * @enum {string}
@@ -7572,6 +7648,49 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+        };
+        /** BentoAiJobResponse */
+        BentoAiJobResponse: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "create" | "edit";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+            /** Runtime Adapter Id */
+            runtime_adapter_id: string;
+            /** Stage */
+            stage: string | null;
+            /** Progress Percent */
+            progress_percent: number;
+            /** Status Message Key */
+            status_message_key: string | null;
+            /** Error Code */
+            error_code: string | null;
+            /** Target Document Id */
+            target_document_id: string | null;
+            /** Result Document Id */
+            result_document_id: string | null;
+            /** Result Version */
+            result_version: number | null;
+            /** Cancellable */
+            cancellable: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
         /** BentoDocumentDetail */
         BentoDocumentDetail: {
@@ -24172,12 +24291,12 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            201: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BentoDocumentDetail"];
+                    "application/json": components["schemas"]["BentoAiJobResponse"];
                 };
             };
             /** @description Authentication required. */
@@ -24225,12 +24344,159 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BentoAiJobResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bento_list_bento_ai_jobs_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BentoDocumentDetail"];
+                    "application/json": components["schemas"]["BentoAiJobResponse"][];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bento_get_bento_ai_job_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BentoAiJobResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bento_cancel_bento_ai_job_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BentoAiJobResponse"];
                 };
             };
             /** @description Authentication required. */

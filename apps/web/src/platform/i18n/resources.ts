@@ -1907,6 +1907,7 @@ export const resources = {
               resultCount: '{{count}}개 표시',
               routeFilter: '실행 경로 필터',
               routeFor: '{{name}}의 실행 경로',
+              runtimeFor: '{{name}}의 에이전트 런타임',
               search: '앱, 기능, 공급자, 모델 검색',
               summary: '전체 {{total}} · 로컬 {{local}} · 외부 {{external}}',
               sources: {
@@ -5360,6 +5361,10 @@ export const resources = {
       bento: {
         actionsMenu: '프레젠테이션 설정',
         aiCancel: '취소',
+        aiBackgroundCreate: 'Bento AI 프레젠테이션 생성',
+        aiBackgroundEdit: 'Bento AI 프레젠테이션 수정',
+        aiBackgroundProgress: 'AI 작업 진행 중 · {{progress}}%',
+        aiBackgroundQueued: 'AI 작업 대기 중',
         aiClose: 'AI 생성 창 닫기',
         aiCreate: 'AI로 만들기',
         aiDialogDescription:
@@ -5372,20 +5377,21 @@ export const resources = {
           '현재 프레젠테이션을 기준으로 내용과 디자인을 수정합니다.',
         aiEditFailed: 'AI로 프레젠테이션을 수정할 수 없습니다.',
         aiEditHint:
-          '현재 편집 내용을 먼저 저장한 뒤 등록된 로컬 AI 모델로 수정합니다.',
+          '현재 편집 내용을 먼저 저장한 뒤 관리자가 등록한 AI 실행 방식으로 수정합니다.',
         aiEditPromptLabel: '수정 지시',
         aiEditPromptPlaceholder:
           '예: 전체 문장을 더 간결하게 다듬고, 마지막 슬라이드의 다음 행동을 세 가지로 명확하게 정리해줘.',
         aiEditTitle: 'AI로 프레젠테이션 수정',
         aiEditing: '수정 중...',
         aiEditingHint:
-          '로컬 모델이 현재 문서를 다시 구성하고 있습니다. 완료될 때까지 편집이 잠시 중지됩니다.',
+          '백그라운드에서 현재 문서를 다시 구성합니다. 창을 닫아도 작업은 계속됩니다.',
         aiGenerate: '프레젠테이션 생성',
         aiGenerateFailed: 'AI 프레젠테이션을 만들 수 없습니다.',
         aiGenerating: '생성 중...',
         aiGeneratingHint:
-          '로컬 모델이 슬라이드를 구성하고 있습니다. 몇 분 정도 걸릴 수 있습니다.',
-        aiLocalHint: '프롬프트는 등록된 로컬 AI 모델에서 처리됩니다.',
+          '백그라운드에서 슬라이드를 구성합니다. 창을 닫아도 작업은 계속됩니다.',
+        aiLocalHint:
+          '프롬프트는 관리자가 등록한 AI 실행 방식과 모델로 처리됩니다.',
         aiPromptLabel: '프레젠테이션 내용',
         aiPromptPlaceholder:
           '예: 신제품 출시안을 경영진에게 보고할 6장 발표 자료. 시장 문제, 핵심 기능 3가지, 출시 일정, 위험과 다음 결정을 포함하고 간결한 한국어로 작성해줘.',
@@ -7378,6 +7384,7 @@ export const resources = {
               resultCount: '{{count}} shown',
               routeFilter: 'Execution route filter',
               routeFor: 'Execution route for {{name}}',
+              runtimeFor: 'Agent runtime for {{name}}',
               search: 'Search apps, functions, providers, or models',
               summary:
                 'Total {{total}} · Local {{local}} · External {{external}}',
@@ -10898,6 +10905,10 @@ export const resources = {
       bento: {
         actionsMenu: 'Presentation settings',
         aiCancel: 'Cancel',
+        aiBackgroundCreate: 'Bento AI presentation',
+        aiBackgroundEdit: 'Bento AI revision',
+        aiBackgroundProgress: 'AI work in progress · {{progress}}%',
+        aiBackgroundQueued: 'AI work queued',
         aiClose: 'Close AI generation dialog',
         aiCreate: 'Create with AI',
         aiDialogDescription:
@@ -10910,21 +10921,21 @@ export const resources = {
           'Revise the content and design of the current presentation.',
         aiEditFailed: 'Could not revise the presentation with AI.',
         aiEditHint:
-          'Current edits are saved before the registered local AI model revises the deck.',
+          'Current edits are saved before the administrator-configured AI runtime revises the deck.',
         aiEditPromptLabel: 'Revision instruction',
         aiEditPromptPlaceholder:
           'Example: Make the copy more concise and turn the final slide into three clear next actions.',
         aiEditTitle: 'Edit presentation with AI',
         aiEditing: 'Revising...',
         aiEditingHint:
-          'The local model is revising the current document. Editing is paused until it finishes.',
+          'The document is being revised in the background. Work continues after this dialog closes.',
         aiGenerate: 'Generate presentation',
         aiGenerateFailed: 'Could not generate the AI presentation.',
         aiGenerating: 'Generating...',
         aiGeneratingHint:
-          'The local model is composing the slides. This can take a few minutes.',
+          'The slides are being composed in the background. Work continues after this dialog closes.',
         aiLocalHint:
-          'Your prompt is processed by the registered local AI model.',
+          'Your prompt is processed by the administrator-configured AI runtime and model.',
         aiPromptLabel: 'Presentation brief',
         aiPromptPlaceholder:
           'Example: A six-slide executive launch proposal covering the market problem, three key capabilities, timeline, risks, and the decision required.',

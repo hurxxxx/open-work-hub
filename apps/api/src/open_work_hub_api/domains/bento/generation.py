@@ -742,8 +742,11 @@ def _normalize_bento_plan_slide(value: Any, *, expected_index: int) -> dict[str,
     content = value.get("content")
     if (
         not isinstance(content, list)
-        or not 2 <= len(content) <= 5
-        or any(not isinstance(item, str) or not item.strip() for item in content)
+        or not 2 <= len(content) <= 12
+        or any(
+            not isinstance(item, str) or not item.strip() or len(item.strip()) > 1_000
+            for item in content
+        )
     ):
         raise ValueError("invalid plan slide content")
     raw_budget = value.get("element_budget")
@@ -751,7 +754,7 @@ def _normalize_bento_plan_slide(value: Any, *, expected_index: int) -> dict[str,
         raise ValueError("invalid plan element budget")
     budget: dict[str, int] = {}
     for element_type in ("text", "shape", "chart", "table"):
-        count = raw_budget.get(element_type)
+        count = raw_budget.get(element_type, 0)
         if isinstance(count, bool) or not isinstance(count, int) or not 0 <= count <= 40:
             raise ValueError("invalid plan element budget")
         budget[element_type] = count

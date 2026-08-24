@@ -17,6 +17,8 @@ BENTO_MAX_OUTPUT_TOKENS = 32_768
 BENTO_PLAN_WORKLOAD_ID = "bento.plan_presentation"
 BENTO_PLAN_TASK_KIND = "bento_plan_presentation"
 BENTO_PLAN_MAX_OUTPUT_TOKENS = 16_384
+BENTO_FIXED_RUNTIME_ADAPTER_ID = "fixed_bento_pipeline"
+BENTO_CODEX_RUNTIME_ADAPTER_ID = "codex_sdk"
 
 
 def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
@@ -27,13 +29,19 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
         app_id=BENTO_APP_ID,
         description="Revise an existing editable bento/slides presentation from an instruction.",
         default_route="local",
-        execution_kind="chat",
-        allowed_routes=("local",),
+        execution_kind="agent",
+        allowed_routes=("local", "external"),
+        allowed_providers=("openai",),
         required_capabilities=("chat",),
         model_roles=("default",),
-        external_data=False,
+        external_data=True,
         local_max_output_tokens=BENTO_MAX_OUTPUT_TOKENS,
         external_max_output_tokens=BENTO_MAX_OUTPUT_TOKENS,
+        default_runtime_adapter=BENTO_FIXED_RUNTIME_ADAPTER_ID,
+        allowed_runtime_adapters=(
+            BENTO_FIXED_RUNTIME_ADAPTER_ID,
+            BENTO_CODEX_RUNTIME_ADAPTER_ID,
+        ),
     )
     registry.register_llm_workload(
         workload_id=BENTO_GENERATE_WORKLOAD_ID,
@@ -42,13 +50,19 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
         app_id=BENTO_APP_ID,
         description="Generate a new editable bento/slides presentation from a user brief.",
         default_route="local",
-        execution_kind="chat",
-        allowed_routes=("local",),
+        execution_kind="agent",
+        allowed_routes=("local", "external"),
+        allowed_providers=("openai",),
         required_capabilities=("chat",),
         model_roles=("default",),
-        external_data=False,
+        external_data=True,
         local_max_output_tokens=BENTO_MAX_OUTPUT_TOKENS,
         external_max_output_tokens=BENTO_MAX_OUTPUT_TOKENS,
+        default_runtime_adapter=BENTO_FIXED_RUNTIME_ADAPTER_ID,
+        allowed_runtime_adapters=(
+            BENTO_FIXED_RUNTIME_ADAPTER_ID,
+            BENTO_CODEX_RUNTIME_ADAPTER_ID,
+        ),
     )
     registry.register_llm_workload(
         workload_id=BENTO_PLAN_WORKLOAD_ID,

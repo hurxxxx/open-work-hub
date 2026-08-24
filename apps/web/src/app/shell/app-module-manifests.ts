@@ -5,7 +5,7 @@ import {
   businessManifest,
   businessModule,
 } from '@/src/app-modules/business';
-import { bentoManifest } from '@/src/app-modules/bento/manifest';
+import { bentoManifest } from '@/src/app-modules/bento';
 import { chatbotManifest } from '@/src/app-modules/chatbot/manifest';
 import {
   collaborationManifest,

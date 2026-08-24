@@ -32,6 +32,7 @@ import {
   createBentoDocument,
   editBentoDocumentWithAi,
   generateBentoDocument,
+  getBentoAiJob,
   getBentoDocument,
   listBentoDocuments,
   permanentlyDeleteBentoDocument,
@@ -185,7 +186,7 @@ function BentoHub() {
     setAiGenerating(true);
     setAiError(null);
     try {
-      const created = await generateBentoDocument(
+      await generateBentoDocument(
         token,
         {
           prompt,
@@ -195,7 +196,8 @@ function BentoHub() {
         },
         workspaceSlug,
       );
-      navigate(documentPath(workspaceSlug, created.id));
+      setAiPrompt('');
+      setAiDialogOpen(false);
     } catch (caught) {
       setAiError(
         caught instanceof Error
@@ -211,7 +213,6 @@ function BentoHub() {
     aiSlideCount,
     aiVisibility,
     i18n.language,
-    navigate,
     t,
     token,
     workspaceSlug,
@@ -854,6 +855,9 @@ function BentoEditor() {
   const [aiEditPrompt, setAiEditPrompt] = useState('');
   const [aiEditing, setAiEditing] = useState(false);
   const [aiEditError, setAiEditError] = useState<string | null>(null);
+  const [activeAiEditJobId, setActiveAiEditJobId] = useState<string | null>(
+    null,
+  );
   const embedConfig = useMemo(() => currentBentoEmbedConfig(), []);
 
   const applyDetail = useCallback((next: BentoDocumentDetail) => {
@@ -949,6 +953,61 @@ function BentoEditor() {
     loadedDocumentRef.current = detail.id;
     postToBento(buildBentoLoadMessage(detail.document_json));
   }, [detail, embedConfig, iframeReady, postToBento]);
+
+  useEffect(() => {
+    if (!activeAiEditJobId || !token || !documentId) return undefined;
+    let active = true;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const poll = async () => {
+      try {
+        const job = await getBentoAiJob(
+          token,
+          activeAiEditJobId,
+          workspaceSlug,
+        );
+        if (!active) return;
+        if (job.status === 'succeeded') {
+          if (job.result_document_id === documentId) {
+            const revised = await getBentoDocument(
+              token,
+              documentId,
+              workspaceSlug,
+            );
+            if (!active) return;
+            loadedDocumentRef.current = null;
+            applyDetail(revised);
+            lastSavedJsonRef.current = revised.document_json;
+          }
+          setSaveStatus('saved');
+          setActiveAiEditJobId(null);
+          return;
+        }
+        if (job.status === 'failed' || job.status === 'cancelled') {
+          setSaveStatus(job.status === 'failed' ? 'error' : 'saved');
+          if (job.status === 'failed') {
+            setError(job.error_code || t('bento.aiEditFailed'));
+          }
+          setActiveAiEditJobId(null);
+          return;
+        }
+        timeoutId = setTimeout(() => void poll(), 2_000);
+      } catch (caught) {
+        if (!active) return;
+        setSaveStatus('error');
+        setError(
+          caught instanceof Error ? caught.message : t('bento.aiEditFailed'),
+        );
+        setActiveAiEditJobId(null);
+      }
+    };
+
+    void poll();
+    return () => {
+      active = false;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [activeAiEditJobId, applyDetail, documentId, t, token, workspaceSlug]);
 
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
@@ -1083,7 +1142,7 @@ function BentoEditor() {
         current = saved;
       }
 
-      const revised = await editBentoDocumentWithAi(
+      const job = await editBentoDocumentWithAi(
         token,
         documentId,
         {
@@ -1093,10 +1152,8 @@ function BentoEditor() {
         },
         workspaceSlug,
       );
-      loadedDocumentRef.current = null;
-      applyDetail(revised);
-      lastSavedJsonRef.current = revised.document_json;
-      setSaveStatus('saved');
+      setActiveAiEditJobId(job.id);
+      setSaveStatus('saving');
       setAiEditPrompt('');
       setAiEditOpen(false);
     } catch (caught) {
@@ -1310,9 +1367,7 @@ function BentoEditor() {
               ) : null}
 
               <p className="app-text-caption mt-3 text-app-ink/45">
-                {aiEditing
-                  ? t('bento.aiEditingHint')
-                  : t('bento.aiEditHint')}
+                {aiEditing ? t('bento.aiEditingHint') : t('bento.aiEditHint')}
               </p>
               <div className="mt-4 flex justify-end gap-2 border-t border-app-border pt-4">
                 <button
@@ -1333,9 +1388,7 @@ function BentoEditor() {
                   ) : (
                     <Sparkles size={15} />
                   )}
-                  {aiEditing
-                    ? t('bento.aiEditing')
-                    : t('bento.aiEditApply')}
+                  {aiEditing ? t('bento.aiEditing') : t('bento.aiEditApply')}
                 </button>
               </div>
             </form>

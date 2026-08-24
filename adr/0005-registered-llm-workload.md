@@ -57,6 +57,10 @@ Open Work Hub의 생성형 LLM 호출은 도메인 gateway, provider SDK, worker
   gateway를 직접 호출하지 않는다.
 - 신규 실행 종류나 Adapter가 필요하면 기능 코드에서 우회하지 말고 Core
   Enablement로 먼저 추가한다.
+- `execution_kind='agent'` workload는 one-shot `LlmExecutionAdapter`와 별도의
+  `AgentRuntimeAdapter`를 등록한다. 관리자는 workload가 허용한 runtime adapter 중 하나를
+  route/provider/model과 함께 선택한다. agent runtime도 gateway 보안·audit·credential 경계를
+  거치며 provider SDK나 secret을 앱 코드에서 직접 선택하지 않는다.
 - embedding, rerank, OCR, ASR은 이 ADR의 생성형 LLM workload 범위가 아니며
   각 Inference Gateway 계약을 따른다.
 

@@ -26,6 +26,7 @@ interface WorkloadDraft {
   modelIds: Record<string, string>;
   localMaxOutputK: string;
   externalMaxOutputK: string;
+  runtimeAdapterId: string;
 }
 
 type RouteFilter = 'all' | AiModelRoute;
@@ -151,7 +152,8 @@ function workloadSelectionUnchanged(
   return (
     draft.routeMode === workload.effective_route &&
     draft.providerId === persistedProvider &&
-    JSON.stringify(draft.modelIds) === JSON.stringify(persistedModels)
+    JSON.stringify(draft.modelIds) === JSON.stringify(persistedModels) &&
+    draft.runtimeAdapterId === workload.effective_runtime_adapter
   );
 }
 
@@ -219,6 +221,9 @@ function initialDrafts(
           modelIds: workload.override?.model_ids ?? {},
           localMaxOutputK: tokenCapToK(workload.local_max_output_tokens),
           externalMaxOutputK: tokenCapToK(workload.external_max_output_tokens),
+          runtimeAdapterId:
+            workload.override?.runtime_adapter_id ??
+            workload.effective_runtime_adapter,
         },
       ];
     }),
@@ -534,6 +539,10 @@ export function AdminLlmRoutingOverview({ token }: { token: string }) {
                         className={`${COMPACT_SELECT_CLASS} min-w-0 flex-1`}
                         onChange={(event) => {
                           const routeMode = event.target.value as AiModelRoute;
+                          const runtimeAdapterId =
+                            workload.runtime_adapters.find((adapter) =>
+                              adapter.allowed_routes.includes(routeMode),
+                            )?.adapter_id ?? draft.runtimeAdapterId;
                           setDrafts((current) => ({
                             ...current,
                             [workload.workload_id]: {
@@ -546,6 +555,7 @@ export function AdminLlmRoutingOverview({ token }: { token: string }) {
                               modelIds: {},
                               localMaxOutputK: draft.localMaxOutputK,
                               externalMaxOutputK: draft.externalMaxOutputK,
+                              runtimeAdapterId,
                             },
                           }));
                         }}
@@ -591,6 +601,50 @@ export function AdminLlmRoutingOverview({ token }: { token: string }) {
                   </td>
                   <td className="px-1.5 py-1.5">
                     <div className="space-y-1">
+                      {workload.execution_kind === 'agent' ? (
+                        <select
+                          aria-label={t(
+                            'admin.console.aiSecurity.routingOverview.runtimeFor',
+                            { name: label },
+                          )}
+                          className={COMPACT_SELECT_CLASS}
+                          onChange={(event) => {
+                            const runtimeAdapterId = event.target.value;
+                            const adapter = workload.runtime_adapters.find(
+                              (item) => item.adapter_id === runtimeAdapterId,
+                            );
+                            const routeMode =
+                              adapter?.allowed_routes[0] ?? draft.routeMode;
+                            const providerId =
+                              adapter?.allowed_providers[0] ??
+                              defaultProviderId(
+                                workload,
+                                routeMode,
+                                data.providers,
+                              );
+                            setDrafts((current) => ({
+                              ...current,
+                              [workload.workload_id]: {
+                                ...draft,
+                                runtimeAdapterId,
+                                routeMode,
+                                providerId,
+                                modelIds: {},
+                              },
+                            }));
+                          }}
+                          value={draft.runtimeAdapterId}
+                        >
+                          {workload.runtime_adapters.map((adapter) => (
+                            <option
+                              key={adapter.adapter_id}
+                              value={adapter.adapter_id}
+                            >
+                              {adapter.display_name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : null}
                       {roles.map((role) => {
                         const models = modelsForWorkload(
                           data,
@@ -826,6 +880,7 @@ export function AdminLlmRoutingOverview({ token }: { token: string }) {
                                   local_max_output_tokens: localMaxOutputTokens,
                                   external_max_output_tokens:
                                     externalMaxOutputTokens,
+                                  runtime_adapter_id: draft.runtimeAdapterId,
                                 },
                               ),
                             );

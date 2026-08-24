@@ -36,6 +36,7 @@ from open_work_hub_api.domains.ai.model_settings_models import (
     AiModelRouteOverride,
 )
 from open_work_hub_api.domains.ai.model_settings_schemas import (
+    AiAgentRuntimeAdapterResponse,
     AiModelCatalogCreateRequest,
     AiModelCatalogEntryResponse,
     AiModelCatalogUpdateRequest,
@@ -47,6 +48,9 @@ from open_work_hub_api.domains.ai.model_settings_schemas import (
     AiModelRouteOverrideUpdateRequest,
     AiModelSettingsResponse,
     AiModelWorkloadResponse,
+)
+from open_work_hub_api.domains.ai.agent_runtime import (
+    get_agent_runtime_adapter_descriptor,
 )
 from open_work_hub_api.domains.ai.registry import (
     RegisteredLlmWorkload,
@@ -72,6 +76,7 @@ class ResolvedLlmWorkloadRoute:
     external_max_output_tokens: int
     max_output_tokens: int
     model_entry_id: str | None = None
+    runtime_adapter_id: str = "chat_completion"
 
     @property
     def source(self) -> Literal["default", "override"]:
@@ -150,6 +155,24 @@ def resolve_ai_model_workload_route(
         select(AiModelRouteOverride).where(AiModelRouteOverride.workload_id == workload.workload_id)
     )
     route = override.route_mode if override is not None else workload.default_route
+    runtime_adapter_id = (
+        override.runtime_adapter_id
+        if override is not None and override.runtime_adapter_id
+        else workload.default_runtime_adapter
+    )
+    if runtime_adapter_id not in workload.allowed_runtime_adapters:
+        raise AiModelSettingsError(
+            status_code=503,
+            code="admin.ai_model_runtime_adapter_not_allowed",
+            context={"workload_id": workload.workload_id},
+        )
+    _require_runtime_route_compatibility(
+        workload,
+        runtime_adapter_id=runtime_adapter_id,
+        route=route,
+        provider_id=override.provider_id if override is not None else None,
+        status_code=503,
+    )
     if route not in workload.allowed_routes:
         raise AiModelSettingsError(
             status_code=503,
@@ -288,6 +311,7 @@ def resolve_ai_model_workload_route(
         external_max_output_tokens=external_max_output_tokens,
         max_output_tokens=max_output_tokens,
         model_entry_id=selected_model_id,
+        runtime_adapter_id=runtime_adapter_id,
     )
 
 
@@ -345,6 +369,7 @@ def get_ai_model_settings_snapshot(db: Session) -> AiModelSettingsResponse:
             model_ids=row.model_ids,
             local_max_output_tokens=row.local_max_output_tokens,
             external_max_output_tokens=row.external_max_output_tokens,
+            runtime_adapter_id=row.runtime_adapter_id,
             version=row.version,
             updated_at=row.updated_at,
         )
@@ -722,6 +747,9 @@ def upsert_ai_model_route_override(
                 model_ids_json=dict(payload.model_ids),
                 local_max_output_tokens=payload.local_max_output_tokens,
                 external_max_output_tokens=payload.external_max_output_tokens,
+                runtime_adapter_id=(
+                    payload.runtime_adapter_id or workload.default_runtime_adapter
+                ),
                 version=1,
                 updated_by=actor_user_id,
             )
@@ -747,6 +775,9 @@ def upsert_ai_model_route_override(
             model_ids_json=dict(payload.model_ids),
             local_max_output_tokens=payload.local_max_output_tokens,
             external_max_output_tokens=payload.external_max_output_tokens,
+            runtime_adapter_id=(
+                payload.runtime_adapter_id or workload.default_runtime_adapter
+            ),
             version=row.version + 1,
             updated_by=actor_user_id,
             updated_at=utcnow_naive(),
@@ -847,6 +878,7 @@ def _serialize_override(row: AiModelRouteOverride) -> AiModelRouteOverrideRespon
         model_ids=row.model_ids,
         local_max_output_tokens=row.local_max_output_tokens,
         external_max_output_tokens=row.external_max_output_tokens,
+        runtime_adapter_id=row.runtime_adapter_id,
         version=row.version,
         updated_at=row.updated_at,
     )
@@ -889,6 +921,27 @@ def _serialize_workload(
         label_key=descriptor.label_key,
         description_key=descriptor.description_key,
         execution_kind=descriptor.execution_kind,
+        default_runtime_adapter=descriptor.default_runtime_adapter,
+        effective_runtime_adapter=(
+            serialized_override.runtime_adapter_id
+            if serialized_override is not None
+            and serialized_override.runtime_adapter_id is not None
+            else descriptor.default_runtime_adapter
+        ),
+        allowed_runtime_adapters=list(descriptor.allowed_runtime_adapters),
+        runtime_adapters=[
+            AiAgentRuntimeAdapterResponse(
+                adapter_id=runtime_descriptor.adapter_id,
+                display_name=runtime_descriptor.display_name,
+                allowed_routes=list(runtime_descriptor.allowed_routes),  # type: ignore[arg-type]
+                allowed_providers=list(runtime_descriptor.allowed_providers),
+            )
+            for adapter_id in descriptor.allowed_runtime_adapters
+            if (
+                runtime_descriptor := get_agent_runtime_adapter_descriptor(adapter_id)
+            )
+            is not None
+        ],
         default_route=descriptor.default_route,
         effective_route=(
             serialized_override.route_mode
@@ -1133,6 +1186,20 @@ def _validate_route_override(
     workload: RegisteredLlmWorkload,
     payload: AiModelRouteOverrideUpdateRequest,
 ) -> str:
+    runtime_adapter_id = payload.runtime_adapter_id or workload.default_runtime_adapter
+    if runtime_adapter_id not in workload.allowed_runtime_adapters:
+        raise AiModelSettingsError(
+            status_code=422,
+            code="admin.ai_model_runtime_adapter_not_allowed",
+            context={"workload_id": workload.workload_id},
+        )
+    _require_runtime_route_compatibility(
+        workload,
+        runtime_adapter_id=runtime_adapter_id,
+        route=payload.route_mode,
+        provider_id=payload.provider_id,
+        status_code=422,
+    )
     if payload.route_mode not in workload.allowed_routes:
         raise AiModelSettingsError(
             status_code=422,
@@ -1212,6 +1279,33 @@ def _validate_route_override(
                 context={"model_id": model.id, "workload_id": workload.workload_id},
             )
     return provider_id
+
+
+def _require_runtime_route_compatibility(
+    workload: RegisteredLlmWorkload,
+    *,
+    runtime_adapter_id: str,
+    route: str,
+    provider_id: str | None,
+    status_code: int,
+) -> None:
+    if workload.execution_kind != "agent":
+        return
+    descriptor = get_agent_runtime_adapter_descriptor(runtime_adapter_id)
+    if descriptor is None:
+        raise AiModelSettingsError(
+            status_code=status_code,
+            code="admin.ai_model_runtime_adapter_not_allowed",
+            context={"workload_id": workload.workload_id},
+        )
+    if route not in descriptor.allowed_routes or (
+        descriptor.allowed_providers
+        and (provider_id or "") not in descriptor.allowed_providers
+    ):
+        raise AiModelSettingsError(
+            status_code=status_code,
+            code="admin.ai_model_runtime_route_mismatch",
+        )
 
 
 def _model_is_referenced(db: Session, *, model_id: str) -> bool:

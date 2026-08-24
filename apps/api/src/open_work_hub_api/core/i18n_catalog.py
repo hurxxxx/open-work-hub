@@ -548,6 +548,14 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "워크로드 {workload_id}에는 선택한 LLM 경로를 사용할 수 없습니다.",
         "en-US": "The selected LLM route is not allowed for workload {workload_id}.",
     },
+    "admin.ai_model_runtime_adapter_not_allowed": {
+        "ko-KR": "워크로드 {workload_id}에는 선택한 에이전트 런타임을 사용할 수 없습니다.",
+        "en-US": "The selected agent runtime is not allowed for workload {workload_id}.",
+    },
+    "admin.ai_model_runtime_route_mismatch": {
+        "ko-KR": "에이전트 런타임과 LLM 경로 또는 제공자가 일치하지 않습니다.",
+        "en-US": "The agent runtime does not match the selected LLM route or provider.",
+    },
     "admin.ai_model_provider_required": {
         "ko-KR": "외부 LLM 경로에는 제공자 선택이 필요합니다.",
         "en-US": "An external LLM route requires a provider selection.",
@@ -1219,6 +1227,14 @@ MESSAGES: dict[str, dict[str, str]] = {
     "bento.ai_unsupported_document": {
         "ko-KR": "이 프레젠테이션에는 현재 AI 수정이 지원하지 않는 요소가 포함되어 있습니다.",
         "en-US": "This presentation contains elements that AI editing does not currently support.",
+    },
+    "bento.ai_job_not_found": {
+        "ko-KR": "AI 작업을 찾을 수 없습니다.",
+        "en-US": "The AI job was not found.",
+    },
+    "bento.ai_edit_already_running": {
+        "ko-KR": "이 프레젠테이션의 AI 수정 작업이 이미 진행 중입니다.",
+        "en-US": "An AI revision is already running for this presentation.",
     },
     "diagrams.not_found": {
         "ko-KR": "다이어그램을 찾을 수 없습니다.",

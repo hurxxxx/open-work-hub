@@ -15,10 +15,33 @@ from open_work_hub_api.domains.bento import (
     BENTO_PLAN_WORKLOAD_ID,
 )
 from open_work_hub_api.domains.bento import generation as bento_generation
+from open_work_hub_api.domains.bento import router as bento_router
+from open_work_hub_api.domains.bento.execution import execute_bento_agent_job
 
 
 def _auth_headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+def _disable_bento_broker_publish(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        bento_router,
+        "publish_pending_graph_dispatches",
+        lambda *_args, **_kwargs: 0,
+    )
+
+
+def _complete_bento_job(
+    client: TestClient,
+    *,
+    headers: dict[str, str],
+    base: str,
+    job_id: str,
+) -> dict[str, object]:
+    execute_bento_agent_job(job_id)
+    response = client.get(f"{base}/ai-jobs/{job_id}", headers=headers)
+    assert response.status_code == 200, response.text
+    return response.json()
 
 
 def _document_json(*, title: str, slide_id: str = "slide-1") -> str:
@@ -163,6 +186,33 @@ def _plan_tool_completion(plan_json: str) -> LlmCompletionResult:
             ),
         ),
     )
+
+
+def test_bento_plan_normalizer_accepts_sparse_zero_budgets_and_longer_lists() -> None:
+    plan = json.loads(_generated_plan(title="Mathematical frontiers", slide_count=3))
+    plan["slides"][1]["content"] = [
+        "P versus NP",
+        "Riemann hypothesis",
+        "Navier-Stokes",
+        "Yang-Mills",
+        "Hodge conjecture",
+        "Birch and Swinnerton-Dyer",
+        "Poincare conjecture (solved)",
+    ]
+    plan["slides"][1]["element_budget"] = {"shape": 7, "text": 7}
+
+    normalized = bento_generation._normalize_bento_plan(
+        json.dumps(plan),
+        expected_slide_count=3,
+    )
+
+    assert len(normalized["slides"][1]["content"]) == 7
+    assert normalized["slides"][1]["element_budget"] == {
+        "text": 7,
+        "shape": 7,
+        "chart": 0,
+        "table": 0,
+    }
 
 
 def test_bento_model_normalizer_supplies_title_and_normalizes_percent_opacity() -> None:
@@ -501,6 +551,7 @@ def test_bento_ai_generation_uses_registered_local_workload_and_persists_documen
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _disable_bento_broker_publish(monkeypatch)
     captured: list[dict[str, object]] = []
 
     def fake_execute(workload_id, context, db, **kwargs):
@@ -543,8 +594,18 @@ def test_bento_ai_generation_uses_registered_local_workload_and_persists_documen
         },
     )
 
-    assert response.status_code == 201, response.text
-    created = response.json()
+    assert response.status_code == 202, response.text
+    job = _complete_bento_job(
+        client,
+        headers=_auth_headers(session["token"]),
+        base="/api/v1/workspaces/delivery-hub/bento",
+        job_id=response.json()["id"],
+    )
+    assert job["status"] == "succeeded"
+    created = client.get(
+        f"/api/v1/workspaces/delivery-hub/bento/items/{job['result_document_id']}",
+        headers=_auth_headers(session["token"]),
+    ).json()
     document = json.loads(created["document_json"])
     assert created["title"] == "AI launch plan"
     assert created["visibility"] == "workspace"
@@ -588,6 +649,7 @@ def test_bento_ai_generation_rejects_invalid_model_output_without_creating_docum
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _disable_bento_broker_publish(monkeypatch)
     model_calls = 0
 
     def fake_invalid_execute(workload_id, *_args, **_kwargs):
@@ -613,8 +675,15 @@ def test_bento_ai_generation_rejects_invalid_model_output_without_creating_docum
         json={"prompt": "invalid output test", "slide_count": 3},
     )
 
-    assert response.status_code == 502
-    assert response.json()["code"] == "bento.ai_invalid_response"
+    assert response.status_code == 202
+    job = _complete_bento_job(
+        client,
+        headers=headers,
+        base=base,
+        job_id=response.json()["id"],
+    )
+    assert job["status"] == "failed"
+    assert job["error_code"] == "bento.agent.BentoGenerationError"
     assert model_calls == 3
     after = client.get(f"{base}/hub", headers=headers).json()["total"]
     assert after == before
@@ -624,6 +693,7 @@ def test_bento_ai_generation_rejects_invalid_plan_before_rendering(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _disable_bento_broker_publish(monkeypatch)
     calls: list[str] = []
 
     def fake_execute(workload_id, *_args, **_kwargs):
@@ -647,8 +717,14 @@ def test_bento_ai_generation_rejects_invalid_plan_before_rendering(
         json={"prompt": "invalid plan test", "slide_count": 3},
     )
 
-    assert response.status_code == 502
-    assert response.json()["code"] == "bento.ai_invalid_response"
+    assert response.status_code == 202
+    job = _complete_bento_job(
+        client,
+        headers=_auth_headers(session["token"]),
+        base="/api/v1/workspaces/delivery-hub/bento",
+        job_id=response.json()["id"],
+    )
+    assert job["status"] == "failed"
     assert calls == [BENTO_PLAN_WORKLOAD_ID]
 
 
@@ -656,6 +732,7 @@ def test_bento_ai_generation_repairs_invalid_model_output_once(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _disable_bento_broker_publish(monkeypatch)
     model_responses = iter(
         [
             "not JSON",
@@ -690,8 +767,18 @@ def test_bento_ai_generation_repairs_invalid_model_output_once(
         json={"prompt": "repair this output", "slide_count": 3},
     )
 
-    assert response.status_code == 201, response.text
-    assert response.json()["title"] == "Repaired deck"
+    assert response.status_code == 202, response.text
+    job = _complete_bento_job(
+        client,
+        headers=_auth_headers(session["token"]),
+        base="/api/v1/workspaces/delivery-hub/bento",
+        job_id=response.json()["id"],
+    )
+    created = client.get(
+        f"/api/v1/workspaces/delivery-hub/bento/items/{job['result_document_id']}",
+        headers=_auth_headers(session["token"]),
+    ).json()
+    assert created["title"] == "Repaired deck"
     assert len(calls) == 3
     assert calls[0]["workload_id"] == BENTO_PLAN_WORKLOAD_ID
     assert calls[1]["workload_id"] == BENTO_GENERATE_WORKLOAD_ID
@@ -706,6 +793,7 @@ def test_bento_ai_edit_preserves_document_identity_and_server_owned_fields(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _disable_bento_broker_publish(monkeypatch)
     captured: dict[str, object] = {}
 
     def fake_execute(workload_id, context, db, **kwargs):
@@ -754,8 +842,16 @@ def test_bento_ai_edit_preserves_document_identity_and_server_owned_fields(
         },
     )
 
-    assert response.status_code == 200, response.text
-    revised = response.json()
+    assert response.status_code == 202, response.text
+    job = _complete_bento_job(
+        client,
+        headers=headers,
+        base=base,
+        job_id=response.json()["id"],
+    )
+    revised = client.get(
+        f"{base}/items/{job['result_document_id']}", headers=headers
+    ).json()
     revised_document = json.loads(revised["document_json"])
     assert revised["id"] == created["id"]
     assert revised["version"] == created["version"] + 1
@@ -830,7 +926,19 @@ def test_bento_ai_workloads_are_registered_local_only(workload_id: str) -> None:
 
     assert workload.app_ids == ("bento",)
     assert workload.default_route == "local"
-    assert workload.allowed_routes == ("local",)
+    if workload_id == BENTO_PLAN_WORKLOAD_ID:
+        assert workload.allowed_routes == ("local",)
+        assert workload.execution_kind == "chat"
+        assert workload.allowed_runtime_adapters == ("chat_completion",)
+    else:
+        assert workload.allowed_routes == ("local", "external")
+        assert workload.allowed_providers == ("openai",)
+        assert workload.execution_kind == "agent"
+        assert workload.default_runtime_adapter == "fixed_bento_pipeline"
+        assert workload.allowed_runtime_adapters == (
+            "fixed_bento_pipeline",
+            "codex_sdk",
+        )
     assert workload.local_max_output_tokens == (
         16_384 if workload_id == BENTO_PLAN_WORKLOAD_ID else 32_768
     )

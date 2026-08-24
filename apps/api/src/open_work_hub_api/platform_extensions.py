@@ -14,6 +14,7 @@ from open_work_hub_api.domains.ai.registry import (
     get_ai_capability_registry,
     initialize_ai_capability_registry,
 )
+from open_work_hub_api.domains.ai.agent_runtime import agent_runtime_adapter_ids
 from open_work_hub_api.domains.ai.local_gateway_tool_catalog import (
     default_gateway_tools_by_agent,
     read_gateway_tool_builders,
@@ -52,6 +53,9 @@ from open_work_hub_api.domains.conversations.default_scope_adapters import (
 from open_work_hub_api.domains.conversations.scope_registry import (
     conversation_scope_adapters,
     supported_conversation_scope_refs,
+)
+from open_work_hub_api.domains.bento.execution import (
+    ensure_bento_agent_executor_registered,
 )
 from open_work_hub_api.domains.rag.default_source_adapters import (
     ensure_rag_source_adapters_registered,
@@ -165,6 +169,7 @@ def initialize_platform_extensions(
     ensure_default_llm_pool_config_resolvers_registered()
     ensure_default_llm_execution_adapters_registered()
     ensure_default_llm_generation_profiles_registered()
+    ensure_bento_agent_executor_registered()
     ensure_retrieval_partition_adapters_registered()
     ensure_search_entity_adapters_registered()
     ensure_search_index_hooks_registered()
@@ -534,6 +539,18 @@ def _validate_llm_registry_contracts(
     official_provider_ids = set(snapshot.llm_external_provider_ids)
     configured_provider_ids = _configured_external_llm_provider_ids(settings)
     problems: list[str] = []
+    registered_agent_runtimes = set(agent_runtime_adapter_ids())
+    for workload in get_ai_capability_registry().llm_workloads.values():
+        if workload.execution_kind != "agent":
+            continue
+        missing_runtimes = sorted(
+            set(workload.allowed_runtime_adapters) - registered_agent_runtimes
+        )
+        if missing_runtimes:
+            problems.append(
+                "agent workload references unregistered runtime adapters: "
+                f"{workload.workload_id} -> {', '.join(missing_runtimes)}"
+            )
     missing_config = sorted(official_provider_ids - config_provider_ids)
     if missing_config:
         problems.append(

@@ -56,6 +56,7 @@ class AiModelRouteOverrideResponse(BaseModel):
     model_ids: dict[str, str] = Field(default_factory=dict)
     local_max_output_tokens: int | None = None
     external_max_output_tokens: int | None = None
+    runtime_adapter_id: str | None = None
     version: int
     updated_at: datetime | None = None
 
@@ -69,6 +70,13 @@ class AiModelResolvedRouteResponse(BaseModel):
     max_output_tokens: int
 
 
+class AiAgentRuntimeAdapterResponse(BaseModel):
+    adapter_id: str
+    display_name: str
+    allowed_routes: list[AiModelRouteMode]
+    allowed_providers: list[str]
+
+
 class AiModelWorkloadResponse(BaseModel):
     workload_id: str
     task_kind: str
@@ -78,6 +86,10 @@ class AiModelWorkloadResponse(BaseModel):
     label_key: str
     description_key: str
     execution_kind: str
+    default_runtime_adapter: str
+    effective_runtime_adapter: str
+    allowed_runtime_adapters: list[str]
+    runtime_adapters: list[AiAgentRuntimeAdapterResponse]
     default_route: AiModelRouteMode
     effective_route: AiModelRouteMode
     allowed_routes: list[AiModelRouteMode]
@@ -101,6 +113,7 @@ class AiModelOrphanedOverrideResponse(BaseModel):
     model_ids: dict[str, str] = Field(default_factory=dict)
     local_max_output_tokens: int | None = None
     external_max_output_tokens: int | None = None
+    runtime_adapter_id: str | None = None
     version: int
     updated_at: datetime | None = None
 
@@ -204,6 +217,12 @@ class AiModelRouteOverrideUpdateRequest(AiModelRegistryMutationRequest):
         ge=1024,
         le=65536,
         multiple_of=1024,
+    )
+    runtime_adapter_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=64,
+        pattern=r"^[a-z][a-z0-9_.-]{0,63}$",
     )
 
     @field_validator("model_ids")

@@ -10,6 +10,8 @@ Open Work Hub의 생성형 모델 호출은 등록된 workload와 공용 실행 
 - 외부 전송은 데이터 분류, 마스킹, 승인 정책과 감사 이벤트를 통과해야 한다.
 - 도구 실행은 workspace/app 권한과 discoverability를 검사하고 쓰기 작업은 승인 게이트를 사용한다.
 - 모델 호출과 결과에는 actor, workspace, workload, provider/model, token 사용량과 trace ID를 남긴다.
+- 자율 툴 루프는 `AgentRuntimeAdapter`로 등록하고 one-shot chat execution adapter와 분리한다.
+  runtime 선택도 workload override의 일부이며 route 간 자동 fallback은 없다.
 
 구현 정본은 `apps/api/src/open_work_hub_api/domains/ai/`와 등록 bootstrap이다.
 

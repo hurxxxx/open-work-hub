@@ -1,4 +1,5 @@
 import { FileUploadProvider } from '@/src/app-modules/files';
+import { bentoAiBackgroundWorkSource } from '@/src/app-modules/bento';
 import { collaborationManifest } from './manifest';
 import {
   collaborationGlobalRoutes,
@@ -18,6 +19,7 @@ export {
 };
 
 export const collaborationModule = {
+  backgroundWorkSources: [bentoAiBackgroundWorkSource],
   globalRoutes: collaborationGlobalRoutes,
   manifest: collaborationManifest,
   shellNavResolver: collaborationShellNavResolver,

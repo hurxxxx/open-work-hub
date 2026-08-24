@@ -34,6 +34,10 @@ function workload(
     label_key: '',
     description_key: '',
     execution_kind: 'chat',
+    default_runtime_adapter: 'chat_completion',
+    effective_runtime_adapter: 'chat_completion',
+    allowed_runtime_adapters: ['chat_completion'],
+    runtime_adapters: [],
     default_route: 'local',
     effective_route: 'local',
     allowed_routes: ['local', 'external'],
@@ -124,9 +128,9 @@ describe('admin AI model settings model', () => {
   });
 
   it('keeps generative Vision workloads configurable in model routing', () => {
-    expect(isConfigurableModelRoutingWorkload(workload('chatbot', ['ai']))).toBe(
-      true,
-    );
+    expect(
+      isConfigurableModelRoutingWorkload(workload('chatbot', ['ai'])),
+    ).toBe(true);
     expect(
       isConfigurableModelRoutingWorkload(
         workload('docs.attachment_vision', ['docs'], {

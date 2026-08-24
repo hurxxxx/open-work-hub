@@ -211,7 +211,15 @@ describe('app module registry', () => {
   });
 
   it('derives background work sources from the app registry', () => {
-    expect(APP_BACKGROUND_WORK_SOURCES).toEqual([]);
+    expect(APP_BACKGROUND_WORK_SOURCES).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          appId: 'collaboration',
+          id: 'bento-ai',
+          requiredNavItemId: 'bento-all',
+        }),
+      ]),
+    );
   });
 
   it('derives AI tool surfaces from feature module registrations', () => {
