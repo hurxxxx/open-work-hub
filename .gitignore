@@ -1,4 +1,9 @@
 .DS_Store
+CLAUDE.local.md
+.claude/settings.local.json
+.claude/state/
+.claude/agent-memory-local/
+.codex-log/
 node_modules/
 dist/
 apps/**/dist-electron/

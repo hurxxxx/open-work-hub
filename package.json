@@ -9,6 +9,8 @@
   "scripts": {
     "nx": "env -u NO_COLOR -u NODE_ENV nx",
     "check:project-version": "node scripts/check-project-version.mjs",
+    "check:skills": "python3 scripts/check-skill-harness.py",
+    "test:skill-harness": "python3 -m unittest scripts.tests.test_skill_harness",
     "dev": "./dev.sh",
     "dev:minimal": "./dev.sh --minimal-infra",
     "dev:login-smoke": "bash ./scripts/dev-login-smoke.sh",
@@ -66,7 +68,7 @@
     "ci:contract": "pnpm check:api-contract && pnpm check:contracts-sources && pnpm nx typecheck contracts && pnpm nx test contracts && pnpm build:contracts",
     "ci:core-web": "pnpm check:core-web-boundaries && pnpm nx typecheck core-web && pnpm nx test core-web && pnpm nx build core-web",
     "ci:web": "pnpm ci:core-web && pnpm check:api-contract && pnpm check:web-architecture && pnpm nx typecheck web && pnpm nx lint web && pnpm nx test web && pnpm nx build web && pnpm nx e2e-shell web",
-    "ci:all": "pnpm ci:python-contract-guardrails && pnpm ci:contract && pnpm ci:api && pnpm ci:web",
+    "ci:all": "pnpm test:skill-harness && pnpm check:skills && pnpm ci:python-contract-guardrails && pnpm ci:contract && pnpm ci:api && pnpm ci:web",
     "test:api:vm": "bash scripts/api-test-vm.sh",
     "test:api:vm:collect": "bash scripts/api-test-vm.sh --collect-only",
     "lint": "nx run-many -t lint --all",

@@ -56,8 +56,16 @@ Useful checks:
 pnpm check:project-version
 pnpm check:path-hardcoding
 pnpm check:python-source-integrity
+pnpm check:skills
 pnpm nx run-many -t typecheck --all
 ```
+
+## AI-assisted development
+
+Codex, Claude Code, GitHub Copilot, and other coding agents must start with
+[`AGENTS.md`](./AGENTS.md). Tool-specific bridge files keep that document as the
+single source of repository rules. Detailed structure, UI, and proportional
+validation guidance lives under [`docs/agents/`](./docs/agents/).
 
 See [`docs/README.md`](./docs/README.md) for architecture and domain documentation.
 

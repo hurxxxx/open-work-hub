@@ -7,6 +7,7 @@
 
 | 영역                      | 시작 문서                                                              |
 | ------------------------- | ---------------------------------------------------------------------- |
+| 에이전트 개발·검증 기준   | [에이전트 문서 라우팅](agents/domain.md)                               |
 | 앱 등록·권한·bootstrap    | [앱 플랫폼 계약](domains/app-platform/README.md)                       |
 | AI 모델과 실행 게이트웨이 | [AI Gateway](domains/ai/gateway.md)                                    |
 | Retrieval과 RAG           | [Retrieval](domains/retrieval/README.md), [RAG](domains/rag/README.md) |
@@ -24,6 +25,7 @@
 | ---------- | ----------------------------------------- |
 | `domains/` | 여러 앱과 런타임을 가로지르는 도메인 계약 |
 | `apps/`    | 특정 범용 앱에 한정된 계약                |
+| `agents/`  | AI 개발 도구의 구조·검증·작업 지침        |
 | `product/` | 제품 UI와 데이터 기준                     |
 
 ADR은 저장소 루트 [`adr/`](../adr)에 둡니다. 임시 검증 결과, 원시 로그,

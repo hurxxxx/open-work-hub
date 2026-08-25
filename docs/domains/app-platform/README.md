@@ -237,14 +237,14 @@ object storage나 broker에 남은 객체·메시지는 Alembic으로 정리하�
 최소 정적·단위 검증은 다음과 같다.
 
 ```bash
-pnpm check:app-platform-guardrails
 pnpm check:web-architecture
 pnpm nx typecheck web
 pnpm check:api-architecture
+pnpm check:api-contract
+pnpm check:i18n
 cd apps/api && uv run --frozen --python 3.12 --group dev python -m pytest \
   tests/test_workspace_app_registry.py \
   tests/test_workspace_bootstrap.py \
-  tests/test_workspace_app_api_gate.py \
   tests/test_admin_workspaces.py -q
 ```
 
