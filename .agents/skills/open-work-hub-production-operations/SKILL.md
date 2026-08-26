@@ -11,6 +11,8 @@ description: Operate Open Work Hub's production Docker Compose infrastructure fr
 - No full app build/migrate/restart/smoke/rollback command exists.
 - Production checkout basename must be `prod`.
 - Source comes from GitLab `origin/main` after approved `dev -> main` MR.
+- `prod` checkout is a command guard. Do not force `prod` into container/volume/service names when a shared site-named instance can isolate data by database, bucket, index, collection, Redis namespace, or queue group.
+- Add separate environment-named instances only for lifecycle, security, capacity, or blast-radius isolation.
 - Never run dev commands from prod checkout.
 - Never print `.env`; use env skill if env changes are scoped.
 

@@ -40,6 +40,7 @@
 ## Platform
 
 - Use existing composition roots, registries, manifests, public APIs, generated contracts, and migrations.
+- Runtime service names use site identity, not environment, when one physical instance can isolate data by DB/schema/bucket/index/collection/queue namespace. Create separate dev/prod instances only for incompatible lifecycle, security, capacity, or blast-radius needs.
 - Web app surfaces stay under `apps/web/src/app-modules/<appId>/`; expose only manifest, public API, or bootstrap DTO.
 - FastAPI routers are assembled by `open_work_hub_api.api_registry`.
 - API contract changes require generated client regeneration when `pnpm check:api-contract` demands it.
