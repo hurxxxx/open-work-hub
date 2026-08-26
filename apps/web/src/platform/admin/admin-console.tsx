@@ -16,6 +16,7 @@ import { CommunitySection } from './admin-community-section';
 import { AdminDocumentProcessingSection } from './admin-document-processing-section';
 import { AdminLlmManagementSection } from './admin-llm-management-section';
 import { AdminModelRuntimeStatusSection } from './admin-model-runtime-status-section';
+import { PeopleSection } from './admin-people-section';
 import { SurfaceCard, getErrorMessage, isAdminUser } from './admin-shared';
 import {
   hasAnyAdminReadPermission,
@@ -34,6 +35,10 @@ const sectionMeta: Record<
   general: {
     titleKey: 'admin.console.sections.general.title',
     descriptionKey: 'admin.console.sections.general.description',
+  },
+  people: {
+    titleKey: 'admin.console.sections.people.title',
+    descriptionKey: 'admin.console.sections.people.description',
   },
   apps: {
     titleKey: 'admin.console.sections.apps.title',
@@ -296,6 +301,9 @@ export function AdminConsoleView({
   switch (section) {
     case 'general':
       content = <GeneralSection token={token} />;
+      break;
+    case 'people':
+      content = <PeopleSection token={token} />;
       break;
     case 'apps':
       content = <AppsSection page={appsPage ?? 'platform'} token={token} />;

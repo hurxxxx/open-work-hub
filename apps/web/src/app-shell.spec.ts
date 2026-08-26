@@ -147,7 +147,6 @@ describe('resolveShellState', () => {
     });
   });
 
-
   it('routes community paths to the company-wide community shell', () => {
     expect(
       resolveShellState('/community', buildUser({ workspaces: [] })),
@@ -278,6 +277,14 @@ describe('resolveShellState', () => {
     expect(resolveShellState('/admin', adminUser)).toEqual({
       activeAppId: 'settings',
       activeNavItemId: 'settings-general',
+    });
+    expect(resolveShellState('/admin/users', adminUser)).toEqual({
+      activeAppId: 'settings',
+      activeNavItemId: 'settings-people',
+    });
+    expect(resolveShellState('/admin/people', adminUser)).toEqual({
+      activeAppId: 'settings',
+      activeNavItemId: 'settings-people',
     });
     expect(resolveShellState('/admin/teams', adminUser)).toEqual({
       activeAppId: 'settings',

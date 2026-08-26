@@ -12,6 +12,7 @@ import {
   Server,
   Settings,
   ShieldCheck,
+  User,
 } from 'lucide-react';
 
 import type { NavItem } from '@/src/app/shell/navigation-types';
@@ -48,6 +49,14 @@ const navItems: NavItem[] = [
     category: 'Platform',
     appId: 'settings',
     absolutePath: '/admin/general',
+  },
+  {
+    id: 'settings-people',
+    title: 'settings-people',
+    icon: User,
+    category: 'Organization',
+    appId: 'settings',
+    absolutePath: '/admin/people',
   },
   {
     id: 'settings-apps-platform',
@@ -109,7 +118,7 @@ const navItems: NavItem[] = [
     id: 'settings-workspaces',
     title: 'settings-workspaces',
     icon: Database,
-    category: 'Workspaces',
+    category: 'Organization',
     appId: 'settings',
     absolutePath: '/admin/workspaces',
   },
@@ -341,6 +350,7 @@ describe('sub-sidebar navigation model', () => {
 
     expect(projection.filteredItems.map((item) => item.id)).toEqual([
       'settings-general',
+      'settings-people',
       'settings-apps-platform',
       'settings-apps-workspace',
       'settings-apps-app-bar',
@@ -355,10 +365,10 @@ describe('sub-sidebar navigation model', () => {
     ]);
     expect(projection.categories).toEqual([
       'Platform',
+      'Organization',
       'AIPlatform',
       'Operations',
       'SecurityAudit',
-      'Workspaces',
     ]);
     expect(
       buildSubSidebarNavigationProjection({
@@ -394,7 +404,7 @@ describe('sub-sidebar navigation model', () => {
     ]);
     expect(projection.categories).toEqual([
       'Platform',
-      'Workspaces',
+      'Organization',
       'Operations',
       'SecurityAudit',
     ]);

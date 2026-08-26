@@ -11,6 +11,7 @@ describe('admin-permissions', () => {
   it('grants every admin section to platform admins', () => {
     const sections: AdminSection[] = [
       'general',
+      'people',
       'apps',
       'llm',
       'model-monitoring',

@@ -1,0 +1,180 @@
+import { act, renderHook, waitFor } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+
+import type { AuthUser } from '@/src/platform/auth/auth-api';
+import type { AdminUsersResponse, WorkspaceItem } from './admin-api';
+import { ADMIN_PEOPLE_DEFAULT_PAGE_SIZE } from './admin-shared';
+import {
+  useAdminPeopleDirectoryController,
+  type AdminPeopleDirectoryClient,
+} from './useAdminPeopleDirectoryController';
+
+function user(): AuthUser {
+  return {
+    id: 'user-1',
+    login_id: 'ada',
+    email: 'ada@example.test',
+    full_name: 'Ada Lovelace',
+    display_name: 'Ada',
+    status: 'active',
+    login_blocked: false,
+    theme_preference: 'system',
+    locale: 'ko-KR',
+    time_zone: 'Asia/Seoul',
+    date_format: 'korean',
+    system_roles: [],
+    workspaces: [],
+    workspace_roles: [],
+    must_change_password: false,
+    last_login_at: null,
+    created_at: '2026-05-30T00:00:00Z',
+  } as AuthUser;
+}
+
+function workspace(): WorkspaceItem {
+  return {
+    id: 'workspace-1',
+    key: 'hq',
+    name: 'HQ',
+    description: '',
+    active: true,
+    member_count: 1,
+  } as WorkspaceItem;
+}
+
+function usersResponse(
+  overrides: Partial<AdminUsersResponse> = {},
+): AdminUsersResponse {
+  return {
+    items: [user()],
+    total: 1,
+    page: 1,
+    page_size: ADMIN_PEOPLE_DEFAULT_PAGE_SIZE,
+    ...overrides,
+  } as AdminUsersResponse;
+}
+
+function client(
+  overrides: Partial<AdminPeopleDirectoryClient> = {},
+): AdminPeopleDirectoryClient {
+  return {
+    listUsers: vi.fn().mockResolvedValue(usersResponse()),
+    listWorkspaces: vi.fn().mockResolvedValue([workspace()]),
+    ...overrides,
+  };
+}
+
+function renderController(testClient = client()) {
+  const rendered = renderHook(() =>
+    useAdminPeopleDirectoryController({
+      token: 'token-1',
+      debounceMs: 0,
+      messages: {
+        workspaceListLoadFailed: 'workspaces failed',
+        userListLoadFailed: 'users failed',
+      },
+      client: testClient,
+    }),
+  );
+  return { ...rendered, client: testClient };
+}
+
+describe('useAdminPeopleDirectoryController', () => {
+  it('loads users and workspaces on mount', async () => {
+    const testClient = client();
+    const { result } = renderController(testClient);
+
+    await waitFor(() => expect(result.current.state.users).toHaveLength(1));
+    await waitFor(() =>
+      expect(result.current.state.workspaces).toHaveLength(1),
+    );
+
+    expect(testClient.listUsers).toHaveBeenCalledWith('token-1', {
+      page: 1,
+      page_size: ADMIN_PEOPLE_DEFAULT_PAGE_SIZE,
+      q: '',
+    });
+    expect(testClient.listWorkspaces).toHaveBeenCalledWith('token-1');
+  });
+
+  it('resets pagination when search or page size changes', async () => {
+    const testClient = client();
+    const { result } = renderController(testClient);
+    await waitFor(() => expect(testClient.listUsers).toHaveBeenCalledTimes(1));
+
+    act(() => {
+      result.current.actions.setPage(3);
+    });
+    await waitFor(() => {
+      expect(testClient.listUsers).toHaveBeenLastCalledWith('token-1', {
+        page: 3,
+        page_size: ADMIN_PEOPLE_DEFAULT_PAGE_SIZE,
+        q: '',
+      });
+    });
+
+    act(() => {
+      result.current.actions.searchChanged('ada');
+    });
+    expect(result.current.state.page).toBe(1);
+    await waitFor(() => {
+      expect(testClient.listUsers).toHaveBeenLastCalledWith('token-1', {
+        page: 1,
+        page_size: ADMIN_PEOPLE_DEFAULT_PAGE_SIZE,
+        q: 'ada',
+      });
+    });
+
+    act(() => {
+      result.current.actions.setPageSize(50);
+    });
+    await waitFor(() => {
+      expect(testClient.listUsers).toHaveBeenLastCalledWith('token-1', {
+        page: 1,
+        page_size: 50,
+        q: 'ada',
+      });
+    });
+  });
+
+  it('reloads with the latest search and applies the server page', async () => {
+    const testClient = client({
+      listUsers: vi
+        .fn()
+        .mockResolvedValue(usersResponse({ page: 2, total: 21 })),
+    });
+    const { result } = renderController(testClient);
+    await waitFor(() => expect(testClient.listUsers).toHaveBeenCalledTimes(1));
+
+    act(() => {
+      result.current.actions.searchChanged('roadmap');
+    });
+    await waitFor(() => {
+      expect(testClient.listUsers).toHaveBeenLastCalledWith('token-1', {
+        page: 1,
+        page_size: ADMIN_PEOPLE_DEFAULT_PAGE_SIZE,
+        q: 'roadmap',
+      });
+    });
+
+    await act(async () => {
+      await result.current.actions.reloadUsers(2);
+    });
+    expect(result.current.state.page).toBe(2);
+    expect(result.current.state.totalUsers).toBe(21);
+  });
+
+  it('routes load failures to the controller error state', async () => {
+    const testClient = client({
+      listUsers: vi.fn().mockRejectedValue('no users'),
+      listWorkspaces: vi.fn().mockRejectedValue('no workspaces'),
+    });
+    const { result } = renderController(testClient);
+
+    await waitFor(() => expect(result.current.state.error).not.toBeNull());
+    expect(['users failed', 'workspaces failed']).toContain(
+      result.current.state.error,
+    );
+    expect(result.current.state.isLoadingUsers).toBe(false);
+  });
+});

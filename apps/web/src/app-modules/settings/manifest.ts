@@ -9,6 +9,7 @@ import {
   Server,
   Settings,
   ShieldCheck,
+  User,
 } from 'lucide-react';
 
 import type { AppModuleManifest } from '@/src/app/shell/navigation-types';
@@ -48,6 +49,14 @@ export const settingsManifest: AppModuleManifest = {
       category: 'Platform',
       appId: 'settings',
       absolutePath: '/admin/general',
+    },
+    {
+      id: 'settings-people',
+      title: 'settings-people',
+      icon: User,
+      category: 'Organization',
+      appId: 'settings',
+      absolutePath: '/admin/people',
     },
     {
       id: 'settings-apps-platform',
@@ -109,7 +118,7 @@ export const settingsManifest: AppModuleManifest = {
       id: 'settings-workspaces',
       title: 'settings-workspaces',
       icon: Database,
-      category: 'Workspaces',
+      category: 'Organization',
       appId: 'settings',
       absolutePath: '/admin/workspaces',
     },
@@ -144,8 +153,10 @@ export const settingsManifest: AppModuleManifest = {
   staticGlobalRoutePaths: [
     '/admin',
     '/admin/apps',
+    '/admin/users',
     '/admin/teams',
     '/admin/general',
+    '/admin/people',
     '/admin/apps/platform',
     '/admin/apps/workspace',
     '/admin/apps/app-bar',
