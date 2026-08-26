@@ -12,7 +12,7 @@
     "check:gitlab-pipeline": "node scripts/check-gitlab-pipeline.mjs",
     "check:skills": "python3 scripts/check-skill-harness.py",
     "test:gitlab-pipeline": "node --test scripts/check-gitlab-pipeline.test.mjs",
-    "test:codex-review-ci": "bash -n scripts/codex-review-ci.sh scripts/install-codex-review-runner-entrypoint.sh scripts/ci/run-api-full-tests.sh",
+    "test:codex-review-ci": "bash -n scripts/codex-review-ci.sh scripts/install-codex-review-runner-entrypoint.sh scripts/ci/run-api-full-tests.sh && node --test scripts/codex-review-ci.test.mjs",
     "test:contracts-publish-tag": "node --test scripts/check-contracts-publish-tag.test.mjs",
     "test:mr-target-policy": "node --test scripts/check-mr-target-policy.test.mjs",
     "test:mr-contract-evidence": "node --test scripts/check-mr-contract-evidence.test.mjs",
