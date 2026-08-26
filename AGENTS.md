@@ -33,7 +33,8 @@
 - Do not push site changes to GitHub or manage them with GitHub PRs.
 - Site integration branch: `dev`. Production branch: protected `main`.
 - Feature flow: feature branch -> GitLab MR to `dev`. Release flow: `dev` -> GitLab MR to `main`.
-- No commit, push, MR, merge, branch switch, or destructive cleanup unless requested.
+- No commit, push, MR, merge, branch switch, or destructive cleanup unless the latest user request explicitly asks for that operation.
+- Finished work stays as an uncommitted diff by default; do not "helpfully" commit or push after implementation.
 - Keep upstream core updates and site custom patches in separate commits.
 - Do not weaken tests, checkers, CI, agent policy, exclusions, auth, or guardrails to pass a feature.
 
