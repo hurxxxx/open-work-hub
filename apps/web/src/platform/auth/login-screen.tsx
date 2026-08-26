@@ -13,6 +13,7 @@ import {
 import { useTranslation } from 'react-i18next';
 
 import { InlineNotice } from '@open-work-hub/ui/feedback/inline-notice';
+import { useFeedback } from '@open-work-hub/ui/feedback/feedback-provider';
 
 import { useAuth } from './auth-context';
 import {
@@ -153,6 +154,7 @@ function DevAccountsPanel({
 
 export function LoginScreen() {
   const auth = useAuth();
+  const feedback = useFeedback();
   const { t } = useTranslation(['auth', 'shell']);
   const [form, dispatch] = useReducer(
     loginFormReducer,
@@ -214,9 +216,8 @@ export function LoginScreen() {
         });
       }
     } catch (caughtError) {
-      dispatch({
-        type: 'errorSet',
-        message: getLoginErrorMessage(
+      feedback.error(
+        getLoginErrorMessage(
           caughtError,
           isSetupMode
             ? t('errors.setup')
@@ -224,7 +225,7 @@ export function LoginScreen() {
               ? t('errors.signup')
               : t('errors.login'),
         ),
-      });
+      );
     } finally {
       dispatch({ type: 'submitFinished' });
     }
@@ -235,10 +236,7 @@ export function LoginScreen() {
     try {
       await auth.loginAsDevelopmentAccount(accountKey);
     } catch (caughtError) {
-      dispatch({
-        type: 'errorSet',
-        message: getLoginErrorMessage(caughtError, t('errors.devLogin')),
-      });
+      feedback.error(getLoginErrorMessage(caughtError, t('errors.devLogin')));
     } finally {
       dispatch({ type: 'submitFinished' });
     }
@@ -249,10 +247,9 @@ export function LoginScreen() {
     try {
       await auth.loginAsDevelopmentAdmin();
     } catch (caughtError) {
-      dispatch({
-        type: 'errorSet',
-        message: getLoginErrorMessage(caughtError, t('errors.devAdminLogin')),
-      });
+      feedback.error(
+        getLoginErrorMessage(caughtError, t('errors.devAdminLogin')),
+      );
     } finally {
       dispatch({ type: 'submitFinished' });
     }
@@ -350,9 +347,6 @@ function LoginFormCard({
       <form className="space-y-4" onSubmit={(event) => void onSubmit(event)}>
         {auth.bootstrapError ? (
           <InlineNotice tone="danger">{auth.bootstrapError}</InlineNotice>
-        ) : null}
-        {form.formError ? (
-          <InlineNotice tone="danger">{form.formError}</InlineNotice>
         ) : null}
 
         {isSetupMode || isSignupMode ? (
