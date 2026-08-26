@@ -18,7 +18,7 @@ import {
   UploadCloud,
   X,
 } from 'lucide-react';
-import { useToast } from '@open-work-hub/ui/providers/toast-provider';
+import { useFeedback } from '@open-work-hub/ui';
 
 import { cn } from '@/src/lib/utils';
 import { formatByteSize } from '@/src/platform/format/byte-size';
@@ -49,7 +49,7 @@ const FILE_UPLOAD_PROVIDER_REQUIRED_ERROR =
 
 export function FileUploadProvider({ children }: { children: ReactNode }) {
   const { t } = useTranslation('apps');
-  const toast = useToast();
+  const toast = useFeedback();
   const activeUploadRef = useRef(false);
   const activeUploadAbortRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);

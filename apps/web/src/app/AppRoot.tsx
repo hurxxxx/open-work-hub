@@ -1,10 +1,7 @@
 import { lazy, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BrowserRouter as Router } from 'react-router-dom';
-import {
-  ToastProvider,
-  ToastViewport,
-} from '@open-work-hub/ui/providers/toast-provider';
+import { FeedbackProvider } from '@open-work-hub/ui';
 import { NOTIFICATION_REALTIME_EVENT_TYPE_VALUES } from '@open-work-hub/contracts/notifications';
 
 import { AppContent } from './shell/AppContent';
@@ -85,7 +82,13 @@ export default function AppRoot() {
   const { t } = useTranslation('common');
 
   return (
-    <ToastProvider closeLabel={t('actions.close')}>
+    <FeedbackProvider
+      labels={{
+        close: t('actions.close'),
+        item: t('feedback.itemLabel'),
+        region: t('feedback.regionLabel'),
+      }}
+    >
       <Router>
         <AppContent
           adminLandingRoute={staticAdminLandingRoute}
@@ -116,7 +119,6 @@ export default function AppRoot() {
           workspaceSettingsRoute={staticWorkspaceSettingsRoute}
         />
       </Router>
-      <ToastViewport />
-    </ToastProvider>
+    </FeedbackProvider>
   );
 }

@@ -80,6 +80,13 @@ from open_work_hub_api.domains.auth.security import (
     normalize_login_id,
 )
 from open_work_hub_api.domains.auth.session_lifecycle import revoke_active_user_sessions
+from open_work_hub_api.domains.organization.models import OrganizationUnit
+from open_work_hub_api.domains.organization.schemas import OrganizationUnitSummaryResponse
+from open_work_hub_api.domains.organization.service import (
+    OrganizationDirectoryError,
+    descendant_organization_unit_ids,
+    ensure_active_organization_unit,
+)
 from open_work_hub_api.domains.auth.workspace_apps import (
     get_workspace_app_catalog_item,
     iter_workspace_app_catalog,
@@ -1513,6 +1520,9 @@ class AdminUserItemResponse(BaseModel):
     email: str
     full_name: str
     display_name: str
+    employee_code: str | None
+    job_title: str | None
+    primary_organization_unit: OrganizationUnitSummaryResponse | None
     status: str
     login_blocked: bool
     theme_preference: str
@@ -1525,6 +1535,7 @@ class AdminUserItemResponse(BaseModel):
     must_change_password: bool
     last_login_at: datetime | None
     created_at: datetime
+    updated_at: datetime
 
 
 class AdminUsersResponse(BaseModel):
@@ -1637,6 +1648,9 @@ class AdminUserCreateRequest(BaseModel):
     email: str = Field(..., min_length=5, max_length=320)
     full_name: str = Field(..., min_length=2, max_length=120)
     display_name: str | None = Field(default=None, min_length=2, max_length=120)
+    employee_code: str | None = Field(default=None, max_length=40)
+    job_title: str | None = Field(default=None, max_length=120)
+    primary_organization_unit_id: str | None = Field(default=None, max_length=36)
     system_roles: list[str] = Field(default_factory=list)
     temporary_password: str | None = Field(default=None, min_length=8, max_length=128)
     status: Literal["active", "invited", "suspended"] = "active"
@@ -1686,6 +1700,9 @@ class AdminUserUpdateRequest(BaseModel):
 
     full_name: str | None = Field(default=None, min_length=2, max_length=120)
     display_name: str | None = Field(default=None, min_length=2, max_length=120)
+    employee_code: str | None = Field(default=None, max_length=40)
+    job_title: str | None = Field(default=None, max_length=120)
+    primary_organization_unit_id: str | None = Field(default=None, max_length=36)
     system_roles: list[str] | None = None
     status: Literal["active", "invited", "suspended"] | None = None
     login_blocked: bool | None = None
@@ -1733,6 +1750,7 @@ USAGE_DASHBOARD_TIME_ZONE = ZoneInfo("Asia/Seoul")
 MAX_USAGE_DASHBOARD_RANGE_DAYS = 366
 MAX_AUDIT_LOG_RANGE_DAYS = 3650
 ADMIN_USER_LIST_OPTIONS = (
+    selectinload(User.primary_organization_unit),
     selectinload(User.system_role_links),
     selectinload(User.workspace_bindings).joinedload(WorkspaceUserBinding.workspace),
 )
@@ -1770,6 +1788,17 @@ def _make_unique_login_id(db: Session, base_login_id: str) -> str:
         candidate = f"{base[: 40 - len(suffix_text)]}{suffix_text}"
         suffix += 1
     return candidate
+
+
+def _ensure_active_organization_unit_or_http(
+    db: Session,
+    organization_unit_id: str | None,
+) -> None:
+    try:
+        ensure_active_organization_unit(db, organization_unit_id)
+    except OrganizationDirectoryError as error:
+        status_code = 404 if error.code == "organization.unit_not_found" else 409
+        raise localized_http_exception(status_code=status_code, code=error.code) from error
 
 
 def _serialize_admin_user(db: Session, user: User) -> AdminUserItemResponse:
@@ -4484,12 +4513,36 @@ def list_users(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     q: str | None = Query(default=None, max_length=120),
+    organization_unit_id: str | None = Query(default=None, max_length=36),
+    include_descendants: bool = Query(default=True),
+    unassigned_only: bool = Query(default=False),
     context: AuthContext = Depends(require_permission("user.read")),
     db: Session = Depends(get_db_session),
 ) -> AdminUsersResponse:
     normalized_query = q.strip() if q else ""
     user_query = select(User).where(User.status != "system")
     count_query = select(func.count()).select_from(User).where(User.status != "system")
+
+    if organization_unit_id and unassigned_only:
+        raise localized_http_exception(
+            status_code=400,
+            code="organization.filter_conflict",
+        )
+    if unassigned_only:
+        user_query = user_query.where(User.primary_organization_unit_id.is_(None))
+        count_query = count_query.where(User.primary_organization_unit_id.is_(None))
+    elif organization_unit_id:
+        try:
+            descendant_ids = descendant_organization_unit_ids(db, organization_unit_id)
+            organization_unit_ids = (
+                descendant_ids if include_descendants else {organization_unit_id}
+            )
+        except OrganizationDirectoryError as error:
+            raise localized_http_exception(status_code=404, code=error.code) from error
+        user_query = user_query.where(User.primary_organization_unit_id.in_(organization_unit_ids))
+        count_query = count_query.where(
+            User.primary_organization_unit_id.in_(organization_unit_ids)
+        )
 
     if normalized_query:
         search_pattern = f"%{normalized_query}%"
@@ -4498,9 +4551,18 @@ def list_users(
             User.email.ilike(search_pattern),
             User.full_name.ilike(search_pattern),
             User.display_name.ilike(search_pattern),
+            User.employee_code.ilike(search_pattern),
+            User.job_title.ilike(search_pattern),
+            OrganizationUnit.name.ilike(search_pattern),
         )
-        user_query = user_query.where(search_filter)
-        count_query = count_query.where(search_filter)
+        user_query = user_query.outerjoin(
+            OrganizationUnit,
+            User.primary_organization_unit_id == OrganizationUnit.id,
+        ).where(search_filter)
+        count_query = count_query.outerjoin(
+            OrganizationUnit,
+            User.primary_organization_unit_id == OrganizationUnit.id,
+        ).where(search_filter)
 
     total = db.scalar(count_query) or 0
     offset = (page - 1) * page_size
@@ -4534,6 +4596,7 @@ def create_user(
     login_id = payload.login_id or _make_unique_login_id(db, derive_login_id_from_email(email))
     if db.scalar(select(User).where(User.login_id == login_id)) is not None:
         raise localized_http_exception(status_code=409, code="auth.login_id_already_exists")
+    _ensure_active_organization_unit_or_http(db, payload.primary_organization_unit_id)
     temporary_password = payload.temporary_password or _generate_temporary_password()
     user = User(
         id=new_id(),
@@ -4541,6 +4604,9 @@ def create_user(
         email=email,
         full_name=payload.full_name.strip(),
         display_name=(payload.display_name or payload.full_name).strip(),
+        employee_code=payload.employee_code.strip() if payload.employee_code else None,
+        job_title=payload.job_title.strip() if payload.job_title else None,
+        primary_organization_unit_id=payload.primary_organization_unit_id,
         password_hash=hash_password(temporary_password),
         status=payload.status,
         must_change_password=True,
@@ -4597,6 +4663,13 @@ def update_user(
         user.full_name = payload.full_name.strip()
     if payload.display_name is not None:
         user.display_name = payload.display_name.strip()
+    if "employee_code" in payload.model_fields_set:
+        user.employee_code = payload.employee_code.strip() if payload.employee_code else None
+    if "job_title" in payload.model_fields_set:
+        user.job_title = payload.job_title.strip() if payload.job_title else None
+    if "primary_organization_unit_id" in payload.model_fields_set:
+        _ensure_active_organization_unit_or_http(db, payload.primary_organization_unit_id)
+        user.primary_organization_unit_id = payload.primary_organization_unit_id
     if payload.status is not None:
         user.status = payload.status
     if payload.login_blocked is not None:

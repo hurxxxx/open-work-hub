@@ -5,7 +5,7 @@ import { ChevronDown, ChevronRight, Loader2, Plus } from 'lucide-react';
 import { useConfirm } from '@open-work-hub/ui/feedback/confirm-dialog';
 import { InlineNotice } from '@open-work-hub/ui/feedback/inline-notice';
 import { usePrompt } from '@open-work-hub/ui/feedback/prompt-dialog';
-import { useToast } from '@open-work-hub/ui/providers/toast-provider';
+import { useFeedback } from '@open-work-hub/ui';
 import { useTranslation } from 'react-i18next';
 
 import {
@@ -257,7 +257,7 @@ function usePmsSidebarSpacesElement({
   const { token, user } = useAuth();
   const { confirm, confirmDialog } = useConfirm();
   const { prompt, promptDialog } = usePrompt();
-  const toast = useToast();
+  const toast = useFeedback();
   const canReadTeams = hasWorkspaceMembership(user, currentWorkspaceSlug);
   const canWriteTeams = hasWorkspaceMembership(user, currentWorkspaceSlug);
   const pmsRootPath = resolveDefaultWorkspaceAppPath(user, 'pms');

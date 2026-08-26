@@ -41,8 +41,12 @@ Open Work Hub Web UI는 새 화면을 만들기 전에 기존 공용 컴포넌�
 | --- | --- | --- |
 | `Button`, `Dialog`, `DropdownMenu`, `Tooltip` | `packages/ui/src/lib/primitives/` | 기본 action, modal, menu와 tooltip. 앱별 chrome을 새로 만들기 전에 우선 사용한다. |
 | `InlineNotice` | `packages/ui/src/lib/feedback/inline-notice.tsx` | Inline success/info/warning/danger notice. Error alert는 수동 danger div 대신 `role="alert"`와 함께 사용한다. |
+| `FeedbackProvider`, `useFeedback` | `packages/ui/src/lib/feedback/feedback-provider.tsx` | 화면 전환 뒤에도 유지되는 전역 success/info/warning/error 피드백. 앱에서 별도 toast provider나 viewport를 만들지 않는다. |
+| `FormMessage`, `StatusSlot`, `ContextNote` | `packages/ui/src/lib/feedback/` | 각각 고정 높이 form validation, 비동기 상태 slot, 권한·범위·운영 맥락 안내. 저장 결과는 전역 feedback, 입력 오류는 form message로 구분한다. |
 | `SearchField`, `Input`, `Select` | `packages/ui/src/lib/primitives/` | 표준 검색·입력·select. 앱 token 스타일과 맞는 경우 chrome을 복제하지 않는다. |
+| `ContentState` | `packages/ui/src/lib/data-display/content-state.tsx` | loading, empty, error, unavailable의 안정된 화면 상태와 선택적 재시도 action. 동일 영역에서 상태별 높이 변화를 줄인다. |
 | `EmptyState`, `Skeleton`, `DataTable` | `packages/ui/src/lib/data-display/` | 비어 있음, loading placeholder와 표준 table. 앱 전용 empty hero/copy가 아니라면 우선 재사용한다. |
+| `DetailDrawer` | `packages/ui/src/lib/layout/detail-drawer.tsx` | 상세 side drawer. 열기 전 focus를 기억하고 닫을 때 연결된 trigger로 복귀시키므로 caller가 별도 focus 복구를 복제하지 않는다. |
 
 ## Platform UI Helpers
 

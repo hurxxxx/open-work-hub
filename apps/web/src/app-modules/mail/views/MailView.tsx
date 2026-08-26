@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 
 import { InlineNotice } from '@open-work-hub/ui/feedback/inline-notice';
-import { useToast } from '@open-work-hub/ui/providers/toast-provider';
+import { useFeedback } from '@open-work-hub/ui';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { normalizeTimeZone } from '@/src/platform/time/time-utils';
@@ -26,7 +26,7 @@ function useMailViewElement() {
   const { token, user } = useAuth();
   const { i18n, t } = useTranslation('apps');
   const timeZone = normalizeTimeZone(user?.time_zone);
-  const toast = useToast();
+  const toast = useFeedback();
   const notify = useMemo(
     () => ({
       success: (message: string) => toast.success(message),

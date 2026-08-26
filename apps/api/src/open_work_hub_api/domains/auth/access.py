@@ -55,6 +55,7 @@ from open_work_hub_api.domains.auth.models import (
 from open_work_hub_api.domains.auth.workspace_apps import (
     iter_workspace_app_catalog,
 )
+from open_work_hub_api.domains.organization.models import OrganizationUnit  # noqa: F401
 from open_work_hub_api.domains.auth.workspace_app_features import (
     is_workspace_catalog_feature_enabled,
 )
@@ -147,6 +148,7 @@ DEV_LOGIN_ACCOUNTS = [
 DEV_LOGIN_ACCOUNT_MAP = {item["key"]: item for item in DEV_LOGIN_ACCOUNTS}
 
 USER_GRAPH_OPTIONS = (
+    selectinload(User.primary_organization_unit),
     selectinload(User.system_role_links),
     selectinload(User.workspace_bindings).joinedload(WorkspaceUserBinding.workspace),
     selectinload(User.team_memberships).joinedload(TeamMember.team).joinedload(Team.workspace),
@@ -1085,6 +1087,19 @@ def serialize_auth_user(db: Session, user: User) -> dict[str, Any]:
         "email": user.email,
         "full_name": user.full_name,
         "display_name": user.display_name or user.full_name,
+        "employee_code": user.employee_code,
+        "job_title": user.job_title,
+        "primary_organization_unit": (
+            {
+                "id": user.primary_organization_unit.id,
+                "name": user.primary_organization_unit.name,
+                "slug": user.primary_organization_unit.slug,
+                "unit_type": user.primary_organization_unit.unit_type,
+                "active": user.primary_organization_unit.active,
+            }
+            if user.primary_organization_unit is not None
+            else None
+        ),
         "status": user.status,
         "login_blocked": user.login_blocked,
         "theme_preference": user.theme_preference,
@@ -1109,6 +1124,7 @@ def serialize_auth_user(db: Session, user: User) -> dict[str, Any]:
         "must_change_password": user.must_change_password,
         "last_login_at": user.last_login_at,
         "created_at": user.created_at,
+        "updated_at": user.updated_at,
     }
 
 

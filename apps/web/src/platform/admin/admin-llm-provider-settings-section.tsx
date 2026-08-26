@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { KeyRound, RefreshCw, Save } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import { Button, useToast } from '@open-work-hub/ui';
+import { Button, useFeedback } from '@open-work-hub/ui';
 
 import {
   AdminAiModelSettingsApiError,
@@ -75,7 +75,7 @@ function defaultModelLabel(
 
 export function AdminLlmProviderSettingsSection({ token }: { token: string }) {
   const { t } = useTranslation('apps');
-  const toast = useToast();
+  const toast = useFeedback();
   const [data, setData] = useState<AdminAiModelSettings | null>(null);
   const [drafts, setDrafts] = useState<Record<string, LlmProviderDraft>>({});
   const [selectedProviderId, setSelectedProviderId] = useState('local');

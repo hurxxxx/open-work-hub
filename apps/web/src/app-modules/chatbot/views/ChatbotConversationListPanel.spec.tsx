@@ -33,7 +33,7 @@ vi.mock('@open-work-hub/ui', () => ({
     prompt: vi.fn(),
     promptDialog: null,
   }),
-  useToast: () => ({
+  useFeedback: () => ({
     error: vi.fn(),
     success: vi.fn(),
   }),

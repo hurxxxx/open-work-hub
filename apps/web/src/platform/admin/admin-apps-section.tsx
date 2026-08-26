@@ -24,7 +24,7 @@ import {
   TabsList,
   TabsTrigger,
   Tooltip,
-  useToast,
+  useFeedback,
 } from '@open-work-hub/ui';
 
 import { IconPickerDialog } from '@/src/components/picker/IconPickerDialog';
@@ -581,7 +581,7 @@ export function AppsSection({
   token: string;
 }) {
   const { t } = useTranslation(['apps', 'shell', 'common']);
-  const toast = useToast();
+  const toast = useFeedback();
   const [searchParams, setSearchParams] = useSearchParams();
   const workspaceAppsTab = resolveWorkspaceAppsTab(searchParams.get('tab'));
   const { reload: reloadWorkspaceBootstrap, reloadGlobalApps } =
@@ -1200,7 +1200,7 @@ function AppBarCategoriesAdmin({
   token: string;
 }) {
   const { t } = useTranslation(['apps', 'shell', 'common']);
-  const toast = useToast();
+  const toast = useFeedback();
   const [response, setResponse] =
     useState<AdminAppBarCategoriesResponse | null>(null);
   const [draftCategories, setDraftCategories] = useState<AdminAppBarCategory[]>(

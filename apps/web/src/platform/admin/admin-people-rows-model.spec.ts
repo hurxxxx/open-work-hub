@@ -132,6 +132,15 @@ describe('admin people rows model', () => {
       users: [
         user({
           display_name: 'Ada "Countess"',
+          employee_code: 'E-1001',
+          job_title: 'Researcher',
+          primary_organization_unit: {
+            id: 'organization-1',
+            name: 'Research',
+            slug: 'research',
+            unit_type: 'department',
+            active: true,
+          },
           workspaces: [
             {
               id: 'workspace-1',
@@ -150,6 +159,9 @@ describe('admin people rows model', () => {
       'Ada "Countess"',
       'ada',
       'ada@example.test',
+      'E-1001',
+      'Researcher',
+      'Research',
       'HQ',
       'Member',
       'status:active',
@@ -163,6 +175,9 @@ describe('admin people rows model', () => {
           'Name',
           'ID',
           'Email',
+          'Employee code',
+          'Job title',
+          'Organization',
           'Workspaces',
           'Role',
           'Status',

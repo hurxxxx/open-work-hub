@@ -19,7 +19,7 @@ import { useTranslation } from 'react-i18next';
 import { LazyMotion, domAnimation, m, AnimatePresence } from 'motion/react';
 import { useConfirm } from '@open-work-hub/ui/feedback/confirm-dialog';
 import { usePrompt } from '@open-work-hub/ui/feedback/prompt-dialog';
-import { useToast } from '@open-work-hub/ui/providers/toast-provider';
+import { useFeedback } from '@open-work-hub/ui';
 import {
   Archive,
   ArchiveRestore,
@@ -237,7 +237,7 @@ function usePMSViewElement(): ReactNode {
   const { token, user } = useAuth();
   const { confirm, confirmDialog } = useConfirm();
   const { prompt, promptDialog } = usePrompt();
-  const toast = useToast();
+  const toast = useFeedback();
   const pmsRoot = resolveDefaultWorkspaceAppPath(user, 'pms');
   const currentWorkspaceSlug =
     getWorkspaceBySlug(user, searchParams.get('workspace'))?.slug ??

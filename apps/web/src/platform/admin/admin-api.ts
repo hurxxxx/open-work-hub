@@ -50,6 +50,12 @@ export type AdminUsersResponse = Omit<
 > & {
   items: AuthUser[];
 };
+export type OrganizationUnitItem = ApiSchema<'OrganizationUnitResponse'>;
+export type PlatformApiKeyItem = ApiSchema<'PlatformApiKeyItemResponse'>;
+export type PlatformApiKeyListResponse =
+  ApiSchema<'PlatformApiKeyListResponse'>;
+export type PlatformApiKeySecretResponse =
+  ApiSchema<'PlatformApiKeySecretResponse'>;
 export type AdminCommunityChannelItem = ApiSchema<'CommunityChannelOut'>;
 export type AdminCommunityChannelInput =
   ApiSchema<'CommunityChannelCreateRequest'>;
@@ -386,6 +392,9 @@ export interface AdminUsersQuery {
   page?: number;
   page_size?: number;
   q?: string;
+  organization_unit_id?: string;
+  include_descendants?: boolean;
+  unassigned_only?: boolean;
 }
 
 export interface AdminAuditLogsQuery {
@@ -490,6 +499,15 @@ export function listAdminUsers(
   if (query.q?.trim()) {
     params.set('q', query.q.trim());
   }
+  if (query.organization_unit_id) {
+    params.set('organization_unit_id', query.organization_unit_id);
+  }
+  if (query.include_descendants !== undefined) {
+    params.set('include_descendants', String(query.include_descendants));
+  }
+  if (query.unassigned_only !== undefined) {
+    params.set('unassigned_only', String(query.unassigned_only));
+  }
   const queryString = params.toString();
   const suffix = queryString ? `?${queryString}` : '';
   return request<AdminUsersResponse>(token, `/api/v1/admin/users${suffix}`);
@@ -502,6 +520,9 @@ export function createAdminUser(
     email: string;
     full_name: string;
     display_name?: string;
+    employee_code?: string | null;
+    job_title?: string | null;
+    primary_organization_unit_id?: string | null;
     system_roles?: string[];
   },
 ): Promise<CreatedUserResponse> {
@@ -517,6 +538,9 @@ export function updateAdminUser(
   payload: {
     full_name?: string;
     display_name?: string;
+    employee_code?: string | null;
+    job_title?: string | null;
+    primary_organization_unit_id?: string | null;
     system_roles?: string[];
     status?: 'active' | 'invited' | 'suspended';
     login_blocked?: boolean;
@@ -532,6 +556,94 @@ export function deleteAdminUser(token: string, userId: string): Promise<void> {
   return request<void>(token, `/api/v1/admin/users/${userId}`, {
     method: 'DELETE',
   });
+}
+
+export function listOrganizationUnits(
+  token: string,
+  options: { includeInactive?: boolean } = {},
+): Promise<OrganizationUnitItem[]> {
+  const suffix = options.includeInactive ? '?include_inactive=true' : '';
+  return request<OrganizationUnitItem[]>(
+    token,
+    `/api/v1/admin/organization-units${suffix}`,
+  );
+}
+
+export function createOrganizationUnit(
+  token: string,
+  payload: {
+    name: string;
+    slug?: string;
+    unit_type: string;
+    parent_id?: string | null;
+    active: boolean;
+  },
+): Promise<OrganizationUnitItem> {
+  return request<OrganizationUnitItem>(
+    token,
+    '/api/v1/admin/organization-units',
+    { method: 'POST', body: JSON.stringify(payload) },
+  );
+}
+
+export function updateOrganizationUnit(
+  token: string,
+  organizationUnitId: string,
+  payload: {
+    name?: string;
+    slug?: string;
+    unit_type?: string;
+    parent_id?: string | null;
+    active?: boolean;
+  },
+): Promise<OrganizationUnitItem> {
+  return request<OrganizationUnitItem>(
+    token,
+    `/api/v1/admin/organization-units/${encodeURIComponent(organizationUnitId)}`,
+    { method: 'PATCH', body: JSON.stringify(payload) },
+  );
+}
+
+export function listPlatformApiKeys(
+  token: string,
+): Promise<PlatformApiKeyListResponse> {
+  return request<PlatformApiKeyListResponse>(
+    token,
+    '/api/v1/admin/platform-api-keys',
+  );
+}
+
+export function createPlatformApiKey(
+  token: string,
+  payload: { name: string; scopes: string[] },
+): Promise<PlatformApiKeySecretResponse> {
+  return request<PlatformApiKeySecretResponse>(
+    token,
+    '/api/v1/admin/platform-api-keys',
+    { method: 'POST', body: JSON.stringify(payload) },
+  );
+}
+
+export function revealPlatformApiKey(
+  token: string,
+  keyId: string,
+): Promise<PlatformApiKeySecretResponse> {
+  return request<PlatformApiKeySecretResponse>(
+    token,
+    `/api/v1/admin/platform-api-keys/${encodeURIComponent(keyId)}/reveal`,
+    { method: 'POST' },
+  );
+}
+
+export function revokePlatformApiKey(
+  token: string,
+  keyId: string,
+): Promise<PlatformApiKeyItem> {
+  return request<PlatformApiKeyItem>(
+    token,
+    `/api/v1/admin/platform-api-keys/${encodeURIComponent(keyId)}/revoke`,
+    { method: 'POST' },
+  );
 }
 
 export function listWorkspaces(

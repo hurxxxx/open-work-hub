@@ -17,7 +17,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
-import { useConfirm, usePrompt, useToast } from '@open-work-hub/ui';
+import { useConfirm, useFeedback, usePrompt } from '@open-work-hub/ui';
 
 import {
   CONVERSATIONS_UPDATED_EVENT,
@@ -347,7 +347,7 @@ export function ChatbotConversationListPanel({
   const navigate = useNavigate();
   const { confirm, confirmDialog } = useConfirm();
   const { prompt, promptDialog } = usePrompt();
-  const toast = useToast();
+  const toast = useFeedback();
   const [state, dispatch] = useReducer(
     chatbotSidebarReducer,
     CHATBOT_SIDEBAR_INITIAL_STATE,

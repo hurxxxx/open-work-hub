@@ -3,7 +3,7 @@ import type { TFunction } from 'i18next';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ExternalLink, Loader2, Square } from 'lucide-react';
-import { useToast } from '@open-work-hub/ui/providers/toast-provider';
+import { useFeedback } from '@open-work-hub/ui';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
@@ -31,7 +31,7 @@ function publishBackgroundWorkToast(
     toast,
   }: {
     t: TFunction;
-    toast: ReturnType<typeof useToast>;
+    toast: ReturnType<typeof useFeedback>;
   },
 ) {
   if (event.type === 'completed') {
@@ -62,7 +62,7 @@ export function BackgroundWorkProvider({
 }) {
   const { token } = useAuth();
   const { t } = useTranslation(['shell', 'apps']);
-  const toast = useToast();
+  const toast = useFeedback();
   const navigate = useNavigate();
   const [items, setItems] = useState<BackgroundWorkItem[]>([]);
   const [cancellingKeys, setCancellingKeys] = useState<Set<string>>(() => new Set());

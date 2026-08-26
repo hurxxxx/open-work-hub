@@ -1,4 +1,5 @@
 import * as Dialog from '@radix-ui/react-dialog';
+import { useRef } from 'react';
 
 import type { DetailDrawerProps } from '../types';
 import {
@@ -21,10 +22,23 @@ export function DetailDrawer({
   embedded = false,
   side = 'right',
 }: DetailDrawerProps) {
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   const handleOutsideInteraction = (event: Event) => {
     if (isFloatingLayerOutsideEvent(event)) {
       event.preventDefault();
     }
+  };
+  const handleOpenAutoFocus = () => {
+    const activeElement = document.activeElement;
+    returnFocusRef.current =
+      activeElement instanceof HTMLElement ? activeElement : null;
+  };
+  const handleCloseAutoFocus = (event: Event) => {
+    const returnFocusTarget = returnFocusRef.current;
+    returnFocusRef.current = null;
+    if (!returnFocusTarget?.isConnected) return;
+    event.preventDefault();
+    returnFocusTarget.focus();
   };
 
   return (
@@ -38,7 +52,9 @@ export function DetailDrawer({
             drawerModeClass(embedded),
             contentClassName,
           )}
+          onCloseAutoFocus={handleCloseAutoFocus}
           onFocusOutside={handleOutsideInteraction}
+          onOpenAutoFocus={handleOpenAutoFocus}
           onPointerDownOutside={handleOutsideInteraction}
           onInteractOutside={handleOutsideInteraction}
         >

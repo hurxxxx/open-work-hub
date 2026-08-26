@@ -56,6 +56,66 @@ MESSAGE_PARAM_VALUE_TRANSLATIONS: dict[tuple[str, str], str] = {
 
 
 MESSAGES: dict[str, dict[str, str]] = {
+    "organization.unit_not_found": {
+        "ko-KR": "조직 단위를 찾을 수 없습니다.",
+        "en-US": "Organization unit not found.",
+    },
+    "organization.unit_inactive": {
+        "ko-KR": "비활성 조직 단위에는 사용자를 배정할 수 없습니다.",
+        "en-US": "Users cannot be assigned to an inactive organization unit.",
+    },
+    "organization.slug_exists": {
+        "ko-KR": "이미 사용 중인 조직 식별자입니다.",
+        "en-US": "This organization identifier is already in use.",
+    },
+    "organization.cycle_detected": {
+        "ko-KR": "조직 계층에 순환 관계를 만들 수 없습니다.",
+        "en-US": "Organization hierarchy cannot contain a cycle.",
+    },
+    "organization.filter_conflict": {
+        "ko-KR": "조직 필터와 미소속 필터를 동시에 사용할 수 없습니다.",
+        "en-US": "Organization and unassigned filters cannot be used together.",
+    },
+    "platform_api_key.required": {
+        "ko-KR": "플랫폼 API 키가 필요합니다.",
+        "en-US": "A platform API key is required.",
+    },
+    "platform_api_key.invalid": {
+        "ko-KR": "플랫폼 API 키가 유효하지 않습니다.",
+        "en-US": "Platform API key is invalid.",
+    },
+    "platform_api_key.scope_required": {
+        "ko-KR": "이 작업에는 {scope} 범위가 필요합니다.",
+        "en-US": "This operation requires the {scope} scope.",
+    },
+    "platform_api_key.scope_invalid": {
+        "ko-KR": "플랫폼 API 키 범위가 유효하지 않습니다.",
+        "en-US": "Platform API key scope is invalid.",
+    },
+    "platform_api_key.encryption_unavailable": {
+        "ko-KR": "플랫폼 API 키 암호화 설정을 사용할 수 없습니다.",
+        "en-US": "Platform API key encryption is unavailable.",
+    },
+    "platform_api_key.not_found": {
+        "ko-KR": "플랫폼 API 키를 찾을 수 없습니다.",
+        "en-US": "Platform API key not found.",
+    },
+    "platform_api_key.inactive": {
+        "ko-KR": "활성 상태가 아닌 플랫폼 API 키입니다.",
+        "en-US": "Platform API key is not active.",
+    },
+    "platform_api_key.issue_failed": {
+        "ko-KR": "플랫폼 API 키를 발급할 수 없습니다.",
+        "en-US": "Platform API key could not be issued.",
+    },
+    "platform_api_key.name_required": {
+        "ko-KR": "플랫폼 API 키 이름이 필요합니다.",
+        "en-US": "Platform API key name is required.",
+    },
+    "platform_api_key.name_invalid": {
+        "ko-KR": "플랫폼 API 키 이름이 유효하지 않습니다.",
+        "en-US": "Platform API key name is invalid.",
+    },
     "auth.user_not_found": {
         "ko-KR": "사용자를 찾을 수 없습니다.",
         "en-US": "User not found.",

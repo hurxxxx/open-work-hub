@@ -11,6 +11,8 @@
 | 앱 등록·권한·bootstrap    | [앱 플랫폼 계약](domains/app-platform/README.md)                       |
 | AI 모델과 실행 게이트웨이 | [AI Gateway](domains/ai/gateway.md)                                    |
 | Retrieval과 RAG           | [Retrieval](domains/retrieval/README.md), [RAG](domains/rag/README.md) |
+| 조직과 임직원 디렉터리    | [Organization](domains/organization/README.md)                         |
+| 플랫폼 API·외부 연계      | [Integrations](domains/integrations/README.md)                         |
 | 배포와 런타임             | [Release](domains/release/README.md)                                   |
 
 ## 앱별 문서

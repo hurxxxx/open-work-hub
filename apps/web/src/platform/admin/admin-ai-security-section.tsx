@@ -25,7 +25,7 @@ import {
   Tabs,
   TabsList,
   TabsTrigger,
-  useToast,
+  useFeedback,
 } from '@open-work-hub/ui';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
@@ -151,7 +151,7 @@ export function AiSecuritySection({ token }: { token: string }) {
   const { t, i18n } = useTranslation('apps');
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const toast = useToast();
+  const toast = useFeedback();
   const { user } = useAuth();
   const locale = i18n.resolvedLanguage ?? i18n.language;
   const timeZone = normalizeTimeZone(user?.time_zone);
