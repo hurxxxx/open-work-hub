@@ -26,32 +26,33 @@ No app-local bypass, checker exclusion, or local allowlist for missing platform 
 
 Record only applicable rows in MR evidence.
 
-| Surface | Must state |
-| --- | --- |
-| Identity/route | app/feature ID, owner, route context, availability, entitlement |
-| Data/auth | scope, authoritative store, transactions, retention, read/write roles |
-| API/UI | request/response/error, workspace prefix, OpenAPI/client, i18n, a11y, time/stale state |
-| File/network | type/size/decompression, redirect/TLS/active content, cleanup |
-| AI | workload ID, route/budget, audit/approval, external-data policy |
-| Worker/runtime | import/registration, queue/beat, retry/idempotency |
-| Migration | target head, model metadata, existing-row compatibility, rollback |
-| Search/retrieval | owner, ACL, partition, projection/outbox, backfill/cutover/rollback |
+| Surface          | Must state                                                                             |
+| ---------------- | -------------------------------------------------------------------------------------- |
+| Identity/route   | app/feature ID, owner, route context, availability, entitlement                        |
+| Data/auth        | scope, authoritative store, transactions, retention, read/write roles                  |
+| API/UI           | request/response/error, workspace prefix, OpenAPI/client, i18n, a11y, time/stale state |
+| File/network     | type/size/decompression, redirect/TLS/active content, cleanup                          |
+| AI               | workload ID, route/budget, audit/approval, external-data policy                        |
+| Worker/runtime   | import/registration, queue/beat, retry/idempotency                                     |
+| Migration        | target head, model metadata, existing-row compatibility, rollback                      |
+| Search/retrieval | owner, ACL, partition, projection/outbox, backfill/cutover/rollback                    |
 
 ## Router
 
-| Change | Owner | Minimum checks |
-| --- | --- | --- |
-| Docs/skills/policy | current file owner | `git diff --check`; `pnpm check:skills` if skills/policy |
-| Translation | i18n catalog | `pnpm check:i18n` |
-| Env/runtime | env settings/compose/scripts | `pnpm check:env-contract`, `pnpm check:path-hardcoding` |
-| Web app-local | app module/UI owner | `pnpm check:web-architecture`, `pnpm nx typecheck web`, focused Vitest |
-| API/domain | domain router/service/tests | `pnpm check:api-architecture`, focused pytest |
-| OpenAPI/generated | API contract | `pnpm check:api-contract`; generate client when required |
-| Worker | worker task owner | focused worker pytest, registration check |
-| Migration/model | Alembic/model owner | `pnpm check:alembic-graph`, migration test |
-| File/network | parser/service/security tests | malformed/oversized/redirect/failure-cleanup tests |
-| AI capability | AI registry/ADR 0002/0005 | registry/direct-call/invoke/ACL tests |
-| Search/RAG | Retrieval/RAG/ADR 0009 | ACL/projection/source/quality tests |
+| Change             | Owner                         | Minimum checks                                                         |
+| ------------------ | ----------------------------- | ---------------------------------------------------------------------- |
+| Docs/skills/policy | current file owner            | `git diff --check`; `pnpm check:skills` if skills/policy               |
+| GitLab CI/harness  | harness owner                 | `pnpm check:gitlab-pipeline`, `pnpm ci:harness`                        |
+| Translation        | i18n catalog                  | `pnpm check:i18n`                                                      |
+| Env/runtime        | env settings/compose/scripts  | `pnpm check:env-contract`, `pnpm check:path-hardcoding`                |
+| Web app-local      | app module/UI owner           | `pnpm check:web-architecture`, `pnpm nx typecheck web`, focused Vitest |
+| API/domain         | domain router/service/tests   | `pnpm check:api-architecture`, focused pytest                          |
+| OpenAPI/generated  | API contract                  | `pnpm check:api-contract`; generate client when required               |
+| Worker             | worker task owner             | focused worker pytest, registration check                              |
+| Migration/model    | Alembic/model owner           | `pnpm check:alembic-graph`, migration test                             |
+| File/network       | parser/service/security tests | malformed/oversized/redirect/failure-cleanup tests                     |
+| AI capability      | AI registry/ADR 0002/0005     | registry/direct-call/invoke/ACL tests                                  |
+| Search/RAG         | Retrieval/RAG/ADR 0009        | ACL/projection/source/quality tests                                    |
 
 Focused commands:
 
@@ -68,8 +69,9 @@ Use `pnpm ci:app-api-contracts`, `pnpm ci:app-web-contracts`, or `pnpm ci:all` o
 - Feature MR target: GitLab `dev`; same user outcome stays in one MR.
 - Release MR target: `main` from `dev`; non-Codex validation lives there.
 - Codex feature MR job checks only review/freshness/merge/evidence gates.
+- Pipeline contract lives in `.gitlab-ci.yml`, `ops/ci/ci-first.gitlab-ci.yml`, and `scripts/check-gitlab-pipeline.mjs`.
 - Source change requires affected evidence refresh. Target change requires rechecking merged surface when it changes.
-- Future publisher/CI gates are not evidence until implemented.
+- Contract package tags `contracts-v*` publish through GitLab Package Registry.
 - Use `open-work-hub-mr-review-validation` only when review/merge decision is requested.
 
 ## Stop

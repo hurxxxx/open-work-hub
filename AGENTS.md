@@ -15,17 +15,17 @@
 - Do not load unrelated apps, old plans, raw logs, or whole doc trees by inertia.
 - Use a project skill only when its trigger matches or the user names it.
 
-| Surface | Owner |
-| --- | --- |
-| Code shape/abstraction | `docs/agents/llm-friendly-development.md`, `docs/agents/composable-abstractions.md` |
-| Validation/MR/Codex | `docs/agents/vibe-coding-harness.md`, `docs/agents/local-codex-review.md` |
-| Docs ownership | `docs/agents/domain.md` |
-| GitLab issue triage | `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md` |
-| App identity/registration | `docs/domains/app-platform/README.md` |
-| UI/time/feedback | `docs/agents/ui-components.md`, `docs/product/ui-design-principles.md` |
-| AI/MCP/LLM | `adr/0002-mcp-capability-platform.md`, `adr/0005-registered-llm-workload.md`, `docs/domains/ai/write-policy.md` |
-| Retrieval/RAG | `docs/domains/retrieval/README.md`, `docs/domains/rag/README.md`, `adr/0009-retrieval-partition-projection-generations.md` |
-| Runtime/deploy | `README.md`, `docs/domains/release/README.md`, relevant operations skill |
+| Surface                   | Owner                                                                                                                      |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Code shape/abstraction    | `docs/agents/llm-friendly-development.md`, `docs/agents/composable-abstractions.md`                                        |
+| Validation/MR/Codex       | `docs/agents/vibe-coding-harness.md`, `docs/agents/local-codex-review.md`                                                  |
+| Docs ownership            | `docs/agents/domain.md`                                                                                                    |
+| GitLab issue triage       | `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`                                                             |
+| App identity/registration | `docs/domains/app-platform/README.md`                                                                                      |
+| UI/time/feedback          | `docs/agents/ui-components.md`, `docs/product/ui-design-principles.md`                                                     |
+| AI/MCP/LLM                | `adr/0002-mcp-capability-platform.md`, `adr/0005-registered-llm-workload.md`, `docs/domains/ai/write-policy.md`            |
+| Retrieval/RAG             | `docs/domains/retrieval/README.md`, `docs/domains/rag/README.md`, `adr/0009-retrieval-partition-projection-generations.md` |
+| Runtime/deploy            | `README.md`, `docs/domains/release/README.md`, relevant operations skill                                                   |
 
 ## Git
 
@@ -54,19 +54,21 @@
 ## Validation
 
 - Pick checks by changed surface. Start focused; widen only for shared, migration, external, or uncertain blast radius.
-- Feature MR CI owns Codex review. `dev -> main` release MR owns non-Codex validation. Do not claim missing CI/publisher scripts as evidence.
+- Feature MR CI owns Codex review. `dev -> main` release MR owns non-Codex validation.
+- CI contract source: `.gitlab-ci.yml`, `ops/ci/ci-first.gitlab-ci.yml`, `scripts/check-gitlab-pipeline.mjs`.
 
-| Change | Baseline checks |
-| --- | --- |
-| Docs/skills/policy | `git diff --check`, `pnpm check:skills` |
-| Web/UI/i18n | focused Vitest, `pnpm check:web-architecture`, `pnpm nx typecheck web` |
-| API/OpenAPI | focused pytest, `pnpm check:api-architecture`, `pnpm check:api-contract` |
-| DB migration | `pnpm check:alembic-graph`, `pnpm test:alembic-graph`, optional `pnpm nx run api:test-migrations` |
-| Worker | focused worker pytest, `pnpm nx lint worker` |
-| Env/runtime | `pnpm check:env-contract`, `pnpm check:path-hardcoding` |
-| AI capability | registry/invoke/ACL/direct-call tests plus ADR 0002/0005 |
-| Browser flow | `pnpm e2e:shell` or local login browser smoke |
-| Release-scale risk | justified `pnpm ci:all` |
+| Change             | Baseline checks                                                                                   |
+| ------------------ | ------------------------------------------------------------------------------------------------- |
+| Docs/skills/policy | `git diff --check`, `pnpm check:skills`                                                           |
+| GitLab CI/harness  | `pnpm check:gitlab-pipeline`, `pnpm ci:harness`                                                   |
+| Web/UI/i18n        | focused Vitest, `pnpm check:web-architecture`, `pnpm nx typecheck web`                            |
+| API/OpenAPI        | focused pytest, `pnpm check:api-architecture`, `pnpm check:api-contract`                          |
+| DB migration       | `pnpm check:alembic-graph`, `pnpm test:alembic-graph`, optional `pnpm nx run api:test-migrations` |
+| Worker             | focused worker pytest, `pnpm nx lint worker`                                                      |
+| Env/runtime        | `pnpm check:env-contract`, `pnpm check:path-hardcoding`                                           |
+| AI capability      | registry/invoke/ACL/direct-call tests plus ADR 0002/0005                                          |
+| Browser flow       | `pnpm e2e:shell` or local login browser smoke                                                     |
+| Release-scale risk | justified `pnpm ci:all`                                                                           |
 
 API/worker focused tests:
 

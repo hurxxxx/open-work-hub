@@ -17,9 +17,21 @@ description: Maintain Open Work Hub's GitLab Codex MR review policy, runner scri
 
 ## Maintenance
 
-Read `docs/agents/local-codex-review.md` and `docs/agents/vibe-coding-harness.md`. When scripts/CI are introduced, add contract tests for parsing, SHA binding, redaction, GitLab API errors, freshness, merge simulation, and exit decisions.
+Read `docs/agents/local-codex-review.md` and `docs/agents/vibe-coding-harness.md`.
+
+CI contract owners:
+
+- `.gitlab-ci.yml`
+- `ops/ci/ci-first.gitlab-ci.yml`
+- `scripts/check-gitlab-pipeline.mjs`
+- `scripts/check-mr-target-policy.mjs`
+- `scripts/check-mr-contract-evidence.mjs`
+- `scripts/codex-review-ci.sh`
+- `scripts/install-codex-review-runner-entrypoint.sh`
 
 ```bash
+pnpm check:gitlab-pipeline
+pnpm ci:harness
 python3 scripts/check-skill-harness.py
 python3 -m unittest scripts.tests.test_skill_harness
 ```
