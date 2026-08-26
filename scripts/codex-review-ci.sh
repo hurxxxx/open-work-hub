@@ -112,8 +112,6 @@ run_codex_review() {
       --skip-git-repo-check \
       --output-last-message "$review_file" \
       -s read-only \
-      review \
-      --base "origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}" \
       - < <(write_prompt) >"$run_log" 2>&1 ||
     fail "codex review failed; see ${run_log}."
 }
