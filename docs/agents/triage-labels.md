@@ -1,24 +1,18 @@
 # Triage Labels
 
-The GitLab project uses a small label vocabulary for issue triage:
+| Label | Rule |
+| --- | --- |
+| `bug` | confirmed/plausible defect only |
+| `needs-triage` | missing evidence, scope, or maintainer decision |
+| `ready-for-agent` | complete testable brief; no unresolved decision |
 
-| Role | GitLab label | Rule |
-| --- | --- | --- |
-| Defect marker | `bug` | Apply only when reported behavior is a confirmed or plausible defect. Feature work has no category label by default. |
-| Needs decision | `needs-triage` | The issue still needs evidence, scope, or a maintainer decision. |
-| Ready for AFK work | `ready-for-agent` | The issue has a complete, testable agent brief and no unresolved decision. |
+- Feature/docs work has no category label by default.
+- An open issue must not have both `needs-triage` and `ready-for-agent`.
+- Reopened issues return to `needs-triage` until revalidated.
+- Duplicate/rejected: comment reason, remove state labels, close only when authorized.
+- Lane/rewrite-approval labels are governance metadata, not triage states.
 
-An open issue must not carry both state labels. Moving an issue to one state removes the other.
-Reopened issues return to `needs-triage` until revalidated.
-
-If information is missing or human judgment is still required, keep `needs-triage` and explain the
-outstanding question in a comment. For a duplicate or rejected request, record the reason in a
-comment, remove both state labels, and close the issue.
-
-Repository lane and rewrite-approval labels are separate governance metadata, not triage states. Only
-the labels listed above belong to the triage contract.
-
-Verify the live vocabulary before changing this contract:
+Verify before changing:
 
 ```bash
 glab label list --per-page 100

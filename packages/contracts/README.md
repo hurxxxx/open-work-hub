@@ -1,24 +1,21 @@
 # Shared Contracts
 
-공통 TS/JSON 계약이 두 개 이상 반복될 때 승격할 공간이다.
+Use this package only for contracts consumed by two or more runtimes/apps.
 
-현재 포함 계약:
+Current exports:
 
-- `@open-work-hub/contracts/dm`: DM web/desktop 공통 응답 타입, API route builder,
-  realtime reducers, list/composer/attachment view-model projections.
-- `@open-work-hub/contracts/openapi`: FastAPI OpenAPI generated 타입.
-- `@open-work-hub/contracts/api`: generated OpenAPI 타입을 다루는 공통 TS helper.
-- `@open-work-hub/contracts/open-work-hub-desktop-update-feed`: Open Work Hub Desktop 설치/업데이트 feed 경로와 파일명 계약.
+- `@open-work-hub/contracts/dm`
+- `@open-work-hub/contracts/openapi`
+- `@open-work-hub/contracts/api`
+- `@open-work-hub/contracts/open-work-hub-desktop-update-feed`
 
-앱별 transport, 인증 토큰, Electron IPC 같은 adapter 세부는 각 앱에 남긴다. 여러 앱이 알아야 하는 path, query invariant, payload shape만 이 패키지로 승격한다.
+Keep app transport, auth tokens, Electron IPC, and adapter details in owning apps. Promote only shared path/query/payload invariants.
 
 ## Publish
 
-이 패키지는 `open-work-hub/open-work-hub` GitLab npm Package Registry에 발행한다. 발행 태그는 패키지 버전과 정확히 맞아야 한다.
+Publish to the GitLab npm Package Registry. Tag must match package version.
 
 ```bash
 git tag contracts-v0.0.3
 git push origin contracts-v0.0.3
 ```
-
-운영 절차와 split repo 소비 규칙은 `docs/domains/release/shared-contracts-package.md`를 정본으로 본다.
