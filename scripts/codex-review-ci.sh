@@ -103,14 +103,15 @@ run_codex_review() {
     PATH="${PATH:-/usr/local/bin:/usr/bin:/bin}" \
     LANG=C.UTF-8 \
     CODEX_HOME="${CODEX_HOME:-${HOME:-/home/user}/.codex}" \
-    "$codex_bin" exec \
+    "$codex_bin" \
+      -a never \
+      exec \
       --ignore-user-config \
       --ignore-rules \
       --ephemeral \
       --skip-git-repo-check \
       --output-last-message "$review_file" \
       -s read-only \
-      -a never \
       review \
       --base "origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}" \
       - < <(write_prompt) >"$run_log" 2>&1 ||
