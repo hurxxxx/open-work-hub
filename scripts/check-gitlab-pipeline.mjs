@@ -28,6 +28,7 @@ const REDIS_SERVICE =
   'redis@sha256:5a77f0f4698389019f828f6387049ce1d5adbea204e56422aa7720dab7034287';
 const MINIO_SERVICE =
   'minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e';
+const OPENSEARCH_SERVICE = 'open-work-hub-opensearch:3.3.2-nori';
 const RETIRED_IDENTIFIER_PATTERN = new RegExp(
   [
     String.raw`\bA` + String.raw`I_DO\b`,
@@ -71,6 +72,16 @@ export function expectedGitlabPipelineConfig() {
             MINIO_ROOT_USER: 'open_work_hub_ci_minio',
           },
         },
+        {
+          name: OPENSEARCH_SERVICE,
+          alias: 'opensearch',
+          variables: {
+            HEALTHCHECK_TCP_PORT: '9200',
+            'discovery.type': 'single-node',
+            DISABLE_SECURITY_PLUGIN: 'true',
+            OPENSEARCH_JAVA_OPTS: '-Xms512m -Xmx512m',
+          },
+        },
       ],
       tags: [VALIDATION_TAG],
       inherit: {
@@ -92,11 +103,14 @@ export function expectedGitlabPipelineConfig() {
         OPEN_WORK_HUB_MINIO_BUCKET: 'open-work-hub-ci',
         OPEN_WORK_HUB_MINIO_ENDPOINT: 'http://minio:9000',
         OPEN_WORK_HUB_MINIO_SECRET_KEY: 'open_work_hub_ci_minio_job_only',
+        OPEN_WORK_HUB_OPENSEARCH_INDEX_PREFIX: 'open-work-hub-ci',
+        OPEN_WORK_HUB_OPENSEARCH_URL: 'http://opensearch:9200',
         OPEN_WORK_HUB_POSTGRES_DSN: '$OPEN_WORK_HUB_CI_POSTGRES_DSN',
         OPEN_WORK_HUB_TEST_MINIO_ACCESS_KEY: 'open_work_hub_ci_minio',
         OPEN_WORK_HUB_TEST_MINIO_ENDPOINT: 'http://minio:9000',
         OPEN_WORK_HUB_TEST_MINIO_SECRET_KEY: 'open_work_hub_ci_minio_job_only',
         OPEN_WORK_HUB_TEST_NON_PRODUCTION_ACK: 'non-production',
+        OPEN_WORK_HUB_TEST_OPENSEARCH_URL: 'http://opensearch:9200',
         OPEN_WORK_HUB_TEST_POSTGRES_TEMPLATE_DSN:
           '$OPEN_WORK_HUB_CI_POSTGRES_DSN',
         OPEN_WORK_HUB_TEST_REDIS_URL: 'redis://redis:6379/0',

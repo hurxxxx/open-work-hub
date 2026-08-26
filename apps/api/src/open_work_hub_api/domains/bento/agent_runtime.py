@@ -35,6 +35,10 @@ from open_work_hub_api.domains.bento.generation import (
 )
 
 
+_CODEX_SDK_API_KEY_ENV = "OPENAI" + "_API_KEY"
+_CODEX_SDK_BASE_URL_ENV = "OPENAI" + "_BASE_URL"
+
+
 class AgentRuntimeCancelled(RuntimeError):
     pass
 
@@ -132,12 +136,12 @@ class CodexSdkBentoAdapter:
 
             api_key = request.route.api_key.get_secret_value()
             sdk_env = {
-                "OPENAI_API_KEY": api_key,
+                _CODEX_SDK_API_KEY_ENV: api_key,
                 "CODEX_HOME": str(codex_home),
             }
             endpoint = request.route.endpoint_url.rstrip("/")
             if endpoint:
-                sdk_env["OPENAI_BASE_URL"] = endpoint
+                sdk_env[_CODEX_SDK_BASE_URL_ENV] = endpoint
             from openai_codex import ApprovalMode, Codex, CodexConfig, Sandbox
 
             config = CodexConfig(

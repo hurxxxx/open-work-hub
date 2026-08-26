@@ -254,8 +254,8 @@ async def test_run_agent_turn_stream_uses_open_work_hub_identity_prompt(
     messages = captured_stream_kwargs[0]["messages"]
     system_prompt = messages[0]["content"]
     assert messages[0]["role"] == "system"
-    assert "Open Work Hub의 업무용 챗봇 AI 어시스턴트(Open Work Hub)" in system_prompt
-    assert "저는 Open Work Hub의 업무용 챗봇 AI 어시스턴트(Open Work Hub)입니다." in system_prompt
+    assert agent_module.AGENT_SYSTEM_PROMPT in system_prompt
+    assert "저는 Open Work Hub의 업무용 AI 어시스턴트입니다." in system_prompt
     assert "기반 모델명이나 개발사를 너의 정체성처럼 말하지 않는다" in system_prompt
 
 

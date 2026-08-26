@@ -48,6 +48,7 @@ RUN apt-get update \
       git \
       jq \
       libpq-dev \
+      postgresql-client \
     && rm -rf /var/lib/apt/lists/* \
     && npm install --global --force corepack@0.34.0 \
     && corepack enable \

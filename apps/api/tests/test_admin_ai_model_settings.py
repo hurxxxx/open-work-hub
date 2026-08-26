@@ -161,6 +161,9 @@ def test_ai_model_provider_default_model_key_resolves_enabled_catalog_entry(
     selected_model = next(
         model for model in created["models"] if model["model_key"] == "selected-local-model"
     )
+    local = next(
+        provider for provider in created["providers"] if provider["provider_id"] == "local"
+    )
     response = client.put(
         "/api/v1/admin/ai-model-settings/providers/local",
         headers=headers,
@@ -211,6 +214,7 @@ def test_admin_ai_model_settings_provider_catalog_and_route_lifecycle(
         for item in snapshot["models"]
         if item["provider_id"] == "local" and item["model_key"] == "qwen-local"
     )
+    local = next(item for item in snapshot["providers"] if item["provider_id"] == "local")
 
     update_provider = client.put(
         "/api/v1/admin/ai-model-settings/providers/local",
@@ -300,6 +304,11 @@ def test_admin_ai_model_settings_external_route_and_secret_redaction(
         item for item in model_response.json()["models"]
         if item["provider_id"] == "anthropic"
         and item["model_key"] == "administrator-selected-model"
+    )
+    anthropic = next(
+        item
+        for item in model_response.json()["providers"]
+        if item["provider_id"] == "anthropic"
     )
 
     provider_response = client.put(

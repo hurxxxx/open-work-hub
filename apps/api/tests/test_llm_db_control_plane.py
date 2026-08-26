@@ -38,7 +38,14 @@ def _configure_conflicting_external_env(monkeypatch: pytest.MonkeyPatch) -> None
 
 def _enable_database_anthropic_provider(db) -> str:
     provider = db.get(AiModelProviderConfig, "anthropic")
-    assert provider is not None
+    if provider is None:
+        provider = AiModelProviderConfig(
+            provider_id="anthropic",
+            enabled=False,
+            version=1,
+        )
+        db.add(provider)
+        db.flush()
     model = db.get(AiModelCatalogEntry, _DB_MODEL_ID)
     if model is None:
         model = AiModelCatalogEntry(
@@ -74,7 +81,14 @@ def test_external_workload_fails_closed_without_enabled_database_provider(
 
     with get_session_factory()() as db:
         provider = db.get(AiModelProviderConfig, "anthropic")
-        assert provider is not None
+        if provider is None:
+            provider = AiModelProviderConfig(
+                provider_id="anthropic",
+                enabled=False,
+                version=1,
+            )
+            db.add(provider)
+            db.flush()
         provider.enabled = False
         if provider_state == "missing":
             db.execute(

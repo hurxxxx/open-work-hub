@@ -43,6 +43,13 @@ _FORBIDDEN_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
         re.compile(r"\b(?:INTERNAL|CONFIDENTIAL)-[A-Z0-9-]+\b", re.IGNORECASE),
     ),
     (
+        "business_record_identifier",
+        re.compile(
+            r"\b(?=[A-Z0-9-]*[A-Z])(?=[A-Z0-9-]*\d)[A-Z0-9]{2,}(?:-[A-Z0-9]{2,}){2,}\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
         "internal_url",
         re.compile(
             r"https?://(?:(?:localhost|127\.0\.0\.1|10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)"

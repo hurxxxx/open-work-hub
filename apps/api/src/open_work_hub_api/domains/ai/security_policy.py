@@ -101,7 +101,9 @@ MASK_ELIGIBLE_EXTERNAL_TRANSFER_BLOCKERS: frozenset[str] = frozenset(
 )
 _DATA_PROTECTION_ACTIONS: frozenset[str] = frozenset({"block", "mask_and_send"})
 _EXTERNAL_APP_ACTIONS: frozenset[str] = frozenset({"block", "mask_and_send"})
-SENSITIVE_IDENTIFIER_ENTITY_TYPES: frozenset[str] = frozenset({"internal_identifier"})
+SENSITIVE_IDENTIFIER_ENTITY_TYPES: frozenset[str] = frozenset(
+    {"internal_identifier", "business_record_identifier"}
+)
 _CONSERVATIVE_EFFECT_RANK: dict[AiSecurityPolicyEffect, int] = {
     "block_external": 5,
     "mask_and_send": 4,

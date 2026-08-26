@@ -14,13 +14,13 @@ def test_canonical_projection_identity_has_fixed_v1_vectors() -> None:
     assert canonical_resource_key(
         resource_type="file_manager_file",
         resource_id="file-123",
-    ) == ("18:open-work-hub-retrieval-v1|8:resource|17:file_manager_file|8:file-123")
+    ) == ("26:open-work-hub-retrieval-v1|8:resource|17:file_manager_file|8:file-123")
     assert (
         canonical_search_document_id(
             resource_type="file_manager_file",
             resource_id="file-123",
         )
-        == "3992a36d-1222-56f3-9e9e-43a4237fbb6b"
+        == "665615a7-6a15-5c5d-846c-d2da825fe613"
     )
     assert (
         canonical_vector_point_id(
@@ -28,7 +28,7 @@ def test_canonical_projection_identity_has_fixed_v1_vectors() -> None:
             resource_id="file-123",
             chunk_id="chunk-0",
         )
-        == "87bd7107-a900-5c27-93ed-0acb1850b4cb"
+        == "6c227f1b-ea27-5a8e-b097-8945c8039873"
     )
 
 

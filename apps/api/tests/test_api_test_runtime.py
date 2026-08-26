@@ -146,47 +146,39 @@ def test_application_database_reset_restores_migration_owned_seed(
     engine = create_engine(application_postgres_state.dsn)
     try:
         with engine.begin() as connection:
-            expected_rows = {
-                table_name: connection.scalar(
-                    text(
-                        f"SELECT COALESCE(jsonb_agg(to_jsonb(row_data) ORDER BY id), "
-                        f"'[]'::jsonb)::text FROM {table_name} AS row_data"
-                    )
-                )
-                for table_name in (
-                    "release_notes",
-                    "web_search_items",
-                    "ai_model_catalog_entries",
-                    "community_channels",
-                )
-            }
-            assert expected_rows["ai_model_catalog_entries"] == "[]"
-            assert all(
-                rows != "[]"
-                for table_name, rows in expected_rows.items()
-                if table_name != "ai_model_catalog_entries"
+            expected_rows = _application_seed_rows(
+                connection,
+                (
+                    "workspaces",
+                    "teams",
+                    "workspace_app_entitlements",
+                    "platform_app_visibility",
+                ),
             )
-            connection.execute(text("DELETE FROM release_notes"))
-            connection.execute(text("DELETE FROM web_search_items"))
-            connection.execute(
-                text("UPDATE community_channels SET name = 'corrupted'")
-            )
+            assert all(rows != "[]" for rows in expected_rows.values())
+            connection.execute(text("DELETE FROM platform_app_visibility"))
+            connection.execute(text("DELETE FROM workspace_app_entitlements"))
+            connection.execute(text("UPDATE workspaces SET name = 'corrupted'"))
 
         conftest._restore_application_postgres_state(application_postgres_state)
 
         with engine.connect() as connection:
-            restored_rows = {
-                table_name: connection.scalar(
-                    text(
-                        f"SELECT COALESCE(jsonb_agg(to_jsonb(row_data) ORDER BY id), "
-                        f"'[]'::jsonb)::text FROM {table_name} AS row_data"
-                    )
-                )
-                for table_name in expected_rows
-            }
+            restored_rows = _application_seed_rows(connection, expected_rows)
         assert restored_rows == expected_rows
     finally:
         engine.dispose()
+
+
+def _application_seed_rows(connection, table_names) -> dict[str, str]:
+    return {
+        table_name: connection.scalar(
+            text(
+                f"SELECT COALESCE(jsonb_agg(to_jsonb(row_data) ORDER BY id), "
+                f"'[]'::jsonb)::text FROM {table_name} AS row_data"
+            )
+        )
+        for table_name in table_names
+    }
 
 
 def test_test_resource_names_are_scoped_to_the_run() -> None:
