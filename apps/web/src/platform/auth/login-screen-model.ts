@@ -35,15 +35,13 @@ export type LoginFormState = {
   password: string;
   passwordConfirm: string;
   submitting: boolean;
-  formError: string | null;
 };
 
 export type LoginFormAction =
   | { type: 'fieldChanged'; field: LoginTextField; value: string }
   | { type: 'modeChanged'; mode: LoginMode }
   | { type: 'submitStarted' }
-  | { type: 'submitFinished' }
-  | { type: 'errorSet'; message: string };
+  | { type: 'submitFinished' };
 
 export const INITIAL_LOGIN_FORM_STATE: LoginFormState = {
   mode: 'login',
@@ -53,7 +51,6 @@ export const INITIAL_LOGIN_FORM_STATE: LoginFormState = {
   password: '',
   passwordConfirm: '',
   submitting: false,
-  formError: null,
 };
 
 export function loginFormReducer(
@@ -64,13 +61,11 @@ export function loginFormReducer(
     case 'fieldChanged':
       return { ...state, [action.field]: action.value };
     case 'modeChanged':
-      return { ...state, mode: action.mode, formError: null };
+      return { ...state, mode: action.mode };
     case 'submitStarted':
-      return { ...state, submitting: true, formError: null };
+      return { ...state, submitting: true };
     case 'submitFinished':
       return { ...state, submitting: false };
-    case 'errorSet':
-      return { ...state, formError: action.message };
     default:
       return state;
   }

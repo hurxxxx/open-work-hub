@@ -9,6 +9,7 @@ Before new UI, search existing app, `apps/web/src/components`, `apps/web/src/pla
 - Keep app-specific workflow components inside `apps/web/src/app-modules/<appId>/`.
 - Cross-app app feature access uses `public-api.ts`; no app-local deep import.
 - Product copy lives in i18n resources or caller props.
+- User-triggered operation results use global feedback; do not render them as page-local inline notices. Reserve form messages for input validation.
 - Use semantic tokens: `bg-app-*`, `text-app-*`, `border-app-*`, `app-text-*`.
 - Validate with `pnpm check:web-architecture` and `pnpm nx typecheck web`.
 
@@ -38,7 +39,7 @@ Before new UI, search existing app, `apps/web/src/components`, `apps/web/src/pla
 | `browser-download` | testable browser download |
 | `formatByteSize` | file-size display |
 | `native-date-input` | date/datetime-local parse/format |
-| `picker-model`, `resource-picker-session` | resource picker state/load wiring |
+| `picker-model`, `resource-picker-session` | picker state/load wiring |
 
 ## App-Scoped
 

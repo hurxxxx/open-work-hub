@@ -21,12 +21,8 @@ function account(overrides: Partial<DevLoginAccountLike>): DevLoginAccountLike {
 }
 
 describe('login screen model', () => {
-  it('updates fields and clears stale errors when submit or mode changes', () => {
-    const withError = loginFormReducer(INITIAL_LOGIN_FORM_STATE, {
-      type: 'errorSet',
-      message: 'Bad credentials',
-    });
-    const withLoginId = loginFormReducer(withError, {
+  it('updates fields, mode, and submitting state', () => {
+    const withLoginId = loginFormReducer(INITIAL_LOGIN_FORM_STATE, {
       type: 'fieldChanged',
       field: 'loginId',
       value: 'admin',
@@ -34,19 +30,16 @@ describe('login screen model', () => {
 
     expect(withLoginId).toMatchObject({
       loginId: 'admin',
-      formError: 'Bad credentials',
     });
     expect(
       loginFormReducer(withLoginId, { type: 'submitStarted' }),
     ).toMatchObject({
       submitting: true,
-      formError: null,
     });
     expect(
       loginFormReducer(withLoginId, { type: 'modeChanged', mode: 'signup' }),
     ).toMatchObject({
       mode: 'signup',
-      formError: null,
     });
   });
 
