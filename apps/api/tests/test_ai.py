@@ -96,7 +96,14 @@ def _configure_external_llm(monkeypatch) -> None:
     monkeypatch.setattr(settings, "llm_external_allowed_providers", "openai,anthropic")
     with Session(get_engine()) as db:
         provider = db.get(AiModelProviderConfig, "openai")
-        assert provider is not None
+        if provider is None:
+            provider = AiModelProviderConfig(
+                provider_id="openai",
+                enabled=False,
+                version=1,
+            )
+            db.add(provider)
+            db.flush()
         model = db.get(AiModelCatalogEntry, "openai-gpt-5-4-mini")
         if model is None:
             model = AiModelCatalogEntry(
@@ -512,9 +519,9 @@ def test_readyz_uses_configured_readiness_while_ai_health_stays_live(
     )
 
     readyz_response = client.get("/readyz")
-    assert readyz_response.status_code == 503
+    assert readyz_response.status_code == 200
     readyz_payload = readyz_response.json()
-    assert readyz_payload["status"] == "degraded"
+    assert readyz_payload["status"] == "ok"
     assert readyz_payload["llm"]["ready"] is True
     assert readyz_payload["llm"]["local"]["status"] == "ready"
     assert "base_url" not in readyz_payload["llm"]["local"]

@@ -32,7 +32,7 @@ REQUIRED_SKILLS = {
     "open-work-hub-env-management",
     "open-work-hub-i18n",
     "open-work-hub-mcp-capability-governance",
-    "open-work-hub-pr-review-validation",
+    "open-work-hub-mr-review-validation",
     "open-work-hub-production-operations",
     "open-work-hub-release-promotion",
     "open-work-hub-runtime-separation-audit",
@@ -49,6 +49,7 @@ REQUIRED_SKILLS = {
 
 RETIRED_SKILLS = {
     "open-work-hub-desktop-release",
+    "open-work-hub-pr-review-validation",
     "setup-matt-pocock-skills",
 }
 
@@ -74,19 +75,16 @@ REQUIRED_RESOURCES = {
 STALE_SKILL_GUIDE_PATTERNS = {
     r"\bCONTEXT(?:-MAP)?\.md\b": "Open Work Hub does not use generic context glossary files",
     r"\bdocs/adr/": "Open Work Hub ADRs live in root adr/",
-    r"(?i)\bai-do\b|\bAI_DO\b": "retired project identifiers must not appear in skills",
-    r"(?i)\bGitLab\b|\bglab\b|\.gitlab": "skills must use the current GitHub workflow",
-    r"\bMR\b|mr-review": "project guidance must use GitHub pull-request terminology",
     r"/projects/": "fixed internal checkout paths are not portable",
     r"\bdocs/current/": "docs/README.md and current owner docs replace docs/current",
     r"\b(?:Legacy Issues|mcloudoc)\b": "retired internal apps must not appear in skills",
 }
 
 RETIRED_TRIAGE_PATTERNS = {
-    r"\bneeds-info\b": "needs-info is not a documented GitHub label",
-    r"\bneeds-triage\b": "workflow-state labels are not part of the current GitHub contract",
-    r"\bready-for-agent\b": "workflow-state labels are not part of the current GitHub contract",
-    r"\bready-for-human\b": "ready-for-human is not a documented GitHub label",
+    r"\benhancement\b": "feature issues do not use a category label in the current GitLab contract",
+    r"\bneeds-info\b": "needs-info is not a documented GitLab label",
+    r"\bready-for-human\b": "ready-for-human is not a documented GitLab label",
+    r"\bwontfix\b": "wontfix is not a documented GitLab label",
     r"\.out-of-scope\b": "the parallel out-of-scope archive is retired",
     r"OUT-OF-SCOPE\.md": "the parallel out-of-scope archive is retired",
 }
@@ -95,6 +93,7 @@ TRIAGE_GUIDANCE_PATHS = {
     Path(".agents/skills/open-work-hub-agent-work-intake/SKILL.md"),
     Path(".agents/skills/to-issues/SKILL.md"),
     Path(".agents/skills/to-prd/SKILL.md"),
+    Path("docs/agents/triage-labels.md"),
 }
 
 PNPM_BUILTINS = {
@@ -129,6 +128,9 @@ PNPM_BUILTINS = {
 }
 
 STALE_PATTERNS = {
+    r"(?i)\bai-do\b|\bAI_DO\b|\bai_do\b": "retired AI-DO identifiers must not appear in Open Work Hub guidance",
+    r"/projects/ai-do\b": "AI-DO internal checkout paths are not portable",
+    r"\bdwdcc\b": "DWDCC project references must not appear in Open Work Hub guidance",
     r"\bvm:app\b": "preview VM app scripts are retired",
     r"\bvm-app-stack\b": "preview VM app harness is retired",
     r"\bopen-work-hub-preview-deploy\b": "preview deploy skill is retired",
@@ -277,6 +279,8 @@ def checked_files(root: Path = ROOT) -> list[Path]:
         root / "scripts",
         root / ".agents",
         root / ".github",
+        root / ".gitlab",
+        root / ".gitlab-ci.yml",
         root / "package.json",
         root / "skills-lock.json",
     ]

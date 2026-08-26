@@ -33,14 +33,14 @@ def _settings(**overrides: object) -> Settings:
                 {
                     "id": "local-model-a",
                     "display_name": "Local Model A",
-                    "endpoint_url": "http://local-model-a:8000/v1",
+                    "endpoint_url": "http://dgx-102:8000/v1",
                     "provider_id": "local",
                     "role": "redundancy",
                 },
                 {
                     "id": "local-model-b",
                     "display_name": "Local Model B",
-                    "endpoint_url": "http://local-model-b:8001/v1",
+                    "endpoint_url": "http://dgx-103:8001/v1",
                     "provider_id": "local",
                     "role": "redundancy",
                 },

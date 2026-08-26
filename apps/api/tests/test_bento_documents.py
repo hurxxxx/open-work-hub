@@ -547,6 +547,7 @@ def test_bento_rejects_invalid_document_payload(client: TestClient) -> None:
     assert blank_title_response.status_code == 422
 
 
+@pytest.mark.usefixtures("configured_local_llm_control_plane")
 def test_bento_ai_generation_uses_registered_local_workload_and_persists_document(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -645,6 +646,7 @@ def test_bento_ai_generation_uses_registered_local_workload_and_persists_documen
     assert render_payload["presentation_plan"]["slides"][1]["composition"] == "process-flow"
 
 
+@pytest.mark.usefixtures("configured_local_llm_control_plane")
 def test_bento_ai_generation_rejects_invalid_model_output_without_creating_document(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -689,6 +691,7 @@ def test_bento_ai_generation_rejects_invalid_model_output_without_creating_docum
     assert after == before
 
 
+@pytest.mark.usefixtures("configured_local_llm_control_plane")
 def test_bento_ai_generation_rejects_invalid_plan_before_rendering(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -728,6 +731,7 @@ def test_bento_ai_generation_rejects_invalid_plan_before_rendering(
     assert calls == [BENTO_PLAN_WORKLOAD_ID]
 
 
+@pytest.mark.usefixtures("configured_local_llm_control_plane")
 def test_bento_ai_generation_repairs_invalid_model_output_once(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -789,6 +793,7 @@ def test_bento_ai_generation_repairs_invalid_model_output_once(
     assert repair_payload["required_slide_count"] == 3
 
 
+@pytest.mark.usefixtures("configured_local_llm_control_plane")
 def test_bento_ai_edit_preserves_document_identity_and_server_owned_fields(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,

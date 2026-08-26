@@ -338,7 +338,7 @@ def test_app_bar_categories_are_admin_managed_presentation_groups(
     payload = list_response.json()
     assert payload["categories"] == []
     available_app_ids = {item["app_id"] for item in payload["available_apps"]}
-    assert {DOCS_WORKSPACE_APP.app_id, "docs", "docs"} <= available_app_ids
+    assert {DOCS_WORKSPACE_APP.app_id, "pms"} <= available_app_ids
     assert {"home", "extensions"}.isdisjoint(available_app_ids)
 
     create_response = client.post(
@@ -362,7 +362,7 @@ def test_app_bar_categories_are_admin_managed_presentation_groups(
                     "id": created["id"],
                     "title": "Field tools",
                     "icon_key": "history",
-                    "app_ids": ["docs", DOCS_WORKSPACE_APP.app_id],
+                    "app_ids": ["docs", "pms"],
                 }
             ]
         },
@@ -375,7 +375,7 @@ def test_app_bar_categories_are_admin_managed_presentation_groups(
     assert updated["icon_key"] == "history"
     assert [item["app_id"] for item in updated["items"]] == [
         "docs",
-        DOCS_WORKSPACE_APP.app_id,
+        "pms",
     ]
 
     bootstrap_response = client.get(
@@ -399,7 +399,7 @@ def test_app_bar_categories_are_admin_managed_presentation_groups(
     }
     assert [item["app_id"] for item in bootstrap_category["items"]] == [
         "docs",
-        DOCS_WORKSPACE_APP.app_id,
+        "pms",
     ]
 
     invalid_icon_response = client.post(
@@ -539,7 +539,7 @@ def test_workspace_app_visibility_override_takes_precedence_over_platform_defaul
     assert "docs" not in bootstrap["platform_visible_app_ids"]
 
 
-def test_sensitive_workspace_app_activation_requires_platform_admin(
+def test_platform_personal_tool_workspace_activation_is_rejected(
     client: TestClient,
 ) -> None:
     platform_admin = _bootstrap_admin_session(client)
@@ -577,8 +577,8 @@ def test_sensitive_workspace_app_activation_requires_platform_admin(
             ]
         },
     )
-    assert workspace_admin_response.status_code == 403
-    assert workspace_admin_response.json()["code"] == "admin.platform_admin_required"
+    assert workspace_admin_response.status_code == 400
+    assert workspace_admin_response.json()["code"] == "admin.unknown_workspace_app"
 
     platform_admin_response = client.patch(
         f"/api/v1/admin/workspaces/{workspace['id']}/app-visibility",
@@ -589,13 +589,8 @@ def test_sensitive_workspace_app_activation_requires_platform_admin(
             ]
         },
     )
-    assert platform_admin_response.status_code == 200, platform_admin_response.text
-    app = next(
-        item
-        for item in platform_admin_response.json()["items"]
-        if item["app_id"] == "planner"
-    )
-    assert app["effective_visible"] is True
+    assert platform_admin_response.status_code == 400
+    assert platform_admin_response.json()["code"] == "admin.unknown_workspace_app"
 
 
 def test_platform_apps_are_excluded_from_workspace_and_category_admin(
@@ -632,13 +627,15 @@ def test_platform_apps_are_excluded_from_workspace_and_category_admin(
     } <= platform_items.keys()
     assert all(
         platform_items[app_id]["availability_scope"] == "platform"
-        for app_id in ("community", "mail", "planner", "docs")
+        for app_id in ("community", "mail", "planner")
     )
+    assert platform_items["docs"]["availability_scope"] == "workspace"
     assert platform_items["community"]["launcher_personal_tools"] is False
     assert all(
         platform_items[app_id]["launcher_personal_tools"] is True for app_id in ("mail", "planner")
     )
-    assert {"community", "mail", "planner", "docs"}.isdisjoint(workspace_app_ids)
+    assert {"community", "mail", "planner"}.isdisjoint(workspace_app_ids)
+    assert "docs" in workspace_app_ids
     assert {"mail", "planner"}.isdisjoint(category_app_ids)
     assert {"community", "docs"} <= category_app_ids
 
@@ -796,7 +793,7 @@ def test_hard_delete_workspace_is_disabled_and_archive_is_preserved(
         headers=_auth_headers(token),
     )
 
-    assert blocked.status_code == 405
+    assert blocked.status_code == 404
     workspaces = client.get(
         "/api/v1/admin/workspaces?include_archived=true",
         headers=_auth_headers(token),

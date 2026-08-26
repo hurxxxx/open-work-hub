@@ -5,5 +5,4 @@
 | `generic_rag` | workspace | qdrant | true |
 | `keyword` | workspace | keyword_search | true |
 
-새 source는 app identity, source access adapter, retrieval partition adapter, projection lifecycle,
-ACL matrix와 citation 검증을 함께 제공해야 한다.
+New source requires app identity, source ACL adapter, retrieval partition adapter, projection lifecycle, ACL matrix, and citation tests.

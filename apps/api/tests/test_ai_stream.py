@@ -307,7 +307,14 @@ def _configure_database_local_provider() -> None:
     model_key = "local/current-moe-test-model"
     with Session(get_engine()) as db:
         provider = db.get(AiModelProviderConfig, "local")
-        assert provider is not None
+        if provider is None:
+            provider = AiModelProviderConfig(
+                provider_id="local",
+                enabled=True,
+                version=1,
+            )
+            db.add(provider)
+            db.flush()
         model = db.get(AiModelCatalogEntry, model_id)
         if model is None:
             model = AiModelCatalogEntry(
@@ -338,7 +345,14 @@ def _configure_database_external_provider(
     with Session(get_engine()) as db:
         for external_provider_id in ("openai", "anthropic", "gemini"):
             row = db.get(AiModelProviderConfig, external_provider_id)
-            assert row is not None
+            if row is None:
+                row = AiModelProviderConfig(
+                    provider_id=external_provider_id,
+                    enabled=False,
+                    version=1,
+                )
+                db.add(row)
+                db.flush()
             row.enabled = external_provider_id == provider_id
         provider = db.get(AiModelProviderConfig, provider_id)
         assert provider is not None
@@ -419,7 +433,8 @@ def _chat_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def _assert_open_work_hub_identity_system_message(messages: list[dict[str, Any]]) -> None:
     assert messages[0]["role"] == "system"
     system_prompt = messages[0]["content"]
-    assert "Open Work Hub의 업무용 챗봇 AI 어시스턴트(Open Work Hub)" in system_prompt
+    assert ai_agent.AGENT_SYSTEM_PROMPT in system_prompt
+    assert "저는 Open Work Hub의 업무용 AI 어시스턴트입니다." in system_prompt
     assert "Qwen, Tongyi, OpenAI" in system_prompt
 
 

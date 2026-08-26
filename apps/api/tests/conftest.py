@@ -293,6 +293,7 @@ def _initialize_application_test_database(dsn: str) -> None:
     with pytest.MonkeyPatch.context() as monkeypatch:
         monkeypatch.setenv("OPEN_WORK_HUB_POSTGRES_DSN", dsn)
         monkeypatch.setenv("OPEN_WORK_HUB_API_AUTO_MIGRATE", "0")
+        monkeypatch.setenv("OPEN_WORK_HUB_API_SEED_DEV_LOGIN_ACCOUNT", "0")
         monkeypatch.setenv(
             "OPEN_WORK_HUB_MAIL_CREDENTIAL_ENCRYPTION_KEY", "test-mail-credential-key"
         )
@@ -629,11 +630,13 @@ def _configure_test_application_environment(
     monkeypatch.setenv("OPEN_WORK_HUB_POSTGRES_DSN", postgres_dsn)
     monkeypatch.setenv("OPEN_WORK_HUB_API_SESSION_TTL_HOURS", "1")
     monkeypatch.setenv("OPEN_WORK_HUB_API_ALLOW_DEV_ADMIN_LOGIN", "1")
+    monkeypatch.setenv("OPEN_WORK_HUB_API_SEED_DEV_LOGIN_ACCOUNT", "0")
     monkeypatch.setenv("OPEN_WORK_HUB_LLM_HEALTHCHECK_ON_STARTUP", "0")
     monkeypatch.setenv("OPEN_WORK_HUB_OPF_HEALTHCHECK_ON_STARTUP", "0")
     monkeypatch.setenv("OPEN_WORK_HUB_OPF_REQUIRED", "0")
     monkeypatch.setenv("OPEN_WORK_HUB_OPF_SERVICE_BASE_URL", "")
     monkeypatch.setenv("OPEN_WORK_HUB_API_AUTO_MIGRATE", "0")
+    monkeypatch.setenv("OPEN_WORK_HUB_API_VIDEO_CHAT_ENABLED", "1")
     monkeypatch.setenv("OPEN_WORK_HUB_API_COLLAB_REDIS_URL", "redis://127.0.0.1:1/0")
     monkeypatch.setenv("OPEN_WORK_HUB_API_REALTIME_REDIS_URL", "redis://127.0.0.1:1/0")
     monkeypatch.setenv("OPEN_WORK_HUB_MINIO_ENDPOINT", minio_endpoint)
@@ -863,7 +866,14 @@ def configured_local_llm_control_plane(client: TestClient) -> None:
     model_key = "local/current-moe-test-model"
     with get_session_factory()() as db:
         provider = db.get(AiModelProviderConfig, "local")
-        assert provider is not None
+        if provider is None:
+            provider = AiModelProviderConfig(
+                provider_id="local",
+                enabled=True,
+                version=1,
+            )
+            db.add(provider)
+            db.flush()
         model = db.get(AiModelCatalogEntry, model_id)
         if model is None:
             model = AiModelCatalogEntry(

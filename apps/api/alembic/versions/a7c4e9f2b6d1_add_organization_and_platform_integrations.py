@@ -1,7 +1,7 @@
 """Add organization directory and platform integrations.
 
 Revision ID: a7c4e9f2b6d1
-Revises: f6d2a4c8e1b3
+Revises: a9c3d2e1f4b5
 """
 
 from collections.abc import Sequence
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 
 revision: str = "a7c4e9f2b6d1"
-down_revision: str | Sequence[str] | None = "f6d2a4c8e1b3"
+down_revision: str | Sequence[str] | None = "a9c3d2e1f4b5"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

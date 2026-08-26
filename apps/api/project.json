@@ -46,7 +46,7 @@
       "cache": false,
       "options": {
         "cwd": "apps/api",
-        "command": "uv run --python 3.12 --group dev python -m pytest -n ${OPEN_WORK_HUB_API_PYTEST_WORKERS:-8} --dist=worksteal -m 'not slow and not external_integration and not migration' && uv run --python 3.12 --group dev python -m pytest -m 'slow and not external_integration and not migration' && uv run --python 3.12 --group dev python -m pytest -m migration && bash ../../scripts/api-test-vm.sh -m external_integration"
+        "command": "bash ../../scripts/ci/run-api-full-tests.sh"
       }
     },
     "test-slow": {

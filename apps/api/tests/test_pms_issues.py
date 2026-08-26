@@ -180,7 +180,7 @@ def test_bulk_update_assigns_and_updates_labels_with_activity(client: TestClient
             "description": "",
             "status": "todo",
             "priority": "medium",
-            "label_ids": [labels_by_name["qa"]["id"]],
+            "label_ids": [labels_by_name["review"]["id"]],
         },
     )
     assert issue_response.status_code == 201
@@ -193,7 +193,7 @@ def test_bulk_update_assigns_and_updates_labels_with_activity(client: TestClient
             "task_ids": [issue["id"]],
             "assignee_id": teammate["user"]["id"],
             "add_label_ids": [labels_by_name["blocked"]["id"]],
-            "remove_label_ids": [labels_by_name["qa"]["id"]],
+            "remove_label_ids": [labels_by_name["review"]["id"]],
         },
     )
     assert bulk_response.status_code == 200

@@ -1,9 +1,13 @@
 # Release Domain
 
-Open Work Hub의 배포 환경은 저장소의 Compose 구성과 안전한 환경 변수 계약을 기반으로
-각 운영 환경에서 구성한다. 특정 서버, 사용자 계정, systemd unit 또는 내부 네트워크에
-종속된 배포 절차는 프로젝트 소스에 포함하지 않는다.
-
-- 개발 인프라: `ops/compose/open-work-hub-dev.infra.yml`
-- 운영 인프라: `ops/compose/open-work-hub-prod.infra.yml`
-- 공통 실행 명령: `scripts/infra-stack.sh`
+- Dev infra: `ops/compose/open-work-hub-dev.infra.yml`.
+- Prod infra: `ops/compose/open-work-hub-prod.infra.yml`.
+- Common entrypoint: `scripts/infra-stack.sh`.
+- CI contract: `.gitlab-ci.yml` and `ops/ci/ci-first.gitlab-ci.yml`.
+- Prefer shared physical infra plus isolated data namespaces when services support it: PostgreSQL database/schema, MinIO bucket/prefix, OpenSearch index prefix, Qdrant collection prefix, Redis DB/key prefix, queue name/group.
+- Use env-named service instances only for incompatible lifecycle, security, capacity, or blast-radius requirements. `prod` checkout/branch is an operational guard, not a naming rule for every container.
+- Release validation: GitLab MR `dev -> main` runs non-Codex `release_validation`.
+- Contract package publish: `contracts-v*` tag publishes `@open-work-hub/contracts`.
+- Do not document server/user/systemd/internal-network-specific deployment in repo source.
+- GitLab `origin/main` is production source after approved `dev -> main` release MR.
+- This repo currently owns Compose infrastructure only, not full app deploy automation.

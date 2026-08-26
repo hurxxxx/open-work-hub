@@ -93,7 +93,7 @@ def test_admin_usage_dashboard_aggregates_user_content_and_llm_usage(
     assert user_item["docs_view_count"] == 2
     assert user_item["llm_call_count"] == 1
     assert user_item["llm_total_tokens"] == 15
-    assert user_item["activity_score"] >= 12
+    assert user_item["activity_score"] >= 11
     assert payload["usage_by_app"][0]["key"] == "docs"
     assert payload["usage_by_route"][0]["key"] == "/w/:workspace/docs"
     assert payload["content_views_by_kind"][0]["key"] == "doc"

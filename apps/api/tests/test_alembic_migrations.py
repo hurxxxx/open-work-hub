@@ -15,6 +15,7 @@ def test_repository_has_one_linear_migration_chain() -> None:
 
     assert [revision.revision for revision in revisions] == [
         "a7c4e9f2b6d1",
+        "a9c3d2e1f4b5",
         "f6d2a4c8e1b3",
         "e5c9a1b7d3f2",
         "d4b7e9a2c6f1",
