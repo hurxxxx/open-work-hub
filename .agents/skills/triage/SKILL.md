@@ -1,11 +1,11 @@
 ---
 name: triage
-description: Triage Open Work Hub GitHub Issues using the repository's current default labels and implementation-brief checklist. Use when the user wants to inspect or create an issue, review incoming work, prepare an AFK agent brief, or change issue state. Do not use for implementing an already-scoped issue.
+description: Triage Open Work Hub GitLab Issues using the repository's current labels and implementation-brief checklist. Use when the user wants to inspect or create an issue, review incoming work, prepare an AFK agent brief, or change issue state. Do not use for implementing an already-scoped issue.
 ---
 
 # Triage
 
-Use GitHub Issues and the contracts in `docs/agents/issue-tracker.md` and `docs/agents/triage-labels.md`. Use `gh` for live repository reads. Creating comments, labels, issues, or state changes requires explicit user authorization.
+Use GitLab Issues and the contracts in `docs/agents/issue-tracker.md` and `docs/agents/triage-labels.md`. Use `glab` for live repository reads. Creating comments, labels, issues, or state changes requires explicit user authorization.
 
 Every AI-generated triage or agent-brief comment posted to an issue starts with:
 
@@ -16,19 +16,16 @@ Every AI-generated triage or agent-brief comment posted to an issue starts with:
 ## Current Labels
 
 - `bug`: confirmed or plausible defect.
-- `enhancement`: new feature or expansion of existing behavior.
-- `documentation`: documentation is the primary outcome.
-- `question`: reproduction evidence, scope, or maintainer judgment is still required.
-- `duplicate`, `invalid`, `wontfix`: closure reasons; explain the reason before closing.
-- `good first issue`, `help wanted`: use only when a maintainer decides the work suits external contribution.
+- `needs-triage`: reproduction evidence, scope, or maintainer judgment is still required.
+- `ready-for-agent`: the issue has a complete brief and no unresolved product, security, data, or architecture decision.
 
-The repository has no workflow-state labels. An issue is implementation-ready when its brief has complete, independently verifiable acceptance criteria and no unresolved product, security, data, or architecture decisions.
+Do not apply undocumented category or closure labels as a substitute for a clear comment. An issue is implementation-ready only when its brief has complete, independently verifiable acceptance criteria and no unresolved decisions.
 
-Before modifying labels, inspect live names with `gh label list --limit 100`; do not invent undocumented labels.
+Before modifying labels, inspect live names with `glab label list --per-page 100`; do not invent undocumented labels.
 
 ## Triage One Issue
 
-1. Read the full issue, comments, labels, reporter, and dates with `gh issue view`.
+1. Read the full issue, comments, labels, reporter, and dates with `glab issue view`.
 2. Inspect current code, tests, `docs/README.md`, the owning domain/app/product document, and accepted root ADRs.
 3. For a bug, attempt a safe reproduction and report the exact result.
 4. Recommend the applicable category/information label, implementation readiness, or closure with evidence.
@@ -36,9 +33,9 @@ Before modifying labels, inspect live names with `gh label list --limit 100`; do
 
 Outcomes:
 
-- Implementation-ready: post a complete brief using [AGENT-BRIEF.md](./AGENT-BRIEF.md), remove `question` if no longer applicable, and state that no unresolved checklist item remains.
-- Unresolved: keep/add `question` and comment with confirmed facts plus specific unanswered questions.
-- Duplicate/rejected: explain the reason and canonical link, apply the appropriate closure label, and close only when authorized.
+- Implementation-ready: post a complete brief using [AGENT-BRIEF.md](./AGENT-BRIEF.md), remove `needs-triage`, add `ready-for-agent`, and state that no unresolved checklist item remains.
+- Unresolved: keep/add `needs-triage` and comment with confirmed facts plus specific unanswered questions.
+- Duplicate/rejected: explain the reason and canonical link, and close only when authorized.
 
 ## Unresolved-Information Comment
 

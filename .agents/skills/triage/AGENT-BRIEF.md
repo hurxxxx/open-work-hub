@@ -1,6 +1,6 @@
 # Writing Agent Briefs
 
-An agent brief is a structured GitHub issue comment that records whether an AFK agent can implement the work without hidden decisions. Readiness is represented by the brief and checklist, not a workflow-state label.
+An agent brief is a structured GitLab issue comment that records whether an AFK agent can implement the work without hidden decisions. Readiness is represented by the brief, checklist, and the `ready-for-agent` label.
 
 ## Requirements
 
@@ -47,4 +47,4 @@ What must be observable after the work, including relevant error and edge cases.
 - Command or harness that verifies the result
 ```
 
-Use the current GitHub category labels when applicable: `bug` for defects, `enhancement` for features, `documentation` for documentation, and `question` while required information remains. After posting a complete brief, state explicitly that no unresolved checklist item remains; do not create or apply workflow-state labels.
+Use the current GitLab labels: `bug` for defects, `needs-triage` while required information remains, and `ready-for-agent` only after posting a complete brief with no unresolved checklist item.

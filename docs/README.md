@@ -7,7 +7,7 @@
 
 | 영역                      | 시작 문서                                                              |
 | ------------------------- | ---------------------------------------------------------------------- |
-| 에이전트 개발·검증 기준   | [에이전트 문서 라우팅](agents/domain.md)                               |
+| 에이전트 개발·검증·MR 기준 | [에이전트 문서 라우팅](agents/domain.md)                               |
 | 앱 등록·권한·bootstrap    | [앱 플랫폼 계약](domains/app-platform/README.md)                       |
 | AI 모델과 실행 게이트웨이 | [AI Gateway](domains/ai/gateway.md)                                    |
 | Retrieval과 RAG           | [Retrieval](domains/retrieval/README.md), [RAG](domains/rag/README.md) |
@@ -28,5 +28,9 @@
 | `agents/`  | AI 개발 도구의 구조·검증·작업 지침        |
 | `product/` | 제품 UI와 데이터 기준                     |
 
-ADR은 저장소 루트 [`adr/`](../adr)에 둡니다. 임시 검증 결과, 원시 로그,
-대용량 스크린샷과 완료 보고서는 문서 정본으로 보관하지 않습니다.
+GitLab `origin`이 이 사이트의 canonical 저장소이며 GitHub `upstream`은 원본 코드 수신용입니다.
+Issue와 MR 운영 지침은 [Issue Tracker](agents/issue-tracker.md)와
+[구현 검증 하네스](agents/vibe-coding-harness.md)를 따릅니다.
+
+ADR은 저장소 루트 [`adr/`](../adr)에 둡니다. 임시 검증 결과, 원시 로그, 대용량 스크린샷과
+완료 보고서는 문서 정본으로 보관하지 않습니다.

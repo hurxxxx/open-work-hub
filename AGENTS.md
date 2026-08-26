@@ -6,8 +6,8 @@
   `.github/copilot-instructions.md`는 도구별 진입점일 뿐 규칙을 복제하지 않는다.
 - 사용자 요청을 만족하는 최소 변경만 수행하고 기존 사용자 변경을 보존한다. 결과, 권한 또는
   외부 상태를 크게 바꾸는 모호함만 확인하고 나머지는 안전한 가정을 밝힌 뒤 진행한다.
-- 저장소 밖은 사용자가 명시적으로 범위에 넣지 않는 한 읽기 전용이다. 파괴적 작업 전에는 정확한
-  대상과 symlink 경계를 확인하고, dirty checkout에서 파일을 되돌리거나 branch를 바꾸지 않는다.
+- 사용자가 명시적으로 범위에 넣지 않은 저장소 밖 경로는 읽기 전용이다. 파괴적 작업 전에는
+  정확한 대상과 symlink 경계를 확인하고, dirty checkout에서 파일을 되돌리거나 branch를 바꾸지 않는다.
 - 시크릿, 토큰, 비밀번호, 운영·고객 데이터를 코드, 문서, 로그, prompt, fixture, diff에 노출하지
   않는다. 설정은 typed settings와 `OPEN_WORK_HUB_*` 환경변수를 사용하며 `.env`는 커밋하지 않는다.
 - 특정 질문, 키워드, 데이터 필드 또는 예시만 맞추는 AI/RAG 분기를 만들지 않는다. 범용 schema,
@@ -24,9 +24,9 @@
 | 변경 표면 | 필요할 때 읽을 정본 |
 | --- | --- |
 | 코드 구조·얇은 추상화 | `docs/agents/llm-friendly-development.md`, `docs/agents/composable-abstractions.md` |
-| 검증 깊이·PR 전달 | `docs/agents/vibe-coding-harness.md`, `docs/agents/local-codex-review.md` |
+| 검증 깊이·MR 전달 | `docs/agents/vibe-coding-harness.md`, `docs/agents/local-codex-review.md` |
 | 문서 구조·소유권 | `docs/agents/domain.md` |
-| GitHub Issue 인입·triage | `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md` |
+| GitLab Issue 인입·triage | `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md` |
 | 앱 identity·registration | `docs/domains/app-platform/README.md` |
 | UI 컴포넌트·시간·알림 | `docs/agents/ui-components.md`, `docs/product/ui-design-principles.md` |
 | AI capability·MCP·LLM workload | `adr/0002-mcp-capability-platform.md`, `adr/0005-registered-llm-workload.md`, `docs/domains/ai/write-policy.md` |
@@ -37,16 +37,19 @@
 
 ## Work And Git
 
-- 기본 개발 환경은 이 GitHub 저장소의 현재 checkout과 로컬 Docker Compose다. 고정 서버 경로,
-  사내 원격 인프라 또는 다른 저장소가 있다고 가정하지 않는다.
-- 현재 기본 branch는 `main`이다. 사용자가 별도 workflow를 지정하지 않으면 저장소에 없는 branch
-  승격 규칙, PR publisher, label lane 또는 CI gate를 만들거나 요구하지 않는다.
-- 별도 요청 없이는 commit, push, PR 생성 또는 merge를 하지 않는다. 요청받은 PR은 일반적으로
-  `main`을 대상으로 전체 base diff를 검토하고, 하나의 완결된 사용자 결과만 담는다.
+- GitLab `origin`이 이 사이트의 canonical 저장소다. GitHub remote는 `upstream` 원본 코드 수신용으로만
+  사용하고, 사이트 전용 변경을 GitHub에 push하거나 GitHub PR로 관리하지 않는다.
+- 통합 branch는 `dev`, 운영 branch는 protected `main`이다. 기능 변경은 feature branch에서
+  `dev`로 GitLab MR을 만들고, 운영 승격은 `dev`에서 `main`으로 GitLab MR을 만든다.
+- 별도 요청 없이는 commit, push, MR 생성 또는 merge를 하지 않는다. 요청받은 MR은 하나의 완결된
+  사용자 결과만 담고, 같은 결과를 완성하는 구현·리뷰·검증 수정은 기존 MR에 계속 반영한다.
+- GitHub upstream 변경을 가져올 때는 먼저 `git fetch upstream main`으로 차이를 확인하고, core update와
+  site custom 변경을 commit 단위로 섞지 않는다. 공통 기능 수정은 upstream에 보낼 수 있는 형태의
+  core patch로 분리하고, 이 사이트만의 정책·브랜딩·운영 변경은 site patch로 작게 유지한다.
 - branch/worktree 변경이 실제로 필요할 때만 `open-work-hub-worktree-management` skill을 사용한다.
   실패한 검사나 리뷰는 현재 diff의 로그와 finding을 먼저 모아 원인별로 수정한다.
 - 기능을 통과시키기 위해 같은 변경에서 checker, 테스트, CI, 에이전트 지침 또는 guardrail을
-  약화하거나 exclusion을 추가하지 않는다.
+  약화하거나 exclusion을 추가하지 않는다. 지침·CI 자체 변경은 기능 변경과 분리한다.
 
 ## Platform Boundaries
 
@@ -81,6 +84,9 @@
 
 - 검증은 변경 위험에 비례한다. 먼저 가장 가까운 focused test와 정적 검사를 실행하고, shared,
   migration, external integration 또는 불확실한 blast radius에서만 범위를 넓힌다.
+- Feature MR CI는 Codex review gate를 소유하고, 비-Codex 전체 검증은 `dev`에서 `main`으로 승격하는
+  release MR pipeline이 소유한다. 해당 CI와 MR publisher script가 아직 없는 checkout에서는 이를
+  통과한 증거로 주장하지 말고 다음 구현 범위로 명시한다.
 - API test를 직접 고를 때는
   `(cd apps/api && uv run --python 3.12 --group dev python -m pytest tests/<file>.py -q)`를 사용한다.
   Worker test는 같은 방식으로 `apps/worker`에서 실행한다.
@@ -100,7 +106,7 @@
 - API 계약을 바꾼 뒤 `pnpm check:api-contract`가 generated diff를 요구하면
   `pnpm generate:api-client`로 재생성하고 생성물과 호출부를 함께 검토한다.
 - 보고에는 실제 실행한 명령과 결과, 실행하지 못한 검증, 남은 위험을 적는다. 문서에 적혔다는
-  이유만으로 존재하지 않는 script, test, GitHub workflow를 성공 증거로 제시하지 않는다.
+  이유만으로 존재하지 않는 script, test, GitLab workflow를 성공 증거로 제시하지 않는다.
 - review와 검증 증거는 확인한 source와 base 상태에 결합한다. 둘 중 하나가 바뀌면 affected diff와
   검증을 다시 판단한다.
 

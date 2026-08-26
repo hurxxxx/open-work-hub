@@ -10,6 +10,7 @@ description: Operate Open Work Hub's production Docker Compose infrastructure fr
 - Production source currently owns infrastructure Compose only: `ops/compose/open-work-hub-prod.infra.yml` through `scripts/infra-stack.sh`.
 - There is no repository command that builds, migrates, restarts, smokes, or rolls back the full application. Do not invent one or substitute a hand-assembled deployment.
 - Production commands are refused unless the checkout basename is exactly `prod` (except an explicit one-off override intended for diagnostics).
+- Production source comes from GitLab `origin/main` after an explicitly approved `dev -> main` release MR. GitHub `upstream` is source-only.
 - Never run `dev.sh` or development infra commands from the production checkout.
 - Never print `.env` values. If env changes are separately in scope, also use `open-work-hub-env-management`.
 

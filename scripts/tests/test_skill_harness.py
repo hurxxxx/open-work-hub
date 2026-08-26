@@ -239,6 +239,38 @@ class SkillHarnessScannerTest(unittest.TestCase):
         self.assertIn(".agents/skills/clean/GUIDE.md", messages)
         self.assertNotIn("docs/archive/history.md", messages)
 
+    def test_allows_current_gitlab_mr_terms_in_skill_guides(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_text(
+                root / ".agents" / "skills" / "clean" / "SKILL.md",
+                valid_skill_text("clean")
+                + "Use glab to inspect a GitLab MR and read .gitlab templates.\n",
+            )
+
+            report = self.evaluate(root, required_skills={"clean"})
+
+        self.assertNotIn("stale_skill_convention", self.codes(report))
+        self.assertNotIn("stale_reference", self.codes(report))
+
+    def test_reports_retired_ai_do_references_in_checked_gitlab_files(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_text(
+                root / ".agents" / "skills" / "clean" / "SKILL.md",
+                valid_skill_text("clean"),
+            )
+            write_text(
+                root / ".gitlab" / "merge_request_templates" / "Vibe_Domain_App.md",
+                "Use ai-do guidance from /projects/ai-do.\n",
+            )
+
+            report = self.evaluate(root, required_skills={"clean"})
+
+        messages = self.messages(report)
+        self.assertIn("stale_reference", self.codes(report))
+        self.assertIn(".gitlab/merge_request_templates/Vibe_Domain_App.md", messages)
+
     def test_reports_retired_triage_terms_only_in_triage_guidance(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -262,7 +294,7 @@ class SkillHarnessScannerTest(unittest.TestCase):
         self.assertIn(".agents/skills/triage/GUIDE.md", messages)
         self.assertNotIn("docs/archive/history.md", messages)
 
-    def test_allows_current_github_default_triage_labels(self) -> None:
+    def test_allows_current_gitlab_triage_labels(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             write_text(
@@ -271,7 +303,7 @@ class SkillHarnessScannerTest(unittest.TestCase):
             )
             write_text(
                 root / ".agents" / "skills" / "triage" / "GUIDE.md",
-                "The current GitHub labels include enhancement and wontfix.\n",
+                "The current GitLab labels include bug, needs-triage, ready-for-agent.\n",
             )
 
             report = self.evaluate(root, required_skills={"clean"})

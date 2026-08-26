@@ -3,10 +3,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
-INCLUDE_GITHUB=0
+INCLUDE_GITLAB=0
 
 usage() {
-  echo "Usage: env-inventory.sh [--root PATH] [--github]" >&2
+  echo "Usage: env-inventory.sh [--root PATH] [--gitlab]" >&2
 }
 
 while [[ $# -gt 0 ]]; do
@@ -15,8 +15,8 @@ while [[ $# -gt 0 ]]; do
       ROOT_DIR="$(cd "${2:?--root requires a path}" && pwd)"
       shift 2
       ;;
-    --github)
-      INCLUDE_GITHUB=1
+    --gitlab)
+      INCLUDE_GITLAB=1
       shift
       ;;
     -h|--help)
@@ -76,13 +76,16 @@ else
   echo "[env-contract] missing scripts/check-env-contract.py"
 fi
 
-if (( INCLUDE_GITHUB )); then
-  if ! command -v gh >/dev/null 2>&1; then
-    echo "[github] gh not installed; secret metadata skipped"
-  elif ! gh auth status >/dev/null 2>&1; then
-    echo "[github] gh not authenticated; secret metadata skipped"
+if (( INCLUDE_GITLAB )); then
+  if ! command -v glab >/dev/null 2>&1; then
+    echo "[gitlab] glab not installed; CI metadata skipped"
+  elif ! glab auth status >/dev/null 2>&1; then
+    echo "[gitlab] glab not authenticated; CI metadata skipped"
   else
-    echo "[github] Actions secret names and update metadata (values unavailable)"
-    gh secret list --app actions
+    echo "[gitlab] CI variable metadata (values redacted)"
+    glab variable list --per-page 100 --output json \
+      --jq 'map({key, variable_type, environment_scope, protected, masked, raw})'
+    echo "[gitlab] Secure file metadata (contents unavailable)"
+    glab securefile list --per-page 100
   fi
 fi

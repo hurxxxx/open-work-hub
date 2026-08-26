@@ -1,9 +1,8 @@
 # 구현 검증 하네스
 
-이 문서는 구현 위험에 맞는 검증 깊이와 GitHub PR 전달 경계를 소유한다. 코드 구조는
+이 문서는 구현 위험에 맞는 검증 깊이와 GitLab MR 전달 경계를 소유한다. 코드 구조는
 [LLM 친화 개발 기준](llm-friendly-development.md), 앱 등록은
-[앱 플랫폼 계약](../domains/app-platform/README.md), 정확한 실행 동작은 현재 `package.json`,
-Nx project 설정, script와 test가 정본이다.
+[앱 플랫폼 계약](../domains/app-platform/README.md), 정확한 CI 동작은 CI script와 test가 정본이다.
 
 단순 설명, 문서 읽기와 copy/translation-only 수정에는 이 문서를 전부 적용하지 않는다. 현재
 코드·테스트에서 시작해 실제 변경 표면에 해당하는 섹션과 owner reference만 사용한다.
@@ -32,13 +31,14 @@ app-local 변경이다. 다음 protected surface가 새로 필요하거나 바�
 필요한 extension point가 없으면 앱 내부 특례나 checker 예외로 우회하지 않는다. 먼저 독립적으로
 검증 가능한 공통 경계를 추가하고 기본 비활성 또는 호환 가능한 상태로 배포할 수 있는지 확인한다.
 
-현재 Git remote는 GitHub이고 기본 브랜치는 `main`이다. 다른 저장소의 별도 release lane,
-Draft gate, 변경 발행 도구와 외부 review runner 계약을 이 저장소에 가져오지 않는다.
+Lane은 app delivery, protected platform, migration/generated/shared runtime, 혼합 integration
+경계에서만 필수다. 문서, 번역, env contract, harness/CI, manifest/public boundary를 건드리지
+않는 단일 app-local 변경에서는 advisory다. Draft/Ready는 workflow metadata이며 검증 gate가 아니다.
 
 ## Contract Map
 
-복합 기능이나 protected boundary 변경은 구현 전에 실제 관련 행만 작업 메모 또는 PR evidence에
-기록한다. 확인할 수 없는 제품·권한 결정을 추정하지 않는다.
+복합 기능이나 protected boundary 변경은 구현 전에 해당 행만 MR evidence에 기록한다. 확인할 수
+없는 제품·권한 결정은 추정하지 않는다.
 
 | 표면 | 확인할 계약 |
 | --- | --- |
@@ -64,9 +64,9 @@ Draft gate, 변경 발행 도구와 외부 review runner 계약을 이 저장소
 | Worker | `apps/worker/src/open_work_hub_worker/`, worker tests | 배포 import/registration, queue/beat, retry와 idempotency. |
 | Migration/model | `apps/api/alembic/`, model registry와 migration tests | Current/single head, metadata registration, 실제 upgrade와 existing-row 보존. |
 
-공유·감사 가능 데이터는 DB/object-store 계약을 사용한다. UI button 숨김, `/tmp`, process-local
-lock, JSON load-modify-write와 browser local storage는 권한이나 공유 데이터의 정본이 아니다.
-기능을 통과시키기 위한 policy/checker self-bypass는 기능 변경에 섞지 않는다.
+공유·감사 가능 데이터는 DB/object-store 계약을 사용한다. UI button 숨김, `/tmp`, process-local lock,
+JSON load-modify-write와 browser local storage는 권한이나 공유 데이터의 정본이 아니다. 기능을
+통과시키기 위한 policy/checker self-bypass는 기능 변경에 섞지 않는다.
 
 ## Proportional Validation
 
@@ -98,29 +98,31 @@ cd apps/worker && uv run --python 3.12 --group dev python -m pytest <path> -q
 `pnpm ci:app-web-contracts`, 저장소 전체 위험이면 `pnpm ci:all`까지 확대할 수 있다. External,
 slow, migration, browser와 full suite는 관련 없는 작은 변경에 관성적으로 추가하지 않는다.
 
-## One-Pass Review Loop
+## One-Pass MR Loop
 
-- 같은 사용자 결과의 구현·리뷰·검증 수정은 현재 working tree/branch에서 일관되게 끝내고,
-  독립 결과만 분리한다.
-- 실패 시 현재 SHA와 환경의 로그·finding을 모아 원인을 함께 수정한다. 반복 실패는 추가 push보다
-  로컬에서 재현 가능한 focused preflight를 먼저 만든다.
-- CI·checker 변경은 canonical contract와 rollback 경계를 유지한다.
-- Diff base, generated artifact와 evidence는 리뷰 시작에 확인하고 source가 바뀌면 affected
-  evidence를 갱신한다.
-- 테스트 실패를 숨기기 위해 exclusion, marker, architecture allowlist와 guardrail을 약화하지 않는다.
+- 같은 사용자 결과의 구현·리뷰·검증 수정은 기존 MR에서 끝내고, 독립 결과만 분리한다.
+- 실패 시 현재 SHA의 review 또는 release-validation 로그·finding을 모아 한 번에 수정한다. 두 번째
+  실패부터는 추가 push/MR 대신 재현 가능한 preflight 또는 staging 검증을 먼저 만든다.
+- CI·runner 변경은 canonical contract와 rollback 경계를 유지한다.
+- source·diff-base·MR evidence는 policy 단계에서 먼저 확인하고, 실제 merge conflict는 merge/review
+  gate에서 차단한다. Pipeline 생성 후 target이 전진했다는 사실만으로 이미 실행 중인 source
+  validation을 실패시키지 않는다.
+- Feature MR의 Codex runner는 자체 job·freshness·merge·evidence gate만 확인한다.
+- `dev -> main` release MR은 Codex 없이 repository, Python, API, DB, Web 검증을 한 job에서 수행한다.
 
-## GitHub PR Handoff
+## MR Delivery
 
-PR 생성·수정·push는 사용자가 명시적으로 요청한 경우에만 수행한다. 그 경우에도 clean/committed
-branch, `main` base, 실제 diff와 검증 evidence를 확인하고 GitHub CLI를 사용한다.
+기능 MR은 clean/committed branch에서 GitLab `dev`를 대상으로 등록한다. 다음 단계에서 canonical MR
+publisher script가 추가되면 publisher가 current target, clean state, merge result, diff와 lane
+metadata를 확인하고 동일 SHA의 MR을 만들거나 갱신한다.
 
-```bash
-gh pr create --base main --head <branch> --title "<title>" --body-file <file>
-```
+Feature MR 서버 pipeline은 Codex review만 수행하며 전체 기술 검증은 `dev -> main` 승격 pipeline이
+소유한다. Publisher와 CI가 추가된 뒤에는 직접 `glab mr create`, GitLab UI/API, 수동 lane, push
+pipeline, 생성 즉시 auto-merge로 이 흐름을 대체하지 않는다.
 
-PR 본문에는 변경 이유, 사용자 영향, contract/migration 여부, 실행한 검증과 실행하지 못한 검증을
-구분한다. Review와 merge 판단은 latest head SHA와 current base를 기준으로 하고 source나
-generated contract가 바뀌면 관련 evidence를 다시 만든다.
+MR evidence와 review는 latest source SHA와 target merge result에 결합한다. Source가 바뀌면 affected
+evidence를 갱신하고, target이 바뀌어 merged surface가 달라지면 관련 검증을 다시 본다. MR
+review/merge 판단을 실제로 요청한 경우에만 `open-work-hub-mr-review-validation`을 사용한다.
 
 ## Stop Conditions
 

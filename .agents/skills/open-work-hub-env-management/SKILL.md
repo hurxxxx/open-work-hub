@@ -1,6 +1,6 @@
 ---
 name: open-work-hub-env-management
-description: Manage Open Work Hub environment-variable contracts and local ignored env files without exposing values. Use when adding, renaming, removing, auditing, or safely installing `.env` settings or GitHub Actions secret metadata. Do not use for incidental env mentions; secret rotation, GitHub writes, service restarts, and production changes require explicit scope.
+description: Manage Open Work Hub environment-variable contracts and local ignored env files without exposing values. Use when adding, renaming, removing, auditing, or safely installing `.env` settings or GitLab CI variable metadata. Do not use for incidental env mentions; secret rotation, GitLab writes, service restarts, and production changes require explicit scope.
 ---
 
 # Open Work Hub Env Management
@@ -12,12 +12,13 @@ description: Manage Open Work Hub environment-variable contracts and local ignor
 - Project-owned settings use `OPEN_WORK_HUB_*`; browser-exposed settings use `VITE_OPEN_WORK_HUB_*`. Never place a secret in a `VITE_*` variable.
 - Keep typed settings, scripts, Compose files, documentation, and `.env.example` aligned when semantics change.
 - Do not reintroduce retired project prefixes or internal-server paths.
-- GitHub Actions stores individual secrets but cannot return their values. `gh secret list` can audit names/metadata; it cannot reconstruct or synchronize a local `.env` file.
+- GitLab CI variables and secure files are external metadata. `glab variable list` and `glab securefile list` are for explicitly requested redacted audits only; they cannot reconstruct or synchronize a local `.env` file.
 
 ## Redacted Audit
 
 ```bash
 bash .agents/skills/open-work-hub-env-management/scripts/env-inventory.sh
+bash .agents/skills/open-work-hub-env-management/scripts/env-inventory.sh --gitlab
 pnpm check:env-contract
 ```
 
@@ -42,7 +43,7 @@ Run the install without `--dry-run` only when replacing the target is explicitly
 5. Run `pnpm check:env-contract` and focused settings/runtime tests.
 6. Restart affected local processes only when the user asked for an operational update; env is normally read at process start.
 
-For explicitly authorized GitHub Actions changes, prefer input redirection such as `gh secret set KEY < /secure/path/value` so values stay out of arguments. Do not create repository/environment secrets merely because a local setting was added.
+For explicitly authorized GitLab CI variable changes, prefer input redirection or GitLab protected/masked variable mechanisms so values stay out of arguments, shell history, logs, and chat. Do not create project/group CI variables merely because a local setting was added.
 
 ## Verification
 

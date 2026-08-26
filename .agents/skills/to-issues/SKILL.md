@@ -7,7 +7,7 @@ description: Break a plan, spec, or PRD into independently-grabbable issues on t
 
 Break a plan into independently-grabbable issues using vertical slices (tracer bullets).
 
-Use GitHub Issues and the label contract documented in `docs/agents/issue-tracker.md` and `docs/agents/triage-labels.md`. Creating issues is an external mutation; draft first and publish with `gh issue create` only when explicitly requested.
+Use GitLab Issues and the label contract documented in `docs/agents/issue-tracker.md` and `docs/agents/triage-labels.md`. Creating issues is an external mutation; draft first and publish with `glab issue create` only when explicitly requested.
 
 ## Process
 
@@ -51,7 +51,7 @@ Iterate until the user approves the breakdown.
 
 ### 5. Publish the issues to the issue tracker
 
-For each approved slice, publish a new issue only when publication is explicitly requested. Use the issue body template below. Apply a current GitHub category label when useful: `bug`, `enhancement`, or `documentation`. Use `question` when information or a maintainer decision is still required. Do not invent workflow-state labels; represent AFK readiness with a complete brief and no unresolved-decision checklist items.
+For each approved slice, publish a new issue only when publication is explicitly requested. Use the issue body template below. Apply `bug` only for defect slices. Use `needs-triage` when information or a maintainer decision is still required. Use `ready-for-agent` only when the brief is complete and has no unresolved-decision checklist items.
 
 Publish issues in dependency order (blockers first) so you can reference real issue identifiers in the "Blocked by" field.
 

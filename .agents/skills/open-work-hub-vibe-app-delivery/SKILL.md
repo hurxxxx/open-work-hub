@@ -53,4 +53,4 @@ For a complex delivery, record applicable surfaces: identity; data/auth; API/UI;
 - A worker task is complete only when deployed bootstrap and routing can discover it.
 - Build migrations from the current head, register model metadata, and preserve supported data/workflows.
 
-Select affected checks from `docs/agents/vibe-coding-harness.md`. Creating a branch, commit, push, or GitHub PR remains separately authorized; no repository-specific publisher or lane is required.
+Select affected checks from `docs/agents/vibe-coding-harness.md`. Creating a branch, commit, push, or GitLab MR remains separately authorized. Use the GitLab MR templates when publication is requested, and do not claim future publisher or CI gates before their scripts exist.

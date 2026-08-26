@@ -5,7 +5,7 @@ description: Turn the current conversation context into a PRD and publish it to 
 
 This skill takes the current conversation context and codebase understanding and produces a PRD. Do NOT interview the user — just synthesize what you already know.
 
-Use GitHub Issues and the label contract documented in `docs/agents/issue-tracker.md` and `docs/agents/triage-labels.md`. Creating an issue is an external mutation; draft first and publish with `gh issue create` only when explicitly requested.
+Use GitLab Issues and the label contract documented in `docs/agents/issue-tracker.md` and `docs/agents/triage-labels.md`. Creating an issue is an external mutation; draft first and publish with `glab issue create` only when explicitly requested.
 
 ## Process
 
@@ -15,9 +15,9 @@ Use GitHub Issues and the label contract documented in `docs/agents/issue-tracke
 
 A deep module (as opposed to a shallow module) is one which encapsulates a lot of functionality in a simple, testable interface which rarely changes.
 
-When the conversation has not resolved a material product or testing decision, list that decision explicitly and use the current `question` label if publication is requested; do not guess.
+When the conversation has not resolved a material product or testing decision, list that decision explicitly and use the current `needs-triage` label if publication is requested; do not guess.
 
-3. Write the PRD using the template below, then publish it only when explicitly requested. Use a current GitHub category label such as `enhancement`, `bug`, or `documentation`; add `question` when unresolved information remains. Do not invent workflow-state labels. A PRD is implementation-ready only when its brief/checklist has no unresolved decisions.
+3. Write the PRD using the template below, then publish it only when explicitly requested. Use `bug` only for defects, add `needs-triage` when unresolved information remains, and add `ready-for-agent` only when its brief/checklist has no unresolved decisions.
 
 <prd-template>
 
