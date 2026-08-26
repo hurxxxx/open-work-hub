@@ -57,6 +57,9 @@ export type AdminPeopleExportHeader = readonly [
   string,
   string,
   string,
+  string,
+  string,
+  string,
 ];
 
 export type AdminPeopleExportRow = AdminPeopleExportHeader;
@@ -96,6 +99,11 @@ function buildAdminPeopleRow(
     lastActiveLabel: format.date(user.last_login_at),
     createdLabel: format.date(user.created_at),
   };
+}
+
+function primaryOrganizationName(user: AuthUser): string {
+  const value = user.primary_organization_unit?.name;
+  return typeof value === 'string' ? value : '';
 }
 
 function buildAdminPeoplePagination({
@@ -172,6 +180,9 @@ export function buildAdminPeopleExportRows({
       row.name,
       row.loginId,
       row.email,
+      user.employee_code ?? '',
+      user.job_title ?? '',
+      primaryOrganizationName(user),
       row.workspaceNames,
       row.roleLabel,
       row.statusLabel,

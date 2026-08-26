@@ -25,7 +25,7 @@ vi.mock('react-i18next', () => ({
 
 vi.mock('@open-work-hub/ui', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@open-work-hub/ui')>()),
-  useToast: () => ({ error: vi.fn(), success: vi.fn() }),
+  useFeedback: () => ({ error: vi.fn(), success: vi.fn() }),
 }));
 
 vi.mock('@/src/platform/workspaces/workspace-bootstrap-context', () => ({

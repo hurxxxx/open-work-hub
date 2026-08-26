@@ -16,6 +16,8 @@ import { CommunitySection } from './admin-community-section';
 import { AdminDocumentProcessingSection } from './admin-document-processing-section';
 import { AdminLlmManagementSection } from './admin-llm-management-section';
 import { AdminModelRuntimeStatusSection } from './admin-model-runtime-status-section';
+import { AdminOrganizationSection } from './admin-organization-section';
+import { AdminPlatformApiKeysSection } from './admin-platform-api-keys-section';
 import { PeopleSection } from './admin-people-section';
 import { SurfaceCard, getErrorMessage, isAdminUser } from './admin-shared';
 import {
@@ -39,6 +41,14 @@ const sectionMeta: Record<
   people: {
     titleKey: 'admin.console.sections.people.title',
     descriptionKey: 'admin.console.sections.people.description',
+  },
+  organization: {
+    titleKey: 'admin.console.sections.organization.title',
+    descriptionKey: 'admin.console.sections.organization.description',
+  },
+  'api-integrations': {
+    titleKey: 'admin.console.sections.apiIntegrations.title',
+    descriptionKey: 'admin.console.sections.apiIntegrations.description',
   },
   apps: {
     titleKey: 'admin.console.sections.apps.title',
@@ -304,6 +314,12 @@ export function AdminConsoleView({
       break;
     case 'people':
       content = <PeopleSection token={token} />;
+      break;
+    case 'organization':
+      content = <AdminOrganizationSection token={token} />;
+      break;
+    case 'api-integrations':
+      content = <AdminPlatformApiKeysSection token={token} />;
       break;
     case 'apps':
       content = <AppsSection page={appsPage ?? 'platform'} token={token} />;

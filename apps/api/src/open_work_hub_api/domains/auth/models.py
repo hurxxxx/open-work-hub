@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     Boolean,
@@ -17,6 +17,9 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from open_work_hub_api.core.db import Base
+
+if TYPE_CHECKING:
+    from open_work_hub_api.domains.organization.models import OrganizationUnit
 
 
 def utcnow_naive() -> datetime:
@@ -60,6 +63,8 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(320), index=True)
     full_name: Mapped[str] = mapped_column(String(120))
     display_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    employee_code: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    job_title: Mapped[str | None] = mapped_column(String(120), nullable=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     status: Mapped[str] = mapped_column(String(24), default="active", index=True)
     login_blocked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
@@ -75,11 +80,26 @@ class User(Base):
         nullable=True,
         index=True,
     )
+    primary_organization_unit_id: Mapped[str | None] = mapped_column(
+        ForeignKey("organization_units.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=utcnow_naive,
         nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        onupdate=utcnow_naive,
+        nullable=False,
+    )
+    primary_organization_unit: Mapped["OrganizationUnit | None"] = relationship(
+        "OrganizationUnit",
+        back_populates="users",
     )
     system_role_links: Mapped[list["UserSystemRole"]] = relationship(
         back_populates="user",

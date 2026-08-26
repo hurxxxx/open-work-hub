@@ -32,4 +32,14 @@ describe('settings admin app routes', () => {
       '/admin/users',
     );
   });
+
+  it('publishes organization and API integration administration', () => {
+    expect(
+      adminSectionRoutes
+        .filter((route) =>
+          ['organization', 'api-integrations'].includes(route.section),
+        )
+        .map((route) => route.path),
+    ).toEqual(['/admin/organization', '/admin/api-integrations']);
+  });
 });

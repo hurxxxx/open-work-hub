@@ -19,6 +19,15 @@ from open_work_hub_api.domains.admin.document_processing_router import (
 from open_work_hub_api.domains.admin.model_runtime_status_router import (
     router as admin_model_runtime_status_router,
 )
+from open_work_hub_api.domains.integrations.admin_router import (
+    router as admin_platform_api_keys_router,
+)
+from open_work_hub_api.domains.integrations.directory_router import (
+    router as directory_integrations_router,
+)
+from open_work_hub_api.domains.organization.admin_router import (
+    router as admin_organization_router,
+)
 from open_work_hub_api.domains.announcements.router import router as announcements_router
 from open_work_hub_api.domains.auth.dependencies import (
     require_current_user,
@@ -124,6 +133,9 @@ def _router_specs() -> list[_RouterSpec]:
         _RouterSpec(admin_ai_model_settings_router, "api", "protected"),
         _RouterSpec(admin_document_processing_router, "api", "protected"),
         _RouterSpec(admin_model_runtime_status_router, "api", "protected"),
+        _RouterSpec(admin_organization_router, "api", "protected"),
+        _RouterSpec(admin_platform_api_keys_router, "api", "protected"),
+        _RouterSpec(directory_integrations_router, "api"),
         _RouterSpec(usage_router, "api", "protected"),
         _RouterSpec(dm_router, "api", "protected"),
         _RouterSpec(dm_public_router, "api"),

@@ -2,7 +2,7 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, model_validator
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from dotenv import dotenv_values
 
@@ -126,6 +126,11 @@ class Settings(BaseSettings):
     ai_model_credential_encryption_key: str = Field(
         default="",
         validation_alias="OPEN_WORK_HUB_AI_MODEL_CREDENTIAL_ENCRYPTION_KEY",
+        repr=False,
+    )
+    platform_api_key_encryption_key: SecretStr = Field(
+        default=SecretStr(""),
+        validation_alias="OPEN_WORK_HUB_PLATFORM_API_KEY_ENCRYPTION_KEY",
         repr=False,
     )
     mail_allowed_private_hosts: str = Field(

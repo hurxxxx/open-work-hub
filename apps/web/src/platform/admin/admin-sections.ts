@@ -3,6 +3,16 @@ import { defineCoreAdminSections } from '@open-work-hub/core-web/admin';
 export const ADMIN_SECTION_DEFINITIONS = defineCoreAdminSections([
   { id: 'general', path: '/admin/general', roles: ['platform_admin'] },
   { id: 'people', path: '/admin/people', roles: ['platform_admin'] },
+  {
+    id: 'organization',
+    path: '/admin/organization',
+    roles: ['platform_admin'],
+  },
+  {
+    id: 'api-integrations',
+    path: '/admin/api-integrations',
+    roles: ['platform_admin'],
+  },
   { id: 'apps', path: '/admin/apps/platform', roles: ['platform_admin'] },
   { id: 'llm', path: '/admin/llm', roles: ['platform_admin'] },
   {

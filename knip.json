@@ -25,6 +25,7 @@
         "scripts/blocknote-collab-codec.mjs",
         "scripts/check-path-hardcoding.mjs",
         "scripts/check-path-hardcoding.test.mjs",
+        "scripts/check-contracts-publish-tag.mjs",
         "scripts/check-web-app-boundaries.mjs",
         "scripts/check-web-app-boundaries.test.mjs",
         "scripts/dev-login-browser-smoke.mjs",

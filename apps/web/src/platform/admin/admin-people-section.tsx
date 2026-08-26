@@ -118,6 +118,11 @@ function WorkspaceMembershipChecklist({
   );
 }
 
+function primaryOrganizationValue(user: AuthUser, key: 'id' | 'name'): string {
+  const value = user.primary_organization_unit?.[key];
+  return typeof value === 'string' ? value : '';
+}
+
 export function PeopleSection({ token }: { token: string }) {
   const { t, i18n } = useTranslation('apps');
   const auth = useAuth();
@@ -127,6 +132,9 @@ export function PeopleSection({ token }: { token: string }) {
   const directory = useAdminPeopleDirectoryController({
     token,
     messages: {
+      organizationListLoadFailed: t(
+        'admin.console.people.organizationListLoadFailed',
+      ),
       workspaceListLoadFailed: t(
         'admin.console.people.workspaceListLoadFailed',
       ),
@@ -136,10 +144,14 @@ export function PeopleSection({ token }: { token: string }) {
   const {
     error: directoryError,
     isLoadingUsers,
+    includeDescendants,
+    organizationUnitId,
+    organizationUnits,
     page,
     pageSize,
     search,
     totalUsers,
+    unassignedOnly,
     users,
     workspaces,
   } = directory.state;
@@ -148,6 +160,10 @@ export function PeopleSection({ token }: { token: string }) {
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [employeeCode, setEmployeeCode] = useState('');
+  const [jobTitle, setJobTitle] = useState('');
+  const [primaryOrganizationUnitId, setPrimaryOrganizationUnitId] =
+    useState('');
   const [selectedWorkspaceIds, setSelectedWorkspaceIds] = useState<string[]>(
     [],
   );
@@ -159,6 +175,10 @@ export function PeopleSection({ token }: { token: string }) {
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [editFullName, setEditFullName] = useState('');
   const [editDisplayName, setEditDisplayName] = useState('');
+  const [editEmployeeCode, setEditEmployeeCode] = useState('');
+  const [editJobTitle, setEditJobTitle] = useState('');
+  const [editPrimaryOrganizationUnitId, setEditPrimaryOrganizationUnitId] =
+    useState('');
   const [editStatus, setEditStatus] = useState<
     'active' | 'invited' | 'suspended'
   >('active');
@@ -240,6 +260,9 @@ export function PeopleSection({ token }: { token: string }) {
     setEmail('');
     setFullName('');
     setDisplayName('');
+    setEmployeeCode('');
+    setJobTitle('');
+    setPrimaryOrganizationUnitId('');
     setSelectedWorkspaceIds([]);
     setSelectedPlatformAdmin(false);
     setCreateOpen(true);
@@ -273,6 +296,9 @@ export function PeopleSection({ token }: { token: string }) {
         email: email.trim(),
         full_name: fullName.trim(),
         display_name: displayName.trim() || undefined,
+        employee_code: employeeCode.trim() || null,
+        job_title: jobTitle.trim() || null,
+        primary_organization_unit_id: primaryOrganizationUnitId || null,
         system_roles: selectedPlatformAdmin ? ['platform_admin'] : [],
       });
       await saveAdminUserAccessWorkflow({
@@ -383,6 +409,9 @@ export function PeopleSection({ token }: { token: string }) {
     setEditingUserId(user.id);
     setEditFullName(user.full_name);
     setEditDisplayName(user.display_name);
+    setEditEmployeeCode(user.employee_code ?? '');
+    setEditJobTitle(user.job_title ?? '');
+    setEditPrimaryOrganizationUnitId(primaryOrganizationValue(user, 'id'));
     setEditStatus(
       user.status === 'invited' || user.status === 'suspended'
         ? user.status
@@ -414,6 +443,15 @@ export function PeopleSection({ token }: { token: string }) {
       await updateAdminUser(token, editingUserId, {
         full_name: editFullName.trim(),
         display_name: editDisplayName.trim() || editFullName.trim(),
+        employee_code: editEmployeeCode.trim() || null,
+        job_title: editJobTitle.trim() || null,
+        ...(editPrimaryOrganizationUnitId !==
+        (editingUser ? primaryOrganizationValue(editingUser, 'id') : '')
+          ? {
+              primary_organization_unit_id:
+                editPrimaryOrganizationUnitId || null,
+            }
+          : {}),
         system_roles: editPlatformAdmin ? ['platform_admin'] : [],
         status: editStatus,
         login_blocked: editLoginBlocked,
@@ -491,6 +529,14 @@ export function PeopleSection({ token }: { token: string }) {
             page: exportPage,
             page_size: exportPageSize,
             q: search,
+            ...(unassignedOnly
+              ? { unassigned_only: true }
+              : organizationUnitId
+                ? {
+                    organization_unit_id: organizationUnitId,
+                    include_descendants: includeDescendants,
+                  }
+                : {}),
           });
           return {
             items: userResponse.items,
@@ -506,6 +552,9 @@ export function PeopleSection({ token }: { token: string }) {
         t('admin.console.people.columns.name'),
         t('admin.console.people.columns.loginId'),
         t('admin.console.people.columns.email'),
+        t('admin.console.people.columns.employeeCode'),
+        t('admin.console.people.columns.jobTitle'),
+        t('admin.console.people.columns.organization'),
         t('admin.console.people.columns.workspaces'),
         t('admin.console.people.columns.role'),
         t('admin.console.people.columns.status'),
@@ -565,6 +614,52 @@ export function PeopleSection({ token }: { token: string }) {
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center gap-3 rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2">
+        <label className="app-text-caption flex items-center gap-2 text-app-ink/55">
+          <span>{t('admin.console.people.organizationFilter')}</span>
+          <select
+            className="app-field-input-sm min-w-48"
+            onChange={(event) =>
+              directory.actions.organizationUnitChanged(event.target.value)
+            }
+            value={organizationUnitId}
+          >
+            <option value="">
+              {t('admin.console.people.allOrganizations')}
+            </option>
+            {organizationUnits.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+                {!item.active
+                  ? ` (${t('admin.console.people.inactiveOrganization')})`
+                  : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="app-text-caption flex items-center gap-2 text-app-ink/65">
+          <input
+            checked={includeDescendants}
+            disabled={!organizationUnitId}
+            onChange={(event) =>
+              directory.actions.setIncludeDescendants(event.target.checked)
+            }
+            type="checkbox"
+          />
+          {t('admin.console.people.includeDescendants')}
+        </label>
+        <label className="app-text-caption flex items-center gap-2 text-app-ink/65">
+          <input
+            checked={unassignedOnly}
+            onChange={(event) =>
+              directory.actions.setUnassignedOnly(event.target.checked)
+            }
+            type="checkbox"
+          />
+          {t('admin.console.people.unassignedOnly')}
+        </label>
+      </div>
+
       <div className="flex h-[calc(100vh-230px)] min-h-[520px] min-w-0 flex-col overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2 py-2">
           <div className="app-text-control inline-flex items-center gap-2 text-app-ink">
@@ -596,11 +691,14 @@ export function PeopleSection({ token }: { token: string }) {
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto border-t border-app-border">
-          <table className="app-text-body-sm min-w-[920px] w-full border-collapse">
+          <table className="app-text-body-sm min-w-[1080px] w-full border-collapse">
             <thead>
               <tr className="sticky top-0 z-10 bg-app-surface-sidebar">
                 <HeadCell className="w-[260px]" dense>
                   {t('admin.console.people.columns.user')}
+                </HeadCell>
+                <HeadCell className="w-[180px]" dense>
+                  {t('admin.console.people.columns.organization')}
                 </HeadCell>
                 <HeadCell className="w-[150px]" dense>
                   {t('admin.console.people.columns.workspaces')}
@@ -628,13 +726,13 @@ export function PeopleSection({ token }: { token: string }) {
             <tbody>
               {isLoadingUsers && users.length === 0 ? (
                 <EmptyRow
-                  colSpan={8}
+                  colSpan={9}
                   description={t('admin.console.people.loadingDescription')}
                   title={t('admin.console.people.loadingTitle')}
                 />
               ) : peopleModel.rows.length === 0 ? (
                 <EmptyRow
-                  colSpan={8}
+                  colSpan={9}
                   description={t('admin.console.people.emptyDescription')}
                   title={t('admin.console.people.emptyTitle')}
                 />
@@ -657,6 +755,19 @@ export function PeopleSection({ token }: { token: string }) {
                             <span className="truncate">{row.email}</span>
                           </div>
                         </div>
+                      </BodyCell>
+                      <BodyCell className="max-w-[180px]" dense>
+                        <div className="truncate text-app-ink/65">
+                          {primaryOrganizationValue(row.user, 'name') ||
+                            t('admin.console.people.unassigned')}
+                        </div>
+                        {row.user.job_title || row.user.employee_code ? (
+                          <div className="app-text-caption mt-0.5 truncate text-app-ink/45">
+                            {[row.user.job_title, row.user.employee_code]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </div>
+                        ) : null}
                       </BodyCell>
                       <BodyCell
                         className="max-w-[150px] truncate text-app-ink/55"
@@ -909,6 +1020,61 @@ export function PeopleSection({ token }: { token: string }) {
           </section>
           <section className="grid gap-3 border-t border-app-border pt-4">
             <h3 className="app-text-caption font-semibold text-app-ink">
+              {t('admin.console.people.organizationMetadataSection')}
+            </h3>
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="grid gap-1">
+                <span className="app-text-caption text-app-ink/55">
+                  {t('admin.console.people.employeeCode')}
+                </span>
+                <input
+                  className={fieldClassName}
+                  maxLength={40}
+                  onChange={(event) => setEmployeeCode(event.target.value)}
+                  value={employeeCode}
+                />
+              </label>
+              <label className="grid gap-1">
+                <span className="app-text-caption text-app-ink/55">
+                  {t('admin.console.people.jobTitle')}
+                </span>
+                <input
+                  className={fieldClassName}
+                  maxLength={120}
+                  onChange={(event) => setJobTitle(event.target.value)}
+                  value={jobTitle}
+                />
+              </label>
+              <label className="grid gap-1 md:col-span-2">
+                <span className="app-text-caption text-app-ink/55">
+                  {t('admin.console.people.primaryOrganization')}
+                </span>
+                <select
+                  className="app-field-input"
+                  onChange={(event) =>
+                    setPrimaryOrganizationUnitId(event.target.value)
+                  }
+                  value={primaryOrganizationUnitId}
+                >
+                  <option value="">
+                    {t('admin.console.people.unassigned')}
+                  </option>
+                  {organizationUnits
+                    .filter((item) => item.active)
+                    .map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            </div>
+            <p className="app-text-caption text-app-ink/55">
+              {t('admin.console.people.organizationMetadataHint')}
+            </p>
+          </section>
+          <section className="grid gap-3 border-t border-app-border pt-4">
+            <h3 className="app-text-caption font-semibold text-app-ink">
               {t('admin.console.people.adminPrivilegesSection')}
             </h3>
             <label className="app-text-control inline-flex items-start gap-2 rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink">
@@ -1003,6 +1169,68 @@ export function PeopleSection({ token }: { token: string }) {
                 />
               </label>
             </div>
+          </section>
+          <section className="grid gap-3 border-t border-app-border pt-4">
+            <h3 className="app-text-caption font-semibold text-app-ink">
+              {t('admin.console.people.organizationMetadataSection')}
+            </h3>
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="grid gap-1">
+                <span className="app-text-caption text-app-ink/55">
+                  {t('admin.console.people.employeeCode')}
+                </span>
+                <input
+                  className={fieldClassName}
+                  maxLength={40}
+                  onChange={(event) => setEditEmployeeCode(event.target.value)}
+                  value={editEmployeeCode}
+                />
+              </label>
+              <label className="grid gap-1">
+                <span className="app-text-caption text-app-ink/55">
+                  {t('admin.console.people.jobTitle')}
+                </span>
+                <input
+                  className={fieldClassName}
+                  maxLength={120}
+                  onChange={(event) => setEditJobTitle(event.target.value)}
+                  value={editJobTitle}
+                />
+              </label>
+              <label className="grid gap-1 md:col-span-2">
+                <span className="app-text-caption text-app-ink/55">
+                  {t('admin.console.people.primaryOrganization')}
+                </span>
+                <select
+                  className="app-field-input"
+                  onChange={(event) =>
+                    setEditPrimaryOrganizationUnitId(event.target.value)
+                  }
+                  value={editPrimaryOrganizationUnitId}
+                >
+                  <option value="">
+                    {t('admin.console.people.unassigned')}
+                  </option>
+                  {organizationUnits
+                    .filter(
+                      (item) =>
+                        item.active ||
+                        item.id === editPrimaryOrganizationUnitId,
+                    )
+                    .map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name}
+                        {!item.active
+                          ? ` (${t('admin.console.people.inactiveOrganization')})`
+                          : ''}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            </div>
+            <p className="app-text-caption text-app-ink/55">
+              {t('admin.console.people.organizationMetadataHint')}
+            </p>
           </section>
           <section className="grid gap-3 border-t border-app-border pt-4">
             <h3 className="app-text-caption font-semibold text-app-ink">

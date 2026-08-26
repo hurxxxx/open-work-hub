@@ -65,6 +65,7 @@ from open_work_hub_api.domains.auth.security import (
     normalize_login_id,
     verify_password,
 )
+from open_work_hub_api.domains.organization.schemas import OrganizationUnitSummaryResponse
 
 DESKTOP_SESSION_LINK_TTL_SECONDS = 5 * 60
 
@@ -156,6 +157,9 @@ class AuthUserResponse(BaseModel):
     email: str
     full_name: str
     display_name: str
+    employee_code: str | None
+    job_title: str | None
+    primary_organization_unit: OrganizationUnitSummaryResponse | None
     status: str
     login_blocked: bool
     theme_preference: str
@@ -169,6 +173,7 @@ class AuthUserResponse(BaseModel):
     must_change_password: bool
     last_login_at: datetime | None
     created_at: datetime
+    updated_at: datetime
 
 
 class AuthSessionResponse(BaseModel):

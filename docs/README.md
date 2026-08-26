@@ -8,6 +8,8 @@ Use the narrowest owner doc. Code and tests are final for implemented behavior.
 | App registration/RBAC/bootstrap | [domains/app-platform/README.md](domains/app-platform/README.md) |
 | AI Gateway/model routing | [domains/ai/gateway.md](domains/ai/gateway.md) |
 | Retrieval/RAG | [domains/retrieval/README.md](domains/retrieval/README.md), [domains/rag/README.md](domains/rag/README.md) |
+| Organization/directory | [domains/organization/README.md](domains/organization/README.md) |
+| Platform integrations/API keys | [domains/integrations/README.md](domains/integrations/README.md) |
 | Runtime/release | [domains/release/README.md](domains/release/README.md) |
 | UI/product rules | [product/README.md](product/README.md) |
 

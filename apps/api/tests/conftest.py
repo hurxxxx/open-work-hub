@@ -301,6 +301,10 @@ def _initialize_application_test_database(dsn: str) -> None:
             "OPEN_WORK_HUB_AI_MODEL_CREDENTIAL_ENCRYPTION_KEY",
             "test-ai-model-credential-key",
         )
+        monkeypatch.setenv(
+            "OPEN_WORK_HUB_PLATFORM_API_KEY_ENCRYPTION_KEY",
+            "test-platform-api-key-encryption-key",
+        )
         _clear_cache(get_session_factory)
         _dispose_cached_engine(get_engine)
         _clear_cache(get_settings)
@@ -488,6 +492,10 @@ def _required_settings_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     monkeypatch.setenv(
         "OPEN_WORK_HUB_AI_MODEL_CREDENTIAL_ENCRYPTION_KEY",
         "test-ai-model-credential-key",
+    )
+    monkeypatch.setenv(
+        "OPEN_WORK_HUB_PLATFORM_API_KEY_ENCRYPTION_KEY",
+        "test-platform-api-key-encryption-key",
     )
     get_settings.cache_clear()
     try:

@@ -91,6 +91,19 @@ def admin_user_list_item_projection(
         "email": user.email,
         "full_name": user.full_name,
         "display_name": user.display_name or user.full_name,
+        "employee_code": user.employee_code,
+        "job_title": user.job_title,
+        "primary_organization_unit": (
+            {
+                "id": user.primary_organization_unit.id,
+                "name": user.primary_organization_unit.name,
+                "slug": user.primary_organization_unit.slug,
+                "unit_type": user.primary_organization_unit.unit_type,
+                "active": user.primary_organization_unit.active,
+            }
+            if user.primary_organization_unit is not None
+            else None
+        ),
         "status": user.status,
         "login_blocked": user.login_blocked,
         "theme_preference": user.theme_preference,
@@ -103,6 +116,7 @@ def admin_user_list_item_projection(
         "must_change_password": user.must_change_password,
         "last_login_at": user.last_login_at,
         "created_at": user.created_at,
+        "updated_at": user.updated_at,
     }
 
 

@@ -2,7 +2,11 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { AuthUser } from '@/src/platform/auth/auth-api';
-import type { AdminUsersResponse, WorkspaceItem } from './admin-api';
+import type {
+  AdminUsersResponse,
+  OrganizationUnitItem,
+  WorkspaceItem,
+} from './admin-api';
 import { ADMIN_PEOPLE_DEFAULT_PAGE_SIZE } from './admin-shared';
 import {
   useAdminPeopleDirectoryController,
@@ -42,6 +46,19 @@ function workspace(): WorkspaceItem {
   } as WorkspaceItem;
 }
 
+function organizationUnit(): OrganizationUnitItem {
+  return {
+    id: 'organization-1',
+    name: 'Research',
+    slug: 'research',
+    unit_type: 'department',
+    parent_id: null,
+    active: true,
+    created_at: '2026-05-30T00:00:00Z',
+    updated_at: '2026-05-30T00:00:00Z',
+  };
+}
+
 function usersResponse(
   overrides: Partial<AdminUsersResponse> = {},
 ): AdminUsersResponse {
@@ -59,6 +76,7 @@ function client(
 ): AdminPeopleDirectoryClient {
   return {
     listUsers: vi.fn().mockResolvedValue(usersResponse()),
+    listOrganizationUnits: vi.fn().mockResolvedValue([organizationUnit()]),
     listWorkspaces: vi.fn().mockResolvedValue([workspace()]),
     ...overrides,
   };
@@ -70,6 +88,7 @@ function renderController(testClient = client()) {
       token: 'token-1',
       debounceMs: 0,
       messages: {
+        organizationListLoadFailed: 'organizations failed',
         workspaceListLoadFailed: 'workspaces failed',
         userListLoadFailed: 'users failed',
       },
@@ -80,13 +99,16 @@ function renderController(testClient = client()) {
 }
 
 describe('useAdminPeopleDirectoryController', () => {
-  it('loads users and workspaces on mount', async () => {
+  it('loads users, organization units, and workspaces on mount', async () => {
     const testClient = client();
     const { result } = renderController(testClient);
 
     await waitFor(() => expect(result.current.state.users).toHaveLength(1));
     await waitFor(() =>
       expect(result.current.state.workspaces).toHaveLength(1),
+    );
+    await waitFor(() =>
+      expect(result.current.state.organizationUnits).toHaveLength(1),
     );
 
     expect(testClient.listUsers).toHaveBeenCalledWith('token-1', {
@@ -95,6 +117,39 @@ describe('useAdminPeopleDirectoryController', () => {
       q: '',
     });
     expect(testClient.listWorkspaces).toHaveBeenCalledWith('token-1');
+    expect(testClient.listOrganizationUnits).toHaveBeenCalledWith('token-1');
+  });
+
+  it('applies mutually exclusive organization and unassigned filters', async () => {
+    const testClient = client();
+    const { result } = renderController(testClient);
+    await waitFor(() => expect(testClient.listUsers).toHaveBeenCalledTimes(1));
+
+    act(() => {
+      result.current.actions.organizationUnitChanged('organization-1');
+    });
+    await waitFor(() => {
+      expect(testClient.listUsers).toHaveBeenLastCalledWith('token-1', {
+        page: 1,
+        page_size: ADMIN_PEOPLE_DEFAULT_PAGE_SIZE,
+        q: '',
+        organization_unit_id: 'organization-1',
+        include_descendants: true,
+      });
+    });
+
+    act(() => {
+      result.current.actions.setUnassignedOnly(true);
+    });
+    await waitFor(() => {
+      expect(testClient.listUsers).toHaveBeenLastCalledWith('token-1', {
+        page: 1,
+        page_size: ADMIN_PEOPLE_DEFAULT_PAGE_SIZE,
+        q: '',
+        unassigned_only: true,
+      });
+    });
+    expect(result.current.state.organizationUnitId).toBe('');
   });
 
   it('resets pagination when search or page size changes', async () => {
@@ -167,14 +222,17 @@ describe('useAdminPeopleDirectoryController', () => {
   it('routes load failures to the controller error state', async () => {
     const testClient = client({
       listUsers: vi.fn().mockRejectedValue('no users'),
+      listOrganizationUnits: vi.fn().mockRejectedValue('no organizations'),
       listWorkspaces: vi.fn().mockRejectedValue('no workspaces'),
     });
     const { result } = renderController(testClient);
 
     await waitFor(() => expect(result.current.state.error).not.toBeNull());
-    expect(['users failed', 'workspaces failed']).toContain(
-      result.current.state.error,
-    );
+    expect([
+      'users failed',
+      'workspaces failed',
+      'organizations failed',
+    ]).toContain(result.current.state.error);
     expect(result.current.state.isLoadingUsers).toBe(false);
   });
 });

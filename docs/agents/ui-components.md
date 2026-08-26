@@ -24,7 +24,10 @@ Before new UI, search existing app, `apps/web/src/components`, `apps/web/src/pla
 | `ResourcePickerDialog` | picker chrome; caller owns rows/load |
 | `FormDialog`, `FormFieldRow` | modal form shell |
 | `FullscreenImageDialog` | image/lightbox dialog |
-| `packages/ui` primitives | button/dialog/menu/tooltip/input/select/search/notice/empty/skeleton/table |
+| `packages/ui` primitives | button/dialog/menu/tooltip/input/select/search |
+| `FeedbackProvider`, `FormMessage`, `StatusSlot`, `ContextNote` | global feedback, validation, async status, context notes |
+| `ContentState`, `EmptyState`, `Skeleton`, `DataTable` | loading/empty/error/unavailable/table display |
+| `DetailDrawer` | side detail surface with focus return |
 
 ## Platform Helpers
 
