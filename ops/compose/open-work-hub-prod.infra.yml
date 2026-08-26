@@ -1,6 +1,30 @@
 name: open-work-hub-prod
 
 services:
+  postgres:
+    image: pgvector/pgvector:0.8.6-pg18
+    container_name: open-work-hub-prod-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${OPEN_WORK_HUB_INFRA_POSTGRES_DB:-open_work_hub_prod}
+      POSTGRES_PASSWORD: ${OPEN_WORK_HUB_INFRA_POSTGRES_PASSWORD:-open_work_hub_prod}
+      POSTGRES_USER: ${OPEN_WORK_HUB_INFRA_POSTGRES_USER:-open_work_hub_prod}
+    ports:
+      - "${OPEN_WORK_HUB_INFRA_BIND_HOST:-127.0.0.1}:${OPEN_WORK_HUB_INFRA_POSTGRES_PORT:-55432}:5432"
+    volumes:
+      - open-work-hub-prod-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - open-work-hub-prod-infra
+
   redis:
     image: redis:7
     container_name: open-work-hub-prod-redis
@@ -132,6 +156,8 @@ networks:
     name: open-work-hub-prod-infra
 
 volumes:
+  open-work-hub-prod-postgres-data:
+    name: open-work-hub-prod-postgres-data
   open-work-hub-prod-redis-data:
     name: open-work-hub-prod-redis-data
   open-work-hub-prod-minio-data:
