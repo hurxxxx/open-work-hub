@@ -59,6 +59,9 @@ build_image() {
       pnpm --version
       python --version
       uv --version
+      pg_dump --version | grep -Eq "^pg_dump \(PostgreSQL\) 17\."
+      pg_restore --version | grep -Eq "^pg_restore \(PostgreSQL\) 17\."
+      psql --version | grep -Eq "^psql \(PostgreSQL\) 17\."
       test -r "$OPEN_WORK_HUB_API_IMAGE_DEPENDENCY_FILE"
       test -r "$OPEN_WORK_HUB_NODE_IMAGE_DEPENDENCY_FILE"
       test -r "$OPEN_WORK_HUB_WORKER_IMAGE_DEPENDENCY_FILE"
