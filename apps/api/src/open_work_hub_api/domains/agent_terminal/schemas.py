@@ -52,6 +52,12 @@ class AgentTerminalConfigResponse(BaseModel):
 
 class AgentTerminalSessionCreateRequest(BaseModel):
     root_key: str = Field(min_length=1, max_length=64)
+    codex_thread_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=160,
+        pattern=r"^[A-Za-z0-9._:-]+$",
+    )
     cols: int = Field(default=120, ge=20, le=500)
     rows: int = Field(default=36, ge=5, le=200)
 
@@ -70,6 +76,20 @@ class AgentTerminalSessionResponse(BaseModel):
 
 class AgentTerminalSessionListResponse(BaseModel):
     items: list[AgentTerminalSessionResponse] = Field(default_factory=list)
+
+
+class AgentTerminalCodexThreadResponse(BaseModel):
+    id: str
+    name: str | None = None
+    preview: str | None = None
+    root_key: str
+    root_path: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class AgentTerminalCodexThreadListResponse(BaseModel):
+    items: list[AgentTerminalCodexThreadResponse] = Field(default_factory=list)
 
 
 class AgentTerminalGitChangeResponse(BaseModel):

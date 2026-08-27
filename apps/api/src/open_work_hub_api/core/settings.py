@@ -260,13 +260,13 @@ class Settings(BaseSettings):
         validation_alias="OPEN_WORK_HUB_API_AGENT_TERMINAL_ALLOWED_ROOTS",
     )
     agent_terminal_max_sessions_per_user: int = Field(
-        default=2,
+        default=4,
         ge=1,
         le=10,
         validation_alias="OPEN_WORK_HUB_API_AGENT_TERMINAL_MAX_SESSIONS_PER_USER",
     )
     agent_terminal_max_sessions_total: int = Field(
-        default=4,
+        default=20,
         ge=1,
         le=50,
         validation_alias="OPEN_WORK_HUB_API_AGENT_TERMINAL_MAX_SESSIONS_TOTAL",

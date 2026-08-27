@@ -132,22 +132,30 @@ describe('AgentTerminalGitPanel', () => {
           old_path: null,
           path: 'src/initial.ts',
         },
+        {
+          kind: 'modified',
+          old_path: null,
+          path: 'docs/guide.md',
+        },
       ],
       files_truncated: false,
       parents: [],
       sha: COMMIT_SHA,
       subject: 'initial commit',
     });
-    vi.mocked(getAgentTerminalGitCommitDiff).mockResolvedValue({
-      commit: COMMIT_SHA,
-      is_binary: false,
-      kind: 'added',
-      new_content: 'initial source\n',
-      old_content: '',
-      old_path: null,
-      path: 'src/initial.ts',
-      too_large: false,
-    });
+    vi.mocked(getAgentTerminalGitCommitDiff).mockImplementation(
+      async (_token, _rootKey, commit, path) => ({
+        commit,
+        is_binary: false,
+        kind: path === 'src/initial.ts' ? 'added' : 'modified',
+        new_content:
+          path === 'src/initial.ts' ? 'initial source\n' : 'updated guide\n',
+        old_content: path === 'src/initial.ts' ? '' : 'old guide\n',
+        old_path: null,
+        path,
+        too_large: false,
+      }),
+    );
     vi.mocked(getAgentTerminalGitDiff).mockImplementation(
       async (_token, _rootKey, change) => ({
         is_binary: false,
@@ -199,7 +207,7 @@ describe('AgentTerminalGitPanel', () => {
     expect(await screen.findByRole('dialog')).toBeTruthy();
   });
 
-  it('shows collapsible current-HEAD history and informational branch refs', async () => {
+  it('opens a focused commit file inspector and returns to read-only history', async () => {
     render(<AgentTerminalGitPanel rootKey="project-root" token="token-1" />);
 
     fireEvent.click(await screen.findByTitle(`${COMMIT_SHA} · initial commit`));
@@ -218,6 +226,30 @@ describe('AgentTerminalGitPanel', () => {
         newContent: 'initial source\n',
       }),
     );
+    expect(screen.queryByRole('button', { name: /initial commit/ })).toBeNull();
+    expect(
+      screen.getByRole('button', {
+        name: 'agentTerminal.git.actions.backToHistory',
+      }),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByTitle('docs/guide.md'));
+    await waitFor(() =>
+      expect(diffSurfaceSpy).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          filePath: 'docs/guide.md',
+          newContent: 'updated guide\n',
+          oldContent: 'old guide\n',
+        }),
+      ),
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'agentTerminal.git.actions.backToHistory',
+      }),
+    );
+    expect(screen.getByRole('button', { name: /initial commit/ })).toBeTruthy();
 
     const changesSection = screen.getByRole('button', {
       name: 'agentTerminal.git.sections.changes 2',

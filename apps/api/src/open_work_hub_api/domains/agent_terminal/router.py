@@ -19,6 +19,11 @@ from open_work_hub_api.domains.agent_terminal.models import (
     AgentTerminalSession,
     utcnow_naive,
 )
+from open_work_hub_api.domains.agent_terminal.codex_history import (
+    AgentTerminalCodexHistoryError,
+    list_codex_threads,
+    require_codex_thread,
+)
 from open_work_hub_api.domains.agent_terminal.git_changes import (
     AgentTerminalGitError,
     get_git_commit_detail,
@@ -34,6 +39,8 @@ from open_work_hub_api.domains.agent_terminal.runtime import (
 )
 from open_work_hub_api.domains.agent_terminal.schemas import (
     AgentTerminalConfigResponse,
+    AgentTerminalCodexThreadListResponse,
+    AgentTerminalCodexThreadResponse,
     AgentTerminalGitChangeScope,
     AgentTerminalGitCommitDetailResponse,
     AgentTerminalGitCommitDiffResponse,
@@ -125,6 +132,15 @@ def _git_exception(exc: AgentTerminalGitError) -> HTTPException:
     return localized_http_exception(status_code=status_code, code=exc.code)
 
 
+def _codex_history_exception(exc: AgentTerminalCodexHistoryError) -> HTTPException:
+    status_code = (
+        status.HTTP_404_NOT_FOUND
+        if exc.code == "agent_terminal.codex_thread_not_found"
+        else status.HTTP_503_SERVICE_UNAVAILABLE
+    )
+    return localized_http_exception(status_code=status_code, code=exc.code)
+
+
 def _owned_session(
     db: Session,
     *,
@@ -184,6 +200,49 @@ def list_agent_terminal_sessions(
         .limit(50)
     ).all()
     return AgentTerminalSessionListResponse(items=[serialize_session(row) for row in rows])
+
+
+@router.get(
+    "/codex/threads",
+    response_model=AgentTerminalCodexThreadListResponse,
+)
+async def list_agent_terminal_codex_threads(
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    settings: Settings = Depends(get_settings),
+    _context: AuthContext = Depends(_require_platform_admin),
+    _app_enabled: None = Depends(_require_app_enabled),
+) -> AgentTerminalCodexThreadListResponse:
+    codex_binary = resolve_codex_binary(settings)
+    if codex_binary is None:
+        raise localized_http_exception(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            code="agent_terminal.codex_unavailable",
+        )
+    try:
+        roots = configured_roots(settings)
+        threads = await list_codex_threads(
+            codex_binary=codex_binary,
+            roots=roots,
+            limit=limit,
+        )
+    except AgentTerminalConfigurationError as exc:
+        raise _configuration_exception(exc) from exc
+    except AgentTerminalCodexHistoryError as exc:
+        raise _codex_history_exception(exc) from exc
+    return AgentTerminalCodexThreadListResponse(
+        items=[
+            AgentTerminalCodexThreadResponse(
+                id=thread.id,
+                name=thread.name,
+                preview=thread.preview,
+                root_key=thread.root_key,
+                root_path=thread.root_path,
+                created_at=thread.created_at,
+                updated_at=thread.updated_at,
+            )
+            for thread in threads
+        ]
+    )
 
 
 @router.get(
@@ -330,6 +389,22 @@ async def create_agent_terminal_session(
     except AgentTerminalConfigurationError as exc:
         raise _configuration_exception(exc) from exc
 
+    if payload.codex_thread_id is not None:
+        codex_binary = resolve_codex_binary(settings)
+        if codex_binary is None:
+            raise localized_http_exception(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                code="agent_terminal.codex_unavailable",
+            )
+        try:
+            await require_codex_thread(
+                codex_binary=codex_binary,
+                root=root,
+                thread_id=payload.codex_thread_id,
+            )
+        except AgentTerminalCodexHistoryError as exc:
+            raise _codex_history_exception(exc) from exc
+
     runtime = _runtime_from_app(request.app)
     now = utcnow_naive()
     row = AgentTerminalSession(
@@ -353,6 +428,7 @@ async def create_agent_terminal_session(
             root_path=root.path,
             cols=payload.cols,
             rows=payload.rows,
+            codex_thread_id=payload.codex_thread_id,
         )
     except (AgentTerminalRuntimeError, OSError) as exc:
         db.refresh(row)
@@ -389,7 +465,11 @@ async def create_agent_terminal_session(
         entity_kind="agent_terminal_session",
         entity_id=row.id,
         summary="Started Codex terminal session",
-        payload={"root_key": root.key, "tool": "codex"},
+        payload={
+            "root_key": root.key,
+            "tool": "codex",
+            "resumed": payload.codex_thread_id is not None,
+        },
     )
     db.commit()
     return serialize_session(row)
@@ -642,7 +722,14 @@ async def _receive_terminal_input(
                 rows = payload.get("rows")
                 if not isinstance(cols, int) or not isinstance(rows, int):
                     raise AgentTerminalRuntimeError("agent_terminal.size_invalid")
-                runtime.resize(session_id, cols=cols, rows=rows)
+                await runtime.resize(session_id, cols=cols, rows=rows)
+            elif message_type == "scroll":
+                lines = payload.get("lines")
+                if isinstance(lines, bool) or not isinstance(lines, int):
+                    raise AgentTerminalRuntimeError("agent_terminal.message_invalid")
+                await runtime.scroll(session_id, lines=lines)
+            elif message_type == "scroll_end":
+                await runtime.end_scroll(session_id)
             elif message_type == "ping":
                 await websocket.send_json({"type": "pong"})
             else:

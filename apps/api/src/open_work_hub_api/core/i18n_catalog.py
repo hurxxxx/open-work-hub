@@ -144,6 +144,14 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "서버에서 Codex CLI 실행 파일을 찾을 수 없습니다.",
         "en-US": "The Codex CLI executable is unavailable on the server.",
     },
+    "agent_terminal.codex_history_unavailable": {
+        "ko-KR": "Codex 작업 기록을 불러올 수 없습니다.",
+        "en-US": "The Codex work history is unavailable.",
+    },
+    "agent_terminal.codex_thread_not_found": {
+        "ko-KR": "선택한 Codex 작업 기록을 찾을 수 없습니다.",
+        "en-US": "The selected Codex work history could not be found.",
+    },
     "agent_terminal.tmux_unavailable": {
         "ko-KR": "서버에서 tmux 실행 파일을 찾을 수 없습니다.",
         "en-US": "The tmux executable is unavailable on the server.",

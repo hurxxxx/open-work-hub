@@ -1,5 +1,5 @@
 import { Badge, Button, EmptyState, useFeedback } from '@open-work-hub/ui';
-import { GitBranch, RefreshCw, X } from 'lucide-react';
+import { ChevronLeft, GitBranch, RefreshCw, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -127,6 +127,122 @@ function LoadingRow({ label }: { label: string }) {
   );
 }
 
+function CommitDetailView({
+  commitSha,
+  detail,
+  failed,
+  loading,
+  onBack,
+  onSelectPath,
+  selectedPath,
+}: {
+  commitSha: string;
+  detail: AgentTerminalGitCommitDetail | null;
+  failed: boolean;
+  loading: boolean;
+  onBack: () => void;
+  onSelectPath: (path: string) => void;
+  selectedPath: string | null;
+}) {
+  const { t } = useTranslation('apps');
+
+  return (
+    <section
+      aria-label={t('agentTerminal.git.sections.commitFiles')}
+      className="min-h-full"
+    >
+      <header className="sticky top-0 z-10 border-b border-app-border bg-app-surface">
+        <div className="px-2 py-1">
+          <Button onClick={onBack} size="dense" variant="ghost">
+            <ChevronLeft aria-hidden="true" className="size-3.5" />
+            {t('agentTerminal.git.actions.backToHistory')}
+          </Button>
+        </div>
+        <div className="px-3 pb-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="shrink-0 font-mono text-[11px] text-app-accent">
+              {commitSha.slice(0, 8)}
+            </span>
+            {detail && (detail.parents ?? []).length > 1 ? (
+              <Badge tone="neutral">
+                {t('agentTerminal.git.history.merge')}
+              </Badge>
+            ) : null}
+          </div>
+          {detail ? (
+            <>
+              <p className="mt-1 break-words text-xs font-medium text-app-ink/80">
+                {detail.subject || t('agentTerminal.git.history.noSubject')}
+              </p>
+              <p className="mt-1 truncate app-text-caption text-app-ink/45">
+                {detail.author_name} ·{' '}
+                <UserDateTime display="relative" value={detail.authored_at} />
+              </p>
+              {(detail.parents ?? []).length > 1 ? (
+                <p className="mt-1 app-text-caption text-app-ink/45">
+                  {t('agentTerminal.git.commitFiles.firstParent')}
+                </p>
+              ) : null}
+            </>
+          ) : null}
+        </div>
+      </header>
+
+      {loading ? (
+        <LoadingRow label={t('agentTerminal.git.commitFiles.loading')} />
+      ) : failed ? (
+        <p className="px-3 py-3 app-text-caption text-app-danger">
+          {t('agentTerminal.git.commitFiles.loadFailed')}
+        </p>
+      ) : detail ? (
+        <>
+          <div className="flex items-center justify-between border-b border-app-border bg-app-bg px-3 py-1.5 app-text-caption font-semibold text-app-ink/55">
+            <span>{t('agentTerminal.git.sections.commitFiles')}</span>
+            <span>{detail.files?.length ?? 0}</span>
+          </div>
+          <div className="py-1">
+            {(detail.files ?? []).map((file) => {
+              const selected = file.path === selectedPath;
+              return (
+                <button
+                  aria-current={selected ? 'true' : undefined}
+                  className={`flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors hover:bg-app-surface-hover ${
+                    selected ? 'bg-app-accent/10' : ''
+                  }`}
+                  key={`${file.old_path ?? ''}\0${file.path}`}
+                  onClick={() => onSelectPath(file.path)}
+                  title={
+                    file.old_path
+                      ? `${file.old_path} → ${file.path}`
+                      : file.path
+                  }
+                  type="button"
+                >
+                  <Badge
+                    aria-label={t(`agentTerminal.git.kind.${file.kind}`)}
+                    className="min-w-6 justify-center px-1"
+                    tone={kindTone(file.kind)}
+                  >
+                    {KIND_MARK[file.kind]}
+                  </Badge>
+                  <span className="min-w-0 flex-1 truncate font-mono text-xs text-app-ink/75">
+                    {file.path}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {detail.files_truncated ? (
+            <p className="border-t border-app-border px-3 py-2 app-text-caption text-app-ink/55">
+              {t('agentTerminal.git.commitFiles.truncated')}
+            </p>
+          ) : null}
+        </>
+      ) : null}
+    </section>
+  );
+}
+
 export function AgentTerminalGitPanel({
   onClose,
   rootKey,
@@ -174,6 +290,8 @@ export function AgentTerminalGitPanel({
   const commitDetailRequestRef = useRef(0);
   const commitDiffRequestRef = useRef(0);
   const lastDiffFailureRef = useRef<string | null>(null);
+  const navigationScrollRef = useRef<HTMLDivElement>(null);
+  const historyScrollTopRef = useRef(0);
   const observedHeadRef = useRef<string | undefined>(undefined);
 
   const loadStatus = useCallback(
@@ -522,6 +640,25 @@ export function AgentTerminalGitPanel({
     void loadRepository(true);
   };
 
+  const selectCommit = (sha: string) => {
+    historyScrollTopRef.current = navigationScrollRef.current?.scrollTop ?? 0;
+    setSelectedTarget({ type: 'commit', sha });
+    window.requestAnimationFrame(() => {
+      if (navigationScrollRef.current) {
+        navigationScrollRef.current.scrollTop = 0;
+      }
+    });
+  };
+
+  const returnToHistory = () => {
+    setSelectedTarget(null);
+    window.requestAnimationFrame(() => {
+      if (navigationScrollRef.current) {
+        navigationScrollRef.current.scrollTop = historyScrollTopRef.current;
+      }
+    });
+  };
+
   return (
     <section className="flex h-full min-h-0 flex-col bg-app-surface text-app-ink">
       <header className="flex shrink-0 items-center justify-between gap-2 border-b border-app-border px-3 py-2">
@@ -593,8 +730,23 @@ export function AgentTerminalGitPanel({
         </div>
       ) : (
         <>
-          <div className="ui-scrollbar max-h-[52%] min-h-[160px] shrink-0 overflow-y-auto border-b border-app-border">
+          <div
+            className="ui-scrollbar max-h-[52%] min-h-[160px] shrink-0 overflow-y-auto border-b border-app-border"
+            ref={navigationScrollRef}
+          >
+            {selectedTarget?.type === 'commit' ? (
+              <CommitDetailView
+                commitSha={selectedTarget.sha}
+                detail={commitDetail}
+                failed={commitDetailFailed}
+                loading={commitDetailLoading}
+                onBack={returnToHistory}
+                onSelectPath={setSelectedCommitPath}
+                selectedPath={selectedCommitPath}
+              />
+            ) : null}
             <AgentTerminalGitSection
+              hidden={selectedTarget?.type === 'commit'}
               title={t('agentTerminal.git.sections.repository')}
             >
               <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 px-3 py-2 app-text-caption">
@@ -630,6 +782,7 @@ export function AgentTerminalGitPanel({
             </AgentTerminalGitSection>
 
             <AgentTerminalGitSection
+              hidden={selectedTarget?.type === 'commit'}
               count={changeCount}
               title={t('agentTerminal.git.sections.changes')}
             >
@@ -697,6 +850,7 @@ export function AgentTerminalGitPanel({
             </AgentTerminalGitSection>
 
             <AgentTerminalGitSection
+              hidden={selectedTarget?.type === 'commit'}
               count={history.length}
               title={t('agentTerminal.git.sections.history')}
             >
@@ -723,12 +877,7 @@ export function AgentTerminalGitPanel({
                           selected ? 'bg-app-accent/10' : ''
                         }`}
                         key={commit.sha}
-                        onClick={() =>
-                          setSelectedTarget({
-                            type: 'commit',
-                            sha: commit.sha,
-                          })
-                        }
+                        onClick={() => selectCommit(commit.sha)}
                         title={`${commit.sha} · ${commit.subject}`}
                         type="button"
                       >
@@ -775,81 +924,8 @@ export function AgentTerminalGitPanel({
               )}
             </AgentTerminalGitSection>
 
-            {selectedTarget?.type === 'commit' ? (
-              <AgentTerminalGitSection
-                count={commitDetail?.files?.length ?? 0}
-                title={t('agentTerminal.git.sections.commitFiles')}
-              >
-                {commitDetailLoading ? (
-                  <LoadingRow
-                    label={t('agentTerminal.git.commitFiles.loading')}
-                  />
-                ) : commitDetailFailed ? (
-                  <p className="px-3 py-3 app-text-caption text-app-danger">
-                    {t('agentTerminal.git.commitFiles.loadFailed')}
-                  </p>
-                ) : commitDetail ? (
-                  <>
-                    <div className="border-b border-app-border px-3 py-2">
-                      <p className="text-xs font-medium text-app-ink/80">
-                        {commitDetail.subject ||
-                          t('agentTerminal.git.history.noSubject')}
-                      </p>
-                      <p className="mt-1 app-text-caption text-app-ink/45">
-                        {commitDetail.author_name} ·{' '}
-                        <UserDateTime
-                          display="relative"
-                          value={commitDetail.authored_at}
-                        />
-                      </p>
-                      {(commitDetail.parents ?? []).length > 1 ? (
-                        <p className="mt-1 app-text-caption text-app-ink/45">
-                          {t('agentTerminal.git.commitFiles.firstParent')}
-                        </p>
-                      ) : null}
-                    </div>
-                    <div className="py-1">
-                      {(commitDetail.files ?? []).map((file) => {
-                        const selected = file.path === selectedCommitPath;
-                        return (
-                          <button
-                            aria-current={selected ? 'true' : undefined}
-                            className={`flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors hover:bg-app-surface-hover ${
-                              selected ? 'bg-app-accent/10' : ''
-                            }`}
-                            key={`${file.old_path ?? ''}\0${file.path}`}
-                            onClick={() => setSelectedCommitPath(file.path)}
-                            title={
-                              file.old_path
-                                ? `${file.old_path} → ${file.path}`
-                                : file.path
-                            }
-                            type="button"
-                          >
-                            <Badge
-                              className="min-w-6 justify-center px-1"
-                              tone={kindTone(file.kind)}
-                            >
-                              {KIND_MARK[file.kind]}
-                            </Badge>
-                            <span className="min-w-0 flex-1 truncate font-mono text-xs text-app-ink/75">
-                              {file.path}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {commitDetail.files_truncated ? (
-                      <p className="border-t border-app-border px-3 py-2 app-text-caption text-app-ink/55">
-                        {t('agentTerminal.git.commitFiles.truncated')}
-                      </p>
-                    ) : null}
-                  </>
-                ) : null}
-              </AgentTerminalGitSection>
-            ) : null}
-
             <AgentTerminalGitSection
+              hidden={selectedTarget?.type === 'commit'}
               count={localBranches.length + remoteBranches.length}
               defaultOpen={false}
               title={t('agentTerminal.git.sections.branches')}
@@ -886,6 +962,7 @@ export function AgentTerminalGitPanel({
             </AgentTerminalGitSection>
 
             <AgentTerminalGitSection
+              hidden={selectedTarget?.type === 'commit'}
               count={tags.length}
               defaultOpen={false}
               title={t('agentTerminal.git.sections.tags')}
@@ -900,6 +977,7 @@ export function AgentTerminalGitPanel({
             </AgentTerminalGitSection>
 
             <AgentTerminalGitSection
+              hidden={selectedTarget?.type === 'commit'}
               count={stashes.length}
               defaultOpen={false}
               title={t('agentTerminal.git.sections.stashes')}

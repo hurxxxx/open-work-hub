@@ -752,6 +752,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/agent-terminal/codex/threads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Agent Terminal Codex Threads */
+        get: operations["agent_terminal_list_agent_terminal_codex_threads_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/agent-terminal/roots/{root_key}/git/status": {
         parameters: {
             query?: never;
@@ -6469,6 +6486,34 @@ export interface components {
             /** Page Size */
             page_size: number;
         };
+        /** AgentTerminalCodexThreadListResponse */
+        AgentTerminalCodexThreadListResponse: {
+            /** Items */
+            items?: components["schemas"]["AgentTerminalCodexThreadResponse"][];
+        };
+        /** AgentTerminalCodexThreadResponse */
+        AgentTerminalCodexThreadResponse: {
+            /** Id */
+            id: string;
+            /** Name */
+            name?: string | null;
+            /** Preview */
+            preview?: string | null;
+            /** Root Key */
+            root_key: string;
+            /** Root Path */
+            root_path: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /** AgentTerminalConfigResponse */
         AgentTerminalConfigResponse: {
             /** Enabled */
@@ -6709,6 +6754,8 @@ export interface components {
         AgentTerminalSessionCreateRequest: {
             /** Root Key */
             root_key: string;
+            /** Codex Thread Id */
+            codex_thread_id?: string | null;
             /**
              * Cols
              * @default 120
@@ -17047,6 +17094,55 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentTerminalSessionResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agent_terminal_list_agent_terminal_codex_threads_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTerminalCodexThreadListResponse"];
                 };
             };
             /** @description Authentication required. */
