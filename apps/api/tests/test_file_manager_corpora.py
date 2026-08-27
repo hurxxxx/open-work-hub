@@ -30,6 +30,7 @@ from open_work_hub_api.domains.files.source_access import (
     can_read_file,
     has_accessible_file,
 )
+from open_work_hub_api.domains.organization.models import OrganizationUnit
 from open_work_hub_api.domains.retrieval.models import RetrievalPartition
 from open_work_hub_api.domains.retrieval.partitioning import ensure_default_partition
 from open_work_hub_api.domains.rag.contracts import (
@@ -63,6 +64,7 @@ def db() -> Session:
         engine,
         tables=[
             Workspace.__table__,
+            OrganizationUnit.__table__,
             User.__table__,
             UserSystemRole.__table__,
             WorkspaceUserBinding.__table__,
