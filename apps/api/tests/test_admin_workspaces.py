@@ -793,7 +793,7 @@ def test_hard_delete_workspace_is_disabled_and_archive_is_preserved(
         headers=_auth_headers(token),
     )
 
-    assert blocked.status_code == 404
+    assert blocked.status_code == 405
     workspaces = client.get(
         "/api/v1/admin/workspaces?include_archived=true",
         headers=_auth_headers(token),
