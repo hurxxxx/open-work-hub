@@ -1,5 +1,6 @@
 ARG NODE_IMAGE=node@sha256:78839ac448c23517f8eab2e8f7943d9b4f73979eb7f8bed2c73dbf72ff869e7b
 ARG UV_IMAGE=ghcr.io/astral-sh/uv@sha256:e5b65587bce7de595f299855d7385fe7fca39b8a74baa261ba1b7147afa78e58
+ARG POSTGRES_CLIENT_IMAGE=postgres@sha256:7bade6d532592ca8ce7ee32def7399dad2607c4ea5583839fc4352a095a11ea6
 
 FROM ${NODE_IMAGE} AS node_toolchain
 
@@ -35,9 +36,28 @@ RUN test -n "${NODE_DEPENDENCY_SHA256}" \
     && pnpm exec nx --version \
     && pnpm exec openapi-typescript --version
 
+FROM ${POSTGRES_CLIENT_IMAGE} AS postgres_client
+
+RUN set -eux; \
+    client_bin_dir="$(pg_config --bindir)"; \
+    libpq_path="$( \
+      ldd "${client_bin_dir}/psql" \
+        | awk '$1 == "libpq.so.5" { print $3; exit }' \
+    )"; \
+    test -n "${libpq_path}"; \
+    mkdir -p /opt/postgres-client/bin /opt/postgres-client/lib; \
+    cp "${client_bin_dir}/pg_dump" /opt/postgres-client/bin/pg_dump; \
+    cp "${client_bin_dir}/pg_restore" /opt/postgres-client/bin/pg_restore; \
+    cp "${client_bin_dir}/psql" /opt/postgres-client/bin/psql; \
+    cp "${libpq_path}" /opt/postgres-client/lib/libpq.so.5
+
 FROM ${UV_IMAGE}
 
 COPY --from=node_toolchain /usr/local/ /usr/local/
+COPY --from=postgres_client /opt/postgres-client/bin/ /usr/local/bin/
+COPY --from=postgres_client /opt/postgres-client/lib/ /usr/local/lib/
+
+ENV LD_LIBRARY_PATH=/usr/local/lib
 
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends \
@@ -57,7 +77,10 @@ RUN apt-get update \
     && pnpm --version \
     && python --version \
     && jq --version \
-    && uv --version
+    && uv --version \
+    && pg_dump --version | grep -Eq '^pg_dump \(PostgreSQL\) 17\.' \
+    && pg_restore --version | grep -Eq '^pg_restore \(PostgreSQL\) 17\.' \
+    && psql --version | grep -Eq '^psql \(PostgreSQL\) 17\.'
 
 ARG API_DEPENDENCY_SHA256
 

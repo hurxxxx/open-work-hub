@@ -30,6 +30,13 @@ worker_dependency_sha256() {
   combined_sha256 "$repo_root/apps/worker/pyproject.toml" "$repo_root/apps/worker/uv.lock"
 }
 
+verify_portable_client_paths() {
+  if grep -Fq 'linux-gnu' "$repo_root/ops/ci/validation-runner/Dockerfile"; then
+    echo "Validation image must discover architecture-specific PostgreSQL client paths." >&2
+    return 2
+  fi
+}
+
 print_contract() {
   printf 'image=%s\n' "$image"
   printf 'dockerfile_sha256=%s\n' "$(sha256sum "$repo_root/ops/ci/validation-runner/Dockerfile" | awk '{print $1}')"
@@ -59,12 +66,17 @@ build_image() {
       pnpm --version
       python --version
       uv --version
+      pg_dump --version | grep -Eq "^pg_dump \(PostgreSQL\) 17\."
+      pg_restore --version | grep -Eq "^pg_restore \(PostgreSQL\) 17\."
+      psql --version | grep -Eq "^psql \(PostgreSQL\) 17\."
       test -r "$OPEN_WORK_HUB_API_IMAGE_DEPENDENCY_FILE"
       test -r "$OPEN_WORK_HUB_NODE_IMAGE_DEPENDENCY_FILE"
       test -r "$OPEN_WORK_HUB_WORKER_IMAGE_DEPENDENCY_FILE"
     '
   echo "Built and verified ${image}."
 }
+
+verify_portable_client_paths
 
 case "${1:-}" in
   "")
