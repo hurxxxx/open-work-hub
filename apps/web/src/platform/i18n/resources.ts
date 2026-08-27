@@ -300,6 +300,7 @@ export const resources = {
         workspaceApp: '{{workspace}} · {{app}} | Open Work Hub',
       },
       apps: {
+        'agent-terminal': 'Codex 터미널',
         ai: 'AI',
         bento: 'bento/slides',
         business: '업무',
@@ -1059,6 +1060,189 @@ export const resources = {
           private: '개인용',
           workspace: '워크스페이스 공유',
         },
+      },
+      agentTerminal: {
+        accessDeniedDescription:
+          '이 도구는 플랫폼 관리자 계정에서만 사용할 수 있습니다.',
+        accessDeniedTitle: '접근 권한이 없습니다.',
+        actions: {
+          cancel: '취소',
+          delete: '삭제',
+          deleteSessionLabel: '"{{root}}" 세션 기록 삭제',
+          newSession: '새 세션',
+          reconnect: '다시 연결',
+          refresh: '새로고침',
+          retry: '다시 시도',
+          stop: '세션 종료',
+        },
+        codexMissingDescription:
+          '설정된 Codex CLI 실행 파일을 서버에서 찾을 수 없습니다.',
+        deleteConfirmDescription:
+          '"{{root}}" 세션 메타데이터를 목록에서 삭제합니다. 이 작업은 되돌릴 수 없습니다.',
+        deleteConfirmTitle: '세션 기록을 삭제할까요?',
+        connection: {
+          connected: '연결됨',
+          connecting: '연결 중',
+          ended: '종료됨',
+          offline: '연결 끊김',
+        },
+        disabledDescription:
+          '서버 환경 설정에서 Codex 터미널을 먼저 활성화해야 합니다.',
+        eyebrow: '플랫폼 관리자 도구',
+        failedSessionDescription:
+          '서버 설정과 Codex CLI 설치 상태를 확인한 뒤 새 세션을 시작하세요.',
+        failedSessionTitle: '세션을 시작하지 못했습니다.',
+        feedback: {
+          connectionFailed: '터미널 연결을 유지하지 못했습니다.',
+          createFailed: 'Codex 터미널 세션을 시작하지 못했습니다.',
+          created: 'Codex 터미널 세션을 시작했습니다.',
+          deleteFailed: '세션 기록을 삭제하지 못했습니다.',
+          deleted: '세션 기록을 삭제했습니다.',
+          loadFailed: 'Codex 터미널 정보를 불러오지 못했습니다.',
+          stopFailed: 'Codex 터미널 세션을 종료하지 못했습니다.',
+          stopped: 'Codex 터미널 세션을 종료했습니다.',
+        },
+        git: {
+          actions: {
+            close: 'Git 패널 닫기',
+            closeExpandedDiff: '확대 diff 닫기',
+            expandDiff: '큰 화면에서 diff 보기',
+            open: 'Git',
+            refresh: 'Git 정보 새로고침',
+          },
+          binaryDescription:
+            '바이너리 파일의 내용 차이는 이 화면에서 표시하지 않습니다.',
+          binaryTitle: '바이너리 파일입니다.',
+          cleanDescription: '스테이지되거나 수정된 파일이 없습니다.',
+          cleanTitle: '작업 트리가 깨끗합니다.',
+          detachedHead: '분리된 HEAD · {{head}}',
+          diffFailedDescription:
+            '파일 상태가 바뀌었을 수 있습니다. 목록을 새로고침한 뒤 다시 시도해 주세요.',
+          diffFailedTitle: '파일 변경사항을 불러오지 못했습니다.',
+          diffLabel: '{{path}} 파일 변경사항',
+          diffLoading: '파일 변경사항을 불러오는 중입니다.',
+          diff: {
+            commitContext: '{{commit}} · {{subject}}',
+            emptyDescription:
+              '작업 트리 파일이나 커밋 파일을 선택하면 diff를 표시합니다.',
+            emptyTitle: '표시할 diff를 선택하세요.',
+            workingTreeContext: '{{branch}} 작업 트리',
+          },
+          drawerDescription:
+            '현재 작업 경로의 변경사항, HEAD 히스토리, 브랜치와 태그를 읽기 전용으로 표시합니다.',
+          drawerTitle: 'Git 저장소',
+          expandedDiffTitle: '{{path}} diff',
+          feedback: {
+            commitFailed: 'Git 커밋 상세 정보를 불러오지 못했습니다.',
+            diffFailed: '파일 변경사항을 불러오지 못했습니다.',
+            historyFailed: 'Git 커밋 히스토리를 더 불러오지 못했습니다.',
+            repositoryFailed: 'Git 저장소 정보를 불러오지 못했습니다.',
+            statusFailed: 'Git 변경사항 목록을 불러오지 못했습니다.',
+          },
+          commitFiles: {
+            firstParent: '병합 커밋은 첫 번째 부모와 비교합니다.',
+            loadFailed: '커밋 파일 목록을 불러오지 못했습니다.',
+            loading: '커밋 파일 목록을 불러오는 중입니다.',
+            truncated: '파일이 많아 커밋 파일 목록 일부만 표시했습니다.',
+          },
+          history: {
+            empty: '현재 HEAD에 커밋이 없습니다.',
+            loadFailed: '커밋 히스토리를 불러오지 못했습니다.',
+            loadMore: '이전 커밋 더 보기',
+            loading: '커밋 히스토리를 불러오는 중입니다.',
+            loadingMore: '이전 커밋을 불러오는 중...',
+            merge: '병합',
+            noSubject: '제목 없는 커밋',
+          },
+          kind: {
+            added: '추가됨',
+            conflicted: '충돌',
+            copied: '복사됨',
+            deleted: '삭제됨',
+            modified: '수정됨',
+            renamed: '이름 변경됨',
+            type_changed: '파일 형식 변경됨',
+            untracked: '추적되지 않음',
+          },
+          loadFailedDescription:
+            'Git 저장소 상태를 확인한 뒤 다시 시도해 주세요.',
+          loadFailedTitle: 'Git 변경사항을 불러오지 못했습니다.',
+          loading: 'Git 변경사항을 불러오는 중입니다.',
+          notRepositoryDescription:
+            '선택한 허용 작업 경로 자체가 Git 저장소 루트가 아닙니다.',
+          notRepositoryTitle: 'Git 저장소가 아닙니다.',
+          resizePanel: '터미널과 Git 패널 크기 조절',
+          refs: {
+            branchesEmpty: '표시할 브랜치가 없습니다.',
+            current: '현재',
+            loading: '브랜치와 태그를 불러오는 중입니다.',
+            localBranches: '로컬 브랜치',
+            readOnly:
+              '브랜치와 태그는 정보만 표시하며 작업 브랜치를 변경하지 않습니다.',
+            remoteBranches: '원격 브랜치',
+            stashesEmpty: '저장된 stash가 없습니다.',
+            tagsEmpty: '표시할 태그가 없습니다.',
+            truncated: '참조가 많아 목록 일부만 표시했습니다.',
+          },
+          repository: {
+            aheadBehind: '앞섬 {{ahead}} · 뒤처짐 {{behind}}',
+            branch: '브랜치',
+            head: 'HEAD',
+            none: '없음',
+            sync: '추적 상태',
+            upstream: '업스트림',
+          },
+          sections: {
+            branches: '브랜치',
+            changes: '작업 트리',
+            commitFiles: '커밋 파일',
+            history: '커밋 히스토리',
+            repository: '저장소 정보',
+            stashes: '스태시',
+            tags: '태그',
+          },
+          scope: {
+            conflicted: '충돌',
+            staged: '스테이지됨',
+            unstaged: '변경됨',
+            untracked: '추적되지 않음',
+          },
+          title: 'Git · 변경사항 {{count}}',
+          tooLargeDescription:
+            '파일이 서버의 diff 표시 크기 제한을 초과했습니다.',
+          tooLargeTitle: '파일이 너무 큽니다.',
+          truncated: '변경 파일이 많아 서버에서 목록 일부만 표시했습니다.',
+          unknownHead: '브랜치 정보 없음',
+        },
+        loadFailedDescription:
+          '권한, 앱 활성화 상태 또는 서버 런타임을 확인해 주세요.',
+        loadFailedTitle: 'Codex 터미널을 불러오지 못했습니다.',
+        loading: 'Codex 터미널을 불러오는 중입니다.',
+        noSessionDescription:
+          '허용된 작업 경로를 선택하고 Codex CLI 세션을 시작하세요.',
+        noSessionTitle: '열린 Codex 세션이 없습니다.',
+        noTranscriptStorage:
+          '터미널 원문은 DB에 저장하지 않습니다. 실행 중 세션은 tmux에서 유지되어 API 재시작 후 다시 연결됩니다.',
+        rootPlaceholder: '작업 경로 선택',
+        rootsMissingDescription:
+          '서버 환경 설정에 허용된 작업 경로를 하나 이상 등록해야 합니다.',
+        securityNotice:
+          'Codex는 서버 권한으로 동작합니다. 승인된 개발 경로에서만 사용하고 비밀값이나 운영 자격증명은 입력하지 마세요.',
+        sessionsDescription: '최근 50개 tmux 세션과 실행 기록',
+        sessionsEmpty: '아직 생성한 세션이 없습니다.',
+        sessionsTitle: '세션',
+        status: {
+          exited: '완료',
+          failed: '실패',
+          running: '실행 중',
+          starting: '시작 중',
+          terminated: '종료됨',
+        },
+        terminalLabel: 'Codex CLI 터미널',
+        tmuxMissingDescription:
+          '지속 가능한 터미널 세션에 필요한 tmux 실행 파일을 서버에서 찾을 수 없습니다.',
+        title: 'Codex 터미널',
+        unavailableTitle: 'Codex 터미널을 사용할 수 없습니다.',
       },
       mail: {
         eyebrow: '로컬 AI 메일',
@@ -5967,6 +6151,7 @@ export const resources = {
         workspaceApp: '{{workspace}} · {{app}} | Open Work Hub',
       },
       apps: {
+        'agent-terminal': 'Codex Terminal',
         ai: 'AI',
         bento: 'bento/slides',
         business: 'Business',
@@ -6733,6 +6918,192 @@ export const resources = {
           private: 'Private',
           workspace: 'Workspace shared',
         },
+      },
+      agentTerminal: {
+        accessDeniedDescription:
+          'This tool is available only to platform administrator accounts.',
+        accessDeniedTitle: 'Access denied.',
+        actions: {
+          cancel: 'Cancel',
+          delete: 'Delete',
+          deleteSessionLabel: 'Delete the "{{root}}" session record',
+          newSession: 'New session',
+          reconnect: 'Reconnect',
+          refresh: 'Refresh',
+          retry: 'Try again',
+          stop: 'Stop session',
+        },
+        codexMissingDescription:
+          'The configured Codex CLI executable was not found on the server.',
+        deleteConfirmDescription:
+          'Delete the "{{root}}" session metadata from the list. This cannot be undone.',
+        deleteConfirmTitle: 'Delete this session record?',
+        connection: {
+          connected: 'Connected',
+          connecting: 'Connecting',
+          ended: 'Ended',
+          offline: 'Offline',
+        },
+        disabledDescription:
+          'Enable the Codex terminal in the server environment first.',
+        eyebrow: 'Platform admin tool',
+        failedSessionDescription:
+          'Check the server configuration and Codex CLI installation, then start a new session.',
+        failedSessionTitle: 'The session could not be started.',
+        feedback: {
+          connectionFailed: 'The terminal connection could not be maintained.',
+          createFailed: 'Could not start a Codex terminal session.',
+          created: 'Codex terminal session started.',
+          deleteFailed: 'Could not delete the session record.',
+          deleted: 'Session record deleted.',
+          loadFailed: 'Could not load Codex terminal information.',
+          stopFailed: 'Could not stop the Codex terminal session.',
+          stopped: 'Codex terminal session stopped.',
+        },
+        git: {
+          actions: {
+            close: 'Close Git panel',
+            closeExpandedDiff: 'Close expanded diff',
+            expandDiff: 'View diff in a large window',
+            open: 'Git',
+            refresh: 'Refresh Git information',
+          },
+          binaryDescription:
+            'Binary file differences are not shown in this view.',
+          binaryTitle: 'This is a binary file.',
+          cleanDescription: 'There are no staged or modified files.',
+          cleanTitle: 'The working tree is clean.',
+          detachedHead: 'Detached HEAD · {{head}}',
+          diffFailedDescription:
+            'The file status may have changed. Refresh the list and try again.',
+          diffFailedTitle: 'Could not load the file changes.',
+          diffLabel: 'Changes for {{path}}',
+          diffLoading: 'Loading file changes.',
+          diff: {
+            commitContext: '{{commit}} · {{subject}}',
+            emptyDescription:
+              'Select a working-tree file or commit file to display its diff.',
+            emptyTitle: 'Select a diff to display.',
+            workingTreeContext: '{{branch}} working tree',
+          },
+          drawerDescription:
+            'Shows working-tree changes, current HEAD history, branches, and tags as read-only information.',
+          drawerTitle: 'Git repository',
+          expandedDiffTitle: '{{path}} diff',
+          feedback: {
+            commitFailed: 'Could not load the Git commit details.',
+            diffFailed: 'Could not load the file changes.',
+            historyFailed: 'Could not load more Git commit history.',
+            repositoryFailed: 'Could not load the Git repository information.',
+            statusFailed: 'Could not load the Git changes list.',
+          },
+          commitFiles: {
+            firstParent: 'Merge commits are compared with their first parent.',
+            loadFailed: 'Could not load the commit file list.',
+            loading: 'Loading the commit file list.',
+            truncated:
+              'Only part of the commit file list is shown because it is large.',
+          },
+          history: {
+            empty: 'There are no commits in the current HEAD.',
+            loadFailed: 'Could not load the commit history.',
+            loadMore: 'Load earlier commits',
+            loading: 'Loading commit history.',
+            loadingMore: 'Loading earlier commits...',
+            merge: 'Merge',
+            noSubject: 'Commit without a subject',
+          },
+          kind: {
+            added: 'Added',
+            conflicted: 'Conflicted',
+            copied: 'Copied',
+            deleted: 'Deleted',
+            modified: 'Modified',
+            renamed: 'Renamed',
+            type_changed: 'File type changed',
+            untracked: 'Untracked',
+          },
+          loadFailedDescription:
+            'Check the Git repository status and try again.',
+          loadFailedTitle: 'Could not load Git changes.',
+          loading: 'Loading Git changes.',
+          notRepositoryDescription:
+            'The selected allowed working root is not itself a Git repository root.',
+          notRepositoryTitle: 'This is not a Git repository.',
+          resizePanel: 'Resize the terminal and Git panels',
+          refs: {
+            branchesEmpty: 'There are no branches to display.',
+            current: 'Current',
+            loading: 'Loading branches and tags.',
+            localBranches: 'Local branches',
+            readOnly:
+              'Branches and tags are informational only and do not change the working branch.',
+            remoteBranches: 'Remote branches',
+            stashesEmpty: 'There are no saved stashes.',
+            tagsEmpty: 'There are no tags to display.',
+            truncated:
+              'Only part of the reference list is shown because it is large.',
+          },
+          repository: {
+            aheadBehind: 'Ahead {{ahead}} · behind {{behind}}',
+            branch: 'Branch',
+            head: 'HEAD',
+            none: 'None',
+            sync: 'Tracking',
+            upstream: 'Upstream',
+          },
+          sections: {
+            branches: 'Branches',
+            changes: 'Working tree',
+            commitFiles: 'Commit files',
+            history: 'Commit history',
+            repository: 'Repository information',
+            stashes: 'Stashes',
+            tags: 'Tags',
+          },
+          scope: {
+            conflicted: 'Conflicts',
+            staged: 'Staged',
+            unstaged: 'Changed',
+            untracked: 'Untracked',
+          },
+          title: 'Git · Changes {{count}}',
+          tooLargeDescription:
+            'The file exceeds the server limit for displaying a diff.',
+          tooLargeTitle: 'The file is too large.',
+          truncated:
+            'Only part of the list is shown because the repository has many changed files.',
+          unknownHead: 'Branch unavailable',
+        },
+        loadFailedDescription:
+          'Check permissions, app visibility, and the server runtime.',
+        loadFailedTitle: 'Could not load the Codex terminal.',
+        loading: 'Loading the Codex terminal.',
+        noSessionDescription:
+          'Choose an allowed working root and start a Codex CLI session.',
+        noSessionTitle: 'No Codex session is open.',
+        noTranscriptStorage:
+          'Terminal output is not stored in the database. Running sessions stay in tmux and reconnect after an API restart.',
+        rootPlaceholder: 'Select working root',
+        rootsMissingDescription:
+          'Register at least one allowed working root in the server environment.',
+        securityNotice:
+          'Codex runs with server permissions. Use only approved development paths and do not enter secrets or production credentials.',
+        sessionsDescription: 'Latest 50 tmux sessions and run records',
+        sessionsEmpty: 'No sessions have been created yet.',
+        sessionsTitle: 'Sessions',
+        status: {
+          exited: 'Completed',
+          failed: 'Failed',
+          running: 'Running',
+          starting: 'Starting',
+          terminated: 'Stopped',
+        },
+        terminalLabel: 'Codex CLI terminal',
+        tmuxMissingDescription:
+          'The tmux executable required for persistent terminal sessions was not found on the server.',
+        title: 'Codex Terminal',
+        unavailableTitle: 'The Codex terminal is unavailable.',
       },
       mail: {
         eyebrow: 'AI Mail',

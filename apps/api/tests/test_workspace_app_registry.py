@@ -5,6 +5,7 @@ import pytest
 from open_work_hub_api.core.workspace_app_registry import (
     WorkspaceAppRegistration,
     WorkspaceNavRegistration,
+    app_is_available_to_system_roles,
     compile_workspace_app_registry,
 )
 from open_work_hub_api.domains.auth.workspace_apps import (
@@ -79,6 +80,46 @@ def test_registration_defaults_are_safe_until_explicitly_activated() -> None:
     assert app.visible_by_default is False
     assert app.launcher_category is False
     assert app.availability_scope == "workspace"
+    assert app.required_system_roles == ()
+
+
+def test_registry_projects_and_checks_required_system_roles() -> None:
+    registry = compile_workspace_app_registry(
+        (
+            WorkspaceAppRegistration(
+                app_id="admin-tool",
+                title="Admin tool",
+                route_base="/admin-tool",
+                icon_key="terminal",
+                availability_scope="platform",
+                required_system_roles=("platform_admin",),
+            ),
+        )
+    )
+
+    app = registry.catalog[0]
+    assert app.required_system_roles == ("platform_admin",)
+    assert app_is_available_to_system_roles(app, ["platform_admin"]) is True
+    assert app_is_available_to_system_roles(app, []) is False
+
+
+@pytest.mark.parametrize(
+    "roles",
+    (("platform_admin", "platform_admin"), ("../admin",)),
+)
+def test_registry_rejects_invalid_required_system_roles(roles: tuple[str, ...]) -> None:
+    with pytest.raises(RuntimeError, match="required system role"):
+        compile_workspace_app_registry(
+            (
+                WorkspaceAppRegistration(
+                    app_id="admin-tool",
+                    title="Admin tool",
+                    route_base="/admin-tool",
+                    icon_key="terminal",
+                    required_system_roles=roles,
+                ),
+            )
+        )
 
 
 def test_files_catalog_exposes_search_as_a_workspace_submenu() -> None:

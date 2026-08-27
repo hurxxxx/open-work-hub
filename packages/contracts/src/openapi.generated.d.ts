@@ -717,6 +717,177 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/agent-terminal/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Agent Terminal Config */
+        get: operations["agent_terminal_get_agent_terminal_config_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-terminal/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Agent Terminal Sessions */
+        get: operations["agent_terminal_list_agent_terminal_sessions_get"];
+        put?: never;
+        /** Create Agent Terminal Session */
+        post: operations["agent_terminal_create_agent_terminal_session_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-terminal/roots/{root_key}/git/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Agent Terminal Git Status */
+        get: operations["agent_terminal_get_agent_terminal_git_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-terminal/roots/{root_key}/git/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Agent Terminal Git Diff */
+        get: operations["agent_terminal_get_agent_terminal_git_diff_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-terminal/roots/{root_key}/git/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Agent Terminal Git Summary */
+        get: operations["agent_terminal_get_agent_terminal_git_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-terminal/roots/{root_key}/git/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Agent Terminal Git History */
+        get: operations["agent_terminal_get_agent_terminal_git_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-terminal/roots/{root_key}/git/commits/{commit}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Agent Terminal Git Commit */
+        get: operations["agent_terminal_get_agent_terminal_git_commit_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-terminal/roots/{root_key}/git/commits/{commit}/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Agent Terminal Git Commit Diff */
+        get: operations["agent_terminal_get_agent_terminal_git_commit_diff_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-terminal/sessions/{session_id}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stop Agent Terminal Session */
+        post: operations["agent_terminal_stop_agent_terminal_session_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-terminal/sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Agent Terminal Session */
+        delete: operations["agent_terminal_delete_agent_terminal_session_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/app-visibility": {
         parameters: {
             query?: never;
@@ -6297,6 +6468,293 @@ export interface components {
             page: number;
             /** Page Size */
             page_size: number;
+        };
+        /** AgentTerminalConfigResponse */
+        AgentTerminalConfigResponse: {
+            /** Enabled */
+            enabled: boolean;
+            /** Codex Available */
+            codex_available: boolean;
+            /** Tmux Available */
+            tmux_available: boolean;
+            /** Roots */
+            roots?: components["schemas"]["AgentTerminalRootResponse"][];
+            /** Max Sessions Per User */
+            max_sessions_per_user: number;
+        };
+        /** AgentTerminalGitChangeResponse */
+        AgentTerminalGitChangeResponse: {
+            /** Path */
+            path: string;
+            /** Old Path */
+            old_path?: string | null;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "staged" | "unstaged" | "untracked" | "conflicted";
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "added" | "copied" | "deleted" | "modified" | "renamed" | "type_changed" | "untracked" | "conflicted";
+        };
+        /** AgentTerminalGitCommitDetailResponse */
+        AgentTerminalGitCommitDetailResponse: {
+            /** Sha */
+            sha: string;
+            /** Parents */
+            parents?: string[];
+            /** Author Name */
+            author_name: string;
+            /**
+             * Authored At
+             * Format: date-time
+             */
+            authored_at: string;
+            /** Subject */
+            subject: string;
+            /** Files */
+            files?: components["schemas"]["AgentTerminalGitCommitFileResponse"][];
+            /**
+             * Files Truncated
+             * @default false
+             */
+            files_truncated: boolean;
+        };
+        /** AgentTerminalGitCommitDiffResponse */
+        AgentTerminalGitCommitDiffResponse: {
+            /** Commit */
+            commit: string;
+            /** Path */
+            path: string;
+            /** Old Path */
+            old_path?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "added" | "copied" | "deleted" | "modified" | "renamed" | "type_changed" | "untracked" | "conflicted";
+            /** Old Content */
+            old_content?: string | null;
+            /** New Content */
+            new_content?: string | null;
+            /**
+             * Is Binary
+             * @default false
+             */
+            is_binary: boolean;
+            /**
+             * Too Large
+             * @default false
+             */
+            too_large: boolean;
+        };
+        /** AgentTerminalGitCommitFileResponse */
+        AgentTerminalGitCommitFileResponse: {
+            /** Path */
+            path: string;
+            /** Old Path */
+            old_path?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "added" | "copied" | "deleted" | "modified" | "renamed" | "type_changed" | "untracked" | "conflicted";
+        };
+        /** AgentTerminalGitCommitResponse */
+        AgentTerminalGitCommitResponse: {
+            /** Sha */
+            sha: string;
+            /** Parents */
+            parents?: string[];
+            /** Author Name */
+            author_name: string;
+            /**
+             * Authored At
+             * Format: date-time
+             */
+            authored_at: string;
+            /** Subject */
+            subject: string;
+        };
+        /** AgentTerminalGitDiffResponse */
+        AgentTerminalGitDiffResponse: {
+            /** Path */
+            path: string;
+            /** Old Path */
+            old_path?: string | null;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "staged" | "unstaged" | "untracked" | "conflicted";
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "added" | "copied" | "deleted" | "modified" | "renamed" | "type_changed" | "untracked" | "conflicted";
+            /** Old Content */
+            old_content?: string | null;
+            /** New Content */
+            new_content?: string | null;
+            /**
+             * Is Binary
+             * @default false
+             */
+            is_binary: boolean;
+            /**
+             * Too Large
+             * @default false
+             */
+            too_large: boolean;
+        };
+        /** AgentTerminalGitHistoryResponse */
+        AgentTerminalGitHistoryResponse: {
+            /** Items */
+            items?: components["schemas"]["AgentTerminalGitCommitResponse"][];
+            /** Offset */
+            offset: number;
+            /**
+             * Has More
+             * @default false
+             */
+            has_more: boolean;
+        };
+        /** AgentTerminalGitRefResponse */
+        AgentTerminalGitRefResponse: {
+            /** Name */
+            name: string;
+            /** Full Name */
+            full_name: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "local_branch" | "remote_branch" | "tag";
+            /** Target */
+            target: string;
+            /**
+             * Current
+             * @default false
+             */
+            current: boolean;
+        };
+        /** AgentTerminalGitStashResponse */
+        AgentTerminalGitStashResponse: {
+            /** Ref */
+            ref: string;
+            /** Sha */
+            sha: string;
+            /** Subject */
+            subject: string;
+        };
+        /** AgentTerminalGitStatusResponse */
+        AgentTerminalGitStatusResponse: {
+            /** Is Repository */
+            is_repository: boolean;
+            /** Branch */
+            branch?: string | null;
+            /** Head */
+            head?: string | null;
+            /** Upstream */
+            upstream?: string | null;
+            /**
+             * Ahead
+             * @default 0
+             */
+            ahead: number;
+            /**
+             * Behind
+             * @default 0
+             */
+            behind: number;
+            /** Changes */
+            changes?: components["schemas"]["AgentTerminalGitChangeResponse"][];
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
+        };
+        /** AgentTerminalGitSummaryResponse */
+        AgentTerminalGitSummaryResponse: {
+            /** Is Repository */
+            is_repository: boolean;
+            /** Refs */
+            refs?: components["schemas"]["AgentTerminalGitRefResponse"][];
+            /** Stashes */
+            stashes?: components["schemas"]["AgentTerminalGitStashResponse"][];
+            /**
+             * Refs Truncated
+             * @default false
+             */
+            refs_truncated: boolean;
+            /**
+             * Stashes Truncated
+             * @default false
+             */
+            stashes_truncated: boolean;
+        };
+        /** AgentTerminalRootResponse */
+        AgentTerminalRootResponse: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Path */
+            path: string;
+        };
+        /** AgentTerminalSessionCreateRequest */
+        AgentTerminalSessionCreateRequest: {
+            /** Root Key */
+            root_key: string;
+            /**
+             * Cols
+             * @default 120
+             */
+            cols: number;
+            /**
+             * Rows
+             * @default 36
+             */
+            rows: number;
+        };
+        /** AgentTerminalSessionListResponse */
+        AgentTerminalSessionListResponse: {
+            /** Items */
+            items?: components["schemas"]["AgentTerminalSessionResponse"][];
+        };
+        /** AgentTerminalSessionResponse */
+        AgentTerminalSessionResponse: {
+            /** Id */
+            id: string;
+            /**
+             * Tool
+             * @default codex
+             * @constant
+             */
+            tool: "codex";
+            /** Root Key */
+            root_key: string;
+            /** Root Path */
+            root_path: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "starting" | "running" | "exited" | "terminated" | "failed";
+            /** Exit Code */
+            exit_code?: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Started At */
+            started_at?: string | null;
+            /** Ended At */
+            ended_at?: string | null;
         };
         /** AiAgentRuntimeAdapterResponse */
         AiAgentRuntimeAdapterResponse: {
@@ -16463,6 +16921,533 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["AiArtifactIndexGenerationListResponse"];
                 };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agent_terminal_get_agent_terminal_config_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTerminalConfigResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    agent_terminal_list_agent_terminal_sessions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTerminalSessionListResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    agent_terminal_create_agent_terminal_session_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentTerminalSessionCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTerminalSessionResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agent_terminal_get_agent_terminal_git_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                root_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTerminalGitStatusResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agent_terminal_get_agent_terminal_git_diff_get: {
+        parameters: {
+            query: {
+                path: string;
+                scope: "staged" | "unstaged" | "untracked" | "conflicted";
+            };
+            header?: never;
+            path: {
+                root_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTerminalGitDiffResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agent_terminal_get_agent_terminal_git_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                root_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTerminalGitSummaryResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agent_terminal_get_agent_terminal_git_history_get: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                root_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTerminalGitHistoryResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agent_terminal_get_agent_terminal_git_commit_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                root_key: string;
+                commit: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTerminalGitCommitDetailResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agent_terminal_get_agent_terminal_git_commit_diff_get: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path: {
+                root_key: string;
+                commit: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTerminalGitCommitDiffResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agent_terminal_stop_agent_terminal_session_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTerminalSessionResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agent_terminal_delete_agent_terminal_session_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Authentication required. */
             401: {

@@ -1,4 +1,8 @@
 import { aiManifest, aiModule } from '@/src/app-modules/ai';
+import {
+  agentTerminalManifest,
+  agentTerminalModule,
+} from '@/src/app-modules/agent-terminal';
 import { announcementsManifest } from '@/src/app-modules/announcements/manifest';
 import {
   businessFeatureModules,
@@ -32,6 +36,7 @@ import { whiteboardManifest } from '@/src/app-modules/whiteboard/manifest';
 import type { FeatureModuleRegistryInput } from './feature-module-registry';
 
 export {
+  agentTerminalManifest,
   aiManifest,
   announcementsManifest,
   businessManifest,
@@ -58,6 +63,7 @@ export {
 export const DEFAULT_APP_MODULES = [
   homeModule,
   aiModule,
+  agentTerminalModule,
   collaborationModule,
   communityModule,
   mailModule,
