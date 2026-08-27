@@ -9,6 +9,7 @@ def import_all_models() -> None:
     from open_work_hub_api.domains.ai.runtime import models as ai_runtime_models  # noqa: F401
     from open_work_hub_api.domains.ai_artifacts import models as ai_artifact_models  # noqa: F401
     from open_work_hub_api.domains.ai_graph import models as ai_graph_models  # noqa: F401
+    from open_work_hub_api.domains.agent_terminal import models as agent_terminal_models  # noqa: F401
     from open_work_hub_api.domains.announcements import models as announcements_models  # noqa: F401
     from open_work_hub_api.domains.auth import models as auth_models  # noqa: F401
     from open_work_hub_api.domains.integrations import models as integration_models  # noqa: F401

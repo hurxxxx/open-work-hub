@@ -12,6 +12,7 @@ _WORKSPACE_ROUTE_BASE_PATTERN = re.compile(
     r"/(?:[a-z][a-z0-9]*(?:-[a-z0-9]+)*)(?:/[a-z][a-z0-9]*(?:-[a-z0-9]+)*)*"
 )
 _BACKEND_DOMAIN_PATTERN = re.compile(r"[a-z][a-z0-9_]*")
+_SYSTEM_ROLE_PATTERN = re.compile(r"[a-z][a-z0-9_]*")
 
 
 AppAvailabilityScope = Literal["platform", "workspace"]
@@ -49,6 +50,7 @@ class WorkspaceAppCatalogItem:
     coming_soon: bool = False
     feature_flag: str | None = None
     platform_admin_activation_required: bool = False
+    required_system_roles: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -81,6 +83,7 @@ class WorkspaceAppRegistration:
     coming_soon: bool = False
     feature_flag: str | None = None
     platform_admin_activation_required: bool = False
+    required_system_roles: tuple[str, ...] = ()
     backend_domain: str | None = None
 
 
@@ -136,6 +139,19 @@ def compile_workspace_app_registry(
                 "Invalid workspace app backend domain for "
                 f"{registration.app_id}: {registration.backend_domain!r}"
             )
+        if len(set(registration.required_system_roles)) != len(
+            registration.required_system_roles
+        ):
+            raise RuntimeError(
+                "Duplicate required system role for "
+                f"{registration.app_id}: {registration.required_system_roles!r}"
+            )
+        for role in registration.required_system_roles:
+            if not _SYSTEM_ROLE_PATTERN.fullmatch(role):
+                raise RuntimeError(
+                    "Invalid required system role for "
+                    f"{registration.app_id}: {role!r}"
+                )
         if not _WORKSPACE_ROUTE_BASE_PATTERN.fullmatch(registration.route_base):
             raise RuntimeError(
                 "Invalid workspace app route base for "
@@ -217,6 +233,7 @@ def compile_workspace_app_registry(
             platform_admin_activation_required=(
                 registration.platform_admin_activation_required
             ),
+            required_system_roles=registration.required_system_roles,
         )
         catalog.append(catalog_item)
         by_app_id[registration.app_id] = catalog_item
@@ -234,6 +251,15 @@ def compile_workspace_app_registry(
         catalog=tuple(catalog),
         by_app_id=MappingProxyType(by_app_id),
     )
+
+
+def app_is_available_to_system_roles(
+    app: WorkspaceAppCatalogItem,
+    system_roles: Iterable[str],
+) -> bool:
+    if not app.required_system_roles:
+        return True
+    return bool(set(system_roles).intersection(app.required_system_roles))
 
 
 def _validate_identifier(value: str, *, kind: str) -> None:

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from open_work_hub_api.core.principal import personal_user_principal
 from open_work_hub_api.core.settings import get_settings
+from open_work_hub_api.core.workspace_app_registry import app_is_available_to_system_roles
 from open_work_hub_api.domains.auth.app_bar_preferences import serialize_app_bar_layout
 from open_work_hub_api.domains.auth.app_bar_categories import (
     app_bar_category_app_ids_from_catalog,
@@ -952,11 +953,13 @@ def build_apps_bootstrap(
 ) -> dict[str, Any]:
     catalog = tuple(iter_workspace_app_catalog())
     catalog_by_app_id = {app.app_id: app for app in catalog}
+    user_system_roles = set(resolve_system_roles(db, user))
     enabled_platform_app_ids = {
         app_id
         for app_id in resolve_platform_enabled_app_ids(db)
         if (app := catalog_by_app_id.get(app_id)) is not None
         and app.availability_scope == "platform"
+        and app_is_available_to_system_roles(app, user_system_roles)
     }
     apps = [
         {

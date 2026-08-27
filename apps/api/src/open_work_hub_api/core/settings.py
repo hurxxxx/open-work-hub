@@ -243,6 +243,40 @@ class Settings(BaseSettings):
         default=str(WORKSPACE_ROOT / ".local-recording-spool"),
         validation_alias="OPEN_WORK_HUB_API_RECORDING_SPOOL_DIR",
     )
+    agent_terminal_enabled: bool = Field(
+        default=False,
+        validation_alias="OPEN_WORK_HUB_API_AGENT_TERMINAL_ENABLED",
+    )
+    agent_terminal_codex_bin: str = Field(
+        default="codex",
+        validation_alias="OPEN_WORK_HUB_API_AGENT_TERMINAL_CODEX_BIN",
+    )
+    agent_terminal_tmux_bin: str = Field(
+        default="tmux",
+        validation_alias="OPEN_WORK_HUB_API_AGENT_TERMINAL_TMUX_BIN",
+    )
+    agent_terminal_allowed_roots: dict[str, str] = Field(
+        default_factory=dict,
+        validation_alias="OPEN_WORK_HUB_API_AGENT_TERMINAL_ALLOWED_ROOTS",
+    )
+    agent_terminal_max_sessions_per_user: int = Field(
+        default=2,
+        ge=1,
+        le=10,
+        validation_alias="OPEN_WORK_HUB_API_AGENT_TERMINAL_MAX_SESSIONS_PER_USER",
+    )
+    agent_terminal_max_sessions_total: int = Field(
+        default=4,
+        ge=1,
+        le=50,
+        validation_alias="OPEN_WORK_HUB_API_AGENT_TERMINAL_MAX_SESSIONS_TOTAL",
+    )
+    agent_terminal_replay_buffer_bytes: int = Field(
+        default=262_144,
+        ge=16_384,
+        le=4_194_304,
+        validation_alias="OPEN_WORK_HUB_API_AGENT_TERMINAL_REPLAY_BUFFER_BYTES",
+    )
     serve_frontend: bool = Field(
         default=False,
         validation_alias="OPEN_WORK_HUB_API_SERVE_FRONTEND",
@@ -813,6 +847,13 @@ class Settings(BaseSettings):
             _settings_env_values()
         )
         self.frontend_dist_dir = self.frontend_dist_dir.strip() or DEFAULT_FRONTEND_DIST_DIR
+        self.agent_terminal_codex_bin = self.agent_terminal_codex_bin.strip() or "codex"
+        self.agent_terminal_tmux_bin = self.agent_terminal_tmux_bin.strip() or "tmux"
+        if self.agent_terminal_max_sessions_total < self.agent_terminal_max_sessions_per_user:
+            raise ValueError(
+                "OPEN_WORK_HUB_API_AGENT_TERMINAL_MAX_SESSIONS_TOTAL must be "
+                "greater than or equal to the per-user limit."
+            )
         self.dm_attachment_signing_key = _normalize_dm_attachment_signing_key(
             self.dm_attachment_signing_key,
             environment=self.environment,

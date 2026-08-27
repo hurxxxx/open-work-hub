@@ -132,6 +132,122 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "관리자에 의해 비활성화된 앱입니다.",
         "en-US": "This app has been disabled by an administrator.",
     },
+    "agent_terminal.disabled": {
+        "ko-KR": "Codex 터미널이 서버에서 활성화되지 않았습니다.",
+        "en-US": "The Codex terminal is not enabled on this server.",
+    },
+    "agent_terminal.runtime_unavailable": {
+        "ko-KR": "Codex 터미널 런타임을 사용할 수 없습니다.",
+        "en-US": "The Codex terminal runtime is unavailable.",
+    },
+    "agent_terminal.codex_unavailable": {
+        "ko-KR": "서버에서 Codex CLI 실행 파일을 찾을 수 없습니다.",
+        "en-US": "The Codex CLI executable is unavailable on the server.",
+    },
+    "agent_terminal.tmux_unavailable": {
+        "ko-KR": "서버에서 tmux 실행 파일을 찾을 수 없습니다.",
+        "en-US": "The tmux executable is unavailable on the server.",
+    },
+    "agent_terminal.tmux_session_lost": {
+        "ko-KR": "유지 중이던 tmux 터미널 세션을 찾을 수 없습니다.",
+        "en-US": "The persisted tmux terminal session could not be found.",
+    },
+    "agent_terminal.root_config_invalid": {
+        "ko-KR": "허용된 작업 경로 설정이 올바르지 않습니다.",
+        "en-US": "The allowed working-root configuration is invalid.",
+    },
+    "agent_terminal.root_unavailable": {
+        "ko-KR": "설정된 작업 경로를 사용할 수 없습니다.",
+        "en-US": "A configured working root is unavailable.",
+    },
+    "agent_terminal.root_not_found": {
+        "ko-KR": "허용된 작업 경로를 찾을 수 없습니다.",
+        "en-US": "The requested allowed working root was not found.",
+    },
+    "agent_terminal.session_limit": {
+        "ko-KR": "동시에 실행할 수 있는 Codex 세션 수를 초과했습니다.",
+        "en-US": "The concurrent Codex session limit has been reached.",
+    },
+    "agent_terminal.session_not_found": {
+        "ko-KR": "Codex 터미널 세션을 찾을 수 없습니다.",
+        "en-US": "The Codex terminal session was not found.",
+    },
+    "agent_terminal.session_not_local": {
+        "ko-KR": "이 API 프로세스에서는 해당 세션에 연결할 수 없습니다.",
+        "en-US": "This API process cannot attach to that session.",
+    },
+    "agent_terminal.session_closed": {
+        "ko-KR": "Codex 터미널 세션이 이미 종료되었습니다.",
+        "en-US": "The Codex terminal session has already ended.",
+    },
+    "agent_terminal.session_active": {
+        "ko-KR": "실행 중인 Codex 터미널 세션은 먼저 종료해야 합니다.",
+        "en-US": "Stop the active Codex terminal session before deleting it.",
+    },
+    "agent_terminal.start_failed": {
+        "ko-KR": "Codex 터미널 세션을 시작하지 못했습니다.",
+        "en-US": "The Codex terminal session could not be started.",
+    },
+    "agent_terminal.input_too_large": {
+        "ko-KR": "터미널 입력이 허용된 크기를 초과했습니다.",
+        "en-US": "The terminal input exceeds the allowed size.",
+    },
+    "agent_terminal.size_invalid": {
+        "ko-KR": "터미널 크기가 허용 범위를 벗어났습니다.",
+        "en-US": "The terminal size is outside the allowed range.",
+    },
+    "agent_terminal.message_invalid": {
+        "ko-KR": "터미널 메시지 형식이 올바르지 않습니다.",
+        "en-US": "The terminal message is invalid.",
+    },
+    "agent_terminal.git_unavailable": {
+        "ko-KR": "서버에서 Git 실행 파일을 찾을 수 없습니다.",
+        "en-US": "The Git executable is unavailable on the server.",
+    },
+    "agent_terminal.git_repository_unavailable": {
+        "ko-KR": "선택한 작업 경로는 Git 저장소 루트가 아닙니다.",
+        "en-US": "The selected working root is not a Git repository root.",
+    },
+    "agent_terminal.git_change_not_found": {
+        "ko-KR": "선택한 Git 변경사항을 찾을 수 없습니다.",
+        "en-US": "The selected Git change was not found.",
+    },
+    "agent_terminal.git_path_invalid": {
+        "ko-KR": "Git 변경 파일 경로가 올바르지 않습니다.",
+        "en-US": "The Git change path is invalid.",
+    },
+    "agent_terminal.git_status_failed": {
+        "ko-KR": "Git 변경사항을 조회하지 못했습니다.",
+        "en-US": "The Git working-tree status could not be read.",
+    },
+    "agent_terminal.git_summary_failed": {
+        "ko-KR": "Git 브랜치와 참조 정보를 조회하지 못했습니다.",
+        "en-US": "The Git branches and references could not be read.",
+    },
+    "agent_terminal.git_history_failed": {
+        "ko-KR": "Git 커밋 히스토리를 조회하지 못했습니다.",
+        "en-US": "The Git commit history could not be read.",
+    },
+    "agent_terminal.git_history_query_invalid": {
+        "ko-KR": "Git 히스토리 조회 범위가 올바르지 않습니다.",
+        "en-US": "The Git history query range is invalid.",
+    },
+    "agent_terminal.git_commit_not_found": {
+        "ko-KR": "현재 HEAD 히스토리에서 Git 커밋을 찾을 수 없습니다.",
+        "en-US": "The Git commit was not found in the current HEAD history.",
+    },
+    "agent_terminal.git_operation_failed": {
+        "ko-KR": "Git 파일 내용을 조회하지 못했습니다.",
+        "en-US": "The Git file content could not be read.",
+    },
+    "agent_terminal.git_output_invalid": {
+        "ko-KR": "Git 명령의 출력 형식이 올바르지 않습니다.",
+        "en-US": "The Git command returned invalid output.",
+    },
+    "agent_terminal.git_output_too_large": {
+        "ko-KR": "Git 변경사항이 표시 제한을 초과했습니다.",
+        "en-US": "The Git changes exceed the display limit.",
+    },
     "auth.setup_already_complete": {
         "ko-KR": "초기 설정이 이미 완료되었습니다.",
         "en-US": "Initial setup is already complete.",
