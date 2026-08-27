@@ -1072,11 +1072,22 @@ export const resources = {
           newSession: '새 세션',
           reconnect: '다시 연결',
           refresh: '새로고침',
+          resume: '이어하기',
+          resumeThreadLabel: '"{{name}}" Codex 작업 이어하기',
           retry: '다시 시도',
           stop: '세션 종료',
+          stopSessionLabel: '"{{root}}" 세션 종료',
         },
         codexMissingDescription:
           '설정된 Codex CLI 실행 파일을 서버에서 찾을 수 없습니다.',
+        codexHistory: {
+          description:
+            '이 서버 계정에 저장된 Codex 작업을 새 터미널에서 이어서 실행합니다.',
+          empty: '이어갈 Codex 작업 기록이 없습니다.',
+          loadFailed: 'Codex 작업 기록을 불러오지 못했습니다.',
+          loading: 'Codex 작업 기록을 불러오는 중입니다.',
+          untitled: 'Codex 작업 · {{id}}',
+        },
         deleteConfirmDescription:
           '"{{root}}" 세션 메타데이터를 목록에서 삭제합니다. 이 작업은 되돌릴 수 없습니다.',
         deleteConfirmTitle: '세션 기록을 삭제할까요?',
@@ -1099,11 +1110,14 @@ export const resources = {
           deleteFailed: '세션 기록을 삭제하지 못했습니다.',
           deleted: '세션 기록을 삭제했습니다.',
           loadFailed: 'Codex 터미널 정보를 불러오지 못했습니다.',
+          resumeFailed: 'Codex 작업을 이어서 실행하지 못했습니다.',
+          resumed: 'Codex 작업을 새 터미널에서 이어갑니다.',
           stopFailed: 'Codex 터미널 세션을 종료하지 못했습니다.',
           stopped: 'Codex 터미널 세션을 종료했습니다.',
         },
         git: {
           actions: {
+            backToHistory: '커밋 히스토리로 돌아가기',
             close: 'Git 패널 닫기',
             closeExpandedDiff: '확대 diff 닫기',
             expandDiff: '큰 화면에서 diff 보기',
@@ -1228,6 +1242,13 @@ export const resources = {
           '서버 환경 설정에 허용된 작업 경로를 하나 이상 등록해야 합니다.',
         securityNotice:
           'Codex는 서버 권한으로 동작합니다. 승인된 개발 경로에서만 사용하고 비밀값이나 운영 자격증명은 입력하지 마세요.',
+        sidebar: {
+          codexHistory: 'Codex 기록',
+          sessions: '터미널',
+        },
+        sessionCapacity: '동시 세션 {{active}}/{{limit}}',
+        sessionLimitReached:
+          '동시 실행 가능한 세션 수에 도달했습니다. 실행 중인 세션을 종료한 뒤 다시 시도하세요.',
         sessionsDescription: '최근 50개 tmux 세션과 실행 기록',
         sessionsEmpty: '아직 생성한 세션이 없습니다.',
         sessionsTitle: '세션',
@@ -6930,11 +6951,22 @@ export const resources = {
           newSession: 'New session',
           reconnect: 'Reconnect',
           refresh: 'Refresh',
+          resume: 'Resume',
+          resumeThreadLabel: 'Resume the "{{name}}" Codex task',
           retry: 'Try again',
           stop: 'Stop session',
+          stopSessionLabel: 'Stop the "{{root}}" session',
         },
         codexMissingDescription:
           'The configured Codex CLI executable was not found on the server.',
+        codexHistory: {
+          description:
+            'Continue Codex work saved for this server account in a new terminal.',
+          empty: 'There is no Codex work history to resume.',
+          loadFailed: 'Could not load the Codex work history.',
+          loading: 'Loading Codex work history.',
+          untitled: 'Codex task · {{id}}',
+        },
         deleteConfirmDescription:
           'Delete the "{{root}}" session metadata from the list. This cannot be undone.',
         deleteConfirmTitle: 'Delete this session record?',
@@ -6957,11 +6989,14 @@ export const resources = {
           deleteFailed: 'Could not delete the session record.',
           deleted: 'Session record deleted.',
           loadFailed: 'Could not load Codex terminal information.',
+          resumeFailed: 'Could not resume the Codex task.',
+          resumed: 'Resuming the Codex task in a new terminal.',
           stopFailed: 'Could not stop the Codex terminal session.',
           stopped: 'Codex terminal session stopped.',
         },
         git: {
           actions: {
+            backToHistory: 'Back to commit history',
             close: 'Close Git panel',
             closeExpandedDiff: 'Close expanded diff',
             expandDiff: 'View diff in a large window',
@@ -7089,6 +7124,13 @@ export const resources = {
           'Register at least one allowed working root in the server environment.',
         securityNotice:
           'Codex runs with server permissions. Use only approved development paths and do not enter secrets or production credentials.',
+        sidebar: {
+          codexHistory: 'Codex history',
+          sessions: 'Terminals',
+        },
+        sessionCapacity: 'Concurrent sessions {{active}}/{{limit}}',
+        sessionLimitReached:
+          'The concurrent session limit has been reached. Stop a running session before starting another one.',
         sessionsDescription: 'Latest 50 tmux sessions and run records',
         sessionsEmpty: 'No sessions have been created yet.',
         sessionsTitle: 'Sessions',

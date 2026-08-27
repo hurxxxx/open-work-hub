@@ -32,17 +32,22 @@ import {
   createAgentTerminalSession,
   deleteAgentTerminalSession,
   getAgentTerminalConfig,
+  listAgentTerminalCodexThreads,
   listAgentTerminalSessions,
   stopAgentTerminalSession,
+  type AgentTerminalCodexThread,
   type AgentTerminalConfig,
   type AgentTerminalSession,
 } from '../api/agent-terminal-api';
+import { AgentTerminalCodexHistory } from './AgentTerminalCodexHistory';
 import { AgentTerminalGitPanel } from './AgentTerminalGitPanel';
 import { AgentTerminalSurface } from './AgentTerminalSurface';
+import {
+  getAgentTerminalSessionCapacity,
+  isAgentTerminalSessionActive,
+} from './agent-terminal-session-capacity';
 
 type TerminalConnectionState = 'connecting' | 'connected' | 'ended' | 'offline';
-
-const ACTIVE_SESSION_STATUSES = new Set(['starting', 'running']);
 
 function badgeTone(
   status: string,
@@ -100,6 +105,9 @@ export function AgentTerminalView() {
   const isPlatformAdmin = hasAnySystemRole(user, ['platform_admin']);
   const [config, setConfig] = useState<AgentTerminalConfig | null>(null);
   const [sessions, setSessions] = useState<AgentTerminalSession[]>([]);
+  const [codexThreads, setCodexThreads] = useState<AgentTerminalCodexThread[]>(
+    [],
+  );
   const [selectedRootKey, setSelectedRootKey] = useState('');
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
     null,
@@ -107,7 +115,15 @@ export function AgentTerminalView() {
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [stopping, setStopping] = useState(false);
+  const [codexHistoryLoading, setCodexHistoryLoading] = useState(true);
+  const [codexHistoryFailed, setCodexHistoryFailed] = useState(false);
+  const [resumingThreadId, setResumingThreadId] = useState<string | null>(null);
+  const [sidebarView, setSidebarView] = useState<'sessions' | 'history'>(
+    'sessions',
+  );
+  const [stoppingSessionId, setStoppingSessionId] = useState<string | null>(
+    null,
+  );
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(
     null,
   );
@@ -127,13 +143,27 @@ export function AgentTerminalView() {
         return current;
       }
       return (
-        items.find((session) => ACTIVE_SESSION_STATUSES.has(session.status))
-          ?.id ??
-        items[0]?.id ??
-        null
+        items.find(isAgentTerminalSessionActive)?.id ?? items[0]?.id ?? null
       );
     });
   }, [token]);
+
+  const loadCodexHistory = useCallback(async () => {
+    if (!token || !isPlatformAdmin) {
+      setCodexHistoryLoading(false);
+      return;
+    }
+    setCodexHistoryLoading(true);
+    try {
+      const response = await listAgentTerminalCodexThreads(token);
+      setCodexThreads(response.items ?? []);
+      setCodexHistoryFailed(false);
+    } catch {
+      setCodexHistoryFailed(true);
+    } finally {
+      setCodexHistoryLoading(false);
+    }
+  }, [isPlatformAdmin, token]);
 
   const loadAll = useCallback(async () => {
     if (!token || !isPlatformAdmin) {
@@ -160,10 +190,7 @@ export function AgentTerminalView() {
           return current;
         }
         return (
-          items.find((session) => ACTIVE_SESSION_STATUSES.has(session.status))
-            ?.id ??
-          items[0]?.id ??
-          null
+          items.find(isAgentTerminalSessionActive)?.id ?? items[0]?.id ?? null
         );
       });
       setLoadFailed(false);
@@ -178,10 +205,11 @@ export function AgentTerminalView() {
   useEffect(() => {
     void loadAll();
   }, [loadAll]);
+  useEffect(() => {
+    void loadCodexHistory();
+  }, [loadCodexHistory]);
 
-  const hasActiveSession = sessions.some((session) =>
-    ACTIVE_SESSION_STATUSES.has(session.status),
-  );
+  const hasActiveSession = sessions.some(isAgentTerminalSessionActive);
   useEffect(() => {
     if (!hasActiveSession) return;
     const timer = window.setInterval(() => {
@@ -194,7 +222,7 @@ export function AgentTerminalView() {
     sessions.find((session) => session.id === selectedSessionId) ?? null;
   useEffect(() => {
     setConnectionState(
-      selectedSession && ACTIVE_SESSION_STATUSES.has(selectedSession.status)
+      selectedSession && isAgentTerminalSessionActive(selectedSession)
         ? 'connecting'
         : 'ended',
     );
@@ -218,9 +246,20 @@ export function AgentTerminalView() {
       }),
     [i18n.language],
   );
+  const sessionCapacity = getAgentTerminalSessionCapacity(
+    sessions,
+    config?.max_sessions_per_user ?? 1,
+  );
 
   const createSession = useCallback(async () => {
-    if (!token || !selectedRootKey) return;
+    if (
+      !token ||
+      !selectedRootKey ||
+      sessionCapacity.limitReached ||
+      resumingThreadId !== null
+    ) {
+      return;
+    }
     setCreating(true);
     try {
       const session = await createAgentTerminalSession(token, {
@@ -236,29 +275,78 @@ export function AgentTerminalView() {
     } finally {
       setCreating(false);
     }
-  }, [feedback, selectedRootKey, t, token]);
+  }, [
+    feedback,
+    resumingThreadId,
+    selectedRootKey,
+    sessionCapacity.limitReached,
+    t,
+    token,
+  ]);
 
-  const stopSession = useCallback(async () => {
-    if (!token || !selectedSession) return;
-    setStopping(true);
-    try {
-      const stopped = await stopAgentTerminalSession(token, selectedSession.id);
-      setSessions((current) =>
-        current.map((session) =>
-          session.id === stopped.id ? stopped : session,
-        ),
-      );
-      feedback.success(t('agentTerminal.feedback.stopped'));
-    } catch {
-      feedback.error(t('agentTerminal.feedback.stopFailed'));
-    } finally {
-      setStopping(false);
-    }
-  }, [feedback, selectedSession, t, token]);
+  const resumeCodexThread = useCallback(
+    async (thread: AgentTerminalCodexThread) => {
+      if (
+        !token ||
+        creating ||
+        resumingThreadId !== null ||
+        sessionCapacity.limitReached
+      ) {
+        return;
+      }
+      setResumingThreadId(thread.id);
+      try {
+        const session = await createAgentTerminalSession(token, {
+          root_key: thread.root_key,
+          codex_thread_id: thread.id,
+          cols: 120,
+          rows: 36,
+        });
+        setSessions((current) => [session, ...current]);
+        setSelectedRootKey(thread.root_key);
+        setSelectedSessionId(session.id);
+        setSidebarView('sessions');
+        feedback.success(t('agentTerminal.feedback.resumed'));
+      } catch {
+        feedback.error(t('agentTerminal.feedback.resumeFailed'));
+      } finally {
+        setResumingThreadId(null);
+      }
+    },
+    [
+      creating,
+      feedback,
+      resumingThreadId,
+      sessionCapacity.limitReached,
+      t,
+      token,
+    ],
+  );
+
+  const stopSession = useCallback(
+    async (session: AgentTerminalSession) => {
+      if (!token || !isAgentTerminalSessionActive(session)) return;
+      setStoppingSessionId(session.id);
+      try {
+        const stopped = await stopAgentTerminalSession(token, session.id);
+        setSessions((current) =>
+          current.map((item) => (item.id === stopped.id ? stopped : item)),
+        );
+        feedback.success(t('agentTerminal.feedback.stopped'));
+      } catch {
+        feedback.error(t('agentTerminal.feedback.stopFailed'));
+      } finally {
+        setStoppingSessionId((current) =>
+          current === session.id ? null : current,
+        );
+      }
+    },
+    [feedback, t, token],
+  );
 
   const deleteSession = useCallback(
     async (session: AgentTerminalSession) => {
-      if (!token || ACTIVE_SESSION_STATUSES.has(session.status)) return;
+      if (!token || isAgentTerminalSessionActive(session)) return;
       const confirmed = await confirm({
         title: t('agentTerminal.deleteConfirmTitle'),
         description: t('agentTerminal.deleteConfirmDescription', {
@@ -277,8 +365,7 @@ export function AgentTerminalView() {
         setSessions(remaining);
         if (selectedSessionId === session.id) {
           setSelectedSessionId(
-            remaining.find((item) => ACTIVE_SESSION_STATUSES.has(item.status))
-              ?.id ??
+            remaining.find(isAgentTerminalSessionActive)?.id ??
               remaining[0]?.id ??
               null,
           );
@@ -295,7 +382,8 @@ export function AgentTerminalView() {
 
   const handleTerminalExit = useCallback(() => {
     void loadSessions().catch(() => undefined);
-  }, [loadSessions]);
+    void loadCodexHistory().catch(() => undefined);
+  }, [loadCodexHistory, loadSessions]);
   const handleTerminalError = useCallback(() => {
     feedback.error(t('agentTerminal.feedback.connectionFailed'));
   }, [feedback, t]);
@@ -303,6 +391,10 @@ export function AgentTerminalView() {
     setConnectionState('connecting');
     setTerminalSurfaceVersion((current) => current + 1);
   }, []);
+  const refreshAll = useCallback(() => {
+    void loadAll();
+    void loadCodexHistory();
+  }, [loadAll, loadCodexHistory]);
 
   if (!isPlatformAdmin) {
     return (
@@ -345,9 +437,11 @@ export function AgentTerminalView() {
     config.tmux_available &&
     rootOptions.length > 0 &&
     Boolean(selectedRootKey) &&
+    !sessionCapacity.limitReached &&
+    resumingThreadId === null &&
     !creating;
   const selectedIsActive = Boolean(
-    selectedSession && ACTIVE_SESSION_STATUSES.has(selectedSession.status),
+    selectedSession && isAgentTerminalSessionActive(selectedSession),
   );
   const terminalSurface = selectedSession ? (
     <div className="h-full min-h-0 bg-[var(--ui-color-surface-inverse)]">
@@ -394,15 +488,30 @@ export function AgentTerminalView() {
             <Select
               ariaLabel={t('agentTerminal.rootPlaceholder')}
               className="max-w-[min(480px,48vw)]"
-              disabled={rootOptions.length === 0 || creating}
+              disabled={
+                rootOptions.length === 0 ||
+                creating ||
+                resumingThreadId !== null
+              }
               onValueChange={setSelectedRootKey}
               options={rootOptions}
               placeholder={t('agentTerminal.rootPlaceholder')}
               value={selectedRootKey}
             />
+            <Badge tone={sessionCapacity.limitReached ? 'warning' : 'neutral'}>
+              {t('agentTerminal.sessionCapacity', {
+                active: sessionCapacity.active,
+                limit: sessionCapacity.limit,
+              })}
+            </Badge>
             <Button
               disabled={!canCreate}
               onClick={() => void createSession()}
+              title={
+                sessionCapacity.limitReached
+                  ? t('agentTerminal.sessionLimitReached')
+                  : undefined
+              }
               variant="primary"
             >
               {creating ? (
@@ -412,7 +521,7 @@ export function AgentTerminalView() {
               )}
               {t('agentTerminal.actions.newSession')}
             </Button>
-            <Button onClick={() => void loadAll()}>
+            <Button onClick={refreshAll}>
               <RefreshCw aria-hidden="true" className="size-4" />
               {t('agentTerminal.actions.refresh')}
             </Button>
@@ -440,27 +549,64 @@ export function AgentTerminalView() {
         ) : (
           <div className="flex min-h-0 flex-1 flex-col md:flex-row">
             <aside className="flex max-h-[34%] w-full shrink-0 flex-col border-b border-app-border bg-app-surface md:max-h-none md:w-[300px] md:border-b-0 md:border-r">
-              <div className="border-b border-app-border px-3 py-3">
-                <h2 className="app-text-label">
-                  {t('agentTerminal.sessionsTitle')}
-                </h2>
+              <div className="border-b border-app-border p-2">
+                <div className="grid grid-cols-2 gap-1 rounded-md bg-app-bg p-1">
+                  <button
+                    aria-pressed={sidebarView === 'sessions'}
+                    className={`rounded border px-2 py-1.5 app-text-caption font-semibold transition-colors ${
+                      sidebarView === 'sessions'
+                        ? 'border-app-border bg-app-surface text-app-ink'
+                        : 'border-transparent text-app-ink/55 hover:text-app-ink'
+                    }`}
+                    onClick={() => setSidebarView('sessions')}
+                    type="button"
+                  >
+                    {t('agentTerminal.sidebar.sessions')} · {sessions.length}
+                  </button>
+                  <button
+                    aria-pressed={sidebarView === 'history'}
+                    className={`rounded border px-2 py-1.5 app-text-caption font-semibold transition-colors ${
+                      sidebarView === 'history'
+                        ? 'border-app-border bg-app-surface text-app-ink'
+                        : 'border-transparent text-app-ink/55 hover:text-app-ink'
+                    }`}
+                    onClick={() => setSidebarView('history')}
+                    type="button"
+                  >
+                    {t('agentTerminal.sidebar.codexHistory')} ·{' '}
+                    {codexThreads.length}
+                  </button>
+                </div>
                 <p className="mt-1 app-text-caption text-app-ink/55">
-                  {t('agentTerminal.sessionsDescription')}
+                  {sidebarView === 'sessions'
+                    ? t('agentTerminal.sessionsDescription')
+                    : t('agentTerminal.codexHistory.description')}
                 </p>
               </div>
-              <div className="min-h-0 flex-1 overflow-y-auto p-2">
-                {sessions.length === 0 ? (
-                  <div className="px-2 py-8 text-center app-text-caption text-app-ink/55">
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                {sidebarView === 'history' ? (
+                  <AgentTerminalCodexHistory
+                    disabled={sessionCapacity.limitReached || creating}
+                    failed={codexHistoryFailed}
+                    loading={codexHistoryLoading}
+                    onResume={(thread) => void resumeCodexThread(thread)}
+                    onRetry={() => void loadCodexHistory()}
+                    resumingThreadId={resumingThreadId}
+                    threads={codexThreads}
+                  />
+                ) : sessions.length === 0 ? (
+                  <div className="px-4 py-8 text-center app-text-caption text-app-ink/55">
                     {t('agentTerminal.sessionsEmpty')}
                   </div>
                 ) : (
-                  <div className="grid gap-1">
+                  <div className="grid gap-1 p-2">
                     {sessions.map((session) => {
-                      const sessionIsActive = ACTIVE_SESSION_STATUSES.has(
-                        session.status,
-                      );
+                      const sessionIsActive =
+                        isAgentTerminalSessionActive(session);
                       const sessionIsDeleting =
                         deletingSessionId === session.id;
+                      const sessionIsStopping =
+                        stoppingSessionId === session.id;
                       return (
                         <div
                           className={`flex w-full overflow-hidden rounded-md border transition-colors ${
@@ -510,7 +656,31 @@ export function AgentTerminalView() {
                                 <Trash2 aria-hidden="true" className="size-4" />
                               )}
                             </button>
-                          ) : null}
+                          ) : (
+                            <button
+                              aria-label={t(
+                                'agentTerminal.actions.stopSessionLabel',
+                                { root: session.root_key },
+                              )}
+                              className="inline-flex w-10 shrink-0 items-center justify-center border-l border-app-border text-[var(--ui-color-danger)] transition-colors hover:bg-[var(--ui-color-danger)]/10 disabled:opacity-50"
+                              disabled={stoppingSessionId !== null}
+                              onClick={() => void stopSession(session)}
+                              title={t('agentTerminal.actions.stop')}
+                              type="button"
+                            >
+                              {sessionIsStopping ? (
+                                <RefreshCw
+                                  aria-hidden="true"
+                                  className="size-4 animate-spin"
+                                />
+                              ) : (
+                                <CircleStop
+                                  aria-hidden="true"
+                                  className="size-4"
+                                />
+                              )}
+                            </button>
+                          )}
                         </div>
                       );
                     })}
@@ -554,11 +724,22 @@ export function AgentTerminalView() {
                       ) : null}
                       {selectedIsActive ? (
                         <Button
-                          disabled={stopping}
-                          onClick={() => void stopSession()}
+                          disabled={stoppingSessionId !== null}
+                          onClick={() =>
+                            selectedSession
+                              ? void stopSession(selectedSession)
+                              : undefined
+                          }
                           variant="subtle"
                         >
-                          <CircleStop aria-hidden="true" className="size-4" />
+                          {stoppingSessionId === selectedSession.id ? (
+                            <RefreshCw
+                              aria-hidden="true"
+                              className="size-4 animate-spin"
+                            />
+                          ) : (
+                            <CircleStop aria-hidden="true" className="size-4" />
+                          )}
                           {t('agentTerminal.actions.stop')}
                         </Button>
                       ) : null}

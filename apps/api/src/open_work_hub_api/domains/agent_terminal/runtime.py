@@ -68,6 +68,7 @@ class _RuntimeSession:
     detaching: bool = False
     finished: bool = False
     closed: bool = False
+    control_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     def append_replay(self, data: bytes) -> None:
         self.replay.extend(data)
@@ -156,6 +157,7 @@ class AgentTerminalRuntime:
         root_path: Path,
         cols: int,
         rows: int,
+        codex_thread_id: str | None = None,
     ) -> None:
         if not self._settings.agent_terminal_enabled:
             raise AgentTerminalRuntimeError("agent_terminal.disabled")
@@ -182,6 +184,7 @@ class AgentTerminalRuntime:
                 codex_binary=codex_binary,
                 cols=cols,
                 rows=rows,
+                codex_thread_id=codex_thread_id,
             )
             try:
                 pane = await self._inspect_tmux_session(session_id)
@@ -255,11 +258,54 @@ class AgentTerminalRuntime:
         except OSError as exc:
             raise AgentTerminalRuntimeError("agent_terminal.session_closed") from exc
 
-    def resize(self, session_id: str, *, cols: int, rows: int) -> None:
+    async def scroll(self, session_id: str, *, lines: int) -> None:
+        if lines == 0 or abs(lines) > 100:
+            raise AgentTerminalRuntimeError("agent_terminal.message_invalid")
+        session = self._active_session(session_id)
+        target = f"{self._tmux_target(session_id)}:0.0"
+        async with session.control_lock:
+            copy_return_code, _copy_output = await self._run_tmux(
+                "copy-mode",
+                "-e",
+                "-t",
+                target,
+            )
+            if copy_return_code != 0:
+                raise AgentTerminalRuntimeError("agent_terminal.runtime_unavailable")
+            scroll_return_code, _scroll_output = await self._run_tmux(
+                "send-keys",
+                "-t",
+                target,
+                "-X",
+                "-N",
+                str(abs(lines)),
+                "scroll-down" if lines > 0 else "scroll-up",
+            )
+            if scroll_return_code != 0:
+                raise AgentTerminalRuntimeError("agent_terminal.runtime_unavailable")
+
+    async def end_scroll(self, session_id: str) -> None:
+        session = self._active_session(session_id)
+        target = f"{self._tmux_target(session_id)}:0.0"
+        async with session.control_lock:
+            return_code, _output = await self._run_tmux(
+                "send-keys",
+                "-t",
+                target,
+                "-X",
+                "cancel",
+            )
+            if return_code not in {0, 1}:
+                raise AgentTerminalRuntimeError("agent_terminal.runtime_unavailable")
+
+    async def resize(self, session_id: str, *, cols: int, rows: int) -> None:
         if not 20 <= cols <= 500 or not 5 <= rows <= 200:
             raise AgentTerminalRuntimeError("agent_terminal.size_invalid")
         session = self._active_session(session_id)
-        _set_terminal_size(session.master_fd, cols=cols, rows=rows)
+        try:
+            _set_terminal_size(session.master_fd, cols=cols, rows=rows)
+        except OSError as exc:
+            raise AgentTerminalRuntimeError("agent_terminal.session_closed") from exc
 
     async def terminate(self, session_id: str) -> None:
         if self._tmux_binary is None:
@@ -307,19 +353,27 @@ class AgentTerminalRuntime:
         codex_binary: str,
         cols: int,
         rows: int,
+        codex_thread_id: str | None = None,
     ) -> None:
+        codex_arguments = [codex_binary]
+        if codex_thread_id is not None:
+            codex_arguments.append("resume")
+        codex_arguments.extend(
+            (
+                "-C",
+                str(root_path),
+                "--dangerously-bypass-approvals-and-sandbox",
+                "--no-alt-screen",
+            )
+        )
+        if codex_thread_id is not None:
+            codex_arguments.append(codex_thread_id)
         command = "exec " + shlex.join(
             (
                 sys.executable,
                 "-m",
                 "open_work_hub_api.domains.agent_terminal.launcher",
-                codex_binary,
-                "-C",
-                str(root_path),
-                "--sandbox",
-                "workspace-write",
-                "--ask-for-approval",
-                "on-request",
+                *codex_arguments,
             )
         )
         target = self._tmux_target(session_id)
@@ -387,14 +441,28 @@ class AgentTerminalRuntime:
     ) -> tuple[subprocess.Popen[bytes], int]:
         if self._tmux_binary is None:
             raise AgentTerminalRuntimeError("agent_terminal.tmux_unavailable")
+        return_code, _output = await self._run_tmux(
+            "set-window-option",
+            "-t",
+            self._tmux_target(session_id),
+            "window-size",
+            "latest",
+        )
+        if return_code != 0:
+            raise AgentTerminalRuntimeError("agent_terminal.session_not_local")
         master_fd, slave_fd = pty.openpty()
         try:
             _set_terminal_size(slave_fd, cols=cols, rows=rows)
             process = subprocess.Popen(
-                self._tmux_prefix(
-                    "attach-session",
-                    "-t",
-                    self._tmux_target(session_id),
+                (
+                    sys.executable,
+                    "-m",
+                    "open_work_hub_api.domains.agent_terminal.tmux_client_launcher",
+                    *self._tmux_prefix(
+                        "attach-session",
+                        "-t",
+                        self._tmux_target(session_id),
+                    ),
                 ),
                 stdin=slave_fd,
                 stdout=slave_fd,

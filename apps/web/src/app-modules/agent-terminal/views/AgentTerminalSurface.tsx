@@ -15,6 +15,26 @@ import {
 
 type TerminalConnectionState = 'connecting' | 'connected' | 'ended' | 'offline';
 
+const TERMINAL_SCROLL_BATCH_MS = 32;
+const MAX_TERMINAL_SCROLL_LINES = 100;
+
+function wheelScrollLines(event: WheelEvent, rows: number): number {
+  let lines: number;
+  if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) {
+    lines = event.deltaY;
+  } else if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) {
+    lines = event.deltaY * rows;
+  } else {
+    lines = event.deltaY / 32;
+  }
+  if (!Number.isFinite(lines) || lines === 0) return 0;
+  const rounded = Math.sign(lines) * Math.max(1, Math.round(Math.abs(lines)));
+  return Math.max(
+    -MAX_TERMINAL_SCROLL_LINES,
+    Math.min(MAX_TERMINAL_SCROLL_LINES, rounded),
+  );
+}
+
 export function AgentTerminalSurface({
   ariaLabel,
   onConnectionStateChange,
@@ -55,9 +75,9 @@ export function AgentTerminalSurface({
         foreground: color('--ui-color-ink-inverse', '#f4f6f8'),
         cursor: color('--ui-color-ink-inverse', '#f4f6f8'),
         cursorAccent: color('--ui-color-surface-inverse', '#101318'),
-        selectionBackground: color('--ui-color-accent', '#5b8def'),
-        selectionForeground: color('--ui-color-ink-inverse', '#f4f6f8'),
-        selectionInactiveBackground: color('--ui-color-accent', '#5b8def'),
+        selectionBackground: '#1d4ed8',
+        selectionForeground: '#ffffff',
+        selectionInactiveBackground: '#1e40af',
       },
     });
     const fitAddon = new FitAddon();
@@ -69,6 +89,9 @@ export function AgentTerminalSurface({
     let reconnectAttempt = 0;
     let reconnectTimer: number | null = null;
     let handshakeTimer: number | null = null;
+    let scrollBatchTimer: number | null = null;
+    let pendingScrollLines = 0;
+    let tmuxScrollActive = false;
     let replayWritesPending = 0;
     let ready = false;
     let ended = false;
@@ -104,6 +127,44 @@ export function AgentTerminalSurface({
     const resizeObserver = new ResizeObserver(() => fit());
     resizeObserver.observe(container);
 
+    const flushScroll = () => {
+      scrollBatchTimer = null;
+      if (
+        pendingScrollLines === 0 ||
+        !ready ||
+        !socket ||
+        socket.readyState !== WebSocket.OPEN
+      ) {
+        pendingScrollLines = 0;
+        return;
+      }
+      socket.send(
+        JSON.stringify({
+          type: 'scroll',
+          lines: pendingScrollLines,
+        }),
+      );
+      pendingScrollLines = 0;
+      tmuxScrollActive = true;
+    };
+    terminal.attachCustomWheelEventHandler((event) => {
+      event.preventDefault();
+      pendingScrollLines = Math.max(
+        -MAX_TERMINAL_SCROLL_LINES,
+        Math.min(
+          MAX_TERMINAL_SCROLL_LINES,
+          pendingScrollLines + wheelScrollLines(event, terminal.rows),
+        ),
+      );
+      if (pendingScrollLines !== 0 && scrollBatchTimer === null) {
+        scrollBatchTimer = window.setTimeout(
+          flushScroll,
+          TERMINAL_SCROLL_BATCH_MS,
+        );
+      }
+      return false;
+    });
+
     const dataDisposable = terminal.onData((data) => {
       if (
         replayWritesPending > 0 ||
@@ -112,6 +173,15 @@ export function AgentTerminalSurface({
         socket.readyState !== WebSocket.OPEN
       ) {
         return;
+      }
+      if (scrollBatchTimer !== null) {
+        window.clearTimeout(scrollBatchTimer);
+        scrollBatchTimer = null;
+        pendingScrollLines = 0;
+      }
+      if (tmuxScrollActive) {
+        socket.send(JSON.stringify({ type: 'scroll_end' }));
+        tmuxScrollActive = false;
       }
       socket.send(
         JSON.stringify({
@@ -216,6 +286,7 @@ export function AgentTerminalSurface({
       disposed = true;
       window.cancelAnimationFrame(initialFit);
       if (reconnectTimer !== null) window.clearTimeout(reconnectTimer);
+      if (scrollBatchTimer !== null) window.clearTimeout(scrollBatchTimer);
       clearHandshakeTimer();
       resizeObserver.disconnect();
       dataDisposable.dispose();

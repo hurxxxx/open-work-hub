@@ -5,18 +5,23 @@ export function AgentTerminalGitSection({
   children,
   count,
   defaultOpen = true,
+  hidden = false,
   title,
 }: {
   children: ReactNode;
   count?: number;
   defaultOpen?: boolean;
+  hidden?: boolean;
   title: string;
 }) {
   const contentId = useId();
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <section className="border-b border-app-border last:border-b-0">
+    <section
+      className="border-b border-app-border last:border-b-0"
+      hidden={hidden}
+    >
       <button
         aria-controls={contentId}
         aria-expanded={open}

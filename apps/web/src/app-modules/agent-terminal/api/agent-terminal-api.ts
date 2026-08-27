@@ -7,6 +7,10 @@ export type AgentTerminalSessionCreate =
   ApiSchema<'AgentTerminalSessionCreateRequest'>;
 export type AgentTerminalSessionList =
   ApiSchema<'AgentTerminalSessionListResponse'>;
+export type AgentTerminalCodexThread =
+  ApiSchema<'AgentTerminalCodexThreadResponse'>;
+export type AgentTerminalCodexThreadList =
+  ApiSchema<'AgentTerminalCodexThreadListResponse'>;
 export type AgentTerminalGitChange =
   ApiSchema<'AgentTerminalGitChangeResponse'>;
 export type AgentTerminalGitChangeScope = AgentTerminalGitChange['scope'];
@@ -36,6 +40,13 @@ export function getAgentTerminalConfig(token: string) {
 
 export function listAgentTerminalSessions(token: string) {
   return apiFetchJson<AgentTerminalSessionList>(`${API_ROOT}/sessions`, token);
+}
+
+export function listAgentTerminalCodexThreads(token: string) {
+  return apiFetchJson<AgentTerminalCodexThreadList>(
+    `${API_ROOT}/codex/threads`,
+    token,
+  );
 }
 
 export function createAgentTerminalSession(

@@ -4,6 +4,7 @@ import {
   agentTerminalWebSocketUrl,
   base64ToBytes,
   bytesToBase64,
+  createAgentTerminalSession,
   deleteAgentTerminalSession,
   getAgentTerminalGitCommit,
   getAgentTerminalGitCommitDiff,
@@ -11,6 +12,7 @@ import {
   getAgentTerminalGitHistory,
   getAgentTerminalGitStatus,
   getAgentTerminalGitSummary,
+  listAgentTerminalCodexThreads,
   stopAgentTerminalSession,
 } from './agent-terminal-api';
 
@@ -64,6 +66,42 @@ describe('agent terminal API protocol', () => {
       2,
       '/api/v1/agent-terminal/sessions/session%20id',
       expect.objectContaining({ method: 'DELETE' }),
+    );
+  });
+
+  it('lists Codex history and passes the selected thread when resuming', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      status: 200,
+      ok: true,
+      json: async () => ({}),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await listAgentTerminalCodexThreads('test-token');
+    await createAgentTerminalSession('test-token', {
+      root_key: 'open-work-hub',
+      codex_thread_id: '11111111-1111-1111-1111-111111111111',
+      cols: 120,
+      rows: 36,
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/v1/agent-terminal/codex/threads',
+      expect.any(Object),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/v1/agent-terminal/sessions',
+      expect.objectContaining({
+        body: JSON.stringify({
+          root_key: 'open-work-hub',
+          codex_thread_id: '11111111-1111-1111-1111-111111111111',
+          cols: 120,
+          rows: 36,
+        }),
+        method: 'POST',
+      }),
     );
   });
 
