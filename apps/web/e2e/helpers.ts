@@ -1,4 +1,8 @@
 import type { Page, Route } from '@playwright/test';
+import {
+  REALTIME_CLIENT_EVENT_TYPES,
+  REALTIME_SERVER_EVENT_TYPES,
+} from '@open-work-hub/contracts/realtime';
 
 const FAKE_TOKEN = 'e2e-test-token';
 const AUTH_TOKEN_STORAGE_KEY = 'open-work-hub.auth.token';
@@ -135,16 +139,6 @@ const NAV_ITEMS_BY_APP: Record<string, WorkspaceBootstrapNavFixture[]> = {
       title: 'AI 챗봇',
       category: 'AI 앱',
       icon_key: 'message-square',
-    }),
-  ],
-  docs: [
-    navItem({
-      id: 'docs',
-      app_id: 'docs',
-      title: '문서 AI',
-      category: 'AI 앱',
-      icon_key: 'message-circle-question',
-      absolute_path: '/docs',
     }),
   ],
   'web-search': [
@@ -297,12 +291,6 @@ const APP_BAR_CATEGORIES: WorkspaceBootstrapAppBarCategoryFixture[] = [
         title: 'AI 어시스턴트 챗봇',
         route_base: '/chatbot',
         icon_key: 'message-square',
-      }),
-      categoryItem({
-        app_id: 'docs',
-        title: '문서 AI',
-        route_base: '/docs',
-        icon_key: 'message-circle-question',
       }),
       categoryItem({
         app_id: 'web-search',
@@ -727,6 +715,30 @@ export async function stubShellBackend(
     group_slugs: [...(options.user ?? FAKE_USER).group_slugs],
   };
   const workspaceBootstrap = buildWorkspaceBootstrap(options.enabledAppIds);
+
+  await page.routeWebSocket('**/api/v1/realtime/ws', (webSocket) => {
+    webSocket.onMessage((message) => {
+      if (typeof message !== 'string') {
+        return;
+      }
+      let payload: unknown;
+      try {
+        payload = JSON.parse(message);
+      } catch {
+        return;
+      }
+      if (
+        payload &&
+        typeof payload === 'object' &&
+        'type' in payload &&
+        payload.type === REALTIME_CLIENT_EVENT_TYPES.auth
+      ) {
+        webSocket.send(
+          JSON.stringify({ type: REALTIME_SERVER_EVENT_TYPES.authOk }),
+        );
+      }
+    });
+  });
 
   // Auth bootstrap: hit on every mount to check setup status.
   await page.route('**/api/v1/auth/bootstrap-status', (route: Route) =>
