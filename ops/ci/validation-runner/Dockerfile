@@ -38,13 +38,24 @@ RUN test -n "${NODE_DEPENDENCY_SHA256}" \
 
 FROM ${POSTGRES_CLIENT_IMAGE} AS postgres_client
 
+RUN set -eux; \
+    client_bin_dir="$(pg_config --bindir)"; \
+    libpq_path="$( \
+      ldd "${client_bin_dir}/psql" \
+        | awk '$1 == "libpq.so.5" { print $3; exit }' \
+    )"; \
+    test -n "${libpq_path}"; \
+    mkdir -p /opt/postgres-client/bin /opt/postgres-client/lib; \
+    cp "${client_bin_dir}/pg_dump" /opt/postgres-client/bin/pg_dump; \
+    cp "${client_bin_dir}/pg_restore" /opt/postgres-client/bin/pg_restore; \
+    cp "${client_bin_dir}/psql" /opt/postgres-client/bin/psql; \
+    cp "${libpq_path}" /opt/postgres-client/lib/libpq.so.5
+
 FROM ${UV_IMAGE}
 
 COPY --from=node_toolchain /usr/local/ /usr/local/
-COPY --from=postgres_client /usr/lib/postgresql/17/bin/pg_dump /usr/local/bin/pg_dump
-COPY --from=postgres_client /usr/lib/postgresql/17/bin/pg_restore /usr/local/bin/pg_restore
-COPY --from=postgres_client /usr/lib/postgresql/17/bin/psql /usr/local/bin/psql
-COPY --from=postgres_client /usr/lib/x86_64-linux-gnu/libpq.so.5.18 /usr/local/lib/libpq.so.5.18
+COPY --from=postgres_client /opt/postgres-client/bin/ /usr/local/bin/
+COPY --from=postgres_client /opt/postgres-client/lib/ /usr/local/lib/
 
 ENV LD_LIBRARY_PATH=/usr/local/lib
 
