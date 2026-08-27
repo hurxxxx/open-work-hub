@@ -234,6 +234,7 @@ describe('app module registry', () => {
 
   it('derives launcher policy from app-owned manifests', () => {
     expect([...APP_LAUNCHER_GLOBAL_PATHS]).toEqual([
+      ['agent-terminal', '/agent-terminal'],
       ['community', '/community'],
       ['mail', '/mail'],
       ['planner', '/planner'],

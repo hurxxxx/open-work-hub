@@ -11,6 +11,7 @@ export interface SelectProps {
   value: string;
   onValueChange: (value: string) => void;
   options: SelectOption[];
+  ariaLabel?: string;
   placeholder?: string;
   className?: string;
   disabled?: boolean;
@@ -20,6 +21,7 @@ export function Select({
   value,
   onValueChange,
   options,
+  ariaLabel,
   placeholder,
   className,
   disabled,
@@ -31,6 +33,7 @@ export function Select({
       disabled={disabled}
     >
       <SelectPrimitive.Trigger
+        aria-label={ariaLabel}
         disabled={disabled}
         className={cn(
           'ui-primitive-control-normal inline-flex h-[var(--ui-density-dense)] min-w-[148px] items-center justify-between gap-2 rounded-[var(--ui-radius-sm)] border border-[var(--ui-color-border)] bg-ui-surface-raised px-2 text-[length:var(--ui-text-caption)] text-[var(--ui-color-ink)] outline-none transition-colors',

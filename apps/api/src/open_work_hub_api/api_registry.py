@@ -9,6 +9,10 @@ from open_work_hub_api.core.settings import Settings
 from open_work_hub_api.domains.ai.router import router as ai_router
 from open_work_hub_api.domains.ai_artifacts.router import router as ai_artifacts_router
 from open_work_hub_api.domains.ai_graph.router import router as ai_graph_router
+from open_work_hub_api.domains.agent_terminal.router import (
+    router as agent_terminal_router,
+    ws_router as agent_terminal_ws_router,
+)
 from open_work_hub_api.domains.admin.router import router as admin_router
 from open_work_hub_api.domains.admin.ai_model_settings_router import (
     router as admin_ai_model_settings_router,
@@ -129,6 +133,8 @@ def _router_specs() -> list[_RouterSpec]:
         _RouterSpec(ai_router, "workspace", "workspace"),
         _RouterSpec(ai_graph_router, "workspace", "workspace"),
         _RouterSpec(ai_artifacts_router, "workspace", "workspace"),
+        _RouterSpec(agent_terminal_router, "api", "protected"),
+        _RouterSpec(agent_terminal_ws_router, "api"),
         _RouterSpec(admin_router, "api", "protected"),
         _RouterSpec(admin_ai_model_settings_router, "api", "protected"),
         _RouterSpec(admin_document_processing_router, "api", "protected"),

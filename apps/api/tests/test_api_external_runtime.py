@@ -42,10 +42,16 @@ def test_production_external_runtime_starts_and_stops_services_in_contract_order
 ) -> None:
     events: list[str] = []
     services = {
+        "agent": _ProbeService("agent", events),
         "app": _ProbeService("app", events),
         "docs": _ProbeService("docs", events),
         "whiteboard": _ProbeService("whiteboard", events),
     }
+    monkeypatch.setattr(
+        runtime_module,
+        "AgentTerminalRuntime",
+        lambda *_args, **_kwargs: services["agent"],
+    )
     monkeypatch.setattr(runtime_module, "AppRealtimeHub", lambda *_args, **_kwargs: services["app"])
     monkeypatch.setattr(runtime_module, "DocsCollabHub", lambda: services["docs"])
     monkeypatch.setattr(runtime_module, "WhiteboardCollabHub", lambda: services["whiteboard"])
@@ -54,6 +60,7 @@ def test_production_external_runtime_starts_and_stops_services_in_contract_order
 
     async def exercise() -> None:
         async with runtime.activate(app):
+            assert app.state.agent_terminal_runtime is services["agent"]
             assert app.state.app_realtime is services["app"]
             assert app.state.docs_collab is services["docs"]
             assert app.state.whiteboard_collab is services["whiteboard"]
@@ -62,6 +69,7 @@ def test_production_external_runtime_starts_and_stops_services_in_contract_order
     asyncio.run(exercise())
 
     assert events == [
+        "start:agent",
         "start:app",
         "start:docs",
         "start:whiteboard",
@@ -69,7 +77,9 @@ def test_production_external_runtime_starts_and_stops_services_in_contract_order
         "stop:whiteboard",
         "stop:docs",
         "stop:app",
+        "stop:agent",
     ]
+    assert app.state.agent_terminal_runtime is None
     assert app.state.app_realtime is None
     assert app.state.docs_collab is None
     assert app.state.whiteboard_collab is None
@@ -80,9 +90,15 @@ def test_production_external_runtime_rolls_back_started_services(
 ) -> None:
     events: list[str] = []
     services = {
+        "agent": _ProbeService("agent", events),
         "app": _ProbeService("app", events),
         "docs": _ProbeService("docs", events, startup_error=RuntimeError("failed")),
     }
+    monkeypatch.setattr(
+        runtime_module,
+        "AgentTerminalRuntime",
+        lambda *_args, **_kwargs: services["agent"],
+    )
     monkeypatch.setattr(runtime_module, "AppRealtimeHub", lambda *_args, **_kwargs: services["app"])
     monkeypatch.setattr(runtime_module, "DocsCollabHub", lambda: services["docs"])
     monkeypatch.setattr(
@@ -100,6 +116,14 @@ def test_production_external_runtime_rolls_back_started_services(
 
     asyncio.run(exercise())
 
-    assert events == ["start:app", "start:docs", "stop:docs", "stop:app"]
+    assert events == [
+        "start:agent",
+        "start:app",
+        "start:docs",
+        "stop:docs",
+        "stop:app",
+        "stop:agent",
+    ]
+    assert app.state.agent_terminal_runtime is None
     assert app.state.app_realtime is None
     assert app.state.docs_collab is None
