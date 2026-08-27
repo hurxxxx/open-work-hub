@@ -72,6 +72,8 @@ build_image() {
       test -r "$OPEN_WORK_HUB_API_IMAGE_DEPENDENCY_FILE"
       test -r "$OPEN_WORK_HUB_NODE_IMAGE_DEPENDENCY_FILE"
       test -r "$OPEN_WORK_HUB_WORKER_IMAGE_DEPENDENCY_FILE"
+      cd /opt/open-work-hub/node-runtime
+      node -e '\''const { chromium } = require("@playwright/test"); chromium.launch({ headless: true }).then((browser) => browser.close()).catch((error) => { console.error(error); process.exit(1); })'\''
     '
   echo "Built and verified ${image}."
 }

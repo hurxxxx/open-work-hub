@@ -140,6 +140,14 @@ COPY --from=validation_node_runtime \
   /opt/open-work-hub/node-runtime \
   /opt/open-work-hub/node-runtime
 
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/open-work-hub/playwright-browsers
+
+RUN cd /opt/open-work-hub/node-runtime \
+    && pnpm exec playwright install --with-deps --only-shell chromium \
+    && node -e \
+      'const { chromium } = require("@playwright/test"); chromium.launch({ headless: true }).then((browser) => browser.close()).catch((error) => { console.error(error); process.exit(1); })' \
+    && rm -rf /var/lib/apt/lists/*
+
 ENV UV_LINK_MODE=copy
 ENV OPEN_WORK_HUB_API_IMAGE_DEPENDENCY_FILE=/opt/open-work-hub/locks/api/dependency.sha256
 ENV OPEN_WORK_HUB_API_IMAGE_VENV=/opt/open-work-hub/venvs/api
