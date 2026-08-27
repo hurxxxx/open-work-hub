@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.db import Base
 from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.organization.models import OrganizationUnit
 from open_work_hub_api.domains.retrieval.models import (
     RetrievalPartition,
     RetrievalPartitionCandidateScope,
@@ -73,6 +74,7 @@ def db() -> Session:
         engine,
         tables=[
             Workspace.__table__,
+            OrganizationUnit.__table__,
             User.__table__,
             RetrievalPartition.__table__,
         ],

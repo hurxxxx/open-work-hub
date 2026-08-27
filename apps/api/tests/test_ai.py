@@ -519,9 +519,9 @@ def test_readyz_uses_configured_readiness_while_ai_health_stays_live(
     )
 
     readyz_response = client.get("/readyz")
-    assert readyz_response.status_code == 200
+    assert readyz_response.status_code == 503
     readyz_payload = readyz_response.json()
-    assert readyz_payload["status"] == "ok"
+    assert readyz_payload["status"] == "degraded"
     assert readyz_payload["llm"]["ready"] is True
     assert readyz_payload["llm"]["local"]["status"] == "ready"
     assert "base_url" not in readyz_payload["llm"]["local"]
