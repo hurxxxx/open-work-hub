@@ -13,10 +13,9 @@
 test -L .claude/skills && test "$(readlink .claude/skills)" = ../.agents/skills
 ```
 
-## GitLab MR Flow
+## GitLab
 
-- GitLab `origin` is canonical; GitHub `upstream` is source-only.
-- Feature MR target: `dev`. Release MR target: `main` from `dev`.
+- Branch, commit, push, MR, release, and deployment authorization lives only in `AGENTS.md`.
 - Before MR ready: implement, run focused checks, run native `/review` when available.
 - If `/review` is unavailable, use `.agents/skills/open-work-hub-mr-review-validation/SKILL.md` and state fallback use.
 - Do not claim future MR publisher, Codex runner, or release validation CI before scripts exist.

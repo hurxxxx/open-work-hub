@@ -64,13 +64,11 @@ cd apps/worker && uv run --python 3.12 --group dev python -m pytest <path> -q
 
 Use `pnpm ci:app-api-contracts`, `pnpm ci:app-web-contracts`, or `pnpm ci:all` only when the changed surface justifies broad validation.
 
-## MR Flow
+## GitLab Evidence
 
-- Feature MR target: GitLab `dev`; same user outcome stays in one MR.
-- Release MR target: `main` from `dev`; non-Codex validation lives there.
-- Codex feature MR job checks only review/freshness/merge/evidence gates.
+- Branch, MR, release, and deployment authorization lives in root `AGENTS.md`.
 - Pipeline contract lives in `.gitlab-ci.yml`, `ops/ci/ci-first.gitlab-ci.yml`, and `scripts/check-gitlab-pipeline.mjs`.
-- Source change requires affected evidence refresh. Target change requires rechecking merged surface when it changes.
+- For explicitly requested MR work, source changes require affected evidence refresh and target changes require rechecking the merged surface.
 - Contract package tags `contracts-v*` publish through GitLab Package Registry.
 - Use `open-work-hub-mr-review-validation` only when review/merge decision is requested.
 

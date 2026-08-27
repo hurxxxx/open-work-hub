@@ -2,8 +2,8 @@
 
 ## Contract
 
-- Feature MR `* -> dev`: `codex_review` only.
-- Release MR `dev -> main`: non-Codex `release_validation`.
+- Branch and MR authorization lives in root `AGENTS.md`.
+- Job selection and target routing live in the CI contract; do not duplicate them in agent guidance.
 - CI contract source: `.gitlab-ci.yml` and byte-identical `ops/ci/ci-first.gitlab-ci.yml`.
 - CI contract checks: `pnpm check:gitlab-pipeline`, `pnpm ci:harness`.
 - GitLab job calls installed runner entrypoint, never MR-source scripts.
