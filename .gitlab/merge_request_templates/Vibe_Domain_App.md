@@ -14,7 +14,7 @@ Under 2,700 chars. Link logs; explain N/A.
 
 - [ ] <!-- open-work-hub:check:scaffold --> Scaffold/Core ready.
 - [ ] <!-- open-work-hub:check:app-owned-surface --> App-only; no guard bypass.
-- [ ] <!-- open-work-hub:check:target --> Feature MR targets GitLab `dev`.
+- [ ] <!-- open-work-hub:check:target --> Target follows root `AGENTS.md`.
 
 ## Data, Authorization, And Safety
 

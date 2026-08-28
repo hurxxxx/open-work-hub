@@ -28,6 +28,7 @@ from open_work_hub_api.domains.files.models import (
     FileManagerFolder,
     FileManagerStorageCleanupJob,
 )
+from open_work_hub_api.domains.organization.models import OrganizationUnit
 from open_work_hub_api.domains.rag.models import RagSyncJob
 from open_work_hub_api.domains.retrieval.models import (
     RetrievalPartition,
@@ -57,6 +58,7 @@ def db() -> Session:
         engine,
         tables=[
             Workspace.__table__,
+            OrganizationUnit.__table__,
             User.__table__,
             UserSystemRole.__table__,
             WorkspaceUserBinding.__table__,

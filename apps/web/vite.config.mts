@@ -11,6 +11,10 @@ const drawioProxyTarget =
   process.env.OPEN_WORK_HUB_WEB_DRAWIO_PROXY_TARGET ??
   `http://127.0.0.1:${process.env.OPEN_WORK_HUB_DRAWIO_PORT ?? 18082}`;
 const webDevPort = Number(process.env.OPEN_WORK_HUB_WEB_DEV_PORT ?? 4200);
+const webDevAllowedHosts = (process.env.OPEN_WORK_HUB_WEB_DEV_ALLOWED_HOSTS ?? '')
+  .split(',')
+  .map((host) => host.trim())
+  .filter(Boolean);
 const webBuildOutDir = '../../dist/apps/web';
 const drawioBrowserUrl =
   process.env.VITE_OPEN_WORK_HUB_DRAWIO_URL ?? process.env.OPEN_WORK_HUB_DRAWIO_SERVER_URL ?? '';
@@ -41,6 +45,7 @@ export default defineConfig(() => ({
   server: {
     port: webDevPort,
     host: process.env.OPEN_WORK_HUB_WEB_DEV_HOST ?? '127.0.0.1',
+    allowedHosts: webDevAllowedHosts,
     proxy: {
       '/api': {
         target: apiProxyTarget,
@@ -61,6 +66,7 @@ export default defineConfig(() => ({
   preview: {
     port: webDevPort,
     host: process.env.OPEN_WORK_HUB_WEB_DEV_HOST ?? '127.0.0.1',
+    allowedHosts: webDevAllowedHosts,
     proxy: {
       '/api': {
         target: apiProxyTarget,

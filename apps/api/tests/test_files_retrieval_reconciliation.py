@@ -21,6 +21,7 @@ from open_work_hub_api.domains.files.models import (
     FileManagerFile,
     FileManagerFolder,
 )
+from open_work_hub_api.domains.organization.models import OrganizationUnit
 from open_work_hub_api.domains.rag.models import RagSyncJob
 from open_work_hub_api.domains.rag.contracts import RagSyncOperation
 from open_work_hub_api.domains.retrieval.models import (
@@ -50,6 +51,7 @@ def _session() -> Session:
         engine,
         tables=[
             Workspace.__table__,
+            OrganizationUnit.__table__,
             User.__table__,
             RetrievalPartition.__table__,
             FileManagerCorpus.__table__,

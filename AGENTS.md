@@ -31,9 +31,10 @@
 
 - GitLab `origin` is the site canonical remote. GitHub `upstream` is source-only.
 - Do not push site changes to GitHub or manage them with GitHub PRs.
-- Site integration branch: `dev`. Production branch: protected `main`.
-- Feature flow: feature branch -> GitLab MR to `dev`. Release flow: `dev` -> GitLab MR to `main`.
-- No commit, push, MR, merge, branch switch, or destructive cleanup unless the latest user request explicitly asks for that operation.
+- Work on `dev` unless the latest user request names another branch. Do not create a persistent branch, worktree, or MR for routine work.
+- If the `dev` checkout has unrelated dirty work, preserve it and use a temporary detached worktree from `origin/dev`; remove it after handoff.
+- Protected `main` is production. Creating or merging a `dev -> main` MR, updating `main` or the production checkout, and deploying each require an explicit latest-user request.
+- No commit, push, MR mutation, merge, or destructive cleanup unless the latest user request explicitly asks for that operation.
 - Finished work stays as an uncommitted diff by default; do not "helpfully" commit or push after implementation.
 - Keep upstream core updates and site custom patches in separate commits.
 - Do not weaken tests, checkers, CI, agent policy, exclusions, auth, or guardrails to pass a feature.
@@ -56,7 +57,7 @@
 ## Validation
 
 - Pick checks by changed surface. Start focused; widen only for shared, migration, external, or uncertain blast radius.
-- Feature MR CI owns Codex review. `dev -> main` release MR owns non-Codex validation.
+- MR-only review and release jobs apply only to explicitly requested MR work; the CI contract owns their exact routing.
 - CI contract source: `.gitlab-ci.yml`, `ops/ci/ci-first.gitlab-ci.yml`, `scripts/check-gitlab-pipeline.mjs`.
 
 | Change             | Baseline checks                                                                                   |
