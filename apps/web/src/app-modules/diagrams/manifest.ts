@@ -1,4 +1,5 @@
 import { Archive, User, Workflow } from 'lucide-react';
+import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
 
 import type { AppModuleManifest } from '@/src/app/shell/navigation-types';
 
@@ -44,7 +45,7 @@ export const diagramsManifest: AppModuleManifest = {
     },
   ],
   workspaceRoutePaths: [
-    '/w/:workspaceSlug/diagrams',
-    '/w/:workspaceSlug/diagrams/:diagramId',
+    getAppRoutePattern('diagrams.root'),
+    getAppRoutePattern('diagrams.diagram'),
   ],
 };

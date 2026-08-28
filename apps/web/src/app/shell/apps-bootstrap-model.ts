@@ -24,35 +24,28 @@ export function projectShellAppsBootstrap({
   globalBootstrap,
   personalToolsScope,
   personalToolsTitle,
-  workspaceApps,
-  workspaceCategories,
 }: {
   globalBootstrap: AppsBootstrapResponse | null;
   personalToolsScope: string;
   personalToolsTitle: string;
-  workspaceApps: readonly WorkspaceBootstrapApp[];
-  workspaceCategories: readonly WorkspaceBootstrapAppBarCategory[];
+  workspaceApps?: readonly WorkspaceBootstrapApp[];
+  workspaceCategories?: readonly WorkspaceBootstrapAppBarCategory[];
 }): ShellAppsBootstrapProjection {
   const appById = new Map<string, WorkspaceBootstrapApp>(
-    workspaceApps.map((app) => [app.app_id, app]),
+    (globalBootstrap?.apps ?? []).map((app) => [
+      app.app_id,
+      { ...app, enabled: true, nav_items: [] } as WorkspaceBootstrapApp,
+    ]),
   );
-  for (const app of globalBootstrap?.apps ?? []) {
-    appById.set(app.app_id, { ...app, nav_items: [] });
-  }
 
-  const personalToolIds = new Set(
-    (globalBootstrap?.personal_tools ?? []).map((app) => app.app_id),
-  );
+  const personalToolIds = new Set(globalBootstrap?.personal_tool_app_ids ?? []);
   const categoryById = new Map<
     string,
     WorkspaceBootstrapAppBarCategory & {
       itemById: Map<string, WorkspaceBootstrapAppBarCategoryItem>;
     }
   >();
-  for (const category of [
-    ...workspaceCategories,
-    ...(globalBootstrap?.app_bar_categories ?? []),
-  ]) {
+  for (const category of [...(globalBootstrap?.app_bar_categories ?? [])]) {
     const existing = categoryById.get(category.id);
     const itemById = existing?.itemById ?? new Map();
     category.items.forEach((item, index) => {
@@ -81,7 +74,9 @@ export function projectShellAppsBootstrap({
     .filter((category) => category.items.length > 0)
     .sort((left, right) => left.position - right.position);
 
-  const personalTools = globalBootstrap?.personal_tools ?? [];
+  const personalTools = (globalBootstrap?.apps ?? []).filter((app) =>
+    personalToolIds.has(app.app_id),
+  );
   if (personalTools.length > 0) {
     appBarCategories.unshift({
       id: PERSONAL_TOOLS_CATEGORY_ID,
@@ -98,7 +93,7 @@ export function projectShellAppsBootstrap({
         route_base: app.route_base,
         icon_key: app.icon_key,
         availability_scope: 'platform',
-        enabled: app.enabled,
+        enabled: true,
         coming_soon: app.coming_soon,
         position,
       })),

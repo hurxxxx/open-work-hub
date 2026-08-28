@@ -18,7 +18,7 @@ function sharing(): WhiteboardSharingResponse {
   return {
     link_share: {
       access_level: 'read',
-      share_path: '/whiteboard/shared/share-token',
+      share_path: '/apps/whiteboard/shared/share-token',
     },
     users: [
       {
@@ -38,7 +38,7 @@ describe('whiteboard share model', () => {
     });
 
     expect(presenter.linkUrl).toBe(
-      'https://app.open-work-hub.local/whiteboard/shared/share-token',
+      'https://app.open-work-hub.local/apps/whiteboard/shared/share-token',
     );
     expect(presenter.userRows.map((row) => row.user.id)).toEqual([
       'user-1',

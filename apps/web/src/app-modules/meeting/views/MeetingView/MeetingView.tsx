@@ -3,11 +3,11 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Plus, Loader2, Users, Video, FileText } from 'lucide-react';
 import { Button } from '@open-work-hub/ui';
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { normalizeTimeZone } from '@/src/platform/time/time-utils';
 import { listMeetings } from '../../api/meeting-api';
-import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
 
 import { MeetingList } from './MeetingList';
 import { MeetingCreateModal } from './MeetingCreateModal';
@@ -17,7 +17,6 @@ import {
   MEETING_TABS,
   consumeMeetingCreateSearchParam,
   createMeetingTabSearchParams,
-  getLegacyMeetingRedirectId,
   meetingListViewReducer,
   resolveMeetingScope,
   resolveMeetingTab,
@@ -36,16 +35,6 @@ export function MeetingView() {
     INITIAL_MEETING_LIST_VIEW_STATE,
   );
   const activeTab = resolveMeetingTab(searchParams.get('tab'));
-
-  useEffect(() => {
-    if (!workspaceSlug) return;
-    const legacyId = getLegacyMeetingRedirectId(searchParams);
-    if (!legacyId) return;
-    navigate(
-      buildWorkspaceAppPath(workspaceSlug, 'meeting', `/${legacyId}`),
-      { replace: true },
-    );
-  }, [navigate, searchParams, workspaceSlug]);
 
   const scope = useMemo(() => resolveMeetingScope(activeTab), [activeTab]);
 
@@ -91,26 +80,40 @@ export function MeetingView() {
   const handleSelect = useCallback(
     (id: string) => {
       if (!workspaceSlug) return;
-      navigate(buildWorkspaceAppPath(workspaceSlug, 'meeting', `/${id}`));
+      navigate(
+        buildAppHref({
+          routeId: 'meeting.detail',
+          workspaceSlug,
+          pathParams: { meetingId: id },
+        }),
+      );
     },
     [navigate, workspaceSlug],
   );
 
   const handleTabChange = useCallback(
     (tab: MeetingTab) => {
-      setSearchParams(
-        createMeetingTabSearchParams({ searchParams, tab }),
-        { replace: true },
-      );
+      setSearchParams(createMeetingTabSearchParams({ searchParams, tab }), {
+        replace: true,
+      });
     },
     [searchParams, setSearchParams],
   );
 
-  const handleCreated = useCallback((id: string) => {
-    if (!workspaceSlug) return;
-    dispatch({ type: 'create-closed' });
-    navigate(buildWorkspaceAppPath(workspaceSlug, 'meeting', `/${id}`));
-  }, [navigate, workspaceSlug]);
+  const handleCreated = useCallback(
+    (id: string) => {
+      if (!workspaceSlug) return;
+      dispatch({ type: 'create-closed' });
+      navigate(
+        buildAppHref({
+          routeId: 'meeting.detail',
+          workspaceSlug,
+          pathParams: { meetingId: id },
+        }),
+      );
+    },
+    [navigate, workspaceSlug],
+  );
 
   if (!workspaceSlug) {
     return null;
@@ -121,7 +124,9 @@ export function MeetingView() {
       <header className="flex items-center justify-between border-b border-app-border bg-app-surface px-6 py-4">
         <div className="flex items-center gap-3">
           <Users size={20} className="text-app-ink/60 dark:text-app-ink/70" />
-          <h1 className="app-text-title-md text-app-ink">{t('meeting.meetings')}</h1>
+          <h1 className="app-text-title-md text-app-ink">
+            {t('meeting.meetings')}
+          </h1>
         </div>
         <Button
           variant="primary"

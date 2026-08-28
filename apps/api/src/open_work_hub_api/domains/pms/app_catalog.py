@@ -1,19 +1,12 @@
 from open_work_hub_api.core.workspace_app_registry import (
-    WorkspaceAppRegistration,
     WorkspaceNavRegistration,
+    workspace_app_registration,
 )
 
 
-PMS_WORKSPACE_APP = WorkspaceAppRegistration(
-    app_id="pms",
-    title="PMS",
-    route_base="/pms",
-    icon_key="folder-kanban",
+PMS_WORKSPACE_APP = workspace_app_registration(
+    "pms",
     backend_domain="pms",
-    enabled_by_default=True,
-    visible_by_default=True,
-    launcher_category=True,
-    launcher_pinned_by_default=True,
     nav_items=(
         WorkspaceNavRegistration(
             id="pms-inbox",

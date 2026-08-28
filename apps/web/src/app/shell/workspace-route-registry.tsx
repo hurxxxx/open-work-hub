@@ -5,17 +5,10 @@ import type { WorkspaceRouteDefinition } from './route-types';
 
 export type ShellWorkspaceRouteDefinition = Omit<
   WorkspaceRouteDefinition,
-  'appId' | 'bootstrapAppId'
+  'appId'
 > & {
   appId: string;
-  bootstrapAppId?: string;
 };
-
-export function resolveWorkspaceRouteBootstrapAppId(
-  route: Pick<ShellWorkspaceRouteDefinition, 'appId' | 'bootstrapAppId'>,
-): string {
-  return route.bootstrapAppId ?? route.appId;
-}
 
 export function WorkspaceRouteElements({
   bootstrapAppIds,
@@ -36,7 +29,7 @@ export function WorkspaceRouteElements({
           path={route.path}
           element={
             <WorkspaceGate
-              appId={resolveWorkspaceRouteBootstrapAppId(route)}
+              appId={route.appId}
               bootstrapAppIds={bootstrapAppIds}
               bootstrapError={bootstrapError}
               bootstrapLoading={bootstrapLoading}

@@ -6,6 +6,7 @@ from open_work_hub_api.core.workspace_app_registry import (
     WorkspaceNavCatalogItem,
     compile_workspace_app_registry,
 )
+from open_work_hub_api.core.app_contracts_generated import APP_CONTRACT_BY_ID
 from open_work_hub_api.domains.bento.app_catalog import BENTO_WORKSPACE_APP
 from open_work_hub_api.domains.agent_terminal.app_catalog import AGENT_TERMINAL_APP
 from open_work_hub_api.domains.community.app_catalog import COMMUNITY_WORKSPACE_APP
@@ -45,7 +46,16 @@ _WORKSPACE_APP_REGISTRATIONS = (
     RECORDING_WORKSPACE_APP,
     RETRIEVAL_SEARCH_WORKSPACE_APP,
 )
-_WORKSPACE_APP_REGISTRY = compile_workspace_app_registry(_WORKSPACE_APP_REGISTRATIONS)
+_WORKSPACE_APP_REGISTRY = compile_workspace_app_registry(
+    _WORKSPACE_APP_REGISTRATIONS,
+    require_generated_contract=True,
+)
+if set(_WORKSPACE_APP_REGISTRY.app_ids) != set(APP_CONTRACT_BY_ID):
+    raise RuntimeError(
+        "Backend app registrations must exactly match the generated app contract: "
+        f"registered={sorted(_WORKSPACE_APP_REGISTRY.app_ids)!r}, "
+        f"contract={sorted(APP_CONTRACT_BY_ID)!r}"
+    )
 _WORKSPACE_APP_REGISTRATIONS_BY_ID = {
     registration.app_id: registration for registration in _WORKSPACE_APP_REGISTRATIONS
 }

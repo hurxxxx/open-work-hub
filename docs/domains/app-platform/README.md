@@ -1,99 +1,108 @@
 # App Platform Contract
 
-## Model
+## Source Of Truth
 
-1. App-owned descriptor/manifest declares identity and contract.
-2. Platform composition root imports registration objects explicitly.
-3. Registry compiler derives bootstrap, nav, routes, launcher, background work, search/guide projections and rejects duplicates/owner mismatch.
+- [ADR 0011](../../../adr/0011-app-first-workspace-context.md) owns app-first workspace context and runtime control policy.
+- `packages/contracts/app-contracts.json` owns executable leaf identity, route context, execution context, resource scope, and launcher placement.
+- `packages/contracts/app-contracts.schema.json` validates the source contract.
+- `scripts/generate-app-contracts.mjs` generates:
+  - `packages/contracts/src/app-contracts.generated.ts`
+  - `apps/api/src/open_work_hub_api/core/app_contracts_generated.py`
+- Generated files are never hand-edited. Run `pnpm generate:app-contracts` after changing the source contract.
 
-Do not add app ID string allowlists, section lists, or platform branches outside registry output.
+`ai`, `collaboration`, and `business` are display categories only. Do not register them as executable apps, route owners, API owners, entitlement targets, or AI capability scopes.
 
-## Scope
+## Route Contract
 
-- Top tenant = company deployment/database/settings bundle. See [ADR 0007](../../../adr/0007-company-tenant-workspace-scope.md).
-- Workspace = collaboration/data/access scope below company.
-- `availability_scope`: `workspace` or `platform`.
-- `resourceScope`: `workspace`, `company`, `personal`, `hybrid`.
-- Route context and execution principal are separate from availability/resource ownership.
-- Workspace route uses `/w/:workspaceSlug/...`; slug is locator, not auth.
-- Server rechecks membership, RBAC, resource ACL, entitlement, and platform visibility at execution.
-- Launcher categories/pins are display only.
+| Context          | Canonical form                               | Workspace bootstrap          |
+| ---------------- | -------------------------------------------- | ---------------------------- |
+| neutral launcher | `/`                                          | no                           |
+| app entry        | `/apps/:appId`                               | no; resolves app-local entry |
+| workspace        | `/apps/:appId/workspaces/:workspaceSlug/...` | yes                          |
+| global/shared    | `/apps/:appId/...`                           | no                           |
+
+- Use `buildAppHref` in TypeScript and `build_app_href` in Python for internal browser links.
+- No legacy aliases, redirects, fallback parsing, or independently assembled browser paths.
+- Route scope does not grant access. Server gates recheck membership, role, availability, resource ACL, and AI approval.
+- API paths remain under `/api/v1`; they are not browser route aliases.
+
+## Runtime Availability
+
+The compiled leaf catalog provides metadata only. PostgreSQL controls execution and missing rows fail closed.
+
+```text
+company enabled
+  ├─ platform app -> enabled
+  └─ workspace app
+       └─ workspace override when present
+            otherwise workspace default
+```
+
+- `company_app_controls`: required company switch for every app.
+- `workspace_app_defaults`: required fallback for workspace apps.
+- `workspace_app_overrides`: optional workspace-specific enable/disable; delete the row to inherit.
+- Static feature flags and required system roles remain additional gates.
+- Catalog defaults, launcher placement, UI hiding, and local storage never authorize execution.
+- Admin writes are audited through:
+  - `GET/PATCH /api/v1/admin/apps/company-controls`
+  - `GET/PATCH /api/v1/admin/apps/workspace-defaults`
+  - `GET/PATCH /api/v1/admin/workspaces/{workspace_id}/app-overrides`
+
+## Launch And Workspace Choice
+
+- `GET /api/v1/apps/bootstrap` returns only executable apps for the current user.
+- `global_route_app_ids` separately authorizes an app's global/shared routes when its company and role gates pass; it does not make the app launcher-visible without an executable context.
+- Platform apps require company enablement and any role/feature gates.
+- Workspace apps require at least one active membership where the app is enabled.
+- `GET /api/v1/apps/{app_id}/eligible-workspaces` is the app-local chooser source.
+- `PUT /api/v1/apps/{app_id}/workspace-preference` persists `(user_id, app_id) -> workspace_id` only after membership and availability checks.
+- One eligible workspace auto-selects. Multiple eligible workspaces use an eligible saved preference or show the chooser.
+- The global App Bar never stores or implies current workspace. Workspace selection renders in the current workspace app submenu.
+- Launcher categories, fixed placement, personal tools, and pins affect presentation only.
 
 ## Backend Registration
 
-- Domain exports immutable `WorkspaceAppRegistration` from `domains/<domain>/app_catalog.py`.
-- Add it to `domains/auth/workspace_apps.py` composition tuple.
-- `compile_workspace_app_registry()` validates ID/route/nav uniqueness, owner links, launcher policy, and derived projections.
-- Bootstrap, entitlement, admin app list, router gates, and fixed/default-pin projections consume compiled catalog.
-- Removed legacy fields stay removed: `launcher_section`, `launcher_sections`, `parent_app_id`, `feature_app_id`, entitlement `enabled`.
-- Migration-only ID mappings stay inside Alembic migrations.
-
-## Launcher
-
-- `launcher_category` = eligible for DB-managed launcher category, not a named section.
-- DB owns category title/icon/order/app placement.
-- `launcher_fixed` and `launcher_pinned_by_default` describe app launcher policy only.
-- `launcher_personal_tools=True` is for platform + personal apps in fixed personal tools launcher. It requires `launcher_category=False`.
-- Empty personal tools launcher is hidden.
-- Admin screens:
-  - `/admin/apps/platform`: platform apps and personal tools
-  - `/admin/apps/workspace`: workspace apps
-  - `/admin/apps/app-bar`: category layout only
+- A domain exports one immutable leaf registration from `domains/<domain>/app_catalog.py`.
+- `domains/auth/workspace_apps.py` is the explicit composition root.
+- `compile_workspace_app_registry()` rejects duplicate identity/routes/nav, invalid ownership, and inconsistent route metadata.
+- Bootstrap, route/API gates, admin controls, AI discovery/execution, search, and background work consume compiled identity plus runtime availability.
+- Queued work rechecks availability after claiming the job and before resolving providers or mutating app data. A disabled job pauses or cancels according to that queue's terminal-state contract.
+- Migration-only app ID lists may exist inside Alembic migrations; runtime allowlists outside the registry are forbidden.
 
 ## Frontend Registration
 
-- App identity lives in `apps/web/src/app-modules/<moduleId>/`.
-- Top-level app exports `AppModuleManifest` and app-local registration.
-- Child tool exports `FeatureModuleManifest`/registration from its own module.
-- Parent composition root includes child registration; shell registry compiles all app/feature projections.
-- Caller does not pass app ID into nav/background inputs; compiler injects owner from manifest and rejects mismatch.
-- Derived projections are not edited as ID lists: manifests, AI tool app IDs, guide sources, nav, routes, App Bar, tool views.
-- AI tool entry is declared by `manifest.surfaces.aiToolEntry`.
-- Workspace keyword search is backend-owned, not frontend manifest-owned.
+- App code stays under `apps/web/src/app-modules/<appId>/`.
+- Each leaf exports an `AppModuleManifest` and owns its routes, submenu, and extension registrations.
+- An app with no submenu entries returns an empty navigation projection; the platform never invents a root item.
+- Settings/admin is a shell-owned navigation surface, not an executable app identity or availability target.
+- The shell composition root imports leaf registrations explicitly and derives route, App Bar, document title, mobile navigation, and background projections.
+- A workspace app uses the route workspace slug as context. Global/shared routes must not call workspace bootstrap.
+- User-facing copy keeps `ko-KR` and `en-US` catalogs aligned.
 
 ## Workspace Keyword Search
 
-Participating app must provide:
+Participating apps provide an app-owned `SearchEntityAdapter`, explicit composition in `domains/search/default_entity_adapters.py`, lifecycle projection hooks, source ACL, and disabled/empty/missing-index tests. Search results use the canonical generated browser route and recheck source access. Retrieval partition is candidate scope, not authorization.
 
-- app-owned `SearchEntityAdapter` in domain `search_projection.py`
-- `owner_app`, `entity_type`, `resource_type`, locale `label_key`, fallback `label`
-- workspace/single-document loader and create/update/delete lifecycle hooks
-- explicit composition in `domains/search/default_entity_adapters.py`
-- Source ACL adapter, keyword ACL branch, hook tests, projection/ACL/disabled/empty/missing-index tests
-- bootstrap projection through `keyword_search.entity_types`
-- backfill plan before production exposure
+## Change Checklist
 
-Do not use runtime scans, frontend flags, app ID allowlists, or direct low-level registry calls.
-
-## New App Checklist
-
-- backend app catalog and composition
-- server entitlement/access gate, bootstrap, icon/i18n
-- frontend manifest/registration and shell composition
-- workspace API prefix, OpenAPI/generated client, RBAC/data scope
-- worker/AI extension points if used
-- duplicate/unknown-owner/identity-injection negative tests
-- keyword search: `none - reason` or adapter/ACL/projection/hook/backfill/rollback evidence
-- incomplete scaffold defaults: `enabled_by_default=False`, `visible_by_default=False`
-
-## Remove App Checklist
-
-- backend catalog/router/gates/AI/worker registrations
-- frontend manifest/route/API/help/i18n/tests
-- entitlements, visibility, launcher category, pins, app tables
-- workload route overrides and AI security scoped to removed app/task
-- regenerated OpenAPI/client
-- preserve audit/usage history unless retention policy says delete
+- update the source app contract and regenerate both language projections
+- update backend leaf registration, route/API gate, admin/runtime availability, and focused tests
+- update frontend manifest, app-first routes, submenu selector, launcher projection, and i18n
+- update search, notification, share, worker, and AI links/capabilities owned by the app
+- regenerate OpenAPI/client when the API contract changes
+- add Alembic migration for persisted schema changes
+- verify zero/missing-control, disabled, unauthorized, global/shared, one-workspace, multi-workspace, and stale-preference cases
 
 ## Checks
 
 ```bash
+pnpm generate:app-contracts
 pnpm check:web-architecture
 pnpm nx typecheck web
 pnpm check:api-architecture
 pnpm check:api-contract
 pnpm check:i18n
-cd apps/api && uv run --frozen --python 3.12 --group dev python -m pytest tests/test_workspace_app_registry.py tests/test_workspace_bootstrap.py tests/test_admin_workspaces.py -q
+pnpm check:alembic-graph
+pnpm test:alembic-graph
+cd apps/api && uv run --python 3.12 --group dev python -m pytest tests/test_app_routes.py tests/test_app_availability.py tests/test_apps_launch_catalog.py tests/test_workspace_app_registry.py tests/test_workspace_bootstrap.py tests/test_admin_workspaces.py -q
 ```
-
-Frontend registry changes also run affected app-registry specs. Exposure changes need browser check for launcher, route, disabled/unauthorized gate, and console errors.

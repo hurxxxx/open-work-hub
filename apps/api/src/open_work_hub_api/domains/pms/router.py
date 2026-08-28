@@ -84,7 +84,6 @@ from open_work_hub_api.domains.pms import task_list_customization as pms_task_li
 from open_work_hub_api.domains.pms import view_preferences as pms_view_preferences
 from open_work_hub_api.domains.pms import task_work_items as pms_task_work_items
 from open_work_hub_api.domains.pms.dashboard_summary import dashboard_summary_payload
-from open_work_hub_api.domains.pms.links import normalize_pms_deep_link
 from open_work_hub_api.domains.pms.app_catalog import PMS_WORKSPACE_APP
 from open_work_hub_api.domains.pms.projections import (
     serialize_task_summary,
@@ -2186,7 +2185,7 @@ def list_notifications(
                 body=n.body,
                 reference_type=n.reference_type,
                 reference_id=n.reference_id,
-                action_url=normalize_pms_deep_link(n.action_url),
+                action_url=n.action_url,
                 is_read=n.is_read,
                 created_at=n.created_at,
             )
@@ -2237,7 +2236,7 @@ def mark_notification_read(
         body=notification.body,
         reference_type=notification.reference_type,
         reference_id=notification.reference_id,
-        action_url=normalize_pms_deep_link(notification.action_url),
+        action_url=notification.action_url,
         is_read=notification.is_read,
         created_at=notification.created_at,
     )

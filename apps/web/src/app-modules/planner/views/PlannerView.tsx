@@ -26,7 +26,10 @@ import type {
 } from '@/src/platform/calendar/calendar-types';
 import { dispatchFloatingPmsOpen } from '@/src/platform/personal-widgets/floating-panel-events';
 import { normalizeTimeZone } from '@/src/platform/time/time-utils';
-import { resolveShellWorkspaceSlug } from '@/src/platform/workspaces/workspace-utils';
+import {
+  getAllEligibleWorkspaces,
+  type EligibleWorkspace,
+} from '@/src/platform/workspaces/workspaces-api';
 import { updateMeeting } from '@/src/app-modules/meeting/public-api';
 import { updateTask } from '@/src/app-modules/pms/public-api';
 import { updatePlannerEvent } from '../api/planner-api';
@@ -249,10 +252,17 @@ function usePlannerViewElement(): ReactNode {
   const today = new Date();
   const { token, user } = useAuth();
   const timeZone = normalizeTimeZone(user?.time_zone);
-  const defaultWorkspaceSlug = resolveShellWorkspaceSlug(user, null);
   const [meetingWorkspaceSlug, setMeetingWorkspaceSlug] = useState<
     string | null
-  >(defaultWorkspaceSlug);
+  >(null);
+  const [meetingWorkspaces, setMeetingWorkspaces] = useState<
+    EligibleWorkspace[]
+  >([]);
+  const [meetingWorkspacesLoading, setMeetingWorkspacesLoading] =
+    useState(false);
+  const [meetingWorkspaceError, setMeetingWorkspaceError] = useState<
+    string | null
+  >(null);
   const meetingEnabled = Boolean(meetingWorkspaceSlug);
   const [previewMeetingWorkspaceSlug, setPreviewMeetingWorkspaceSlug] =
     useState<string | null>(null);
@@ -280,16 +290,40 @@ function usePlannerViewElement(): ReactNode {
     : session.plannerEventRange;
 
   useEffect(() => {
-    if (
-      meetingWorkspaceSlug &&
-      user?.workspaces.some(
-        (workspace) => workspace.slug === meetingWorkspaceSlug,
-      )
-    ) {
+    if (!token) {
+      setMeetingWorkspaces([]);
+      setMeetingWorkspaceSlug(null);
       return;
     }
-    setMeetingWorkspaceSlug(defaultWorkspaceSlug);
-  }, [defaultWorkspaceSlug, meetingWorkspaceSlug, user?.workspaces]);
+    let cancelled = false;
+    setMeetingWorkspacesLoading(true);
+    setMeetingWorkspaceError(null);
+    getAllEligibleWorkspaces(token, 'meeting')
+      .then((workspaces) => {
+        if (cancelled) return;
+        setMeetingWorkspaces(workspaces);
+        setMeetingWorkspaceSlug((current) => {
+          if (workspaces.some((workspace) => workspace.slug === current)) {
+            return current;
+          }
+          return workspaces.length === 1 ? workspaces[0].slug : null;
+        });
+      })
+      .catch((caught: unknown) => {
+        if (cancelled) return;
+        setMeetingWorkspaces([]);
+        setMeetingWorkspaceSlug(null);
+        setMeetingWorkspaceError(
+          caught instanceof Error ? caught.message : String(caught),
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setMeetingWorkspacesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   const calendarRef = useRef<UnifiedCalendarHandle | null>(null);
   const previousSurfaceMode = useRef(surfaceMode);
@@ -486,11 +520,7 @@ function usePlannerViewElement(): ReactNode {
       return;
     }
     setSession((current) => {
-      if (
-        !current.meetingCreateOpen &&
-        !current.previewMeetingId &&
-        !current.creationChoice
-      ) {
+      if (!current.meetingCreateOpen && !current.creationChoice) {
         return current;
       }
       return {
@@ -498,10 +528,8 @@ function usePlannerViewElement(): ReactNode {
         creationChoice: null,
         meetingCreateOpen: false,
         meetingCreateRange: null,
-        previewMeetingId: null,
       };
     });
-    setPreviewMeetingWorkspaceSlug(null);
   }, [meetingEnabled]);
 
   useEffect(() => {
@@ -853,9 +881,9 @@ function usePlannerViewElement(): ReactNode {
                     <Plus size={14} className="text-app-ink/45" />
                     <span>{t('planner.event')}</span>
                   </button>
-                  {meetingEnabled ? (
+                  {meetingWorkspaces.length > 0 || meetingWorkspacesLoading ? (
                     <>
-                      {user && user.workspaces.length > 1 ? (
+                      {meetingWorkspaces.length > 1 ? (
                         <label className="block border-t border-app-border px-3 py-2">
                           <span className="app-text-overline mb-1 block text-app-ink/45">
                             {t('common:labels.workspace')}
@@ -864,11 +892,16 @@ function usePlannerViewElement(): ReactNode {
                             aria-label={t('common:labels.workspace')}
                             className="app-field-input w-full"
                             onChange={(event) =>
-                              setMeetingWorkspaceSlug(event.target.value)
+                              setMeetingWorkspaceSlug(
+                                event.target.value || null,
+                              )
                             }
                             value={meetingWorkspaceSlug ?? ''}
                           >
-                            {user.workspaces.map((workspace) => (
+                            <option value="">
+                              {t('planner.chooseMeetingWorkspace')}
+                            </option>
+                            {meetingWorkspaces.map((workspace) => (
                               <option key={workspace.id} value={workspace.slug}>
                                 {workspace.name}
                               </option>
@@ -878,15 +911,21 @@ function usePlannerViewElement(): ReactNode {
                       ) : null}
                       <button
                         type="button"
+                        disabled={!meetingEnabled || meetingWorkspacesLoading}
                         onClick={() =>
                           setSession((current) => openMeetingCreate(current))
                         }
-                        className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink transition-colors hover:bg-app-surface-hover"
+                        className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink transition-colors hover:bg-app-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         <Plus size={14} className="text-app-ink/45" />
                         <span>{t('planner.meeting')}</span>
                       </button>
                     </>
+                  ) : null}
+                  {meetingWorkspaceError ? (
+                    <p className="app-text-caption border-t border-app-border px-3 py-2 text-app-danger">
+                      {meetingWorkspaceError}
+                    </p>
                   ) : null}
                 </div>
               ) : null}
@@ -949,7 +988,7 @@ function usePlannerViewElement(): ReactNode {
           )}
         </div>
 
-        {meetingEnabled ? (
+        {session.previewMeetingId ? (
           <MeetingPreviewModal
             meetingId={session.previewMeetingId}
             workspaceSlug={previewMeetingWorkspaceSlug ?? undefined}

@@ -159,8 +159,7 @@ const navItems: NavItem[] = [
     title: 'Document library',
     icon: Database,
     category: 'Documents',
-    appId: 'business',
-    linkAppId: 'docs',
+    appId: 'docs',
     pathSuffix: '/default',
   },
   {
@@ -168,8 +167,7 @@ const navItems: NavItem[] = [
     title: 'Document assistant',
     icon: Search,
     category: 'Documents',
-    appId: 'business',
-    linkAppId: 'docs',
+    appId: 'docs',
   },
 ];
 
@@ -188,7 +186,7 @@ describe('sub-sidebar navigation model', () => {
           title: 'Search from bootstrap',
           category: 'Tools',
           path_suffix: '?q=1',
-          absolute_path: '/tool/search',
+          absolute_path: '/apps/retrieval-search',
           link_app_id: 'docs',
           coming_soon: true,
         }),
@@ -204,7 +202,7 @@ describe('sub-sidebar navigation model', () => {
       title: 'Translated search',
       category: 'Translated tools',
       pathSuffix: '?q=1',
-      absolutePath: '/tool/search',
+      absolutePath: '/apps/retrieval-search',
       linkAppId: 'docs',
       comingSoon: true,
     });
@@ -277,10 +275,9 @@ describe('sub-sidebar navigation model', () => {
     ).toEqual([]);
   });
 
-  it('projects leaf app nav items and ignores aggregate owner ids', () => {
+  it('projects only nav items owned by the active leaf app', () => {
     const projection = buildSubSidebarNavigationProjection({
-      activeAppId: 'business',
-      activeFeatureAppId: 'docs',
+      activeAppId: 'docs',
       canReadWorkspace: true,
       navItems,
       systemRoles: [],
@@ -295,8 +292,8 @@ describe('sub-sidebar navigation model', () => {
         }),
         workspaceNavItem({
           id: 'docs-assistant',
-          app_id: 'business',
-          title: 'Aggregate owner item',
+          app_id: 'chatbot',
+          title: 'Other app item',
           category: 'docs',
         }),
         workspaceNavItem({
@@ -309,8 +306,7 @@ describe('sub-sidebar navigation model', () => {
     expect(projection.filteredItems).toHaveLength(1);
     expect(projection.filteredItems[0]).toMatchObject({
       id: 'docs-library',
-      appId: 'business',
-      linkAppId: 'docs',
+      appId: 'docs',
       title: 'Document library from bootstrap',
       category: 'docs',
       pathSuffix: '/library',

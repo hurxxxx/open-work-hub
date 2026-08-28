@@ -4,6 +4,10 @@ from collections.abc import Callable
 
 from open_work_hub_api.core.db import get_session_factory
 from open_work_hub_api.domains.ai_graph.models import AiGraphRun
+from open_work_hub_api.domains.ai_graph.repository import AiGraphRunRepository
+from open_work_hub_api.domains.auth.workspace_app_gate import (
+    is_app_enabled_for_user_context,
+)
 
 
 AiGraphExecutor = Callable[[str], str]
@@ -33,6 +37,23 @@ def execute_registered_ai_graph(run_id: str) -> str:
         run = db.get(AiGraphRun, run_id)
         if run is None:
             raise LookupError(run_id)
+        if not is_app_enabled_for_user_context(
+            db,
+            app_id=run.app_id,
+            user_id=run.requested_by_user_id,
+            workspace_id=run.workspace_id,
+        ):
+            if run.status not in {"completed", "failed", "cancelled"}:
+                AiGraphRunRepository(db).transition(
+                    run.id,
+                    "cancelled",
+                    stage="policy_gate",
+                    status_message_key="ai.graphRun.cancelled",
+                    error_code="app_execution_disabled",
+                    claim_token=run.execution_claim_token,
+                )
+                db.commit()
+            return "app_disabled"
         key = (run.graph_id, run.graph_version)
         executor = _executors.get(key)
     if executor is None:

@@ -36,7 +36,7 @@ function globalBootstrap(
   const community = {
     app_id: 'community',
     title: 'Community',
-    route_base: '/community',
+    route_base: '/apps/community',
     icon_key: 'messages-square',
     availability_scope: 'platform' as const,
     enabled: true,
@@ -44,6 +44,9 @@ function globalBootstrap(
   };
   return {
     apps: [community, ...personalTools],
+    global_route_app_ids: [community, ...personalTools].map(
+      (app) => app.app_id,
+    ),
     app_bar_categories: [
       {
         id: 'collaboration',
@@ -59,8 +62,7 @@ function globalBootstrap(
         ],
       },
     ],
-    personal_tools: personalTools,
-    platform_enabled_app_ids: ['community', ...personalToolIds],
+    personal_tool_app_ids: personalToolIds,
     principal: {
       kind: 'user',
       scope: 'personal',
@@ -72,7 +74,7 @@ function globalBootstrap(
 }
 
 describe('projectShellAppsBootstrap', () => {
-  it('merges platform apps and creates a fixed non-pinnable personal tools launcher', () => {
+  it('projects only launchable apps and creates a fixed non-pinnable personal tools launcher', () => {
     const projection = projectShellAppsBootstrap({
       globalBootstrap: globalBootstrap(),
       personalToolsScope: 'All workspaces',
@@ -89,7 +91,7 @@ describe('projectShellAppsBootstrap', () => {
             {
               app_id: 'docs',
               title: 'Docs',
-              route_base: '/docs',
+              route_base: '/apps/docs',
               icon_key: 'file-text',
               enabled: true,
               position: 1,
@@ -99,13 +101,7 @@ describe('projectShellAppsBootstrap', () => {
       ],
     });
 
-    expect(projection.enabledAppIds).toEqual([
-      'home',
-      'docs',
-      'community',
-      'mail',
-      'planner',
-    ]);
+    expect(projection.enabledAppIds).toEqual(['community', 'mail', 'planner']);
     expect(projection.appBarCategories[0]).toMatchObject({
       id: PERSONAL_TOOLS_CATEGORY_ID,
       title: 'Personal',
@@ -117,7 +113,7 @@ describe('projectShellAppsBootstrap', () => {
     ).toEqual(['mail', 'planner']);
     expect(
       projection.appBarCategories[1]?.items.map((item) => item.app_id),
-    ).toEqual(['docs', 'community']);
+    ).toEqual(['community']);
   });
 
   it('omits the personal tools launcher when every personal app is disabled', () => {

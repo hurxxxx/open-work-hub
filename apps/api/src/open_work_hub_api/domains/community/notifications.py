@@ -5,6 +5,7 @@ from typing import Protocol
 
 from sqlalchemy.orm import Session
 
+from open_work_hub_api.core.app_routes import InternalAppLocation, build_app_href
 from open_work_hub_api.domains.auth.access import is_platform_admin_user
 from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.auth.security import new_id
@@ -164,11 +165,16 @@ def _comment_preview(body: str) -> str:
 
 
 def _community_post_url(post: CommunityPost) -> str:
-    path = f"/community/posts/{post.id}"
     channel_key = post.channel.key if post.channel is not None else DEFAULT_CHANNEL_KEY
-    if channel_key == DEFAULT_CHANNEL_KEY:
-        return path
-    return f"{path}?channel={channel_key}"
+    return build_app_href(
+        InternalAppLocation(
+            route_id="community.post",
+            path_params={"postId": post.id},
+            query_params={
+                "channel": channel_key if channel_key != DEFAULT_CHANNEL_KEY else None
+            },
+        )
+    )
 
 
 def _bot_dm_body(*, title: str, body: str, action_url: str) -> str:

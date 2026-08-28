@@ -9,11 +9,17 @@ import mimetypes
 from pathlib import Path
 import re
 from typing import Any, Protocol
+from urllib.parse import urlencode
 from zipfile import BadZipFile, ZipFile
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session, joinedload, undefer
 
+from open_work_hub_api.core.app_routes import (
+    InternalAppLocation,
+    app_entry_href,
+    build_app_href,
+)
 from open_work_hub_api.domains.document_processing import (
     EvidenceBlock,
     UnsupportedDocumentType,
@@ -163,6 +169,7 @@ def load_file_rag_projection(
         .options(
             joinedload(FileManagerFile.owner),
             joinedload(FileManagerFile.source_metadata),
+            joinedload(FileManagerFile.workspace),
             undefer(FileManagerFile.extraction_text),
             undefer(FileManagerFile.extraction_blocks),
             undefer(FileManagerFile.extraction_metadata),
@@ -188,7 +195,11 @@ def load_file_rag_projection(
             raise
         if not _store_artifact_if_active(db, file_id=file.id, artifact=artifact):
             return None
-    return build_file_rag_projection(file=file, artifact=artifact)
+    return build_file_rag_projection(
+        file=file,
+        artifact=artifact,
+        workspace_slug=file.workspace.key,
+    )
 
 
 def workspace_file_resource_ids(db: Session, workspace: Any) -> list[str]:
@@ -373,6 +384,7 @@ def build_file_rag_projection(
     *,
     file: FileManagerFile,
     artifact: FileExtractionArtifact,
+    workspace_slug: str | None = None,
 ) -> RagProjection:
     chunking_result = _chunk_file_evidence(file=file, blocks=artifact.blocks)
     chunks = chunking_result.chunks
@@ -405,7 +417,7 @@ def build_file_rag_projection(
         ),
         visibility_refs=visibility_refs,
         metadata={
-            "origin_ref": _file_deep_link(file),
+            "origin_ref": _file_deep_link(file, workspace_slug=workspace_slug),
             "content_modality": "text",
             "filename": file.filename,
             "content_type": file.content_type,
@@ -910,11 +922,23 @@ def _summary(text: str, *, max_chars: int = 240) -> str | None:
     return normalized[: max_chars - 3].rstrip() + "..."
 
 
-def _file_deep_link(file: FileManagerFile) -> str:
-    base = f"/files?file={file.id}"
+def _file_deep_link(
+    file: FileManagerFile,
+    *,
+    workspace_slug: str | None = None,
+) -> str:
+    query = {"file": file.id}
     if file.folder_id:
-        return f"{base}&folder={file.folder_id}"
-    return base
+        query["folder"] = file.folder_id
+    if workspace_slug:
+        return build_app_href(
+            InternalAppLocation(
+                route_id="files.root",
+                workspace_slug=workspace_slug,
+                query_params=query,
+            )
+        )
+    return f"{app_entry_href('files')}?{urlencode(sorted(query.items()))}"
 
 
 def hydrate_file_rag_hits_from_source(
@@ -944,6 +968,7 @@ def hydrate_file_rag_hits_from_source(
                 .options(
                     joinedload(FileManagerFile.corpus),
                     joinedload(FileManagerFile.source_metadata),
+                    joinedload(FileManagerFile.workspace),
                 )
                 .where(
                     FileManagerFile.id.in_(file_ids),
@@ -992,7 +1017,12 @@ def hydrate_file_rag_hits_from_source(
         )
         metadata.update(
             {
-                "origin_ref": _file_deep_link(file),
+                "origin_ref": _file_deep_link(
+                    file,
+                    # Resource visibility may be company-wide, but the file
+                    # still has one owning workspace route context.
+                    workspace_slug=file.workspace.key,
+                ),
                 "filename": file.filename,
                 "content_type": file.content_type,
                 "size_bytes": file.size_bytes,

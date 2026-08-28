@@ -71,8 +71,10 @@ function createTestRegistry() {
           { appId: 'research', id: 'research-home', label: 'Research Home' },
         ],
         staticGlobalRoutePaths: ['/research/static'],
-        staticWorkspaceRoutePaths: ['/w/:workspaceSlug/research/static'],
-        workspaceRoutePaths: ['/w/:workspaceSlug/research'],
+        staticWorkspaceRoutePaths: [
+          '/apps/research/workspaces/:workspaceSlug/static',
+        ],
+        workspaceRoutePaths: ['/apps/research/workspaces/:workspaceSlug'],
       },
       backgroundWorkSources: [
         {
@@ -98,7 +100,7 @@ function createTestRegistry() {
         {
           appId: 'research',
           component: 'ResearchWorkspace',
-          path: '/w/:workspaceSlug/research',
+          path: '/apps/research/workspaces/:workspaceSlug',
         },
       ],
     },
@@ -162,7 +164,7 @@ describe('createCoreAppModuleRegistryApi', () => {
       {
         appId: 'research',
         component: 'ResearchWorkspace',
-        path: '/w/:workspaceSlug/research',
+        path: '/apps/research/workspaces/:workspaceSlug',
       },
     ]);
     expect(
@@ -182,13 +184,17 @@ describe('createCoreAppModuleRegistryApi', () => {
     expect(() =>
       registry.assertAppModuleStaticRouteContract('research', {
         globalRoutes: [{ path: '/research/static' }],
-        workspaceRoutes: [{ path: '/w/:workspaceSlug/research/static' }],
+        workspaceRoutes: [
+          { path: '/apps/research/workspaces/:workspaceSlug/static' },
+        ],
       }),
     ).not.toThrow();
     expect(() =>
       registry.assertAppModuleStaticRouteContract('research', {
         globalRoutes: [{ path: '/research/missing' }],
-        workspaceRoutes: [{ path: '/w/:workspaceSlug/research/static' }],
+        workspaceRoutes: [
+          { path: '/apps/research/workspaces/:workspaceSlug/static' },
+        ],
       }),
     ).toThrow(
       'Static global route path /research/missing is not declared in manifest research',
@@ -222,13 +228,13 @@ describe('createCoreAppModuleRegistryApi', () => {
             {
               appId: 'research',
               component: 'ResearchWorkspace',
-              path: '/w/:workspaceSlug/research',
+              path: '/apps/research/workspaces/:workspaceSlug',
             },
           ],
         },
       ]),
     ).toThrow(
-      'Workspace route path /w/:workspaceSlug/research is not declared in manifest research',
+      'Workspace route path /apps/research/workspaces/:workspaceSlug is not declared in manifest research',
     );
   });
 

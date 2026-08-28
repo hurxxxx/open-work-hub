@@ -3,25 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
-import {
-  workspaceRoleAllows,
-  type AppBarAppId,
-} from '@/src/platform/auth/auth-api';
+import { type AppBarAppId } from '@/src/platform/auth/auth-api';
 import {
   useShellRealtime,
   useShellRealtimeEvent,
 } from '@/src/app/shell/shell-realtime-context';
-import {
-  persistLastWorkspaceSlug,
-  resolveWorkspaceSwitchPath,
-  type WorkspaceAppId,
-} from '@/src/platform/workspaces/workspace-utils';
+import { type WorkspaceAppId } from '@/src/platform/workspaces/workspace-utils';
 import { EMPTY_LAUNCHER_GLOBAL_PATHS } from '@/src/app/shell/navigation-types';
 import {
   INITIAL_APP_BAR_STATE,
   appBarReducer,
   buildAppBarItemsProjection,
-  buildAppBarWorkspaceProjection,
   buildNotificationIssueHref,
   buildVisibleAppBarItems,
   buildWorkspaceSearchHref,
@@ -46,17 +38,15 @@ export function useAppBarController({
   notificationRealtimeEventTypes = new Set(),
   notificationUnreadCountLoader = null,
   notificationsEnabled = false,
-  onShellWorkspaceChange,
   shellWorkspaceSlug,
   workspaceAppBarCategories,
   workspaceApps,
 }: AppBarProps) {
-  const { hasPermission, token, updatePreferences } = useAuth();
+  const { token, updatePreferences } = useAuth();
   const { reconnectSeq } = useShellRealtime();
-  const { t, i18n } = useTranslation(['common', 'shell', 'auth']);
+  const { t } = useTranslation(['common', 'shell', 'auth']);
   const navigate = useNavigate();
   const [state, dispatch] = useReducer(appBarReducer, INITIAL_APP_BAR_STATE);
-  const workspaceSwitcherRef = useRef<HTMLDivElement>(null);
   const moreMenuRef = useRef<HTMLDivElement>(null);
   const previousPathnameRef = useRef(currentPathname);
   const translate = t as AppBarTranslator;
@@ -66,43 +56,6 @@ export function useAppBarController({
       pinnedByDefaultAppIds: appBarPinnedByDefaultAppIds,
     }),
     [appBarFixedAppIds, appBarPinnedByDefaultAppIds],
-  );
-
-  const canCreateWorkspace = hasPermission('workspace.write');
-  const defaultWorkspaceId =
-    state.optimisticDefaultWorkspaceId === undefined
-      ? (currentUser.default_workspace_id ?? null)
-      : state.optimisticDefaultWorkspaceId;
-  const workspaceProjection = useMemo(
-    () =>
-      buildAppBarWorkspaceProjection({
-        defaultWorkspaceId,
-        locale: i18n.language,
-        shellWorkspaceSlug,
-        workspaceFallbackLabel: translate('common:labels.workspace'),
-        workspaceQuery: state.workspaceQuery,
-        workspaces: currentUser.workspaces,
-      }),
-    [
-      currentUser.workspaces,
-      defaultWorkspaceId,
-      i18n.language,
-      shellWorkspaceSlug,
-      state.workspaceQuery,
-      translate,
-    ],
-  );
-  const {
-    currentWorkspace,
-    currentWorkspaceName,
-    defaultWorkspaceOptions,
-    normalizedDefaultWorkspaceId,
-    otherWorkspaces,
-    pinnedWorkspace,
-  } = workspaceProjection;
-  const canManageCurrentWorkspace = workspaceRoleAllows(
-    currentWorkspace?.role,
-    'admin',
   );
 
   useEffect(() => {
@@ -181,11 +134,7 @@ export function useAppBarController({
       return;
     }
     previousPathnameRef.current = currentPathname;
-    if (
-      state.favoritesOpen ||
-      state.categoryMenuId ||
-      state.appBarEditorOpen
-    ) {
+    if (state.favoritesOpen || state.categoryMenuId || state.appBarEditorOpen) {
       dispatch({
         type: 'patch',
         patch: {
@@ -201,29 +150,6 @@ export function useAppBarController({
     state.categoryMenuId,
     state.favoritesOpen,
   ]);
-
-  useEffect(() => {
-    if (!state.workspaceSwitcherOpen) {
-      return;
-    }
-
-    function handlePointerDown(event: MouseEvent) {
-      if (
-        workspaceSwitcherRef.current &&
-        !workspaceSwitcherRef.current.contains(event.target as Node)
-      ) {
-        dispatch({
-          type: 'patch',
-          patch: { workspaceSwitcherOpen: false },
-        });
-      }
-    }
-
-    document.addEventListener('mousedown', handlePointerDown);
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown);
-    };
-  }, [state.workspaceSwitcherOpen]);
 
   useEffect(() => {
     if (
@@ -288,84 +214,6 @@ export function useAppBarController({
       navigate,
       notificationIssueAppId,
       shellWorkspaceSlug,
-    ],
-  );
-
-  const handleWorkspaceSelect = useCallback(
-    (nextWorkspaceSlug: string) => {
-      if (nextWorkspaceSlug === shellWorkspaceSlug) {
-        dispatch({
-          type: 'patch',
-          patch: { workspaceSwitcherOpen: false },
-        });
-        return;
-      }
-
-      persistLastWorkspaceSlug(nextWorkspaceSlug);
-      onShellWorkspaceChange(nextWorkspaceSlug);
-      dispatch({
-        type: 'patch',
-        patch: { workspaceQuery: '', workspaceSwitcherOpen: false },
-      });
-      navigate(
-        resolveWorkspaceSwitchPath(
-          currentUser,
-          currentPathname,
-          nextWorkspaceSlug,
-          workspaceApps.flatMap((app) => (app.enabled ? [app.app_id] : [])),
-        ),
-      );
-    },
-    [
-      currentPathname,
-      currentUser,
-      navigate,
-      onShellWorkspaceChange,
-      shellWorkspaceSlug,
-      workspaceApps,
-    ],
-  );
-
-  const handleSetDefaultWorkspace = useCallback(
-    async (workspaceId: string | null) => {
-      if (workspaceId === defaultWorkspaceId || state.defaultWorkspaceSaving) {
-        return;
-      }
-
-      const previousDefaultWorkspaceId = defaultWorkspaceId;
-      dispatch({
-        type: 'patch',
-        patch: {
-          defaultWorkspaceSaving: true,
-          optimisticDefaultWorkspaceId: workspaceId,
-          workspacePreferenceError: null,
-        },
-      });
-      try {
-        await updatePreferences({ default_workspace_id: workspaceId });
-      } catch (caughtError) {
-        dispatch({
-          type: 'patch',
-          patch: {
-            optimisticDefaultWorkspaceId: previousDefaultWorkspaceId,
-            workspacePreferenceError:
-              caughtError instanceof Error
-                ? caughtError.message
-                : translate('shell:workspaceSwitcher.defaultSaveFailed'),
-          },
-        });
-      } finally {
-        dispatch({
-          type: 'patch',
-          patch: { defaultWorkspaceSaving: false },
-        });
-      }
-    },
-    [
-      defaultWorkspaceId,
-      state.defaultWorkspaceSaving,
-      translate,
-      updatePreferences,
     ],
   );
 
@@ -501,48 +349,15 @@ export function useAppBarController({
 
   return {
     activeAppTitle,
-    canCreateWorkspace,
-    canManageCurrentWorkspace,
     canOpenWorkspaceSearch,
-    currentWorkspace,
-    currentWorkspaceName,
-    defaultWorkspaceOptions,
     draftItems,
     fixedItems,
     handleCountChange,
     handleNavigateToIssue,
-    handleSetDefaultWorkspace,
-    handleWorkspaceSelect,
     moreMenuRef,
-    normalizedDefaultWorkspaceId,
     onCloseEditor: () =>
       dispatch({ type: 'patch', patch: { appBarEditorOpen: false } }),
     onCloseLauncherMenus: () => dispatch({ type: 'closeLauncherMenus' }),
-    onCreateWorkspace: () => {
-      dispatch({
-        type: 'patch',
-        patch: {
-          categoryMenuId: null,
-          favoritesOpen: false,
-          workspaceSwitcherOpen: false,
-        },
-      });
-      navigate('/admin/workspaces');
-    },
-    onManageCurrentWorkspace: () => {
-      if (!currentWorkspace) {
-        return;
-      }
-      dispatch({
-        type: 'patch',
-        patch: {
-          categoryMenuId: null,
-          favoritesOpen: false,
-          workspaceSwitcherOpen: false,
-        },
-      });
-      navigate(`/w/${encodeURIComponent(currentWorkspace.slug)}/settings`);
-    },
     onMovePinnedApp: (appId: WorkspaceAppId, direction: -1 | 1) =>
       dispatch({ type: 'moveDraftPinned', appId, direction }),
     onOpenEditor: openAppBarEditor,
@@ -552,7 +367,6 @@ export function useAppBarController({
         patch: {
           categoryMenuId: null,
           favoritesOpen: false,
-          workspaceSwitcherOpen: false,
         },
       });
       navigate(workspaceSearchHref);
@@ -561,8 +375,6 @@ export function useAppBarController({
     onSaveLayout: () => {
       void saveAppBarLayout();
     },
-    onSearchQueryChange: (workspaceQuery: string) =>
-      dispatch({ type: 'patch', patch: { workspaceQuery } }),
     onToggleCategoryMenu: (categoryId: string) =>
       dispatch({ type: 'toggleCategoryMenu', categoryId }),
     onToggleFavorites: () => dispatch({ type: 'toggleFavorites' }),
@@ -571,18 +383,13 @@ export function useAppBarController({
         dispatch({ type: 'toggleNotifications' });
       }
     },
-    onToggleWorkspaceSwitcher: () =>
-      dispatch({ type: 'toggleWorkspaceSwitcher' }),
     onTogglePinnedApp: (appId: WorkspaceAppId, checked: boolean) => {
       dispatch({ type: 'toggleDraftPinned', appId, checked });
     },
-    otherWorkspaces,
     pinnedEligibleAppIds,
     pinnedItems,
-    pinnedWorkspace,
     state,
     t: translate,
     workspaceSearchHref,
-    workspaceSwitcherRef,
   };
 }

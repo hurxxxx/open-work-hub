@@ -1,9 +1,4 @@
-import {
-  useCallback,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -15,17 +10,13 @@ import {
   ScrollText,
   Trash2,
 } from 'lucide-react';
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
 
 import { DocsViewerModal } from '@/src/app-modules/docs/public-api';
 import { useAuth } from '@/src/platform/auth/auth-provider';
-import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
 import { RecordingStageRail } from './RecordingStageRail';
 import { useRecordingCollectionWorkflow } from './recording-collection-workflow';
-import {
-  formatBytes,
-  hasFailedStage,
-  titleFor,
-} from './recording-view-model';
+import { formatBytes, hasFailedStage, titleFor } from './recording-view-model';
 
 export interface LinkedRecordingListItem {
   id: string;
@@ -154,7 +145,13 @@ export function LinkedRecordingList({
         {items.map((item) => {
           const actionBusy = actionBusyId === item.id;
           const isBusy = disabled || actionBusy;
-          const detailHref = item.detailHref ?? buildWorkspaceAppPath(workspaceSlug, 'recording', item.id);
+          const detailHref =
+            item.detailHref ??
+            buildAppHref({
+              routeId: 'recording.detail',
+              workspaceSlug,
+              pathParams: { recordingId: item.id },
+            });
           return (
             <li
               key={item.id}
@@ -336,7 +333,11 @@ export function LinkedRecordingsForTarget({
           title: titleFor(recording, t('recording.untitled')),
           subtitle: `${formatBytes(recording.file_size)} · ${recording.mime_type}`,
           detailHref: workspaceSlug
-            ? buildWorkspaceAppPath(workspaceSlug, 'recording', recording.id)
+            ? buildAppHref({
+                routeId: 'recording.detail',
+                workspaceSlug,
+                pathParams: { recordingId: recording.id },
+              })
             : null,
           rawTranscriptDocId: recording.raw_transcript_doc_id,
           minutesDocId: recording.minutes_doc_id,

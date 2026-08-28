@@ -43,6 +43,32 @@ async function stubFullShell(page: Page) {
 }
 
 test.describe('AI-friendly app boundary smoke', () => {
+  test('keeps the launcher neutral and resolves workspace context per app', async ({
+    page,
+  }) => {
+    await stubFullShell(page);
+    const errors = collectBrowserErrors(page);
+
+    await page.goto('/');
+    await expect(
+      page.getByRole('heading', { level: 1, name: /앱 런처|App launcher/ }),
+    ).toBeVisible();
+    await page.locator('a[href="/apps/docs"]').click();
+    await expect(page).toHaveURL(/\/apps\/docs\/workspaces\/hq$/);
+    await expect(
+      page.getByRole('button', {
+        name: /이 앱의 워크스페이스|Workspace for this app/,
+      }),
+    ).toContainText('Open Work Hub HQ');
+
+    await page.goto('/apps/planner');
+    await expect(page).toHaveURL(/\/apps\/planner$/);
+    await expect(
+      page.getByRole('heading', { level: 1, name: /Planner|플래너/ }),
+    ).toBeVisible();
+    errors.expectClean();
+  });
+
   test('renders workspace apps and tool wrappers through the shell registry', async ({
     page,
   }) => {
@@ -54,13 +80,13 @@ test.describe('AI-friendly app boundary smoke', () => {
       assert: (page: Page) => Promise<void>;
     }> = [
       {
-        path: '/w/hq/home',
+        path: '/apps/home/workspaces/hq',
         assert: async (current) => {
           await expect(current.getByText(/Good/)).toBeVisible();
         },
       },
       {
-        path: '/w/hq/chatbot',
+        path: '/apps/chatbot/workspaces/hq',
         assert: async (current) => {
           await expect(
             current.getByRole('heading', {
@@ -70,7 +96,7 @@ test.describe('AI-friendly app boundary smoke', () => {
         },
       },
       {
-        path: '/w/hq/pms',
+        path: '/apps/pms/workspaces/hq',
         assert: async (current) => {
           await expect(
             current.getByRole('heading', { name: 'PMS', exact: true }).or(
@@ -92,7 +118,7 @@ test.describe('AI-friendly app boundary smoke', () => {
         },
       },
       {
-        path: '/w/hq/docs',
+        path: '/apps/docs/workspaces/hq',
         assert: async (current) => {
           await expect(
             current.getByRole('heading', {
@@ -106,7 +132,7 @@ test.describe('AI-friendly app boundary smoke', () => {
         },
       },
       {
-        path: '/planner',
+        path: '/apps/planner',
         assert: async (current) => {
           await expect(
             current.getByRole('heading', { level: 1, name: /Planner|플래너/ }),
@@ -117,7 +143,7 @@ test.describe('AI-friendly app boundary smoke', () => {
         },
       },
       {
-        path: '/w/hq/meeting',
+        path: '/apps/meeting/workspaces/hq',
         assert: async (current) => {
           await expect(
             current.getByRole('heading', { level: 1, name: /Meetings|회의/ }),
@@ -130,7 +156,7 @@ test.describe('AI-friendly app boundary smoke', () => {
         },
       },
       {
-        path: '/w/hq/settings',
+        path: '/admin/workspaces/hq/settings',
         assert: async (current) => {
           await expect(
             current.getByText(/Workspace Settings|워크스페이스 설정/),
@@ -144,10 +170,12 @@ test.describe('AI-friendly app boundary smoke', () => {
         },
       },
       {
-        path: '/tool/search?workspace=hq',
+        path: '/apps/retrieval-search/workspaces/hq',
         assert: async (current) => {
           await expect(
-            current.getByRole('heading', { name: 'Open Work Hub 통합검색' }),
+            current.getByRole('heading', {
+              name: /Retrieval 진단 검색|Retrieval diagnostics search/,
+            }),
           ).toBeVisible();
         },
       },
@@ -174,7 +202,7 @@ test.describe('AI-friendly app boundary smoke', () => {
     await stubConversationsApi(page);
     const errors = collectBrowserErrors(page);
 
-    await page.goto('/w/hq/meeting');
+    await page.goto('/apps/meeting/workspaces/hq');
 
     await expect(
       page.getByRole('heading', { name: '접근 권한 없음' }),

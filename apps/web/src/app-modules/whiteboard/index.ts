@@ -1,8 +1,11 @@
-export { whiteboardManifest } from './manifest';
+import { whiteboardManifest } from './manifest';
+import { whiteboardGlobalRoutes, whiteboardWorkspaceRoutes } from './routes';
+import { whiteboardSidebarConfig } from './sidebar';
+
+export { whiteboardManifest };
 export {
   whiteboardGlobalRoutes,
   whiteboardToolElement,
-  whiteboardToolViewRoutes,
   whiteboardWorkspaceRoutes,
 } from './routes';
 export { whiteboardSidebarConfig } from './sidebar';
@@ -11,3 +14,10 @@ export {
   listWhiteboardHub,
   type WhiteboardHubItem,
 } from './api/whiteboard-api';
+
+export const whiteboardModule = {
+  globalRoutes: whiteboardGlobalRoutes,
+  manifest: whiteboardManifest,
+  sidebarConfig: whiteboardSidebarConfig,
+  workspaceRoutes: whiteboardWorkspaceRoutes,
+} as const;

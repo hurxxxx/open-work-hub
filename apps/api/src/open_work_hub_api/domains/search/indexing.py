@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from collections.abc import Callable
 from typing import Any
 
 from sqlalchemy import and_, or_, select, update
@@ -40,12 +41,23 @@ def process_search_index_job(
     job_id: str,
     *,
     client: KeywordSearchClient | None = None,
+    client_factory: Callable[[Session, SearchIndexJob], KeywordSearchClient] | None = None,
+    execution_allowed: Callable[[Session, SearchIndexJob], bool] | None = None,
 ) -> str:
     job, claim_outcome = _claim_search_index_job(db, job_id)
     if claim_outcome == "missing":
         return "missing"
     if claim_outcome != "claimed" or job is None:
         return "ignored"
+    if execution_allowed is not None and not execution_allowed(db, job):
+        job.status = "pending"
+        job.attempts = max(job.attempts - 1, 0)
+        job.last_error = "app_disabled"
+        job.next_retry_at = None
+        job.updated_at = datetime.now(UTC).replace(tzinfo=None)
+        db.add(job)
+        db.commit()
+        return "app-disabled"
 
     versioned = _job_has_projection_fence(job)
     if not versioned:
@@ -59,7 +71,9 @@ def process_search_index_job(
             )
             return "superseded"
 
-    search_client = client or _search_client()
+    search_client = client or (
+        client_factory(db, job) if client_factory is not None else _search_client()
+    )
     if job.operation == "delete":
         if versioned and not _lock_matching_projection_head(db, job):
             _cancel_projection_fenced_search_index_job(db, job)

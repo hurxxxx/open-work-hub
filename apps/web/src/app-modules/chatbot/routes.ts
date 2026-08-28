@@ -1,4 +1,8 @@
 import { createElement, lazy } from 'react';
+import {
+  getAppRouteChrome,
+  getAppRoutePattern,
+} from '@open-work-hub/contracts/app-routes';
 
 import { lazyRoute } from '@/src/app/shell/lazy-route';
 import type { WorkspaceRouteDefinition } from '@/src/app/shell/route-types';
@@ -12,9 +16,8 @@ const ChatbotView = lazy(() =>
 export const chatbotWorkspaceRoutes: WorkspaceRouteDefinition[] = [
   {
     appId: 'chatbot',
-    chrome: 'fullSurface',
-    path: '/w/:workspaceSlug/chatbot',
-    subSidebar: 'hidden',
+    chrome: getAppRouteChrome('chatbot.root'),
+    path: getAppRoutePattern('chatbot.root'),
     element: lazyRoute(createElement(ChatbotView)),
   },
 ];

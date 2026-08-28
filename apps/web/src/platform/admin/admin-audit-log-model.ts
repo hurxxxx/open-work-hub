@@ -21,8 +21,8 @@ export interface AuditLogDisplayModel {
 const ACTION_LABEL_KEYS: Record<string, string> = {
   'admin.ai_runtime.retention.scrub':
     'admin.console.audit.actions.adminAiRuntimeRetentionScrub',
-  'admin.app_visibility.update':
-    'admin.console.audit.actions.adminAppVisibilityUpdate',
+  'admin.company_app_controls.update':
+    'admin.console.audit.actions.adminCompanyAppControlsUpdate',
   'admin.team.create': 'admin.console.audit.actions.adminTeamCreate',
   'admin.team.delete': 'admin.console.audit.actions.adminTeamDelete',
   'admin.team.members.replace':
@@ -66,8 +66,10 @@ const ACTION_LABEL_KEYS: Record<string, string> = {
     'admin.console.audit.actions.adminWorkspaceMemberRemove',
   'admin.workspace.member.role.update':
     'admin.console.audit.actions.adminWorkspaceMemberRoleUpdate',
-  'admin.workspace_app_visibility.update':
-    'admin.console.audit.actions.adminWorkspaceAppVisibilityUpdate',
+  'admin.workspace_app_defaults.update':
+    'admin.console.audit.actions.adminWorkspaceAppDefaultsUpdate',
+  'admin.workspace_app_overrides.update':
+    'admin.console.audit.actions.adminWorkspaceAppOverridesUpdate',
   ai_meeting_insight_created:
     'admin.console.audit.actions.aiMeetingInsightCreated',
   ai_external_call: 'admin.console.audit.actions.aiExternalCall',

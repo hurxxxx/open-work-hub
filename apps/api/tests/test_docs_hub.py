@@ -1,6 +1,8 @@
 from fastapi.testclient import TestClient
 
 from dev_accounts import dev_login
+from open_work_hub_api.core.db import get_session_factory
+from open_work_hub_api.domains.auth.models import CompanyAppControl
 
 
 def _dev_login(client: TestClient, account_key: str) -> dict:
@@ -310,6 +312,9 @@ def test_internal_shared_links_require_auth_and_honor_read_vs_edit(client: TestC
     )
     assert enable_read_link_response.status_code == 200
     share_token = enable_read_link_response.json()["link_share"]["token"]
+    assert enable_read_link_response.json()["link_share"]["share_path"] == (
+        f"/apps/docs/shared/{share_token}"
+    )
 
     unauthenticated_response = client.get(f"/api/v1/docs/shared-links/{share_token}")
     assert unauthenticated_response.status_code == 401
@@ -349,6 +354,20 @@ def test_internal_shared_links_require_auth_and_honor_read_vs_edit(client: TestC
         json={"content_blocks": [{"type": "paragraph", "content": "allowed"}]},
     )
     assert edit_via_link_response.status_code == 200
+
+    with get_session_factory()() as db:
+        control = db.get(CompanyAppControl, "docs")
+        assert control is not None
+        control.enabled = False
+        db.add(control)
+        db.commit()
+
+    disabled_response = client.get(
+        f"/api/v1/docs/shared-links/{updated_share_token}",
+        headers=_auth_headers(recipient_token),
+    )
+    assert disabled_response.status_code == 403
+    assert disabled_response.json()["code"] == "workspace.app_disabled"
 
 
 def test_workspace_scoped_shareable_users_stay_in_requested_docs_workspace(

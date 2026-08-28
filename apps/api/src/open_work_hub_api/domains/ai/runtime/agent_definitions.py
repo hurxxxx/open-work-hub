@@ -29,7 +29,7 @@ class ResolvedAgentDefinitions:
 @dataclass(frozen=True)
 class _AgentResolutionScope:
     enabled_app_ids: frozenset[str]
-    visible_app_ids: frozenset[str]
+    effective_app_ids: frozenset[str]
 
     @classmethod
     def from_app_ids(
@@ -39,23 +39,23 @@ class _AgentResolutionScope:
         allowed_app_ids: Iterable[str] | None,
     ) -> _AgentResolutionScope:
         enabled_scope = cls._normalize_app_scope(enabled_app_ids)
-        visible_scope = enabled_scope
+        effective_scope = enabled_scope
         if allowed_app_ids is not None:
-            visible_scope = enabled_scope & cls._normalize_app_scope(allowed_app_ids)
-        return cls(enabled_app_ids=enabled_scope, visible_app_ids=visible_scope)
+            effective_scope = enabled_scope & cls._normalize_app_scope(allowed_app_ids)
+        return cls(enabled_app_ids=enabled_scope, effective_app_ids=effective_scope)
 
     @property
     def can_resolve(self) -> bool:
         return CHATBOT_WORKSPACE_APP.app_id in self.enabled_app_ids
 
-    def is_definition_visible(self, definition: AgentDefinition) -> bool:
-        if definition.requires_non_empty_scope and not self.visible_app_ids:
+    def is_definition_available(self, definition: AgentDefinition) -> bool:
+        if definition.requires_non_empty_scope and not self.effective_app_ids:
             return False
         if not definition.workspace_app_ids:
             return True
         return (
             definition.workspace_app_ids <= self.enabled_app_ids
-            and definition.workspace_app_ids <= self.visible_app_ids
+            and definition.workspace_app_ids <= self.effective_app_ids
         )
 
     @staticmethod
@@ -88,12 +88,12 @@ class AgentDefinitionResolver:
         if not scope.can_resolve:
             return _empty_resolution()
 
-        visible_definitions = tuple(
+        available_definitions = tuple(
             definition
             for definition in self._definitions.values()
-            if scope.is_definition_visible(definition)
+            if scope.is_definition_available(definition)
         )
-        return _build_resolution(visible_definitions)
+        return _build_resolution(available_definitions)
 
     def by_id(self) -> Mapping[str, AgentDefinition]:
         return self._definitions

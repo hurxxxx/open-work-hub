@@ -57,11 +57,11 @@ describe('notification panel model', () => {
     expect(
       resolveNotificationAction(
         notification('route', {
-          action_url: '/tool/reports?workspace=hq',
+          action_url: '/apps/pms/workspaces/hq/assigned',
           reference_id: 'issue-1',
         }),
       ),
-    ).toEqual({ kind: 'route', to: '/tool/reports?workspace=hq' });
+    ).toEqual({ kind: 'route', to: '/apps/pms/workspaces/hq/assigned' });
     expect(
       resolveNotificationAction(
         notification('dm', {
@@ -72,8 +72,8 @@ describe('notification panel model', () => {
     ).toEqual({ kind: 'dm', threadId: 'conversation-1' });
     expect(
       resolveNotificationAction(
-        notification('workspace-dm', {
-          action_url: '/w/hq/dm?thread=conversation-2',
+        notification('dm-query', {
+          action_url: '/dm?thread=conversation-2',
         }),
       ),
     ).toEqual({ kind: 'dm', threadId: 'conversation-2' });

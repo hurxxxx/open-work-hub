@@ -52,7 +52,7 @@ def project_workspace_bootstrap_apps(
     nav: list[WorkspaceBootstrapNavItemProjection] = []
 
     for app in catalog:
-        if app.app_id not in enabled_app_id_set or not _workspace_app_is_visible(
+        if app.app_id not in enabled_app_id_set or not _workspace_app_feature_enabled(
             app,
             settings,
         ):
@@ -80,14 +80,14 @@ def project_workspace_bootstrap_apps(
     )
 
 
-def _workspace_app_is_visible(
+def _workspace_app_feature_enabled(
     item: WorkspaceAppCatalogItem,
     settings: object,
 ) -> bool:
     return item.feature_flag is None or _setting_is_enabled(settings, item.feature_flag)
 
 
-def _workspace_nav_item_is_visible(
+def _workspace_nav_item_feature_enabled(
     item: WorkspaceNavCatalogItem,
     settings: object,
 ) -> bool:
@@ -119,27 +119,8 @@ def _project_workspace_bootstrap_nav_items(
     *,
     settings: object,
 ) -> list[WorkspaceBootstrapNavItemProjection]:
-    if not app.nav_items:
-        return [_project_workspace_bootstrap_root_nav_item(app)]
-
     return [
         _project_workspace_bootstrap_nav_item(item)
         for item in app.nav_items
-        if _workspace_nav_item_is_visible(item, settings)
+        if _workspace_nav_item_feature_enabled(item, settings)
     ]
-
-
-def _project_workspace_bootstrap_root_nav_item(
-    app: WorkspaceAppCatalogItem,
-) -> WorkspaceBootstrapNavItemProjection:
-    return {
-        "id": app.app_id,
-        "app_id": app.app_id,
-        "title": app.title,
-        "category": app.title,
-        "icon_key": app.icon_key,
-        "link_app_id": None,
-        "path_suffix": None,
-        "absolute_path": None,
-        "coming_soon": app.coming_soon,
-    }

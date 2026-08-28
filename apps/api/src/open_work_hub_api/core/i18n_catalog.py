@@ -132,6 +132,14 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "관리자에 의해 비활성화된 앱입니다.",
         "en-US": "This app has been disabled by an administrator.",
     },
+    "app.not_found": {
+        "ko-KR": "앱을 찾을 수 없습니다.",
+        "en-US": "App not found.",
+    },
+    "app.workspace_context_unsupported": {
+        "ko-KR": "이 앱은 워크스페이스 컨텍스트를 사용하지 않습니다.",
+        "en-US": "This app does not use a workspace context.",
+    },
     "agent_terminal.disabled": {
         "ko-KR": "Codex 터미널이 서버에서 활성화되지 않았습니다.",
         "en-US": "The Codex terminal is not enabled on this server.",

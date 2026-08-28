@@ -11,19 +11,19 @@
 - Active users belong to the company tenant.
 - System role/platform admin controls tenant-level admin work.
 - Workspace is a collaboration/access/data isolation scope below company, not tenant.
-- Workspace routes use `/w/:workspaceSlug/...`; global routes omit workspace slug.
+- App-first routes follow [ADR 0011](0011-app-first-workspace-context.md): workspace routes use `/apps/:appId/workspaces/:workspaceSlug/...`; global routes omit the workspace segment.
 - Workspace slug is locator only. Server rechecks membership, RBAC, resource ACL, and app entitlement.
 - Global route means no workspace selection required, not public access.
 
 ## Scope Matrix
 
-| Dimension | Values |
-| --- | --- |
-| Tenant boundary | company deployment |
-| App availability | `platform`, `workspace` |
-| Resource ownership | `company`, `personal`, `workspace`, `hybrid` |
-| Route context | global, workspace |
-| Execution principal | personal, workspace |
+| Dimension           | Values                                       |
+| ------------------- | -------------------------------------------- |
+| Tenant boundary     | company deployment                           |
+| App availability    | `platform`, `workspace`                      |
+| Resource ownership  | `company`, `personal`, `workspace`, `hybrid` |
+| Route context       | global, workspace                            |
+| Execution principal | personal, workspace                          |
 
 - Do not infer resource ownership from availability or principal.
 - Company-resource reads default to authenticated tenant users when no narrower ACL exists.

@@ -4,6 +4,10 @@ import { Link, useLocation } from 'react-router-dom';
 import { ChevronDown, ChevronRight, FileText } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, LazyMotion, domAnimation, m } from 'motion/react';
+import {
+  buildAppEntryHref,
+  buildAppHref,
+} from '@open-work-hub/contracts/app-routes';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
@@ -19,10 +23,6 @@ import {
   toggleDocsSidebarSection,
   type DocsSidebarSectionId,
 } from './docs-sidebar-model';
-import {
-  buildWorkspaceAppPath,
-  resolveDefaultWorkspaceAppPath,
-} from '@/src/platform/workspaces/workspace-utils';
 import { cn } from '@/src/lib/utils';
 
 interface DocsSidebarExtrasProps {
@@ -95,7 +95,7 @@ export function DocsSidebarExtras({
   currentWorkspaceSlug,
 }: DocsSidebarExtrasProps) {
   const { t } = useTranslation('apps');
-  const { token, user } = useAuth();
+  const { token } = useAuth();
   const location = useLocation();
   const [sidebarData, setSidebarData] = useState<DocsSidebarData>({
     favorites: [],
@@ -141,23 +141,20 @@ export function DocsSidebarExtras({
         {favorites.length > 0 ? (
           favorites.map((favorite) => {
             const docPath = currentWorkspaceSlug
-              ? buildWorkspaceAppPath(
-                  currentWorkspaceSlug,
-                  'docs',
-                  `/${favorite.id}`,
-                )
-              : resolveDefaultWorkspaceAppPath(
-                  user,
-                  'docs',
-                  `/${favorite.id}`,
-                );
+              ? buildAppHref({
+                  routeId: 'docs.document',
+                  workspaceSlug: currentWorkspaceSlug,
+                  pathParams: { docId: favorite.id },
+                })
+              : buildAppEntryHref('docs');
             return (
               <Link
                 key={favorite.id}
                 to={docPath}
                 className={cn(
                   'sidebar-submenu-item ml-1',
-                  location.pathname === docPath && 'sidebar-submenu-item-active',
+                  location.pathname === docPath &&
+                    'sidebar-submenu-item-active',
                 )}
               >
                 <FileText size={14} className="text-yellow-500" />
@@ -179,25 +176,18 @@ export function DocsSidebarExtras({
       <DocsSidebarSection
         id="recentPages"
         title={t('docs.sidebar.recentPages')}
-        expanded={isDocsSidebarSectionExpanded(
-          expandedSections,
-          'recentPages',
-        )}
+        expanded={isDocsSidebarSectionExpanded(expandedSections, 'recentPages')}
         onToggle={toggleSection}
       >
         {recentPages.length > 0 ? (
           recentPages.map((recentPage) => {
             const docPathWithoutPage = currentWorkspaceSlug
-              ? buildWorkspaceAppPath(
-                  currentWorkspaceSlug,
-                  'docs',
-                  `/${recentPage.doc_id}`,
-                )
-              : resolveDefaultWorkspaceAppPath(
-                  user,
-                  'docs',
-                  `/${recentPage.doc_id}`,
-                );
+              ? buildAppHref({
+                  routeId: 'docs.document',
+                  workspaceSlug: currentWorkspaceSlug,
+                  pathParams: { docId: recentPage.doc_id },
+                })
+              : buildAppEntryHref('docs');
             const docPath = appendDocPageQuery(
               docPathWithoutPage,
               recentPage.page_id,

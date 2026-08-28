@@ -15,7 +15,7 @@ from open_work_hub_api.domains.ai.tool_surface import (
 )
 from open_work_hub_api.domains.auth.access import load_user_graph
 from open_work_hub_api.domains.auth.models import (
-    PlatformAppVisibility,
+    CompanyAppControl,
     Workspace,
 )
 
@@ -41,12 +41,12 @@ def _load_workspace_principal(session: dict) -> tuple[Workspace, CallerPrincipal
 
 def _disable_platform_app(app_id: str) -> None:
     with Session(get_engine()) as db:
-        visibility = db.scalar(
-            select(PlatformAppVisibility).where(PlatformAppVisibility.app_id == app_id)
+        control = db.scalar(
+            select(CompanyAppControl).where(CompanyAppControl.app_id == app_id)
         )
-        assert visibility is not None
-        visibility.visible = False
-        db.add(visibility)
+        assert control is not None
+        control.enabled = False
+        db.add(control)
         db.commit()
 
 

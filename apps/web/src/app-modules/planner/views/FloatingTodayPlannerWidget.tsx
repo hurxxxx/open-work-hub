@@ -9,6 +9,7 @@ import {
   MapPin,
 } from 'lucide-react';
 import { Button, InlineNotice } from '@open-work-hub/ui';
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
 
 import { cn } from '@/src/lib/utils';
 import type {
@@ -299,7 +300,7 @@ export function FloatingTodayPlannerWidget({
       <div className="flex shrink-0 justify-end border-t border-app-border px-4 py-3">
         <Button
           className="gap-1.5"
-          onClick={() => navigate('/planner')}
+          onClick={() => navigate(buildAppHref({ routeId: 'planner.root' }))}
           variant="secondary"
         >
           <ExternalLink aria-hidden="true" size={14} />

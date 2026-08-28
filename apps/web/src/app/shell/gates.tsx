@@ -95,7 +95,7 @@ export function workspaceFeatureComingSoonItem(
     icon: workspaceAppIconForKey(item.icon_key),
     category: '',
     appId: item.app_id as AppModuleId,
-    pathSuffix: item.route_base,
+    absolutePath: item.route_base,
     comingSoon: true,
   };
 }

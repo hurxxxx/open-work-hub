@@ -132,11 +132,11 @@ def _disable_app(
     catalog_item = get_workspace_app_catalog_item(app_id)
     assert catalog_item is not None
     if catalog_item.availability_scope == "platform":
-        path = "/api/v1/admin/app-visibility"
-        payload = {"items": [{"app_id": app_id, "visible": False}]}
+        path = "/api/v1/admin/apps/company-controls"
+        payload = {"items": [{"app_id": app_id, "enabled": False}]}
     else:
-        path = f"/api/v1/admin/workspaces/{workspace_id}/app-visibility"
-        payload = {"items": [{"app_id": app_id, "visibility_override": False}]}
+        path = f"/api/v1/admin/workspaces/{workspace_id}/app-overrides"
+        payload = {"items": [{"app_id": app_id, "enabled": False}]}
     response = client.patch(
         path,
         headers=_auth_headers(admin_token),

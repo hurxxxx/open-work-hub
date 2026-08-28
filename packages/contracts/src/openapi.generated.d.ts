@@ -310,6 +310,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/apps/{app_id}/eligible-workspaces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Eligible Workspaces */
+        get: operations["apps_get_eligible_workspaces_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/apps/{app_id}/workspace-preference": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update App Workspace Preference */
+        put: operations["apps_update_app_workspace_preference_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_slug}/bootstrap": {
         parameters: {
             query?: never;
@@ -905,40 +939,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/app-visibility": {
+    "/api/v1/admin/apps/company-controls": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List Platform App Visibility */
-        get: operations["admin_list_platform_app_visibility_get"];
+        /** List Company App Controls */
+        get: operations["admin_list_company_app_controls_get"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        /** Update Platform App Visibility */
-        patch: operations["admin_update_platform_app_visibility_patch"];
+        /** Update Company App Controls */
+        patch: operations["admin_update_company_app_controls_patch"];
         trace?: never;
     };
-    "/api/v1/admin/workspaces/{workspace_id}/app-visibility": {
+    "/api/v1/admin/apps/workspace-defaults": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List Workspace App Visibility */
-        get: operations["admin_list_workspace_app_visibility_get"];
+        /** List Workspace App Defaults */
+        get: operations["admin_list_workspace_app_defaults_get"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        /** Update Workspace App Visibility */
-        patch: operations["admin_update_workspace_app_visibility_patch"];
+        /** Update Workspace App Defaults */
+        patch: operations["admin_update_workspace_app_defaults_patch"];
+        trace?: never;
+    };
+    "/api/v1/admin/workspaces/{workspace_id}/app-overrides": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Workspace App Overrides */
+        get: operations["admin_list_workspace_app_overrides_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Workspace App Overrides */
+        patch: operations["admin_update_workspace_app_overrides_patch"];
         trace?: never;
     };
     "/api/v1/admin/app-bar-categories": {
@@ -8039,6 +8091,23 @@ export interface components {
             /** Pinned App Ids */
             pinned_app_ids?: string[];
         };
+        /** AppWorkspacePreferenceRequest */
+        AppWorkspacePreferenceRequest: {
+            /** Workspace Id */
+            workspace_id: string;
+        };
+        /** AppWorkspacePreferenceResponse */
+        AppWorkspacePreferenceResponse: {
+            /** App Id */
+            app_id: string;
+            /** Workspace Id */
+            workspace_id: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /** ApprovalAbandonRequest */
         ApprovalAbandonRequest: {
             /** Reason */
@@ -8099,30 +8168,6 @@ export interface components {
             /** Snapshot Status */
             snapshot_status?: string | null;
         };
-        /** AppsBootstrapAppResponse */
-        AppsBootstrapAppResponse: {
-            /** App Id */
-            app_id: string;
-            /** Title */
-            title: string;
-            /** Route Base */
-            route_base: string;
-            /** Icon Key */
-            icon_key: string;
-            /**
-             * Availability Scope
-             * @default platform
-             * @constant
-             */
-            availability_scope: "platform";
-            /** Enabled */
-            enabled: boolean;
-            /**
-             * Coming Soon
-             * @default false
-             */
-            coming_soon: boolean;
-        };
         /** AppsBootstrapPrincipalResponse */
         AppsBootstrapPrincipalResponse: {
             /**
@@ -8149,13 +8194,13 @@ export interface components {
         /** AppsBootstrapResponse */
         AppsBootstrapResponse: {
             /** Apps */
-            apps?: components["schemas"]["AppsBootstrapAppResponse"][];
+            apps: (components["schemas"]["PlatformAppsBootstrapAppResponse"] | components["schemas"]["WorkspaceAppsBootstrapAppResponse"])[];
+            /** Global Route App Ids */
+            global_route_app_ids: string[];
             /** App Bar Categories */
-            app_bar_categories?: components["schemas"]["WorkspaceBootstrapAppBarCategoryResponse"][];
-            /** Personal Tools */
-            personal_tools?: components["schemas"]["AppsBootstrapAppResponse"][];
-            /** Platform Enabled App Ids */
-            platform_enabled_app_ids?: string[];
+            app_bar_categories: components["schemas"]["WorkspaceBootstrapAppBarCategoryResponse"][];
+            /** Personal Tool App Ids */
+            personal_tool_app_ids: string[];
             principal: components["schemas"]["AppsBootstrapPrincipalResponse"];
         };
         /**
@@ -8286,8 +8331,6 @@ export interface components {
             /** Date Format */
             date_format: string;
             app_bar_layout: components["schemas"]["AppBarLayoutPreference"];
-            /** Default Workspace Id */
-            default_workspace_id: string | null;
             /** System Roles */
             system_roles: string[];
             /** Workspaces */
@@ -9148,6 +9191,51 @@ export interface components {
         CommunityUnlockRequest: {
             /** Password */
             password: string;
+        };
+        /** CompanyAppControlItemResponse */
+        CompanyAppControlItemResponse: {
+            /** App Id */
+            app_id: string;
+            /** Title */
+            title: string;
+            /** Route Base */
+            route_base: string;
+            /** Icon Key */
+            icon_key: string;
+            /**
+             * Availability Scope
+             * @default workspace
+             * @enum {string}
+             */
+            availability_scope: "platform" | "workspace";
+            /**
+             * Execution Context Kind
+             * @enum {string}
+             */
+            execution_context_kind: "personal" | "company" | "workspace";
+            /** Enabled */
+            enabled: boolean;
+            /** Runtime Enabled */
+            runtime_enabled: boolean;
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /** CompanyAppControlUpdateItem */
+        CompanyAppControlUpdateItem: {
+            /** App Id */
+            app_id: string;
+            /** Enabled */
+            enabled: boolean;
+        };
+        /** CompanyAppControlsResponse */
+        CompanyAppControlsResponse: {
+            /** Items */
+            items: components["schemas"]["CompanyAppControlItemResponse"][];
+        };
+        /** CompanyAppControlsUpdateRequest */
+        CompanyAppControlsUpdateRequest: {
+            /** Items */
+            items: components["schemas"]["CompanyAppControlUpdateItem"][];
         };
         /** ConversationBoundChatRequest */
         ConversationBoundChatRequest: {
@@ -10474,6 +10562,28 @@ export interface components {
              * @enum {string}
              */
             language: "auto" | "ko" | "en";
+        };
+        /** EligibleWorkspaceResponse */
+        EligibleWorkspaceResponse: {
+            /** Id */
+            id: string;
+            /** Slug */
+            slug: string;
+            /** Name */
+            name: string;
+        };
+        /** EligibleWorkspacesResponse */
+        EligibleWorkspacesResponse: {
+            /** App Id */
+            app_id: string;
+            /** Items */
+            items: components["schemas"]["EligibleWorkspaceResponse"][];
+            /** Total */
+            total: number;
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
         };
         /** EntityTypeFacet */
         EntityTypeFacet: {
@@ -12371,71 +12481,48 @@ export interface components {
             /** Operations */
             operations: components["schemas"]["PlatformApiScopeOperationResponse"][];
         };
-        /** PlatformAppVisibilityItemResponse */
-        PlatformAppVisibilityItemResponse: {
+        /** PlatformAppsBootstrapAppResponse */
+        PlatformAppsBootstrapAppResponse: {
             /** App Id */
             app_id: string;
             /** Title */
             title: string;
             /** Route Base */
             route_base: string;
+            /** Entry Route Id */
+            entry_route_id: string;
             /** Icon Key */
             icon_key: string;
             /**
-             * Availability Scope
-             * @default workspace
+             * Execution Context Kind
              * @enum {string}
              */
-            availability_scope: "platform" | "workspace";
+            execution_context_kind: "personal" | "company" | "workspace";
             /**
-             * Launcher Personal Tools
+             * Resource Scope
+             * @enum {string}
+             */
+            resource_scope: "personal" | "company" | "workspace" | "hybrid";
+            /**
+             * Coming Soon
              * @default false
              */
-            launcher_personal_tools: boolean;
+            coming_soon: boolean;
             /**
-             * Kind
-             * @default mode
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
              */
-            kind: string;
-            /** Visible */
-            visible: boolean;
-            /** Runtime Enabled */
-            runtime_enabled: boolean;
+            availability_scope: "platform";
             /**
-             * Visible Workspace Count
+             * Eligible Workspace Count
              * @default 0
+             * @constant
              */
-            visible_workspace_count: number;
-            /** Visible Workspaces */
-            visible_workspaces?: components["schemas"]["PlatformAppVisibleWorkspaceResponse"][];
-            /** Updated At */
-            updated_at?: string | null;
-        };
-        /** PlatformAppVisibilityResponse */
-        PlatformAppVisibilityResponse: {
-            /** Items */
-            items: components["schemas"]["PlatformAppVisibilityItemResponse"][];
-        };
-        /** PlatformAppVisibilityUpdateItem */
-        PlatformAppVisibilityUpdateItem: {
-            /** App Id */
-            app_id: string;
-            /** Visible */
-            visible: boolean;
-        };
-        /** PlatformAppVisibilityUpdateRequest */
-        PlatformAppVisibilityUpdateRequest: {
-            /** Items */
-            items: components["schemas"]["PlatformAppVisibilityUpdateItem"][];
-        };
-        /** PlatformAppVisibleWorkspaceResponse */
-        PlatformAppVisibleWorkspaceResponse: {
-            /** Id */
-            id: string;
-            /** Key */
-            key: string;
-            /** Name */
-            name: string;
+            eligible_workspace_count: 0;
+            /** Preferred Workspace */
+            preferred_workspace?: null;
+            /** Single Eligible Workspace */
+            single_eligible_workspace?: null;
         };
         /** PmsViewPreferencesResponse */
         PmsViewPreferencesResponse: {
@@ -14352,8 +14439,6 @@ export interface components {
             /** Date Format */
             date_format?: ("korean" | "iso" | "us" | "european" | "locale") | null;
             app_bar_layout?: components["schemas"]["AppBarLayoutPreference"] | null;
-            /** Default Workspace Id */
-            default_workspace_id?: string | null;
         };
         /** UpdateWhiteboardRequest */
         UpdateWhiteboardRequest: {
@@ -14833,8 +14918,8 @@ export interface components {
              */
             access_level: "read" | "edit";
         };
-        /** WorkspaceAppVisibilityItemResponse */
-        WorkspaceAppVisibilityItemResponse: {
+        /** WorkspaceAppDefaultItemResponse */
+        WorkspaceAppDefaultItemResponse: {
             /** App Id */
             app_id: string;
             /** Title */
@@ -14844,29 +14929,75 @@ export interface components {
             /** Icon Key */
             icon_key: string;
             /**
-             * Availability Scope
+             * Execution Context Kind
              * @default workspace
              * @constant
              */
-            availability_scope: "workspace";
-            /**
-             * Kind
-             * @default mode
-             */
-            kind: string;
-            /** Platform Visible */
-            platform_visible: boolean;
-            /** Visibility Override */
-            visibility_override?: boolean | null;
-            /** Effective Visible */
-            effective_visible: boolean;
+            execution_context_kind: "workspace";
+            /** Company Enabled */
+            company_enabled: boolean;
+            /** Enabled */
+            enabled: boolean;
             /** Runtime Enabled */
             runtime_enabled: boolean;
             /** Updated At */
             updated_at?: string | null;
         };
-        /** WorkspaceAppVisibilityResponse */
-        WorkspaceAppVisibilityResponse: {
+        /** WorkspaceAppDefaultUpdateItem */
+        WorkspaceAppDefaultUpdateItem: {
+            /** App Id */
+            app_id: string;
+            /** Enabled */
+            enabled: boolean;
+        };
+        /** WorkspaceAppDefaultsResponse */
+        WorkspaceAppDefaultsResponse: {
+            /** Items */
+            items: components["schemas"]["WorkspaceAppDefaultItemResponse"][];
+        };
+        /** WorkspaceAppDefaultsUpdateRequest */
+        WorkspaceAppDefaultsUpdateRequest: {
+            /** Items */
+            items: components["schemas"]["WorkspaceAppDefaultUpdateItem"][];
+        };
+        /** WorkspaceAppOverrideItemResponse */
+        WorkspaceAppOverrideItemResponse: {
+            /** App Id */
+            app_id: string;
+            /** Title */
+            title: string;
+            /** Route Base */
+            route_base: string;
+            /** Icon Key */
+            icon_key: string;
+            /**
+             * Execution Context Kind
+             * @default workspace
+             * @constant
+             */
+            execution_context_kind: "workspace";
+            /** Company Enabled */
+            company_enabled: boolean;
+            /** Default Enabled */
+            default_enabled: boolean;
+            /** Override Enabled */
+            override_enabled?: boolean | null;
+            /** Effective Enabled */
+            effective_enabled: boolean;
+            /** Runtime Enabled */
+            runtime_enabled: boolean;
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /** WorkspaceAppOverrideUpdateItem */
+        WorkspaceAppOverrideUpdateItem: {
+            /** App Id */
+            app_id: string;
+            /** Enabled */
+            enabled?: boolean | null;
+        };
+        /** WorkspaceAppOverridesResponse */
+        WorkspaceAppOverridesResponse: {
             /** Workspace Id */
             workspace_id: string;
             /** Workspace Key */
@@ -14874,19 +15005,49 @@ export interface components {
             /** Workspace Name */
             workspace_name: string;
             /** Items */
-            items: components["schemas"]["WorkspaceAppVisibilityItemResponse"][];
+            items: components["schemas"]["WorkspaceAppOverrideItemResponse"][];
         };
-        /** WorkspaceAppVisibilityUpdateItem */
-        WorkspaceAppVisibilityUpdateItem: {
+        /** WorkspaceAppOverridesUpdateRequest */
+        WorkspaceAppOverridesUpdateRequest: {
+            /** Items */
+            items: components["schemas"]["WorkspaceAppOverrideUpdateItem"][];
+        };
+        /** WorkspaceAppsBootstrapAppResponse */
+        WorkspaceAppsBootstrapAppResponse: {
             /** App Id */
             app_id: string;
-            /** Visibility Override */
-            visibility_override?: boolean | null;
-        };
-        /** WorkspaceAppVisibilityUpdateRequest */
-        WorkspaceAppVisibilityUpdateRequest: {
-            /** Items */
-            items: components["schemas"]["WorkspaceAppVisibilityUpdateItem"][];
+            /** Title */
+            title: string;
+            /** Route Base */
+            route_base: string;
+            /** Entry Route Id */
+            entry_route_id: string;
+            /** Icon Key */
+            icon_key: string;
+            /**
+             * Execution Context Kind
+             * @enum {string}
+             */
+            execution_context_kind: "personal" | "company" | "workspace";
+            /**
+             * Resource Scope
+             * @enum {string}
+             */
+            resource_scope: "personal" | "company" | "workspace" | "hybrid";
+            /**
+             * Coming Soon
+             * @default false
+             */
+            coming_soon: boolean;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            availability_scope: "workspace";
+            /** Eligible Workspace Count */
+            eligible_workspace_count: number;
+            preferred_workspace?: components["schemas"]["EligibleWorkspaceResponse"] | null;
+            single_eligible_workspace?: components["schemas"]["EligibleWorkspaceResponse"] | null;
         };
         /** WorkspaceBindingInput */
         WorkspaceBindingInput: {
@@ -15030,8 +15191,6 @@ export interface components {
             app_bar_categories?: components["schemas"]["WorkspaceBootstrapAppBarCategoryResponse"][];
             /** Nav */
             nav: components["schemas"]["WorkspaceBootstrapNavItemResponse"][];
-            /** Platform Visible App Ids */
-            platform_visible_app_ids?: string[];
             /** Chatbot App Ids */
             chatbot_app_ids?: string[];
             keyword_search?: components["schemas"]["WorkspaceBootstrapKeywordSearchResponse"];
@@ -15718,6 +15877,113 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    apps_get_eligible_workspaces_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                slug?: string | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path: {
+                app_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EligibleWorkspacesResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apps_update_app_workspace_preference_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                app_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppWorkspacePreferenceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppWorkspacePreferenceResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -17574,11 +17840,9 @@ export interface operations {
             };
         };
     };
-    admin_list_platform_app_visibility_get: {
+    admin_list_company_app_controls_get: {
         parameters: {
-            query?: {
-                scope?: "core";
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
@@ -17591,7 +17855,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PlatformAppVisibilityResponse"];
+                    "application/json": components["schemas"]["CompanyAppControlsResponse"];
                 };
             };
             /** @description Authentication required. */
@@ -17612,29 +17876,18 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
         };
     };
-    admin_update_platform_app_visibility_patch: {
+    admin_update_company_app_controls_patch: {
         parameters: {
-            query?: {
-                scope?: "core";
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PlatformAppVisibilityUpdateRequest"];
+                "application/json": components["schemas"]["CompanyAppControlsUpdateRequest"];
             };
         };
         responses: {
@@ -17644,7 +17897,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PlatformAppVisibilityResponse"];
+                    "application/json": components["schemas"]["CompanyAppControlsResponse"];
                 };
             };
             /** @description Authentication required. */
@@ -17676,11 +17929,98 @@ export interface operations {
             };
         };
     };
-    admin_list_workspace_app_visibility_get: {
+    admin_list_workspace_app_defaults_get: {
         parameters: {
-            query?: {
-                scope?: "core";
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceAppDefaultsResponse"];
+                };
             };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    admin_update_workspace_app_defaults_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkspaceAppDefaultsUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceAppDefaultsResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_list_workspace_app_overrides_get: {
+        parameters: {
+            query?: never;
             header?: never;
             path: {
                 workspace_id: string;
@@ -17695,7 +18035,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["WorkspaceAppVisibilityResponse"];
+                    "application/json": components["schemas"]["WorkspaceAppOverridesResponse"];
                 };
             };
             /** @description Authentication required. */
@@ -17727,11 +18067,9 @@ export interface operations {
             };
         };
     };
-    admin_update_workspace_app_visibility_patch: {
+    admin_update_workspace_app_overrides_patch: {
         parameters: {
-            query?: {
-                scope?: "core";
-            };
+            query?: never;
             header?: never;
             path: {
                 workspace_id: string;
@@ -17740,7 +18078,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["WorkspaceAppVisibilityUpdateRequest"];
+                "application/json": components["schemas"]["WorkspaceAppOverridesUpdateRequest"];
             };
         };
         responses: {
@@ -17750,7 +18088,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["WorkspaceAppVisibilityResponse"];
+                    "application/json": components["schemas"]["WorkspaceAppOverridesResponse"];
                 };
             };
             /** @description Authentication required. */

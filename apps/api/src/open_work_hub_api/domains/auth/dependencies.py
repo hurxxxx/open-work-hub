@@ -17,7 +17,6 @@ from open_work_hub_api.domains.auth.access import (
     load_user_graph,
     resolve_system_roles,
     resolve_team_role,
-    resolve_workspaces,
     resolve_workspace_role,
     team_role_allows,
     workspace_role_allows,
@@ -183,34 +182,6 @@ def _resolve_workspace_role_for_request(
     return resolve_workspace_role(db, auth.user, workspace.id)
 
 
-def _select_legacy_workspace_for_request(
-    db: Session,
-    auth: AuthContext,
-    min_role: str,
-    preferred_workspace_key: str | None = None,
-) -> tuple[Workspace, str]:
-    if preferred_workspace_key:
-        explicit_workspace = load_active_workspace_by_key(db, preferred_workspace_key)
-        if explicit_workspace is not None:
-            explicit_role = _resolve_workspace_role_for_request(db, auth, explicit_workspace)
-            if explicit_role is not None and workspace_role_allows(explicit_role, min_role):
-                return explicit_workspace, explicit_role
-
-    for summary in resolve_workspaces(db, auth.user):
-        if not workspace_role_allows(summary["role"], min_role):
-            continue
-        workspace = db.scalar(
-            select(Workspace).where(Workspace.id == summary["id"], Workspace.active.is_(True))
-        )
-        if workspace is not None:
-            return workspace, summary["role"]
-
-    raise localized_http_exception(
-        status_code=status.HTTP_403_FORBIDDEN,
-        code="workspace.access_required",
-    )
-
-
 def _store_request_workspace(request: Request, workspace: Workspace | None) -> None:
     request.state.current_workspace = workspace
 
@@ -290,28 +261,6 @@ def require_workspace_access(workspace_key: str, min_role: str = "member"):
                 code="workspace.access_required_named",
                 workspace=workspace.key,
             )
-        bind_current_workspace(db, workspace)
-        _store_request_workspace(request, workspace)
-        return WorkspaceAccessContext(auth=auth, workspace=workspace, role=role)
-
-    return dependency
-
-
-def require_legacy_workspace_membership(
-    min_role: str = "member",
-    preferred_workspace_key: str | None = None,
-):
-    async def dependency(
-        request: Request,
-        auth: AuthContext = Depends(require_auth_context),
-        db: Session = Depends(get_db_session),
-    ) -> WorkspaceAccessContext:
-        workspace, role = _select_legacy_workspace_for_request(
-            db,
-            auth,
-            min_role,
-            preferred_workspace_key=preferred_workspace_key,
-        )
         bind_current_workspace(db, workspace)
         _store_request_workspace(request, workspace)
         return WorkspaceAccessContext(auth=auth, workspace=workspace, role=role)

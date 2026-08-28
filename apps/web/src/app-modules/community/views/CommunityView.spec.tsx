@@ -125,11 +125,14 @@ describe('CommunityView', () => {
 
     render(
       <MemoryRouter
-        initialEntries={['/community/posts/post-1?channel=general']}
+        initialEntries={['/apps/community/posts/post-1?channel=general']}
       >
         <Routes>
-          <Route path="/community/posts/:postId" element={<CommunityView />} />
-          <Route path="/community" element={<CommunityView />} />
+          <Route
+            path="/apps/community/posts/:postId"
+            element={<CommunityView />}
+          />
+          <Route path="/apps/community" element={<CommunityView />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -164,11 +167,14 @@ describe('CommunityView', () => {
 
     render(
       <MemoryRouter
-        initialEntries={['/community/posts/post-locked?channel=general']}
+        initialEntries={['/apps/community/posts/post-locked?channel=general']}
       >
         <Routes>
-          <Route path="/community/posts/:postId" element={<CommunityView />} />
-          <Route path="/community" element={<CommunityView />} />
+          <Route
+            path="/apps/community/posts/:postId"
+            element={<CommunityView />}
+          />
+          <Route path="/apps/community" element={<CommunityView />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -188,11 +194,14 @@ describe('CommunityView', () => {
 
     render(
       <MemoryRouter
-        initialEntries={['/community/posts/post-1?channel=general']}
+        initialEntries={['/apps/community/posts/post-1?channel=general']}
       >
         <Routes>
-          <Route path="/community/posts/:postId" element={<CommunityView />} />
-          <Route path="/community" element={<CommunityView />} />
+          <Route
+            path="/apps/community/posts/:postId"
+            element={<CommunityView />}
+          />
+          <Route path="/apps/community" element={<CommunityView />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -252,11 +261,14 @@ describe('CommunityView', () => {
 
     render(
       <MemoryRouter
-        initialEntries={['/community/posts/post-1?channel=general']}
+        initialEntries={['/apps/community/posts/post-1?channel=general']}
       >
         <Routes>
-          <Route path="/community/posts/:postId" element={<CommunityView />} />
-          <Route path="/community" element={<CommunityView />} />
+          <Route
+            path="/apps/community/posts/:postId"
+            element={<CommunityView />}
+          />
+          <Route path="/apps/community" element={<CommunityView />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -324,10 +336,13 @@ describe('CommunityView', () => {
     );
 
     render(
-      <MemoryRouter initialEntries={['/community?channel=general']}>
+      <MemoryRouter initialEntries={['/apps/community?channel=general']}>
         <Routes>
-          <Route path="/community/posts/:postId" element={<CommunityView />} />
-          <Route path="/community" element={<CommunityView />} />
+          <Route
+            path="/apps/community/posts/:postId"
+            element={<CommunityView />}
+          />
+          <Route path="/apps/community" element={<CommunityView />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -429,10 +444,13 @@ describe('CommunityView', () => {
     });
 
     render(
-      <MemoryRouter initialEntries={['/community?channel=private']}>
+      <MemoryRouter initialEntries={['/apps/community?channel=private']}>
         <Routes>
-          <Route path="/community/posts/:postId" element={<CommunityView />} />
-          <Route path="/community" element={<CommunityView />} />
+          <Route
+            path="/apps/community/posts/:postId"
+            element={<CommunityView />}
+          />
+          <Route path="/apps/community" element={<CommunityView />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -488,10 +506,13 @@ describe('CommunityView', () => {
     });
 
     render(
-      <MemoryRouter initialEntries={['/community?channel=private']}>
+      <MemoryRouter initialEntries={['/apps/community?channel=private']}>
         <Routes>
-          <Route path="/community/posts/:postId" element={<CommunityView />} />
-          <Route path="/community" element={<CommunityView />} />
+          <Route
+            path="/apps/community/posts/:postId"
+            element={<CommunityView />}
+          />
+          <Route path="/apps/community" element={<CommunityView />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -538,10 +559,13 @@ describe('CommunityView', () => {
     });
 
     render(
-      <MemoryRouter initialEntries={['/community?channel=announcements']}>
+      <MemoryRouter initialEntries={['/apps/community?channel=announcements']}>
         <Routes>
-          <Route path="/community/posts/:postId" element={<CommunityView />} />
-          <Route path="/community" element={<CommunityView />} />
+          <Route
+            path="/apps/community/posts/:postId"
+            element={<CommunityView />}
+          />
+          <Route path="/apps/community" element={<CommunityView />} />
         </Routes>
       </MemoryRouter>,
     );

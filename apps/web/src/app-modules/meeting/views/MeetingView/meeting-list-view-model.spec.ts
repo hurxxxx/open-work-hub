@@ -6,7 +6,6 @@ import {
   buildMeetingListRows,
   consumeMeetingCreateSearchParam,
   createMeetingTabSearchParams,
-  getLegacyMeetingRedirectId,
   meetingListViewReducer,
   resolveMeetingScope,
   resolveMeetingTab,
@@ -49,21 +48,16 @@ describe('meeting list view model', () => {
     expect(resolveMeetingScope('recordings')).toBe('mine');
   });
 
-  it('builds tab search params while dropping legacy meeting ids', () => {
+  it('builds tab search params without interpreting unrelated params', () => {
     expect(
       createMeetingTabSearchParams({
         searchParams: new URLSearchParams('id=meeting-1&create=1'),
         tab: 'mine',
       }).toString(),
-    ).toBe('create=1&tab=mine');
+    ).toBe('id=meeting-1&create=1&tab=mine');
   });
 
-  it('detects legacy redirect ids and consumes create requests', () => {
-    expect(
-      getLegacyMeetingRedirectId(new URLSearchParams('id= meeting-1 ')),
-    ).toBe('meeting-1');
-    expect(getLegacyMeetingRedirectId(new URLSearchParams('id='))).toBeNull();
-
+  it('consumes create requests', () => {
     expect(
       consumeMeetingCreateSearchParam(
         new URLSearchParams('tab=mine&create=1'),

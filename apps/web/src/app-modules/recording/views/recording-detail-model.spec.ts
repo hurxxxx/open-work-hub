@@ -144,7 +144,7 @@ describe('recording detail model', () => {
 
   it('builds hrefs for known target apps', () => {
     expect(recordingTargetHref('team space', target())).toBe(
-      '/w/team%20space/meeting/meeting-1',
+      '/apps/meeting/workspaces/team%20space/meetings/meeting-1',
     );
     expect(
       recordingTargetHref(
@@ -155,7 +155,7 @@ describe('recording detail model', () => {
           target_id: 'task 42',
         }),
       ),
-    ).toBe('/w/hq/pms?task=task%2042');
+    ).toBe('/apps/pms/workspaces/hq?task=task+42');
     expect(
       recordingTargetHref(
         'hq',
@@ -165,7 +165,7 @@ describe('recording detail model', () => {
           target_id: 'doc-1',
         }),
       ),
-    ).toBe('/w/hq/docs/doc-1');
+    ).toBe('/apps/docs/workspaces/hq/documents/doc-1');
     expect(
       recordingTargetHref('hq', target({ target_app: 'unknown-app' })),
     ).toBeNull();

@@ -28,8 +28,8 @@ import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { teamRoleAllows } from '@/src/platform/auth/auth-api';
 import {
+  buildWorkspaceAppEntryPath,
   buildWorkspaceAppPath,
-  resolveDefaultWorkspaceAppPath,
 } from '@/src/platform/workspaces/workspace-utils';
 import {
   listDocsHub,
@@ -151,11 +151,13 @@ function useSpaceOverviewViewElement({
   spaceName,
   workspaceSlug,
 }: SpaceOverviewViewProps) {
-  const { token, user } = useAuth();
+  const { token } = useAuth();
   const { t, i18n } = useTranslation('apps');
   const locale = i18n.resolvedLanguage ?? i18n.language;
   const navigate = useNavigate();
-  const pmsRootPath = resolveDefaultWorkspaceAppPath(user, 'pms');
+  const pmsRootPath = workspaceSlug
+    ? buildWorkspaceAppPath(workspaceSlug, 'pms')
+    : buildWorkspaceAppEntryPath('pms');
   const { confirm, confirmDialog } = useConfirm();
   const { prompt, promptDialog } = usePrompt();
   const [spaceMenuOpen, setSpaceMenuOpen] = useState(false);

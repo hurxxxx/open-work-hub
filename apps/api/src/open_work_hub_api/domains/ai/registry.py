@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from pydantic import BaseModel
 
 from open_work_hub_api.domains.ai.schema_compile import compile_input_schemas
-from open_work_hub_api.domains.auth.access import (
+from open_work_hub_api.domains.auth.app_availability import (
     resolve_platform_enabled_app_ids,
     resolve_workspace_enabled_app_ids,
 )

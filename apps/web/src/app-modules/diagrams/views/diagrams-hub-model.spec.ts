@@ -9,10 +9,6 @@ import {
   writeStoredDiagramLayoutMode,
 } from './diagrams-hub-model';
 
-const user = {
-  workspaces: [{ id: 'workspace-1', key: 'lab', slug: 'lab' }],
-};
-
 describe('diagrams hub model', () => {
   it('normalizes hub view search values', () => {
     expect(viewFromSearch('mine')).toBe('mine');
@@ -20,15 +16,13 @@ describe('diagrams hub model', () => {
     expect(viewFromSearch('trash')).toBe('all');
   });
 
-  it('builds workspace and default workspace paths', () => {
-    expect(
-      itemPath({ itemId: 'diagram 1', user, workspaceSlug: 'research' }),
-    ).toBe('/w/research/diagrams/diagram%201');
-    expect(itemPath({ itemId: 'diagram-1', user })).toBe(
-      '/w/lab/diagrams/diagram-1',
+  it('builds explicit workspace paths and unresolved app entries', () => {
+    expect(itemPath({ itemId: 'diagram 1', workspaceSlug: 'research' })).toBe(
+      '/apps/diagrams/workspaces/research/diagrams/diagram%201',
     );
-    expect(rootPath('research', user, new URLSearchParams('view=mine'))).toBe(
-      '/w/research/diagrams?view=mine',
+    expect(itemPath({ itemId: 'diagram-1' })).toBe('/apps/diagrams');
+    expect(rootPath('research', new URLSearchParams('view=mine'))).toBe(
+      '/apps/diagrams/workspaces/research?view=mine',
     );
   });
 

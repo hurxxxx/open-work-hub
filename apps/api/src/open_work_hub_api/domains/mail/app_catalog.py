@@ -1,19 +1,11 @@
 from open_work_hub_api.core.workspace_app_registry import (
-    WorkspaceAppRegistration,
     WorkspaceNavRegistration,
+    workspace_app_registration,
 )
 
 
-MAIL_WORKSPACE_APP = WorkspaceAppRegistration(
-    app_id="mail",
-    title="MAIL",
-    route_base="/mail",
-    icon_key="mail",
-    availability_scope="platform",
-    enabled_by_default=True,
-    visible_by_default=True,
-    launcher_category=False,
-    launcher_personal_tools=True,
+MAIL_WORKSPACE_APP = workspace_app_registration(
+    "mail",
     nav_items=(
         WorkspaceNavRegistration(
             id="mail-inbox",

@@ -42,8 +42,8 @@ export function ShellPersonalWidgetHost() {
   const workspaceBootstrap = useWorkspaceBootstrapContext();
   const currentWorkspaceSlug = workspaceBootstrap.data?.workspace.slug ?? null;
   const plannerEnabled = Boolean(
-    workspaceBootstrap.globalApps?.platform_enabled_app_ids.includes(
-      plannerManifest.appBarItem.id,
+    workspaceBootstrap.globalApps?.apps.some(
+      (app) => app.app_id === plannerManifest.appBarItem.id,
     ),
   );
   const timeZone = normalizeTimeZone(user?.time_zone);

@@ -24,10 +24,8 @@ def _registration(
     return WorkspaceAppRegistration(
         app_id=app_id,
         title=app_id,
-        route_base=f"/{app_id}",
+        route_base=f"/apps/{app_id}",
         icon_key="box",
-        enabled_by_default=True,
-        visible_by_default=True,
         launcher_category=True,
         nav_items=nav_items,
     )
@@ -63,21 +61,19 @@ def test_registry_rejects_duplicate_app_ids() -> None:
         )
 
 
-def test_registration_defaults_are_safe_until_explicitly_activated() -> None:
+def test_registration_defaults_exclude_unspecified_launcher_placement() -> None:
     registry = compile_workspace_app_registry(
         (
             WorkspaceAppRegistration(
                 app_id="inactive-app",
                 title="Inactive",
-                route_base="/inactive-app",
+                route_base="/apps/inactive-app",
                 icon_key="box",
             ),
         )
     )
 
     app = registry.catalog[0]
-    assert app.enabled_by_default is False
-    assert app.visible_by_default is False
     assert app.launcher_category is False
     assert app.availability_scope == "workspace"
     assert app.required_system_roles == ()
@@ -89,7 +85,7 @@ def test_registry_projects_and_checks_required_system_roles() -> None:
             WorkspaceAppRegistration(
                 app_id="admin-tool",
                 title="Admin tool",
-                route_base="/admin-tool",
+                route_base="/apps/admin-tool",
                 icon_key="terminal",
                 availability_scope="platform",
                 required_system_roles=("platform_admin",),
@@ -114,7 +110,7 @@ def test_registry_rejects_invalid_required_system_roles(roles: tuple[str, ...]) 
                 WorkspaceAppRegistration(
                     app_id="admin-tool",
                     title="Admin tool",
-                    route_base="/admin-tool",
+                    route_base="/apps/admin-tool",
                     icon_key="terminal",
                     required_system_roles=roles,
                 ),
@@ -139,7 +135,7 @@ def test_registry_rejects_invalid_app_id_format(app_id: str) -> None:
                 WorkspaceAppRegistration(
                     app_id=app_id,
                     title="Invalid",
-                    route_base="/invalid",
+                    route_base="/apps/invalid",
                     icon_key="box",
                 ),
             )
@@ -154,7 +150,7 @@ def test_registry_rejects_invalid_backend_domain(backend_domain: str) -> None:
                 WorkspaceAppRegistration(
                     app_id="quality-search",
                     title="Quality Search",
-                    route_base="/quality-search",
+                    route_base="/apps/quality-search",
                     icon_key="search",
                     backend_domain=backend_domain,
                 ),
@@ -183,20 +179,20 @@ def test_registry_rejects_invalid_route_base_format(route_base: str) -> None:
 def test_registry_rejects_duplicate_route_bases() -> None:
     with pytest.raises(
         RuntimeError,
-        match=r"Duplicate workspace app route base: /shared \(first-app, second-app\)",
+        match=r"Duplicate workspace app route base: /apps/shared \(first-app, second-app\)",
     ):
         compile_workspace_app_registry(
             (
                 WorkspaceAppRegistration(
                     app_id="first-app",
                     title="First",
-                    route_base="/shared",
+                    route_base="/apps/shared",
                     icon_key="box",
                 ),
                 WorkspaceAppRegistration(
                     app_id="second-app",
                     title="Second",
-                    route_base="/shared",
+                    route_base="/apps/shared",
                     icon_key="box",
                 ),
             )
@@ -290,20 +286,16 @@ def test_registry_derives_launcher_policy_from_app_registrations() -> None:
             WorkspaceAppRegistration(
                 app_id="fixed-app",
                 title="Fixed",
-                route_base="/fixed-app",
+                route_base="/apps/fixed-app",
                 icon_key="box",
-                enabled_by_default=True,
-                visible_by_default=True,
                 launcher_category=False,
                 launcher_fixed=True,
             ),
             WorkspaceAppRegistration(
                 app_id="default-pin",
                 title="Default pin",
-                route_base="/default-pin",
+                route_base="/apps/default-pin",
                 icon_key="box",
-                enabled_by_default=True,
-                visible_by_default=True,
                 launcher_category=True,
                 launcher_pinned_by_default=True,
             ),
@@ -320,7 +312,7 @@ def test_registry_derives_platform_personal_tools_launcher_policy() -> None:
             WorkspaceAppRegistration(
                 app_id="personal-mail",
                 title="Personal mail",
-                route_base="/personal-mail",
+                route_base="/apps/personal-mail",
                 icon_key="mail",
                 availability_scope="platform",
                 launcher_personal_tools=True,
@@ -345,7 +337,7 @@ def test_registry_rejects_invalid_personal_tools_launcher_placement() -> None:
                 WorkspaceAppRegistration(
                     app_id="personal-mail",
                     title="Personal mail",
-                    route_base="/personal-mail",
+                    route_base="/apps/personal-mail",
                     icon_key="mail",
                     availability_scope="platform",
                     launcher_category=True,
@@ -363,7 +355,7 @@ def test_registry_rejects_invalid_personal_tools_launcher_placement() -> None:
                 WorkspaceAppRegistration(
                     app_id="workspace-mail",
                     title="Workspace mail",
-                    route_base="/workspace-mail",
+                    route_base="/apps/workspace-mail",
                     icon_key="mail",
                     launcher_personal_tools=True,
                 ),
@@ -381,10 +373,8 @@ def test_registry_rejects_conflicting_launcher_policy() -> None:
                 WorkspaceAppRegistration(
                     app_id="invalid-app",
                     title="Invalid",
-                    route_base="/invalid-app",
+                    route_base="/apps/invalid-app",
                     icon_key="box",
-                    enabled_by_default=True,
-                    visible_by_default=True,
                     launcher_category=True,
                     launcher_fixed=True,
                 ),
@@ -402,14 +392,41 @@ def test_canonical_workspace_registry_exposes_all_composed_apps_by_identity() ->
     assert get_workspace_app_catalog_item("unknown-app") is None
 
 
+def test_production_registry_requires_a_generated_leaf_app_contract() -> None:
+    with pytest.raises(
+        RuntimeError,
+        match="Workspace app registration has no generated contract: custom-app",
+    ):
+        compile_workspace_app_registry(
+            (_registration("custom-app"),),
+            require_generated_contract=True,
+        )
+
+
+def test_production_registry_rejects_identity_drift_from_generated_contract() -> None:
+    with pytest.raises(
+        RuntimeError,
+        match="Workspace app registration disagrees with generated contract for docs",
+    ):
+        compile_workspace_app_registry(
+            (
+                WorkspaceAppRegistration(
+                    app_id="docs",
+                    title="Docs",
+                    route_base="/apps/wrong-docs",
+                    icon_key="files",
+                ),
+            ),
+            require_generated_contract=True,
+        )
+
+
 def test_bento_catalog_exposes_workspace_document_hub() -> None:
     app = get_workspace_app_catalog_item("bento")
 
     assert app is not None
-    assert app.route_base == "/bento"
+    assert app.route_base == "/apps/bento"
     assert app.icon_key == "presentation"
-    assert app.enabled_by_default is True
-    assert app.visible_by_default is True
     assert app.launcher_category is True
     assert [item.id for item in app.nav_items] == [
         "bento-all",

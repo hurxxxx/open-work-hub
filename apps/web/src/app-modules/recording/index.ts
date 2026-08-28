@@ -1,3 +1,15 @@
-export { recordingManifest } from './manifest';
-export { recordingWorkspaceRoutes } from './routes';
-export { recordingShellNavResolver } from './shell-nav';
+import { recordingManifest } from './manifest';
+import { recordingWorkspaceRoutes } from './routes';
+import { recordingShellNavResolver } from './shell-nav';
+
+export {
+  recordingManifest,
+  recordingShellNavResolver,
+  recordingWorkspaceRoutes,
+};
+
+export const recordingModule = {
+  manifest: recordingManifest,
+  shellNavResolver: recordingShellNavResolver,
+  workspaceRoutes: recordingWorkspaceRoutes,
+} as const;

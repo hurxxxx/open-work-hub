@@ -99,8 +99,5 @@ export function resolveDmNotificationThreadId(
   if (globalMatch?.[1]) {
     return decodeURIComponent(globalMatch[1]);
   }
-  if (/^\/w\/[^/]+\/dm\/?$/.test(parsed.pathname)) {
-    return parsed.searchParams.get('thread');
-  }
   return undefined;
 }

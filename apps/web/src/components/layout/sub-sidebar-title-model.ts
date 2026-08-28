@@ -8,27 +8,24 @@ type TranslateSubSidebarTitle = (
 
 export function resolveSubSidebarTitle({
   activeAppId,
-  activeFeatureAppId,
   appBarItems,
   t,
   workspaceAppRegistry,
 }: {
   activeAppId: string;
-  activeFeatureAppId?: string | null;
   appBarItems: readonly AppBarItem[];
   t: TranslateSubSidebarTitle;
   workspaceAppRegistry: ReadonlyMap<string, WorkspaceBootstrapApp>;
 }): string {
-  const titleAppId = activeFeatureAppId ?? activeAppId;
-  if (titleAppId === 'settings') {
+  if (activeAppId === 'settings') {
     return t('sidebar.allSettings');
   }
 
   const appBarItemById = new Map(appBarItems.map((item) => [item.id, item]));
-  return t(`apps.${titleAppId}`, {
+  return t(`apps.${activeAppId}`, {
     defaultValue:
-      workspaceAppRegistry.get(titleAppId)?.title ??
-      appBarItemById.get(titleAppId as AppBarItem['id'])?.title ??
-      titleAppId,
+      workspaceAppRegistry.get(activeAppId)?.title ??
+      appBarItemById.get(activeAppId as AppBarItem['id'])?.title ??
+      activeAppId,
   });
 }

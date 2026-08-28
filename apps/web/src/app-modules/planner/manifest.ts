@@ -1,15 +1,14 @@
 import { Activity, Calendar } from 'lucide-react';
+import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
 
 import type { AppModuleManifest } from '@/src/app/shell/navigation-types';
 
 export const plannerManifest: AppModuleManifest = {
   appBarItem: { id: 'planner', title: 'planner', icon: Calendar },
-  surfaces: { launcher: { globalPath: '/planner' } },
   contract: {
     owner: 'planner-platform',
     permissions: [],
     apiDomain: 'planner',
-    resourceScope: 'personal',
     aiCapabilities: [
       'planner.list_events',
       'planner.create_event',
@@ -45,5 +44,5 @@ export const plannerManifest: AppModuleManifest = {
     },
   ],
   workspaceRoutePaths: [],
-  globalRoutePaths: ['/planner'],
+  globalRoutePaths: [getAppRoutePattern('planner.root')],
 };

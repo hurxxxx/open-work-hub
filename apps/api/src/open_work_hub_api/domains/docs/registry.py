@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
+from open_work_hub_api.core.app_routes import InternalAppLocation, build_app_href
 from open_work_hub_api.domains.auth.models import Workspace
 from open_work_hub_api.domains.docs.models import NativeDoc, NativeDocTarget
 from open_work_hub_api.domains.pms.links import pms_root_path, pms_space_docs_path
@@ -47,7 +48,13 @@ class _DocsSourceAdapter:
         return SourceDescriptor(
             label="Docs",
             badge="Docs",
-            deep_link=f"/w/{workspace.key}/docs/{doc.id}",
+            deep_link=build_app_href(
+                InternalAppLocation(
+                    route_id="docs.document",
+                    workspace_slug=workspace.key,
+                    path_params={"docId": doc.id},
+                )
+            ),
         )
 
 
@@ -62,7 +69,12 @@ class _MeetingSourceAdapter:
         return SourceDescriptor(
             label="Meeting",
             badge="Meeting",
-            deep_link=f"/w/{workspace.key}/meeting",
+            deep_link=build_app_href(
+                InternalAppLocation(
+                    route_id="meeting.root",
+                    workspace_slug=workspace.key,
+                )
+            ),
         )
 
 
@@ -104,7 +116,13 @@ class _GenericSourceAdapter:
         return SourceDescriptor(
             label=label,
             badge=label,
-            deep_link=f"/w/{workspace.key}/docs/{doc.id}",
+            deep_link=build_app_href(
+                InternalAppLocation(
+                    route_id="docs.document",
+                    workspace_slug=workspace.key,
+                    path_params={"docId": doc.id},
+                )
+            ),
         )
 
 

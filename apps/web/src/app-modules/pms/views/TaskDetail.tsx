@@ -259,7 +259,6 @@ function useTaskDetailContent({
     spaceId,
     token,
     t,
-    user,
     workspaceSlug,
   });
 

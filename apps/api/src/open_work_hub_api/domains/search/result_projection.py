@@ -6,7 +6,6 @@ import re
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from open_work_hub_api.domains.pms.links import normalize_pms_deep_link
 from open_work_hub_api.domains.search.schemas import (
     TargetFacet,
     EntityTypeFacet,
@@ -147,7 +146,7 @@ def _deep_link_for_row(
     query: str,
     doc_page_lookup: DocPageLookup,
 ) -> str:
-    deep_link = normalize_pms_deep_link(str(row["deep_link"])) or str(row["deep_link"])
+    deep_link = str(row["deep_link"])
     if str(row.get("entity_type")) != SearchEntityType.DOC.value:
         return deep_link
     doc_pages = row.get("doc_pages")

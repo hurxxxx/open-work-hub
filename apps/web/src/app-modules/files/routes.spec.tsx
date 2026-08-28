@@ -18,9 +18,9 @@ vi.mock('./views/FilesChatView', () => ({
 
 async function renderFilesRoute(path: string) {
   const route = filesWorkspaceRoutes.find((candidate) =>
-    candidate.path.endsWith(
-      path.includes('/files/chat') ? '/files/chat' : '/files',
-    ),
+    path.endsWith('/chat')
+      ? candidate.path.endsWith('/chat')
+      : candidate.path.endsWith('/:workspaceSlug'),
   );
   if (!route) {
     throw new Error(`Files route is not registered for ${path}`);
@@ -36,19 +36,19 @@ async function renderFilesRoute(path: string) {
 
 describe('Files routes', () => {
   it('renders document chat at the dedicated Files route', async () => {
-    await renderFilesRoute('/w/hq/files/chat');
+    await renderFilesRoute('/apps/files/workspaces/hq/chat');
     expect(await screen.findByText('files-chat-view')).toBeTruthy();
     expect(screen.queryByText('file-manager-view')).toBeNull();
   });
 
   it('selects search only for the Files search view query', async () => {
-    await renderFilesRoute('/w/hq/files?view=search');
+    await renderFilesRoute('/apps/files/workspaces/hq?view=search');
     expect(await screen.findByText('file-search-view')).toBeTruthy();
     expect(screen.queryByText('file-manager-view')).toBeNull();
   });
 
   it('keeps the existing file manager as the default view', async () => {
-    await renderFilesRoute('/w/hq/files');
+    await renderFilesRoute('/apps/files/workspaces/hq');
     expect(await screen.findByText('file-manager-view')).toBeTruthy();
     expect(screen.queryByText('file-search-view')).toBeNull();
   });

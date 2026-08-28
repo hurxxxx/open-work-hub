@@ -48,10 +48,10 @@ vi.mock('@/src/platform/browser/browser-download', async (importOriginal) => {
 
 function renderSources(content: string) {
   render(
-    <MemoryRouter initialEntries={['/w/hq/files/chat']}>
+    <MemoryRouter initialEntries={['/apps/files/workspaces/hq/chat']}>
       <Routes>
         <Route
-          path="/w/:workspaceSlug/files/chat"
+          path="/apps/files/workspaces/:workspaceSlug/chat"
           element={<FilesRagSourcesArtifact content={content} />}
         />
       </Routes>

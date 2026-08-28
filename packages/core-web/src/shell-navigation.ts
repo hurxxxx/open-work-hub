@@ -126,9 +126,9 @@ export function getCoreWorkspaceAppRelativePath(
   pathname: string,
   appId: string,
 ): string | null {
-  const match = new RegExp(`^/w/[^/]+/${escapeRegExp(appId)}(?=$|/)`).exec(
-    pathname,
-  );
+  const match = new RegExp(
+    `^/apps/${escapeRegExp(appId)}/workspaces/[^/]+(?=$|/)`,
+  ).exec(pathname);
   if (!match) {
     return null;
   }
@@ -162,7 +162,7 @@ export function coreRoutePathMatchesPathname(
 }
 
 function workspaceRouteAppPrefix(routePath: string): string | null {
-  const match = /^\/w\/:workspaceSlug\/([^/:]+)/.exec(routePath);
+  const match = /^\/apps\/([^/:]+)\/workspaces\/:workspaceSlug/.exec(routePath);
   return match?.[1] ?? null;
 }
 

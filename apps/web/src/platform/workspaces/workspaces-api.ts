@@ -12,23 +12,18 @@ export type WorkspaceBootstrapNavItem =
     coming_soon?: boolean | null;
   };
 
-export type WorkspaceBootstrapAppBarCategoryItem = {
-  app_id: string;
-  title: string;
-  route_base: string;
-  icon_key: string;
-  availability_scope?: 'platform' | 'workspace';
-  enabled: boolean;
+export type WorkspaceBootstrapAppBarCategoryItem = Omit<
+  ApiSchema<'WorkspaceBootstrapAppBarCategoryItemResponse'>,
+  'coming_soon' | 'position'
+> & {
   coming_soon?: boolean | null;
   position?: number;
 };
 
-export type WorkspaceBootstrapAppBarCategory = {
-  id: string;
-  key: string;
-  title: string;
-  icon_key: string;
-  position: number;
+export type WorkspaceBootstrapAppBarCategory = Omit<
+  ApiSchema<'WorkspaceBootstrapAppBarCategoryResponse'>,
+  'items'
+> & {
   pinnable?: boolean;
   contextLabel?: string;
   showWorkspaceContext?: boolean;
@@ -58,39 +53,29 @@ export type WorkspaceBootstrapResponse = {
   apps: WorkspaceBootstrapApp[];
   app_bar_categories?: WorkspaceBootstrapAppBarCategory[];
   nav: WorkspaceBootstrapNavItem[];
-  platform_visible_app_ids?: string[];
   /**
    * Workspace app ids exposed in the business-chat scope picker, after
-   * applying both entitlement checks and the business-chat context policy.
+   * applying runtime availability checks and the business-chat context policy.
    */
   chatbot_app_ids?: string[];
   keyword_search?: WorkspaceBootstrapKeywordSearch;
 };
 
-export type AppsBootstrapApp = {
-  app_id: string;
-  title: string;
-  route_base: string;
-  icon_key: string;
-  availability_scope: 'platform';
-  enabled: boolean;
-  coming_soon?: boolean | null;
+type GeneratedAppsBootstrapResponse = ApiSchema<'AppsBootstrapResponse'>;
+
+export type AppsBootstrapResponse = Omit<
+  GeneratedAppsBootstrapResponse,
+  'app_bar_categories'
+> & {
+  app_bar_categories: WorkspaceBootstrapAppBarCategory[];
 };
 
-export type AppsBootstrapResponse = {
-  apps: AppsBootstrapApp[];
-  app_bar_categories: WorkspaceBootstrapAppBarCategory[];
-  personal_tools: AppsBootstrapApp[];
-  platform_enabled_app_ids: string[];
-  principal: {
-    kind: 'user';
-    scope: 'personal';
-    workspace_id: null;
-    source: string;
-    user_id: string;
-    session_id?: string | null;
-  };
-};
+export type AppsBootstrapApp = AppsBootstrapResponse['apps'][number];
+export type EligibleWorkspace = ApiSchema<'EligibleWorkspaceResponse'>;
+export type EligibleWorkspacesResponse =
+  ApiSchema<'EligibleWorkspacesResponse'>;
+export type AppWorkspacePreferenceResponse =
+  ApiSchema<'AppWorkspacePreferenceResponse'>;
 
 async function getWorkspaceBootstrap(
   token: string,
@@ -309,4 +294,71 @@ export function useAppsBootstrap(token: string | null) {
     loading: state.loading,
     reload,
   };
+}
+
+export async function getEligibleWorkspaces(
+  token: string,
+  appId: string,
+  {
+    page = 1,
+    pageSize = 50,
+    query = '',
+    slug,
+  }: { page?: number; pageSize?: number; query?: string; slug?: string } = {},
+): Promise<EligibleWorkspacesResponse> {
+  const params = new URLSearchParams({
+    page: String(page),
+    page_size: String(pageSize),
+  });
+  if (query.trim()) params.set('q', query.trim());
+  if (slug?.trim()) params.set('slug', slug.trim());
+  return apiFetchJsonWithMappedError<EligibleWorkspacesResponse>(
+    `/api/v1/apps/${encodeURIComponent(appId)}/eligible-workspaces?${params.toString()}`,
+    token,
+    {},
+    (error) =>
+      new Error(error.message || i18n.t('apps:workspace.bootstrapLoadFailed')),
+  );
+}
+
+export async function getAllEligibleWorkspaces(
+  token: string,
+  appId: string,
+  { query = '' }: { query?: string } = {},
+): Promise<EligibleWorkspace[]> {
+  const pageSize = 100;
+  const first = await getEligibleWorkspaces(token, appId, {
+    page: 1,
+    pageSize,
+    query,
+  });
+  const pageCount = Math.ceil(first.total / pageSize);
+  const remaining: EligibleWorkspacesResponse[] = [];
+  for (let page = 2; page <= pageCount; page += 1) {
+    remaining.push(
+      await getEligibleWorkspaces(token, appId, { page, pageSize, query }),
+    );
+  }
+  const items = [first, ...remaining].flatMap((response) => response.items);
+  return Array.from(
+    new Map(items.map((workspace) => [workspace.id, workspace])).values(),
+  );
+}
+
+export async function setAppWorkspacePreference(
+  token: string,
+  appId: string,
+  workspaceId: string,
+): Promise<AppWorkspacePreferenceResponse> {
+  return apiFetchJsonWithMappedError<AppWorkspacePreferenceResponse>(
+    `/api/v1/apps/${encodeURIComponent(appId)}/workspace-preference`,
+    token,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspace_id: workspaceId }),
+    },
+    (error) =>
+      new Error(error.message || i18n.t('apps:workspace.bootstrapLoadFailed')),
+  );
 }

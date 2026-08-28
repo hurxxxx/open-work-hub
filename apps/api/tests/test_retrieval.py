@@ -19,11 +19,10 @@ from open_work_hub_api.domains.ai.registry import (
     reset_ai_capability_registry,
 )
 from open_work_hub_api.domains.auth.models import (
-    PlatformAppVisibility,
+    CompanyAppControl,
     Workspace,
-    WorkspaceAppEntitlement,
+    WorkspaceAppOverride,
 )
-from open_work_hub_api.domains.auth.security import new_id
 from open_work_hub_api.domains.auth.workspace_apps import get_workspace_app_catalog_item
 from open_work_hub_api.domains.conversations.app_catalog import CHATBOT_WORKSPACE_APP
 from open_work_hub_api.domains.rag.contracts import (
@@ -124,36 +123,36 @@ def _disable_retrieval_discoverability_apps(workspace_slug: str) -> None:
         existing = {
             row.app_id: row
             for row in session.scalars(
-                select(WorkspaceAppEntitlement).where(
-                    WorkspaceAppEntitlement.workspace_id == workspace.id,
-                    WorkspaceAppEntitlement.app_id.in_(workspace_app_ids),
+                select(WorkspaceAppOverride).where(
+                    WorkspaceAppOverride.workspace_id == workspace.id,
+                    WorkspaceAppOverride.app_id.in_(workspace_app_ids),
                 )
             )
         }
         for app_id in workspace_app_ids:
             row = existing.get(app_id)
             if row is None:
-                row = WorkspaceAppEntitlement(
-                    id=new_id(),
+                row = WorkspaceAppOverride(
                     workspace_id=workspace.id,
                     app_id=app_id,
+                    enabled=False,
                 )
-            row.visibility_override = False
+            row.enabled = False
             session.add(row)
-        platform_visibility_by_app_id = {
+        company_controls_by_app_id = {
             row.app_id: row
             for row in session.scalars(
-                select(PlatformAppVisibility).where(
-                    PlatformAppVisibility.app_id.in_(platform_app_ids)
+                select(CompanyAppControl).where(
+                    CompanyAppControl.app_id.in_(platform_app_ids)
                 )
             )
         }
         for app_id in platform_app_ids:
-            row = platform_visibility_by_app_id.get(app_id)
+            row = company_controls_by_app_id.get(app_id)
             if row is None:
-                row = PlatformAppVisibility(id=new_id(), app_id=app_id, visible=False)
+                row = CompanyAppControl(app_id=app_id, enabled=False)
             else:
-                row.visible = False
+                row.enabled = False
             session.add(row)
         session.commit()
 
@@ -413,7 +412,7 @@ def test_hybrid_retrieval_fuses_actual_keyword_and_rag_resource_shapes(monkeypat
                 score=27.5,
                 updated_at=now,
                 created_at=now,
-                deep_link="/w/workspace/docs/doc-1",
+                deep_link="/apps/docs/workspaces/workspace/documents/doc-1",
                 metadata={"source_kind": "manual"},
             )
         ],
@@ -471,7 +470,7 @@ def test_hybrid_retrieval_fuses_actual_keyword_and_rag_resource_shapes(monkeypat
     hit = response.hits[0]
     assert hit.resource_type == "docs_native_doc"
     assert hit.excerpt == "BM25 passage\n\nsemantic hybrid retrieval passage"
-    assert hit.citation == "/w/workspace/docs/doc-1"
+    assert hit.citation == "/apps/docs/workspaces/workspace/documents/doc-1"
     assert {"bm25", "dense_vector", "rrf", "cross_encoder"} <= set(hit.methods)
     assert hit.metadata["retrieval"]["backend_ranks"] == {
         "generic_rag": 1,

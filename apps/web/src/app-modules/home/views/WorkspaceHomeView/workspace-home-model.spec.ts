@@ -37,7 +37,10 @@ function task(id: string, overrides: Partial<PmsTask> = {}): PmsTask {
   } as PmsTask;
 }
 
-function page(id: string, overrides: Partial<RecentPageItem> = {}): RecentPageItem {
+function page(
+  id: string,
+  overrides: Partial<RecentPageItem> = {},
+): RecentPageItem {
   return {
     page_id: id,
     page_title: `Page ${id}`,
@@ -90,15 +93,21 @@ describe('workspace-home-model', () => {
     ];
 
     expect(
-      selectTodayMeetings(meetings, 'UTC', new Date('2026-01-10T12:00:00Z')).map(
-        (item) => item.id,
-      ),
+      selectTodayMeetings(
+        meetings,
+        'UTC',
+        new Date('2026-01-10T12:00:00Z'),
+      ).map((item) => item.id),
     ).toEqual(['a', 'b', 'c', 'd', 'e']);
   });
 
   it('caps task and recent page summaries', () => {
-    expect(selectTopAssignedTasks([1, 2, 3, 4, 5, 6].map(String).map(task))).toHaveLength(5);
-    expect(selectTopRecentPages([1, 2, 3, 4, 5, 6].map(String).map(page))).toHaveLength(5);
+    expect(
+      selectTopAssignedTasks([1, 2, 3, 4, 5, 6].map(String).map(task)),
+    ).toHaveLength(5);
+    expect(
+      selectTopRecentPages([1, 2, 3, 4, 5, 6].map(String).map(page)),
+    ).toHaveLength(5);
   });
 
   it('maps task priorities to summary tones', () => {
@@ -120,10 +129,10 @@ describe('workspace-home-model', () => {
         workspaceSlug: 'team alpha',
       }).map((section) => [section.id, section.status, section.actionTo]),
     ).toEqual([
-      ['planner', 'loading', '/w/team%20alpha/planner'],
-      ['meetings', 'loading', '/w/team%20alpha/meeting'],
-      ['tasks', 'loading', '/w/team%20alpha/pms/assigned'],
-      ['docs', 'loading', '/w/team%20alpha/docs'],
+      ['planner', 'loading', '/apps/planner'],
+      ['meetings', 'loading', '/apps/meeting/workspaces/team%20alpha'],
+      ['tasks', 'loading', '/apps/pms/workspaces/team%20alpha/assigned'],
+      ['docs', 'loading', '/apps/docs/workspaces/team%20alpha'],
       ['notifications', 'loading', ''],
     ]);
 
@@ -196,7 +205,7 @@ describe('workspace-home-model', () => {
         kind: 'meeting',
         id: 'today',
         title: 'Meeting today',
-        to: '/w/team%20alpha/meeting/today',
+        to: '/apps/meeting/workspaces/team%20alpha/meetings/today',
       },
     ]);
     expect(sections[2]?.rows).toEqual([
@@ -204,7 +213,7 @@ describe('workspace-home-model', () => {
         kind: 'task',
         id: 'due',
         title: 'Task due',
-        to: '/w/team%20alpha/pms/assigned?task=due',
+        to: '/apps/pms/workspaces/team%20alpha/assigned?task=due',
         trailing: 'home.dueTomorrow',
         priorityTone: 'danger',
       },
@@ -215,7 +224,7 @@ describe('workspace-home-model', () => {
         id: 'page-1',
         title: 'home.untitled',
         subtitle: 'Project Notes',
-        to: '/w/team%20alpha/docs/doc-1',
+        to: '/apps/docs/workspaces/team%20alpha/documents/doc-1',
       },
     ]);
   });
@@ -262,12 +271,12 @@ describe('workspace-home-model', () => {
       {
         kind: 'planner',
         id: 'soon',
-        to: '/w/team%20alpha/planner',
+        to: '/apps/planner',
       },
       {
         kind: 'planner',
         id: 'later',
-        to: '/w/team%20alpha/planner',
+        to: '/apps/planner',
       },
     ]);
   });
@@ -304,7 +313,7 @@ describe('workspace-home-model', () => {
             body: '',
             reference_type: 'doc',
             reference_id: null,
-            action_url: '/w/team%20alpha/docs/d1',
+            action_url: '/apps/docs/workspaces/team%20alpha/documents/d1',
             is_read: true,
             created_at: '2026-06-09T02:00:00Z',
           } as WorkspaceNotification,
@@ -324,13 +333,13 @@ describe('workspace-home-model', () => {
       {
         kind: 'notification',
         id: 'n1',
-        to: '/w/team%20alpha/pms/assigned?task=task-9',
+        to: '/apps/pms/workspaces/team%20alpha/assigned?task=task-9',
         isRead: false,
       },
       {
         kind: 'notification',
         id: 'n2',
-        to: '/w/team%20alpha/docs/d1',
+        to: '/apps/docs/workspaces/team%20alpha/documents/d1',
         isRead: true,
       },
     ]);
@@ -351,7 +360,9 @@ describe('workspace-home-model', () => {
     expect(loadedState.meetings).toHaveLength(1);
     expect(loadedState.meetingsLoading).toBe(false);
 
-    const failedState = workspaceHomeReducer(loadedState, { type: 'meetings-failed' });
+    const failedState = workspaceHomeReducer(loadedState, {
+      type: 'meetings-failed',
+    });
     expect(failedState.meetings).toEqual([]);
     expect(failedState.meetingsLoading).toBe(false);
   });

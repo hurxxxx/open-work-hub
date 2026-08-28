@@ -135,7 +135,7 @@ def test_list_user_notifications_excludes_legacy_dm_message_rows() -> None:
         session.close()
 
 
-def test_list_user_notifications_normalizes_legacy_pms_action_urls() -> None:
+def test_list_user_notifications_preserves_canonical_pms_action_urls() -> None:
     session = _session()
     try:
         _add_user(session, "user-1")
@@ -144,18 +144,21 @@ def test_list_user_notifications_normalizes_legacy_pms_action_urls() -> None:
             notification_id="pms-notification",
             user_id="user-1",
             created_at=datetime(2026, 1, 1, tzinfo=UTC).replace(tzinfo=None),
-            action_url="/tool/pms-list-list-1?workspace=hq&task=task-1",
+            action_url="/apps/pms/workspaces/hq/lists/list-1?task=task-1",
         )
         session.commit()
 
         response = list_user_notifications(session, user_id="user-1", page=1, page_size=20)
 
-        assert response.items[0].action_url == "/w/hq/pms/lists/list-1?task=task-1"
+        assert (
+            response.items[0].action_url
+            == "/apps/pms/workspaces/hq/lists/list-1?task=task-1"
+        )
     finally:
         session.close()
 
 
-def test_list_user_notifications_normalizes_duplicate_workspace_app_action_urls() -> None:
+def test_list_user_notifications_preserves_canonical_docs_action_urls() -> None:
     session = _session()
     try:
         _add_user(session, "user-1")
@@ -164,13 +167,16 @@ def test_list_user_notifications_normalizes_duplicate_workspace_app_action_urls(
             notification_id="docs-notification",
             user_id="user-1",
             created_at=datetime(2026, 1, 1, tzinfo=UTC).replace(tzinfo=None),
-            action_url="/w/hq/docs/docs/cooling-module",
+            action_url="/apps/docs/workspaces/hq/documents/cooling-module",
         )
         session.commit()
 
         response = list_user_notifications(session, user_id="user-1", page=1, page_size=20)
 
-        assert response.items[0].action_url == "/w/hq/docs/cooling-module"
+        assert (
+            response.items[0].action_url
+            == "/apps/docs/workspaces/hq/documents/cooling-module"
+        )
     finally:
         session.close()
 

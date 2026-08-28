@@ -47,7 +47,6 @@ export interface WorkspaceHomeClient {
   ): Promise<{ items: WorkspaceNotification[] }>;
   listPlannerEvents(
     token: string,
-    workspaceSlug: string,
     options: { from?: string; to?: string },
   ): Promise<{ items: PlannerEvent[] }>;
   listRecentPages(
@@ -146,7 +145,7 @@ export function useWorkspaceHomeController({
         timeZone,
       );
       void client
-        .listPlannerEvents(token, workspaceSlug, {
+        .listPlannerEvents(token, {
           from: plannerFrom,
           to: plannerTo,
         })

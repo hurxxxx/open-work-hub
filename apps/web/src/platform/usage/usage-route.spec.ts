@@ -6,9 +6,9 @@ describe('normalizeUsageRoutePath', () => {
   it('groups workspace routes without preserving workspace slugs or ids', () => {
     expect(
       normalizeUsageRoutePath(
-        '/w/product-dev/docs/items/550e8400-e29b-41d4-a716-446655440000',
+        '/apps/docs/workspaces/product-dev/documents/items/550e8400-e29b-41d4-a716-446655440000',
       ),
-    ).toBe('/w/:workspace/docs/items/:id');
+    ).toBe('/apps/docs/workspaces/:workspace/documents/items/:id');
   });
 
   it('keeps stable admin routes readable', () => {

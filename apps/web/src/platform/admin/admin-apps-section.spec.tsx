@@ -3,9 +3,9 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
-  listAdminAppBarCategories,
-  listPlatformAppVisibility,
-  listWorkspaceAppVisibility,
+  listCompanyAppControls,
+  listWorkspaceAppDefaults,
+  listWorkspaceAppOverrides,
   listWorkspaces,
 } from './admin-api';
 import { AppsSection } from './admin-apps-section';
@@ -37,38 +37,31 @@ vi.mock('@/src/platform/workspaces/workspace-bootstrap-context', () => ({
 
 vi.mock('./admin-api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./admin-api')>()),
-  listAdminAppBarCategories: vi.fn(),
-  listPlatformAppVisibility: vi.fn(),
-  listWorkspaceAppVisibility: vi.fn(),
+  listCompanyAppControls: vi.fn(),
+  listWorkspaceAppDefaults: vi.fn(),
+  listWorkspaceAppOverrides: vi.fn(),
   listWorkspaces: vi.fn(),
 }));
 
 beforeEach(() => {
-  vi.mocked(listAdminAppBarCategories).mockResolvedValue({
-    available_apps: [],
-    categories: [],
-    icon_keys: [],
-  });
-  vi.mocked(listPlatformAppVisibility).mockResolvedValue({
+  vi.mocked(listCompanyAppControls).mockResolvedValue({ items: [] });
+  vi.mocked(listWorkspaceAppDefaults).mockResolvedValue({
     items: [
       {
         app_id: 'workspace-default-app',
-        availability_scope: 'workspace',
+        company_enabled: true,
+        enabled: true,
+        execution_context_kind: 'workspace',
         icon_key: 'box',
-        kind: 'launcher_app',
-        launcher_personal_tools: false,
-        route_base: '/workspace-default-app',
+        route_base: '/apps/workspace-default-app',
         runtime_enabled: true,
         title: 'Workspace default app',
         updated_at: null,
-        visible: true,
-        visible_workspace_count: 0,
-        visible_workspaces: [],
       },
     ],
   });
   vi.mocked(listWorkspaces).mockResolvedValue([]);
-  vi.mocked(listWorkspaceAppVisibility).mockResolvedValue({
+  vi.mocked(listWorkspaceAppOverrides).mockResolvedValue({
     items: [],
     workspace_id: 'unused',
     workspace_key: 'unused',
@@ -99,7 +92,7 @@ describe('AppsSection workspace app defaults', () => {
     renderWorkspaceApps('/admin/apps/workspace?tab=defaults');
 
     expect(await screen.findByText('workspace-default-app')).toBeTruthy();
-    expect(listPlatformAppVisibility).toHaveBeenCalledWith('test-token');
+    expect(listWorkspaceAppDefaults).toHaveBeenCalledWith('test-token');
   });
 
   it('switches to workspace-specific overrides and keeps the tab in the URL', async () => {
@@ -118,20 +111,20 @@ describe('AppsSection workspace app defaults', () => {
         updated_at: null,
       },
     ]);
-    vi.mocked(listWorkspaceAppVisibility).mockResolvedValue({
+    vi.mocked(listWorkspaceAppOverrides).mockResolvedValue({
       items: [
         {
           app_id: 'workspace-override-app',
-          availability_scope: 'workspace',
-          effective_visible: true,
+          company_enabled: true,
+          default_enabled: true,
+          effective_enabled: true,
+          execution_context_kind: 'workspace',
           icon_key: 'box',
-          kind: 'launcher_app',
-          platform_visible: true,
-          route_base: '/workspace-override-app',
+          route_base: '/apps/workspace-override-app',
           runtime_enabled: true,
           title: 'Workspace override app',
           updated_at: null,
-          visibility_override: null,
+          override_enabled: null,
         },
       ],
       workspace_id: 'workspace-1',
@@ -143,17 +136,22 @@ describe('AppsSection workspace app defaults', () => {
 
     fireEvent.mouseDown(
       screen.getByRole('tab', {
-        name: 'admin.console.apps.workspaceOverridesTab',
+        name: 'admin.console.apps.controls.overridesTab',
       }),
       { button: 0, ctrlKey: false },
     );
 
     expect(await screen.findByText('workspace-override-app')).toBeTruthy();
+    expect(
+      screen.getByRole('combobox', {
+        name: 'admin.console.apps.controls.overrideSelect',
+      }),
+    ).toBeTruthy();
     expect(screen.getByLabelText('location').textContent).toBe(
       '?tab=overrides',
     );
     expect(listWorkspaces).toHaveBeenCalledWith('test-token');
-    expect(listWorkspaceAppVisibility).toHaveBeenCalledWith(
+    expect(listWorkspaceAppOverrides).toHaveBeenCalledWith(
       'test-token',
       'workspace-1',
     );

@@ -14,7 +14,7 @@ describe('FilesChatSidebarLink', () => {
   it('provides a Files chat fallback when workspace bootstrap nav is stale', () => {
     const onNavigate = vi.fn();
     render(
-      <MemoryRouter initialEntries={['/w/hq/files/chat']}>
+      <MemoryRouter initialEntries={['/apps/files/workspaces/hq/chat']}>
         <FilesChatSidebarLink
           currentWorkspaceSlug="hq"
           hasBootstrapItem={false}
@@ -24,7 +24,7 @@ describe('FilesChatSidebarLink', () => {
     );
 
     const link = screen.getByRole('link', { name: 'nav.files-chat' });
-    expect(link.getAttribute('href')).toBe('/w/hq/files/chat');
+    expect(link.getAttribute('href')).toBe('/apps/files/workspaces/hq/chat');
     expect(link.className).toContain('sidebar-submenu-item-active');
     fireEvent.click(link);
     expect(onNavigate).toHaveBeenCalledTimes(1);

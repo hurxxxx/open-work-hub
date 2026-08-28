@@ -95,7 +95,10 @@ def test_admin_usage_dashboard_aggregates_user_content_and_llm_usage(
     assert user_item["llm_total_tokens"] == 15
     assert user_item["activity_score"] >= 11
     assert payload["usage_by_app"][0]["key"] == "docs"
-    assert payload["usage_by_route"][0]["key"] == "/w/:workspace/docs"
+    assert (
+        payload["usage_by_route"][0]["key"]
+        == "/apps/docs/workspaces/:workspace"
+    )
     assert payload["content_views_by_kind"][0]["key"] == "doc"
     assert payload["content_views_by_kind"][0]["count"] == 2
     assert payload["llm_by_task_kind"][0]["key"] == "chatbot"
@@ -672,7 +675,7 @@ def _seed_usage_rows(*, user_id: str, workspace_id: str) -> None:
             workspace_id=workspace_id,
             app_id="docs",
             event_type=USAGE_EVENT_APP_OPEN,
-            route_path="/w/:workspace/docs",
+            route_path="/apps/docs/workspaces/:workspace",
             source="shell.nav.docs",
         )
         record_usage_event(

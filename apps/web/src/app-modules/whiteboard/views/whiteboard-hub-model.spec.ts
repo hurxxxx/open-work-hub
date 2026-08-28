@@ -17,7 +17,6 @@ import {
   viewFromSearch,
   whiteboardViewReducer,
   writeStoredLayoutMode,
-  type WhiteboardHubPathUser,
 } from './whiteboard-hub-model';
 
 function hubItem(
@@ -36,16 +35,6 @@ function detail(overrides: Partial<WhiteboardDetail> = {}): WhiteboardDetail {
     scene: { elements: [], appState: {}, files: {} },
     ...overrides,
   } as WhiteboardDetail;
-}
-
-function pathUser(): WhiteboardHubPathUser {
-  return {
-    default_workspace_id: 'workspace-default',
-    workspaces: [
-      { id: 'workspace-default', slug: 'default' },
-      { id: 'workspace-side', slug: 'side' },
-    ],
-  } as WhiteboardHubPathUser;
 }
 
 function memoryStorage(
@@ -227,22 +216,18 @@ describe('whiteboard hub model', () => {
       buildWhiteboardHubItemPath({
         itemId: 'board-1',
         searchParams,
-        user: pathUser(),
         workspaceSlug: 'team space',
       }),
     ).toBe(
-      '/w/team%20space/whiteboard/board-1?view=recent&target_id=target-1',
+      '/apps/whiteboard/workspaces/team%20space/boards/board-1?target_id=target-1&view=recent',
     );
 
     expect(
       buildWhiteboardHubRootPath({
         searchParams,
-        user: pathUser(),
         workspaceSlug: null,
       }),
-    ).toBe(
-      '/w/default/whiteboard?view=recent&target_id=target-1',
-    );
+    ).toBe('/apps/whiteboard');
   });
 
   it('reads and writes the stored layout mode', () => {

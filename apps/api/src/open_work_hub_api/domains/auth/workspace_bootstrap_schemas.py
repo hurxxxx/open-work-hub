@@ -71,7 +71,6 @@ class WorkspaceBootstrapResponse(BaseModel):
     apps: list[WorkspaceBootstrapAppResponse]
     app_bar_categories: list[WorkspaceBootstrapAppBarCategoryResponse] = Field(default_factory=list)
     nav: list[WorkspaceBootstrapNavItemResponse]
-    platform_visible_app_ids: list[str] = Field(default_factory=list)
     chatbot_app_ids: list[str] = Field(default_factory=list)
     keyword_search: WorkspaceBootstrapKeywordSearchResponse = Field(
         default_factory=WorkspaceBootstrapKeywordSearchResponse

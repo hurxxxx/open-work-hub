@@ -1,5 +1,4 @@
 import { createElement, lazy } from 'react';
-import { Navigate } from 'react-router-dom';
 
 import { lazyRoute } from '@/src/app/shell/lazy-route';
 import {
@@ -20,33 +19,11 @@ const WorkspaceSettingsView = lazy(() =>
 );
 
 export const workspaceSettingsRoute = {
-  path: '/w/:workspaceSlug/settings',
+  path: '/admin/workspaces/:workspaceSlug/settings',
   element: lazyRoute(createElement(WorkspaceSettingsView)),
 };
 
-export const adminRedirectRoutes = [
-  {
-    path: '/admin/apps',
-    element: createElement(Navigate, {
-      replace: true,
-      to: '/admin/apps/platform',
-    }),
-  },
-  {
-    path: '/admin/users',
-    element: createElement(Navigate, {
-      replace: true,
-      to: '/admin/people',
-    }),
-  },
-  {
-    path: '/admin/teams',
-    element: createElement(Navigate, {
-      replace: true,
-      to: '/admin/workspaces',
-    }),
-  },
-];
+export const adminRedirectRoutes = [] as const;
 
 function createAdminSectionRoute(
   section: AdminSection,

@@ -18,10 +18,10 @@ import { AdminLandingRedirect } from './redirects';
 export const workspaceRouteDefinitions = [...APP_WORKSPACE_ROUTES];
 
 export const staticDocsGlobalRoutes = APP_GLOBAL_ROUTES.filter(
-  (route) => route.bootstrapAppId === docsManifest.appBarItem.id,
+  (route) => route.appId === docsManifest.appBarItem.id,
 );
 export const staticWhiteboardGlobalRoutes = APP_GLOBAL_ROUTES.filter(
-  (route) => route.bootstrapAppId === whiteboardManifest.appBarItem.id,
+  (route) => route.appId === whiteboardManifest.appBarItem.id,
 );
 export const staticAppGlobalRoutes = [...APP_GLOBAL_ROUTES];
 export const staticWorkspaceSettingsRoute = workspaceSettingsRoute;

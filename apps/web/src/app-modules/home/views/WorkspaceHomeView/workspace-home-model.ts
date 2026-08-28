@@ -13,7 +13,10 @@ import {
   parseApiDateTime,
   zonedDateKey,
 } from '@/src/platform/time/time-utils';
-import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
+import {
+  buildAppEntryHref,
+  buildAppHref,
+} from '@open-work-hub/contracts/app-routes';
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 
@@ -191,7 +194,10 @@ export function selectTodayMeetings(
     .slice(0, limit);
 }
 
-export function selectTopAssignedTasks(issues: PmsTask[], limit = 5): PmsTask[] {
+export function selectTopAssignedTasks(
+  issues: PmsTask[],
+  limit = 5,
+): PmsTask[] {
   return issues.slice(0, limit);
 }
 
@@ -221,7 +227,9 @@ export function formatHomeEventWhen(
 ): string {
   const startDate = parseApiDateTime(start);
   const dateKey =
-    allDay || !startDate ? start.slice(0, 10) : zonedDateKey(startDate, timeZone);
+    allDay || !startDate
+      ? start.slice(0, 10)
+      : zonedDateKey(startDate, timeZone);
   const dayLabel = formatHomeDueDate(dateKey, timeZone, locale, t, now);
   if (allDay || !startDate) return dayLabel;
   const time = formatHomeTime(start, timeZone, locale);
@@ -243,8 +251,11 @@ export function buildNotificationTo(
     return notification.action_url;
   }
   if (notification.reference_id) {
-    const assigned = buildWorkspaceAppPath(workspaceSlug, 'pms', '/assigned');
-    return `${assigned}?task=${encodeURIComponent(notification.reference_id)}`;
+    return buildAppHref({
+      routeId: 'pms.assigned',
+      workspaceSlug,
+      queryParams: { task: notification.reference_id },
+    });
   }
   return null;
 }
@@ -305,13 +316,25 @@ export function buildWorkspaceHomeSections({
   t: Translate;
   workspaceSlug: string;
 }): WorkspaceHomeSection[] {
-  const meetingRoot = buildWorkspaceAppPath(workspaceSlug, 'meeting');
-  const assignedLink = buildWorkspaceAppPath(workspaceSlug, 'pms', '/assigned');
-  const docsRoot = buildWorkspaceAppPath(workspaceSlug, 'docs');
-  const plannerRoot = buildWorkspaceAppPath(workspaceSlug, 'planner');
-  const meetingCreate = buildWorkspaceAppPath(workspaceSlug, 'meeting', '?create=1');
-  const taskCreate = buildWorkspaceAppPath(workspaceSlug, 'pms', '?create=1');
-  const docCreate = buildWorkspaceAppPath(workspaceSlug, 'docs', '?create=1');
+  const meetingRoot = buildAppHref({ routeId: 'meeting.root', workspaceSlug });
+  const assignedLink = buildAppHref({ routeId: 'pms.assigned', workspaceSlug });
+  const docsRoot = buildAppHref({ routeId: 'docs.root', workspaceSlug });
+  const plannerRoot = buildAppEntryHref('planner');
+  const meetingCreate = buildAppHref({
+    routeId: 'meeting.root',
+    workspaceSlug,
+    queryParams: { create: '1' },
+  });
+  const taskCreate = buildAppHref({
+    routeId: 'pms.root',
+    workspaceSlug,
+    queryParams: { create: '1' },
+  });
+  const docCreate = buildAppHref({
+    routeId: 'docs.root',
+    workspaceSlug,
+    queryParams: { create: '1' },
+  });
 
   const plannerRows = selectUpcomingPlannerEvents(
     state.plannerEvents,
@@ -338,7 +361,11 @@ export function buildWorkspaceHomeSections({
     kind: 'meeting',
     id: meeting.id,
     title: meeting.title,
-    to: `${meetingRoot}/${meeting.id}`,
+    to: buildAppHref({
+      routeId: 'meeting.detail',
+      workspaceSlug,
+      pathParams: { meetingId: meeting.id },
+    }),
     trailing: formatHomeTime(meeting.start_at, timeZone, locale),
   }));
 
@@ -347,7 +374,11 @@ export function buildWorkspaceHomeSections({
       kind: 'task',
       id: issue.id,
       title: issue.title,
-      to: `${assignedLink}?task=${encodeURIComponent(issue.id)}`,
+      to: buildAppHref({
+        routeId: 'pms.assigned',
+        workspaceSlug,
+        queryParams: { task: issue.id },
+      }),
       trailing: issue.due_date
         ? formatHomeDueDate(issue.due_date, timeZone, locale, t, now)
         : '',
@@ -361,7 +392,11 @@ export function buildWorkspaceHomeSections({
       id: page.page_id,
       title: page.page_title || t('home.untitled'),
       subtitle: page.doc_title,
-      to: `${docsRoot}/${page.doc_id}`,
+      to: buildAppHref({
+        routeId: 'docs.document',
+        workspaceSlug,
+        pathParams: { docId: page.doc_id },
+      }),
     }),
   );
 

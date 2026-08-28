@@ -3,6 +3,8 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from dev_accounts import dev_login
+from open_work_hub_api.core.db import get_session_factory
+from open_work_hub_api.domains.auth.models import CompanyAppControl
 
 
 
@@ -104,6 +106,9 @@ def test_whiteboard_user_and_link_shares_grant_access(client: TestClient) -> Non
     )
     assert read_link_response.status_code == 200, read_link_response.text
     read_share_token = read_link_response.json()["link_share"]["token"]
+    assert read_link_response.json()["link_share"]["share_path"] == (
+        f"/apps/whiteboard/shared/{read_share_token}"
+    )
 
     read_link_patch = client.patch(
         f"/api/v1/whiteboard/shared-links/{read_share_token}/item",
@@ -136,6 +141,20 @@ def test_whiteboard_user_and_link_shares_grant_access(client: TestClient) -> Non
     )
     assert shared_patch.status_code == 200, shared_patch.text
     assert shared_patch.json()["scene"]["elements"][0]["id"] == "via-link"
+
+    with get_session_factory()() as db:
+        control = db.get(CompanyAppControl, "whiteboard")
+        assert control is not None
+        control.enabled = False
+        db.add(control)
+        db.commit()
+
+    disabled_response = client.get(
+        f"/api/v1/whiteboard/shared-links/{share_token}",
+        headers=_auth_headers(recipient["token"]),
+    )
+    assert disabled_response.status_code == 403
+    assert disabled_response.json()["code"] == "workspace.app_disabled"
 
 
 def _create_space_whiteboard(client: TestClient, token: str, space_id: str) -> dict:

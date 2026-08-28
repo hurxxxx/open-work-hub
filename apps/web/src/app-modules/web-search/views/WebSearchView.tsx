@@ -29,7 +29,6 @@ import {
   streamWebSearch,
 } from '../api/web-search-api';
 import { useWorkspaceBootstrapContext } from '@/src/platform/workspaces/workspace-bootstrap-context';
-import { resolveShellWorkspaceSlug } from '@/src/platform/workspaces/workspace-utils';
 
 export interface WebSearchExperience {
   apiPrefix: string;
@@ -228,17 +227,15 @@ export function WebSearchExperienceView({
   const { t } = useTranslation('apps');
   const i18nKey = experience.i18nKey;
   const ExperienceIcon = experience.icon;
-  const { token, user } = useAuth();
+  const { token } = useAuth();
   const workspaceBootstrap = useWorkspaceBootstrapContext();
-  const workspaceSlug =
-    workspaceBootstrap.data?.workspace.slug ??
-    resolveShellWorkspaceSlug(user, null);
+  const workspaceSlug = workspaceBootstrap.data?.workspace.slug ?? null;
   const authToken = token ?? '';
 
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
-  const [activeConversationId, setActiveConversationId] = useState<string | null>(
-    null,
-  );
+  const [activeConversationId, setActiveConversationId] = useState<
+    string | null
+  >(null);
   const [activeConversation, setActiveConversation] =
     useState<ConversationDetail | null>(null);
   const [activeTurns, setActiveTurns] = useState<ChatTurn[]>([]);
@@ -435,11 +432,7 @@ export function WebSearchExperienceView({
           continue;
         }
         if (event.type === 'error') {
-          throw new WebSearchApiError(
-            0,
-            event.data.message,
-            event.data.code,
-          );
+          throw new WebSearchApiError(0, event.data.message, event.data.code);
         }
         if (event.type === 'done') {
           break;
@@ -478,8 +471,8 @@ export function WebSearchExperienceView({
         error.code === WEB_SEARCH_POLICY_DENIED_CODE
           ? t(`${i18nKey}.errors.policyDenied`)
           : error instanceof WebSearchApiError
-          ? error.message
-          : t(`${i18nKey}.errors.askFailed`);
+            ? error.message
+            : t(`${i18nKey}.errors.askFailed`);
       if (
         error instanceof WebSearchApiError &&
         error.code === WEB_SEARCH_POLICY_DENIED_CODE &&
@@ -561,48 +554,46 @@ export function WebSearchExperienceView({
       />
 
       <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-app-surface">
-          <header className="flex h-12 shrink-0 items-center justify-between border-b border-app-border px-4">
-            <div className="flex min-w-0 items-center gap-2">
-              <ExperienceIcon className="h-4 w-4 shrink-0 text-app-accent" />
-              <h1 className="truncate app-text-control text-app-ink">
-                {activeConversation?.title ??
-                  draftTitle ??
-                  t(`${i18nKey}.title`)}
-              </h1>
-            </div>
-          </header>
+        <header className="flex h-12 shrink-0 items-center justify-between border-b border-app-border px-4">
+          <div className="flex min-w-0 items-center gap-2">
+            <ExperienceIcon className="h-4 w-4 shrink-0 text-app-accent" />
+            <h1 className="truncate app-text-control text-app-ink">
+              {activeConversation?.title ?? draftTitle ?? t(`${i18nKey}.title`)}
+            </h1>
+          </div>
+        </header>
 
-          {turns.length === 0 && !isCurrentViewStreaming ? (
-            <EmptyState
-              greeting={t(`${i18nKey}.emptyGreeting`)}
-              subline={t(`${i18nKey}.emptySubline`)}
-            >
+        {turns.length === 0 && !isCurrentViewStreaming ? (
+          <EmptyState
+            greeting={t(`${i18nKey}.emptyGreeting`)}
+            subline={t(`${i18nKey}.emptySubline`)}
+          >
+            {composer}
+          </EmptyState>
+        ) : (
+          <>
+            <ChatThread
+              turns={turns}
+              typingLabel={t(`${i18nKey}.thinking`)}
+              jumpToBottomLabel={t(`${i18nKey}.jumpToBottom`)}
+              liveAssistant={
+                isCurrentViewStreaming
+                  ? {
+                      content: liveAnswer,
+                      reasoning: '',
+                      status: 'streaming',
+                    }
+                  : null
+              }
+              onCopyTurn={async (turn) => {
+                await navigator.clipboard?.writeText(turn.content);
+              }}
+            />
+            <div className="sticky bottom-0 z-10 space-y-2 border-t border-app-border bg-app-surface p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
               {composer}
-            </EmptyState>
-          ) : (
-            <>
-              <ChatThread
-                turns={turns}
-                typingLabel={t(`${i18nKey}.thinking`)}
-                jumpToBottomLabel={t(`${i18nKey}.jumpToBottom`)}
-                liveAssistant={
-                  isCurrentViewStreaming
-                    ? {
-                        content: liveAnswer,
-                        reasoning: '',
-                        status: 'streaming',
-                      }
-                    : null
-                }
-                onCopyTurn={async (turn) => {
-                  await navigator.clipboard?.writeText(turn.content);
-                }}
-              />
-              <div className="sticky bottom-0 z-10 space-y-2 border-t border-app-border bg-app-surface p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
-                {composer}
-              </div>
-            </>
-          )}
+            </div>
+          </>
+        )}
       </section>
     </main>
   );

@@ -4,7 +4,6 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.domains.notifications.schemas import GlobalNotificationItem
-from open_work_hub_api.domains.pms.links import normalize_pms_deep_link
 from open_work_hub_api.domains.pms.models import Notification
 
 EXCLUDED_GLOBAL_NOTIFICATION_TYPES = ("dm_message",)
@@ -18,7 +17,7 @@ def serialize_notification(notification: Notification) -> GlobalNotificationItem
         body=notification.body,
         reference_type=notification.reference_type,
         reference_id=notification.reference_id,
-        action_url=normalize_pms_deep_link(notification.action_url),
+        action_url=notification.action_url,
         is_read=notification.is_read,
         created_at=notification.created_at,
     )

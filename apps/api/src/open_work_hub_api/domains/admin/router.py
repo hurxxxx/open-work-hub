@@ -28,8 +28,6 @@ from open_work_hub_api.core.i18n import (
 )
 from open_work_hub_api.core.settings import get_settings
 from open_work_hub_api.domains.auth.access import (
-    ensure_platform_app_visibility,
-    ensure_workspace_app_entitlements,
     ensure_workspace_default_pms_space,
     is_platform_admin_user,
     is_valid_workspace_role,
@@ -47,6 +45,9 @@ from open_work_hub_api.domains.auth.access import (
     team_role_allows,
     workspace_role_allows,
 )
+from open_work_hub_api.domains.auth.app_availability import (
+    load_app_availability_snapshot,
+)
 from open_work_hub_api.domains.auth.date_format_preferences import (
     default_date_format_value,
     normalize_date_format_payload,
@@ -60,15 +61,16 @@ from open_work_hub_api.domains.auth.dependencies import (
 from open_work_hub_api.domains.auth.models import (
     AuditLog,
     AuthSession,
+    CompanyAppControl,
     PlatformAppBarCategory,
     PlatformAppBarCategoryApp,
-    PlatformAppVisibility,
     Team,
     TeamMember,
     User,
     UserSystemRole,
     Workspace,
-    WorkspaceAppEntitlement,
+    WorkspaceAppDefault,
+    WorkspaceAppOverride,
     WorkspaceUserBinding,
 )
 from open_work_hub_api.domains.auth.security import (
@@ -93,8 +95,6 @@ from open_work_hub_api.domains.auth.workspace_apps import (
 )
 from open_work_hub_api.domains.auth.app_bar_categories import (
     app_bar_category_app_ids_from_catalog,
-    is_app_bar_category_app,
-    is_platform_visibility_app,
 )
 from open_work_hub_api.domains.auth.workspace_app_features import (
     is_workspace_catalog_feature_enabled,
@@ -257,74 +257,90 @@ class TeamItemResponse(BaseModel):
     current_user_role: str | None = None
 
 
-class PlatformAppVisibleWorkspaceResponse(BaseModel):
-    id: str
-    key: str
-    name: str
-
-
-class PlatformAppVisibilityItemResponse(BaseModel):
+class CompanyAppControlItemResponse(BaseModel):
     app_id: str
     title: str
     route_base: str
     icon_key: str
     availability_scope: Literal["platform", "workspace"] = "workspace"
-    launcher_personal_tools: bool = False
-    kind: str = "mode"
-    visible: bool
+    execution_context_kind: Literal["personal", "company", "workspace"]
+    enabled: bool
     runtime_enabled: bool
-    visible_workspace_count: int = 0
-    visible_workspaces: list[PlatformAppVisibleWorkspaceResponse] = Field(
-        default_factory=list,
-    )
     updated_at: datetime | None = None
 
 
-class PlatformAppVisibilityResponse(BaseModel):
-    items: list[PlatformAppVisibilityItemResponse]
+class CompanyAppControlsResponse(BaseModel):
+    items: list[CompanyAppControlItemResponse]
 
 
-class WorkspaceAppVisibilityItemResponse(BaseModel):
+class WorkspaceAppDefaultItemResponse(BaseModel):
     app_id: str
     title: str
     route_base: str
     icon_key: str
-    availability_scope: Literal["workspace"] = "workspace"
-    kind: str = "mode"
-    platform_visible: bool
-    visibility_override: bool | None = None
-    effective_visible: bool
+    execution_context_kind: Literal["workspace"] = "workspace"
+    company_enabled: bool
+    enabled: bool
     runtime_enabled: bool
     updated_at: datetime | None = None
 
 
-class WorkspaceAppVisibilityResponse(BaseModel):
+class WorkspaceAppDefaultsResponse(BaseModel):
+    items: list[WorkspaceAppDefaultItemResponse]
+
+
+class WorkspaceAppOverrideItemResponse(BaseModel):
+    app_id: str
+    title: str
+    route_base: str
+    icon_key: str
+    execution_context_kind: Literal["workspace"] = "workspace"
+    company_enabled: bool
+    default_enabled: bool
+    override_enabled: bool | None = None
+    effective_enabled: bool
+    runtime_enabled: bool
+    updated_at: datetime | None = None
+
+
+class WorkspaceAppOverridesResponse(BaseModel):
     workspace_id: str
     workspace_key: str
     workspace_name: str
-    items: list[WorkspaceAppVisibilityItemResponse]
+    items: list[WorkspaceAppOverrideItemResponse]
 
 
-class PlatformAppVisibilityUpdateItem(BaseModel):
+class CompanyAppControlUpdateItem(BaseModel):
     app_id: str = Field(..., min_length=1, max_length=64)
-    visible: bool
+    enabled: bool
 
 
-class PlatformAppVisibilityUpdateRequest(BaseModel):
+class CompanyAppControlsUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    items: list[PlatformAppVisibilityUpdateItem] = Field(..., min_length=1, max_length=100)
+    items: list[CompanyAppControlUpdateItem] = Field(..., min_length=1, max_length=100)
 
 
-class WorkspaceAppVisibilityUpdateItem(BaseModel):
+class WorkspaceAppDefaultUpdateItem(BaseModel):
     app_id: str = Field(..., min_length=1, max_length=64)
-    visibility_override: bool | None = None
+    enabled: bool
 
 
-class WorkspaceAppVisibilityUpdateRequest(BaseModel):
+class WorkspaceAppDefaultsUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    items: list[WorkspaceAppVisibilityUpdateItem] = Field(..., min_length=1, max_length=100)
+    items: list[WorkspaceAppDefaultUpdateItem] = Field(..., min_length=1, max_length=100)
+
+
+class WorkspaceAppOverrideUpdateItem(BaseModel):
+    app_id: str = Field(..., min_length=1, max_length=64)
+    enabled: bool | None = None
+
+
+class WorkspaceAppOverridesUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[WorkspaceAppOverrideUpdateItem] = Field(..., min_length=1, max_length=100)
 
 
 class AdminAppBarCategoryAppItemResponse(BaseModel):
@@ -406,223 +422,132 @@ def _serialize_workspace(db: Session, workspace: Workspace) -> WorkspaceItemResp
     return WorkspaceItemResponse.model_validate(admin_workspace_item_projection(db, workspace))
 
 
-def _platform_app_visibility_rows_by_id(db: Session) -> dict[str, PlatformAppVisibility]:
+def _company_app_control_rows_by_id(db: Session) -> dict[str, CompanyAppControl]:
     return {
         item.app_id: item
         for item in db.scalars(
-            select(PlatformAppVisibility).order_by(PlatformAppVisibility.app_id.asc())
+            select(CompanyAppControl).order_by(CompanyAppControl.app_id.asc())
         ).all()
     }
 
 
-def _catalog_items_for_platform_admin_app_scope(scope: AdminAppVisibilityScope):
-    del scope
-    catalog_items = tuple(iter_workspace_app_catalog())
-    return tuple(app for app in catalog_items if is_platform_visibility_app(app))
-
-
-def _catalog_items_for_workspace_admin_app_scope(scope: AdminAppVisibilityScope):
-    del scope
-    catalog_items = tuple(iter_workspace_app_catalog())
-    return tuple(
-        app
-        for app in catalog_items
-        if is_app_bar_category_app(app) and app.availability_scope == "workspace"
-    )
-
-
-def _serialize_platform_app_visibility(
-    db: Session,
-    *,
-    scope: AdminAppVisibilityScope = "core",
-) -> PlatformAppVisibilityResponse:
-    rows_by_app_id = _platform_app_visibility_rows_by_id(db)
-    catalog_items = tuple(iter_workspace_app_catalog())
-    catalog_by_app_id = {app.app_id: app for app in catalog_items}
-    active_workspaces = list(
-        db.scalars(
-            select(Workspace).where(Workspace.active.is_(True)).order_by(Workspace.name.asc())
+def _workspace_app_default_rows_by_id(db: Session) -> dict[str, WorkspaceAppDefault]:
+    return {
+        item.app_id: item
+        for item in db.scalars(
+            select(WorkspaceAppDefault).order_by(WorkspaceAppDefault.app_id.asc())
         ).all()
-    )
-    active_workspace_ids = [workspace.id for workspace in active_workspaces]
-    workspace_entitlements_by_id: dict[tuple[str, str], WorkspaceAppEntitlement] = {}
-    if active_workspace_ids:
-        workspace_entitlements_by_id = {
-            (item.workspace_id, item.app_id): item
-            for item in db.scalars(
-                select(WorkspaceAppEntitlement).where(
-                    WorkspaceAppEntitlement.workspace_id.in_(active_workspace_ids)
-                )
-            ).all()
-        }
-
-    def visible_for(app_id: str) -> bool:
-        app = catalog_by_app_id[app_id]
-        row = rows_by_app_id.get(app_id)
-        return app.visible_by_default if row is None else bool(row.visible)
-
-    runtime_cache: dict[str, bool] = {}
-
-    def runtime_enabled_for(app_id: str) -> bool:
-        if app_id in runtime_cache:
-            return runtime_cache[app_id]
-        app = catalog_by_app_id[app_id]
-        runtime_enabled = visible_for(app_id) and _catalog_runtime_feature_enabled(app)
-        runtime_cache[app_id] = bool(runtime_enabled)
-        return runtime_cache[app_id]
-
-    workspace_effective_cache: dict[tuple[str, str], bool] = {}
-
-    def workspace_effective_visible_for(workspace_id: str, app_id: str) -> bool:
-        cache_key = (workspace_id, app_id)
-        if cache_key in workspace_effective_cache:
-            return workspace_effective_cache[cache_key]
-        app = catalog_by_app_id[app_id]
-        entitlement = workspace_entitlements_by_id.get(cache_key)
-        visibility_override = entitlement.visibility_override if entitlement is not None else None
-        effective_visible = (
-            bool(visibility_override)
-            if visibility_override is not None
-            else app.enabled_by_default and visible_for(app_id)
-        )
-        workspace_effective_cache[cache_key] = bool(effective_visible)
-        return workspace_effective_cache[cache_key]
-
-    workspace_runtime_cache: dict[tuple[str, str], bool] = {}
-
-    def workspace_runtime_enabled_for(workspace_id: str, app_id: str) -> bool:
-        cache_key = (workspace_id, app_id)
-        if cache_key in workspace_runtime_cache:
-            return workspace_runtime_cache[cache_key]
-        app = catalog_by_app_id[app_id]
-        runtime_enabled = workspace_effective_visible_for(
-            workspace_id,
-            app_id,
-        ) and _catalog_runtime_feature_enabled(app)
-        workspace_runtime_cache[cache_key] = bool(runtime_enabled)
-        return workspace_runtime_cache[cache_key]
-
-    def visible_workspaces_for(app_id: str) -> list[PlatformAppVisibleWorkspaceResponse]:
-        if catalog_by_app_id[app_id].availability_scope == "platform":
-            return []
-        return [
-            PlatformAppVisibleWorkspaceResponse(
-                id=workspace.id,
-                key=workspace.key,
-                name=workspace.name,
-            )
-            for workspace in active_workspaces
-            if workspace_runtime_enabled_for(workspace.id, app_id)
-        ]
-
-    def response_item_for(app: WorkspaceAppCatalogItem) -> PlatformAppVisibilityItemResponse:
-        visible_workspaces = visible_workspaces_for(app.app_id)
-        return PlatformAppVisibilityItemResponse(
-            app_id=app.app_id,
-            title=app.title,
-            route_base=app.route_base,
-            icon_key=app.icon_key,
-            availability_scope=app.availability_scope,
-            launcher_personal_tools=app.launcher_personal_tools,
-            kind="launcher_app" if is_platform_visibility_app(app) else "mode",
-            visible=visible_for(app.app_id),
-            runtime_enabled=runtime_enabled_for(app.app_id),
-            visible_workspace_count=len(visible_workspaces),
-            visible_workspaces=visible_workspaces,
-            updated_at=rows_by_app_id.get(app.app_id).updated_at
-            if app.app_id in rows_by_app_id
-            else None,
-        )
-
-    return PlatformAppVisibilityResponse(
-        items=[response_item_for(app) for app in _catalog_items_for_platform_admin_app_scope(scope)]
-    )
+    }
 
 
-def _workspace_app_entitlement_rows_by_id(
+def _workspace_app_override_rows_by_id(
     db: Session,
     workspace_id: str,
-) -> dict[str, WorkspaceAppEntitlement]:
+) -> dict[str, WorkspaceAppOverride]:
     return {
         item.app_id: item
         for item in db.scalars(
-            select(WorkspaceAppEntitlement)
-            .where(WorkspaceAppEntitlement.workspace_id == workspace_id)
-            .order_by(WorkspaceAppEntitlement.app_id.asc())
+            select(WorkspaceAppOverride)
+            .where(WorkspaceAppOverride.workspace_id == workspace_id)
+            .order_by(WorkspaceAppOverride.app_id.asc())
         ).all()
     }
 
 
-def _serialize_workspace_app_visibility(
-    db: Session,
-    workspace: Workspace,
-    *,
-    scope: AdminAppVisibilityScope = "core",
-) -> WorkspaceAppVisibilityResponse:
-    platform_rows_by_app_id = _platform_app_visibility_rows_by_id(db)
-    entitlement_rows_by_app_id = _workspace_app_entitlement_rows_by_id(db, workspace.id)
-    items: list[WorkspaceAppVisibilityItemResponse] = []
-    all_catalog_items = tuple(iter_workspace_app_catalog())
-    scoped_catalog_items = _catalog_items_for_workspace_admin_app_scope(scope)
-    catalog_by_app_id = {app.app_id: app for app in all_catalog_items}
-
-    def platform_visible_for(app_id: str) -> bool:
-        app = catalog_by_app_id[app_id]
-        platform_row = platform_rows_by_app_id.get(app_id)
-        return app.visible_by_default if platform_row is None else bool(platform_row.visible)
-
-    effective_cache: dict[str, bool] = {}
-
-    def effective_visible_for(app_id: str) -> bool:
-        if app_id in effective_cache:
-            return effective_cache[app_id]
-        app = catalog_by_app_id[app_id]
-        entitlement = entitlement_rows_by_app_id.get(app_id)
-        visibility_override = entitlement.visibility_override if entitlement is not None else None
-        effective_visible = (
-            bool(visibility_override)
-            if visibility_override is not None
-            else app.enabled_by_default and platform_visible_for(app_id)
-        )
-        effective_cache[app_id] = bool(effective_visible)
-        return effective_cache[app_id]
-
-    runtime_cache: dict[str, bool] = {}
-
-    def runtime_enabled_for(app_id: str) -> bool:
-        if app_id in runtime_cache:
-            return runtime_cache[app_id]
-        app = catalog_by_app_id[app_id]
-        runtime_enabled = effective_visible_for(app_id) and _catalog_runtime_feature_enabled(app)
-        runtime_cache[app_id] = bool(runtime_enabled)
-        return runtime_cache[app_id]
-
-    for app in scoped_catalog_items:
-        entitlement = entitlement_rows_by_app_id.get(app.app_id)
-        platform_visible = platform_visible_for(app.app_id)
-        visibility_override = entitlement.visibility_override if entitlement is not None else None
-        effective_visible = effective_visible_for(app.app_id)
-        items.append(
-            WorkspaceAppVisibilityItemResponse(
+def _serialize_company_app_controls(db: Session) -> CompanyAppControlsResponse:
+    rows_by_app_id = _company_app_control_rows_by_id(db)
+    catalog_items = tuple(iter_workspace_app_catalog())
+    snapshot = load_app_availability_snapshot(db)
+    return CompanyAppControlsResponse(
+        items=[
+            CompanyAppControlItemResponse(
                 app_id=app.app_id,
                 title=app.title,
                 route_base=app.route_base,
                 icon_key=app.icon_key,
-                availability_scope="workspace",
-                kind="launcher_app" if is_app_bar_category_app(app) else "mode",
-                platform_visible=platform_visible,
-                visibility_override=visibility_override,
-                effective_visible=effective_visible,
-                runtime_enabled=runtime_enabled_for(app.app_id),
-                updated_at=entitlement.updated_at if entitlement is not None else None,
+                availability_scope=app.availability_scope,
+                execution_context_kind=app.execution_context_kind,
+                enabled=bool(rows_by_app_id.get(app.app_id).enabled)
+                if app.app_id in rows_by_app_id
+                else False,
+                runtime_enabled=snapshot.company_enabled(app),
+                updated_at=rows_by_app_id.get(app.app_id).updated_at
+                if app.app_id in rows_by_app_id
+                else None,
             )
-        )
+            for app in catalog_items
+        ]
+    )
 
-    return WorkspaceAppVisibilityResponse(
+
+def _serialize_workspace_app_defaults(db: Session) -> WorkspaceAppDefaultsResponse:
+    rows_by_app_id = _workspace_app_default_rows_by_id(db)
+    catalog_items = tuple(
+        app for app in iter_workspace_app_catalog() if app.availability_scope == "workspace"
+    )
+    snapshot = load_app_availability_snapshot(db)
+    return WorkspaceAppDefaultsResponse(
+        items=[
+            WorkspaceAppDefaultItemResponse(
+                app_id=app.app_id,
+                title=app.title,
+                route_base=app.route_base,
+                icon_key=app.icon_key,
+                company_enabled=bool(
+                    snapshot.company_enabled_by_app_id.get(app.app_id, False)
+                ),
+                enabled=bool(snapshot.workspace_default_by_app_id.get(app.app_id, False)),
+                runtime_enabled=(
+                    snapshot.company_enabled(app)
+                    and bool(snapshot.workspace_default_by_app_id.get(app.app_id, False))
+                ),
+                updated_at=rows_by_app_id.get(app.app_id).updated_at
+                if app.app_id in rows_by_app_id
+                else None,
+            )
+            for app in catalog_items
+        ]
+    )
+
+
+def _serialize_workspace_app_overrides(
+    db: Session,
+    workspace: Workspace,
+) -> WorkspaceAppOverridesResponse:
+    rows_by_app_id = _workspace_app_override_rows_by_id(db, workspace.id)
+    catalog_items = tuple(
+        app for app in iter_workspace_app_catalog() if app.availability_scope == "workspace"
+    )
+    snapshot = load_app_availability_snapshot(db, workspace_ids=(workspace.id,))
+    return WorkspaceAppOverridesResponse(
         workspace_id=workspace.id,
         workspace_key=workspace.key,
         workspace_name=workspace.name,
-        items=items,
+        items=[
+            WorkspaceAppOverrideItemResponse(
+                app_id=app.app_id,
+                title=app.title,
+                route_base=app.route_base,
+                icon_key=app.icon_key,
+                company_enabled=bool(
+                    snapshot.company_enabled_by_app_id.get(app.app_id, False)
+                ),
+                default_enabled=bool(
+                    snapshot.workspace_default_by_app_id.get(app.app_id, False)
+                ),
+                override_enabled=(
+                    rows_by_app_id[app.app_id].enabled
+                    if app.app_id in rows_by_app_id
+                    else None
+                ),
+                effective_enabled=snapshot.workspace_enabled(app, workspace.id),
+                runtime_enabled=snapshot.workspace_enabled(app, workspace.id),
+                updated_at=rows_by_app_id.get(app.app_id).updated_at
+                if app.app_id in rows_by_app_id
+                else None,
+            )
+            for app in catalog_items
+        ],
     )
 
 
@@ -4195,34 +4120,29 @@ def _build_usage_dashboard(
     )
 
 
-@router.get("/app-visibility", response_model=PlatformAppVisibilityResponse)
-def list_platform_app_visibility(
-    scope: AdminAppVisibilityScope = Query(default="core"),
+@router.get("/apps/company-controls", response_model=CompanyAppControlsResponse)
+def list_company_app_controls(
     context: AuthContext = Depends(require_permission("admin.access")),
     db: Session = Depends(get_db_session),
-) -> PlatformAppVisibilityResponse:
+) -> CompanyAppControlsResponse:
     _ensure_platform_admin(context, db)
-    ensure_platform_app_visibility(db)
-    db.commit()
-    return _serialize_platform_app_visibility(db, scope=scope)
+    return _serialize_company_app_controls(db)
 
 
-@router.patch("/app-visibility", response_model=PlatformAppVisibilityResponse)
-def update_platform_app_visibility(
-    payload: PlatformAppVisibilityUpdateRequest,
-    scope: AdminAppVisibilityScope = Query(default="core"),
+@router.patch("/apps/company-controls", response_model=CompanyAppControlsResponse)
+def update_company_app_controls(
+    payload: CompanyAppControlsUpdateRequest,
     context: AuthContext = Depends(require_permission("admin.access")),
     db: Session = Depends(get_db_session),
-) -> PlatformAppVisibilityResponse:
+) -> CompanyAppControlsResponse:
     _ensure_platform_admin(context, db)
-    ensure_platform_app_visibility(db)
-    rows_by_app_id = _platform_app_visibility_rows_by_id(db)
+    rows_by_app_id = _company_app_control_rows_by_id(db)
     changed_items: list[dict[str, object]] = []
     now = _utcnow()
 
     for item in payload.items:
         catalog_item = get_workspace_app_catalog_item(item.app_id)
-        if catalog_item is None or not is_platform_visibility_app(catalog_item):
+        if catalog_item is None:
             raise localized_http_exception(
                 status_code=400,
                 code="admin.unknown_workspace_app",
@@ -4230,122 +4150,164 @@ def update_platform_app_visibility(
             )
         row = rows_by_app_id.get(item.app_id)
         if row is None:
-            row = PlatformAppVisibility(
-                id=new_id(),
+            row = CompanyAppControl(
                 app_id=item.app_id,
-                visible=item.visible,
+                enabled=item.enabled,
+                updated_by_user_id=context.user.id,
                 created_at=now,
                 updated_at=now,
             )
             db.add(row)
             rows_by_app_id[item.app_id] = row
-        elif row.visible != item.visible:
-            row.visible = item.visible
+        elif row.enabled != item.enabled:
+            row.enabled = item.enabled
+            row.updated_by_user_id = context.user.id
             row.updated_at = now
             db.add(row)
-        changed_items.append({"app_id": item.app_id, "visible": item.visible})
+        changed_items.append({"app_id": item.app_id, "enabled": item.enabled})
 
     record_audit_log(
         db,
         actor_user_id=context.user.id,
-        action="admin.app_visibility.update",
-        entity_kind="platform_app_visibility",
+        action="admin.company_app_controls.update",
+        entity_kind="company_app_control",
         entity_id=None,
-        summary="Updated platform app visibility",
+        summary="Updated company app controls",
         payload={"items": changed_items},
     )
     db.commit()
-    return _serialize_platform_app_visibility(db, scope=scope)
+    return _serialize_company_app_controls(db)
+
+
+@router.get("/apps/workspace-defaults", response_model=WorkspaceAppDefaultsResponse)
+def list_workspace_app_defaults(
+    context: AuthContext = Depends(require_permission("admin.access")),
+    db: Session = Depends(get_db_session),
+) -> WorkspaceAppDefaultsResponse:
+    _ensure_platform_admin(context, db)
+    return _serialize_workspace_app_defaults(db)
+
+
+@router.patch("/apps/workspace-defaults", response_model=WorkspaceAppDefaultsResponse)
+def update_workspace_app_defaults(
+    payload: WorkspaceAppDefaultsUpdateRequest,
+    context: AuthContext = Depends(require_permission("admin.access")),
+    db: Session = Depends(get_db_session),
+) -> WorkspaceAppDefaultsResponse:
+    _ensure_platform_admin(context, db)
+    rows_by_app_id = _workspace_app_default_rows_by_id(db)
+    changed_items: list[dict[str, object]] = []
+    now = _utcnow()
+
+    for item in payload.items:
+        catalog_item = get_workspace_app_catalog_item(item.app_id)
+        if catalog_item is None or catalog_item.availability_scope != "workspace":
+            raise localized_http_exception(
+                status_code=400,
+                code="admin.unknown_workspace_app",
+                app_id=item.app_id,
+            )
+        row = rows_by_app_id.get(item.app_id)
+        if row is None:
+            row = WorkspaceAppDefault(
+                app_id=item.app_id,
+                enabled=item.enabled,
+                updated_by_user_id=context.user.id,
+                created_at=now,
+                updated_at=now,
+            )
+            db.add(row)
+            rows_by_app_id[item.app_id] = row
+        elif row.enabled != item.enabled:
+            row.enabled = item.enabled
+            row.updated_by_user_id = context.user.id
+            row.updated_at = now
+            db.add(row)
+        changed_items.append({"app_id": item.app_id, "enabled": item.enabled})
+
+    record_audit_log(
+        db,
+        actor_user_id=context.user.id,
+        action="admin.workspace_app_defaults.update",
+        entity_kind="workspace_app_default",
+        entity_id=None,
+        summary="Updated workspace app defaults",
+        payload={"items": changed_items},
+    )
+    db.commit()
+    return _serialize_workspace_app_defaults(db)
 
 
 @router.get(
-    "/workspaces/{workspace_id}/app-visibility",
-    response_model=WorkspaceAppVisibilityResponse,
+    "/workspaces/{workspace_id}/app-overrides",
+    response_model=WorkspaceAppOverridesResponse,
 )
-def list_workspace_app_visibility(
+def list_workspace_app_overrides(
     workspace_id: str,
-    scope: AdminAppVisibilityScope = Query(default="core"),
     context: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
-) -> WorkspaceAppVisibilityResponse:
+) -> WorkspaceAppOverridesResponse:
     workspace = _ensure_admin_workspace_scope(db, context.user, workspace_id)
-    ensure_platform_app_visibility(db)
-    ensure_workspace_app_entitlements(db)
-    db.commit()
-    return _serialize_workspace_app_visibility(db, workspace, scope=scope)
+    return _serialize_workspace_app_overrides(db, workspace)
 
 
 @router.patch(
-    "/workspaces/{workspace_id}/app-visibility",
-    response_model=WorkspaceAppVisibilityResponse,
+    "/workspaces/{workspace_id}/app-overrides",
+    response_model=WorkspaceAppOverridesResponse,
 )
-def update_workspace_app_visibility(
+def update_workspace_app_overrides(
     workspace_id: str,
-    payload: WorkspaceAppVisibilityUpdateRequest,
-    scope: AdminAppVisibilityScope = Query(default="core"),
+    payload: WorkspaceAppOverridesUpdateRequest,
     context: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
-) -> WorkspaceAppVisibilityResponse:
+) -> WorkspaceAppOverridesResponse:
     workspace = _ensure_admin_workspace_scope(db, context.user, workspace_id)
-    ensure_platform_app_visibility(db)
-    ensure_workspace_app_entitlements(db)
-    rows_by_app_id = _workspace_app_entitlement_rows_by_id(db, workspace.id)
+    rows_by_app_id = _workspace_app_override_rows_by_id(db, workspace.id)
     changed_items: list[dict[str, object]] = []
     now = _utcnow()
 
     for item in payload.items:
         catalog_item = get_workspace_app_catalog_item(item.app_id)
-        if (
-            catalog_item is None
-            or not is_app_bar_category_app(catalog_item)
-            or catalog_item.availability_scope != "workspace"
-        ):
+        if catalog_item is None or catalog_item.availability_scope != "workspace":
             raise localized_http_exception(
                 status_code=400,
                 code="admin.unknown_workspace_app",
                 app_id=item.app_id,
             )
-        if catalog_item.platform_admin_activation_required and not is_platform_admin_user(
-            context.user, db
-        ):
-            raise localized_http_exception(
-                status_code=403,
-                code="admin.platform_admin_required",
-            )
         row = rows_by_app_id.get(item.app_id)
-        if row is None:
-            row = WorkspaceAppEntitlement(
-                id=new_id(),
+        if item.enabled is None:
+            if row is not None:
+                db.delete(row)
+                rows_by_app_id.pop(item.app_id, None)
+        elif row is None:
+            row = WorkspaceAppOverride(
                 workspace_id=workspace.id,
                 app_id=item.app_id,
-                visibility_override=item.visibility_override,
+                enabled=item.enabled,
+                updated_by_user_id=context.user.id,
                 created_at=now,
                 updated_at=now,
             )
             db.add(row)
             rows_by_app_id[item.app_id] = row
-        elif row.visibility_override != item.visibility_override:
-            row.visibility_override = item.visibility_override
+        elif row.enabled != item.enabled:
+            row.enabled = item.enabled
+            row.updated_by_user_id = context.user.id
             row.updated_at = now
             db.add(row)
-        changed_items.append(
-            {
-                "app_id": item.app_id,
-                "visibility_override": item.visibility_override,
-            }
-        )
+        changed_items.append({"app_id": item.app_id, "enabled": item.enabled})
 
     record_audit_log(
         db,
         actor_user_id=context.user.id,
-        action="admin.workspace_app_visibility.update",
+        action="admin.workspace_app_overrides.update",
         entity_kind="workspace",
         entity_id=workspace.id,
-        summary=f"Updated app visibility overrides for workspace {workspace.name}",
+        summary=f"Updated app overrides for workspace {workspace.name}",
         payload={"items": changed_items},
     )
     db.commit()
-    return _serialize_workspace_app_visibility(db, workspace, scope=scope)
+    return _serialize_workspace_app_overrides(db, workspace)
 
 
 @router.get("/app-bar-categories", response_model=AdminAppBarCategoriesResponse)
@@ -4819,7 +4781,6 @@ def create_workspace(
     db.add(workspace)
     db.flush()
     ensure_workspace_default_pms_space(db, workspace)
-    ensure_workspace_app_entitlements(db)
     db.add(
         WorkspaceUserBinding(
             id=new_id(),

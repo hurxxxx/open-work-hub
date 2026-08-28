@@ -34,6 +34,9 @@ from open_work_hub_api.domains.ai.gateway import (  # noqa: E402
     execute_llm,
 )
 from open_work_hub_api.domains.auth.security import new_id  # noqa: E402
+from open_work_hub_api.domains.auth.workspace_app_gate import (  # noqa: E402
+    is_app_enabled_for_user_context,
+)
 from open_work_hub_api.domains.docs.models import NativeDoc, NativeDocPage, NativeDocTarget  # noqa: E402
 from open_work_hub_api.domains.docs.rag_sync import enqueue_native_doc_rag_sync  # noqa: E402
 from open_work_hub_api.domains.meeting.models import Meeting  # noqa: E402
@@ -100,6 +103,28 @@ def _mark_failed(session: Session, recording_id: str, reason: str, *, stage: str
     recording.updated_at = _utcnow()
     session.add(recording)
     session.commit()
+
+
+def _ensure_recording_execution_allowed(
+    session: Session,
+    recording: Recording,
+    *,
+    stage: str,
+) -> None:
+    if is_app_enabled_for_user_context(
+        session,
+        app_id="recording",
+        user_id=recording.owner_id,
+        workspace_id=recording.workspace_id,
+    ):
+        return
+    _mark_failed(
+        session,
+        recording.id,
+        "Recording app execution disabled or requester membership revoked.",
+        stage=stage,
+    )
+    raise Ignore()
 
 
 def _download_recording_to_tmp(recording: Recording) -> str:
@@ -374,6 +399,8 @@ def transcribe_recording(self, recording_id: str) -> str:
             _heartbeat(session, recording, max(recording.progress_pct, 60))
             return recording.id
 
+        _ensure_recording_execution_allowed(session, recording, stage="transcript")
+
         if recording.transcribe_started_at is None:
             recording.transcribe_started_at = _utcnow()
         _heartbeat(
@@ -395,8 +422,10 @@ def transcribe_recording(self, recording_id: str) -> str:
             rec = session.get(Recording, recording_id)
             if rec is None or rec.trashed_at is not None:
                 raise Ignore()
+            _ensure_recording_execution_allowed(session, rec, stage="transcript")
             _heartbeat(session, rec, pct, transcript_status="transcribing")
 
+        _ensure_recording_execution_allowed(session, recording, stage="transcript")
         result = get_asr_backend().transcribe(Path(tmp_path), on_progress=on_progress)
         text = result.text.strip()
         if not text:
@@ -405,6 +434,7 @@ def transcribe_recording(self, recording_id: str) -> str:
         recording = session.get(Recording, recording_id)
         if recording is None or recording.trashed_at is not None:
             raise Ignore()
+        _ensure_recording_execution_allowed(session, recording, stage="transcript")
         recording.transcript_text = text
         if recording.duration_sec is None and result.duration_sec:
             recording.duration_sec = int(result.duration_sec)
@@ -448,6 +478,7 @@ def create_raw_transcript_doc(self, recording_id: str) -> str:
         if recording.raw_transcript_doc_id and recording.raw_transcript_doc_status == "done":
             _heartbeat(session, recording, max(recording.progress_pct, 70))
             return recording.id
+        _ensure_recording_execution_allowed(session, recording, stage="raw_doc")
         if not recording.transcript_text:
             raise PermanentError("Transcript is missing.")
 
@@ -498,6 +529,8 @@ def analyze_transcript(self, recording_id: str) -> dict[str, Any]:
         if not recording.transcript_text:
             raise PermanentError("Transcript is missing.")
 
+        _ensure_recording_execution_allowed(session, recording, stage="minutes")
+
         _heartbeat(session, recording, max(recording.progress_pct, 78), minutes_status="creating")
         summary = _complete_local_agent(
             session,
@@ -543,6 +576,8 @@ def verify_transcript_summary(self, payload: dict[str, Any]) -> dict[str, Any]:
         summary = str(payload.get("summary") or "").strip()
         if not transcript or not summary:
             raise PermanentError("Transcript summary verification input is missing.")
+
+        _ensure_recording_execution_allowed(session, recording, stage="minutes")
 
         verifier_note = _complete_local_agent(
             session,
@@ -591,6 +626,7 @@ def create_minutes_doc(self, payload: dict[str, Any]) -> str:
         if recording.minutes_doc_id and recording.minutes_doc_status == "done":
             _heartbeat(session, recording, 100)
             return recording.id
+        _ensure_recording_execution_allowed(session, recording, stage="minutes")
         summary = str(payload.get("summary") or "").strip()
         if not summary:
             raise PermanentError("Minutes summary is missing.")

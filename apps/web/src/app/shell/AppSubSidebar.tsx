@@ -11,6 +11,7 @@ import type {
   WorkspaceBootstrapNavItem,
 } from '@/src/platform/workspaces/workspaces-api';
 import type { AdminSectionAccessResolver } from '@/src/platform/admin/admin-permissions';
+import type { ReactNode } from 'react';
 
 const getNoopAppModuleManifest = () => null;
 
@@ -32,6 +33,7 @@ export function AppSubSidebar({
   enabledWorkspaceAppIds,
   getAppModuleManifest = getNoopAppModuleManifest,
   getAppSidebarConfig,
+  headerSlot,
   hasAdminSectionAccess,
   launcherGlobalPaths = EMPTY_LAUNCHER_GLOBAL_PATHS,
   navItems,
@@ -50,6 +52,7 @@ export function AppSubSidebar({
   enabledWorkspaceAppIds?: readonly string[];
   getAppModuleManifest?: (appId: string) => unknown | null;
   getAppSidebarConfig?: (appId: string) => AppSidebarConfig | null;
+  headerSlot?: ReactNode;
   hasAdminSectionAccess?: AdminSectionAccessResolver;
   launcherGlobalPaths?: LauncherGlobalPaths;
   navItems?: readonly NavItem[];
@@ -73,6 +76,7 @@ export function AppSubSidebar({
       currentWorkspaceSlug={currentWorkspaceSlug}
       enabledWorkspaceAppIds={enabledWorkspaceAppIds}
       getAppSidebarConfig={getAppSidebarConfig}
+      headerSlot={headerSlot}
       hasAdminSectionAccess={hasAdminSectionAccess}
       launcherGlobalPaths={launcherGlobalPaths}
       navItems={navItems}

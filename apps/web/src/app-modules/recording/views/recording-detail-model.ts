@@ -1,4 +1,4 @@
-import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
 
 import type { Recording, RecordingTarget } from '../api/recording-api';
 
@@ -104,21 +104,25 @@ export function recordingTargetHref(
   target: RecordingTarget,
 ): string | null {
   if (target.target_app === 'meeting') {
-    return buildWorkspaceAppPath(
+    return buildAppHref({
+      routeId: 'meeting.detail',
       workspaceSlug,
-      'meeting',
-      target.target_id,
-    );
+      pathParams: { meetingId: target.target_id },
+    });
   }
   if (target.target_app === 'pms') {
-    return buildWorkspaceAppPath(
+    return buildAppHref({
+      routeId: 'pms.root',
       workspaceSlug,
-      'pms',
-      `?task=${encodeURIComponent(target.target_id)}`,
-    );
+      queryParams: { task: target.target_id },
+    });
   }
   if (target.target_app === 'docs') {
-    return buildWorkspaceAppPath(workspaceSlug, 'docs', target.target_id);
+    return buildAppHref({
+      routeId: 'docs.document',
+      workspaceSlug,
+      pathParams: { docId: target.target_id },
+    });
   }
   return null;
 }

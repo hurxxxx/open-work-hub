@@ -63,7 +63,7 @@ describe('meeting insight chat handoff plan', () => {
       aiDraftOrigin: 'meeting_insight',
     });
     expect(plan.targetUrlForConversation('conversation 1/2')).toBe(
-      '/w/team%20space/chatbot?c=conversation%201%2F2',
+      '/apps/chatbot/workspaces/team%20space?c=conversation+1%2F2',
     );
   });
 

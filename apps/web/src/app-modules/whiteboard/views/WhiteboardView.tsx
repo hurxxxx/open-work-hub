@@ -110,20 +110,18 @@ function useWhiteboardViewElement() {
       return buildWhiteboardHubItemPath({
         itemId: id,
         searchParams,
-        user,
         workspaceSlug,
       });
     },
-    [searchParams, user, workspaceSlug],
+    [searchParams, workspaceSlug],
   );
 
   const rootPath = useCallback(() => {
     return buildWhiteboardHubRootPath({
       searchParams,
-      user,
       workspaceSlug,
     });
-  }, [searchParams, user, workspaceSlug]);
+  }, [searchParams, workspaceSlug]);
 
   const openItem = useCallback(
     (item: WhiteboardHubItem) => {

@@ -1,5 +1,11 @@
 import { Check, Search, SlidersHorizontal, Star } from 'lucide-react';
-import { useMemo, useState, type ReactNode, type RefObject } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import { Link } from 'react-router-dom';
 
 import { cn } from '@/src/lib/utils';
@@ -113,6 +119,28 @@ export function AppBarLauncherMenus({
     (category) => category.pinnable !== false,
   );
   const favoritesColumnCount = launcherGridColumnCount(pinnedItems.length);
+
+  useEffect(() => {
+    if (!favoritesOpen && !categoryMenuId) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') {
+        return;
+      }
+      const trigger = menuRef.current?.querySelector<HTMLButtonElement>(
+        'button[aria-haspopup="menu"][aria-expanded="true"]',
+      );
+      event.preventDefault();
+      event.stopPropagation();
+      onCloseLauncherMenus();
+      window.requestAnimationFrame(() => trigger?.focus());
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [categoryMenuId, favoritesOpen, menuRef, onCloseLauncherMenus]);
 
   return (
     <div
@@ -402,6 +430,7 @@ function CategoryItemSearch({
         <LauncherGrid columnCount={columnCount}>
           {filteredItems.map((item) => (
             <CategoryLauncherItem
+              category={category}
               currentPathname={currentPathname}
               item={item}
               key={item.app_id}
@@ -507,12 +536,14 @@ function FavoriteLauncherItem({
 }
 
 function CategoryLauncherItem({
+  category,
   currentPathname,
   item,
   onClose,
   resolveAppLink,
   t,
 }: {
+  category: WorkspaceBootstrapAppBarCategory;
   currentPathname: string;
   item: WorkspaceBootstrapAppBarCategoryItem;
   onClose: () => void;
@@ -524,12 +555,19 @@ function CategoryLauncherItem({
     defaultValue: item.title,
   });
   const link = resolveAppLink(item.app_id as WorkspaceAppId);
+  const scopeLabel =
+    category.showWorkspaceContext === false && category.contextLabel
+      ? category.contextLabel
+      : item.availability_scope === 'workspace'
+        ? t('shell:launcher.workspaceApp')
+        : t('shell:launcher.companyApp');
   return (
     <LauncherLink
       active={isLauncherPathActive({ currentPathname, link })}
       comingSoon={item.coming_soon}
       icon={Icon}
       onClose={onClose}
+      scopeLabel={scopeLabel}
       title={title}
       to={link}
       t={t}
@@ -542,6 +580,7 @@ function LauncherLink({
   comingSoon = false,
   icon: Icon,
   onClose,
+  scopeLabel,
   title,
   to,
   t,
@@ -550,6 +589,7 @@ function LauncherLink({
   comingSoon?: boolean | null;
   icon: AppBarWorkspaceItem['icon'];
   onClose: () => void;
+  scopeLabel?: string | null;
   title: string;
   to: string;
   t: AppBarTranslator;
@@ -558,7 +598,7 @@ function LauncherLink({
     <Link
       aria-label={t('shell:appLauncher.openApp', { title })}
       className={cn(
-        'group/app relative flex h-24 min-w-0 flex-col items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-center text-app-ink transition-colors hover:border-app-border hover:bg-app-surface-hover',
+        'group/app relative flex h-28 min-w-0 flex-col items-center justify-center gap-1 rounded-lg border px-2 py-2 text-center text-app-ink transition-colors hover:border-app-border hover:bg-app-surface-hover',
         active
           ? 'border-app-accent/35 bg-app-bg text-app-accent'
           : 'border-transparent',
@@ -581,6 +621,11 @@ function LauncherLink({
       <span className="app-text-caption line-clamp-2 max-w-full font-medium leading-snug">
         {title}
       </span>
+      {scopeLabel ? (
+        <span className="app-text-micro max-w-full truncate rounded-full bg-app-surface px-1.5 py-0.5 text-app-ink/50">
+          {scopeLabel}
+        </span>
+      ) : null}
       {active ? (
         <Check size={15} className="absolute right-1.5 top-1.5 shrink-0" />
       ) : null}

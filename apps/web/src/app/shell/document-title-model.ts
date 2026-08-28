@@ -17,7 +17,6 @@ type ShellDocumentTitleWorkspace =
 export interface ResolveShellDocumentTitleInput {
   activeAppId: string;
   appBarItems?: readonly Pick<AppBarItem, 'id' | 'title'>[];
-  pathname: string;
   routeWorkspaceSlug: string | null;
   t: ShellDocumentTitleTranslator;
   workspace: ShellDocumentTitleWorkspace;
@@ -27,18 +26,17 @@ export interface ResolveShellDocumentTitleInput {
 function resolveDocumentAppTitle({
   activeAppId,
   appBarItems = [],
-  pathname,
   t,
   workspaceApps,
 }: Pick<
   ResolveShellDocumentTitleInput,
-  'activeAppId' | 'appBarItems' | 'pathname' | 't' | 'workspaceApps'
+  'activeAppId' | 'appBarItems' | 't' | 'workspaceApps'
 >): string {
-  if (/^\/w\/[^/]+\/settings(?:\/|$)/.test(pathname)) {
-    return t('workspaceSwitcher.manage');
-  }
   if (activeAppId === 'profile') {
     return t('documentTitle.profile');
+  }
+  if (activeAppId === 'launcher') {
+    return t('launcher.title');
   }
   if (activeAppId === 'settings') {
     return t('apps.settings');
@@ -57,7 +55,6 @@ function resolveDocumentAppTitle({
 export function resolveShellDocumentTitle({
   activeAppId,
   appBarItems,
-  pathname,
   routeWorkspaceSlug,
   t,
   workspace,
@@ -66,11 +63,10 @@ export function resolveShellDocumentTitle({
   const app = resolveDocumentAppTitle({
     activeAppId,
     appBarItems,
-    pathname,
     t,
     workspaceApps,
   });
-  if (workspace && (routeWorkspaceSlug || pathname.startsWith('/tool/'))) {
+  if (workspace && routeWorkspaceSlug) {
     return t('documentTitle.workspaceApp', {
       app,
       workspace: workspace.name,

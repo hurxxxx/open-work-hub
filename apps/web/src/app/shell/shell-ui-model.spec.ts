@@ -1,51 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
-import type { AuthUser, WorkspaceSummary } from '@/src/platform/auth/auth-api';
 import {
   EMPTY_LAUNCHER_GLOBAL_PATHS,
   type LauncherGlobalPaths,
 } from './navigation-types';
 import {
   getInitials,
+  resolveAppDisplayScope,
   resolveMobileAppLink,
   resolveThemePreference,
 } from './shell-ui-model';
 
-function workspace(
-  overrides: Partial<WorkspaceSummary> = {},
-): WorkspaceSummary {
-  return {
-    id: 'workspace-hq',
-    name: 'Open Work Hub HQ',
-    role: 'admin',
-    slug: 'hq',
-    ...overrides,
-  };
-}
-
-function user(overrides: Partial<AuthUser> = {}): AuthUser {
-  return {
-    date_format: 'korean',
-    display_name: 'Open Work Hub Member',
-    email: 'member@open-work-hub.local',
-    full_name: 'Open Work Hub Member',
-    id: 'user-1',
-    locale: 'ko-KR',
-    login_id: 'member',
-    must_change_password: false,
-    status: 'active',
-    system_roles: [],
-    theme_preference: 'system',
-    time_zone: 'Asia/Seoul',
-    workspace_roles: [],
-    workspaces: [workspace()],
-    ...overrides,
-  };
-}
-
 const LAUNCHER_GLOBAL_PATHS: LauncherGlobalPaths = new Map([
-  ['community', '/community'],
-  ['docs', '/docs'],
+  ['community', '/apps/community'],
+  ['mail', '/apps/mail'],
 ]);
 
 describe('shell ui model', () => {
@@ -62,70 +30,30 @@ describe('shell ui model', () => {
     expect(getInitials('   ', 'WS')).toBe('WS');
   });
 
-  it('resolves mobile app links from current shell workspace first', () => {
-    expect(
-      resolveMobileAppLink(
-        'docs',
-        user({
-          default_workspace_id: 'workspace-demo',
-          workspaces: [
-            workspace(),
-            workspace({
-              id: 'workspace-demo',
-              name: 'Demo',
-              role: 'member',
-              slug: 'demo',
-            }),
-          ],
-        }),
-        'hq',
-        EMPTY_LAUNCHER_GLOBAL_PATHS,
-      ),
-    ).toBe('/w/hq/docs');
+  it('resolves user-facing app scopes from the executable app contract', () => {
+    expect(resolveAppDisplayScope('docs')).toBe('workspace');
+    expect(resolveAppDisplayScope('mail')).toBe('personal');
+    expect(resolveAppDisplayScope('community')).toBe('company');
   });
 
-  it('falls back to preferred workspace', () => {
-    const currentUser = user({
-      default_workspace_id: 'workspace-demo',
-      workspaces: [
-        workspace(),
-        workspace({
-          id: 'workspace-demo',
-          name: 'Demo',
-          role: 'member',
-          slug: 'demo',
-        }),
-      ],
-    });
+  it('resolves mobile workspace apps through their own app entry route', () => {
+    expect(resolveMobileAppLink('docs', EMPTY_LAUNCHER_GLOBAL_PATHS)).toBe(
+      '/apps/docs',
+    );
+  });
 
-    expect(
-      resolveMobileAppLink(
-        'docs',
-        currentUser,
-        null,
-        EMPTY_LAUNCHER_GLOBAL_PATHS,
-      ),
-    ).toBe('/w/demo/docs');
+  it('uses the app entry route for workspace apps', () => {
+    expect(resolveMobileAppLink('docs', EMPTY_LAUNCHER_GLOBAL_PATHS)).toBe(
+      '/apps/docs',
+    );
   });
 
   it('uses manifest-projected global launcher paths', () => {
-    const currentUser = user();
-
-    expect(
-      resolveMobileAppLink(
-        'docs',
-        currentUser,
-        'hq',
-        LAUNCHER_GLOBAL_PATHS,
-      ),
-    ).toBe('/docs');
-    expect(
-      resolveMobileAppLink(
-        'community',
-        currentUser,
-        'hq',
-        LAUNCHER_GLOBAL_PATHS,
-      ),
-    ).toBe('/community');
+    expect(resolveMobileAppLink('mail', LAUNCHER_GLOBAL_PATHS)).toBe(
+      '/apps/mail',
+    );
+    expect(resolveMobileAppLink('community', LAUNCHER_GLOBAL_PATHS)).toBe(
+      '/apps/community',
+    );
   });
 });

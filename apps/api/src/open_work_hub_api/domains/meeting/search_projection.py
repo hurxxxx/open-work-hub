@@ -5,6 +5,7 @@ from typing import Any
 from sqlalchemy import inspect, select
 from sqlalchemy.orm import Session, selectinload
 
+from open_work_hub_api.core.app_routes import InternalAppLocation, build_app_href
 from open_work_hub_api.domains.auth.models import Workspace
 from open_work_hub_api.domains.meeting.app_catalog import MEETING_WORKSPACE_APP
 from open_work_hub_api.domains.meeting.models import Meeting, MeetingAttendee, MeetingRecording
@@ -112,7 +113,13 @@ def _meeting_row(db: Session, *, workspace: Workspace, meeting: Meeting) -> dict
             "event_start_at": meeting.start_at.isoformat(),
             "start_date": meeting.start_at.date().isoformat(),
         },
-        deep_link=f"/w/{workspace.key}/meeting/{meeting.id}",
+        deep_link=build_app_href(
+            InternalAppLocation(
+                route_id="meeting.detail",
+                workspace_slug=workspace.key,
+                path_params={"meetingId": meeting.id},
+            )
+        ),
         metadata={"attendee_count": len(meeting.attendees)},
         source_updated_at=meeting.updated_at,
     )

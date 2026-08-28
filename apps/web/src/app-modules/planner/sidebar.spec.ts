@@ -7,7 +7,7 @@ function actionContext(
   enabledWorkspaceAppIds: readonly string[],
 ): AppSidebarActionContext {
   return {
-    currentPathname: '/w/general/planner',
+    currentPathname: '/apps/planner',
     currentWorkspaceSlug: 'general',
     enabledWorkspaceAppIds,
     navigate: vi.fn() as unknown as AppSidebarActionContext['navigate'],

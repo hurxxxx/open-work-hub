@@ -42,7 +42,7 @@ test.describe('i18n locale smoke', () => {
     const patchedLocales: string[] = [];
     await stubFullShell(page, (locale) => patchedLocales.push(locale));
 
-    await page.goto('/w/hq/home');
+    await page.goto('/apps/home/workspaces/hq');
     await expect(page.getByRole('button', { name: '내 설정' })).toBeVisible();
     await expect
       .poll(() => page.evaluate(() => document.documentElement.lang))
@@ -114,7 +114,7 @@ test.describe('i18n locale smoke', () => {
       assert: (current: Page) => Promise<void>;
     }> = [
       {
-        path: '/w/hq/home',
+        path: '/apps/home/workspaces/hq',
         assert: async (current) => {
           await expect(
             current.getByRole('link', { name: 'New Meeting' }),
@@ -122,7 +122,7 @@ test.describe('i18n locale smoke', () => {
         },
       },
       {
-        path: '/w/hq/chatbot',
+        path: '/apps/chatbot/workspaces/hq',
         assert: async (current) => {
           await expect(
             current.getByRole('heading', { name: 'AI Assistant Chatbot' }),
@@ -130,7 +130,7 @@ test.describe('i18n locale smoke', () => {
         },
       },
       {
-        path: '/w/hq/pms',
+        path: '/apps/pms/workspaces/hq',
         assert: async (current) => {
           await expect(
             current.getByRole('heading', { name: 'No Spaces Yet' }),
@@ -143,7 +143,7 @@ test.describe('i18n locale smoke', () => {
         },
       },
       {
-        path: '/w/hq/docs',
+        path: '/apps/docs/workspaces/hq',
         assert: async (current) => {
           await expect(
             current.getByRole('heading', { name: 'No Docs found' }),
@@ -151,7 +151,7 @@ test.describe('i18n locale smoke', () => {
         },
       },
       {
-        path: '/w/hq/planner',
+        path: '/apps/planner',
         assert: async (current) => {
           await expect(
             current.getByRole('button', { name: 'Month' }),
@@ -162,7 +162,7 @@ test.describe('i18n locale smoke', () => {
         },
       },
       {
-        path: '/w/hq/meeting',
+        path: '/apps/meeting/workspaces/hq',
         assert: async (current) => {
           await expect(
             current.getByText('No upcoming meetings.'),
@@ -170,7 +170,7 @@ test.describe('i18n locale smoke', () => {
         },
       },
       {
-        path: '/w/hq/settings',
+        path: '/admin/workspaces/hq/settings',
         assert: async (current) => {
           await expect(
             current.getByText('Workspace Settings', { exact: true }).first(),
@@ -178,7 +178,7 @@ test.describe('i18n locale smoke', () => {
         },
       },
       {
-        path: '/tool/search?workspace=hq',
+        path: '/apps/retrieval-search/workspaces/hq',
         assert: async (current) => {
           await expect(
             current.getByRole('heading', { name: 'Open Work Hub Search' }),

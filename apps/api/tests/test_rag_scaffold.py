@@ -323,6 +323,7 @@ def test_workspace_rag_reindex_requires_ai_enablement(monkeypatch) -> None:
 def test_company_rag_reindex_enqueues_company_scope_jobs(monkeypatch) -> None:
     captured: list[dict] = []
     adapter = SimpleNamespace(
+        app_id="docs",
         resource_type="docs_native_doc",
         company_resource_ids=lambda db: ["doc-1", "doc-2"],
     )
@@ -336,6 +337,11 @@ def test_company_rag_reindex_enqueues_company_scope_jobs(monkeypatch) -> None:
         rag_application,
         "company_reindex_resource_adapters",
         lambda app_ids=None: (adapter,),
+    )
+    monkeypatch.setattr(
+        rag_application,
+        "resolve_company_enabled_app_ids",
+        lambda db: ["docs"],
     )
 
     def fake_enqueue_rag_sync_job(db, **kwargs):
@@ -375,6 +381,31 @@ def test_company_rag_reindex_enqueues_company_scope_jobs(monkeypatch) -> None:
             "lane": RagSyncLane.BACKFILL,
         },
     ]
+
+
+def test_company_rag_reindex_excludes_disabled_workspace_app_adapters(
+    monkeypatch,
+) -> None:
+    adapter = SimpleNamespace(
+        app_id="files",
+        resource_type="file_manager_file",
+        company_resource_ids=lambda db: ["file-1"],
+    )
+    monkeypatch.setattr(
+        rag_application,
+        "company_reindex_resource_adapters",
+        lambda app_ids=None: (adapter,),
+    )
+    monkeypatch.setattr(
+        rag_application,
+        "resolve_company_enabled_app_ids",
+        lambda db: [],
+    )
+
+    assert rag_application._enabled_company_reindex_resource_adapters(
+        object(),
+        {"files"},
+    ) == ()
 
 
 def test_workspace_rag_sources_expose_official_docs(monkeypatch) -> None:
@@ -972,7 +1003,9 @@ def test_rag_hydrates_source_metadata_before_final_acl_and_grounding() -> None:
             source_kind="files",
             text_content="company handbook",
             visibility_refs=["workspace:workspace-before-publication"],
-            metadata={"origin_ref": "/w/workspace-before/files?file=file-1"},
+            metadata={
+                "origin_ref": "/apps/files/workspaces/workspace-before?file=file-1"
+            },
         ),
         collection="rag-source-hydration",
     )
@@ -1000,7 +1033,7 @@ def test_rag_hydrates_source_metadata_before_final_acl_and_grounding() -> None:
                             "scope_kind": RagScopeKind.COMPANY,
                             "workspace_id": None,
                             "visibility_refs": ["company_public"],
-                            "metadata": {"origin_ref": "/files?file=file-1"},
+                            "metadata": {"origin_ref": "/apps/files?file=file-1"},
                         }
                     )
                 }
@@ -1024,7 +1057,7 @@ def test_rag_hydrates_source_metadata_before_final_acl_and_grounding() -> None:
     assert response.hits[0].scope_kind == RagScopeKind.COMPANY
     assert response.hits[0].workspace_id is None
     assert response.hits[0].acl_summary == ["company public"]
-    assert response.hits[0].origin_ref == "/files?file=file-1"
+    assert response.hits[0].origin_ref == "/apps/files?file=file-1"
     assert response.grounded_answer is not None
     assert response.grounded_answer.citations[0].resource_id == "file-1"
 

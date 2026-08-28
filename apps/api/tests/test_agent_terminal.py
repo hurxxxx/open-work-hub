@@ -667,8 +667,8 @@ def test_admin_can_reconnect_to_owned_codex_session_without_transcript_audit(
     member_apps = client.get("/api/v1/apps/bootstrap", headers=member_headers)
     assert admin_apps.status_code == 200
     assert member_apps.status_code == 200
-    assert "agent-terminal" in {item["app_id"] for item in admin_apps.json()["personal_tools"]}
-    assert "agent-terminal" not in {item["app_id"] for item in member_apps.json()["personal_tools"]}
+    assert "agent-terminal" in admin_apps.json()["personal_tool_app_ids"]
+    assert "agent-terminal" not in member_apps.json()["personal_tool_app_ids"]
     assert client.get("/api/v1/agent-terminal/config", headers=member_headers).status_code == 403
 
     _initialize_git_repository(tmp_path)

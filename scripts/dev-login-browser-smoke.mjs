@@ -31,7 +31,7 @@ try {
   await loginIdInput.fill(loginId);
   await passwordInput.fill(password);
   await submitButton.click();
-  await page.waitForURL('**/w/administrator/home', { timeout: 15_000 });
+  await page.waitForURL((url) => url.pathname === '/', { timeout: 15_000 });
 
   const applicationRoot = page.locator('#root');
   if (
@@ -56,26 +56,15 @@ try {
       throw new Error('Authenticated browser session token is missing.');
 
     const headers = { Authorization: `Bearer ${token}` };
-    const responses = await Promise.all([
-      fetch('/api/v1/workspaces/administrator/bootstrap', { headers }),
-      fetch('/api/v1/apps/bootstrap', { headers }),
-    ]);
-    if (responses.some((response) => !response.ok)) {
+    const response = await fetch('/api/v1/apps/bootstrap', { headers });
+    if (!response.ok) {
       throw new Error('App bootstrap request failed after browser login.');
     }
-
-    const payloads = await Promise.all(
-      responses.map((response) => response.json()),
-    );
-    return payloads
-      .flatMap((payload) => payload.app_bar_categories ?? [])
+    const payload = await response.json();
+    return (payload.app_bar_categories ?? [])
       .filter((category) => category.title === 'All Apps')
       .flatMap((category) => category.items)
-      .map((item) =>
-        item.availability_scope === 'platform'
-          ? item.route_base
-          : `/w/administrator${item.route_base}`,
-      )
+      .map((item) => item.route_base)
       .filter((path, index, paths) => paths.indexOf(path) === index)
       .sort();
   });

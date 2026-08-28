@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from open_work_hub_api.core.app_routes import InternalAppLocation, build_app_href
 from open_work_hub_api.domains.auth.access import (
     resolve_team_role,
     resolve_workspace_role,
@@ -114,8 +115,20 @@ def describe_source(
                 ),
             )
     if primary_target is not None and primary_target.target_app == "meeting":
-        return label, f"/w/{workspace.key}/meeting/{primary_target.target_id}"
-    return label, f"/w/{workspace.key}/whiteboard/{whiteboard.id}"
+        return label, build_app_href(
+            InternalAppLocation(
+                route_id="meeting.detail",
+                workspace_slug=workspace.key,
+                path_params={"meetingId": primary_target.target_id},
+            )
+        )
+    return label, build_app_href(
+        InternalAppLocation(
+            route_id="whiteboard.board",
+            workspace_slug=workspace.key,
+            path_params={"whiteboardId": whiteboard.id},
+        )
+    )
 
 
 def resolve_target_label(

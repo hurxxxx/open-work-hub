@@ -13,7 +13,9 @@ from open_work_hub_api.core.db import get_engine
 from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.core.settings import Settings, get_settings
 from open_work_hub_api.core.telemetry import current_trace_id
-from open_work_hub_api.domains.auth.access import resolve_workspace_runtime_enabled_app_ids
+from open_work_hub_api.domains.auth.app_availability import (
+    resolve_workspace_runtime_enabled_app_ids,
+)
 from open_work_hub_api.domains.auth.models import User, Workspace
 from open_work_hub_api.domains.rag import application as rag_application
 from open_work_hub_api.domains.rag.contracts import (

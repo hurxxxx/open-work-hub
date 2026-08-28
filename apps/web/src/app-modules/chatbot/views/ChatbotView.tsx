@@ -267,8 +267,7 @@ function ChatbotViewContent({
             pendingConversationTitle={
               isSending ? chatState.pendingUserContent : null
             }
-            routeAppId={experience.routeAppId}
-            routePathSuffix={experience.routePathSuffix}
+            routeId={experience.routeId}
             scopeRef={experience.conversationScope?.ref}
             scopeResourceId={experience.conversationScope?.resourceId}
             eyebrow={experience.sidebarEyebrow}

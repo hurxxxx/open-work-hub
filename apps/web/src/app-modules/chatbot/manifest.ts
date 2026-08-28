@@ -1,4 +1,5 @@
 import { MessageSquare } from 'lucide-react';
+import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
 
 import type { AppModuleManifest } from '@/src/app/shell/navigation-types';
 
@@ -21,5 +22,5 @@ export const chatbotManifest: AppModuleManifest = {
   },
   defaultActiveNavItemId: '',
   navItems: [],
-  workspaceRoutePaths: ['/w/:workspaceSlug/chatbot'],
+  workspaceRoutePaths: [getAppRoutePattern('chatbot.root')],
 };

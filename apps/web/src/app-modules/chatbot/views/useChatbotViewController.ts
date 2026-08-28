@@ -10,7 +10,7 @@ import { useConfirm } from '@open-work-hub/ui';
 
 import type { NavItem } from '@/src/app/shell/navigation-types';
 import { useAuth } from '@/src/platform/auth/auth-provider';
-import { resolveToolInvocationHref } from '@/src/platform/workspaces/workspace-utils';
+import { resolveAppInvocationHref } from '@/src/platform/workspaces/workspace-utils';
 import {
   CONVERSATIONS_UPDATED_EVENT,
   getConversation,
@@ -60,8 +60,8 @@ export function useChatbotViewController(
   const [searchParams, setSearchParams] = useSearchParams();
   // `c` query param is the durable source of truth for which persisted
   // conversation this tab is showing. The conversation list navigates to
-  // `/w/:slug/chatbot?c=<id>` to switch threads; the bare
-  // `/w/:slug/chatbot` path
+  // the canonical chatbot app route with `?c=<id>` to switch threads; the
+  // route without `c`
   // opens a fresh chat. Stream-created conversations write themselves back
   // into this param so a page refresh resumes the same thread.
   const routeConversationId = searchParams.get('c');
@@ -88,7 +88,7 @@ export function useChatbotViewController(
   const resolvedExperience = useMemo<ResolvedChatbotExperienceConfig>(() => {
     return {
       routeAppId: experience.routeAppId ?? 'chatbot',
-      routePathSuffix: experience.routePathSuffix ?? '',
+      routeId: experience.routeId ?? 'chatbot.root',
       sidebarEyebrow: experience.sidebarEyebrow ?? 'AI',
       sidebarTitle:
         experience.sidebarTitle ?? t('apps:ai.sidebar.recentConversations'),
@@ -109,7 +109,7 @@ export function useChatbotViewController(
     experience.emptyGreeting,
     experience.emptySubline,
     experience.routeAppId,
-    experience.routePathSuffix,
+    experience.routeId,
     experience.sidebarEyebrow,
     experience.sidebarTitle,
     experience.sourceArtifactTypes,
@@ -175,7 +175,7 @@ export function useChatbotViewController(
         user?.id ?? 'anonymous',
         workspaceSlug ?? 'no-workspace',
         resolvedExperience.routeAppId,
-        resolvedExperience.routePathSuffix,
+        resolvedExperience.routeId,
         resolvedExperience.conversationScope?.ref ?? 'unscoped',
         resolvedExperience.conversationScope?.resourceId ?? 'unscoped',
       ].join(':'),
@@ -183,7 +183,7 @@ export function useChatbotViewController(
       resolvedExperience.conversationScope?.ref,
       resolvedExperience.conversationScope?.resourceId,
       resolvedExperience.routeAppId,
-      resolvedExperience.routePathSuffix,
+      resolvedExperience.routeId,
       user?.id,
       workspaceSlug,
     ],
@@ -625,9 +625,8 @@ export function useChatbotViewController(
   };
 
   function handleSelectTool(item: NavItem) {
-    // Tool invocation semantics: plain AI items land on their /tool/:id page,
-    // deep-links (linkAppId, absolutePath) honor their NavItem metadata.
-    navigate(resolveToolInvocationHref(item, workspaceSlug, user));
+    // Registered app metadata owns every navigation target.
+    navigate(resolveAppInvocationHref(item, workspaceSlug, user));
   }
 
   function handleSubmit() {

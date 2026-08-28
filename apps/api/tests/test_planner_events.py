@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from open_work_hub_api.core.db import get_session_factory
-from open_work_hub_api.domains.auth.models import PlatformAppVisibility
+from open_work_hub_api.domains.auth.models import CompanyAppControl
 
 from test_meeting import (
     _auth_headers,
@@ -26,13 +26,13 @@ def _workspace_slug_for_key(client: TestClient, token: str, key: str) -> str:
     return workspace.get("slug", key)
 
 
-def _set_platform_app_visibility(app_id: str, visible: bool) -> None:
+def _set_company_app_control(app_id: str, enabled: bool) -> None:
     with get_session_factory()() as db:
         row = db.scalar(
-            select(PlatformAppVisibility).where(PlatformAppVisibility.app_id == app_id)
+            select(CompanyAppControl).where(CompanyAppControl.app_id == app_id)
         )
         assert row is not None
-        row.visible = visible
+        row.enabled = enabled
         db.add(row)
         db.commit()
 
@@ -382,7 +382,7 @@ def test_meeting_availability_masks_other_users_personal_events(client: TestClie
     assert meeting_block["masked"] is True
     assert meeting_block["title"] is None
 
-    _set_platform_app_visibility("planner", False)
+    _set_company_app_control("planner", False)
     planner_disabled = client.get(
         f"/api/v1/workspaces/{meeting_workspace_slug}/meeting/availability",
         headers=_auth_headers(admin_token),

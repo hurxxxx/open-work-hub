@@ -1,5 +1,9 @@
 import { createElement, lazy } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import {
+  getAppRouteChrome,
+  getAppRoutePattern,
+} from '@open-work-hub/contracts/app-routes';
 
 import { lazyRoute } from '@/src/app/shell/lazy-route';
 import type { WorkspaceRouteDefinition } from '@/src/app/shell/route-types';
@@ -35,12 +39,14 @@ function FilesWorkspaceView() {
 export const filesWorkspaceRoutes: WorkspaceRouteDefinition[] = [
   {
     appId: 'files',
-    path: '/w/:workspaceSlug/files/chat',
+    chrome: getAppRouteChrome('files.chat'),
+    path: getAppRoutePattern('files.chat'),
     element: lazyRoute(createElement(FilesChatView)),
   },
   {
     appId: 'files',
-    path: '/w/:workspaceSlug/files',
+    chrome: getAppRouteChrome('files.root'),
+    path: getAppRoutePattern('files.root'),
     element: createElement(FilesWorkspaceView),
   },
 ];

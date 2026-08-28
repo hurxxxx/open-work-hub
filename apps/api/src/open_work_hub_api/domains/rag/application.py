@@ -8,12 +8,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.settings import Settings, get_settings
-from open_work_hub_api.domains.auth.access import (
-    resolve_platform_enabled_app_ids,
+from open_work_hub_api.domains.auth.app_availability import (
+    resolve_company_enabled_app_ids,
     resolve_workspace_runtime_enabled_app_ids,
 )
-from open_work_hub_api.domains.auth.models import User, Workspace, WorkspaceUserBinding
-from open_work_hub_api.domains.auth.workspace_apps import get_workspace_app_catalog_item
+from open_work_hub_api.domains.auth.models import User, Workspace
 from open_work_hub_api.domains.conversations.app_catalog import CHATBOT_WORKSPACE_APP
 from open_work_hub_api.domains.files.retrieval_contract import FILES_RAG_SOURCE_KIND
 from open_work_hub_api.domains.rag.grounded_answer import LlmGroundedAnswerSynthesizer
@@ -512,28 +511,6 @@ def _build_grounded_answer_synthesizer_for_workspace_id(
     )
 
 
-def resolve_ai_gateway_workspace_id(db: Session, user: User) -> str | None:
-    if user.default_workspace_id:
-        active_default = db.scalar(
-            select(Workspace.id).where(
-                Workspace.id == user.default_workspace_id,
-                Workspace.active.is_(True),
-            )
-        )
-        if active_default is not None:
-            return active_default
-    return db.scalar(
-        select(WorkspaceUserBinding.workspace_id)
-        .join(Workspace, Workspace.id == WorkspaceUserBinding.workspace_id)
-        .where(
-            WorkspaceUserBinding.user_id == user.id,
-            Workspace.active.is_(True),
-        )
-        .order_by(WorkspaceUserBinding.created_at.asc())
-        .limit(1)
-    )
-
-
 def _query_rag_service(
     service: RagQueryService,
     request: RagQueryRequest,
@@ -704,23 +681,11 @@ def _enabled_company_reindex_resource_adapters(
     app_ids: set[str] | None,
 ):
     adapters = tuple(company_reindex_resource_adapters(app_ids))
-    platform_app_ids = {
-        catalog_item.app_id
-        for adapter in adapters
-        if (app_id := getattr(adapter, "app_id", None))
-        and (catalog_item := get_workspace_app_catalog_item(app_id)) is not None
-        and catalog_item.availability_scope == "platform"
-    }
-    if not platform_app_ids:
-        return adapters
-    enabled_platform_app_ids = set(resolve_platform_enabled_app_ids(db))
+    enabled_company_app_ids = set(resolve_company_enabled_app_ids(db))
     return tuple(
         adapter
         for adapter in adapters
-        if (
-            (app_id := getattr(adapter, "app_id", None)) not in platform_app_ids
-            or app_id in enabled_platform_app_ids
-        )
+        if getattr(adapter, "app_id", None) in enabled_company_app_ids
     )
 
 

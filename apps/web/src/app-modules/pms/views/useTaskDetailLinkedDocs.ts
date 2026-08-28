@@ -6,16 +6,16 @@ import {
 } from 'react';
 import type { TFunction } from 'i18next';
 import type { BlockContent } from '@open-work-hub/ui';
+import {
+  buildAppEntryHref,
+  buildAppHref,
+} from '@open-work-hub/contracts/app-routes';
 
 import {
   createNativeDoc,
   listDocPages,
   updateDocPage,
 } from '@/src/app-modules/docs/public-api';
-import {
-  buildWorkspaceAppPath,
-  resolveDefaultWorkspaceAppPath,
-} from '@/src/platform/workspaces/workspace-utils';
 import {
   attachTaskDoc,
   detachTaskDoc,
@@ -26,8 +26,6 @@ import {
   getTaskDetailMutationErrorMessage,
   notifyTaskDetailUpdated,
 } from './task-detail-mutation';
-
-type WorkspaceUser = Parameters<typeof resolveDefaultWorkspaceAppPath>[0];
 
 export function resolveTaskDetailPromotedDocContent({
   descriptionBlocks,
@@ -45,17 +43,18 @@ export function resolveTaskDetailPromotedDocContent({
 
 export function resolveTaskDetailDocPath({
   docId,
-  user,
   workspaceSlug,
 }: {
   docId: string;
-  user: WorkspaceUser;
   workspaceSlug: string | null;
 }): string {
-  const suffix = `/${docId}`;
   return workspaceSlug
-    ? buildWorkspaceAppPath(workspaceSlug, 'docs', suffix)
-    : resolveDefaultWorkspaceAppPath(user, 'docs', suffix);
+    ? buildAppHref({
+        routeId: 'docs.document',
+        workspaceSlug,
+        pathParams: { docId },
+      })
+    : buildAppEntryHref('docs');
 }
 
 export function useTaskDetailLinkedDocs({
@@ -68,7 +67,6 @@ export function useTaskDetailLinkedDocs({
   spaceId,
   token,
   t,
-  user,
   workspaceSlug,
 }: {
   canEdit: boolean;
@@ -80,15 +78,14 @@ export function useTaskDetailLinkedDocs({
   spaceId: string | null;
   token: string | null;
   t: TFunction;
-  user: WorkspaceUser;
   workspaceSlug: string | null;
 }) {
   const [docPickerOpen, setDocPickerOpen] = useState(false);
   const [promotingDescription, setPromotingDescription] = useState(false);
 
   const buildDocPath = useCallback(
-    (docId: string) => resolveTaskDetailDocPath({ docId, user, workspaceSlug }),
-    [user, workspaceSlug],
+    (docId: string) => resolveTaskDetailDocPath({ docId, workspaceSlug }),
+    [workspaceSlug],
   );
 
   const handlePromoteDescriptionToDoc = useCallback(async () => {

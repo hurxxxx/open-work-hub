@@ -1,7 +1,7 @@
 // Two-pane meeting workspace: collaborative notes editor on the left + the
 // MeetingDetail sidebar on the right. Extracted from MeetingWorkspaceView so
 // the same layout can be hosted in:
-//   - the dedicated meeting page route (/w/{slug}/meeting/{meetingId})
+//   - the dedicated workspace-scoped meeting detail route
 //   - an embedded modal (the calendar's MeetingPreviewModal)
 //
 // Loads + ensures meeting notes, manages title editing, threads onChanged /
@@ -30,6 +30,7 @@ import {
   DetailDrawer,
   InlineNotice,
 } from '@open-work-hub/ui';
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
 import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
@@ -48,7 +49,6 @@ import {
   getMeeting,
   type MeetingDetail as MeetingDetailType,
 } from '../../api/meeting-api';
-import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
 import { normalizeTimeZone } from '@/src/platform/time/time-utils';
 
 import { MeetingDetail } from './MeetingDetail';
@@ -150,7 +150,7 @@ function useMeetingWorkspaceLayoutElement({
   const detailPanelDocked = useMediaQuery('(min-width: 1280px)');
 
   const meetingsRoot =
-    backHref ?? buildWorkspaceAppPath(workspaceSlug, 'meeting');
+    backHref ?? buildAppHref({ routeId: 'meeting.root', workspaceSlug });
   const notesDocId = notesDoc?.id ?? null;
   const notesPageId = notesPage?.id ?? null;
   const [collabEditingNotesPageId, setCollabEditingNotesPageId] = useState<
@@ -324,7 +324,11 @@ function useMeetingWorkspaceLayoutElement({
   }
 
   const notesDocPath = meeting.notes_doc_id
-    ? buildWorkspaceAppPath(workspaceSlug, 'docs', meeting.notes_doc_id)
+    ? buildAppHref({
+        routeId: 'docs.document',
+        workspaceSlug,
+        pathParams: { docId: meeting.notes_doc_id },
+      })
     : null;
   const editorAuthToken = token;
   const canEditNotes = Boolean(

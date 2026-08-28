@@ -1,17 +1,11 @@
 from open_work_hub_api.core.workspace_app_registry import (
-    WorkspaceAppRegistration,
     WorkspaceNavRegistration,
+    workspace_app_registration,
 )
 
 
-DIAGRAMS_WORKSPACE_APP = WorkspaceAppRegistration(
-    app_id="diagrams",
-    title="Diagrams",
-    route_base="/diagrams",
-    icon_key="workflow",
-    enabled_by_default=True,
-    visible_by_default=True,
-    launcher_category=True,
+DIAGRAMS_WORKSPACE_APP = workspace_app_registration(
+    "diagrams",
     nav_items=(
         WorkspaceNavRegistration(
             id="diagrams-all",

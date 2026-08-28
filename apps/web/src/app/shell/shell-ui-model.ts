@@ -1,12 +1,14 @@
-import type { AuthUser, ThemePreference } from '@/src/platform/auth/auth-api';
-import type { LauncherGlobalPaths } from './navigation-types';
+import type { ThemePreference } from '@/src/platform/auth/auth-api';
 import {
-  buildWorkspaceAppPath,
-  getPreferredWorkspace,
-  type WorkspaceAppId,
-} from '@/src/platform/workspaces/workspace-utils';
+  APP_CONTRACT_BY_ID,
+  type AppId,
+} from '@open-work-hub/contracts/app-contracts';
+import { buildAppEntryHref } from '@open-work-hub/contracts/app-routes';
+import type { LauncherGlobalPaths } from './navigation-types';
+import type { WorkspaceAppId } from '@/src/platform/workspaces/workspace-utils';
 
 export type ResolvedThemePreference = 'light' | 'dark';
+export type AppDisplayScope = 'company' | 'personal' | 'workspace';
 
 export const DARK_MODE_QUERY = '(prefers-color-scheme: dark)';
 
@@ -54,10 +56,19 @@ export function getInitials(label: string, fallback: string): string {
   return initials || fallback;
 }
 
+export function resolveAppDisplayScope(
+  appId: WorkspaceAppId,
+): AppDisplayScope | null {
+  const contract = APP_CONTRACT_BY_ID.get(appId as AppId);
+  if (!contract) return null;
+  if (contract.availability_scope === 'workspace') return 'workspace';
+  return contract.execution_context_kind === 'personal'
+    ? 'personal'
+    : 'company';
+}
+
 export function resolveMobileAppLink(
   appId: WorkspaceAppId,
-  currentUser: AuthUser,
-  shellWorkspaceSlug: string | null,
   launcherGlobalPaths: LauncherGlobalPaths,
 ): string {
   const globalPath = launcherGlobalPaths.get(appId);
@@ -65,15 +76,6 @@ export function resolveMobileAppLink(
     return globalPath;
   }
 
-  const workspaceForShellSlug = shellWorkspaceSlug
-    ? currentUser.workspaces.find(
-        (workspace) => workspace.slug === shellWorkspaceSlug,
-      )
-    : undefined;
-  const selectedWorkspace =
-    workspaceForShellSlug ?? getPreferredWorkspace(currentUser, appId);
-
-  return selectedWorkspace
-    ? buildWorkspaceAppPath(selectedWorkspace.slug, appId)
-    : '/';
+  const contract = APP_CONTRACT_BY_ID.get(appId as AppId);
+  return contract ? buildAppEntryHref(contract.app_id) : '/';
 }

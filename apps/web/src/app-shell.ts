@@ -2,18 +2,14 @@ import {
   APP_GLOBAL_ROUTES,
   APP_MODULE_MANIFESTS,
   NAV_ITEMS,
+  SHELL_MODULE_MANIFESTS,
   getAppShellNavResolver,
   getAppModuleManifest,
-  getNavItem,
-  getToolViewRoute,
 } from './app/shell/app-registry';
 import type { AppModuleId } from './app/shell/navigation-types';
 import { hasAdminConsoleAccess, type AuthUser } from './platform/auth/auth-api';
 import { canAccessWorkspaceApp } from './platform/workspaces/workspace-app-access';
-import {
-  getWorkspaceAppIdFromPath,
-  getWorkspaceSlugFromPath,
-} from './platform/workspaces/workspace-utils';
+import { getWorkspaceSlugFromPath } from './platform/workspaces/workspace-utils';
 import {
   getShellPathname,
   routePathMatchesPathname,
@@ -21,8 +17,12 @@ import {
   resolveManifestNavItemId,
   resolveWorkspaceRouteAppId,
 } from './app-shell-navigation-model';
+import {
+  APP_CONTRACT_BY_ID,
+  type AppId,
+} from '@open-work-hub/contracts/app-contracts';
 
-export type ShellAppId = AppModuleId | 'search' | 'profile';
+export type ShellAppId = AppModuleId | 'launcher' | 'profile';
 
 export type ShellState = {
   activeAppId: ShellAppId;
@@ -31,6 +31,11 @@ export type ShellState = {
 
 const HOME_SHELL_STATE: ShellState = {
   activeAppId: 'home',
+  activeNavItemId: '',
+};
+
+const LAUNCHER_SHELL_STATE: ShellState = {
+  activeAppId: 'launcher',
   activeNavItemId: '',
 };
 
@@ -53,12 +58,10 @@ function canShowAppChrome(
 
 function canShowGlobalAppChrome({
   appId,
-  bootstrapAppId,
   enabledWorkspaceAppIds,
   user,
 }: {
   appId: AppModuleId;
-  bootstrapAppId?: AppModuleId;
   enabledWorkspaceAppIds?: readonly string[];
   user: AuthUser | null | undefined;
 }): boolean {
@@ -66,8 +69,7 @@ function canShowGlobalAppChrome({
     return hasAdminConsoleAccess(user);
   }
 
-  const gateAppId = bootstrapAppId ?? appId;
-  return Boolean(user && enabledWorkspaceAppIds?.includes(gateAppId));
+  return Boolean(user && enabledWorkspaceAppIds?.includes(appId));
 }
 
 function resolveAppNavItemId({
@@ -120,15 +122,7 @@ function resolveWorkspaceAppShellState({
   if (appId === 'home' || appId === 'settings') {
     return HOME_SHELL_STATE;
   }
-  const bootstrapAppId = getWorkspaceAppIdFromPath(pathname) ?? appId;
-  if (
-    !canShowAppChrome(
-      user,
-      bootstrapAppId,
-      workspaceSlug,
-      enabledWorkspaceAppIds,
-    )
-  ) {
+  if (!canShowAppChrome(user, appId, workspaceSlug, enabledWorkspaceAppIds)) {
     return HOME_SHELL_STATE;
   }
   return {
@@ -139,14 +133,12 @@ function resolveWorkspaceAppShellState({
 
 function resolveGlobalRouteShellState({
   appId,
-  bootstrapAppId,
   enabledWorkspaceAppIds,
   path,
   pathname,
   user,
 }: {
   appId: AppModuleId;
-  bootstrapAppId?: AppModuleId;
   enabledWorkspaceAppIds?: readonly string[];
   path: string;
   pathname: string;
@@ -155,7 +147,6 @@ function resolveGlobalRouteShellState({
   if (
     !canShowGlobalAppChrome({
       appId,
-      bootstrapAppId,
       enabledWorkspaceAppIds,
       user,
     })
@@ -177,10 +168,25 @@ export function resolveShellState(
   const workspaceSlug = getWorkspaceSlugFromPath(pathname);
 
   if (pathname === '/') {
-    return HOME_SHELL_STATE;
+    return LAUNCHER_SHELL_STATE;
   }
 
-  if (/^\/w\/[^/]+\/home(?:\/|$)/.test(pathname)) {
+  const appEntryMatch = /^\/apps\/([^/]+)$/.exec(pathname);
+  const appEntryContract = appEntryMatch
+    ? APP_CONTRACT_BY_ID.get((appEntryMatch[1] ?? '') as AppId)
+    : null;
+  if (appEntryContract?.availability_scope === 'workspace') {
+    const appId = appEntryContract.app_id;
+    if (
+      getAppModuleManifest(appId) &&
+      canShowGlobalAppChrome({ appId, enabledWorkspaceAppIds, user })
+    ) {
+      return { activeAppId: appId, activeNavItemId: '' };
+    }
+    return LAUNCHER_SHELL_STATE;
+  }
+
+  if (/^\/apps\/home\/workspaces\/[^/]+(?:\/|$)/.test(pathname)) {
     return HOME_SHELL_STATE;
   }
 
@@ -190,13 +196,12 @@ export function resolveShellState(
   const globalRouteAppId =
     registeredGlobalRoute?.appId ??
     resolveGlobalRouteAppId({
-      manifests: APP_MODULE_MANIFESTS,
+      manifests: [...APP_MODULE_MANIFESTS, ...SHELL_MODULE_MANIFESTS],
       pathname,
     });
   if (globalRouteAppId) {
     return resolveGlobalRouteShellState({
       appId: globalRouteAppId,
-      bootstrapAppId: registeredGlobalRoute?.bootstrapAppId,
       enabledWorkspaceAppIds,
       path,
       pathname,
@@ -219,58 +224,5 @@ export function resolveShellState(
     });
   }
 
-  if (!pathname.startsWith('/tool/')) {
-    return HOME_SHELL_STATE;
-  }
-
-  const toolId = pathname.split('/')[2] ?? '';
-  if (toolId === 'search') {
-    return {
-      activeAppId: 'search',
-      activeNavItemId: 'search',
-    };
-  }
-
-  const item = getNavItem(toolId);
-  const matchedToolRoute = getToolViewRoute({ item, toolId });
-  if (matchedToolRoute) {
-    if (
-      !canShowAppChrome(
-        user,
-        matchedToolRoute.bootstrapAppId ?? matchedToolRoute.appId,
-        undefined,
-        enabledWorkspaceAppIds,
-      )
-    ) {
-      return HOME_SHELL_STATE;
-    }
-    return {
-      activeAppId: matchedToolRoute.appId,
-      activeNavItemId:
-        matchedToolRoute.type === 'redirect_app_root'
-          ? ''
-          : (item?.id ?? toolId),
-    };
-  }
-
-  if (!item) {
-    return HOME_SHELL_STATE;
-  }
-
-  if (
-    item.appId !== 'home' &&
-    !canShowAppChrome(
-      user,
-      item.linkAppId ?? item.appId,
-      undefined,
-      enabledWorkspaceAppIds,
-    )
-  ) {
-    return HOME_SHELL_STATE;
-  }
-
-  return {
-    activeAppId: item.appId,
-    activeNavItemId: item.id,
-  };
+  return HOME_SHELL_STATE;
 }

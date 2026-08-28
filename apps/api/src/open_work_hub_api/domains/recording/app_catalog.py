@@ -1,17 +1,11 @@
 from open_work_hub_api.core.workspace_app_registry import (
-    WorkspaceAppRegistration,
     WorkspaceNavRegistration,
+    workspace_app_registration,
 )
 
 
-RECORDING_WORKSPACE_APP = WorkspaceAppRegistration(
-    app_id="recording",
-    title="RECORDING",
-    route_base="/recording",
-    icon_key="mic",
-    enabled_by_default=True,
-    visible_by_default=True,
-    launcher_category=True,
+RECORDING_WORKSPACE_APP = workspace_app_registration(
+    "recording",
     nav_items=(
         WorkspaceNavRegistration(
             id="recording-quick",

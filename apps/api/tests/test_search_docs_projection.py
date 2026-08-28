@@ -173,7 +173,9 @@ def test_docs_search_projection_preserves_document_shape_through_dispatcher() ->
         ]
         assert dispatched["target_keys"] == ["pms:space:team-1", "space:team-1"]
         assert dispatched["shared_user_ids"] == ["user-1"]
-        assert dispatched["deep_link"] == "/w/delivery-hub/docs/doc-1?page=page-1"
+        assert dispatched["deep_link"] == (
+            "/apps/docs/workspaces/delivery-hub/documents/doc-1?page=page-1"
+        )
         assert dispatched["metadata"] == {"source_kind": "manual", "source_ref": "source-1"}
         assert dispatched["doc_pages"] == [
             {"id": "page-1", "title": "First Page", "text": "budget risk"},

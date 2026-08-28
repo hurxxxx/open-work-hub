@@ -58,6 +58,10 @@ import {
   REALTIME_TOPIC_EVENT_TYPES,
   createDocsPagesRealtimeSubscriptionMessage,
 } from '@open-work-hub/contracts/realtime';
+import {
+  buildAppEntryHref,
+  buildAppHref,
+} from '@open-work-hub/contracts/app-routes';
 
 import { useMediaUpload } from '@/src/platform/media/use-media-upload';
 import { useAuth } from '@/src/platform/auth/auth-provider';
@@ -118,7 +122,6 @@ import {
   getDocPageIdFromSearchParams,
   getDocsFilterQueryString,
   getExpandedDocPageNodeIds,
-  removeLegacyDocsSearchParams,
   resetDocsFilterSearchParams,
   DOCS_SPACE_QUERY_PARAM,
   withDocPageSearchParam,
@@ -130,8 +133,6 @@ import { DocsFullscreenReadModal } from './DocsFullscreenReadModal';
 import { DocsHtmlPageContentSurface } from './docs-html-renderers';
 import { downloadMarkdownFile } from './docs-markdown-file';
 import {
-  CATEGORY_LABEL_KEYS,
-  CATEGORY_MAP,
   DOC_CONTENT_FORMAT_OPTIONS,
   DocsContentFormatBadge,
   DocsPageTreeNode,
@@ -162,10 +163,6 @@ import {
 import { useDocsPageContentSaveController } from './useDocsPageContentSaveController';
 import { useDocsHubController } from './useDocsHubController';
 import { useDocsViewState } from './useDocsViewState';
-import {
-  buildWorkspaceAppPath,
-  resolveDefaultWorkspaceAppPath,
-} from '@/src/platform/workspaces/workspace-utils';
 import {
   listSpaces,
   TaskPickerModal,
@@ -429,6 +426,7 @@ const renderDocsEditor = (props: any) => {
           </div>
           <button
             type="button"
+            aria-label={t('common:actions.close')}
             onClick={handleBack}
             className="p-1.5 rounded text-app-ink/55 transition-colors hover:bg-app-surface-hover hover:text-app-danger"
           >
@@ -1091,6 +1089,7 @@ const renderDocsShell = (props: any) => {
               </div>
               <button
                 type="button"
+                aria-label={t('common:actions.close')}
                 onClick={() => setShowShareModal(false)}
                 className="rounded p-1.5 text-app-ink/55 hover:bg-app-surface-hover"
               >
@@ -1469,6 +1468,7 @@ const renderDocsShell = (props: any) => {
                 ) : (
                   <button
                     type="button"
+                    aria-label={t('docs.searchPlaceholder')}
                     onClick={() => setSearchOpen(true)}
                     className="p-1.5 rounded text-app-ink/55 hover:bg-app-surface-hover hover:text-app-ink"
                   >
@@ -1704,7 +1704,7 @@ const renderDocsShell = (props: any) => {
 export const DocsView = () => {
   const { t, i18n } = useTranslation(['apps', 'common']);
   const locale = i18n.resolvedLanguage ?? i18n.language;
-  const { toolId, docId, shareToken, workspaceSlug } = useParams();
+  const { docId, shareToken, workspaceSlug } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedPageId = getDocPageIdFromSearchParams(searchParams);
@@ -1812,16 +1812,12 @@ export const DocsView = () => {
   );
   const docPagesPendingParentIdRef = useRef<string | null>(null);
 
-  const requestedCategory = toolId
-    ? CATEGORY_MAP[toolId]
-    : searchParams.get('view');
+  const requestedCategory = searchParams.get('view');
   const activeCategory: DocsViewCategory = isDocsViewCategory(requestedCategory)
     ? requestedCategory
     : 'all';
   const activeCategoryLabel = t(
-    (toolId && CATEGORY_LABEL_KEYS[toolId]) ||
-      VIEW_LABEL_KEYS[activeCategory] ||
-      'docs.category.all',
+    VIEW_LABEL_KEYS[activeCategory] || 'docs.category.all',
   );
   const activeSourceApp = searchParams.get('source_app') ?? undefined;
   const activeSourceKind = searchParams.get('source_kind') ?? undefined;
@@ -1899,37 +1895,35 @@ export const DocsView = () => {
     () =>
       auth.user?.workspaces.find(
         (workspace) => workspace.slug === workspaceSlug,
-      ) ??
-      auth.user?.workspaces[0] ??
-      null,
+      ) ?? null,
     [auth.user, workspaceSlug],
   );
   const docsRoot = workspaceSlug
-    ? buildWorkspaceAppPath(workspaceSlug, 'docs')
-    : resolveDefaultWorkspaceAppPath(auth.user, 'docs');
+    ? buildAppHref({ routeId: 'docs.root', workspaceSlug })
+    : buildAppEntryHref('docs');
   const docPathFor = useCallback(
     (itemId: string, pageId?: string | null) => {
       const path = workspaceSlug
-        ? buildWorkspaceAppPath(workspaceSlug, 'docs', `/${itemId}`)
-        : resolveDefaultWorkspaceAppPath(auth.user, 'docs', `/${itemId}`);
+        ? buildAppHref({
+            routeId: 'docs.document',
+            workspaceSlug,
+            pathParams: { docId: itemId },
+          })
+        : buildAppEntryHref('docs');
       return appendDocPageQuery(path, pageId);
     },
-    [auth.user, workspaceSlug],
+    [workspaceSlug],
   );
   const htmlRenderPathFor = useCallback(
     (itemId: string, pageId: string) =>
       workspaceSlug
-        ? buildWorkspaceAppPath(
+        ? buildAppHref({
+            routeId: 'docs.document-html',
             workspaceSlug,
-            'docs',
-            `/${itemId}/html/${pageId}`,
-          )
-        : resolveDefaultWorkspaceAppPath(
-            auth.user,
-            'docs',
-            `/${itemId}/html/${pageId}`,
-          ),
-    [auth.user, workspaceSlug],
+            pathParams: { docId: itemId, pageId },
+          })
+        : buildAppEntryHref('docs'),
+    [workspaceSlug],
   );
 
   const selectDocPage = useCallback(
@@ -2164,12 +2158,6 @@ export const DocsView = () => {
   );
 
   useEffect(() => {
-    const next = removeLegacyDocsSearchParams(searchParams);
-    if (!next) return;
-    setSearchParams(next, { replace: true });
-  }, [searchParams, setSearchParams]);
-
-  useEffect(() => {
     if (!token) return;
     if (!shareToken) {
       loadedSharedDocIdRef.current = null;
@@ -2234,7 +2222,7 @@ export const DocsView = () => {
   }, [isListView, setAvailableSpaces, token, workspaceSlug]);
 
   const docNavigationPathFor = (itemId: string) => {
-    const basePath = toolId ? `/tool/${toolId}/${itemId}` : docPathFor(itemId);
+    const basePath = docPathFor(itemId);
     return activeFilterQuery ? `${basePath}?${activeFilterQuery}` : basePath;
   };
 
@@ -2247,8 +2235,7 @@ export const DocsView = () => {
       navigate('/');
       return;
     }
-    const basePath = toolId ? `/tool/${toolId}` : docsRoot;
-    navigate(activeFilterQuery ? `${basePath}?${activeFilterQuery}` : basePath);
+    navigate(activeFilterQuery ? `${docsRoot}?${activeFilterQuery}` : docsRoot);
   };
 
   const openCreateModal = useCallback(
@@ -2468,9 +2455,7 @@ export const DocsView = () => {
         workspaceSlug,
       );
       void fetchDocs();
-      const basePath = toolId
-        ? `/tool/${toolId}/${duplicate.id}`
-        : docPathFor(duplicate.id);
+      const basePath = docPathFor(duplicate.id);
       navigate(
         activeFilterQuery ? `${basePath}?${activeFilterQuery}` : basePath,
       );
@@ -2481,9 +2466,7 @@ export const DocsView = () => {
 
   const docUrlFor = (item: DocsHubItem): string => {
     const pageId = item.id === activeDocId ? activePageId : null;
-    const path = toolId
-      ? appendDocPageQuery(`/tool/${toolId}/${item.id}`, pageId)
-      : docPathFor(item.id, pageId);
+    const path = docPathFor(item.id, pageId);
     return `${window.location.origin}${path}`;
   };
 
@@ -2512,7 +2495,10 @@ export const DocsView = () => {
     if (shareToken) {
       await flushPendingContentTextSave();
       window.open(
-        `/docs/shared/${shareToken}/html/${page.id}`,
+        buildAppHref({
+          routeId: 'docs.shared-html',
+          pathParams: { shareToken, pageId: page.id },
+        }),
         '_blank',
         'noopener,noreferrer',
       );
@@ -2898,7 +2884,13 @@ export const DocsView = () => {
   const copyShareLink = async () => {
     const tokenValue = sharingState?.link_share?.token;
     if (!tokenValue) return;
-    const path = appendDocPageQuery(`/docs/shared/${tokenValue}`, activePageId);
+    const path = appendDocPageQuery(
+      buildAppHref({
+        routeId: 'docs.shared',
+        pathParams: { shareToken: tokenValue },
+      }),
+      activePageId,
+    );
     const url = `${window.location.origin}${path}`;
     try {
       await navigator.clipboard.writeText(url);

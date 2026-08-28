@@ -313,7 +313,7 @@ def test_comment_on_my_community_post_creates_notification_and_bot_dm(
     assert notification["type"] == "community_comment"
     assert notification["reference_type"] == "community_post"
     assert notification["reference_id"] == post["id"]
-    assert notification["action_url"] == f"/community/posts/{post['id']}"
+    assert notification["action_url"] == f"/apps/community/posts/{post['id']}"
     assert notification["is_read"] is False
     assert "댓글 알림 테스트" in notification["body"]
     assert "확인했습니다" in notification["body"]
@@ -340,7 +340,7 @@ def test_comment_on_my_community_post_creates_notification_and_bot_dm(
     assert message["sender_name"] == "Open Work Hub Bot"
     assert "내 커뮤니티 글에 댓글이 달렸습니다" in message["body"]
     assert "확인했습니다" in message["body"]
-    assert f"/community/posts/{post['id']}" in message["body"]
+    assert f"/apps/community/posts/{post['id']}" in message["body"]
 
     dm_search_response = client.get(
         "/api/v1/dm/users",

@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from typing import Any
-from urllib.parse import urlencode
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload, undefer
 
+from open_work_hub_api.core.app_routes import InternalAppLocation, build_app_href
 from open_work_hub_api.domains.auth.models import Workspace
 from open_work_hub_api.domains.files.app_catalog import FILES_WORKSPACE_APP
 from open_work_hub_api.domains.files.external_projection import (
@@ -158,7 +158,13 @@ def _file_deep_link(*, workspace: Workspace, file: FileManagerFile) -> str:
     query = {"file": file.id}
     if file.folder_id:
         query["folder"] = file.folder_id
-    return f"/w/{workspace.key}/files?{urlencode(query)}"
+    return build_app_href(
+        InternalAppLocation(
+            route_id="files.root",
+            workspace_slug=workspace.key,
+            query_params=query,
+        )
+    )
 
 
 def hydrate_file_search_rows_from_source(

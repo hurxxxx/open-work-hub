@@ -132,11 +132,17 @@ export function NotificationPanel({
               variant="ghost"
               size="icon"
               onClick={handleReadAll}
+              aria-label={t('notifications.markAllAsRead')}
               title={t('notifications.markAllAsRead')}
             >
               <CheckCheck size={14} />
             </Button>
-            <Button variant="ghost" size="icon" onClick={onClose}>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              aria-label={t('notifications.closePanel')}
+            >
               <X size={14} />
             </Button>
           </div>

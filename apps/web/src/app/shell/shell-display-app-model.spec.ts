@@ -7,7 +7,7 @@ describe('resolveShellDisplayAppId', () => {
     expect(
       resolveShellDisplayAppId({
         activeAppId: 'business',
-        pathname: '/w/delivery-hub/retrieval-search',
+        pathname: '/apps/retrieval-search/workspaces/delivery-hub',
       }),
     ).toBe('retrieval-search');
   });

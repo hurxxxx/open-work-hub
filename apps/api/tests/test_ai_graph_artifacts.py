@@ -535,6 +535,11 @@ def test_graph_executor_registry_resolves_exact_graph_version(
         "get_session_factory",
         lambda: session_factory,
     )
+    monkeypatch.setattr(
+        registry_module,
+        "is_app_enabled_for_user_context",
+        lambda *_args, **_kwargs: True,
+    )
     reset_ai_graph_executors()
     try:
         register_ai_graph_executor(
@@ -546,6 +551,49 @@ def test_graph_executor_registry_resolves_exact_graph_version(
         with pytest.raises(LookupError, match="@2"):
             execute_registered_ai_graph(run_v2.id)
         assert calls == [f"v1:{run_v1.id}"]
+    finally:
+        reset_ai_graph_executors()
+
+
+def test_graph_executor_registry_cancels_before_provider_when_app_is_disabled(
+    monkeypatch,
+    session_factory: sessionmaker[Session],
+) -> None:
+    import open_work_hub_api.domains.ai_graph.execution_registry as registry_module
+
+    request = _run_request()
+    with session_factory() as db:
+        run = AiGraphRunRepository(db).create(request)
+        db.commit()
+        run_id = run.id
+
+    monkeypatch.setattr(
+        registry_module,
+        "get_session_factory",
+        lambda: session_factory,
+    )
+    monkeypatch.setattr(
+        registry_module,
+        "is_app_enabled_for_user_context",
+        lambda *_args, **_kwargs: False,
+    )
+    provider_calls: list[str] = []
+    reset_ai_graph_executors()
+    try:
+        register_ai_graph_executor(
+            request.graph.graph_id,
+            request.graph.graph_version,
+            lambda current_run_id: provider_calls.append(current_run_id) or "executed",
+        )
+
+        assert execute_registered_ai_graph(run_id) == "app_disabled"
+        assert provider_calls == []
+        with session_factory() as db:
+            cancelled = db.get(AiGraphRun, run_id)
+            assert cancelled is not None
+            assert cancelled.status == "cancelled"
+            assert cancelled.stage == "policy_gate"
+            assert cancelled.error_code == "app_execution_disabled"
     finally:
         reset_ai_graph_executors()
 

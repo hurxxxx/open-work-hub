@@ -14,7 +14,6 @@ function state(overrides: Partial<ProfilePageState> = {}): ProfilePageState {
     activeSection: 'appearance',
     currentPassword: '',
     dateFormat: 'korean',
-    defaultWorkspaceId: 'workspace-a',
     displayName: 'Member',
     error: 'previous error',
     fullName: 'Open Work Hub Member',
@@ -116,30 +115,6 @@ describe('settings page model', () => {
       payload: { date_format: 'iso' },
       rollbackPatch: { dateFormat: 'korean' },
     });
-  });
-
-  it('trims default workspace saves and sends null for blank values', () => {
-    expect(
-      prepareProfilePreferenceSave(state(), {
-        type: 'defaultWorkspace',
-        value: ' workspace-b ',
-      }),
-    ).toEqual({
-      optimisticPatch: {
-        defaultWorkspaceId: 'workspace-b',
-        error: null,
-        message: null,
-      },
-      payload: { default_workspace_id: 'workspace-b' },
-      rollbackPatch: { defaultWorkspaceId: 'workspace-a' },
-    });
-
-    expect(
-      prepareProfilePreferenceSave(state(), {
-        type: 'defaultWorkspace',
-        value: '   ',
-      })?.payload,
-    ).toEqual({ default_workspace_id: null });
   });
 
   it('plans full profile detail saves with trimmed identity fields', () => {

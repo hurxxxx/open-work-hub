@@ -36,13 +36,15 @@ export interface AppBarItem {
   icon: LucideIcon;
 }
 
-export type ShellRouteChrome = 'standard' | 'fullSurface' | 'containedSurface';
+export type ShellRouteChrome =
+  | 'standard'
+  | 'fullSurface'
+  | 'containedSurface'
+  | 'shared';
 export type ShellRouteSubSidebar = 'auto' | 'hidden';
 
 export interface StaticRouteDefinition {
   appId?: AppModuleId;
-  /** Bootstrap app entitlement used to gate a route owned by a shell parent. */
-  bootstrapAppId?: AppModuleId;
   chrome?: ShellRouteChrome;
   element: ReactNode;
   path: string;
@@ -53,7 +55,6 @@ export interface AppModuleContract {
   owner: string;
   permissions: string[];
   apiDomain: string | null;
-  resourceScope?: 'workspace' | 'company' | 'hybrid' | 'personal';
   workspaceApiPrefixes?: string[];
   workspaceApiPublicPrefixes?: string[];
   workspaceApiPublicQueryBypasses?: Array<{
@@ -64,13 +65,6 @@ export interface AppModuleContract {
   aiCapabilities: string[];
   writeAuditActions: string[];
   appLocalTests: string[];
-}
-
-export interface LauncherModuleSurface {
-  defaultPinOrder?: number;
-  fixed?: boolean;
-  /** Absolute launcher destination for apps that are not workspace-routed. */
-  globalPath?: `/${string}`;
 }
 
 export type LauncherGlobalPaths = ReadonlyMap<AppModuleId, `/${string}`>;
@@ -84,7 +78,6 @@ export interface FeatureGuideModuleSurface {
 
 export interface AppModuleSurfaces {
   featureGuides?: FeatureGuideModuleSurface;
-  launcher?: LauncherModuleSurface;
 }
 
 export interface AppModuleManifest {

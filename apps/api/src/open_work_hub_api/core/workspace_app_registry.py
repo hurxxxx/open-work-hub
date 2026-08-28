@@ -4,7 +4,9 @@ import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Literal
+from typing import Any, Literal, cast
+
+from open_work_hub_api.core.app_contracts_generated import APP_CONTRACT_BY_ID
 
 
 _WORKSPACE_IDENTIFIER_PATTERN = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
@@ -16,6 +18,8 @@ _SYSTEM_ROLE_PATTERN = re.compile(r"[a-z][a-z0-9_]*")
 
 
 AppAvailabilityScope = Literal["platform", "workspace"]
+AppExecutionContextKind = Literal["personal", "company", "workspace"]
+AppResourceScope = Literal["personal", "company", "workspace", "hybrid"]
 _APP_AVAILABILITY_SCOPES: frozenset[str] = frozenset({"platform", "workspace"})
 
 
@@ -40,8 +44,9 @@ class WorkspaceAppCatalogItem:
     route_base: str
     icon_key: str
     availability_scope: AppAvailabilityScope = "workspace"
-    enabled_by_default: bool = False
-    visible_by_default: bool = False
+    execution_context_kind: AppExecutionContextKind = "workspace"
+    resource_scope: AppResourceScope = "workspace"
+    entry_route_id: str = ""
     launcher_category: bool = False
     launcher_fixed: bool = False
     launcher_personal_tools: bool = False
@@ -49,7 +54,6 @@ class WorkspaceAppCatalogItem:
     nav_items: tuple[WorkspaceNavCatalogItem, ...] = ()
     coming_soon: bool = False
     feature_flag: str | None = None
-    platform_admin_activation_required: bool = False
     required_system_roles: tuple[str, ...] = ()
 
 
@@ -73,8 +77,6 @@ class WorkspaceAppRegistration:
     route_base: str
     icon_key: str
     availability_scope: AppAvailabilityScope = "workspace"
-    enabled_by_default: bool = False
-    visible_by_default: bool = False
     launcher_category: bool = False
     launcher_fixed: bool = False
     launcher_personal_tools: bool = False
@@ -82,9 +84,47 @@ class WorkspaceAppRegistration:
     nav_items: tuple[WorkspaceNavRegistration, ...] = ()
     coming_soon: bool = False
     feature_flag: str | None = None
-    platform_admin_activation_required: bool = False
     required_system_roles: tuple[str, ...] = ()
     backend_domain: str | None = None
+
+
+def workspace_app_registration(
+    app_id: str,
+    *,
+    nav_items: tuple[WorkspaceNavRegistration, ...] = (),
+    coming_soon: bool = False,
+    backend_domain: str | None = None,
+) -> WorkspaceAppRegistration:
+    """Create an app registration from the generated leaf-app contract.
+
+    Domain modules own implementation metadata such as nav items and backend
+    composition. Identity, route, scope, feature, role, and launcher policy are
+    generated from packages/contracts/app-contracts.json.
+    """
+
+    contract = APP_CONTRACT_BY_ID.get(app_id)
+    if contract is None:
+        raise RuntimeError(f"Unknown generated app contract: {app_id}")
+    launcher = cast(dict[str, Any], contract["launcher"])
+    placement = str(launcher["placement"])
+    return WorkspaceAppRegistration(
+        app_id=app_id,
+        title=str(contract["title"]),
+        route_base=str(contract["route_base"]),
+        icon_key=str(contract["icon_key"]),
+        availability_scope=cast(AppAvailabilityScope, contract["availability_scope"]),
+        launcher_category=placement == "category",
+        launcher_fixed=placement == "fixed",
+        launcher_personal_tools=placement == "personal_tools",
+        launcher_pinned_by_default=bool(launcher["pinned_by_default"]),
+        nav_items=nav_items,
+        coming_soon=coming_soon,
+        feature_flag=cast(str | None, contract.get("feature_flag")),
+        required_system_roles=tuple(
+            cast(list[str], contract.get("required_system_roles", []))
+        ),
+        backend_domain=backend_domain,
+    )
 
 
 @dataclass(frozen=True)
@@ -117,6 +157,8 @@ class WorkspaceAppRegistry:
 
 def compile_workspace_app_registry(
     registrations: Iterable[WorkspaceAppRegistration],
+    *,
+    require_generated_contract: bool = False,
 ) -> WorkspaceAppRegistry:
     catalog: list[WorkspaceAppCatalogItem] = []
     by_app_id: dict[str, WorkspaceAppCatalogItem] = {}
@@ -125,6 +167,28 @@ def compile_workspace_app_registry(
 
     for registration in registrations:
         _validate_identifier(registration.app_id, kind="app id")
+        contract = APP_CONTRACT_BY_ID.get(registration.app_id)
+        if contract is None and require_generated_contract:
+            raise RuntimeError(
+                f"Workspace app registration has no generated contract: {registration.app_id}"
+            )
+        if contract is not None and require_generated_contract:
+            contract_projection = (
+                str(contract["route_base"]),
+                str(contract["icon_key"]),
+                str(contract["availability_scope"]),
+            )
+            registration_projection = (
+                registration.route_base,
+                registration.icon_key,
+                registration.availability_scope,
+            )
+            if registration_projection != contract_projection:
+                raise RuntimeError(
+                    "Workspace app registration disagrees with generated contract for "
+                    f"{registration.app_id}: "
+                    f"{registration_projection!r} != {contract_projection!r}"
+                )
         if registration.app_id in by_app_id:
             raise RuntimeError(f"Duplicate workspace app registration: {registration.app_id}")
         if registration.availability_scope not in _APP_AVAILABILITY_SCOPES:
@@ -207,8 +271,19 @@ def compile_workspace_app_registry(
             route_base=registration.route_base,
             icon_key=registration.icon_key,
             availability_scope=registration.availability_scope,
-            enabled_by_default=registration.enabled_by_default,
-            visible_by_default=registration.visible_by_default,
+            execution_context_kind=cast(
+                AppExecutionContextKind,
+                contract["execution_context_kind"] if contract is not None else "workspace",
+            ),
+            resource_scope=cast(
+                AppResourceScope,
+                contract["resource_scope"] if contract is not None else "workspace",
+            ),
+            entry_route_id=(
+                str(contract["entry_route_id"])
+                if contract is not None
+                else f"{registration.app_id}.root"
+            ),
             launcher_category=registration.launcher_category,
             launcher_fixed=registration.launcher_fixed,
             launcher_personal_tools=registration.launcher_personal_tools,
@@ -230,9 +305,6 @@ def compile_workspace_app_registry(
             ),
             coming_soon=registration.coming_soon,
             feature_flag=registration.feature_flag,
-            platform_admin_activation_required=(
-                registration.platform_admin_activation_required
-            ),
             required_system_roles=registration.required_system_roles,
         )
         catalog.append(catalog_item)
@@ -265,3 +337,18 @@ def app_is_available_to_system_roles(
 def _validate_identifier(value: str, *, kind: str) -> None:
     if not _WORKSPACE_IDENTIFIER_PATTERN.fullmatch(value):
         raise RuntimeError(f"Invalid workspace {kind}: {value!r}")
+
+
+__all__ = [
+    "AppAvailabilityScope",
+    "AppExecutionContextKind",
+    "AppResourceScope",
+    "WorkspaceAppCatalogItem",
+    "WorkspaceAppRegistration",
+    "WorkspaceAppRegistry",
+    "WorkspaceNavCatalogItem",
+    "WorkspaceNavRegistration",
+    "app_is_available_to_system_roles",
+    "compile_workspace_app_registry",
+    "workspace_app_registration",
+]

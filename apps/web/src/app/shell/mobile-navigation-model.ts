@@ -12,7 +12,7 @@ export interface MobileNavigationItem {
   title: string;
   icon: AppBarItem['icon'];
   linkAppId: WorkspaceAppId;
-  type: 'app' | 'category';
+  type: 'app';
 }
 
 export function projectMobileNavigationItems({
@@ -64,19 +64,19 @@ export function projectMobileNavigationItems({
           !projectedAppIds.has(categoryItem.app_id),
       );
     });
-    const firstItem = enabledItems[0];
-    if (!firstItem) {
-      continue;
+    for (const categoryItem of enabledItems) {
+      const app = workspaceAppById.get(categoryItem.app_id);
+      if (!app) continue;
+      projectedAppIds.add(app.app_id);
+      items.push({
+        id: app.app_id,
+        activeAppIds: [app.app_id],
+        title: app.title,
+        icon: workspaceAppIconForKey(app.icon_key),
+        linkAppId: app.app_id,
+        type: 'app',
+      });
     }
-
-    items.push({
-      id: category.id,
-      activeAppIds: enabledItems.map((item) => item.app_id as WorkspaceAppId),
-      title: category.title,
-      icon: workspaceAppIconForKey(category.icon_key),
-      linkAppId: firstItem.app_id as WorkspaceAppId,
-      type: 'category',
-    });
   }
 
   return items;

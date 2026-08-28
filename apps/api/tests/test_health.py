@@ -52,7 +52,7 @@ def test_auth_bootstrap_and_protected_retrieval(client: TestClient) -> None:
     assert auth_payload["user"]["app_bar_layout"] == {
         "pinned_app_ids": ["pms", "docs", "whiteboard"],
     }
-    assert auth_payload["user"]["default_workspace_id"] is None
+    assert "default_workspace_id" not in auth_payload["user"]
     assert auth_payload["user"]["login_id"] == "admin"
     assert auth_payload["user"]["workspaces"]
     assert any(item["role"] == "admin" for item in auth_payload["user"]["workspaces"])
@@ -119,71 +119,6 @@ def test_auth_login_success_and_invalid_password(client: TestClient) -> None:
         },
     )
     assert invalid_password_response.status_code == 401
-
-
-def test_auth_preferences_manage_default_workspace(client: TestClient) -> None:
-    setup_response = client.post(
-        "/api/v1/auth/setup",
-        json={
-            "full_name": "Open Work Hub Admin",
-            "login_id": "admin",
-            "email": "admin@open-work-hub.local",
-            "password": "supersecret123",
-        },
-    )
-    assert setup_response.status_code == 201
-    setup_payload = setup_response.json()
-    admin_token = setup_payload["token"]
-    first_workspace = setup_payload["user"]["workspaces"][0]
-
-    update_response = client.patch(
-        "/api/v1/auth/preferences",
-        headers={"Authorization": f"Bearer {admin_token}"},
-        json={"default_workspace_id": first_workspace["id"]},
-    )
-    assert update_response.status_code == 200, update_response.text
-    assert update_response.json()["default_workspace_id"] == first_workspace["id"]
-
-    me_response = client.get(
-        "/api/v1/auth/me",
-        headers={"Authorization": f"Bearer {admin_token}"},
-    )
-    assert me_response.status_code == 200
-    assert me_response.json()["default_workspace_id"] == first_workspace["id"]
-
-    create_member_response = client.post(
-        "/api/v1/admin/users",
-        headers={"Authorization": f"Bearer {admin_token}"},
-        json={
-            "full_name": "Pending Member",
-            "login_id": "pending-member",
-            "email": "pending@open-work-hub.local",
-            "temporary_password": "memberpass123",
-        },
-    )
-    assert create_member_response.status_code == 201, create_member_response.text
-    login_member_response = client.post(
-        "/api/v1/auth/login",
-        json={"login_id": "pending-member", "password": "memberpass123"},
-    )
-    assert login_member_response.status_code == 200, login_member_response.text
-    member_token = login_member_response.json()["token"]
-
-    forbidden_response = client.patch(
-        "/api/v1/auth/preferences",
-        headers={"Authorization": f"Bearer {member_token}"},
-        json={"default_workspace_id": first_workspace["id"]},
-    )
-    assert forbidden_response.status_code == 403
-    assert forbidden_response.json()["code"] == "workspace.membership_required"
-
-    clear_response = client.patch(
-        "/api/v1/auth/preferences",
-        headers={"Authorization": f"Bearer {admin_token}"},
-        json={"default_workspace_id": None},
-    )
-    assert clear_response.status_code == 200
-    assert clear_response.json()["default_workspace_id"] is None
 
 
 def test_auth_preferences_manage_app_bar_layout(client: TestClient) -> None:

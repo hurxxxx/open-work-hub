@@ -411,12 +411,6 @@ export function CommunityView() {
   );
 
   useEffect(() => {
-    const legacyPostId = searchParams.get('post');
-    if (selectedPostId || !legacyPostId) return;
-    openPost(legacyPostId, activeChannelKey, { replace: true });
-  }, [activeChannelKey, openPost, searchParams, selectedPostId]);
-
-  useEffect(() => {
     if (channels.length === 0) return;
     if (channels.some((channel) => channel.key === activeChannelKey)) return;
     selectChannel(channels[0].key);

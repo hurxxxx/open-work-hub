@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { collaborationGlobalRoutes } from '../../app-modules/collaboration';
 import { pmsHelpGuideRegistration } from '../../app-modules/pms';
+import { APP_GLOBAL_ROUTES } from './app-registry';
 import {
   createDefaultHelpRoutes,
   resolveGlobalRouteGateAppId,
@@ -24,12 +24,12 @@ describe('static route app gates', () => {
     ).toBe(true);
   });
 
-  it('gates aggregate collaboration routes with their leaf entitlements', () => {
-    const docsRoute = collaborationGlobalRoutes.find((route) =>
-      route.path.startsWith('/docs/shared/'),
+  it('gates shared routes with their leaf app controls', () => {
+    const docsRoute = APP_GLOBAL_ROUTES.find((route) =>
+      route.path.startsWith('/apps/docs/shared/'),
     );
-    const whiteboardRoute = collaborationGlobalRoutes.find((route) =>
-      route.path.startsWith('/whiteboard/shared/'),
+    const whiteboardRoute = APP_GLOBAL_ROUTES.find((route) =>
+      route.path.startsWith('/apps/whiteboard/shared/'),
     );
 
     expect(resolveGlobalRouteGateAppId(docsRoute ?? {})).toBe('docs');

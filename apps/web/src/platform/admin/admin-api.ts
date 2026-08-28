@@ -61,22 +61,17 @@ export type AdminCommunityChannelInput =
   ApiSchema<'CommunityChannelCreateRequest'>;
 export type AdminCommunityChannelsResponse =
   ApiSchema<'CommunityChannelsResponse'>;
-export type PlatformAppVisibilityItem =
-  ApiSchema<'PlatformAppVisibilityItemResponse'> & {
-    availability_scope: 'platform' | 'workspace';
-  };
-export type PlatformAppVisibilityResponse = Omit<
-  ApiSchema<'PlatformAppVisibilityResponse'>,
-  'items'
-> & { items: PlatformAppVisibilityItem[] };
-export type WorkspaceAppVisibilityItem =
-  ApiSchema<'WorkspaceAppVisibilityItemResponse'> & {
-    availability_scope: 'workspace';
-  };
-export type WorkspaceAppVisibilityResponse = Omit<
-  ApiSchema<'WorkspaceAppVisibilityResponse'>,
-  'items'
-> & { items: WorkspaceAppVisibilityItem[] };
+export type CompanyAppControlItem = ApiSchema<'CompanyAppControlItemResponse'>;
+export type CompanyAppControlsResponse =
+  ApiSchema<'CompanyAppControlsResponse'>;
+export type WorkspaceAppDefaultItem =
+  ApiSchema<'WorkspaceAppDefaultItemResponse'>;
+export type WorkspaceAppDefaultsResponse =
+  ApiSchema<'WorkspaceAppDefaultsResponse'>;
+export type WorkspaceAppOverrideItem =
+  ApiSchema<'WorkspaceAppOverrideItemResponse'>;
+export type WorkspaceAppOverridesResponse =
+  ApiSchema<'WorkspaceAppOverridesResponse'>;
 export interface AdminAppBarCategoryAppItem {
   app_id: string;
   title: string;
@@ -1154,24 +1149,24 @@ export function replaceAdminUsageTargets(
   );
 }
 
-export function listPlatformAppVisibility(
+export function listCompanyAppControls(
   token: string,
-): Promise<PlatformAppVisibilityResponse> {
-  return request<PlatformAppVisibilityResponse>(
+): Promise<CompanyAppControlsResponse> {
+  return request<CompanyAppControlsResponse>(
     token,
-    '/api/v1/admin/app-visibility',
+    '/api/v1/admin/apps/company-controls',
   );
 }
 
-export function updatePlatformAppVisibility(
+export function updateCompanyAppControls(
   token: string,
   payload: {
-    items: Array<{ app_id: string; visible: boolean }>;
+    items: Array<{ app_id: string; enabled: boolean }>;
   },
-): Promise<PlatformAppVisibilityResponse> {
-  return request<PlatformAppVisibilityResponse>(
+): Promise<CompanyAppControlsResponse> {
+  return request<CompanyAppControlsResponse>(
     token,
-    '/api/v1/admin/app-visibility',
+    '/api/v1/admin/apps/company-controls',
     {
       method: 'PATCH',
       body: JSON.stringify(payload),
@@ -1179,26 +1174,51 @@ export function updatePlatformAppVisibility(
   );
 }
 
-export function listWorkspaceAppVisibility(
+export function listWorkspaceAppDefaults(
   token: string,
-  workspaceId: string,
-): Promise<WorkspaceAppVisibilityResponse> {
-  return request<WorkspaceAppVisibilityResponse>(
+): Promise<WorkspaceAppDefaultsResponse> {
+  return request<WorkspaceAppDefaultsResponse>(
     token,
-    `/api/v1/admin/workspaces/${workspaceId}/app-visibility`,
+    '/api/v1/admin/apps/workspace-defaults',
   );
 }
 
-export function updateWorkspaceAppVisibility(
+export function updateWorkspaceAppDefaults(
+  token: string,
+  payload: {
+    items: Array<{ app_id: string; enabled: boolean }>;
+  },
+): Promise<WorkspaceAppDefaultsResponse> {
+  return request<WorkspaceAppDefaultsResponse>(
+    token,
+    '/api/v1/admin/apps/workspace-defaults',
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function listWorkspaceAppOverrides(
+  token: string,
+  workspaceId: string,
+): Promise<WorkspaceAppOverridesResponse> {
+  return request<WorkspaceAppOverridesResponse>(
+    token,
+    `/api/v1/admin/workspaces/${workspaceId}/app-overrides`,
+  );
+}
+
+export function updateWorkspaceAppOverrides(
   token: string,
   workspaceId: string,
   payload: {
-    items: Array<{ app_id: string; visibility_override: boolean | null }>;
+    items: Array<{ app_id: string; enabled: boolean | null }>;
   },
-): Promise<WorkspaceAppVisibilityResponse> {
-  return request<WorkspaceAppVisibilityResponse>(
+): Promise<WorkspaceAppOverridesResponse> {
+  return request<WorkspaceAppOverridesResponse>(
     token,
-    `/api/v1/admin/workspaces/${workspaceId}/app-visibility`,
+    `/api/v1/admin/workspaces/${workspaceId}/app-overrides`,
     {
       method: 'PATCH',
       body: JSON.stringify(payload),

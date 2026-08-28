@@ -25,12 +25,10 @@ from open_work_hub_api.domains.auth.access import (
     get_dev_login_user,
     list_dev_login_account_catalog,
     list_dev_login_accounts,
-    load_active_workspace_by_id,
     load_user_graph,
     normalize_locale,
     normalize_time_zone,
     record_audit_log,
-    resolve_workspace_role,
     replace_user_system_roles,
     serialize_auth_user,
 )
@@ -167,7 +165,6 @@ class AuthUserResponse(BaseModel):
     time_zone: str
     date_format: str
     app_bar_layout: AppBarLayoutPreference
-    default_workspace_id: str | None
     system_roles: list[str]
     workspaces: list[WorkspaceSummaryResponse]
     must_change_password: bool
@@ -296,7 +293,6 @@ class UpdatePreferencesRequest(BaseModel):
     time_zone: str | None = Field(default=None, min_length=1, max_length=64)
     date_format: Literal["korean", "iso", "us", "european", "locale"] | None = None
     app_bar_layout: AppBarLayoutPreference | None = None
-    default_workspace_id: str | None = Field(default=None, max_length=36)
 
     @model_validator(mode="before")
     @classmethod
@@ -341,15 +337,6 @@ class UpdatePreferencesRequest(BaseModel):
     @classmethod
     def validate_date_format(cls, value: str | None) -> str | None:
         return validate_date_format_value(value)
-
-    @field_validator("default_workspace_id")
-    @classmethod
-    def validate_default_workspace_id(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        normalized = value.strip()
-        return normalized or None
-
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -919,24 +906,6 @@ def update_preferences(
             if payload.app_bar_layout is not None
             else None
         )
-    if "default_workspace_id" in payload.model_fields_set:
-        if payload.default_workspace_id is None:
-            context.user.default_workspace_id = None
-        else:
-            workspace = load_active_workspace_by_id(db, payload.default_workspace_id)
-            if workspace is None:
-                raise localized_http_exception(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    code="workspace.not_found",
-                )
-            if resolve_workspace_role(db, context.user, workspace.id) is None:
-                raise localized_http_exception(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    code="workspace.membership_required",
-                    workspace=workspace.key,
-                )
-            context.user.default_workspace_id = workspace.id
-
     db.add(context.user)
     record_audit_log(
         db,
@@ -953,11 +922,6 @@ def update_preferences(
             "app_bar_layout": (
                 payload.app_bar_layout.model_dump()
                 if payload.app_bar_layout is not None
-                else None
-            ),
-            "default_workspace_id": (
-                payload.default_workspace_id
-                if "default_workspace_id" in payload.model_fields_set
                 else None
             ),
             "display_name": payload.display_name,

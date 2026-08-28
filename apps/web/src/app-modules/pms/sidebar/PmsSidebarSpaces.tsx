@@ -42,8 +42,8 @@ import {
   type FlatDropZone,
 } from '../api/pms-sidebar-reorder';
 import {
+  buildWorkspaceAppEntryPath,
   buildWorkspaceAppPath,
-  resolveDefaultWorkspaceAppPath,
 } from '@/src/platform/workspaces/workspace-utils';
 import { CreateTaskListModal } from '../views/CreateTaskListModal';
 import { CreateSpaceModal } from '../views/CreateSpaceModal';
@@ -260,7 +260,9 @@ function usePmsSidebarSpacesElement({
   const toast = useFeedback();
   const canReadTeams = hasWorkspaceMembership(user, currentWorkspaceSlug);
   const canWriteTeams = hasWorkspaceMembership(user, currentWorkspaceSlug);
-  const pmsRootPath = resolveDefaultWorkspaceAppPath(user, 'pms');
+  const pmsRootPath = currentWorkspaceSlug
+    ? buildWorkspaceAppPath(currentWorkspaceSlug, 'pms')
+    : buildWorkspaceAppEntryPath('pms');
   const canManageSpace = useCallback(
     (team: PmsSpace) => teamRoleAllows(team.current_user_role, 'admin'),
     [],

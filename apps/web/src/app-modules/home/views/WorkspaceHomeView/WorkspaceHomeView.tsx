@@ -37,7 +37,11 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '@/src/platform/auth/auth-provider';
-import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
+import {
+  APP_CONTRACT_BY_ID,
+  type AppId,
+} from '@open-work-hub/contracts/app-contracts';
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
 import { useWorkspaceBootstrapProjection } from '@/src/platform/workspaces/workspace-bootstrap-context';
 import type { WorkspaceBootstrapNavItem } from '@/src/platform/workspaces/workspaces-api';
 import { getKoreanHolidayNames } from '@/src/lib/korean-holidays';
@@ -93,19 +97,6 @@ const AI_TOOL_ICON_BY_KEY: Record<string, LucideIcon> = {
   sparkles: Sparkles,
 };
 
-function buildBootstrapWorkspaceHref(
-  workspaceSlug: string,
-  appId: string,
-  suffix = '',
-): string {
-  const normalizedSuffix = suffix
-    ? suffix.startsWith('/') || suffix.startsWith('?') || suffix.startsWith('#')
-      ? suffix
-      : `/${suffix}`
-    : '';
-  return `/w/${encodeURIComponent(workspaceSlug)}/${appId}${normalizedSuffix}`;
-}
-
 function resolveAiToolHref(
   item: WorkspaceBootstrapNavItem,
   workspaceSlug: string,
@@ -113,30 +104,14 @@ function resolveAiToolHref(
   if (item.absolute_path) {
     return item.absolute_path;
   }
-  if (item.coming_soon) {
-    return `/tool/${item.id}`;
-  }
-  if (item.link_app_id) {
-    return buildBootstrapWorkspaceHref(
-      workspaceSlug,
-      item.link_app_id,
-      item.path_suffix ?? '',
-    );
-  }
-  if (item.path_suffix) {
-    return buildBootstrapWorkspaceHref(
-      workspaceSlug,
-      item.app_id,
-      item.path_suffix,
-    );
-  }
-  if (item.id === 'chatbot') {
-    return buildBootstrapWorkspaceHref(workspaceSlug, item.app_id);
-  }
-  const toolPath = `/tool/${item.id}`;
-  return workspaceSlug
-    ? `${toolPath}?workspace=${encodeURIComponent(workspaceSlug)}`
-    : toolPath;
+  const contract = APP_CONTRACT_BY_ID.get(
+    (item.link_app_id ?? item.app_id) as AppId,
+  );
+  if (!contract) return '/';
+  return buildAppHref({
+    routeId: contract.entry_route_id,
+    ...(contract.availability_scope === 'workspace' ? { workspaceSlug } : {}),
+  });
 }
 
 function SectionHeader({
@@ -164,12 +139,10 @@ function SectionHeader({
 }
 
 function WorkspaceHomeHeader({
-  isStartWorkspace,
   timeZone,
   userName,
   workspaceName,
 }: {
-  isStartWorkspace: boolean;
   timeZone: string;
   userName: string;
   workspaceName: string;
@@ -189,11 +162,6 @@ function WorkspaceHomeHeader({
         <span className="app-text-overline text-app-ink/55">
           {t('home.workspaceLabel')}
         </span>
-        {isStartWorkspace ? (
-          <span className="app-text-micro rounded-full border border-app-border px-1.5 py-0.5 text-app-ink/55">
-            {t('home.startWorkspaceBadge')}
-          </span>
-        ) : null}
       </div>
       <h1 className="app-text-title-lg text-app-ink">{workspaceName}</h1>
       <p className="app-text-body mt-1 text-app-ink/55">
@@ -324,19 +292,31 @@ function QuickActionsRow({
     {
       appId: 'meeting',
       label: t('home.actionNewMeeting'),
-      to: buildWorkspaceAppPath(workspaceSlug, 'meeting', '?create=1'),
+      to: buildAppHref({
+        routeId: 'meeting.root',
+        workspaceSlug,
+        queryParams: { create: '1' },
+      }),
       icon: Video,
     },
     {
       appId: 'pms',
       label: t('home.actionNewTask'),
-      to: buildWorkspaceAppPath(workspaceSlug, 'pms', '?create=1'),
+      to: buildAppHref({
+        routeId: 'pms.root',
+        workspaceSlug,
+        queryParams: { create: '1' },
+      }),
       icon: ListTodo,
     },
     {
       appId: 'docs',
       label: t('home.actionNewDoc'),
-      to: buildWorkspaceAppPath(workspaceSlug, 'docs', '?create=1'),
+      to: buildAppHref({
+        routeId: 'docs.root',
+        workspaceSlug,
+        queryParams: { create: '1' },
+      }),
       icon: FileText,
     },
   ];
@@ -563,9 +543,6 @@ export const WorkspaceHomeView = () => {
     user?.display_name || user?.full_name || t('home.userFallback');
   const workspaceName =
     currentWorkspace?.name || workspaceSlug || t('home.workspaceFallback');
-  const isStartWorkspace = Boolean(
-    currentWorkspace?.id && currentWorkspace.id === user?.default_workspace_id,
-  );
   const timeZone = normalizeTimeZone(user?.time_zone);
   const enabledAppIds = useMemo(
     () =>
@@ -621,7 +598,6 @@ export const WorkspaceHomeView = () => {
     <div className="custom-scrollbar h-full overflow-y-auto">
       <div className="w-full space-y-6 px-8 py-10">
         <WorkspaceHomeHeader
-          isStartWorkspace={isStartWorkspace}
           userName={userName}
           workspaceName={workspaceName}
           timeZone={timeZone}

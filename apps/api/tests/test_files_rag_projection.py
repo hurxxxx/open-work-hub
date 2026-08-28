@@ -718,7 +718,9 @@ def test_file_keyword_projection_uses_same_resource_identity_as_rag() -> None:
     assert document["metadata"]["resource_id"] == file.id
     assert document["metadata"]["source_kind"] == "files"
     assert document["visibility"] == "workspace"
-    assert document["deep_link"].startswith("/w/engineering/files?")
+    assert document["deep_link"].startswith(
+        "/apps/files/workspaces/engineering?"
+    )
     assert "비상 정지 압력" in document["body"]
     ensure_search_document_identity(
         document,

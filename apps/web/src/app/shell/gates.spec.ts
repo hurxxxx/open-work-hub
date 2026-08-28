@@ -15,7 +15,7 @@ function bootstrapData(): WorkspaceBootstrapResponse {
         enabled: true,
         icon_key: 'file-text',
         nav_items: [],
-        route_base: '/docs',
+        route_base: '/apps/docs',
         title: 'Docs from apps',
       },
       {
@@ -23,7 +23,7 @@ function bootstrapData(): WorkspaceBootstrapResponse {
         enabled: false,
         icon_key: 'mail',
         nav_items: [],
-        route_base: '/mail',
+        route_base: '/apps/mail',
         title: 'Mail',
       },
     ],
@@ -49,7 +49,7 @@ describe('workspace feature gates', () => {
       appId: 'docs',
       comingSoon: true,
       id: 'docs',
-      pathSuffix: '/docs',
+      absolutePath: '/apps/docs',
       title: 'Docs from apps',
     });
     expect(workspaceFeatureComingSoonItem(bootstrapData(), 'mail')).toBeNull();

@@ -51,7 +51,6 @@ describe('useWorkspaceHomeController', () => {
     expect(client.listRecentPages).toHaveBeenCalledWith('token', 10, 'hq');
     expect(client.listPlannerEvents).toHaveBeenCalledWith(
       'token',
-      'hq',
       expect.objectContaining({
         from: expect.any(String),
         to: expect.any(String),

@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from open_work_hub_api.core.app_routes import InternalAppLocation, build_app_href
 from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.domains.auth.access import resolve_workspace_role
 from open_work_hub_api.domains.auth.models import User
@@ -176,7 +177,12 @@ def _serialize_sharing_response(whiteboard: Whiteboard) -> WhiteboardSharingResp
                 token=link_share.token,
                 access_level=link_share.access_level,
                 active=link_share.active,
-                share_path=f"/whiteboard/shared/{link_share.token}",
+                share_path=build_app_href(
+                    InternalAppLocation(
+                        route_id="whiteboard.shared",
+                        path_params={"shareToken": link_share.token},
+                    )
+                ),
             )
             if link_share is not None
             else None

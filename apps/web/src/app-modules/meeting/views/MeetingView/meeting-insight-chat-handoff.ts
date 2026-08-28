@@ -3,7 +3,7 @@ import type {
   MeetingInsightItem,
   MeetingInsightType,
 } from '../../api/meeting-insights-api';
-import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
 
 export interface MeetingInsightChatPromptVariables
   extends Record<string, string> {
@@ -120,11 +120,11 @@ export function buildMeetingInsightChatTargetUrl(
   workspaceSlug: string,
   conversationId: string,
 ): string {
-  return buildWorkspaceAppPath(
+  return buildAppHref({
+    routeId: 'chatbot.root',
     workspaceSlug,
-    'chatbot',
-    `?c=${encodeURIComponent(conversationId)}`,
-  );
+    queryParams: { c: conversationId },
+  });
 }
 
 export function planMeetingInsightChatHandoff({

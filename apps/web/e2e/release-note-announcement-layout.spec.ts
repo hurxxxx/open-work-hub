@@ -27,7 +27,7 @@ test('keeps release-note actions inside the announcement modal', async ({
     route.fulfill({ json: { item: LONG_RELEASE_NOTE } }),
   );
 
-  await page.goto('/w/hq/home');
+  await page.goto('/apps/home/workspaces/hq');
 
   const dismissButton = page.getByRole('button', {
     name: /다시 보지 않기|Do not show again/,

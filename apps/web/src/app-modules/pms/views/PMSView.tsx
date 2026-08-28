@@ -8,13 +8,16 @@ import {
   useRef,
 } from 'react';
 import {
-  useParams,
   Link,
   Navigate,
   useSearchParams,
   useNavigate,
   useLocation,
 } from 'react-router-dom';
+import {
+  buildAppEntryHref,
+  buildAppHref,
+} from '@open-work-hub/contracts/app-routes';
 import { useTranslation } from 'react-i18next';
 import { LazyMotion, domAnimation, m, AnimatePresence } from 'motion/react';
 import { useConfirm } from '@open-work-hub/ui/feedback/confirm-dialog';
@@ -37,12 +40,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/platform/auth/auth-provider';
-import {
-  buildWorkspaceAppPath,
-  getWorkspaceBySlug,
-  getCurrentOrLastWorkspaceSlug,
-  resolveDefaultWorkspaceAppPath,
-} from '@/src/platform/workspaces/workspace-utils';
+import { getWorkspaceSlugFromPath } from '@/src/platform/workspaces/workspace-utils';
 import {
   getPmsTaskList,
   listAllPmsTaskLists,
@@ -230,7 +228,6 @@ export const PMSView = () => <>{usePMSViewElement()}</>;
 
 function usePMSViewElement(): ReactNode {
   const { t } = useTranslation('apps');
-  const { toolId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -238,12 +235,10 @@ function usePMSViewElement(): ReactNode {
   const { confirm, confirmDialog } = useConfirm();
   const { prompt, promptDialog } = usePrompt();
   const toast = useFeedback();
-  const pmsRoot = resolveDefaultWorkspaceAppPath(user, 'pms');
-  const currentWorkspaceSlug =
-    getWorkspaceBySlug(user, searchParams.get('workspace'))?.slug ??
-    getCurrentOrLastWorkspaceSlug();
+  const pmsRoot = buildAppEntryHref('pms');
+  const currentWorkspaceSlug = getWorkspaceSlugFromPath(location.pathname);
   const pmsListRootPath = currentWorkspaceSlug
-    ? buildWorkspaceAppPath(currentWorkspaceSlug, 'pms')
+    ? buildAppHref({ routeId: 'pms.root', workspaceSlug: currentWorkspaceSlug })
     : pmsRoot;
   const [selectedIssueDraft, setSelectedIssueDraft] = useState<PmsTask | null>(
     null,
@@ -311,7 +306,6 @@ function usePMSViewElement(): ReactNode {
     isNewTaskModalOpen,
     requestedTab: searchParams.get('tab'),
     routePathname: location.pathname,
-    toolId,
   });
   const isAssignedTasksView = pmsRoute.kind === 'assigned';
   const isTodayView = pmsRoute.kind === 'today';
@@ -1430,7 +1424,10 @@ function usePMSViewElement(): ReactNode {
             <Link
               to={
                 currentWorkspaceSlug
-                  ? `/w/${encodeURIComponent(currentWorkspaceSlug)}/pms`
+                  ? buildAppHref({
+                      routeId: 'pms.root',
+                      workspaceSlug: currentWorkspaceSlug,
+                    })
                   : pmsRoot
               }
               className="hover:text-app-ink transition-colors shrink-0"

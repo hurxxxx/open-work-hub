@@ -1059,7 +1059,7 @@ def test_platform_extension_validation_accepts_explicit_backend_domain_different
         owner_app = WorkspaceAppRegistration(
             app_id="quality-search",
             title="Quality Search",
-            route_base="/quality-search",
+            route_base="/apps/quality-search",
             icon_key="search",
             backend_domain="quality_records",
         )
@@ -1190,7 +1190,7 @@ def test_platform_extension_validation_requires_explicit_search_backend_domain(
         owner_app = WorkspaceAppRegistration(
             app_id="quality-search",
             title="Quality Search",
-            route_base="/quality-search",
+            route_base="/apps/quality-search",
             icon_key="search",
         )
         owner_catalog = WorkspaceAppCatalogItem(
@@ -1474,7 +1474,7 @@ def test_files_keyword_search_adapter_can_activate_after_partition_generation(
             WorkspaceAppRegistration(
                 app_id="missing-app",
                 title="Missing App",
-                route_base="/missing-app",
+                route_base="/apps/missing-app",
                 icon_key="missing",
             ),
             "references unknown owner app: missing-app",

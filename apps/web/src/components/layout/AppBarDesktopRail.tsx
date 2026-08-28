@@ -18,7 +18,6 @@ import {
 } from './AppBarIconLink';
 import { AppBarLauncherMenus } from './AppBarLauncherMenus';
 import { AppBarNotificationButton } from './AppBarNotificationButton';
-import { AppBarWorkspaceSwitcher } from './AppBarWorkspaceSwitcher';
 import {
   createAppBarItemById,
   getInitials,
@@ -35,27 +34,17 @@ export function AppBarDesktopRail({
   appBarLayoutError,
   appBarLayoutSaving,
   appBarItems = [],
-  canCreateWorkspace,
-  canManageCurrentWorkspace,
   canOpenWorkspaceSearch,
   currentUser,
   currentPathname,
-  currentWorkspace,
-  currentWorkspaceName,
-  defaultWorkspaceOptions,
-  defaultWorkspaceSaving,
   draftItems,
   draftPinnedAppIds,
   fixedItems,
   categoryMenuId,
   favoritesOpen,
   moreMenuRef,
-  normalizedDefaultWorkspaceId,
   onCloseEditor,
   onCloseLauncherMenus,
-  onCreateWorkspace,
-  onDefaultWorkspaceChange,
-  onManageCurrentWorkspace,
   onMovePinnedApp,
   onMouseEnter,
   onMouseLeave,
@@ -65,53 +54,34 @@ export function AppBarDesktopRail({
   onOpenWorkspaceSearch,
   onResetDraft,
   onSaveLayout,
-  onSearchQueryChange,
-  onSelectWorkspace,
   onToggleCategoryMenu,
   onToggleFavorites,
   onToggleNotifications,
   onTogglePinnedApp,
   notificationsEnabled,
-  onToggleWorkspaceSwitcher,
-  otherWorkspaces,
   pinnedEligibleAppIds,
   pinnedItems,
-  pinnedWorkspace,
   resolveAppLink,
   t,
   unreadCount,
-  workspacePreferenceError,
-  workspaceQuery,
   workspaceAppBarCategories,
-  workspaceSwitcherRef,
-  workspaceSwitcherOpen,
 }: {
   activeAppId: string;
   appBarEditorOpen: boolean;
   appBarLayoutError: string | null;
   appBarLayoutSaving: boolean;
   appBarItems?: readonly AppBarItem[];
-  canCreateWorkspace: boolean;
-  canManageCurrentWorkspace: boolean;
   canOpenWorkspaceSearch: boolean;
   currentUser: AuthUser;
   currentPathname: string;
-  currentWorkspace: AuthUser['workspaces'][number] | null;
-  currentWorkspaceName: string;
-  defaultWorkspaceOptions: AuthUser['workspaces'];
-  defaultWorkspaceSaving: boolean;
   draftItems: AppBarWorkspaceItem[];
   draftPinnedAppIds: WorkspaceAppId[];
   fixedItems: AppBarWorkspaceItem[];
   categoryMenuId: string | null;
   favoritesOpen: boolean;
   moreMenuRef: RefObject<HTMLDivElement | null>;
-  normalizedDefaultWorkspaceId: string | null;
   onCloseEditor: () => void;
   onCloseLauncherMenus: () => void;
-  onCreateWorkspace: () => void;
-  onDefaultWorkspaceChange: (workspaceId: string | null) => void;
-  onManageCurrentWorkspace: () => void;
   onMovePinnedApp: (appId: WorkspaceAppId, direction: -1 | 1) => void;
   onMouseEnter?: MouseEventHandler<HTMLDivElement>;
   onMouseLeave?: MouseEventHandler<HTMLDivElement>;
@@ -121,26 +91,17 @@ export function AppBarDesktopRail({
   onOpenWorkspaceSearch: () => void;
   onResetDraft: () => void;
   onSaveLayout: () => void;
-  onSearchQueryChange: (query: string) => void;
-  onSelectWorkspace: (workspaceSlug: string) => void;
   onToggleCategoryMenu: (categoryId: string) => void;
   onToggleFavorites: () => void;
   onToggleNotifications: () => void;
   onTogglePinnedApp: (appId: WorkspaceAppId, checked: boolean) => void;
   notificationsEnabled: boolean;
-  onToggleWorkspaceSwitcher: () => void;
-  otherWorkspaces: AuthUser['workspaces'];
   pinnedEligibleAppIds: ReadonlySet<WorkspaceAppId>;
   pinnedItems: AppBarWorkspaceItem[];
-  pinnedWorkspace: AuthUser['workspaces'][number] | null;
   resolveAppLink: AppBarAppLinkResolver;
   t: AppBarTranslator;
   unreadCount: number;
-  workspacePreferenceError: string | null;
-  workspaceQuery: string;
   workspaceAppBarCategories: WorkspaceBootstrapAppBarCategory[];
-  workspaceSwitcherRef: RefObject<HTMLDivElement | null>;
-  workspaceSwitcherOpen: boolean;
 }) {
   const appBarItemById = useMemo(
     () => createAppBarItemById(appBarItems),
@@ -160,28 +121,6 @@ export function AppBarDesktopRail({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      <AppBarWorkspaceSwitcher
-        canCreateWorkspace={canCreateWorkspace}
-        canManageCurrentWorkspace={canManageCurrentWorkspace}
-        currentWorkspace={currentWorkspace}
-        defaultWorkspaceOptions={defaultWorkspaceOptions}
-        defaultWorkspaceSaving={defaultWorkspaceSaving}
-        normalizedDefaultWorkspaceId={normalizedDefaultWorkspaceId}
-        onCreateWorkspace={onCreateWorkspace}
-        onDefaultWorkspaceChange={onDefaultWorkspaceChange}
-        onManageCurrentWorkspace={onManageCurrentWorkspace}
-        onQueryChange={onSearchQueryChange}
-        onSelectWorkspace={onSelectWorkspace}
-        onToggle={onToggleWorkspaceSwitcher}
-        otherWorkspaces={otherWorkspaces}
-        pinnedWorkspace={pinnedWorkspace}
-        preferenceError={workspacePreferenceError}
-        query={workspaceQuery}
-        rootRef={workspaceSwitcherRef}
-        t={t}
-        workspaceSwitcherOpen={workspaceSwitcherOpen}
-      />
-
       {canOpenWorkspaceSearch ? (
         <DesktopRailSearchButton
           active={activeAppId === 'search'}
@@ -210,7 +149,7 @@ export function AppBarDesktopRail({
         appBarLayoutSaving={appBarLayoutSaving}
         categoryMenuId={categoryMenuId}
         currentPathname={currentPathname}
-        currentWorkspaceName={currentWorkspaceName}
+        currentWorkspaceName={t('shell:launcher.title')}
         draftItems={draftItems}
         draftPinnedAppIds={draftPinnedAppIds}
         favoritesActive={pinnedItemActive}

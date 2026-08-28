@@ -44,7 +44,6 @@ const TEAM_ROLE_RANK: Record<string, number> = {
 export type AuthUser = Omit<
   ApiSchema<'AuthUserResponse'>,
   | 'created_at'
-  | 'default_workspace_id'
   | 'last_login_at'
   | 'login_blocked'
   | 'theme_preference'
@@ -53,7 +52,6 @@ export type AuthUser = Omit<
   | 'date_format'
   | 'workspaces'
 > & {
-  default_workspace_id?: string | null;
   app_bar_layout?: AppBarLayoutPreference | null;
   login_blocked?: boolean;
   theme_preference: ThemePreference;
@@ -173,7 +171,6 @@ export type UpdatePreferencesPayload = Omit<
   'theme_preference' | 'locale' | 'time_zone' | 'date_format'
 > & {
   app_bar_layout?: AppBarLayoutPreference | null;
-  default_workspace_id?: string | null;
   theme_preference?: ThemePreference;
   locale?: LocalePreference;
   time_zone?: string;

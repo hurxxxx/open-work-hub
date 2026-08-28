@@ -32,45 +32,35 @@ export function AppBar(props: AppBarProps) {
     props.notificationsEnabled ?? Boolean(NotificationPanel);
   const controller = useAppBarController({ ...props, notificationsEnabled });
   const resolveAppLink: AppBarAppLinkResolver = (appId) =>
-    buildAppLink(appId, currentUser, shellWorkspaceSlug, launcherGlobalPaths);
+    buildAppLink(
+      appId,
+      currentUser,
+      props.currentWorkspaceAppIds?.includes(appId) ? shellWorkspaceSlug : null,
+      launcherGlobalPaths,
+    );
   const {
     activeAppTitle,
-    canCreateWorkspace,
-    canManageCurrentWorkspace,
     canOpenWorkspaceSearch,
-    currentWorkspace,
-    currentWorkspaceName,
-    defaultWorkspaceOptions,
     draftItems,
     fixedItems,
     handleCountChange,
     handleNavigateToIssue,
-    handleSetDefaultWorkspace,
-    handleWorkspaceSelect,
     moreMenuRef,
-    normalizedDefaultWorkspaceId,
     onCloseEditor,
     onCloseLauncherMenus,
-    onCreateWorkspace,
-    onManageCurrentWorkspace,
     onMovePinnedApp,
     onOpenEditor,
     onOpenWorkspaceSearch,
     onResetDraft,
     onSaveLayout,
-    onSearchQueryChange,
     onToggleCategoryMenu,
     onToggleFavorites,
     onToggleNotifications,
     onTogglePinnedApp,
-    onToggleWorkspaceSwitcher,
-    otherWorkspaces,
     pinnedEligibleAppIds,
     pinnedItems,
-    pinnedWorkspace,
     state,
     t,
-    workspaceSwitcherRef,
   } = controller;
   const desktopMenuOpen =
     state.favoritesOpen ||
@@ -88,7 +78,6 @@ export function AppBar(props: AppBarProps) {
         canOpenMobileAppMenu={canOpenMobileAppMenu}
         canOpenWorkspaceSearch={canOpenWorkspaceSearch}
         currentUser={currentUser}
-        currentWorkspaceName={currentWorkspaceName}
         labels={{
           accountTitle: t('auth:settings.mySettings'),
           mobileMenuTitle: t('shell:mobileAppMenu.title', {
@@ -114,31 +103,19 @@ export function AppBar(props: AppBarProps) {
         appBarLayoutError={state.appBarLayoutError}
         appBarLayoutSaving={state.appBarLayoutSaving}
         appBarItems={props.appBarItems}
-        canCreateWorkspace={canCreateWorkspace}
-        canManageCurrentWorkspace={canManageCurrentWorkspace}
         canOpenWorkspaceSearch={canOpenWorkspaceSearch}
         currentUser={currentUser}
         currentPathname={props.currentPathname}
-        currentWorkspace={currentWorkspace}
-        currentWorkspaceName={currentWorkspaceName}
-        defaultWorkspaceOptions={defaultWorkspaceOptions}
-        defaultWorkspaceSaving={state.defaultWorkspaceSaving}
         draftItems={draftItems}
         draftPinnedAppIds={state.draftPinnedAppIds}
         fixedItems={fixedItems}
         categoryMenuId={state.categoryMenuId}
         favoritesOpen={state.favoritesOpen}
         moreMenuRef={moreMenuRef}
-        normalizedDefaultWorkspaceId={normalizedDefaultWorkspaceId}
         onCloseEditor={onCloseEditor}
         onCloseLauncherMenus={onCloseLauncherMenus}
-        onCreateWorkspace={onCreateWorkspace}
         onMouseEnter={onDesktopRailMouseEnter}
         onMouseLeave={onDesktopRailMouseLeave}
-        onDefaultWorkspaceChange={(workspaceId) => {
-          void handleSetDefaultWorkspace(workspaceId);
-        }}
-        onManageCurrentWorkspace={onManageCurrentWorkspace}
         onMovePinnedApp={onMovePinnedApp}
         onOpenAccount={onOpenAccount}
         onOpenEditor={onOpenEditor}
@@ -146,26 +123,17 @@ export function AppBar(props: AppBarProps) {
         onOpenWorkspaceSearch={onOpenWorkspaceSearch}
         onResetDraft={onResetDraft}
         onSaveLayout={onSaveLayout}
-        onSearchQueryChange={onSearchQueryChange}
         onToggleCategoryMenu={onToggleCategoryMenu}
         onToggleFavorites={onToggleFavorites}
-        onSelectWorkspace={handleWorkspaceSelect}
         onToggleNotifications={onToggleNotifications}
         onTogglePinnedApp={onTogglePinnedApp}
         notificationsEnabled={notificationsEnabled}
-        onToggleWorkspaceSwitcher={onToggleWorkspaceSwitcher}
-        otherWorkspaces={otherWorkspaces}
         pinnedEligibleAppIds={pinnedEligibleAppIds}
         pinnedItems={pinnedItems}
-        pinnedWorkspace={pinnedWorkspace}
         resolveAppLink={resolveAppLink}
         t={t}
         unreadCount={state.unreadCount}
         workspaceAppBarCategories={workspaceAppBarCategories}
-        workspacePreferenceError={state.workspacePreferenceError}
-        workspaceQuery={state.workspaceQuery}
-        workspaceSwitcherOpen={state.workspaceSwitcherOpen}
-        workspaceSwitcherRef={workspaceSwitcherRef}
       />
 
       <AnimatePresence>

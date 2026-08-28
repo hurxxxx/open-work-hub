@@ -1,48 +1,50 @@
-import { aiManifest, aiModule } from '@/src/app-modules/ai';
 import {
   agentTerminalManifest,
   agentTerminalModule,
 } from '@/src/app-modules/agent-terminal';
 import { announcementsManifest } from '@/src/app-modules/announcements/manifest';
-import {
-  businessFeatureModules,
-  businessManifest,
-  businessModule,
-} from '@/src/app-modules/business';
-import { bentoManifest } from '@/src/app-modules/bento';
-import { chatbotManifest } from '@/src/app-modules/chatbot/manifest';
-import {
-  collaborationManifest,
-  collaborationModule,
-} from '@/src/app-modules/collaboration';
+import { bentoManifest, bentoModule } from '@/src/app-modules/bento';
+import { chatbotManifest, chatbotModule } from '@/src/app-modules/chatbot';
 import {
   communityManifest,
   communityModule,
 } from '@/src/app-modules/community';
-import { diagramsManifest } from '@/src/app-modules/diagrams/manifest';
-import { docsManifest } from '@/src/app-modules/docs/manifest';
-import { filesManifest } from '@/src/app-modules/files/manifest';
+import { diagramsManifest, diagramsModule } from '@/src/app-modules/diagrams';
+import { docsManifest, docsModule } from '@/src/app-modules/docs';
+import { filesManifest, filesModule } from '@/src/app-modules/files';
 import { homeManifest, homeModule } from '@/src/app-modules/home';
 import { mailManifest, mailModule } from '@/src/app-modules/mail';
-import { meetingManifest } from '@/src/app-modules/meeting/manifest';
+import { meetingManifest, meetingModule } from '@/src/app-modules/meeting';
 import { plannerManifest, plannerModule } from '@/src/app-modules/planner';
-import { pmsManifest } from '@/src/app-modules/pms/manifest';
-import { retrievalSearchManifest } from '@/src/app-modules/retrieval-search';
-import { recordingManifest } from '@/src/app-modules/recording/manifest';
+import { pmsManifest, pmsModule } from '@/src/app-modules/pms';
+import {
+  recordingManifest,
+  recordingModule,
+} from '@/src/app-modules/recording';
+import {
+  retrievalSearchManifest,
+  retrievalSearchModule,
+} from '@/src/app-modules/retrieval-search';
 import { settingsManifest, settingsModule } from '@/src/app-modules/settings';
-import { videoChatManifest } from '@/src/app-modules/video-chat/manifest';
-import { webSearchManifest } from '@/src/app-modules/web-search/manifest';
-import { whiteboardManifest } from '@/src/app-modules/whiteboard/manifest';
+import {
+  videoChatManifest,
+  videoChatModule,
+} from '@/src/app-modules/video-chat';
+import {
+  webSearchManifest,
+  webSearchModule,
+} from '@/src/app-modules/web-search';
+import {
+  whiteboardManifest,
+  whiteboardModule,
+} from '@/src/app-modules/whiteboard';
 import type { FeatureModuleRegistryInput } from './feature-module-registry';
 
 export {
   agentTerminalManifest,
-  aiManifest,
   announcementsManifest,
-  businessManifest,
   bentoManifest,
   chatbotManifest,
-  collaborationManifest,
   communityManifest,
   diagramsManifest,
   docsManifest,
@@ -52,34 +54,48 @@ export {
   meetingManifest,
   plannerManifest,
   pmsManifest,
-  retrievalSearchManifest,
   recordingManifest,
+  retrievalSearchManifest,
   settingsManifest,
   videoChatManifest,
   webSearchManifest,
   whiteboardManifest,
 };
 
+/** Executable identities are leaf apps. Categories never own routes. */
 export const DEFAULT_APP_MODULES = [
   homeModule,
-  aiModule,
   agentTerminalModule,
-  collaborationModule,
-  communityModule,
+  chatbotModule,
+  webSearchModule,
+  pmsModule,
+  docsModule,
+  filesModule,
   mailModule,
+  communityModule,
+  whiteboardModule,
+  diagramsModule,
+  bentoModule,
   plannerModule,
-  businessModule,
-  settingsModule,
+  meetingModule,
+  videoChatModule,
+  recordingModule,
+  retrievalSearchModule,
 ] as const;
+
+/** Shell-owned navigation surfaces are not executable app identities. */
+export const DEFAULT_SHELL_MODULES = [settingsModule] as const;
 
 export const DEFAULT_APP_MODULE_MANIFESTS = DEFAULT_APP_MODULES.map(
   (module) => module.manifest,
 );
 
+export const DEFAULT_SHELL_MODULE_MANIFESTS = DEFAULT_SHELL_MODULES.map(
+  (module) => module.manifest,
+);
+
 export const DEFAULT_FEATURE_MODULES: readonly FeatureModuleRegistryInput[] = [
   announcementsManifest,
-  ...businessFeatureModules,
-  webSearchManifest,
 ] as const;
 
 export const DEFAULT_FEATURE_MODULE_MANIFESTS = DEFAULT_FEATURE_MODULES.map(
@@ -88,11 +104,5 @@ export const DEFAULT_FEATURE_MODULE_MANIFESTS = DEFAULT_FEATURE_MODULES.map(
 
 export const DEFAULT_PLATFORM_MODULE_MANIFESTS = [
   ...DEFAULT_APP_MODULE_MANIFESTS,
-  chatbotManifest,
   ...DEFAULT_FEATURE_MODULE_MANIFESTS,
-  docsManifest,
-  meetingManifest,
-  plannerManifest,
-  pmsManifest,
-  whiteboardManifest,
 ] as const;

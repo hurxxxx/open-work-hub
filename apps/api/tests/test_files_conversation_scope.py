@@ -106,7 +106,7 @@ def test_files_first_turn_retries_with_recall_optimized_query_after_no_evidence(
             FileChatEvidenceItem(
                 file_id="file-1",
                 filename="자가 진단_v_1_10.docx",
-                locator="/w/workspace/files?file=file-1",
+                locator="/apps/files/workspaces/workspace?file=file-1",
                 excerpt="권한 설정 오류 상태",
                 methods=("bm25", "dense_vector", "cross_encoder"),
             ),

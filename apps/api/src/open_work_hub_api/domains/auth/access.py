@@ -8,13 +8,13 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from sqlalchemy import inspect, select
 from sqlalchemy.orm import Session, selectinload
 
-from open_work_hub_api.core.principal import personal_user_principal
 from open_work_hub_api.core.settings import get_settings
-from open_work_hub_api.core.workspace_app_registry import app_is_available_to_system_roles
 from open_work_hub_api.domains.auth.app_bar_preferences import serialize_app_bar_layout
 from open_work_hub_api.domains.auth.app_bar_categories import (
     app_bar_category_app_ids_from_catalog,
-    is_platform_visibility_app,
+)
+from open_work_hub_api.domains.auth.app_availability import (
+    resolve_workspace_enabled_app_ids,
 )
 from open_work_hub_api.domains.auth.roles import (
     SYSTEM_PLATFORM_ADMIN,
@@ -44,13 +44,11 @@ from open_work_hub_api.domains.auth.models import (
     AuditLog,
     PlatformAppBarCategory,
     PlatformAppBarCategoryApp,
-    PlatformAppVisibility,
     Team,
     TeamMember,
     User,
     UserSystemRole,
     Workspace,
-    WorkspaceAppEntitlement,
     WorkspaceUserBinding,
 )
 from open_work_hub_api.domains.auth.workspace_apps import (
@@ -279,34 +277,12 @@ def ensure_seed_data(db: Session) -> None:
         for workspace in existing_workspaces:
             ensure_workspace_default_pms_space(db, workspace)
 
-    if _workspace_app_entitlements_table_exists(db):
-        ensure_workspace_app_entitlements(db)
-    else:
-        logger.warning(
-            "workspace_app_entitlements table is missing; skipping entitlement seed "
-            "and falling back to the default app catalog until alembic migrations are applied."
-        )
-    if _platform_app_visibility_table_exists(db):
-        ensure_platform_app_visibility(db)
-    else:
-        logger.warning(
-            "platform_app_visibility table is missing; using all catalog apps as visible "
-            "until alembic migrations are applied."
-        )
     if not _platform_app_bar_category_tables_exist(db):
         logger.warning(
             "platform app bar category tables are missing; app bar categories remain "
             "empty until alembic migrations are applied."
         )
     db.commit()
-
-
-def _workspace_app_entitlements_table_exists(db: Session) -> bool:
-    return inspect(db.get_bind()).has_table(WorkspaceAppEntitlement.__tablename__)
-
-
-def _platform_app_visibility_table_exists(db: Session) -> bool:
-    return inspect(db.get_bind()).has_table(PlatformAppVisibility.__tablename__)
 
 
 def _platform_app_bar_category_tables_exist(db: Session) -> bool:
@@ -317,88 +293,13 @@ def _platform_app_bar_category_tables_exist(db: Session) -> bool:
     )
 
 
-def ensure_workspace_app_entitlements(db: Session) -> None:
-    if not _workspace_app_entitlements_table_exists(db):
-        return
-    existing_pairs = {
-        (workspace_id, app_id)
-        for workspace_id, app_id in db.execute(
-            select(WorkspaceAppEntitlement.workspace_id, WorkspaceAppEntitlement.app_id)
-        ).all()
-    }
-    workspace_ids = list(db.scalars(select(Workspace.id)).all())
-    for workspace_id in workspace_ids:
-        for app in iter_workspace_app_catalog():
-            if not _workspace_app_should_have_entitlement(app):
-                continue
-            pair = (workspace_id, app.app_id)
-            if pair in existing_pairs:
-                continue
-            db.add(
-                WorkspaceAppEntitlement(
-                    id=new_id(),
-                    workspace_id=workspace_id,
-                    app_id=app.app_id,
-                    visibility_override=None,
-                )
-            )
-    if workspace_ids:
-        db.flush()
-
-
-def _workspace_app_should_have_entitlement(app: Any) -> bool:
-    return app.availability_scope == "workspace" and not app.launcher_fixed
-
-
-def ensure_platform_app_visibility(db: Session) -> None:
-    if not _platform_app_visibility_table_exists(db):
-        return
-    existing_app_ids = set(db.scalars(select(PlatformAppVisibility.app_id)).all())
-    for app in iter_workspace_app_catalog():
-        if not is_platform_visibility_app(app):
-            continue
-        if app.app_id in existing_app_ids:
-            continue
-        db.add(
-            PlatformAppVisibility(
-                id=new_id(),
-                app_id=app.app_id,
-                visible=app.visible_by_default,
-            )
-        )
-    db.flush()
-
-
 def ensure_dev_seed_app_access(
     db: Session,
     workspace_by_key: dict[str, Workspace],
 ) -> None:
     """Make every registered launcher app available in development seed workspaces."""
 
-    ensure_workspace_app_entitlements(db)
-    ensure_platform_app_visibility(db)
-
-    seed_workspace_ids = {
-        workspace.id
-        for workspace_key, workspace in workspace_by_key.items()
-        if workspace_key in DEV_WORKSPACE_SEED_KEYS
-    }
-    workspace_app_ids = {
-        app.app_id
-        for app in iter_workspace_app_catalog()
-        if _workspace_app_should_have_entitlement(app)
-    }
-    if seed_workspace_ids and workspace_app_ids:
-        entitlements = db.scalars(
-            select(WorkspaceAppEntitlement).where(
-                WorkspaceAppEntitlement.workspace_id.in_(seed_workspace_ids),
-                WorkspaceAppEntitlement.app_id.in_(workspace_app_ids),
-            )
-        ).all()
-        for entitlement in entitlements:
-            if entitlement.visibility_override is None:
-                entitlement.visibility_override = True
-                db.add(entitlement)
+    del workspace_by_key
 
     if not _platform_app_bar_category_tables_exist(db):
         return
@@ -788,95 +689,6 @@ def resolve_workspaces(db: Session, user: User) -> list[dict[str, Any]]:
     return items
 
 
-def resolve_workspace_enabled_app_ids(db: Session, workspace_id: str) -> list[str]:
-    catalog_items = tuple(iter_workspace_app_catalog())
-    platform_visible_app_ids = set(resolve_platform_visible_app_ids(db))
-    settings = get_settings()
-    entitlement_rows = (
-        db.execute(
-            select(
-                WorkspaceAppEntitlement.app_id,
-                WorkspaceAppEntitlement.visibility_override,
-            ).where(WorkspaceAppEntitlement.workspace_id == workspace_id)
-        ).all()
-        if _workspace_app_entitlements_table_exists(db)
-        else []
-    )
-    visibility_overrides = {
-        app_id: bool(visibility_override)
-        for app_id, visibility_override in entitlement_rows
-        if visibility_override is not None
-    }
-    catalog_by_app_id = {app.app_id: app for app in catalog_items}
-    enabled_cache: dict[str, bool] = {}
-
-    def catalog_app_is_enabled(app_id: str) -> bool:
-        if app_id in enabled_cache:
-            return enabled_cache[app_id]
-        app = catalog_by_app_id.get(app_id)
-        if app is None or app.availability_scope != "workspace":
-            enabled_cache[app_id] = False
-            return False
-        if app.feature_flag is not None and not is_workspace_catalog_feature_enabled(
-            settings,
-            app.feature_flag,
-        ):
-            enabled_cache[app_id] = False
-            return False
-        effective_visible = visibility_overrides.get(app.app_id)
-        if effective_visible is None:
-            effective_visible = app.enabled_by_default and app.app_id in platform_visible_app_ids
-        enabled_cache[app_id] = bool(effective_visible)
-        return enabled_cache[app_id]
-
-    known_enabled_app_ids = [
-        app.app_id for app in catalog_items if catalog_app_is_enabled(app.app_id)
-    ]
-    return sorted(known_enabled_app_ids)
-
-
-def resolve_platform_visible_app_ids(db: Session) -> list[str]:
-    catalog_items = tuple(iter_workspace_app_catalog())
-    if not _platform_app_visibility_table_exists(db):
-        return [app.app_id for app in catalog_items if app.visible_by_default]
-    visible_by_app_id = {
-        app_id: visible
-        for app_id, visible in db.execute(
-            select(PlatformAppVisibility.app_id, PlatformAppVisibility.visible)
-        ).all()
-    }
-    if not visible_by_app_id:
-        return [app.app_id for app in catalog_items if app.visible_by_default]
-    return [
-        app.app_id
-        for app in catalog_items
-        if visible_by_app_id.get(app.app_id, app.visible_by_default)
-    ]
-
-
-def resolve_platform_enabled_app_ids(db: Session) -> list[str]:
-    visible_app_ids = set(resolve_platform_visible_app_ids(db))
-    settings = get_settings()
-    return [
-        app.app_id
-        for app in iter_workspace_app_catalog()
-        if app.availability_scope == "platform"
-        and app.app_id in visible_app_ids
-        and (
-            app.feature_flag is None
-            or is_workspace_catalog_feature_enabled(settings, app.feature_flag)
-        )
-    ]
-
-
-def resolve_workspace_runtime_enabled_app_ids(db: Session, workspace_id: str) -> list[str]:
-    """Return workspace entitlements plus enabled platform apps usable from that workspace."""
-    return sorted(
-        set(resolve_workspace_enabled_app_ids(db, workspace_id))
-        | set(resolve_platform_enabled_app_ids(db))
-    )
-
-
 def project_platform_app_bar_categories(
     db: Session,
     *,
@@ -944,56 +756,6 @@ def project_platform_app_bar_categories(
     return categories
 
 
-def build_apps_bootstrap(
-    db: Session,
-    *,
-    user: User,
-    source: str,
-    session_id: str | None = None,
-) -> dict[str, Any]:
-    catalog = tuple(iter_workspace_app_catalog())
-    catalog_by_app_id = {app.app_id: app for app in catalog}
-    user_system_roles = set(resolve_system_roles(db, user))
-    enabled_platform_app_ids = {
-        app_id
-        for app_id in resolve_platform_enabled_app_ids(db)
-        if (app := catalog_by_app_id.get(app_id)) is not None
-        and app.availability_scope == "platform"
-        and app_is_available_to_system_roles(app, user_system_roles)
-    }
-    apps = [
-        {
-            "app_id": app.app_id,
-            "title": app.title,
-            "route_base": app.route_base,
-            "icon_key": app.icon_key,
-            "availability_scope": app.availability_scope,
-            "enabled": True,
-            "coming_soon": app.coming_soon,
-        }
-        for app in catalog
-        if app.app_id in enabled_platform_app_ids
-    ]
-    personal_tools = [
-        app for app in apps if catalog_by_app_id[app["app_id"]].launcher_personal_tools
-    ]
-    return {
-        "apps": apps,
-        "app_bar_categories": project_platform_app_bar_categories(
-            db,
-            enabled_app_ids=enabled_platform_app_ids,
-            settings=get_settings(),
-        ),
-        "personal_tools": personal_tools,
-        "platform_enabled_app_ids": sorted(enabled_platform_app_ids),
-        "principal": personal_user_principal(
-            user_id=user.id,
-            source=source,
-            session_id=session_id,
-        ).as_payload(),
-    }
-
-
 def build_workspace_bootstrap(
     db: Session,
     *,
@@ -1004,7 +766,6 @@ def build_workspace_bootstrap(
 ) -> dict[str, Any]:
     role = resolve_workspace_role(db, user, workspace.id)
     enabled_app_ids = set(resolve_workspace_enabled_app_ids(db, workspace.id))
-    platform_visible_app_ids = resolve_platform_visible_app_ids(db)
     settings = get_settings()
     catalog = iter_workspace_app_catalog()
     app_nav_projection = project_workspace_bootstrap_apps(
@@ -1019,8 +780,8 @@ def build_workspace_bootstrap(
     )
 
     # Business-chat context picker entries are intentionally narrower than the
-    # full tool registry. They must be registered, entitled, and allowed by the
-    # business-chat context policy.
+    # full tool registry. They must be registered, runtime-enabled, and allowed
+    # by the business-chat context policy.
     from open_work_hub_api.domains.ai.chat_context_policy import (
         filter_business_chat_context_app_ids,
     )
@@ -1057,7 +818,6 @@ def build_workspace_bootstrap(
                 for descriptor in keyword_search_scope.descriptors
             ]
         },
-        "platform_visible_app_ids": platform_visible_app_ids,
         "principal": {
             "kind": "user",
             "workspace_id": workspace.id,
@@ -1082,8 +842,6 @@ def resolve_workspace_roles(db: Session, user: User) -> list[dict[str, str]]:
 
 def serialize_auth_user(db: Session, user: User) -> dict[str, Any]:
     workspaces = resolve_workspaces(db, user)
-    accessible_workspace_ids = {workspace["id"] for workspace in workspaces}
-    default_workspace_id = getattr(user, "default_workspace_id", None)
     return {
         "id": user.id,
         "login_id": user.login_id,
@@ -1110,9 +868,6 @@ def serialize_auth_user(db: Session, user: User) -> dict[str, Any]:
         "time_zone": user.time_zone or DEFAULT_TIME_ZONE,
         "date_format": normalize_date_format(getattr(user, "date_format", None)),
         "app_bar_layout": serialize_app_bar_layout(getattr(user, "app_bar_layout", None)),
-        "default_workspace_id": (
-            default_workspace_id if default_workspace_id in accessible_workspace_ids else None
-        ),
         "system_roles": resolve_system_roles(db, user),
         "workspaces": workspaces,
         "workspace_roles": [

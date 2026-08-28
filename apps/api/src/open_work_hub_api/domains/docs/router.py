@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from open_work_hub_api.core.app_routes import InternalAppLocation, build_app_href
 from open_work_hub_api.core.db import get_db_session, get_session_factory
 from open_work_hub_api.core.i18n import (
     DEFAULT_LOCALE,
@@ -32,7 +33,10 @@ from open_work_hub_api.domains.auth.dependencies import (
 )
 from open_work_hub_api.domains.auth.models import User, Workspace
 from open_work_hub_api.domains.auth.security import new_id
-from open_work_hub_api.domains.auth.workspace_app_gate import require_workspace_app_enabled
+from open_work_hub_api.domains.auth.workspace_app_gate import (
+    require_company_app_enabled,
+    require_workspace_app_enabled,
+)
 from open_work_hub_api.domains.collaboration.yjs_runtime import (
     CollabConnectionLimitExceeded,
     FastAPIYjsWebsocket,
@@ -105,13 +109,21 @@ require_docs_app_enabled = require_workspace_app_enabled(
     DOCS_WORKSPACE_APP.app_id,
     error_code="workspace.app_disabled",
 )
+require_docs_company_app_enabled = require_company_app_enabled(
+    DOCS_WORKSPACE_APP.app_id,
+    error_code="workspace.app_disabled",
+)
 
 router = APIRouter(
     prefix="/docs",
     tags=["docs"],
     dependencies=[Depends(require_docs_app_enabled)],
 )
-public_router = APIRouter(prefix="/docs", tags=["docs"])
+public_router = APIRouter(
+    prefix="/docs",
+    tags=["docs"],
+    dependencies=[Depends(require_docs_company_app_enabled)],
+)
 ws_router = APIRouter(prefix="/docs", tags=["docs"])
 DocsDocType = Literal[
     "general",
@@ -1932,7 +1944,12 @@ def _serialize_sharing_response(doc: NativeDoc) -> NativeDocSharingResponse:
                 token=link_share.token,
                 access_level=link_share.access_level,
                 active=link_share.active,
-                share_path=f"/docs/shared/{link_share.token}",
+                share_path=build_app_href(
+                    InternalAppLocation(
+                        route_id="docs.shared",
+                        path_params={"shareToken": link_share.token},
+                    )
+                ),
             )
             if link_share is not None
             else None

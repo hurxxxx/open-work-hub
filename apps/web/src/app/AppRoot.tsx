@@ -22,8 +22,6 @@ import {
   WORKSPACE_AI_TOOL_APP_IDS,
   getAppModuleManifest,
   getAppModuleSidebarConfig,
-  getNavItem,
-  getToolViewRoute,
 } from './shell/app-registry';
 import {
   staticAdminLandingRoute,
@@ -102,8 +100,6 @@ export default function AppRoot() {
           featureGuideToolIds={APP_FEATURE_GUIDE_TOOL_IDS}
           getAppModuleManifest={getDefaultAppModuleManifest}
           getAppSidebarConfig={getAppModuleSidebarConfig}
-          getNavItem={getNavItem}
-          getToolViewRoute={getToolViewRoute}
           launcherGlobalPaths={APP_LAUNCHER_GLOBAL_PATHS}
           navItems={NAV_ITEMS}
           notificationIssueAppId={pmsManifest.appBarItem.id}

@@ -771,7 +771,7 @@ def test_task_comment_mention_notification_identifies_task(client: TestClient) -
     assert notification["reference_id"] == issue["id"]
     assert (
         notification["action_url"]
-        == f"/w/administrator/pms/lists/{task_list['id']}?task={issue['id']}"
+        == f"/apps/pms/workspaces/administrator/lists/{task_list['id']}?task={issue['id']}"
     )
 
 
