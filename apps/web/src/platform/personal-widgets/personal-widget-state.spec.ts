@@ -4,11 +4,18 @@ import {
   DEFAULT_PERSONAL_WIDGET_PREFERENCES,
   countOpenTodos,
   parsePersonalWidgetPreferences,
+  personalWidgetStorageKey,
   serializePersonalWidgetPreferences,
   sortPersonalTodos,
 } from './personal-widget-state';
 
 describe('personal-widget-state', () => {
+  it('namespaces browser preferences by authenticated principal', () => {
+    expect(personalWidgetStorageKey('user-a')).not.toBe(
+      personalWidgetStorageKey('user-b'),
+    );
+  });
+
   it('falls back to collapsed todo preferences for invalid stored values', () => {
     expect(parsePersonalWidgetPreferences(null)).toEqual(
       DEFAULT_PERSONAL_WIDGET_PREFERENCES,

@@ -39,6 +39,16 @@ class AgentToolSurface:
     has_approval_required_tools: bool
 
 
+def descriptor_owner_app_enabled(
+    descriptor: AiCapabilityDescriptor,
+    *,
+    enabled_app_ids: frozenset[str],
+) -> bool:
+    """Require the descriptor owner before domain-specific narrowing rules."""
+
+    return descriptor.workspace_app_id in enabled_app_ids
+
+
 def resolve_filtered_capability_tools(
     db: Session,
     *,
@@ -68,6 +78,11 @@ def resolve_filtered_capability_tools(
         if scope_set is not None and descriptor.workspace_app_id not in scope_set:
             continue
         if not include_approval_required and descriptor.approval_policy == "required":
+            continue
+        if not descriptor_owner_app_enabled(
+            descriptor,
+            enabled_app_ids=entitlements.effective_enabled_app_ids,
+        ):
             continue
         predicate = registry.resolve_discoverability_predicate(
             descriptor.discoverability_predicate_id
@@ -125,8 +140,8 @@ def resolve_agent_tool_surface(
     resolved_registry = registry or get_ai_capability_registry()
     _ = messages
 
-    # ``allowed_app_ids`` is a user-driven scope narrowing knob. An empty list
-    # explicitly means text-only. ``None`` keeps the legacy all-entitled surface.
+    # ``allowed_app_ids`` is a user-driven owner-app scope. An empty list means
+    # text-only; ``None`` exposes every entitled and discoverable owner app.
     if allowed_app_ids is not None and not allowed_app_ids:
         return AgentToolSurface(
             tool_specs=[],

@@ -339,8 +339,6 @@ export function LinkedRecordingsForTarget({
                 pathParams: { recordingId: recording.id },
               })
             : null,
-          rawTranscriptDocId: recording.raw_transcript_doc_id,
-          minutesDocId: recording.minutes_doc_id,
           canRetry: isOwner && hasFailedStage(recording),
           progress: <RecordingStageRail recording={recording} compact />,
         };

@@ -91,8 +91,10 @@ function normalizeNotification(
     typeof value.type !== 'string' ||
     typeof value.title !== 'string' ||
     typeof value.body !== 'string' ||
-    typeof value.reference_type !== 'string' ||
-    !isNullableString(value.reference_id) ||
+    typeof value.source_type !== 'string' ||
+    !isNullableString(value.source_id) ||
+    typeof value.origin_app_id !== 'string' ||
+    !isNullableString(value.origin_workspace_id) ||
     (actionUrl !== undefined &&
       actionUrl !== null &&
       typeof actionUrl !== 'string') ||
@@ -107,8 +109,10 @@ function normalizeNotification(
     type: value.type,
     title: value.title,
     body: value.body,
-    reference_type: value.reference_type,
-    reference_id: value.reference_id,
+    source_type: value.source_type,
+    source_id: value.source_id,
+    origin_app_id: value.origin_app_id,
+    origin_workspace_id: value.origin_workspace_id,
     is_read: value.is_read,
     created_at: value.created_at,
   };

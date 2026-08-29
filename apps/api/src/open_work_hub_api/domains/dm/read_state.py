@@ -8,15 +8,12 @@ from sqlalchemy.orm import Session, selectinload
 from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.domains.dm import participants as participant_rules
 from open_work_hub_api.domains.dm.models import DmConversation, DmConversationParticipant, DmMessage
-from open_work_hub_api.domains.notifications.models import NotificationDmDelivery
-from open_work_hub_api.domains.pms.models import Notification
 
 
 @dataclass(frozen=True)
 class DmConversationReadReceipt:
     participant: DmConversationParticipant
     latest_message: DmMessage | None
-    notifications: list[Notification]
 
 
 @dataclass(frozen=True)
@@ -29,58 +26,20 @@ class DmMessageReadState:
 class DmConversationReadMark:
     participant: DmConversationParticipant
     latest_message: DmMessage | None
-    notifications: list[Notification]
 
     def apply(self) -> DmConversationReadReceipt:
         self.participant.last_read_message_id = (
             self.latest_message.id if self.latest_message is not None else None
         )
-        for notification in self.notifications:
-            notification.is_read = True
         return DmConversationReadReceipt(
             participant=self.participant,
             latest_message=self.latest_message,
-            notifications=self.notifications,
         )
 
 
 class DmConversationReadStateStore:
     def __init__(self, db: Session) -> None:
         self._db = db
-
-    def unread_dm_notifications(
-        self,
-        *,
-        user_id: str,
-        conversation_id: str,
-    ) -> list[Notification]:
-        legacy_notifications = list(
-            self._db.scalars(
-                select(Notification).where(
-                    Notification.user_id == user_id,
-                    Notification.reference_type == "dm_thread",
-                    Notification.reference_id == conversation_id,
-                    Notification.is_read == False,  # noqa: E712
-                )
-            )
-        )
-        delivered_notifications = list(
-            self._db.scalars(
-                select(Notification)
-                .join(
-                    NotificationDmDelivery,
-                    NotificationDmDelivery.notification_id == Notification.id,
-                )
-                .where(
-                    NotificationDmDelivery.user_id == user_id,
-                    NotificationDmDelivery.conversation_id == conversation_id,
-                    Notification.is_read == False,  # noqa: E712
-                )
-            )
-        )
-        by_id = {notification.id: notification for notification in legacy_notifications}
-        by_id.update({notification.id: notification for notification in delivered_notifications})
-        return list(by_id.values())
 
     def latest_visible_message(
         self,
@@ -134,10 +93,6 @@ class DmConversationReadState:
         return DmConversationReadMark(
             participant=participant,
             latest_message=self._store.latest_visible_message(conversation.id, participant),
-            notifications=self._store.unread_dm_notifications(
-                user_id=user_id,
-                conversation_id=conversation.id,
-            ),
         ).apply()
 
     def unread_count(self, *, conversation: DmConversation, user_id: str) -> int:
@@ -174,18 +129,6 @@ def mark_conversation_read(
     return conversation_read_state(db).mark_conversation_read(
         conversation=conversation,
         user_id=user_id,
-    )
-
-
-def unread_dm_notifications(
-    db: Session,
-    *,
-    user_id: str,
-    conversation_id: str,
-) -> list[Notification]:
-    return DmConversationReadStateStore(db).unread_dm_notifications(
-        user_id=user_id,
-        conversation_id=conversation_id,
     )
 
 

@@ -53,6 +53,31 @@ export function isGlobalAppGateEnabled(
   );
 }
 
+export type GlobalAppGateState = 'allowed' | 'denied' | 'error' | 'loading';
+
+export function resolveGlobalAppGateState({
+  appId,
+  bootstrapError,
+  bootstrapLoading,
+  enabledAppIds,
+}: {
+  appId: string | undefined;
+  bootstrapError: string | null;
+  bootstrapLoading: boolean;
+  enabledAppIds: readonly string[] | null;
+}): GlobalAppGateState {
+  if (!appId || appId === 'home' || appId === 'settings') {
+    return 'allowed';
+  }
+  if (bootstrapError) {
+    return 'error';
+  }
+  if (bootstrapLoading || enabledAppIds === null) {
+    return 'loading';
+  }
+  return isGlobalAppGateEnabled(appId, enabledAppIds) ? 'allowed' : 'denied';
+}
+
 export function createDefaultHelpRoutes(
   featureGuideToolIds: FeatureGuideToolIds,
 ): readonly ShellStaticRouteDefinition[] {
@@ -88,21 +113,24 @@ function GlobalAppGate({
   enabledAppIds: readonly string[] | null;
 }) {
   const { t } = useTranslation('shell');
-  if (!appId || appId === 'home' || appId === 'settings') {
+  const state = resolveGlobalAppGateState({
+    appId,
+    bootstrapError,
+    bootstrapLoading,
+    enabledAppIds,
+  });
+  if (state === 'allowed') {
     return children;
   }
-  if (bootstrapLoading || enabledAppIds === null) {
+  if (state === 'error') {
+    return <AccessDeniedView description={bootstrapError ?? undefined} />;
+  }
+  if (state === 'loading') {
     return (
       <div className="p-8 text-app-ink/55">{t('gates.workspaceLoading')}</div>
     );
   }
-  if (bootstrapError) {
-    return <AccessDeniedView description={bootstrapError} />;
-  }
-  if (!isGlobalAppGateEnabled(appId, enabledAppIds)) {
-    return <AccessDeniedView description={t('gates.appDisabled')} />;
-  }
-  return children;
+  return <AccessDeniedView description={t('gates.appDisabled')} />;
 }
 
 export function StaticRouteElements({

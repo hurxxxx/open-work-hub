@@ -14,6 +14,9 @@ from open_work_hub_api.domains.ai_graph.contracts import (
 from open_work_hub_api.domains.ai_graph.repository import AiGraphRunRepository
 from open_work_hub_api.domains.auth.dependencies import require_current_user, require_current_workspace
 from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.workspace_app_gate import (
+    resolve_enabled_app_ids_for_user_context,
+)
 
 
 router = APIRouter(prefix="/ai", tags=["ai-graph-runs"])
@@ -25,6 +28,7 @@ def _artifact_ids_by_run(
     *,
     workspace_id: str,
     user_id: str,
+    enabled_app_ids: frozenset[str],
 ) -> dict[str, str]:
     if not run_ids:
         return {}
@@ -33,6 +37,7 @@ def _artifact_ids_by_run(
         .where(
             AiArtifact.graph_run_id.in_(run_ids),
             AiArtifact.workspace_id == workspace_id,
+            AiArtifact.app_id.in_(enabled_app_ids),
             or_(
                 AiArtifact.owner_user_id == user_id,
                 AiArtifact.visibility == "workspace",
@@ -69,6 +74,11 @@ def list_graph_runs(
     current_user: User = Depends(require_current_user),
     current_workspace: Workspace = Depends(require_current_workspace),
 ) -> AiGraphRunListResponse:
+    enabled_app_ids = resolve_enabled_app_ids_for_user_context(
+        db,
+        user=current_user,
+        workspace_id=current_workspace.id,
+    )
     items, total = AiGraphRunRepository(db).list_visible(
         workspace_id=current_workspace.id,
         user_id=current_user.id,
@@ -77,12 +87,14 @@ def list_graph_runs(
         conversation_id=conversation_id,
         limit=limit,
         offset=offset,
+        enabled_app_ids=enabled_app_ids,
     )
     artifact_ids = _artifact_ids_by_run(
         db,
         [item.id for item in items],
         workspace_id=current_workspace.id,
         user_id=current_user.id,
+        enabled_app_ids=enabled_app_ids,
     )
     return AiGraphRunListResponse(
         items=[_run_response(item, artifact_ids.get(item.id)) for item in items],
@@ -97,10 +109,16 @@ def get_graph_run(
     current_user: User = Depends(require_current_user),
     current_workspace: Workspace = Depends(require_current_workspace),
 ) -> AiGraphRunResponse:
+    enabled_app_ids = resolve_enabled_app_ids_for_user_context(
+        db,
+        user=current_user,
+        workspace_id=current_workspace.id,
+    )
     run = AiGraphRunRepository(db).get_visible(
         run_id,
         workspace_id=current_workspace.id,
         user_id=current_user.id,
+        enabled_app_ids=enabled_app_ids,
     )
     if run is None:
         raise HTTPException(status_code=404, detail={"code": "ai.graph_run_not_found"})
@@ -109,5 +127,6 @@ def get_graph_run(
         [run.id],
         workspace_id=current_workspace.id,
         user_id=current_user.id,
+        enabled_app_ids=enabled_app_ids,
     )
     return _run_response(run, artifact_ids.get(run.id))

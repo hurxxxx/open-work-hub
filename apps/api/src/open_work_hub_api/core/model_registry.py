@@ -26,7 +26,6 @@ def import_all_models() -> None:
     from open_work_hub_api.domains.mail import models as mail_models  # noqa: F401
     from open_work_hub_api.domains.media import models as media_models  # noqa: F401
     from open_work_hub_api.domains.meeting import models as meeting_models  # noqa: F401
-    from open_work_hub_api.domains.notifications import models as notifications_models  # noqa: F401
     from open_work_hub_api.domains.personal_widgets import models as personal_widgets_models  # noqa: F401
     from open_work_hub_api.domains.pms import models as pms_models  # noqa: F401
     from open_work_hub_api.domains.planner import models as planner_models  # noqa: F401

@@ -72,7 +72,12 @@ def load_meeting_search_document_for_entity(
 
 def _meeting_row(db: Session, *, workspace: Workspace, meeting: Meeting) -> dict[str, Any]:
     recording = _latest_meeting_recording_for_search(db, meeting=meeting)
-    recording_summary = (getattr(recording, "summary_text", None) or "").strip()
+    recording_summary = (
+        recording.result.summary_text
+        if recording is not None and recording.result is not None
+        else ""
+    ) or ""
+    recording_summary = recording_summary.strip()
     attendees = [
         search_person("participant", attendee.user_id, getattr(attendee.user, "full_name", None))
         for attendee in meeting.attendees
@@ -82,7 +87,9 @@ def _meeting_row(db: Session, *, workspace: Workspace, meeting: Meeting) -> dict
         for part in [
             meeting.agenda,
             recording_summary,
-            recording.transcript_text if recording else "",
+            recording.result.transcript_text
+            if recording is not None and recording.result is not None
+            else "",
         ]
         if part
     )
@@ -134,6 +141,7 @@ def _latest_meeting_recording_for_search(
         recording = db.scalar(
             select(Recording)
             .join(RecordingTarget)
+            .options(selectinload(Recording.result))
             .where(
                 Recording.workspace_id == meeting.workspace_id,
                 Recording.trashed_at.is_(None),

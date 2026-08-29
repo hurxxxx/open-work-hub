@@ -42,6 +42,7 @@ export function useTaskDetailIssueEditing({
   taskListStatuses,
   token,
   t,
+  workspaceSlug,
 }: {
   canEdit: boolean;
   members: PmsTaskListMember[];
@@ -50,6 +51,7 @@ export function useTaskDetailIssueEditing({
   taskListStatuses?: PmsTaskListStatus[];
   token: string | null;
   t: TFunction;
+  workspaceSlug: string;
 }) {
   const [syncedTask, setSyncedTask] = useState(task);
   const [issueState, setIssueState] = useState(task);
@@ -116,14 +118,19 @@ export function useTaskDetailIssueEditing({
       applyOptimistic: (current: PmsTask) => PmsTask,
       fallbackMessage: string,
     ) => {
-      if (!token || !canEdit) return null;
+      if (!token || !canEdit || !workspaceSlug) return null;
 
       const previousIssue = issueState;
       setSaveError(null);
       setIssueState((current) => applyOptimistic(current));
 
       try {
-        const updatedIssue = await updateTask(token, issueState.id, payload);
+        const updatedIssue = await updateTask(
+          token,
+          issueState.id,
+          payload,
+          workspaceSlug,
+        );
         setIssueState(updatedIssue);
         await Promise.resolve(onUpdate?.());
         return updatedIssue;
@@ -133,7 +140,7 @@ export function useTaskDetailIssueEditing({
         return null;
       }
     },
-    [canEdit, issueState, onUpdate, token],
+    [canEdit, issueState, onUpdate, token, workspaceSlug],
   );
 
   const patchField = useCallback(
@@ -167,7 +174,7 @@ export function useTaskDetailIssueEditing({
 
   const setIssueUserRoleIds = useCallback(
     async (role: TaskUserRole, userIds: string[]) => {
-      if (!token || !canEdit) return;
+      if (!token || !canEdit || !workspaceSlug) return;
       const previousIssue = issueState;
       const nextNames = memberNamesForIds(userIds);
       const requestSeq = userRoleRequestSeqRef.current[role] + 1;
@@ -180,8 +187,18 @@ export function useTaskDetailIssueEditing({
       try {
         const saved =
           role === 'assignees'
-            ? await setTaskAssignees(token, issueState.id, userIds)
-            : await setTaskFollowers(token, issueState.id, userIds);
+            ? await setTaskAssignees(
+                token,
+                issueState.id,
+                userIds,
+                workspaceSlug,
+              )
+            : await setTaskFollowers(
+                token,
+                issueState.id,
+                userIds,
+                workspaceSlug,
+              );
         if (userRoleRequestSeqRef.current[role] === requestSeq) {
           const savedIds = saved.map((item) => item.user_id);
           const savedNames = saved.map((item) => item.full_name);
@@ -205,7 +222,7 @@ export function useTaskDetailIssueEditing({
         );
       }
     },
-    [canEdit, issueState, memberNamesForIds, onUpdate, t, token],
+    [canEdit, issueState, memberNamesForIds, onUpdate, t, token, workspaceSlug],
   );
 
   const toggleIssueUserRole = useCallback(
@@ -221,11 +238,16 @@ export function useTaskDetailIssueEditing({
   const handleDescriptionChange = useCallback(
     (content: BlockContent) => {
       descriptionBlocksRef.current = content;
-      if (!token || !canEdit) return;
+      if (!token || !canEdit || !workspaceSlug) return;
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       setSaveError(null);
       saveTimerRef.current = setTimeout(() => {
-        updateTask(token, issueState.id, { description_blocks: content })
+        updateTask(
+          token,
+          issueState.id,
+          { description_blocks: content },
+          workspaceSlug,
+        )
           .then(async (updatedIssue) => {
             setIssueState(updatedIssue);
             descriptionBlocksRef.current =
@@ -249,7 +271,7 @@ export function useTaskDetailIssueEditing({
           });
       }, 500);
     },
-    [canEdit, issueState.id, onUpdate, token, t],
+    [canEdit, issueState.id, onUpdate, token, t, workspaceSlug],
   );
 
   return {

@@ -58,7 +58,7 @@ describe('notification panel model', () => {
       resolveNotificationAction(
         notification('route', {
           action_url: '/apps/pms/workspaces/hq/assigned',
-          reference_id: 'issue-1',
+          source_id: 'issue-1',
         }),
       ),
     ).toEqual({ kind: 'route', to: '/apps/pms/workspaces/hq/assigned' });
@@ -66,7 +66,7 @@ describe('notification panel model', () => {
       resolveNotificationAction(
         notification('dm', {
           action_url: '/dm/conversations/conversation-1',
-          reference_id: 'issue-1',
+          source_id: 'issue-1',
         }),
       ),
     ).toEqual({ kind: 'dm', threadId: 'conversation-1' });
@@ -81,7 +81,8 @@ describe('notification panel model', () => {
       resolveNotificationAction(
         notification('issue', {
           action_url: 'https://example.test/unsafe',
-          reference_id: 'issue-1',
+          source_id: 'issue-1',
+          source_type: 'pms_task',
         }),
       ),
     ).toEqual({ kind: 'issue', taskId: 'issue-1' });
@@ -89,7 +90,7 @@ describe('notification panel model', () => {
       resolveNotificationAction(
         notification('none', {
           action_url: 'https://example.test/unsafe',
-          reference_id: null,
+          source_id: null,
         }),
       ),
     ).toEqual({ kind: 'none' });
@@ -106,8 +107,10 @@ function notification(
     created_at: '2026-05-20T00:00:00.000Z',
     id,
     is_read: false,
-    reference_id: null,
-    reference_type: null,
+    source_id: null,
+    source_type: 'system',
+    origin_app_id: 'shell',
+    origin_workspace_id: null,
     title: 'Title',
     type: 'issue_assigned',
     ...overrides,

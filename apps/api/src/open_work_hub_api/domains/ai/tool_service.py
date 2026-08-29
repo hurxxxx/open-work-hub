@@ -37,6 +37,7 @@ from open_work_hub_api.domains.ai.tool_result_projection import (
     serialize_tool_result_for_llm as serialize_tool_result_for_llm,
     tool_result_preview as tool_result_preview,
 )
+from open_work_hub_api.domains.ai.tool_surface import descriptor_owner_app_enabled
 from open_work_hub_api.domains.ai.registry import (
     build_workspace_context,
     get_ai_capability_registry,
@@ -136,7 +137,10 @@ def execute_tool(
             )
         workspace_context = build_workspace_context(workspace)
         entitlements = resolve_workspace_entitlement_view(db, workspace=workspace)
-        if not predicate(principal, workspace_context, entitlements):
+        if not descriptor_owner_app_enabled(
+            descriptor,
+            enabled_app_ids=entitlements.effective_enabled_app_ids,
+        ) or not predicate(principal, workspace_context, entitlements):
             _log_tool_call(
                 source=source,
                 principal=principal,

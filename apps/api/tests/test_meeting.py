@@ -5,7 +5,7 @@ from io import BytesIO
 
 from fastapi.testclient import TestClient
 
-from dev_accounts import dev_login
+from dev_accounts import content_headers, dev_login
 
 
 def _auth_headers(token: str) -> dict[str, str]:
@@ -73,9 +73,7 @@ def _grant_workspace_access(
     bindings = bindings_response.json()
 
     roles_by_user_id = {
-        item["subject_id"]: item["role"]
-        for item in bindings
-        if item["subject_type"] == "user"
+        item["subject_id"]: item["role"] for item in bindings if item["subject_type"] == "user"
     }
     existing_role = roles_by_user_id.get(user_id)
     if existing_role != "admin" or role == "admin":
@@ -259,9 +257,7 @@ def test_non_organizer_attendee_cannot_modify_meeting(client: TestClient) -> Non
         full_name="Meeting Member",
         workspace_keys=["administrator"],
     )
-    member_token = _login(
-        client, member["user"]["email"], member["temporary_password"]
-    )
+    member_token = _login(client, member["user"]["email"], member["temporary_password"])
 
     # Admin organizes a meeting and invites the member.
     meeting = _create_meeting(
@@ -325,12 +321,8 @@ def test_attendee_can_invite_other_attendees(client: TestClient) -> None:
         workspace_keys=["administrator"],
     )
 
-    invitee_a_token = _login(
-        client, invitee_a["user"]["email"], invitee_a["temporary_password"]
-    )
-    outsider_token = _login(
-        client, outsider["user"]["email"], outsider["temporary_password"]
-    )
+    invitee_a_token = _login(client, invitee_a["user"]["email"], invitee_a["temporary_password"])
+    outsider_token = _login(client, outsider["user"]["email"], outsider["temporary_password"])
 
     # Admin creates a meeting with invitee_a as the only non-organizer attendee.
     meeting = _create_meeting(
@@ -344,11 +336,7 @@ def test_attendee_can_invite_other_attendees(client: TestClient) -> None:
     add_response = client.post(
         f"/api/v1/workspaces/administrator/meeting/meetings/{meeting['id']}/attendees",
         headers=_auth_headers(invitee_a_token),
-        json={
-            "attendees": [
-                {"user_id": invitee_b["user"]["id"], "role": "required"}
-            ]
-        },
+        json={"attendees": [{"user_id": invitee_b["user"]["id"], "role": "required"}]},
     )
     assert add_response.status_code == 200, add_response.text
     body = add_response.json()
@@ -363,11 +351,7 @@ def test_attendee_can_invite_other_attendees(client: TestClient) -> None:
     again = client.post(
         f"/api/v1/workspaces/administrator/meeting/meetings/{meeting['id']}/attendees",
         headers=_auth_headers(invitee_a_token),
-        json={
-            "attendees": [
-                {"user_id": invitee_b["user"]["id"], "role": "optional"}
-            ]
-        },
+        json={"attendees": [{"user_id": invitee_b["user"]["id"], "role": "optional"}]},
     )
     assert again.status_code == 200
     again_body = again.json()
@@ -381,11 +365,7 @@ def test_attendee_can_invite_other_attendees(client: TestClient) -> None:
     forbidden = client.post(
         f"/api/v1/workspaces/administrator/meeting/meetings/{meeting['id']}/attendees",
         headers=_auth_headers(outsider_token),
-        json={
-            "attendees": [
-                {"user_id": invitee_b["user"]["id"], "role": "required"}
-            ]
-        },
+        json={"attendees": [{"user_id": invitee_b["user"]["id"], "role": "required"}]},
     )
     assert forbidden.status_code == 403
 
@@ -621,9 +601,7 @@ def test_attach_task_returns_403_for_user_without_list_access(
         full_name="Meeting Organizer",
         workspace_keys=["administrator"],
     )
-    organizer_token = _login(
-        client, organizer["user"]["email"], organizer["temporary_password"]
-    )
+    organizer_token = _login(client, organizer["user"]["email"], organizer["temporary_password"])
 
     meeting = _create_meeting(client, organizer_token, title="External sync")
 
@@ -784,7 +762,11 @@ def test_meeting_user_search_returns_users_without_pms_access(
     assert response.status_code == 200
     payload = response.json()
     emails = {item["email"] for item in payload}
-    assert {"admin@open-work-hub.local", "alice@open-work-hub.local", "bob@open-work-hub.local"} <= emails
+    assert {
+        "admin@open-work-hub.local",
+        "alice@open-work-hub.local",
+        "bob@open-work-hub.local",
+    } <= emails
     assert "outsider@open-work-hub.local" not in emails
 
     # Partial-name query.
@@ -806,6 +788,7 @@ def test_meeting_user_search_returns_users_without_pms_access(
     assert email_response.status_code == 200
     assert [item["email"] for item in email_response.json()] == ["bob@open-work-hub.local"]
 
+
 def test_workspace_scoped_meeting_routes_keep_administrator_context(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
 
@@ -823,9 +806,7 @@ def test_workspace_scoped_meeting_routes_keep_administrator_context(client: Test
     me_response = client.get("/api/v1/auth/me", headers=_auth_headers(member_token))
     assert me_response.status_code == 200
     workspace_id = next(
-        item["id"]
-        for item in me_response.json()["workspaces"]
-        if item["slug"] == "administrator"
+        item["id"] for item in me_response.json()["workspaces"] if item["slug"] == "administrator"
     )
 
     scoped_users_response = client.get(
@@ -941,9 +922,7 @@ class _FakeMinioClient:
         self.objects: dict[str, bytes] = {}
         self.removed: list[str] = []
 
-    def put_object(
-        self, bucket: str, key: str, body, length: int, content_type: str
-    ) -> None:
+    def put_object(self, bucket: str, key: str, body, length: int, content_type: str) -> None:
         del bucket, length, content_type
         self.objects[key] = body.read()
 
@@ -1069,9 +1048,7 @@ def test_attendee_can_attach_task_via_space_access(client: TestClient) -> None:
     )
     assert add_space_member.status_code in (200, 201), add_space_member.text
 
-    attendee_token = _login(
-        client, attendee["user"]["email"], attendee["temporary_password"]
-    )
+    attendee_token = _login(client, attendee["user"]["email"], attendee["temporary_password"])
 
     # Admin organizes a meeting and invites the attendee.
     meeting = _create_meeting(
@@ -1114,9 +1091,7 @@ def test_attendee_can_attach_doc_and_only_adder_can_remove(
         full_name="Prep Attendee",
         workspace_keys=["administrator"],
     )
-    attendee_token = _login(
-        client, attendee["user"]["email"], attendee["temporary_password"]
-    )
+    attendee_token = _login(client, attendee["user"]["email"], attendee["temporary_password"])
 
     admin_doc = _create_native_doc(client, admin_token, "Admin prep")
     attendee_doc = _create_native_doc(client, attendee_token, "Attendee prep")
@@ -1162,9 +1137,7 @@ def test_attendee_can_attach_doc_and_only_adder_can_remove(
         headers=_auth_headers(attendee_token),
     )
     assert own_detach.status_code == 200
-    assert {link["doc_id"] for link in own_detach.json()["doc_links"]} == {
-        admin_doc
-    }
+    assert {link["doc_id"] for link in own_detach.json()["doc_links"]} == {admin_doc}
 
     # Re-attach attendee's doc, then organizer detaches it → success
     # (organizer always wins).
@@ -1289,11 +1262,7 @@ def test_meeting_add_attendee_inherits_existing_task_and_doc_attachment_grants(
     add_attendee = client.post(
         f"/api/v1/workspaces/administrator/meeting/meetings/{meeting['id']}/attendees",
         headers=_auth_headers(admin_token),
-        json={
-            "attendees": [
-                {"user_id": attendee["user"]["id"], "role": "required"}
-            ]
-        },
+        json={"attendees": [{"user_id": attendee["user"]["id"], "role": "required"}]},
     )
     assert add_attendee.status_code == 200, add_attendee.text
 
@@ -1516,9 +1485,7 @@ def test_meeting_file_attachment_upload_and_permission_matrix(
         full_name="File Attendee",
         workspace_keys=["administrator"],
     )
-    attendee_token = _login(
-        client, attendee["user"]["email"], attendee["temporary_password"]
-    )
+    attendee_token = _login(client, attendee["user"]["email"], attendee["temporary_password"])
 
     meeting = _create_meeting(
         client,
@@ -1544,11 +1511,14 @@ def test_meeting_file_attachment_upload_and_permission_matrix(
     assert any("notes.txt" in key for key in fake.objects)
 
     file_id = file_meta["id"]
-    assert file_meta["download_url"].startswith(f"/api/v1/meeting/files/{file_id}/content?")
+    assert file_meta["download_url"].startswith("/api/v1/content#grant=")
     assert "127.0.0.1" not in file_meta["download_url"]
     assert "fake-minio" not in file_meta["download_url"]
 
-    download_response = client.get(file_meta["download_url"])
+    download_response = client.get(
+        file_meta["download_url"],
+        headers=content_headers(attendee_token, file_meta["download_url"]),
+    )
     assert download_response.status_code == 200, download_response.text
     assert download_response.content == b"hello world"
     assert download_response.headers["content-type"].startswith("text/plain")
@@ -1603,9 +1573,7 @@ def test_meeting_file_attachment_upload_and_permission_matrix(
     assert organizer_delete.json()["file_attachments"] == []
 
 
-def test_meeting_file_upload_rejects_non_participant(
-    client: TestClient, monkeypatch
-) -> None:
+def test_meeting_file_upload_rejects_non_participant(client: TestClient, monkeypatch) -> None:
     _install_fake_minio(monkeypatch)
 
     admin = _bootstrap_admin_session(client)
@@ -1618,9 +1586,7 @@ def test_meeting_file_upload_rejects_non_participant(
         full_name="Stranger",
         workspace_keys=["administrator"],
     )
-    stranger_token = _login(
-        client, stranger["user"]["email"], stranger["temporary_password"]
-    )
+    stranger_token = _login(client, stranger["user"]["email"], stranger["temporary_password"])
 
     meeting = _create_meeting(client, admin_token, title="Closed for files")
 
@@ -1646,9 +1612,7 @@ def test_non_participant_cannot_attach_doc(client: TestClient) -> None:
         full_name="Lurker",
         workspace_keys=["administrator"],
     )
-    stranger_token = _login(
-        client, stranger["user"]["email"], stranger["temporary_password"]
-    )
+    stranger_token = _login(client, stranger["user"]["email"], stranger["temporary_password"])
     stranger_doc = _create_native_doc(client, stranger_token, "Lurker prep")
 
     # Admin organizes a meeting and does NOT invite the stranger.
@@ -1800,9 +1764,7 @@ def test_upcoming_scope_does_not_leak_other_users_meetings(
         )
         assert response.status_code == 200, response.text
         body = response.json()
-        assert body["total"] == 0, (
-            f"scope={scope} leaked meeting: {body}"
-        )
+        assert body["total"] == 0, f"scope={scope} leaked meeting: {body}"
 
     # Trying to GET the meeting directly is also blocked.
     direct = client.get(
@@ -1817,9 +1779,7 @@ def test_upcoming_scope_does_not_leak_other_users_meetings(
         f"/api/v1/workspaces/administrator/meeting/meetings/{private['id']}",
         headers=_auth_headers(admin_token),
         json={
-            "attendees": [
-                {"user_id": outsider["user"]["id"], "role": "required"}
-            ],
+            "attendees": [{"user_id": outsider["user"]["id"], "role": "required"}],
         },
     )
     assert update_response.status_code == 200

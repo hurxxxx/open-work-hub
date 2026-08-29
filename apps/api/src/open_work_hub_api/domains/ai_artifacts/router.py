@@ -26,6 +26,9 @@ from open_work_hub_api.domains.ai_artifacts.models import (
 from open_work_hub_api.domains.ai_artifacts.repository import AiArtifactRepository
 from open_work_hub_api.domains.auth.dependencies import require_current_user, require_current_workspace
 from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.workspace_app_gate import (
+    resolve_enabled_app_ids_for_user_context,
+)
 
 
 router = APIRouter(prefix="/ai", tags=["ai-artifacts"])
@@ -160,11 +163,17 @@ def _visible_artifact(
     user: User,
     eager: bool = False,
 ) -> AiArtifact:
+    enabled_app_ids = resolve_enabled_app_ids_for_user_context(
+        db,
+        user=user,
+        workspace_id=workspace.id,
+    )
     artifact = AiArtifactRepository(db).get_visible(
         identifier,
         workspace_id=workspace.id,
         user_id=user.id,
         eager=eager,
+        enabled_app_ids=enabled_app_ids,
     )
     if artifact is None:
         raise HTTPException(status_code=404, detail={"code": "ai.artifact_not_found"})
@@ -184,6 +193,11 @@ def list_artifacts(
     current_user: User = Depends(require_current_user),
     current_workspace: Workspace = Depends(require_current_workspace),
 ) -> AiArtifactListResponse:
+    enabled_app_ids = resolve_enabled_app_ids_for_user_context(
+        db,
+        user=current_user,
+        workspace_id=current_workspace.id,
+    )
     items, total = AiArtifactRepository(db).list_visible(
         workspace_id=current_workspace.id,
         user_id=current_user.id,
@@ -194,6 +208,7 @@ def list_artifacts(
         conversation_id=conversation_id,
         limit=limit,
         offset=offset,
+        enabled_app_ids=enabled_app_ids,
     )
     return AiArtifactListResponse(
         items=[_artifact_response(item) for item in items],

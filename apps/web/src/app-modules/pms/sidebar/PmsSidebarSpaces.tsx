@@ -113,7 +113,7 @@ function getErrorMessage(error: unknown, fallback: string): string {
 
 async function listSidebarTaskLists(
   token: string,
-  workspaceSlug: string | null,
+  workspaceSlug: string,
 ): Promise<PmsTaskList[]> {
   const [active, archived] = await Promise.all([
     listAllPmsTaskLists(token, undefined, workspaceSlug),
@@ -258,8 +258,10 @@ function usePmsSidebarSpacesElement({
   const { confirm, confirmDialog } = useConfirm();
   const { prompt, promptDialog } = usePrompt();
   const toast = useFeedback();
-  const canReadTeams = hasWorkspaceMembership(user, currentWorkspaceSlug);
-  const canWriteTeams = hasWorkspaceMembership(user, currentWorkspaceSlug);
+  const hasWorkspaceContext = Boolean(currentWorkspaceSlug);
+  const canReadTeams =
+    hasWorkspaceContext && hasWorkspaceMembership(user, currentWorkspaceSlug);
+  const canWriteTeams = canReadTeams;
   const pmsRootPath = currentWorkspaceSlug
     ? buildWorkspaceAppPath(currentWorkspaceSlug, 'pms')
     : buildWorkspaceAppEntryPath('pms');
@@ -306,7 +308,7 @@ function usePmsSidebarSpacesElement({
 
   useEffect(() => {
     let cancelled = false;
-    if (!token) {
+    if (!token || !currentWorkspaceSlug) {
       dispatch({
         type: 'loadComplete',
         lists: [],
@@ -1050,7 +1052,7 @@ function usePmsSidebarSpacesElement({
 
   const handleDeleteFolder = useCallback(
     async (folderId: string) => {
-      if (!token) return;
+      if (!token || !currentWorkspaceSlug) return;
       if (hasArchivedPmsTaskListInFolder(pmsLists, folderId)) {
         toast.error(t('pms.archive.folderDeleteBlocked'));
         return;
@@ -1446,7 +1448,7 @@ function usePmsSidebarSpacesElement({
               type: 'setFolders',
               updater: (current) => [...current, folder],
             });
-            if (token) {
+            if (token && currentWorkspaceSlug) {
               listSidebarTaskLists(token, currentWorkspaceSlug)
                 .then((lists) =>
                   dispatch({ type: 'setLists', updater: () => lists }),

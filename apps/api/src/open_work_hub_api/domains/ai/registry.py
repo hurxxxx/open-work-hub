@@ -169,17 +169,10 @@ class AiCapabilityDescriptor:
     preview_builder_id: str | None
     output_projection: OutputProjection
     service_handler_id: str
-    # Workspace AppBar app_id this capability belongs to (e.g. "pms",
-    # "meeting", "chatbot"). Tool name prefix is *not* authoritative — RAG tools
-    # are named ``rag.*`` but live under the ``ai`` app, and future bridges
-    # may register tools whose name namespace differs from their app id.
+    # Workspace app that owns this capability (e.g. "pms", "meeting",
+    # "retrieval-search"). Tool name prefix is not authoritative: ``rag.*``
+    # capabilities are owned by the Retrieval Search app.
     workspace_app_id: str
-
-    @property
-    def app_id(self) -> str:
-        # Backwards-compatible alias for callers that historically read the
-        # name-prefix-derived id. Prefer ``workspace_app_id`` for new code.
-        return self.workspace_app_id
 
 
 @dataclass(frozen=True)

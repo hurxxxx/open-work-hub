@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   X,
   Maximize2,
@@ -25,11 +25,16 @@ import type { BlockContent } from '@open-work-hub/ui';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '@/src/platform/auth/auth-provider';
+import {
+  authenticatedContentObjectUrl,
+  downloadAuthenticatedContent,
+} from '@/src/platform/browser/browser-download';
 import { DateInput } from '@/src/components/date/DateInput';
 import { useMediaUpload } from '@/src/platform/media/use-media-upload';
 import { LinkedRecordingsForTarget } from '@/src/app-modules/recording/public-api';
 import {
   type PmsTask,
+  type PmsAttachment,
   type PmsTaskListMember,
   type PmsMilestone,
   type PmsLabel,
@@ -88,10 +93,17 @@ type TaskDetailProps = {
 };
 
 export function TaskDetail(props: TaskDetailProps) {
-  return useTaskDetailContent(props);
+  const { workspaceSlug: routeWorkspaceSlug } = useParams();
+  const workspaceSlug = props.workspaceSlug ?? routeWorkspaceSlug ?? null;
+  if (!workspaceSlug) return null;
+  return <TaskDetailContent {...props} workspaceSlug={workspaceSlug} />;
 }
 
-function useTaskDetailContent({
+type TaskDetailContentProps = Omit<TaskDetailProps, 'workspaceSlug'> & {
+  workspaceSlug: string;
+};
+
+function TaskDetailContent({
   task,
   members = EMPTY_MEMBERS,
   milestones = EMPTY_MILESTONES,
@@ -99,13 +111,12 @@ function useTaskDetailContent({
   taskListStatuses,
   spaceName,
   spaceId = null,
-  workspaceSlug: workspaceSlugProp = null,
-  canEdit = true,
+  workspaceSlug,
+  canEdit: canEditProp = true,
   onClose,
   onUpdate,
-}: TaskDetailProps) {
-  const { workspaceSlug: routeWorkspaceSlug } = useParams();
-  const workspaceSlug = workspaceSlugProp ?? routeWorkspaceSlug ?? null;
+}: TaskDetailContentProps) {
+  const canEdit = canEditProp;
   const { token, user } = useAuth();
   const { t } = useTranslation('apps');
   const { uploadFile, resolveFileUrl } = useMediaUpload();
@@ -134,6 +145,7 @@ function useTaskDetailContent({
     taskListStatuses,
     token,
     t,
+    workspaceSlug,
   });
   const [descFullscreen, setDescFullscreen] = useState(false);
   const [labelPickerOpen, setLabelPickerOpen] = useState(false);
@@ -143,6 +155,9 @@ function useTaskDetailContent({
   const [mobilePanel, setMobilePanel] = useState<'details' | 'activity'>(
     'details',
   );
+  const [downloadingAttachmentId, setDownloadingAttachmentId] = useState<
+    string | null
+  >(null);
   const {
     state: {
       activityLogs,
@@ -182,6 +197,7 @@ function useTaskDetailContent({
     taskListStatuses,
     token,
     t,
+    workspaceSlug,
   });
   const {
     addingChecklist,
@@ -206,6 +222,7 @@ function useTaskDetailContent({
     taskId: task.id,
     token,
     t,
+    workspaceSlug,
   });
   const {
     dragOver,
@@ -222,7 +239,28 @@ function useTaskDetailContent({
     taskId: task.id,
     token,
     t,
+    workspaceSlug,
   });
+
+  const handleDownloadAttachment = useCallback(
+    async (attachment: PmsAttachment) => {
+      if (!token || downloadingAttachmentId) return;
+      setDownloadingAttachmentId(attachment.id);
+      setSaveError(null);
+      try {
+        await downloadAuthenticatedContent(
+          token,
+          attachment.download_url,
+          attachment.filename,
+        );
+      } catch {
+        setSaveError(t('files.errors.downloadFailed'));
+      } finally {
+        setDownloadingAttachmentId(null);
+      }
+    },
+    [downloadingAttachmentId, setSaveError, t, token],
+  );
   const {
     closeMention,
     commentDraft,
@@ -240,6 +278,7 @@ function useTaskDetailContent({
     taskId: task.id,
     token,
     t,
+    workspaceSlug,
   });
   const {
     buildDocPath,
@@ -1208,10 +1247,10 @@ function useTaskDetailContent({
                         className="flex items-center gap-3 py-1.5 px-2 rounded-md hover:bg-app-surface-hover group transition-colors"
                       >
                         {isImage ? (
-                          <img
-                            src={att.download_url}
+                          <AuthenticatedTaskAttachmentThumbnail
                             alt={att.filename}
-                            className="size-8 rounded border border-app-border object-cover"
+                            token={token}
+                            url={att.download_url}
                           />
                         ) : (
                           <div className="flex size-8 items-center justify-center rounded border border-app-border bg-app-surface-sidebar">
@@ -1228,17 +1267,21 @@ function useTaskDetailContent({
                             {att.uploaded_by_name}
                           </p>
                         </div>
-                        <a
-                          href={att.download_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <button
+                          type="button"
+                          disabled={downloadingAttachmentId !== null}
+                          onClick={() => void handleDownloadAttachment(att)}
                           aria-label={t('pms.taskDetail.downloadAttachment', {
                             filename: att.filename,
                           })}
-                          className="opacity-0 group-hover:opacity-100 text-app-ink/40 hover:text-app-ink transition-all"
+                          className="opacity-0 group-hover:opacity-100 text-app-ink/40 hover:text-app-ink transition-all disabled:cursor-not-allowed disabled:opacity-40"
                         >
-                          <Download size={14} />
-                        </a>
+                          {downloadingAttachmentId === att.id ? (
+                            <Loader2 size={14} className="animate-spin" />
+                          ) : (
+                            <Download size={14} />
+                          )}
+                        </button>
                         {canEdit ? (
                           <button
                             type="button"
@@ -1346,6 +1389,53 @@ function useTaskDetailContent({
         excludeDocIds={linkedDocs.map((doc) => doc.doc_id)}
         workspaceSlug={workspaceSlug}
       />
+    </div>
+  );
+}
+
+function AuthenticatedTaskAttachmentThumbnail({
+  alt,
+  token,
+  url,
+}: {
+  alt: string;
+  token: string | null;
+  url: string;
+}) {
+  const [src, setSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    setSrc(null);
+    if (!token) return undefined;
+
+    void authenticatedContentObjectUrl(token, url)
+      .then((nextUrl) => {
+        objectUrl = nextUrl;
+        if (cancelled) {
+          URL.revokeObjectURL(nextUrl);
+          return;
+        }
+        setSrc(nextUrl);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [token, url]);
+
+  return src ? (
+    <img
+      src={src}
+      alt={alt}
+      className="size-8 rounded border border-app-border object-cover"
+    />
+  ) : (
+    <div className="flex size-8 items-center justify-center rounded border border-app-border bg-app-surface-sidebar">
+      <FileIcon size={14} className="text-app-ink/40" />
     </div>
   );
 }

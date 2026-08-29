@@ -9,7 +9,13 @@ from pydantic.alias_generators import to_camel
 
 GraphRunStatus = Literal["pending", "running", "completed", "failed", "cancelled"]
 GraphRunVisibility = Literal["private", "workspace"]
-GraphDispatchStatus = Literal["pending", "claimed", "dispatched", "dead_letter"]
+GraphDispatchStatus = Literal[
+    "pending",
+    "claimed",
+    "dispatched",
+    "dead_letter",
+    "cancelled",
+]
 
 
 class _CamelModel(BaseModel):

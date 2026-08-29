@@ -97,7 +97,6 @@ def resolve_auth_context_from_token(
         db.info.pop("impersonator_user_id", None)
         db.info.pop("impersonated_user_id", None)
         db.info.pop("impersonation_session_id", None)
-
     return AuthContext(
         user=user,
         session=auth_session,

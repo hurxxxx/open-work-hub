@@ -114,7 +114,7 @@ def test_media_ids_from_urls_keeps_only_exact_media_refs() -> None:
     ]
 
 
-def test_can_resolve_unlinked_or_unknown_resource_for_uploader_only() -> None:
+def test_can_resolve_only_unlinked_media_for_uploader_and_rejects_unknown_sources() -> None:
     uploader = SimpleNamespace(id="uploader")
     outsider = SimpleNamespace(id="outsider")
 
@@ -126,7 +126,7 @@ def test_can_resolve_unlinked_or_unknown_resource_for_uploader_only() -> None:
             uploader,
             _media(resource_type="legacy_unknown", resource_id="resource-1"),
         )
-        is True
+        is False
     )
     assert (
         can_resolve_media(

@@ -3,7 +3,6 @@ import type { RecentPageItem } from '@/src/app-modules/docs/public-api';
 import type { MeetingListItem } from '@/src/app-modules/meeting/public-api';
 import type { PlannerEvent } from '@/src/app-modules/planner/public-api';
 import type { PmsTask } from '@/src/app-modules/pms/public-api';
-import type { WorkspaceNotification } from '@/src/platform/notifications/notifications-api';
 import {
   INITIAL_WORKSPACE_HOME_STATE,
   buildWorkspaceHomeSections,
@@ -133,7 +132,6 @@ describe('workspace-home-model', () => {
       ['meetings', 'loading', '/apps/meeting/workspaces/team%20alpha'],
       ['tasks', 'loading', '/apps/pms/workspaces/team%20alpha/assigned'],
       ['docs', 'loading', '/apps/docs/workspaces/team%20alpha'],
-      ['notifications', 'loading', ''],
     ]);
 
     expect(
@@ -149,8 +147,6 @@ describe('workspace-home-model', () => {
           pagesLoading: false,
           plannerEvents: [],
           plannerLoading: false,
-          notifications: [],
-          notificationsLoading: false,
         },
         timeZone: 'UTC',
         t,
@@ -161,7 +157,6 @@ describe('workspace-home-model', () => {
       ['meetings', 'empty'],
       ['tasks', 'empty'],
       ['docs', 'empty'],
-      ['notifications', 'empty'],
     ]);
   });
 
@@ -192,8 +187,6 @@ describe('workspace-home-model', () => {
         pagesLoading: false,
         plannerEvents: [],
         plannerLoading: false,
-        notifications: [],
-        notificationsLoading: false,
       },
       timeZone: 'UTC',
       t,
@@ -257,8 +250,6 @@ describe('workspace-home-model', () => {
           } as PlannerEvent,
         ],
         plannerLoading: false,
-        notifications: [],
-        notificationsLoading: false,
       },
       timeZone: 'UTC',
       t,
@@ -277,70 +268,6 @@ describe('workspace-home-model', () => {
         kind: 'planner',
         id: 'later',
         to: '/apps/planner',
-      },
-    ]);
-  });
-
-  it('builds notification rows with resolved deep links', () => {
-    const sections = buildWorkspaceHomeSections({
-      locale: 'en-US',
-      now: new Date('2026-06-10T03:00:00Z'),
-      state: {
-        meetings: [],
-        meetingsLoading: false,
-        issues: [],
-        issuesLoading: false,
-        recentPages: [],
-        pagesLoading: false,
-        plannerEvents: [],
-        plannerLoading: false,
-        notifications: [
-          {
-            id: 'n1',
-            type: 'task',
-            title: 'Assigned to you',
-            body: 'Task X',
-            reference_type: 'task',
-            reference_id: 'task-9',
-            action_url: null,
-            is_read: false,
-            created_at: '2026-06-10T02:00:00Z',
-          } as WorkspaceNotification,
-          {
-            id: 'n2',
-            type: 'mention',
-            title: 'Mentioned you',
-            body: '',
-            reference_type: 'doc',
-            reference_id: null,
-            action_url: '/apps/docs/workspaces/team%20alpha/documents/d1',
-            is_read: true,
-            created_at: '2026-06-09T02:00:00Z',
-          } as WorkspaceNotification,
-        ],
-        notificationsLoading: false,
-      },
-      timeZone: 'UTC',
-      t,
-      workspaceSlug: 'team alpha',
-    });
-
-    const notifications = sections.find(
-      (section) => section.id === 'notifications',
-    );
-    expect(notifications?.status).toBe('ready');
-    expect(notifications?.rows).toMatchObject([
-      {
-        kind: 'notification',
-        id: 'n1',
-        to: '/apps/pms/workspaces/team%20alpha/assigned?task=task-9',
-        isRead: false,
-      },
-      {
-        kind: 'notification',
-        id: 'n2',
-        to: '/apps/docs/workspaces/team%20alpha/documents/d1',
-        isRead: true,
       },
     ]);
   });

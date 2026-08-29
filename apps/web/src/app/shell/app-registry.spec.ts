@@ -11,6 +11,7 @@ import {
 
 import { communityGlobalRoutes } from '@/src/app-modules/community';
 import { settingsManifest } from '@/src/app-modules/settings';
+import { DEFAULT_APP_CONTRACT_MANIFESTS } from './app-contract-manifests';
 import {
   APP_BACKGROUND_WORK_SOURCES,
   APP_BAR_FIXED_APP_IDS,
@@ -66,6 +67,9 @@ describe('app module registry', () => {
       expect.arrayContaining(['ai', 'collaboration', 'business']),
     );
     expect(APP_MODULE_MANIFESTS).toEqual(DEFAULT_APP_MODULE_MANIFESTS);
+    expect(
+      DEFAULT_APP_CONTRACT_MANIFESTS.map((manifest) => manifest.appBarItem.id),
+    ).toEqual(appIds);
   });
 
   it('rejects duplicate app and navigation identities', () => {

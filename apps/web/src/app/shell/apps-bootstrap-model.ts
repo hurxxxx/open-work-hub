@@ -11,6 +11,7 @@ export interface ShellAppsBootstrapProjection {
   apps: WorkspaceBootstrapApp[];
   appBarCategories: WorkspaceBootstrapAppBarCategory[];
   enabledAppIds: string[];
+  globalRouteAppIds: string[] | null;
 }
 
 function categoryItemPosition(
@@ -105,5 +106,6 @@ export function projectShellAppsBootstrap({
     apps,
     appBarCategories,
     enabledAppIds: apps.filter((app) => app.enabled).map((app) => app.app_id),
+    globalRouteAppIds: globalBootstrap?.global_route_app_ids ?? null,
   };
 }

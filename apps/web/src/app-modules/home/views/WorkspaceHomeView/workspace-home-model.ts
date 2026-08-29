@@ -2,12 +2,10 @@ import type { RecentPageItem } from '@/src/app-modules/docs/public-api';
 import type { MeetingListItem } from '@/src/app-modules/meeting/public-api';
 import type { PlannerEvent } from '@/src/app-modules/planner/public-api';
 import type { PmsTask } from '@/src/app-modules/pms/public-api';
-import type { WorkspaceNotification } from '@/src/platform/notifications/notifications-api';
 import {
   diffDateOnlyDays,
   formatDateOnly,
   formatDateTime,
-  formatRelativeTime,
   getZonedDateParts,
   isSameDateInTimeZone,
   parseApiDateTime,
@@ -53,19 +51,10 @@ export type WorkspaceHomeRow =
       title: string;
       to: string;
       trailing: string;
-    }
-  | {
-      kind: 'notification';
-      id: string;
-      title: string;
-      subtitle: string;
-      to: string | null;
-      trailing: string;
-      isRead: boolean;
     };
 
 export type WorkspaceHomeSection = {
-  id: 'meetings' | 'tasks' | 'docs' | 'planner' | 'notifications';
+  id: 'meetings' | 'tasks' | 'docs' | 'planner';
   titleKey: string;
   actionLabelKey: string;
   actionTo: string;
@@ -93,8 +82,6 @@ export interface WorkspaceHomeState {
   pagesLoading: boolean;
   plannerEvents: PlannerEvent[];
   plannerLoading: boolean;
-  notifications: WorkspaceNotification[];
-  notificationsLoading: boolean;
 }
 
 export type WorkspaceHomeAction =
@@ -106,9 +93,7 @@ export type WorkspaceHomeAction =
   | { type: 'pages-loaded'; items: RecentPageItem[] }
   | { type: 'pages-failed' }
   | { type: 'planner-loaded'; items: PlannerEvent[] }
-  | { type: 'planner-failed' }
-  | { type: 'notifications-loaded'; items: WorkspaceNotification[] }
-  | { type: 'notifications-failed' };
+  | { type: 'planner-failed' };
 
 export const INITIAL_WORKSPACE_HOME_STATE: WorkspaceHomeState = {
   meetings: [],
@@ -119,8 +104,6 @@ export const INITIAL_WORKSPACE_HOME_STATE: WorkspaceHomeState = {
   pagesLoading: true,
   plannerEvents: [],
   plannerLoading: true,
-  notifications: [],
-  notificationsLoading: true,
 };
 
 export function getHomeGreeting(
@@ -234,30 +217,6 @@ export function formatHomeEventWhen(
   if (allDay || !startDate) return dayLabel;
   const time = formatHomeTime(start, timeZone, locale);
   return dayLabel ? `${dayLabel} ${time}` : time;
-}
-
-export function selectTopNotifications(
-  notifications: WorkspaceNotification[],
-  limit = 5,
-): WorkspaceNotification[] {
-  return notifications.slice(0, limit);
-}
-
-export function buildNotificationTo(
-  notification: WorkspaceNotification,
-  workspaceSlug: string,
-): string | null {
-  if (notification.action_url && notification.action_url.startsWith('/')) {
-    return notification.action_url;
-  }
-  if (notification.reference_id) {
-    return buildAppHref({
-      routeId: 'pms.assigned',
-      workspaceSlug,
-      queryParams: { task: notification.reference_id },
-    });
-  }
-  return null;
 }
 
 export function workspaceHomePriorityTone(
@@ -400,20 +359,6 @@ export function buildWorkspaceHomeSections({
     }),
   );
 
-  const notificationRows = selectTopNotifications(
-    state.notifications,
-  ).map<WorkspaceHomeRow>((notification) => ({
-    kind: 'notification',
-    id: notification.id,
-    title: notification.title,
-    subtitle: notification.body,
-    to: buildNotificationTo(notification, workspaceSlug),
-    trailing: notification.created_at
-      ? formatRelativeTime(notification.created_at, { locale, timeZone })
-      : '',
-    isRead: notification.is_read,
-  }));
-
   return [
     {
       id: 'planner',
@@ -459,17 +404,6 @@ export function buildWorkspaceHomeSections({
       status: sectionStatus(state.pagesLoading, docRows),
       rows: docRows,
     },
-    {
-      id: 'notifications',
-      titleKey: 'home.notifications',
-      actionLabelKey: '',
-      actionTo: '',
-      emptyKey: 'home.notificationsEmpty',
-      emptyCtaLabelKey: '',
-      emptyCtaTo: '',
-      status: sectionStatus(state.notificationsLoading, notificationRows),
-      rows: notificationRows,
-    },
   ];
 }
 
@@ -485,7 +419,6 @@ export function workspaceHomeReducer(
         issuesLoading: true,
         pagesLoading: true,
         plannerLoading: true,
-        notificationsLoading: true,
       };
     case 'meetings-loaded':
       return { ...state, meetings: action.items, meetingsLoading: false };
@@ -503,13 +436,5 @@ export function workspaceHomeReducer(
       return { ...state, plannerEvents: action.items, plannerLoading: false };
     case 'planner-failed':
       return { ...state, plannerEvents: [], plannerLoading: false };
-    case 'notifications-loaded':
-      return {
-        ...state,
-        notifications: action.items,
-        notificationsLoading: false,
-      };
-    case 'notifications-failed':
-      return { ...state, notifications: [], notificationsLoading: false };
   }
 }

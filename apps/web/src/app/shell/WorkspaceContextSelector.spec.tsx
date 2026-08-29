@@ -138,6 +138,9 @@ describe('WorkspaceContextSelector', () => {
       name: '이 앱의 워크스페이스',
     });
     fireEvent.click(trigger);
+    expect(
+      screen.getByRole('listbox', { name: '이 앱의 워크스페이스' }),
+    ).toBeTruthy();
     const search = screen.getByRole('searchbox');
     fireEvent.change(search, { target: { value: 'General' } });
     search.focus();

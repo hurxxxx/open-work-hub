@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next';
 import {
   AlertTriangle,
   BarChart3,
-  Bell,
   Calendar,
   CalendarDays,
   ChevronDown,
@@ -408,41 +407,6 @@ function WorkspaceSummaryRow({ row }: { row: WorkspaceHomeRow }) {
     );
   }
 
-  if (row.kind === 'notification') {
-    const rowClass =
-      'group -mx-2 flex items-center gap-3 border-b border-app-border px-2 py-3 transition-colors last:border-b-0';
-    const content = (
-      <>
-        <Bell
-          size={16}
-          className={`shrink-0 ${row.isRead ? 'text-app-ink/45' : 'text-app-accent'}`}
-        />
-        <div className="min-w-0 flex-1">
-          <span className="app-text-body block truncate text-app-ink">
-            {row.title}
-          </span>
-          {row.subtitle ? (
-            <span className="app-text-caption block truncate text-app-ink/55">
-              {row.subtitle}
-            </span>
-          ) : null}
-        </div>
-        {row.trailing ? (
-          <span className="app-text-micro shrink-0 text-app-ink/45">
-            {row.trailing}
-          </span>
-        ) : null}
-      </>
-    );
-    return row.to ? (
-      <Link to={row.to} className={`${rowClass} hover:bg-app-surface-hover/50`}>
-        {content}
-      </Link>
-    ) : (
-      <div className={rowClass}>{content}</div>
-    );
-  }
-
   return (
     <Link
       to={row.to}
@@ -590,9 +554,6 @@ export const WorkspaceHomeView = () => {
   const docsSection = enabledAppIdSet.has('docs')
     ? sections.find((section) => section.id === 'docs')
     : undefined;
-  const notificationsSection = sections.find(
-    (section) => section.id === 'notifications',
-  );
 
   return (
     <div className="custom-scrollbar h-full overflow-y-auto">
@@ -630,9 +591,6 @@ export const WorkspaceHomeView = () => {
           />
           {docsSection ? (
             <WorkspaceSummarySection section={docsSection} />
-          ) : null}
-          {notificationsSection ? (
-            <WorkspaceSummarySection section={notificationsSection} />
           ) : null}
           <ComingSoonMailWidget />
         </div>

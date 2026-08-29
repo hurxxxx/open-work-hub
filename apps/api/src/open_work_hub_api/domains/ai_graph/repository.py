@@ -100,17 +100,18 @@ class AiGraphRunRepository:
         *,
         workspace_id: str,
         user_id: str,
+        enabled_app_ids: frozenset[str],
     ) -> AiGraphRun | None:
-        return self.db.scalar(
-            select(AiGraphRun).where(
+        predicates = [
                 AiGraphRun.id == run_id,
                 AiGraphRun.workspace_id == workspace_id,
                 or_(
                     AiGraphRun.requested_by_user_id == user_id,
                     AiGraphRun.visibility == "workspace",
                 ),
-            )
-        )
+        ]
+        predicates.append(AiGraphRun.app_id.in_(enabled_app_ids))
+        return self.db.scalar(select(AiGraphRun).where(*predicates))
 
     def list_visible(
         self,
@@ -120,6 +121,7 @@ class AiGraphRunRepository:
         status: str | None = None,
         app_id: str | None = None,
         conversation_id: str | None = None,
+        enabled_app_ids: frozenset[str],
         limit: int = 50,
         offset: int = 0,
     ) -> tuple[list[AiGraphRun], int]:
@@ -130,6 +132,7 @@ class AiGraphRunRepository:
                 AiGraphRun.visibility == "workspace",
             ),
         ]
+        predicates.append(AiGraphRun.app_id.in_(enabled_app_ids))
         if status:
             predicates.append(AiGraphRun.status == status)
         if app_id:
@@ -409,6 +412,25 @@ class AiGraphDispatchRepository:
         item.dispatched_at = now
         item.claim_token = None
         item.updated_at = now
+        self.db.add(item)
+        self.db.flush()
+        return item
+
+    def mark_cancelled(
+        self,
+        outbox_id: str,
+        *,
+        claim_token: str,
+        error_code: str = "app_execution_disabled",
+    ) -> AiGraphDispatchOutbox:
+        item = self.db.get(AiGraphDispatchOutbox, outbox_id)
+        if item is None or item.status != "claimed" or item.claim_token != claim_token:
+            raise AiGraphDispatchTransitionError("dispatch claim is missing or no longer owned")
+        item.status = "cancelled"
+        item.last_error_code = error_code[:128]
+        item.claim_token = None
+        item.claimed_at = None
+        item.updated_at = _utcnow_naive()
         self.db.add(item)
         self.db.flush()
         return item

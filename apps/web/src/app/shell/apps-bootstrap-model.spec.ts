@@ -23,6 +23,7 @@ function workspaceApp(appId: string): WorkspaceBootstrapApp {
 
 function globalBootstrap(
   personalToolIds: string[] = ['mail', 'planner'],
+  globalRouteAppIds?: string[],
 ): AppsBootstrapResponse {
   const personalTools = personalToolIds.map((appId) => ({
     app_id: appId,
@@ -44,9 +45,9 @@ function globalBootstrap(
   };
   return {
     apps: [community, ...personalTools],
-    global_route_app_ids: [community, ...personalTools].map(
-      (app) => app.app_id,
-    ),
+    global_route_app_ids:
+      globalRouteAppIds ??
+      [community, ...personalTools].map((app) => app.app_id),
     app_bar_categories: [
       {
         id: 'collaboration',
@@ -130,5 +131,16 @@ describe('projectShellAppsBootstrap', () => {
         (category) => category.id === PERSONAL_TOOLS_CATEGORY_ID,
       ),
     ).toBe(false);
+  });
+
+  it('uses the server global-route projection instead of inferring route access from apps', () => {
+    const projection = projectShellAppsBootstrap({
+      globalBootstrap: globalBootstrap(['mail'], ['community']),
+      personalToolsScope: 'All workspaces',
+      personalToolsTitle: 'Personal',
+    });
+
+    expect(projection.enabledAppIds).toEqual(['community', 'mail']);
+    expect(projection.globalRouteAppIds).toEqual(['community']);
   });
 });

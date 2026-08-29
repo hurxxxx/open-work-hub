@@ -39,9 +39,7 @@ def test_rag_sync_rechecks_app_before_provider_mutation(monkeypatch) -> None:
         rag_sync,
         "_mark_sync_job",
         lambda _session, current_job, *, status, last_error=None, **_kwargs: (
-            marked.append((status, last_error))
-            if current_job is job
-            else None
+            marked.append((status, last_error)) if current_job is job else None
         ),
     )
     monkeypatch.setattr(
@@ -52,14 +50,17 @@ def test_rag_sync_rechecks_app_before_provider_mutation(monkeypatch) -> None:
         ),
     )
 
-    assert rag_sync._execute_sync_job(
-        object(),
-        task=object(),
-        job=job,
-        span_name="test.rag",
-        job_kind="resource_sync",
-        rag_enabled=True,
-    ) == "app-disabled"
+    assert (
+        rag_sync._execute_sync_job(
+            object(),
+            task=object(),
+            job=job,
+            span_name="test.rag",
+            job_kind="resource_sync",
+            rag_enabled=True,
+        )
+        == "app-disabled"
+    )
     assert job.attempts == 0
     assert marked == [("pending", "app_disabled:docs")]
 
@@ -87,9 +88,7 @@ def test_rag_visibility_rechecks_app_before_enqueuing_resources(monkeypatch) -> 
         rag_sync,
         "_mark_visibility_job",
         lambda _session, current_job, *, status, last_error=None, **_kwargs: (
-            marked.append((status, last_error))
-            if current_job is job
-            else None
+            marked.append((status, last_error)) if current_job is job else None
         ),
     )
     monkeypatch.setattr(
@@ -100,18 +99,22 @@ def test_rag_visibility_rechecks_app_before_enqueuing_resources(monkeypatch) -> 
         ),
     )
 
-    assert rag_sync._execute_visibility_job(
-        object(),
-        task=object(),
-        job=job,
-        rag_enabled=True,
-    ) == "app-disabled"
+    assert (
+        rag_sync._execute_visibility_job(
+            object(),
+            task=object(),
+            job=job,
+            rag_enabled=True,
+        )
+        == "app-disabled"
+    )
     assert job.attempts == 0
     assert marked == [("pending", "app_disabled:docs")]
 
 
 def test_recording_worker_marks_stage_failed_before_provider_io(monkeypatch) -> None:
     current_recording = SimpleNamespace(
+        celery_task_id="attempt-1",
         id="recording-1",
         owner_id="user-1",
         workspace_id="workspace-1",
@@ -125,7 +128,7 @@ def test_recording_worker_marks_stage_failed_before_provider_io(monkeypatch) -> 
     monkeypatch.setattr(
         recording,
         "_mark_failed",
-        lambda _session, recording_id, reason, *, stage: marked.append(
+        lambda _session, recording_id, reason, *, stage, expected_attempt_id: marked.append(
             (recording_id, reason, stage)
         ),
     )
@@ -135,6 +138,7 @@ def test_recording_worker_marks_stage_failed_before_provider_io(monkeypatch) -> 
             object(),
             current_recording,
             stage="transcript",
+            expected_attempt_id="attempt-1",
         )
 
     assert marked == [
@@ -144,6 +148,186 @@ def test_recording_worker_marks_stage_failed_before_provider_io(monkeypatch) -> 
             "transcript",
         )
     ]
+
+
+def test_recording_heartbeat_mutates_only_the_locked_current_attempt(monkeypatch) -> None:
+    stale = SimpleNamespace(id="recording-1", progress_pct=10)
+    current = SimpleNamespace(
+        id="recording-1",
+        progress_pct=20,
+        summary_status="pending",
+        transcript_status="pending",
+        updated_at=None,
+    )
+    added: list[object] = []
+
+    class FakeSession:
+        def add(self, value: object) -> None:
+            added.append(value)
+
+        def commit(self) -> None:
+            pass
+
+    monkeypatch.setattr(
+        recording,
+        "_lock_current_recording_attempt",
+        lambda _session, recording_id, attempt_id: (
+            current
+            if recording_id == "recording-1" and attempt_id == "attempt-current"
+            else (_ for _ in ()).throw(recording.SupersededRecordingGeneration())
+        ),
+    )
+
+    recording._heartbeat(
+        FakeSession(),
+        stale,
+        45,
+        expected_attempt_id="attempt-current",
+        transcript_status="transcribing",
+    )
+
+    assert stale.progress_pct == 10
+    assert current.progress_pct == 45
+    assert current.transcript_status == "transcribing"
+    assert current.updated_at is not None
+    assert added == [current]
+
+
+def test_recording_worker_persists_result_without_publication_side_effect(
+    monkeypatch,
+) -> None:
+    result = SimpleNamespace(
+        generated_at=None,
+        summary_text="Grounded summary",
+        updated_at=None,
+        verifier_note=None,
+        version=3,
+    )
+    current_recording = SimpleNamespace(
+        celery_task_id="task-1",
+        failure_reason="old failure",
+        id="recording-1",
+        meeting_insight_status="pending",
+        progress_pct=94,
+        result=result,
+        summary_status="verifying",
+        updated_at=None,
+    )
+    added: list[object] = []
+
+    class FakeSession:
+        def add(self, value: object) -> None:
+            added.append(value)
+
+        def close(self) -> None:
+            pass
+
+        def commit(self) -> None:
+            pass
+
+    session = FakeSession()
+    monkeypatch.setattr(recording, "_db_session", lambda: session)
+    monkeypatch.setattr(
+        recording,
+        "_load_active_recording",
+        lambda _session, recording_id: (
+            current_recording if recording_id == current_recording.id else None
+        ),
+    )
+    monkeypatch.setattr(
+        recording,
+        "_lock_current_recording_attempt",
+        lambda _session, recording_id, attempt_id: (
+            current_recording
+            if recording_id == current_recording.id and attempt_id == "task-1"
+            else (_ for _ in ()).throw(recording.SupersededRecordingGeneration())
+        ),
+    )
+    monkeypatch.setattr(
+        recording,
+        "_ensure_recording_execution_allowed",
+        lambda *_args, **_kwargs: None,
+    )
+
+    assert (
+        recording.persist_recording_result.run(
+            {
+                "recording_id": current_recording.id,
+                "attempt_id": "task-1",
+                "result_version": 3,
+                "summary": "Grounded summary",
+                "verifier_note": "Verified",
+            }
+        )
+        == current_recording.id
+    )
+
+    assert added == [result, current_recording]
+    assert result.verifier_note == "Verified"
+    assert result.generated_at is not None
+    assert current_recording.summary_status == "done"
+    assert current_recording.meeting_insight_status == "none"
+    assert current_recording.progress_pct == 100
+    assert current_recording.failure_reason is None
+    assert current_recording.celery_task_id is None
+
+
+def test_recording_worker_rejects_stale_result_version(monkeypatch) -> None:
+    current_recording = SimpleNamespace(
+        celery_task_id="task-v4",
+        failure_reason=None,
+        id="recording-1",
+        result=SimpleNamespace(summary_text="Current summary", version=4),
+        summary_status="verifying",
+    )
+    marked: list[tuple[str, str, str]] = []
+
+    class FakeSession:
+        def close(self) -> None:
+            pass
+
+        def rollback(self) -> None:
+            pass
+
+    session = FakeSession()
+    monkeypatch.setattr(recording, "_db_session", lambda: session)
+    monkeypatch.setattr(
+        recording,
+        "_load_active_recording",
+        lambda *_args: current_recording,
+    )
+    monkeypatch.setattr(
+        recording,
+        "_lock_current_recording_attempt",
+        lambda *_args: current_recording,
+    )
+    monkeypatch.setattr(
+        recording,
+        "_ensure_recording_execution_allowed",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        recording,
+        "_mark_failed",
+        lambda _session, recording_id, reason, *, stage, expected_attempt_id: marked.append(
+            (recording_id, reason, stage)
+        ),
+    )
+
+    with pytest.raises(Ignore):
+        recording.persist_recording_result.run(
+            {
+                "recording_id": current_recording.id,
+                "attempt_id": "task-v4",
+                "result_version": 3,
+                "summary": "Current summary",
+            }
+        )
+
+    assert marked == []
+    assert current_recording.summary_status == "verifying"
+    assert current_recording.celery_task_id == "task-v4"
+    assert current_recording.failure_reason is None
 
 
 def test_meeting_worker_marks_failed_before_provider_io(monkeypatch) -> None:

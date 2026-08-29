@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
@@ -17,9 +18,6 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from open_work_hub_api.core.db import Base
-from open_work_hub_api.domains.docs.models import NativeDoc
-
-
 def utcnow_naive() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
@@ -30,8 +28,7 @@ class Recording(Base):
         Index("ix_recordings_workspace_owner_started", "workspace_id", "owner_id", "started_at"),
         Index("ix_recordings_workspace_audio_status", "workspace_id", "audio_status"),
         Index("ix_recordings_workspace_transcript_status", "workspace_id", "transcript_status"),
-        Index("ix_recordings_minutes_doc_id", "minutes_doc_id"),
-        Index("ix_recordings_raw_transcript_doc_id", "raw_transcript_doc_id"),
+        Index("ix_recordings_workspace_summary_status", "workspace_id", "summary_status"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -55,24 +52,14 @@ class Recording(Base):
     transcript_status: Mapped[str] = mapped_column(
         String(24), default="pending", index=True, nullable=False
     )
-    raw_transcript_doc_status: Mapped[str] = mapped_column(
-        String(24), default="pending", index=True, nullable=False
-    )
-    minutes_doc_status: Mapped[str] = mapped_column(
+    summary_status: Mapped[str] = mapped_column(
         String(24), default="pending", index=True, nullable=False
     )
     meeting_insight_status: Mapped[str] = mapped_column(
         String(24), default="none", index=True, nullable=False
     )
     progress_pct: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    transcript_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
-    raw_transcript_doc_id: Mapped[str | None] = mapped_column(
-        ForeignKey("docs_native_docs.id"), nullable=True
-    )
-    minutes_doc_id: Mapped[str | None] = mapped_column(
-        ForeignKey("docs_native_docs.id"), nullable=True
-    )
     celery_task_id: Mapped[str | None] = mapped_column(String(80), index=True, nullable=True)
     transcribe_started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     transcribe_completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -84,12 +71,82 @@ class Recording(Base):
 
     workspace = relationship("Workspace")
     owner = relationship("User", foreign_keys=[owner_id])
-    raw_transcript_doc = relationship(NativeDoc, foreign_keys=[raw_transcript_doc_id])
-    minutes_doc = relationship(NativeDoc, foreign_keys=[minutes_doc_id])
+    result: Mapped["RecordingResult | None"] = relationship(
+        back_populates="recording",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+    publications: Mapped[list["RecordingPublication"]] = relationship(
+        back_populates="recording",
+        cascade="all, delete-orphan",
+        order_by="RecordingPublication.created_at",
+    )
     targets: Mapped[list["RecordingTarget"]] = relationship(
         back_populates="recording",
         cascade="all, delete-orphan",
     )
+
+
+class RecordingResult(Base):
+    __tablename__ = "recording_results"
+    __table_args__ = (
+        CheckConstraint("version >= 1", name="ck_recording_results_version"),
+    )
+
+    recording_id: Mapped[str] = mapped_column(
+        ForeignKey("recordings.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    transcript_text: Mapped[str] = mapped_column(Text, nullable=False)
+    summary_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    verifier_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    generated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        onupdate=utcnow_naive,
+        nullable=False,
+    )
+
+    recording: Mapped[Recording] = relationship(back_populates="result")
+
+
+class RecordingPublication(Base):
+    __tablename__ = "recording_publications"
+    __table_args__ = (
+        UniqueConstraint(
+            "recording_id",
+            "target_app",
+            "result_version",
+            name="uq_recording_publication_result_version",
+        ),
+        Index("ix_recording_publications_target", "target_app", "target_resource_id"),
+        CheckConstraint(
+            "result_version >= 1",
+            name="ck_recording_publications_result_version",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    recording_id: Mapped[str] = mapped_column(
+        ForeignKey("recordings.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    target_app: Mapped[str] = mapped_column(String(64), nullable=False)
+    target_resource_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    result_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    published_by_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
+
+    recording: Mapped[Recording] = relationship(back_populates="publications")
+    published_by = relationship("User")
 
 
 class RecordingStaging(Base):

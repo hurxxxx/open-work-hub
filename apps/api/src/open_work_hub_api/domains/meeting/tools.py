@@ -155,14 +155,13 @@ def _get_meeting(
     user: User,
     arguments: Mapping[str, Any],
 ) -> dict[str, Any]:
-    result = _meeting_service().get_meeting(
+    return _meeting_service().get_meeting_for_ai(
         db,
         workspace=workspace,
         principal=principal,
         user=user,
         meeting_id=str(arguments["meeting_id"]),
     )
-    return result.model_dump(mode="json", by_alias=True)
 
 
 def _find_availability(

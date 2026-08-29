@@ -697,9 +697,10 @@ function AuthenticatedShell({
     activeMobileShellMenu;
   const themePreference = currentUser?.theme_preference ?? 'system';
   const resolvedTheme = resolveThemePreference(themePreference, systemDarkMode);
-  const appsBootstrap = useAppsBootstrap(auth.token);
+  const appsBootstrap = useAppsBootstrap(auth.token, currentUserId);
   const workspaceBootstrap = useWorkspaceBootstrap(
     auth.token,
+    currentUserId,
     routeWorkspaceSlug,
   );
   const scopedWorkspaceBootstrapData = useMemo(
@@ -743,12 +744,7 @@ function AuthenticatedShell({
       }),
     [appsBootstrap.data, t],
   );
-  const enabledGlobalAppIds = useMemo(() => {
-    if (!appsBootstrap.data) {
-      return null;
-    }
-    return appsBootstrap.data.apps.map((app) => app.app_id);
-  }, [appsBootstrap.data]);
+  const enabledGlobalAppIds = shellAppsBootstrap.globalRouteAppIds;
   const enabledRouteAppIds = routeWorkspaceSlug
     ? enabledWorkspaceAppIds
     : enabledGlobalAppIds;
@@ -1252,7 +1248,7 @@ function AuthenticatedShell({
                     <div className="h-full w-10 shrink-0 border-l border-app-border bg-app-bg" />
                   }
                 >
-                  <PersonalWidgetHost />
+                  <PersonalWidgetHost key={currentUserId} />
                 </Suspense>
               </LazyRouteErrorBoundary>
             ) : null}

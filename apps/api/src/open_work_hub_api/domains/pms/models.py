@@ -449,11 +449,16 @@ class Notification(Base):
             postgresql_where=text("is_read = false AND type <> 'dm_message'"),
         ),
         Index(
-            "ix_pms_notifications_dm_thread_unread",
+            "ix_pms_notifications_user_source_unread",
             "user_id",
-            "reference_type",
-            "reference_id",
+            "origin_app_id",
+            "source_type",
+            "source_id",
             postgresql_where=text("is_read = false"),
+        ),
+        CheckConstraint(
+            "origin_app_id IS NOT NULL AND source_id IS NOT NULL",
+            name="ck_pms_notifications_global_origin",
         ),
     )
 
@@ -462,8 +467,14 @@ class Notification(Base):
     type: Mapped[str] = mapped_column(String(40), index=True)
     title: Mapped[str] = mapped_column(String(255))
     body: Mapped[str] = mapped_column(Text, default="")
-    reference_type: Mapped[str] = mapped_column(String(24), default="task")
-    reference_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    source_type: Mapped[str] = mapped_column(String(40), default="task")
+    source_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    origin_app_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    origin_workspace_id: Mapped[str | None] = mapped_column(
+        ForeignKey("workspaces.id"),
+        nullable=True,
+        index=True,
+    )
     action_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     created_at: Mapped[datetime] = mapped_column(

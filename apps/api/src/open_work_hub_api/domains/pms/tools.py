@@ -131,7 +131,7 @@ def _get_task(
     user: User,
     arguments: Mapping[str, Any],
 ) -> dict[str, Any]:
-    return _pms_service().get_task_detail(
+    return _pms_service().get_task_detail_for_ai(
         db,
         workspace=workspace,
         principal=principal,

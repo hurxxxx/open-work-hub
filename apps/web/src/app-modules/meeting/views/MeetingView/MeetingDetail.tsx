@@ -28,6 +28,10 @@ import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
+  downloadAuthenticatedContent,
+  openAuthenticatedContent,
+} from '@/src/platform/browser/browser-download';
+import {
   LinkedRecordingList,
   RecordingRecoveryBanner,
   getRecordingRecoveryAction,
@@ -492,24 +496,26 @@ function useMeetingDetailElement({
     download_url: string;
     filename: string;
   }) {
+    if (!token) return;
     try {
-      const response = await fetch(file.download_url);
-      if (!response.ok) {
-        throw new Error(
-          t('meeting.detail.downloadFailedWithStatus', {
-            status: response.status,
-          }),
-        );
-      }
-      const blob = await response.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = objectUrl;
-      anchor.download = file.filename;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(objectUrl);
+      await downloadAuthenticatedContent(
+        token,
+        file.download_url,
+        file.filename,
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : t('meeting.detail.downloadFileFailed'),
+      );
+    }
+  }
+
+  async function handleFilePreview(file: { download_url: string }) {
+    if (!token) return;
+    try {
+      await openAuthenticatedContent(token, file.download_url);
     } catch (err) {
       setError(
         err instanceof Error
@@ -902,15 +908,14 @@ function useMeetingDetailElement({
                   className="flex items-start justify-between rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2"
                 >
                   <div className="min-w-0 flex-1">
-                    <a
-                      href={file.download_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      type="button"
+                      onClick={() => void handleFilePreview(file)}
                       className="app-text-body line-clamp-1 text-app-ink hover:text-app-accent"
                       title={t('meeting.detail.previewNewTab')}
                     >
                       {file.filename}
-                    </a>
+                    </button>
                     <p className="app-text-caption text-app-ink/40">
                       {formatMeetingFileSize(file.size_bytes)} ·{' '}
                       {file.added_by_name}

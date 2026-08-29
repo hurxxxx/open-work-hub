@@ -36,10 +36,7 @@ export function getTaskDetailMentionCandidates<
   TMember extends Pick<PmsTaskListMember, 'email' | 'full_name'> & {
     user_id?: string;
   },
->(
-  members: TMember[],
-  mentionQuery: string,
-): TMember[] {
+>(members: TMember[], mentionQuery: string): TMember[] {
   if (!mentionQuery) return members;
   return members.filter((member) =>
     userOptionMatchesQuery(
@@ -114,6 +111,7 @@ export function useTaskDetailComments({
   taskId,
   token,
   t,
+  workspaceSlug,
 }: {
   canEdit: boolean;
   members: PmsTaskListMember[];
@@ -123,6 +121,7 @@ export function useTaskDetailComments({
   taskId: string;
   token: string | null;
   t: TFunction;
+  workspaceSlug: string;
 }) {
   const [commentDraft, setCommentDraft] = useState('');
   const [mentionOpen, setMentionOpen] = useState(false);
@@ -167,11 +166,11 @@ export function useTaskDetailComments({
   }, []);
 
   const handleCommentSubmit = useCallback(() => {
-    if (!token || !canEdit || !commentDraft.trim()) return;
+    if (!token || !canEdit || !workspaceSlug || !commentDraft.trim()) return;
     setSaveError(null);
     const body = commentDraft.trim();
     const bodyBlocks = buildTaskCommentBodyBlocks(body, mentionTokens);
-    createTaskComment(token, taskId, body, bodyBlocks)
+    createTaskComment(token, taskId, body, bodyBlocks, workspaceSlug)
       .then(async (newComment) => {
         setComments((prev) => [...prev, newComment]);
         setCommentDraft('');
@@ -198,6 +197,7 @@ export function useTaskDetailComments({
     t,
     taskId,
     token,
+    workspaceSlug,
   ]);
 
   return {

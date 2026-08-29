@@ -9,10 +9,9 @@ from open_work_hub_api.core.app_routes import InternalAppLocation, build_app_hre
 from open_work_hub_api.domains.auth.access import is_platform_admin_user
 from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.auth.security import new_id
-from open_work_hub_api.domains.dm import realtime_event_types
-from open_work_hub_api.domains.notifications import dm_delivery
 from open_work_hub_api.domains.notifications import realtime_event_types as notification_event_types
 from open_work_hub_api.domains.notifications import service as notification_service
+from open_work_hub_api.domains.notifications.visibility import notification_is_visible
 from open_work_hub_api.domains.pms.models import Notification
 
 from .models import CommunityComment, CommunityPost
@@ -26,14 +25,6 @@ COMMENT_PREVIEW_SUFFIX = "..."
 
 
 class CommunityNotificationPublisher(Protocol):
-    def publish_conversation_snapshot(
-        self,
-        conversation: object,
-        event_type: str,
-        *,
-        message: object | None = None,
-    ) -> None: ...
-
     def publish_notification(
         self,
         user_id: str,
@@ -47,7 +38,6 @@ class CommunityNotificationPublisher(Protocol):
 @dataclass(frozen=True)
 class CommunityCommentNotificationResult:
     notification: Notification
-    delivery: dm_delivery.NotificationDmDeliveryResult
 
 
 def create_comment_notification(
@@ -82,25 +72,16 @@ def create_comment_notification(
         type="community_comment",
         title=title,
         body=body,
-        reference_type="community_post",
-        reference_id=post.id,
+        source_type="community_post",
+        source_id=post.id,
+        origin_app_id="community",
+        origin_workspace_id=None,
         action_url=action_url,
     )
     db.add(notification)
     db.flush()
-    delivery = dm_delivery.deliver_notification_as_bot_dm(
-        db,
-        notification=notification,
-        recipient=recipient,
-        body=_bot_dm_body(
-            title=title,
-            body=body,
-            action_url=action_url,
-        ),
-    )
     return CommunityCommentNotificationResult(
         notification=notification,
-        delivery=delivery,
     )
 
 
@@ -110,13 +91,15 @@ def publish_comment_notification(
     result: CommunityCommentNotificationResult | None,
     events: CommunityNotificationPublisher | None,
 ) -> None:
-    if result is None or events is None or not result.delivery.created:
+    if result is None or events is None:
         return
-    events.publish_conversation_snapshot(
-        result.delivery.conversation,
-        realtime_event_types.DM_MESSAGE_CREATED,
-        message=result.delivery.message,
-    )
+    recipient = db.get(User, result.notification.user_id)
+    if recipient is None or not notification_is_visible(
+        db,
+        notification=result.notification,
+        user=recipient,
+    ):
+        return
     events.publish_notification(
         result.notification.user_id,
         event_type=notification_event_types.NOTIFICATION_CREATED,
@@ -175,7 +158,3 @@ def _community_post_url(post: CommunityPost) -> str:
             },
         )
     )
-
-
-def _bot_dm_body(*, title: str, body: str, action_url: str) -> str:
-    return f"{title}\n{body}\n{action_url}"

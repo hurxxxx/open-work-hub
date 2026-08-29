@@ -9,6 +9,7 @@ import {
   type AppBarProps,
 } from './app-bar-model';
 import { useAppBarController } from './useAppBarController';
+import { useNotificationPanelFocus } from './useNotificationPanelFocus';
 import { EMPTY_LAUNCHER_GLOBAL_PATHS } from '@/src/app/shell/navigation-types';
 
 export function AppBar(props: AppBarProps) {
@@ -66,6 +67,10 @@ export function AppBar(props: AppBarProps) {
     state.favoritesOpen ||
     Boolean(state.categoryMenuId) ||
     state.appBarEditorOpen;
+  const notificationPanelFocus = useNotificationPanelFocus(
+    state.notifOpen,
+    onToggleNotifications,
+  );
 
   useEffect(() => {
     onDesktopMenuOpenChange?.(desktopMenuOpen);
@@ -92,7 +97,8 @@ export function AppBar(props: AppBarProps) {
         onOpenMobileAppMenu={onOpenMobileAppMenu}
         onOpenMobileNavigation={onOpenMobileNavigation}
         onOpenWorkspaceSearch={onOpenWorkspaceSearch}
-        onToggleNotifications={onToggleNotifications}
+        onToggleNotifications={notificationPanelFocus.onToggle}
+        notificationPanelOpen={state.notifOpen}
         notificationsEnabled={notificationsEnabled}
         unreadCount={state.unreadCount}
       />
@@ -125,7 +131,8 @@ export function AppBar(props: AppBarProps) {
         onSaveLayout={onSaveLayout}
         onToggleCategoryMenu={onToggleCategoryMenu}
         onToggleFavorites={onToggleFavorites}
-        onToggleNotifications={onToggleNotifications}
+        onToggleNotifications={notificationPanelFocus.onToggle}
+        notificationPanelOpen={state.notifOpen}
         onTogglePinnedApp={onTogglePinnedApp}
         notificationsEnabled={notificationsEnabled}
         pinnedEligibleAppIds={pinnedEligibleAppIds}
@@ -139,7 +146,7 @@ export function AppBar(props: AppBarProps) {
       <AnimatePresence>
         {notificationsEnabled && NotificationPanel && state.notifOpen ? (
           <NotificationPanel
-            onClose={onToggleNotifications}
+            onClose={notificationPanelFocus.onClose}
             onCountChange={handleCountChange}
             onNavigateToIssue={handleNavigateToIssue}
             refreshKey={state.notificationRefreshSeq}

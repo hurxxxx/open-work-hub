@@ -1,3 +1,4 @@
+import type { MouseEventHandler } from 'react';
 import { ChevronDown, Menu, Search } from 'lucide-react';
 
 import type { AuthUser } from '@/src/platform/auth/auth-api';
@@ -15,6 +16,7 @@ export function AppBarMobileHeader({
   onOpenMobileNavigation,
   onOpenWorkspaceSearch,
   onToggleNotifications,
+  notificationPanelOpen,
   notificationsEnabled,
   unreadCount,
 }: {
@@ -34,7 +36,8 @@ export function AppBarMobileHeader({
   onOpenMobileAppMenu?: () => void;
   onOpenMobileNavigation: () => void;
   onOpenWorkspaceSearch: () => void;
-  onToggleNotifications: () => void;
+  onToggleNotifications: MouseEventHandler<HTMLButtonElement>;
+  notificationPanelOpen: boolean;
   notificationsEnabled: boolean;
   unreadCount: number;
 }) {
@@ -93,6 +96,7 @@ export function AppBarMobileHeader({
           iconSize={19}
           label={labels.notificationsTitle}
           onClick={onToggleNotifications}
+          open={notificationPanelOpen}
           unreadCount={unreadCount}
         />
       ) : null}

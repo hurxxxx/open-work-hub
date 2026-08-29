@@ -96,6 +96,7 @@ async function getWorkspaceBootstrap(
 }
 
 interface WorkspaceBootstrapState {
+  scopeKey: string | null;
   data: WorkspaceBootstrapResponse | null;
   error: string | null;
   loading: boolean;
@@ -103,11 +104,12 @@ interface WorkspaceBootstrapState {
 
 type WorkspaceBootstrapAction =
   | { type: 'reset' }
-  | { type: 'loading' }
-  | { type: 'success'; data: WorkspaceBootstrapResponse }
-  | { type: 'failure'; error: string };
+  | { type: 'loading'; scopeKey: string }
+  | { type: 'success'; scopeKey: string; data: WorkspaceBootstrapResponse }
+  | { type: 'failure'; scopeKey: string; error: string };
 
 const WORKSPACE_BOOTSTRAP_INITIAL_STATE: WorkspaceBootstrapState = {
+  scopeKey: null,
   data: null,
   error: null,
   loading: false,
@@ -124,18 +126,21 @@ function workspaceBootstrapReducer(
         : WORKSPACE_BOOTSTRAP_INITIAL_STATE;
     case 'loading':
       return {
-        data: state.data,
+        scopeKey: action.scopeKey,
+        data: state.scopeKey === action.scopeKey ? state.data : null,
         error: null,
         loading: true,
       };
     case 'success':
       return {
+        scopeKey: action.scopeKey,
         data: action.data,
         error: null,
         loading: false,
       };
     case 'failure':
       return {
+        scopeKey: action.scopeKey,
         data: null,
         error: action.error,
         loading: false,
@@ -145,6 +150,7 @@ function workspaceBootstrapReducer(
 
 export function useWorkspaceBootstrap(
   token: string | null,
+  principalId: string | null,
   workspaceSlug: string | null | undefined,
 ) {
   const [state, dispatch] = useReducer(
@@ -153,20 +159,25 @@ export function useWorkspaceBootstrap(
   );
   const [reloadSeq, setReloadSeq] = useState(0);
 
+  const requestedScopeKey =
+    token && principalId && workspaceSlug
+      ? JSON.stringify([principalId, workspaceSlug])
+      : null;
+
   useEffect(() => {
-    if (!token || !workspaceSlug) {
+    if (!token || !principalId || !workspaceSlug || !requestedScopeKey) {
       dispatch({ type: 'reset' });
       return;
     }
 
     let cancelled = false;
-    dispatch({ type: 'loading' });
+    dispatch({ type: 'loading', scopeKey: requestedScopeKey });
     getWorkspaceBootstrap(token, workspaceSlug)
       .then((next) => {
         if (cancelled) {
           return;
         }
-        dispatch({ type: 'success', data: next });
+        dispatch({ type: 'success', scopeKey: requestedScopeKey, data: next });
       })
       .catch((caughtError: unknown) => {
         if (cancelled) {
@@ -174,6 +185,7 @@ export function useWorkspaceBootstrap(
         }
         dispatch({
           type: 'failure',
+          scopeKey: requestedScopeKey,
           error:
             caughtError instanceof Error
               ? caughtError.message
@@ -184,16 +196,22 @@ export function useWorkspaceBootstrap(
     return () => {
       cancelled = true;
     };
-  }, [reloadSeq, token, workspaceSlug]);
+  }, [principalId, reloadSeq, requestedScopeKey, token, workspaceSlug]);
 
   const reload = useCallback(() => {
     setReloadSeq((current) => current + 1);
   }, []);
 
+  const scopedState =
+    requestedScopeKey !== null && state.scopeKey === requestedScopeKey
+      ? state
+      : WORKSPACE_BOOTSTRAP_INITIAL_STATE;
   return {
-    data: state.data,
-    error: state.error,
-    loading: state.loading,
+    data: scopedState.data,
+    error: scopedState.error,
+    loading:
+      requestedScopeKey !== null &&
+      (scopedState.loading || state.scopeKey !== requestedScopeKey),
     reload,
   };
 }
@@ -214,6 +232,7 @@ async function getAppsBootstrap(token: string): Promise<AppsBootstrapResponse> {
 }
 
 interface AppsBootstrapState {
+  scopeKey: string | null;
   data: AppsBootstrapResponse | null;
   error: string | null;
   loading: boolean;
@@ -221,11 +240,12 @@ interface AppsBootstrapState {
 
 type AppsBootstrapAction =
   | { type: 'reset' }
-  | { type: 'loading' }
-  | { type: 'success'; data: AppsBootstrapResponse }
-  | { type: 'failure'; error: string };
+  | { type: 'loading'; scopeKey: string }
+  | { type: 'success'; scopeKey: string; data: AppsBootstrapResponse }
+  | { type: 'failure'; scopeKey: string; error: string };
 
 const APPS_BOOTSTRAP_INITIAL_STATE: AppsBootstrapState = {
+  scopeKey: null,
   data: null,
   error: null,
   loading: false,
@@ -241,37 +261,64 @@ function appsBootstrapReducer(
         ? state
         : APPS_BOOTSTRAP_INITIAL_STATE;
     case 'loading':
-      return { data: state.data, error: null, loading: true };
+      return {
+        scopeKey: action.scopeKey,
+        data: state.scopeKey === action.scopeKey ? state.data : null,
+        error: null,
+        loading: true,
+      };
     case 'success':
-      return { data: action.data, error: null, loading: false };
+      return {
+        scopeKey: action.scopeKey,
+        data: action.data,
+        error: null,
+        loading: false,
+      };
     case 'failure':
-      return { data: null, error: action.error, loading: false };
+      return {
+        scopeKey: action.scopeKey,
+        data: null,
+        error: action.error,
+        loading: false,
+      };
   }
 }
 
-export function useAppsBootstrap(token: string | null) {
+export function useAppsBootstrap(
+  token: string | null,
+  principalId: string | null,
+) {
   const [state, dispatch] = useReducer(
     appsBootstrapReducer,
     APPS_BOOTSTRAP_INITIAL_STATE,
   );
   const [reloadSeq, setReloadSeq] = useState(0);
 
+  const requestedScopeKey = token && principalId ? principalId : null;
+
   useEffect(() => {
-    if (!token) {
+    if (!token || !principalId || !requestedScopeKey) {
       dispatch({ type: 'reset' });
       return;
     }
 
     let cancelled = false;
-    dispatch({ type: 'loading' });
+    dispatch({ type: 'loading', scopeKey: requestedScopeKey });
     getAppsBootstrap(token)
       .then((next) => {
-        if (!cancelled) dispatch({ type: 'success', data: next });
+        if (!cancelled) {
+          dispatch({
+            type: 'success',
+            scopeKey: requestedScopeKey,
+            data: next,
+          });
+        }
       })
       .catch((caughtError: unknown) => {
         if (cancelled) return;
         dispatch({
           type: 'failure',
+          scopeKey: requestedScopeKey,
           error:
             caughtError instanceof Error
               ? caughtError.message
@@ -282,16 +329,22 @@ export function useAppsBootstrap(token: string | null) {
     return () => {
       cancelled = true;
     };
-  }, [reloadSeq, token]);
+  }, [principalId, reloadSeq, requestedScopeKey, token]);
 
   const reload = useCallback(() => {
     setReloadSeq((current) => current + 1);
   }, []);
 
+  const scopedState =
+    requestedScopeKey !== null && state.scopeKey === requestedScopeKey
+      ? state
+      : APPS_BOOTSTRAP_INITIAL_STATE;
   return {
-    data: state.data,
-    error: state.error,
-    loading: state.loading,
+    data: scopedState.data,
+    error: scopedState.error,
+    loading:
+      requestedScopeKey !== null &&
+      (scopedState.loading || state.scopeKey !== requestedScopeKey),
     reload,
   };
 }

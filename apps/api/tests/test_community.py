@@ -28,8 +28,9 @@ from open_work_hub_api.domains.dm.models import (
 )
 from open_work_hub_api.domains.community.router import _require_author_or_admin
 from open_work_hub_api.domains.community.schemas import CommunityChannelCreateRequest
+from open_work_hub_api.domains.content_access.grants import ContentGrantIssuer
+from open_work_hub_api.domains.media import content_access as media_content_access
 from open_work_hub_api.domains.media.models import MediaFile
-from open_work_hub_api.domains.notifications.models import NotificationDmDelivery
 from open_work_hub_api.domains.pms.models import Notification
 from dev_accounts import auth_headers, dev_login
 
@@ -49,7 +50,6 @@ def db() -> Session:
         DmMessage.__table__,
         DmConversationParticipant.__table__,
         DmMessageAttachment.__table__,
-        NotificationDmDelivery.__table__,
     ):
         table.create(engine, checkfirst=True)
     with Session(engine) as session:
@@ -68,6 +68,10 @@ def _make_user(db: Session, name: str) -> User:
     db.add(user)
     db.commit()
     return user
+
+
+def _content_grant_issuer(user: User) -> ContentGrantIssuer:
+    return ContentGrantIssuer(user_id=user.id, session_id="test-session")
 
 
 def _create_community_post(
@@ -285,7 +289,7 @@ def test_deleting_post_removes_read_receipts(db: Session) -> None:
     assert db.scalar(select(func.count()).select_from(CommunityPostRead)) == 0
 
 
-def test_comment_on_my_community_post_creates_notification_and_bot_dm(
+def test_comment_on_my_community_post_creates_source_owned_notification_only(
     client: TestClient,
 ) -> None:
     author = dev_login(client, "administrator")
@@ -311,8 +315,10 @@ def test_comment_on_my_community_post_creates_notification_and_bot_dm(
     assert notifications_response.status_code == 200, notifications_response.text
     notification = notifications_response.json()["items"][0]
     assert notification["type"] == "community_comment"
-    assert notification["reference_type"] == "community_post"
-    assert notification["reference_id"] == post["id"]
+    assert notification["source_type"] == "community_post"
+    assert notification["source_id"] == post["id"]
+    assert notification["origin_app_id"] == "community"
+    assert notification["origin_workspace_id"] is None
     assert notification["action_url"] == f"/apps/community/posts/{post['id']}"
     assert notification["is_read"] is False
     assert "댓글 알림 테스트" in notification["body"]
@@ -324,42 +330,13 @@ def test_comment_on_my_community_post_creates_notification_and_bot_dm(
         headers=auth_headers(author["token"]),
     )
     assert conversations_response.status_code == 200, conversations_response.text
-    bot_conversation = next(
-        item
+    assert all(
+        item["display_name"] != "Open Work Hub Bot"
         for item in conversations_response.json()["items"]
-        if item["display_name"] == "Open Work Hub Bot"
     )
-    assert bot_conversation["unread_count"] == 1
-
-    messages_response = client.get(
-        f"/api/v1/dm/conversations/{bot_conversation['id']}/messages",
-        headers=auth_headers(author["token"]),
-    )
-    assert messages_response.status_code == 200, messages_response.text
-    message = messages_response.json()["items"][0]
-    assert message["sender_name"] == "Open Work Hub Bot"
-    assert "내 커뮤니티 글에 댓글이 달렸습니다" in message["body"]
-    assert "확인했습니다" in message["body"]
-    assert f"/apps/community/posts/{post['id']}" in message["body"]
-
-    dm_search_response = client.get(
-        "/api/v1/dm/users",
-        headers=auth_headers(author["token"]),
-        params={"q": "Open Work Hub Bot"},
-    )
-    assert dm_search_response.status_code == 200, dm_search_response.text
-    assert dm_search_response.json() == []
-
-    admin_users_response = client.get(
-        "/api/v1/admin/users",
-        headers=auth_headers(author["token"]),
-        params={"q": "Open Work Hub Bot"},
-    )
-    assert admin_users_response.status_code == 200, admin_users_response.text
-    assert admin_users_response.json()["items"] == []
 
     read_response = client.patch(
-        f"/api/v1/dm/conversations/{bot_conversation['id']}/read",
+        f"/api/v1/notifications/{notification['id']}/read",
         headers=auth_headers(author["token"]),
     )
     assert read_response.status_code == 200, read_response.text
@@ -488,7 +465,15 @@ def test_create_comment_links_embedded_media_to_community_comment(db: Session) -
     assert stored.resource_id == comment.id
 
 
-def test_resolve_secret_post_media_accepts_post_password(db: Session) -> None:
+def test_resolve_secret_post_media_accepts_post_password(
+    db: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        media_content_access,
+        "is_company_app_enabled_for_user_context",
+        lambda *_args, **_kwargs: True,
+    )
     author = _make_user(db, "author")
     reader = _make_user(db, "reader")
     channel = _channel(db)
@@ -515,6 +500,7 @@ def test_resolve_secret_post_media_accepts_post_password(db: Session) -> None:
             urls=[f"media:{media_id}"],
             viewer=reader,
             viewer_is_admin=False,
+            content_grant_issuer=_content_grant_issuer(reader),
             password="wrong-pw",
         )
 
@@ -524,13 +510,15 @@ def test_resolve_secret_post_media_accepts_post_password(db: Session) -> None:
         urls=[f"media:{media_id}"],
         viewer=reader,
         viewer_is_admin=False,
+        content_grant_issuer=_content_grant_issuer(reader),
         password="secret-pw",
     )
 
     resolved_url = resolved.resolved[f"media:{media_id}"]
     parsed = urlparse(resolved_url)
-    assert parsed.path == f"/api/v1/media/content/{media_id}"
-    assert parse_qs(parsed.query)["signature"]
+    assert parsed.path == "/api/v1/content"
+    assert not parsed.query
+    assert parse_qs(parsed.fragment)["grant"]
 
 
 def test_inactive_channel_is_hidden_from_public_channel_list(db: Session) -> None:
@@ -1267,7 +1255,18 @@ def test_force_anonymous_channel_masks_names_except_for_admin(db: Session) -> No
 
 def test_admin_only_channel_masks_content_and_media_for_regular_viewers(
     db: Session,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(
+        media_content_access,
+        "is_company_app_enabled_for_user_context",
+        lambda *_args, **_kwargs: True,
+    )
+    monkeypatch.setattr(
+        media_content_access,
+        "can_resolve_media",
+        lambda *_args, **_kwargs: True,
+    )
     author = _make_user(db, "author")
     reader = _make_user(db, "reader")
     service.create_channel(
@@ -1332,6 +1331,7 @@ def test_admin_only_channel_masks_content_and_media_for_regular_viewers(
             urls=[f"media:{media_id}"],
             viewer=reader,
             viewer_is_admin=False,
+            content_grant_issuer=_content_grant_issuer(reader),
         )
 
     admin_detail = service.get_post_detail(
@@ -1352,6 +1352,7 @@ def test_admin_only_channel_masks_content_and_media_for_regular_viewers(
         urls=[f"media:{media_id}"],
         viewer=reader,
         viewer_is_admin=True,
+        content_grant_issuer=_content_grant_issuer(reader),
     )
     assert f"media:{media_id}" in resolved.resolved
 

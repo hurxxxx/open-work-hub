@@ -91,6 +91,18 @@ def session_factory() -> sessionmaker[Session]:
     return sessionmaker(bind=engine, expire_on_commit=False)
 
 
+@pytest.fixture(autouse=True)
+def allow_runtime_graph_policy(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "open_work_hub_api.domains.ai_graph.runtime.enforce_graph_run_app_policy",
+        lambda *_args, **_kwargs: True,
+    )
+
+
+async def _allow_policy() -> None:
+    return None
+
+
 def _linear_spec() -> AiGraphSpec:
     return AiGraphSpec(
         graph_id="test.report",
@@ -210,6 +222,7 @@ def test_langgraph_conditional_route_executes_only_selected_branch() -> None:
                 app_id="docs",
                 conversation_id=None,
                 progress_callback=progress,
+                policy_callback=_allow_policy,
             ),
         )
 
@@ -353,6 +366,7 @@ def test_dispatch_outbox_can_be_claimed_retried_and_acked(
             [prepared.graph_run.id],
             workspace_id="workspace-1",
             user_id="user-1",
+            enabled_app_ids=frozenset({"docs"}),
         ) == {prepared.graph_run.id: completed.id}
 
 
@@ -459,6 +473,7 @@ def test_graph_run_artifact_lookup_enforces_acl_and_prefers_completed_artifact(
             [preferred_run.id, private_foreign_run.id, shared_run.id],
             workspace_id="workspace-1",
             user_id="user-1",
+            enabled_app_ids=frozenset({"docs"}),
         ) == {
             preferred_run.id: preferred.id,
             shared_run.id: shared.id,
@@ -536,8 +551,7 @@ def test_graph_executor_registry_resolves_exact_graph_version(
         lambda: session_factory,
     )
     monkeypatch.setattr(
-        registry_module,
-        "is_app_enabled_for_user_context",
+        "open_work_hub_api.domains.ai_graph.execution_policy.is_app_enabled_for_user_context",
         lambda *_args, **_kwargs: True,
     )
     reset_ai_graph_executors()
@@ -573,8 +587,7 @@ def test_graph_executor_registry_cancels_before_provider_when_app_is_disabled(
         lambda: session_factory,
     )
     monkeypatch.setattr(
-        registry_module,
-        "is_app_enabled_for_user_context",
+        "open_work_hub_api.domains.ai_graph.execution_policy.is_app_enabled_for_user_context",
         lambda *_args, **_kwargs: False,
     )
     provider_calls: list[str] = []
@@ -592,8 +605,36 @@ def test_graph_executor_registry_cancels_before_provider_when_app_is_disabled(
             cancelled = db.get(AiGraphRun, run_id)
             assert cancelled is not None
             assert cancelled.status == "cancelled"
-            assert cancelled.stage == "policy_gate"
+            assert cancelled.stage == "registry.policy_gate"
             assert cancelled.error_code == "app_execution_disabled"
+    finally:
+        reset_ai_graph_executors()
+
+
+def test_graph_executor_registry_never_reexecutes_terminal_run(
+    monkeypatch,
+    session_factory: sessionmaker[Session],
+) -> None:
+    import open_work_hub_api.domains.ai_graph.execution_registry as registry_module
+
+    request = _run_request()
+    with session_factory() as db:
+        run = AiGraphRunRepository(db).create(request)
+        run.status = "completed"
+        run_id = run.id
+        db.commit()
+
+    monkeypatch.setattr(registry_module, "get_session_factory", lambda: session_factory)
+    calls: list[str] = []
+    reset_ai_graph_executors()
+    try:
+        register_ai_graph_executor(
+            request.graph.graph_id,
+            request.graph.graph_version,
+            lambda current_run_id: calls.append(current_run_id) or "executed",
+        )
+        assert execute_registered_ai_graph(run_id) == "completed"
+        assert calls == []
     finally:
         reset_ai_graph_executors()
 
@@ -822,6 +863,7 @@ def test_run_graph_resumes_completed_checkpoint_after_stale_lease_without_reexec
                 app_id=request.app_id,
                 conversation_id=request.conversation_id,
                 progress_callback=lambda _node_id: asyncio.sleep(0),
+                policy_callback=_allow_policy,
             ),
         )
 

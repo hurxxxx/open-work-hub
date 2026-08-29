@@ -7,7 +7,6 @@ from datetime import UTC, date, datetime
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query, Response, UploadFile, status
-from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
@@ -33,12 +32,11 @@ from open_work_hub_api.domains.auth.models import (
 )
 from open_work_hub_api.domains.auth.security import new_id
 from open_work_hub_api.domains.auth.workspace_app_gate import require_workspace_app_enabled
+from open_work_hub_api.domains.content_access.dependencies import require_content_grant_issuer
+from open_work_hub_api.domains.content_access.grants import ContentGrantIssuer
 from open_work_hub_api.domains.pms.attachments import (
-    TaskAttachmentDisposition,
     TaskAttachmentUpload,
     delete_task_attachment,
-    get_task_attachment_download_url,
-    open_task_attachment_content,
     upload_task_attachment,
 )
 from open_work_hub_api.domains.pms import task_doc_links as pms_task_doc_links
@@ -52,7 +50,6 @@ from open_work_hub_api.domains.pms.models import (
     TaskLabel,
     Label,
     Milestone,
-    Notification,
     SpaceStatus,
     TaskList,
     TaskListStatus,
@@ -593,29 +590,6 @@ class AttachmentItem(BaseModel):
     created_at: datetime
 
 
-class NotificationItem(BaseModel):
-    id: str
-    type: str
-    title: str
-    body: str
-    reference_type: str
-    reference_id: str | None
-    action_url: str | None = None
-    is_read: bool
-    created_at: datetime
-
-
-class NotificationListResponse(BaseModel):
-    items: list[NotificationItem]
-    total: int
-    page: int
-    page_size: int
-
-
-class UnreadCountResponse(BaseModel):
-    count: int
-
-
 class TaskDetailResponse(BaseModel):
     task: TaskItem
     comments: list[TaskCommentItem]
@@ -677,10 +651,6 @@ router = APIRouter(
     prefix="/pms",
     tags=["pms"],
     dependencies=[Depends(require_pms_app_enabled)],
-)
-public_router = APIRouter(
-    prefix="/pms",
-    tags=["pms"],
 )
 
 
@@ -968,8 +938,9 @@ def _create_notification(
     ntype: str,
     title: str,
     body: str,
-    reference_type: str = "task",
-    reference_id: str | None = None,
+    origin_workspace_id: str,
+    source_type: str = "pms_task",
+    source_id: str | None = None,
     action_url: str | None = None,
 ) -> None:
     pms_service._create_notification(
@@ -978,8 +949,9 @@ def _create_notification(
         ntype,
         title,
         body,
-        reference_type=reference_type,
-        reference_id=reference_id,
+        source_type=source_type,
+        source_id=source_id,
+        origin_workspace_id=origin_workspace_id,
         action_url=action_url,
     )
 
@@ -1792,6 +1764,7 @@ def get_task(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> TaskDetailResponse:
     return pms_service.get_task_detail(
         db,
@@ -1803,6 +1776,7 @@ def get_task(
         ),
         user=current_user,
         task_id=task_id,
+        content_grant_issuer=content_grant_issuer,
     )
 
 
@@ -2092,12 +2066,14 @@ async def upload_attachment(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     current_workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> AttachmentItem:
     item = upload_task_attachment(
         db,
         workspace=current_workspace,
         user=current_user,
         task_id=task_id,
+        content_grant_issuer=content_grant_issuer,
         upload=TaskAttachmentUpload(
             filename=file.filename,
             content_type=file.content_type,
@@ -2105,42 +2081,6 @@ async def upload_attachment(
         ),
     )
     return AttachmentItem(**asdict(item))
-
-
-@router.get("/attachments/{attachment_id}/download")
-def download_attachment(
-    attachment_id: str,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> RedirectResponse:
-    url = get_task_attachment_download_url(
-        db,
-        user=current_user,
-        attachment_id=attachment_id,
-    )
-    return RedirectResponse(url=url, status_code=302)
-
-
-@public_router.get("/attachments/{attachment_id}/content")
-def proxy_attachment_content(
-    attachment_id: str,
-    expires: int = Query(..., ge=1),
-    signature: str = Query(..., min_length=1),
-    disposition: TaskAttachmentDisposition = "attachment",
-    db: Session = Depends(get_db_session),
-) -> StreamingResponse:
-    content = open_task_attachment_content(
-        db,
-        attachment_id=attachment_id,
-        expires=expires,
-        signature=signature,
-        disposition=disposition,
-    )
-    return StreamingResponse(
-        content.body,
-        media_type=content.media_type,
-        headers=content.headers,
-    )
 
 
 @router.delete("/attachments/{attachment_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -2156,105 +2096,6 @@ def delete_attachment(
         user=current_user,
         attachment_id=attachment_id,
     )
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-# ── Notifications ────────────────────────────────────────────────────
-
-
-@router.get("/notifications", response_model=NotificationListResponse)
-def list_notifications(
-    page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> NotificationListResponse:
-    rows = list(
-        db.scalars(
-            select(Notification)
-            .where(Notification.user_id == current_user.id)
-            .order_by(Notification.created_at.desc())
-        )
-    )
-    page_items, total = _paginate(
-        [
-            NotificationItem(
-                id=n.id,
-                type=n.type,
-                title=n.title,
-                body=n.body,
-                reference_type=n.reference_type,
-                reference_id=n.reference_id,
-                action_url=n.action_url,
-                is_read=n.is_read,
-                created_at=n.created_at,
-            )
-            for n in rows
-        ],
-        page,
-        page_size,
-    )
-    return NotificationListResponse(items=page_items, total=total, page=page, page_size=page_size)
-
-
-@router.get("/notifications/unread-count", response_model=UnreadCountResponse)
-def get_unread_count(
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> UnreadCountResponse:
-    count = (
-        db.scalar(
-            select(func.count(Notification.id)).where(
-                Notification.user_id == current_user.id,
-                Notification.is_read == False,  # noqa: E712
-            )
-        )
-        or 0
-    )
-    return UnreadCountResponse(count=count)
-
-
-@router.patch("/notifications/{notification_id}/read", response_model=NotificationItem)
-def mark_notification_read(
-    notification_id: str,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> NotificationItem:
-    notification = db.scalar(
-        select(Notification).where(
-            Notification.id == notification_id, Notification.user_id == current_user.id
-        )
-    )
-    if notification is None:
-        raise localized_http_exception(status_code=404, code="pms.notification_not_found")
-    notification.is_read = True
-    db.commit()
-    return NotificationItem(
-        id=notification.id,
-        type=notification.type,
-        title=notification.title,
-        body=notification.body,
-        reference_type=notification.reference_type,
-        reference_id=notification.reference_id,
-        action_url=notification.action_url,
-        is_read=notification.is_read,
-        created_at=notification.created_at,
-    )
-
-
-@router.patch("/notifications/read-all", status_code=status.HTTP_204_NO_CONTENT)
-def mark_all_notifications_read(
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> Response:
-    from sqlalchemy import update as sa_update
-
-    db.execute(
-        sa_update(Notification)
-        .where(Notification.user_id == current_user.id, Notification.is_read == False)  # noqa: E712
-        .values(is_read=True)
-    )
-    db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

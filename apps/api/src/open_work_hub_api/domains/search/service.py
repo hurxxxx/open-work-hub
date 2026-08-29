@@ -152,14 +152,30 @@ def query_workspace_keyword_search(
             rows=accessible_rows,
             execution_workspace=workspace,
         )
-    # Recheck immediately before facets/counts/highlights and response
-    # projection so a concurrent revoke cannot leak derived information.
+    # Recompute app, partition, role, and source policy immediately before
+    # facets/counts/highlights so a concurrent revoke cannot leak derivatives.
+    final_scope = resolve_workspace_keyword_search_scope(
+        resolve_workspace_enabled_app_ids(db, workspace.id),
+        include_inactive_entity_types=evaluation_entity_types,
+    )
+    final_allowed_entity_types = frozenset(
+        final_scope.constrain_entity_types(requested_entity_types)
+    )
+    final_partition_ids = _resolve_keyword_partition_ids(
+        db,
+        scope=final_scope,
+        allowed_entity_types=tuple(final_allowed_entity_types),
+        workspace=workspace,
+        user=user,
+        partitioned_generation=partitioned_generation,
+    )
+    final_policy = SourceAclPolicy.for_workspace(db, workspace=workspace, user=user)
     accessible_rows = _filter_accessible_search_rows(
         accessible_rows,
-        policy,
+        final_policy,
         workspace_id=workspace.id,
-        allowed_entity_types=frozenset(allowed_entity_types),
-        authorized_partition_ids=retrieval_partition_ids,
+        allowed_entity_types=final_allowed_entity_types,
+        authorized_partition_ids=final_partition_ids,
     )
     page_rows = accessible_rows[
         effective_request.offset : effective_request.offset + effective_request.limit

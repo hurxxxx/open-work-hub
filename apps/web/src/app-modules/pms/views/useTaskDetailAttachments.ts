@@ -25,6 +25,7 @@ export function useTaskDetailAttachments({
   taskId,
   token,
   t,
+  workspaceSlug,
 }: {
   canEdit: boolean;
   onUpdate?: () => void | Promise<void>;
@@ -33,18 +34,21 @@ export function useTaskDetailAttachments({
   taskId: string;
   token: string | null;
   t: TFunction;
+  workspaceSlug: string;
 }) {
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
 
   const handleFileUpload = useCallback(
     async (files: FileList | File[]) => {
-      if (!token || !canEdit) return;
+      if (!token || !canEdit || !workspaceSlug) return;
       setUploading(true);
       setSaveError(null);
       try {
         const uploadedAttachments = await Promise.all(
-          Array.from(files).map((file) => uploadAttachment(token, taskId, file)),
+          Array.from(files).map((file) =>
+            uploadAttachment(token, taskId, file, workspaceSlug),
+          ),
         );
         setAttachments((prev) => [...prev, ...uploadedAttachments]);
         await notifyTaskDetailUpdated(onUpdate);
@@ -60,15 +64,24 @@ export function useTaskDetailAttachments({
         setDragOver(false);
       }
     },
-    [canEdit, onUpdate, setAttachments, setSaveError, t, taskId, token],
+    [
+      canEdit,
+      onUpdate,
+      setAttachments,
+      setSaveError,
+      t,
+      taskId,
+      token,
+      workspaceSlug,
+    ],
   );
 
   const handleDeleteAttachment = useCallback(
     async (attachmentId: string) => {
-      if (!token || !canEdit) return;
+      if (!token || !canEdit || !workspaceSlug) return;
       setSaveError(null);
       try {
-        await deleteAttachment(token, attachmentId);
+        await deleteAttachment(token, attachmentId, workspaceSlug);
         setAttachments((prev) =>
           prev.filter((attachment) => attachment.id !== attachmentId),
         );
@@ -82,7 +95,7 @@ export function useTaskDetailAttachments({
         );
       }
     },
-    [canEdit, onUpdate, setAttachments, setSaveError, t, token],
+    [canEdit, onUpdate, setAttachments, setSaveError, t, token, workspaceSlug],
   );
 
   return {

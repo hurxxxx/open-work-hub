@@ -149,6 +149,7 @@ export function WorkspaceContextSelector({
             />
           </label>
           <div
+            aria-label={t('workspaceContext.label')}
             className="mt-2 max-h-52 space-y-1 overflow-y-auto"
             role="listbox"
           >

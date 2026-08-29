@@ -105,7 +105,7 @@
       "icon_key": "folder",
       "availability_scope": "workspace",
       "execution_context_kind": "workspace",
-      "resource_scope": "workspace",
+      "resource_scope": "hybrid",
       "route_base": "/apps/files",
       "entry_route_id": "files.root",
       "launcher": { "placement": "category", "pinned_by_default": false },

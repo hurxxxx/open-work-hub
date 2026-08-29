@@ -41,13 +41,10 @@ function recording(overrides: Partial<Recording> = {}): Recording {
     mime_type: 'audio/webm',
     audio_status: 'saved',
     transcript_status: 'done',
-    raw_transcript_doc_status: 'done',
-    minutes_doc_status: 'done',
+    summary_status: 'done',
     meeting_insight_status: 'done',
     progress_pct: 100,
     failure_reason: null,
-    raw_transcript_doc_id: null,
-    minutes_doc_id: null,
     transcribe_started_at: null,
     transcribe_completed_at: null,
     created_at: '2026-05-30T09:00:00Z',
@@ -61,9 +58,11 @@ function recording(overrides: Partial<Recording> = {}): Recording {
 describe('recording detail model', () => {
   it('maps backend pipeline statuses into rail states', () => {
     expect(recordingPipelineState('done')).toBe('done');
+    expect(recordingPipelineState('saved')).toBe('done');
     expect(recordingPipelineState('failed')).toBe('failed');
     expect(recordingPipelineState('creating')).toBe('inProgress');
     expect(recordingPipelineState('transcribing')).toBe('inProgress');
+    expect(recordingPipelineState('verifying')).toBe('inProgress');
     expect(recordingPipelineState('pending')).toBe('pending');
   });
 
@@ -71,19 +70,20 @@ describe('recording detail model', () => {
     const summary = summarizeRecordingStages(
       recording({
         transcript_status: 'done',
-        raw_transcript_doc_status: 'creating',
-        minutes_doc_status: 'pending',
+        summary_status: 'analyzing',
       }),
     );
 
     expect(summary.stages).toEqual([
       { key: 'audio', state: 'done' },
       { key: 'transcript', state: 'done' },
-      { key: 'rawDoc', state: 'inProgress' },
-      { key: 'minutesDoc', state: 'pending' },
+      { key: 'summary', state: 'inProgress' },
     ]);
     expect(summary.failedStage).toBeNull();
-    expect(summary.activeStage).toEqual({ key: 'rawDoc', state: 'inProgress' });
+    expect(summary.activeStage).toEqual({
+      key: 'summary',
+      state: 'inProgress',
+    });
     expect(summary.allDone).toBe(false);
   });
 
@@ -91,7 +91,7 @@ describe('recording detail model', () => {
     const summary = summarizeRecordingStages(
       recording({
         transcript_status: 'failed',
-        raw_transcript_doc_status: 'creating',
+        summary_status: 'analyzing',
       }),
     );
 
@@ -105,12 +105,11 @@ describe('recording detail model', () => {
     ).toBe(false);
   });
 
-  it('derives completed stages when generated documents are done', () => {
+  it('derives completed stages when the recording-owned result is done', () => {
     expect(deriveRecordingStages(recording())).toEqual([
       { key: 'audio', state: 'done' },
       { key: 'transcript', state: 'done' },
-      { key: 'rawDoc', state: 'done' },
-      { key: 'minutesDoc', state: 'done' },
+      { key: 'summary', state: 'done' },
     ]);
     expect(summarizeRecordingStages(recording()).allDone).toBe(true);
   });

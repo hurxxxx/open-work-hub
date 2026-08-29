@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
@@ -27,6 +34,7 @@ import {
 import { UserDateTime } from '@/src/components/date/UserDateTime';
 import { hasAdminConsoleAccess } from '@/src/platform/auth/auth-api';
 import { useAuth } from '@/src/platform/auth/auth-provider';
+import { authenticatedContentObjectUrl } from '@/src/platform/browser/browser-download';
 import { useMediaUpload } from '@/src/platform/media/use-media-upload';
 
 import {
@@ -143,6 +151,8 @@ export function CommunityView() {
   const [detail, setDetail] = useState<CommunityPostDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const detailMediaGenerationRef = useRef(0);
+  const detailMediaObjectUrlsRef = useRef(new Set<string>());
   const [composerOpen, setComposerOpen] = useState(false);
   const [postDraft, setPostDraft] = useState<PostDraft>(EMPTY_POST_DRAFT);
   const [formError, setFormError] = useState<string | null>(null);
@@ -292,6 +302,16 @@ export function CommunityView() {
     [token, unlockedPasswords],
   );
 
+  useEffect(() => {
+    detailMediaGenerationRef.current += 1;
+    const objectUrls = detailMediaObjectUrlsRef.current;
+    return () => {
+      detailMediaGenerationRef.current += 1;
+      for (const objectUrl of objectUrls) URL.revokeObjectURL(objectUrl);
+      objectUrls.clear();
+    };
+  }, [detail?.id, token]);
+
   const resolveDetailFileUrl = useCallback(
     async (url: string): Promise<string> => {
       if (!url.startsWith('media:')) {
@@ -300,16 +320,28 @@ export function CommunityView() {
       if (!detail) {
         return resolveFileUrl ? resolveFileUrl(url) : url;
       }
+      if (!token) return url;
 
       try {
+        const generation = detailMediaGenerationRef.current;
         const response = await resolveCommunityPostMediaUrls(
           token,
           detail.id,
           [url],
           detail.isSecret ? unlockedPasswords[detail.id] : null,
         );
-        if (response.resolved[url]) {
-          return response.resolved[url];
+        const contentUrl = response.resolved[url];
+        if (contentUrl) {
+          const objectUrl = await authenticatedContentObjectUrl(
+            token,
+            contentUrl,
+          );
+          if (detailMediaGenerationRef.current !== generation) {
+            URL.revokeObjectURL(objectUrl);
+            return url;
+          }
+          detailMediaObjectUrlsRef.current.add(objectUrl);
+          return objectUrl;
         }
       } catch {
         return url;

@@ -3,11 +3,7 @@ import { buildAppHref } from '@open-work-hub/contracts/app-routes';
 import type { Recording, RecordingTarget } from '../api/recording-api';
 
 export type RecordingStageState = 'done' | 'inProgress' | 'pending' | 'failed';
-export type RecordingStageKey =
-  | 'audio'
-  | 'transcript'
-  | 'rawDoc'
-  | 'minutesDoc';
+export type RecordingStageKey = 'audio' | 'transcript' | 'summary';
 
 export interface RecordingStage {
   key: RecordingStageKey;
@@ -28,26 +24,30 @@ export interface RecordingTargetGroups {
 }
 
 export function recordingPipelineState(value: string): RecordingStageState {
-  if (value === 'done') return 'done';
+  if (value === 'done' || value === 'saved') return 'done';
   if (value === 'failed') return 'failed';
-  if (value === 'creating' || value === 'transcribing') return 'inProgress';
+  if (
+    value === 'uploading' ||
+    value === 'creating' ||
+    value === 'transcribing' ||
+    value === 'analyzing' ||
+    value === 'verifying'
+  ) {
+    return 'inProgress';
+  }
   return 'pending';
 }
 
 export function deriveRecordingStages(recording: Recording): RecordingStage[] {
   return [
-    { key: 'audio', state: 'done' },
+    { key: 'audio', state: recordingPipelineState(recording.audio_status) },
     {
       key: 'transcript',
       state: recordingPipelineState(recording.transcript_status),
     },
     {
-      key: 'rawDoc',
-      state: recordingPipelineState(recording.raw_transcript_doc_status),
-    },
-    {
-      key: 'minutesDoc',
-      state: recordingPipelineState(recording.minutes_doc_status),
+      key: 'summary',
+      state: recordingPipelineState(recording.summary_status),
     },
   ];
 }
@@ -71,9 +71,9 @@ export function summarizeRecordingStages(
 
 export function isRecordingRetryable(recording: Recording): boolean {
   return [
+    recording.audio_status,
     recording.transcript_status,
-    recording.raw_transcript_doc_status,
-    recording.minutes_doc_status,
+    recording.summary_status,
   ].some((status) => status === 'failed');
 }
 

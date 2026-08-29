@@ -1,4 +1,11 @@
-import { useEffect, useCallback, useReducer } from 'react';
+import {
+  useEffect,
+  useCallback,
+  useId,
+  useReducer,
+  useRef,
+  type KeyboardEvent,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { LazyMotion, domAnimation, m } from 'motion/react';
@@ -22,6 +29,16 @@ import {
   notificationPanelReducer,
   resolveNotificationAction,
 } from './notification-panel-model';
+import { NOTIFICATION_PANEL_ID } from './useNotificationPanelFocus';
+
+const PANEL_FOCUSABLE_SELECTOR = [
+  'button:not([disabled])',
+  'a[href]',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
 
 function timeAgo(dateStr: string, timeZone: string, locale: string): string {
   return formatRelativeTime(dateStr, { locale, timeZone });
@@ -43,6 +60,8 @@ export function NotificationPanel({
   const { token, user } = useAuth();
   const { t, i18n } = useTranslation('shell');
   const navigate = useNavigate();
+  const titleId = useId();
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const timeZone = normalizeTimeZone(user?.time_zone);
   const [{ loading, notifications }, dispatch] = useReducer(
     notificationPanelReducer,
@@ -106,6 +125,42 @@ export function NotificationPanel({
     onCountChange?.(-unreadCount);
   }, [token, notifications, onCountChange, workspaceSlug]);
 
+  const handlePanelKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key !== 'Tab' || !panelRef.current) return;
+
+      const focusable = Array.from(
+        panelRef.current.querySelectorAll<HTMLElement>(
+          PANEL_FOCUSABLE_SELECTOR,
+        ),
+      );
+      if (focusable.length === 0) {
+        event.preventDefault();
+        panelRef.current.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (
+        event.shiftKey &&
+        (document.activeElement === first ||
+          document.activeElement === panelRef.current)
+      ) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    },
+    [onClose],
+  );
+
   return (
     <LazyMotion features={domAnimation}>
       <button
@@ -118,13 +173,20 @@ export function NotificationPanel({
         tabIndex={-1}
       />
       <m.div
+        ref={panelRef}
+        id={NOTIFICATION_PANEL_ID}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        onKeyDown={handlePanelKeyDown}
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -8 }}
         className="fixed left-3 right-3 top-16 z-50 flex max-h-[min(480px,calc(100vh-5rem))] flex-col overflow-hidden rounded-xl border border-app-border bg-app-bg shadow-2xl lg:bottom-16 lg:left-20 lg:right-auto lg:top-auto lg:w-80"
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-app-border shrink-0">
-          <h3 className="app-text-title-md text-app-ink">
+          <h3 id={titleId} className="app-text-title-md text-app-ink">
             {t('notifications.title')}
           </h3>
           <div className="flex items-center gap-1">

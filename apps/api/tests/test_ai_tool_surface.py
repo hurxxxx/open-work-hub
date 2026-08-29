@@ -80,10 +80,11 @@ def test_agent_tool_surface_exposes_provider_neutral_tool_metadata(client: TestC
             workspace=workspace,
             principal=principal,
             messages=[{"role": "user", "content": "문서 근거를 찾아줘"}],
-            allowed_app_ids=["chatbot"],
+            allowed_app_ids=["retrieval-search"],
         )
 
     contract_names = sorted(spec.name for spec in surface.tool_specs)
+    assert contract_names
     assert surface.tool_names == contract_names
     assert all(spec.description for spec in surface.tool_specs)
     assert all(spec.input_schema.get("type") == "object" for spec in surface.tool_specs)
@@ -103,13 +104,32 @@ def test_agent_tool_surface_uses_scope_not_message_keywords_for_rag(
             workspace=workspace,
             principal=principal,
             messages=[{"role": "user", "content": "안녕하세요"}],
-            allowed_app_ids=["chatbot"],
+            allowed_app_ids=["retrieval-search"],
         )
 
     assert "rag.query" in surface.tool_names
     assert "rag.list_sources" in surface.tool_names
     assert "retrieval.search" in surface.tool_names
     assert "retrieval.list_sources" in surface.tool_names
+
+
+def test_agent_tool_surface_does_not_cross_tool_owner_app_scope(
+    client: TestClient,
+) -> None:
+    session = _dev_login(client, "delivery-hub-admin")
+    workspace, principal = _load_workspace_principal(session)
+
+    with get_session_factory()() as db:
+        surface = resolve_agent_tool_surface(
+            db,
+            workspace=workspace,
+            principal=principal,
+            messages=[{"role": "user", "content": "문서를 검색해줘"}],
+            allowed_app_ids=["chatbot"],
+        )
+
+    assert "rag.query" not in surface.tool_names
+    assert "retrieval.search" not in surface.tool_names
 
 
 def test_filtered_capability_tools_intersect_app_scope_with_platform_visibility(

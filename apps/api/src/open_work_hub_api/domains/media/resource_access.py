@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Iterable
+from dataclasses import dataclass
+import hashlib
+import json
+from typing import Iterable, Literal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
@@ -34,6 +37,123 @@ SUPPORTED_MEDIA_LINK_RESOURCE_TYPES = frozenset(
         MEDIA_RESOURCE_COMMUNITY_COMMENT,
     }
 )
+
+
+@dataclass(frozen=True)
+class MediaAccessContext:
+    owner_app_id: str
+    execution_context_kind: Literal["personal", "company", "workspace"]
+    workspace_id: str | None
+    route_id: str | None
+    source_type: str
+    source_id: str
+    source_version: str
+    community_post_id: str | None = None
+
+
+def resolve_media_access_context(
+    db: Session,
+    media: MediaFile,
+) -> MediaAccessContext | None:
+    if media.resource_type is None:
+        return MediaAccessContext(
+            owner_app_id="shell",
+            execution_context_kind="personal",
+            workspace_id=None,
+            route_id=None,
+            source_type="media_upload",
+            source_id=media.id,
+            source_version=_media_source_version(media.created_at),
+        )
+    if media.resource_type == MEDIA_RESOURCE_TASK and media.resource_id:
+        from open_work_hub_api.domains.pms.models import Task, TaskList
+
+        row = db.execute(
+            select(Team.workspace_id, Task.updated_at)
+            .join(TaskList, TaskList.team_id == Team.id)
+            .join(Task, Task.list_id == TaskList.id)
+            .where(Task.id == media.resource_id)
+        ).first()
+        if row is None:
+            return None
+        return MediaAccessContext(
+            owner_app_id="pms",
+            execution_context_kind="workspace",
+            workspace_id=row.workspace_id,
+            route_id=None,
+            source_type="pms_task",
+            source_id=media.resource_id,
+            source_version=_media_source_version(row.updated_at),
+        )
+    if media.resource_type == MEDIA_RESOURCE_DOCS_NATIVE_PAGE and media.resource_id:
+        page = db.scalar(
+            select(NativeDocPage)
+            .options(joinedload(NativeDocPage.doc))
+            .where(NativeDocPage.id == media.resource_id)
+        )
+        if page is None or page.doc is None or page.trashed_at is not None:
+            return None
+        return MediaAccessContext(
+            owner_app_id="docs",
+            execution_context_kind="workspace",
+            workspace_id=page.doc.workspace_id,
+            route_id=None,
+            source_type="native_doc",
+            source_id=page.doc_id,
+            source_version=_media_source_version(page.updated_at, page.doc.updated_at),
+        )
+    if media.resource_type in {
+        MEDIA_RESOURCE_COMMUNITY_POST,
+        MEDIA_RESOURCE_COMMUNITY_COMMENT,
+    } and media.resource_id:
+        from open_work_hub_api.domains.community.models import (
+            CommunityComment,
+            CommunityPost,
+        )
+
+        if media.resource_type == MEDIA_RESOURCE_COMMUNITY_POST:
+            post = db.scalar(
+                select(CommunityPost)
+                .options(joinedload(CommunityPost.channel))
+                .where(CommunityPost.id == media.resource_id)
+            )
+            comment_updated_at = None
+        else:
+            comment = db.scalar(
+                select(CommunityComment)
+                .options(joinedload(CommunityComment.post).joinedload(CommunityPost.channel))
+                .where(CommunityComment.id == media.resource_id)
+            )
+            if comment is None or comment.is_deleted:
+                return None
+            post = comment.post
+            comment_updated_at = comment.updated_at
+        if post is None or post.channel is None or not post.channel.active:
+            return None
+        policy_fingerprint = _media_source_version(
+            post.updated_at,
+            comment_updated_at,
+            post.channel.updated_at,
+            post.is_secret,
+            post.password_hash,
+            post.channel.admin_only_content,
+        )
+        return MediaAccessContext(
+            owner_app_id="community",
+            execution_context_kind="company",
+            workspace_id=None,
+            route_id="community.post",
+            source_type=media.resource_type,
+            source_id=media.resource_id,
+            source_version=policy_fingerprint,
+            community_post_id=post.id,
+        )
+    return None
+
+
+def _media_source_version(*values: object) -> str:
+    payload = json.dumps(values, default=str, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def media_ids_from_urls(urls: Iterable[str]) -> list[str]:
@@ -67,7 +187,7 @@ def can_resolve_media(db: Session, user: User, media: MediaFile) -> bool:
     if media.resource_type == MEDIA_RESOURCE_COMMUNITY_COMMENT:
         return _can_access_community_comment_resource(db, user, media.resource_id)
 
-    return media.uploaded_by_id == user.id
+    return False
 
 
 def ensure_media_link_resource_access(
@@ -242,7 +362,7 @@ def _can_access_community_post_resource(
     from open_work_hub_api.domains.community.models import CommunityPost
 
     post = db.scalar(select(CommunityPost).where(CommunityPost.id == post_id))
-    if post is None:
+    if post is None or post.channel is None or not post.channel.active:
         return False
     if post.channel is not None and post.channel.admin_only_content:
         return is_platform_admin_user(user, db)

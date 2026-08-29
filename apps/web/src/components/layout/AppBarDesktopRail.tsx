@@ -57,6 +57,7 @@ export function AppBarDesktopRail({
   onToggleCategoryMenu,
   onToggleFavorites,
   onToggleNotifications,
+  notificationPanelOpen,
   onTogglePinnedApp,
   notificationsEnabled,
   pinnedEligibleAppIds,
@@ -93,7 +94,8 @@ export function AppBarDesktopRail({
   onSaveLayout: () => void;
   onToggleCategoryMenu: (categoryId: string) => void;
   onToggleFavorites: () => void;
-  onToggleNotifications: () => void;
+  onToggleNotifications: MouseEventHandler<HTMLButtonElement>;
+  notificationPanelOpen: boolean;
   onTogglePinnedApp: (appId: WorkspaceAppId, checked: boolean) => void;
   notificationsEnabled: boolean;
   pinnedEligibleAppIds: ReadonlySet<WorkspaceAppId>;
@@ -185,6 +187,7 @@ export function AppBarDesktopRail({
         onOpenAccount={onOpenAccount}
         onOpenHelp={onOpenHelp}
         onToggleNotifications={onToggleNotifications}
+        notificationPanelOpen={notificationPanelOpen}
         notificationsEnabled={notificationsEnabled}
         t={t}
         unreadCount={unreadCount}
@@ -255,6 +258,7 @@ function DesktopRailAccountControls({
   onOpenAccount,
   onOpenHelp,
   onToggleNotifications,
+  notificationPanelOpen,
   notificationsEnabled,
   t,
   unreadCount,
@@ -262,7 +266,8 @@ function DesktopRailAccountControls({
   currentUser: AuthUser;
   onOpenAccount: () => void;
   onOpenHelp: () => void;
-  onToggleNotifications: () => void;
+  onToggleNotifications: MouseEventHandler<HTMLButtonElement>;
+  notificationPanelOpen: boolean;
   notificationsEnabled: boolean;
   t: AppBarTranslator;
   unreadCount: number;
@@ -281,6 +286,7 @@ function DesktopRailAccountControls({
           iconSize={22}
           label={t('shell:notifications.title')}
           onClick={onToggleNotifications}
+          open={notificationPanelOpen}
           unreadCount={unreadCount}
         />
       ) : null}

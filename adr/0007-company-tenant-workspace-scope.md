@@ -23,9 +23,10 @@
 | App availability    | `platform`, `workspace`                      |
 | Resource ownership  | `company`, `personal`, `workspace`, `hybrid` |
 | Route context       | global, workspace                            |
-| Execution principal | personal, workspace                          |
+| Execution context   | `personal`, `company`, `workspace`           |
 
 - Do not infer resource ownership from availability or principal.
+- Company execution context means tenant-scoped app execution; it does not by itself widen resource ownership or source ACL.
 - Company-resource reads default to authenticated tenant users when no narrower ACL exists.
 - Company-resource writes default to platform admin when no narrower policy exists.
 - Cross-workspace aggregation keeps origin workspace and rechecks source access.

@@ -4,7 +4,6 @@ from datetime import datetime, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Form, Header, Query, Response, UploadFile, status
-from fastapi.responses import StreamingResponse
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
@@ -20,9 +19,12 @@ from open_work_hub_api.domains.auth.models import (
     Workspace,
 )
 from open_work_hub_api.domains.auth.workspace_app_gate import require_workspace_app_enabled
+from open_work_hub_api.domains.content_access.dependencies import require_content_grant_issuer
+from open_work_hub_api.domains.content_access.grants import ContentGrantIssuer
 from open_work_hub_api.domains.meeting import recordings as recording_service
 from open_work_hub_api.domains.meeting import service as meeting_service
 from open_work_hub_api.domains.meeting.app_catalog import MEETING_WORKSPACE_APP
+from open_work_hub_api.domains.meeting.models import Meeting
 from open_work_hub_api.domains.meeting.availability_projection import workspace_meeting_user_ids_subquery
 from open_work_hub_api.domains.meeting.schemas import (
     MeetingAvailabilityResponse,
@@ -53,10 +55,21 @@ router = APIRouter(
     tags=["meeting"],
     dependencies=[Depends(require_meeting_app_enabled)],
 )
-public_router = APIRouter(
-    prefix="/meeting",
-    tags=["meeting"],
-)
+
+
+def _meeting_detail_response(
+    db: Session,
+    *,
+    meeting: Meeting,
+    user: User,
+    content_grant_issuer: ContentGrantIssuer,
+) -> MeetingDetail:
+    return meeting_service.serialize_meeting_for_http(
+        db,
+        meeting,
+        viewer_user_id=user.id,
+        content_grant_issuer=content_grant_issuer,
+    )
 
 
 @router.get("/meetings", response_model=MeetingListResponse)
@@ -93,9 +106,19 @@ def create_meeting(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> MeetingDetail:
-    return meeting_service.create_meeting(
-        db, workspace=workspace, organizer=current_user, payload=payload
+    meeting = meeting_service.create_meeting(
+        db,
+        workspace=workspace,
+        organizer=current_user,
+        payload=payload,
+    )
+    return _meeting_detail_response(
+        db,
+        meeting=meeting,
+        user=current_user,
+        content_grant_issuer=content_grant_issuer,
     )
 
 
@@ -105,8 +128,9 @@ def get_meeting(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> MeetingDetail:
-    return meeting_service.get_meeting(
+    meeting = meeting_service.get_meeting(
         db,
         workspace=workspace,
         principal=user_principal(
@@ -117,6 +141,12 @@ def get_meeting(
         user=current_user,
         meeting_id=meeting_id,
     )
+    return _meeting_detail_response(
+        db,
+        meeting=meeting,
+        user=current_user,
+        content_grant_issuer=content_grant_issuer,
+    )
 
 
 @router.patch("/meetings/{meeting_id}", response_model=MeetingDetail)
@@ -126,9 +156,20 @@ def update_meeting(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> MeetingDetail:
-    return meeting_service.update_meeting(
-        db, workspace=workspace, user=current_user, meeting_id=meeting_id, payload=payload
+    meeting = meeting_service.update_meeting(
+        db,
+        workspace=workspace,
+        user=current_user,
+        meeting_id=meeting_id,
+        payload=payload,
+    )
+    return _meeting_detail_response(
+        db,
+        meeting=meeting,
+        user=current_user,
+        content_grant_issuer=content_grant_issuer,
     )
 
 
@@ -138,12 +179,19 @@ def ensure_meeting_notes(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> MeetingDetail:
-    return meeting_service.ensure_meeting_notes(
+    meeting = meeting_service.ensure_meeting_notes(
         db,
         workspace=workspace,
         user=current_user,
         meeting_id=meeting_id,
+    )
+    return _meeting_detail_response(
+        db,
+        meeting=meeting,
+        user=current_user,
+        content_grant_issuer=content_grant_issuer,
     )
 
 
@@ -170,18 +218,25 @@ def add_meeting_attendees(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> MeetingDetail:
     """Append attendees to an existing meeting.
 
     Permission: any current participant (organizer or existing attendee). The
     full attendee replace path stays organizer-only via ``PATCH /meetings/{id}``.
     """
-    return meeting_service.add_attendees(
+    meeting = meeting_service.add_attendees(
         db,
         workspace=workspace,
         user=current_user,
         meeting_id=meeting_id,
         attendees=list(payload.attendees),
+    )
+    return _meeting_detail_response(
+        db,
+        meeting=meeting,
+        user=current_user,
+        content_grant_issuer=content_grant_issuer,
     )
 
 
@@ -192,9 +247,20 @@ def attach_task(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> MeetingDetail:
-    return meeting_service.attach_task(
-        db, workspace=workspace, user=current_user, meeting_id=meeting_id, task_id=payload.task_id
+    meeting = meeting_service.attach_task(
+        db,
+        workspace=workspace,
+        user=current_user,
+        meeting_id=meeting_id,
+        task_id=payload.task_id,
+    )
+    return _meeting_detail_response(
+        db,
+        meeting=meeting,
+        user=current_user,
+        content_grant_issuer=content_grant_issuer,
     )
 
 
@@ -208,9 +274,20 @@ def detach_task(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> MeetingDetail:
-    return meeting_service.detach_task(
-        db, workspace=workspace, user=current_user, meeting_id=meeting_id, task_id=task_id
+    meeting = meeting_service.detach_task(
+        db,
+        workspace=workspace,
+        user=current_user,
+        meeting_id=meeting_id,
+        task_id=task_id,
+    )
+    return _meeting_detail_response(
+        db,
+        meeting=meeting,
+        user=current_user,
+        content_grant_issuer=content_grant_issuer,
     )
 
 
@@ -221,9 +298,20 @@ def attach_doc(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> MeetingDetail:
-    return meeting_service.attach_doc(
-        db, workspace=workspace, user=current_user, meeting_id=meeting_id, doc_id=payload.doc_id
+    meeting = meeting_service.attach_doc(
+        db,
+        workspace=workspace,
+        user=current_user,
+        meeting_id=meeting_id,
+        doc_id=payload.doc_id,
+    )
+    return _meeting_detail_response(
+        db,
+        meeting=meeting,
+        user=current_user,
+        content_grant_issuer=content_grant_issuer,
     )
 
 
@@ -237,9 +325,20 @@ def detach_doc(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> MeetingDetail:
-    return meeting_service.detach_doc(
-        db, workspace=workspace, user=current_user, meeting_id=meeting_id, doc_id=doc_id
+    meeting = meeting_service.detach_doc(
+        db,
+        workspace=workspace,
+        user=current_user,
+        meeting_id=meeting_id,
+        doc_id=doc_id,
+    )
+    return _meeting_detail_response(
+        db,
+        meeting=meeting,
+        user=current_user,
+        content_grant_issuer=content_grant_issuer,
     )
 
 
@@ -250,9 +349,20 @@ async def attach_file(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> MeetingDetail:
-    return await meeting_service.attach_file(
-        db, workspace=workspace, user=current_user, meeting_id=meeting_id, upload=file
+    meeting = await meeting_service.attach_file(
+        db,
+        workspace=workspace,
+        user=current_user,
+        meeting_id=meeting_id,
+        upload=file,
+    )
+    return _meeting_detail_response(
+        db,
+        meeting=meeting,
+        user=current_user,
+        content_grant_issuer=content_grant_issuer,
     )
 
 
@@ -266,31 +376,20 @@ def detach_file(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> MeetingDetail:
-    return meeting_service.detach_file(
-        db, workspace=workspace, user=current_user, meeting_id=meeting_id, file_id=file_id
-    )
-
-
-@public_router.get("/files/{file_id}/content")
-def proxy_file_attachment_content(
-    file_id: str,
-    expires: int = Query(..., ge=1),
-    signature: str = Query(..., min_length=1),
-    disposition: meeting_service.MeetingAttachmentDisposition = "attachment",
-    db: Session = Depends(get_db_session),
-) -> StreamingResponse:
-    content = meeting_service.open_file_attachment_content(
+    meeting = meeting_service.detach_file(
         db,
+        workspace=workspace,
+        user=current_user,
+        meeting_id=meeting_id,
         file_id=file_id,
-        expires=expires,
-        signature=signature,
-        disposition=disposition,
     )
-    return StreamingResponse(
-        content.body,
-        media_type=content.media_type,
-        headers=content.headers,
+    return _meeting_detail_response(
+        db,
+        meeting=meeting,
+        user=current_user,
+        content_grant_issuer=content_grant_issuer,
     )
 
 
@@ -352,14 +451,21 @@ def complete_recording_staging(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> MeetingDetail:
-    return recording_service.complete_staging(
+    meeting = recording_service.complete_staging(
         db,
         workspace=workspace,
         user=current_user,
         meeting_id=meeting_id,
         staging_id=staging_id,
         payload=payload,
+    )
+    return _meeting_detail_response(
+        db,
+        meeting=meeting,
+        user=current_user,
+        content_grant_issuer=content_grant_issuer,
     )
 
 
@@ -412,13 +518,20 @@ def delete_meeting_recording(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> MeetingDetail:
-    return recording_service.delete_recording(
+    meeting = recording_service.delete_recording(
         db,
         workspace=workspace,
         user=current_user,
         meeting_id=meeting_id,
         recording_id=recording_id,
+    )
+    return _meeting_detail_response(
+        db,
+        meeting=meeting,
+        user=current_user,
+        content_grant_issuer=content_grant_issuer,
     )
 
 
@@ -430,14 +543,21 @@ def import_recording(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> MeetingDetail:
-    return recording_service.import_recording(
+    meeting = recording_service.import_recording(
         db,
         workspace=workspace,
         user=current_user,
         meeting_id=meeting_id,
         upload=file,
         linked_task_id=linked_task_id,
+    )
+    return _meeting_detail_response(
+        db,
+        meeting=meeting,
+        user=current_user,
+        content_grant_issuer=content_grant_issuer,
     )
 
 
@@ -488,13 +608,20 @@ def retry_recording(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> MeetingDetail:
-    return recording_service.retry_recording(
+    meeting = recording_service.retry_recording(
         db,
         workspace=workspace,
         user=current_user,
         meeting_id=meeting_id,
         recording_id=recording_id,
+    )
+    return _meeting_detail_response(
+        db,
+        meeting=meeting,
+        user=current_user,
+        content_grant_issuer=content_grant_issuer,
     )
 
 

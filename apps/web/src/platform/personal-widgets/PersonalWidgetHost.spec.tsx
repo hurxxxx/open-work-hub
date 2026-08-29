@@ -16,7 +16,7 @@ import {
   updatePersonalTodo,
   type PersonalTodoItem,
 } from './personal-widgets-api';
-import { PERSONAL_WIDGET_STORAGE_KEY } from './personal-widget-state';
+import { personalWidgetStorageKey } from './personal-widget-state';
 
 function translate(key: string, values?: { title?: string }) {
   return values?.title ? `${key}:${values.title}` : key;
@@ -29,7 +29,7 @@ vi.mock('react-i18next', () => ({
 }));
 
 vi.mock('@/src/platform/auth/auth-provider', () => ({
-  useAuth: () => ({ token: 'token' }),
+  useAuth: () => ({ token: 'token', user: { id: 'user-1' } }),
 }));
 
 vi.mock('./personal-widgets-api', () => ({
@@ -65,7 +65,7 @@ function renderTodoWidget(
 
 beforeEach(() => {
   window.localStorage.setItem(
-    PERSONAL_WIDGET_STORAGE_KEY,
+    personalWidgetStorageKey('user-1'),
     JSON.stringify({ activeWidget: 'todo', mode: 'panel' }),
   );
   listPersonalTodosMock.mockResolvedValue({ items: [todo('Original todo')] });

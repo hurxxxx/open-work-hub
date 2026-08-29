@@ -5,6 +5,7 @@ import { APP_GLOBAL_ROUTES } from './app-registry';
 import {
   createDefaultHelpRoutes,
   resolveGlobalRouteGateAppId,
+  resolveGlobalAppGateState,
 } from './static-route-elements';
 
 describe('static route app gates', () => {
@@ -36,5 +37,27 @@ describe('static route app gates', () => {
     expect(resolveGlobalRouteGateAppId(whiteboardRoute ?? {})).toBe(
       'whiteboard',
     );
+  });
+
+  it('surfaces a bootstrap error before a loading placeholder', () => {
+    expect(
+      resolveGlobalAppGateState({
+        appId: 'docs',
+        bootstrapError: 'bootstrap failed',
+        bootstrapLoading: true,
+        enabledAppIds: null,
+      }),
+    ).toBe('error');
+  });
+
+  it('keeps core global routes independent from app bootstrap failures', () => {
+    expect(
+      resolveGlobalAppGateState({
+        appId: 'settings',
+        bootstrapError: 'bootstrap failed',
+        bootstrapLoading: false,
+        enabledAppIds: null,
+      }),
+    ).toBe('allowed');
   });
 });

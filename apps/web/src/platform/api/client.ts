@@ -10,17 +10,25 @@ export class ApiRequestError extends Error {
   }
 }
 
-export function jsonHeaders(token?: string | null, headers?: HeadersInit): HeadersInit {
+export function jsonHeaders(
+  token?: string | null,
+  headers?: HeadersInit,
+): HeadersInit {
   const locale = i18n.resolvedLanguage || i18n.language;
   return {
     Accept: 'application/json',
-    ...(locale ? { 'Accept-Language': locale, 'X-Open-Work-Hub-Locale': locale } : {}),
+    ...(locale
+      ? { 'Accept-Language': locale, 'X-Open-Work-Hub-Locale': locale }
+      : {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(headers ?? {}),
   };
 }
 
-export function jsonBodyHeaders(token?: string | null, headers?: HeadersInit): HeadersInit {
+export function jsonBodyHeaders(
+  token?: string | null,
+  headers?: HeadersInit,
+): HeadersInit {
   return {
     ...jsonHeaders(token, headers),
     'Content-Type': 'application/json',
@@ -52,11 +60,14 @@ export async function apiFetchJson<T>(
   init: RequestInit = {},
 ): Promise<T> {
   const shouldSendJsonContentType =
-    init.body != null && !(typeof FormData !== 'undefined' && init.body instanceof FormData);
+    init.body != null &&
+    !(typeof FormData !== 'undefined' && init.body instanceof FormData);
   const response = await fetch(path, {
     ...init,
     headers: {
-      ...(shouldSendJsonContentType ? jsonBodyHeaders(token) : jsonHeaders(token)),
+      ...(shouldSendJsonContentType
+        ? jsonBodyHeaders(token)
+        : jsonHeaders(token)),
       ...(init.headers ?? {}),
     },
     cache: init.cache ?? 'no-store',
@@ -64,7 +75,47 @@ export async function apiFetchJson<T>(
   return parseJsonResponse<T>(response);
 }
 
-export async function apiFetchJsonWithMappedError<T, TError extends Error = Error>(
+export interface ApiBinaryResponse {
+  blob: Blob;
+  contentDisposition: string | null;
+  contentType: string | null;
+}
+
+export async function apiFetchBinary(
+  path: string,
+  token: string,
+  init: RequestInit = {},
+): Promise<ApiBinaryResponse> {
+  const response = await fetch(path, {
+    ...init,
+    headers: {
+      ...jsonHeaders(token),
+      Accept: '*/*',
+      ...(init.headers ?? {}),
+    },
+    cache: init.cache ?? 'no-store',
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new ApiRequestError(
+      response.status,
+      typeof payload?.detail === 'string'
+        ? payload.detail
+        : `Request failed with ${response.status}.`,
+      payload,
+    );
+  }
+  return {
+    blob: await response.blob(),
+    contentDisposition: response.headers.get('content-disposition'),
+    contentType: response.headers.get('content-type'),
+  };
+}
+
+export async function apiFetchJsonWithMappedError<
+  T,
+  TError extends Error = Error,
+>(
   path: string,
   token: string | null | undefined,
   init: RequestInit = {},

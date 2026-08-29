@@ -19,7 +19,13 @@ from open_work_hub_api.core.settings import get_settings
 from open_work_hub_api.core.worker_task_publisher import create_fail_fast_celery_publisher
 from open_work_hub_api.core.worker_queue_contract import MEETING_TRANSCRIBE_QUEUE
 from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.workspace_app_gate import (
+    is_app_enabled_for_user_context,
+)
 from open_work_hub_api.domains.auth.security import new_id
+from open_work_hub_api.domains.docs.minutes import build_minutes_blocks
+from open_work_hub_api.domains.docs.models import NativeDoc
+from open_work_hub_api.domains.docs.service import create_native_doc_for_user
 from open_work_hub_api.domains.meeting.models import Meeting
 from open_work_hub_api.domains.recording import blob_store
 from open_work_hub_api.domains.recording.chunk_sequence import plan_chunk_assembly
@@ -39,11 +45,18 @@ from open_work_hub_api.domains.recording.target_projection import (
     serialize_recordings_with_target_titles as _serialize_recordings,
 )
 from open_work_hub_api.domains.recording.initial_target import resolve_initial_recording_target
-from open_work_hub_api.domains.recording.models import Recording, RecordingTarget, RecordingStaging
+from open_work_hub_api.domains.recording.models import (
+    Recording,
+    RecordingPublication,
+    RecordingResult,
+    RecordingTarget,
+    RecordingStaging,
+)
 from open_work_hub_api.domains.recording.schemas import (
+    RecordingDetailOut,
+    RecordingPublicationOut,
     RecordingTargetCreateRequest,
     RecordingListResponse,
-    RecordingOut,
     RecordingPlaybackResponse,
     RecordingUpdateRequest,
     RecordingUploadChunkAck,
@@ -92,7 +105,11 @@ def _as_utc_naive(value: datetime) -> datetime:
 def _load_recording(db: Session, recording_id: str) -> Recording | None:
     return db.scalar(
         select(Recording)
-        .options(selectinload(Recording.targets))
+        .options(
+            selectinload(Recording.targets),
+            selectinload(Recording.result),
+            selectinload(Recording.publications),
+        )
         .where(Recording.id == recording_id)
     )
 
@@ -109,7 +126,11 @@ def _load_recording_or_404(db: Session, recording_id: str) -> Recording:
 def _load_recording_for_update_or_404(db: Session, recording_id: str) -> Recording:
     recording = db.scalar(
         select(Recording)
-        .options(selectinload(Recording.targets))
+        .options(
+            selectinload(Recording.targets),
+            selectinload(Recording.result),
+            selectinload(Recording.publications),
+        )
         .where(Recording.id == recording_id)
         .with_for_update()
     )
@@ -189,16 +210,24 @@ def _broker_is_reachable() -> bool:
         return False
 
 
-def enqueue_recording_pipeline(recording_id: str) -> str:
+def new_recording_attempt_id(recording_id: str) -> str:
+    del recording_id
+    return new_id()
+
+
+def enqueue_recording_pipeline(recording_id: str, attempt_id: str) -> None:
     celery_client = _get_celery_client()
-    result = chain(
-        celery_client.signature("recording.transcribe", args=[recording_id], immutable=True),
-        celery_client.signature("recording.create_raw_transcript_doc"),
+    final_task = celery_client.signature("recording.persist_result").set(task_id=attempt_id)
+    chain(
+        celery_client.signature(
+            "recording.transcribe",
+            args=[recording_id, attempt_id],
+            immutable=True,
+        ),
         celery_client.signature("recording.analyze_transcript"),
         celery_client.signature("recording.verify_transcript_summary"),
-        celery_client.signature("recording.create_minutes_doc"),
+        final_task,
     ).apply_async(queue=MEETING_TRANSCRIBE_QUEUE, retry=False)
-    return str(result.id)
 
 
 def revoke_recording_task(task_id: str) -> None:
@@ -218,35 +247,58 @@ def _recording_has_meeting_target(recording: Recording) -> bool:
 
 
 def _enqueue_pipeline_or_mark_failed(db: Session, *, recording: Recording) -> None:
-    if recording.celery_task_id:
-        return
-    if not _broker_is_reachable():
-        recording.transcript_status = "failed"
-        recording.failure_reason = ENQUEUE_FAILURE_REASON
-        recording.updated_at = _utcnow()
-        db.add(recording)
+    recording_id = recording.id
+    broker_reachable = _broker_is_reachable()
+    locked = db.scalar(
+        select(Recording)
+        .where(Recording.id == recording_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if locked is None or locked.celery_task_id:
         db.commit()
-        db.refresh(recording)
         return
-    try:
-        recording.celery_task_id = enqueue_recording_pipeline(recording.id)
-        recording.transcript_status = "pending"
-        recording.failure_reason = None
-    except Exception:
-        recording.transcript_status = "failed"
-        recording.failure_reason = ENQUEUE_FAILURE_REASON
-    recording.updated_at = _utcnow()
-    db.add(recording)
+    if not broker_reachable:
+        locked.transcript_status = "failed"
+        locked.failure_reason = ENQUEUE_FAILURE_REASON
+        locked.updated_at = _utcnow()
+        db.add(locked)
+        db.commit()
+        return
+    attempt_id = new_recording_attempt_id(recording_id)
+    locked.celery_task_id = attempt_id
+    locked.transcript_status = "pending"
+    locked.failure_reason = None
+    locked.updated_at = _utcnow()
+    db.add(locked)
     db.commit()
-    db.refresh(recording)
+    try:
+        enqueue_recording_pipeline(recording_id, attempt_id)
+    except Exception:
+        db.rollback()
+        locked = db.scalar(
+            select(Recording)
+            .where(
+                Recording.id == recording_id,
+                Recording.celery_task_id == attempt_id,
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if locked is not None:
+            locked.transcript_status = "failed"
+            locked.failure_reason = ENQUEUE_FAILURE_REASON
+            locked.celery_task_id = None
+            locked.updated_at = _utcnow()
+            db.add(locked)
+        db.commit()
 
 
 def _failed_filter():
     return or_(
         Recording.audio_status == "failed",
         Recording.transcript_status == "failed",
-        Recording.raw_transcript_doc_status == "failed",
-        Recording.minutes_doc_status == "failed",
+        Recording.summary_status == "failed",
         Recording.meeting_insight_status == "failed",
     )
 
@@ -255,8 +307,7 @@ def _processing_filter():
     return or_(
         Recording.audio_status == "uploading",
         Recording.transcript_status == "transcribing",
-        Recording.raw_transcript_doc_status == "creating",
-        Recording.minutes_doc_status == "creating",
+        Recording.summary_status.in_(["analyzing", "verifying"]),
         Recording.meeting_insight_status.in_(["pending", "extracting"]),
     )
 
@@ -407,8 +458,7 @@ def _new_saved_recording(
         mime_type=mime_type,
         audio_status="saved",
         transcript_status="pending",
-        raw_transcript_doc_status="pending",
-        minutes_doc_status="pending",
+        summary_status="pending",
         meeting_insight_status="none",
         progress_pct=0,
     )
@@ -846,7 +896,7 @@ def complete_staging(
     user: User,
     staging_id: str,
     payload: RecordingUploadCompleteRequest,
-) -> RecordingOut:
+) -> RecordingDetailOut:
     staging = _load_staging_or_404(db, workspace=workspace, staging_id=staging_id)
     if staging.uploaded_by_id != user.id:
         raise localized_http_exception(
@@ -983,7 +1033,7 @@ def list_recordings(
     elif view == "needs_review":
         query = query.where(
             Recording.transcript_status == "done",
-            Recording.minutes_doc_status != "done",
+            Recording.summary_status != "done",
         )
     if from_ is not None:
         query = query.where(Recording.started_at >= from_)
@@ -1002,10 +1052,122 @@ def get_recording(
     workspace: Workspace,
     user: User,
     recording_id: str,
-) -> RecordingOut:
-    recording = _load_recording_or_404(db, recording_id)
+) -> RecordingDetailOut:
+    recording = _load_recording_for_update_or_404(db, recording_id)
     _ensure_recording_access(db, workspace=workspace, user=user, recording=recording)
     return _serialize_recording(db, recording)
+
+
+def publish_recording_to_docs(
+    db: Session,
+    *,
+    workspace: Workspace,
+    user: User,
+    recording_id: str,
+) -> RecordingPublicationOut:
+    recording = _load_recording_for_update_or_404(db, recording_id)
+    if recording.workspace_id != workspace.id:
+        raise localized_http_exception(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="recording.not_found",
+        )
+    _ensure_recording_access(db, workspace=workspace, user=user, recording=recording)
+    result = recording.result
+    if (
+        result is None
+        or recording.summary_status != "done"
+        or not (result.summary_text or "").strip()
+    ):
+        raise localized_http_exception(
+            status_code=status.HTTP_409_CONFLICT,
+            code="recording.result_not_ready",
+        )
+    if not is_app_enabled_for_user_context(
+        db,
+        app_id="docs",
+        user_id=user.id,
+        workspace_id=workspace.id,
+    ):
+        raise localized_http_exception(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code="workspace.app_disabled",
+        )
+
+    existing = db.scalar(
+        select(RecordingPublication).where(
+            RecordingPublication.recording_id == recording.id,
+            RecordingPublication.target_app == "docs",
+            RecordingPublication.result_version == result.version,
+        )
+    )
+    if existing is not None:
+        doc = db.get(NativeDoc, existing.target_resource_id)
+        return RecordingPublicationOut.model_validate(existing).model_copy(
+            update={"target_title": doc.title if doc is not None else None}
+        )
+
+    doc, _page = create_native_doc_for_user(
+        db,
+        workspace_id=workspace.id,
+        owner_id=user.id,
+        title=_recording_publication_title(recording.title, result.version),
+        first_page_title=recording.title,
+        content_blocks=build_minutes_blocks(
+            result.summary_text or "",
+            result.transcript_text,
+        ),
+        source_app="recording",
+        source_kind="recording_result",
+        source_ref=f"{recording.id}:{result.version}",
+        generation_kind="system_ai",
+        doc_type="meeting_notes",
+    )
+    if not is_app_enabled_for_user_context(
+        db,
+        app_id="docs",
+        user_id=user.id,
+        workspace_id=workspace.id,
+    ):
+        db.rollback()
+        raise localized_http_exception(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code="workspace.app_disabled",
+        )
+    publication = RecordingPublication(
+        id=new_id(),
+        recording_id=recording.id,
+        target_app="docs",
+        target_resource_id=doc.id,
+        result_version=result.version,
+        published_by_id=user.id,
+    )
+    db.add(publication)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        existing = db.scalar(
+            select(RecordingPublication).where(
+                RecordingPublication.recording_id == recording.id,
+                RecordingPublication.target_app == "docs",
+                RecordingPublication.result_version == result.version,
+            )
+        )
+        if existing is None:
+            raise
+        existing_doc = db.get(NativeDoc, existing.target_resource_id)
+        return RecordingPublicationOut.model_validate(existing).model_copy(
+            update={"target_title": existing_doc.title if existing_doc else None}
+        )
+    db.refresh(publication)
+    return RecordingPublicationOut.model_validate(publication).model_copy(
+        update={"target_title": doc.title}
+    )
+
+
+def _recording_publication_title(title: str, version: int) -> str:
+    suffix = f" (v{version})"
+    return f"{title[: 200 - len(suffix)].rstrip()}{suffix}"
 
 
 def update_recording(
@@ -1015,7 +1177,7 @@ def update_recording(
     user: User,
     recording_id: str,
     payload: RecordingUpdateRequest,
-) -> RecordingOut:
+) -> RecordingDetailOut:
     recording = _load_recording_or_404(db, recording_id)
     if recording.workspace_id != workspace.id:
         raise localized_http_exception(
@@ -1068,7 +1230,7 @@ def import_recording(
     initial_target_type: str | None = None,
     initial_target_id: str | None = None,
     linked_task_id: str | None = None,
-) -> RecordingOut:
+) -> RecordingDetailOut:
     mime_type = _require_allowed_mime(upload.content_type)
     resolved_started_at = _as_utc_naive(started_at) if started_at else _utcnow()
     resolved_ended_at = _as_utc_naive(ended_at) if ended_at else None
@@ -1156,7 +1318,7 @@ def retry_recording(
     workspace: Workspace,
     user: User,
     recording_id: str,
-) -> RecordingOut:
+) -> RecordingDetailOut:
     recording = _load_recording_or_404(db, recording_id)
     if recording.workspace_id != workspace.id:
         raise localized_http_exception(
@@ -1167,19 +1329,14 @@ def retry_recording(
         raise localized_http_exception(
             status_code=status.HTTP_409_CONFLICT, code="recording.audio_unavailable"
         )
-    if (
-        recording.transcript_status == "transcribing"
-        or recording.raw_transcript_doc_status == "creating"
-        or recording.minutes_doc_status == "creating"
-    ):
+    if recording.transcript_status == "transcribing" or recording.summary_status in {
+        "analyzing",
+        "verifying",
+    }:
         raise localized_http_exception(
             status_code=status.HTTP_409_CONFLICT, code="recording.processing_in_progress"
         )
-    if (
-        recording.transcript_status == "done"
-        and recording.raw_transcript_doc_status == "done"
-        and recording.minutes_doc_status == "done"
-    ):
+    if recording.transcript_status == "done" and recording.summary_status == "done":
         raise localized_http_exception(
             status_code=status.HTTP_409_CONFLICT, code="recording.processing_already_done"
         )
@@ -1195,12 +1352,11 @@ def retry_recording(
         recording.progress_pct = 0
     else:
         recording.progress_pct = max(recording.progress_pct, 60)
-    if recording.raw_transcript_doc_status != "done":
-        recording.raw_transcript_doc_status = "pending"
-        recording.raw_transcript_doc_id = None
-    if recording.minutes_doc_status != "done":
-        recording.minutes_doc_status = "pending"
-        recording.minutes_doc_id = None
+    if recording.summary_status != "done":
+        recording.summary_status = "pending"
+        if recording.result is not None:
+            recording.result.summary_text = None
+            recording.result.verifier_note = None
     recording.meeting_insight_status = "none"
     recording.updated_at = _utcnow()
     db.add(recording)
@@ -1218,7 +1374,7 @@ def create_target(
     user: User,
     recording_id: str,
     payload: RecordingTargetCreateRequest,
-) -> RecordingOut:
+) -> RecordingDetailOut:
     recording = _load_recording_for_update_or_404(db, recording_id)
     if recording.workspace_id != workspace.id:
         raise localized_http_exception(
@@ -1310,7 +1466,7 @@ def delete_target(
     user: User,
     recording_id: str,
     target_id: str,
-) -> RecordingOut:
+) -> RecordingDetailOut:
     recording = _load_recording_or_404(db, recording_id)
     if recording.workspace_id != workspace.id:
         raise localized_http_exception(
@@ -1345,15 +1501,14 @@ def _meeting_recording_status(recording: Recording) -> str:
     if (
         recording.audio_status == "failed"
         or recording.transcript_status == "failed"
-        or recording.raw_transcript_doc_status == "failed"
-        or recording.minutes_doc_status == "failed"
+        or recording.summary_status == "failed"
         or recording.meeting_insight_status == "failed"
     ):
         return "failed"
-    if recording.minutes_doc_status == "done":
+    if recording.summary_status == "done":
         return "done"
-    if recording.minutes_doc_status == "creating":
-        return "generating_doc"
+    if recording.summary_status in {"analyzing", "verifying"}:
+        return "summarizing"
     if recording.transcript_status == "done":
         return "summarizing"
     if recording.transcript_status == "transcribing":
@@ -1388,7 +1543,11 @@ def list_meeting_recording_outs(db: Session, *, meeting: Meeting) -> list:
         db.scalars(
             select(Recording)
             .join(RecordingTarget)
-            .options(selectinload(Recording.targets))
+            .options(
+                selectinload(Recording.targets),
+                selectinload(Recording.result),
+                selectinload(Recording.publications),
+            )
             .where(
                 Recording.workspace_id == meeting.workspace_id,
                 Recording.trashed_at.is_(None),
@@ -1422,12 +1581,14 @@ def list_meeting_recording_outs(db: Session, *, meeting: Meeting) -> list:
                 file_size=recording.file_size,
                 mime_type=recording.mime_type,
                 failure_reason=recording.failure_reason,
-                linked_doc_id=recording.minutes_doc_id,
-                raw_transcript_doc_id=recording.raw_transcript_doc_id,
-                minutes_doc_id=recording.minutes_doc_id,
+                linked_doc_id=None,
+                raw_transcript_doc_id=None,
+                minutes_doc_id=None,
                 linked_task_id=_linked_task_id(recording),
-                transcript_extracted=bool((recording.transcript_text or "").strip()),
-                summary_generated=recording.minutes_doc_status == "done",
+                transcript_extracted=bool(
+                    recording.result and recording.result.transcript_text.strip()
+                ),
+                summary_generated=recording.summary_status == "done",
                 transcribe_started_at=recording.transcribe_started_at,
                 transcribe_completed_at=recording.transcribe_completed_at,
                 created_at=recording.created_at,
@@ -1470,11 +1631,12 @@ def load_meeting_recording_or_404(
     workspace: Workspace,
     meeting_id: str,
     recording_id: str,
+    for_update: bool = False,
 ) -> Recording:
-    recording = db.scalar(
+    query = (
         select(Recording)
         .join(RecordingTarget)
-        .options(selectinload(Recording.targets))
+        .options(selectinload(Recording.targets), selectinload(Recording.result))
         .where(
             Recording.id == recording_id,
             Recording.workspace_id == workspace.id,
@@ -1484,6 +1646,9 @@ def load_meeting_recording_or_404(
             RecordingTarget.target_id == meeting_id,
         )
     )
+    if for_update:
+        query = query.with_for_update(of=Recording)
+    recording = db.scalar(query)
     if recording is None:
         raise localized_http_exception(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -1513,7 +1678,7 @@ def latest_meeting_recording(
         .order_by(RecordingTarget.sort_order.desc(), Recording.started_at.desc())
     )
     if require_transcript:
-        query = query.where(Recording.transcript_text.is_not(None))
+        query = query.join(RecordingResult).where(RecordingResult.transcript_text != "")
     return db.scalar(query)
 
 
@@ -1524,12 +1689,13 @@ def retry_meeting_recording(
     user: User,
     meeting: Meeting,
     recording_id: str,
-) -> RecordingOut:
+) -> RecordingDetailOut:
     recording = load_meeting_recording_or_404(
         db,
         workspace=workspace,
         meeting_id=meeting.id,
         recording_id=recording_id,
+        for_update=True,
     )
     if recording.owner_id != user.id and meeting.organizer_id != user.id:
         raise localized_http_exception(
@@ -1557,12 +1723,11 @@ def retry_meeting_recording(
         recording.progress_pct = 0
     else:
         recording.progress_pct = max(recording.progress_pct, 60)
-    if recording.raw_transcript_doc_status != "done":
-        recording.raw_transcript_doc_status = "pending"
-        recording.raw_transcript_doc_id = None
-    if recording.minutes_doc_status != "done":
-        recording.minutes_doc_status = "pending"
-        recording.minutes_doc_id = None
+    if recording.summary_status != "done":
+        recording.summary_status = "pending"
+        if recording.result is not None:
+            recording.result.summary_text = None
+            recording.result.verifier_note = None
     recording.meeting_insight_status = "none"
     recording.updated_at = _utcnow()
     db.add(recording)

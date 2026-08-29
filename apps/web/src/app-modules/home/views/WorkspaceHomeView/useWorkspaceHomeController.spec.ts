@@ -5,7 +5,6 @@ import type { RecentPageItem } from '@/src/app-modules/docs/public-api';
 import type { MeetingListItem } from '@/src/app-modules/meeting/public-api';
 import type { PlannerEvent } from '@/src/app-modules/planner/public-api';
 import type { PmsTask } from '@/src/app-modules/pms/public-api';
-import type { WorkspaceNotification } from '@/src/platform/notifications/notifications-api';
 import {
   useWorkspaceHomeController,
   type WorkspaceHomeClient,
@@ -18,9 +17,6 @@ describe('useWorkspaceHomeController', () => {
       listMeetings: vi
         .fn()
         .mockResolvedValue({ items: [meeting('meeting-1')] }),
-      listNotifications: vi
-        .fn()
-        .mockResolvedValue({ items: [notification('notif-1')] }),
       listPlannerEvents: vi
         .fn()
         .mockResolvedValue({ items: [event('event-1')] }),
@@ -33,14 +29,11 @@ describe('useWorkspaceHomeController', () => {
       expect(result.current.state.issues).toHaveLength(1);
       expect(result.current.state.recentPages).toHaveLength(1);
       expect(result.current.state.plannerEvents).toHaveLength(1);
-      expect(result.current.state.notifications).toHaveLength(1);
     });
     expect(result.current.state.meetingsLoading).toBe(false);
     expect(result.current.state.issuesLoading).toBe(false);
     expect(result.current.state.pagesLoading).toBe(false);
     expect(result.current.state.plannerLoading).toBe(false);
-    expect(result.current.state.notificationsLoading).toBe(false);
-    expect(client.listNotifications).toHaveBeenCalledWith('token', 1, 'hq');
     expect(client.listMeetings).toHaveBeenCalledWith('token', 'hq', {
       scope: 'upcoming',
     });
@@ -86,7 +79,6 @@ describe('useWorkspaceHomeController', () => {
     expect(client.listAssignedTasks).not.toHaveBeenCalled();
     expect(client.listRecentPages).not.toHaveBeenCalled();
     expect(client.listPlannerEvents).not.toHaveBeenCalled();
-    expect(client.listNotifications).not.toHaveBeenCalled();
   });
 
   it('does not request data from disabled workspace apps', async () => {
@@ -101,13 +93,11 @@ describe('useWorkspaceHomeController', () => {
       expect(result.current.state.issuesLoading).toBe(false);
       expect(result.current.state.pagesLoading).toBe(false);
       expect(result.current.state.plannerLoading).toBe(false);
-      expect(result.current.state.notificationsLoading).toBe(false);
     });
     expect(client.listMeetings).not.toHaveBeenCalled();
     expect(client.listAssignedTasks).toHaveBeenCalled();
     expect(client.listRecentPages).toHaveBeenCalled();
     expect(client.listPlannerEvents).toHaveBeenCalled();
-    expect(client.listNotifications).toHaveBeenCalled();
   });
 
   it('waits for workspace bootstrap before loading home data', () => {
@@ -118,7 +108,6 @@ describe('useWorkspaceHomeController', () => {
     expect(client.listAssignedTasks).not.toHaveBeenCalled();
     expect(client.listRecentPages).not.toHaveBeenCalled();
     expect(client.listPlannerEvents).not.toHaveBeenCalled();
-    expect(client.listNotifications).not.toHaveBeenCalled();
   });
 });
 
@@ -152,7 +141,6 @@ function clientWith(
   return {
     listAssignedTasks: vi.fn().mockResolvedValue({ items: [] }),
     listMeetings: vi.fn().mockResolvedValue({ items: [] }),
-    listNotifications: vi.fn().mockResolvedValue({ items: [] }),
     listPlannerEvents: vi.fn().mockResolvedValue({ items: [] }),
     listRecentPages: vi.fn().mockResolvedValue([]),
     ...overrides,
@@ -193,18 +181,4 @@ function event(id: string): PlannerEvent {
     start: '2026-06-15T01:00:00.000Z',
     end: '2026-06-15T02:00:00.000Z',
   } as PlannerEvent;
-}
-
-function notification(id: string): WorkspaceNotification {
-  return {
-    id,
-    type: 'task',
-    title: id,
-    body: '',
-    reference_type: 'task',
-    reference_id: null,
-    action_url: null,
-    is_read: false,
-    created_at: '2026-06-10T00:00:00.000Z',
-  } as WorkspaceNotification;
 }

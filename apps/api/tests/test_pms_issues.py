@@ -768,7 +768,10 @@ def test_task_comment_mention_notification_identifies_task(client: TestClient) -
     assert "Mention target task" in notification["title"]
     assert "Mention target task" in notification["body"]
     assert issue["reference"] in notification["body"]
-    assert notification["reference_id"] == issue["id"]
+    assert notification["source_type"] == "pms_task"
+    assert notification["source_id"] == issue["id"]
+    assert notification["origin_app_id"] == "pms"
+    assert notification["origin_workspace_id"] == admin_session["user"]["workspaces"][0]["id"]
     assert (
         notification["action_url"]
         == f"/apps/pms/workspaces/administrator/lists/{task_list['id']}?task={issue['id']}"
@@ -851,7 +854,10 @@ def test_task_assignment_notification_identifies_task_by_title(client: TestClien
     assert notification["title"] == "AI 서버 근크림 그리기 assigned to you"
     assert issue["reference"] not in notification["title"]
     assert notification["body"].startswith("Open Work Hub Admin assigned AI 서버 근크림 그리기")
-    assert notification["reference_id"] == issue["id"]
+    assert notification["source_type"] == "pms_task"
+    assert notification["source_id"] == issue["id"]
+    assert notification["origin_app_id"] == "pms"
+    assert notification["origin_workspace_id"] == admin_session["user"]["workspaces"][0]["id"]
 
 
 def test_explicit_null_clears_nullable_issue_fields(client: TestClient) -> None:

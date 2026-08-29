@@ -4,16 +4,21 @@ from datetime import datetime
 from tempfile import SpooledTemporaryFile
 from typing import Literal
 
-from fastapi import APIRouter, Depends, File, Form, Query, Request, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Request, Response, UploadFile, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.db import get_db_session
 from open_work_hub_api.core.i18n import localized_http_exception
-from open_work_hub_api.domains.auth.dependencies import require_current_user, require_current_workspace
+from open_work_hub_api.domains.auth.dependencies import (
+    require_current_user,
+    require_current_workspace,
+)
 from open_work_hub_api.domains.auth.models import User, Workspace
 from open_work_hub_api.domains.auth.workspace_app_gate import require_workspace_app_enabled
+from open_work_hub_api.domains.content_access.dependencies import require_content_grant_issuer
+from open_work_hub_api.domains.content_access.grants import ContentGrantIssuer
 from open_work_hub_api.domains.files.app_catalog import FILES_WORKSPACE_APP
 from open_work_hub_api.domains.files.browse_projection import (
     FileBrowseResponse,
@@ -24,10 +29,8 @@ from open_work_hub_api.domains.files.browse_projection import (
     serialize_folder_item,
 )
 from open_work_hub_api.domains.files.content_access import (
-    FileContentDisposition,
     build_file_content_url,
     is_previewable_image,
-    open_file_content,
 )
 from open_work_hub_api.domains.files.rag_status import load_file_rag_states
 from open_work_hub_api.domains.files.search import (
@@ -51,7 +54,6 @@ router = APIRouter(
     tags=["files"],
     dependencies=[Depends(require_files_app_enabled)],
 )
-public_router = APIRouter(prefix="/files", tags=["files"])
 
 
 FileVisibility = Literal["private", "workspace"]
@@ -394,6 +396,7 @@ def get_file_download(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     current_workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> FileDownloadResponse:
     file = files_service.require_file_access(
         db,
@@ -404,7 +407,7 @@ def get_file_download(
     return FileDownloadResponse(
         url=build_file_content_url(
             file,
-            issuer_user_id=current_user.id,
+            issuer=content_grant_issuer,
             execution_workspace_id=current_workspace.id,
             disposition="attachment",
         )
@@ -417,6 +420,7 @@ def get_file_preview(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     current_workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> FileDownloadResponse:
     file = files_service.require_file_access(
         db,
@@ -429,32 +433,10 @@ def get_file_preview(
     return FileDownloadResponse(
         url=build_file_content_url(
             file,
-            issuer_user_id=current_user.id,
+            issuer=content_grant_issuer,
             execution_workspace_id=current_workspace.id,
             disposition="inline",
         )
-    )
-
-
-@public_router.get("/content/{file_id}")
-def proxy_file_content(
-    file_id: str,
-    expires: int = Query(..., ge=1),
-    signature: str = Query(..., min_length=1),
-    disposition: FileContentDisposition = "attachment",
-    db: Session = Depends(get_db_session),
-) -> StreamingResponse:
-    content = open_file_content(
-        db,
-        file_id=file_id,
-        expires=expires,
-        signature=signature,
-        disposition=disposition,
-    )
-    return StreamingResponse(
-        content.body,
-        media_type=content.media_type,
-        headers=content.headers,
     )
 
 

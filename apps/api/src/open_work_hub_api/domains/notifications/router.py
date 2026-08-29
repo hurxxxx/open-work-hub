@@ -52,9 +52,7 @@ def mark_notification_read(
         db,
         user_id=current_user.id,
         notification_id=notification_id,
-        events=read_service.RealtimeNotificationEventPublisher(
-            request.app.state.app_realtime
-        ),
+        events=read_service.RealtimeNotificationEventPublisher(request.app.state.app_realtime),
     )
 
 
@@ -67,8 +65,6 @@ def mark_all_notifications_read(
     read_service.mark_all_read_and_publish(
         db,
         user_id=current_user.id,
-        events=read_service.RealtimeNotificationEventPublisher(
-            request.app.state.app_realtime
-        ),
+        events=read_service.RealtimeNotificationEventPublisher(request.app.state.app_realtime),
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)

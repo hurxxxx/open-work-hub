@@ -4,8 +4,11 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
+import { validateAppContracts } from './app-contract-validation.mjs';
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sourcePath = path.join(root, 'packages/contracts/app-contracts.json');
+const schemaPath = path.join(root, 'packages/contracts/app-contracts.schema.json');
 const tsPath = path.join(
   root,
   'packages/contracts/src/app-contracts.generated.ts',
@@ -18,46 +21,9 @@ const check = process.argv.includes('--check');
 
 const sourceText = await readFile(sourcePath, 'utf8');
 const source = JSON.parse(sourceText);
+const schema = JSON.parse(await readFile(schemaPath, 'utf8'));
+validateAppContracts(source, schema);
 const apps = source.apps;
-
-const appIds = new Set();
-const routeIds = new Set();
-const routeBases = new Set();
-for (const app of apps) {
-  if (appIds.has(app.app_id))
-    throw new Error(`Duplicate app id: ${app.app_id}`);
-  if (routeBases.has(app.route_base))
-    throw new Error(`Duplicate route base: ${app.route_base}`);
-  if (app.route_base !== `/apps/${app.app_id}`) {
-    throw new Error(`Route base must match app id: ${app.app_id}`);
-  }
-  appIds.add(app.app_id);
-  routeBases.add(app.route_base);
-  const appRouteIds = new Set(app.routes.map((route) => route.route_id));
-  if (!appRouteIds.has(app.entry_route_id)) {
-    throw new Error(
-      `Unknown entry route ${app.entry_route_id} for ${app.app_id}`,
-    );
-  }
-  for (const route of app.routes) {
-    if (routeIds.has(route.route_id))
-      throw new Error(`Duplicate route id: ${route.route_id}`);
-    if (!route.route_id.startsWith(`${app.app_id}.`)) {
-      throw new Error(
-        `Route id must be owned by ${app.app_id}: ${route.route_id}`,
-      );
-    }
-    if (
-      route.context_scope === 'global' &&
-      route.suffix.startsWith('/workspaces')
-    ) {
-      throw new Error(
-        `Global route uses reserved workspace prefix: ${route.route_id}`,
-      );
-    }
-    routeIds.add(route.route_id);
-  }
-}
 
 const canonical = `${JSON.stringify(source)}\n`;
 const revision = `sha256:${createHash('sha256').update(canonical).digest('hex')}`;

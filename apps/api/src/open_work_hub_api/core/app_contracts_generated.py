@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Final
 
-APP_CONTRACT_REVISION: Final = "sha256:ecc71a311e19c1183d6f697e595b194b80cce3db41ad0c2959e68521ef759634"
+APP_CONTRACT_REVISION: Final = "sha256:8756ac96aac1101a95bd4e7d634466ed8f37b8790e06ae17313f86d1f9f40463"
 APP_CONTRACTS: Final = [
   {
     "app_id": "home",
@@ -220,7 +220,7 @@ APP_CONTRACTS: Final = [
     "icon_key": "folder",
     "availability_scope": "workspace",
     "execution_context_kind": "workspace",
-    "resource_scope": "workspace",
+    "resource_scope": "hybrid",
     "route_base": "/apps/files",
     "entry_route_id": "files.root",
     "launcher": {

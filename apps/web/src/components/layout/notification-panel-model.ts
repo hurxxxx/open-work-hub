@@ -77,8 +77,8 @@ export function resolveNotificationAction(
   if (notification.action_url?.startsWith('/')) {
     return { kind: 'route', to: notification.action_url };
   }
-  if (notification.reference_id) {
-    return { kind: 'issue', taskId: notification.reference_id };
+  if (notification.source_type === 'pms_task' && notification.source_id) {
+    return { kind: 'issue', taskId: notification.source_id };
   }
   return { kind: 'none' };
 }

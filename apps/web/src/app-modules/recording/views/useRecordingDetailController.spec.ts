@@ -1,7 +1,11 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { Recording, RecordingTarget } from '../api/recording-api';
+import type {
+  RecordingDetail,
+  RecordingPublication,
+  RecordingTarget,
+} from '../api/recording-api';
 import {
   useRecordingDetailController,
   type RecordingDetailBrowserAdapter,
@@ -10,9 +14,7 @@ import {
   type RecordingDetailMessages,
 } from './useRecordingDetailController';
 
-function target(
-  overrides: Partial<RecordingTarget> = {},
-): RecordingTarget {
+function target(overrides: Partial<RecordingTarget> = {}): RecordingTarget {
   return {
     id: 'target-1',
     recording_id: 'recording-1',
@@ -28,7 +30,7 @@ function target(
   };
 }
 
-function recording(overrides: Partial<Recording> = {}): Recording {
+function recording(overrides: Partial<RecordingDetail> = {}): RecordingDetail {
   return {
     id: 'recording-1',
     workspace_id: 'workspace-1',
@@ -43,21 +45,27 @@ function recording(overrides: Partial<Recording> = {}): Recording {
     mime_type: 'audio/webm',
     audio_status: 'saved',
     transcript_status: 'done',
-    raw_transcript_doc_status: 'done',
-    minutes_doc_status: 'done',
+    summary_status: 'done',
     meeting_insight_status: 'done',
     progress_pct: 100,
     failure_reason: null,
-    raw_transcript_doc_id: null,
-    minutes_doc_id: null,
     transcribe_started_at: null,
     transcribe_completed_at: null,
     created_at: '2026-05-30T09:00:00Z',
     updated_at: '2026-05-30T09:00:00Z',
     trashed_at: null,
     targets: [],
+    result: {
+      transcript_text: 'Transcript',
+      summary_text: 'Summary',
+      verifier_note: null,
+      version: 1,
+      generated_at: '2026-05-30T09:02:00Z',
+      updated_at: '2026-05-30T09:02:00Z',
+    },
+    publications: [],
     ...overrides,
-  } as Recording;
+  } as RecordingDetail;
 }
 
 function messages(): RecordingDetailMessages {
@@ -66,6 +74,7 @@ function messages(): RecordingDetailMessages {
     updateFailed: 'update failed',
     playbackFailed: 'playback failed',
     retryFailed: 'retry failed',
+    publishFailed: 'publish failed',
     detachFailed: 'detach failed',
     detachConfirmTitle: 'Detach?',
     detachConfirmDescription: 'Remove this link?',
@@ -82,10 +91,26 @@ function client(overrides: Partial<RecordingDetailClient> = {}) {
     getPlaybackUrl: vi.fn().mockResolvedValue({ url: '/playback' }),
     fetchPlaybackBlobUrl: vi.fn().mockResolvedValue('blob:audio-1'),
     retryRecording: vi.fn().mockResolvedValue(current),
+    publishToDocs: vi.fn().mockResolvedValue(publication()),
     attachTarget: vi.fn().mockResolvedValue(current),
     detachTarget: vi.fn().mockResolvedValue(current),
     ...overrides,
   } satisfies RecordingDetailClient;
+}
+
+function publication(
+  overrides: Partial<RecordingPublication> = {},
+): RecordingPublication {
+  return {
+    id: 'publication-1',
+    target_app: 'docs',
+    target_resource_id: 'doc-1',
+    target_title: 'Daily Standup (v1)',
+    result_version: 1,
+    published_by_id: 'user-1',
+    created_at: '2026-05-30T09:03:00Z',
+    ...overrides,
+  };
 }
 
 function browser(overrides: Partial<RecordingDetailBrowserAdapter> = {}) {
@@ -175,6 +200,7 @@ describe('useRecordingDetailController', () => {
         await result.current.actions.refresh();
         await result.current.actions.play();
         await result.current.actions.retry();
+        await result.current.actions.publish();
         await result.current.actions.attachMeeting('meeting-1');
         await result.current.actions.detachTarget(target());
       });
@@ -183,6 +209,7 @@ describe('useRecordingDetailController', () => {
       expect(testClient.updateRecording).not.toHaveBeenCalled();
       expect(testClient.getPlaybackUrl).not.toHaveBeenCalled();
       expect(testClient.retryRecording).not.toHaveBeenCalled();
+      expect(testClient.publishToDocs).not.toHaveBeenCalled();
       expect(testClient.attachTarget).not.toHaveBeenCalled();
       expect(testClient.detachTarget).not.toHaveBeenCalled();
     }
@@ -243,6 +270,36 @@ describe('useRecordingDetailController', () => {
     );
   });
 
+  it('preserves a dirty title draft during a processing refresh', async () => {
+    const processing = recording({
+      title: 'Server title',
+      summary_status: 'analyzing',
+    });
+    const refreshed = recording({
+      title: 'Server title changed',
+      summary_status: 'verifying',
+    });
+    const testClient = client({
+      getRecording: vi
+        .fn()
+        .mockResolvedValueOnce(processing)
+        .mockResolvedValueOnce(refreshed),
+    });
+    const { result } = renderController({ client: testClient });
+
+    await waitFor(() =>
+      expect(result.current.state.recording).toBe(processing),
+    );
+    act(() => result.current.actions.setTitleDraft('Unsaved local title'));
+    await act(async () => {
+      await result.current.actions.refresh();
+    });
+
+    expect(result.current.state.recording).toBe(refreshed);
+    expect(result.current.state.titleDraft).toBe('Unsaved local title');
+    expect(result.current.state.titleDirty).toBe(true);
+  });
+
   it('creates playback blob URLs and revokes the previous object URL', async () => {
     const testClient = client({
       getPlaybackUrl: vi.fn().mockResolvedValue({ url: '/playback' }),
@@ -281,7 +338,7 @@ describe('useRecordingDetailController', () => {
   });
 
   it('tracks retry busy state and replaces the recording', async () => {
-    const pendingRetry = deferred<Recording>();
+    const pendingRetry = deferred<RecordingDetail>();
     const updated = recording({ transcript_status: 'done' });
     const testClient = client({
       getRecording: vi
@@ -311,6 +368,47 @@ describe('useRecordingDetailController', () => {
     );
     expect(result.current.state.busy).toBeNull();
     expect(result.current.state.recording).toBe(updated);
+  });
+
+  it('publishes the current result once and appends the returned document', async () => {
+    const pendingPublish = deferred<RecordingPublication>();
+    const published = publication();
+    const testClient = client({
+      publishToDocs: vi.fn().mockReturnValue(pendingPublish.promise),
+    });
+    const { result } = renderController({ client: testClient });
+
+    await waitFor(() => expect(result.current.state.recording).not.toBeNull());
+    let first!: Promise<void>;
+    act(() => {
+      first = result.current.actions.publish();
+      void result.current.actions.publish();
+    });
+    await waitFor(() => expect(result.current.state.busy).toBe('publish'));
+    expect(testClient.publishToDocs).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      pendingPublish.resolve(published);
+      await first;
+    });
+
+    expect(result.current.state.busy).toBeNull();
+    expect(result.current.state.recording?.publications).toEqual([published]);
+  });
+
+  it('surfaces publish failures without mutating publications', async () => {
+    const testClient = client({
+      publishToDocs: vi.fn().mockRejectedValue(new Error('publish denied')),
+    });
+    const { result } = renderController({ client: testClient });
+
+    await waitFor(() => expect(result.current.state.recording).not.toBeNull());
+    await act(async () => {
+      await result.current.actions.publish();
+    });
+
+    expect(result.current.state.error).toBe('publish denied');
+    expect(result.current.state.recording?.publications).toEqual([]);
   });
 
   it('attaches targets and detaches only after confirmation', async () => {

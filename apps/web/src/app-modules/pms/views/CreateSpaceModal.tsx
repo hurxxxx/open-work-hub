@@ -128,7 +128,9 @@ export const CreateSpaceModal = ({
     dispatch,
   ] = useReducer(createSpaceModalReducer, INITIAL_CREATE_SPACE_MODAL_STATE);
 
-  const canCreateSpace = hasWorkspaceMembership(user);
+  const canCreateSpace = Boolean(
+    workspaceSlug && hasWorkspaceMembership(user, workspaceSlug),
+  );
 
   useEffect(() => {
     if (!isOpen) return;
@@ -184,7 +186,7 @@ export const CreateSpaceModal = ({
   }
 
   async function handleCreate() {
-    if (!token || !name.trim() || !canCreateSpace) return;
+    if (!token || !workspaceSlug || !name.trim() || !canCreateSpace) return;
     dispatch({ type: 'createStarted' });
     try {
       const space = await createSpace(

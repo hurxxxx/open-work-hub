@@ -8,11 +8,11 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.sql.elements import ColumnElement
 
-from open_work_hub_api.core.settings import get_settings
 from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.auth.security import hash_password, new_id, verify_password
+from open_work_hub_api.domains.content_access.grants import ContentGrantIssuer
 from open_work_hub_api.domains.media.models import MediaFile
-from open_work_hub_api.domains.media.proxy_urls import build_media_proxy_url
+from open_work_hub_api.domains.media.content_access import build_media_content_url
 from open_work_hub_api.domains.media.resource_access import (
     MEDIA_RESOURCE_COMMUNITY_COMMENT,
     MEDIA_RESOURCE_COMMUNITY_POST,
@@ -467,6 +467,7 @@ def resolve_post_media_urls(
     urls: list[str],
     viewer: User,
     viewer_is_admin: bool,
+    content_grant_issuer: ContentGrantIssuer,
     password: str | None = None,
 ) -> CommunityMediaResolveResponse:
     if _channel_admin_only_content(post.channel) and not viewer_is_admin:
@@ -501,15 +502,22 @@ def resolve_post_media_urls(
             ).all()
         }
 
-    settings = get_settings()
     resolved: dict[str, str] = {}
     for media in media_files:
         if not _media_belongs_to_post(media, post, comments_by_id):
             continue
-        resolved[f"media:{media.id}"] = build_media_proxy_url(
-            media,
-            api_prefix=settings.api_prefix,
-            secret=settings.minio_secret_key,
+        password_authorized = (
+            post.is_secret and post.author_id != viewer.id and not viewer_is_admin
+        )
+        resolved[f"media:{media.id}"] = build_media_content_url(
+            db,
+            user=viewer,
+            media=media,
+            content_grant_issuer=content_grant_issuer,
+            authorization_mode=(
+                "community_password" if password_authorized else "source_acl"
+            ),
+            authorized_community_post_id=post.id if password_authorized else None,
         )
     return CommunityMediaResolveResponse(resolved=resolved)
 

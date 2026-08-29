@@ -7,6 +7,7 @@ from dataclasses import asdict, is_dataclass
 from typing import Any
 
 from fastapi import status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.db import get_engine
@@ -17,6 +18,10 @@ from open_work_hub_api.domains.auth.app_availability import (
     resolve_workspace_runtime_enabled_app_ids,
 )
 from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.workspace_app_gate import (
+    is_app_enabled_for_user_context,
+    is_company_app_enabled_for_user_context,
+)
 from open_work_hub_api.domains.rag import application as rag_application
 from open_work_hub_api.domains.rag.contracts import (
     RagAnswerMode,
@@ -29,6 +34,9 @@ from open_work_hub_api.domains.rag.default_source_adapters import (
 from open_work_hub_api.domains.rag.runtime import (
     get_provider_bundle,
     get_retrieval_candidate_query_service,
+)
+from open_work_hub_api.domains.rag.source_adapter_registry import (
+    get_rag_resource_adapter,
 )
 from open_work_hub_api.domains.rag.query_service import RagQueryService
 from open_work_hub_api.domains.retrieval.contracts import (
@@ -66,6 +74,7 @@ from open_work_hub_api.domains.search.entity_adapter_registry import (
 )
 from open_work_hub_api.domains.search.schemas import KeywordSearchRequest, KeywordSearchResponse
 from open_work_hub_api.domains.search.resource_mapping import resource_type_for_search_entity
+from open_work_hub_api.domains.source_access import SourceAclPolicy
 
 
 _PRIMARY_BACKEND_TIMEOUT_SECONDS = 5.0
@@ -181,6 +190,16 @@ def query_retrieval(
         )
         _add_methods(profile, ("semantic", "vector", "dense_vector"))
 
+    backend_hits = {
+        backend: _filter_current_retrieval_hits(
+            db,
+            user=user,
+            request_workspace_id=workspace.id,
+            hits=hits,
+        )
+        for backend, hits in backend_hits.items()
+    }
+
     nonempty_backend_hits = {backend: hits for backend, hits in backend_hits.items() if hits}
     if len(nonempty_backend_hits) > 1:
         ranking_result = fuse_ranked_hits(nonempty_backend_hits)
@@ -215,6 +234,12 @@ def query_retrieval(
                 error_type = str(rerank_result.profile.get("error_type") or "Unavailable")
                 profile.degraded_reasons.append(f"rerank:{error_type}")
 
+    ranked_hits = _filter_current_retrieval_hits(
+        db,
+        user=user,
+        request_workspace_id=workspace.id,
+        hits=ranked_hits,
+    )
     merged_hits = ranked_hits[: request.top_k]
     grounded_answer: RetrievalGroundedAnswer | None = None
     citations: list[RetrievalCitation] = []
@@ -392,7 +417,6 @@ def list_workspace_rag_sources_response(
         user=user,
         settings=settings,
     )
-
 
 
 def _query_primary_candidate_backends(
@@ -811,6 +835,94 @@ def _keyword_response_to_hits(response: KeywordSearchResponse) -> list[Retrieval
             )
         )
     return hits
+
+
+def _filter_current_retrieval_hits(
+    db: Session,
+    *,
+    user: User,
+    request_workspace_id: str,
+    hits: list[RetrievalHit],
+) -> list[RetrievalHit]:
+    """Re-authorize authoritative app ownership and source ACL at a use seam."""
+
+    if not hits:
+        return []
+    ensure_rag_source_adapters_registered()
+    fresh_user = db.scalar(
+        select(User).where(User.id == user.id).execution_options(populate_existing=True)
+    )
+    if fresh_user is None or fresh_user.status != "active" or fresh_user.login_blocked:
+        return []
+
+    policies: dict[tuple[str, str | None], SourceAclPolicy | None] = {}
+    candidates_by_policy: dict[tuple[str, str | None, bool], list[RetrievalHit]] = {}
+    candidate_policy_by_identity: dict[int, tuple[str, str | None, bool]] = {}
+    for hit in hits:
+        adapter = get_rag_resource_adapter(hit.resource_type)
+        if adapter is None or not adapter.app_id:
+            continue
+        scope_kind = str(hit.metadata.get("scope_kind") or "workspace")
+        if scope_kind == "company":
+            if not is_company_app_enabled_for_user_context(
+                db,
+                app_id=adapter.app_id,
+                user_id=fresh_user.id,
+            ):
+                continue
+            policy_key = ("company", None)
+        else:
+            if hit.workspace_id != request_workspace_id or not is_app_enabled_for_user_context(
+                db,
+                app_id=adapter.app_id,
+                user_id=fresh_user.id,
+                workspace_id=request_workspace_id,
+            ):
+                continue
+            policy_key = ("workspace", request_workspace_id)
+        authorization_key = (*policy_key, _hit_requires_rag_acl(hit))
+        candidates_by_policy.setdefault(authorization_key, []).append(hit)
+        candidate_policy_by_identity[id(hit)] = authorization_key
+
+    allowed_keys_by_policy: dict[tuple[str, str | None, bool], set[tuple[str, str]]] = {}
+    for authorization_key, candidates in candidates_by_policy.items():
+        policy_key = authorization_key[:2]
+        if policy_key not in policies:
+            try:
+                policies[policy_key] = (
+                    SourceAclPolicy.for_company(db, user=fresh_user)
+                    if policy_key[0] == "company"
+                    else SourceAclPolicy.for_workspace_id(
+                        db,
+                        workspace_id=request_workspace_id,
+                        user=fresh_user,
+                    )
+                )
+            except ValueError:
+                policies[policy_key] = None
+        policy = policies[policy_key]
+        if policy is None:
+            continue
+        authorize_many = (
+            policy.authorize_many_rag_resources
+            if authorization_key[2]
+            else policy.authorize_many_resources
+        )
+        allowed_keys_by_policy[authorization_key] = set(
+            authorize_many((hit.resource_type, hit.resource_id) for hit in candidates)
+        )
+    return [
+        hit
+        for hit in hits
+        if (policy_key := candidate_policy_by_identity.get(id(hit))) is not None
+        and (hit.resource_type, hit.resource_id) in allowed_keys_by_policy.get(policy_key, set())
+    ]
+
+
+def _hit_requires_rag_acl(hit: RetrievalHit) -> bool:
+    retrieval = hit.metadata.get("retrieval") if hit.metadata else None
+    backends = retrieval.get("backends") if isinstance(retrieval, dict) else None
+    return hit.source == "generic_rag" or (isinstance(backends, list) and "generic_rag" in backends)
 
 
 def _add_methods(profile: RetrievalProfile, methods: tuple[str, ...]) -> None:

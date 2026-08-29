@@ -3,7 +3,7 @@ import { Download, FileText, Loader2, MapPin, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 
-import { openDownloadUrl } from '@/src/platform/browser/browser-download';
+import { downloadAuthenticatedContent } from '@/src/platform/browser/browser-download';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { FilesApiError, getFileDownloadUrl } from '../api/files-api';
 
@@ -55,7 +55,7 @@ export function FilesRagSourcesArtifact({ content }: { content: string }) {
         workspaceSlug,
         source.fileId,
       );
-      openDownloadUrl(response.url);
+      await downloadAuthenticatedContent(token, response.url, source.filename);
     } catch (caughtError: unknown) {
       if (caughtError instanceof FilesApiError && caughtError.status === 401) {
         setError(t('files.chat.sources.sessionExpired'));

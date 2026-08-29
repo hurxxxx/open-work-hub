@@ -1,43 +1,42 @@
+import { agentTerminalModule } from '@/src/app-modules/agent-terminal';
+import { bentoModule } from '@/src/app-modules/bento';
+import { chatbotModule } from '@/src/app-modules/chatbot';
+import { communityModule } from '@/src/app-modules/community';
+import { diagramsModule } from '@/src/app-modules/diagrams';
+import { docsModule } from '@/src/app-modules/docs';
+import { filesModule } from '@/src/app-modules/files';
+import { homeModule } from '@/src/app-modules/home';
+import { mailModule } from '@/src/app-modules/mail';
+import { meetingModule } from '@/src/app-modules/meeting';
+import { plannerModule } from '@/src/app-modules/planner';
+import { pmsModule } from '@/src/app-modules/pms';
+import { recordingModule } from '@/src/app-modules/recording';
+import { retrievalSearchModule } from '@/src/app-modules/retrieval-search';
+import { settingsModule } from '@/src/app-modules/settings';
+import { videoChatModule } from '@/src/app-modules/video-chat';
+import { webSearchModule } from '@/src/app-modules/web-search';
+import { whiteboardModule } from '@/src/app-modules/whiteboard';
 import {
   agentTerminalManifest,
-  agentTerminalModule,
-} from '@/src/app-modules/agent-terminal';
-import { announcementsManifest } from '@/src/app-modules/announcements/manifest';
-import { bentoManifest, bentoModule } from '@/src/app-modules/bento';
-import { chatbotManifest, chatbotModule } from '@/src/app-modules/chatbot';
-import {
+  announcementsManifest,
+  bentoManifest,
+  chatbotManifest,
   communityManifest,
-  communityModule,
-} from '@/src/app-modules/community';
-import { diagramsManifest, diagramsModule } from '@/src/app-modules/diagrams';
-import { docsManifest, docsModule } from '@/src/app-modules/docs';
-import { filesManifest, filesModule } from '@/src/app-modules/files';
-import { homeManifest, homeModule } from '@/src/app-modules/home';
-import { mailManifest, mailModule } from '@/src/app-modules/mail';
-import { meetingManifest, meetingModule } from '@/src/app-modules/meeting';
-import { plannerManifest, plannerModule } from '@/src/app-modules/planner';
-import { pmsManifest, pmsModule } from '@/src/app-modules/pms';
-import {
+  diagramsManifest,
+  docsManifest,
+  filesManifest,
+  homeManifest,
+  mailManifest,
+  meetingManifest,
+  plannerManifest,
+  pmsManifest,
   recordingManifest,
-  recordingModule,
-} from '@/src/app-modules/recording';
-import {
   retrievalSearchManifest,
-  retrievalSearchModule,
-} from '@/src/app-modules/retrieval-search';
-import { settingsManifest, settingsModule } from '@/src/app-modules/settings';
-import {
+  settingsManifest,
   videoChatManifest,
-  videoChatModule,
-} from '@/src/app-modules/video-chat';
-import {
   webSearchManifest,
-  webSearchModule,
-} from '@/src/app-modules/web-search';
-import {
   whiteboardManifest,
-  whiteboardModule,
-} from '@/src/app-modules/whiteboard';
+} from './app-contract-manifests';
 import type { FeatureModuleRegistryInput } from './feature-module-registry';
 
 export {

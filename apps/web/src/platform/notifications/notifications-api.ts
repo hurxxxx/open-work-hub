@@ -1,16 +1,11 @@
 import { apiFetchJson } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
 
-export type WorkspaceNotification = ApiSchema<'NotificationItem'>;
-export type WorkspaceNotificationsResponse = {
-  items: WorkspaceNotification[];
-  total: number;
-  page: number;
-  page_size: number;
-};
-export type WorkspaceUnreadCountResponse = {
-  count: number;
-};
+export type WorkspaceNotification = ApiSchema<'GlobalNotificationItem'>;
+export type WorkspaceNotificationsResponse =
+  ApiSchema<'GlobalNotificationListResponse'>;
+export type WorkspaceUnreadCountResponse =
+  ApiSchema<'GlobalUnreadCountResponse'>;
 
 export function listNotifications(
   token: string,
@@ -53,9 +48,7 @@ export function markAllNotificationsRead(
   workspaceSlug?: string | null,
 ): Promise<void> {
   void workspaceSlug;
-  return apiFetchJson<void>(
-    '/api/v1/notifications/read-all',
-    token,
-    { method: 'PATCH' },
-  );
+  return apiFetchJson<void>('/api/v1/notifications/read-all', token, {
+    method: 'PATCH',
+  });
 }

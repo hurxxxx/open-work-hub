@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 import sys
 from types import SimpleNamespace
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 
 def _load_script_module():
@@ -91,6 +91,36 @@ def test_live_e2e_requires_positive_loopback_development_data_plane_identity() -
             }
         else:
             raise AssertionError(f"unsafe development binding accepted: {attribute}")
+
+
+def test_http_files_api_accepts_only_the_authenticated_content_grant_route() -> None:
+    live = _load_script_module()
+    api = live.HttpFilesApi(
+        base_url="http://127.0.0.1:8001",
+        token="test-session-token",
+    )
+    try:
+        accepted = api._validated_content_url("/api/v1/content#grant=signed-token")
+        assert accepted == (
+            "http://127.0.0.1:8001/api/v1/content",
+            "signed-token",
+        )
+
+        for rejected in (
+            "/api/v1/files/content/file-1#grant=signed-token",
+            "/api/v1/content#grant=signed-token&grant=other",
+            "/api/v1/content#grant=signed-token&extra=1",
+            "/api/v1/content?grant=signed-token",
+            "http://example.test/api/v1/content#grant=signed-token",
+        ):
+            try:
+                api._validated_content_url(rejected)
+            except live.LiveE2EContractError as error:
+                assert error.code == "invalid_download_url"
+            else:
+                raise AssertionError(f"unsafe content URL was accepted: {rejected}")
+    finally:
+        api.close()
 
 
 def test_canary_selection_is_bounded_hashed_and_report_is_private(
@@ -303,14 +333,13 @@ class _FakeLiveApi:
         assert self.state.scope == "company" or workspace_slug == self.state.workspace
         row = self.state.files[file_id]
         return (
-            f"http://127.0.0.1:8001/api/v1/files/content/{file_id}"
-            f"?epoch={self.state.metadata_version}",
+            f"http://127.0.0.1:8001/api/v1/content#grant=test-{self.state.metadata_version}",
             row["sha256"],
             int(row["size_bytes"]),
         )
 
     def assert_stale_download_denied(self, url: str) -> None:
-        epoch = int(urlparse(url).query.split("=", 1)[1])
+        epoch = int(parse_qs(urlparse(url).fragment)["grant"][0].removeprefix("test-"))
         assert self.state.deleted or epoch < self.state.metadata_version
 
     def transition(

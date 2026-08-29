@@ -19,6 +19,7 @@ from open_work_hub_api.domains.ai.model_settings_service import (
     resolve_ai_model_workload_route,
 )
 from open_work_hub_api.domains.ai_graph.execution_registry import register_ai_graph_executor
+from open_work_hub_api.domains.ai_graph.execution_policy import enforce_graph_run_app_policy
 from open_work_hub_api.domains.ai_graph.repository import (
     AiGraphExecutionLeaseLostError,
     AiGraphRunInputRepository,
@@ -57,6 +58,14 @@ def execute_bento_agent_job(run_id: str) -> str:
         )
         if not claim.acquired:
             return claim.reason or claim.status
+        if not enforce_graph_run_app_policy(
+            db,
+            run_id=run_id,
+            claim_token=claim_token,
+            stage="bento.ai.claim_policy_gate",
+        ):
+            _finish_app_disabled(db, run_id=run_id)
+            return "app_disabled"
         job = db.get(BentoAiJob, run_id)
         job_input = db.get(BentoAiJobInput, run_id)
         if job is None or job_input is None:
@@ -102,6 +111,14 @@ def execute_bento_agent_job(run_id: str) -> str:
             db.commit()
 
         try:
+            if not enforce_graph_run_app_policy(
+                db,
+                run_id=run_id,
+                claim_token=claim_token,
+                stage="bento.ai.provider_policy_gate",
+            ):
+                _finish_app_disabled(db, run_id=run_id)
+                return "app_disabled"
             route = resolve_ai_model_workload_route(db, workload_id=workload_id)
             if route.runtime_adapter_id != job.runtime_adapter_id:
                 raise RuntimeError("bento.runtime_configuration_changed")
@@ -127,6 +144,14 @@ def execute_bento_agent_job(run_id: str) -> str:
             )
             if cancelled():
                 raise AgentRuntimeCancelled()
+            if not enforce_graph_run_app_policy(
+                db,
+                run_id=run_id,
+                claim_token=claim_token,
+                stage="bento.ai.mutation_policy_gate",
+            ):
+                _finish_app_disabled(db, run_id=run_id)
+                return "app_disabled"
             document_json = str(result.output_payload["document_json"])
             parsed = json.loads(document_json)
             title = str(parsed["title"]).strip()
@@ -206,6 +231,20 @@ def execute_bento_agent_job(run_id: str) -> str:
                 error_code=error_code,
             )
             return "failed"
+
+
+def _finish_app_disabled(db, *, run_id: str) -> None:
+    job = db.get(BentoAiJob, run_id)
+    if job is not None:
+        job.status = "cancelled"
+        job.error_code = "app_execution_disabled"
+        job.finished_at = utcnow_naive()
+        job.updated_at = utcnow_naive()
+    job_input = db.get(BentoAiJobInput, run_id)
+    if job_input is not None:
+        db.delete(job_input)
+    AiGraphRunInputRepository(db).delete_after_terminal(run_id)
+    db.commit()
 
 
 def _finish_failed_or_cancelled(

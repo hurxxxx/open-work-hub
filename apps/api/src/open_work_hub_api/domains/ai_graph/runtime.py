@@ -24,8 +24,10 @@ from open_work_hub_api.domains.ai_graph.contracts import (
     AiGraphSpec,
     merge_graph_values,
 )
+from open_work_hub_api.domains.ai_graph.execution_policy import enforce_graph_run_app_policy
 from open_work_hub_api.domains.ai_graph.repository import (
     AiGraphExecutionLeaseLostError,
+    AiGraphRunInputRepository,
     AiGraphRunRepository,
 )
 
@@ -53,6 +55,11 @@ class AiGraphRuntimeContext:
     app_id: str
     conversation_id: str | None
     progress_callback: Callable[[str], Awaitable[None]]
+    policy_callback: Callable[[], Awaitable[None]]
+
+
+class AiGraphExecutionDisabledError(RuntimeError):
+    pass
 
 
 class AiGraphNodeAdapter(Protocol):
@@ -83,6 +90,7 @@ def _node_runner(
         runtime: Runtime[AiGraphRuntimeContext],
     ) -> dict[str, Any]:
         try:
+            await runtime.context.policy_callback()
             result = await adapter(state, runtime.context)
             if not isinstance(result, AiGraphNodeResult):
                 result = AiGraphNodeResult.model_validate(result)
@@ -97,6 +105,8 @@ def _node_runner(
                 values["routes"] = {node.node_id: result.route}
             await runtime.context.progress_callback(node.node_id)
             return values
+        except AiGraphExecutionDisabledError:
+            raise
         except Exception as error:
             if node.required or node.routes:
                 logger.error(
@@ -214,6 +224,31 @@ def _progress_callback(
             )
 
     return advance
+
+
+def _policy_callback(
+    session_factory: sessionmaker[Session],
+    run_id: str,
+    claim_token: str,
+) -> Callable[[], Awaitable[None]]:
+    async def enforce() -> None:
+        def persist() -> bool:
+            with session_factory() as db:
+                enabled = enforce_graph_run_app_policy(
+                    db,
+                    run_id=run_id,
+                    claim_token=claim_token,
+                    stage="graph.node_policy_gate",
+                )
+                if not enabled:
+                    AiGraphRunInputRepository(db).delete_after_terminal(run_id)
+                db.commit()
+                return enabled
+
+        if not await asyncio.to_thread(persist):
+            raise AiGraphExecutionDisabledError("app_execution_disabled")
+
+    return enforce
 
 
 async def _renew_execution_lease(
@@ -334,6 +369,19 @@ async def run_graph(
             claim_token=resolved_claim_token,
             lease_duration=_EXECUTION_LEASE_DURATION,
         )
+        if claim.acquired and not enforce_graph_run_app_policy(
+            db,
+            run_id=run_id,
+            claim_token=resolved_claim_token,
+            stage="graph.claim_policy_gate",
+        ):
+            AiGraphRunInputRepository(db).delete_after_terminal(run_id)
+            db.commit()
+            return AiGraphRunResult(
+                run_id=run_id,
+                status="skipped",
+                reason="app_disabled",
+            )
         db.commit()
         if not claim.acquired:
             return AiGraphRunResult(
@@ -349,6 +397,11 @@ async def run_graph(
         app_id=request.app_id,
         conversation_id=request.conversation_id,
         progress_callback=_progress_callback(
+            resolved_factory,
+            run_id,
+            resolved_claim_token,
+        ),
+        policy_callback=_policy_callback(
             resolved_factory,
             run_id,
             resolved_claim_token,
@@ -380,6 +433,12 @@ async def run_graph(
             session_factory=resolved_factory,
             run_id=run_id,
             claim_token=resolved_claim_token,
+        )
+    except AiGraphExecutionDisabledError:
+        return AiGraphRunResult(
+            run_id=run_id,
+            status="skipped",
+            reason="app_disabled",
         )
     except asyncio.CancelledError:
         with resolved_factory() as db:
@@ -439,6 +498,19 @@ async def run_graph(
 
     with resolved_factory() as db:
         try:
+            if not enforce_graph_run_app_policy(
+                db,
+                run_id=run_id,
+                claim_token=resolved_claim_token,
+                stage="graph.completion_policy_gate",
+            ):
+                AiGraphRunInputRepository(db).delete_after_terminal(run_id)
+                db.commit()
+                return AiGraphRunResult(
+                    run_id=run_id,
+                    status="skipped",
+                    reason="app_disabled",
+                )
             AiGraphRunRepository(db).transition(
                 run_id,
                 "completed",

@@ -24,7 +24,6 @@ from open_work_hub_api.domains.auth.models import (
     WorkspaceAppOverride,
 )
 from open_work_hub_api.domains.auth.workspace_apps import get_workspace_app_catalog_item
-from open_work_hub_api.domains.conversations.app_catalog import CHATBOT_WORKSPACE_APP
 from open_work_hub_api.domains.rag.contracts import (
     RagAnswerMode,
     RagQueryHit,
@@ -72,6 +71,14 @@ def _auth_headers(token: str) -> dict[str, str]:
 
 def _workspace_retrieval_path(workspace_slug: str, suffix: str) -> str:
     return f"/api/v1/workspaces/{workspace_slug}/retrieval{suffix}"
+
+
+def _allow_final_retrieval_hits(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        retrieval_application,
+        "_filter_current_retrieval_hits",
+        lambda _db, *, user, request_workspace_id, hits: list(hits),
+    )
 
 
 def _workspace_ai_path(workspace_slug: str, suffix: str) -> str:
@@ -142,9 +149,7 @@ def _disable_retrieval_discoverability_apps(workspace_slug: str) -> None:
         company_controls_by_app_id = {
             row.app_id: row
             for row in session.scalars(
-                select(CompanyAppControl).where(
-                    CompanyAppControl.app_id.in_(platform_app_ids)
-                )
+                select(CompanyAppControl).where(CompanyAppControl.app_id.in_(platform_app_ids))
             )
         }
         for app_id in platform_app_ids:
@@ -199,10 +204,216 @@ def test_retrieval_source_catalog_exposes_active_sources() -> None:
 
 def test_retrieval_discoverability_is_derived_from_registered_descriptors() -> None:
     assert retrieval_discoverable_app_ids() == (
-        frozenset({CHATBOT_WORKSPACE_APP.app_id})
-        | registered_retrieval_source_app_ids()
-        | registered_rag_app_ids()
+        registered_retrieval_source_app_ids() | registered_rag_app_ids()
     )
+
+
+def test_final_retrieval_filter_rechecks_owner_app_and_source_acl(monkeypatch) -> None:
+    user = SimpleNamespace(id="user-1", status="active", login_blocked=False)
+    db = SimpleNamespace(scalar=lambda _statement: user)
+    enabled = {"value": True}
+
+    class Policy:
+        def authorize_many_resources(self, resources):
+            return {
+                resource for resource in resources if resource == ("docs_native_doc", "allowed")
+            }
+
+        def authorize_many_rag_resources(self, resources):
+            return self.authorize_many_resources(resources)
+
+    monkeypatch.setattr(
+        retrieval_application,
+        "get_rag_resource_adapter",
+        lambda resource_type: (
+            SimpleNamespace(app_id="docs") if resource_type == "docs_native_doc" else None
+        ),
+    )
+    monkeypatch.setattr(
+        retrieval_application,
+        "is_app_enabled_for_user_context",
+        lambda *_args, **_kwargs: enabled["value"],
+    )
+    monkeypatch.setattr(
+        retrieval_application.SourceAclPolicy,
+        "for_workspace_id",
+        lambda *_args, **_kwargs: Policy(),
+    )
+    hits = [
+        RetrievalHit(
+            source="generic_rag",
+            resource_type="docs_native_doc",
+            resource_id=resource_id,
+            workspace_id="workspace-1",
+            metadata={"scope_kind": "workspace"},
+        )
+        for resource_id in ("allowed", "denied")
+    ]
+    hits.append(
+        RetrievalHit(
+            source="generic_rag",
+            resource_type="unknown",
+            resource_id="unknown",
+            workspace_id="workspace-1",
+            metadata={"scope_kind": "workspace"},
+        )
+    )
+
+    assert [
+        hit.resource_id
+        for hit in retrieval_application._filter_current_retrieval_hits(
+            db,
+            user=user,
+            request_workspace_id="workspace-1",
+            hits=hits,
+        )
+    ] == ["allowed"]
+
+    enabled["value"] = False
+    assert (
+        retrieval_application._filter_current_retrieval_hits(
+            db,
+            user=user,
+            request_workspace_id="workspace-1",
+            hits=hits,
+        )
+        == []
+    )
+
+
+def test_final_retrieval_filter_preserves_rank_order_across_scopes(monkeypatch) -> None:
+    user = SimpleNamespace(id="user-1", status="active", login_blocked=False)
+    db = SimpleNamespace(scalar=lambda _statement: user)
+
+    class Policy:
+        def __init__(self, allowed_id: str) -> None:
+            self.allowed_id = allowed_id
+
+        def authorize_many_resources(self, resources):
+            return {
+                resource
+                for resource in resources
+                if resource == ("docs_native_doc", self.allowed_id)
+            }
+
+        def authorize_many_rag_resources(self, resources):
+            return self.authorize_many_resources(resources)
+
+    monkeypatch.setattr(
+        retrieval_application,
+        "get_rag_resource_adapter",
+        lambda _resource_type: SimpleNamespace(app_id="docs"),
+    )
+    monkeypatch.setattr(
+        retrieval_application,
+        "is_app_enabled_for_user_context",
+        lambda *_args, **_kwargs: True,
+    )
+    monkeypatch.setattr(
+        retrieval_application,
+        "is_company_app_enabled_for_user_context",
+        lambda *_args, **_kwargs: True,
+    )
+    monkeypatch.setattr(
+        retrieval_application.SourceAclPolicy,
+        "for_workspace_id",
+        lambda *_args, **_kwargs: Policy("workspace-result"),
+    )
+    monkeypatch.setattr(
+        retrieval_application.SourceAclPolicy,
+        "for_company",
+        lambda *_args, **_kwargs: Policy("company-result"),
+    )
+    hits = [
+        RetrievalHit(
+            source="generic_rag",
+            resource_type="docs_native_doc",
+            resource_id="company-result",
+            workspace_id=None,
+            metadata={"scope_kind": "company"},
+        ),
+        RetrievalHit(
+            source="generic_rag",
+            resource_type="docs_native_doc",
+            resource_id="workspace-result",
+            workspace_id="workspace-1",
+            metadata={"scope_kind": "workspace"},
+        ),
+    ]
+
+    assert [
+        hit.resource_id
+        for hit in retrieval_application._filter_current_retrieval_hits(
+            db,
+            user=user,
+            request_workspace_id="workspace-1",
+            hits=hits,
+        )
+    ] == ["company-result", "workspace-result"]
+
+
+def test_final_retrieval_filter_uses_rag_acl_for_rag_backed_hits(monkeypatch) -> None:
+    user = SimpleNamespace(id="user-1", status="active", login_blocked=False)
+    db = SimpleNamespace(scalar=lambda _statement: user)
+
+    class Policy:
+        def authorize_many_resources(self, resources):
+            return set(resources)
+
+        def authorize_many_rag_resources(self, resources):
+            return set()
+
+    monkeypatch.setattr(
+        retrieval_application,
+        "get_rag_resource_adapter",
+        lambda _resource_type: SimpleNamespace(app_id="docs"),
+    )
+    monkeypatch.setattr(
+        retrieval_application,
+        "is_app_enabled_for_user_context",
+        lambda *_args, **_kwargs: True,
+    )
+    monkeypatch.setattr(
+        retrieval_application.SourceAclPolicy,
+        "for_workspace_id",
+        lambda *_args, **_kwargs: Policy(),
+    )
+    hits = [
+        RetrievalHit(
+            source="generic_rag",
+            resource_type="docs_native_doc",
+            resource_id="rag-only",
+            workspace_id="workspace-1",
+            metadata={"scope_kind": "workspace"},
+        ),
+        RetrievalHit(
+            source="keyword",
+            resource_type="docs_native_doc",
+            resource_id="keyword-only",
+            workspace_id="workspace-1",
+            metadata={"scope_kind": "workspace"},
+        ),
+        RetrievalHit(
+            source="keyword",
+            resource_type="docs_native_doc",
+            resource_id="fused-with-rag",
+            workspace_id="workspace-1",
+            metadata={
+                "scope_kind": "workspace",
+                "retrieval": {"backends": ["keyword", "generic_rag"]},
+            },
+        ),
+    ]
+
+    assert [
+        hit.resource_id
+        for hit in retrieval_application._filter_current_retrieval_hits(
+            db,
+            user=user,
+            request_workspace_id="workspace-1",
+            hits=hits,
+        )
+    ] == ["keyword-only"]
 
 
 def test_retrieval_source_matrix_doc_matches_catalog() -> None:
@@ -398,6 +609,7 @@ def test_retrieval_ai_tools_are_hidden_and_blocked_when_sources_disabled(
 
 
 def test_hybrid_retrieval_fuses_actual_keyword_and_rag_resource_shapes(monkeypatch) -> None:
+    _allow_final_retrieval_hits(monkeypatch)
     now = datetime.now(UTC)
     keyword_response = KeywordSearchResponse(
         query="hybrid",
@@ -482,6 +694,7 @@ def test_hybrid_retrieval_fuses_actual_keyword_and_rag_resource_shapes(monkeypat
 
 
 def test_grounded_answer_uses_final_fused_hits_once(monkeypatch) -> None:
+    _allow_final_retrieval_hits(monkeypatch)
     rag_response = RagQueryResponse(
         query="policy",
         answer_mode=RagAnswerMode.SEARCH_ONLY,
@@ -634,6 +847,7 @@ def test_explicit_source_runtime_failure_is_service_unavailable(monkeypatch) -> 
 
 
 def test_multiple_backends_always_use_rrf_even_for_semantic_strategy(monkeypatch) -> None:
+    _allow_final_retrieval_hits(monkeypatch)
     keyword_response = KeywordSearchResponse(
         query="multi",
         hits=[],

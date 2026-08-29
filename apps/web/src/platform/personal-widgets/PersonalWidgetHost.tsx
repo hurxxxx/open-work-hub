@@ -46,9 +46,9 @@ import {
 } from './personal-widgets-api';
 import {
   DEFAULT_PERSONAL_WIDGET_PREFERENCES,
-  PERSONAL_WIDGET_STORAGE_KEY,
   countOpenTodos,
   parsePersonalWidgetPreferences,
+  personalWidgetStorageKey,
   serializePersonalWidgetPreferences,
   sortPersonalTodos,
   type PersonalWidgetId,
@@ -86,21 +86,26 @@ export interface PersonalWidgetSecondaryPanelAdapter {
 
 const EMPTY_DOCK_PANELS: readonly PersonalWidgetSecondaryPanelAdapter[] = [];
 
-function readStoredPreferences(): PersonalWidgetPreferences {
-  if (typeof window === 'undefined') {
+function readStoredPreferences(
+  userId: string | null,
+): PersonalWidgetPreferences {
+  if (typeof window === 'undefined' || !userId) {
     return DEFAULT_PERSONAL_WIDGET_PREFERENCES;
   }
   return parsePersonalWidgetPreferences(
-    window.localStorage.getItem(PERSONAL_WIDGET_STORAGE_KEY),
+    window.localStorage.getItem(personalWidgetStorageKey(userId)),
   );
 }
 
-function writeStoredPreferences(preferences: PersonalWidgetPreferences): void {
-  if (typeof window === 'undefined') {
+function writeStoredPreferences(
+  userId: string | null,
+  preferences: PersonalWidgetPreferences,
+): void {
+  if (typeof window === 'undefined' || !userId) {
     return;
   }
   window.localStorage.setItem(
-    PERSONAL_WIDGET_STORAGE_KEY,
+    personalWidgetStorageKey(userId),
     serializePersonalWidgetPreferences(preferences),
   );
 }
@@ -114,9 +119,12 @@ export function PersonalWidgetHost({
   onConvertTodoToPms?: (todo: PersonalTodoItem) => void;
   secondaryPanel?: PersonalWidgetSecondaryPanelAdapter;
 }) {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const principalId = user?.id ?? null;
   const { t } = useTranslation('shell');
-  const [preferences, setPreferences] = useState(readStoredPreferences);
+  const [preferences, setPreferences] = useState(() =>
+    readStoredPreferences(principalId),
+  );
   const [todos, setTodos] = useState<PersonalTodoItem[]>([]);
   const [memo, setMemo] = useState<PersonalMemo | null>(null);
   const [memoBody, setMemoBody] = useState('');
@@ -178,8 +186,8 @@ export function PersonalWidgetHost({
       : activeWidget;
 
   useEffect(() => {
-    writeStoredPreferences(preferences);
-  }, [preferences]);
+    writeStoredPreferences(principalId, preferences);
+  }, [preferences, principalId]);
 
   useEffect(() => {
     if (editingTodoId !== null || !pendingTodoEditFocusIdRef.current) {
@@ -975,7 +983,10 @@ export function PersonalWidgetHost({
                               <button
                                 ref={(node) => {
                                   if (node) {
-                                    todoEditButtonRefs.current.set(todo.id, node);
+                                    todoEditButtonRefs.current.set(
+                                      todo.id,
+                                      node,
+                                    );
                                   } else {
                                     todoEditButtonRefs.current.delete(todo.id);
                                   }

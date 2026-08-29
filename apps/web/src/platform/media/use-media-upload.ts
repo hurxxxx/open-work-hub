@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { i18n } from '@/src/platform/i18n';
 import { linkMedia, uploadMedia, resolveMediaUrls } from './media-api';
@@ -15,8 +15,10 @@ export function useMediaUpload() {
   const { token } = useAuth();
   const urlResolutionSession = useMemo(
     () => createMediaUrlResolutionSession({ resolveMediaUrls }),
-    [],
+    [token],
   );
+
+  useEffect(() => () => urlResolutionSession.dispose(), [urlResolutionSession]);
 
   const uploadFile = useCallback(
     async (file: File): Promise<string> => {

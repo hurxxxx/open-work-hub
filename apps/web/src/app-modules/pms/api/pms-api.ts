@@ -857,11 +857,17 @@ export function createTaskComment(
   taskId: string,
   body: string,
   bodyBlocks?: Record<string, unknown>[] | null,
+  workspaceSlug?: string | null,
 ): Promise<PmsComment> {
-  return request<PmsComment>(`/api/v1/pms/tasks/${taskId}/comments`, token, {
-    method: 'POST',
-    body: JSON.stringify({ body, body_blocks: bodyBlocks ?? null }),
-  });
+  return request<PmsComment>(
+    `/api/v1/pms/tasks/${taskId}/comments`,
+    token,
+    {
+      method: 'POST',
+      body: JSON.stringify({ body, body_blocks: bodyBlocks ?? null }),
+    },
+    workspaceSlug,
+  );
 }
 
 export function listTaskListLabels(
@@ -902,19 +908,29 @@ export function deleteLabel(token: string, labelId: string): Promise<void> {
   });
 }
 
-export function deleteTask(token: string, taskId: string): Promise<void> {
-  return request<void>(`/api/v1/pms/tasks/${taskId}`, token, {
-    method: 'DELETE',
-  });
+export function deleteTask(
+  token: string,
+  taskId: string,
+  workspaceSlug?: string | null,
+): Promise<void> {
+  return request<void>(
+    `/api/v1/pms/tasks/${taskId}`,
+    token,
+    { method: 'DELETE' },
+    workspaceSlug,
+  );
 }
 
 export function listTaskActivityLogs(
   token: string,
   taskId: string,
+  workspaceSlug?: string | null,
 ): Promise<PmsActivityLogsResponse> {
   return request<PmsActivityLogsResponse>(
     `/api/v1/pms/tasks/${taskId}/activity-logs?page=1&page_size=50`,
     token,
+    {},
+    workspaceSlug,
   );
 }
 
@@ -922,11 +938,12 @@ export async function uploadAttachment(
   token: string,
   taskId: string,
   file: File,
+  workspaceSlug?: string | null,
 ): Promise<PmsAttachment> {
   const formData = new FormData();
   formData.append('file', file);
   return apiFetchJsonWithMappedError<PmsAttachment>(
-    resolvePmsPath(`/api/v1/pms/tasks/${taskId}/attachments`),
+    resolvePmsPath(`/api/v1/pms/tasks/${taskId}/attachments`, workspaceSlug),
     token,
     {
       method: 'POST',
@@ -939,10 +956,14 @@ export async function uploadAttachment(
 export function deleteAttachment(
   token: string,
   attachmentId: string,
+  workspaceSlug?: string | null,
 ): Promise<void> {
-  return request<void>(`/api/v1/pms/attachments/${attachmentId}`, token, {
-    method: 'DELETE',
-  });
+  return request<void>(
+    `/api/v1/pms/attachments/${attachmentId}`,
+    token,
+    { method: 'DELETE' },
+    workspaceSlug,
+  );
 }
 
 // ── Linked Docs ─────────────────────────────────────────────────────
@@ -1056,6 +1077,7 @@ export function createChecklistItem(
   token: string,
   taskId: string,
   payload: { text: string; sort_order?: number },
+  workspaceSlug?: string | null,
 ): Promise<PmsChecklistItem> {
   return request<PmsChecklistItem>(
     `/api/v1/pms/tasks/${taskId}/checklist`,
@@ -1064,6 +1086,7 @@ export function createChecklistItem(
       method: 'POST',
       body: JSON.stringify(payload),
     },
+    workspaceSlug,
   );
 }
 
@@ -1071,92 +1094,28 @@ export function updateChecklistItem(
   token: string,
   itemId: string,
   payload: { text?: string; completed?: boolean; sort_order?: number },
+  workspaceSlug?: string | null,
 ): Promise<PmsChecklistItem> {
-  return request<PmsChecklistItem>(`/api/v1/pms/checklist/${itemId}`, token, {
-    method: 'PATCH',
-    body: JSON.stringify(payload),
-  });
+  return request<PmsChecklistItem>(
+    `/api/v1/pms/checklist/${itemId}`,
+    token,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    },
+    workspaceSlug,
+  );
 }
 
 export function deleteChecklistItem(
   token: string,
   itemId: string,
-): Promise<void> {
-  return request<void>(`/api/v1/pms/checklist/${itemId}`, token, {
-    method: 'DELETE',
-  });
-}
-
-// ── Notifications ───────────────────────────────────────────────────
-
-export interface PmsNotification {
-  id: string;
-  type: string;
-  title: string;
-  body: string;
-  reference_type: string;
-  reference_id: string | null;
-  is_read: boolean;
-  created_at: string;
-}
-
-export interface PmsNotificationsResponse {
-  items: PmsNotification[];
-  total: number;
-  page: number;
-  page_size: number;
-}
-
-export interface PmsUnreadCountResponse {
-  count: number;
-}
-
-export function listNotifications(
-  token: string,
-  page = 1,
-  workspaceSlug?: string | null,
-): Promise<PmsNotificationsResponse> {
-  return request<PmsNotificationsResponse>(
-    `/api/v1/pms/notifications?page=${page}&page_size=20`,
-    token,
-    {},
-    workspaceSlug,
-  );
-}
-
-export function getUnreadNotificationCount(
-  token: string,
-  workspaceSlug?: string | null,
-): Promise<PmsUnreadCountResponse> {
-  return request<PmsUnreadCountResponse>(
-    '/api/v1/pms/notifications/unread-count',
-    token,
-    {},
-    workspaceSlug,
-  );
-}
-
-export function markNotificationRead(
-  token: string,
-  notificationId: string,
-  workspaceSlug?: string | null,
-): Promise<PmsNotification> {
-  return request<PmsNotification>(
-    `/api/v1/pms/notifications/${notificationId}/read`,
-    token,
-    { method: 'PATCH' },
-    workspaceSlug,
-  );
-}
-
-export function markAllNotificationsRead(
-  token: string,
   workspaceSlug?: string | null,
 ): Promise<void> {
   return request<void>(
-    '/api/v1/pms/notifications/read-all',
+    `/api/v1/pms/checklist/${itemId}`,
     token,
-    { method: 'PATCH' },
+    { method: 'DELETE' },
     workspaceSlug,
   );
 }
@@ -1446,6 +1405,7 @@ export function setTaskAssignees(
   token: string,
   taskId: string,
   userIds: string[],
+  workspaceSlug?: string | null,
 ): Promise<PmsTaskAssignee[]> {
   return request<PmsTaskAssignee[]>(
     `/api/v1/pms/tasks/${taskId}/assignees`,
@@ -1454,6 +1414,7 @@ export function setTaskAssignees(
       method: 'PUT',
       body: JSON.stringify({ user_ids: userIds }),
     },
+    workspaceSlug,
   );
 }
 
@@ -1463,6 +1424,7 @@ export function setTaskFollowers(
   token: string,
   taskId: string,
   userIds: string[],
+  workspaceSlug?: string | null,
 ): Promise<PmsTaskFollower[]> {
   return request<PmsTaskFollower[]>(
     `/api/v1/pms/tasks/${taskId}/followers`,
@@ -1471,6 +1433,7 @@ export function setTaskFollowers(
       method: 'PUT',
       body: JSON.stringify({ user_ids: userIds }),
     },
+    workspaceSlug,
   );
 }
 

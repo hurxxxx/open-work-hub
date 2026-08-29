@@ -12,8 +12,9 @@ import { useParams, useSearchParams } from 'react-router-dom';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
+  authenticatedContentObjectUrl,
   downloadBlobAsFile,
-  openDownloadUrl,
+  downloadAuthenticatedContent,
 } from '@/src/platform/browser/browser-download';
 import { normalizeTimeZone } from '@/src/platform/time/time-utils';
 import { useWorkspaceBootstrapContext } from '@/src/platform/workspaces/workspace-bootstrap-context';
@@ -83,6 +84,8 @@ export function useFileManagerController() {
   const loadAbortRef = useRef<AbortController | null>(null);
   const foregroundLoadAbortRef = useRef<AbortController | null>(null);
   const loadRequestSeqRef = useRef(0);
+  const previewRequestSeqRef = useRef(0);
+  const previewObjectUrlRef = useRef<string | null>(null);
   const folderId = searchParams.get('folder');
   const [browse, setBrowse] = useState<FileBrowseResponse | null>(null);
   const [loadState, setLoadState] = useState<LoadState>('idle');
@@ -104,6 +107,30 @@ export function useFileManagerController() {
   const [folderVisibility, setFolderVisibility] =
     useState<FileVisibility>('private');
   const [savingFolder, setSavingFolder] = useState(false);
+
+  const closeImagePreview = useCallback(() => {
+    previewRequestSeqRef.current += 1;
+    if (previewObjectUrlRef.current) {
+      URL.revokeObjectURL(previewObjectUrlRef.current);
+      previewObjectUrlRef.current = null;
+    }
+    setImagePreview(null);
+  }, []);
+
+  useEffect(
+    () => () => {
+      previewRequestSeqRef.current += 1;
+      if (previewObjectUrlRef.current) {
+        URL.revokeObjectURL(previewObjectUrlRef.current);
+        previewObjectUrlRef.current = null;
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    closeImagePreview();
+  }, [closeImagePreview, token, workspaceSlug]);
 
   const workspaceName =
     workspaceBootstrap.data?.workspace.name ?? workspaceSlug ?? '';
@@ -459,7 +486,7 @@ export function useFileManagerController() {
     setError(null);
     try {
       const response = await getFileDownloadUrl(token, workspaceSlug, file.id);
-      openDownloadUrl(response.url);
+      await downloadAuthenticatedContent(token, response.url, file.filename);
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
@@ -477,9 +504,23 @@ export function useFileManagerController() {
     }
     setPreviewBusyId(file.id);
     setError(null);
+    const sequence = previewRequestSeqRef.current + 1;
+    previewRequestSeqRef.current = sequence;
     try {
       const response = await getFilePreviewUrl(token, workspaceSlug, file.id);
-      setImagePreview({ file, url: response.url });
+      const objectUrl = await authenticatedContentObjectUrl(
+        token,
+        response.url,
+      );
+      if (previewRequestSeqRef.current !== sequence) {
+        URL.revokeObjectURL(objectUrl);
+        return;
+      }
+      if (previewObjectUrlRef.current) {
+        URL.revokeObjectURL(previewObjectUrlRef.current);
+      }
+      previewObjectUrlRef.current = objectUrl;
+      setImagePreview({ file, url: objectUrl });
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
@@ -647,6 +688,7 @@ export function useFileManagerController() {
     handlePreview,
     hasActiveUploads,
     imagePreview,
+    closeImagePreview,
     i18nLanguage: i18n.language,
     isEmpty,
     load,
@@ -664,7 +706,6 @@ export function useFileManagerController() {
     setFolderName,
     setFolderSelected,
     setFolderVisibility,
-    setImagePreview,
     setUploadVisibility,
     timeZone,
     uploadVisibility,

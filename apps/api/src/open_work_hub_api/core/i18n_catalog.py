@@ -1012,6 +1012,10 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "파일 링크가 올바르지 않습니다.",
         "en-US": "File link is invalid.",
     },
+    "content.grant_invalid": {
+        "ko-KR": "콘텐츠 링크가 만료되었거나 현재 접근 권한이 없습니다.",
+        "en-US": "The content link expired or you no longer have access.",
+    },
     "files.preview_unsupported_type": {
         "ko-KR": "이 파일 형식은 바로보기를 지원하지 않습니다.",
         "en-US": "This file type cannot be previewed.",
@@ -2203,6 +2207,10 @@ MESSAGES: dict[str, dict[str, str]] = {
     "recording.owner_required": {
         "ko-KR": "녹음 소유자만 이 작업을 수행할 수 있습니다.",
         "en-US": "Only the recording owner can perform this action.",
+    },
+    "recording.result_not_ready": {
+        "ko-KR": "녹음 결과가 아직 게시할 준비가 되지 않았습니다.",
+        "en-US": "The recording result is not ready to publish yet.",
     },
     "recording.target_filter_required": {
         "ko-KR": "첨부 대상 필터에는 app, type, id가 모두 필요합니다.",

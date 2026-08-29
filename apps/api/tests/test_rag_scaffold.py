@@ -1064,6 +1064,8 @@ def test_rag_hydrates_source_metadata_before_final_acl_and_grounding() -> None:
 
 def test_company_rag_filter_requires_source_owned_acl(monkeypatch) -> None:
     calls: list[set[tuple[str, str]]] = []
+    user = SimpleNamespace(id="user-1", status="active", login_blocked=False)
+    db = SimpleNamespace(scalar=lambda _statement: user)
 
     class FakeCompanyPolicy:
         def authorize_many_rag_resources(self, resources):
@@ -1076,9 +1078,14 @@ def test_company_rag_filter_requires_source_owned_acl(monkeypatch) -> None:
         "for_company",
         lambda db, *, user: FakeCompanyPolicy(),
     )
+    monkeypatch.setattr(
+        rag_access_filter,
+        "is_company_app_enabled_for_user_context",
+        lambda *_args, **_kwargs: True,
+    )
     post_filter = rag_access_filter.build_company_rag_post_filter(
-        SimpleNamespace(),
-        user=SimpleNamespace(id="user-1"),
+        db,
+        user=user,
         source_kinds=["docs_native_doc"],
     )
 
@@ -1106,6 +1113,8 @@ def test_company_rag_filter_requires_source_owned_acl(monkeypatch) -> None:
 
 def test_partition_authorized_rag_filters_ignore_stale_scope_payload(monkeypatch) -> None:
     partition_id = "11111111-1111-1111-1111-111111111111"
+    user = SimpleNamespace(id="user-1", status="active", login_blocked=False)
+    db = SimpleNamespace(scalar=lambda _statement: user)
 
     class FakePolicy:
         def authorize_many_rag_resources(self, resources):
@@ -1115,6 +1124,16 @@ def test_partition_authorized_rag_filters_ignore_stale_scope_payload(monkeypatch
         rag_access_filter.SourceAclPolicy,
         "for_company",
         lambda db, *, user: FakePolicy(),
+    )
+    monkeypatch.setattr(
+        rag_access_filter,
+        "is_app_enabled_for_user_context",
+        lambda *_args, **_kwargs: True,
+    )
+    monkeypatch.setattr(
+        rag_access_filter,
+        "is_company_app_enabled_for_user_context",
+        lambda *_args, **_kwargs: True,
     )
     monkeypatch.setattr(
         rag_access_filter.SourceAclPolicy,
@@ -1146,14 +1165,14 @@ def test_partition_authorized_rag_filters_ignore_stale_scope_payload(monkeypatch
     )
 
     workspace_filter = rag_access_filter.build_user_rag_post_filter(
-        SimpleNamespace(),
-        user=SimpleNamespace(id="user-1"),
+        db,
+        user=user,
         workspace_id="current-workspace",
         authorized_partition_ids=[partition_id],
     )
     company_filter = rag_access_filter.build_company_rag_post_filter(
-        SimpleNamespace(),
-        user=SimpleNamespace(id="user-1"),
+        db,
+        user=user,
         source_kinds=["files"],
         authorized_partition_ids=[partition_id],
     )

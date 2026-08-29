@@ -1,7 +1,14 @@
 import { expect, test, type Page } from '@playwright/test';
+import { APP_CONTRACTS } from '@open-work-hub/contracts/app-contracts';
+import { APP_WORKSPACE_API_ROUTE_POLICY } from '@/src/app/shell/workspace-api-routes';
+import {
+  isPublicWorkspaceApiPath,
+  matchesWorkspaceApiPrefix,
+} from '@/src/platform/api/workspace-api-route-policy';
 
 import {
   FAKE_PLATFORM_ADMIN_USER,
+  FAKE_WORKSPACE_USER,
   stubConversationsApi,
   stubShellBackend,
   stubWorkspaceAppDataBackend,
@@ -67,6 +74,75 @@ test.describe('AI-friendly app boundary smoke', () => {
       page.getByRole('heading', { level: 1, name: /Planner|플래너/ }),
     ).toBeVisible();
     errors.expectClean();
+  });
+
+  test('does not load workspace app data before a workspace is chosen', async ({
+    page,
+  }) => {
+    const workspaceLessRequests: string[] = [];
+    page.on('request', (request) => {
+      const url = new URL(request.url());
+      const rawPath = `${url.pathname}${url.search}`;
+      if (
+        !url.pathname.startsWith('/api/v1/workspaces/') &&
+        matchesWorkspaceApiPrefix(
+          url.pathname,
+          APP_WORKSPACE_API_ROUTE_POLICY.prefixes,
+        ) &&
+        !isPublicWorkspaceApiPath(rawPath, APP_WORKSPACE_API_ROUTE_POLICY)
+      ) {
+        workspaceLessRequests.push(rawPath);
+      }
+    });
+    await stubShellBackend(page, {
+      user: {
+        ...FAKE_WORKSPACE_USER,
+        workspaces: [
+          ...FAKE_WORKSPACE_USER.workspaces,
+          {
+            id: 'workspace-branch',
+            slug: 'branch',
+            name: 'Branch Workspace',
+            role: 'member',
+          },
+        ],
+      },
+    });
+    await stubConversationsApi(page);
+
+    const workspaceAppIds = APP_CONTRACTS.filter(
+      (app) => app.availability_scope === 'workspace' && app.app_id !== 'home',
+    ).map((app) => app.app_id);
+
+    await page.goto('/');
+    await expect(
+      page.getByRole('heading', { level: 1, name: /앱 런처|App launcher/ }),
+    ).toBeVisible();
+    workspaceLessRequests.length = 0;
+
+    for (const appId of workspaceAppIds) {
+      await page.evaluate((nextAppId) => {
+        window.history.pushState({}, '', `/apps/${nextAppId}`);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      }, appId);
+      await expect(
+        page.getByRole('button', { name: /Branch Workspace/ }),
+      ).toBeVisible();
+      if (appId === 'pms') {
+        await expect(
+          page.getByRole('button', { name: /새 스페이스|New Space/ }),
+        ).toHaveCount(0);
+      }
+      await page.waitForTimeout(50);
+
+      expect(
+        workspaceLessRequests,
+        `${appId} issued workspace API calls before context selection`,
+      ).toEqual([]);
+      workspaceLessRequests.length = 0;
+    }
+
+    expect(workspaceLessRequests).toEqual([]);
   });
 
   test('renders workspace apps and tool wrappers through the shell registry', async ({

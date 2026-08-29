@@ -2053,6 +2053,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Proxy Content */
+        get: operations["content_proxy_content_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/release-notes/current": {
         parameters: {
             query?: never;
@@ -3497,23 +3514,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/files/content/{file_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Proxy File Content */
-        get: operations["files_proxy_file_content_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/workspaces/{workspace_slug}/connectors/ocr/route": {
         parameters: {
             query?: never;
@@ -3525,23 +3525,6 @@ export interface paths {
         put?: never;
         /** Route Ocr */
         post: operations["ocr_route_ocr_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/pms/attachments/{attachment_id}/content": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Proxy Attachment Content */
-        get: operations["pms_proxy_attachment_content_get"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4005,23 +3988,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/attachments/{attachment_id}/download": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Download Attachment */
-        get: operations["pms_download_attachment_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/workspaces/{workspace_slug}/pms/attachments/{attachment_id}": {
         parameters: {
             query?: never;
@@ -4037,74 +4003,6 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/pms/notifications": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Notifications */
-        get: operations["pms_list_notifications_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/pms/notifications/unread-count": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Unread Count */
-        get: operations["pms_get_unread_count_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/pms/notifications/{notification_id}/read": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** Mark Notification Read */
-        patch: operations["pms_mark_notification_read_patch"];
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/pms/notifications/read-all": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** Mark All Notifications Read */
-        patch: operations["pms_mark_all_notifications_read_patch"];
         trace?: never;
     };
     "/api/v1/workspaces/{workspace_slug}/pms/tasks/{task_id}/checklist": {
@@ -4422,23 +4320,6 @@ export interface paths {
         head?: never;
         /** Update Folder */
         patch: operations["pms_update_folder_patch"];
-        trace?: never;
-    };
-    "/api/v1/meeting/files/{file_id}/content": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Proxy File Attachment Content */
-        get: operations["meeting_proxy_file_attachment_content_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
         trace?: never;
     };
     "/api/v1/workspaces/{workspace_slug}/meeting/meetings": {
@@ -5105,6 +4986,23 @@ export interface paths {
         head?: never;
         /** Update Recording */
         patch: operations["recording_update_recording_patch"];
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_slug}/recording/recordings/{recording_id}/publications/docs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Publish Recording To Docs */
+        post: operations["recording_publish_recording_to_docs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/workspaces/{workspace_slug}/recording/recordings/{recording_id}/retry": {
@@ -5855,26 +5753,6 @@ export interface paths {
         put?: never;
         /** Cleanup Orphan Media */
         post: operations["media_cleanup_orphan_media_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/media/content/{media_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Proxy Media Content
-         * @description Serve a short-lived resolved media URL through the API origin.
-         */
-        get: operations["media_proxy_media_content_get"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -10983,10 +10861,14 @@ export interface components {
             title: string;
             /** Body */
             body: string;
-            /** Reference Type */
-            reference_type: string;
-            /** Reference Id */
-            reference_id: string | null;
+            /** Source Type */
+            source_type: string;
+            /** Source Id */
+            source_id: string | null;
+            /** Origin App Id */
+            origin_app_id: string;
+            /** Origin Workspace Id */
+            origin_workspace_id: string | null;
             /** Action Url */
             action_url?: string | null;
             /** Is Read */
@@ -12022,41 +11904,6 @@ export interface components {
              */
             access_level: "read" | "edit";
         };
-        /** NotificationItem */
-        NotificationItem: {
-            /** Id */
-            id: string;
-            /** Type */
-            type: string;
-            /** Title */
-            title: string;
-            /** Body */
-            body: string;
-            /** Reference Type */
-            reference_type: string;
-            /** Reference Id */
-            reference_id: string | null;
-            /** Action Url */
-            action_url?: string | null;
-            /** Is Read */
-            is_read: boolean;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-        };
-        /** NotificationListResponse */
-        NotificationListResponse: {
-            /** Items */
-            items: components["schemas"]["NotificationItem"][];
-            /** Total */
-            total: number;
-            /** Page */
-            page: number;
-            /** Page Size */
-            page_size: number;
-        };
         /** OcrRouteRequest */
         OcrRouteRequest: {
             /** Asset Uri */
@@ -12753,13 +12600,8 @@ export interface components {
             /** Duration Sec Estimate */
             duration_sec_estimate?: number | null;
         };
-        /** RecordingListResponse */
-        RecordingListResponse: {
-            /** Items */
-            items: components["schemas"]["RecordingOut"][];
-        };
-        /** RecordingOut */
-        RecordingOut: {
+        /** RecordingDetailOut */
+        RecordingDetailOut: {
             /** Id */
             id: string;
             /** Workspace Id */
@@ -12789,20 +12631,75 @@ export interface components {
             audio_status: string;
             /** Transcript Status */
             transcript_status: string;
-            /** Raw Transcript Doc Status */
-            raw_transcript_doc_status: string;
-            /** Minutes Doc Status */
-            minutes_doc_status: string;
+            /** Summary Status */
+            summary_status: string;
             /** Meeting Insight Status */
             meeting_insight_status: string;
             /** Progress Pct */
             progress_pct: number;
             /** Failure Reason */
             failure_reason: string | null;
-            /** Raw Transcript Doc Id */
-            raw_transcript_doc_id: string | null;
-            /** Minutes Doc Id */
-            minutes_doc_id: string | null;
+            /** Transcribe Started At */
+            transcribe_started_at: string | null;
+            /** Transcribe Completed At */
+            transcribe_completed_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Trashed At */
+            trashed_at: string | null;
+            /** Targets */
+            targets?: components["schemas"]["RecordingTargetOut"][];
+            result?: components["schemas"]["RecordingResultOut"] | null;
+            /** Publications */
+            publications?: components["schemas"]["RecordingPublicationOut"][];
+        };
+        /** RecordingListItem */
+        RecordingListItem: {
+            /** Id */
+            id: string;
+            /** Workspace Id */
+            workspace_id: string;
+            /** Owner Id */
+            owner_id: string;
+            /** Title */
+            title: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Ended At */
+            ended_at: string | null;
+            /** Duration Sec */
+            duration_sec: number | null;
+            /** Source */
+            source: string;
+            /** Storage Key */
+            storage_key: string | null;
+            /** File Size */
+            file_size: number;
+            /** Mime Type */
+            mime_type: string;
+            /** Audio Status */
+            audio_status: string;
+            /** Transcript Status */
+            transcript_status: string;
+            /** Summary Status */
+            summary_status: string;
+            /** Meeting Insight Status */
+            meeting_insight_status: string;
+            /** Progress Pct */
+            progress_pct: number;
+            /** Failure Reason */
+            failure_reason: string | null;
             /** Transcribe Started At */
             transcribe_started_at: string | null;
             /** Transcribe Completed At */
@@ -12822,6 +12719,11 @@ export interface components {
             /** Targets */
             targets?: components["schemas"]["RecordingTargetOut"][];
         };
+        /** RecordingListResponse */
+        RecordingListResponse: {
+            /** Items */
+            items: components["schemas"]["RecordingListItem"][];
+        };
         /** RecordingPlaybackResponse */
         RecordingPlaybackResponse: {
             /** Url */
@@ -12831,6 +12733,44 @@ export interface components {
              * Format: date-time
              */
             expires_at: string;
+        };
+        /** RecordingPublicationOut */
+        RecordingPublicationOut: {
+            /** Id */
+            id: string;
+            /** Target App */
+            target_app: string;
+            /** Target Resource Id */
+            target_resource_id: string;
+            /** Target Title */
+            target_title?: string | null;
+            /** Result Version */
+            result_version: number;
+            /** Published By Id */
+            published_by_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** RecordingResultOut */
+        RecordingResultOut: {
+            /** Transcript Text */
+            transcript_text: string;
+            /** Summary Text */
+            summary_text: string | null;
+            /** Verifier Note */
+            verifier_note: string | null;
+            /** Version */
+            version: number;
+            /** Generated At */
+            generated_at: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
         /** RecordingStagingInitRequest */
         RecordingStagingInitRequest: {
@@ -14336,11 +14276,6 @@ export interface components {
             approval_required: boolean;
             /** Result */
             result: unknown;
-        };
-        /** UnreadCountResponse */
-        UnreadCountResponse: {
-            /** Count */
-            count: number;
         };
         /** UpdateBentoDocumentRequest */
         UpdateBentoDocumentRequest: {
@@ -22225,6 +22160,46 @@ export interface operations {
             };
         };
     };
+    content_proxy_content_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Open-Work-Hub-Content-Grant"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description Content capability denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     release_notes_get_current_release_note_route_get: {
         parameters: {
             query?: never;
@@ -28031,41 +28006,6 @@ export interface operations {
             };
         };
     };
-    files_proxy_file_content_get: {
-        parameters: {
-            query: {
-                expires: number;
-                signature: string;
-                disposition?: "attachment" | "inline";
-            };
-            header?: never;
-            path: {
-                file_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     ocr_route_ocr_post: {
         parameters: {
             query?: never;
@@ -28104,41 +28044,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    pms_proxy_attachment_content_get: {
-        parameters: {
-            query: {
-                expires: number;
-                signature: string;
-                disposition?: "attachment" | "inline";
-            };
-            header?: never;
-            path: {
-                attachment_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -30236,55 +30141,6 @@ export interface operations {
             };
         };
     };
-    pms_download_attachment_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                attachment_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     pms_delete_attachment_delete: {
         parameters: {
             query?: never;
@@ -30328,179 +30184,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    pms_list_notifications_get: {
-        parameters: {
-            query?: {
-                page?: number;
-                page_size?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NotificationListResponse"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    pms_get_unread_count_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UnreadCountResponse"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    pms_mark_notification_read_patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                notification_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NotificationItem"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    pms_mark_all_notifications_read_patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };
@@ -31973,41 +31656,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    meeting_proxy_file_attachment_content_get: {
-        parameters: {
-            query: {
-                expires: number;
-                signature: string;
-                disposition?: "attachment" | "inline";
-            };
-            header?: never;
-            path: {
-                file_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -34219,7 +33867,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RecordingOut"];
+                    "application/json": components["schemas"]["RecordingDetailOut"];
                 };
             };
             /** @description Authentication required. */
@@ -34317,7 +33965,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RecordingOut"];
+                    "application/json": components["schemas"]["RecordingDetailOut"];
                 };
             };
             /** @description Authentication required. */
@@ -34366,7 +34014,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RecordingOut"];
+                    "application/json": components["schemas"]["RecordingDetailOut"];
                 };
             };
             /** @description Authentication required. */
@@ -34466,7 +34114,56 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RecordingOut"];
+                    "application/json": components["schemas"]["RecordingDetailOut"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recording_publish_recording_to_docs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recording_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordingPublicationOut"];
                 };
             };
             /** @description Authentication required. */
@@ -34515,7 +34212,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RecordingOut"];
+                    "application/json": components["schemas"]["RecordingDetailOut"];
                 };
             };
             /** @description Authentication required. */
@@ -34666,7 +34363,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RecordingOut"];
+                    "application/json": components["schemas"]["RecordingDetailOut"];
                 };
             };
             /** @description Authentication required. */
@@ -34716,7 +34413,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RecordingOut"];
+                    "application/json": components["schemas"]["RecordingDetailOut"];
                 };
             };
             /** @description Authentication required. */
@@ -37283,40 +36980,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    media_proxy_media_content_get: {
-        parameters: {
-            query: {
-                expires: number;
-                signature: string;
-            };
-            header?: never;
-            path: {
-                media_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

@@ -8,7 +8,6 @@ from open_work_hub_api.core.settings import get_settings
 from open_work_hub_api.domains.ai.registry import AiCapabilityRegistry
 from open_work_hub_api.domains.ai.tool_context import current_tool_execution_context
 from open_work_hub_api.domains.auth.models import User, Workspace
-from open_work_hub_api.domains.conversations.app_catalog import CHATBOT_WORKSPACE_APP
 from open_work_hub_api.domains.rag.default_source_adapters import registered_rag_app_ids
 from open_work_hub_api.domains.retrieval import application
 from open_work_hub_api.domains.retrieval.contracts import (
@@ -41,11 +40,7 @@ class RetrievalListSourcesToolArgs(BaseModel):
 
 
 def retrieval_discoverable_app_ids() -> frozenset[str]:
-    return (
-        frozenset({CHATBOT_WORKSPACE_APP.app_id})
-        | registered_retrieval_source_app_ids()
-        | registered_rag_app_ids()
-    )
+    return registered_retrieval_source_app_ids() | registered_rag_app_ids()
 
 
 def _search(
@@ -121,7 +116,8 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
             "Unified retrieval entrypoint for workspace keyword search and workspace RAG. "
             "Prefer this when an agent needs one managed search surface."
         ),
-        owner_domain="chatbot",
+        owner_domain="retrieval",
+        workspace_app_id="retrieval-search",
         handler=_search,
         args_model=RetrievalSearchToolArgs,
         discoverability_predicate_id="retrieval.enabled",
@@ -129,7 +125,8 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
     registry.register_tool(
         name="retrieval.list_sources",
         description="List unified retrieval sources and current workspace availability.",
-        owner_domain="chatbot",
+        owner_domain="retrieval",
+        workspace_app_id="retrieval-search",
         handler=_list_sources,
         args_model=RetrievalListSourcesToolArgs,
         discoverability_predicate_id="retrieval.enabled",
