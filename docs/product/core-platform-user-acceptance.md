@@ -5,6 +5,13 @@ architecture and route rules remain in [ADR 0011](../../adr/0011-app-first-works
 and the [App Platform Contract](../domains/app-platform/README.md). App-specific behavior stays
 in its app documentation and tests.
 
+Indexed-source authorization is composed by [Source Access](../domains/source-access/README.md),
+cross-app byte delivery by [Content Access](../domains/content-access/README.md), global notification
+authorization by [Notifications](../domains/notifications/README.md), durable AI state by
+[AI Execution](../domains/ai/execution.md), and recording result/publication behavior by the
+[Recording App](../apps/recording/README.md). The scenarios below verify those contracts without
+becoming a second implementation specification.
+
 ## Test Personas
 
 | Persona | Required state |

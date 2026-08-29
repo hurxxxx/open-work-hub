@@ -10,7 +10,10 @@ Open Work Hub embeds official `bento/slides` single-HTML runtime in a separate-o
 - Release SHA-256: `06026f088399a7422696ef122f424f09d4735fd128ae398392af31ce50ebdf9b`
 - License: MIT
 
-`ops/bento/Dockerfile` verifies release/license/notice checksums and adds only the Work Hub bridge. Runtime upgrade updates tag, revision, checksums, build evidence, and browser save/import/export smoke together.
+`ops/bento/Dockerfile` verifies release/license/notice checksums and adds only the Work Hub bridge.
+Runtime upgrade updates tag, revision, checksums, and build evidence together. Before promotion,
+manually smoke create/save/import/export against the rendered editor; the repository currently has
+protocol unit coverage but no dedicated Bento browser harness.
 
 ## Runtime
 
@@ -27,7 +30,7 @@ docker compose --env-file .env.example -f ops/compose/open-work-hub-dev.infra.ym
 
 ## Data/Auth
 
-- App catalog `bento` entitlement gates hub, document API, and editor route.
+- Runtime availability for app `bento` gates the hub, document API, and editor route.
 - `bento_documents` stores workspace, owner, visibility, version, archive state, normalized JSON.
 - Max document JSON size: 25 MiB.
 - Personal docs are owner-only. Workspace docs are member-editable; owner/workspace admin manages name/visibility/archive.

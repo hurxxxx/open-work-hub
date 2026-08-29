@@ -10,7 +10,7 @@
   - `apps/api/src/open_work_hub_api/core/app_contracts_generated.py`
 - Generated files are never hand-edited. Run `pnpm generate:app-contracts` after changing the source contract.
 
-`ai`, `collaboration`, and `business` are display categories only. Do not register them as executable apps, route owners, API owners, entitlement targets, or AI capability scopes.
+`ai`, `collaboration`, and `business` are display categories only. Do not register them as executable apps, route owners, API owners, runtime availability targets, or AI capability scopes.
 
 ## Route Contract
 
@@ -60,13 +60,30 @@ company enabled
 - The global App Bar never stores or implies current workspace. Workspace selection renders in the current workspace app submenu.
 - Launcher categories, fixed placement, personal tools, and pins affect presentation only.
 
+## App Bar Presentation
+
+- Static `launcher.placement` declares whether a leaf is fixed, a personal tool, or eligible for a
+  company category. `launcher.pinned_by_default` supplies only the initial personal pin default.
+- `platform_app_bar_categories` and `platform_app_bar_category_apps` own company category title,
+  icon, order, and app membership. Admin manages them through `/api/v1/admin/app-bar-categories`;
+  bootstrap filters every item through the current user's executable app catalog.
+- `users.app_bar_layout.pinned_app_ids` owns at most eight personal pins. On reads, the server
+  removes unknown, fixed, personal-tool, and duplicate IDs; a missing or malformed list falls back
+  to compiled pinned defaults. Preference writes reject unknown IDs.
+- Category assignment, pinning, ordering, and hiding never create an app identity or authorize a
+  route, API, worker, search result, notification, or AI capability.
+
 ## Backend Registration
 
-- A domain exports one immutable leaf registration from `domains/<domain>/app_catalog.py`.
-- `domains/auth/workspace_apps.py` is the explicit composition root.
+- A domain exports one immutable leaf registration from
+  `apps/api/src/open_work_hub_api/domains/<domain>/app_catalog.py`.
+- `apps/api/src/open_work_hub_api/domains/auth/workspace_apps.py` is the explicit composition root.
 - `compile_workspace_app_registry()` rejects duplicate identity/routes/nav, invalid ownership, and inconsistent route metadata.
 - Bootstrap, route/API gates, admin controls, AI discovery/execution, search, and background work consume compiled identity plus runtime availability.
-- Queued work rechecks availability after claiming the job and before resolving providers or mutating app data. A disabled job pauses or cancels according to that queue's terminal-state contract.
+- Executable app-owned user work rechecks availability after claiming the job and before resolving
+  providers or mutating app data. A disabled job pauses or cancels according to that queue's
+  terminal-state contract. Compensating cleanup may remove orphaned/expired storage after
+  disablement but must not publish new user-visible app state.
 - Migration-only app ID lists may exist inside Alembic migrations; runtime allowlists outside the registry are forbidden.
 
 ## Frontend Registration
@@ -79,9 +96,16 @@ company enabled
 - A workspace app uses the route workspace slug as context. Global/shared routes must not call workspace bootstrap.
 - User-facing copy keeps `ko-KR` and `en-US` catalogs aligned.
 
+Cross-app authenticated byte delivery follows [Content Access](../content-access/README.md). Global
+source events follow [Notifications](../notifications/README.md); notification rows never replace
+source authorization.
+
 ## Workspace Keyword Search
 
-Participating apps provide an app-owned `SearchEntityAdapter`, explicit composition in `domains/search/default_entity_adapters.py`, lifecycle projection hooks, source ACL, and disabled/empty/missing-index tests. Search results use the canonical generated browser route and recheck source access. Retrieval partition is candidate scope, not authorization.
+Participating apps provide an app-owned `SearchEntityAdapter`, explicit composition in
+`apps/api/src/open_work_hub_api/domains/search/default_entity_adapters.py`, lifecycle projection
+hooks, source ACL, and disabled/empty/missing-index tests. Search results use the canonical generated
+browser route and recheck source access. Retrieval partition is candidate scope, not authorization.
 
 ## Change Checklist
 
@@ -96,7 +120,7 @@ Participating apps provide an app-owned `SearchEntityAdapter`, explicit composit
 ## Checks
 
 ```bash
-pnpm generate:app-contracts
+pnpm check:app-contracts
 pnpm check:web-architecture
 pnpm nx typecheck web
 pnpm check:api-architecture
@@ -104,5 +128,5 @@ pnpm check:api-contract
 pnpm check:i18n
 pnpm check:alembic-graph
 pnpm test:alembic-graph
-cd apps/api && uv run --python 3.12 --group dev python -m pytest tests/test_app_routes.py tests/test_app_availability.py tests/test_apps_launch_catalog.py tests/test_workspace_app_registry.py tests/test_workspace_bootstrap.py tests/test_admin_workspaces.py -q
+(cd apps/api && uv run --python 3.12 --group dev python -m pytest tests/test_app_routes.py tests/test_app_availability.py tests/test_apps_launch_catalog.py tests/test_workspace_app_registry.py tests/test_workspace_bootstrap.py tests/test_admin_workspaces.py -q)
 ```

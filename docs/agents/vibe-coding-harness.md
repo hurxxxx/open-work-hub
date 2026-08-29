@@ -13,7 +13,7 @@ Pick validation by changed surface. Current code/tests plus owner docs are sourc
 
 Separate app-local work from platform enablement when touching:
 
-- app/feature identity, manifest, entitlement, bootstrap
+- executable app/feature identity, manifest, runtime availability, bootstrap
 - shell route/nav, protected API composition, OpenAPI/generated client
 - shared RBAC/data/table, worker runtime
 - file/network platform pipeline
@@ -28,7 +28,7 @@ Record only applicable rows in MR evidence.
 
 | Surface          | Must state                                                                             |
 | ---------------- | -------------------------------------------------------------------------------------- |
-| Identity/route   | app/feature ID, owner, route context, availability, entitlement                        |
+| Identity/route   | app/feature ID, owner, route/execution/resource scope, runtime availability             |
 | Data/auth        | scope, authoritative store, transactions, retention, read/write roles                  |
 | API/UI           | request/response/error, workspace prefix, OpenAPI/client, i18n, a11y, time/stale state |
 | File/network     | type/size/decompression, redirect/TLS/active content, cleanup                          |
@@ -57,9 +57,9 @@ Record only applicable rows in MR evidence.
 Focused commands:
 
 ```bash
-pnpm --dir apps/web exec vitest run <path>
-cd apps/api && uv run --python 3.12 --group dev python -m pytest <path> -q
-cd apps/worker && uv run --python 3.12 --group dev python -m pytest <path> -q
+pnpm exec vitest run --root apps/web <path>
+(cd apps/api && uv run --python 3.12 --group dev python -m pytest <path> -q)
+(cd apps/worker && uv run --python 3.12 --group dev python -m pytest <path> -q)
 ```
 
 Use `pnpm ci:app-api-contracts`, `pnpm ci:app-web-contracts`, or `pnpm ci:all` only when the changed surface justifies broad validation.

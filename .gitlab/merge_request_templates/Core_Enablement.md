@@ -17,7 +17,7 @@ Keep this description below 2,700 characters. Link logs and owning decisions.
 - [ ] <!-- open-work-hub:check:hidden-default --> Incomplete app stays hidden/disabled/unscheduled.
 - [ ] <!-- open-work-hub:check:extension-contracts --> Registry/API/RBAC/worker/AI contracts tested; independently configurable LLM functions have registered workloads, output caps, audit, common interface, and direct-call guard evidence.
 - [ ] <!-- open-work-hub:check:activation-owner --> Activation ownership is explicit.
-- [ ] <!-- open-work-hub:check:workspace-keyword-search --> Backend registry is authoritative; entitlement, ACL, empty/missing-index, backfill, smoke, and rollback evidence are recorded, or `none` has a reason.
+- [ ] <!-- open-work-hub:check:workspace-keyword-search --> Backend registry is authoritative; app availability, source ACL, empty/missing-index, backfill, smoke, and rollback evidence are recorded, or `none` has a reason.
 
 ## Verification Evidence
 

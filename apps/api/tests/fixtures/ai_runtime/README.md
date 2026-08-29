@@ -4,9 +4,10 @@ These fixtures are synthetic seed cases for runtime evaluation checks. They are
 intentionally small and deterministic. They must not call an LLM, network
 provider, or workspace data source during tests.
 
-Only fixtures that feed active runtime tests live here. Historical sample
-fixtures should stay out of the local suite unless they drive executable
-behavior.
+Fixtures should stay here only while they feed an executable runtime evaluation. The sanitizer
+fixture is consumed by external-egress tests. `routing_cases.json` is currently a reserved
+evaluation corpus, not a CI gate; do not treat its expectations as enforced until a deterministic
+evaluator consumes it.
 
 ## Launch SLO Metrics
 

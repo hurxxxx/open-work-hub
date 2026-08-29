@@ -41,6 +41,9 @@ A global workspace selection made the entire shell appear workspace-scoped while
 - Workspace fallback: `workspace_app_defaults`.
 - Per-workspace exception: `workspace_app_overrides`; absence means inherit.
 - Per-user app choice: `user_app_workspace_preferences`.
+- Company App Bar categories/order: `platform_app_bar_categories` and
+  `platform_app_bar_category_apps`.
+- Per-user presentation pins: `users.app_bar_layout.pinned_app_ids`.
 - PostgreSQL is authoritative. UI hiding, local storage, process state, and catalog defaults are not authorization inputs.
 
 ## Consequences

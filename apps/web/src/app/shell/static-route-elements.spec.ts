@@ -10,7 +10,7 @@ import {
 
 describe('static route app gates', () => {
   it('injects the registry-projected feature guides into the default help route', () => {
-    const featureGuideToolIds = new Set(['search']);
+    const featureGuideToolIds = new Set(['registered-tool']);
     const guideRoute = createDefaultHelpRoutes(featureGuideToolIds).find(
       (route) => route.path === '/help/ai/:feature',
     );

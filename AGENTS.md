@@ -22,8 +22,12 @@
 | Docs ownership            | `docs/agents/domain.md`                                                                                                    |
 | GitLab issue triage       | `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`                                                             |
 | App identity/registration | `docs/domains/app-platform/README.md`                                                                                      |
+| Indexed source auth       | `docs/domains/source-access/README.md`                                                                                    |
+| Content delivery          | `docs/domains/content-access/README.md`                                                                                    |
+| Global notifications      | `docs/domains/notifications/README.md`                                                                                     |
+| Recording pipeline        | `docs/apps/recording/README.md`                                                                                            |
 | UI/time/feedback          | `docs/agents/ui-components.md`, `docs/product/ui-design-principles.md`                                                     |
-| AI/MCP/LLM                | `adr/0002-mcp-capability-platform.md`, `adr/0005-registered-llm-workload.md`, `docs/domains/ai/write-policy.md`            |
+| AI/MCP/LLM                | `adr/0002-mcp-capability-platform.md`, `adr/0005-registered-llm-workload.md`, `docs/domains/ai/README.md`                  |
 | Retrieval/RAG             | `docs/domains/retrieval/README.md`, `docs/domains/rag/README.md`, `adr/0009-retrieval-partition-projection-generations.md` |
 | Runtime/deploy            | `README.md`, `docs/domains/release/README.md`, relevant operations skill                                                   |
 
@@ -49,10 +53,12 @@
 - New DB schema changes require Alembic migration.
 - User-facing copy keeps `ko-KR` and `en-US` aligned.
 - Shared/auditable state lives in PostgreSQL/object storage, not UI hiding, local storage, `/tmp`, process memory, or JSON load-modify-write.
-- Server enforces auth, workspace, entitlement, app visibility, resource ACL, and AI write approval fail-closed.
+- Server enforces auth, declared execution context, runtime app availability, resource ACL, and AI
+  write approval fail-closed.
 - External file/URL input needs size/type/scheme/host/timeout/SSRF/cleanup boundaries and failure tests.
 - Generative LLM calls use registered `RegisteredLlmWorkload` plus common execution interface. App code never selects provider/model/pool/credential or direct SDK/HTTP.
-- Retrieval partition is candidate scope, not authorization. Apply source ACL, stable identity, versioned projection/outbox, and ADR 0009 cutover rules.
+- Retrieval partition is candidate scope, not authorization. Apply the Source Access contract,
+  stable identity, versioned projection/outbox, and ADR 0009 cutover rules.
 
 ## Validation
 
@@ -76,8 +82,8 @@
 API/worker focused tests:
 
 ```bash
-cd apps/api && uv run --python 3.12 --group dev python -m pytest tests/<file>.py -q
-cd apps/worker && uv run --python 3.12 --group dev python -m pytest tests/<file>.py -q
+(cd apps/api && uv run --python 3.12 --group dev python -m pytest tests/<file>.py -q)
+(cd apps/worker && uv run --python 3.12 --group dev python -m pytest tests/<file>.py -q)
 ```
 
 Report commands run, results, skipped validation, and residual risk.

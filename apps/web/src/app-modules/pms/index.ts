@@ -4,7 +4,7 @@ import { pmsSidebarConfig } from './sidebar/config';
 import { pmsShellNavResolver } from './shell-nav';
 
 export { pmsManifest };
-export { pmsHelpGuideRegistration } from './help-guide';
+export { getPmsHelpGuideSrc, pmsHelpGuideRegistration } from './help-guide';
 export { pmsToolElement, pmsWorkspaceRoutes } from './routes';
 export { pmsSidebarConfig } from './sidebar/config';
 export { pmsShellNavResolver } from './shell-nav';

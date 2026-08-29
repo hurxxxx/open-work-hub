@@ -12,7 +12,8 @@
 - System role/platform admin controls tenant-level admin work.
 - Workspace is a collaboration/access/data isolation scope below company, not tenant.
 - App-first routes follow [ADR 0011](0011-app-first-workspace-context.md): workspace routes use `/apps/:appId/workspaces/:workspaceSlug/...`; global routes omit the workspace segment.
-- Workspace slug is locator only. Server rechecks membership, RBAC, resource ACL, and app entitlement.
+- Workspace slug is locator only. Server rechecks membership, RBAC, runtime app availability, and
+  resource ACL.
 - Global route means no workspace selection required, not public access.
 
 ## Scope Matrix

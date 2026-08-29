@@ -35,7 +35,9 @@ apps/api/src/open_work_hub_api/domains/<domain>/
 ```
 
 - Router/AI tool/worker do not reimplement domain service auth/DB rules.
-- Feature modules can live under a parent app visually while owning manifest/API/view.
+- Feature modules can be composed visually inside an executable leaf app while owning their local
+  manifest/API/view. They are not executable app identities, route owners, or runtime availability
+  targets unless promoted into the app contract as a leaf app.
 - Cross-app consumption uses `public-api.ts`; no app-local deep import.
 - Current examples: Docs picker/viewer public API; PMS tree/reorder remains PMS-local.
 
