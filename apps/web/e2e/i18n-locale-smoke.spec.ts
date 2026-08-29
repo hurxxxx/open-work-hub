@@ -181,12 +181,10 @@ test.describe('i18n locale smoke', () => {
         path: '/apps/retrieval-search/workspaces/hq',
         assert: async (current) => {
           await expect(
-            current.getByRole('heading', { name: 'Open Work Hub Search' }),
+            current.getByRole('heading', { name: 'Retrieval Diagnostics' }),
           ).toBeVisible();
           await expect(
-            current.getByPlaceholder(
-              'Search docs, meetings, tasks, and schedules',
-            ),
+            current.getByPlaceholder('Enter a retrieval query'),
           ).toBeVisible();
         },
       },
