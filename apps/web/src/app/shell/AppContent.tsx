@@ -91,6 +91,8 @@ import { trackMatomoPageView } from '@/src/platform/analytics/matomo';
 import { cn } from '@/src/lib/utils';
 import { AppEntryRoute } from './AppEntryRoute';
 import { AppLauncherView } from './AppLauncherView';
+import { AccessRefreshBoundary } from './AccessRefreshBoundary';
+import { createAccessProjectionKey } from './access-projection-key';
 import { resolveAppRouteContext } from './app-route-context';
 import { WorkspaceContextSelector } from './WorkspaceContextSelector';
 import {
@@ -698,10 +700,16 @@ function AuthenticatedShell({
   const themePreference = currentUser?.theme_preference ?? 'system';
   const resolvedTheme = resolveThemePreference(themePreference, systemDarkMode);
   const appsBootstrap = useAppsBootstrap(auth.token, currentUserId);
+  const isRouteWorkspaceMember = Boolean(
+    routeWorkspaceSlug &&
+      currentUser?.workspaces.some(
+        (workspace) => workspace.slug === routeWorkspaceSlug,
+      ),
+  );
   const workspaceBootstrap = useWorkspaceBootstrap(
     auth.token,
     currentUserId,
-    routeWorkspaceSlug,
+    isRouteWorkspaceMember ? routeWorkspaceSlug : null,
   );
   const scopedWorkspaceBootstrapData = useMemo(
     () =>
@@ -1076,280 +1084,298 @@ function AuthenticatedShell({
 
   return (
     <ShellRealtimeProvider token={realtimeEnabled ? auth.token : null}>
-      <WorkspaceBootstrapProvider
-        value={{
-          ...scopedWorkspaceBootstrap,
-          aiToolAppIds: workspaceAiToolAppIds,
-          globalApps: appsBootstrap.data,
-          reloadGlobalApps: appsBootstrap.reload,
-        }}
+      <AccessRefreshBoundary
+        accessProjectionKey={createAccessProjectionKey(
+          currentUser,
+          appsBootstrap.data,
+        )}
+        refreshApps={appsBootstrap.refresh}
+        refreshUser={auth.refreshAccessUser}
+        refreshWorkspace={workspaceBootstrap.refresh}
+        workspaceSlug={routeWorkspaceSlug}
       >
-        <div className="flex h-screen flex-col overflow-hidden bg-app-surface-sidebar text-app-ink transition-colors lg:flex-row">
-          <AppBar
-            activeAppId={activeDisplayAppId}
-            appBarFixedAppIds={appBarFixedAppIds}
-            appBarItems={appBarItems}
-            appBarPinnedByDefaultAppIds={appBarPinnedByDefaultAppIds}
-            canOpenMobileAppMenu={canOpenMobileAppMenu}
-            currentUser={currentUser}
-            currentPathname={locationPathname}
-            currentWorkspaceAppIds={enabledWorkspaceAppIds ?? []}
-            launcherGlobalPaths={launcherGlobalPaths}
-            notificationIssueAppId={notificationIssueAppId}
-            onDesktopMenuOpenChange={setDesktopAppBarMenuOpen}
-            onDesktopRailMouseEnter={openSubSidebarPreview}
-            onDesktopRailMouseLeave={scheduleSubSidebarPreviewClose}
-            onOpenHelp={() => setHelpOpen(true)}
-            onOpenMobileAppMenu={() => setMobileAppMenuOpen(true)}
-            onOpenMobileNavigation={() => setMobileNavOpen(true)}
-            shellWorkspaceSlug={shellWorkspaceSlug}
-            workspaceApps={shellAppsBootstrap.apps}
-            workspaceAppBarCategories={shellAppsBootstrap.appBarCategories}
-            canOpenWorkspaceSearch={Boolean(
-              scopedWorkspaceBootstrapData?.keyword_search?.entity_types.length,
-            )}
-            notificationPanel={notificationPanel}
-            notificationRealtimeEventTypes={notificationRealtimeEventTypes}
-            notificationUnreadCountLoader={notificationUnreadCountLoader}
-            notificationsEnabled={Boolean(notificationPanel)}
-            onOpenAccount={() => openProfile('profile')}
-          />
+        <WorkspaceBootstrapProvider
+          value={{
+            ...scopedWorkspaceBootstrap,
+            aiToolAppIds: workspaceAiToolAppIds,
+            globalApps: appsBootstrap.data,
+            reloadGlobalApps: appsBootstrap.reload,
+          }}
+        >
+          <div className="flex h-screen flex-col overflow-hidden bg-app-surface-sidebar text-app-ink transition-colors lg:flex-row">
+            <AppBar
+              activeAppId={activeDisplayAppId}
+              appBarFixedAppIds={appBarFixedAppIds}
+              appBarItems={appBarItems}
+              appBarPinnedByDefaultAppIds={appBarPinnedByDefaultAppIds}
+              canOpenMobileAppMenu={canOpenMobileAppMenu}
+              currentUser={currentUser}
+              currentPathname={locationPathname}
+              currentWorkspaceAppIds={enabledWorkspaceAppIds ?? []}
+              launcherGlobalPaths={launcherGlobalPaths}
+              notificationIssueAppId={notificationIssueAppId}
+              onDesktopMenuOpenChange={setDesktopAppBarMenuOpen}
+              onDesktopRailMouseEnter={openSubSidebarPreview}
+              onDesktopRailMouseLeave={scheduleSubSidebarPreviewClose}
+              onOpenHelp={() => setHelpOpen(true)}
+              onOpenMobileAppMenu={() => setMobileAppMenuOpen(true)}
+              onOpenMobileNavigation={() => setMobileNavOpen(true)}
+              shellWorkspaceSlug={shellWorkspaceSlug}
+              workspaceApps={shellAppsBootstrap.apps}
+              workspaceAppBarCategories={shellAppsBootstrap.appBarCategories}
+              canOpenWorkspaceSearch={Boolean(
+                scopedWorkspaceBootstrapData?.keyword_search?.entity_types
+                  .length,
+              )}
+              notificationPanel={notificationPanel}
+              notificationRealtimeEventTypes={notificationRealtimeEventTypes}
+              notificationUnreadCountLoader={notificationUnreadCountLoader}
+              notificationsEnabled={Boolean(notificationPanel)}
+              onOpenAccount={() => openProfile('profile')}
+            />
 
-          <div className="relative flex flex-1 overflow-hidden">
-            <LazyMotion features={domAnimation}>
-              <AnimatePresence initial={false}>
-                {desktopSubSidebarOpen ? (
-                  <m.div
-                    animate={{ opacity: 1, x: 0 }}
-                    className={cn(
-                      subSidebarPinned
-                        ? 'hidden h-full shrink-0 lg:flex'
-                        : 'absolute inset-y-0 left-0 z-30 hidden lg:flex',
-                    )}
-                    exit={
-                      subSidebarPinned ? undefined : { opacity: 0, x: '-100%' }
-                    }
-                    initial={
-                      subSidebarPinned ? false : { opacity: 0, x: '-100%' }
-                    }
-                    transition={
-                      prefersReducedMotion
-                        ? { duration: 0 }
-                        : {
-                            duration: 0.22,
-                            ease: [0.22, 1, 0.36, 1],
-                          }
-                    }
-                    onBlurCapture={(event) => {
-                      const nextTarget = event.relatedTarget;
-                      if (
-                        nextTarget instanceof Node &&
-                        event.currentTarget.contains(nextTarget)
-                      ) {
-                        return;
+            <div className="relative flex flex-1 overflow-hidden">
+              <LazyMotion features={domAnimation}>
+                <AnimatePresence initial={false}>
+                  {desktopSubSidebarOpen ? (
+                    <m.div
+                      animate={{ opacity: 1, x: 0 }}
+                      className={cn(
+                        subSidebarPinned
+                          ? 'hidden h-full shrink-0 lg:flex'
+                          : 'absolute inset-y-0 left-0 z-30 hidden lg:flex',
+                      )}
+                      exit={
+                        subSidebarPinned
+                          ? undefined
+                          : { opacity: 0, x: '-100%' }
                       }
-                      scheduleSubSidebarPreviewClose();
-                    }}
-                    onFocusCapture={openSubSidebarPreview}
-                    onMouseEnter={openSubSidebarPreview}
-                    onMouseLeave={scheduleSubSidebarPreviewClose}
-                  >
-                    <AppSubSidebar
-                      activeAppId={activeAppId}
-                      activeNavItemId={activeNavItemId}
-                      appBarItems={appBarItems}
-                      currentWorkspaceSlug={routeWorkspaceSlug}
-                      enabledWorkspaceAppIds={enabledWorkspaceAppIds ?? []}
-                      getAppModuleManifest={getAppModuleManifest}
-                      getAppSidebarConfig={getAppSidebarConfig}
-                      hasAdminSectionAccess={hasAdminSectionAccess}
-                      headerSlot={
-                        activeWorkspaceContext ? (
-                          <WorkspaceContextSelector
-                            appId={activeWorkspaceContext.appId}
-                            onPreferenceChanged={appsBootstrap.reload}
-                            workspaceSlug={activeWorkspaceContext.workspaceSlug}
-                          />
-                        ) : undefined
+                      initial={
+                        subSidebarPinned ? false : { opacity: 0, x: '-100%' }
                       }
-                      launcherGlobalPaths={launcherGlobalPaths}
-                      navItems={navItems}
-                      onPinnedChange={handleSubSidebarPinnedChange}
-                      overlay={!subSidebarPinned}
-                      pinned={subSidebarPinned}
-                      variant="desktop"
-                      workspaceApps={scopedWorkspaceBootstrap.data?.apps ?? []}
-                      workspaceNavItems={
-                        scopedWorkspaceBootstrap.data?.nav ?? []
+                      transition={
+                        prefersReducedMotion
+                          ? { duration: 0 }
+                          : {
+                              duration: 0.22,
+                              ease: [0.22, 1, 0.36, 1],
+                            }
+                      }
+                      onBlurCapture={(event) => {
+                        const nextTarget = event.relatedTarget;
+                        if (
+                          nextTarget instanceof Node &&
+                          event.currentTarget.contains(nextTarget)
+                        ) {
+                          return;
+                        }
+                        scheduleSubSidebarPreviewClose();
+                      }}
+                      onFocusCapture={openSubSidebarPreview}
+                      onMouseEnter={openSubSidebarPreview}
+                      onMouseLeave={scheduleSubSidebarPreviewClose}
+                    >
+                      <AppSubSidebar
+                        activeAppId={activeAppId}
+                        activeNavItemId={activeNavItemId}
+                        appBarItems={appBarItems}
+                        currentWorkspaceSlug={routeWorkspaceSlug}
+                        enabledWorkspaceAppIds={enabledWorkspaceAppIds ?? []}
+                        getAppModuleManifest={getAppModuleManifest}
+                        getAppSidebarConfig={getAppSidebarConfig}
+                        hasAdminSectionAccess={hasAdminSectionAccess}
+                        headerSlot={
+                          activeWorkspaceContext ? (
+                            <WorkspaceContextSelector
+                              appId={activeWorkspaceContext.appId}
+                              onPreferenceChanged={appsBootstrap.reload}
+                              workspaceSlug={
+                                activeWorkspaceContext.workspaceSlug
+                              }
+                            />
+                          ) : undefined
+                        }
+                        launcherGlobalPaths={launcherGlobalPaths}
+                        navItems={navItems}
+                        onPinnedChange={handleSubSidebarPinnedChange}
+                        overlay={!subSidebarPinned}
+                        pinned={subSidebarPinned}
+                        variant="desktop"
+                        workspaceApps={
+                          scopedWorkspaceBootstrap.data?.apps ?? []
+                        }
+                        workspaceNavItems={
+                          scopedWorkspaceBootstrap.data?.nav ?? []
+                        }
+                      />
+                    </m.div>
+                  ) : null}
+                </AnimatePresence>
+              </LazyMotion>
+
+              <div className="flex-1 min-w-0 flex flex-col overflow-hidden bg-app-bg transition-colors">
+                <main className={mainClassName}>
+                  <Routes>
+                    <Route
+                      path="/"
+                      element={
+                        <AppLauncherView
+                          data={appsBootstrap.data}
+                          error={appsBootstrap.error}
+                          loading={appsBootstrap.loading}
+                        />
                       }
                     />
-                  </m.div>
-                ) : null}
-              </AnimatePresence>
-            </LazyMotion>
+                    <Route
+                      path="/apps/:appId"
+                      element={
+                        <AppEntryRoute
+                          bootstrap={appsBootstrap.data}
+                          error={appsBootstrap.error}
+                          loading={appsBootstrap.loading}
+                          reload={appsBootstrap.reload}
+                        />
+                      }
+                    />
+                    {WorkspaceRouteElements({
+                      bootstrapAppIds: enabledWorkspaceAppIds,
+                      bootstrapError: workspaceBootstrap.error,
+                      bootstrapLoading: workspaceBootstrap.loading,
+                      workspaceRoutes,
+                    })}
+                    {StaticRouteElements({
+                      adminLandingRoute,
+                      adminRedirectRoutes,
+                      adminSectionRoutes,
+                      appGlobalRoutes,
+                      bootstrapError: appsBootstrap.error,
+                      bootstrapLoading: appsBootstrap.loading,
+                      enabledAppIds: appsBootstrap.data
+                        ? appsBootstrap.data.global_route_app_ids
+                        : null,
+                      featureGuideToolIds,
+                      getDefaultAdminPath,
+                      hasAdminSectionAccess,
+                      helpRoutes,
+                      workspaceSettingsRoute,
+                    })}
+                    <Route path="*" element={<NotFoundView />} />
+                  </Routes>
+                </main>
+              </div>
 
-            <div className="flex-1 min-w-0 flex flex-col overflow-hidden bg-app-bg transition-colors">
-              <main className={mainClassName}>
-                <Routes>
-                  <Route
-                    path="/"
-                    element={
-                      <AppLauncherView
-                        data={appsBootstrap.data}
-                        error={appsBootstrap.error}
-                        loading={appsBootstrap.loading}
-                      />
+              {personalWidgetsEnabled && PersonalWidgetHost ? (
+                <LazyRouteErrorBoundary
+                  resetKey={`${locationPathname}${locationSearch}`}
+                >
+                  <Suspense
+                    fallback={
+                      <div className="h-full w-10 shrink-0 border-l border-app-border bg-app-bg" />
                     }
-                  />
-                  <Route
-                    path="/apps/:appId"
-                    element={
-                      <AppEntryRoute
-                        bootstrap={appsBootstrap.data}
-                        error={appsBootstrap.error}
-                        loading={appsBootstrap.loading}
-                        reload={appsBootstrap.reload}
-                      />
-                    }
-                  />
-                  {WorkspaceRouteElements({
-                    bootstrapAppIds: enabledWorkspaceAppIds,
-                    bootstrapError: workspaceBootstrap.error,
-                    bootstrapLoading: workspaceBootstrap.loading,
-                    workspaceRoutes,
-                  })}
-                  {StaticRouteElements({
-                    adminLandingRoute,
-                    adminRedirectRoutes,
-                    adminSectionRoutes,
-                    appGlobalRoutes,
-                    bootstrapError: appsBootstrap.error,
-                    bootstrapLoading: appsBootstrap.loading,
-                    enabledAppIds: appsBootstrap.data
-                      ? appsBootstrap.data.global_route_app_ids
-                      : null,
-                    featureGuideToolIds,
-                    getDefaultAdminPath,
-                    hasAdminSectionAccess,
-                    helpRoutes,
-                    workspaceSettingsRoute,
-                  })}
-                  <Route path="*" element={<NotFoundView />} />
-                </Routes>
-              </main>
+                  >
+                    <PersonalWidgetHost key={currentUserId} />
+                  </Suspense>
+                </LazyRouteErrorBoundary>
+              ) : null}
             </div>
 
-            {personalWidgetsEnabled && PersonalWidgetHost ? (
-              <LazyRouteErrorBoundary
-                resetKey={`${locationPathname}${locationSearch}`}
-              >
-                <Suspense
-                  fallback={
-                    <div className="h-full w-10 shrink-0 border-l border-app-border bg-app-bg" />
-                  }
-                >
-                  <PersonalWidgetHost key={currentUserId} />
-                </Suspense>
-              </LazyRouteErrorBoundary>
-            ) : null}
-          </div>
-
-          <MobileNavigationDrawer
-            activeAppId={activeAppId}
-            appBarFixedAppIds={appBarFixedAppIds}
-            appBarCategories={shellAppsBootstrap.appBarCategories}
-            appBarItems={appBarItems}
-            currentPathname={locationPathname}
-            currentUser={currentUser}
-            launcherGlobalPaths={launcherGlobalPaths}
-            getDefaultAdminPath={getDefaultAdminPath}
-            hasAnyAdminReadPermission={hasAnyAdminReadPermission}
-            onOpenChange={setMobileNavOpen}
-            open={mobileNavOpen}
-            workspaceApps={shellAppsBootstrap.apps}
-          />
-
-          {canOpenMobileAppMenu ? (
-            <MobileAppMenuDrawer
+            <MobileNavigationDrawer
               activeAppId={activeAppId}
-              activeDisplayAppId={activeDisplayAppId}
-              activeNavItemId={activeNavItemId}
+              appBarFixedAppIds={appBarFixedAppIds}
+              appBarCategories={shellAppsBootstrap.appBarCategories}
               appBarItems={appBarItems}
-              currentWorkspaceSlug={routeWorkspaceSlug}
-              enabledWorkspaceAppIds={enabledWorkspaceAppIds ?? []}
-              getAppModuleManifest={getAppModuleManifest}
-              getAppSidebarConfig={getAppSidebarConfig}
-              hasAdminSectionAccess={hasAdminSectionAccess}
-              headerSlot={
-                activeWorkspaceContext ? (
-                  <WorkspaceContextSelector
-                    appId={activeWorkspaceContext.appId}
-                    onNavigate={() => setMobileAppMenuOpen(false)}
-                    onPreferenceChanged={appsBootstrap.reload}
-                    workspaceSlug={activeWorkspaceContext.workspaceSlug}
-                  />
-                ) : undefined
-              }
+              currentPathname={locationPathname}
+              currentUser={currentUser}
               launcherGlobalPaths={launcherGlobalPaths}
-              navItems={navItems}
-              onOpenChange={setMobileAppMenuOpen}
-              open={mobileAppMenuOpen}
-              workspaceApps={scopedWorkspaceBootstrap.data?.apps ?? []}
-              workspaceNavItems={scopedWorkspaceBootstrap.data?.nav ?? []}
+              getDefaultAdminPath={getDefaultAdminPath}
+              hasAnyAdminReadPermission={hasAnyAdminReadPermission}
+              onOpenChange={setMobileNavOpen}
+              open={mobileNavOpen}
+              workspaceApps={shellAppsBootstrap.apps}
             />
-          ) : null}
 
-          {profileOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center">
-              <button
-                type="button"
-                aria-label={t('common:actions.close')}
-                className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"
-                onClick={() => setProfileOpen(false)}
+            {canOpenMobileAppMenu ? (
+              <MobileAppMenuDrawer
+                activeAppId={activeAppId}
+                activeDisplayAppId={activeDisplayAppId}
+                activeNavItemId={activeNavItemId}
+                appBarItems={appBarItems}
+                currentWorkspaceSlug={routeWorkspaceSlug}
+                enabledWorkspaceAppIds={enabledWorkspaceAppIds ?? []}
+                getAppModuleManifest={getAppModuleManifest}
+                getAppSidebarConfig={getAppSidebarConfig}
+                hasAdminSectionAccess={hasAdminSectionAccess}
+                headerSlot={
+                  activeWorkspaceContext ? (
+                    <WorkspaceContextSelector
+                      appId={activeWorkspaceContext.appId}
+                      onNavigate={() => setMobileAppMenuOpen(false)}
+                      onPreferenceChanged={appsBootstrap.reload}
+                      workspaceSlug={activeWorkspaceContext.workspaceSlug}
+                    />
+                  ) : undefined
+                }
+                launcherGlobalPaths={launcherGlobalPaths}
+                navItems={navItems}
+                onOpenChange={setMobileAppMenuOpen}
+                open={mobileAppMenuOpen}
+                workspaceApps={scopedWorkspaceBootstrap.data?.apps ?? []}
+                workspaceNavItems={scopedWorkspaceBootstrap.data?.nav ?? []}
               />
-              <div className="relative z-10 h-[calc(100vh-1rem)] w-[calc(100vw-1rem)] overflow-hidden rounded-xl border border-app-border bg-app-bg shadow-2xl sm:h-[85vh] sm:max-w-4xl sm:rounded-2xl">
+            ) : null}
+
+            {profileOpen && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center">
                 <button
                   type="button"
                   aria-label={t('common:actions.close')}
+                  className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"
                   onClick={() => setProfileOpen(false)}
-                  className="absolute top-4 right-4 z-20 flex size-8 items-center justify-center rounded-lg text-app-ink/50 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
-                >
-                  <X aria-hidden size={16} />
-                </button>
-                <div className="h-full overflow-y-auto">
-                  <ProfilePage initialTab={profileInitialTab} />
+                />
+                <div className="relative z-10 h-[calc(100vh-1rem)] w-[calc(100vw-1rem)] overflow-hidden rounded-xl border border-app-border bg-app-bg shadow-2xl sm:h-[85vh] sm:max-w-4xl sm:rounded-2xl">
+                  <button
+                    type="button"
+                    aria-label={t('common:actions.close')}
+                    onClick={() => setProfileOpen(false)}
+                    className="absolute top-4 right-4 z-20 flex size-8 items-center justify-center rounded-lg text-app-ink/50 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
+                  >
+                    <X aria-hidden size={16} />
+                  </button>
+                  <div className="h-full overflow-y-auto">
+                    <ProfilePage initialTab={profileInitialTab} />
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
-          {currentReleaseNote ? (
-            <ReleaseNoteAnnouncementModal
-              dismissing={releaseNoteDismissing}
-              error={releaseNoteDismissError}
-              item={currentReleaseNote}
-              locale={i18n.language}
-              onClose={() => {
-                setCurrentReleaseNote(null);
-                setReleaseNoteDismissError(null);
-              }}
-              onDismiss={() => {
-                void dismissCurrentReleaseNote();
-              }}
-              onOpenHistory={openReleaseNotesHistory}
+            )}
+            {currentReleaseNote ? (
+              <ReleaseNoteAnnouncementModal
+                dismissing={releaseNoteDismissing}
+                error={releaseNoteDismissError}
+                item={currentReleaseNote}
+                locale={i18n.language}
+                onClose={() => {
+                  setCurrentReleaseNote(null);
+                  setReleaseNoteDismissError(null);
+                }}
+                onDismiss={() => {
+                  void dismissCurrentReleaseNote();
+                }}
+                onOpenHistory={openReleaseNotesHistory}
+              />
+            ) : null}
+            {helpOpen ? (
+              <HelpCenterModal
+                closeLabel={t('common:actions.close')}
+                onClose={() => setHelpOpen(false)}
+              />
+            ) : null}
+            <BackgroundWorkProvider
+              sources={enabledBackgroundWorkSources}
+              workspaceSlug={routeWorkspaceSlug}
             />
-          ) : null}
-          {helpOpen ? (
-            <HelpCenterModal
-              closeLabel={t('common:actions.close')}
-              onClose={() => setHelpOpen(false)}
-            />
-          ) : null}
-          <BackgroundWorkProvider
-            sources={enabledBackgroundWorkSources}
-            workspaceSlug={routeWorkspaceSlug}
-          />
-        </div>
-      </WorkspaceBootstrapProvider>
+          </div>
+        </WorkspaceBootstrapProvider>
+      </AccessRefreshBoundary>
     </ShellRealtimeProvider>
   );
 }

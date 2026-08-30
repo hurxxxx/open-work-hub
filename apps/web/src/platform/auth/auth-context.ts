@@ -34,6 +34,7 @@ export interface AuthContextValue {
   switchSession: (session: AuthSessionResponse) => void;
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
+  refreshAccessUser: () => Promise<AuthUser>;
   updatePreferences: (payload: UpdatePreferencesPayload) => Promise<void>;
   changePassword: (payload: ChangePasswordPayload) => Promise<void>;
   listSessions: () => Promise<AuthSessionItem[]>;

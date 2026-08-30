@@ -21,7 +21,6 @@ from open_work_hub_api.domains.auth.access import (
     SYSTEM_PLATFORM_ADMIN,
     ensure_dev_login_seed_data,
     ensure_seed_data,
-    ensure_workspace_default_pms_space,
     get_dev_login_user,
     list_dev_login_account_catalog,
     list_dev_login_accounts,
@@ -49,8 +48,6 @@ from open_work_hub_api.domains.auth.models import (
     AuthSession,
     DesktopSessionLink,
     User,
-    Workspace,
-    WorkspaceUserBinding,
 )
 from open_work_hub_api.domains.auth.security import (
     derive_login_id_from_email,
@@ -338,6 +335,7 @@ class UpdatePreferencesRequest(BaseModel):
     def validate_date_format(cls, value: str | None) -> str | None:
         return validate_date_format_value(value)
 
+
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
@@ -403,10 +401,7 @@ def _ensure_development_environment() -> None:
 
 def is_local_dev_admin_login_available(request: Request) -> bool:
     settings = get_settings()
-    if (
-        is_production_like_environment(settings.environment)
-        or not settings.allow_dev_admin_login
-    ):
+    if is_production_like_environment(settings.environment) or not settings.allow_dev_admin_login:
         return False
 
     client_host = request.client.host if request.client else None
@@ -504,19 +499,6 @@ def setup_first_user(
     db.add(user)
     db.flush()
     replace_user_system_roles(db, user.id, [SYSTEM_PLATFORM_ADMIN])
-    default_workspaces = db.scalars(
-        select(Workspace).where(Workspace.key.in_(["administrator", "general"]))
-    ).all()
-    for default_workspace in default_workspaces:
-        db.add(
-            WorkspaceUserBinding(
-                id=new_id(),
-                workspace_id=default_workspace.id,
-                user_id=user.id,
-                role="admin",
-            )
-        )
-        ensure_workspace_default_pms_space(db, default_workspace)
     record_audit_log(
         db,
         actor_user_id=user.id,
@@ -557,13 +539,6 @@ def signup(
             code="auth.user_already_exists",
         )
 
-    default_workspace = db.scalar(select(Workspace).where(Workspace.key == "general"))
-    if default_workspace is None:
-        raise localized_http_exception(
-            status_code=500,
-            code="auth.default_identity_seed_incomplete",
-        )
-
     user = User(
         id=new_id(),
         login_id=payload.login_id,
@@ -580,15 +555,6 @@ def signup(
     )
     db.add(user)
     db.flush()
-    db.add(
-        WorkspaceUserBinding(
-            id=new_id(),
-            workspace_id=default_workspace.id,
-            user_id=user.id,
-            role="member",
-        )
-    )
-    ensure_workspace_default_pms_space(db, default_workspace)
     record_audit_log(
         db,
         actor_user_id=user.id,
@@ -902,9 +868,7 @@ def update_preferences(
         context.user.date_format = payload.date_format
     if "app_bar_layout" in payload.model_fields_set:
         context.user.app_bar_layout = (
-            payload.app_bar_layout.model_dump()
-            if payload.app_bar_layout is not None
-            else None
+            payload.app_bar_layout.model_dump() if payload.app_bar_layout is not None else None
         )
     db.add(context.user)
     record_audit_log(
@@ -920,9 +884,7 @@ def update_preferences(
             "time_zone": payload.time_zone,
             "date_format": payload.date_format,
             "app_bar_layout": (
-                payload.app_bar_layout.model_dump()
-                if payload.app_bar_layout is not None
-                else None
+                payload.app_bar_layout.model_dump() if payload.app_bar_layout is not None else None
             ),
             "display_name": payload.display_name,
         },

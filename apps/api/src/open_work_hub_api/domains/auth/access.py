@@ -115,7 +115,7 @@ DEFAULT_WORKSPACE_SEEDS = [
     {
         "key": "general",
         "name": "General",
-        "description": "General workspace for all members.",
+        "description": "General collaboration workspace.",
     },
 ]
 DEV_WORKSPACE_SEEDS = []

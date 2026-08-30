@@ -3,6 +3,7 @@
 ## Source Of Truth
 
 - [ADR 0011](../../../adr/0011-app-first-workspace-context.md) owns app-first workspace context and runtime control policy.
+- [ADR 0007](../../../adr/0007-company-tenant-workspace-scope.md) owns company-account and explicit workspace-membership lifecycle.
 - `packages/contracts/app-contracts.json` owns executable leaf identity, route context, execution context, resource scope, and launcher placement.
 - `packages/contracts/app-contracts.schema.json` validates the source contract.
 - `scripts/generate-app-contracts.mjs` generates:
@@ -43,6 +44,10 @@ company enabled
 - `workspace_app_overrides`: optional workspace-specific enable/disable; delete the row to inherit.
 - Static feature flags and required system roles remain additional gates.
 - Catalog defaults, launcher placement, UI hiding, and local storage never authorize execution.
+- Committed company controls, workspace defaults/overrides, workspace metadata/active-state, and
+  membership changes publish `auth.access.changed` invalidations. Open sessions refresh canonical
+  user, app, and workspace projections; server authorization remains fail-closed if delivery is
+  delayed or lost.
 - Admin writes are audited through:
   - `GET/PATCH /api/v1/admin/apps/company-controls`
   - `GET/PATCH /api/v1/admin/apps/workspace-defaults`

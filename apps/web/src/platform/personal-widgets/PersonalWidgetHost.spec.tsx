@@ -85,6 +85,20 @@ afterEach(() => {
 });
 
 describe('PersonalWidgetHost todo editing', () => {
+  it('renders the open Todo count with the danger contrast token pair', async () => {
+    renderTodoWidget();
+
+    const todoButton = await screen.findByRole('button', {
+      name: 'personalWidgets.todo.open',
+    });
+    const badge = Array.from(todoButton.querySelectorAll('span')).find(
+      (element) =>
+        element.textContent === '1' && element.className.includes('absolute'),
+    );
+    expect(badge?.className).toContain('bg-[var(--ui-color-danger-text)]');
+    expect(badge?.className).toContain('text-[var(--ui-color-danger-bg)]');
+  });
+
   it('describes the edit, PMS registration, and delete actions on hover', async () => {
     const onConvertTodoToPms = vi.fn();
     renderTodoWidget({ onConvertTodoToPms });

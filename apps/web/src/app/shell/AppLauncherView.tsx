@@ -5,6 +5,8 @@ import { buildAppEntryHref } from '@open-work-hub/contracts/app-routes';
 
 import { workspaceAppIconForKey } from '@/src/platform/workspaces/workspace-app-icons';
 import type { AppsBootstrapResponse } from '@/src/platform/workspaces/workspaces-api';
+import { useAuth } from '@/src/platform/auth/auth-provider';
+import { hasAdminConsoleAccess } from '@/src/platform/auth/auth-api';
 
 export function AppLauncherView({
   data,
@@ -16,6 +18,10 @@ export function AppLauncherView({
   loading: boolean;
 }) {
   const { t } = useTranslation('shell');
+  const { user } = useAuth();
+  const hasNoWorkspace = user?.workspaces.length === 0;
+  const isPlatformAdmin = hasAdminConsoleAccess(user);
+  const hasNoApps = Boolean(data && data.apps.length === 0);
   return (
     <div className="mx-auto w-full max-w-6xl px-5 py-10 sm:px-8">
       <p className="app-text-overline text-app-accent">
@@ -35,6 +41,34 @@ export function AppLauncherView({
         <p className="app-text-body mt-8 rounded-xl border border-app-danger/25 bg-app-danger/10 p-4 text-app-danger">
           {error}
         </p>
+      ) : null}
+      {hasNoWorkspace && !loading ? (
+        <section className="mt-8 rounded-2xl border border-app-accent/25 bg-app-accent/8 p-5">
+          <h2 className="app-text-title-md text-app-ink">
+            {t('launcher.noWorkspaceTitle')}
+          </h2>
+          <p className="app-text-body mt-2 max-w-3xl text-app-ink/65">
+            {t('launcher.noWorkspaceDescription')}
+          </p>
+          {isPlatformAdmin ? (
+            <Link
+              className="app-text-body-sm mt-4 inline-flex rounded-xl bg-app-accent px-4 py-2.5 font-semibold text-app-accent-fg"
+              to="/admin/workspaces"
+            >
+              {t('launcher.manageWorkspaces')}
+            </Link>
+          ) : null}
+        </section>
+      ) : null}
+      {hasNoApps && !error ? (
+        <section className="mt-8 rounded-2xl border border-app-border bg-app-surface p-6 text-center">
+          <h2 className="app-text-title-md text-app-ink">
+            {t('launcher.noAppsTitle')}
+          </h2>
+          <p className="app-text-body mt-2 text-app-ink/60">
+            {t('launcher.noAppsDescription')}
+          </p>
+        </section>
       ) : null}
       <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {(data?.apps ?? []).map((app) => {

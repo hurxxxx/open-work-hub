@@ -6,6 +6,13 @@ export type TimelineRangeDays = (typeof TIMELINE_RANGE_OPTIONS)[number];
 
 export const DEFAULT_TIMELINE_RANGE_DAYS: TimelineRangeDays = 28;
 
+export function shouldBlockPlannerCalendar(
+  error: string | null,
+  hasUsableSnapshot: boolean,
+): boolean {
+  return Boolean(error) && !hasUsableSnapshot;
+}
+
 const TIMELINE_RANGE_STORAGE_KEY = 'open-work-hub:planner-timeline-range-days';
 type PlannerDateFormatterKind =
   | 'timelineStartSameYear'
@@ -207,7 +214,11 @@ export function buildPlannerDatePickerGrid(args: {
   ) => readonly string[] | null;
 }): PlannerDatePickerCell[] {
   const leadingBlanks = new Date(args.pickerYear, args.pickerMonth, 1).getDay();
-  const daysInMonth = new Date(args.pickerYear, args.pickerMonth + 1, 0).getDate();
+  const daysInMonth = new Date(
+    args.pickerYear,
+    args.pickerMonth + 1,
+    0,
+  ).getDate();
 
   return Array.from({ length: 42 }, (_, index): PlannerDatePickerCell => {
     const day = index - leadingBlanks + 1;
@@ -225,15 +236,19 @@ export function buildPlannerDatePickerGrid(args: {
       day,
       date,
       isSelected:
-        args.pickerYear === args.viewYear
-        && args.pickerMonth === args.viewMonth
-        && day === args.selectedDate,
+        args.pickerYear === args.viewYear &&
+        args.pickerMonth === args.viewMonth &&
+        day === args.selectedDate,
       isSunday: date.getDay() === 0,
       isToday:
-        args.pickerYear === args.today.getFullYear()
-        && args.pickerMonth === args.today.getMonth()
-        && day === args.today.getDate(),
-      holidayNames: args.getHolidayNames(args.pickerYear, args.pickerMonth, day),
+        args.pickerYear === args.today.getFullYear() &&
+        args.pickerMonth === args.today.getMonth() &&
+        day === args.today.getDate(),
+      holidayNames: args.getHolidayNames(
+        args.pickerYear,
+        args.pickerMonth,
+        day,
+      ),
     };
   });
 }

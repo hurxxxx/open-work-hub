@@ -4,7 +4,13 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search } from 'lucide-react';
 
-import { Button, Dialog, DropdownMenu, SearchField } from '@open-work-hub/ui';
+import {
+  Button,
+  ConfirmDialog,
+  Dialog,
+  DropdownMenu,
+  SearchField,
+} from '@open-work-hub/ui';
 
 import {
   bulkWorkspaceMembers,
@@ -189,6 +195,10 @@ export function PeopleSection({ token }: { token: string }) {
   >([]);
   const [editWorkspaceIds, setEditWorkspaceIds] = useState<string[]>([]);
   const [isSavingUser, setIsSavingUser] = useState(false);
+  const [workspaceRemovalConfirm, setWorkspaceRemovalConfirm] = useState<{
+    count: number;
+    userLabel: string;
+  } | null>(null);
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   const [impersonatingUserId, setImpersonatingUserId] = useState<string | null>(
     null,
@@ -279,6 +289,7 @@ export function PeopleSection({ token }: { token: string }) {
 
   function closeEditUserDialog() {
     if (!isSavingUser) {
+      setWorkspaceRemovalConfirm(null);
       setEditingUserId(null);
     }
   }
@@ -429,8 +440,26 @@ export function PeopleSection({ token }: { token: string }) {
     });
   }
 
-  async function handleUpdateUser(event: React.FormEvent<HTMLFormElement>) {
+  function handleUpdateUser(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!editingUserId) {
+      return;
+    }
+    const nextWorkspaceIdSet = new Set(editWorkspaceIds);
+    const removedWorkspaceCount = editOriginalWorkspaceIds.filter(
+      (workspaceId) => !nextWorkspaceIdSet.has(workspaceId),
+    ).length;
+    if (removedWorkspaceCount > 0) {
+      setWorkspaceRemovalConfirm({
+        count: removedWorkspaceCount,
+        userLabel: editingUser?.email ?? editFullName,
+      });
+      return;
+    }
+    void saveEditedUser();
+  }
+
+  async function saveEditedUser() {
     if (!editingUserId) {
       return;
     }
@@ -1307,6 +1336,26 @@ export function PeopleSection({ token }: { token: string }) {
           </section>
         </form>
       </Dialog>
+      {workspaceRemovalConfirm ? (
+        <ConfirmDialog
+          cancelLabel={t('common:actions.cancel')}
+          confirmLabel={t('admin.console.people.workspaceRemovalConfirmAction')}
+          description={t(
+            'admin.console.people.workspaceRemovalConfirmDescription',
+            workspaceRemovalConfirm,
+          )}
+          onCancel={() => setWorkspaceRemovalConfirm(null)}
+          onConfirm={() => {
+            setWorkspaceRemovalConfirm(null);
+            void saveEditedUser();
+          }}
+          open
+          title={t('admin.console.people.workspaceRemovalConfirmTitle', {
+            count: workspaceRemovalConfirm.count,
+          })}
+          variant="danger"
+        />
+      ) : null}
     </div>
   );
 }

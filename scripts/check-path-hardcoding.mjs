@@ -137,6 +137,14 @@ function resolveRepoFile(repoRoot, filePath) {
   return path.isAbsolute(filePath) ? filePath : path.join(repoRoot, filePath);
 }
 
+export function isReadableRepoFile(repoRoot, filePath, fileSystem = fs) {
+  try {
+    return fileSystem.statSync(resolveRepoFile(repoRoot, filePath)).isFile();
+  } catch {
+    return false;
+  }
+}
+
 function collectGitTrackedFiles(repoRoot = process.cwd()) {
   const output = execFileSync('git', ['ls-files', '-z', '--', '.'], {
     cwd: repoRoot,
@@ -150,7 +158,7 @@ function runPathHardcodingCheck(repoRoot = process.cwd(), options = {}) {
   const files = options.files ?? collectGitTrackedFiles(repoRoot);
   const scanFiles = options.readFile
     ? files
-    : files.filter((file) => fs.existsSync(resolveRepoFile(repoRoot, file)));
+    : files.filter((file) => isReadableRepoFile(repoRoot, file));
   const readFile =
     options.readFile ??
     ((file) => fs.readFileSync(resolveRepoFile(repoRoot, file), 'utf8'));

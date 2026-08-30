@@ -286,7 +286,10 @@ def test_internal_shared_links_require_auth_and_honor_read_vs_edit(client: TestC
     owner_token = _login(client, owner["user"]["email"], owner["temporary_password"])
 
     recipient = _create_user(
-        client, admin["token"], email="share-recipient@open-work-hub.local", full_name="Share Recipient"
+        client,
+        admin["token"],
+        email="share-recipient@open-work-hub.local",
+        full_name="Share Recipient",
     )
     recipient_token = _login(client, recipient["user"]["email"], recipient["temporary_password"])
 
@@ -452,7 +455,10 @@ def test_duplicate_doc_via_read_share_creates_private_copy_for_recipient(
     owner_token = _login(client, owner["user"]["email"], owner["temporary_password"])
 
     recipient = _create_user(
-        client, admin["token"], email="dup-share-recipient@open-work-hub.local", full_name="Recipient"
+        client,
+        admin["token"],
+        email="dup-share-recipient@open-work-hub.local",
+        full_name="Recipient",
     )
     _grant_workspace_access(client, admin["token"], recipient["user"]["id"], "administrator")
     recipient_token = _login(client, recipient["user"]["email"], recipient["temporary_password"])
@@ -493,7 +499,21 @@ def _bootstrap_admin_session(client: TestClient) -> dict:
         },
     )
     assert response.status_code == 201
-    return response.json()
+    session = response.json()
+    _grant_workspace_access(
+        client,
+        session["token"],
+        session["user"]["id"],
+        "administrator",
+        role="admin",
+    )
+    me_response = client.get(
+        "/api/v1/auth/me",
+        headers=_auth_headers(session["token"]),
+    )
+    assert me_response.status_code == 200, me_response.text
+    session["user"] = me_response.json()
+    return session
 
 
 def _create_user(client: TestClient, token: str, *, email: str, full_name: str) -> dict:

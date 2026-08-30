@@ -614,7 +614,8 @@ export function PersonalWidgetHost({
     }),
     {
       ariaLabel: t('personalWidgets.todo.open'),
-      badgeClassName: 'bg-[var(--ui-color-danger)] text-white',
+      badgeClassName:
+        'bg-[var(--ui-color-danger-text)] text-[var(--ui-color-danger-bg)]',
       badgeCount: openTodoCount,
       id: 'todo' as const,
       label: t('personalWidgets.todo.shortTitle'),

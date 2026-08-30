@@ -208,13 +208,14 @@ export const resources = {
       gates: {
         adminSectionDenied:
           '현재 계정에는 이 관리자 섹션을 볼 권한이 없습니다.',
-        appDisabled: '현재 workspace에서는 이 앱이 활성화되어 있지 않습니다.',
+        appDisabled:
+          '현재 워크스페이스에서는 이 앱이 활성화되어 있지 않습니다.',
         noAccessibleWorkspace:
           '워크스페이스 초대를 기다리는 중입니다. 워크스페이스 관리자에게 초대를 요청해 주세요.',
         toolWorkspaceDenied:
           '현재 계정에는 이 도구가 속한 워크스페이스 접근 권한이 없습니다.',
         workspaceAppDenied:
-          '현재 계정은 이 workspace에서 해당 앱을 사용할 수 없습니다.',
+          '현재 계정은 이 워크스페이스에서 해당 앱을 사용할 수 없습니다.',
         workspaceDenied: '현재 계정은 이 워크스페이스에 접근할 수 없습니다.',
         workspaceLoading: '워크스페이스 구성을 불러오는 중입니다.',
         workspaceSearchDisabled:
@@ -239,6 +240,7 @@ export const resources = {
         favorites: '즐겨찾기 런처',
         launcher: '앱 런처',
         more: '더 보기',
+        primaryNavigation: '주요 앱 탐색',
         personalTools: '개인 도구',
         personalToolsScope: '내 개인 앱',
         searchApps: '앱 검색',
@@ -257,9 +259,26 @@ export const resources = {
         description:
           '사용 가능한 앱을 먼저 선택하세요. 워크스페이스 앱은 앱 안에서 작업 공간을 선택합니다.',
         eyebrow: '앱 중심 작업 공간',
+        manageWorkspaces: '워크스페이스 관리',
+        noAppsDescription:
+          '현재 계정에 노출하도록 설정된 전사 앱이나 개인 앱이 없습니다.',
+        noAppsTitle: '사용 가능한 앱이 없습니다',
+        noWorkspaceDescription:
+          '계정에 제공된 전사 앱과 개인 앱은 워크스페이스 없이 사용할 수 있습니다. 워크스페이스 앱은 관리자가 멤버십을 추가하면 표시됩니다.',
+        noWorkspaceTitle: '아직 소속된 워크스페이스가 없습니다',
         personalApp: '개인 앱',
         title: '앱 런처',
         workspaceApp: '워크스페이스 앱',
+        workspaceMembershipRequiredDescription:
+          '이 앱은 워크스페이스 멤버십이 필요합니다. 관리자에게 워크스페이스 추가를 요청하세요.',
+        workspaceMembershipRequiredTitle: '워크스페이스 접근이 필요합니다',
+      },
+      accessRefresh: {
+        failedDescription:
+          '최신 접근 권한을 확인하지 못했습니다. 다시 시도해 주세요.',
+        failedTitle: '접근 권한을 새로 고치지 못했습니다',
+        loading: '최신 접근 권한을 확인하는 중입니다.',
+        retry: '다시 시도',
       },
       workspaceContext: {
         chooseDescription:
@@ -531,10 +550,11 @@ export const resources = {
         showPasswordField: '{{field}} 보기',
         signIn: '로그인',
         signUp: '회원가입',
-        setupDescription: '첫 관리자 계정을 생성해 워크스페이스를 시작합니다.',
+        setupDescription:
+          '첫 플랫폼 관리자 계정을 생성합니다. 워크스페이스 멤버십은 별도로 추가합니다.',
         setupTitle: '최초 관리자 설정',
         signupDescription:
-          '계정을 만든 뒤 워크스페이스 관리자의 초대를 받으면 앱을 사용할 수 있습니다.',
+          '계정을 만들면 전사 앱과 개인 앱을 바로 사용할 수 있습니다. 워크스페이스 앱은 멤버십이 추가된 뒤 표시됩니다.',
       },
       notFound: {
         description: '요청한 주소는 존재하지 않거나 이동되었습니다.',
@@ -665,9 +685,9 @@ export const resources = {
           '워크스페이스 bootstrap 요청에 실패했습니다. ({{status}})',
         contextUnavailable: '워크스페이스 컨텍스트를 사용할 수 없습니다.',
         settingsAccessDenied:
-          '현재 계정은 이 workspace 설정에 접근할 수 없습니다.',
+          '현재 계정은 이 워크스페이스 설정에 접근할 수 없습니다.',
         settingsAdminRequired:
-          '이 workspace 설정은 admin 이상만 접근할 수 있습니다.',
+          '이 워크스페이스 설정은 워크스페이스 관리자만 접근할 수 있습니다.',
         settingsDescription: '이 협업 공간의 프로필과 멤버십을 관리합니다.',
         settingsLoadFailed: '워크스페이스 설정을 불러오지 못했습니다.',
         settingsLoading: '워크스페이스 설정을 불러오는 중입니다.',
@@ -3419,6 +3439,11 @@ export const resources = {
             workspaceListLoadFailed:
               '배정 가능한 워크스페이스를 불러오지 못했습니다.',
             workspaceMemberships: '소속 워크스페이스',
+            workspaceRemovalConfirmAction: '접근 권한 제거 후 저장',
+            workspaceRemovalConfirmDescription:
+              '{{userLabel}} 사용자는 선택 해제한 {{count}}개 워크스페이스의 앱과 기능에 즉시 접근할 수 없게 됩니다.',
+            workspaceRemovalConfirmTitle:
+              '워크스페이스 {{count}}개의 접근 권한을 제거할까요?',
           },
           organization: {
             boundaryTitle: '조직 정보의 범위',
@@ -3730,6 +3755,9 @@ export const resources = {
             bulkAdded: '{{count}}명을 추가했습니다.',
             bulkAddPartial: '{{succeeded}}명 추가됨, {{failed}}명 실패',
             bulkRemoveFailed: '일괄 제거에 실패했습니다.',
+            bulkRemoveConfirmDescription:
+              '선택한 {{count}}명은 {{workspace}} 워크스페이스의 앱과 기능에 즉시 접근할 수 없게 됩니다.',
+            bulkRemoveConfirmTitle: '선택한 {{count}}명을 제거할까요?',
             bulkRemovePartial: '{{succeeded}}명 제거됨, {{failed}}명 실패',
             bulkRemoved: '{{count}}명을 제거했습니다.',
             bulkRoleChanged: '{{count}}명의 역할을 변경했습니다.',
@@ -3752,6 +3780,10 @@ export const resources = {
             name: '이름',
             previewMeta: '{{count}}명 · 관리자 미리보기',
             removeFailed: '멤버를 제거하지 못했습니다.',
+            removeConfirmAction: '워크스페이스에서 제거',
+            removeConfirmDescription:
+              '{{name}}님은 {{workspace}} 워크스페이스의 앱과 기능에 즉시 접근할 수 없게 됩니다.',
+            removeConfirmTitle: '{{name}}님을 제거할까요?',
             removed: '멤버를 제거했습니다.',
             removeFromWorkspace: '워크스페이스에서 제거',
             role: '역할',
@@ -4934,7 +4966,7 @@ export const resources = {
         recordingsDescription:
           '회의를 열면 notes editor 오른쪽 rail에서 녹음 시작과 음성 파일 업로드를 사용할 수 있습니다.',
         recordingsPlaceholder:
-          '회의 녹음은 각 회의 workspace에서 사용할 수 있습니다.',
+          '회의 녹음은 각 회의 워크스페이스에서 사용할 수 있습니다.',
         schedule: '일정',
         scheduled: '예정',
         scheduleView: '스케줄 보기',
@@ -6181,6 +6213,7 @@ export const resources = {
         favorites: 'Favorites launcher',
         launcher: 'App launcher',
         more: 'Available',
+        primaryNavigation: 'Primary app navigation',
         personalTools: 'Personal tools',
         personalToolsScope: 'My personal apps',
         searchApps: 'Search apps',
@@ -6200,9 +6233,25 @@ export const resources = {
         description:
           'Choose an app first. Workspace apps let you select the working space inside the app.',
         eyebrow: 'App-first workspace',
+        manageWorkspaces: 'Manage workspaces',
+        noAppsDescription:
+          'No company or personal apps are configured for this account.',
+        noAppsTitle: 'No apps are available',
+        noWorkspaceDescription:
+          'Any company or personal apps made available to your account work without a workspace. Workspace apps appear after an admin adds your membership.',
+        noWorkspaceTitle: 'You do not belong to a workspace yet',
         personalApp: 'Personal app',
         title: 'App launcher',
         workspaceApp: 'Workspace app',
+        workspaceMembershipRequiredDescription:
+          'This app requires workspace membership. Ask an admin to add you to a workspace.',
+        workspaceMembershipRequiredTitle: 'Workspace access required',
+      },
+      accessRefresh: {
+        failedDescription: 'Could not verify your latest access. Try again.',
+        failedTitle: 'Could not refresh access',
+        loading: 'Checking your latest access.',
+        retry: 'Retry',
       },
       workspaceContext: {
         chooseDescription:
@@ -6476,10 +6525,10 @@ export const resources = {
         signIn: 'Sign in',
         signUp: 'Sign up',
         setupDescription:
-          'Create the first admin account and start the workspace.',
+          'Create the first platform admin account. Workspace memberships are added separately.',
         setupTitle: 'Initial admin setup',
         signupDescription:
-          'Create an account now. Apps appear after a workspace admin invites you.',
+          'Create an account to use company and personal apps now. Workspace apps appear after membership is added.',
       },
       notFound: {
         description: 'The requested address does not exist or has moved.',
@@ -9409,6 +9458,11 @@ export const resources = {
             userSaveFailed: 'Could not save user information.',
             workspaceListLoadFailed: 'Could not load assignable workspaces.',
             workspaceMemberships: 'Workspace memberships',
+            workspaceRemovalConfirmAction: 'Remove access and save',
+            workspaceRemovalConfirmDescription:
+              '{{userLabel}} will immediately lose access to apps and features in the {{count}} deselected workspace memberships.',
+            workspaceRemovalConfirmTitle:
+              'Remove access to {{count}} workspace memberships?',
           },
           organization: {
             boundaryTitle: 'Organization information boundary',
@@ -9721,6 +9775,10 @@ export const resources = {
             bulkAdded: 'Added {{count}}.',
             bulkAddPartial: '{{succeeded}} added, {{failed}} failed',
             bulkRemoveFailed: 'Bulk remove failed.',
+            bulkRemoveConfirmDescription:
+              'Immediately revoke access to apps and features in {{workspace}} for the selected people ({{count}}).',
+            bulkRemoveConfirmTitle:
+              'Remove selected workspace members ({{count}})?',
             bulkRemovePartial: '{{succeeded}} removed, {{failed}} failed',
             bulkRemoved: 'Removed {{count}}.',
             bulkRoleChanged: 'Changed roles for {{count}}.',
@@ -9743,6 +9801,10 @@ export const resources = {
             name: 'Name',
             previewMeta: '{{count}} · admin preview',
             removeFailed: 'Could not remove the member.',
+            removeConfirmAction: 'Remove from workspace',
+            removeConfirmDescription:
+              '{{name}} will immediately lose access to apps and features in {{workspace}}.',
+            removeConfirmTitle: 'Remove {{name}}?',
             removed: 'Member removed.',
             removeFromWorkspace: 'Remove from workspace',
             role: 'Role',

@@ -43,6 +43,10 @@ import { MeetingPreviewModal } from './calendar/MeetingPreviewModal';
 import { PlannerEventModal } from './PlannerEventModal';
 import { PlannerEventChoicePopover } from './PlannerEventChoicePopover';
 import { PlannerTimelineView } from './PlannerTimelineView';
+import {
+  plannerCalendarEventId,
+  plannerEventToCalendarEvent,
+} from './planner-calendar-event-projection';
 import { createPlannerCalendarScheduleWorkflow } from './planner-calendar-schedule-workflow';
 import {
   buildPlannerSurfaceModeSearchParams,
@@ -58,6 +62,7 @@ import {
   getPlannerDateFormatter,
   persistTimelineRangeDays,
   readTimelineRangeDays,
+  shouldBlockPlannerCalendar,
   type PlannerSurfaceMode,
   type PlannerViewMode,
   type TimelineRangeDays,
@@ -329,7 +334,15 @@ function usePlannerViewElement(): ReactNode {
   const previousSurfaceMode = useRef(surfaceMode);
   const previousTimelineRangeDays = useRef(timelineRangeDays);
 
-  const { events, loading, error, refresh } = useCalendarEvents({
+  const {
+    events,
+    loading,
+    error,
+    hasUsableSnapshot,
+    refresh,
+    removeEvent,
+    upsertEvent,
+  } = useCalendarEvents({
     from: calendarState.rangeStart,
     to: calendarState.rangeEnd,
     sources: PLANNER_SOURCES,
@@ -688,14 +701,22 @@ function usePlannerViewElement(): ReactNode {
       chooseCalendarSelectionTarget(current, { target: 'dismiss' }),
     );
   }, []);
-  const handlePlannerEventSaved = useCallback(() => {
-    closePlannerEventModal();
-    refresh();
-  }, [closePlannerEventModal, refresh]);
-  const handlePlannerEventDeleted = useCallback(() => {
-    closePlannerEventModal();
-    refresh();
-  }, [closePlannerEventModal, refresh]);
+  const handlePlannerEventSaved = useCallback(
+    (event: Parameters<typeof plannerEventToCalendarEvent>[0]) => {
+      upsertEvent(plannerEventToCalendarEvent(event));
+      closePlannerEventModal();
+      refresh();
+    },
+    [closePlannerEventModal, refresh, upsertEvent],
+  );
+  const handlePlannerEventDeleted = useCallback(
+    (eventId: string) => {
+      removeEvent(plannerCalendarEventId(eventId));
+      closePlannerEventModal();
+      refresh();
+    },
+    [closePlannerEventModal, refresh, removeEvent],
+  );
   const handleMeetingCreated = useCallback(
     (meetingId: string) => {
       setPreviewMeetingWorkspaceSlug(meetingWorkspaceSlug);
@@ -942,14 +963,39 @@ function usePlannerViewElement(): ReactNode {
           </div>
         ) : null}
 
+        {error && hasUsableSnapshot ? (
+          <div
+            role="alert"
+            className="flex items-center justify-between gap-3 rounded-md border border-app-danger/40 bg-app-danger/10 px-4 py-2 app-text-caption text-app-danger"
+          >
+            <span>{error}</span>
+            <button
+              type="button"
+              className="app-text-control-sm shrink-0 rounded border border-app-danger/40 px-2 py-1 hover:bg-app-danger/10"
+              onClick={refresh}
+            >
+              {t('common:actions.retry')}
+            </button>
+          </div>
+        ) : null}
+
         <div className="flex-1 card p-0 overflow-hidden flex flex-col relative">
-          {error ? (
+          {shouldBlockPlannerCalendar(error, hasUsableSnapshot) ? (
             <div className="flex-1 flex items-center justify-center p-8">
               <div className="text-center space-y-2">
-                <p className="text-app-danger app-text-body">{error}</p>
+                <p role="alert" className="text-app-danger app-text-body">
+                  {error}
+                </p>
                 <p className="text-app-ink/55 app-text-caption">
                   {t('planner.loadRetry')}
                 </p>
+                <button
+                  type="button"
+                  className="app-text-control-sm rounded border border-app-border px-3 py-1.5 text-app-ink hover:bg-app-surface-hover"
+                  onClick={refresh}
+                >
+                  {t('common:actions.retry')}
+                </button>
               </div>
             </div>
           ) : (

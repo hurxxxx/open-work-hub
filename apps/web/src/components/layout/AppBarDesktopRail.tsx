@@ -84,8 +84,8 @@ export function AppBarDesktopRail({
   onCloseEditor: () => void;
   onCloseLauncherMenus: () => void;
   onMovePinnedApp: (appId: WorkspaceAppId, direction: -1 | 1) => void;
-  onMouseEnter?: MouseEventHandler<HTMLDivElement>;
-  onMouseLeave?: MouseEventHandler<HTMLDivElement>;
+  onMouseEnter?: MouseEventHandler<HTMLElement>;
+  onMouseLeave?: MouseEventHandler<HTMLElement>;
   onOpenAccount: () => void;
   onOpenEditor: () => void;
   onOpenHelp: () => void;
@@ -118,7 +118,8 @@ export function AppBarDesktopRail({
   );
 
   return (
-    <div
+    <nav
+      aria-label={t('shell:appBar.primaryNavigation')}
       className="z-50 hidden h-full w-16 flex-col items-center gap-2 border-r border-app-border bg-app-bg-strong py-3 lg:flex"
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
@@ -192,7 +193,7 @@ export function AppBarDesktopRail({
         t={t}
         unreadCount={unreadCount}
       />
-    </div>
+    </nav>
   );
 }
 

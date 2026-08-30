@@ -43,6 +43,12 @@ class WorkspaceMemberDirectory:
     pending_count: int
 
 
+@dataclass(frozen=True)
+class WorkspaceMemberRoleUpdate:
+    binding: WorkspaceUserBinding
+    changed: bool
+
+
 def workspace_role_storage_values(role: str) -> tuple[str, ...]:
     normalized_role = normalize_workspace_role(role)
     if normalized_role == "admin":
@@ -103,7 +109,7 @@ def update_workspace_member_binding_role(
     actor_user_id: str,
     subject_id: str,
     role: str,
-) -> WorkspaceUserBinding:
+) -> WorkspaceMemberRoleUpdate:
     binding = _load_workspace_member_binding(db, workspace.id, subject_id, include_user=True)
     if binding is None:
         raise localized_http_exception(
@@ -117,9 +123,11 @@ def update_workspace_member_binding_role(
             status_code=409,
             code="admin.self_role_change_denied",
         )
-    binding.role = requested_role
-    db.add(binding)
-    return binding
+    changed = current_role != requested_role
+    if changed:
+        binding.role = requested_role
+        db.add(binding)
+    return WorkspaceMemberRoleUpdate(binding=binding, changed=changed)
 
 
 def remove_workspace_member_binding(
@@ -149,7 +157,7 @@ def replace_workspace_member_bindings(
     *,
     actor_user_id: str,
     requested_roles_by_user_id: dict[str, str],
-) -> None:
+) -> set[str]:
     requested_user_ids = set(requested_roles_by_user_id)
     existing_requested_user_ids = set(
         db.scalars(select(User.id).where(User.id.in_(requested_user_ids))).all()
@@ -189,6 +197,7 @@ def replace_workspace_member_bindings(
             code="admin.invalid_workspace_role",
         )
 
+    changed_user_ids: set[str] = set()
     for binding in current_bindings:
         if binding.user_id not in requested_user_ids:
             remove_workspace_member_binding(
@@ -197,14 +206,17 @@ def replace_workspace_member_bindings(
                 actor_user_id=actor_user_id,
                 subject_id=binding.user_id,
             )
+            changed_user_ids.add(binding.user_id)
             continue
-        update_workspace_member_binding_role(
+        role_update = update_workspace_member_binding_role(
             db,
             workspace,
             actor_user_id=actor_user_id,
             subject_id=binding.user_id,
             role=requested_roles_by_user_id[binding.user_id],
         )
+        if role_update.changed:
+            changed_user_ids.add(binding.user_id)
 
     for user_id in requested_user_ids - current_user_ids:
         add_workspace_member_binding(
@@ -214,6 +226,8 @@ def replace_workspace_member_bindings(
             role=requested_roles_by_user_id[user_id],
             duplicate_code="admin.user_already_workspace_member",
         )
+        changed_user_ids.add(user_id)
+    return changed_user_ids
 
 
 def list_workspace_member_directory(
@@ -264,7 +278,7 @@ def apply_workspace_member_bulk_entry(
     subject_type: WorkspaceMemberSubjectType,
     subject_id: str,
     role: str | None,
-) -> None:
+) -> bool:
     if action == "add":
         if role is None:
             raise localized_http_exception(
@@ -279,7 +293,7 @@ def apply_workspace_member_bulk_entry(
                 role=role,
                 duplicate_code="admin.subject_already_member",
             )
-        return
+        return True
 
     if action == "remove":
         if subject_type == "user":
@@ -289,7 +303,7 @@ def apply_workspace_member_bulk_entry(
                 actor_user_id=actor_user_id,
                 subject_id=subject_id,
             )
-        return
+        return True
 
     if action == "update_role":
         if role is None:
@@ -298,13 +312,15 @@ def apply_workspace_member_bulk_entry(
                 code="admin.role_required_for_update_role",
             )
         if subject_type == "user":
-            update_workspace_member_binding_role(
+            role_update = update_workspace_member_binding_role(
                 db,
                 workspace,
                 actor_user_id=actor_user_id,
                 subject_id=subject_id,
                 role=role,
             )
+            return role_update.changed
+    return False
 
 
 def _load_workspace_member_binding(
@@ -415,7 +431,4 @@ def _load_directory_items(
     if requested_role_values:
         user_query = user_query.where(WorkspaceUserBinding.role.in_(requested_role_values))
     user_query = user_query.order_by(user_role_priority.asc(), User.full_name.asc())
-    return [
-        serialize_workspace_member_binding(binding)
-        for binding in db.scalars(user_query).all()
-    ]
+    return [serialize_workspace_member_binding(binding) for binding in db.scalars(user_query).all()]

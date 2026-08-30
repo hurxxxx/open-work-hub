@@ -82,6 +82,10 @@ from open_work_hub_api.domains.auth.security import (
     normalize_login_id,
 )
 from open_work_hub_api.domains.auth.session_lifecycle import revoke_active_user_sessions
+from open_work_hub_api.domains.auth.realtime import (
+    publish_app_availability_access_changed,
+    publish_workspace_membership_access_changed,
+)
 from open_work_hub_api.domains.organization.models import OrganizationUnit
 from open_work_hub_api.domains.organization.schemas import OrganizationUnitSummaryResponse
 from open_work_hub_api.domains.organization.service import (
@@ -493,9 +497,7 @@ def _serialize_workspace_app_defaults(db: Session) -> WorkspaceAppDefaultsRespon
                 title=app.title,
                 route_base=app.route_base,
                 icon_key=app.icon_key,
-                company_enabled=bool(
-                    snapshot.company_enabled_by_app_id.get(app.app_id, False)
-                ),
+                company_enabled=bool(snapshot.company_enabled_by_app_id.get(app.app_id, False)),
                 enabled=bool(snapshot.workspace_default_by_app_id.get(app.app_id, False)),
                 runtime_enabled=(
                     snapshot.company_enabled(app)
@@ -529,16 +531,10 @@ def _serialize_workspace_app_overrides(
                 title=app.title,
                 route_base=app.route_base,
                 icon_key=app.icon_key,
-                company_enabled=bool(
-                    snapshot.company_enabled_by_app_id.get(app.app_id, False)
-                ),
-                default_enabled=bool(
-                    snapshot.workspace_default_by_app_id.get(app.app_id, False)
-                ),
+                company_enabled=bool(snapshot.company_enabled_by_app_id.get(app.app_id, False)),
+                default_enabled=bool(snapshot.workspace_default_by_app_id.get(app.app_id, False)),
                 override_enabled=(
-                    rows_by_app_id[app.app_id].enabled
-                    if app.app_id in rows_by_app_id
-                    else None
+                    rows_by_app_id[app.app_id].enabled if app.app_id in rows_by_app_id else None
                 ),
                 effective_enabled=snapshot.workspace_enabled(app, workspace.id),
                 runtime_enabled=snapshot.workspace_enabled(app, workspace.id),
@@ -4129,15 +4125,73 @@ def list_company_app_controls(
     return _serialize_company_app_controls(db)
 
 
+def _active_company_user_ids(db: Session) -> set[str]:
+    return set(
+        db.scalars(
+            select(User.id).where(
+                User.status == "active",
+                User.login_blocked.is_(False),
+            )
+        ).all()
+    )
+
+
+def _active_workspace_user_ids(
+    db: Session,
+    workspace_ids: Iterable[str],
+) -> set[str]:
+    normalized_workspace_ids = tuple(dict.fromkeys(workspace_ids))
+    if not normalized_workspace_ids:
+        return set()
+    query = (
+        select(WorkspaceUserBinding.user_id, WorkspaceUserBinding.role)
+        .join(User, User.id == WorkspaceUserBinding.user_id)
+        .where(
+            WorkspaceUserBinding.workspace_id.in_(normalized_workspace_ids),
+            User.status == "active",
+            User.login_blocked.is_(False),
+        )
+    )
+    return {
+        user_id
+        for user_id, role in db.execute(query).all()
+        if normalize_workspace_role(role) is not None
+    }
+
+
+def _active_workspace_bound_user_ids(db: Session, workspace_id: str) -> set[str]:
+    return {
+        user_id
+        for user_id, role in db.execute(
+            select(WorkspaceUserBinding.user_id, WorkspaceUserBinding.role)
+            .join(User, User.id == WorkspaceUserBinding.user_id)
+            .where(
+                WorkspaceUserBinding.workspace_id == workspace_id,
+                User.status == "active",
+                User.login_blocked.is_(False),
+            )
+        ).all()
+        if normalize_workspace_role(role) is not None
+    }
+
+
+# Policy writes intentionally invalidate from committed storage deltas instead of
+# suppressing events from a separately-read effective snapshot. This can refresh a
+# few unaffected sessions, but it cannot miss the final state when company/default/
+# override rows are changed concurrently.
+
+
 @router.patch("/apps/company-controls", response_model=CompanyAppControlsResponse)
 def update_company_app_controls(
     payload: CompanyAppControlsUpdateRequest,
+    request: Request,
     context: AuthContext = Depends(require_permission("admin.access")),
     db: Session = Depends(get_db_session),
 ) -> CompanyAppControlsResponse:
     _ensure_platform_admin(context, db)
     rows_by_app_id = _company_app_control_rows_by_id(db)
     changed_items: list[dict[str, object]] = []
+    access_changed = False
     now = _utcnow()
 
     for item in payload.items:
@@ -4150,6 +4204,7 @@ def update_company_app_controls(
             )
         row = rows_by_app_id.get(item.app_id)
         if row is None:
+            access_changed = True
             row = CompanyAppControl(
                 app_id=item.app_id,
                 enabled=item.enabled,
@@ -4160,6 +4215,7 @@ def update_company_app_controls(
             db.add(row)
             rows_by_app_id[item.app_id] = row
         elif row.enabled != item.enabled:
+            access_changed = True
             row.enabled = item.enabled
             row.updated_by_user_id = context.user.id
             row.updated_at = now
@@ -4175,7 +4231,12 @@ def update_company_app_controls(
         summary="Updated company app controls",
         payload={"items": changed_items},
     )
+    affected_user_ids = _active_company_user_ids(db) if access_changed else set()
     db.commit()
+    publish_app_availability_access_changed(
+        getattr(request.app.state, "app_realtime", None),
+        affected_user_ids,
+    )
     return _serialize_company_app_controls(db)
 
 
@@ -4191,12 +4252,14 @@ def list_workspace_app_defaults(
 @router.patch("/apps/workspace-defaults", response_model=WorkspaceAppDefaultsResponse)
 def update_workspace_app_defaults(
     payload: WorkspaceAppDefaultsUpdateRequest,
+    request: Request,
     context: AuthContext = Depends(require_permission("admin.access")),
     db: Session = Depends(get_db_session),
 ) -> WorkspaceAppDefaultsResponse:
     _ensure_platform_admin(context, db)
     rows_by_app_id = _workspace_app_default_rows_by_id(db)
     changed_items: list[dict[str, object]] = []
+    access_changed = False
     now = _utcnow()
 
     for item in payload.items:
@@ -4209,6 +4272,7 @@ def update_workspace_app_defaults(
             )
         row = rows_by_app_id.get(item.app_id)
         if row is None:
+            access_changed = True
             row = WorkspaceAppDefault(
                 app_id=item.app_id,
                 enabled=item.enabled,
@@ -4219,6 +4283,7 @@ def update_workspace_app_defaults(
             db.add(row)
             rows_by_app_id[item.app_id] = row
         elif row.enabled != item.enabled:
+            access_changed = True
             row.enabled = item.enabled
             row.updated_by_user_id = context.user.id
             row.updated_at = now
@@ -4234,7 +4299,17 @@ def update_workspace_app_defaults(
         summary="Updated workspace app defaults",
         payload={"items": changed_items},
     )
+    active_workspace_ids = tuple(
+        db.scalars(select(Workspace.id).where(Workspace.active.is_(True))).all()
+    )
+    affected_user_ids = (
+        _active_workspace_user_ids(db, active_workspace_ids) if access_changed else set()
+    )
     db.commit()
+    publish_app_availability_access_changed(
+        getattr(request.app.state, "app_realtime", None),
+        affected_user_ids,
+    )
     return _serialize_workspace_app_defaults(db)
 
 
@@ -4258,12 +4333,14 @@ def list_workspace_app_overrides(
 def update_workspace_app_overrides(
     workspace_id: str,
     payload: WorkspaceAppOverridesUpdateRequest,
+    request: Request,
     context: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
 ) -> WorkspaceAppOverridesResponse:
     workspace = _ensure_admin_workspace_scope(db, context.user, workspace_id)
     rows_by_app_id = _workspace_app_override_rows_by_id(db, workspace.id)
     changed_items: list[dict[str, object]] = []
+    access_changed = False
     now = _utcnow()
 
     for item in payload.items:
@@ -4277,9 +4354,11 @@ def update_workspace_app_overrides(
         row = rows_by_app_id.get(item.app_id)
         if item.enabled is None:
             if row is not None:
+                access_changed = True
                 db.delete(row)
                 rows_by_app_id.pop(item.app_id, None)
         elif row is None:
+            access_changed = True
             row = WorkspaceAppOverride(
                 workspace_id=workspace.id,
                 app_id=item.app_id,
@@ -4291,6 +4370,7 @@ def update_workspace_app_overrides(
             db.add(row)
             rows_by_app_id[item.app_id] = row
         elif row.enabled != item.enabled:
+            access_changed = True
             row.enabled = item.enabled
             row.updated_by_user_id = context.user.id
             row.updated_at = now
@@ -4306,7 +4386,19 @@ def update_workspace_app_overrides(
         summary=f"Updated app overrides for workspace {workspace.name}",
         payload={"items": changed_items},
     )
+    affected_user_ids = (
+        _active_workspace_user_ids(
+            db,
+            (workspace.id,) if workspace.active else (),
+        )
+        if access_changed
+        else set()
+    )
     db.commit()
+    publish_app_availability_access_changed(
+        getattr(request.app.state, "app_realtime", None),
+        affected_user_ids,
+    )
     return _serialize_workspace_app_overrides(db, workspace)
 
 
@@ -4763,6 +4855,7 @@ def list_workspaces(
 )
 def create_workspace(
     payload: WorkspaceUpsertRequest,
+    request: Request,
     context: AuthContext = Depends(require_permission("workspace.write")),
     db: Session = Depends(get_db_session),
 ) -> WorkspaceItemResponse:
@@ -4798,6 +4891,10 @@ def create_workspace(
         summary=f"Created workspace {workspace.name}",
     )
     db.commit()
+    publish_workspace_membership_access_changed(
+        getattr(request.app.state, "app_realtime", None),
+        {context.user.id},
+    )
     db.refresh(workspace)
     return _serialize_workspace(db, workspace)
 
@@ -4806,14 +4903,27 @@ def create_workspace(
 def update_workspace(
     workspace_id: str,
     payload: WorkspaceUpsertRequest,
+    request: Request,
     context: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
 ) -> WorkspaceItemResponse:
     workspace = _ensure_admin_workspace_scope(db, context.user, workspace_id)
 
-    workspace.key = payload.key or workspace.key
-    workspace.name = payload.name.strip()
-    workspace.description = payload.description.strip()
+    next_key = payload.key or workspace.key
+    next_name = payload.name.strip()
+    next_description = payload.description.strip()
+    access_projection_changed = (
+        workspace.key != next_key
+        or workspace.name != next_name
+        or workspace.description != next_description
+        or workspace.active != payload.active
+    )
+    affected_user_ids = (
+        _active_workspace_bound_user_ids(db, workspace.id) if access_projection_changed else set()
+    )
+    workspace.key = next_key
+    workspace.name = next_name
+    workspace.description = next_description
     workspace.active = payload.active
     db.add(workspace)
     record_audit_log(
@@ -4825,6 +4935,10 @@ def update_workspace(
         summary=f"Updated workspace {workspace.name}",
     )
     db.commit()
+    publish_workspace_membership_access_changed(
+        getattr(request.app.state, "app_realtime", None),
+        affected_user_ids,
+    )
     db.refresh(workspace)
     return _serialize_workspace(db, workspace)
 
@@ -4865,6 +4979,7 @@ def list_workspace_bindings(
 def replace_workspace_bindings(
     workspace_id: str,
     payload: WorkspaceBindingsUpdateRequest,
+    request: Request,
     context: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
 ) -> list[WorkspaceBindingItemResponse]:
@@ -4878,7 +4993,7 @@ def replace_workspace_bindings(
         raise localized_http_exception(status_code=404, code="workspace.not_found")
 
     user_role_map = {item.subject_id: item.role for item in payload.users}
-    replace_workspace_member_bindings(
+    changed_user_ids = replace_workspace_member_bindings(
         db,
         workspace,
         actor_user_id=context.user.id,
@@ -4894,6 +5009,10 @@ def replace_workspace_bindings(
         summary=f"Replaced workspace bindings for {workspace.name}",
     )
     db.commit()
+    publish_workspace_membership_access_changed(
+        getattr(request.app.state, "app_realtime", None),
+        changed_user_ids,
+    )
     return list_workspace_bindings(workspace_id, context, db)
 
 
@@ -4916,6 +5035,7 @@ def _serialize_user_binding(binding: WorkspaceUserBinding) -> WorkspaceBindingIt
 def add_workspace_member(
     workspace_id: str,
     payload: WorkspaceMemberUpsertRequest,
+    request: Request,
     context: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
 ) -> WorkspaceBindingItemResponse:
@@ -4938,6 +5058,10 @@ def add_workspace_member(
         payload={"subject_type": "user", "subject_id": payload.subject_id, "role": payload.role},
     )
     db.commit()
+    publish_workspace_membership_access_changed(
+        getattr(request.app.state, "app_realtime", None),
+        {payload.subject_id},
+    )
     return _serialize_user_binding(binding)
 
 
@@ -4950,12 +5074,13 @@ def update_workspace_member_role(
     subject_type: Literal["user"],
     subject_id: str,
     payload: WorkspaceMemberRoleUpdateRequest,
+    request: Request,
     context: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
 ) -> WorkspaceBindingItemResponse:
     workspace = _ensure_admin_workspace_scope(db, context.user, workspace_id)
 
-    binding = update_workspace_member_binding_role(
+    role_update = update_workspace_member_binding_role(
         db,
         workspace,
         actor_user_id=context.user.id,
@@ -4972,7 +5097,12 @@ def update_workspace_member_role(
         payload={"subject_type": "user", "subject_id": subject_id, "role": payload.role},
     )
     db.commit()
-    return _serialize_user_binding(binding)
+    if role_update.changed:
+        publish_workspace_membership_access_changed(
+            getattr(request.app.state, "app_realtime", None),
+            {subject_id},
+        )
+    return _serialize_user_binding(role_update.binding)
 
 
 @router.delete(
@@ -4983,6 +5113,7 @@ def remove_workspace_member(
     workspace_id: str,
     subject_type: Literal["user"],
     subject_id: str,
+    request: Request,
     context: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
 ) -> None:
@@ -5004,6 +5135,10 @@ def remove_workspace_member(
         payload={"subject_type": subject_type, "subject_id": subject_id},
     )
     db.commit()
+    publish_workspace_membership_access_changed(
+        getattr(request.app.state, "app_realtime", None),
+        {subject_id},
+    )
 
 
 @router.get(
@@ -5060,11 +5195,12 @@ def bulk_workspace_members(
 
     succeeded = 0
     failed: list[dict[str, str]] = []
+    changed_user_ids: set[str] = set()
 
     for entry in payload.subjects:
         savepoint = db.begin_nested()
         try:
-            apply_workspace_member_bulk_entry(
+            changed = apply_workspace_member_bulk_entry(
                 db,
                 workspace,
                 actor_user_id=context.user.id,
@@ -5076,6 +5212,8 @@ def bulk_workspace_members(
             db.flush()
             savepoint.commit()
             succeeded += 1
+            if changed:
+                changed_user_ids.add(entry.subject_id)
         except HTTPException as exc:
             savepoint.rollback()
             failure = {
@@ -5097,6 +5235,10 @@ def bulk_workspace_members(
         payload={"succeeded": succeeded, "failed_count": len(failed)},
     )
     db.commit()
+    publish_workspace_membership_access_changed(
+        getattr(request.app.state, "app_realtime", None),
+        changed_user_ids,
+    )
     return WorkspaceMemberBulkResponse(succeeded=succeeded, failed=failed)
 
 

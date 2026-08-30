@@ -897,7 +897,10 @@ def test_issue_assignees_reject_non_members(client: TestClient) -> None:
     task_list = _create_task_list(client, admin_session["token"])
     issue = _create_issue(client, admin_session["token"], task_list["id"], title="Assignee guard")
     outsider = _create_user(
-        client, admin_session["token"], email="outsider@open-work-hub.local", full_name="Outsider User"
+        client,
+        admin_session["token"],
+        email="outsider@open-work-hub.local",
+        full_name="Outsider User",
     )
 
     response = client.put(
@@ -2145,7 +2148,22 @@ def _bootstrap_admin_session(client: TestClient) -> dict:
         },
     )
     assert response.status_code == 201
-    return response.json()
+    session = response.json()
+    for workspace_key in ("administrator", "general"):
+        _grant_workspace_access(
+            client,
+            session["token"],
+            session["user"]["id"],
+            workspace_key,
+            role="admin",
+        )
+    me_response = client.get(
+        "/api/v1/auth/me",
+        headers=_auth_headers(session["token"]),
+    )
+    assert me_response.status_code == 200, me_response.text
+    session["user"] = me_response.json()
+    return session
 
 
 def _create_task_list(

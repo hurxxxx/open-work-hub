@@ -19,6 +19,9 @@ Current exports:
 `app-contracts` is generated from `packages/contracts/app-contracts.json`; `app-routes` is the only
 shared browser-route builder/parser contract. Regenerate both runtime projections with
 `pnpm generate:app-contracts`. OpenAPI types are generated with `pnpm generate:api-client`.
+Auth access-invalidation event types and reasons are generated for TypeScript and Python from
+`packages/contracts/auth-realtime-contract.json`; run `pnpm generate:auth-realtime-contract` and
+verify with `pnpm check:auth-realtime-contract`.
 
 Keep app transport, auth tokens, Electron IPC, and adapter details in owning apps. Promote only shared path/query/payload invariants.
 

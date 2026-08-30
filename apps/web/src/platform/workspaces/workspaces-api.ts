@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef } from 'react';
 
 import { apiFetchJsonWithMappedError } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
@@ -157,50 +157,53 @@ export function useWorkspaceBootstrap(
     workspaceBootstrapReducer,
     WORKSPACE_BOOTSTRAP_INITIAL_STATE,
   );
-  const [reloadSeq, setReloadSeq] = useState(0);
+  const requestIdRef = useRef(0);
 
   const requestedScopeKey =
     token && principalId && workspaceSlug
       ? JSON.stringify([principalId, workspaceSlug])
       : null;
 
-  useEffect(() => {
+  const refresh = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     if (!token || !principalId || !workspaceSlug || !requestedScopeKey) {
       dispatch({ type: 'reset' });
-      return;
+      return null;
     }
 
-    let cancelled = false;
     dispatch({ type: 'loading', scopeKey: requestedScopeKey });
-    getWorkspaceBootstrap(token, workspaceSlug)
-      .then((next) => {
-        if (cancelled) {
-          return;
-        }
+    try {
+      const next = await getWorkspaceBootstrap(token, workspaceSlug);
+      if (requestIdRef.current === requestId) {
         dispatch({ type: 'success', scopeKey: requestedScopeKey, data: next });
-      })
-      .catch((caughtError: unknown) => {
-        if (cancelled) {
-          return;
-        }
+      }
+      return next;
+    } catch (caughtError) {
+      const error =
+        caughtError instanceof Error
+          ? caughtError
+          : new Error(i18n.t('apps:workspace.bootstrapLoadFailed'));
+      if (requestIdRef.current === requestId) {
         dispatch({
           type: 'failure',
           scopeKey: requestedScopeKey,
-          error:
-            caughtError instanceof Error
-              ? caughtError.message
-              : i18n.t('apps:workspace.bootstrapLoadFailed'),
+          error: error.message,
         });
-      });
+      }
+      throw error;
+    }
+  }, [principalId, requestedScopeKey, token, workspaceSlug]);
 
+  useEffect(() => {
+    void refresh().catch(() => undefined);
     return () => {
-      cancelled = true;
+      requestIdRef.current += 1;
     };
-  }, [principalId, reloadSeq, requestedScopeKey, token, workspaceSlug]);
+  }, [refresh]);
 
   const reload = useCallback(() => {
-    setReloadSeq((current) => current + 1);
-  }, []);
+    void refresh().catch(() => undefined);
+  }, [refresh]);
 
   const scopedState =
     requestedScopeKey !== null && state.scopeKey === requestedScopeKey
@@ -213,6 +216,7 @@ export function useWorkspaceBootstrap(
       requestedScopeKey !== null &&
       (scopedState.loading || state.scopeKey !== requestedScopeKey),
     reload,
+    refresh,
   };
 }
 
@@ -292,48 +296,54 @@ export function useAppsBootstrap(
     appsBootstrapReducer,
     APPS_BOOTSTRAP_INITIAL_STATE,
   );
-  const [reloadSeq, setReloadSeq] = useState(0);
+  const requestIdRef = useRef(0);
 
   const requestedScopeKey = token && principalId ? principalId : null;
 
-  useEffect(() => {
+  const refresh = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     if (!token || !principalId || !requestedScopeKey) {
       dispatch({ type: 'reset' });
-      return;
+      return null;
     }
 
-    let cancelled = false;
     dispatch({ type: 'loading', scopeKey: requestedScopeKey });
-    getAppsBootstrap(token)
-      .then((next) => {
-        if (!cancelled) {
-          dispatch({
-            type: 'success',
-            scopeKey: requestedScopeKey,
-            data: next,
-          });
-        }
-      })
-      .catch((caughtError: unknown) => {
-        if (cancelled) return;
+    try {
+      const next = await getAppsBootstrap(token);
+      if (requestIdRef.current === requestId) {
+        dispatch({
+          type: 'success',
+          scopeKey: requestedScopeKey,
+          data: next,
+        });
+      }
+      return next;
+    } catch (caughtError) {
+      const error =
+        caughtError instanceof Error
+          ? caughtError
+          : new Error(i18n.t('apps:workspace.bootstrapLoadFailed'));
+      if (requestIdRef.current === requestId) {
         dispatch({
           type: 'failure',
           scopeKey: requestedScopeKey,
-          error:
-            caughtError instanceof Error
-              ? caughtError.message
-              : i18n.t('apps:workspace.bootstrapLoadFailed'),
+          error: error.message,
         });
-      });
+      }
+      throw error;
+    }
+  }, [principalId, requestedScopeKey, token]);
 
+  useEffect(() => {
+    void refresh().catch(() => undefined);
     return () => {
-      cancelled = true;
+      requestIdRef.current += 1;
     };
-  }, [principalId, reloadSeq, requestedScopeKey, token]);
+  }, [refresh]);
 
   const reload = useCallback(() => {
-    setReloadSeq((current) => current + 1);
-  }, []);
+    void refresh().catch(() => undefined);
+  }, [refresh]);
 
   const scopedState =
     requestedScopeKey !== null && state.scopeKey === requestedScopeKey
@@ -346,6 +356,7 @@ export function useAppsBootstrap(
       requestedScopeKey !== null &&
       (scopedState.loading || state.scopeKey !== requestedScopeKey),
     reload,
+    refresh,
   };
 }
 

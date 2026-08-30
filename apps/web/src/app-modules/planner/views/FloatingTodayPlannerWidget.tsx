@@ -32,6 +32,10 @@ import { MeetingPreviewModal } from './calendar/MeetingPreviewModal';
 import { PlannerEventModal } from './PlannerEventModal';
 import { resolvePlannerCalendarEventClick } from './planner-calendar-controller';
 import {
+  plannerCalendarEventId,
+  plannerEventToCalendarEvent,
+} from './planner-calendar-event-projection';
+import {
   addDateKeyDays,
   buildCreateRangeForDateKey,
   buildTodayPlannerDayGroups,
@@ -107,12 +111,13 @@ export function FloatingTodayPlannerWidget({
     () => buildTodayPlannerRange(now, timeZone),
     [now, timeZone],
   );
-  const { events, loading, error, refresh } = useCalendarEvents({
-    from: range.from,
-    sources: TODAY_PLANNER_SOURCES,
-    to: range.to,
-    useMockData: false,
-  });
+  const { events, loading, error, refresh, removeEvent, upsertEvent } =
+    useCalendarEvents({
+      from: range.from,
+      sources: TODAY_PLANNER_SOURCES,
+      to: range.to,
+      useMockData: false,
+    });
   const groups = useMemo(
     () => buildTodayPlannerDayGroups(events, range.days, timeZone, now),
     [events, now, range.days, timeZone],
@@ -157,13 +162,31 @@ export function FloatingTodayPlannerWidget({
     refresh();
   }, [refresh, reloadSeq]);
 
-  const handlePlannerChanged = useCallback(() => {
+  const closePlannerEvent = useCallback(() => {
     setPlannerEventModalOpen(false);
     setPlannerEventId(null);
     setPlannerEventRange(null);
-    refresh();
-    onChanged?.();
-  }, [onChanged, refresh]);
+  }, []);
+
+  const handlePlannerEventSaved = useCallback(
+    (event: Parameters<typeof plannerEventToCalendarEvent>[0]) => {
+      upsertEvent(plannerEventToCalendarEvent(event));
+      closePlannerEvent();
+      refresh();
+      onChanged?.();
+    },
+    [closePlannerEvent, onChanged, refresh, upsertEvent],
+  );
+
+  const handlePlannerEventDeleted = useCallback(
+    (eventId: string) => {
+      removeEvent(plannerCalendarEventId(eventId));
+      closePlannerEvent();
+      refresh();
+      onChanged?.();
+    },
+    [closePlannerEvent, onChanged, refresh, removeEvent],
+  );
 
   const openCreatePlannerEvent = useCallback(() => {
     const dateKey = activeGroup?.dateKey ?? range.todayKey;
@@ -332,8 +355,8 @@ export function FloatingTodayPlannerWidget({
           setPlannerEventId(null);
           setPlannerEventRange(null);
         }}
-        onDeleted={handlePlannerChanged}
-        onSaved={handlePlannerChanged}
+        onDeleted={handlePlannerEventDeleted}
+        onSaved={handlePlannerEventSaved}
         overlayClassName="z-[119]"
       />
     </div>

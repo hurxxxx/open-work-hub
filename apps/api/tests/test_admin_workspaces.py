@@ -329,6 +329,12 @@ def test_app_bar_categories_are_admin_managed_presentation_groups(
     get_settings.cache_clear()
     admin = _bootstrap_admin_session(client)
     token = admin["token"]
+    workspace = _create_workspace(
+        client,
+        token,
+        name="App Bar Workspace",
+        key="app-bar-workspace",
+    )
 
     list_response = client.get(
         "/api/v1/admin/app-bar-categories",
@@ -379,7 +385,7 @@ def test_app_bar_categories_are_admin_managed_presentation_groups(
     ]
 
     bootstrap_response = client.get(
-        "/api/v1/workspaces/administrator/bootstrap",
+        f"/api/v1/workspaces/{workspace['key']}/bootstrap",
         headers=_auth_headers(token),
     )
     assert bootstrap_response.status_code == 200, bootstrap_response.text
@@ -426,13 +432,17 @@ def test_app_bar_categories_are_admin_managed_presentation_groups(
     get_settings.cache_clear()
 
 
-
-
 def test_company_app_control_disables_workspace_app(
     client: TestClient,
 ) -> None:
     admin = _bootstrap_admin_session(client)
     token = admin["token"]
+    workspace = _create_workspace(
+        client,
+        token,
+        name="Company Control Workspace",
+        key="company-control-workspace",
+    )
 
     list_response = client.get(
         "/api/v1/admin/apps/company-controls",
@@ -453,14 +463,12 @@ def test_company_app_control_disables_workspace_app(
         json={"items": [{"app_id": "docs", "enabled": False}]},
     )
     assert update_response.status_code == 200, update_response.text
-    docs_item = next(
-        item for item in update_response.json()["items"] if item["app_id"] == "docs"
-    )
+    docs_item = next(item for item in update_response.json()["items"] if item["app_id"] == "docs")
     assert docs_item["enabled"] is False
     assert docs_item["runtime_enabled"] is False
 
     bootstrap_response = client.get(
-        "/api/v1/workspaces/administrator/bootstrap",
+        f"/api/v1/workspaces/{workspace['key']}/bootstrap",
         headers=_auth_headers(token),
     )
     assert bootstrap_response.status_code == 200, bootstrap_response.text
@@ -475,11 +483,13 @@ def test_company_master_cannot_be_bypassed_by_workspace_override(
 ) -> None:
     admin = _bootstrap_admin_session(client)
     token = admin["token"]
-    workspace_id = next(
-        workspace["id"]
-        for workspace in admin["user"]["workspaces"]
-        if workspace["slug"] == "administrator"
+    workspace = _create_workspace(
+        client,
+        token,
+        name="Override Boundary Workspace",
+        key="override-boundary-workspace",
     )
+    workspace_id = workspace["id"]
     company_response = client.patch(
         "/api/v1/admin/apps/company-controls",
         headers=_auth_headers(token),
@@ -492,9 +502,7 @@ def test_company_master_cannot_be_bypassed_by_workspace_override(
         headers=_auth_headers(token),
     )
     assert list_response.status_code == 200, list_response.text
-    docs_item = next(
-        item for item in list_response.json()["items"] if item["app_id"] == "docs"
-    )
+    docs_item = next(item for item in list_response.json()["items"] if item["app_id"] == "docs")
     assert docs_item["company_enabled"] is False
     assert docs_item["default_enabled"] is True
     assert docs_item["override_enabled"] is None
@@ -506,17 +514,13 @@ def test_company_master_cannot_be_bypassed_by_workspace_override(
         json={"items": [{"app_id": "docs", "enabled": True}]},
     )
     assert override_response.status_code == 200, override_response.text
-    docs_item = next(
-        item
-        for item in override_response.json()["items"]
-        if item["app_id"] == "docs"
-    )
+    docs_item = next(item for item in override_response.json()["items"] if item["app_id"] == "docs")
     assert docs_item["override_enabled"] is True
     assert docs_item["effective_enabled"] is False
     assert docs_item["runtime_enabled"] is False
 
     bootstrap_response = client.get(
-        "/api/v1/workspaces/administrator/bootstrap",
+        f"/api/v1/workspaces/{workspace['key']}/bootstrap",
         headers=_auth_headers(token),
     )
     assert bootstrap_response.status_code == 200, bootstrap_response.text
@@ -568,7 +572,11 @@ def test_platform_apps_are_excluded_from_workspace_controls_and_categories(
 ) -> None:
     admin = _bootstrap_admin_session(client)
     token = admin["token"]
-    workspace_id = admin["user"]["workspaces"][0]["id"]
+    workspace_id = _create_workspace(
+        client,
+        token,
+        name="Workspace App Controls",
+    )["id"]
 
     company_response = client.get(
         "/api/v1/admin/apps/company-controls",
@@ -591,18 +599,10 @@ def test_platform_apps_are_excluded_from_workspace_controls_and_categories(
     assert defaults_response.status_code == 200, defaults_response.text
     assert overrides_response.status_code == 200, overrides_response.text
     assert categories_response.status_code == 200, categories_response.text
-    company_items = {
-        item["app_id"]: item for item in company_response.json()["items"]
-    }
-    default_app_ids = {
-        item["app_id"] for item in defaults_response.json()["items"]
-    }
-    override_app_ids = {
-        item["app_id"] for item in overrides_response.json()["items"]
-    }
-    category_app_ids = {
-        item["app_id"] for item in categories_response.json()["available_apps"]
-    }
+    company_items = {item["app_id"]: item for item in company_response.json()["items"]}
+    default_app_ids = {item["app_id"] for item in defaults_response.json()["items"]}
+    override_app_ids = {item["app_id"] for item in overrides_response.json()["items"]}
+    category_app_ids = {item["app_id"] for item in categories_response.json()["available_apps"]}
     assert {"community", "mail", "planner", "docs"} <= company_items.keys()
     assert all(
         company_items[app_id]["availability_scope"] == "platform"
@@ -627,7 +627,11 @@ def test_workspace_app_override_can_return_to_workspace_default(
 ) -> None:
     admin = _bootstrap_admin_session(client)
     token = admin["token"]
-    workspace_id = admin["user"]["workspaces"][0]["id"]
+    workspace_id = _create_workspace(
+        client,
+        token,
+        name="Workspace Override Inheritance",
+    )["id"]
 
     disabled_response = client.patch(
         f"/api/v1/admin/workspaces/{workspace_id}/app-overrides",
@@ -642,13 +646,12 @@ def test_workspace_app_override_can_return_to_workspace_default(
         json={"items": [{"app_id": "docs", "enabled": None}]},
     )
     assert inherit_response.status_code == 200, inherit_response.text
-    docs_item = next(
-        item for item in inherit_response.json()["items"] if item["app_id"] == "docs"
-    )
+    docs_item = next(item for item in inherit_response.json()["items"] if item["app_id"] == "docs")
     assert docs_item["company_enabled"] is True
     assert docs_item["default_enabled"] is True
     assert docs_item["override_enabled"] is None
     assert docs_item["effective_enabled"] is True
+
 
 def test_add_remove_member_endpoints(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
@@ -702,6 +705,179 @@ def test_add_remove_member_endpoints(client: TestClient) -> None:
     )
     assert missing_remove.status_code == 404
     assert missing_remove.json()["code"] == "admin.workspace_member_not_found"
+
+
+def test_workspace_membership_changes_reach_open_sessions_and_match_auth_me(
+    client: TestClient,
+) -> None:
+    admin = _bootstrap_admin_session(client)
+    admin_token = admin["token"]
+    workspace = _create_workspace(client, admin_token, name="Realtime Access")
+    member_payload = _create_user_with_password(
+        client,
+        admin_token,
+        email="realtime-member@open-work-hub.local",
+        full_name="Realtime Member",
+        password="Open Work Hub!realtime12",
+    )
+    member_id = member_payload["user"]["id"]
+    login = client.post(
+        "/api/v1/auth/login",
+        json={
+            "login_id": "realtime-member",
+            "password": "Open Work Hub!realtime12",
+        },
+    )
+    assert login.status_code == 200, login.text
+    member_token = login.json()["token"]
+
+    def assert_access_changed(websocket, reason: str) -> None:
+        event = websocket.receive_json()
+        assert event["type"] == "auth.access.changed"
+        assert event["data"] == {"reason": reason}
+        assert event["topic"] == f"user:{member_id}"
+        assert event["event_id"]
+
+    def current_workspace_role() -> str | None:
+        response = client.get(
+            "/api/v1/auth/me",
+            headers=_auth_headers(member_token),
+        )
+        assert response.status_code == 200, response.text
+        current = next(
+            (item for item in response.json()["workspaces"] if item["id"] == workspace["id"]),
+            None,
+        )
+        return current["role"] if current else None
+
+    def current_app_ids() -> set[str]:
+        response = client.get(
+            "/api/v1/apps/bootstrap",
+            headers=_auth_headers(member_token),
+        )
+        assert response.status_code == 200, response.text
+        return {item["app_id"] for item in response.json()["apps"]}
+
+    with client.websocket_connect("/api/v1/realtime/ws") as websocket:
+        websocket.send_json({"type": "auth", "token": member_token})
+        assert websocket.receive_json() == {
+            "type": "realtime.auth.ok",
+            "data": {},
+        }
+        assert websocket.receive_json()["type"] == "notification.snapshot"
+
+        added = client.post(
+            f"/api/v1/admin/workspaces/{workspace['id']}/members",
+            headers=_auth_headers(admin_token),
+            json={
+                "subject_id": member_id,
+                "subject_type": "user",
+                "role": "member",
+            },
+        )
+        assert added.status_code == 201, added.text
+        assert_access_changed(websocket, "workspace_membership")
+        assert current_workspace_role() == "member"
+
+        company_disabled = client.patch(
+            "/api/v1/admin/apps/company-controls",
+            headers=_auth_headers(admin_token),
+            json={"items": [{"app_id": "planner", "enabled": False}]},
+        )
+        assert company_disabled.status_code == 200, company_disabled.text
+        assert_access_changed(websocket, "app_availability")
+        assert "planner" not in current_app_ids()
+
+        company_restored = client.patch(
+            "/api/v1/admin/apps/company-controls",
+            headers=_auth_headers(admin_token),
+            json={"items": [{"app_id": "planner", "enabled": True}]},
+        )
+        assert company_restored.status_code == 200, company_restored.text
+        assert_access_changed(websocket, "app_availability")
+        assert "planner" in current_app_ids()
+
+        default_disabled = client.patch(
+            "/api/v1/admin/apps/workspace-defaults",
+            headers=_auth_headers(admin_token),
+            json={"items": [{"app_id": "docs", "enabled": False}]},
+        )
+        assert default_disabled.status_code == 200, default_disabled.text
+        assert_access_changed(websocket, "app_availability")
+        assert "docs" not in current_app_ids()
+
+        default_restored = client.patch(
+            "/api/v1/admin/apps/workspace-defaults",
+            headers=_auth_headers(admin_token),
+            json={"items": [{"app_id": "docs", "enabled": True}]},
+        )
+        assert default_restored.status_code == 200, default_restored.text
+        assert_access_changed(websocket, "app_availability")
+        assert "docs" in current_app_ids()
+
+        override_disabled = client.patch(
+            f"/api/v1/admin/workspaces/{workspace['id']}/app-overrides",
+            headers=_auth_headers(admin_token),
+            json={"items": [{"app_id": "docs", "enabled": False}]},
+        )
+        assert override_disabled.status_code == 200, override_disabled.text
+        assert_access_changed(websocket, "app_availability")
+        assert "docs" not in current_app_ids()
+
+        override_restored = client.patch(
+            f"/api/v1/admin/workspaces/{workspace['id']}/app-overrides",
+            headers=_auth_headers(admin_token),
+            json={"items": [{"app_id": "docs", "enabled": None}]},
+        )
+        assert override_restored.status_code == 200, override_restored.text
+        assert_access_changed(websocket, "app_availability")
+        assert "docs" in current_app_ids()
+
+        archived = client.patch(
+            f"/api/v1/admin/workspaces/{workspace['id']}",
+            headers=_auth_headers(admin_token),
+            json={
+                "key": workspace["key"],
+                "name": workspace["name"],
+                "description": workspace["description"],
+                "active": False,
+            },
+        )
+        assert archived.status_code == 200, archived.text
+        assert_access_changed(websocket, "workspace_membership")
+        assert current_workspace_role() is None
+
+        restored = client.patch(
+            f"/api/v1/admin/workspaces/{workspace['id']}",
+            headers=_auth_headers(admin_token),
+            json={
+                "key": workspace["key"],
+                "name": workspace["name"],
+                "description": workspace["description"],
+                "active": True,
+            },
+        )
+        assert restored.status_code == 200, restored.text
+        assert_access_changed(websocket, "workspace_membership")
+        assert current_workspace_role() == "member"
+
+        role_changed = client.patch(
+            f"/api/v1/admin/workspaces/{workspace['id']}/members/user/{member_id}",
+            headers=_auth_headers(admin_token),
+            json={"role": "admin"},
+        )
+        assert role_changed.status_code == 200, role_changed.text
+        assert_access_changed(websocket, "workspace_membership")
+        assert current_workspace_role() == "admin"
+
+        removed = client.delete(
+            f"/api/v1/admin/workspaces/{workspace['id']}/members/user/{member_id}",
+            headers=_auth_headers(admin_token),
+        )
+        assert removed.status_code == 204, removed.text
+        assert_access_changed(websocket, "workspace_membership")
+        assert current_workspace_role() is None
+        websocket.close()
 
 
 def test_add_member_rejects_unknown_user(client: TestClient) -> None:

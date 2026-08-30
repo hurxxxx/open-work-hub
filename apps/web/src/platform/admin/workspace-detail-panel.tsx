@@ -38,6 +38,7 @@ import {
   type WorkspaceBindingItem,
   type WorkspaceItem,
   type WorkspaceMemberCandidate,
+  type WorkspaceMemberItem,
 } from './admin-api';
 import {
   Badge,
@@ -314,13 +315,16 @@ function useWorkspaceDetailPanelElement({
     if (totalSelected === 0) return;
     setAddBusy(true);
     try {
-      const { outcome, bindings: nextBindings, memberCountDelta } =
-        await addWorkspaceMembersWorkflow({
-          workspaceId,
-          selection: addSelection,
-          role: addRole,
-          ports: memberWorkflowPorts,
-        });
+      const {
+        outcome,
+        bindings: nextBindings,
+        memberCountDelta,
+      } = await addWorkspaceMembersWorkflow({
+        workspaceId,
+        selection: addSelection,
+        role: addRole,
+        ports: memberWorkflowPorts,
+      });
       if (outcome.partial) {
         flashError(
           t('admin.workspace.members.bulkAddPartial', {
@@ -647,7 +651,25 @@ function useWorkspaceDetailPanelElement({
                   onChangeRole={(role) =>
                     void handleChangeMemberRole(binding, role)
                   }
-                  onRemove={() => void handleRemoveMember(binding)}
+                  onRemove={() =>
+                    openConfirm({
+                      title: t('admin.workspace.members.removeConfirmTitle', {
+                        name: binding.subject_label,
+                      }),
+                      description: t(
+                        'admin.workspace.members.removeConfirmDescription',
+                        {
+                          name: binding.subject_label,
+                          workspace: workspace.name,
+                        },
+                      ),
+                      confirmLabel: t(
+                        'admin.workspace.members.removeConfirmAction',
+                      ),
+                      variant: 'danger',
+                      onConfirm: () => handleRemoveMember(binding),
+                    })
+                  }
                 />
               ))}
               {workspace.member_count > previewBindings.length ? (
@@ -1312,6 +1334,11 @@ function useWorkspaceMembersDrawerElement({
   const locale = i18n.resolvedLanguage ?? i18n.language;
   const timeZone = normalizeTimeZone(user?.time_zone);
   const roleOptions = getWorkspaceRoleOptions(t);
+  const [removeConfirm, setRemoveConfirm] = useState<
+    | { kind: 'single'; member: WorkspaceMemberItem }
+    | { kind: 'bulk'; count: number }
+    | null
+  >(null);
   const controller = useWorkspaceMembersDrawerController({
     open,
     workspace,
@@ -1344,352 +1371,393 @@ function useWorkspaceMembersDrawerElement({
     onError,
     onSuccess,
   });
-  const {
-    bulkRoleOpen,
-    busy,
-    data,
-    loading,
-    pendingOnly,
-    query,
-    roleFilter,
-  } = controller.state;
-  const {
-    activeSelectedKeys,
-    allSelectableSelected,
-    totalPages,
-  } = controller.derived;
+  const { bulkRoleOpen, busy, data, loading, pendingOnly, query, roleFilter } =
+    controller.state;
+  const { activeSelectedKeys, allSelectableSelected, totalPages } =
+    controller.derived;
 
   if (!workspace) return null;
 
   return (
-    <Dialog
-      closeLabel={t('common:actions.close')}
-      open={open}
-      onOpenChange={onOpenChange}
-      title={t('admin.workspace.members.manageTitle', { name: workspace.name })}
-      description={t('admin.workspace.members.manageDescription')}
-      fullSize
-      dismissOnInteractOutside={false}
-    >
-      <div className="flex h-full min-h-0 flex-col gap-4">
-        {/* Filter bar */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex flex-1 min-w-[220px] items-center gap-2 rounded-md border border-app-border bg-app-surface-sidebar px-2 py-1.5">
-            <Search size={14} className="text-app-ink/50" />
-            <input
-              className="app-text-body flex-1 bg-transparent text-app-ink outline-none placeholder:text-app-ink/40"
-              placeholder={t('admin.workspace.members.searchPlaceholder')}
-              value={query}
-              aria-label={t('admin.workspace.members.searchPlaceholder')}
-              onChange={(event) =>
-                controller.actions.setQuery(event.target.value)
-              }
-            />
+    <>
+      <Dialog
+        closeLabel={t('common:actions.close')}
+        open={open}
+        onOpenChange={onOpenChange}
+        title={t('admin.workspace.members.manageTitle', {
+          name: workspace.name,
+        })}
+        description={t('admin.workspace.members.manageDescription')}
+        fullSize
+        dismissOnInteractOutside={false}
+      >
+        <div className="flex h-full min-h-0 flex-col gap-4">
+          {/* Filter bar */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-1 min-w-[220px] items-center gap-2 rounded-md border border-app-border bg-app-surface-sidebar px-2 py-1.5">
+              <Search size={14} className="text-app-ink/50" />
+              <input
+                className="app-text-body flex-1 bg-transparent text-app-ink outline-none placeholder:text-app-ink/40"
+                placeholder={t('admin.workspace.members.searchPlaceholder')}
+                value={query}
+                aria-label={t('admin.workspace.members.searchPlaceholder')}
+                onChange={(event) =>
+                  controller.actions.setQuery(event.target.value)
+                }
+              />
+            </div>
           </div>
-        </div>
 
-        {/* Role chips */}
-        <div className="flex flex-wrap items-center gap-2">
-          <FilterChip
-            label={t('admin.workspace.members.filterAll', {
-              count: data?.total ?? 0,
-            })}
-            active={roleFilter === null && !pendingOnly}
-            onClick={() => {
-              controller.actions.setRoleFilter(null);
-            }}
-          />
-          {(['admin', 'member'] as const).map((role) => (
+          {/* Role chips */}
+          <div className="flex flex-wrap items-center gap-2">
             <FilterChip
-              key={role}
-              label={t('admin.workspace.members.filterRole', {
-                role: getWorkspaceRoleLabel(role, t),
-                count: data?.role_counts[role] ?? 0,
+              label={t('admin.workspace.members.filterAll', {
+                count: data?.total ?? 0,
               })}
-              active={roleFilter === role && !pendingOnly}
+              active={roleFilter === null && !pendingOnly}
               onClick={() => {
-                controller.actions.setRoleFilter(role);
+                controller.actions.setRoleFilter(null);
               }}
             />
-          ))}
-          {data && data.pending_count > 0 ? (
-            <FilterChip
-              label={t('admin.workspace.members.filterPending', {
-                count: data.pending_count,
-              })}
-              active={pendingOnly}
-              tone="warning"
-              onClick={() => {
-                controller.actions.setPendingOnly(true);
-              }}
-            />
-          ) : null}
-        </div>
+            {(['admin', 'member'] as const).map((role) => (
+              <FilterChip
+                key={role}
+                label={t('admin.workspace.members.filterRole', {
+                  role: getWorkspaceRoleLabel(role, t),
+                  count: data?.role_counts[role] ?? 0,
+                })}
+                active={roleFilter === role && !pendingOnly}
+                onClick={() => {
+                  controller.actions.setRoleFilter(role);
+                }}
+              />
+            ))}
+            {data && data.pending_count > 0 ? (
+              <FilterChip
+                label={t('admin.workspace.members.filterPending', {
+                  count: data.pending_count,
+                })}
+                active={pendingOnly}
+                tone="warning"
+                onClick={() => {
+                  controller.actions.setPendingOnly(true);
+                }}
+              />
+            ) : null}
+          </div>
 
-        {/* Bulk action bar */}
-        {activeSelectedKeys.size > 0 ? (
-          <div className="flex items-center justify-between gap-2 rounded-lg border border-app-accent/40 bg-app-accent/10 px-3 py-2">
-            <span className="app-text-body text-app-ink">
-              {t('admin.workspace.members.selectedCount', {
-                count: activeSelectedKeys.size,
-              })}
-            </span>
-            <div className="flex items-center gap-2">
-              <div className="relative">
+          {/* Bulk action bar */}
+          {activeSelectedKeys.size > 0 ? (
+            <div className="flex items-center justify-between gap-2 rounded-lg border border-app-accent/40 bg-app-accent/10 px-3 py-2">
+              <span className="app-text-body text-app-ink">
+                {t('admin.workspace.members.selectedCount', {
+                  count: activeSelectedKeys.size,
+                })}
+              </span>
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <Button
+                    variant="ghost"
+                    onClick={() =>
+                      controller.actions.setBulkRoleOpen((current) => !current)
+                    }
+                    disabled={busy}
+                  >
+                    {t('admin.workspace.members.changeRole')}
+                  </Button>
+                  {bulkRoleOpen ? (
+                    <div className="absolute right-0 top-full z-10 mt-1 min-w-[160px] rounded-md border border-app-border bg-app-bg shadow-lg">
+                      {roleOptions.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          className="app-text-body flex w-full items-center justify-between px-3 py-2 text-left text-app-ink hover:bg-app-surface-sidebar"
+                          onClick={() =>
+                            void controller.actions.bulkRole(option.value)
+                          }
+                        >
+                          <span>{option.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
                 <Button
                   variant="ghost"
                   onClick={() =>
-                    controller.actions.setBulkRoleOpen((current) => !current)
+                    setRemoveConfirm({
+                      kind: 'bulk',
+                      count: activeSelectedKeys.size,
+                    })
                   }
                   disabled={busy}
+                  className="text-[var(--ui-color-danger)]"
                 >
-                  {t('admin.workspace.members.changeRole')}
+                  {t('common:actions.delete')}
                 </Button>
-                {bulkRoleOpen ? (
-                  <div className="absolute right-0 top-full z-10 mt-1 min-w-[160px] rounded-md border border-app-border bg-app-bg shadow-lg">
-                    {roleOptions.map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        className="app-text-body flex w-full items-center justify-between px-3 py-2 text-left text-app-ink hover:bg-app-surface-sidebar"
-                        onClick={() =>
-                          void controller.actions.bulkRole(option.value)
-                        }
-                      >
-                        <span>{option.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
+                <Button
+                  variant="ghost"
+                  onClick={controller.actions.clearSelection}
+                >
+                  {t('admin.workspace.members.clearSelection')}
+                </Button>
               </div>
-              <Button
-                variant="ghost"
-                onClick={() => void controller.actions.bulkRemove()}
-                disabled={busy}
-                className="text-[var(--ui-color-danger)]"
-              >
-                {t('common:actions.delete')}
-              </Button>
-              <Button
-                variant="ghost"
-                onClick={controller.actions.clearSelection}
-              >
-                {t('admin.workspace.members.clearSelection')}
-              </Button>
             </div>
-          </div>
-        ) : null}
+          ) : null}
 
-        {/* Table */}
-        <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-app-border">
-          <table className="w-full">
-            <thead className="sticky top-0 z-10 bg-app-surface-sidebar">
-              <tr>
-                <th className="w-10 px-3 py-2 text-left">
-                  {canManage ? (
-                    <input
-                      type="checkbox"
-                      aria-label={t('admin.workspace.members.selectAll')}
-                      onChange={controller.actions.toggleSelectAll}
-                      checked={allSelectableSelected}
-                    />
-                  ) : null}
-                </th>
-                <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">
-                  {t('admin.workspace.members.name')}
-                </th>
-                <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">
-                  {t('admin.workspace.members.role')}
-                </th>
-                <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">
-                  {t('admin.shared.directory.status')}
-                </th>
-                <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">
-                  {t('admin.shared.directory.recent')}
-                </th>
-                <th className="w-10 px-2 py-1.5">
-                  <span className="sr-only">
-                    {t('admin.workspace.members.actions')}
-                  </span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && !data ? (
+          {/* Table */}
+          <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-app-border">
+            <table className="w-full">
+              <thead className="sticky top-0 z-10 bg-app-surface-sidebar">
                 <tr>
-                  <td
-                    colSpan={6}
-                    className="px-2 py-8 text-center text-app-ink/60"
-                  >
-                    {t('common:feedback.loading')}
-                  </td>
+                  <th className="w-10 px-3 py-2 text-left">
+                    {canManage ? (
+                      <input
+                        type="checkbox"
+                        aria-label={t('admin.workspace.members.selectAll')}
+                        onChange={controller.actions.toggleSelectAll}
+                        checked={allSelectableSelected}
+                      />
+                    ) : null}
+                  </th>
+                  <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">
+                    {t('admin.workspace.members.name')}
+                  </th>
+                  <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">
+                    {t('admin.workspace.members.role')}
+                  </th>
+                  <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">
+                    {t('admin.shared.directory.status')}
+                  </th>
+                  <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">
+                    {t('admin.shared.directory.recent')}
+                  </th>
+                  <th className="w-10 px-2 py-1.5">
+                    <span className="sr-only">
+                      {t('admin.workspace.members.actions')}
+                    </span>
+                  </th>
                 </tr>
-              ) : (data?.items.length ?? 0) === 0 ? (
-                <tr>
-                  <td
-                    colSpan={6}
-                    className="px-2 py-8 text-center text-app-ink/60"
-                  >
-                    {t('admin.workspace.members.empty')}
-                  </td>
-                </tr>
-              ) : (
-                (data?.items ?? []).map((item) => {
-                  const key = workspaceMemberKey(item);
-                  const isSelf =
-                    item.subject_type === 'user' &&
-                    item.subject_id === currentUserId;
-                  return (
-                    <tr key={key} className="border-b border-app-border/50">
-                      <td className="px-2 py-1">
-                        {canManage && !isSelf ? (
-                          <input
-                            type="checkbox"
-                            aria-label={t(
-                              'admin.workspace.members.selectMember',
-                              {
-                                name: item.subject_label,
-                              },
-                            )}
-                            checked={activeSelectedKeys.has(key)}
-                            onChange={() =>
-                              controller.actions.toggleSelect(item)
-                            }
-                          />
-                        ) : null}
-                      </td>
-                      <td className="app-text-body-sm px-2 py-1">
-                        <span className="font-medium text-app-ink">
-                          {item.subject_label}
-                        </span>
-                        {item.subject_secondary ? (
-                          <span className="ml-2 text-app-ink/50">
-                            {item.subject_secondary}
-                          </span>
-                        ) : null}
-                        {isSelf ? (
-                          <span className="ml-2 text-app-ink/40">
-                            {t('admin.workspace.members.currentUser')}
-                          </span>
-                        ) : null}
-                      </td>
-                      <td className="px-2 py-1">
-                        <MemberRoleBadge role={item.role} />
-                      </td>
-                      <td className="app-text-body-sm px-2 py-1">
-                        {item.user_status === 'invited' ? (
-                          <Badge tone="amber">
-                            {t('admin.shared.status.invitedShort')}
-                          </Badge>
-                        ) : item.user_status === 'suspended' ? (
-                          <Badge tone="amber">
-                            {t('admin.shared.status.suspendedShort')}
-                          </Badge>
-                        ) : (
-                          <span className="text-app-ink/60">
-                            {t('admin.shared.status.activeShort')}
-                          </span>
-                        )}
-                      </td>
-                      <td className="app-text-caption px-2 py-1 text-app-ink/60">
-                        {formatDateLabel(
-                          item.last_login_at,
-                          locale,
-                          timeZone,
-                        )}
-                      </td>
-                      <td className="px-2 py-1 text-right">
-                        {canManage && !isSelf ? (
-                          <DropdownMenu
-                            trigger={
-                              <button
-                                type="button"
-                                className="rounded p-1 text-app-ink/60 transition-colors hover:bg-app-surface-sidebar hover:text-app-ink"
-                                aria-label={t(
-                                  'admin.workspace.members.actions',
-                                )}
-                              >
-                                <MoreHorizontal size={14} />
-                              </button>
-                            }
-                            items={[
-                              ...roleOptions.map((option) => ({
-                                id: `role-${option.value}`,
-                                label: (
-                                  <span className="flex items-center justify-between gap-2">
-                                    <span>{option.label}</span>
-                                    {item.role === option.value ? (
-                                      <Check
-                                        size={14}
-                                        className="text-app-accent"
-                                      />
-                                    ) : null}
-                                  </span>
-                                ),
-                                onSelect: () => {
-                                  if (item.role !== option.value) {
-                                    void controller.actions.singleRoleChange(
-                                      item,
-                                      option.value,
-                                    );
-                                  }
+              </thead>
+              <tbody>
+                {loading && !data ? (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="px-2 py-8 text-center text-app-ink/60"
+                    >
+                      {t('common:feedback.loading')}
+                    </td>
+                  </tr>
+                ) : (data?.items.length ?? 0) === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="px-2 py-8 text-center text-app-ink/60"
+                    >
+                      {t('admin.workspace.members.empty')}
+                    </td>
+                  </tr>
+                ) : (
+                  (data?.items ?? []).map((item) => {
+                    const key = workspaceMemberKey(item);
+                    const isSelf =
+                      item.subject_type === 'user' &&
+                      item.subject_id === currentUserId;
+                    return (
+                      <tr key={key} className="border-b border-app-border/50">
+                        <td className="px-2 py-1">
+                          {canManage && !isSelf ? (
+                            <input
+                              type="checkbox"
+                              aria-label={t(
+                                'admin.workspace.members.selectMember',
+                                {
+                                  name: item.subject_label,
                                 },
-                                disabled: busy,
-                              })),
-                              {
-                                id: 'remove',
-                                label: t(
-                                  'admin.workspace.members.removeFromWorkspace',
-                                ),
-                                onSelect: () =>
-                                  void controller.actions.singleRemove(item),
-                                disabled: busy,
-                                tone: 'danger' as const,
-                                separatorBefore: true,
-                              },
-                            ]}
-                          />
-                        ) : null}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination footer */}
-        {data && data.total > 0 ? (
-          <div className="flex items-center justify-between gap-2">
-            <span className="app-text-caption text-app-ink/60">
-              {(data.page - 1) * data.page_size + 1}-
-              {Math.min(data.page * data.page_size, data.total)} / {data.total}
-            </span>
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                disabled={data.page <= 1 || busy}
-                onClick={() =>
-                  controller.actions.setPage((p) => Math.max(1, p - 1))
-                }
-              >
-                {t('admin.shared.pagination.previous')}
-              </Button>
-              <span className="app-text-caption px-2 text-app-ink/60">
-                {data.page} / {totalPages}
-              </span>
-              <Button
-                variant="ghost"
-                disabled={data.page >= totalPages || busy}
-                onClick={() => controller.actions.setPage((p) => p + 1)}
-              >
-                {t('admin.shared.pagination.next')}
-              </Button>
-            </div>
+                              )}
+                              checked={activeSelectedKeys.has(key)}
+                              onChange={() =>
+                                controller.actions.toggleSelect(item)
+                              }
+                            />
+                          ) : null}
+                        </td>
+                        <td className="app-text-body-sm px-2 py-1">
+                          <span className="font-medium text-app-ink">
+                            {item.subject_label}
+                          </span>
+                          {item.subject_secondary ? (
+                            <span className="ml-2 text-app-ink/50">
+                              {item.subject_secondary}
+                            </span>
+                          ) : null}
+                          {isSelf ? (
+                            <span className="ml-2 text-app-ink/40">
+                              {t('admin.workspace.members.currentUser')}
+                            </span>
+                          ) : null}
+                        </td>
+                        <td className="px-2 py-1">
+                          <MemberRoleBadge role={item.role} />
+                        </td>
+                        <td className="app-text-body-sm px-2 py-1">
+                          {item.user_status === 'invited' ? (
+                            <Badge tone="amber">
+                              {t('admin.shared.status.invitedShort')}
+                            </Badge>
+                          ) : item.user_status === 'suspended' ? (
+                            <Badge tone="amber">
+                              {t('admin.shared.status.suspendedShort')}
+                            </Badge>
+                          ) : (
+                            <span className="text-app-ink/60">
+                              {t('admin.shared.status.activeShort')}
+                            </span>
+                          )}
+                        </td>
+                        <td className="app-text-caption px-2 py-1 text-app-ink/60">
+                          {formatDateLabel(
+                            item.last_login_at,
+                            locale,
+                            timeZone,
+                          )}
+                        </td>
+                        <td className="px-2 py-1 text-right">
+                          {canManage && !isSelf ? (
+                            <DropdownMenu
+                              trigger={
+                                <button
+                                  type="button"
+                                  className="rounded p-1 text-app-ink/60 transition-colors hover:bg-app-surface-sidebar hover:text-app-ink"
+                                  aria-label={t(
+                                    'admin.workspace.members.actions',
+                                  )}
+                                >
+                                  <MoreHorizontal size={14} />
+                                </button>
+                              }
+                              items={[
+                                ...roleOptions.map((option) => ({
+                                  id: `role-${option.value}`,
+                                  label: (
+                                    <span className="flex items-center justify-between gap-2">
+                                      <span>{option.label}</span>
+                                      {item.role === option.value ? (
+                                        <Check
+                                          size={14}
+                                          className="text-app-accent"
+                                        />
+                                      ) : null}
+                                    </span>
+                                  ),
+                                  onSelect: () => {
+                                    if (item.role !== option.value) {
+                                      void controller.actions.singleRoleChange(
+                                        item,
+                                        option.value,
+                                      );
+                                    }
+                                  },
+                                  disabled: busy,
+                                })),
+                                {
+                                  id: 'remove',
+                                  label: t(
+                                    'admin.workspace.members.removeFromWorkspace',
+                                  ),
+                                  onSelect: () =>
+                                    setRemoveConfirm({
+                                      kind: 'single',
+                                      member: item,
+                                    }),
+                                  disabled: busy,
+                                  tone: 'danger' as const,
+                                  separatorBefore: true,
+                                },
+                              ]}
+                            />
+                          ) : null}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
-        ) : null}
-      </div>
-    </Dialog>
+
+          {/* Pagination footer */}
+          {data && data.total > 0 ? (
+            <div className="flex items-center justify-between gap-2">
+              <span className="app-text-caption text-app-ink/60">
+                {(data.page - 1) * data.page_size + 1}-
+                {Math.min(data.page * data.page_size, data.total)} /{' '}
+                {data.total}
+              </span>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  disabled={data.page <= 1 || busy}
+                  onClick={() =>
+                    controller.actions.setPage((p) => Math.max(1, p - 1))
+                  }
+                >
+                  {t('admin.shared.pagination.previous')}
+                </Button>
+                <span className="app-text-caption px-2 text-app-ink/60">
+                  {data.page} / {totalPages}
+                </span>
+                <Button
+                  variant="ghost"
+                  disabled={data.page >= totalPages || busy}
+                  onClick={() => controller.actions.setPage((p) => p + 1)}
+                >
+                  {t('admin.shared.pagination.next')}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </Dialog>
+      {removeConfirm ? (
+        <ConfirmDialog
+          cancelLabel={t('common:actions.cancel')}
+          confirmLabel={t('admin.workspace.members.removeConfirmAction')}
+          description={
+            removeConfirm.kind === 'single'
+              ? t('admin.workspace.members.removeConfirmDescription', {
+                  name: removeConfirm.member.subject_label,
+                  workspace: workspace.name,
+                })
+              : t('admin.workspace.members.bulkRemoveConfirmDescription', {
+                  count: removeConfirm.count,
+                  workspace: workspace.name,
+                })
+          }
+          onCancel={() => setRemoveConfirm(null)}
+          onConfirm={() => {
+            const pending = removeConfirm;
+            setRemoveConfirm(null);
+            if (pending.kind === 'single') {
+              void controller.actions.singleRemove(pending.member);
+            } else {
+              void controller.actions.bulkRemove();
+            }
+          }}
+          open
+          title={
+            removeConfirm.kind === 'single'
+              ? t('admin.workspace.members.removeConfirmTitle', {
+                  name: removeConfirm.member.subject_label,
+                })
+              : t('admin.workspace.members.bulkRemoveConfirmTitle', {
+                  count: removeConfirm.count,
+                })
+          }
+          variant="danger"
+        />
+      ) : null}
+    </>
   );
 }

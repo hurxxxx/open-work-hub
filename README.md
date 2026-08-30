@@ -39,6 +39,18 @@ pnpm e2e:install
 pnpm dev:login-browser-smoke
 ```
 
+Full-stack public-domain user acceptance uses the current development data and real dependencies.
+Keep the first command running, then execute the preflight in another terminal before opening
+isolated `agent-browser` sessions:
+
+```bash
+./dev.sh --with-worker --restart
+OPEN_WORK_HUB_UAT_BASE_URL=https://your-public-dev-domain.example pnpm uat:preflight
+```
+
+The repeatable personas, state restoration rules, and expected evidence are owned by
+[Core Platform User Acceptance](./docs/product/core-platform-user-acceptance.md).
+
 Seed account: `administrator` / `open-work-hub-dev-only`. Dev/minimal settings are rejected by preview/prod.
 
 ## Checks

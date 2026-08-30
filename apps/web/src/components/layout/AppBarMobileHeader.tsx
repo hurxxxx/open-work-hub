@@ -28,6 +28,7 @@ export function AppBarMobileHeader({
     accountTitle: string;
     mobileMenuTitle: string;
     mobileNavigationOpen: string;
+    primaryNavigation: string;
     notificationsTitle: string;
     searchOpen: string;
     searchTitle: string;
@@ -54,7 +55,10 @@ export function AppBarMobileHeader({
   );
 
   return (
-    <div className="flex h-14 shrink-0 items-center gap-2 border-b border-white/10 bg-app-bg-strong px-3 text-white lg:hidden">
+    <nav
+      aria-label={labels.primaryNavigation}
+      className="flex h-14 shrink-0 items-center gap-2 border-b border-white/10 bg-app-bg-strong px-3 text-white lg:hidden"
+    >
       <button
         aria-label={labels.mobileNavigationOpen}
         className="flex size-10 items-center justify-center rounded-xl border border-app-border bg-app-surface text-app-ink shadow-sm transition-colors hover:bg-app-surface-hover"
@@ -110,6 +114,6 @@ export function AppBarMobileHeader({
       >
         {getInitials(currentUser.display_name || currentUser.full_name, 'ID')}
       </button>
-    </div>
+    </nav>
   );
 }

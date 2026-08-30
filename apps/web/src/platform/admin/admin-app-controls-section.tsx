@@ -423,6 +423,7 @@ export function AppControlsSection({
   const toast = useFeedback();
   const [searchParams, setSearchParams] = useSearchParams();
   const workspaceTab = resolveWorkspaceAppsTab(searchParams.get('tab'));
+  const requestedWorkspaceId = searchParams.get('workspace') ?? '';
   const { reload, reloadGlobalApps } = useWorkspaceBootstrapContext();
   const [companyItems, setCompanyItems] = useState<CompanyAppControlItem[]>([]);
   const [defaultItems, setDefaultItems] = useState<WorkspaceAppDefaultItem[]>(
@@ -458,7 +459,12 @@ export function AppControlsSection({
         setSelectedWorkspaceId((current) =>
           current && response.some((workspace) => workspace.id === current)
             ? current
-            : (response[0]?.id ?? ''),
+            : requestedWorkspaceId &&
+                response.some(
+                  (workspace) => workspace.id === requestedWorkspaceId,
+                )
+              ? requestedWorkspaceId
+              : (response[0]?.id ?? ''),
         );
       }
     } catch (caughtError) {
@@ -471,7 +477,18 @@ export function AppControlsSection({
     } finally {
       setLoading(false);
     }
-  }, [page, t, token, workspaceTab]);
+  }, [page, requestedWorkspaceId, t, token, workspaceTab]);
+
+  const selectWorkspace = useCallback(
+    (workspaceId: string) => {
+      setSelectedWorkspaceId(workspaceId);
+      const next = new URLSearchParams(searchParams);
+      next.set('tab', 'overrides');
+      next.set('workspace', workspaceId);
+      setSearchParams(next, { replace: true });
+    },
+    [searchParams, setSearchParams],
+  );
 
   useEffect(() => {
     void loadPrimary();
@@ -712,7 +729,7 @@ export function AppControlsSection({
                           : 'text-app-ink/85 hover:bg-app-surface-sidebar'
                       }`}
                       key={workspace.id}
-                      onClick={() => setSelectedWorkspaceId(workspace.id)}
+                      onClick={() => selectWorkspace(workspace.id)}
                       type="button"
                     >
                       <div className="min-w-0 flex-1">

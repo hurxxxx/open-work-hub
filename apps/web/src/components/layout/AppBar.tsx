@@ -90,6 +90,7 @@ export function AppBar(props: AppBarProps) {
           }),
           mobileNavigationOpen: t('shell:mobileNavigation.open'),
           notificationsTitle: t('shell:notifications.title'),
+          primaryNavigation: t('shell:appBar.primaryNavigation'),
           searchOpen: t('shell:search.open'),
           searchTitle: t('shell:search.title'),
         }}

@@ -13,6 +13,7 @@ import {
 import { buildAppHref } from '@open-work-hub/contracts/app-routes';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
+import { AccessDeniedView } from '@/src/platform/auth/settings-pages';
 import {
   setAppWorkspacePreference,
   type AppsBootstrapResponse,
@@ -36,7 +37,7 @@ export function AppEntryRoute({
   reload: () => void;
 }) {
   const { appId = '' } = useParams<{ appId: string }>();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { t } = useTranslation('shell');
@@ -45,6 +46,11 @@ export function AppEntryRoute({
   const [selectionError, setSelectionError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const attemptedSingleSelectionRef = useRef<string | null>(null);
+  const staticContract = APP_CONTRACT_BY_ID.get(appId as AppId) ?? null;
+  const workspaceUnavailableWithoutMembership = Boolean(
+    staticContract?.availability_scope === 'workspace' &&
+      user?.workspaces.length === 0,
+  );
 
   const entryQueryParams = useMemo(
     () => projectAppEntryQueryParams(searchParams),
@@ -101,6 +107,14 @@ export function AppEntryRoute({
       .finally(() => setSaving(false));
   }, [app, destination, entryDecision, navigate, reload, saving, token]);
 
+  if (workspaceUnavailableWithoutMembership) {
+    return (
+      <AccessDeniedView
+        description={t('launcher.workspaceMembershipRequiredDescription')}
+        title={t('launcher.workspaceMembershipRequiredTitle')}
+      />
+    );
+  }
   if (loading && !bootstrap) {
     return (
       <div className="m-8 h-48 animate-pulse rounded-2xl bg-app-surface" />
@@ -108,6 +122,12 @@ export function AppEntryRoute({
   }
   if (error) {
     return <p className="m-8 text-app-danger">{error}</p>;
+  }
+  if (
+    staticContract?.availability_scope === 'workspace' &&
+    (!app || entryDecision.kind === 'unavailable')
+  ) {
+    return <AccessDeniedView description={t('gates.workspaceAppDenied')} />;
   }
   if (entryDecision.kind === 'unavailable' || !app) {
     return (

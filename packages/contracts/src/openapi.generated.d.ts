@@ -12219,6 +12219,12 @@ export interface components {
             start: string;
             /** End */
             end: string;
+            /** Calendarstart */
+            calendarStart: string;
+            /** Calendarend */
+            calendarEnd: string;
+            /** Calendarallday */
+            calendarAllDay: boolean;
             /**
              * Createdat
              * Format: date-time

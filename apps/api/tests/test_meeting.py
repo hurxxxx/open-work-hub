@@ -22,7 +22,21 @@ def _bootstrap_admin_session(client: TestClient) -> dict:
         },
     )
     assert response.status_code == 201
-    return response.json()
+    session = response.json()
+    _grant_workspace_access(
+        client,
+        session["token"],
+        session["user"]["id"],
+        "administrator",
+        role="admin",
+    )
+    me_response = client.get(
+        "/api/v1/auth/me",
+        headers=_auth_headers(session["token"]),
+    )
+    assert me_response.status_code == 200, me_response.text
+    session["user"] = me_response.json()
+    return session
 
 
 def _create_user_with_workspaces(

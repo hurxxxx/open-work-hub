@@ -20,6 +20,7 @@ const translate: AppBarTranslator = (key, options) =>
     ({
       'auth:settings.mySettings': '내 설정',
       'shell:appBar.favorites': '즐겨찾기',
+      'shell:appBar.primaryNavigation': '주요 앱 탐색',
       'shell:appLauncher.openApp': '앱 열기',
       'shell:helpCenter.open': '도움말',
       'shell:launcher.title': '앱',
@@ -105,6 +106,9 @@ describe('AppBarDesktopRail', () => {
     );
 
     expect(screen.getByRole('button', { name: '협업 / 문서' })).toBeTruthy();
+    expect(
+      screen.getByRole('navigation', { name: '주요 앱 탐색' }),
+    ).toBeTruthy();
     expect(screen.queryByRole('button', { name: '워크스페이스' })).toBeNull();
   });
 

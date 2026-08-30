@@ -156,4 +156,70 @@ describe('AppsSection workspace app defaults', () => {
       'workspace-1',
     );
   });
+
+  it('restores the selected override workspace from the URL after a remount', async () => {
+    vi.mocked(listWorkspaces).mockResolvedValue([
+      {
+        active: true,
+        created_at: null,
+        description: '',
+        doc_count: 0,
+        id: 'workspace-1',
+        key: 'workspace-one',
+        meeting_count: 0,
+        member_count: 2,
+        name: 'Workspace One',
+        team_count: 0,
+        updated_at: null,
+      },
+      {
+        active: true,
+        created_at: null,
+        description: '',
+        doc_count: 0,
+        id: 'workspace-2',
+        key: 'workspace-two',
+        meeting_count: 0,
+        member_count: 3,
+        name: 'Workspace Two',
+        team_count: 0,
+        updated_at: null,
+      },
+    ]);
+    vi.mocked(listWorkspaceAppOverrides).mockImplementation(
+      async (_token, workspaceId) => ({
+        items: [],
+        workspace_id: workspaceId,
+        workspace_key: workspaceId,
+        workspace_name: workspaceId,
+      }),
+    );
+
+    renderWorkspaceApps(
+      '/admin/apps/workspace?tab=overrides&workspace=workspace-2',
+    );
+
+    expect(
+      await screen.findByRole('heading', { name: 'Workspace Two' }),
+    ).toBeTruthy();
+    expect(listWorkspaceAppOverrides).toHaveBeenCalledWith(
+      'test-token',
+      'workspace-2',
+    );
+    expect(screen.getByLabelText('location').textContent).toBe(
+      '?tab=overrides&workspace=workspace-2',
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /Workspace One workspace-one/ }),
+    );
+    expect(screen.getByLabelText('location').textContent).toBe(
+      '?tab=overrides&workspace=workspace-1',
+    );
+    await screen.findByRole('heading', { name: 'Workspace One' });
+    expect(listWorkspaceAppOverrides).toHaveBeenCalledWith(
+      'test-token',
+      'workspace-1',
+    );
+  });
 });

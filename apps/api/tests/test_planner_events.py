@@ -28,9 +28,7 @@ def _workspace_slug_for_key(client: TestClient, token: str, key: str) -> str:
 
 def _set_company_app_control(app_id: str, enabled: bool) -> None:
     with get_session_factory()() as db:
-        row = db.scalar(
-            select(CompanyAppControl).where(CompanyAppControl.app_id == app_id)
-        )
+        row = db.scalar(select(CompanyAppControl).where(CompanyAppControl.app_id == app_id))
         assert row is not None
         row.enabled = enabled
         db.add(row)
@@ -112,6 +110,9 @@ def test_planner_event_crud_happy_path(client: TestClient) -> None:
     assert created["endHasTime"] is True
     assert created["start"] == "2026-05-04T01:00:00+00:00"
     assert created["end"] == "2026-05-04T03:30:00+00:00"
+    assert created["calendarStart"] == created["start"]
+    assert created["calendarEnd"] == created["end"]
+    assert created["calendarAllDay"] is False
 
     detail = client.get(
         f"/api/v1/planner/events/{created['id']}",
@@ -137,6 +138,9 @@ def test_planner_event_crud_happy_path(client: TestClient) -> None:
     assert updated_body["endHasTime"] is False
     assert updated_body["start"] == "2026-05-06"
     assert updated_body["end"] == "2026-05-08"
+    assert updated_body["calendarStart"] == "2026-05-06"
+    assert updated_body["calendarEnd"] == "2026-05-08"
+    assert updated_body["calendarAllDay"] is True
     assert updated_body["location"] == "부산"
 
     listing = client.get(
@@ -267,6 +271,9 @@ def test_planner_event_accepts_partial_or_unspecified_times(client: TestClient) 
     assert start_only["endHasTime"] is False
     assert start_only["start"] == "2026-05-12T00:00:00+00:00"
     assert start_only["end"] == "2026-05-12"
+    assert start_only["calendarStart"] == "2026-05-12T00:00:00+00:00"
+    assert start_only["calendarEnd"] == "2026-05-12T00:30:00+00:00"
+    assert start_only["calendarAllDay"] is False
 
     end_only = _create_planner_event(
         client,
@@ -279,6 +286,9 @@ def test_planner_event_accepts_partial_or_unspecified_times(client: TestClient) 
     assert end_only["endHasTime"] is True
     assert end_only["start"] == "2026-05-13"
     assert end_only["end"] == "2026-05-13T09:00:00+00:00"
+    assert end_only["calendarStart"] == "2026-05-13T08:30:00+00:00"
+    assert end_only["calendarEnd"] == "2026-05-13T09:00:00+00:00"
+    assert end_only["calendarAllDay"] is False
 
     no_time = _create_planner_event(
         client,
@@ -291,6 +301,9 @@ def test_planner_event_accepts_partial_or_unspecified_times(client: TestClient) 
     assert no_time["endHasTime"] is False
     assert no_time["start"] == "2026-05-14"
     assert no_time["end"] == "2026-05-14"
+    assert no_time["calendarStart"] == "2026-05-14"
+    assert no_time["calendarEnd"] == "2026-05-15"
+    assert no_time["calendarAllDay"] is True
 
     calendar = client.get(
         "/api/v1/calendar/events",
@@ -304,11 +317,60 @@ def test_planner_event_accepts_partial_or_unspecified_times(client: TestClient) 
     assert calendar.status_code == 200, calendar.text
     by_title = {item["title"]: item for item in calendar.json()["items"]}
     assert by_title["시작만 있는 일정"]["allDay"] is False
+    assert by_title["시작만 있는 일정"]["start"] == start_only["calendarStart"]
+    assert by_title["시작만 있는 일정"]["end"] == start_only["calendarEnd"]
     assert by_title["시작만 있는 일정"]["metadata"]["plannerEndHasTime"] is False
     assert by_title["종료만 있는 일정"]["allDay"] is False
+    assert by_title["종료만 있는 일정"]["start"] == end_only["calendarStart"]
+    assert by_title["종료만 있는 일정"]["end"] == end_only["calendarEnd"]
     assert by_title["종료만 있는 일정"]["metadata"]["plannerStartHasTime"] is False
     assert by_title["시간 미정 일정"]["allDay"] is True
+    assert by_title["시간 미정 일정"]["start"] == no_time["calendarStart"]
+    assert by_title["시간 미정 일정"]["end"] == no_time["calendarEnd"]
     assert by_title["시간 미정 일정"]["metadata"]["plannerAllDay"] is False
+
+
+def test_planner_event_calendar_bounds_use_server_timezone_rules(
+    client: TestClient,
+) -> None:
+    admin = _bootstrap_admin_session(client)
+    token = admin["token"]
+    preferences = client.patch(
+        "/api/v1/auth/preferences",
+        headers=_auth_headers(token),
+        json={"time_zone": "Africa/Cairo"},
+    )
+    assert preferences.status_code == 200, preferences.text
+
+    event = _create_planner_event(
+        client,
+        token,
+        title="DST 자정 경계",
+        start="2024-04-26",
+        end="2024-04-25T22:10:00+00:00",
+    )
+
+    # Cairo skipped local 00:00 on this date. Python ZoneInfo resolves the
+    # canonical stored day start, and clients consume it without recreating
+    # timezone-gap semantics in the browser.
+    assert event["calendarStart"] == "2024-04-25T22:00:00+00:00"
+    assert event["calendarEnd"] == "2024-04-25T22:10:00+00:00"
+    assert event["calendarAllDay"] is False
+
+    calendar = client.get(
+        "/api/v1/calendar/events",
+        headers=_auth_headers(token),
+        params={
+            "from": "2024-04-25T00:00:00+00:00",
+            "to": "2024-04-27T00:00:00+00:00",
+            "sources": "planner_event",
+        },
+    )
+    assert calendar.status_code == 200, calendar.text
+    projected = next(item for item in calendar.json()["items"] if item["sourceId"] == event["id"])
+    assert projected["start"] == event["calendarStart"]
+    assert projected["end"] == event["calendarEnd"]
+    assert projected["allDay"] == event["calendarAllDay"]
 
 
 def test_meeting_availability_masks_other_users_personal_events(client: TestClient) -> None:

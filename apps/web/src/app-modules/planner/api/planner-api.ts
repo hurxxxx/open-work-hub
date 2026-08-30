@@ -13,6 +13,9 @@ export interface PlannerEvent {
   endHasTime: boolean;
   start: string;
   end: string;
+  calendarStart: string;
+  calendarEnd: string;
+  calendarAllDay: boolean;
   createdAt: string;
   updatedAt: string;
 }
