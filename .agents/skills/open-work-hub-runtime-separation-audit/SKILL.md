@@ -17,9 +17,11 @@ Confirm:
 
 - Dev names/ports/buckets use `open-work-hub-dev`.
 - Prod names/ports/buckets use `open-work-hub-prod`.
-- Prod Compose has no PostgreSQL service.
+- Site-scoped production PostgreSQL keeps the `open-work-hub-postgres` identity; do not rename it to an environment identity without an isolation reason.
 - Dev/prod host ports, Redis, MinIO, OpenSearch, Qdrant do not collide.
+- The production app and privacy-filter ports do not collide with dev or infra ports. The privacy-filter endpoint stays on loopback, and proxy trust lists exact IPs rather than a wildcard.
 - `scripts/infra-stack.sh` blocks prod commands outside `prod` checkout.
+- `scripts/prod-app.sh` blocks production app mutation outside a clean `prod` checkout at `origin/main`.
 - `dev.sh`/`scripts/dev-infra.sh` block dev commands from `prod`.
 - Dev login/minimal seed cannot become prod default.
 

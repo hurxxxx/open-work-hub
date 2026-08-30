@@ -6,21 +6,24 @@ import { pathToFileURL } from 'node:url';
 
 const REQUEST_TIMEOUT_MS = 10_000;
 
-export function normalizePublicBaseUrl(rawValue) {
+export function normalizePublicBaseUrl(
+  rawValue,
+  variableName = 'OPEN_WORK_HUB_UAT_BASE_URL',
+) {
   if (!rawValue?.trim()) {
-    throw new Error('OPEN_WORK_HUB_UAT_BASE_URL is required');
+    throw new Error(`${variableName} is required`);
   }
 
   let url;
   try {
     url = new URL(rawValue);
   } catch {
-    throw new Error('OPEN_WORK_HUB_UAT_BASE_URL must be a valid URL');
+    throw new Error(`${variableName} must be a valid URL`);
   }
 
   const hostname = url.hostname.toLowerCase().replace(/\.$/, '');
   if (url.protocol !== 'https:') {
-    throw new Error('OPEN_WORK_HUB_UAT_BASE_URL must use https');
+    throw new Error(`${variableName} must use https`);
   }
   if (
     !hostname.includes('.') ||
@@ -29,24 +32,25 @@ export function normalizePublicBaseUrl(rawValue) {
     hostname.endsWith('.local') ||
     isIP(hostname) !== 0
   ) {
-    throw new Error('OPEN_WORK_HUB_UAT_BASE_URL must use a public domain name');
+    throw new Error(`${variableName} must use a public domain name`);
   }
   if (url.username || url.password || url.search || url.hash) {
     throw new Error(
-      'OPEN_WORK_HUB_UAT_BASE_URL must not contain credentials, query, or fragment',
+      `${variableName} must not contain credentials, query, or fragment`,
     );
   }
   if (url.pathname !== '/' && url.pathname !== '') {
-    throw new Error(
-      'OPEN_WORK_HUB_UAT_BASE_URL must be an origin without a path',
-    );
+    throw new Error(`${variableName} must be an origin without a path`);
   }
 
   return new URL(`${url.origin}/`);
 }
 
-export function assertRuntimeStatus(output) {
-  for (const service of ['web', 'api', 'worker']) {
+export function assertRuntimeStatus(
+  output,
+  services = ['web', 'api', 'worker'],
+) {
+  for (const service of services) {
     if (!new RegExp(`^${service}\\s+running\\b`, 'm').test(output)) {
       throw new Error(`development ${service} service is not running`);
     }
@@ -59,7 +63,7 @@ export function assertWorkerPing(output) {
   }
 }
 
-export async function assertJsonEndpoint(label, url, expectedStatus) {
+export async function readJsonEndpoint(label, url) {
   const response = await fetchWithTimeout(url);
   if (!response.ok) {
     throw new Error(`${label} returned HTTP ${response.status}`);
@@ -68,9 +72,39 @@ export async function assertJsonEndpoint(label, url, expectedStatus) {
   if (!contentType.toLowerCase().includes('application/json')) {
     throw new Error(`${label} did not return JSON`);
   }
-  const body = await response.json();
+  return response.json();
+}
+
+export async function assertJsonEndpoint(label, url, expectedStatus) {
+  const body = await readJsonEndpoint(label, url);
   if (body?.status !== expectedStatus) {
     throw new Error(`${label} reported status ${String(body?.status)}`);
+  }
+  return body;
+}
+
+export async function assertJsonObjectEndpoint(label, url) {
+  const body = await readJsonEndpoint(label, url);
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    throw new Error(`${label} did not return a JSON object`);
+  }
+  return body;
+}
+
+export function assertMatchingDevRuntime(localHealth, publicHealth) {
+  const fields = ['version', 'environment', 'instance_id', 'runtime_revision'];
+  for (const field of fields) {
+    const localValue = localHealth?.[field];
+    const publicValue = publicHealth?.[field];
+    if (typeof localValue !== 'string' || !localValue) {
+      throw new Error(`local health did not report ${field}`);
+    }
+    if (localValue !== publicValue) {
+      throw new Error(`public health does not match local ${field}`);
+    }
+  }
+  if (localHealth.environment !== 'development') {
+    throw new Error('local health is not a development runtime');
   }
 }
 
@@ -109,36 +143,96 @@ async function fetchWithTimeout(url) {
   }
 }
 
-function localPort(name, fallback) {
-  const value = process.env[name] ?? fallback;
+function localPort(name, fallback, env = process.env) {
+  const value = env[name] ?? fallback;
   if (!/^\d+$/.test(value) || Number(value) < 1 || Number(value) > 65_535) {
     throw new Error(`${name} must be a valid TCP port`);
   }
   return value;
 }
 
-export async function runPreflight() {
-  const publicBaseUrl = normalizePublicBaseUrl(
-    process.env.OPEN_WORK_HUB_UAT_BASE_URL,
-  );
-  const apiPort = localPort('OPEN_WORK_HUB_API_DEV_PORT', '8001');
-  const webPort = localPort('OPEN_WORK_HUB_WEB_DEV_PORT', '4200');
+export async function runPublicDevSmoke({
+  env = process.env,
+  requireWorker = false,
+  statusOutput,
+  report = true,
+} = {}) {
+  const publicBaseUrl = normalizePublicBaseUrl(env.OPEN_WORK_HUB_UAT_BASE_URL);
+  const apiPort = localPort('OPEN_WORK_HUB_API_DEV_PORT', '8001', env);
+  const webPort = localPort('OPEN_WORK_HUB_WEB_DEV_PORT', '4200', env);
   const localApi = new URL(`http://127.0.0.1:${apiPort}/`);
   const localWeb = new URL(`http://127.0.0.1:${webPort}/`);
+
+  const requiredServices = requireWorker
+    ? ['web', 'api', 'worker']
+    : ['web', 'api'];
+  const status =
+    statusOutput ??
+    execFileSync(
+      './dev.sh',
+      requireWorker ? ['--with-worker', '--status'] : ['--status'],
+      {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
+  assertRuntimeStatus(status, requiredServices);
+
+  const [localHealth, publicHealth] = await Promise.all([
+    assertJsonEndpoint('local health', new URL('/healthz', localApi), 'ok'),
+    assertJsonEndpoint(
+      'public health',
+      new URL('/healthz', publicBaseUrl),
+      'ok',
+    ),
+  ]);
+  assertMatchingDevRuntime(localHealth, publicHealth);
+
+  for (const [label, url] of [
+    ['local readiness', new URL('/readyz', localApi)],
+    ['public readiness', new URL('/readyz', publicBaseUrl)],
+  ]) {
+    await assertJsonEndpoint(label, url, 'ok');
+  }
+  await assertJsonObjectEndpoint(
+    'local bootstrap',
+    new URL('/api/v1/auth/bootstrap-status', localApi),
+  );
+  await assertJsonObjectEndpoint(
+    'public bootstrap',
+    new URL('/api/v1/auth/bootstrap-status', publicBaseUrl),
+  );
+  for (const [label, url] of [
+    ['local root', new URL('/', localWeb)],
+    ['local login', new URL('/login', localWeb)],
+    ['public root', new URL('/', publicBaseUrl)],
+    ['public login', new URL('/login', publicBaseUrl)],
+  ]) {
+    await assertLoginPage(label, url);
+  }
+
+  if (report) {
+    process.stdout.write(
+      `Public dev smoke passed for ${publicBaseUrl.origin}: local web and API are running, the public root/login/health/readiness/bootstrap surfaces are available, and public health matches the local development runtime.\n`,
+    );
+  }
+  return { publicBaseUrl };
+}
+
+export async function runPreflight({ env = process.env } = {}) {
+  const { publicBaseUrl } = await runPublicDevSmoke({
+    env,
+    requireWorker: true,
+    report: false,
+  });
   const objectStorageEndpoint = new URL(
-    process.env.OPEN_WORK_HUB_MINIO_ENDPOINT ?? 'http://127.0.0.1:59010',
+    env.OPEN_WORK_HUB_MINIO_ENDPOINT ?? 'http://127.0.0.1:59010',
   );
   if (objectStorageEndpoint.username || objectStorageEndpoint.password) {
     throw new Error(
       'OPEN_WORK_HUB_MINIO_ENDPOINT must not contain credentials',
     );
   }
-
-  const status = execFileSync('./dev.sh', ['--with-worker', '--status'], {
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  assertRuntimeStatus(status);
 
   let workerPing;
   try {
@@ -168,22 +262,10 @@ export async function runPreflight() {
   }
   assertWorkerPing(workerPing);
 
-  const checks = [
-    ['local health', new URL('/healthz', localApi), 'ok'],
-    ['local readiness', new URL('/readyz', localApi), 'ok'],
-    ['public health', new URL('/healthz', publicBaseUrl), 'ok'],
-    ['public readiness', new URL('/readyz', publicBaseUrl), 'ok'],
-  ];
-  for (const [label, url, expectedStatus] of checks) {
-    await assertJsonEndpoint(label, url, expectedStatus);
-  }
   await assertOkEndpoint(
     'object storage health',
     new URL('/minio/health/live', objectStorageEndpoint),
   );
-  await assertLoginPage('local login', new URL('/login', localWeb));
-  await assertLoginPage('public login', new URL('/login', publicBaseUrl));
-
   process.stdout.write(
     `UAT preflight passed for ${publicBaseUrl.origin}: web, api, worker ping, object storage, health, readiness, and the login HTML shell are available.\n`,
   );
@@ -192,7 +274,10 @@ export async function runPreflight() {
 const isMain =
   process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isMain) {
-  runPreflight().catch((error) => {
+  const runner = process.argv.includes('--public-dev-smoke')
+    ? runPublicDevSmoke
+    : runPreflight;
+  runner().catch((error) => {
     const detail = error instanceof Error ? error.message : String(error);
     process.stderr.write(`UAT preflight failed: ${detail}\n`);
     process.exitCode = 1;

@@ -1,0 +1,12 @@
+{
+  "name": "@open-work-hub/collab-codec-runtime",
+  "version": "0.0.1",
+  "private": true,
+  "dependencies": {
+    "@blocknote/core": "^0.52.1",
+    "@blocknote/react": "^0.52.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "yjs": "^13.6.30"
+  }
+}

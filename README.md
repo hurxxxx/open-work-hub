@@ -45,8 +45,13 @@ isolated `agent-browser` sessions:
 
 ```bash
 ./dev.sh --with-worker --restart
+OPEN_WORK_HUB_UAT_BASE_URL=https://your-public-dev-domain.example pnpm dev:public-smoke
 OPEN_WORK_HUB_UAT_BASE_URL=https://your-public-dev-domain.example pnpm uat:preflight
 ```
+
+`dev:public-smoke` is the focused recovery gate: it requires the local Web/API listeners and checks
+that the public root, login, health, readiness, and bootstrap surfaces resolve to the same development
+runtime. `uat:preflight` additionally requires the Worker and object storage.
 
 The repeatable personas, state restoration rules, and expected evidence are owned by
 [Core Platform User Acceptance](./docs/product/core-platform-user-acceptance.md).

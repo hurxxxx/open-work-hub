@@ -16,7 +16,14 @@ SETTINGS_FILE_PARTS = [
     Path("apps/worker/src/open_work_hub_worker/settings.py"),
 ]
 SETTINGS_FILES = [ROOT / part for part in SETTINGS_FILE_PARTS]
-DEPLOY_ENV_KEYS: frozenset[str] = frozenset()
+DEPLOY_ENV_KEYS: frozenset[str] = frozenset(
+    {
+        "OPEN_WORK_HUB_APP_BIND_HOST",
+        "OPEN_WORK_HUB_APP_FORWARDED_ALLOW_IPS",
+        "OPEN_WORK_HUB_APP_PORT",
+        "OPEN_WORK_HUB_APP_PUBLIC_URL",
+    }
+)
 
 FORBIDDEN_ENV_KEYS = frozenset(
     {

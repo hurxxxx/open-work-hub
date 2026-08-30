@@ -1,0 +1,141 @@
+name: open-work-hub-prod-app
+
+x-open-work-hub-app: &open-work-hub-app
+  image: open-work-hub-app:prod
+  network_mode: host
+  env_file:
+    - ../../.env
+  environment: &open-work-hub-app-environment
+    OPEN_WORK_HUB_API_AUTO_MIGRATE: "0"
+    OPEN_WORK_HUB_API_FRONTEND_DIST_DIR: /opt/open-work-hub/dist/apps/web
+    OPEN_WORK_HUB_API_RECORDING_SPOOL_DIR: /opt/open-work-hub/.runtime/recording-spool
+    OPEN_WORK_HUB_API_SERVE_FRONTEND: "true"
+    OPEN_WORK_HUB_OPF_CACHE_DIR: /opt/open-work-hub/.runtime/opf-cache
+  init: true
+  volumes:
+    - open-work-hub-prod-app-runtime:/opt/open-work-hub/.runtime
+
+services:
+  migrate:
+    <<: *open-work-hub-app
+    command:
+      - apps/api/.venv/bin/python
+      - -c
+      - from open_work_hub_api.core.db import run_migrations; run_migrations()
+    restart: "no"
+
+  api:
+    <<: *open-work-hub-app
+    container_name: open-work-hub-prod-api
+    depends_on:
+      privacy-filter:
+        condition: service_healthy
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        exec apps/api/.venv/bin/uvicorn open_work_hub_api.main:app \
+          --app-dir apps/api/src \
+          --host "$${OPEN_WORK_HUB_APP_BIND_HOST:-127.0.0.1}" \
+          --port "$${OPEN_WORK_HUB_APP_PORT:-14201}" \
+          --proxy-headers \
+          --forwarded-allow-ips "$${OPEN_WORK_HUB_APP_FORWARDED_ALLOW_IPS:-127.0.0.1}"
+    restart: unless-stopped
+    stop_grace_period: 45s
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          apps/api/.venv/bin/python -c
+          'import os, urllib.request;
+          urllib.request.urlopen(
+          "http://127.0.0.1:" + os.environ.get("OPEN_WORK_HUB_APP_PORT", "14201") + "/healthz",
+          timeout=5).read()'
+      interval: 15s
+      timeout: 8s
+      retries: 12
+      start_period: 90s
+
+  privacy-filter:
+    <<: *open-work-hub-app
+    container_name: open-work-hub-prod-privacy-filter
+    command:
+      - apps/api/.venv/bin/python
+      - -c
+      - |
+        import os
+        from urllib.parse import urlparse
+        import uvicorn
+        endpoint = urlparse(os.environ["OPEN_WORK_HUB_OPF_SERVICE_BASE_URL"])
+        uvicorn.run(
+            "open_work_hub_api.domains.ai.privacy_filter_service:app",
+            app_dir="apps/api/src",
+            host=endpoint.hostname,
+            port=endpoint.port,
+        )
+    restart: unless-stopped
+    stop_grace_period: 45s
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          apps/api/.venv/bin/python -c
+          'import json, os, urllib.request;
+          body = json.load(urllib.request.urlopen(
+          os.environ["OPEN_WORK_HUB_OPF_SERVICE_BASE_URL"].rstrip("/") + "/healthz",
+          timeout=5));
+          assert body.get("ready") is True'
+      interval: 15s
+      timeout: 8s
+      retries: 20
+      start_period: 5m
+
+  worker:
+    <<: *open-work-hub-app
+    container_name: open-work-hub-prod-worker
+    environment:
+      <<: *open-work-hub-app-environment
+      OPEN_WORK_HUB_WORKER_QUEUE_GROUP: all
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        queues="$$(apps/worker/.venv/bin/python -m open_work_hub_worker.queue_contract --celery-queues)"
+        exec apps/worker/.venv/bin/celery \
+          -A open_work_hub_worker.celery_app:celery_app worker \
+          --loglevel=info \
+          --queues "$${queues}" \
+          --hostname "prod-worker@%h"
+    restart: unless-stopped
+    stop_grace_period: 65m
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          apps/worker/.venv/bin/celery
+          -A open_work_hub_worker.celery_app:celery_app inspect ping
+          --destination "prod-worker@$$(hostname)" --timeout 5
+          | grep -q pong
+      interval: 20s
+      timeout: 10s
+      retries: 12
+      start_period: 45s
+
+  beat:
+    <<: *open-work-hub-app
+    container_name: open-work-hub-prod-beat
+    environment:
+      <<: *open-work-hub-app-environment
+      OPEN_WORK_HUB_WORKER_QUEUE_GROUP: beat
+    command:
+      - apps/worker/.venv/bin/celery
+      - -A
+      - open_work_hub_worker.celery_app:celery_app
+      - beat
+      - --loglevel=info
+    restart: unless-stopped
+    stop_grace_period: 45s
+
+volumes:
+  open-work-hub-prod-app-runtime:
+    name: open-work-hub-prod-app-runtime
