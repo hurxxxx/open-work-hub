@@ -32,11 +32,14 @@ vi.mock('@/src/platform/auth/auth-provider', () => ({
 vi.mock('@open-work-hub/ui', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@open-work-hub/ui')>()),
   DropdownMenu: ({
+    trigger,
     items,
   }: {
+    trigger: ReactNode;
     items: Array<{ id: string; label: ReactNode; onSelect?: () => void }>;
   }) => (
     <div>
+      {trigger}
       {items.map((item) => (
         <button key={item.id} onClick={item.onSelect} type="button">
           {item.label}
@@ -139,6 +142,11 @@ describe('WorkspaceDetailPanel lifecycle actions', () => {
     renderPanel();
     await screen.findByText('Member Two');
 
+    const actionsButton = screen.getByRole('button', {
+      name: 'admin.workspace.members.actions',
+    });
+    actionsButton.focus();
+
     fireEvent.click(
       screen.getByRole('button', {
         name: 'admin.workspace.members.removeFromWorkspace',
@@ -153,6 +161,7 @@ describe('WorkspaceDetailPanel lifecycle actions', () => {
       }),
     );
     expect(removeWorkspaceMember).not.toHaveBeenCalled();
+    await waitFor(() => expect(document.activeElement).toBe(actionsButton));
 
     fireEvent.click(
       screen.getByRole('button', {
@@ -269,6 +278,38 @@ describe('WorkspaceDetailPanel lifecycle actions', () => {
         },
       ),
     );
+  });
+
+  it('returns focus to the member actions button after cancelling removal', async () => {
+    renderPanel();
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'admin.workspace.members.manage',
+      }),
+    );
+    const drawer = await screen.findByRole('dialog', {
+      name: 'admin.workspace.members.manageTitle',
+    });
+    await within(drawer).findByText('Member Two');
+    const actionsButton = within(drawer).getByRole('button', {
+      name: 'admin.workspace.members.actions',
+    });
+    actionsButton.focus();
+
+    fireEvent.click(
+      within(drawer).getByRole('button', {
+        name: 'admin.workspace.members.removeFromWorkspace',
+      }),
+    );
+    fireEvent.click(
+      within(
+        await screen.findByRole('dialog', {
+          name: 'admin.workspace.members.removeConfirmTitle',
+        }),
+      ).getByRole('button', { name: 'common:actions.cancel' }),
+    );
+
+    await waitFor(() => expect(document.activeElement).toBe(actionsButton));
   });
 });
 

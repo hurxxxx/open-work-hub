@@ -30,12 +30,17 @@ import {
   Select,
   useConfirm,
 } from '@open-work-hub/ui';
+import {
+  NOTIFICATION_REALTIME_EVENT_TYPES,
+  normalizeNotificationRealtimeEvent,
+} from '@open-work-hub/contracts/notifications';
 
 import { UserDateTime } from '@/src/components/date/UserDateTime';
 import { hasAdminConsoleAccess } from '@/src/platform/auth/auth-api';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { authenticatedContentObjectUrl } from '@/src/platform/browser/browser-download';
 import { useMediaUpload } from '@/src/platform/media/use-media-upload';
+import { useRealtimeEvent } from '@/src/platform/realtime/realtime-provider';
 
 import {
   createCommunityComment,
@@ -301,6 +306,48 @@ export function CommunityView() {
     },
     [token, unlockedPasswords],
   );
+
+  const refreshSelectedPost = useCallback(() => {
+    if (!selectedPostId) return;
+    void reloadDetail(selectedPostId).catch(() => undefined);
+  }, [reloadDetail, selectedPostId]);
+
+  const handleCommunityNotification = useCallback(
+    (event: Parameters<typeof normalizeNotificationRealtimeEvent>[0]) => {
+      const notificationEvent = normalizeNotificationRealtimeEvent(event);
+      const notification = notificationEvent?.data.notification;
+      if (
+        !selectedPostId ||
+        notification?.origin_app_id !== 'community' ||
+        notification.source_type !== 'community_post' ||
+        notification.source_id !== selectedPostId
+      ) {
+        return;
+      }
+      refreshSelectedPost();
+    },
+    [refreshSelectedPost, selectedPostId],
+  );
+
+  useRealtimeEvent(
+    NOTIFICATION_REALTIME_EVENT_TYPES.created,
+    handleCommunityNotification,
+  );
+
+  useEffect(() => {
+    if (!selectedPostId) return;
+    const refreshWhenVisible = () => {
+      if (document.visibilityState !== 'hidden') {
+        refreshSelectedPost();
+      }
+    };
+    window.addEventListener('focus', refreshWhenVisible);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      window.removeEventListener('focus', refreshWhenVisible);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, [refreshSelectedPost, selectedPostId]);
 
   useEffect(() => {
     detailMediaGenerationRef.current += 1;
@@ -690,10 +737,10 @@ export function CommunityView() {
                     <Hash size={18} className="shrink-0 text-app-ink/45" />
                     <span className="truncate">{activeChannelTitle}</span>
                   </div>
-                  <div className="mt-1 app-text-body-sm text-app-ink/55">
+                  <div className="mt-1 app-text-body-sm text-app-ink/70">
                     {activeChannelDescription}
                   </div>
-                  <div className="mt-1 app-text-caption text-app-ink/45">
+                  <div className="mt-1 app-text-caption text-app-ink/70">
                     {t('community.threadCount', { count: total })}
                   </div>
                   {activeChannelReadOnly ? (

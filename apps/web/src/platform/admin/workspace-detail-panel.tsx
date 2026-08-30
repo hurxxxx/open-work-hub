@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -171,6 +172,7 @@ function useWorkspaceDetailPanelElement({
     variant: 'default' | 'danger';
     onConfirm: () => Promise<void>;
   }>(null);
+  const confirmReturnFocusRef = useRef<HTMLElement | null>(null);
   const [membersDrawerOpen, setMembersDrawerOpen] = useState(false);
   const [addState, setAddState] = useState<WorkspaceAddMemberState>(() =>
     createWorkspaceAddMemberState(null),
@@ -437,8 +439,11 @@ function useWorkspaceDetailPanelElement({
     confirmLabel: string;
     variant: 'default' | 'danger';
     onConfirm: () => Promise<void>;
+    returnFocusTarget?: HTMLElement | null;
   }) {
-    setConfirmState(spec);
+    const { returnFocusTarget = null, ...confirmSpec } = spec;
+    confirmReturnFocusRef.current = returnFocusTarget;
+    setConfirmState(confirmSpec);
   }
 
   async function handleDrawerChanged() {
@@ -651,7 +656,7 @@ function useWorkspaceDetailPanelElement({
                   onChangeRole={(role) =>
                     void handleChangeMemberRole(binding, role)
                   }
-                  onRemove={() =>
+                  onRemove={(returnFocusTarget) =>
                     openConfirm({
                       title: t('admin.workspace.members.removeConfirmTitle', {
                         name: binding.subject_label,
@@ -668,6 +673,7 @@ function useWorkspaceDetailPanelElement({
                       ),
                       variant: 'danger',
                       onConfirm: () => handleRemoveMember(binding),
+                      returnFocusTarget,
                     })
                   }
                 />
@@ -729,6 +735,7 @@ function useWorkspaceDetailPanelElement({
           confirmLabel={confirmState.confirmLabel}
           cancelLabel={t('common:actions.cancel')}
           variant={confirmState.variant}
+          returnFocusRef={confirmReturnFocusRef}
           onConfirm={() => {
             const action = confirmState.onConfirm;
             setConfirmState(null);
@@ -779,9 +786,10 @@ function WorkspaceMemberRow({
   isCurrentUser: boolean;
   busy: boolean;
   onChangeRole: (role: string) => void;
-  onRemove: () => void;
+  onRemove: (returnFocusTarget: HTMLElement | null) => void;
 }) {
   const { t } = useTranslation('apps');
+  const actionsButtonRef = useRef<HTMLButtonElement | null>(null);
   const roleOptions = getWorkspaceRoleOptions(t);
   const showMenu = canManage && !isCurrentUser;
   const items: Parameters<typeof DropdownMenu>[0]['items'] = [
@@ -810,7 +818,7 @@ function WorkspaceMemberRow({
     {
       id: 'remove',
       label: t('admin.workspace.members.removeFromWorkspace'),
-      onSelect: onRemove,
+      onSelect: () => onRemove(actionsButtonRef.current),
       disabled: busy,
       tone: 'danger' as const,
       separatorBefore: true,
@@ -843,6 +851,7 @@ function WorkspaceMemberRow({
         <DropdownMenu
           trigger={
             <button
+              ref={actionsButtonRef}
               type="button"
               className="rounded p-1 text-app-ink/60 transition-colors hover:bg-app-surface-sidebar hover:text-app-ink"
               aria-label={t('admin.workspace.members.actions')}
@@ -1339,6 +1348,8 @@ function useWorkspaceMembersDrawerElement({
     | { kind: 'bulk'; count: number }
     | null
   >(null);
+  const confirmReturnFocusRef = useRef<HTMLElement | null>(null);
+  const memberActionButtonRefs = useRef(new Map<string, HTMLButtonElement>());
   const controller = useWorkspaceMembersDrawerController({
     open,
     workspace,
@@ -1484,12 +1495,13 @@ function useWorkspaceMembersDrawerElement({
                 </div>
                 <Button
                   variant="ghost"
-                  onClick={() =>
+                  onClick={(event) => {
+                    confirmReturnFocusRef.current = event.currentTarget;
                     setRemoveConfirm({
                       kind: 'bulk',
                       count: activeSelectedKeys.size,
-                    })
-                  }
+                    });
+                  }}
                   disabled={busy}
                   className="text-[var(--ui-color-danger)]"
                 >
@@ -1628,6 +1640,18 @@ function useWorkspaceMembersDrawerElement({
                             <DropdownMenu
                               trigger={
                                 <button
+                                  ref={(node) => {
+                                    if (node) {
+                                      memberActionButtonRefs.current.set(
+                                        key,
+                                        node,
+                                      );
+                                    } else {
+                                      memberActionButtonRefs.current.delete(
+                                        key,
+                                      );
+                                    }
+                                  }}
                                   type="button"
                                   className="rounded p-1 text-app-ink/60 transition-colors hover:bg-app-surface-sidebar hover:text-app-ink"
                                   aria-label={t(
@@ -1666,11 +1690,15 @@ function useWorkspaceMembersDrawerElement({
                                   label: t(
                                     'admin.workspace.members.removeFromWorkspace',
                                   ),
-                                  onSelect: () =>
+                                  onSelect: () => {
+                                    confirmReturnFocusRef.current =
+                                      memberActionButtonRefs.current.get(key) ??
+                                      null;
                                     setRemoveConfirm({
                                       kind: 'single',
                                       member: item,
-                                    }),
+                                    });
+                                  },
                                   disabled: busy,
                                   tone: 'danger' as const,
                                   separatorBefore: true,
@@ -1746,6 +1774,7 @@ function useWorkspaceMembersDrawerElement({
             }
           }}
           open
+          returnFocusRef={confirmReturnFocusRef}
           title={
             removeConfirm.kind === 'single'
               ? t('admin.workspace.members.removeConfirmTitle', {
