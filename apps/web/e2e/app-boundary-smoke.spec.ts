@@ -63,9 +63,7 @@ test.describe('AI-friendly app boundary smoke', () => {
     await page.locator('a[href="/apps/docs"]').click();
     await expect(page).toHaveURL(/\/apps\/docs\/workspaces\/hq$/);
     await expect(
-      page.getByRole('button', {
-        name: /이 앱의 워크스페이스|Workspace for this app/,
-      }),
+      page.getByLabel(/이 앱의 워크스페이스|Workspace for this app/),
     ).toContainText('Open Work Hub HQ');
 
     await page.goto('/apps/planner');
