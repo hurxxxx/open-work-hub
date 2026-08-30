@@ -8,7 +8,7 @@ description: Maintain Open Work Hub's GitLab Codex MR review policy, runner scri
 ## Contract
 
 - Branch and MR authorization lives in root `AGENTS.md`; CI files own job routing and target policy.
-- CI job calls installed runner entrypoint, not MR-source script.
+- CI job calls installed runner entrypoint, not MR-source script. Its trusted policy is the runner prompt plus target-SHA root/scoped `AGENTS.md` selected by changed path.
 - Codex receives no tokens, credentialed remotes, `.env`, MR note bodies, raw prompts, customer/ops data.
 - Runner fails closed for job identity, source/target/evidence freshness, unresolved discussions, merge simulation, final comment.
 - Final output has `## 병합 가능 여부` plus exactly one token: `MERGE_READY` or `MERGE_BLOCKED`.

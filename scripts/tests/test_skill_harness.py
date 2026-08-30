@@ -136,6 +136,71 @@ class SkillHarnessScannerTest(unittest.TestCase):
             self.messages(report),
         )
 
+    def test_reports_skill_line_and_description_limits(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_text(
+                root / ".agents" / "skills" / "long-lines" / "SKILL.md",
+                valid_skill_text("long-lines") + ("step\n" * 130),
+            )
+            write_text(
+                root / ".agents" / "skills" / "long-description" / "SKILL.md",
+                "---\n"
+                "name: long-description\n"
+                f"description: {'x' * 390} Use when testing limits.\n"
+                "---\n\n# Skill\n",
+            )
+
+            report = self.evaluate(
+                root,
+                required_skills={"long-lines", "long-description"},
+            )
+
+        self.assertIn("skill_guide_too_long", self.codes(report))
+        self.assertIn("skill_description_too_long", self.codes(report))
+        self.assertIn("130 lines", self.messages(report))
+        self.assertIn("400", self.messages(report))
+
+    def test_reports_instruction_scope_size_and_bridge_contracts(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_text(
+                root / ".agents" / "skills" / "clean" / "SKILL.md",
+                valid_skill_text("clean"),
+            )
+            write_text(root / "AGENTS.md", "rule\n" * 61)
+            write_text(root / "apps" / "api" / "AGENTS.md", "rule\n" * 25)
+            write_text(
+                root / "apps" / "api" / "CLAUDE.md",
+                "@AGENTS.md\nExtra duplicated rule.\n",
+            )
+            write_text(root / "packages" / "extra" / "AGENTS.md", "rule\n")
+
+            report = self.evaluate(root, required_skills={"clean"})
+
+        codes = self.codes(report)
+        self.assertIn("unexpected_agent_instruction", codes)
+        self.assertIn("agent_instruction_too_long", codes)
+        self.assertIn("invalid_scoped_claude_bridge", codes)
+        messages = self.messages(report)
+        self.assertIn("packages/extra/AGENTS.md", messages)
+        self.assertIn("AGENTS.md: 61 lines", messages)
+        self.assertIn("apps/api/AGENTS.md: 25 lines", messages)
+
+    def test_reports_lowercase_agents_filename_references(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_text(
+                root / ".agents" / "skills" / "clean" / "SKILL.md",
+                valid_skill_text("clean"),
+            )
+            write_text(root / "README.md", "Read agents.md before changing code.\n")
+
+            report = self.evaluate(root, required_skills={"clean"})
+
+        self.assertIn("lowercase_agents_reference", self.codes(report))
+        self.assertIn("README.md", self.messages(report))
+
     def test_reports_missing_required_resources(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
