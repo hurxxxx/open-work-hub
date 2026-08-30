@@ -1503,7 +1503,7 @@ function useWorkspaceMembersDrawerElement({
                     });
                   }}
                   disabled={busy}
-                  className="text-[var(--ui-color-danger)]"
+                  className="text-app-danger-text"
                 >
                   {t('common:actions.delete')}
                 </Button>

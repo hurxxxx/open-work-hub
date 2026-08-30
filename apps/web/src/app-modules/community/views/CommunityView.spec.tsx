@@ -230,6 +230,52 @@ describe('CommunityView', () => {
     expect(getCommunityPost).toHaveBeenCalledTimes(2);
   });
 
+  it('coalesces focus and visibility refreshes while a post refresh is in flight', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={['/apps/community/posts/post-1?channel=general']}
+      >
+        <Routes>
+          <Route
+            path="/apps/community/posts/:postId"
+            element={<CommunityView />}
+          />
+          <Route path="/apps/community" element={<CommunityView />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole('heading', { name: 'Post title' });
+    await waitFor(() => expect(getCommunityPost).toHaveBeenCalledTimes(1));
+    const initialDetail =
+      await vi.mocked(getCommunityPost).mock.results[0].value;
+
+    let resolveRefresh: (() => void) | undefined;
+    vi.mocked(getCommunityPost).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveRefresh = () => resolve(initialDetail);
+        }),
+    );
+
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+      window.dispatchEvent(new Event('focus'));
+    });
+
+    expect(getCommunityPost).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      resolveRefresh?.();
+    });
+
+    act(() => {
+      window.dispatchEvent(new Event('focus'));
+    });
+
+    await waitFor(() => expect(getCommunityPost).toHaveBeenCalledTimes(3));
+  });
+
   it('uses readable channel metadata contrast classes', async () => {
     render(
       <MemoryRouter initialEntries={['/apps/community?channel=general']}>

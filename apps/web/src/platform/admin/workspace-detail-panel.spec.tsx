@@ -239,11 +239,11 @@ describe('WorkspaceDetailPanel lifecycle actions', () => {
         name: 'admin.workspace.members.selectMember',
       }),
     );
-    fireEvent.click(
-      within(reloadedDrawer).getByRole('button', {
-        name: 'common:actions.delete',
-      }),
-    );
+    const bulkDeleteButton = within(reloadedDrawer).getByRole('button', {
+      name: 'common:actions.delete',
+    });
+    expect(bulkDeleteButton.className).toContain('text-app-danger-text');
+    fireEvent.click(bulkDeleteButton);
     const bulkConfirmation = await screen.findByRole('dialog', {
       name: 'admin.workspace.members.bulkRemoveConfirmTitle',
     });
@@ -254,11 +254,7 @@ describe('WorkspaceDetailPanel lifecycle actions', () => {
     );
     expect(bulkWorkspaceMembers).not.toHaveBeenCalled();
 
-    fireEvent.click(
-      within(reloadedDrawer).getByRole('button', {
-        name: 'common:actions.delete',
-      }),
-    );
+    fireEvent.click(bulkDeleteButton);
     fireEvent.click(
       within(
         await screen.findByRole('dialog', {

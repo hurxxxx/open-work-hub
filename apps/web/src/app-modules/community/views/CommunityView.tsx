@@ -156,6 +156,9 @@ export function CommunityView() {
   const [detail, setDetail] = useState<CommunityPostDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const selectedPostRefreshInFlightRef = useRef<{ postId: string } | null>(
+    null,
+  );
   const detailMediaGenerationRef = useRef(0);
   const detailMediaObjectUrlsRef = useRef(new Set<string>());
   const [composerOpen, setComposerOpen] = useState(false);
@@ -308,8 +311,20 @@ export function CommunityView() {
   );
 
   const refreshSelectedPost = useCallback(() => {
-    if (!selectedPostId) return;
-    void reloadDetail(selectedPostId).catch(() => undefined);
+    const postId = selectedPostId;
+    if (!postId || selectedPostRefreshInFlightRef.current?.postId === postId) {
+      return;
+    }
+
+    const refresh = { postId };
+    selectedPostRefreshInFlightRef.current = refresh;
+    void reloadDetail(postId)
+      .catch(() => undefined)
+      .finally(() => {
+        if (selectedPostRefreshInFlightRef.current === refresh) {
+          selectedPostRefreshInFlightRef.current = null;
+        }
+      });
   }, [reloadDetail, selectedPostId]);
 
   const handleCommunityNotification = useCallback(
