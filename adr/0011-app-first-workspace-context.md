@@ -16,7 +16,9 @@ A global workspace selection made the entire shell appear workspace-scoped while
   - workspace execution: `/apps/:appId/workspaces/:workspaceSlug/...`
   - global/shared execution: `/apps/:appId/...`
 - No legacy browser route, redirect, alias, or inferred global workspace context is retained.
-- The App Bar has no workspace selector. Workspace apps render the selector at the top of their app submenu. Platform apps and shared routes do not render or bootstrap workspace context.
+- The App Bar has no workspace selector. Workspace apps render the selector in their app-owned context surface, such as the app submenu or Home header. Platform apps and shared routes do not render or bootstrap workspace context.
+- Shell app navigation preserves the route workspace only when the target is also a workspace app enabled in that workspace. This is a resolved link destination, not global workspace state.
+- When the target workspace app is unavailable in the route workspace, navigation uses the target app entry resolution and previews its eligible saved or single-workspace destination. Platform apps never inherit route workspace context.
 - A workspace slug is a locator, not authorization. The server rechecks active membership, role, app availability, resource ACL, and any AI approval at execution.
 - App availability is fail-closed and evaluated in this order:
   1. company control must enable the app;
@@ -30,6 +32,8 @@ A global workspace selection made the entire shell appear workspace-scoped while
   - one eligible workspace: persist it as the app preference and enter it;
   - multiple eligible workspaces: use an eligible saved preference, otherwise show a chooser.
 - The saved preference key is `(user_id, app_id)`. Changing workspace inside one app does not change another app.
+- Implicit app-to-app continuity does not update a saved preference. Only an explicit chooser or in-app workspace selection updates the target app preference.
+- In-app workspace selection enters the target workspace at the app root. Detail identifiers, query parameters, and fragments are not projected across workspace boundaries.
 - Internal links, notifications, search/RAG origins, workers, and shares use the generated route contract; producers do not assemble browser paths independently.
 - Queued/provider execution rechecks app availability after claim and before provider resolution or mutation. Disabled work pauses or cancels under the queue's explicit terminal-state contract.
 - Settings/admin remains a shell-owned navigation surface rather than an executable app identity.
@@ -49,6 +53,7 @@ A global workspace selection made the entire shell appear workspace-scoped while
 ## Consequences
 
 - Route context matches the app that owns it, so company/personal apps no longer appear to inherit a selected workspace.
+- Workspace app navigation retains user orientation when the current scope is valid, while destination previews make fallback workspace changes explicit.
 - App enablement changes apply consistently to launcher, route gates, APIs, search, AI, and background work.
 - New app registration must declare one leaf identity and explicit route contexts before it can be composed.
 - Removing the former global default workspace and legacy visibility/entitlement tables is an intentional breaking development-stage migration.

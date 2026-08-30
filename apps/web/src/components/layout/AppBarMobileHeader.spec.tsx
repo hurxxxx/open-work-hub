@@ -8,6 +8,7 @@ describe('AppBarMobileHeader', () => {
   it('exposes the mobile app bar as named primary navigation', () => {
     render(
       <AppBarMobileHeader
+        activeContextLabel="Personal scope"
         activeAppTitle="Planner"
         canOpenWorkspaceSearch={false}
         currentUser={
@@ -38,5 +39,6 @@ describe('AppBarMobileHeader', () => {
     expect(
       screen.getByRole('navigation', { name: 'Primary apps' }),
     ).toBeTruthy();
+    expect(screen.getByText('Personal scope')).toBeTruthy();
   });
 });

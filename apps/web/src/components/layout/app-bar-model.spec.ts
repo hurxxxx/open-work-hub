@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Home } from 'lucide-react';
 
-import type {
-  AppBarItem,
-  LauncherGlobalPaths,
-} from '@/src/app/shell/navigation-types';
-import type { AuthUser } from '@/src/platform/auth/auth-api';
+import type { AppBarItem } from '@/src/app/shell/navigation-types';
 import type {
   WorkspaceBootstrapAppBarCategory,
   WorkspaceBootstrapApp,
@@ -14,25 +10,12 @@ import {
   INITIAL_APP_BAR_STATE,
   appBarReducer,
   buildAppBarItemsProjection,
-  buildAppLink,
   buildNotificationIssueHref,
   buildVisibleAppBarItems,
   buildWorkspaceSearchHref,
   resolvePinnedAppIds,
   type AppBarTranslator,
 } from './app-bar-model';
-
-type Workspace = AuthUser['workspaces'][number];
-
-function workspace(overrides: Partial<Workspace>): Workspace {
-  return {
-    id: 'workspace-hq',
-    slug: 'hq',
-    name: 'Open Work Hub HQ',
-    role: 'owner',
-    ...overrides,
-  };
-}
 
 function app(overrides: Partial<WorkspaceBootstrapApp>): WorkspaceBootstrapApp {
   return {
@@ -57,11 +40,6 @@ const LAUNCHER_POLICY = {
   fixedAppIds: new Set(['home']),
   pinnedByDefaultAppIds: ['pms', 'docs', 'whiteboard'],
 } as const;
-
-const LAUNCHER_GLOBAL_PATHS: LauncherGlobalPaths = new Map([
-  ['community', '/apps/community'],
-  ['planner', '/apps/planner'],
-]);
 
 const APP_BAR_CATEGORIES: WorkspaceBootstrapAppBarCategory[] = [
   {
@@ -193,45 +171,18 @@ describe('app-bar model', () => {
     expect(projection.activeAppTitle).toBe('데이터 시각화');
   });
 
-  it('uses app entries without carrying workspace context across apps', () => {
-    const user = {
-      id: 'user-1',
-      workspaces: [workspace({ slug: 'hq' })],
-    } as AuthUser;
-
-    expect(buildAppLink('docs', user, 'hq', LAUNCHER_GLOBAL_PATHS)).toBe(
-      '/apps/docs',
-    );
-    expect(buildAppLink('community', user, 'hq', LAUNCHER_GLOBAL_PATHS)).toBe(
-      '/apps/community',
-    );
-    expect(buildAppLink('community', user, 'hq', new Map())).toBe(
-      '/apps/community',
-    );
-    expect(buildAppLink('docs', user, null, new Map())).toBe('/apps/docs');
-  });
-
   it('builds notification issue links from the injected owner app', () => {
-    const user = {
-      id: 'user-1',
-      workspaces: [workspace({ slug: 'hq' })],
-    } as AuthUser;
-
     expect(
       buildNotificationIssueHref({
         appId: 'pms',
-        currentUser: user,
         launcherGlobalPaths: new Map(),
-        shellWorkspaceSlug: 'hq',
         taskId: 'task / 1',
       }),
     ).toBe('/apps/pms?task=task%20%2F%201');
     expect(
       buildNotificationIssueHref({
         appId: null,
-        currentUser: user,
         launcherGlobalPaths: new Map(),
-        shellWorkspaceSlug: 'hq',
         taskId: 'task-1',
       }),
     ).toBeNull();

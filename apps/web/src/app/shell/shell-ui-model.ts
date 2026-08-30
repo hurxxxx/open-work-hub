@@ -3,8 +3,6 @@ import {
   APP_CONTRACT_BY_ID,
   type AppId,
 } from '@open-work-hub/contracts/app-contracts';
-import { buildAppEntryHref } from '@open-work-hub/contracts/app-routes';
-import type { LauncherGlobalPaths } from './navigation-types';
 import type { WorkspaceAppId } from '@/src/platform/workspaces/workspace-utils';
 
 export type ResolvedThemePreference = 'light' | 'dark';
@@ -65,17 +63,4 @@ export function resolveAppDisplayScope(
   return contract.execution_context_kind === 'personal'
     ? 'personal'
     : 'company';
-}
-
-export function resolveMobileAppLink(
-  appId: WorkspaceAppId,
-  launcherGlobalPaths: LauncherGlobalPaths,
-): string {
-  const globalPath = launcherGlobalPaths.get(appId);
-  if (globalPath) {
-    return globalPath;
-  }
-
-  const contract = APP_CONTRACT_BY_ID.get(appId as AppId);
-  return contract ? buildAppEntryHref(contract.app_id) : '/';
 }

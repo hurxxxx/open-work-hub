@@ -3,21 +3,21 @@ import { AnimatePresence } from 'motion/react';
 
 import { AppBarDesktopRail } from './AppBarDesktopRail';
 import { AppBarMobileHeader } from './AppBarMobileHeader';
-import {
-  buildAppLink,
-  type AppBarAppLinkResolver,
-  type AppBarProps,
-} from './app-bar-model';
+import { type AppBarAppLinkResolver, type AppBarProps } from './app-bar-model';
 import { useAppBarController } from './useAppBarController';
 import { useNotificationPanelFocus } from './useNotificationPanelFocus';
-import { EMPTY_LAUNCHER_GLOBAL_PATHS } from '@/src/app/shell/navigation-types';
+import {
+  translateAppLaunchContext,
+  translateAppLaunchLabel,
+} from '@/src/app/shell/app-launch-destination';
 
 export function AppBar(props: AppBarProps) {
   const {
     activeAppId,
+    activeContextLabel,
     canOpenMobileAppMenu,
+    currentWorkspaceName,
     currentUser,
-    launcherGlobalPaths = EMPTY_LAUNCHER_GLOBAL_PATHS,
     onDesktopMenuOpenChange,
     onDesktopRailMouseEnter,
     onDesktopRailMouseLeave,
@@ -25,6 +25,7 @@ export function AppBar(props: AppBarProps) {
     onOpenHelp,
     onOpenMobileAppMenu,
     onOpenMobileNavigation,
+    resolveAppDestination,
     shellWorkspaceSlug,
     workspaceAppBarCategories,
   } = props;
@@ -32,13 +33,6 @@ export function AppBar(props: AppBarProps) {
   const notificationsEnabled =
     props.notificationsEnabled ?? Boolean(NotificationPanel);
   const controller = useAppBarController({ ...props, notificationsEnabled });
-  const resolveAppLink: AppBarAppLinkResolver = (appId) =>
-    buildAppLink(
-      appId,
-      currentUser,
-      props.currentWorkspaceAppIds?.includes(appId) ? shellWorkspaceSlug : null,
-      launcherGlobalPaths,
-    );
   const {
     activeAppTitle,
     canOpenWorkspaceSearch,
@@ -63,6 +57,12 @@ export function AppBar(props: AppBarProps) {
     state,
     t,
   } = controller;
+  const resolveAppLink: AppBarAppLinkResolver = (appId) =>
+    resolveAppDestination(appId).href;
+  const resolveAppContextLabel = (appId: string) =>
+    translateAppLaunchContext(resolveAppDestination(appId), t);
+  const resolveAppLabel = (appId: string, title: string) =>
+    translateAppLaunchLabel(title, resolveAppDestination(appId), t);
   const desktopMenuOpen =
     state.favoritesOpen ||
     Boolean(state.categoryMenuId) ||
@@ -79,15 +79,21 @@ export function AppBar(props: AppBarProps) {
   return (
     <>
       <AppBarMobileHeader
+        activeContextLabel={activeContextLabel}
         activeAppTitle={activeAppTitle}
         canOpenMobileAppMenu={canOpenMobileAppMenu}
         canOpenWorkspaceSearch={canOpenWorkspaceSearch}
         currentUser={currentUser}
         labels={{
           accountTitle: t('auth:settings.mySettings'),
-          mobileMenuTitle: t('shell:mobileAppMenu.title', {
-            title: activeAppTitle,
-          }),
+          mobileMenuTitle: activeContextLabel
+            ? t('shell:mobileAppMenu.titleWithContext', {
+                context: activeContextLabel,
+                title: activeAppTitle,
+              })
+            : t('shell:mobileAppMenu.title', {
+                title: activeAppTitle,
+              }),
           mobileNavigationOpen: t('shell:mobileNavigation.open'),
           notificationsTitle: t('shell:notifications.title'),
           primaryNavigation: t('shell:appBar.primaryNavigation'),
@@ -113,6 +119,7 @@ export function AppBar(props: AppBarProps) {
         canOpenWorkspaceSearch={canOpenWorkspaceSearch}
         currentUser={currentUser}
         currentPathname={props.currentPathname}
+        currentWorkspaceName={currentWorkspaceName}
         draftItems={draftItems}
         draftPinnedAppIds={state.draftPinnedAppIds}
         fixedItems={fixedItems}
@@ -139,6 +146,8 @@ export function AppBar(props: AppBarProps) {
         pinnedEligibleAppIds={pinnedEligibleAppIds}
         pinnedItems={pinnedItems}
         resolveAppLink={resolveAppLink}
+        resolveAppContextLabel={resolveAppContextLabel}
+        resolveAppLabel={resolveAppLabel}
         t={t}
         unreadCount={state.unreadCount}
         workspaceAppBarCategories={workspaceAppBarCategories}

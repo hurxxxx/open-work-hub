@@ -284,7 +284,9 @@ test.describe('AI-friendly app boundary smoke', () => {
       page.getByRole('heading', { name: '접근 권한 없음' }),
     ).toBeVisible();
     await expect(
-      page.getByText('현재 workspace에서는 이 앱이 활성화되어 있지 않습니다.'),
+      page.getByText(
+        '현재 워크스페이스에서는 이 앱이 활성화되어 있지 않습니다.',
+      ),
     ).toBeVisible();
     await expect(page.getByRole('link', { name: 'MEETING' })).toHaveCount(0);
     errors.expectClean();

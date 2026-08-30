@@ -23,7 +23,7 @@ import {
   projectAppEntryQueryParams,
   resolveAppEntryDecision,
 } from './app-entry-model';
-import { useEligibleWorkspaceSearch } from './useEligibleWorkspaceSearch';
+import { useEligibleWorkspaceSearch } from '@/src/platform/workspaces/useEligibleWorkspaceSearch';
 
 export function AppEntryRoute({
   bootstrap,

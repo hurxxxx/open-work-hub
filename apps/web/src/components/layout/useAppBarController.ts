@@ -198,9 +198,7 @@ export function useAppBarController({
     (taskId: string) => {
       const issueHref = buildNotificationIssueHref({
         appId: notificationIssueAppId,
-        currentUser,
         launcherGlobalPaths,
-        shellWorkspaceSlug,
         taskId,
       });
       if (!issueHref) {
@@ -208,13 +206,7 @@ export function useAppBarController({
       }
       navigate(issueHref);
     },
-    [
-      currentUser,
-      launcherGlobalPaths,
-      navigate,
-      notificationIssueAppId,
-      shellWorkspaceSlug,
-    ],
+    [launcherGlobalPaths, navigate, notificationIssueAppId],
   );
 
   const visibleItems = useMemo(

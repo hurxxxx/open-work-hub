@@ -9,6 +9,7 @@ import type {
   AppBarItem,
   LauncherGlobalPaths,
 } from '@/src/app/shell/navigation-types';
+import type { AppLaunchDestinationResolver } from '@/src/app/shell/app-launch-destination';
 import type {
   AppBarLayoutPreference,
   AuthUser,
@@ -92,6 +93,7 @@ export const INITIAL_APP_BAR_STATE: AppBarState = {
 
 export type AppBarProps = {
   activeAppId: string;
+  activeContextLabel: string | null;
   appBarFixedAppIds?: readonly string[];
   appBarItems?: readonly AppBarItem[];
   appBarPinnedByDefaultAppIds?: readonly string[];
@@ -99,6 +101,7 @@ export type AppBarProps = {
   canOpenMobileAppMenu?: boolean;
   currentPathname: string;
   currentUser: AuthUser;
+  currentWorkspaceName: string | null;
   launcherGlobalPaths?: LauncherGlobalPaths;
   /** App that owns issue destinations surfaced by the notification adapter. */
   notificationIssueAppId?: string | null;
@@ -111,8 +114,8 @@ export type AppBarProps = {
   onDesktopRailMouseLeave?: () => void;
   onOpenHelp: () => void;
   onOpenMobileAppMenu?: () => void;
+  resolveAppDestination: AppLaunchDestinationResolver;
   shellWorkspaceSlug: string | null;
-  currentWorkspaceAppIds?: readonly string[];
   workspaceAppBarCategories: WorkspaceBootstrapAppBarCategory[];
   workspaceApps: WorkspaceBootstrapApp[];
   onOpenAccount: () => void;
@@ -256,10 +259,8 @@ export function getInitials(label: string, fallback: string): string {
   return initials || fallback;
 }
 
-export function buildAppLink(
+function buildNotificationAppEntryLink(
   appId: WorkspaceAppId,
-  _currentUser: AuthUser,
-  _shellWorkspaceSlug: string | null,
   launcherGlobalPaths: LauncherGlobalPaths,
 ): string {
   const globalPath = launcherGlobalPaths.get(appId);
@@ -274,24 +275,18 @@ export function buildAppLink(
 
 export function buildNotificationIssueHref({
   appId,
-  currentUser,
   launcherGlobalPaths,
-  shellWorkspaceSlug,
   taskId,
 }: {
   appId: string | null | undefined;
-  currentUser: AuthUser;
   launcherGlobalPaths: LauncherGlobalPaths;
-  shellWorkspaceSlug: string | null;
   taskId: string;
 }): string | null {
   if (!appId) {
     return null;
   }
-  const appPath = buildAppLink(
+  const appPath = buildNotificationAppEntryLink(
     appId as WorkspaceAppId,
-    currentUser,
-    shellWorkspaceSlug,
     launcherGlobalPaths,
   );
   return appPath === '/'
@@ -300,6 +295,11 @@ export function buildNotificationIssueHref({
 }
 
 export type AppBarAppLinkResolver = (appId: WorkspaceAppId) => string;
+export type AppBarAppContextLabelResolver = (appId: WorkspaceAppId) => string;
+export type AppBarAppLabelResolver = (
+  appId: WorkspaceAppId,
+  title: string,
+) => string;
 
 export function buildVisibleAppBarItems(
   workspaceApps: WorkspaceBootstrapApp[],

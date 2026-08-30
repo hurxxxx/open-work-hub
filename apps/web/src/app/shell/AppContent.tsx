@@ -94,7 +94,7 @@ import { AppLauncherView } from './AppLauncherView';
 import { AccessRefreshBoundary } from './AccessRefreshBoundary';
 import { createAccessProjectionKey } from './access-projection-key';
 import { resolveAppRouteContext } from './app-route-context';
-import { WorkspaceContextSelector } from './WorkspaceContextSelector';
+import { WorkspaceContextSelector } from '@/src/platform/workspaces/WorkspaceContextSelector';
 import {
   WorkspaceRouteElements,
   type ShellWorkspaceRouteDefinition,
@@ -121,7 +121,6 @@ import {
 import {
   getSystemDarkModeSnapshot,
   resolveAppDisplayScope,
-  resolveMobileAppLink,
   resolveThemePreference,
   subscribeSystemDarkMode,
 } from './shell-ui-model';
@@ -142,6 +141,12 @@ import type {
   AppBarNotificationPanelComponent,
   AppBarNotificationUnreadCountLoader,
 } from '@/src/components/layout/app-bar-model';
+import {
+  resolveAppLaunchDestination,
+  translateAppLaunchContext,
+  translateAppLaunchLabel,
+  type AppLaunchDestinationResolver,
+} from './app-launch-destination';
 
 export type ShellProviderComponent = ComponentType<{ children: ReactNode }>;
 export type ShellRealtimeProviderComponent = ComponentType<{
@@ -159,6 +164,20 @@ function NoopShellRealtimeProvider({
   token: string | null;
 }) {
   return children;
+}
+
+function ExecutionScopeIndicator({ label }: { label: string }) {
+  const { t } = useTranslation('shell');
+  return (
+    <div className="border-b border-app-border px-3 py-3">
+      <div className="app-text-overline text-app-ink/55">
+        {t('workspaceContext.executionScopeLabel')}
+      </div>
+      <div className="app-text-body-sm mt-1.5 rounded-lg border border-app-border bg-app-bg px-3 py-2 text-app-ink">
+        {label}
+      </div>
+    </div>
+  );
 }
 
 export interface WorkspaceAppScope {
@@ -252,7 +271,6 @@ function MobileNavigationDrawer({
   activeAppId,
   appBarFixedAppIds,
   appBarItems,
-  launcherGlobalPaths,
   currentPathname,
   currentUser,
   getDefaultAdminPath,
@@ -260,12 +278,12 @@ function MobileNavigationDrawer({
   appBarCategories,
   onOpenChange,
   open,
+  resolveAppDestination,
   workspaceApps,
 }: {
   activeAppId: string;
   appBarFixedAppIds: readonly string[];
   appBarItems: readonly AppBarItem[];
-  launcherGlobalPaths: LauncherGlobalPaths;
   currentPathname: string;
   currentUser: AuthUser;
   getDefaultAdminPath: DefaultAdminPathResolver;
@@ -273,6 +291,7 @@ function MobileNavigationDrawer({
   appBarCategories: readonly WorkspaceBootstrapAppBarCategory[];
   onOpenChange: (open: boolean) => void;
   open: boolean;
+  resolveAppDestination: AppLaunchDestinationResolver;
   workspaceApps: WorkspaceBootstrapApp[];
 }) {
   const { t } = useTranslation(['common', 'shell']);
@@ -288,7 +307,7 @@ function MobileNavigationDrawer({
     workspaceApps,
   }).map((item) => ({
     ...item,
-    scope: resolveAppDisplayScope(item.linkAppId),
+    destination: resolveAppDestination(item.linkAppId),
     title:
       item.type === 'app'
         ? t(`shell:apps.${item.id}`, { defaultValue: item.title })
@@ -340,8 +359,13 @@ function MobileNavigationDrawer({
             </Link>
             {visibleItems.map((item) => (
               <Link
+                aria-label={translateAppLaunchLabel(
+                  item.title,
+                  item.destination,
+                  t,
+                )}
                 key={item.id}
-                to={resolveMobileAppLink(item.linkAppId, launcherGlobalPaths)}
+                to={item.destination.href}
                 className={cn(
                   'flex items-center gap-3 rounded-xl px-3 py-2 text-app-ink transition-colors hover:bg-app-surface-hover',
                   item.activeAppIds.includes(
@@ -354,15 +378,9 @@ function MobileNavigationDrawer({
                   <span className="app-text-body-sm block truncate">
                     {item.title}
                   </span>
-                  {item.scope ? (
-                    <span className="app-text-micro block truncate text-app-ink/50">
-                      {item.scope === 'workspace'
-                        ? t('shell:launcher.workspaceApp')
-                        : item.scope === 'personal'
-                          ? t('shell:launcher.personalApp')
-                          : t('shell:launcher.companyApp')}
-                    </span>
-                  ) : null}
+                  <span className="app-text-micro block truncate text-app-ink/50">
+                    {translateAppLaunchContext(item.destination, t)}
+                  </span>
                 </span>
                 {item.activeAppIds.includes(
                   navigationActiveAppId as WorkspaceAppId,
@@ -738,6 +756,56 @@ function AuthenticatedShell({
       app.enabled ? [app.app_id] : [],
     );
   }, [scopedWorkspaceBootstrapData]);
+  const currentWorkspace = useMemo(() => {
+    if (!routeWorkspaceSlug) {
+      return null;
+    }
+    const workspace =
+      scopedWorkspaceBootstrapData?.workspace ??
+      currentUser?.workspaces.find(
+        (candidate) => candidate.slug === routeWorkspaceSlug,
+      ) ??
+      null;
+    return workspace
+      ? {
+          id: workspace.id,
+          name: workspace.name,
+          slug: workspace.slug,
+        }
+      : null;
+  }, [
+    currentUser?.workspaces,
+    routeWorkspaceSlug,
+    scopedWorkspaceBootstrapData?.workspace,
+  ]);
+  const currentWorkspaceAppIdSet = useMemo(
+    () =>
+      routeWorkspaceSlug && enabledWorkspaceAppIds
+        ? new Set(enabledWorkspaceAppIds)
+        : null,
+    [enabledWorkspaceAppIds, routeWorkspaceSlug],
+  );
+  const launchAppById = useMemo(
+    () =>
+      new Map((appsBootstrap.data?.apps ?? []).map((app) => [app.app_id, app])),
+    [appsBootstrap.data?.apps],
+  );
+  const resolveAppDestination = useCallback<AppLaunchDestinationResolver>(
+    (appId) =>
+      resolveAppLaunchDestination({
+        app: launchAppById.get(appId) ?? null,
+        appId,
+        currentWorkspace,
+        currentWorkspaceAppIds: currentWorkspaceAppIdSet,
+        launcherGlobalPaths,
+      }),
+    [
+      currentWorkspace,
+      currentWorkspaceAppIdSet,
+      launchAppById,
+      launcherGlobalPaths,
+    ],
+  );
   const activeWorkspaceContext =
     appRouteContext.kind === 'workspace' &&
     enabledWorkspaceAppIds?.includes(appRouteContext.appId)
@@ -800,6 +868,18 @@ function AuthenticatedShell({
     activeAppId,
     pathname: locationPathname,
   });
+  const activeDisplayScope = resolveAppDisplayScope(
+    activeDisplayAppId as WorkspaceAppId,
+  );
+  const currentWorkspaceName = currentWorkspace?.name ?? routeWorkspaceSlug;
+  const activeContextLabel =
+    activeDisplayScope === 'workspace'
+      ? currentWorkspaceName
+      : activeDisplayScope === 'personal'
+        ? t('shell:launcher.personalScope')
+        : activeDisplayScope === 'company'
+          ? t('shell:launcher.companyScope')
+          : null;
   const canRenderDesktopSubSidebar =
     showSubSidebar && activeAppId !== 'profile';
   const subSidebarCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -1105,13 +1185,14 @@ function AuthenticatedShell({
           <div className="flex h-screen flex-col overflow-hidden bg-app-surface-sidebar text-app-ink transition-colors lg:flex-row">
             <AppBar
               activeAppId={activeDisplayAppId}
+              activeContextLabel={activeContextLabel}
               appBarFixedAppIds={appBarFixedAppIds}
               appBarItems={appBarItems}
               appBarPinnedByDefaultAppIds={appBarPinnedByDefaultAppIds}
               canOpenMobileAppMenu={canOpenMobileAppMenu}
               currentUser={currentUser}
               currentPathname={locationPathname}
-              currentWorkspaceAppIds={enabledWorkspaceAppIds ?? []}
+              currentWorkspaceName={currentWorkspaceName}
               launcherGlobalPaths={launcherGlobalPaths}
               notificationIssueAppId={notificationIssueAppId}
               onDesktopMenuOpenChange={setDesktopAppBarMenuOpen}
@@ -1120,6 +1201,7 @@ function AuthenticatedShell({
               onOpenHelp={() => setHelpOpen(true)}
               onOpenMobileAppMenu={() => setMobileAppMenuOpen(true)}
               onOpenMobileNavigation={() => setMobileNavOpen(true)}
+              resolveAppDestination={resolveAppDestination}
               shellWorkspaceSlug={shellWorkspaceSlug}
               workspaceApps={shellAppsBootstrap.apps}
               workspaceAppBarCategories={shellAppsBootstrap.appBarCategories}
@@ -1192,6 +1274,12 @@ function AuthenticatedShell({
                               workspaceSlug={
                                 activeWorkspaceContext.workspaceSlug
                               }
+                            />
+                          ) : activeContextLabel &&
+                            (activeDisplayScope === 'company' ||
+                              activeDisplayScope === 'personal') ? (
+                            <ExecutionScopeIndicator
+                              label={activeContextLabel}
                             />
                           ) : undefined
                         }
@@ -1286,11 +1374,11 @@ function AuthenticatedShell({
               appBarItems={appBarItems}
               currentPathname={locationPathname}
               currentUser={currentUser}
-              launcherGlobalPaths={launcherGlobalPaths}
               getDefaultAdminPath={getDefaultAdminPath}
               hasAnyAdminReadPermission={hasAnyAdminReadPermission}
               onOpenChange={setMobileNavOpen}
               open={mobileNavOpen}
+              resolveAppDestination={resolveAppDestination}
               workspaceApps={shellAppsBootstrap.apps}
             />
 
@@ -1313,6 +1401,10 @@ function AuthenticatedShell({
                       onPreferenceChanged={appsBootstrap.reload}
                       workspaceSlug={activeWorkspaceContext.workspaceSlug}
                     />
+                  ) : activeContextLabel &&
+                    (activeDisplayScope === 'company' ||
+                      activeDisplayScope === 'personal') ? (
+                    <ExecutionScopeIndicator label={activeContextLabel} />
                   ) : undefined
                 }
                 launcherGlobalPaths={launcherGlobalPaths}

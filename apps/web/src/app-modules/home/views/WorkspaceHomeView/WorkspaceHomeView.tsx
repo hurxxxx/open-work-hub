@@ -41,7 +41,11 @@ import {
   type AppId,
 } from '@open-work-hub/contracts/app-contracts';
 import { buildAppHref } from '@open-work-hub/contracts/app-routes';
-import { useWorkspaceBootstrapProjection } from '@/src/platform/workspaces/workspace-bootstrap-context';
+import {
+  useWorkspaceBootstrapContext,
+  useWorkspaceBootstrapProjection,
+} from '@/src/platform/workspaces/workspace-bootstrap-context';
+import { WorkspaceContextSelector } from '@/src/platform/workspaces/WorkspaceContextSelector';
 import type { WorkspaceBootstrapNavItem } from '@/src/platform/workspaces/workspaces-api';
 import { getKoreanHolidayNames } from '@/src/lib/korean-holidays';
 import {
@@ -138,13 +142,17 @@ function SectionHeader({
 }
 
 function WorkspaceHomeHeader({
+  onPreferenceChanged,
   timeZone,
   userName,
   workspaceName,
+  workspaceSlug,
 }: {
+  onPreferenceChanged?: () => void;
   timeZone: string;
   userName: string;
   workspaceName: string;
+  workspaceSlug: string;
 }) {
   const { t, i18n } = useTranslation('apps');
   const now = new Date();
@@ -162,7 +170,15 @@ function WorkspaceHomeHeader({
           {t('home.workspaceLabel')}
         </span>
       </div>
-      <h1 className="app-text-title-lg text-app-ink">{workspaceName}</h1>
+      <div className="flex flex-wrap items-center gap-2">
+        <h1 className="app-text-title-lg text-app-ink">{workspaceName}</h1>
+        <WorkspaceContextSelector
+          appId="home"
+          onPreferenceChanged={onPreferenceChanged}
+          variant="compact"
+          workspaceSlug={workspaceSlug}
+        />
+      </div>
       <p className="app-text-body mt-1 text-app-ink/55">
         {getHomeGreeting(timeZone, t)}, {userName}
         <span className="mx-2 text-gray-300 dark:text-app-ink/40">/</span>
@@ -500,6 +516,7 @@ export const WorkspaceHomeView = () => {
   const { workspaceSlug = '' } = useParams();
   const { apps: workspaceApps, loading: workspaceAppsLoading } =
     useWorkspaceBootstrapProjection();
+  const { reloadGlobalApps } = useWorkspaceBootstrapContext();
   const currentWorkspace =
     user?.workspaces.find((workspace) => workspace.slug === workspaceSlug) ??
     null;
@@ -559,8 +576,10 @@ export const WorkspaceHomeView = () => {
     <div className="custom-scrollbar h-full overflow-y-auto">
       <div className="w-full space-y-6 px-8 py-10">
         <WorkspaceHomeHeader
+          onPreferenceChanged={reloadGlobalApps}
           userName={userName}
           workspaceName={workspaceName}
+          workspaceSlug={workspaceSlug}
           timeZone={timeZone}
         />
         <BriefingBanner briefing={briefing} />

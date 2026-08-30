@@ -6,6 +6,7 @@ import { getInitials } from './app-bar-model';
 import { AppBarNotificationButton } from './AppBarNotificationButton';
 
 export function AppBarMobileHeader({
+  activeContextLabel,
   activeAppTitle,
   canOpenMobileAppMenu,
   canOpenWorkspaceSearch,
@@ -20,6 +21,7 @@ export function AppBarMobileHeader({
   notificationsEnabled,
   unreadCount,
 }: {
+  activeContextLabel: string | null;
   activeAppTitle: string;
   canOpenMobileAppMenu?: boolean;
   canOpenWorkspaceSearch: boolean;
@@ -43,13 +45,21 @@ export function AppBarMobileHeader({
   unreadCount: number;
 }) {
   const mobileTitle = (
-    <div className="app-text-body-sm truncate font-semibold text-white">
-      <span>{activeAppTitle}</span>
-      {canOpenMobileAppMenu ? (
-        <ChevronDown
-          size={13}
-          className="ml-1 inline-block align-[-2px] text-white/70"
-        />
+    <div className="min-w-0">
+      <div className="app-text-body-sm truncate font-semibold text-white">
+        <span>{activeAppTitle}</span>
+        {canOpenMobileAppMenu ? (
+          <ChevronDown
+            aria-hidden
+            size={13}
+            className="ml-1 inline-block align-[-2px] text-white/70"
+          />
+        ) : null}
+      </div>
+      {activeContextLabel ? (
+        <div className="app-text-micro truncate text-white/65">
+          {activeContextLabel}
+        </div>
       ) : null}
     </div>
   );

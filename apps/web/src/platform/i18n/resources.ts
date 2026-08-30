@@ -81,6 +81,7 @@ export const resources = {
         close: '{{title}} 메뉴 닫기',
         description: '현재 앱 안에서 이동합니다.',
         title: '{{title}} 메뉴',
+        titleWithContext: '{{title}} 메뉴 — 현재 범위 {{context}}',
       },
       search: {
         open: '통합검색 열기',
@@ -256,8 +257,10 @@ export const resources = {
         appUnavailable: '이 앱을 사용할 수 없습니다.',
         availableWorkspaceCount: '사용 가능한 워크스페이스 {{count}}개',
         companyApp: '전사 앱',
+        companyScope: '전사 범위',
+        chooseWorkspaceForApp: '{{app}} — 워크스페이스 선택 필요',
         description:
-          '사용 가능한 앱을 먼저 선택하세요. 워크스페이스 앱은 앱 안에서 작업 공간을 선택합니다.',
+          '앱을 선택하세요. 워크스페이스 앱은 현재 작업 공간을 우선 유지하고, 필요한 경우 목적지를 먼저 안내합니다.',
         eyebrow: '앱 중심 작업 공간',
         manageWorkspaces: '워크스페이스 관리',
         noAppsDescription:
@@ -266,9 +269,16 @@ export const resources = {
         noWorkspaceDescription:
           '계정에 제공된 전사 앱과 개인 앱은 워크스페이스 없이 사용할 수 있습니다. 워크스페이스 앱은 관리자가 멤버십을 추가하면 표시됩니다.',
         noWorkspaceTitle: '아직 소속된 워크스페이스가 없습니다',
+        openCompanyApp: '{{app}} — 전사 범위에서 열기',
+        openPersonalApp: '{{app}} — 개인 범위에서 열기',
+        opensInWorkspace: '{{workspace}}에서 열림',
+        openWorkspaceApp: '{{app}} — {{workspace}}에서 열기',
         personalApp: '개인 앱',
+        personalScope: '개인 범위',
         title: '앱 런처',
+        unavailableAppLabel: '{{app}} — 사용할 수 없음',
         workspaceApp: '워크스페이스 앱',
+        workspaceSelectionRequired: '워크스페이스 선택 필요',
         workspaceMembershipRequiredDescription:
           '이 앱은 워크스페이스 멤버십이 필요합니다. 관리자에게 워크스페이스 추가를 요청하세요.',
         workspaceMembershipRequiredTitle: '워크스페이스 접근이 필요합니다',
@@ -281,10 +291,12 @@ export const resources = {
         retry: '다시 시도',
       },
       workspaceContext: {
+        change: '변경',
         chooseDescription:
           '이 앱을 사용할 워크스페이스를 선택하세요. 선택은 앱별로 저장됩니다.',
         chooseTitle: '{{app}}에서 사용할 워크스페이스 선택',
         currentUnavailable: '현재 워크스페이스 사용 불가',
+        executionScopeLabel: '실행 범위',
         label: '이 앱의 워크스페이스',
         loadFailed: '워크스페이스 목록을 불러오지 못했습니다.',
         loading: '워크스페이스를 불러오는 중입니다.',
@@ -293,6 +305,9 @@ export const resources = {
         retry: '다시 시도',
         searchLabel: '워크스페이스 검색',
         searchPlaceholder: '이름 또는 주소로 검색',
+        switchFailedTitle: '워크스페이스를 변경하지 못했습니다.',
+        switchedDescription: '앱 홈으로 이동했습니다.',
+        switchedTitle: '{{workspace}}로 전환했습니다.',
       },
       appBarEditor: {
         allApps: '전체 앱',
@@ -6052,6 +6067,7 @@ export const resources = {
         close: 'Close {{title}} menu',
         description: 'Navigate within the current app.',
         title: '{{title}} menu',
+        titleWithContext: '{{title}} menu — current scope: {{context}}',
       },
       search: {
         open: 'Open global search',
@@ -6230,8 +6246,10 @@ export const resources = {
         availableWorkspaceCount_one: '{{count}} available workspace',
         availableWorkspaceCount_other: '{{count}} available workspaces',
         companyApp: 'Company app',
+        companyScope: 'Company scope',
+        chooseWorkspaceForApp: '{{app}} — choose a workspace',
         description:
-          'Choose an app first. Workspace apps let you select the working space inside the app.',
+          'Choose an app. Workspace apps keep your current workspace when possible and preview a different destination when needed.',
         eyebrow: 'App-first workspace',
         manageWorkspaces: 'Manage workspaces',
         noAppsDescription:
@@ -6240,9 +6258,16 @@ export const resources = {
         noWorkspaceDescription:
           'Any company or personal apps made available to your account work without a workspace. Workspace apps appear after an admin adds your membership.',
         noWorkspaceTitle: 'You do not belong to a workspace yet',
+        openCompanyApp: 'Open {{app}} in company scope',
+        openPersonalApp: 'Open {{app}} in personal scope',
+        opensInWorkspace: 'Opens in {{workspace}}',
+        openWorkspaceApp: 'Open {{app}} in {{workspace}}',
         personalApp: 'Personal app',
+        personalScope: 'Personal scope',
         title: 'App launcher',
+        unavailableAppLabel: '{{app}} — unavailable',
         workspaceApp: 'Workspace app',
+        workspaceSelectionRequired: 'Workspace selection required',
         workspaceMembershipRequiredDescription:
           'This app requires workspace membership. Ask an admin to add you to a workspace.',
         workspaceMembershipRequiredTitle: 'Workspace access required',
@@ -6254,10 +6279,12 @@ export const resources = {
         retry: 'Retry',
       },
       workspaceContext: {
+        change: 'Change',
         chooseDescription:
           'Choose the workspace for this app. Your choice is saved per app.',
         chooseTitle: 'Choose a workspace for {{app}}',
         currentUnavailable: 'Current workspace unavailable',
+        executionScopeLabel: 'Execution scope',
         label: 'Workspace for this app',
         loadFailed: 'Could not load the workspace list.',
         loading: 'Loading workspaces.',
@@ -6266,6 +6293,9 @@ export const resources = {
         retry: 'Retry',
         searchLabel: 'Search workspaces',
         searchPlaceholder: 'Search by name or address',
+        switchFailedTitle: 'Could not change the workspace.',
+        switchedDescription: 'Moved to the app home.',
+        switchedTitle: 'Switched to {{workspace}}.',
       },
       appBarEditor: {
         allApps: 'All apps',

@@ -15,7 +15,7 @@ vi.mock('@/src/platform/auth/auth-provider', () => ({
   }),
 }));
 
-vi.mock('./useEligibleWorkspaceSearch', () => ({
+vi.mock('@/src/platform/workspaces/useEligibleWorkspaceSearch', () => ({
   useEligibleWorkspaceSearch: () => ({
     error: null,
     hasMore: false,

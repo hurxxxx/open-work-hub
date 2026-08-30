@@ -21,6 +21,8 @@ import { AppBarNotificationButton } from './AppBarNotificationButton';
 import {
   createAppBarItemById,
   getInitials,
+  type AppBarAppContextLabelResolver,
+  type AppBarAppLabelResolver,
   type AppBarAppLinkResolver,
   type AppBarTranslator,
   type AppBarWorkspaceItem,
@@ -37,6 +39,7 @@ export function AppBarDesktopRail({
   canOpenWorkspaceSearch,
   currentUser,
   currentPathname,
+  currentWorkspaceName,
   draftItems,
   draftPinnedAppIds,
   fixedItems,
@@ -63,6 +66,8 @@ export function AppBarDesktopRail({
   pinnedEligibleAppIds,
   pinnedItems,
   resolveAppLink,
+  resolveAppContextLabel,
+  resolveAppLabel,
   t,
   unreadCount,
   workspaceAppBarCategories,
@@ -75,6 +80,7 @@ export function AppBarDesktopRail({
   canOpenWorkspaceSearch: boolean;
   currentUser: AuthUser;
   currentPathname: string;
+  currentWorkspaceName: string | null;
   draftItems: AppBarWorkspaceItem[];
   draftPinnedAppIds: WorkspaceAppId[];
   fixedItems: AppBarWorkspaceItem[];
@@ -101,6 +107,8 @@ export function AppBarDesktopRail({
   pinnedEligibleAppIds: ReadonlySet<WorkspaceAppId>;
   pinnedItems: AppBarWorkspaceItem[];
   resolveAppLink: AppBarAppLinkResolver;
+  resolveAppContextLabel: AppBarAppContextLabelResolver;
+  resolveAppLabel: AppBarAppLabelResolver;
   t: AppBarTranslator;
   unreadCount: number;
   workspaceAppBarCategories: WorkspaceBootstrapAppBarCategory[];
@@ -132,19 +140,19 @@ export function AppBarDesktopRail({
         />
       ) : null}
 
-      {fixedItems.map((item) => (
-        <AppBarIconLink
-          active={isAppBarItemPathActive(
-            currentPathname,
-            resolveAppLink(item.id),
-          )}
-          icon={item.icon}
-          key={item.id}
-          tone="fixed"
-          title={item.title}
-          to={resolveAppLink(item.id)}
-        />
-      ))}
+      {fixedItems.map((item) => {
+        const link = resolveAppLink(item.id);
+        return (
+          <AppBarIconLink
+            active={isAppBarItemPathActive(currentPathname, link)}
+            icon={item.icon}
+            key={item.id}
+            tone="fixed"
+            title={resolveAppLabel(item.id, item.title)}
+            to={link}
+          />
+        );
+      })}
 
       <AppBarLauncherMenus
         appBarEditorOpen={appBarEditorOpen}
@@ -152,7 +160,7 @@ export function AppBarDesktopRail({
         appBarLayoutSaving={appBarLayoutSaving}
         categoryMenuId={categoryMenuId}
         currentPathname={currentPathname}
-        currentWorkspaceName={t('shell:launcher.title')}
+        currentWorkspaceName={currentWorkspaceName}
         draftItems={draftItems}
         draftPinnedAppIds={draftPinnedAppIds}
         favoritesActive={pinnedItemActive}
@@ -171,6 +179,8 @@ export function AppBarDesktopRail({
         pinnedEligibleAppIds={pinnedEligibleAppIds}
         pinnedItems={pinnedItems}
         resolveAppLink={resolveAppLink}
+        resolveAppContextLabel={resolveAppContextLabel}
+        resolveAppLabel={resolveAppLabel}
         t={t}
       />
 
