@@ -1,8 +1,36 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from alembic.config import Config
 from alembic.script import ScriptDirectory
+
+from open_work_hub_api.core import db as db_module
+
+
+def test_runtime_alembic_config_uses_workspace_root(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    api_root = tmp_path / "apps" / "api"
+    api_root.mkdir(parents=True)
+    ini_path = api_root / "alembic.ini"
+    ini_path.write_text(
+        "[alembic]\nscript_location = %(here)s/alembic\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(db_module, "WORKSPACE_ROOT", tmp_path)
+    monkeypatch.setattr(
+        db_module,
+        "get_settings",
+        lambda: SimpleNamespace(postgres_dsn="sqlite:///runtime-test.db"),
+    )
+
+    config = db_module._alembic_config()
+
+    assert Path(config.config_file_name or "") == ini_path
+    assert config.get_main_option("script_location") == str(api_root / "alembic")
+    assert config.get_main_option("sqlalchemy.url") == "sqlite:///runtime-test.db"
 
 
 @pytest.mark.migration

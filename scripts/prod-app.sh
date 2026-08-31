@@ -87,6 +87,9 @@ verify_release_image() {
     node --version >/dev/null
     node scripts/blocknote-collab-codec.mjs encode </dev/null >/dev/null
     apps/api/.venv/bin/python -c "import open_work_hub_api"
+    OPEN_WORK_HUB_POSTGRES_DSN=sqlite:///migration-config-smoke.db \
+      apps/api/.venv/bin/python -c \
+      "from alembic.script import ScriptDirectory; from open_work_hub_api.core.db import _alembic_config; assert ScriptDirectory.from_config(_alembic_config()).get_current_head()"
     apps/api/.venv/bin/python -c "import opf, torch"
     apps/worker/.venv/bin/python -c "import open_work_hub_worker"
   '
