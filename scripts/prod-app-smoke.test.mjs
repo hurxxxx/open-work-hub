@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
 import test from 'node:test';
 
 import {
@@ -8,6 +9,40 @@ import {
   assertEdgeHostRouting,
   runProductionSmoke,
 } from './prod-app-smoke.mjs';
+
+async function startEdgeTestServer(context) {
+  const requestedHosts = [];
+  const server = createServer((request, response) => {
+    const host = request.headers.host;
+    requestedHosts.push(host);
+    if (host !== 'prod.example.com') {
+      response.writeHead(421, { 'content-type': 'text/plain' });
+      response.end('unknown host');
+      return;
+    }
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(
+      JSON.stringify({
+        status: 'ok',
+        environment: 'production',
+        runtime_revision: 'abc123',
+      }),
+    );
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  context.after(
+    () =>
+      new Promise((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      }),
+  );
+  const address = server.address();
+  assert.ok(address && typeof address === 'object');
+  return { port: address.port, requestedHosts };
+}
 
 test('validates production health and the expected revision', async (context) => {
   const originalFetch = globalThis.fetch;
@@ -77,29 +112,10 @@ test('requires bootstrap JSON objects', async (context) => {
 });
 
 test('requires production routing and unknown-host rejection at the edge', async (context) => {
-  const originalFetch = globalThis.fetch;
-  context.after(() => {
-    globalThis.fetch = originalFetch;
-  });
-  const requestedHosts = [];
-  globalThis.fetch = async (_url, options) => {
-    const host = options?.headers?.Host;
-    requestedHosts.push(host);
-    if (host === 'unconfigured.invalid') {
-      return new Response('', { status: 421 });
-    }
-    return new Response(
-      JSON.stringify({
-        status: 'ok',
-        environment: 'production',
-        runtime_revision: 'abc123',
-      }),
-      { headers: { 'content-type': 'application/json' } },
-    );
-  };
+  const { port, requestedHosts } = await startEdgeTestServer(context);
 
   await assertEdgeHostRouting({
-    edgeListenPort: 4200,
+    edgeListenPort: port,
     edgeProdHost: 'prod.example.com',
     expectedRevision: 'abc123',
   });
@@ -110,20 +126,15 @@ test('requires production routing and unknown-host rejection at the edge', async
 });
 
 test('checks local and public surfaces in one smoke loop', async (context) => {
+  const { port, requestedHosts } = await startEdgeTestServer(context);
   const originalFetch = globalThis.fetch;
   context.after(() => {
     globalThis.fetch = originalFetch;
   });
   const requestedPaths = [];
-  globalThis.fetch = async (url, options) => {
+  globalThis.fetch = async (url) => {
     const parsed = new URL(url);
-    const host = options?.headers?.Host;
-    requestedPaths.push(
-      `${parsed.origin}${parsed.pathname}${host ? `#${host}` : ''}`,
-    );
-    if (host === 'unconfigured.invalid') {
-      return new Response('', { status: 421 });
-    }
+    requestedPaths.push(`${parsed.origin}${parsed.pathname}`);
     if (parsed.pathname === '/login') {
       return new Response(
         '<!doctype html><html><body><div id="root"></div></body></html>',
@@ -147,14 +158,16 @@ test('checks local and public surfaces in one smoke loop', async (context) => {
 
   await runProductionSmoke({
     appPort: 8000,
-    edgeListenPort: 4200,
+    edgeListenPort: port,
     edgeProdHost: 'prod.example.com',
     publicBaseUrl: new URL('https://prod.example.com/'),
     expectedRevision: 'abc123',
   });
+  assert.deepEqual(requestedHosts, [
+    'prod.example.com',
+    'unconfigured.invalid',
+  ]);
   assert.deepEqual(requestedPaths, [
-    'http://127.0.0.1:4200/healthz#prod.example.com',
-    'http://127.0.0.1:4200/healthz#unconfigured.invalid',
     'http://127.0.0.1:8000/healthz',
     'http://127.0.0.1:8000/readyz',
     'http://127.0.0.1:8000/api/v1/auth/bootstrap-status',
