@@ -26,7 +26,6 @@ import {
   formatDateTime,
   normalizeTimeZone,
 } from '@/src/platform/time/time-utils';
-import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
 import {
   archiveBentoDocument,
   createBentoDocument,
@@ -44,6 +43,10 @@ import {
   type BentoVisibility,
 } from '../api/bento-api';
 import {
+  buildBentoHubPath,
+  buildBentoPresentationPath,
+} from '../bento-route-paths';
+import {
   buildBentoExportMessage,
   buildBentoLoadMessage,
   buildBentoSaveRequestMessage,
@@ -55,14 +58,16 @@ import {
 } from './bento-embed-protocol';
 
 function hubPath(workspaceSlug: string | undefined): string {
-  return workspaceSlug ? buildWorkspaceAppPath(workspaceSlug, 'bento') : '/';
+  return workspaceSlug ? buildBentoHubPath(workspaceSlug) : '/';
 }
 
 function documentPath(
   workspaceSlug: string | undefined,
   documentId: string,
 ): string {
-  return `${hubPath(workspaceSlug)}/${encodeURIComponent(documentId)}`;
+  return workspaceSlug
+    ? buildBentoPresentationPath(workspaceSlug, documentId)
+    : '/';
 }
 
 function viewFromSearch(value: string | null): BentoHubView {
