@@ -25,7 +25,7 @@ docker compose --env-file .env.example -f ops/compose/open-work-hub-dev.infra.ym
 - Local URL: `http://127.0.0.1:18084/`
 - Health: `/healthz`
 - Public env: `OPEN_WORK_HUB_BENTO_SERVER_URL`
-- Production must use separate HTTPS origin proxied to container port `8080`.
+- The external HTTPS proxy connects the dedicated Bento hostname directly to `OPEN_WORK_HUB_BENTO_BIND_HOST:OPEN_WORK_HUB_BENTO_PORT`; use a reachable bind host when the proxy runs outside the host namespace.
 - Do not serve Bento below the Hub origin; iframe must not access Hub storage/tokens.
 
 ## Data/Auth

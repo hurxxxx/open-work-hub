@@ -141,7 +141,7 @@ services:
     container_name: open-work-hub-dev-bento
     restart: unless-stopped
     ports:
-      - "${OPEN_WORK_HUB_BENTO_BIND_HOST:-127.0.0.1}:${OPEN_WORK_HUB_BENTO_PORT:-18084}:8080"
+      - "${OPEN_WORK_HUB_BENTO_BIND_HOST:-0.0.0.0}:${OPEN_WORK_HUB_BENTO_PORT:-18084}:8080"
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
       interval: 30s

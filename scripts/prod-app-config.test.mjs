@@ -2,10 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-import {
-  assertProductionAppEnv,
-  parseEnvText,
-} from './prod-app-config.mjs';
+import { assertProductionAppEnv, parseEnvText } from './prod-app-config.mjs';
 
 function validEnv(overrides = {}) {
   return new Map(
@@ -20,17 +17,15 @@ function validEnv(overrides = {}) {
       OPEN_WORK_HUB_APP_FORWARDED_ALLOW_IPS: '127.0.0.1',
       OPEN_WORK_HUB_APP_PORT: '8000',
       OPEN_WORK_HUB_APP_PUBLIC_URL: 'https://prod.example.com',
-      OPEN_WORK_HUB_EDGE_DEV_HOST: 'dev.example.com',
-      OPEN_WORK_HUB_EDGE_DEV_UPSTREAM_PORT: '4201',
-      OPEN_WORK_HUB_EDGE_LISTEN_PORT: '4200',
-      OPEN_WORK_HUB_EDGE_PROD_HOST: 'prod.example.com',
-      OPEN_WORK_HUB_EDGE_PROD_UPSTREAM_PORT: '8000',
+      OPEN_WORK_HUB_BENTO_PORT: '18084',
+      OPEN_WORK_HUB_BENTO_SERVER_URL: 'https://bento.example.com',
+      OPEN_WORK_HUB_DRAWIO_PORT: '18083',
       OPEN_WORK_HUB_ENV_PROFILE: 'prod',
       OPEN_WORK_HUB_INFRA_NGINX_PORT: '14200',
       OPEN_WORK_HUB_OPF_ENABLED: 'true',
       OPEN_WORK_HUB_OPF_REQUIRED: 'true',
       OPEN_WORK_HUB_OPF_SERVICE_BASE_URL: 'http://127.0.0.1:18081',
-      OPEN_WORK_HUB_WEB_DEV_PORT: '4201',
+      OPEN_WORK_HUB_WEB_DEV_PORT: '4200',
       ...overrides,
     }),
   );
@@ -54,8 +49,7 @@ test('parses dotenv assignments without evaluating shell syntax', () => {
 test('accepts a separated production runtime configuration', () => {
   const config = assertProductionAppEnv(validEnv());
   assert.equal(config.appPort, 8000);
-  assert.equal(config.edgeListenPort, 4200);
-  assert.equal(config.edgeProdHost, 'prod.example.com');
+  assert.equal(config.bentoServerUrl.href, 'https://bento.example.com/');
   assert.equal(config.publicBaseUrl.href, 'https://prod.example.com/');
 });
 
@@ -68,11 +62,12 @@ test('rejects development access and port collisions', () => {
     /ALLOW_DEV_ADMIN_LOGIN/,
   );
   assert.throws(
-    () =>
-      assertProductionAppEnv(
-        validEnv({ OPEN_WORK_HUB_APP_PORT: '4201' }),
-      ),
+    () => assertProductionAppEnv(validEnv({ OPEN_WORK_HUB_APP_PORT: '4200' })),
     /WEB_DEV_PORT/,
+  );
+  assert.throws(
+    () => assertProductionAppEnv(validEnv({ OPEN_WORK_HUB_APP_PORT: '18084' })),
+    /BENTO_PORT/,
   );
 });
 
@@ -84,8 +79,22 @@ test('requires a credential-free HTTPS public origin', () => {
     'https://user:password@prod.example.com',
   ]) {
     assert.throws(() =>
+      assertProductionAppEnv(validEnv({ OPEN_WORK_HUB_APP_PUBLIC_URL: value })),
+    );
+  }
+});
+
+test('requires a separate credential-free HTTPS Bento origin', () => {
+  for (const value of [
+    '',
+    'http://bento.example.com',
+    'https://localhost:18084',
+    'https://user:password@bento.example.com',
+    'https://prod.example.com',
+  ]) {
+    assert.throws(() =>
       assertProductionAppEnv(
-        validEnv({ OPEN_WORK_HUB_APP_PUBLIC_URL: value }),
+        validEnv({ OPEN_WORK_HUB_BENTO_SERVER_URL: value }),
       ),
     );
   }
@@ -108,51 +117,6 @@ test('rejects unsafe production secrets and proxy trust', () => {
         validEnv({ OPEN_WORK_HUB_APP_FORWARDED_ALLOW_IPS: '*' }),
       ),
     /exact proxy IP addresses/,
-  );
-  assert.throws(
-    () =>
-      assertProductionAppEnv(
-        validEnv({ OPEN_WORK_HUB_APP_FORWARDED_ALLOW_IPS: '10.0.0.10' }),
-      ),
-    /loopback edge proxy/,
-  );
-});
-
-test('requires isolated host-aware edge routing', () => {
-  assert.throws(
-    () =>
-      assertProductionAppEnv(
-        validEnv({ OPEN_WORK_HUB_EDGE_LISTEN_PORT: '4201' }),
-      ),
-    /must not collide with an edge upstream port/,
-  );
-  assert.throws(
-    () =>
-      assertProductionAppEnv(
-        validEnv({ OPEN_WORK_HUB_EDGE_DEV_UPSTREAM_PORT: '4300' }),
-      ),
-    /must match OPEN_WORK_HUB_WEB_DEV_PORT/,
-  );
-  assert.throws(
-    () =>
-      assertProductionAppEnv(
-        validEnv({ OPEN_WORK_HUB_EDGE_PROD_UPSTREAM_PORT: '8002' }),
-      ),
-    /must match OPEN_WORK_HUB_APP_PORT/,
-  );
-  assert.throws(
-    () =>
-      assertProductionAppEnv(
-        validEnv({ OPEN_WORK_HUB_EDGE_PROD_HOST: 'other.example.com' }),
-      ),
-    /must match OPEN_WORK_HUB_APP_PUBLIC_URL/,
-  );
-  assert.throws(
-    () =>
-      assertProductionAppEnv(
-        validEnv({ OPEN_WORK_HUB_EDGE_DEV_HOST: 'prod.example.com' }),
-      ),
-    /must be distinct/,
   );
 });
 
@@ -186,39 +150,30 @@ test('worker healthcheck uses the container hostname without spawning hostname',
   assert.doesNotMatch(composeText, /\$\$\(hostname\)/);
 });
 
-test('production compose owns a pinned host-aware edge', async () => {
-  const [composeText, edgeConfig] = await Promise.all([
+test('production compose does not add a second ingress proxy', async () => {
+  const [composeText, releaseScript] = await Promise.all([
     readFile(
       new URL('../ops/compose/open-work-hub-prod.app.yml', import.meta.url),
       'utf8',
     ),
-    readFile(
-      new URL('../ops/edge/nginx.conf.template', import.meta.url),
-      'utf8',
-    ),
+    readFile(new URL('./prod-app.sh', import.meta.url), 'utf8'),
   ]);
-  assert.match(composeText, /container_name: open-work-hub-edge/);
+  assert.doesNotMatch(composeText, /open-work-hub-edge|ops\/edge/);
+  assert.match(releaseScript, /--remove-orphans/);
+});
+
+test('production image build embeds the validated Bento public URL', async () => {
+  const [dockerfile, releaseScript] = await Promise.all([
+    readFile(new URL('../ops/app/Dockerfile', import.meta.url), 'utf8'),
+    readFile(new URL('./prod-app.sh', import.meta.url), 'utf8'),
+  ]);
+  assert.match(dockerfile, /ARG OPEN_WORK_HUB_BENTO_SERVER_URL/);
   assert.match(
-    composeText,
-    /nginx:1\.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10/,
-  );
-  assert.ok(
-    edgeConfig.includes('server_name ${OPEN_WORK_HUB_EDGE_PROD_HOST};'),
-  );
-  assert.ok(
-    edgeConfig.includes(
-      'proxy_pass http://127.0.0.1:${OPEN_WORK_HUB_EDGE_PROD_UPSTREAM_PORT};',
-    ),
-  );
-  assert.ok(
-    edgeConfig.includes(
-      'proxy_pass http://127.0.0.1:${OPEN_WORK_HUB_EDGE_DEV_UPSTREAM_PORT};',
-    ),
+    dockerfile,
+    /OPEN_WORK_HUB_BENTO_SERVER_URL="\$\{OPEN_WORK_HUB_BENTO_SERVER_URL\}"/,
   );
   assert.match(
-    edgeConfig,
-    /listen \$\{OPEN_WORK_HUB_EDGE_LISTEN_PORT\} default_server;/,
+    releaseScript,
+    /--build-arg "OPEN_WORK_HUB_BENTO_SERVER_URL=\$bento_server_url"/,
   );
-  assert.match(edgeConfig, /return 421;/);
-  assert.doesNotMatch(edgeConfig, /1punicorn/);
 });

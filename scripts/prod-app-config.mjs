@@ -12,6 +12,8 @@ const TRUE_VALUES = new Set(['1', 'true', 'yes', 'on']);
 const DEFAULT_DM_ATTACHMENT_SIGNING_KEY = 'dev-dm-attachment-signing-key';
 const PORT_KEYS = [
   'OPEN_WORK_HUB_API_DEV_PORT',
+  'OPEN_WORK_HUB_BENTO_PORT',
+  'OPEN_WORK_HUB_DRAWIO_PORT',
   'OPEN_WORK_HUB_INFRA_MINIO_CONSOLE_PORT',
   'OPEN_WORK_HUB_INFRA_MINIO_PORT',
   'OPEN_WORK_HUB_INFRA_NGINX_PORT',
@@ -92,35 +94,6 @@ function parsePort(values, key, { required = false } = {}) {
   return port;
 }
 
-function parsePublicHostname(values, key) {
-  const rawValue = (values.get(key) ?? '').trim().toLowerCase();
-  let url;
-  try {
-    url = new URL(`https://${rawValue}`);
-  } catch {
-    throw new Error(`${key} must be a public DNS hostname`);
-  }
-  const hostname = url.hostname.toLowerCase().replace(/\.$/, '');
-  if (
-    !rawValue ||
-    rawValue !== hostname ||
-    !hostname.includes('.') ||
-    hostname === 'localhost' ||
-    hostname.endsWith('.localhost') ||
-    hostname.endsWith('.local') ||
-    isIP(hostname) !== 0 ||
-    url.port ||
-    url.username ||
-    url.password ||
-    url.pathname !== '/' ||
-    url.search ||
-    url.hash
-  ) {
-    throw new Error(`${key} must be a public DNS hostname`);
-  }
-  return hostname;
-}
-
 export function assertProductionAppEnv(values) {
   requireExact(values, 'OPEN_WORK_HUB_ENV_PROFILE', 'prod');
   requireExact(values, 'OPEN_WORK_HUB_API_ENVIRONMENT', 'production');
@@ -132,9 +105,7 @@ export function assertProductionAppEnv(values) {
 
   const bindHost = (values.get('OPEN_WORK_HUB_APP_BIND_HOST') ?? '').trim();
   if (!['0.0.0.0', '127.0.0.1'].includes(bindHost)) {
-    throw new Error(
-      'OPEN_WORK_HUB_APP_BIND_HOST must be 0.0.0.0 or 127.0.0.1',
-    );
+    throw new Error('OPEN_WORK_HUB_APP_BIND_HOST must be 0.0.0.0 or 127.0.0.1');
   }
   const forwardedAllowIps = (
     values.get('OPEN_WORK_HUB_APP_FORWARDED_ALLOW_IPS') ?? ''
@@ -178,60 +149,13 @@ export function assertProductionAppEnv(values) {
     values.get('OPEN_WORK_HUB_APP_PUBLIC_URL'),
     'OPEN_WORK_HUB_APP_PUBLIC_URL',
   );
-
-  const edgeListenPort = parsePort(values, 'OPEN_WORK_HUB_EDGE_LISTEN_PORT', {
-    required: true,
-  });
-  const edgeDevUpstreamPort = parsePort(
-    values,
-    'OPEN_WORK_HUB_EDGE_DEV_UPSTREAM_PORT',
-    { required: true },
+  const bentoServerUrl = normalizePublicBaseUrl(
+    values.get('OPEN_WORK_HUB_BENTO_SERVER_URL'),
+    'OPEN_WORK_HUB_BENTO_SERVER_URL',
   );
-  const edgeProdUpstreamPort = parsePort(
-    values,
-    'OPEN_WORK_HUB_EDGE_PROD_UPSTREAM_PORT',
-    { required: true },
-  );
-  const webDevPort = parsePort(values, 'OPEN_WORK_HUB_WEB_DEV_PORT', {
-    required: true,
-  });
-  const edgeDevHost = parsePublicHostname(
-    values,
-    'OPEN_WORK_HUB_EDGE_DEV_HOST',
-  );
-  const edgeProdHost = parsePublicHostname(
-    values,
-    'OPEN_WORK_HUB_EDGE_PROD_HOST',
-  );
-  if (
-    edgeListenPort === edgeDevUpstreamPort ||
-    edgeListenPort === edgeProdUpstreamPort
-  ) {
+  if (bentoServerUrl.origin === publicBaseUrl.origin) {
     throw new Error(
-      'OPEN_WORK_HUB_EDGE_LISTEN_PORT must not collide with an edge upstream port',
-    );
-  }
-  if (edgeDevUpstreamPort !== webDevPort) {
-    throw new Error(
-      'OPEN_WORK_HUB_EDGE_DEV_UPSTREAM_PORT must match OPEN_WORK_HUB_WEB_DEV_PORT',
-    );
-  }
-  if (edgeProdUpstreamPort !== appPort) {
-    throw new Error(
-      'OPEN_WORK_HUB_EDGE_PROD_UPSTREAM_PORT must match OPEN_WORK_HUB_APP_PORT',
-    );
-  }
-  if (edgeProdHost !== publicBaseUrl.hostname) {
-    throw new Error(
-      'OPEN_WORK_HUB_EDGE_PROD_HOST must match OPEN_WORK_HUB_APP_PUBLIC_URL',
-    );
-  }
-  if (edgeDevHost === edgeProdHost) {
-    throw new Error('development and production edge hosts must be distinct');
-  }
-  if (!trustedProxyIps.includes('127.0.0.1')) {
-    throw new Error(
-      'OPEN_WORK_HUB_APP_FORWARDED_ALLOW_IPS must trust the loopback edge proxy',
+      'OPEN_WORK_HUB_BENTO_SERVER_URL must use a dedicated origin',
     );
   }
 
@@ -242,9 +166,7 @@ export function assertProductionAppEnv(values) {
   try {
     opfServiceBaseUrl = new URL(opfServiceUrlValue);
   } catch {
-    throw new Error(
-      'OPEN_WORK_HUB_OPF_SERVICE_BASE_URL must be a valid URL',
-    );
+    throw new Error('OPEN_WORK_HUB_OPF_SERVICE_BASE_URL must be a valid URL');
   }
   if (
     opfServiceBaseUrl.protocol !== 'http:' ||
@@ -267,12 +189,8 @@ export function assertProductionAppEnv(values) {
   }
   return {
     appPort,
+    bentoServerUrl,
     bindHost,
-    edgeDevHost,
-    edgeDevUpstreamPort,
-    edgeListenPort,
-    edgeProdHost,
-    edgeProdUpstreamPort,
     forwardedAllowIps,
     opfServiceBaseUrl,
     publicBaseUrl,
@@ -281,9 +199,17 @@ export function assertProductionAppEnv(values) {
 
 function runCli() {
   const envPath = process.argv[2] ?? '.env';
-  assertProductionAppEnv(readEnvFile(envPath));
+  const config = assertProductionAppEnv(readEnvFile(envPath));
+  const outputMode = process.argv[3];
+  if (outputMode === '--print-bento-server-url') {
+    process.stdout.write(config.bentoServerUrl.href);
+    return;
+  }
+  if (outputMode) {
+    throw new Error(`unsupported argument: ${outputMode}`);
+  }
   process.stdout.write(
-    'Production app environment preflight passed: runtime identity, security flags, port separation, proxy trust, and public origin are configured.\n',
+    'Production app environment preflight passed: runtime identity, security flags, port separation, proxy trust, and public origins are configured.\n',
   );
 }
 
@@ -294,7 +220,9 @@ if (isMain) {
     runCli();
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`Production app environment preflight failed: ${detail}\n`);
+    process.stderr.write(
+      `Production app environment preflight failed: ${detail}\n`,
+    );
     process.exitCode = 1;
   }
 }
