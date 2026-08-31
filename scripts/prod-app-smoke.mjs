@@ -10,10 +10,11 @@ import { assertLoginPage } from './live-uat-preflight.mjs';
 
 const REQUEST_TIMEOUT_MS = 15_000;
 
-async function fetchJson(label, url) {
+async function fetchResponse(label, url, headers = undefined) {
   let response;
   try {
     response = await fetch(url, {
+      headers,
       redirect: 'follow',
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
@@ -21,6 +22,11 @@ async function fetchJson(label, url) {
     const detail = error instanceof Error ? error.message : String(error);
     throw new Error(`${label} request failed: ${detail}`);
   }
+  return response;
+}
+
+async function fetchJson(label, url, headers = undefined) {
+  const response = await fetchResponse(label, url, headers);
   if (!response.ok) {
     throw new Error(`${label} returned HTTP ${response.status}`);
   }
@@ -31,8 +37,13 @@ async function fetchJson(label, url) {
   return response.json();
 }
 
-export async function assertDeploymentHealth(label, url, expectedRevision) {
-  const body = await fetchJson(label, url);
+export async function assertDeploymentHealth(
+  label,
+  url,
+  expectedRevision,
+  headers = undefined,
+) {
+  const body = await fetchJson(label, url, headers);
   if (body?.status !== 'ok') {
     throw new Error(`${label} reported status ${String(body?.status)}`);
   }
@@ -68,11 +79,42 @@ export async function assertBootstrapJson(label, url) {
   }
 }
 
+export async function assertEdgeHostRouting({
+  edgeListenPort,
+  edgeProdHost,
+  expectedRevision,
+}) {
+  const edgeBaseUrl = new URL(`http://127.0.0.1:${edgeListenPort}/`);
+  await assertDeploymentHealth(
+    'edge production-host health',
+    new URL('/healthz', edgeBaseUrl),
+    expectedRevision,
+    { Host: edgeProdHost },
+  );
+  const unknownHostResponse = await fetchResponse(
+    'edge unknown-host rejection',
+    new URL('/healthz', edgeBaseUrl),
+    { Host: 'unconfigured.invalid' },
+  );
+  if (unknownHostResponse.status !== 421) {
+    throw new Error(
+      `edge accepted an unknown host with HTTP ${unknownHostResponse.status}`,
+    );
+  }
+}
+
 export async function runProductionSmoke({
   appPort,
+  edgeListenPort,
+  edgeProdHost,
   publicBaseUrl,
   expectedRevision,
 }) {
+  await assertEdgeHostRouting({
+    edgeListenPort,
+    edgeProdHost,
+    expectedRevision,
+  });
   const localBaseUrl = new URL(`http://127.0.0.1:${appPort}/`);
   for (const [label, baseUrl] of [
     ['local', localBaseUrl],
@@ -107,7 +149,7 @@ async function runCli() {
   }
   await runProductionSmoke({ ...config, expectedRevision });
   process.stdout.write(
-    'Production app smoke passed: local and public health, readiness, revision, bootstrap, and login shell are available.\n',
+    'Production app smoke passed: edge host isolation, local and public health, readiness, revision, bootstrap, and login shell are available.\n',
   );
 }
 

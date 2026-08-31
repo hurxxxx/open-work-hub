@@ -92,6 +92,35 @@ function parsePort(values, key, { required = false } = {}) {
   return port;
 }
 
+function parsePublicHostname(values, key) {
+  const rawValue = (values.get(key) ?? '').trim().toLowerCase();
+  let url;
+  try {
+    url = new URL(`https://${rawValue}`);
+  } catch {
+    throw new Error(`${key} must be a public DNS hostname`);
+  }
+  const hostname = url.hostname.toLowerCase().replace(/\.$/, '');
+  if (
+    !rawValue ||
+    rawValue !== hostname ||
+    !hostname.includes('.') ||
+    hostname === 'localhost' ||
+    hostname.endsWith('.localhost') ||
+    hostname.endsWith('.local') ||
+    isIP(hostname) !== 0 ||
+    url.port ||
+    url.username ||
+    url.password ||
+    url.pathname !== '/' ||
+    url.search ||
+    url.hash
+  ) {
+    throw new Error(`${key} must be a public DNS hostname`);
+  }
+  return hostname;
+}
+
 export function assertProductionAppEnv(values) {
   requireExact(values, 'OPEN_WORK_HUB_ENV_PROFILE', 'prod');
   requireExact(values, 'OPEN_WORK_HUB_API_ENVIRONMENT', 'production');
@@ -150,6 +179,62 @@ export function assertProductionAppEnv(values) {
     'OPEN_WORK_HUB_APP_PUBLIC_URL',
   );
 
+  const edgeListenPort = parsePort(values, 'OPEN_WORK_HUB_EDGE_LISTEN_PORT', {
+    required: true,
+  });
+  const edgeDevUpstreamPort = parsePort(
+    values,
+    'OPEN_WORK_HUB_EDGE_DEV_UPSTREAM_PORT',
+    { required: true },
+  );
+  const edgeProdUpstreamPort = parsePort(
+    values,
+    'OPEN_WORK_HUB_EDGE_PROD_UPSTREAM_PORT',
+    { required: true },
+  );
+  const webDevPort = parsePort(values, 'OPEN_WORK_HUB_WEB_DEV_PORT', {
+    required: true,
+  });
+  const edgeDevHost = parsePublicHostname(
+    values,
+    'OPEN_WORK_HUB_EDGE_DEV_HOST',
+  );
+  const edgeProdHost = parsePublicHostname(
+    values,
+    'OPEN_WORK_HUB_EDGE_PROD_HOST',
+  );
+  if (
+    edgeListenPort === edgeDevUpstreamPort ||
+    edgeListenPort === edgeProdUpstreamPort
+  ) {
+    throw new Error(
+      'OPEN_WORK_HUB_EDGE_LISTEN_PORT must not collide with an edge upstream port',
+    );
+  }
+  if (edgeDevUpstreamPort !== webDevPort) {
+    throw new Error(
+      'OPEN_WORK_HUB_EDGE_DEV_UPSTREAM_PORT must match OPEN_WORK_HUB_WEB_DEV_PORT',
+    );
+  }
+  if (edgeProdUpstreamPort !== appPort) {
+    throw new Error(
+      'OPEN_WORK_HUB_EDGE_PROD_UPSTREAM_PORT must match OPEN_WORK_HUB_APP_PORT',
+    );
+  }
+  if (edgeProdHost !== publicBaseUrl.hostname) {
+    throw new Error(
+      'OPEN_WORK_HUB_EDGE_PROD_HOST must match OPEN_WORK_HUB_APP_PUBLIC_URL',
+    );
+  }
+  if (edgeDevHost === edgeProdHost) {
+    throw new Error('development and production edge hosts must be distinct');
+  }
+  if (!trustedProxyIps.includes('127.0.0.1')) {
+    throw new Error(
+      'OPEN_WORK_HUB_APP_FORWARDED_ALLOW_IPS must trust the loopback edge proxy',
+    );
+  }
+
   const opfServiceUrlValue = (
     values.get('OPEN_WORK_HUB_OPF_SERVICE_BASE_URL') ?? ''
   ).trim();
@@ -183,6 +268,11 @@ export function assertProductionAppEnv(values) {
   return {
     appPort,
     bindHost,
+    edgeDevHost,
+    edgeDevUpstreamPort,
+    edgeListenPort,
+    edgeProdHost,
+    edgeProdUpstreamPort,
     forwardedAllowIps,
     opfServiceBaseUrl,
     publicBaseUrl,
