@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import {
@@ -12,6 +13,16 @@ import {
   normalizePublicBaseUrl,
   runPublicDevSmoke,
 } from './live-uat-preflight.mjs';
+
+test('browser login smoke loads the checkout env contract', async () => {
+  const packageJson = JSON.parse(
+    await readFile(new URL('../package.json', import.meta.url), 'utf8'),
+  );
+  assert.equal(
+    packageJson.scripts['dev:login-browser-smoke'],
+    "bash -c 'source ./scripts/dev-env.sh && node ./scripts/dev-login-browser-smoke.mjs'",
+  );
+});
 
 test('accepts only credential-free HTTPS public origins', () => {
   assert.equal(
