@@ -47,10 +47,10 @@ vi.mock('@xterm/xterm', () => ({
       terminalHarness.instances.push(this);
     }
 
-    dispose() {}
-    focus() {}
-    loadAddon() {}
-    open() {}
+    dispose = vi.fn();
+    focus = vi.fn();
+    loadAddon = vi.fn();
+    open = vi.fn();
 
     onData(listener: DataListener) {
       this.dataListener = listener;
@@ -138,9 +138,9 @@ beforeEach(() => {
   vi.stubGlobal(
     'ResizeObserver',
     class {
-      disconnect() {}
-      observe() {}
-      unobserve() {}
+      disconnect = vi.fn();
+      observe = vi.fn();
+      unobserve = vi.fn();
     },
   );
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
