@@ -186,7 +186,8 @@
       "launcher": { "placement": "category", "pinned_by_default": false },
       "routes": [
         { "route_id": "bento.root", "context_scope": "workspace", "suffix": "", "chrome": "standard" },
-        { "route_id": "bento.presentation", "context_scope": "workspace", "suffix": "/presentations/:documentId", "chrome": "containedSurface" }
+        { "route_id": "bento.presentation", "context_scope": "workspace", "suffix": "/presentations/:documentId", "chrome": "containedSurface" },
+        { "route_id": "bento.presentation-legacy", "context_scope": "workspace", "suffix": "/:documentId", "chrome": "containedSurface" }
       ]
     },
     {

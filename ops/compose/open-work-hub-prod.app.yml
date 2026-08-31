@@ -16,32 +16,6 @@ x-open-work-hub-app: &open-work-hub-app
     - open-work-hub-prod-app-runtime:/opt/open-work-hub/.runtime
 
 services:
-  edge:
-    image: nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
-    container_name: open-work-hub-edge
-    network_mode: host
-    env_file:
-      - ../../.env
-    depends_on:
-      api:
-        condition: service_healthy
-    init: true
-    restart: unless-stopped
-    stop_grace_period: 15s
-    volumes:
-      - ../edge/nginx.conf.template:/etc/nginx/templates/default.conf.template:ro
-    healthcheck:
-      test:
-        - CMD-SHELL
-        - >-
-          wget -q -O /dev/null
-          --header="Host: $${OPEN_WORK_HUB_EDGE_PROD_HOST}"
-          "http://127.0.0.1:$${OPEN_WORK_HUB_EDGE_LISTEN_PORT}/healthz"
-      interval: 15s
-      timeout: 8s
-      retries: 12
-      start_period: 10s
-
   migrate:
     <<: *open-work-hub-app
     command:

@@ -1,48 +1,12 @@
 import assert from 'node:assert/strict';
-import { createServer } from 'node:http';
 import test from 'node:test';
 
 import {
   assertBootstrapJson,
   assertDeploymentHealth,
   assertDeploymentReadiness,
-  assertEdgeHostRouting,
   runProductionSmoke,
 } from './prod-app-smoke.mjs';
-
-async function startEdgeTestServer(context) {
-  const requestedHosts = [];
-  const server = createServer((request, response) => {
-    const host = request.headers.host;
-    requestedHosts.push(host);
-    if (host !== 'prod.example.com') {
-      response.writeHead(421, { 'content-type': 'text/plain' });
-      response.end('unknown host');
-      return;
-    }
-    response.writeHead(200, { 'content-type': 'application/json' });
-    response.end(
-      JSON.stringify({
-        status: 'ok',
-        environment: 'production',
-        runtime_revision: 'abc123',
-      }),
-    );
-  });
-  await new Promise((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', resolve);
-  });
-  context.after(
-    () =>
-      new Promise((resolve, reject) => {
-        server.close((error) => (error ? reject(error) : resolve()));
-      }),
-  );
-  const address = server.address();
-  assert.ok(address && typeof address === 'object');
-  return { port: address.port, requestedHosts };
-}
 
 test('validates production health and the expected revision', async (context) => {
   const originalFetch = globalThis.fetch;
@@ -111,22 +75,7 @@ test('requires bootstrap JSON objects', async (context) => {
   );
 });
 
-test('requires production routing and unknown-host rejection at the edge', async (context) => {
-  const { port, requestedHosts } = await startEdgeTestServer(context);
-
-  await assertEdgeHostRouting({
-    edgeListenPort: port,
-    edgeProdHost: 'prod.example.com',
-    expectedRevision: 'abc123',
-  });
-  assert.deepEqual(requestedHosts, [
-    'prod.example.com',
-    'unconfigured.invalid',
-  ]);
-});
-
 test('checks local and public surfaces in one smoke loop', async (context) => {
-  const { port, requestedHosts } = await startEdgeTestServer(context);
   const originalFetch = globalThis.fetch;
   context.after(() => {
     globalThis.fetch = originalFetch;
@@ -158,15 +107,9 @@ test('checks local and public surfaces in one smoke loop', async (context) => {
 
   await runProductionSmoke({
     appPort: 8000,
-    edgeListenPort: port,
-    edgeProdHost: 'prod.example.com',
     publicBaseUrl: new URL('https://prod.example.com/'),
     expectedRevision: 'abc123',
   });
-  assert.deepEqual(requestedHosts, [
-    'prod.example.com',
-    'unconfigured.invalid',
-  ]);
   assert.deepEqual(requestedPaths, [
     'http://127.0.0.1:8000/healthz',
     'http://127.0.0.1:8000/readyz',

@@ -5,6 +5,8 @@ ARG PYTHON_IMAGE=python:3.12-slim-bookworm@sha256:0f5b26b9518d002b6173fd61daad82
 
 FROM ${NODE_IMAGE} AS web-build
 
+ARG OPEN_WORK_HUB_BENTO_SERVER_URL
+
 WORKDIR /opt/open-work-hub
 
 RUN corepack enable \
@@ -18,7 +20,9 @@ COPY packages/ui/package.json packages/ui/package.json
 RUN pnpm install --frozen-lockfile
 
 COPY . .
-RUN pnpm nx build web --skip-nx-cache
+RUN test -n "${OPEN_WORK_HUB_BENTO_SERVER_URL}" \
+  && OPEN_WORK_HUB_BENTO_SERVER_URL="${OPEN_WORK_HUB_BENTO_SERVER_URL}" \
+    pnpm nx build web --skip-nx-cache
 RUN pnpm --filter @open-work-hub/collab-codec-runtime deploy \
     --prod --legacy /opt/collab-codec-runtime
 

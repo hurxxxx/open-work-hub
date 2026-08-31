@@ -8,6 +8,7 @@ description: Prepare or validate an Open Work Hub promotion from `dev` to `main`
 - Authorization lives in root `AGENTS.md`; never trigger this workflow automatically.
 - Inspecting, creating an MR, merging, updating the production checkout, and deploying are separate actions and must each be in scope.
 - Never push directly to protected `main`.
+- Before creating or merging `dev -> main`, verify remote `dev` exists and is protected. Never request or allow source-branch removal for this release MR.
 - Evidence binds to latest source SHA or equivalent merge result.
 - Application rollout uses the guarded `pnpm app:prod:deploy` entrypoint from the production checkout, but promotion and deployment remain separately authorized actions.
 

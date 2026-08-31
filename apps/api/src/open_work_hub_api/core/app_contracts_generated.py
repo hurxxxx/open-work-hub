@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Final
 
-APP_CONTRACT_REVISION: Final = "sha256:8756ac96aac1101a95bd4e7d634466ed8f37b8790e06ae17313f86d1f9f40463"
+APP_CONTRACT_REVISION: Final = "sha256:fa42fe2986e326110b910c22df65fccb980f300535ffc5a0ae73a942d044a809"
 APP_CONTRACTS: Final = [
   {
     "app_id": "home",
@@ -378,6 +378,12 @@ APP_CONTRACTS: Final = [
         "route_id": "bento.presentation",
         "context_scope": "workspace",
         "suffix": "/presentations/:documentId",
+        "chrome": "containedSurface"
+      },
+      {
+        "route_id": "bento.presentation-legacy",
+        "context_scope": "workspace",
+        "suffix": "/:documentId",
         "chrome": "containedSurface"
       }
     ]

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { APP_CONTRACTS } from '@open-work-hub/contracts/app-contracts';
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
 import { APP_WORKSPACE_API_ROUTE_POLICY } from '@/src/app/shell/workspace-api-routes';
 import {
   isPublicWorkspaceApiPath,
@@ -264,6 +265,105 @@ test.describe('AI-friendly app boundary smoke', () => {
     }
 
     errors.expectClean();
+  });
+
+  test('mounts every executable app entry without falling through to NotFoundView', async ({
+    page,
+  }) => {
+    await stubWorkspaceAppDataBackend(page);
+    await stubShellBackend(page, {
+      enabledAppIds: APP_CONTRACTS.map((app) => app.app_id),
+    });
+    await stubConversationsApi(page);
+
+    for (const app of APP_CONTRACTS) {
+      const href = buildAppHref({
+        routeId: app.entry_route_id,
+        ...(app.availability_scope === 'workspace'
+          ? { workspaceSlug: 'hq' }
+          : {}),
+      });
+      await page.goto(href);
+      await expect(page).toHaveURL(
+        new RegExp(`${href.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`),
+      );
+      await expect(
+        page.getByRole('navigation', {
+          name: /주요 앱 탐색|Primary app navigation/,
+        }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole('heading', {
+          name: /페이지를 찾을 수 없습니다|Page not found/,
+        }),
+        app.app_id,
+      ).toHaveCount(0);
+    }
+  });
+
+  test('opens a newly created Bento presentation on its canonical detail route', async ({
+    page,
+  }) => {
+    await stubFullShell(page);
+    const document = {
+      id: 'presentation-1',
+      workspace_id: 'workspace-hq',
+      title: 'Untitled Presentation',
+      visibility: 'personal',
+      version: 1,
+      created_by_id: 'user-e2e',
+      created_by_name: 'E2E Tester',
+      created_at: '2026-08-31T00:00:00Z',
+      updated_at: '2026-08-31T00:00:00Z',
+      archived_at: null,
+      can_edit: true,
+      can_manage: true,
+      document_json: '{}',
+    };
+    await page.route('**/api/v1/workspaces/hq/bento/**', (route) => {
+      const request = route.request();
+      const pathname = new URL(request.url()).pathname;
+      if (pathname.endsWith('/bento/hub')) {
+        return route.fulfill({
+          json: { items: [], view: 'all', page: 1, page_size: 200, total: 0 },
+        });
+      }
+      if (pathname.endsWith('/bento/ai-jobs')) {
+        return route.fulfill({ json: [] });
+      }
+      if (pathname.endsWith('/bento/items') && request.method() === 'POST') {
+        return route.fulfill({ json: document });
+      }
+      if (pathname.endsWith('/bento/items/presentation-1')) {
+        return route.fulfill({ json: document });
+      }
+      return route.fulfill({ status: 404, json: { detail: 'not stubbed' } });
+    });
+
+    await page.goto('/apps/bento/workspaces/hq');
+    await page
+      .getByRole('button', { name: /새 프레젠테이션|New presentation/ })
+      .first()
+      .click();
+
+    await expect(page).toHaveURL(
+      /\/apps\/bento\/workspaces\/hq\/presentations\/presentation-1$/,
+    );
+    await expect(
+      page.getByRole('heading', {
+        name: /페이지를 찾을 수 없습니다|Page not found/,
+      }),
+    ).toHaveCount(0);
+
+    await page.goto('/apps/bento/workspaces/hq/presentation-1');
+    await expect(page).toHaveURL(
+      /\/apps\/bento\/workspaces\/hq\/presentations\/presentation-1$/,
+    );
+    await expect(
+      page.getByRole('heading', {
+        name: /페이지를 찾을 수 없습니다|Page not found/,
+      }),
+    ).toHaveCount(0);
   });
 
   test('keeps disabled workspace apps blocked by WorkspaceGate', async ({

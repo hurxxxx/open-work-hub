@@ -14,6 +14,7 @@ export const bentoManifest: AppModuleManifest = {
     writeAuditActions: [],
     appLocalTests: [
       'apps/api/tests/test_bento_documents.py',
+      'apps/web/src/app-modules/bento/bento-route-paths.spec.ts',
       'apps/web/src/app-modules/bento/views/bento-embed-protocol.spec.ts',
     ],
   },
@@ -46,5 +47,6 @@ export const bentoManifest: AppModuleManifest = {
   workspaceRoutePaths: [
     getAppRoutePattern('bento.root'),
     getAppRoutePattern('bento.presentation'),
+    getAppRoutePattern('bento.presentation-legacy'),
   ],
 };
