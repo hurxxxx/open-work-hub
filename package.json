@@ -25,7 +25,7 @@
     "dev:minimal": "./dev.sh --minimal-infra",
     "dev:login-smoke": "bash ./scripts/dev-login-smoke.sh",
     "dev:public-smoke": "bash -c 'source ./scripts/dev-env.sh && node ./scripts/live-uat-preflight.mjs --public-dev-smoke'",
-    "dev:login-browser-smoke": "node ./scripts/dev-login-browser-smoke.mjs",
+    "dev:login-browser-smoke": "bash -c 'source ./scripts/dev-env.sh && node ./scripts/dev-login-browser-smoke.mjs'",
     "uat:preflight": "bash -c 'source ./scripts/dev-env.sh && node ./scripts/live-uat-preflight.mjs'",
     "dev:qwen:pull": "bash ./scripts/dev-local-qwen.sh pull",
     "dev:qwen:start": "bash ./scripts/dev-local-qwen.sh start",

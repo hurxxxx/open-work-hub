@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { request as httpRequest } from 'node:http';
 import { pathToFileURL } from 'node:url';
 
 import {
@@ -9,12 +10,51 @@ import {
 import { assertLoginPage } from './live-uat-preflight.mjs';
 
 const REQUEST_TIMEOUT_MS = 15_000;
+const MAX_EDGE_RESPONSE_BYTES = 1024 * 1024;
 
-async function fetchResponse(label, url, headers = undefined) {
+async function requestEdge(label, url, host) {
+  return new Promise((resolve, reject) => {
+    const request = httpRequest(
+      url,
+      {
+        headers: { Host: host },
+        method: 'GET',
+      },
+      (response) => {
+        const chunks = [];
+        let size = 0;
+        response.on('data', (chunk) => {
+          size += chunk.length;
+          if (size > MAX_EDGE_RESPONSE_BYTES) {
+            request.destroy(new Error(`${label} response exceeded 1 MiB`));
+            return;
+          }
+          chunks.push(chunk);
+        });
+        response.on('end', () => {
+          resolve({
+            body: Buffer.concat(chunks).toString('utf8'),
+            contentType: response.headers['content-type'] ?? '',
+            status: response.statusCode ?? 0,
+          });
+        });
+      },
+    );
+    request.setTimeout(REQUEST_TIMEOUT_MS, () => {
+      request.destroy(new Error(`${label} request timed out`));
+    });
+    request.on('error', (error) => {
+      const detail = error instanceof Error ? error.message : String(error);
+      reject(new Error(`${label} request failed: ${detail}`));
+    });
+    request.end();
+  });
+}
+
+async function fetchResponse(label, url) {
   let response;
   try {
     response = await fetch(url, {
-      headers,
       redirect: 'follow',
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
@@ -25,8 +65,8 @@ async function fetchResponse(label, url, headers = undefined) {
   return response;
 }
 
-async function fetchJson(label, url, headers = undefined) {
-  const response = await fetchResponse(label, url, headers);
+async function fetchJson(label, url) {
+  const response = await fetchResponse(label, url);
   if (!response.ok) {
     throw new Error(`${label} returned HTTP ${response.status}`);
   }
@@ -37,13 +77,12 @@ async function fetchJson(label, url, headers = undefined) {
   return response.json();
 }
 
-export async function assertDeploymentHealth(
-  label,
-  url,
-  expectedRevision,
-  headers = undefined,
-) {
-  const body = await fetchJson(label, url, headers);
+export async function assertDeploymentHealth(label, url, expectedRevision) {
+  const body = await fetchJson(label, url);
+  assertDeploymentHealthBody(label, body, expectedRevision);
+}
+
+function assertDeploymentHealthBody(label, body, expectedRevision) {
   if (body?.status !== 'ok') {
     throw new Error(`${label} reported status ${String(body?.status)}`);
   }
@@ -85,16 +124,37 @@ export async function assertEdgeHostRouting({
   expectedRevision,
 }) {
   const edgeBaseUrl = new URL(`http://127.0.0.1:${edgeListenPort}/`);
-  await assertDeploymentHealth(
+  const productionResponse = await requestEdge(
     'edge production-host health',
     new URL('/healthz', edgeBaseUrl),
-    expectedRevision,
-    { Host: edgeProdHost },
+    edgeProdHost,
   );
-  const unknownHostResponse = await fetchResponse(
+  if (productionResponse.status < 200 || productionResponse.status >= 300) {
+    throw new Error(
+      `edge production-host health returned HTTP ${productionResponse.status}`,
+    );
+  }
+  if (
+    !productionResponse.contentType.toLowerCase().includes('application/json')
+  ) {
+    throw new Error('edge production-host health did not return JSON');
+  }
+  let productionBody;
+  try {
+    productionBody = JSON.parse(productionResponse.body);
+  } catch {
+    throw new Error('edge production-host health returned invalid JSON');
+  }
+  assertDeploymentHealthBody(
+    'edge production-host health',
+    productionBody,
+    expectedRevision,
+  );
+
+  const unknownHostResponse = await requestEdge(
     'edge unknown-host rejection',
     new URL('/healthz', edgeBaseUrl),
-    { Host: 'unconfigured.invalid' },
+    'unconfigured.invalid',
   );
   if (unknownHostResponse.status !== 421) {
     throw new Error(
