@@ -10,7 +10,6 @@ describe('community shell registration', () => {
     ]);
     expect(
       communitySidebarConfig.extendCategories?.(['community'], {
-        activeFeatureAppId: null,
         canReadWorkspace: true,
       }),
     ).toEqual([]);

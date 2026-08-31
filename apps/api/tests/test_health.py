@@ -52,10 +52,10 @@ def test_auth_bootstrap_and_protected_retrieval(client: TestClient) -> None:
     assert auth_payload["user"]["app_bar_layout"] == {
         "pinned_app_ids": ["pms", "docs", "whiteboard"],
     }
-    assert auth_payload["user"]["default_workspace_id"] is None
+    assert "default_workspace_id" not in auth_payload["user"]
     assert auth_payload["user"]["login_id"] == "admin"
-    assert auth_payload["user"]["workspaces"]
-    assert any(item["role"] == "admin" for item in auth_payload["user"]["workspaces"])
+    assert auth_payload["user"]["workspaces"] == []
+    _assert_user_has_no_workspace_memberships(auth_payload["user"]["id"])
     assert "workspace_roles" not in auth_payload["user"]
     assert "app_access" not in auth_payload["user"]
     token = auth_payload["token"]
@@ -67,8 +67,20 @@ def test_auth_bootstrap_and_protected_retrieval(client: TestClient) -> None:
     assert me_response.status_code == 200
     assert me_response.json()["email"] == "admin@open-work-hub.local"
 
-    retrieval_response = client.get(
+    denied_retrieval_response = client.get(
         "/api/v1/workspaces/administrator/retrieval/sources",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert denied_retrieval_response.status_code == 403
+
+    workspace_response = client.post(
+        "/api/v1/admin/workspaces",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"key": "setup-admin-workspace", "name": "Setup Admin Workspace"},
+    )
+    assert workspace_response.status_code == 201, workspace_response.text
+    retrieval_response = client.get(
+        "/api/v1/workspaces/setup-admin-workspace/retrieval/sources",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert retrieval_response.status_code == 200
@@ -119,71 +131,6 @@ def test_auth_login_success_and_invalid_password(client: TestClient) -> None:
         },
     )
     assert invalid_password_response.status_code == 401
-
-
-def test_auth_preferences_manage_default_workspace(client: TestClient) -> None:
-    setup_response = client.post(
-        "/api/v1/auth/setup",
-        json={
-            "full_name": "Open Work Hub Admin",
-            "login_id": "admin",
-            "email": "admin@open-work-hub.local",
-            "password": "supersecret123",
-        },
-    )
-    assert setup_response.status_code == 201
-    setup_payload = setup_response.json()
-    admin_token = setup_payload["token"]
-    first_workspace = setup_payload["user"]["workspaces"][0]
-
-    update_response = client.patch(
-        "/api/v1/auth/preferences",
-        headers={"Authorization": f"Bearer {admin_token}"},
-        json={"default_workspace_id": first_workspace["id"]},
-    )
-    assert update_response.status_code == 200, update_response.text
-    assert update_response.json()["default_workspace_id"] == first_workspace["id"]
-
-    me_response = client.get(
-        "/api/v1/auth/me",
-        headers={"Authorization": f"Bearer {admin_token}"},
-    )
-    assert me_response.status_code == 200
-    assert me_response.json()["default_workspace_id"] == first_workspace["id"]
-
-    create_member_response = client.post(
-        "/api/v1/admin/users",
-        headers={"Authorization": f"Bearer {admin_token}"},
-        json={
-            "full_name": "Pending Member",
-            "login_id": "pending-member",
-            "email": "pending@open-work-hub.local",
-            "temporary_password": "memberpass123",
-        },
-    )
-    assert create_member_response.status_code == 201, create_member_response.text
-    login_member_response = client.post(
-        "/api/v1/auth/login",
-        json={"login_id": "pending-member", "password": "memberpass123"},
-    )
-    assert login_member_response.status_code == 200, login_member_response.text
-    member_token = login_member_response.json()["token"]
-
-    forbidden_response = client.patch(
-        "/api/v1/auth/preferences",
-        headers={"Authorization": f"Bearer {member_token}"},
-        json={"default_workspace_id": first_workspace["id"]},
-    )
-    assert forbidden_response.status_code == 403
-    assert forbidden_response.json()["code"] == "workspace.membership_required"
-
-    clear_response = client.patch(
-        "/api/v1/auth/preferences",
-        headers={"Authorization": f"Bearer {admin_token}"},
-        json={"default_workspace_id": None},
-    )
-    assert clear_response.status_code == 200
-    assert clear_response.json()["default_workspace_id"] is None
 
 
 def test_auth_preferences_manage_app_bar_layout(client: TestClient) -> None:
@@ -286,7 +233,9 @@ def test_auth_preferences_manage_app_bar_layout(client: TestClient) -> None:
     }
 
 
-def test_auth_signup_creates_local_member_after_setup(client: TestClient) -> None:
+def test_auth_signup_creates_company_user_without_workspace_membership(
+    client: TestClient,
+) -> None:
     setup_response = client.post(
         "/api/v1/auth/setup",
         json={
@@ -312,7 +261,8 @@ def test_auth_signup_creates_local_member_after_setup(client: TestClient) -> Non
     assert signup_body["user"]["login_id"] == "new-member"
     assert signup_body["user"]["email"] == "new@open-work-hub.local"
     assert signup_body["user"]["system_roles"] == []
-    assert signup_body["user"]["workspaces"][0]["slug"] == "general"
+    assert signup_body["user"]["workspaces"] == []
+    _assert_user_has_no_workspace_memberships(signup_body["user"]["id"])
 
     login_response = client.post(
         "/api/v1/auth/login",
@@ -586,7 +536,11 @@ def test_auth_preferences_password_and_sessions(client: TestClient) -> None:
     assert new_login_response.status_code == 200
 
 
-def _bootstrap_admin(client: TestClient) -> str:
+def _bootstrap_admin(
+    client: TestClient,
+    *,
+    workspace_keys: tuple[str, ...] = (),
+) -> str:
     setup_response = client.post(
         "/api/v1/auth/setup",
         json={
@@ -596,7 +550,55 @@ def _bootstrap_admin(client: TestClient) -> str:
         },
     )
     assert setup_response.status_code == 201
-    return setup_response.json()["token"]
+    auth_payload = setup_response.json()
+    token = auth_payload["token"]
+    if workspace_keys:
+        headers = {"Authorization": f"Bearer {token}"}
+        workspaces_response = client.get("/api/v1/admin/workspaces", headers=headers)
+        assert workspaces_response.status_code == 200, workspaces_response.text
+        workspaces_by_key = {item["key"]: item for item in workspaces_response.json()}
+        assert set(workspace_keys) <= set(workspaces_by_key)
+        for workspace_key in workspace_keys:
+            binding_response = client.put(
+                f"/api/v1/admin/workspaces/{workspaces_by_key[workspace_key]['id']}/bindings",
+                headers=headers,
+                json={
+                    "users": [
+                        {
+                            "subject_id": auth_payload["user"]["id"],
+                            "role": "admin",
+                        }
+                    ]
+                },
+            )
+            assert binding_response.status_code == 200, binding_response.text
+    return token
+
+
+def _assert_user_has_no_workspace_memberships(user_id: str) -> None:
+    from sqlalchemy import func, select
+
+    from open_work_hub_api.core.db import get_session_factory
+    from open_work_hub_api.domains.auth.models import (
+        TeamMember,
+        WorkspaceUserBinding,
+    )
+
+    db = get_session_factory()()
+    try:
+        workspace_binding_count = db.scalar(
+            select(func.count())
+            .select_from(WorkspaceUserBinding)
+            .where(WorkspaceUserBinding.user_id == user_id)
+        )
+        team_membership_count = db.scalar(
+            select(func.count()).select_from(TeamMember).where(TeamMember.user_id == user_id)
+        )
+    finally:
+        db.close()
+
+    assert workspace_binding_count == 0
+    assert team_membership_count == 0
 
 
 def _replace_workspace_user_bindings(
@@ -1028,7 +1030,7 @@ def test_workspace_scoped_team_management_requires_workspace_admin_role(client: 
 
 
 def test_workspace_routes_require_workspace_membership(client: TestClient) -> None:
-    admin_token = _bootstrap_admin(client)
+    admin_token = _bootstrap_admin(client, workspace_keys=("administrator",))
     admin_headers = {"Authorization": f"Bearer {admin_token}"}
 
     workspaces_response = client.get("/api/v1/admin/workspaces", headers=admin_headers)
@@ -1086,7 +1088,7 @@ def test_workspace_routes_require_workspace_membership(client: TestClient) -> No
 
 
 def test_pms_membership_permissions(client: TestClient) -> None:
-    admin_token = _bootstrap_admin(client)
+    admin_token = _bootstrap_admin(client, workspace_keys=("administrator",))
     outsider_id, outsider_token = _create_direct_user(
         email="member@open-work-hub.local",
         full_name="List Member",
@@ -1129,7 +1131,7 @@ def test_pms_membership_permissions(client: TestClient) -> None:
 
 
 def test_pms_space_members_still_need_workspace_membership(client: TestClient) -> None:
-    admin_token = _bootstrap_admin(client)
+    admin_token = _bootstrap_admin(client, workspace_keys=("administrator",))
     member_id, member_token = _create_direct_user(
         email="space-only@open-work-hub.local",
         full_name="Space Only Member",
@@ -1204,7 +1206,7 @@ def test_pms_space_creator_becomes_owner_and_last_manager_is_protected(client: T
 def test_platform_admin_without_workspace_membership_cannot_view_pms_spaces(
     client: TestClient,
 ) -> None:
-    admin_token = _bootstrap_admin(client)
+    admin_token = _bootstrap_admin(client, workspace_keys=("administrator",))
     task_list_response = client.post(
         "/api/v1/workspaces/administrator/pms/lists",
         headers={"Authorization": f"Bearer {admin_token}"},
@@ -1307,7 +1309,7 @@ def test_workspace_bindings_grant_and_revoke_effective_workspace_access(
 
 
 def test_pms_parent_issue_validation_and_label_conflicts(client: TestClient) -> None:
-    token = _bootstrap_admin(client)
+    token = _bootstrap_admin(client, workspace_keys=("administrator",))
     primary_list = _create_pms_task_list(client, token, key="PARENT", name="Parent List")
     secondary_list = _create_pms_task_list(client, token, key="OTHER", name="Other List")
 
@@ -1370,7 +1372,7 @@ def test_pms_parent_issue_validation_and_label_conflicts(client: TestClient) -> 
 
 
 def test_pms_task_board_positions_are_scoped_to_sibling_level(client: TestClient) -> None:
-    token = _bootstrap_admin(client)
+    token = _bootstrap_admin(client, workspace_keys=("administrator",))
     task_list = _create_pms_task_list(client, token, key="POS", name="Position List")
 
     parent = _create_pms_task(

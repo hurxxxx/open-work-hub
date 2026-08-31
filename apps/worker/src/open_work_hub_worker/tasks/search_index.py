@@ -45,6 +45,19 @@ from open_work_hub_api.domains.search.backend_factory import (  # noqa: E402
     build_partitioned_keyword_search_client,
 )
 from open_work_hub_api.domains.search.models import SearchIndexJob  # noqa: E402
+from open_work_hub_api.domains.auth.app_availability import (  # noqa: E402
+    AppAvailabilitySnapshot,
+    load_app_availability_snapshot,
+)
+from open_work_hub_api.domains.auth.workspace_apps import (  # noqa: E402
+    get_workspace_app_catalog_item,
+)
+from open_work_hub_api.domains.search.default_entity_adapters import (  # noqa: E402
+    ensure_search_entity_adapters_registered,
+)
+from open_work_hub_api.domains.search.entity_adapter_registry import (  # noqa: E402
+    get_search_entity_adapter,
+)
 from open_work_hub_api.domains.search.schemas import SearchEntityType  # noqa: E402
 from open_work_hub_api.domains.retrieval.runtime_binding import (  # noqa: E402
     PartitionedRetrievalRuntimeUnavailable,
@@ -103,6 +116,37 @@ def _file_job_has_complete_projection_fence(job: SearchIndexJob) -> bool:
     )
 
 
+def _search_job_app_enabled(
+    session: Session,
+    job: SearchIndexJob,
+    *,
+    snapshot: AppAvailabilitySnapshot | None = None,
+) -> bool:
+    ensure_search_entity_adapters_registered()
+    adapter = get_search_entity_adapter(job.entity_type)
+    if adapter is None:
+        # The indexing core owns unsupported-entity terminal handling.
+        return True
+    app = get_workspace_app_catalog_item(adapter.owner_app_id)
+    if app is None:
+        return False
+    resolved_snapshot = snapshot or load_app_availability_snapshot(
+        session,
+        workspace_ids=(job.workspace_id,),
+    )
+    return resolved_snapshot.enabled(app, workspace_id=job.workspace_id)
+
+
+def _pause_search_job_for_disabled_app(session: Session, job: SearchIndexJob) -> str:
+    job.status = "pending"
+    job.last_error = "app_disabled"
+    job.next_retry_at = None
+    job.updated_at = datetime.now(UTC).replace(tzinfo=None)
+    session.add(job)
+    session.commit()
+    return "app-disabled"
+
+
 @celery_app.task(
     name="search.index_resource",
     bind=True,
@@ -114,10 +158,17 @@ def index_resource(self, job_id: str) -> str:
     session = _db_session()
     try:
         job = session.get(SearchIndexJob, job_id)
+        if (
+            job is not None
+            and job.status == "pending"
+            and not _search_job_app_enabled(session, job)
+        ):
+            return _pause_search_job_for_disabled_app(session, job)
         return process_search_index_job(
             session,
             job_id,
-            client=_search_client_for_job(session, job),
+            client_factory=_search_client_for_job,
+            execution_allowed=_search_job_app_enabled,
         )
     except Exception as error:
         return _handle_job_failure(session, task=self, job_id=job_id, error=error)
@@ -160,6 +211,7 @@ def _handle_job_failure(
     settings = get_settings()
     error_text = str(error)
     if _is_files_operator_gate_pause(error=error, job=job):
+        job.attempts = max(job.attempts - 1, 0)
         if _has_superseding_pending_job(session, job=job):
             job.status = "cancelled"
             job.last_error = "superseded_while_operator_gate_disabled"
@@ -311,17 +363,26 @@ def _cancel_older_pending_search_index_jobs(session: Session, *, job: SearchInde
 
 def _due_pending_search_job_ids(session: Session, *, limit: int) -> list[str]:
     now = datetime.now(UTC).replace(tzinfo=None)
-    return list(
+    resolved_limit = max(int(limit), 1)
+    candidates = list(
         session.scalars(
-            select(SearchIndexJob.id)
+            select(SearchIndexJob)
             .where(
                 SearchIndexJob.status == "pending",
                 ((SearchIndexJob.next_retry_at.is_(None)) | (SearchIndexJob.next_retry_at <= now)),
             )
             .order_by(SearchIndexJob.created_at.asc(), SearchIndexJob.id.asc())
-            .limit(max(int(limit), 1))
         )
     )
+    snapshot = load_app_availability_snapshot(
+        session,
+        workspace_ids=(job.workspace_id for job in candidates),
+    )
+    return [
+        job.id
+        for job in candidates
+        if _search_job_app_enabled(session, job, snapshot=snapshot)
+    ][:resolved_limit]
 
 
 def _publish_search_index_job(job_id: str) -> None:

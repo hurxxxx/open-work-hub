@@ -6,7 +6,7 @@ export const uiToneClasses = {
   success:
     'border-transparent bg-[color-mix(in_oklab,var(--ui-color-success)_12%,white)] text-[var(--ui-color-success)]',
   warning:
-    'border-transparent bg-[color-mix(in_oklab,var(--ui-color-warning)_14%,white)] text-[var(--ui-color-warning)]',
+    'border-[var(--ui-color-warning-border)] bg-[var(--ui-color-warning-bg)] text-[var(--ui-color-warning-text)]',
   danger:
     'border-transparent bg-[color-mix(in_oklab,var(--ui-color-danger)_14%,white)] text-[var(--ui-color-danger)]',
   inverse: 'border-white/10 bg-white/6 text-white/76',

@@ -1,6 +1,8 @@
+import type { MouseEventHandler } from 'react';
 import { Bell } from 'lucide-react';
 
 import { cn } from '@/src/lib/utils';
+import { NOTIFICATION_PANEL_ID } from './useNotificationPanelFocus';
 
 export function AppBarNotificationButton({
   badgeClassName,
@@ -8,18 +10,22 @@ export function AppBarNotificationButton({
   iconSize = 20,
   label,
   onClick,
+  open,
   unreadCount,
 }: {
   badgeClassName?: string;
   className?: string;
   iconSize?: number;
   label: string;
-  onClick: () => void;
+  onClick: MouseEventHandler<HTMLButtonElement>;
+  open: boolean;
   unreadCount: number;
 }) {
   return (
     <button
       aria-label={label}
+      aria-controls={NOTIFICATION_PANEL_ID}
+      aria-expanded={open}
       className={cn('relative rounded-xl transition-all', className)}
       onClick={onClick}
       title={label}

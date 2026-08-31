@@ -1,6 +1,6 @@
 import type { TFunction } from 'i18next';
 
-import { AiApiError } from '@/src/app-modules/ai/public-api';
+import { AiApiError } from '@/src/platform/ai/ai-api';
 import type { MeetingDetail } from '../../api/meeting-api';
 import type {
   MeetingFollowupResult,

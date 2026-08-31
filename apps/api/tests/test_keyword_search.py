@@ -203,7 +203,9 @@ def test_keyword_search_returns_contract_facets_snippets_and_deep_links(
                 }
             ],
         )
-        expected_deep_link = f"/w/delivery-hub/docs/{doc.id}?page={page.id}"
+        expected_deep_link = (
+            f"/apps/docs/workspaces/delivery-hub/documents/{doc.id}?page={page.id}"
+        )
         db.commit()
     _process_pending_search_jobs()
 

@@ -28,7 +28,10 @@ from open_work_hub_api.domains.auth.dependencies import (
     resolve_auth_context_from_token,
 )
 from open_work_hub_api.domains.auth.models import User, Workspace
-from open_work_hub_api.domains.auth.workspace_app_gate import require_workspace_app_enabled
+from open_work_hub_api.domains.auth.workspace_app_gate import (
+    require_company_app_enabled,
+    require_workspace_app_enabled,
+)
 from open_work_hub_api.domains.collaboration.yjs_runtime import (
     CollabConnectionLimitExceeded,
     FastAPIYjsWebsocket,
@@ -105,13 +108,21 @@ require_whiteboard_app_enabled = require_workspace_app_enabled(
     WHITEBOARD_WORKSPACE_APP.app_id,
     error_code="workspace.app_disabled",
 )
+require_whiteboard_company_app_enabled = require_company_app_enabled(
+    WHITEBOARD_WORKSPACE_APP.app_id,
+    error_code="workspace.app_disabled",
+)
 
 router = APIRouter(
     prefix="/whiteboard",
     tags=["whiteboard"],
     dependencies=[Depends(require_whiteboard_app_enabled)],
 )
-public_router = APIRouter(prefix="/whiteboard", tags=["whiteboard"])
+public_router = APIRouter(
+    prefix="/whiteboard",
+    tags=["whiteboard"],
+    dependencies=[Depends(require_whiteboard_company_app_enabled)],
+)
 ws_router = APIRouter(prefix="/whiteboard", tags=["whiteboard"])
 
 

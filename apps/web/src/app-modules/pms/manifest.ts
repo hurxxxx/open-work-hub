@@ -5,6 +5,7 @@ import {
   Inbox,
   User,
 } from 'lucide-react';
+import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
 
 import type { AppModuleManifest } from '@/src/app/shell/navigation-types';
 
@@ -36,8 +37,7 @@ export const pmsManifest: AppModuleManifest = {
       'apps/api/tests/test_pms_issues.py',
     ],
   },
-  defaultActiveNavItemId: '',
-  surfaces: { launcher: { defaultPinOrder: 0 } },
+  defaultActiveNavItemId: 'pms-inbox',
   navItems: [
     {
       id: 'pms-inbox',
@@ -72,14 +72,14 @@ export const pmsManifest: AppModuleManifest = {
     },
   ],
   workspaceRoutePaths: [
-    '/w/:workspaceSlug/pms',
-    '/w/:workspaceSlug/pms/assigned',
-    '/w/:workspaceSlug/pms/today',
-    '/w/:workspaceSlug/pms/lists/:taskListId',
-    '/w/:workspaceSlug/pms/spaces/:spaceId',
-    '/w/:workspaceSlug/pms/spaces/:spaceId/docs',
-    '/w/:workspaceSlug/pms/spaces/:spaceId/docs/:docId',
-    '/w/:workspaceSlug/pms/spaces/:spaceId/whiteboards',
-    '/w/:workspaceSlug/pms/spaces/:spaceId/whiteboards/:whiteboardId',
+    getAppRoutePattern('pms.root'),
+    getAppRoutePattern('pms.assigned'),
+    getAppRoutePattern('pms.today'),
+    getAppRoutePattern('pms.list'),
+    getAppRoutePattern('pms.space'),
+    getAppRoutePattern('pms.space-docs'),
+    getAppRoutePattern('pms.space-doc'),
+    getAppRoutePattern('pms.space-whiteboards'),
+    getAppRoutePattern('pms.space-whiteboard'),
   ],
 };

@@ -44,11 +44,28 @@ def build_meeting_projection(
         for attendee in sorted(meeting.attendees, key=lambda item: item.created_at)
         if attendee.user is not None and attendee.user.full_name.strip()
     ]
-    transcript_excerpt = (latest_recording.transcript_text or "").strip()[:8000] if latest_recording else ""
-    recording_summary = (getattr(latest_recording, "summary_text", None) or "").strip()[:4000]
+    if isinstance(latest_recording, Recording):
+        transcript_excerpt = (
+            latest_recording.result.transcript_text.strip()[:8000]
+            if latest_recording.result is not None
+            else ""
+        )
+        recording_summary = (
+            (latest_recording.result.summary_text or "").strip()[:4000]
+            if latest_recording.result is not None
+            else ""
+        )
+    else:
+        transcript_excerpt = (
+            (latest_recording.transcript_text or "").strip()[:8000]
+            if latest_recording
+            else ""
+        )
+        recording_summary = (
+            (getattr(latest_recording, "summary_text", None) or "").strip()[:4000]
+        )
     linked_doc_id = (
-        getattr(latest_recording, "minutes_doc_id", None)
-        or getattr(latest_recording, "linked_doc_id", None)
+        getattr(latest_recording, "linked_doc_id", None)
         if latest_recording is not None
         else None
     )
@@ -93,6 +110,7 @@ def _latest_meeting_recording_for_projection(
         recording = db.scalar(
             select(Recording)
             .join(RecordingTarget)
+            .options(selectinload(Recording.result))
             .where(
                 Recording.workspace_id == meeting.workspace_id,
                 Recording.trashed_at.is_(None),

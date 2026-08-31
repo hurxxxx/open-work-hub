@@ -97,7 +97,7 @@ function FileManagerViewContent({
     setFolderName,
     setFolderSelected,
     setFolderVisibility,
-    setImagePreview,
+    closeImagePreview,
     setUploadVisibility,
     timeZone,
     uploadVisibility,
@@ -329,7 +329,7 @@ function FileManagerViewContent({
       {imagePreview ? (
         <FileImagePreviewDialog
           file={imagePreview.file}
-          onClose={() => setImagePreview(null)}
+          onClose={closeImagePreview}
           url={imagePreview.url}
         />
       ) : null}

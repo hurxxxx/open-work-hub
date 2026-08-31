@@ -35,7 +35,6 @@ export interface ProfilePageState {
   timeZone: string;
   locale: LocalePreference;
   dateFormat: DateFormatPreference;
-  defaultWorkspaceId: string;
   submitting: boolean;
   message: string | null;
   error: string | null;
@@ -49,8 +48,7 @@ export type ProfilePreferenceChange =
   | { type: 'theme'; value: ThemePreference }
   | { type: 'locale'; value: string }
   | { type: 'timeZone'; value: string }
-  | { type: 'dateFormat'; value: string }
-  | { type: 'defaultWorkspace'; value: string };
+  | { type: 'dateFormat'; value: string };
 
 export type ProfilePreferenceSyncPlan = {
   kind: 'locale';
@@ -104,18 +102,6 @@ export function getErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-function resolveDefaultWorkspaceId(user: AuthUser | null | undefined): string {
-  const defaultWorkspaceId = user?.default_workspace_id ?? '';
-  if (!defaultWorkspaceId) {
-    return '';
-  }
-  return user?.workspaces.some(
-    (workspace) => workspace.id === defaultWorkspaceId,
-  )
-    ? defaultWorkspaceId
-    : '';
-}
-
 export function createInitialProfilePageState(
   user: AuthUser,
   initialTab: SettingsSection,
@@ -128,7 +114,6 @@ export function createInitialProfilePageState(
     timeZone: normalizeTimeZone(user.time_zone),
     locale: normalizeLocale(user.locale),
     dateFormat: normalizeDateFormatPreference(user.date_format),
-    defaultWorkspaceId: resolveDefaultWorkspaceId(user),
     submitting: false,
     message: null,
     error: null,
@@ -154,7 +139,6 @@ export function profilePageReducer(
         timeZone: normalizeTimeZone(action.user.time_zone),
         locale: normalizeLocale(action.user.locale),
         dateFormat: normalizeDateFormatPreference(action.user.date_format),
-        defaultWorkspaceId: resolveDefaultWorkspaceId(action.user),
         message: null,
         error: null,
       };
@@ -228,17 +212,7 @@ export function prepareProfilePreferenceSave(
     };
   }
 
-  const nextDefaultWorkspaceId = change.value.trim();
-  if (nextDefaultWorkspaceId === state.defaultWorkspaceId) return null;
-  return {
-    optimisticPatch: {
-      defaultWorkspaceId: nextDefaultWorkspaceId,
-      error: null,
-      message: null,
-    },
-    payload: { default_workspace_id: nextDefaultWorkspaceId || null },
-    rollbackPatch: { defaultWorkspaceId: state.defaultWorkspaceId },
-  };
+  return null;
 }
 
 export function prepareProfileDetailsSave(

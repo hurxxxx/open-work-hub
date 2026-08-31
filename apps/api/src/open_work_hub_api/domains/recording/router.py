@@ -15,8 +15,9 @@ from open_work_hub_api.domains.recording import tus_protocol
 from open_work_hub_api.domains.recording.app_catalog import RECORDING_WORKSPACE_APP
 from open_work_hub_api.domains.recording.schemas import (
     RecordingTargetCreateRequest,
+    RecordingDetailOut,
     RecordingListResponse,
-    RecordingOut,
+    RecordingPublicationOut,
     RecordingPlaybackResponse,
     RecordingUpdateRequest,
     RecordingUploadChunkAck,
@@ -208,14 +209,14 @@ async def upload_recording_chunk(
     )
 
 
-@router.post("/recordings/staging/{staging_id}/complete", response_model=RecordingOut)
+@router.post("/recordings/staging/{staging_id}/complete", response_model=RecordingDetailOut)
 def complete_recording_staging(
     staging_id: str,
     payload: RecordingUploadCompleteRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
-) -> RecordingOut:
+) -> RecordingDetailOut:
     return recording_service.complete_staging(
         db,
         workspace=workspace,
@@ -260,7 +261,7 @@ def discard_recording_staging(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.post("/recordings/import", response_model=RecordingOut, status_code=status.HTTP_201_CREATED)
+@router.post("/recordings/import", response_model=RecordingDetailOut, status_code=status.HTTP_201_CREATED)
 def import_recording(
     file: UploadFile,
     title: str | None = Form(default=None, max_length=200),
@@ -275,7 +276,7 @@ def import_recording(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
-) -> RecordingOut:
+) -> RecordingDetailOut:
     return recording_service.import_recording(
         db,
         workspace=workspace,
@@ -293,13 +294,13 @@ def import_recording(
     )
 
 
-@router.get("/recordings/{recording_id}", response_model=RecordingOut)
+@router.get("/recordings/{recording_id}", response_model=RecordingDetailOut)
 def get_recording(
     recording_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
-) -> RecordingOut:
+) -> RecordingDetailOut:
     return recording_service.get_recording(
         db,
         workspace=workspace,
@@ -308,14 +309,33 @@ def get_recording(
     )
 
 
-@router.patch("/recordings/{recording_id}", response_model=RecordingOut)
+@router.post(
+    "/recordings/{recording_id}/publications/docs",
+    response_model=RecordingPublicationOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def publish_recording_to_docs(
+    recording_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
+) -> RecordingPublicationOut:
+    return recording_service.publish_recording_to_docs(
+        db,
+        workspace=workspace,
+        user=current_user,
+        recording_id=recording_id,
+    )
+
+
+@router.patch("/recordings/{recording_id}", response_model=RecordingDetailOut)
 def update_recording(
     recording_id: str,
     payload: RecordingUpdateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
-) -> RecordingOut:
+) -> RecordingDetailOut:
     return recording_service.update_recording(
         db,
         workspace=workspace,
@@ -340,13 +360,13 @@ def delete_recording(
     )
 
 
-@router.post("/recordings/{recording_id}/retry", response_model=RecordingOut)
+@router.post("/recordings/{recording_id}/retry", response_model=RecordingDetailOut)
 def retry_recording(
     recording_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
-) -> RecordingOut:
+) -> RecordingDetailOut:
     return recording_service.retry_recording(
         db,
         workspace=workspace,
@@ -385,14 +405,14 @@ def stream_recording_media(
     )
 
 
-@router.post("/recordings/{recording_id}/targets", response_model=RecordingOut)
+@router.post("/recordings/{recording_id}/targets", response_model=RecordingDetailOut)
 def create_target(
     recording_id: str,
     payload: RecordingTargetCreateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
-) -> RecordingOut:
+) -> RecordingDetailOut:
     return recording_service.create_target(
         db,
         workspace=workspace,
@@ -402,14 +422,14 @@ def create_target(
     )
 
 
-@router.delete("/recordings/{recording_id}/targets/{target_id}", response_model=RecordingOut)
+@router.delete("/recordings/{recording_id}/targets/{target_id}", response_model=RecordingDetailOut)
 def delete_target(
     recording_id: str,
     target_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
-) -> RecordingOut:
+) -> RecordingDetailOut:
     return recording_service.delete_target(
         db,
         workspace=workspace,

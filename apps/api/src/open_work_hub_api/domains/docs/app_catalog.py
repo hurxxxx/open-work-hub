@@ -1,19 +1,12 @@
 from open_work_hub_api.core.workspace_app_registry import (
-    WorkspaceAppRegistration,
     WorkspaceNavRegistration,
+    workspace_app_registration,
 )
 
 
-DOCS_WORKSPACE_APP = WorkspaceAppRegistration(
-    app_id="docs",
-    title="DOCS",
-    route_base="/docs",
-    icon_key="files",
+DOCS_WORKSPACE_APP = workspace_app_registration(
+    "docs",
     backend_domain="docs",
-    enabled_by_default=True,
-    visible_by_default=True,
-    launcher_category=True,
-    launcher_pinned_by_default=True,
     nav_items=(
         WorkspaceNavRegistration(
             id="docs-all",

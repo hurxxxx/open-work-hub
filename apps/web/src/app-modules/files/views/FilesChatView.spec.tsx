@@ -33,7 +33,7 @@ describe('FilesChatView', () => {
       emptyGreeting: 'files.chat.emptyGreeting',
       emptySubline: 'files.chat.emptySubline',
       routeAppId: 'files',
-      routePathSuffix: '/chat',
+      routeId: 'files.chat',
       sidebarTitle: 'files.chat.conversationsTitle',
       title: 'files.chat.title',
     });

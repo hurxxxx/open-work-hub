@@ -81,12 +81,14 @@ export const resources = {
         close: '{{title}} 메뉴 닫기',
         description: '현재 앱 안에서 이동합니다.',
         title: '{{title}} 메뉴',
+        titleWithContext: '{{title}} 메뉴 — 현재 범위 {{context}}',
       },
       search: {
         open: '통합검색 열기',
         title: '통합검색',
       },
       notifications: {
+        closePanel: '알림 패널 닫기',
         empty: '알림이 없습니다.',
         markAllAsRead: '모두 읽음으로 표시',
         markAsRead: '읽음으로 표시',
@@ -207,13 +209,14 @@ export const resources = {
       gates: {
         adminSectionDenied:
           '현재 계정에는 이 관리자 섹션을 볼 권한이 없습니다.',
-        appDisabled: '현재 workspace에서는 이 앱이 활성화되어 있지 않습니다.',
+        appDisabled:
+          '현재 워크스페이스에서는 이 앱이 활성화되어 있지 않습니다.',
         noAccessibleWorkspace:
           '워크스페이스 초대를 기다리는 중입니다. 워크스페이스 관리자에게 초대를 요청해 주세요.',
         toolWorkspaceDenied:
           '현재 계정에는 이 도구가 속한 워크스페이스 접근 권한이 없습니다.',
         workspaceAppDenied:
-          '현재 계정은 이 workspace에서 해당 앱을 사용할 수 없습니다.',
+          '현재 계정은 이 워크스페이스에서 해당 앱을 사용할 수 없습니다.',
         workspaceDenied: '현재 계정은 이 워크스페이스에 접근할 수 없습니다.',
         workspaceLoading: '워크스페이스 구성을 불러오는 중입니다.',
         workspaceSearchDisabled:
@@ -238,6 +241,7 @@ export const resources = {
         favorites: '즐겨찾기 런처',
         launcher: '앱 런처',
         more: '더 보기',
+        primaryNavigation: '주요 앱 탐색',
         personalTools: '개인 도구',
         personalToolsScope: '내 개인 앱',
         searchApps: '앱 검색',
@@ -248,6 +252,62 @@ export const resources = {
         mode: '앱 영역',
         open: '열기',
         openApp: '{{title}} 열기',
+      },
+      launcher: {
+        appUnavailable: '이 앱을 사용할 수 없습니다.',
+        availableWorkspaceCount: '사용 가능한 워크스페이스 {{count}}개',
+        companyApp: '전사 앱',
+        companyScope: '전사 범위',
+        chooseWorkspaceForApp: '{{app}} — 워크스페이스 선택 필요',
+        description:
+          '앱을 선택하세요. 워크스페이스 앱은 현재 작업 공간을 우선 유지하고, 필요한 경우 목적지를 먼저 안내합니다.',
+        eyebrow: '앱 중심 작업 공간',
+        manageWorkspaces: '워크스페이스 관리',
+        noAppsDescription:
+          '현재 계정에 노출하도록 설정된 전사 앱이나 개인 앱이 없습니다.',
+        noAppsTitle: '사용 가능한 앱이 없습니다',
+        noWorkspaceDescription:
+          '계정에 제공된 전사 앱과 개인 앱은 워크스페이스 없이 사용할 수 있습니다. 워크스페이스 앱은 관리자가 멤버십을 추가하면 표시됩니다.',
+        noWorkspaceTitle: '아직 소속된 워크스페이스가 없습니다',
+        openCompanyApp: '{{app}} — 전사 범위에서 열기',
+        openPersonalApp: '{{app}} — 개인 범위에서 열기',
+        opensInWorkspace: '{{workspace}}에서 열림',
+        openWorkspaceApp: '{{app}} — {{workspace}}에서 열기',
+        personalApp: '개인 앱',
+        personalScope: '개인 범위',
+        title: '앱 런처',
+        unavailableAppLabel: '{{app}} — 사용할 수 없음',
+        workspaceApp: '워크스페이스 앱',
+        workspaceSelectionRequired: '워크스페이스 선택 필요',
+        workspaceMembershipRequiredDescription:
+          '이 앱은 워크스페이스 멤버십이 필요합니다. 관리자에게 워크스페이스 추가를 요청하세요.',
+        workspaceMembershipRequiredTitle: '워크스페이스 접근이 필요합니다',
+      },
+      accessRefresh: {
+        failedDescription:
+          '최신 접근 권한을 확인하지 못했습니다. 다시 시도해 주세요.',
+        failedTitle: '접근 권한을 새로 고치지 못했습니다',
+        loading: '최신 접근 권한을 확인하는 중입니다.',
+        retry: '다시 시도',
+      },
+      workspaceContext: {
+        change: '변경',
+        chooseDescription:
+          '이 앱을 사용할 워크스페이스를 선택하세요. 선택은 앱별로 저장됩니다.',
+        chooseTitle: '{{app}}에서 사용할 워크스페이스 선택',
+        currentUnavailable: '현재 워크스페이스 사용 불가',
+        executionScopeLabel: '실행 범위',
+        label: '이 앱의 워크스페이스',
+        loadFailed: '워크스페이스 목록을 불러오지 못했습니다.',
+        loading: '워크스페이스를 불러오는 중입니다.',
+        loadMore: '워크스페이스 더 보기',
+        noResults: '사용 가능한 워크스페이스가 없습니다.',
+        retry: '다시 시도',
+        searchLabel: '워크스페이스 검색',
+        searchPlaceholder: '이름 또는 주소로 검색',
+        switchFailedTitle: '워크스페이스를 변경하지 못했습니다.',
+        switchedDescription: '앱 홈으로 이동했습니다.',
+        switchedTitle: '{{workspace}}로 전환했습니다.',
       },
       appBarEditor: {
         allApps: '전체 앱',
@@ -281,25 +341,13 @@ export const resources = {
         'diagrams-create': '다이어그램',
         'whiteboard-create': '화이트보드',
       },
-      workspaceSwitcher: {
-        create: '새 워크스페이스',
-        currentTitle: '{{name}} 워크스페이스',
-        defaultBadge: '시작',
-        defaultNone: '지정 안 함',
-        defaultSaveFailed: '시작 워크스페이스를 저장하지 못했습니다.',
-        defaultSelectLabel: '시작 워크스페이스',
-        manage: '워크스페이스 설정',
-        noResults: '검색 결과가 없습니다.',
-        noResultsHint: '이름 또는 slug 로 다시 검색하세요.',
-        searchPlaceholder: '워크스페이스 검색',
-        switch: '워크스페이스 전환',
-      },
       documentTitle: {
         app: '{{app}} | Open Work Hub',
         profile: '내 설정',
         workspaceApp: '{{workspace}} · {{app}} | Open Work Hub',
       },
       apps: {
+        'agent-terminal': 'Codex 터미널',
         ai: 'AI',
         bento: 'bento/slides',
         business: '업무',
@@ -517,10 +565,11 @@ export const resources = {
         showPasswordField: '{{field}} 보기',
         signIn: '로그인',
         signUp: '회원가입',
-        setupDescription: '첫 관리자 계정을 생성해 워크스페이스를 시작합니다.',
+        setupDescription:
+          '첫 플랫폼 관리자 계정을 생성합니다. 워크스페이스 멤버십은 별도로 추가합니다.',
         setupTitle: '최초 관리자 설정',
         signupDescription:
-          '계정을 만든 뒤 워크스페이스 관리자의 초대를 받으면 앱을 사용할 수 있습니다.',
+          '계정을 만들면 전사 앱과 개인 앱을 바로 사용할 수 있습니다. 워크스페이스 앱은 멤버십이 추가된 뒤 표시됩니다.',
       },
       notFound: {
         description: '요청한 주소는 존재하지 않거나 이동되었습니다.',
@@ -558,10 +607,6 @@ export const resources = {
         avatar: '아바타',
         currentPassword: '현재 비밀번호',
         customizeAppearance: '앱 표시 방식을 설정합니다.',
-        defaultWorkspace: '시작 워크스페이스',
-        defaultWorkspaceDescription:
-          '로그인 후 홈으로 들어갈 때 먼저 열 워크스페이스입니다.',
-        defaultWorkspaceNone: '지정 안 함',
         displayName: '표시 이름',
         emailAddress: '이메일 주소',
         emailChangeHint: '변경하려면 관리자에게 문의하세요.',
@@ -655,9 +700,9 @@ export const resources = {
           '워크스페이스 bootstrap 요청에 실패했습니다. ({{status}})',
         contextUnavailable: '워크스페이스 컨텍스트를 사용할 수 없습니다.',
         settingsAccessDenied:
-          '현재 계정은 이 workspace 설정에 접근할 수 없습니다.',
+          '현재 계정은 이 워크스페이스 설정에 접근할 수 없습니다.',
         settingsAdminRequired:
-          '이 workspace 설정은 admin 이상만 접근할 수 있습니다.',
+          '이 워크스페이스 설정은 워크스페이스 관리자만 접근할 수 있습니다.',
         settingsDescription: '이 협업 공간의 프로필과 멤버십을 관리합니다.',
         settingsLoadFailed: '워크스페이스 설정을 불러오지 못했습니다.',
         settingsLoading: '워크스페이스 설정을 불러오는 중입니다.',
@@ -1060,6 +1105,210 @@ export const resources = {
           workspace: '워크스페이스 공유',
         },
       },
+      agentTerminal: {
+        accessDeniedDescription:
+          '이 도구는 플랫폼 관리자 계정에서만 사용할 수 있습니다.',
+        accessDeniedTitle: '접근 권한이 없습니다.',
+        actions: {
+          cancel: '취소',
+          delete: '삭제',
+          deleteSessionLabel: '"{{root}}" 세션 기록 삭제',
+          newSession: '새 세션',
+          reconnect: '다시 연결',
+          refresh: '새로고침',
+          resume: '이어하기',
+          resumeThreadLabel: '"{{name}}" Codex 작업 이어하기',
+          retry: '다시 시도',
+          stop: '세션 종료',
+          stopSessionLabel: '"{{root}}" 세션 종료',
+        },
+        codexMissingDescription:
+          '설정된 Codex CLI 실행 파일을 서버에서 찾을 수 없습니다.',
+        codexHistory: {
+          description:
+            '이 서버 계정에 저장된 Codex 작업을 새 터미널에서 이어서 실행합니다.',
+          empty: '이어갈 Codex 작업 기록이 없습니다.',
+          loadFailed: 'Codex 작업 기록을 불러오지 못했습니다.',
+          loading: 'Codex 작업 기록을 불러오는 중입니다.',
+          untitled: 'Codex 작업 · {{id}}',
+        },
+        deleteConfirmDescription:
+          '"{{root}}" 세션 메타데이터를 목록에서 삭제합니다. 이 작업은 되돌릴 수 없습니다.',
+        deleteConfirmTitle: '세션 기록을 삭제할까요?',
+        connection: {
+          connected: '연결됨',
+          connecting: '연결 중',
+          ended: '종료됨',
+          offline: '연결 끊김',
+        },
+        disabledDescription:
+          '서버 환경 설정에서 Codex 터미널을 먼저 활성화해야 합니다.',
+        eyebrow: '플랫폼 관리자 도구',
+        failedSessionDescription:
+          '서버 설정과 Codex CLI 설치 상태를 확인한 뒤 새 세션을 시작하세요.',
+        failedSessionTitle: '세션을 시작하지 못했습니다.',
+        feedback: {
+          connectionFailed: '터미널 연결을 유지하지 못했습니다.',
+          createFailed: 'Codex 터미널 세션을 시작하지 못했습니다.',
+          created: 'Codex 터미널 세션을 시작했습니다.',
+          deleteFailed: '세션 기록을 삭제하지 못했습니다.',
+          deleted: '세션 기록을 삭제했습니다.',
+          loadFailed: 'Codex 터미널 정보를 불러오지 못했습니다.',
+          resumeFailed: 'Codex 작업을 이어서 실행하지 못했습니다.',
+          resumed: 'Codex 작업을 새 터미널에서 이어갑니다.',
+          stopFailed: 'Codex 터미널 세션을 종료하지 못했습니다.',
+          stopped: 'Codex 터미널 세션을 종료했습니다.',
+        },
+        git: {
+          actions: {
+            backToHistory: '커밋 히스토리로 돌아가기',
+            close: 'Git 패널 닫기',
+            closeExpandedDiff: '확대 diff 닫기',
+            expandDiff: '큰 화면에서 diff 보기',
+            open: 'Git',
+            refresh: 'Git 정보 새로고침',
+          },
+          binaryDescription:
+            '바이너리 파일의 내용 차이는 이 화면에서 표시하지 않습니다.',
+          binaryTitle: '바이너리 파일입니다.',
+          cleanDescription: '스테이지되거나 수정된 파일이 없습니다.',
+          cleanTitle: '작업 트리가 깨끗합니다.',
+          detachedHead: '분리된 HEAD · {{head}}',
+          diffFailedDescription:
+            '파일 상태가 바뀌었을 수 있습니다. 목록을 새로고침한 뒤 다시 시도해 주세요.',
+          diffFailedTitle: '파일 변경사항을 불러오지 못했습니다.',
+          diffLabel: '{{path}} 파일 변경사항',
+          diffLoading: '파일 변경사항을 불러오는 중입니다.',
+          diff: {
+            commitContext: '{{commit}} · {{subject}}',
+            emptyDescription:
+              '작업 트리 파일이나 커밋 파일을 선택하면 diff를 표시합니다.',
+            emptyTitle: '표시할 diff를 선택하세요.',
+            workingTreeContext: '{{branch}} 작업 트리',
+          },
+          drawerDescription:
+            '현재 작업 경로의 변경사항, HEAD 히스토리, 브랜치와 태그를 읽기 전용으로 표시합니다.',
+          drawerTitle: 'Git 저장소',
+          expandedDiffTitle: '{{path}} diff',
+          feedback: {
+            commitFailed: 'Git 커밋 상세 정보를 불러오지 못했습니다.',
+            diffFailed: '파일 변경사항을 불러오지 못했습니다.',
+            historyFailed: 'Git 커밋 히스토리를 더 불러오지 못했습니다.',
+            repositoryFailed: 'Git 저장소 정보를 불러오지 못했습니다.',
+            statusFailed: 'Git 변경사항 목록을 불러오지 못했습니다.',
+          },
+          commitFiles: {
+            firstParent: '병합 커밋은 첫 번째 부모와 비교합니다.',
+            loadFailed: '커밋 파일 목록을 불러오지 못했습니다.',
+            loading: '커밋 파일 목록을 불러오는 중입니다.',
+            truncated: '파일이 많아 커밋 파일 목록 일부만 표시했습니다.',
+          },
+          history: {
+            empty: '현재 HEAD에 커밋이 없습니다.',
+            loadFailed: '커밋 히스토리를 불러오지 못했습니다.',
+            loadMore: '이전 커밋 더 보기',
+            loading: '커밋 히스토리를 불러오는 중입니다.',
+            loadingMore: '이전 커밋을 불러오는 중...',
+            merge: '병합',
+            noSubject: '제목 없는 커밋',
+          },
+          kind: {
+            added: '추가됨',
+            conflicted: '충돌',
+            copied: '복사됨',
+            deleted: '삭제됨',
+            modified: '수정됨',
+            renamed: '이름 변경됨',
+            type_changed: '파일 형식 변경됨',
+            untracked: '추적되지 않음',
+          },
+          loadFailedDescription:
+            'Git 저장소 상태를 확인한 뒤 다시 시도해 주세요.',
+          loadFailedTitle: 'Git 변경사항을 불러오지 못했습니다.',
+          loading: 'Git 변경사항을 불러오는 중입니다.',
+          notRepositoryDescription:
+            '선택한 허용 작업 경로 자체가 Git 저장소 루트가 아닙니다.',
+          notRepositoryTitle: 'Git 저장소가 아닙니다.',
+          resizePanel: '터미널과 Git 패널 크기 조절',
+          refs: {
+            branchesEmpty: '표시할 브랜치가 없습니다.',
+            current: '현재',
+            loading: '브랜치와 태그를 불러오는 중입니다.',
+            localBranches: '로컬 브랜치',
+            readOnly:
+              '브랜치와 태그는 정보만 표시하며 작업 브랜치를 변경하지 않습니다.',
+            remoteBranches: '원격 브랜치',
+            stashesEmpty: '저장된 stash가 없습니다.',
+            tagsEmpty: '표시할 태그가 없습니다.',
+            truncated: '참조가 많아 목록 일부만 표시했습니다.',
+          },
+          repository: {
+            aheadBehind: '앞섬 {{ahead}} · 뒤처짐 {{behind}}',
+            branch: '브랜치',
+            head: 'HEAD',
+            none: '없음',
+            sync: '추적 상태',
+            upstream: '업스트림',
+          },
+          sections: {
+            branches: '브랜치',
+            changes: '작업 트리',
+            commitFiles: '커밋 파일',
+            history: '커밋 히스토리',
+            repository: '저장소 정보',
+            stashes: '스태시',
+            tags: '태그',
+          },
+          scope: {
+            conflicted: '충돌',
+            staged: '스테이지됨',
+            unstaged: '변경됨',
+            untracked: '추적되지 않음',
+          },
+          title: 'Git · 변경사항 {{count}}',
+          tooLargeDescription:
+            '파일이 서버의 diff 표시 크기 제한을 초과했습니다.',
+          tooLargeTitle: '파일이 너무 큽니다.',
+          truncated: '변경 파일이 많아 서버에서 목록 일부만 표시했습니다.',
+          unknownHead: '브랜치 정보 없음',
+        },
+        loadFailedDescription:
+          '권한, 앱 활성화 상태 또는 서버 런타임을 확인해 주세요.',
+        loadFailedTitle: 'Codex 터미널을 불러오지 못했습니다.',
+        loading: 'Codex 터미널을 불러오는 중입니다.',
+        noSessionDescription:
+          '허용된 작업 경로를 선택하고 Codex CLI 세션을 시작하세요.',
+        noSessionTitle: '열린 Codex 세션이 없습니다.',
+        noTranscriptStorage:
+          '터미널 원문은 DB에 저장하지 않습니다. 실행 중 세션은 tmux에서 유지되어 API 재시작 후 다시 연결됩니다.',
+        rootPlaceholder: '작업 경로 선택',
+        rootsMissingDescription:
+          '서버 환경 설정에 허용된 작업 경로를 하나 이상 등록해야 합니다.',
+        securityNotice:
+          'Codex는 서버 권한으로 동작합니다. 승인된 개발 경로에서만 사용하고 비밀값이나 운영 자격증명은 입력하지 마세요.',
+        sidebar: {
+          codexHistory: 'Codex 기록',
+          sessions: '터미널',
+        },
+        sessionCapacity: '동시 세션 {{active}}/{{limit}}',
+        sessionLimitReached:
+          '동시 실행 가능한 세션 수에 도달했습니다. 실행 중인 세션을 종료한 뒤 다시 시도하세요.',
+        sessionsDescription: '최근 50개 tmux 세션과 실행 기록',
+        sessionsEmpty: '아직 생성한 세션이 없습니다.',
+        sessionsTitle: '세션',
+        status: {
+          exited: '완료',
+          failed: '실패',
+          running: '실행 중',
+          starting: '시작 중',
+          terminated: '종료됨',
+        },
+        terminalLabel: 'Codex CLI 터미널',
+        tmuxMissingDescription:
+          '지속 가능한 터미널 세션에 필요한 tmux 실행 파일을 서버에서 찾을 수 없습니다.',
+        title: 'Codex 터미널',
+        unavailableTitle: 'Codex 터미널을 사용할 수 없습니다.',
+      },
       mail: {
         eyebrow: '로컬 AI 메일',
         title: '메일',
@@ -1263,7 +1512,7 @@ export const resources = {
             actionPlaceholder: '작업 코드',
             actions: {
               adminAiRuntimeRetentionScrub: 'AI 런타임 보존 정리',
-              adminAppVisibilityUpdate: '전사 앱 표시 변경',
+              adminCompanyAppControlsUpdate: '회사 앱 제어 변경',
               adminTeamCreate: '팀 생성',
               adminTeamDelete: '팀 삭제',
               adminTeamMembersReplace: '팀 멤버 교체',
@@ -1286,7 +1535,8 @@ export const resources = {
               adminUserDelete: '사용자 삭제',
               adminUserResetPassword: '비밀번호 초기화',
               adminUserUpdate: '사용자 수정',
-              adminWorkspaceAppVisibilityUpdate: '워크스페이스 앱 표시 변경',
+              adminWorkspaceAppDefaultsUpdate: '워크스페이스 앱 기본값 변경',
+              adminWorkspaceAppOverridesUpdate: '워크스페이스 앱 설정 변경',
               adminWorkspaceBindingsReplace: '워크스페이스 연결 교체',
               adminWorkspaceCreate: '워크스페이스 생성',
               adminWorkspaceDelete: '워크스페이스 삭제',
@@ -2763,6 +3013,57 @@ export const resources = {
             usersTitle: '사용자별 활용 현황',
           },
           apps: {
+            controls: {
+              columns: {
+                app: '앱',
+                company: '회사 제어',
+                context: '실행 컨텍스트',
+                default: '기본값',
+                effective: '최종 적용',
+                override: '워크스페이스 설정',
+                scope: '정책 범위',
+              },
+              companyDescription:
+                '모든 실행 앱의 최상위 사용 여부를 결정합니다. 이 설정을 끄면 워크스페이스 기본값이나 예외로 다시 켤 수 없습니다.',
+              companyTitle: '회사 앱 제어',
+              companyToggle: '{{app}} 회사 사용 여부',
+              context: {
+                company: '전사',
+                personal: '개인',
+                workspace: '워크스페이스',
+              },
+              defaultToggle: '{{app}} 워크스페이스 기본 사용 여부',
+              defaultsDescription:
+                '회사에서 허용한 워크스페이스 앱의 기본값입니다. 개별 워크스페이스 설정이 없을 때 적용됩니다.',
+              defaultsTab: '워크스페이스 기본값',
+              defaultsTitle: '워크스페이스 앱 기본값',
+              disabled: '중지',
+              emptyDescription: '등록된 실행 앱이 없습니다.',
+              emptyTitle: '표시할 앱이 없습니다.',
+              enabled: '사용',
+              loadFailed: '앱 정책을 불러오지 못했습니다.',
+              loadingDescription: '잠시만 기다려 주세요.',
+              loadingTitle: '앱 정책을 불러오는 중입니다.',
+              override: {
+                disable: '이 워크스페이스에서 중지',
+                enable: '이 워크스페이스에서 사용',
+                inherit: '기본값 상속',
+              },
+              overridesDescription:
+                '선택한 워크스페이스에만 기본값과 다른 정책을 적용합니다. 회사 제어가 항상 우선합니다.',
+              overridesTab: '워크스페이스별 설정',
+              overridesTitle: '워크스페이스별 앱 설정',
+              overrideSelect: '{{app}} 워크스페이스 설정',
+              refresh: '새로고침',
+              saveFailed: '앱 정책을 저장하지 못했습니다.',
+              saved: '앱 정책을 저장했습니다.',
+              scope: {
+                platform: '워크스페이스 무관',
+                workspace: '워크스페이스별',
+              },
+              workspaceEmpty: '워크스페이스가 없습니다.',
+              workspaceSearch: '워크스페이스 검색',
+            },
             columns: {
               app: '앱',
               route: '기본 경로',
@@ -3153,6 +3454,11 @@ export const resources = {
             workspaceListLoadFailed:
               '배정 가능한 워크스페이스를 불러오지 못했습니다.',
             workspaceMemberships: '소속 워크스페이스',
+            workspaceRemovalConfirmAction: '접근 권한 제거 후 저장',
+            workspaceRemovalConfirmDescription:
+              '{{userLabel}} 사용자는 선택 해제한 {{count}}개 워크스페이스의 앱과 기능에 즉시 접근할 수 없게 됩니다.',
+            workspaceRemovalConfirmTitle:
+              '워크스페이스 {{count}}개의 접근 권한을 제거할까요?',
           },
           organization: {
             boundaryTitle: '조직 정보의 범위',
@@ -3464,6 +3770,9 @@ export const resources = {
             bulkAdded: '{{count}}명을 추가했습니다.',
             bulkAddPartial: '{{succeeded}}명 추가됨, {{failed}}명 실패',
             bulkRemoveFailed: '일괄 제거에 실패했습니다.',
+            bulkRemoveConfirmDescription:
+              '선택한 {{count}}명은 {{workspace}} 워크스페이스의 앱과 기능에 즉시 접근할 수 없게 됩니다.',
+            bulkRemoveConfirmTitle: '선택한 {{count}}명을 제거할까요?',
             bulkRemovePartial: '{{succeeded}}명 제거됨, {{failed}}명 실패',
             bulkRemoved: '{{count}}명을 제거했습니다.',
             bulkRoleChanged: '{{count}}명의 역할을 변경했습니다.',
@@ -3486,6 +3795,10 @@ export const resources = {
             name: '이름',
             previewMeta: '{{count}}명 · 관리자 미리보기',
             removeFailed: '멤버를 제거하지 못했습니다.',
+            removeConfirmAction: '워크스페이스에서 제거',
+            removeConfirmDescription:
+              '{{name}}님은 {{workspace}} 워크스페이스의 앱과 기능에 즉시 접근할 수 없게 됩니다.',
+            removeConfirmTitle: '{{name}}님을 제거할까요?',
             removed: '멤버를 제거했습니다.',
             removeFromWorkspace: '워크스페이스에서 제거',
             role: '역할',
@@ -4175,8 +4488,6 @@ export const resources = {
         mail: '받은 메일',
         mailComingSoon: '메일 연동 준비 중입니다.',
         meetingsEmptyCta: '회의 잡기',
-        notifications: '알림',
-        notificationsEmpty: '새 알림이 없습니다.',
         scheduleEmpty: '예정된 일정이 없습니다.',
         scheduleEmptyCta: '일정 추가',
         tasksEmptyCta: '태스크 추가',
@@ -4228,6 +4539,7 @@ export const resources = {
           noLocalRecordingToRecover: '복구할 로컬 녹음이 없습니다.',
           originalUploadFailed: '원본 파일 업로드에 실패했습니다.',
           playbackFailed: '녹음 재생 링크를 가져올 수 없습니다.',
+          publishFailed: '녹음 결과를 문서로 게시할 수 없습니다.',
           persistCheckFailed:
             '브라우저 저장공간 보호 상태를 확인하지 못했습니다.',
           persistMayExpire:
@@ -4251,7 +4563,6 @@ export const resources = {
           detachConfirmDescription: '이 항목과의 연결을 해제하시겠습니까?',
           detachConfirmTitle: '연결 해제',
           detachItemLabel: '{{item}} 연결 해제',
-          generatedDocsTitle: '자동 생성된 문서',
           linkedItems: '관련 항목',
           linkedMeetings: '연결된 회의',
           linkedTasks: '연결된 태스크',
@@ -4274,12 +4585,22 @@ export const resources = {
             title: '회의 추가',
           },
           minutesDoc: '요약 문서',
+          noPublications: '아직 게시된 문서가 없습니다.',
           noLinkedMeetings: '연결된 회의가 없습니다.',
           noLinkedTasks: '연결된 태스크가 없습니다.',
           noOtherConnections: '기타 연결이 없습니다.',
           notReady: '준비 중',
           otherConnections: '기타 연결',
+          publicationsTitle: '게시된 문서',
+          publishedDocument: '녹음 결과 문서 v{{version}}',
+          publishing: '게시 중',
+          publishToDocs: '문서로 게시',
           rawTranscriptDoc: '원문 스크립트',
+          resultsTitle: '녹음 결과',
+          resultPending: '결과를 생성하고 있습니다.',
+          resultVersion: '결과 버전 {{version}}',
+          summaryTitle: '요약',
+          transcriptTitle: '스크립트',
           taskPicker: {
             description: '이 녹음을 연결할 태스크를 선택하세요.',
             noTaskLists: '태스크 목록이 없습니다.',
@@ -4289,6 +4610,7 @@ export const resources = {
           },
           titleLabel: '제목',
           titleSaved: '제목이 저장되었습니다.',
+          verifierNote: '검증 메모: {{note}}',
         },
         filters: {
           categories: {
@@ -4369,8 +4691,7 @@ export const resources = {
           progressLabel: '{{stage}} 진행 중',
           stages: {
             audio: '음성 저장',
-            minutesDoc: '요약 문서',
-            rawDoc: '원문 문서',
+            summary: '요약 생성',
             transcript: '스크립트 추출',
           },
           state: {
@@ -4660,7 +4981,7 @@ export const resources = {
         recordingsDescription:
           '회의를 열면 notes editor 오른쪽 rail에서 녹음 시작과 음성 파일 업로드를 사용할 수 있습니다.',
         recordingsPlaceholder:
-          '회의 녹음은 각 회의 workspace에서 사용할 수 있습니다.',
+          '회의 녹음은 각 회의 워크스페이스에서 사용할 수 있습니다.',
         schedule: '일정',
         scheduled: '예정',
         scheduleView: '스케줄 보기',
@@ -4699,6 +5020,7 @@ export const resources = {
         allDay: '종일 일정',
         create: '생성',
         createEventOrMeeting: '이벤트 또는 회의 생성',
+        chooseMeetingWorkspace: '회의 워크스페이스 선택',
         datePicker: {
           chooseDate: '날짜 선택',
           nextMonth: '다음 달',
@@ -5745,12 +6067,14 @@ export const resources = {
         close: 'Close {{title}} menu',
         description: 'Navigate within the current app.',
         title: '{{title}} menu',
+        titleWithContext: '{{title}} menu — current scope: {{context}}',
       },
       search: {
         open: 'Open global search',
         title: 'Global search',
       },
       notifications: {
+        closePanel: 'Close notifications panel',
         empty: 'No notifications',
         markAllAsRead: 'Mark all as read',
         markAsRead: 'Mark as read',
@@ -5905,6 +6229,7 @@ export const resources = {
         favorites: 'Favorites launcher',
         launcher: 'App launcher',
         more: 'Available',
+        primaryNavigation: 'Primary app navigation',
         personalTools: 'Personal tools',
         personalToolsScope: 'My personal apps',
         searchApps: 'Search apps',
@@ -5915,6 +6240,62 @@ export const resources = {
         mode: 'App area',
         open: 'Open',
         openApp: 'Open {{title}}',
+      },
+      launcher: {
+        appUnavailable: 'This app is unavailable.',
+        availableWorkspaceCount_one: '{{count}} available workspace',
+        availableWorkspaceCount_other: '{{count}} available workspaces',
+        companyApp: 'Company app',
+        companyScope: 'Company scope',
+        chooseWorkspaceForApp: '{{app}} — choose a workspace',
+        description:
+          'Choose an app. Workspace apps keep your current workspace when possible and preview a different destination when needed.',
+        eyebrow: 'App-first workspace',
+        manageWorkspaces: 'Manage workspaces',
+        noAppsDescription:
+          'No company or personal apps are configured for this account.',
+        noAppsTitle: 'No apps are available',
+        noWorkspaceDescription:
+          'Any company or personal apps made available to your account work without a workspace. Workspace apps appear after an admin adds your membership.',
+        noWorkspaceTitle: 'You do not belong to a workspace yet',
+        openCompanyApp: 'Open {{app}} in company scope',
+        openPersonalApp: 'Open {{app}} in personal scope',
+        opensInWorkspace: 'Opens in {{workspace}}',
+        openWorkspaceApp: 'Open {{app}} in {{workspace}}',
+        personalApp: 'Personal app',
+        personalScope: 'Personal scope',
+        title: 'App launcher',
+        unavailableAppLabel: '{{app}} — unavailable',
+        workspaceApp: 'Workspace app',
+        workspaceSelectionRequired: 'Workspace selection required',
+        workspaceMembershipRequiredDescription:
+          'This app requires workspace membership. Ask an admin to add you to a workspace.',
+        workspaceMembershipRequiredTitle: 'Workspace access required',
+      },
+      accessRefresh: {
+        failedDescription: 'Could not verify your latest access. Try again.',
+        failedTitle: 'Could not refresh access',
+        loading: 'Checking your latest access.',
+        retry: 'Retry',
+      },
+      workspaceContext: {
+        change: 'Change',
+        chooseDescription:
+          'Choose the workspace for this app. Your choice is saved per app.',
+        chooseTitle: 'Choose a workspace for {{app}}',
+        currentUnavailable: 'Current workspace unavailable',
+        executionScopeLabel: 'Execution scope',
+        label: 'Workspace for this app',
+        loadFailed: 'Could not load the workspace list.',
+        loading: 'Loading workspaces.',
+        loadMore: 'Load more workspaces',
+        noResults: 'No eligible workspaces found.',
+        retry: 'Retry',
+        searchLabel: 'Search workspaces',
+        searchPlaceholder: 'Search by name or address',
+        switchFailedTitle: 'Could not change the workspace.',
+        switchedDescription: 'Moved to the app home.',
+        switchedTitle: 'Switched to {{workspace}}.',
       },
       appBarEditor: {
         allApps: 'All apps',
@@ -5948,25 +6329,13 @@ export const resources = {
         'diagrams-create': 'Diagram',
         'whiteboard-create': 'Whiteboard',
       },
-      workspaceSwitcher: {
-        create: 'New workspace',
-        currentTitle: '{{name}} workspace',
-        defaultBadge: 'Start',
-        defaultNone: 'No preference',
-        defaultSaveFailed: 'Could not save the start workspace.',
-        defaultSelectLabel: 'Start workspace',
-        manage: 'Workspace settings',
-        noResults: 'No results found.',
-        noResultsHint: 'Search again by name or slug.',
-        searchPlaceholder: 'Search workspaces',
-        switch: 'Switch workspace',
-      },
       documentTitle: {
         app: '{{app}} | Open Work Hub',
         profile: 'My Settings',
         workspaceApp: '{{workspace}} · {{app}} | Open Work Hub',
       },
       apps: {
+        'agent-terminal': 'Codex Terminal',
         ai: 'AI',
         bento: 'bento/slides',
         business: 'Business',
@@ -6186,10 +6555,10 @@ export const resources = {
         signIn: 'Sign in',
         signUp: 'Sign up',
         setupDescription:
-          'Create the first admin account and start the workspace.',
+          'Create the first platform admin account. Workspace memberships are added separately.',
         setupTitle: 'Initial admin setup',
         signupDescription:
-          'Create an account now. Apps appear after a workspace admin invites you.',
+          'Create an account to use company and personal apps now. Workspace apps appear after membership is added.',
       },
       notFound: {
         description: 'The requested address does not exist or has moved.',
@@ -6227,10 +6596,6 @@ export const resources = {
         avatar: 'Avatar',
         currentPassword: 'Current Password',
         customizeAppearance: 'Customize how the app looks.',
-        defaultWorkspace: 'Start Workspace',
-        defaultWorkspaceDescription:
-          'The workspace that opens first when you enter home after login.',
-        defaultWorkspaceNone: 'No preference',
         displayName: 'Display Name',
         emailAddress: 'Email Address',
         emailChangeHint: 'Contact your admin to change.',
@@ -6734,6 +7099,213 @@ export const resources = {
           workspace: 'Workspace shared',
         },
       },
+      agentTerminal: {
+        accessDeniedDescription:
+          'This tool is available only to platform administrator accounts.',
+        accessDeniedTitle: 'Access denied.',
+        actions: {
+          cancel: 'Cancel',
+          delete: 'Delete',
+          deleteSessionLabel: 'Delete the "{{root}}" session record',
+          newSession: 'New session',
+          reconnect: 'Reconnect',
+          refresh: 'Refresh',
+          resume: 'Resume',
+          resumeThreadLabel: 'Resume the "{{name}}" Codex task',
+          retry: 'Try again',
+          stop: 'Stop session',
+          stopSessionLabel: 'Stop the "{{root}}" session',
+        },
+        codexMissingDescription:
+          'The configured Codex CLI executable was not found on the server.',
+        codexHistory: {
+          description:
+            'Continue Codex work saved for this server account in a new terminal.',
+          empty: 'There is no Codex work history to resume.',
+          loadFailed: 'Could not load the Codex work history.',
+          loading: 'Loading Codex work history.',
+          untitled: 'Codex task · {{id}}',
+        },
+        deleteConfirmDescription:
+          'Delete the "{{root}}" session metadata from the list. This cannot be undone.',
+        deleteConfirmTitle: 'Delete this session record?',
+        connection: {
+          connected: 'Connected',
+          connecting: 'Connecting',
+          ended: 'Ended',
+          offline: 'Offline',
+        },
+        disabledDescription:
+          'Enable the Codex terminal in the server environment first.',
+        eyebrow: 'Platform admin tool',
+        failedSessionDescription:
+          'Check the server configuration and Codex CLI installation, then start a new session.',
+        failedSessionTitle: 'The session could not be started.',
+        feedback: {
+          connectionFailed: 'The terminal connection could not be maintained.',
+          createFailed: 'Could not start a Codex terminal session.',
+          created: 'Codex terminal session started.',
+          deleteFailed: 'Could not delete the session record.',
+          deleted: 'Session record deleted.',
+          loadFailed: 'Could not load Codex terminal information.',
+          resumeFailed: 'Could not resume the Codex task.',
+          resumed: 'Resuming the Codex task in a new terminal.',
+          stopFailed: 'Could not stop the Codex terminal session.',
+          stopped: 'Codex terminal session stopped.',
+        },
+        git: {
+          actions: {
+            backToHistory: 'Back to commit history',
+            close: 'Close Git panel',
+            closeExpandedDiff: 'Close expanded diff',
+            expandDiff: 'View diff in a large window',
+            open: 'Git',
+            refresh: 'Refresh Git information',
+          },
+          binaryDescription:
+            'Binary file differences are not shown in this view.',
+          binaryTitle: 'This is a binary file.',
+          cleanDescription: 'There are no staged or modified files.',
+          cleanTitle: 'The working tree is clean.',
+          detachedHead: 'Detached HEAD · {{head}}',
+          diffFailedDescription:
+            'The file status may have changed. Refresh the list and try again.',
+          diffFailedTitle: 'Could not load the file changes.',
+          diffLabel: 'Changes for {{path}}',
+          diffLoading: 'Loading file changes.',
+          diff: {
+            commitContext: '{{commit}} · {{subject}}',
+            emptyDescription:
+              'Select a working-tree file or commit file to display its diff.',
+            emptyTitle: 'Select a diff to display.',
+            workingTreeContext: '{{branch}} working tree',
+          },
+          drawerDescription:
+            'Shows working-tree changes, current HEAD history, branches, and tags as read-only information.',
+          drawerTitle: 'Git repository',
+          expandedDiffTitle: '{{path}} diff',
+          feedback: {
+            commitFailed: 'Could not load the Git commit details.',
+            diffFailed: 'Could not load the file changes.',
+            historyFailed: 'Could not load more Git commit history.',
+            repositoryFailed: 'Could not load the Git repository information.',
+            statusFailed: 'Could not load the Git changes list.',
+          },
+          commitFiles: {
+            firstParent: 'Merge commits are compared with their first parent.',
+            loadFailed: 'Could not load the commit file list.',
+            loading: 'Loading the commit file list.',
+            truncated:
+              'Only part of the commit file list is shown because it is large.',
+          },
+          history: {
+            empty: 'There are no commits in the current HEAD.',
+            loadFailed: 'Could not load the commit history.',
+            loadMore: 'Load earlier commits',
+            loading: 'Loading commit history.',
+            loadingMore: 'Loading earlier commits...',
+            merge: 'Merge',
+            noSubject: 'Commit without a subject',
+          },
+          kind: {
+            added: 'Added',
+            conflicted: 'Conflicted',
+            copied: 'Copied',
+            deleted: 'Deleted',
+            modified: 'Modified',
+            renamed: 'Renamed',
+            type_changed: 'File type changed',
+            untracked: 'Untracked',
+          },
+          loadFailedDescription:
+            'Check the Git repository status and try again.',
+          loadFailedTitle: 'Could not load Git changes.',
+          loading: 'Loading Git changes.',
+          notRepositoryDescription:
+            'The selected allowed working root is not itself a Git repository root.',
+          notRepositoryTitle: 'This is not a Git repository.',
+          resizePanel: 'Resize the terminal and Git panels',
+          refs: {
+            branchesEmpty: 'There are no branches to display.',
+            current: 'Current',
+            loading: 'Loading branches and tags.',
+            localBranches: 'Local branches',
+            readOnly:
+              'Branches and tags are informational only and do not change the working branch.',
+            remoteBranches: 'Remote branches',
+            stashesEmpty: 'There are no saved stashes.',
+            tagsEmpty: 'There are no tags to display.',
+            truncated:
+              'Only part of the reference list is shown because it is large.',
+          },
+          repository: {
+            aheadBehind: 'Ahead {{ahead}} · behind {{behind}}',
+            branch: 'Branch',
+            head: 'HEAD',
+            none: 'None',
+            sync: 'Tracking',
+            upstream: 'Upstream',
+          },
+          sections: {
+            branches: 'Branches',
+            changes: 'Working tree',
+            commitFiles: 'Commit files',
+            history: 'Commit history',
+            repository: 'Repository information',
+            stashes: 'Stashes',
+            tags: 'Tags',
+          },
+          scope: {
+            conflicted: 'Conflicts',
+            staged: 'Staged',
+            unstaged: 'Changed',
+            untracked: 'Untracked',
+          },
+          title: 'Git · Changes {{count}}',
+          tooLargeDescription:
+            'The file exceeds the server limit for displaying a diff.',
+          tooLargeTitle: 'The file is too large.',
+          truncated:
+            'Only part of the list is shown because the repository has many changed files.',
+          unknownHead: 'Branch unavailable',
+        },
+        loadFailedDescription:
+          'Check permissions, app visibility, and the server runtime.',
+        loadFailedTitle: 'Could not load the Codex terminal.',
+        loading: 'Loading the Codex terminal.',
+        noSessionDescription:
+          'Choose an allowed working root and start a Codex CLI session.',
+        noSessionTitle: 'No Codex session is open.',
+        noTranscriptStorage:
+          'Terminal output is not stored in the database. Running sessions stay in tmux and reconnect after an API restart.',
+        rootPlaceholder: 'Select working root',
+        rootsMissingDescription:
+          'Register at least one allowed working root in the server environment.',
+        securityNotice:
+          'Codex runs with server permissions. Use only approved development paths and do not enter secrets or production credentials.',
+        sidebar: {
+          codexHistory: 'Codex history',
+          sessions: 'Terminals',
+        },
+        sessionCapacity: 'Concurrent sessions {{active}}/{{limit}}',
+        sessionLimitReached:
+          'The concurrent session limit has been reached. Stop a running session before starting another one.',
+        sessionsDescription: 'Latest 50 tmux sessions and run records',
+        sessionsEmpty: 'No sessions have been created yet.',
+        sessionsTitle: 'Sessions',
+        status: {
+          exited: 'Completed',
+          failed: 'Failed',
+          running: 'Running',
+          starting: 'Starting',
+          terminated: 'Stopped',
+        },
+        terminalLabel: 'Codex CLI terminal',
+        tmuxMissingDescription:
+          'The tmux executable required for persistent terminal sessions was not found on the server.',
+        title: 'Codex Terminal',
+        unavailableTitle: 'The Codex terminal is unavailable.',
+      },
       mail: {
         eyebrow: 'AI Mail',
         title: 'Mail',
@@ -6942,7 +7514,7 @@ export const resources = {
             actionPlaceholder: 'Action code',
             actions: {
               adminAiRuntimeRetentionScrub: 'AI runtime retention scrub',
-              adminAppVisibilityUpdate: 'Platform app visibility changed',
+              adminCompanyAppControlsUpdate: 'Company app controls changed',
               adminTeamCreate: 'Team created',
               adminTeamDelete: 'Team deleted',
               adminTeamMembersReplace: 'Team members replaced',
@@ -6967,8 +7539,9 @@ export const resources = {
               adminUserDelete: 'User deleted',
               adminUserResetPassword: 'Password reset',
               adminUserUpdate: 'User updated',
-              adminWorkspaceAppVisibilityUpdate:
-                'Workspace app visibility changed',
+              adminWorkspaceAppDefaultsUpdate: 'Workspace app defaults changed',
+              adminWorkspaceAppOverridesUpdate:
+                'Workspace app overrides changed',
               adminWorkspaceBindingsReplace: 'Workspace bindings replaced',
               adminWorkspaceCreate: 'Workspace created',
               adminWorkspaceDelete: 'Workspace deleted',
@@ -8472,6 +9045,57 @@ export const resources = {
             usersTitle: 'Usage by user',
           },
           apps: {
+            controls: {
+              columns: {
+                app: 'App',
+                company: 'Company control',
+                context: 'Execution context',
+                default: 'Default',
+                effective: 'Effective',
+                override: 'Workspace setting',
+                scope: 'Policy scope',
+              },
+              companyDescription:
+                'Set the master availability of every executable app. A disabled app cannot be re-enabled by workspace defaults or overrides.',
+              companyTitle: 'Company app controls',
+              companyToggle: 'Toggle company availability for {{app}}',
+              context: {
+                company: 'Company',
+                personal: 'Personal',
+                workspace: 'Workspace',
+              },
+              defaultToggle: 'Toggle the workspace default for {{app}}',
+              defaultsDescription:
+                'Set the default for company-approved workspace apps. It applies when a workspace has no override.',
+              defaultsTab: 'Workspace defaults',
+              defaultsTitle: 'Workspace app defaults',
+              disabled: 'Disabled',
+              emptyDescription: 'No executable apps are registered.',
+              emptyTitle: 'No apps to show.',
+              enabled: 'Enabled',
+              loadFailed: 'Could not load app policies.',
+              loadingDescription: 'Please wait.',
+              loadingTitle: 'Loading app policies.',
+              override: {
+                disable: 'Disable in this workspace',
+                enable: 'Enable in this workspace',
+                inherit: 'Inherit default',
+              },
+              overridesDescription:
+                'Apply a different policy only to the selected workspace. Company control always takes precedence.',
+              overridesTab: 'Workspace settings',
+              overridesTitle: 'Workspace-specific app settings',
+              overrideSelect: 'Workspace setting for {{app}}',
+              refresh: 'Refresh',
+              saveFailed: 'Could not save the app policy.',
+              saved: 'Saved the app policy.',
+              scope: {
+                platform: 'Workspace-independent',
+                workspace: 'Per workspace',
+              },
+              workspaceEmpty: 'No workspaces.',
+              workspaceSearch: 'Search workspaces',
+            },
             columns: {
               app: 'App',
               route: 'Base route',
@@ -8864,6 +9488,11 @@ export const resources = {
             userSaveFailed: 'Could not save user information.',
             workspaceListLoadFailed: 'Could not load assignable workspaces.',
             workspaceMemberships: 'Workspace memberships',
+            workspaceRemovalConfirmAction: 'Remove access and save',
+            workspaceRemovalConfirmDescription:
+              '{{userLabel}} will immediately lose access to apps and features in the {{count}} deselected workspace memberships.',
+            workspaceRemovalConfirmTitle:
+              'Remove access to {{count}} workspace memberships?',
           },
           organization: {
             boundaryTitle: 'Organization information boundary',
@@ -9176,6 +9805,10 @@ export const resources = {
             bulkAdded: 'Added {{count}}.',
             bulkAddPartial: '{{succeeded}} added, {{failed}} failed',
             bulkRemoveFailed: 'Bulk remove failed.',
+            bulkRemoveConfirmDescription:
+              'Immediately revoke access to apps and features in {{workspace}} for the selected people ({{count}}).',
+            bulkRemoveConfirmTitle:
+              'Remove selected workspace members ({{count}})?',
             bulkRemovePartial: '{{succeeded}} removed, {{failed}} failed',
             bulkRemoved: 'Removed {{count}}.',
             bulkRoleChanged: 'Changed roles for {{count}}.',
@@ -9198,6 +9831,10 @@ export const resources = {
             name: 'Name',
             previewMeta: '{{count}} · admin preview',
             removeFailed: 'Could not remove the member.',
+            removeConfirmAction: 'Remove from workspace',
+            removeConfirmDescription:
+              '{{name}} will immediately lose access to apps and features in {{workspace}}.',
+            removeConfirmTitle: 'Remove {{name}}?',
             removed: 'Member removed.',
             removeFromWorkspace: 'Remove from workspace',
             role: 'Role',
@@ -9900,8 +10537,6 @@ export const resources = {
         mail: 'Inbox',
         mailComingSoon: 'Mail integration is coming soon.',
         meetingsEmptyCta: 'Schedule a meeting',
-        notifications: 'Notifications',
-        notificationsEmpty: 'No new notifications.',
         scheduleEmpty: 'No upcoming events.',
         scheduleEmptyCta: 'Add an event',
         tasksEmptyCta: 'Add a task',
@@ -9956,6 +10591,7 @@ export const resources = {
           noLocalRecordingToRecover: 'There is no local recording to recover.',
           originalUploadFailed: 'Could not upload the original file.',
           playbackFailed: 'Could not get the recording playback link.',
+          publishFailed: 'Could not publish the recording result to Docs.',
           persistCheckFailed: 'Could not check browser storage protection.',
           persistMayExpire:
             'The recoverable period may be shorter because of browser storage policy.',
@@ -9978,7 +10614,6 @@ export const resources = {
           detachConfirmDescription: 'Unlink this item from the recording?',
           detachConfirmTitle: 'Unlink item',
           detachItemLabel: 'Unlink {{item}}',
-          generatedDocsTitle: 'Auto-generated documents',
           linkedItems: 'Related items',
           linkedMeetings: 'Linked meetings',
           linkedTasks: 'Linked tasks',
@@ -10001,12 +10636,22 @@ export const resources = {
             title: 'Add meeting',
           },
           minutesDoc: 'Summary',
+          noPublications: 'No documents have been published yet.',
           noLinkedMeetings: 'No linked meetings yet.',
           noLinkedTasks: 'No linked tasks yet.',
           noOtherConnections: 'No other connections yet.',
           notReady: 'Preparing',
           otherConnections: 'Other connections',
+          publicationsTitle: 'Published documents',
+          publishedDocument: 'Recording result document v{{version}}',
+          publishing: 'Publishing',
+          publishToDocs: 'Publish to Docs',
           rawTranscriptDoc: 'Raw transcript',
+          resultsTitle: 'Recording result',
+          resultPending: 'The result is being generated.',
+          resultVersion: 'Result version {{version}}',
+          summaryTitle: 'Summary',
+          transcriptTitle: 'Transcript',
           taskPicker: {
             description: 'Select a task to link to this recording.',
             noTaskLists: 'No task lists available.',
@@ -10016,6 +10661,7 @@ export const resources = {
           },
           titleLabel: 'Title',
           titleSaved: 'Title saved.',
+          verifierNote: 'Verification note: {{note}}',
         },
         filters: {
           categories: {
@@ -10100,8 +10746,7 @@ export const resources = {
           progressLabel: '{{stage}} in progress',
           stages: {
             audio: 'Audio',
-            minutesDoc: 'Summary',
-            rawDoc: 'Transcript doc',
+            summary: 'Summary',
             transcript: 'Transcription',
           },
           state: {
@@ -10439,6 +11084,7 @@ export const resources = {
         allDay: 'All-day event',
         create: 'Create',
         createEventOrMeeting: 'Create event or meeting',
+        chooseMeetingWorkspace: 'Choose a meeting workspace',
         datePicker: {
           chooseDate: 'Choose a date',
           nextMonth: 'Next month',

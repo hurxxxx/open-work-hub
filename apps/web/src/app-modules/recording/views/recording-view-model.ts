@@ -30,8 +30,7 @@ export function hasFailedStage(recording: Recording): boolean {
   return [
     recording.audio_status,
     recording.transcript_status,
-    recording.raw_transcript_doc_status,
-    recording.minutes_doc_status,
+    recording.summary_status,
     recording.meeting_insight_status,
   ].some((status) => status === 'failed');
 }
@@ -74,10 +73,7 @@ function recordingTargets(recording: Recording): RecordingTarget[] {
 }
 
 function isMeetingTarget(target: RecordingTarget): boolean {
-  return (
-    target.target_app === 'meeting' &&
-    target.target_type === 'meeting'
-  );
+  return target.target_app === 'meeting' && target.target_type === 'meeting';
 }
 
 function isTaskTarget(target: RecordingTarget): boolean {

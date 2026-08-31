@@ -163,7 +163,7 @@ function DiagramsHub() {
           workspaceSlug,
         );
         dispatch({ type: 'upsert', item: created });
-        navigate(itemPath({ itemId: created.id, user, workspaceSlug }));
+        navigate(itemPath({ itemId: created.id, workspaceSlug }));
       } catch (error) {
         dispatch({
           type: 'setError',
@@ -174,7 +174,7 @@ function DiagramsHub() {
         });
       }
     },
-    [navigate, t, token, user, workspaceSlug],
+    [navigate, t, token, workspaceSlug],
   );
 
   const handleVisibilityChange = useCallback(
@@ -290,9 +290,7 @@ function DiagramsHub() {
               archived={isArchived}
               layoutMode={layoutMode}
               onCreate={handleCreate}
-              onOpen={(itemId) =>
-                navigate(itemPath({ itemId, user, workspaceSlug }))
-              }
+              onOpen={(itemId) => navigate(itemPath({ itemId, workspaceSlug }))}
               onVisibilityChange={handleVisibilityChange}
             />
             <DiagramSection
@@ -304,9 +302,7 @@ function DiagramsHub() {
               archived={isArchived}
               layoutMode={layoutMode}
               onCreate={handleCreate}
-              onOpen={(itemId) =>
-                navigate(itemPath({ itemId, user, workspaceSlug }))
-              }
+              onOpen={(itemId) => navigate(itemPath({ itemId, workspaceSlug }))}
               onVisibilityChange={handleVisibilityChange}
             />
           </div>
@@ -752,7 +748,7 @@ function DiagramListTable({
 
 function DiagramEditor() {
   const { t } = useTranslation(['apps', 'common']);
-  const { token, user } = useAuth();
+  const { token } = useAuth();
   const { workspaceSlug, diagramId } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -790,8 +786,8 @@ function DiagramEditor() {
   );
 
   const goBack = useCallback(() => {
-    navigate(rootPath(workspaceSlug, user, searchParams));
-  }, [navigate, searchParams, user, workspaceSlug]);
+    navigate(rootPath(workspaceSlug, searchParams));
+  }, [navigate, searchParams, workspaceSlug]);
 
   useEffect(() => {
     if (!token || !diagramId) return undefined;

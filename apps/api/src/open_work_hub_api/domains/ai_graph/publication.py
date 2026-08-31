@@ -10,6 +10,9 @@ from sqlalchemy.orm import Session
 from open_work_hub_api.core.settings import get_settings
 from open_work_hub_api.core.worker_task_publisher import create_fail_fast_celery_publisher
 from open_work_hub_api.domains.ai_graph.repository import AiGraphDispatchRepository
+from open_work_hub_api.domains.ai_graph.execution_policy import enforce_graph_run_app_policy
+from open_work_hub_api.domains.ai_graph.models import AiGraphRun
+from open_work_hub_api.domains.ai_graph.repository import AiGraphRunInputRepository
 
 
 @lru_cache(maxsize=1)
@@ -33,14 +36,34 @@ def publish_pending_graph_dispatches(
     repository = AiGraphDispatchRepository(db)
     claim_token = uuid4().hex
     claimed = repository.claim_due(claim_token=claim_token, limit=limit)
+    publishable = []
+    for item in claimed:
+        run = db.get(AiGraphRun, item.graph_run_id)
+        if run is None or run.status in {"completed", "failed", "cancelled"}:
+            repository.mark_cancelled(
+                item.id,
+                claim_token=claim_token,
+                error_code=f"graph_run_{run.status if run is not None else 'missing'}",
+            )
+            continue
+        if enforce_graph_run_app_policy(
+            db,
+            run_id=item.graph_run_id,
+            claim_token=None,
+            stage="dispatch.policy_gate",
+        ):
+            publishable.append(item)
+            continue
+        repository.mark_cancelled(item.id, claim_token=claim_token)
+        AiGraphRunInputRepository(db).delete_after_terminal(item.graph_run_id)
     db.commit()
-    if not claimed:
+    if not publishable:
         return 0
 
     try:
         client = publisher or get_ai_graph_celery_client()
     except Exception as error:
-        for item in claimed:
+        for item in publishable:
             repository.mark_retry(
                 item.id,
                 claim_token=claim_token,
@@ -50,7 +73,7 @@ def publish_pending_graph_dispatches(
         db.commit()
         return 0
     published = 0
-    for item in claimed:
+    for item in publishable:
         try:
             result = client.send_task(
                 item.task_name,

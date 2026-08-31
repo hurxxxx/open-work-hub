@@ -1,10 +1,11 @@
 import { createElement, lazy } from 'react';
+import {
+  getAppRouteChrome,
+  getAppRoutePattern,
+} from '@open-work-hub/contracts/app-routes';
 
 import { lazyRoute } from '@/src/app/shell/lazy-route';
-import type {
-  ToolViewRouteDefinition,
-  WorkspaceRouteDefinition,
-} from '@/src/app/shell/route-types';
+import type { WorkspaceRouteDefinition } from '@/src/app/shell/route-types';
 
 const AssignedToMeView = lazy(() =>
   import('./views/AssignedToMeView').then((module) => ({
@@ -22,69 +23,59 @@ const TodayOverdueView = lazy(() =>
 
 export const pmsToolElement = lazyRoute(createElement(PMSView));
 
-export const pmsToolViewRoutes: ToolViewRouteDefinition[] = [
-  {
-    appId: 'pms',
-    element: pmsToolElement,
-    id: 'pms.main',
-    match: ({ item }) => item?.appId === 'pms',
-    type: 'element',
-  },
-];
-
 export const pmsWorkspaceRoutes: WorkspaceRouteDefinition[] = [
   {
     appId: 'pms',
-    chrome: 'containedSurface',
-    path: '/w/:workspaceSlug/pms',
+    chrome: getAppRouteChrome('pms.root'),
+    path: getAppRoutePattern('pms.root'),
     element: pmsToolElement,
   },
   {
     appId: 'pms',
-    chrome: 'containedSurface',
-    path: '/w/:workspaceSlug/pms/assigned',
+    chrome: getAppRouteChrome('pms.assigned'),
+    path: getAppRoutePattern('pms.assigned'),
     element: lazyRoute(createElement(AssignedToMeView)),
   },
   {
     appId: 'pms',
-    chrome: 'containedSurface',
-    path: '/w/:workspaceSlug/pms/today',
+    chrome: getAppRouteChrome('pms.today'),
+    path: getAppRoutePattern('pms.today'),
     element: lazyRoute(createElement(TodayOverdueView)),
   },
   {
     appId: 'pms',
-    chrome: 'containedSurface',
-    path: '/w/:workspaceSlug/pms/lists/:taskListId',
+    chrome: getAppRouteChrome('pms.list'),
+    path: getAppRoutePattern('pms.list'),
     element: pmsToolElement,
   },
   {
     appId: 'pms',
-    chrome: 'containedSurface',
-    path: '/w/:workspaceSlug/pms/spaces/:spaceId',
+    chrome: getAppRouteChrome('pms.space'),
+    path: getAppRoutePattern('pms.space'),
     element: pmsToolElement,
   },
   {
     appId: 'pms',
-    chrome: 'containedSurface',
-    path: '/w/:workspaceSlug/pms/spaces/:spaceId/docs',
+    chrome: getAppRouteChrome('pms.space-docs'),
+    path: getAppRoutePattern('pms.space-docs'),
     element: pmsToolElement,
   },
   {
     appId: 'pms',
-    chrome: 'containedSurface',
-    path: '/w/:workspaceSlug/pms/spaces/:spaceId/docs/:docId',
+    chrome: getAppRouteChrome('pms.space-doc'),
+    path: getAppRoutePattern('pms.space-doc'),
     element: pmsToolElement,
   },
   {
     appId: 'pms',
-    chrome: 'containedSurface',
-    path: '/w/:workspaceSlug/pms/spaces/:spaceId/whiteboards',
+    chrome: getAppRouteChrome('pms.space-whiteboards'),
+    path: getAppRoutePattern('pms.space-whiteboards'),
     element: pmsToolElement,
   },
   {
     appId: 'pms',
-    chrome: 'containedSurface',
-    path: '/w/:workspaceSlug/pms/spaces/:spaceId/whiteboards/:whiteboardId',
+    chrome: getAppRouteChrome('pms.space-whiteboard'),
+    path: getAppRoutePattern('pms.space-whiteboard'),
     element: pmsToolElement,
   },
 ];

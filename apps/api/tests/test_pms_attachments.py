@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from dev_accounts import content_headers
 from open_work_hub_api.core.db import get_session_factory
 from open_work_hub_api.domains.pms.attachments import normalize_task_attachment_filename
 from open_work_hub_api.domains.pms.models import Attachment, TaskActivityLog
@@ -38,7 +39,7 @@ def test_task_attachment_upload_registers_canonical_storage_and_activity(
     assert payload["filename"] == "brief.txt"
     assert payload["content_type"] == "text/plain"
     assert payload["size_bytes"] == 5
-    assert payload["download_url"].startswith(f"/api/v1/pms/attachments/{payload['id']}/content?")
+    assert payload["download_url"].startswith("/api/v1/content#grant=")
     assert "127.0.0.1" not in payload["download_url"]
     assert "fake-minio" not in payload["download_url"]
     assert store.puts == [
@@ -49,7 +50,10 @@ def test_task_attachment_upload_registers_canonical_storage_and_activity(
         }
     ]
 
-    download_response = client.get(payload["download_url"])
+    download_response = client.get(
+        payload["download_url"],
+        headers=content_headers(token, payload["download_url"]),
+    )
     assert download_response.status_code == 200, download_response.text
     assert download_response.content == b"hello"
     assert download_response.headers["content-type"].startswith("text/plain")

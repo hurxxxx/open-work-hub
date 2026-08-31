@@ -21,10 +21,6 @@ import type {
 } from '@/src/platform/retrieval/retrieval-api';
 import { useWorkspaceBootstrapContext } from '@/src/platform/workspaces/workspace-bootstrap-context';
 import {
-  getWorkspaceBySlug,
-  resolveShellWorkspaceSlug,
-} from '@/src/platform/workspaces/workspace-utils';
-import {
   isSelectableRetrievalSource,
   retrievalHitKey,
   RETRIEVAL_ANSWER_MODES,
@@ -36,19 +32,11 @@ import { useRetrievalSearchController } from './useRetrievalSearchController';
 
 export function RetrievalSearchView() {
   const { t } = useTranslation('apps');
-  const { token, user, logout } = useAuth();
+  const { token, logout } = useAuth();
   const workspaceBootstrap = useWorkspaceBootstrapContext();
   const [searchParams, setSearchParams] = useSearchParams();
-  const urlWorkspaceSlug = searchParams.get('workspace')?.trim() || null;
-  const workspaceSlug =
-    getWorkspaceBySlug(user, urlWorkspaceSlug)?.slug ??
-    workspaceBootstrap.data?.workspace.slug ??
-    resolveShellWorkspaceSlug(user, null);
-  const workspaceName =
-    workspaceBootstrap.data?.workspace.name ??
-    getWorkspaceBySlug(user, workspaceSlug)?.name ??
-    workspaceSlug ??
-    '';
+  const workspaceSlug = workspaceBootstrap.data?.workspace.slug ?? null;
+  const workspaceName = workspaceBootstrap.data?.workspace.name ?? '';
   const {
     actions,
     state: {
@@ -134,7 +122,9 @@ export function RetrievalSearchView() {
                 <input
                   aria-label={t('ai.retrievalSearch.queryLabel')}
                   className="app-text-body min-w-0 flex-1 bg-transparent text-app-ink outline-none"
-                  onChange={(event) => actions.setQueryInput(event.target.value)}
+                  onChange={(event) =>
+                    actions.setQueryInput(event.target.value)
+                  }
                   placeholder={t('ai.retrievalSearch.placeholder')}
                   value={queryInput}
                 />
@@ -230,7 +220,9 @@ export function RetrievalSearchView() {
             </p>
             {response?.trace_id ? (
               <span className="truncate app-text-caption text-app-ink/45">
-                {t('ai.retrievalSearch.traceId', { traceId: response.trace_id })}
+                {t('ai.retrievalSearch.traceId', {
+                  traceId: response.trace_id,
+                })}
               </span>
             ) : null}
           </div>
@@ -394,7 +386,10 @@ function RetrievalHitRow({ hit, t }: { hit: RetrievalHit; t: TranslationFn }) {
         {Object.entries(metadata)
           .slice(0, 4)
           .map(([key, value]) => (
-            <MutedBadge key={key} label={`${key}: ${formatMetadataValue(value)}`} />
+            <MutedBadge
+              key={key}
+              label={`${key}: ${formatMetadataValue(value)}`}
+            />
           ))}
       </div>
     </article>
@@ -407,7 +402,9 @@ function DiagnosticsPanel({
   t,
 }: {
   backendProfileText: string;
-  response: ReturnType<typeof useRetrievalSearchController>['state']['response'];
+  response: ReturnType<
+    typeof useRetrievalSearchController
+  >['state']['response'];
   t: TranslationFn;
 }) {
   const profile = response?.profile ?? null;

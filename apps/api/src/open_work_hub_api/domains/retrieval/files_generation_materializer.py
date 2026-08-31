@@ -206,7 +206,11 @@ class FilesCachedProjectionMaterializer:
             document = load_file_search_document(db, event.resource_id)
             if document is None:
                 raise RuntimeError("Cached Files keyword projection is unavailable")
-            projection = build_file_rag_projection(file=file, artifact=artifact).model_copy(
+            projection = build_file_rag_projection(
+                file=file,
+                artifact=artifact,
+                workspace_slug=file.workspace.key,
+            ).model_copy(
                 update={
                     "retrieval_partition_id": str(event.retrieval_partition_id),
                     "projection_version": int(event.projection_version),
@@ -335,6 +339,7 @@ def _load_cached_file_artifact(
         .options(
             joinedload(FileManagerFile.owner),
             joinedload(FileManagerFile.corpus),
+            joinedload(FileManagerFile.workspace),
             undefer(FileManagerFile.extraction_text),
             undefer(FileManagerFile.extraction_blocks),
             undefer(FileManagerFile.extraction_metadata),

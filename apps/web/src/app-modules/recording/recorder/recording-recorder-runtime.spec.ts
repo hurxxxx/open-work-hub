@@ -18,7 +18,11 @@ interface SavedRecording {
   payload: RecordingCompletionPayload;
 }
 
-function chunk(seq: number, size: number, uploadedAt: number | null = null): RecordingChunkState {
+function chunk(
+  seq: number,
+  size: number,
+  uploadedAt: number | null = null,
+): RecordingChunkState {
   return {
     stagingId: 'staging-1',
     seq,
@@ -29,7 +33,9 @@ function chunk(seq: number, size: number, uploadedAt: number | null = null): Rec
   };
 }
 
-function session(overrides: Partial<RecordingSessionState> = {}): RecordingSessionState {
+function session(
+  overrides: Partial<RecordingSessionState> = {},
+): RecordingSessionState {
   return {
     stagingId: 'staging-1',
     workspaceSlug: 'hq',
@@ -50,15 +56,16 @@ function session(overrides: Partial<RecordingSessionState> = {}): RecordingSessi
     uploadCompletedAt: null,
     interruptedAt: null,
     interruptionReason: null,
-    meetingId: null,
     ...overrides,
   };
 }
 
-function createStore(input: {
-  chunks?: RecordingChunkState[];
-  session?: RecordingSessionState | null;
-} = {}): RecordingRecorderRuntimeStore & {
+function createStore(
+  input: {
+    chunks?: RecordingChunkState[];
+    session?: RecordingSessionState | null;
+  } = {},
+): RecordingRecorderRuntimeStore & {
   chunks: RecordingChunkState[];
   session: RecordingSessionState | null;
   updates: Array<Partial<RecordingSessionState>>;
@@ -88,7 +95,10 @@ function createStore(input: {
         item.uploadedAt = NOW + seq;
       }
     },
-    async updateSessionProgress(_stagingId: string, update: Partial<RecordingSessionState>) {
+    async updateSessionProgress(
+      _stagingId: string,
+      update: Partial<RecordingSessionState>,
+    ) {
       store.updates.push(update);
       if (store.session) {
         store.session = { ...store.session, ...update };
@@ -97,7 +107,10 @@ function createStore(input: {
     async getSession() {
       return store.session;
     },
-    async listIncompleteSessions(options: { workspaceSlug: string; scopeKey?: string | null }) {
+    async listIncompleteSessions(options: {
+      workspaceSlug: string;
+      scopeKey?: string | null;
+    }) {
       if (!store.session || store.session.completedAt != null) {
         return [];
       }
@@ -157,11 +170,13 @@ function createEnvironment(
   };
 }
 
-function createRuntime(input: {
-  store?: ReturnType<typeof createStore>;
-  environment?: ReturnType<typeof createEnvironment>;
-  canUpload?: () => boolean;
-} = {}) {
+function createRuntime(
+  input: {
+    store?: ReturnType<typeof createStore>;
+    environment?: ReturnType<typeof createEnvironment>;
+    canUpload?: () => boolean;
+  } = {},
+) {
   const store = input.store ?? createStore();
   const environment = input.environment ?? createEnvironment();
   const callbacks = {
@@ -175,12 +190,16 @@ function createRuntime(input: {
   };
   const client = {
     headUpload: vi.fn(async () => 0),
-    uploadChunk: vi.fn(async (_stagingId: string, offset: number, blob: Blob) =>
-      offset + blob.size),
-    completeUpload: vi.fn(async (_stagingId: string, payload: RecordingCompletionPayload) => ({
-      id: 'recording-1',
-      payload,
-    })),
+    uploadChunk: vi.fn(
+      async (_stagingId: string, offset: number, blob: Blob) =>
+        offset + blob.size,
+    ),
+    completeUpload: vi.fn(
+      async (_stagingId: string, payload: RecordingCompletionPayload) => ({
+        id: 'recording-1',
+        payload,
+      }),
+    ),
   };
   const runtime = new RecordingRecorderRuntime<SavedRecording>({
     store,
@@ -300,7 +319,10 @@ describe('RecordingRecorderRuntime', () => {
 
     await runtime.pumpUploads('staging-1');
 
-    expect(callbacks.onPumpFailed).toHaveBeenCalledWith('staging-1', expect.any(Error));
+    expect(callbacks.onPumpFailed).toHaveBeenCalledWith(
+      'staging-1',
+      expect.any(Error),
+    );
     expect(environment.registerBackgroundSync).toHaveBeenCalledTimes(1);
     expect(environment.timers.size).toBe(1);
 

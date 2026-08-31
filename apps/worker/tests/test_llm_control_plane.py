@@ -120,6 +120,7 @@ def test_meeting_summarize_uses_complete_chat_without_local_precheck(
 
     recording = SimpleNamespace(
         id="rec-1",
+        uploaded_by_id="user-1",
         summary_text=None,
         transcript_text="회의 전사",
         progress_pct=60,
@@ -150,6 +151,11 @@ def test_meeting_summarize_uses_complete_chat_without_local_precheck(
     monkeypatch.setattr(meeting_module, "_load_active_recording", lambda *_args: recording)
     monkeypatch.setattr(meeting_module, "_heartbeat", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(meeting_module, "_mark_failed", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        meeting_module,
+        "is_app_enabled_for_user_context",
+        lambda *_args, **_kwargs: True,
+    )
 
     def fake_execute_llm(workload_id, context, db, **kwargs):
         captured["workload_id"] = workload_id
@@ -249,6 +255,7 @@ def test_meeting_extract_insights_invokes_worker_service_without_stopping_pipeli
 
     recording = SimpleNamespace(
         id="rec-2",
+        uploaded_by_id="user-1",
         summary_text="요약 결과",
         transcript_text="회의 전사",
         progress_pct=90,
@@ -284,6 +291,11 @@ def test_meeting_extract_insights_invokes_worker_service_without_stopping_pipeli
         meeting_module,
         "_heartbeat",
         lambda _session, _recording, pct, status_name=None: heartbeats.append((pct, status_name)),
+    )
+    monkeypatch.setattr(
+        meeting_module,
+        "is_app_enabled_for_user_context",
+        lambda *_args, **_kwargs: True,
     )
 
     def fake_extract(db, **kwargs):

@@ -776,6 +776,42 @@ def test_process_search_index_job_upserts_loaded_projection(monkeypatch) -> None
         session.close()
 
 
+def test_process_search_index_job_rechecks_policy_after_claim_before_client_resolution(
+    monkeypatch,
+) -> None:
+    session = _session()
+    published: list[tuple[str, list[str], str]] = []
+    _stub_celery(monkeypatch, published)
+    try:
+        with session.begin():
+            job = enqueue_search_index_job(
+                session,
+                workspace_id="ws-1",
+                entity_type="doc",
+                entity_id="doc-disabled",
+                operation="upsert",
+                trace_context={},
+            )
+
+        result = process_search_index_job(
+            session,
+            job.id,
+            client_factory=lambda *_args: (_ for _ in ()).throw(
+                AssertionError("disabled job resolved a search provider")
+            ),
+            execution_allowed=lambda *_args: False,
+        )
+
+        stored = session.get(SearchIndexJob, job.id)
+        assert result == "app-disabled"
+        assert stored is not None
+        assert stored.status == "pending"
+        assert stored.attempts == 0
+        assert stored.last_error == "app_disabled"
+    finally:
+        session.close()
+
+
 def test_versioned_search_job_stale_head_skips_backend_mutation(monkeypatch) -> None:
     session = _projection_session()
     published: list[tuple[str, list[str], str]] = []

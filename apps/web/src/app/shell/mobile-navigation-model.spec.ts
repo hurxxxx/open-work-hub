@@ -10,7 +10,7 @@ const appBarItems: readonly AppBarItem[] = [
 ];
 
 describe('mobile navigation model', () => {
-  it('uses ordered dynamic categories and links the first enabled ready leaf', () => {
+  it('uses category order while exposing every enabled ready leaf', () => {
     const items = projectMobileNavigationItems({
       appBarItems,
       fixedAppIds: ['home'],
@@ -20,7 +20,7 @@ describe('mobile navigation model', () => {
           enabled: true,
           icon_key: 'home',
           nav_items: [],
-          route_base: '/home',
+          route_base: '/apps/home',
           title: 'Home',
         },
         {
@@ -28,7 +28,7 @@ describe('mobile navigation model', () => {
           enabled: true,
           icon_key: 'file-text',
           nav_items: [],
-          route_base: '/docs',
+          route_base: '/apps/docs',
           title: 'Docs',
         },
         {
@@ -37,7 +37,7 @@ describe('mobile navigation model', () => {
           enabled: true,
           icon_key: 'list-checks',
           nav_items: [],
-          route_base: '/pms',
+          route_base: '/apps/pms',
           title: 'PMS',
         },
         {
@@ -45,7 +45,7 @@ describe('mobile navigation model', () => {
           enabled: true,
           icon_key: 'globe',
           nav_items: [],
-          route_base: '/web-search',
+          route_base: '/apps/web-search',
           title: 'Web Search',
         },
       ],
@@ -58,7 +58,7 @@ describe('mobile navigation model', () => {
               app_id: 'web-search',
               enabled: true,
               icon_key: 'globe',
-              route_base: '/web-search',
+              route_base: '/apps/web-search',
               title: 'Web Search',
             },
           ],
@@ -74,14 +74,14 @@ describe('mobile navigation model', () => {
               app_id: 'pms',
               enabled: true,
               icon_key: 'list-checks',
-              route_base: '/pms',
+              route_base: '/apps/pms',
               title: 'PMS',
             },
             {
               app_id: 'docs',
               enabled: true,
               icon_key: 'file-text',
-              route_base: '/docs',
+              route_base: '/apps/docs',
               title: 'Docs',
             },
           ],
@@ -118,20 +118,20 @@ describe('mobile navigation model', () => {
       },
       {
         activeAppIds: ['docs'],
-        id: 'team-space-id',
+        id: 'docs',
         linkAppId: 'docs',
-        title: 'Team space',
-        type: 'category',
+        title: 'Docs',
+        type: 'app',
       },
       {
         activeAppIds: ['web-search'],
-        id: 'custom-business-id',
+        id: 'web-search',
         linkAppId: 'web-search',
-        title: 'Custom business tools',
-        type: 'category',
+        title: 'Web Search',
+        type: 'app',
       },
     ]);
-    expect(items[1]?.icon).toBe(Users);
+    expect(items[1]?.icon).not.toBe(Users);
   });
 
   it('projects every registry-derived fixed app without duplicating categories', () => {
@@ -145,7 +145,7 @@ describe('mobile navigation model', () => {
               app_id: 'fixed-feature',
               enabled: true,
               icon_key: 'sparkles',
-              route_base: '/fixed-feature',
+              route_base: '/apps/fixed-feature',
               title: 'Fixed feature',
             },
           ],
@@ -162,7 +162,7 @@ describe('mobile navigation model', () => {
           enabled: true,
           icon_key: 'home',
           nav_items: [],
-          route_base: '/home',
+          route_base: '/apps/home',
           title: 'Home',
         },
         {
@@ -170,7 +170,7 @@ describe('mobile navigation model', () => {
           enabled: true,
           icon_key: 'sparkles',
           nav_items: [],
-          route_base: '/fixed-feature',
+          route_base: '/apps/fixed-feature',
           title: 'Fixed feature',
         },
       ],

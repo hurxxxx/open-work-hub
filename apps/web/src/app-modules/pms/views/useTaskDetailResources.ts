@@ -30,7 +30,7 @@ export function useTaskDetailResources({
 }: {
   taskId: string;
   token: string | null;
-  workspaceSlug: string | null;
+  workspaceSlug: string;
 }) {
   const [state, dispatch] = useReducer(
     taskDetailResourcesReducer,
@@ -38,11 +38,14 @@ export function useTaskDetailResources({
   );
 
   useEffect(() => {
-    if (!token) return;
+    if (!token || !workspaceSlug) {
+      dispatch({ type: 'loading', value: false });
+      return;
+    }
     dispatch({ type: 'loading', value: true });
     Promise.all([
       getTaskDetail(token, taskId, workspaceSlug),
-      listTaskActivityLogs(token, taskId),
+      listTaskActivityLogs(token, taskId, workspaceSlug),
     ])
       .then(([detail, logs]) => dispatch({ type: 'loaded', detail, logs }))
       .finally(() => dispatch({ type: 'loading', value: false }));

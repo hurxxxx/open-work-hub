@@ -2,11 +2,20 @@ from __future__ import annotations
 
 import base64
 import hashlib
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from sqlalchemy import func, select
+
+from open_work_hub_api.core.db import get_session_factory
+from open_work_hub_api.domains.docs.models import NativeDoc, NativeDocPage
 from open_work_hub_api.domains.recording import blob_store
 from open_work_hub_api.domains.recording import service as recording_service
+from open_work_hub_api.domains.recording.models import (
+    Recording,
+    RecordingPublication,
+    RecordingResult,
+)
 
 from test_meeting import _auth_headers, _bootstrap_admin_session, _first_workspace_slug
 
@@ -30,8 +39,13 @@ def _install_fake_recording_storage(monkeypatch) -> _FakeRecordingMinio:
     monkeypatch.setattr(recording_service, "_broker_is_reachable", lambda: True)
     monkeypatch.setattr(
         recording_service,
-        "enqueue_recording_pipeline",
+        "new_recording_attempt_id",
         lambda recording_id: f"task-{recording_id}",
+    )
+    monkeypatch.setattr(
+        recording_service,
+        "enqueue_recording_pipeline",
+        lambda recording_id, attempt_id: None,
     )
     return fake
 
@@ -78,6 +92,100 @@ def _attach_meeting(client, token: str, *, workspace_slug: str, recording_id: st
     )
 
 
+def _complete_recording_result(recording_id: str, *, version: int = 1) -> None:
+    now = datetime.now(UTC).replace(tzinfo=None)
+    with get_session_factory()() as session:
+        recording = session.get(Recording, recording_id)
+        assert recording is not None
+        recording.transcript_status = "done"
+        recording.summary_status = "done"
+        recording.progress_pct = 100
+        session.add(
+            RecordingResult(
+                recording_id=recording.id,
+                transcript_text="원문 전사 내용",
+                summary_text="핵심 요약 내용",
+                verifier_note="검증: 통과",
+                version=version,
+                generated_at=now,
+            )
+        )
+        session.add(recording)
+        session.commit()
+
+
+def test_recording_result_requires_explicit_idempotent_docs_publication(
+    client,
+    monkeypatch,
+) -> None:
+    _install_fake_recording_storage(monkeypatch)
+    admin = _bootstrap_admin_session(client)
+    workspace_slug = _first_workspace_slug(client, admin["token"])
+    recording = _import_recording(
+        client,
+        admin["token"],
+        workspace_slug=workspace_slug,
+        title="explicit publication",
+    )
+    detail_path = f"/api/v1/workspaces/{workspace_slug}/recording/recordings/{recording['id']}"
+    publish_path = f"{detail_path}/publications/docs"
+
+    with get_session_factory()() as session:
+        docs_before = session.scalar(select(func.count()).select_from(NativeDoc))
+
+    not_ready = client.post(publish_path, headers=_auth_headers(admin["token"]))
+    assert not_ready.status_code == 409, not_ready.text
+    assert not_ready.json()["code"] == "recording.result_not_ready"
+
+    _complete_recording_result(recording["id"])
+    detail = client.get(detail_path, headers=_auth_headers(admin["token"]))
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["result"] == {
+        "transcript_text": "원문 전사 내용",
+        "summary_text": "핵심 요약 내용",
+        "verifier_note": "검증: 통과",
+        "version": 1,
+        "generated_at": detail.json()["result"]["generated_at"],
+        "updated_at": detail.json()["result"]["updated_at"],
+    }
+    assert detail.json()["publications"] == []
+
+    listing = client.get(
+        f"/api/v1/workspaces/{workspace_slug}/recording/recordings",
+        headers=_auth_headers(admin["token"]),
+    )
+    assert listing.status_code == 200, listing.text
+    listed = next(item for item in listing.json()["items"] if item["id"] == recording["id"])
+    assert "result" not in listed
+    assert "publications" not in listed
+
+    first = client.post(publish_path, headers=_auth_headers(admin["token"]))
+    second = client.post(publish_path, headers=_auth_headers(admin["token"]))
+    assert first.status_code == 201, first.text
+    assert second.status_code == 201, second.text
+    assert second.json()["id"] == first.json()["id"]
+    assert first.json()["target_app"] == "docs"
+    assert first.json()["result_version"] == 1
+
+    with get_session_factory()() as session:
+        assert session.scalar(select(func.count()).select_from(NativeDoc)) == docs_before + 1
+        assert session.scalar(select(func.count()).select_from(RecordingPublication)) == 1
+        doc = session.get(NativeDoc, first.json()["target_resource_id"])
+        assert doc is not None
+        assert doc.source_app == "recording"
+        assert doc.source_kind == "recording_result"
+        assert doc.source_ref == f"{recording['id']}:1"
+        page = session.scalar(select(NativeDocPage).where(NativeDocPage.doc_id == doc.id))
+        assert page is not None
+        rendered_blocks = str(page.content_blocks)
+        assert "핵심 요약 내용" in rendered_blocks
+        assert "원문 전사 내용" in rendered_blocks
+
+    after = client.get(detail_path, headers=_auth_headers(admin["token"]))
+    assert after.status_code == 200, after.text
+    assert [item["id"] for item in after.json()["publications"]] == [first.json()["id"]]
+
+
 def test_recording_meeting_attach_assigns_sequence_and_is_idempotent(client, monkeypatch):
     _install_fake_recording_storage(monkeypatch)
     admin = _bootstrap_admin_session(client)
@@ -89,7 +197,9 @@ def test_recording_meeting_attach_assigns_sequence_and_is_idempotent(client, mon
         title="Recording attach target",
     )
     first = _import_recording(client, admin["token"], workspace_slug=workspace_slug, title="first")
-    second = _import_recording(client, admin["token"], workspace_slug=workspace_slug, title="second")
+    second = _import_recording(
+        client, admin["token"], workspace_slug=workspace_slug, title="second"
+    )
 
     first_attach = _attach_meeting(
         client,

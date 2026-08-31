@@ -31,12 +31,16 @@ from open_work_hub_api.core.llm import (  # noqa: E402
     LlmRuntimeError,
     LlmTaskContext,
 )
+from open_work_hub_api.core.app_routes import InternalAppLocation, build_app_href  # noqa: E402
 from open_work_hub_api.domains.ai.gateway import (  # noqa: E402
     LlmWorkloadContext,
     execute_llm,
 )
 from open_work_hub_api.domains.auth.models import Workspace  # noqa: E402
 from open_work_hub_api.domains.auth.security import new_id  # noqa: E402
+from open_work_hub_api.domains.auth.workspace_app_gate import (  # noqa: E402
+    is_app_enabled_for_user_context,
+)
 from open_work_hub_api.domains.meeting.models import (  # noqa: E402
     Meeting,
     MeetingAttendee,
@@ -96,6 +100,26 @@ def _mark_failed(session: Session, recording_id: str, reason: str) -> None:
     recording.failure_reason = reason[:5000]
     session.add(recording)
     session.commit()
+
+
+def _ensure_meeting_execution_allowed(
+    session: Session,
+    recording: MeetingRecording,
+) -> None:
+    meeting = recording.meeting
+    if meeting is not None and is_app_enabled_for_user_context(
+        session,
+        app_id="meeting",
+        user_id=recording.uploaded_by_id,
+        workspace_id=meeting.workspace_id,
+    ):
+        return
+    _mark_failed(
+        session,
+        recording.id,
+        "Meeting app execution disabled or requester membership revoked.",
+    )
+    raise Ignore()
 
 
 def _download_recording_to_tmp(recording: MeetingRecording) -> str:
@@ -163,6 +187,8 @@ def transcribe_recording(self, recording_id: str) -> str:
             _heartbeat(session, recording, 60, "summarizing")
             return recording.id
 
+        _ensure_meeting_execution_allowed(session, recording)
+
         if recording.transcribe_started_at is None:
             recording.transcribe_started_at = _utcnow()
         _heartbeat(session, recording, max(recording.progress_pct, 10), "transcribing")
@@ -182,12 +208,15 @@ def transcribe_recording(self, recording_id: str) -> str:
             rec = session.get(MeetingRecording, recording_id)
             if rec is None or rec.transcription_status == "cancelled":
                 raise Ignore()
+            _ensure_meeting_execution_allowed(session, rec)
             _heartbeat(session, rec, pct, "transcribing")
 
+        _ensure_meeting_execution_allowed(session, recording)
         result = get_asr_backend().transcribe(Path(tmp_path), on_progress=on_progress)
         recording = session.get(MeetingRecording, recording_id)
         if recording is None or recording.transcription_status == "cancelled":
             raise Ignore()
+        _ensure_meeting_execution_allowed(session, recording)
         recording.transcript_text = result.text.strip()
         if recording.duration_sec is None and result.duration_sec:
             recording.duration_sec = int(result.duration_sec)
@@ -240,6 +269,8 @@ def summarize_recording(self, recording_id: str) -> str:
         if not recording.transcript_text:
             raise PermanentError("Transcript is missing.")
 
+        _ensure_meeting_execution_allowed(session, recording)
+
         _heartbeat(session, recording, max(recording.progress_pct, 60), "summarizing")
 
         # Build the LlmTaskContext for this system job. Routing is delegated to
@@ -273,6 +304,7 @@ def summarize_recording(self, recording_id: str) -> str:
         recording = session.get(MeetingRecording, recording_id)
         if recording is None or recording.transcription_status == "cancelled":
             raise Ignore()
+        _ensure_meeting_execution_allowed(session, recording)
         recording.summary_text = summary
         meeting_id = _recording_meeting_id(recording)
         if meeting_id is not None:
@@ -316,6 +348,8 @@ def extract_meeting_insights(self, recording_id: str) -> str:
             _heartbeat(session, recording, max(recording.progress_pct, 90), "generating_doc")
             return recording.id
 
+        _ensure_meeting_execution_allowed(session, recording)
+
         _heartbeat(session, recording, max(recording.progress_pct, 90), "extracting_insights")
         try:
             meeting_insights_module().extract_and_persist_meeting_insights(
@@ -336,6 +370,7 @@ def extract_meeting_insights(self, recording_id: str) -> str:
         recording = session.get(MeetingRecording, recording_id)
         if recording is None or recording.transcription_status == "cancelled":
             raise Ignore()
+        _ensure_meeting_execution_allowed(session, recording)
         _heartbeat(session, recording, max(recording.progress_pct, 92), "generating_doc")
         return recording.id
     finally:
@@ -368,6 +403,8 @@ def generate_meeting_doc(self, recording_id: str) -> str:
         if not recording.transcript_text:
             raise PermanentError("Transcript is missing.")
 
+        _ensure_meeting_execution_allowed(session, recording)
+
         meeting = recording.meeting
         if meeting is None:
             raise PermanentError("Meeting is missing.")
@@ -392,13 +429,25 @@ def generate_meeting_doc(self, recording_id: str) -> str:
                     id=new_id(),
                     task_id=recording.linked_task_id,
                     author_id=meeting.organizer_id,
-                    body=f"📄 회의록: /w/{slug}/docs/{doc.id}" if slug else f"📄 회의록: {doc.id}",
+                    body=(
+                        "📄 회의록: "
+                        + build_app_href(
+                            InternalAppLocation(
+                                route_id="docs.document",
+                                workspace_slug=slug,
+                                path_params={"docId": doc.id},
+                            )
+                        )
+                        if slug
+                        else f"📄 회의록: {doc.id}"
+                    ),
                     body_blocks=None,
                 )
             )
         recording = session.get(MeetingRecording, recording_id)
         if recording is None or recording.transcription_status == "cancelled":
             raise Ignore()
+        _ensure_meeting_execution_allowed(session, recording)
         recording.linked_doc_id = doc.id
         recording.transcription_status = "done"
         recording.progress_pct = 100

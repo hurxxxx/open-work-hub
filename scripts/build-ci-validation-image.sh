@@ -66,6 +66,7 @@ build_image() {
       pnpm --version
       python --version
       uv --version
+      tmux -V
       pg_dump --version | grep -Eq "^pg_dump \(PostgreSQL\) 17\."
       pg_restore --version | grep -Eq "^pg_restore \(PostgreSQL\) 17\."
       psql --version | grep -Eq "^psql \(PostgreSQL\) 17\."

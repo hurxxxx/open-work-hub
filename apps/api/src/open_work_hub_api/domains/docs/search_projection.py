@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Any
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from open_work_hub_api.core.app_routes import InternalAppLocation, build_app_href
 from open_work_hub_api.domains.auth.models import Team, Workspace
 from open_work_hub_api.domains.docs.app_catalog import DOCS_WORKSPACE_APP
 from open_work_hub_api.domains.docs.content_text import extract_page_text
@@ -134,10 +134,13 @@ def _doc_row(db: Session, *, workspace: Workspace, doc: NativeDoc) -> dict[str, 
         shared_user_ids=[share.user_id for share in doc.user_shares],
         granted_user_ids=_active_doc_grant_user_ids(doc.meeting_access_grants),
         date_markers={},
-        deep_link=_with_query_param(
-            f"/w/{workspace.key}/docs/{doc.id}",
-            "page",
-            doc_pages[0]["id"] if doc_pages else None,
+        deep_link=build_app_href(
+            InternalAppLocation(
+                route_id="docs.document",
+                workspace_slug=workspace.key,
+                path_params={"docId": doc.id},
+                query_params={"page": doc_pages[0]["id"] if doc_pages else None},
+            )
         ),
         metadata={"source_kind": doc.source_kind, "source_ref": doc.source_ref},
         source_updated_at=doc.updated_at,
@@ -148,19 +151,6 @@ def _doc_row(db: Session, *, workspace: Workspace, doc: NativeDoc) -> dict[str, 
 
 def _doc_page_sort_key(page: NativeDocPage) -> tuple[int, datetime, str]:
     return (page.sort_order, page.created_at, page.id)
-
-
-def _with_query_param(url: str, key: str, value: str | None) -> str:
-    if not value:
-        return url
-    parts = urlsplit(url)
-    query = [
-        (item_key, item_value)
-        for item_key, item_value in parse_qsl(parts.query, keep_blank_values=True)
-        if item_key != key
-    ]
-    query.append((key, value))
-    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
 
 
 def _task_list_team_lookup(db: Session, workspace: Workspace) -> dict[str, str]:

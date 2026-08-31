@@ -26,7 +26,13 @@ from open_work_hub_api.domains.auth.models import utcnow_naive
 
 GRAPH_RUN_STATUSES = ("pending", "running", "completed", "failed", "cancelled")
 GRAPH_RUN_VISIBILITIES = ("private", "workspace")
-GRAPH_DISPATCH_STATUSES = ("pending", "claimed", "dispatched", "dead_letter")
+GRAPH_DISPATCH_STATUSES = (
+    "pending",
+    "claimed",
+    "dispatched",
+    "dead_letter",
+    "cancelled",
+)
 JSONB_COMPAT = JSONB(astext_type=Text()).with_variant(JSON(), "sqlite")
 
 

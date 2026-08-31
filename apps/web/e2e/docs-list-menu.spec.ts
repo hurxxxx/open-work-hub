@@ -80,15 +80,23 @@ async function stubDocsList(page: Page) {
 }
 
 test.describe('Docs list row menu', () => {
-  test('keeps the bottom row menu reachable outside the table frame', async ({ page }) => {
+  test('keeps the bottom row menu reachable outside the table frame', async ({
+    page,
+  }) => {
     await stubShellBackend(page);
     await stubConversationsApi(page);
     await stubDocsList(page);
 
-    await page.goto('/w/hq/docs');
+    await page.goto('/apps/docs/workspaces/hq');
     await expect(page.getByText('HP ZGX Nano AI Station 셋업')).toBeVisible();
 
-    await page.locator('tbody tr').last().locator('td').last().locator('button').click();
+    await page
+      .locator('tbody tr')
+      .last()
+      .locator('td')
+      .last()
+      .locator('button')
+      .click();
 
     const renameAction = page.getByText('이름 변경');
     await expect(renameAction).toBeVisible();
@@ -100,7 +108,10 @@ test.describe('Docs list row menu', () => {
             rect.left + rect.width / 2,
             rect.top + rect.height / 2,
           );
-          return target === node || Boolean(target && (node.contains(target) || target.contains(node)));
+          return (
+            target === node ||
+            Boolean(target && (node.contains(target) || target.contains(node)))
+          );
         }),
       )
       .toBe(true);

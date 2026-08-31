@@ -2275,6 +2275,7 @@ def load_files_source_snapshot(db: Session) -> FilesSourceProjectionSnapshot:
             rag_projection = build_file_rag_projection(
                 file=file,
                 artifact=artifact,
+                workspace_slug=workspace.key,
             ).model_copy(
                 update={
                     "retrieval_partition_id": str(row.file_partition_id),

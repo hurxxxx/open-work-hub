@@ -129,7 +129,7 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
         task_kind="rag_grounded_answer",
         default_policy="local_only",
         description="Grounded answer synthesis for workspace RAG queries.",
-        app_ids=("rag",),
+        app_ids=("retrieval-search",),
     )
     registry.register_tool(
         name="rag.query",
@@ -138,7 +138,8 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
             "internal document or knowledge evidence. "
             "Results are limited by the current workspace, app enablement, and ACL."
         ),
-        owner_domain="chatbot",
+        owner_domain="rag",
+        workspace_app_id="retrieval-search",
         handler=_query,
         args_model=RagQueryToolArgs,
         discoverability_predicate_id="rag.enabled",
@@ -150,7 +151,8 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
             "Use this before RAG search when the user asks what internal document "
             "sources are available."
         ),
-        owner_domain="chatbot",
+        owner_domain="rag",
+        workspace_app_id="retrieval-search",
         handler=_list_sources,
         args_model=RagListSourcesArgs,
         discoverability_predicate_id="rag.enabled",

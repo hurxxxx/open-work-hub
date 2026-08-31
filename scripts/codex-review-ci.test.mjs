@@ -24,7 +24,7 @@ test('passes approval policy as a Codex global option before exec', () => {
   );
 });
 
-test('uses trusted developer instructions with the structured base review', () => {
+test('uses target-owned developer instructions with the structured base review', () => {
   assert.ok(invocationStart >= 0);
   assert.ok(invocationEnd > invocationStart);
   assert.match(
@@ -37,6 +37,11 @@ test('uses trusted developer instructions with the structured base review', () =
     /--base "origin\/\$\{CI_MERGE_REQUEST_TARGET_BRANCH_NAME\}"/,
   );
   assert.doesNotMatch(codexInvocation, /\s+- < <\(write_prompt\)/);
+  assert.match(runnerSource, /select_target_instruction_paths/);
+  assert.match(
+    runnerSource,
+    /git show "\$\{target_sha\}:\$\{instruction_path\}"/,
+  );
 });
 
 test('reviews in a credential-free checkout without source instructions', () => {
@@ -77,8 +82,17 @@ test('keeps source instructions out of the review checkout but in its diff', () 
     git(['init', '--initial-branch=dev'], checkout);
     git(['config', 'user.name', 'Codex Review Test'], checkout);
     git(['config', 'user.email', 'codex-review@example.invalid'], checkout);
+    fs.mkdirSync(path.join(checkout, 'apps', 'api'), { recursive: true });
+    fs.writeFileSync(
+      path.join(checkout, 'AGENTS.md'),
+      'trusted target root instructions\n',
+    );
+    fs.writeFileSync(
+      path.join(checkout, 'apps', 'api', 'AGENTS.md'),
+      'trusted target API instructions\n',
+    );
     fs.writeFileSync(path.join(checkout, 'base.txt'), 'base\n');
-    git(['add', 'base.txt'], checkout);
+    git(['add', 'AGENTS.md', 'apps/api/AGENTS.md', 'base.txt'], checkout);
     git(['commit', '-m', 'base'], checkout);
     const baseSha = git(['rev-parse', 'HEAD'], checkout);
     git(['remote', 'add', 'origin', remote], checkout);
@@ -87,13 +101,24 @@ test('keeps source instructions out of the review checkout but in its diff', () 
     fs.mkdirSync(path.join(checkout, '.agents', 'skills', 'untrusted'), {
       recursive: true,
     });
-    fs.writeFileSync(path.join(checkout, 'AGENTS.md'), 'untrusted instructions\n');
+    fs.writeFileSync(
+      path.join(checkout, 'AGENTS.md'),
+      'untrusted source root instructions\n',
+    );
+    fs.writeFileSync(
+      path.join(checkout, 'apps', 'api', 'AGENTS.md'),
+      'untrusted source API instructions\n',
+    );
+    fs.writeFileSync(
+      path.join(checkout, 'apps', 'api', 'feature.py'),
+      'FEATURE = True\n',
+    );
     fs.writeFileSync(
       path.join(checkout, '.agents', 'skills', 'untrusted', 'SKILL.md'),
       'untrusted skill\n',
     );
     fs.writeFileSync(path.join(checkout, 'feature.txt'), 'feature\n');
-    git(['add', 'AGENTS.md', '.agents', 'feature.txt'], checkout);
+    git(['add', 'AGENTS.md', 'apps/api', '.agents', 'feature.txt'], checkout);
     git(['commit', '-m', 'feature'], checkout);
     const sourceSha = git(['rev-parse', 'HEAD'], checkout);
 
@@ -104,7 +129,7 @@ set -Eeuo pipefail
 workspace=""
 output=""
 base=""
-trusted_instructions="false"
+trusted_instructions=""
 while (( $# > 0 )); do
   case "$1" in
     -C)
@@ -113,7 +138,7 @@ while (( $# > 0 )); do
       ;;
     -c)
       if [[ "$2" == developer_instructions=* ]]; then
-        trusted_instructions="true"
+        trusted_instructions="\${2#developer_instructions=}"
       fi
       shift 2
       ;;
@@ -130,9 +155,16 @@ while (( $# > 0 )); do
       ;;
   esac
 done
-[[ "$trusted_instructions" == "true" ]]
+[[ -n "$trusted_instructions" ]]
+node -e '
+const value = JSON.parse(process.argv[1]);
+if (!value.includes("trusted target root instructions")) process.exit(1);
+if (!value.includes("trusted target API instructions")) process.exit(1);
+if (value.includes("untrusted source root instructions")) process.exit(1);
+if (value.includes("untrusted source API instructions")) process.exit(1);
+' "$trusted_instructions"
 [[ -n "$workspace" && -n "$output" && "$base" == "origin/dev" ]]
-[[ ! -e "$workspace/AGENTS.md" && ! -e "$workspace/.agents" ]]
+[[ ! -e "$workspace/AGENTS.md" && ! -e "$workspace/apps/api/AGENTS.md" && ! -e "$workspace/.agents" ]]
 [[ -z "$(git -C "$workspace" remote)" ]]
 git -C "$workspace" rev-parse --verify "$base" >/dev/null
 git -C "$workspace" diff --name-only "$base"...HEAD | grep -Fxq AGENTS.md
@@ -180,6 +212,13 @@ printf '%s\n' \\
       fs.readFileSync(path.join(checkout, 'codex-review.md'), 'utf8'),
       /MERGE_READY/,
     );
+    const policyContext = fs.readFileSync(
+      path.join(checkout, 'codex-review-policy-context.md'),
+      'utf8',
+    );
+    assert.match(policyContext, new RegExp(`target_sha=${baseSha}`));
+    assert.match(policyContext, /policy_path=AGENTS\.md blob=/);
+    assert.match(policyContext, /policy_path=apps\/api\/AGENTS\.md blob=/);
   } finally {
     fs.rmSync(fixtureRoot, { recursive: true, force: true });
   }

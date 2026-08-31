@@ -1,4 +1,5 @@
 import { Archive, Presentation, User } from 'lucide-react';
+import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
 
 import type { AppModuleManifest } from '@/src/app/shell/navigation-types';
 
@@ -9,7 +10,6 @@ export const bentoManifest: AppModuleManifest = {
     permissions: [],
     apiDomain: 'bento',
     workspaceApiPrefixes: ['/api/v1/bento'],
-    resourceScope: 'hybrid',
     aiCapabilities: [],
     writeAuditActions: [],
     appLocalTests: [
@@ -44,7 +44,7 @@ export const bentoManifest: AppModuleManifest = {
     },
   ],
   workspaceRoutePaths: [
-    '/w/:workspaceSlug/bento',
-    '/w/:workspaceSlug/bento/:documentId',
+    getAppRoutePattern('bento.root'),
+    getAppRoutePattern('bento.presentation'),
   ],
 };

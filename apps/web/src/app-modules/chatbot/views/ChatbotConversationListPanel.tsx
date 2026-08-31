@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import type { AppRouteId } from '@open-work-hub/contracts/app-contracts';
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
 
 import { useConfirm, useFeedback, usePrompt } from '@open-work-hub/ui';
 
@@ -36,10 +38,6 @@ import {
   shouldAutoLoadMoreForSearch,
 } from '../ai-sidebar-model';
 import { useAuth } from '@/src/platform/auth/auth-provider';
-import {
-  buildWorkspaceAppPath,
-  type WorkspaceAppId,
-} from '@/src/platform/workspaces/workspace-utils';
 import { cn } from '@/src/lib/utils';
 
 interface ChatbotConversationListPanelProps {
@@ -47,8 +45,7 @@ interface ChatbotConversationListPanelProps {
   currentWorkspaceSlug?: string | null;
   navigationDisabled?: boolean;
   pendingConversationTitle?: string | null;
-  routeAppId?: WorkspaceAppId;
-  routePathSuffix?: string;
+  routeId?: AppRouteId;
   scopeRef?: string;
   scopeResourceId?: string;
   eyebrow?: string;
@@ -335,8 +332,7 @@ export function ChatbotConversationListPanel({
   currentWorkspaceSlug,
   navigationDisabled = false,
   pendingConversationTitle,
-  routeAppId = 'chatbot',
-  routePathSuffix = '',
+  routeId = 'chatbot.root',
   scopeRef,
   scopeResourceId,
   eyebrow,
@@ -409,18 +405,15 @@ export function ChatbotConversationListPanel({
   const navigateToAi = useCallback(
     (conversationId?: string) => {
       if (!currentWorkspaceSlug) return;
-      const basePath = buildWorkspaceAppPath(
-        currentWorkspaceSlug,
-        routeAppId,
-        routePathSuffix,
-      );
       navigate(
-        conversationId
-          ? `${basePath}?c=${encodeURIComponent(conversationId)}`
-          : basePath,
+        buildAppHref({
+          routeId,
+          workspaceSlug: currentWorkspaceSlug,
+          queryParams: conversationId ? { c: conversationId } : {},
+        }),
       );
     },
-    [currentWorkspaceSlug, navigate, routeAppId, routePathSuffix],
+    [currentWorkspaceSlug, navigate, routeId],
   );
 
   const loadMoreConversations = useCallback(async () => {

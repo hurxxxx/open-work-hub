@@ -1,4 +1,4 @@
-// Route shell for /w/{workspaceSlug}/meeting/{meetingId}.
+// Route shell for /apps/meeting/workspaces/{workspaceSlug}/meetings/{meetingId}.
 // All actual rendering lives in MeetingWorkspaceLayout so the same two-pane
 // layout (notes editor + MeetingDetail sidebar) can also be hosted inside
 // the calendar's MeetingPreviewModal.

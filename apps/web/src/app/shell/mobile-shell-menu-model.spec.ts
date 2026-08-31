@@ -10,9 +10,9 @@ import {
 
 describe('mobile shell menu model', () => {
   it('builds stable route keys from path and search', () => {
-    expect(createMobileShellRouteKey('/w/hq/docs', '?view=mine')).toBe(
-      '/w/hq/docs\u0000?view=mine',
-    );
+    expect(
+      createMobileShellRouteKey('/apps/docs/workspaces/hq', '?view=mine'),
+    ).toBe('/apps/docs/workspaces/hq\u0000?view=mine');
   });
 
   it('resolves stale route state to closed drawers', () => {

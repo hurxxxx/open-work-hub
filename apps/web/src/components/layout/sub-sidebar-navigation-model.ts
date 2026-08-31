@@ -26,7 +26,6 @@ export interface SubSidebarNavigationProjection {
 
 export interface BuildSubSidebarNavigationProjectionInput {
   activeAppId: string;
-  activeFeatureAppId?: string | null;
   canReadWorkspace: boolean;
   extendCategories?: AppSidebarConfig['extendCategories'];
   globalAppIds?: readonly string[];
@@ -57,28 +56,17 @@ function translateNavItem(
 
 function buildWorkspaceNavItems({
   activeAppId,
-  activeFeatureAppId,
   navItems,
   translate,
   workspaceNavItems,
 }: Pick<
   BuildSubSidebarNavigationProjectionInput,
-  | 'activeAppId'
-  | 'activeFeatureAppId'
-  | 'navItems'
-  | 'translate'
-  | 'workspaceNavItems'
+  'activeAppId' | 'navItems' | 'translate' | 'workspaceNavItems'
 >): NavItem[] {
   const navItemRegistry = new Map(navItems.map((item) => [item.id, item]));
   const items: NavItem[] = [];
   for (const item of workspaceNavItems) {
-    if (
-      !isWorkspaceNavItemInActiveScope({
-        activeAppId,
-        activeFeatureAppId,
-        item,
-      })
-    ) {
+    if (item.app_id !== activeAppId) {
       continue;
     }
     const localItem = navItemRegistry.get(item.id);
@@ -109,22 +97,6 @@ function buildWorkspaceNavItems({
     items.push(nextItem);
   }
   return items;
-}
-
-function isWorkspaceNavItemInActiveScope({
-  activeAppId,
-  activeFeatureAppId,
-  item,
-}: {
-  activeAppId: string;
-  activeFeatureAppId?: string | null;
-  item: WorkspaceBootstrapNavItem;
-}): boolean {
-  if (activeFeatureAppId !== undefined && activeFeatureAppId !== null) {
-    return item.app_id === activeFeatureAppId;
-  }
-
-  return item.app_id === activeAppId;
 }
 
 function buildSettingsNavItems({
@@ -164,7 +136,6 @@ function resolveSettingsSectionId(item: NavItem): string | null {
 
 export function buildSubSidebarNavigationProjection({
   activeAppId,
-  activeFeatureAppId,
   canReadWorkspace,
   extendCategories,
   globalAppIds = [],
@@ -189,7 +160,6 @@ export function buildSubSidebarNavigationProjection({
             .map((item) => translateNavItem(item, translate))
         : buildWorkspaceNavItems({
             activeAppId,
-            activeFeatureAppId,
             navItems,
             translate,
             workspaceNavItems,
@@ -199,7 +169,6 @@ export function buildSubSidebarNavigationProjection({
   );
   const categories =
     extendCategories?.(baseCategories, {
-      activeFeatureAppId,
       canReadWorkspace,
     }) ?? baseCategories;
   return { categories, filteredItems };

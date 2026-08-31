@@ -310,7 +310,7 @@ def test_partitioned_keyword_query_uses_partition_then_source_acl_and_hydration(
         "keywords": "handbook",
         "source_updated_at": "2026-07-20T00:00:00Z",
         "created_at": "2026-07-20T00:00:00Z",
-        "deep_link": "/w/workspace-before/files?file=file-1",
+        "deep_link": "/apps/files/workspaces/workspace-before?file=file-1",
         "visibility": "private",
         "metadata": {"managed_workspace_id": "workspace-before-publication"},
     }
@@ -355,7 +355,9 @@ def test_partitioned_keyword_query_uses_partition_then_source_acl_and_hydration(
             {
                 **rows[0],
                 "workspace_id": execution_workspace.id,
-                "deep_link": f"/w/{execution_workspace.key}/files?file=file-1",
+                "deep_link": (
+                    f"/apps/files/workspaces/{execution_workspace.key}?file=file-1"
+                ),
                 "visibility": "company",
                 "metadata": {
                     "access_scope_kind": "company",
@@ -378,7 +380,10 @@ def test_partitioned_keyword_query_uses_partition_then_source_acl_and_hydration(
     assert response.total == 1
     assert response.hits[0].workspace_id == "workspace-1"
     assert response.hits[0].visibility == "company"
-    assert response.hits[0].deep_link == "/w/workspace-1/files?file=file-1"
+    assert (
+        response.hits[0].deep_link
+        == "/apps/files/workspaces/workspace-1?file=file-1"
+    )
     assert response.hits[0].metadata["access_scope_kind"] == "company"
 
 
@@ -429,7 +434,7 @@ def test_disabled_source_retains_indexed_documents_for_reenable(
         "summary": "Budget review",
         "source_updated_at": "2026-07-20T00:00:00Z",
         "created_at": "2026-07-20T00:00:00Z",
-        "deep_link": "/w/workspace-1/docs/doc-1",
+        "deep_link": "/apps/docs/workspaces/workspace-1/documents/doc-1",
         "doc_pages": [],
     }
 

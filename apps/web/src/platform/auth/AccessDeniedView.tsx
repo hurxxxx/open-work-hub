@@ -12,9 +12,9 @@ export function AccessDeniedView({
   return (
     <div className="p-6">
       <div className="rounded-xl border border-app-border bg-app-surface-sidebar p-6">
-        <h2 className="app-text-title-md mb-2 text-app-ink">
+        <h1 className="app-text-title-md mb-2 text-app-ink">
           {title ?? t('accessDenied.title')}
-        </h2>
+        </h1>
         <p className="app-text-body mb-4 text-app-ink/55">
           {description ?? t('accessDenied.description')}
         </p>

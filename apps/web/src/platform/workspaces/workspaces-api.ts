@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef } from 'react';
 
 import { apiFetchJsonWithMappedError } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
@@ -12,23 +12,18 @@ export type WorkspaceBootstrapNavItem =
     coming_soon?: boolean | null;
   };
 
-export type WorkspaceBootstrapAppBarCategoryItem = {
-  app_id: string;
-  title: string;
-  route_base: string;
-  icon_key: string;
-  availability_scope?: 'platform' | 'workspace';
-  enabled: boolean;
+export type WorkspaceBootstrapAppBarCategoryItem = Omit<
+  ApiSchema<'WorkspaceBootstrapAppBarCategoryItemResponse'>,
+  'coming_soon' | 'position'
+> & {
   coming_soon?: boolean | null;
   position?: number;
 };
 
-export type WorkspaceBootstrapAppBarCategory = {
-  id: string;
-  key: string;
-  title: string;
-  icon_key: string;
-  position: number;
+export type WorkspaceBootstrapAppBarCategory = Omit<
+  ApiSchema<'WorkspaceBootstrapAppBarCategoryResponse'>,
+  'items'
+> & {
   pinnable?: boolean;
   contextLabel?: string;
   showWorkspaceContext?: boolean;
@@ -58,39 +53,29 @@ export type WorkspaceBootstrapResponse = {
   apps: WorkspaceBootstrapApp[];
   app_bar_categories?: WorkspaceBootstrapAppBarCategory[];
   nav: WorkspaceBootstrapNavItem[];
-  platform_visible_app_ids?: string[];
   /**
    * Workspace app ids exposed in the business-chat scope picker, after
-   * applying both entitlement checks and the business-chat context policy.
+   * applying runtime availability checks and the business-chat context policy.
    */
   chatbot_app_ids?: string[];
   keyword_search?: WorkspaceBootstrapKeywordSearch;
 };
 
-export type AppsBootstrapApp = {
-  app_id: string;
-  title: string;
-  route_base: string;
-  icon_key: string;
-  availability_scope: 'platform';
-  enabled: boolean;
-  coming_soon?: boolean | null;
+type GeneratedAppsBootstrapResponse = ApiSchema<'AppsBootstrapResponse'>;
+
+export type AppsBootstrapResponse = Omit<
+  GeneratedAppsBootstrapResponse,
+  'app_bar_categories'
+> & {
+  app_bar_categories: WorkspaceBootstrapAppBarCategory[];
 };
 
-export type AppsBootstrapResponse = {
-  apps: AppsBootstrapApp[];
-  app_bar_categories: WorkspaceBootstrapAppBarCategory[];
-  personal_tools: AppsBootstrapApp[];
-  platform_enabled_app_ids: string[];
-  principal: {
-    kind: 'user';
-    scope: 'personal';
-    workspace_id: null;
-    source: string;
-    user_id: string;
-    session_id?: string | null;
-  };
-};
+export type AppsBootstrapApp = AppsBootstrapResponse['apps'][number];
+export type EligibleWorkspace = ApiSchema<'EligibleWorkspaceResponse'>;
+export type EligibleWorkspacesResponse =
+  ApiSchema<'EligibleWorkspacesResponse'>;
+export type AppWorkspacePreferenceResponse =
+  ApiSchema<'AppWorkspacePreferenceResponse'>;
 
 async function getWorkspaceBootstrap(
   token: string,
@@ -111,6 +96,7 @@ async function getWorkspaceBootstrap(
 }
 
 interface WorkspaceBootstrapState {
+  scopeKey: string | null;
   data: WorkspaceBootstrapResponse | null;
   error: string | null;
   loading: boolean;
@@ -118,11 +104,12 @@ interface WorkspaceBootstrapState {
 
 type WorkspaceBootstrapAction =
   | { type: 'reset' }
-  | { type: 'loading' }
-  | { type: 'success'; data: WorkspaceBootstrapResponse }
-  | { type: 'failure'; error: string };
+  | { type: 'loading'; scopeKey: string }
+  | { type: 'success'; scopeKey: string; data: WorkspaceBootstrapResponse }
+  | { type: 'failure'; scopeKey: string; error: string };
 
 const WORKSPACE_BOOTSTRAP_INITIAL_STATE: WorkspaceBootstrapState = {
+  scopeKey: null,
   data: null,
   error: null,
   loading: false,
@@ -139,18 +126,21 @@ function workspaceBootstrapReducer(
         : WORKSPACE_BOOTSTRAP_INITIAL_STATE;
     case 'loading':
       return {
-        data: state.data,
+        scopeKey: action.scopeKey,
+        data: state.scopeKey === action.scopeKey ? state.data : null,
         error: null,
         loading: true,
       };
     case 'success':
       return {
+        scopeKey: action.scopeKey,
         data: action.data,
         error: null,
         loading: false,
       };
     case 'failure':
       return {
+        scopeKey: action.scopeKey,
         data: null,
         error: action.error,
         loading: false,
@@ -160,56 +150,73 @@ function workspaceBootstrapReducer(
 
 export function useWorkspaceBootstrap(
   token: string | null,
+  principalId: string | null,
   workspaceSlug: string | null | undefined,
 ) {
   const [state, dispatch] = useReducer(
     workspaceBootstrapReducer,
     WORKSPACE_BOOTSTRAP_INITIAL_STATE,
   );
-  const [reloadSeq, setReloadSeq] = useState(0);
+  const requestIdRef = useRef(0);
 
-  useEffect(() => {
-    if (!token || !workspaceSlug) {
+  const requestedScopeKey =
+    token && principalId && workspaceSlug
+      ? JSON.stringify([principalId, workspaceSlug])
+      : null;
+
+  const refresh = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
+    if (!token || !principalId || !workspaceSlug || !requestedScopeKey) {
       dispatch({ type: 'reset' });
-      return;
+      return null;
     }
 
-    let cancelled = false;
-    dispatch({ type: 'loading' });
-    getWorkspaceBootstrap(token, workspaceSlug)
-      .then((next) => {
-        if (cancelled) {
-          return;
-        }
-        dispatch({ type: 'success', data: next });
-      })
-      .catch((caughtError: unknown) => {
-        if (cancelled) {
-          return;
-        }
+    dispatch({ type: 'loading', scopeKey: requestedScopeKey });
+    try {
+      const next = await getWorkspaceBootstrap(token, workspaceSlug);
+      if (requestIdRef.current === requestId) {
+        dispatch({ type: 'success', scopeKey: requestedScopeKey, data: next });
+      }
+      return next;
+    } catch (caughtError) {
+      const error =
+        caughtError instanceof Error
+          ? caughtError
+          : new Error(i18n.t('apps:workspace.bootstrapLoadFailed'));
+      if (requestIdRef.current === requestId) {
         dispatch({
           type: 'failure',
-          error:
-            caughtError instanceof Error
-              ? caughtError.message
-              : i18n.t('apps:workspace.bootstrapLoadFailed'),
+          scopeKey: requestedScopeKey,
+          error: error.message,
         });
-      });
+      }
+      throw error;
+    }
+  }, [principalId, requestedScopeKey, token, workspaceSlug]);
 
+  useEffect(() => {
+    void refresh().catch(() => undefined);
     return () => {
-      cancelled = true;
+      requestIdRef.current += 1;
     };
-  }, [reloadSeq, token, workspaceSlug]);
+  }, [refresh]);
 
   const reload = useCallback(() => {
-    setReloadSeq((current) => current + 1);
-  }, []);
+    void refresh().catch(() => undefined);
+  }, [refresh]);
 
+  const scopedState =
+    requestedScopeKey !== null && state.scopeKey === requestedScopeKey
+      ? state
+      : WORKSPACE_BOOTSTRAP_INITIAL_STATE;
   return {
-    data: state.data,
-    error: state.error,
-    loading: state.loading,
+    data: scopedState.data,
+    error: scopedState.error,
+    loading:
+      requestedScopeKey !== null &&
+      (scopedState.loading || state.scopeKey !== requestedScopeKey),
     reload,
+    refresh,
   };
 }
 
@@ -229,6 +236,7 @@ async function getAppsBootstrap(token: string): Promise<AppsBootstrapResponse> {
 }
 
 interface AppsBootstrapState {
+  scopeKey: string | null;
   data: AppsBootstrapResponse | null;
   error: string | null;
   loading: boolean;
@@ -236,11 +244,12 @@ interface AppsBootstrapState {
 
 type AppsBootstrapAction =
   | { type: 'reset' }
-  | { type: 'loading' }
-  | { type: 'success'; data: AppsBootstrapResponse }
-  | { type: 'failure'; error: string };
+  | { type: 'loading'; scopeKey: string }
+  | { type: 'success'; scopeKey: string; data: AppsBootstrapResponse }
+  | { type: 'failure'; scopeKey: string; error: string };
 
 const APPS_BOOTSTRAP_INITIAL_STATE: AppsBootstrapState = {
+  scopeKey: null,
   data: null,
   error: null,
   loading: false,
@@ -256,57 +265,164 @@ function appsBootstrapReducer(
         ? state
         : APPS_BOOTSTRAP_INITIAL_STATE;
     case 'loading':
-      return { data: state.data, error: null, loading: true };
+      return {
+        scopeKey: action.scopeKey,
+        data: state.scopeKey === action.scopeKey ? state.data : null,
+        error: null,
+        loading: true,
+      };
     case 'success':
-      return { data: action.data, error: null, loading: false };
+      return {
+        scopeKey: action.scopeKey,
+        data: action.data,
+        error: null,
+        loading: false,
+      };
     case 'failure':
-      return { data: null, error: action.error, loading: false };
+      return {
+        scopeKey: action.scopeKey,
+        data: null,
+        error: action.error,
+        loading: false,
+      };
   }
 }
 
-export function useAppsBootstrap(token: string | null) {
+export function useAppsBootstrap(
+  token: string | null,
+  principalId: string | null,
+) {
   const [state, dispatch] = useReducer(
     appsBootstrapReducer,
     APPS_BOOTSTRAP_INITIAL_STATE,
   );
-  const [reloadSeq, setReloadSeq] = useState(0);
+  const requestIdRef = useRef(0);
 
-  useEffect(() => {
-    if (!token) {
+  const requestedScopeKey = token && principalId ? principalId : null;
+
+  const refresh = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
+    if (!token || !principalId || !requestedScopeKey) {
       dispatch({ type: 'reset' });
-      return;
+      return null;
     }
 
-    let cancelled = false;
-    dispatch({ type: 'loading' });
-    getAppsBootstrap(token)
-      .then((next) => {
-        if (!cancelled) dispatch({ type: 'success', data: next });
-      })
-      .catch((caughtError: unknown) => {
-        if (cancelled) return;
+    dispatch({ type: 'loading', scopeKey: requestedScopeKey });
+    try {
+      const next = await getAppsBootstrap(token);
+      if (requestIdRef.current === requestId) {
+        dispatch({
+          type: 'success',
+          scopeKey: requestedScopeKey,
+          data: next,
+        });
+      }
+      return next;
+    } catch (caughtError) {
+      const error =
+        caughtError instanceof Error
+          ? caughtError
+          : new Error(i18n.t('apps:workspace.bootstrapLoadFailed'));
+      if (requestIdRef.current === requestId) {
         dispatch({
           type: 'failure',
-          error:
-            caughtError instanceof Error
-              ? caughtError.message
-              : i18n.t('apps:workspace.bootstrapLoadFailed'),
+          scopeKey: requestedScopeKey,
+          error: error.message,
         });
-      });
+      }
+      throw error;
+    }
+  }, [principalId, requestedScopeKey, token]);
 
+  useEffect(() => {
+    void refresh().catch(() => undefined);
     return () => {
-      cancelled = true;
+      requestIdRef.current += 1;
     };
-  }, [reloadSeq, token]);
+  }, [refresh]);
 
   const reload = useCallback(() => {
-    setReloadSeq((current) => current + 1);
-  }, []);
+    void refresh().catch(() => undefined);
+  }, [refresh]);
 
+  const scopedState =
+    requestedScopeKey !== null && state.scopeKey === requestedScopeKey
+      ? state
+      : APPS_BOOTSTRAP_INITIAL_STATE;
   return {
-    data: state.data,
-    error: state.error,
-    loading: state.loading,
+    data: scopedState.data,
+    error: scopedState.error,
+    loading:
+      requestedScopeKey !== null &&
+      (scopedState.loading || state.scopeKey !== requestedScopeKey),
     reload,
+    refresh,
   };
+}
+
+export async function getEligibleWorkspaces(
+  token: string,
+  appId: string,
+  {
+    page = 1,
+    pageSize = 50,
+    query = '',
+    slug,
+  }: { page?: number; pageSize?: number; query?: string; slug?: string } = {},
+): Promise<EligibleWorkspacesResponse> {
+  const params = new URLSearchParams({
+    page: String(page),
+    page_size: String(pageSize),
+  });
+  if (query.trim()) params.set('q', query.trim());
+  if (slug?.trim()) params.set('slug', slug.trim());
+  return apiFetchJsonWithMappedError<EligibleWorkspacesResponse>(
+    `/api/v1/apps/${encodeURIComponent(appId)}/eligible-workspaces?${params.toString()}`,
+    token,
+    {},
+    (error) =>
+      new Error(error.message || i18n.t('apps:workspace.bootstrapLoadFailed')),
+  );
+}
+
+export async function getAllEligibleWorkspaces(
+  token: string,
+  appId: string,
+  { query = '' }: { query?: string } = {},
+): Promise<EligibleWorkspace[]> {
+  const pageSize = 100;
+  const first = await getEligibleWorkspaces(token, appId, {
+    page: 1,
+    pageSize,
+    query,
+  });
+  const pageCount = Math.ceil(first.total / pageSize);
+  const remaining: EligibleWorkspacesResponse[] = [];
+  for (let page = 2; page <= pageCount; page += 1) {
+    remaining.push(
+      await getEligibleWorkspaces(token, appId, { page, pageSize, query }),
+    );
+  }
+  const items = [first, ...remaining].flatMap((response) => response.items);
+  return Array.from(
+    new Map(items.map((workspace) => [workspace.id, workspace])).values(),
+  );
+}
+
+export async function setAppWorkspacePreference(
+  token: string,
+  appId: string,
+  workspaceId: string,
+): Promise<AppWorkspacePreferenceResponse> {
+  return apiFetchJsonWithMappedError<AppWorkspacePreferenceResponse>(
+    `/api/v1/apps/${encodeURIComponent(appId)}/workspace-preference`,
+    token,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspace_id: workspaceId }),
+    },
+    (error) =>
+      new Error(error.message || i18n.t('apps:workspace.bootstrapLoadFailed')),
+  );
 }

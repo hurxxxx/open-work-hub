@@ -13,7 +13,7 @@ Pick validation by changed surface. Current code/tests plus owner docs are sourc
 
 Separate app-local work from platform enablement when touching:
 
-- app/feature identity, manifest, entitlement, bootstrap
+- executable app/feature identity, manifest, runtime availability, bootstrap
 - shell route/nav, protected API composition, OpenAPI/generated client
 - shared RBAC/data/table, worker runtime
 - file/network platform pipeline
@@ -28,7 +28,7 @@ Record only applicable rows in MR evidence.
 
 | Surface          | Must state                                                                             |
 | ---------------- | -------------------------------------------------------------------------------------- |
-| Identity/route   | app/feature ID, owner, route context, availability, entitlement                        |
+| Identity/route   | app/feature ID, owner, route/execution/resource scope, runtime availability             |
 | Data/auth        | scope, authoritative store, transactions, retention, read/write roles                  |
 | API/UI           | request/response/error, workspace prefix, OpenAPI/client, i18n, a11y, time/stale state |
 | File/network     | type/size/decompression, redirect/TLS/active content, cleanup                          |
@@ -57,20 +57,18 @@ Record only applicable rows in MR evidence.
 Focused commands:
 
 ```bash
-pnpm --dir apps/web exec vitest run <path>
-cd apps/api && uv run --python 3.12 --group dev python -m pytest <path> -q
-cd apps/worker && uv run --python 3.12 --group dev python -m pytest <path> -q
+pnpm exec vitest run --root apps/web <path>
+(cd apps/api && uv run --python 3.12 --group dev python -m pytest <path> -q)
+(cd apps/worker && uv run --python 3.12 --group dev python -m pytest <path> -q)
 ```
 
 Use `pnpm ci:app-api-contracts`, `pnpm ci:app-web-contracts`, or `pnpm ci:all` only when the changed surface justifies broad validation.
 
-## MR Flow
+## GitLab Evidence
 
-- Feature MR target: GitLab `dev`; same user outcome stays in one MR.
-- Release MR target: `main` from `dev`; non-Codex validation lives there.
-- Codex feature MR job checks only review/freshness/merge/evidence gates.
+- Branch, MR, release, and deployment authorization lives in root `AGENTS.md`.
 - Pipeline contract lives in `.gitlab-ci.yml`, `ops/ci/ci-first.gitlab-ci.yml`, and `scripts/check-gitlab-pipeline.mjs`.
-- Source change requires affected evidence refresh. Target change requires rechecking merged surface when it changes.
+- For explicitly requested MR work, source changes require affected evidence refresh and target changes require rechecking the merged surface.
 - Contract package tags `contracts-v*` publish through GitLab Package Registry.
 - Use `open-work-hub-mr-review-validation` only when review/merge decision is requested.
 

@@ -69,6 +69,7 @@ RUN apt-get update \
       jq \
       libpq-dev \
       postgresql-client \
+      tmux \
     && rm -rf /var/lib/apt/lists/* \
     && npm install --global --force corepack@0.34.0 \
     && corepack enable \

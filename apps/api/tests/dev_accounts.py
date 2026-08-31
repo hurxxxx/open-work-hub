@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from urllib.parse import parse_qs, urlsplit
+
 from fastapi.testclient import TestClient
 
 from open_work_hub_api.core.db import get_session_factory
@@ -38,6 +40,20 @@ _LEGACY_ACCOUNTS = {
 
 def auth_headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+def content_grant_headers(content_url: str) -> dict[str, str]:
+    parsed = urlsplit(content_url)
+    fragment = parse_qs(parsed.fragment, keep_blank_values=True)
+    grants = fragment.get("grant", [])
+    assert not parsed.scheme and not parsed.netloc
+    assert parsed.path == "/api/v1/content" and not parsed.query
+    assert set(fragment) == {"grant"} and len(grants) == 1 and grants[0]
+    return {"X-Open-Work-Hub-Content-Grant": grants[0]}
+
+
+def content_headers(token: str, content_url: str) -> dict[str, str]:
+    return {**auth_headers(token), **content_grant_headers(content_url)}
 
 
 def dev_login(client: TestClient, account_key: str = "administrator") -> dict:
@@ -158,7 +174,9 @@ def _ensure_user(
         params={"q": email},
     )
     assert list_response.status_code == 200, list_response.text
-    existing = next((item for item in list_response.json()["items"] if item["email"] == email), None)
+    existing = next(
+        (item for item in list_response.json()["items"] if item["email"] == email), None
+    )
     if existing is not None:
         return existing
 

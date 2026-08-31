@@ -9,6 +9,7 @@ import pytest
 from starlette.websockets import WebSocketDisconnect
 import y_py as Y
 
+from dev_accounts import content_headers
 from open_work_hub_api.domains.docs.collab import (
     CollabPageContext,
     DocsCollabHub,
@@ -20,8 +21,9 @@ from open_work_hub_api.domains.docs.collab import (
 from open_work_hub_api.domains.collaboration import CollabConnectionLimitExceeded
 from open_work_hub_api.domains.docs.collab_codec import blocks_to_yjs_state, yjs_state_to_blocks
 from open_work_hub_api.domains.auth.security import new_id
-from open_work_hub_api.domains.media import router as media_router
+from open_work_hub_api.domains.media import content_access as media_content_access
 from open_work_hub_api.domains.media.models import MediaFile
+from open_work_hub_api.domains.media.object_storage import MediaObjectStorage
 from open_work_hub_api.core.db import get_session_factory
 from test_docs_hub import (
     _add_task_list_member,
@@ -455,7 +457,7 @@ def test_docs_native_page_linked_media_resolves_for_shared_user(
     )
     assert resolve_response.status_code == 200, resolve_response.text
     resolved_url = resolve_response.json()["resolved"][f"media:{media['id']}"]
-    assert resolved_url.startswith(f"/api/v1/media/content/{media['id']}?")
+    assert resolved_url.startswith("/api/v1/content#grant=")
     assert "127.0.0.1:59000" not in resolved_url
 
     class FakeMinioObject:
@@ -465,7 +467,7 @@ def test_docs_native_page_linked_media_resolves_for_shared_user(
 
         def stream(self, chunk_size: int):
             assert chunk_size > 0
-            yield b"png-bytes"
+            yield b"\x89PNG\r\n\x1a\npng-bytes"
 
         def close(self) -> None:
             self.closed = True
@@ -481,11 +483,18 @@ def test_docs_native_page_linked_media_resolves_for_shared_user(
             assert storage_key.endswith("/fixture.png")
             return fake_object
 
-    monkeypatch.setattr(media_router, "get_minio_client", lambda: FakeMinioClient())
+    monkeypatch.setattr(
+        media_content_access,
+        "media_object_storage",
+        lambda: MediaObjectStorage(bucket_name="test-bucket", client=FakeMinioClient()),
+    )
 
-    content_response = client.get(resolved_url)
+    content_response = client.get(
+        resolved_url,
+        headers=content_headers(member_token, resolved_url),
+    )
     assert content_response.status_code == 200, content_response.text
-    assert content_response.content == b"png-bytes"
+    assert content_response.content == b"\x89PNG\r\n\x1a\npng-bytes"
     assert content_response.headers["content-type"] == "image/png"
     assert fake_object.closed is True
     assert fake_object.released is True
@@ -514,10 +523,18 @@ def test_media_content_missing_storage_object_returns_not_found(
                 object_name=storage_key,
             )
 
-    monkeypatch.setattr(media_router, "get_minio_client", lambda: FakeMinioClient())
+    monkeypatch.setattr(
+        media_content_access,
+        "media_object_storage",
+        lambda: MediaObjectStorage(bucket_name="test-bucket", client=FakeMinioClient()),
+    )
 
-    content_response = client.get(resolved_url)
-    assert content_response.status_code == 404, content_response.text
+    content_response = client.get(
+        resolved_url,
+        headers=content_headers(admin["token"], resolved_url),
+    )
+    assert content_response.status_code == 403, content_response.text
+    assert content_response.json()["code"] == "content.grant_invalid"
 
 
 def test_media_content_storage_download_failure_returns_bad_gateway(
@@ -534,9 +551,16 @@ def test_media_content_storage_download_failure_returns_bad_gateway(
             assert storage_key.endswith("/fixture.png")
             raise RuntimeError("storage unavailable")
 
-    monkeypatch.setattr(media_router, "get_minio_client", lambda: FakeMinioClient())
+    monkeypatch.setattr(
+        media_content_access,
+        "media_object_storage",
+        lambda: MediaObjectStorage(bucket_name="test-bucket", client=FakeMinioClient()),
+    )
 
-    content_response = client.get(resolved_url)
+    content_response = client.get(
+        resolved_url,
+        headers=content_headers(admin["token"], resolved_url),
+    )
     assert content_response.status_code == 502, content_response.text
 
 

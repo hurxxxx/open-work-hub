@@ -9,6 +9,10 @@ from open_work_hub_api.core.settings import Settings
 from open_work_hub_api.domains.ai.router import router as ai_router
 from open_work_hub_api.domains.ai_artifacts.router import router as ai_artifacts_router
 from open_work_hub_api.domains.ai_graph.router import router as ai_graph_router
+from open_work_hub_api.domains.agent_terminal.router import (
+    router as agent_terminal_router,
+    ws_router as agent_terminal_ws_router,
+)
 from open_work_hub_api.domains.admin.router import router as admin_router
 from open_work_hub_api.domains.admin.ai_model_settings_router import (
     router as admin_ai_model_settings_router,
@@ -39,24 +43,21 @@ from open_work_hub_api.domains.auth.workspace_router import router as workspace_
 from open_work_hub_api.domains.bento.router import router as bento_router
 from open_work_hub_api.domains.calendar.router import router as calendar_router
 from open_work_hub_api.domains.community.router import router as community_router
+from open_work_hub_api.domains.content_access.router import router as content_access_router
 from open_work_hub_api.domains.docs.router import public_router as docs_public_router
 from open_work_hub_api.domains.docs.router import router as docs_router
 from open_work_hub_api.domains.docs.router import ws_router as docs_ws_router
 from open_work_hub_api.domains.diagrams.router import router as diagrams_router
 from open_work_hub_api.domains.dm.router import public_router as dm_public_router
 from open_work_hub_api.domains.dm.router import router as dm_router
-from open_work_hub_api.domains.files.router import public_router as files_public_router
 from open_work_hub_api.domains.files.router import router as files_router
 from open_work_hub_api.domains.mail.router import router as mail_router
-from open_work_hub_api.domains.media.router import public_router as media_public_router
 from open_work_hub_api.domains.media.router import router as media_router
-from open_work_hub_api.domains.meeting.router import public_router as meeting_public_router
 from open_work_hub_api.domains.meeting.router import router as meeting_router
 from open_work_hub_api.domains.notifications.router import router as notifications_router
 from open_work_hub_api.domains.ocr.router import router as ocr_router
 from open_work_hub_api.domains.personal_widgets.router import router as personal_widgets_router
 from open_work_hub_api.domains.planner.router import router as planner_router
-from open_work_hub_api.domains.pms.router import public_router as pms_public_router
 from open_work_hub_api.domains.pms.router import router as pms_router
 from open_work_hub_api.domains.rag.router import router as rag_router
 from open_work_hub_api.domains.release_notes.router import router as release_notes_router
@@ -129,6 +130,8 @@ def _router_specs() -> list[_RouterSpec]:
         _RouterSpec(ai_router, "workspace", "workspace"),
         _RouterSpec(ai_graph_router, "workspace", "workspace"),
         _RouterSpec(ai_artifacts_router, "workspace", "workspace"),
+        _RouterSpec(agent_terminal_router, "api", "protected"),
+        _RouterSpec(agent_terminal_ws_router, "api"),
         _RouterSpec(admin_router, "api", "protected"),
         _RouterSpec(admin_ai_model_settings_router, "api", "protected"),
         _RouterSpec(admin_document_processing_router, "api", "protected"),
@@ -139,6 +142,7 @@ def _router_specs() -> list[_RouterSpec]:
         _RouterSpec(usage_router, "api", "protected"),
         _RouterSpec(dm_router, "api", "protected"),
         _RouterSpec(dm_public_router, "api"),
+        _RouterSpec(content_access_router, "api"),
         _RouterSpec(release_notes_router, "api", "protected"),
         _RouterSpec(realtime_ws_router, "api"),
         _RouterSpec(notifications_router, "api", "protected"),
@@ -152,11 +156,8 @@ def _router_specs() -> list[_RouterSpec]:
         _RouterSpec(docs_ws_router, "workspace"),
         _RouterSpec(whiteboard_ws_router, "workspace"),
         _RouterSpec(files_router, "workspace", "workspace"),
-        _RouterSpec(files_public_router, "api"),
         _RouterSpec(ocr_router, "workspace", "workspace"),
-        _RouterSpec(pms_public_router, "api"),
         _RouterSpec(pms_router, "workspace", "workspace"),
-        _RouterSpec(meeting_public_router, "api"),
         _RouterSpec(meeting_router, "workspace", "workspace"),
         _RouterSpec(video_chat_router, "workspace", "workspace"),
         _RouterSpec(recording_router, "workspace", "workspace"),
@@ -170,7 +171,6 @@ def _router_specs() -> list[_RouterSpec]:
         _RouterSpec(mail_router, "api", "protected"),
         _RouterSpec(search_router, "workspace", "workspace"),
         _RouterSpec(media_router, "api", "protected"),
-        _RouterSpec(media_public_router, "api"),
     ]
 
 

@@ -33,7 +33,10 @@ describe('Matomo tracking configuration', () => {
 
   it('does not track dev or localhost by default', () => {
     expect(
-      resolveMatomoTrackingConfig({}, { hostname: 'dev.open-work-hub.example' }),
+      resolveMatomoTrackingConfig(
+        {},
+        { hostname: 'dev.open-work-hub.example' },
+      ),
     ).toBeNull();
     expect(
       resolveMatomoTrackingConfig({}, { hostname: 'localhost' }),
@@ -52,7 +55,7 @@ describe('Matomo tracking configuration', () => {
 
 describe('Matomo tracker installation', () => {
   it('installs the Matomo script and queues the base tracker settings', () => {
-    window.history.replaceState({}, '', '/w/main/home');
+    window.history.replaceState({}, '', '/apps/home/workspaces/main');
     document.title = 'Open Work Hub Home';
 
     installedTracking = installMatomoTracking(
@@ -74,7 +77,7 @@ describe('Matomo tracker installation', () => {
   });
 
   it('tracks shell route context once per page key', () => {
-    window.history.replaceState({}, '', '/w/main/home');
+    window.history.replaceState({}, '', '/apps/home/workspaces/main');
 
     installedTracking = installMatomoTracking(
       { VITE_OPEN_WORK_HUB_MATOMO_ALLOWED_HOSTS: 'localhost' },
@@ -82,27 +85,27 @@ describe('Matomo tracker installation', () => {
     );
     window._paq?.splice(0);
 
-    window.history.pushState({}, '', '/w/main/docs');
+    window.history.pushState({}, '', '/apps/docs/workspaces/main');
     trackMatomoPageView(
       {
         appId: 'collaboration:docs-main',
-        appRoute: '/w/:workspace/docs',
+        appRoute: '/apps/docs/workspaces/:workspace',
       },
       window,
     );
     trackMatomoPageView(
       {
         appId: 'collaboration:docs-main',
-        appRoute: '/w/:workspace/docs',
+        appRoute: '/apps/docs/workspaces/:workspace',
       },
       window,
     );
 
     expect(window._paq).toEqual([
-      ['setCustomUrl', 'http://localhost:3000/w/main/docs'],
+      ['setCustomUrl', 'http://localhost:3000/apps/docs/workspaces/main'],
       ['setDocumentTitle', document.title],
       ['setCustomDimension', 2, 'collaboration:docs-main'],
-      ['setCustomDimension', 3, '/w/:workspace/docs'],
+      ['setCustomDimension', 3, '/apps/docs/workspaces/:workspace'],
       ['trackPageView'],
     ]);
   });

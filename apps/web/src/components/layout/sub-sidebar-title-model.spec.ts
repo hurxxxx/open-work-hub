@@ -1,25 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { FileText, Users } from 'lucide-react';
+import { FileText } from 'lucide-react';
 
 import { resolveSubSidebarTitle } from './sub-sidebar-title-model';
 
 function t(key: string, options?: Record<string, unknown>): string {
   if (key === 'sidebar.allSettings') return 'All settings';
   if (key === 'apps.docs') return '문서';
-  if (key === 'apps.collaboration') return '협업';
   if (key === 'apps.community') return '커뮤니티';
   return String(options?.defaultValue ?? key);
 }
 
 describe('sub sidebar title model', () => {
-  it('uses the active feature app title before the parent app title', () => {
+  it('uses the active leaf app title from workspace bootstrap', () => {
     expect(
       resolveSubSidebarTitle({
-        activeAppId: 'collaboration',
-        activeFeatureAppId: 'docs',
-        appBarItems: [
-          { id: 'collaboration', title: 'collaboration', icon: Users },
-        ],
+        activeAppId: 'docs',
+        appBarItems: [],
         t,
         workspaceAppRegistry: new Map([
           [
@@ -29,7 +25,7 @@ describe('sub sidebar title model', () => {
               enabled: true,
               icon_key: 'docs',
               nav_items: [],
-              route_base: '/docs',
+              route_base: '/apps/docs',
               title: 'Docs',
             },
           ],
@@ -42,7 +38,6 @@ describe('sub sidebar title model', () => {
     expect(
       resolveSubSidebarTitle({
         activeAppId: 'community',
-        activeFeatureAppId: null,
         appBarItems: [{ id: 'community', title: 'community', icon: FileText }],
         t,
         workspaceAppRegistry: new Map(),

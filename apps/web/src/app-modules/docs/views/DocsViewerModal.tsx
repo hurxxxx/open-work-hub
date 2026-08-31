@@ -21,6 +21,7 @@ import {
   REALTIME_TOPIC_EVENT_TYPES,
   createDocsPagesRealtimeSubscriptionMessage,
 } from '@open-work-hub/contracts/realtime';
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
 
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/platform/auth/auth-provider';
@@ -45,7 +46,6 @@ import {
   type DocsPageItem,
 } from '../api/docs-api';
 import { flattenVisibleTree } from '../api/docs-page-reorder';
-import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
 import { DocsBlockContentSurface } from './DocsBlockContentSurface';
 import { DocsBlockMarkdownActions } from './docs-content-renderers';
 import { DocsHtmlPageContentSurface } from './docs-html-renderers';
@@ -503,7 +503,10 @@ function useDocsEmbeddedViewerContent({
     if (shareToken) {
       await flushPendingContentTextSave();
       window.open(
-        `/docs/shared/${shareToken}/html/${page.id}`,
+        buildAppHref({
+          routeId: 'docs.shared-html',
+          pathParams: { shareToken, pageId: page.id },
+        }),
         '_blank',
         'noopener,noreferrer',
       );
@@ -512,11 +515,11 @@ function useDocsEmbeddedViewerContent({
     if (!workspaceSlug) return;
     await flushPendingContentTextSave();
     window.open(
-      buildWorkspaceAppPath(
+      buildAppHref({
+        routeId: 'docs.document-html',
         workspaceSlug,
-        'docs',
-        `/${doc.id}/html/${page.id}`,
-      ),
+        pathParams: { docId: doc.id, pageId: page.id },
+      }),
       '_blank',
       'noopener,noreferrer',
     );

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from open_work_hub_api.core.settings import get_settings
 from open_work_hub_api.domains.ai.registry import reset_ai_capability_registry
 from open_work_hub_api.core.db import get_engine
-from open_work_hub_api.domains.auth.models import PlatformAppVisibility
+from open_work_hub_api.domains.auth.models import CompanyAppControl
 
 
 def _dev_login(client: TestClient, account_key: str) -> dict:
@@ -26,12 +26,12 @@ def _workspace_ai_path(workspace_slug: str, suffix: str) -> str:
 
 def _disable_platform_app(app_id: str) -> None:
     with Session(get_engine()) as session:
-        visibility = session.scalar(
-            select(PlatformAppVisibility).where(PlatformAppVisibility.app_id == app_id)
+        control = session.scalar(
+            select(CompanyAppControl).where(CompanyAppControl.app_id == app_id)
         )
-        assert visibility is not None
-        visibility.visible = False
-        session.add(visibility)
+        assert control is not None
+        control.enabled = False
+        session.add(control)
         session.commit()
 
 

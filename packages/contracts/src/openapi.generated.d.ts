@@ -310,6 +310,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/apps/{app_id}/eligible-workspaces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Eligible Workspaces */
+        get: operations["apps_get_eligible_workspaces_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/apps/{app_id}/workspace-preference": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update App Workspace Preference */
+        put: operations["apps_update_app_workspace_preference_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_slug}/bootstrap": {
         parameters: {
             query?: never;
@@ -717,40 +751,246 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/app-visibility": {
+    "/api/v1/agent-terminal/config": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List Platform App Visibility */
-        get: operations["admin_list_platform_app_visibility_get"];
+        /** Get Agent Terminal Config */
+        get: operations["agent_terminal_get_agent_terminal_config_get"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        /** Update Platform App Visibility */
-        patch: operations["admin_update_platform_app_visibility_patch"];
+        patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/workspaces/{workspace_id}/app-visibility": {
+    "/api/v1/agent-terminal/sessions": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List Workspace App Visibility */
-        get: operations["admin_list_workspace_app_visibility_get"];
+        /** List Agent Terminal Sessions */
+        get: operations["agent_terminal_list_agent_terminal_sessions_get"];
+        put?: never;
+        /** Create Agent Terminal Session */
+        post: operations["agent_terminal_create_agent_terminal_session_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-terminal/codex/threads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Agent Terminal Codex Threads */
+        get: operations["agent_terminal_list_agent_terminal_codex_threads_get"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        /** Update Workspace App Visibility */
-        patch: operations["admin_update_workspace_app_visibility_patch"];
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-terminal/roots/{root_key}/git/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Agent Terminal Git Status */
+        get: operations["agent_terminal_get_agent_terminal_git_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-terminal/roots/{root_key}/git/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Agent Terminal Git Diff */
+        get: operations["agent_terminal_get_agent_terminal_git_diff_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-terminal/roots/{root_key}/git/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Agent Terminal Git Summary */
+        get: operations["agent_terminal_get_agent_terminal_git_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-terminal/roots/{root_key}/git/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Agent Terminal Git History */
+        get: operations["agent_terminal_get_agent_terminal_git_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-terminal/roots/{root_key}/git/commits/{commit}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Agent Terminal Git Commit */
+        get: operations["agent_terminal_get_agent_terminal_git_commit_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-terminal/roots/{root_key}/git/commits/{commit}/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Agent Terminal Git Commit Diff */
+        get: operations["agent_terminal_get_agent_terminal_git_commit_diff_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-terminal/sessions/{session_id}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stop Agent Terminal Session */
+        post: operations["agent_terminal_stop_agent_terminal_session_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-terminal/sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Agent Terminal Session */
+        delete: operations["agent_terminal_delete_agent_terminal_session_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/apps/company-controls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Company App Controls */
+        get: operations["admin_list_company_app_controls_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Company App Controls */
+        patch: operations["admin_update_company_app_controls_patch"];
+        trace?: never;
+    };
+    "/api/v1/admin/apps/workspace-defaults": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Workspace App Defaults */
+        get: operations["admin_list_workspace_app_defaults_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Workspace App Defaults */
+        patch: operations["admin_update_workspace_app_defaults_patch"];
+        trace?: never;
+    };
+    "/api/v1/admin/workspaces/{workspace_id}/app-overrides": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Workspace App Overrides */
+        get: operations["admin_list_workspace_app_overrides_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Workspace App Overrides */
+        patch: operations["admin_update_workspace_app_overrides_patch"];
         trace?: never;
     };
     "/api/v1/admin/app-bar-categories": {
@@ -1805,6 +2045,23 @@ export interface paths {
         };
         /** Proxy Dm Attachment Content */
         get: operations["dm_proxy_dm_attachment_content_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Proxy Content */
+        get: operations["content_proxy_content_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3257,23 +3514,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/files/content/{file_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Proxy File Content */
-        get: operations["files_proxy_file_content_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/workspaces/{workspace_slug}/connectors/ocr/route": {
         parameters: {
             query?: never;
@@ -3285,23 +3525,6 @@ export interface paths {
         put?: never;
         /** Route Ocr */
         post: operations["ocr_route_ocr_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/pms/attachments/{attachment_id}/content": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Proxy Attachment Content */
-        get: operations["pms_proxy_attachment_content_get"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3765,23 +3988,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/attachments/{attachment_id}/download": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Download Attachment */
-        get: operations["pms_download_attachment_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/workspaces/{workspace_slug}/pms/attachments/{attachment_id}": {
         parameters: {
             query?: never;
@@ -3797,74 +4003,6 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/pms/notifications": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Notifications */
-        get: operations["pms_list_notifications_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/pms/notifications/unread-count": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Unread Count */
-        get: operations["pms_get_unread_count_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/pms/notifications/{notification_id}/read": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** Mark Notification Read */
-        patch: operations["pms_mark_notification_read_patch"];
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/pms/notifications/read-all": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** Mark All Notifications Read */
-        patch: operations["pms_mark_all_notifications_read_patch"];
         trace?: never;
     };
     "/api/v1/workspaces/{workspace_slug}/pms/tasks/{task_id}/checklist": {
@@ -4182,23 +4320,6 @@ export interface paths {
         head?: never;
         /** Update Folder */
         patch: operations["pms_update_folder_patch"];
-        trace?: never;
-    };
-    "/api/v1/meeting/files/{file_id}/content": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Proxy File Attachment Content */
-        get: operations["meeting_proxy_file_attachment_content_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
         trace?: never;
     };
     "/api/v1/workspaces/{workspace_slug}/meeting/meetings": {
@@ -4865,6 +4986,23 @@ export interface paths {
         head?: never;
         /** Update Recording */
         patch: operations["recording_update_recording_patch"];
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_slug}/recording/recordings/{recording_id}/publications/docs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Publish Recording To Docs */
+        post: operations["recording_publish_recording_to_docs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/workspaces/{workspace_slug}/recording/recordings/{recording_id}/retry": {
@@ -5621,26 +5759,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/media/content/{media_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Proxy Media Content
-         * @description Serve a short-lived resolved media URL through the API origin.
-         */
-        get: operations["media_proxy_media_content_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -6297,6 +6415,323 @@ export interface components {
             page: number;
             /** Page Size */
             page_size: number;
+        };
+        /** AgentTerminalCodexThreadListResponse */
+        AgentTerminalCodexThreadListResponse: {
+            /** Items */
+            items?: components["schemas"]["AgentTerminalCodexThreadResponse"][];
+        };
+        /** AgentTerminalCodexThreadResponse */
+        AgentTerminalCodexThreadResponse: {
+            /** Id */
+            id: string;
+            /** Name */
+            name?: string | null;
+            /** Preview */
+            preview?: string | null;
+            /** Root Key */
+            root_key: string;
+            /** Root Path */
+            root_path: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** AgentTerminalConfigResponse */
+        AgentTerminalConfigResponse: {
+            /** Enabled */
+            enabled: boolean;
+            /** Codex Available */
+            codex_available: boolean;
+            /** Tmux Available */
+            tmux_available: boolean;
+            /** Roots */
+            roots?: components["schemas"]["AgentTerminalRootResponse"][];
+            /** Max Sessions Per User */
+            max_sessions_per_user: number;
+        };
+        /** AgentTerminalGitChangeResponse */
+        AgentTerminalGitChangeResponse: {
+            /** Path */
+            path: string;
+            /** Old Path */
+            old_path?: string | null;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "staged" | "unstaged" | "untracked" | "conflicted";
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "added" | "copied" | "deleted" | "modified" | "renamed" | "type_changed" | "untracked" | "conflicted";
+        };
+        /** AgentTerminalGitCommitDetailResponse */
+        AgentTerminalGitCommitDetailResponse: {
+            /** Sha */
+            sha: string;
+            /** Parents */
+            parents?: string[];
+            /** Author Name */
+            author_name: string;
+            /**
+             * Authored At
+             * Format: date-time
+             */
+            authored_at: string;
+            /** Subject */
+            subject: string;
+            /** Files */
+            files?: components["schemas"]["AgentTerminalGitCommitFileResponse"][];
+            /**
+             * Files Truncated
+             * @default false
+             */
+            files_truncated: boolean;
+        };
+        /** AgentTerminalGitCommitDiffResponse */
+        AgentTerminalGitCommitDiffResponse: {
+            /** Commit */
+            commit: string;
+            /** Path */
+            path: string;
+            /** Old Path */
+            old_path?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "added" | "copied" | "deleted" | "modified" | "renamed" | "type_changed" | "untracked" | "conflicted";
+            /** Old Content */
+            old_content?: string | null;
+            /** New Content */
+            new_content?: string | null;
+            /**
+             * Is Binary
+             * @default false
+             */
+            is_binary: boolean;
+            /**
+             * Too Large
+             * @default false
+             */
+            too_large: boolean;
+        };
+        /** AgentTerminalGitCommitFileResponse */
+        AgentTerminalGitCommitFileResponse: {
+            /** Path */
+            path: string;
+            /** Old Path */
+            old_path?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "added" | "copied" | "deleted" | "modified" | "renamed" | "type_changed" | "untracked" | "conflicted";
+        };
+        /** AgentTerminalGitCommitResponse */
+        AgentTerminalGitCommitResponse: {
+            /** Sha */
+            sha: string;
+            /** Parents */
+            parents?: string[];
+            /** Author Name */
+            author_name: string;
+            /**
+             * Authored At
+             * Format: date-time
+             */
+            authored_at: string;
+            /** Subject */
+            subject: string;
+        };
+        /** AgentTerminalGitDiffResponse */
+        AgentTerminalGitDiffResponse: {
+            /** Path */
+            path: string;
+            /** Old Path */
+            old_path?: string | null;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "staged" | "unstaged" | "untracked" | "conflicted";
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "added" | "copied" | "deleted" | "modified" | "renamed" | "type_changed" | "untracked" | "conflicted";
+            /** Old Content */
+            old_content?: string | null;
+            /** New Content */
+            new_content?: string | null;
+            /**
+             * Is Binary
+             * @default false
+             */
+            is_binary: boolean;
+            /**
+             * Too Large
+             * @default false
+             */
+            too_large: boolean;
+        };
+        /** AgentTerminalGitHistoryResponse */
+        AgentTerminalGitHistoryResponse: {
+            /** Items */
+            items?: components["schemas"]["AgentTerminalGitCommitResponse"][];
+            /** Offset */
+            offset: number;
+            /**
+             * Has More
+             * @default false
+             */
+            has_more: boolean;
+        };
+        /** AgentTerminalGitRefResponse */
+        AgentTerminalGitRefResponse: {
+            /** Name */
+            name: string;
+            /** Full Name */
+            full_name: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "local_branch" | "remote_branch" | "tag";
+            /** Target */
+            target: string;
+            /**
+             * Current
+             * @default false
+             */
+            current: boolean;
+        };
+        /** AgentTerminalGitStashResponse */
+        AgentTerminalGitStashResponse: {
+            /** Ref */
+            ref: string;
+            /** Sha */
+            sha: string;
+            /** Subject */
+            subject: string;
+        };
+        /** AgentTerminalGitStatusResponse */
+        AgentTerminalGitStatusResponse: {
+            /** Is Repository */
+            is_repository: boolean;
+            /** Branch */
+            branch?: string | null;
+            /** Head */
+            head?: string | null;
+            /** Upstream */
+            upstream?: string | null;
+            /**
+             * Ahead
+             * @default 0
+             */
+            ahead: number;
+            /**
+             * Behind
+             * @default 0
+             */
+            behind: number;
+            /** Changes */
+            changes?: components["schemas"]["AgentTerminalGitChangeResponse"][];
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
+        };
+        /** AgentTerminalGitSummaryResponse */
+        AgentTerminalGitSummaryResponse: {
+            /** Is Repository */
+            is_repository: boolean;
+            /** Refs */
+            refs?: components["schemas"]["AgentTerminalGitRefResponse"][];
+            /** Stashes */
+            stashes?: components["schemas"]["AgentTerminalGitStashResponse"][];
+            /**
+             * Refs Truncated
+             * @default false
+             */
+            refs_truncated: boolean;
+            /**
+             * Stashes Truncated
+             * @default false
+             */
+            stashes_truncated: boolean;
+        };
+        /** AgentTerminalRootResponse */
+        AgentTerminalRootResponse: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Path */
+            path: string;
+        };
+        /** AgentTerminalSessionCreateRequest */
+        AgentTerminalSessionCreateRequest: {
+            /** Root Key */
+            root_key: string;
+            /** Codex Thread Id */
+            codex_thread_id?: string | null;
+            /**
+             * Cols
+             * @default 120
+             */
+            cols: number;
+            /**
+             * Rows
+             * @default 36
+             */
+            rows: number;
+        };
+        /** AgentTerminalSessionListResponse */
+        AgentTerminalSessionListResponse: {
+            /** Items */
+            items?: components["schemas"]["AgentTerminalSessionResponse"][];
+        };
+        /** AgentTerminalSessionResponse */
+        AgentTerminalSessionResponse: {
+            /** Id */
+            id: string;
+            /**
+             * Tool
+             * @default codex
+             * @constant
+             */
+            tool: "codex";
+            /** Root Key */
+            root_key: string;
+            /** Root Path */
+            root_path: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "starting" | "running" | "exited" | "terminated" | "failed";
+            /** Exit Code */
+            exit_code?: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Started At */
+            started_at?: string | null;
+            /** Ended At */
+            ended_at?: string | null;
         };
         /** AiAgentRuntimeAdapterResponse */
         AiAgentRuntimeAdapterResponse: {
@@ -7534,6 +7969,23 @@ export interface components {
             /** Pinned App Ids */
             pinned_app_ids?: string[];
         };
+        /** AppWorkspacePreferenceRequest */
+        AppWorkspacePreferenceRequest: {
+            /** Workspace Id */
+            workspace_id: string;
+        };
+        /** AppWorkspacePreferenceResponse */
+        AppWorkspacePreferenceResponse: {
+            /** App Id */
+            app_id: string;
+            /** Workspace Id */
+            workspace_id: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /** ApprovalAbandonRequest */
         ApprovalAbandonRequest: {
             /** Reason */
@@ -7594,30 +8046,6 @@ export interface components {
             /** Snapshot Status */
             snapshot_status?: string | null;
         };
-        /** AppsBootstrapAppResponse */
-        AppsBootstrapAppResponse: {
-            /** App Id */
-            app_id: string;
-            /** Title */
-            title: string;
-            /** Route Base */
-            route_base: string;
-            /** Icon Key */
-            icon_key: string;
-            /**
-             * Availability Scope
-             * @default platform
-             * @constant
-             */
-            availability_scope: "platform";
-            /** Enabled */
-            enabled: boolean;
-            /**
-             * Coming Soon
-             * @default false
-             */
-            coming_soon: boolean;
-        };
         /** AppsBootstrapPrincipalResponse */
         AppsBootstrapPrincipalResponse: {
             /**
@@ -7644,13 +8072,13 @@ export interface components {
         /** AppsBootstrapResponse */
         AppsBootstrapResponse: {
             /** Apps */
-            apps?: components["schemas"]["AppsBootstrapAppResponse"][];
+            apps: (components["schemas"]["PlatformAppsBootstrapAppResponse"] | components["schemas"]["WorkspaceAppsBootstrapAppResponse"])[];
+            /** Global Route App Ids */
+            global_route_app_ids: string[];
             /** App Bar Categories */
-            app_bar_categories?: components["schemas"]["WorkspaceBootstrapAppBarCategoryResponse"][];
-            /** Personal Tools */
-            personal_tools?: components["schemas"]["AppsBootstrapAppResponse"][];
-            /** Platform Enabled App Ids */
-            platform_enabled_app_ids?: string[];
+            app_bar_categories: components["schemas"]["WorkspaceBootstrapAppBarCategoryResponse"][];
+            /** Personal Tool App Ids */
+            personal_tool_app_ids: string[];
             principal: components["schemas"]["AppsBootstrapPrincipalResponse"];
         };
         /**
@@ -7781,8 +8209,6 @@ export interface components {
             /** Date Format */
             date_format: string;
             app_bar_layout: components["schemas"]["AppBarLayoutPreference"];
-            /** Default Workspace Id */
-            default_workspace_id: string | null;
             /** System Roles */
             system_roles: string[];
             /** Workspaces */
@@ -8643,6 +9069,51 @@ export interface components {
         CommunityUnlockRequest: {
             /** Password */
             password: string;
+        };
+        /** CompanyAppControlItemResponse */
+        CompanyAppControlItemResponse: {
+            /** App Id */
+            app_id: string;
+            /** Title */
+            title: string;
+            /** Route Base */
+            route_base: string;
+            /** Icon Key */
+            icon_key: string;
+            /**
+             * Availability Scope
+             * @default workspace
+             * @enum {string}
+             */
+            availability_scope: "platform" | "workspace";
+            /**
+             * Execution Context Kind
+             * @enum {string}
+             */
+            execution_context_kind: "personal" | "company" | "workspace";
+            /** Enabled */
+            enabled: boolean;
+            /** Runtime Enabled */
+            runtime_enabled: boolean;
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /** CompanyAppControlUpdateItem */
+        CompanyAppControlUpdateItem: {
+            /** App Id */
+            app_id: string;
+            /** Enabled */
+            enabled: boolean;
+        };
+        /** CompanyAppControlsResponse */
+        CompanyAppControlsResponse: {
+            /** Items */
+            items: components["schemas"]["CompanyAppControlItemResponse"][];
+        };
+        /** CompanyAppControlsUpdateRequest */
+        CompanyAppControlsUpdateRequest: {
+            /** Items */
+            items: components["schemas"]["CompanyAppControlUpdateItem"][];
         };
         /** ConversationBoundChatRequest */
         ConversationBoundChatRequest: {
@@ -9970,6 +10441,28 @@ export interface components {
              */
             language: "auto" | "ko" | "en";
         };
+        /** EligibleWorkspaceResponse */
+        EligibleWorkspaceResponse: {
+            /** Id */
+            id: string;
+            /** Slug */
+            slug: string;
+            /** Name */
+            name: string;
+        };
+        /** EligibleWorkspacesResponse */
+        EligibleWorkspacesResponse: {
+            /** App Id */
+            app_id: string;
+            /** Items */
+            items: components["schemas"]["EligibleWorkspaceResponse"][];
+            /** Total */
+            total: number;
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+        };
         /** EntityTypeFacet */
         EntityTypeFacet: {
             /** Value */
@@ -10368,10 +10861,14 @@ export interface components {
             title: string;
             /** Body */
             body: string;
-            /** Reference Type */
-            reference_type: string;
-            /** Reference Id */
-            reference_id: string | null;
+            /** Source Type */
+            source_type: string;
+            /** Source Id */
+            source_id: string | null;
+            /** Origin App Id */
+            origin_app_id: string;
+            /** Origin Workspace Id */
+            origin_workspace_id: string | null;
             /** Action Url */
             action_url?: string | null;
             /** Is Read */
@@ -11407,41 +11904,6 @@ export interface components {
              */
             access_level: "read" | "edit";
         };
-        /** NotificationItem */
-        NotificationItem: {
-            /** Id */
-            id: string;
-            /** Type */
-            type: string;
-            /** Title */
-            title: string;
-            /** Body */
-            body: string;
-            /** Reference Type */
-            reference_type: string;
-            /** Reference Id */
-            reference_id: string | null;
-            /** Action Url */
-            action_url?: string | null;
-            /** Is Read */
-            is_read: boolean;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-        };
-        /** NotificationListResponse */
-        NotificationListResponse: {
-            /** Items */
-            items: components["schemas"]["NotificationItem"][];
-            /** Total */
-            total: number;
-            /** Page */
-            page: number;
-            /** Page Size */
-            page_size: number;
-        };
         /** OcrRouteRequest */
         OcrRouteRequest: {
             /** Asset Uri */
@@ -11757,6 +12219,12 @@ export interface components {
             start: string;
             /** End */
             end: string;
+            /** Calendarstart */
+            calendarStart: string;
+            /** Calendarend */
+            calendarEnd: string;
+            /** Calendarallday */
+            calendarAllDay: boolean;
             /**
              * Createdat
              * Format: date-time
@@ -11866,71 +12334,48 @@ export interface components {
             /** Operations */
             operations: components["schemas"]["PlatformApiScopeOperationResponse"][];
         };
-        /** PlatformAppVisibilityItemResponse */
-        PlatformAppVisibilityItemResponse: {
+        /** PlatformAppsBootstrapAppResponse */
+        PlatformAppsBootstrapAppResponse: {
             /** App Id */
             app_id: string;
             /** Title */
             title: string;
             /** Route Base */
             route_base: string;
+            /** Entry Route Id */
+            entry_route_id: string;
             /** Icon Key */
             icon_key: string;
             /**
-             * Availability Scope
-             * @default workspace
+             * Execution Context Kind
              * @enum {string}
              */
-            availability_scope: "platform" | "workspace";
+            execution_context_kind: "personal" | "company" | "workspace";
             /**
-             * Launcher Personal Tools
+             * Resource Scope
+             * @enum {string}
+             */
+            resource_scope: "personal" | "company" | "workspace" | "hybrid";
+            /**
+             * Coming Soon
              * @default false
              */
-            launcher_personal_tools: boolean;
+            coming_soon: boolean;
             /**
-             * Kind
-             * @default mode
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
              */
-            kind: string;
-            /** Visible */
-            visible: boolean;
-            /** Runtime Enabled */
-            runtime_enabled: boolean;
+            availability_scope: "platform";
             /**
-             * Visible Workspace Count
+             * Eligible Workspace Count
              * @default 0
+             * @constant
              */
-            visible_workspace_count: number;
-            /** Visible Workspaces */
-            visible_workspaces?: components["schemas"]["PlatformAppVisibleWorkspaceResponse"][];
-            /** Updated At */
-            updated_at?: string | null;
-        };
-        /** PlatformAppVisibilityResponse */
-        PlatformAppVisibilityResponse: {
-            /** Items */
-            items: components["schemas"]["PlatformAppVisibilityItemResponse"][];
-        };
-        /** PlatformAppVisibilityUpdateItem */
-        PlatformAppVisibilityUpdateItem: {
-            /** App Id */
-            app_id: string;
-            /** Visible */
-            visible: boolean;
-        };
-        /** PlatformAppVisibilityUpdateRequest */
-        PlatformAppVisibilityUpdateRequest: {
-            /** Items */
-            items: components["schemas"]["PlatformAppVisibilityUpdateItem"][];
-        };
-        /** PlatformAppVisibleWorkspaceResponse */
-        PlatformAppVisibleWorkspaceResponse: {
-            /** Id */
-            id: string;
-            /** Key */
-            key: string;
-            /** Name */
-            name: string;
+            eligible_workspace_count: 0;
+            /** Preferred Workspace */
+            preferred_workspace?: null;
+            /** Single Eligible Workspace */
+            single_eligible_workspace?: null;
         };
         /** PmsViewPreferencesResponse */
         PmsViewPreferencesResponse: {
@@ -12161,13 +12606,8 @@ export interface components {
             /** Duration Sec Estimate */
             duration_sec_estimate?: number | null;
         };
-        /** RecordingListResponse */
-        RecordingListResponse: {
-            /** Items */
-            items: components["schemas"]["RecordingOut"][];
-        };
-        /** RecordingOut */
-        RecordingOut: {
+        /** RecordingDetailOut */
+        RecordingDetailOut: {
             /** Id */
             id: string;
             /** Workspace Id */
@@ -12197,20 +12637,75 @@ export interface components {
             audio_status: string;
             /** Transcript Status */
             transcript_status: string;
-            /** Raw Transcript Doc Status */
-            raw_transcript_doc_status: string;
-            /** Minutes Doc Status */
-            minutes_doc_status: string;
+            /** Summary Status */
+            summary_status: string;
             /** Meeting Insight Status */
             meeting_insight_status: string;
             /** Progress Pct */
             progress_pct: number;
             /** Failure Reason */
             failure_reason: string | null;
-            /** Raw Transcript Doc Id */
-            raw_transcript_doc_id: string | null;
-            /** Minutes Doc Id */
-            minutes_doc_id: string | null;
+            /** Transcribe Started At */
+            transcribe_started_at: string | null;
+            /** Transcribe Completed At */
+            transcribe_completed_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Trashed At */
+            trashed_at: string | null;
+            /** Targets */
+            targets?: components["schemas"]["RecordingTargetOut"][];
+            result?: components["schemas"]["RecordingResultOut"] | null;
+            /** Publications */
+            publications?: components["schemas"]["RecordingPublicationOut"][];
+        };
+        /** RecordingListItem */
+        RecordingListItem: {
+            /** Id */
+            id: string;
+            /** Workspace Id */
+            workspace_id: string;
+            /** Owner Id */
+            owner_id: string;
+            /** Title */
+            title: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Ended At */
+            ended_at: string | null;
+            /** Duration Sec */
+            duration_sec: number | null;
+            /** Source */
+            source: string;
+            /** Storage Key */
+            storage_key: string | null;
+            /** File Size */
+            file_size: number;
+            /** Mime Type */
+            mime_type: string;
+            /** Audio Status */
+            audio_status: string;
+            /** Transcript Status */
+            transcript_status: string;
+            /** Summary Status */
+            summary_status: string;
+            /** Meeting Insight Status */
+            meeting_insight_status: string;
+            /** Progress Pct */
+            progress_pct: number;
+            /** Failure Reason */
+            failure_reason: string | null;
             /** Transcribe Started At */
             transcribe_started_at: string | null;
             /** Transcribe Completed At */
@@ -12230,6 +12725,11 @@ export interface components {
             /** Targets */
             targets?: components["schemas"]["RecordingTargetOut"][];
         };
+        /** RecordingListResponse */
+        RecordingListResponse: {
+            /** Items */
+            items: components["schemas"]["RecordingListItem"][];
+        };
         /** RecordingPlaybackResponse */
         RecordingPlaybackResponse: {
             /** Url */
@@ -12239,6 +12739,44 @@ export interface components {
              * Format: date-time
              */
             expires_at: string;
+        };
+        /** RecordingPublicationOut */
+        RecordingPublicationOut: {
+            /** Id */
+            id: string;
+            /** Target App */
+            target_app: string;
+            /** Target Resource Id */
+            target_resource_id: string;
+            /** Target Title */
+            target_title?: string | null;
+            /** Result Version */
+            result_version: number;
+            /** Published By Id */
+            published_by_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** RecordingResultOut */
+        RecordingResultOut: {
+            /** Transcript Text */
+            transcript_text: string;
+            /** Summary Text */
+            summary_text: string | null;
+            /** Verifier Note */
+            verifier_note: string | null;
+            /** Version */
+            version: number;
+            /** Generated At */
+            generated_at: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
         /** RecordingStagingInitRequest */
         RecordingStagingInitRequest: {
@@ -13745,11 +14283,6 @@ export interface components {
             /** Result */
             result: unknown;
         };
-        /** UnreadCountResponse */
-        UnreadCountResponse: {
-            /** Count */
-            count: number;
-        };
         /** UpdateBentoDocumentRequest */
         UpdateBentoDocumentRequest: {
             /** Version */
@@ -13847,8 +14380,6 @@ export interface components {
             /** Date Format */
             date_format?: ("korean" | "iso" | "us" | "european" | "locale") | null;
             app_bar_layout?: components["schemas"]["AppBarLayoutPreference"] | null;
-            /** Default Workspace Id */
-            default_workspace_id?: string | null;
         };
         /** UpdateWhiteboardRequest */
         UpdateWhiteboardRequest: {
@@ -14328,8 +14859,8 @@ export interface components {
              */
             access_level: "read" | "edit";
         };
-        /** WorkspaceAppVisibilityItemResponse */
-        WorkspaceAppVisibilityItemResponse: {
+        /** WorkspaceAppDefaultItemResponse */
+        WorkspaceAppDefaultItemResponse: {
             /** App Id */
             app_id: string;
             /** Title */
@@ -14339,29 +14870,75 @@ export interface components {
             /** Icon Key */
             icon_key: string;
             /**
-             * Availability Scope
+             * Execution Context Kind
              * @default workspace
              * @constant
              */
-            availability_scope: "workspace";
-            /**
-             * Kind
-             * @default mode
-             */
-            kind: string;
-            /** Platform Visible */
-            platform_visible: boolean;
-            /** Visibility Override */
-            visibility_override?: boolean | null;
-            /** Effective Visible */
-            effective_visible: boolean;
+            execution_context_kind: "workspace";
+            /** Company Enabled */
+            company_enabled: boolean;
+            /** Enabled */
+            enabled: boolean;
             /** Runtime Enabled */
             runtime_enabled: boolean;
             /** Updated At */
             updated_at?: string | null;
         };
-        /** WorkspaceAppVisibilityResponse */
-        WorkspaceAppVisibilityResponse: {
+        /** WorkspaceAppDefaultUpdateItem */
+        WorkspaceAppDefaultUpdateItem: {
+            /** App Id */
+            app_id: string;
+            /** Enabled */
+            enabled: boolean;
+        };
+        /** WorkspaceAppDefaultsResponse */
+        WorkspaceAppDefaultsResponse: {
+            /** Items */
+            items: components["schemas"]["WorkspaceAppDefaultItemResponse"][];
+        };
+        /** WorkspaceAppDefaultsUpdateRequest */
+        WorkspaceAppDefaultsUpdateRequest: {
+            /** Items */
+            items: components["schemas"]["WorkspaceAppDefaultUpdateItem"][];
+        };
+        /** WorkspaceAppOverrideItemResponse */
+        WorkspaceAppOverrideItemResponse: {
+            /** App Id */
+            app_id: string;
+            /** Title */
+            title: string;
+            /** Route Base */
+            route_base: string;
+            /** Icon Key */
+            icon_key: string;
+            /**
+             * Execution Context Kind
+             * @default workspace
+             * @constant
+             */
+            execution_context_kind: "workspace";
+            /** Company Enabled */
+            company_enabled: boolean;
+            /** Default Enabled */
+            default_enabled: boolean;
+            /** Override Enabled */
+            override_enabled?: boolean | null;
+            /** Effective Enabled */
+            effective_enabled: boolean;
+            /** Runtime Enabled */
+            runtime_enabled: boolean;
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /** WorkspaceAppOverrideUpdateItem */
+        WorkspaceAppOverrideUpdateItem: {
+            /** App Id */
+            app_id: string;
+            /** Enabled */
+            enabled?: boolean | null;
+        };
+        /** WorkspaceAppOverridesResponse */
+        WorkspaceAppOverridesResponse: {
             /** Workspace Id */
             workspace_id: string;
             /** Workspace Key */
@@ -14369,19 +14946,49 @@ export interface components {
             /** Workspace Name */
             workspace_name: string;
             /** Items */
-            items: components["schemas"]["WorkspaceAppVisibilityItemResponse"][];
+            items: components["schemas"]["WorkspaceAppOverrideItemResponse"][];
         };
-        /** WorkspaceAppVisibilityUpdateItem */
-        WorkspaceAppVisibilityUpdateItem: {
+        /** WorkspaceAppOverridesUpdateRequest */
+        WorkspaceAppOverridesUpdateRequest: {
+            /** Items */
+            items: components["schemas"]["WorkspaceAppOverrideUpdateItem"][];
+        };
+        /** WorkspaceAppsBootstrapAppResponse */
+        WorkspaceAppsBootstrapAppResponse: {
             /** App Id */
             app_id: string;
-            /** Visibility Override */
-            visibility_override?: boolean | null;
-        };
-        /** WorkspaceAppVisibilityUpdateRequest */
-        WorkspaceAppVisibilityUpdateRequest: {
-            /** Items */
-            items: components["schemas"]["WorkspaceAppVisibilityUpdateItem"][];
+            /** Title */
+            title: string;
+            /** Route Base */
+            route_base: string;
+            /** Entry Route Id */
+            entry_route_id: string;
+            /** Icon Key */
+            icon_key: string;
+            /**
+             * Execution Context Kind
+             * @enum {string}
+             */
+            execution_context_kind: "personal" | "company" | "workspace";
+            /**
+             * Resource Scope
+             * @enum {string}
+             */
+            resource_scope: "personal" | "company" | "workspace" | "hybrid";
+            /**
+             * Coming Soon
+             * @default false
+             */
+            coming_soon: boolean;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            availability_scope: "workspace";
+            /** Eligible Workspace Count */
+            eligible_workspace_count: number;
+            preferred_workspace?: components["schemas"]["EligibleWorkspaceResponse"] | null;
+            single_eligible_workspace?: components["schemas"]["EligibleWorkspaceResponse"] | null;
         };
         /** WorkspaceBindingInput */
         WorkspaceBindingInput: {
@@ -14525,8 +15132,6 @@ export interface components {
             app_bar_categories?: components["schemas"]["WorkspaceBootstrapAppBarCategoryResponse"][];
             /** Nav */
             nav: components["schemas"]["WorkspaceBootstrapNavItemResponse"][];
-            /** Platform Visible App Ids */
-            platform_visible_app_ids?: string[];
             /** Chatbot App Ids */
             chatbot_app_ids?: string[];
             keyword_search?: components["schemas"]["WorkspaceBootstrapKeywordSearchResponse"];
@@ -15213,6 +15818,113 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    apps_get_eligible_workspaces_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                slug?: string | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path: {
+                app_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EligibleWorkspacesResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apps_update_app_workspace_preference_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                app_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppWorkspacePreferenceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppWorkspacePreferenceResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -16493,10 +17205,137 @@ export interface operations {
             };
         };
     };
-    admin_list_platform_app_visibility_get: {
+    agent_terminal_get_agent_terminal_config_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTerminalConfigResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    agent_terminal_list_agent_terminal_sessions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTerminalSessionListResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    agent_terminal_create_agent_terminal_session_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentTerminalSessionCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTerminalSessionResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agent_terminal_list_agent_terminal_codex_threads_get: {
         parameters: {
             query?: {
-                scope?: "core";
+                limit?: number;
             };
             header?: never;
             path?: never;
@@ -16510,7 +17349,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PlatformAppVisibilityResponse"];
+                    "application/json": components["schemas"]["AgentTerminalCodexThreadListResponse"];
                 };
             };
             /** @description Authentication required. */
@@ -16542,18 +17381,454 @@ export interface operations {
             };
         };
     };
-    admin_update_platform_app_visibility_patch: {
+    agent_terminal_get_agent_terminal_git_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                root_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTerminalGitStatusResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agent_terminal_get_agent_terminal_git_diff_get: {
+        parameters: {
+            query: {
+                path: string;
+                scope: "staged" | "unstaged" | "untracked" | "conflicted";
+            };
+            header?: never;
+            path: {
+                root_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTerminalGitDiffResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agent_terminal_get_agent_terminal_git_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                root_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTerminalGitSummaryResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agent_terminal_get_agent_terminal_git_history_get: {
         parameters: {
             query?: {
-                scope?: "core";
+                offset?: number;
+                limit?: number;
             };
+            header?: never;
+            path: {
+                root_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTerminalGitHistoryResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agent_terminal_get_agent_terminal_git_commit_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                root_key: string;
+                commit: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTerminalGitCommitDetailResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agent_terminal_get_agent_terminal_git_commit_diff_get: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path: {
+                root_key: string;
+                commit: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTerminalGitCommitDiffResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agent_terminal_stop_agent_terminal_session_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTerminalSessionResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agent_terminal_delete_agent_terminal_session_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_list_company_app_controls_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyAppControlsResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    admin_update_company_app_controls_patch: {
+        parameters: {
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PlatformAppVisibilityUpdateRequest"];
+                "application/json": components["schemas"]["CompanyAppControlsUpdateRequest"];
             };
         };
         responses: {
@@ -16563,7 +17838,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PlatformAppVisibilityResponse"];
+                    "application/json": components["schemas"]["CompanyAppControlsResponse"];
                 };
             };
             /** @description Authentication required. */
@@ -16595,11 +17870,98 @@ export interface operations {
             };
         };
     };
-    admin_list_workspace_app_visibility_get: {
+    admin_list_workspace_app_defaults_get: {
         parameters: {
-            query?: {
-                scope?: "core";
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceAppDefaultsResponse"];
+                };
             };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    admin_update_workspace_app_defaults_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkspaceAppDefaultsUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceAppDefaultsResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_list_workspace_app_overrides_get: {
+        parameters: {
+            query?: never;
             header?: never;
             path: {
                 workspace_id: string;
@@ -16614,7 +17976,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["WorkspaceAppVisibilityResponse"];
+                    "application/json": components["schemas"]["WorkspaceAppOverridesResponse"];
                 };
             };
             /** @description Authentication required. */
@@ -16646,11 +18008,9 @@ export interface operations {
             };
         };
     };
-    admin_update_workspace_app_visibility_patch: {
+    admin_update_workspace_app_overrides_patch: {
         parameters: {
-            query?: {
-                scope?: "core";
-            };
+            query?: never;
             header?: never;
             path: {
                 workspace_id: string;
@@ -16659,7 +18019,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["WorkspaceAppVisibilityUpdateRequest"];
+                "application/json": components["schemas"]["WorkspaceAppOverridesUpdateRequest"];
             };
         };
         responses: {
@@ -16669,7 +18029,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["WorkspaceAppVisibilityResponse"];
+                    "application/json": components["schemas"]["WorkspaceAppOverridesResponse"];
                 };
             };
             /** @description Authentication required. */
@@ -20793,6 +22153,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    content_proxy_content_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Open-Work-Hub-Content-Grant"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description Content capability denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Validation Error */
@@ -26612,41 +28012,6 @@ export interface operations {
             };
         };
     };
-    files_proxy_file_content_get: {
-        parameters: {
-            query: {
-                expires: number;
-                signature: string;
-                disposition?: "attachment" | "inline";
-            };
-            header?: never;
-            path: {
-                file_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     ocr_route_ocr_post: {
         parameters: {
             query?: never;
@@ -26685,41 +28050,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    pms_proxy_attachment_content_get: {
-        parameters: {
-            query: {
-                expires: number;
-                signature: string;
-                disposition?: "attachment" | "inline";
-            };
-            header?: never;
-            path: {
-                attachment_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -28817,55 +30147,6 @@ export interface operations {
             };
         };
     };
-    pms_download_attachment_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                attachment_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     pms_delete_attachment_delete: {
         parameters: {
             query?: never;
@@ -28909,179 +30190,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    pms_list_notifications_get: {
-        parameters: {
-            query?: {
-                page?: number;
-                page_size?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NotificationListResponse"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    pms_get_unread_count_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UnreadCountResponse"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    pms_mark_notification_read_patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                notification_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NotificationItem"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    pms_mark_all_notifications_read_patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };
@@ -30554,41 +31662,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    meeting_proxy_file_attachment_content_get: {
-        parameters: {
-            query: {
-                expires: number;
-                signature: string;
-                disposition?: "attachment" | "inline";
-            };
-            header?: never;
-            path: {
-                file_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -32800,7 +33873,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RecordingOut"];
+                    "application/json": components["schemas"]["RecordingDetailOut"];
                 };
             };
             /** @description Authentication required. */
@@ -32898,7 +33971,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RecordingOut"];
+                    "application/json": components["schemas"]["RecordingDetailOut"];
                 };
             };
             /** @description Authentication required. */
@@ -32947,7 +34020,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RecordingOut"];
+                    "application/json": components["schemas"]["RecordingDetailOut"];
                 };
             };
             /** @description Authentication required. */
@@ -33047,7 +34120,56 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RecordingOut"];
+                    "application/json": components["schemas"]["RecordingDetailOut"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recording_publish_recording_to_docs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recording_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordingPublicationOut"];
                 };
             };
             /** @description Authentication required. */
@@ -33096,7 +34218,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RecordingOut"];
+                    "application/json": components["schemas"]["RecordingDetailOut"];
                 };
             };
             /** @description Authentication required. */
@@ -33247,7 +34369,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RecordingOut"];
+                    "application/json": components["schemas"]["RecordingDetailOut"];
                 };
             };
             /** @description Authentication required. */
@@ -33297,7 +34419,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RecordingOut"];
+                    "application/json": components["schemas"]["RecordingDetailOut"];
                 };
             };
             /** @description Authentication required. */
@@ -35864,40 +36986,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    media_proxy_media_content_get: {
-        parameters: {
-            query: {
-                expires: number;
-                signature: string;
-            };
-            header?: never;
-            path: {
-                media_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

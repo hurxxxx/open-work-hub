@@ -144,7 +144,9 @@ describe('useFileSearchController', () => {
       pending.get('second')?.resolve(response(1, false, 'second'));
       await Promise.resolve();
     });
-    await waitFor(() => expect(result.current.state.response?.query).toBe('second'));
+    await waitFor(() =>
+      expect(result.current.state.response?.query).toBe('second'),
+    );
 
     await act(async () => {
       pending.get('first')?.resolve(response(1, false, 'first'));
@@ -163,7 +165,7 @@ describe('useFileSearchController', () => {
       expect(client.download).toHaveBeenCalledWith('token-1', 'hq', 'file-1'),
     );
     await waitFor(() =>
-      expect(openDownload).toHaveBeenCalledWith('/download/file-1'),
+      expect(openDownload).toHaveBeenCalledWith('/download/file-1', 'token-1'),
     );
     expect(result.current.state.busyDownloadId).toBeNull();
   });
@@ -194,7 +196,9 @@ describe('useFileSearchController', () => {
     const client = createClient();
     vi.mocked(client.search).mockImplementation(
       (_token, workspaceSlug, payload) =>
-        Promise.resolve(response(payload.page, false, `${workspaceSlug}:result`)),
+        Promise.resolve(
+          response(payload.page, false, `${workspaceSlug}:result`),
+        ),
     );
     const setSearchParams = vi.fn<FileSearchParamsSetter>();
     const rendered = renderHook(

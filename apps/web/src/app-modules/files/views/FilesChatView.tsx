@@ -16,7 +16,7 @@ export function FilesChatView() {
     () => ({
       title: t('files.chat.title'),
       routeAppId: 'files',
-      routePathSuffix: '/chat',
+      routeId: 'files.chat',
       conversationScope: {
         ref: 'files',
         resourceId: 'workspace',

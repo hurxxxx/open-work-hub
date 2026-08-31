@@ -1,12 +1,6 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { openDownloadUrl } from '@/src/platform/browser/browser-download';
+import { downloadAuthenticatedContent } from '@/src/platform/browser/browser-download';
 import {
   FilesApiError,
   getFileDownloadUrl,
@@ -55,7 +49,7 @@ export interface FileSearchControllerOptions {
   client?: FileSearchControllerClient;
   logout: () => Promise<void> | void;
   messages: FileSearchControllerMessages;
-  openDownload?: (url: string) => void;
+  openDownload?: (url: string, token: string) => Promise<void> | void;
   searchParams: URLSearchParams;
   setSearchParams: FileSearchParamsSetter;
   token: string | null | undefined;
@@ -99,7 +93,8 @@ export function useFileSearchController({
   client = defaultClient,
   logout,
   messages,
-  openDownload = openDownloadUrl,
+  openDownload = (url, currentToken) =>
+    downloadAuthenticatedContent(currentToken, url, 'download'),
   searchParams,
   setSearchParams,
   token,
@@ -111,8 +106,9 @@ export function useFileSearchController({
     [searchParamsKey],
   );
   const [queryInput, setQueryInputState] = useState(urlSearch.query);
-  const [strategy, setStrategyState] =
-    useState<FileSearchStrategy>(urlSearch.strategy);
+  const [strategy, setStrategyState] = useState<FileSearchStrategy>(
+    urlSearch.strategy,
+  );
   const [scopedResponse, setScopedResponse] =
     useState<ScopedFileSearchResponse | null>(null);
   const [searching, setSearching] = useState(false);
@@ -209,7 +205,10 @@ export function useFileSearchController({
         if (controller.signal.aborted || isAbortError(caughtError)) {
           return;
         }
-        if (caughtError instanceof FilesApiError && caughtError.status === 401) {
+        if (
+          caughtError instanceof FilesApiError &&
+          caughtError.status === 401
+        ) {
           setError(messages.sessionExpired);
           void logout();
           return;
@@ -317,13 +316,16 @@ export function useFileSearchController({
       try {
         const result = await client.download(token, workspaceSlug, fileId);
         if (downloadSequenceRef.current === sequence) {
-          openDownload(result.url);
+          await openDownload(result.url, token);
         }
       } catch (caughtError: unknown) {
         if (downloadSequenceRef.current !== sequence) {
           return;
         }
-        if (caughtError instanceof FilesApiError && caughtError.status === 401) {
+        if (
+          caughtError instanceof FilesApiError &&
+          caughtError.status === 401
+        ) {
           setError(messages.sessionExpired);
           void logout();
           return;

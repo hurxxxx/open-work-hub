@@ -39,7 +39,9 @@ class _FakeRecordingMinio:
         del bucket, length, content_type
         self.objects[key] = data.read()
 
-    def fput_object(self, bucket: str, key: str, path: str, content_type: str | None = None) -> None:
+    def fput_object(
+        self, bucket: str, key: str, path: str, content_type: str | None = None
+    ) -> None:
         del bucket, content_type
         self.objects[key] = Path(path).read_bytes()
 
@@ -70,8 +72,13 @@ def _install_fake_recording_storage(monkeypatch, tmp_path) -> _FakeRecordingMini
     monkeypatch.setattr(canonical_recording_service, "_broker_is_reachable", lambda: True)
     monkeypatch.setattr(
         canonical_recording_service,
-        "enqueue_recording_pipeline",
+        "new_recording_attempt_id",
         lambda recording_id: f"task-{recording_id}",
+    )
+    monkeypatch.setattr(
+        canonical_recording_service,
+        "enqueue_recording_pipeline",
+        lambda recording_id, attempt_id: None,
     )
     return fake
 
@@ -202,16 +209,21 @@ def test_complete_staging_promotes_to_recording(client, monkeypatch, tmp_path) -
         recording = session.get(Recording, staging_id)
         assert recording is not None
         assert recording.celery_task_id == f"task-{staging_id}"
-        assert _meeting_recording_target(
-            session,
-            meeting_id=meeting["id"],
-            recording_id=recording.id,
-        ).sort_order == 1
+        assert (
+            _meeting_recording_target(
+                session,
+                meeting_id=meeting["id"],
+                recording_id=recording.id,
+            ).sort_order
+            == 1
+        )
         assert fake_minio.objects[recording.storage_key] == chunk
         assert re.fullmatch(
             rf"\d{{8}}T\d{{6}}Z-{recording.id}\.webm",
             Path(recording.storage_key).name,
         )
+
+
 def test_only_one_user_can_record_at_a_time(client, monkeypatch, tmp_path) -> None:
     """Single-recorder lock: while one participant is staging an active
     recording, other participants get a 409 with the active recorder name."""
@@ -360,7 +372,9 @@ def test_delete_recording_permission_and_cleanup(client, monkeypatch, tmp_path) 
     body = complete.json()
     assert len(body["recordings"]) == 1
     recording_id = body["recordings"][0]["id"]
-    storage_key = body["recordings"][0]["storage_key"] if "storage_key" in body["recordings"][0] else None
+    storage_key = (
+        body["recordings"][0]["storage_key"] if "storage_key" in body["recordings"][0] else None
+    )
 
     # Capture the storage key directly from the DB so we can verify minio removal.
     with Session(get_engine()) as session:

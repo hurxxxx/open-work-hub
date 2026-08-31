@@ -11,7 +11,11 @@ import {
   type RecordingUploadSessionStore,
 } from './recording-upload-session';
 
-function chunk(seq: number, size: number, uploadedAt: number | null = null): RecordingChunkState {
+function chunk(
+  seq: number,
+  size: number,
+  uploadedAt: number | null = null,
+): RecordingChunkState {
   return {
     stagingId: 'staging-1',
     seq,
@@ -22,7 +26,9 @@ function chunk(seq: number, size: number, uploadedAt: number | null = null): Rec
   };
 }
 
-function session(overrides: Partial<RecordingSessionState> = {}): RecordingSessionState {
+function session(
+  overrides: Partial<RecordingSessionState> = {},
+): RecordingSessionState {
   return {
     stagingId: 'staging-1',
     workspaceSlug: 'hq',
@@ -43,14 +49,17 @@ function session(overrides: Partial<RecordingSessionState> = {}): RecordingSessi
     uploadCompletedAt: null,
     interruptedAt: null,
     interruptionReason: null,
-    meetingId: null,
     ...overrides,
   };
 }
 
-function createStore(chunks: RecordingChunkState[]): RecordingUploadSessionStore {
+function createStore(
+  chunks: RecordingChunkState[],
+): RecordingUploadSessionStore {
   return {
-    getChunks: vi.fn(async () => [...chunks].sort((left, right) => left.seq - right.seq)),
+    getChunks: vi.fn(async () =>
+      [...chunks].sort((left, right) => left.seq - right.seq),
+    ),
     getPendingChunks: vi.fn(async () =>
       chunks
         .filter((item) => item.uploadedAt == null)
@@ -97,7 +106,9 @@ describe('recording upload session', () => {
 
   it('uploads pending chunks in sequence with the expected TUS offsets', async () => {
     const store = createStore([chunk(0, 5), chunk(1, 6)]);
-    const uploadChunk = vi.fn(async (_stagingId, offset: number, blob: Blob) => offset + blob.size);
+    const uploadChunk = vi.fn(
+      async (_stagingId, offset: number, blob: Blob) => offset + blob.size,
+    );
 
     const result = await drainRecordingUploadSession({
       stagingId: 'staging-1',
@@ -127,12 +138,20 @@ describe('recording upload session', () => {
     expect(result.uploadedChunkSeqs).toEqual([0, 1]);
     expect(result.reconciledChunkSeqs).toEqual([]);
     expect(result.remoteOffset).toBe(11);
-    expect(store.updateSessionProgress).toHaveBeenNthCalledWith(1, 'staging-1', {
-      lastUploadedSeq: 0,
-    });
-    expect(store.updateSessionProgress).toHaveBeenNthCalledWith(2, 'staging-1', {
-      lastUploadedSeq: 1,
-    });
+    expect(store.updateSessionProgress).toHaveBeenNthCalledWith(
+      1,
+      'staging-1',
+      {
+        lastUploadedSeq: 0,
+      },
+    );
+    expect(store.updateSessionProgress).toHaveBeenNthCalledWith(
+      2,
+      'staging-1',
+      {
+        lastUploadedSeq: 1,
+      },
+    );
   });
 
   it('waits for pending chunk writes before deciding a finalize request is ready', async () => {
@@ -147,7 +166,9 @@ describe('recording upload session', () => {
       shouldFinalize: true,
       pendingWrites: [pendingWrite],
       store: {
-        getSession: vi.fn(async () => session({ finalizeRequestedAt: 1_700_000_200_000 })),
+        getSession: vi.fn(async () =>
+          session({ finalizeRequestedAt: 1_700_000_200_000 }),
+        ),
         getPendingChunks,
       },
     });

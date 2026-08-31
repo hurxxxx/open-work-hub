@@ -8,6 +8,7 @@ import {
   Mic,
   Users,
 } from 'lucide-react';
+import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
 
 import type { AppModuleManifest } from '@/src/app/shell/navigation-types';
 
@@ -88,5 +89,8 @@ export const recordingManifest: AppModuleManifest = {
       pathSuffix: '?view=archived',
     },
   ],
-  workspaceRoutePaths: ['/w/:workspaceSlug/recording', '/w/:workspaceSlug/recording/:recordingId'],
+  workspaceRoutePaths: [
+    getAppRoutePattern('recording.root'),
+    getAppRoutePattern('recording.detail'),
+  ],
 };

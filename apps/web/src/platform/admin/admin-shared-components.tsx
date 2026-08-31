@@ -106,7 +106,7 @@ export function Badge({
     tone === 'purple'
       ? 'border-app-accent/20 bg-app-accent/10 text-app-accent'
       : tone === 'green'
-        ? 'border-app-success-border bg-app-success/10 text-app-success dark:text-app-success-text'
+        ? 'border-app-success-border bg-app-success/10 text-app-success-text'
         : tone === 'amber'
           ? 'border-app-warning/20 bg-app-warning/10 text-app-warning-text dark:text-app-warning-text'
           : 'border-app-border bg-app-surface-sidebar text-app-ink/55';

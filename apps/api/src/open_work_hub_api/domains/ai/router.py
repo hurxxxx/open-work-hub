@@ -225,10 +225,8 @@ class ChatRequest(BaseModel):
     temperature: float = Field(default=0.2, ge=0, le=2)
     max_tokens: int | None = Field(default=None, ge=1, le=262144)
     reasoning_effort: Literal["none", "low", "medium", "high"] | None = None
-    # User-selected workspace apps the business chatbot may invoke tools from.
-    # This is currently disabled at the business-chat policy layer: the server
-    # forces an empty list so AI chat stays text-only until the RAG/SQL/fulltext
-    # context architecture is redesigned.
+    # User-selected tool-owner apps the business chatbot may invoke. The server
+    # intersects this scope with registered, enabled, and discoverable apps.
     allowed_app_ids: list[str] | None = None
 
     @field_validator("allowed_app_ids")

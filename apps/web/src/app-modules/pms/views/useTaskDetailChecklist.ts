@@ -45,6 +45,7 @@ export function useTaskDetailChecklist({
   taskId,
   token,
   t,
+  workspaceSlug,
 }: {
   canEdit: boolean;
   checklistItems: PmsChecklistItem[];
@@ -54,6 +55,7 @@ export function useTaskDetailChecklist({
   taskId: string;
   token: string | null;
   t: TFunction;
+  workspaceSlug: string;
 }) {
   const [newChecklistText, setNewChecklistText] = useState('');
   const [addingChecklist, setAddingChecklist] = useState(false);
@@ -64,7 +66,8 @@ export function useTaskDetailChecklist({
   const checklistProgress = getTaskDetailChecklistProgress(checklistItems);
 
   const handleAddChecklistItem = useCallback(async () => {
-    if (!token || !canEdit || !newChecklistText.trim()) return;
+    if (!token || !canEdit || !workspaceSlug || !newChecklistText.trim())
+      return;
     setAddingChecklist(true);
     setSaveError(null);
     try {
@@ -75,6 +78,7 @@ export function useTaskDetailChecklist({
           sortOrder: checklistItems.length,
           text: newChecklistText,
         }),
+        workspaceSlug,
       );
       setChecklistItems((prev) => [...prev, item]);
       setNewChecklistText('');
@@ -99,11 +103,12 @@ export function useTaskDetailChecklist({
     t,
     taskId,
     token,
+    workspaceSlug,
   ]);
 
   const handleToggleChecklistItem = useCallback(
     async (item: PmsChecklistItem) => {
-      if (!token || !canEdit) return;
+      if (!token || !canEdit || !workspaceSlug) return;
       const newCompleted = !item.completed;
       setChecklistItems((prev) =>
         prev.map((checklistItem) =>
@@ -113,7 +118,12 @@ export function useTaskDetailChecklist({
         ),
       );
       try {
-        await updateChecklistItem(token, item.id, { completed: newCompleted });
+        await updateChecklistItem(
+          token,
+          item.id,
+          { completed: newCompleted },
+          workspaceSlug,
+        );
         await notifyTaskDetailUpdated(onUpdate);
       } catch (error) {
         setChecklistItems((prev) =>
@@ -131,16 +141,30 @@ export function useTaskDetailChecklist({
         );
       }
     },
-    [canEdit, onUpdate, setChecklistItems, setSaveError, t, token],
+    [
+      canEdit,
+      onUpdate,
+      setChecklistItems,
+      setSaveError,
+      t,
+      token,
+      workspaceSlug,
+    ],
   );
 
   const handleSaveChecklistEdit = useCallback(
     async (itemId: string) => {
-      if (!token || !canEdit || !editingChecklistText.trim()) return;
+      if (!token || !canEdit || !workspaceSlug || !editingChecklistText.trim())
+        return;
       try {
-        await updateChecklistItem(token, itemId, {
-          text: editingChecklistText.trim(),
-        });
+        await updateChecklistItem(
+          token,
+          itemId,
+          {
+            text: editingChecklistText.trim(),
+          },
+          workspaceSlug,
+        );
         setChecklistItems((prev) =>
           prev.map((checklistItem) =>
             checklistItem.id === itemId
@@ -165,14 +189,15 @@ export function useTaskDetailChecklist({
       setSaveError,
       t,
       token,
+      workspaceSlug,
     ],
   );
 
   const handleDeleteChecklistItem = useCallback(
     async (itemId: string) => {
-      if (!token || !canEdit) return;
+      if (!token || !canEdit || !workspaceSlug) return;
       try {
-        await deleteChecklistItem(token, itemId);
+        await deleteChecklistItem(token, itemId, workspaceSlug);
         setChecklistItems((prev) =>
           prev.filter((checklistItem) => checklistItem.id !== itemId),
         );
@@ -186,7 +211,15 @@ export function useTaskDetailChecklist({
         );
       }
     },
-    [canEdit, onUpdate, setChecklistItems, setSaveError, t, token],
+    [
+      canEdit,
+      onUpdate,
+      setChecklistItems,
+      setSaveError,
+      t,
+      token,
+      workspaceSlug,
+    ],
   );
 
   return {

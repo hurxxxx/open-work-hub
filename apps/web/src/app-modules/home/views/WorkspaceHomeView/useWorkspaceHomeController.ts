@@ -16,10 +16,6 @@ import {
   listAssignedTasks,
   type PmsTask,
 } from '@/src/app-modules/pms/public-api';
-import {
-  listNotifications,
-  type WorkspaceNotification,
-} from '@/src/platform/notifications/notifications-api';
 import { zonedDateKey } from '@/src/platform/time/time-utils';
 import {
   INITIAL_WORKSPACE_HOME_STATE,
@@ -40,14 +36,8 @@ export interface WorkspaceHomeClient {
     workspaceSlug: string,
     options: { scope: 'upcoming' },
   ): Promise<{ items: MeetingListItem[] }>;
-  listNotifications(
-    token: string,
-    page: number,
-    workspaceSlug: string,
-  ): Promise<{ items: WorkspaceNotification[] }>;
   listPlannerEvents(
     token: string,
-    workspaceSlug: string,
     options: { from?: string; to?: string },
   ): Promise<{ items: PlannerEvent[] }>;
   listRecentPages(
@@ -72,7 +62,6 @@ export interface WorkspaceHomeController {
 const defaultClient: WorkspaceHomeClient = {
   listAssignedTasks,
   listMeetings,
-  listNotifications,
   listPlannerEvents,
   listRecentPages,
 };
@@ -146,7 +135,7 @@ export function useWorkspaceHomeController({
         timeZone,
       );
       void client
-        .listPlannerEvents(token, workspaceSlug, {
+        .listPlannerEvents(token, {
           from: plannerFrom,
           to: plannerTo,
         })
@@ -161,17 +150,6 @@ export function useWorkspaceHomeController({
     } else {
       dispatch({ type: 'planner-loaded', items: [] });
     }
-
-    void client
-      .listNotifications(token, 1, workspaceSlug)
-      .then((response) => {
-        if (!cancelled) {
-          dispatch({ type: 'notifications-loaded', items: response.items });
-        }
-      })
-      .catch(() => {
-        if (!cancelled) dispatch({ type: 'notifications-failed' });
-      });
 
     return () => {
       cancelled = true;

@@ -24,7 +24,6 @@ from open_work_hub_api.domains.recording.schemas import (
     RecordingUploadInitRequest as CanonicalRecordingStagingInitRequest,
 )
 from open_work_hub_api.domains.meeting.schemas import (
-    MeetingDetail,
     RecordingChunkAck,
     RecordingCompleteRequest,
     RecordingPlaybackResponse,
@@ -205,7 +204,7 @@ def complete_staging(
     meeting_id: str,
     staging_id: str,
     payload: RecordingCompleteRequest,
-):
+) -> Meeting:
     meeting = meeting_service._load_meeting(db, workspace, meeting_id)
     ensure_meeting_participant(db, user, meeting)
     _ensure_canonical_staging_for_meeting(
@@ -226,7 +225,7 @@ def complete_staging(
         ),
     )
     fresh = meeting_service._load_meeting(db, workspace, meeting.id)
-    return meeting_service._serialize_meeting(db, fresh)
+    return fresh
 
 
 def import_recording(
@@ -237,7 +236,7 @@ def import_recording(
     meeting_id: str,
     upload: UploadFile,
     linked_task_id: str | None,
-):
+) -> Meeting:
     meeting = meeting_service._load_meeting(db, workspace, meeting_id)
     ensure_meeting_participant(db, user, meeting)
     _validate_linked_task_id(db, meeting=meeting, user=user, linked_task_id=linked_task_id)
@@ -257,7 +256,7 @@ def import_recording(
         linked_task_id=linked_task_id,
     )
     fresh = meeting_service._load_meeting(db, workspace, meeting.id)
-    return meeting_service._serialize_meeting(db, fresh)
+    return fresh
 
 
 def get_recording_playback(
@@ -322,7 +321,7 @@ def retry_recording(
     user: User,
     meeting_id: str,
     recording_id: str,
-):
+) -> Meeting:
     meeting = meeting_service._load_meeting(db, workspace, meeting_id)
     ensure_meeting_participant(db, user, meeting)
     canonical_recording_service.retry_meeting_recording(
@@ -333,7 +332,7 @@ def retry_recording(
         recording_id=recording_id,
     )
     fresh = meeting_service._load_meeting(db, workspace, meeting.id)
-    return meeting_service._serialize_meeting(db, fresh)
+    return fresh
 
 
 def delete_recording(
@@ -343,7 +342,7 @@ def delete_recording(
     user: User,
     meeting_id: str,
     recording_id: str,
-) -> MeetingDetail:
+) -> Meeting:
     """Hard-delete a finalized meeting recording.
 
     Permission: organizer of the meeting OR the user who originally uploaded
@@ -374,7 +373,7 @@ def delete_recording(
     db.commit()
 
     fresh = meeting_service._load_meeting(db, workspace, meeting.id)
-    return meeting_service._serialize_meeting(db, fresh)
+    return fresh
 
 
 def cleanup_meeting_recordings(db: Session, *, meeting: Meeting) -> None:

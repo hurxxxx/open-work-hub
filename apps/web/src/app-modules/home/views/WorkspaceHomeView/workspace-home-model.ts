@@ -2,18 +2,19 @@ import type { RecentPageItem } from '@/src/app-modules/docs/public-api';
 import type { MeetingListItem } from '@/src/app-modules/meeting/public-api';
 import type { PlannerEvent } from '@/src/app-modules/planner/public-api';
 import type { PmsTask } from '@/src/app-modules/pms/public-api';
-import type { WorkspaceNotification } from '@/src/platform/notifications/notifications-api';
 import {
   diffDateOnlyDays,
   formatDateOnly,
   formatDateTime,
-  formatRelativeTime,
   getZonedDateParts,
   isSameDateInTimeZone,
   parseApiDateTime,
   zonedDateKey,
 } from '@/src/platform/time/time-utils';
-import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
+import {
+  buildAppEntryHref,
+  buildAppHref,
+} from '@open-work-hub/contracts/app-routes';
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 
@@ -50,19 +51,10 @@ export type WorkspaceHomeRow =
       title: string;
       to: string;
       trailing: string;
-    }
-  | {
-      kind: 'notification';
-      id: string;
-      title: string;
-      subtitle: string;
-      to: string | null;
-      trailing: string;
-      isRead: boolean;
     };
 
 export type WorkspaceHomeSection = {
-  id: 'meetings' | 'tasks' | 'docs' | 'planner' | 'notifications';
+  id: 'meetings' | 'tasks' | 'docs' | 'planner';
   titleKey: string;
   actionLabelKey: string;
   actionTo: string;
@@ -90,8 +82,6 @@ export interface WorkspaceHomeState {
   pagesLoading: boolean;
   plannerEvents: PlannerEvent[];
   plannerLoading: boolean;
-  notifications: WorkspaceNotification[];
-  notificationsLoading: boolean;
 }
 
 export type WorkspaceHomeAction =
@@ -103,9 +93,7 @@ export type WorkspaceHomeAction =
   | { type: 'pages-loaded'; items: RecentPageItem[] }
   | { type: 'pages-failed' }
   | { type: 'planner-loaded'; items: PlannerEvent[] }
-  | { type: 'planner-failed' }
-  | { type: 'notifications-loaded'; items: WorkspaceNotification[] }
-  | { type: 'notifications-failed' };
+  | { type: 'planner-failed' };
 
 export const INITIAL_WORKSPACE_HOME_STATE: WorkspaceHomeState = {
   meetings: [],
@@ -116,8 +104,6 @@ export const INITIAL_WORKSPACE_HOME_STATE: WorkspaceHomeState = {
   pagesLoading: true,
   plannerEvents: [],
   plannerLoading: true,
-  notifications: [],
-  notificationsLoading: true,
 };
 
 export function getHomeGreeting(
@@ -191,7 +177,10 @@ export function selectTodayMeetings(
     .slice(0, limit);
 }
 
-export function selectTopAssignedTasks(issues: PmsTask[], limit = 5): PmsTask[] {
+export function selectTopAssignedTasks(
+  issues: PmsTask[],
+  limit = 5,
+): PmsTask[] {
   return issues.slice(0, limit);
 }
 
@@ -221,32 +210,13 @@ export function formatHomeEventWhen(
 ): string {
   const startDate = parseApiDateTime(start);
   const dateKey =
-    allDay || !startDate ? start.slice(0, 10) : zonedDateKey(startDate, timeZone);
+    allDay || !startDate
+      ? start.slice(0, 10)
+      : zonedDateKey(startDate, timeZone);
   const dayLabel = formatHomeDueDate(dateKey, timeZone, locale, t, now);
   if (allDay || !startDate) return dayLabel;
   const time = formatHomeTime(start, timeZone, locale);
   return dayLabel ? `${dayLabel} ${time}` : time;
-}
-
-export function selectTopNotifications(
-  notifications: WorkspaceNotification[],
-  limit = 5,
-): WorkspaceNotification[] {
-  return notifications.slice(0, limit);
-}
-
-export function buildNotificationTo(
-  notification: WorkspaceNotification,
-  workspaceSlug: string,
-): string | null {
-  if (notification.action_url && notification.action_url.startsWith('/')) {
-    return notification.action_url;
-  }
-  if (notification.reference_id) {
-    const assigned = buildWorkspaceAppPath(workspaceSlug, 'pms', '/assigned');
-    return `${assigned}?task=${encodeURIComponent(notification.reference_id)}`;
-  }
-  return null;
 }
 
 export function workspaceHomePriorityTone(
@@ -305,13 +275,25 @@ export function buildWorkspaceHomeSections({
   t: Translate;
   workspaceSlug: string;
 }): WorkspaceHomeSection[] {
-  const meetingRoot = buildWorkspaceAppPath(workspaceSlug, 'meeting');
-  const assignedLink = buildWorkspaceAppPath(workspaceSlug, 'pms', '/assigned');
-  const docsRoot = buildWorkspaceAppPath(workspaceSlug, 'docs');
-  const plannerRoot = buildWorkspaceAppPath(workspaceSlug, 'planner');
-  const meetingCreate = buildWorkspaceAppPath(workspaceSlug, 'meeting', '?create=1');
-  const taskCreate = buildWorkspaceAppPath(workspaceSlug, 'pms', '?create=1');
-  const docCreate = buildWorkspaceAppPath(workspaceSlug, 'docs', '?create=1');
+  const meetingRoot = buildAppHref({ routeId: 'meeting.root', workspaceSlug });
+  const assignedLink = buildAppHref({ routeId: 'pms.assigned', workspaceSlug });
+  const docsRoot = buildAppHref({ routeId: 'docs.root', workspaceSlug });
+  const plannerRoot = buildAppEntryHref('planner');
+  const meetingCreate = buildAppHref({
+    routeId: 'meeting.root',
+    workspaceSlug,
+    queryParams: { create: '1' },
+  });
+  const taskCreate = buildAppHref({
+    routeId: 'pms.root',
+    workspaceSlug,
+    queryParams: { create: '1' },
+  });
+  const docCreate = buildAppHref({
+    routeId: 'docs.root',
+    workspaceSlug,
+    queryParams: { create: '1' },
+  });
 
   const plannerRows = selectUpcomingPlannerEvents(
     state.plannerEvents,
@@ -338,7 +320,11 @@ export function buildWorkspaceHomeSections({
     kind: 'meeting',
     id: meeting.id,
     title: meeting.title,
-    to: `${meetingRoot}/${meeting.id}`,
+    to: buildAppHref({
+      routeId: 'meeting.detail',
+      workspaceSlug,
+      pathParams: { meetingId: meeting.id },
+    }),
     trailing: formatHomeTime(meeting.start_at, timeZone, locale),
   }));
 
@@ -347,7 +333,11 @@ export function buildWorkspaceHomeSections({
       kind: 'task',
       id: issue.id,
       title: issue.title,
-      to: `${assignedLink}?task=${encodeURIComponent(issue.id)}`,
+      to: buildAppHref({
+        routeId: 'pms.assigned',
+        workspaceSlug,
+        queryParams: { task: issue.id },
+      }),
       trailing: issue.due_date
         ? formatHomeDueDate(issue.due_date, timeZone, locale, t, now)
         : '',
@@ -361,23 +351,13 @@ export function buildWorkspaceHomeSections({
       id: page.page_id,
       title: page.page_title || t('home.untitled'),
       subtitle: page.doc_title,
-      to: `${docsRoot}/${page.doc_id}`,
+      to: buildAppHref({
+        routeId: 'docs.document',
+        workspaceSlug,
+        pathParams: { docId: page.doc_id },
+      }),
     }),
   );
-
-  const notificationRows = selectTopNotifications(
-    state.notifications,
-  ).map<WorkspaceHomeRow>((notification) => ({
-    kind: 'notification',
-    id: notification.id,
-    title: notification.title,
-    subtitle: notification.body,
-    to: buildNotificationTo(notification, workspaceSlug),
-    trailing: notification.created_at
-      ? formatRelativeTime(notification.created_at, { locale, timeZone })
-      : '',
-    isRead: notification.is_read,
-  }));
 
   return [
     {
@@ -424,17 +404,6 @@ export function buildWorkspaceHomeSections({
       status: sectionStatus(state.pagesLoading, docRows),
       rows: docRows,
     },
-    {
-      id: 'notifications',
-      titleKey: 'home.notifications',
-      actionLabelKey: '',
-      actionTo: '',
-      emptyKey: 'home.notificationsEmpty',
-      emptyCtaLabelKey: '',
-      emptyCtaTo: '',
-      status: sectionStatus(state.notificationsLoading, notificationRows),
-      rows: notificationRows,
-    },
   ];
 }
 
@@ -450,7 +419,6 @@ export function workspaceHomeReducer(
         issuesLoading: true,
         pagesLoading: true,
         plannerLoading: true,
-        notificationsLoading: true,
       };
     case 'meetings-loaded':
       return { ...state, meetings: action.items, meetingsLoading: false };
@@ -468,13 +436,5 @@ export function workspaceHomeReducer(
       return { ...state, plannerEvents: action.items, plannerLoading: false };
     case 'planner-failed':
       return { ...state, plannerEvents: [], plannerLoading: false };
-    case 'notifications-loaded':
-      return {
-        ...state,
-        notifications: action.items,
-        notificationsLoading: false,
-      };
-    case 'notifications-failed':
-      return { ...state, notifications: [], notificationsLoading: false };
   }
 }

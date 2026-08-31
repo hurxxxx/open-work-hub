@@ -566,7 +566,7 @@ def test_corpus_scope_transition_hydrates_stale_search_and_rag_response_metadata
         "entity_type": "file",
         "entity_id": file.id,
         "visibility": "workspace",
-        "deep_link": f"/w/workspace-a/files?file={file.id}",
+        "deep_link": f"/apps/files/workspaces/workspace-a?file={file.id}",
         "metadata": {
             "resource_type": "file_manager_file",
             "resource_id": file.id,
@@ -594,7 +594,7 @@ def test_corpus_scope_transition_hydrates_stale_search_and_rag_response_metadata
             source_kind="files",
             visibility_refs=[f"workspace:{WORKSPACE_A_ID}"],
             metadata={
-                "origin_ref": f"/w/workspace-a/files?file={file.id}",
+                "origin_ref": f"/apps/files/workspaces/workspace-a?file={file.id}",
                 "corpus_id": corpus.id,
                 "managed_workspace_id": WORKSPACE_A_ID,
                 "author": "stale author",
@@ -622,7 +622,9 @@ def test_corpus_scope_transition_hydrates_stale_search_and_rag_response_metadata
     )
     assert hydrated_rows[0]["workspace_id"] == WORKSPACE_B_ID
     assert hydrated_rows[0]["visibility"] == "company"
-    assert hydrated_rows[0]["deep_link"] == (f"/w/workspace-b/files?file={file.id}")
+    assert hydrated_rows[0]["deep_link"] == (
+        f"/apps/files/workspaces/workspace-b?file={file.id}"
+    )
     assert hydrated_rows[0]["metadata"]["access_scope_kind"] == "company"
     assert hydrated_rows[0]["metadata"]["managed_workspace_id"] == WORKSPACE_A_ID
     assert "author" not in hydrated_rows[0]["metadata"]
@@ -639,7 +641,9 @@ def test_corpus_scope_transition_hydrates_stale_search_and_rag_response_metadata
     assert hydrated_projection.scope_kind == RagScopeKind.COMPANY
     assert hydrated_projection.workspace_id is None
     assert hydrated_projection.visibility_refs == ["company_public"]
-    assert hydrated_projection.metadata["origin_ref"] == f"/files?file={file.id}"
+    assert hydrated_projection.metadata["origin_ref"] == (
+        f"/apps/files/workspaces/workspace-a?file={file.id}"
+    )
     assert hydrated_projection.metadata["access_scope_kind"] == "company"
     assert "author" not in hydrated_projection.metadata
     assert "author_filter" not in hydrated_projection.metadata
@@ -673,7 +677,9 @@ def test_corpus_scope_transition_hydrates_stale_search_and_rag_response_metadata
     )
     assert workspace_rows[0]["workspace_id"] == WORKSPACE_A_ID
     assert workspace_rows[0]["visibility"] == "workspace"
-    assert workspace_rows[0]["deep_link"] == f"/w/workspace-a/files?file={file.id}"
+    assert workspace_rows[0]["deep_link"] == (
+        f"/apps/files/workspaces/workspace-a?file={file.id}"
+    )
     workspace_hits = files_rag_projection.hydrate_file_rag_hits_from_source(
         db,
         hits=hydrated_hits,

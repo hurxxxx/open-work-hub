@@ -5,6 +5,7 @@ from typing import Any
 from sqlalchemy import inspect, select
 from sqlalchemy.orm import Session, selectinload
 
+from open_work_hub_api.core.app_routes import InternalAppLocation, build_app_href
 from open_work_hub_api.domains.auth.models import Workspace
 from open_work_hub_api.domains.meeting.app_catalog import MEETING_WORKSPACE_APP
 from open_work_hub_api.domains.meeting.models import Meeting, MeetingAttendee, MeetingRecording
@@ -71,7 +72,12 @@ def load_meeting_search_document_for_entity(
 
 def _meeting_row(db: Session, *, workspace: Workspace, meeting: Meeting) -> dict[str, Any]:
     recording = _latest_meeting_recording_for_search(db, meeting=meeting)
-    recording_summary = (getattr(recording, "summary_text", None) or "").strip()
+    recording_summary = (
+        recording.result.summary_text
+        if recording is not None and recording.result is not None
+        else ""
+    ) or ""
+    recording_summary = recording_summary.strip()
     attendees = [
         search_person("participant", attendee.user_id, getattr(attendee.user, "full_name", None))
         for attendee in meeting.attendees
@@ -81,7 +87,9 @@ def _meeting_row(db: Session, *, workspace: Workspace, meeting: Meeting) -> dict
         for part in [
             meeting.agenda,
             recording_summary,
-            recording.transcript_text if recording else "",
+            recording.result.transcript_text
+            if recording is not None and recording.result is not None
+            else "",
         ]
         if part
     )
@@ -112,7 +120,13 @@ def _meeting_row(db: Session, *, workspace: Workspace, meeting: Meeting) -> dict
             "event_start_at": meeting.start_at.isoformat(),
             "start_date": meeting.start_at.date().isoformat(),
         },
-        deep_link=f"/w/{workspace.key}/meeting/{meeting.id}",
+        deep_link=build_app_href(
+            InternalAppLocation(
+                route_id="meeting.detail",
+                workspace_slug=workspace.key,
+                path_params={"meetingId": meeting.id},
+            )
+        ),
         metadata={"attendee_count": len(meeting.attendees)},
         source_updated_at=meeting.updated_at,
     )
@@ -127,6 +141,7 @@ def _latest_meeting_recording_for_search(
         recording = db.scalar(
             select(Recording)
             .join(RecordingTarget)
+            .options(selectinload(Recording.result))
             .where(
                 Recording.workspace_id == meeting.workspace_id,
                 Recording.trashed_at.is_(None),

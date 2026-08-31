@@ -1,11 +1,6 @@
 from __future__ import annotations
 
-import base64
-from dataclasses import dataclass
 from datetime import UTC, datetime
-import hashlib
-import hmac
-import time
 from typing import Iterable, Literal
 from urllib.parse import quote
 
@@ -15,7 +10,6 @@ from sqlalchemy.orm import Session, selectinload
 
 from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.core.principal import CallerPrincipal
-from open_work_hub_api.core.settings import get_settings
 from open_work_hub_api.domains.auth.access import (
     bind_current_workspace,
     resolve_workspace_role,
@@ -25,6 +19,15 @@ from open_work_hub_api.domains.auth.models import (
     Workspace,
 )
 from open_work_hub_api.domains.auth.security import new_id
+from open_work_hub_api.domains.auth.workspace_app_gate import is_app_enabled_for_user_context
+from open_work_hub_api.domains.content_access.grants import (
+    ContentGrantClaims,
+    ContentGrantIssuer,
+    InvalidContentGrant,
+    build_content_grant_url,
+    object_identity,
+)
+from open_work_hub_api.domains.content_access.contracts import ContentStream
 from open_work_hub_api.domains.retrieval.partitioning import assign_default_partition
 from open_work_hub_api.domains.docs.models import NativeDoc
 from open_work_hub_api.domains.docs.rag_sync import (
@@ -89,16 +92,9 @@ from open_work_hub_api.domains.whiteboard.models import Whiteboard, WhiteboardTa
 
 
 MAX_FILE_UPLOAD_SIZE = 100 * 1024 * 1024  # 100 MB
-MEETING_ATTACHMENT_CONTENT_URL_EXPIRES_SECONDS = 60 * 60
+MEETING_ATTACHMENT_CONTENT_URL_EXPIRES_SECONDS = 5 * 60
 MEETING_ATTACHMENT_CONTENT_CHUNK_SIZE = 1024 * 1024
 MeetingAttachmentDisposition = Literal["attachment", "inline"]
-
-
-@dataclass(frozen=True)
-class MeetingAttachmentContent:
-    body: Iterable[bytes]
-    media_type: str
-    headers: dict[str, str]
 
 
 def _bind_workspace_context(
@@ -315,88 +311,98 @@ def _load_doc_link_doc_map(
 
 
 def _build_file_download_url(
+    db: Session,
     attachment: MeetingFileAttachment,
     *,
+    content_grant_issuer: ContentGrantIssuer,
     disposition: MeetingAttachmentDisposition = "attachment",
     now: float | None = None,
     expires_seconds: int = MEETING_ATTACHMENT_CONTENT_URL_EXPIRES_SECONDS,
 ) -> str:
-    expires = int(time.time() if now is None else now) + expires_seconds
-    signature = _sign_file_content_url(
-        attachment,
-        expires=expires,
+    meeting = db.get(Meeting, attachment.meeting_id)
+    if meeting is None:
+        raise ValueError("meeting attachment grants require a meeting context")
+    return build_content_grant_url(
+        resource_kind="meeting.attachment",
+        resource_id=attachment.id,
+        owner_app_id="meeting",
+        issuer=content_grant_issuer,
+        execution_context_kind="workspace",
+        execution_workspace_id=meeting.workspace_id,
+        route_id=None,
+        source_type="meeting",
+        source_id=meeting.id,
+        object_identity=object_identity(
+            attachment.id,
+            attachment.meeting_id,
+            attachment.storage_key,
+            attachment.size_bytes,
+        ),
+        resource_version=attachment.created_at.isoformat(timespec="microseconds"),
         disposition=disposition,
-    )
-    return (
-        f"{get_settings().api_prefix}/meeting/files/{attachment.id}/content"
-        f"?expires={expires}&signature={signature}&disposition={disposition}"
+        expires_seconds=expires_seconds,
+        now=now,
     )
 
 
 def _serialize_file_attachment(
+    db: Session,
     attachment: MeetingFileAttachment,
+    *,
+    content_grant_issuer: ContentGrantIssuer,
 ) -> MeetingFileAttachmentOut:
     return serialize_file_attachment(
         attachment,
-        download_url=_build_file_download_url(attachment),
+        download_url=_build_file_download_url(
+            db,
+            attachment,
+            content_grant_issuer=content_grant_issuer,
+        ),
     )
 
 
-def _sign_file_content_url(
-    attachment: MeetingFileAttachment,
-    *,
-    expires: int,
-    disposition: MeetingAttachmentDisposition,
-) -> str:
-    secret = get_settings().minio_secret_key.encode("utf-8")
-    message = (
-        f"v1:{attachment.id}:{attachment.meeting_id}:{attachment.storage_key}:"
-        f"{expires}:{disposition}"
-    ).encode("utf-8")
-    digest = hmac.new(secret, message, hashlib.sha256).digest()
-    return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
-
-
-def _validate_file_content_signature(
-    attachment: MeetingFileAttachment,
-    *,
-    expires: int,
-    disposition: MeetingAttachmentDisposition,
-    signature: str,
-    now: float | None = None,
-) -> bool:
-    if expires < int(time.time() if now is None else now):
-        return False
-    expected = _sign_file_content_url(
-        attachment,
-        expires=expires,
-        disposition=disposition,
-    )
-    return hmac.compare_digest(signature, expected)
-
-
-def open_file_attachment_content(
+def open_file_attachment_content_grant(
     db: Session,
     *,
-    file_id: str,
-    expires: int,
-    signature: str,
-    disposition: MeetingAttachmentDisposition,
-) -> MeetingAttachmentContent:
-    attachment = db.get(MeetingFileAttachment, file_id)
+    claims: ContentGrantClaims,
+) -> ContentStream:
+    attachment = db.get(MeetingFileAttachment, claims.resource_id)
     if attachment is None:
-        raise localized_http_exception(status_code=404, code="meeting.file_not_found")
-    if not _validate_file_content_signature(
-        attachment,
-        expires=expires,
-        disposition=disposition,
-        signature=signature,
-    ):
-        raise localized_http_exception(
-            status_code=403,
-            code="meeting.file_proxy_url_invalid",
+        raise InvalidContentGrant("resource")
+    meeting = db.get(Meeting, attachment.meeting_id)
+    if (
+        meeting is None
+        or claims.owner_app_id != "meeting"
+        or claims.execution_context_kind != "workspace"
+        or claims.execution_workspace_id != meeting.workspace_id
+        or claims.source_type != "meeting"
+        or claims.source_id != meeting.id
+        or claims.object_identity
+        != object_identity(
+            attachment.id,
+            attachment.meeting_id,
+            attachment.storage_key,
+            attachment.size_bytes,
         )
-
+        or claims.resource_version
+        != attachment.created_at.isoformat(timespec="microseconds")
+    ):
+        raise InvalidContentGrant("binding")
+    if not is_app_enabled_for_user_context(
+        db,
+        app_id="meeting",
+        user_id=claims.issuer_user_id,
+        workspace_id=meeting.workspace_id,
+    ):
+        raise InvalidContentGrant("app")
+    user = db.get(User, claims.issuer_user_id)
+    if user is None or not can_read_meeting(
+        db,
+        user=user,
+        workspace_id=meeting.workspace_id,
+        meeting_id=meeting.id,
+    ):
+        raise InvalidContentGrant("source_acl")
     try:
         body = file_storage.open_attachment_object(
             storage_key=attachment.storage_key,
@@ -407,14 +413,15 @@ def open_file_attachment_content(
             status_code=502,
             code="meeting.file_download_failed",
         ) from exc
-
     encoded_filename = quote(attachment.filename or "attachment", safe="")
-    return MeetingAttachmentContent(
+    return ContentStream(
         body=body,
         media_type=attachment.content_type or file_storage.DEFAULT_ATTACHMENT_CONTENT_TYPE,
         headers={
-            "Cache-Control": "private, max-age=300",
-            "Content-Disposition": (f"{disposition}; filename*=UTF-8''{encoded_filename}"),
+            "Cache-Control": "private, no-store",
+            "Content-Disposition": (
+                f"{claims.disposition}; filename*=UTF-8''{encoded_filename}"
+            ),
             "X-Content-Type-Options": "nosniff",
         },
     )
@@ -453,7 +460,63 @@ def _serialize_whiteboard_link(
     return serialize_whiteboard_link(target=target, whiteboard=whiteboard)
 
 
-def _serialize_meeting(db: Session, meeting: Meeting) -> MeetingDetail:
+def serialize_meeting_for_http(
+    db: Session,
+    meeting: Meeting,
+    *,
+    viewer_user_id: str,
+    content_grant_issuer: ContentGrantIssuer,
+) -> MeetingDetail:
+    if content_grant_issuer.user_id != viewer_user_id:
+        raise ValueError("meeting content grant issuer does not match the viewer")
+    return _build_meeting_detail(
+        db,
+        meeting,
+        file_attachments=[
+            _serialize_file_attachment(
+                db,
+                attachment,
+                content_grant_issuer=content_grant_issuer,
+            )
+            for attachment in sorted(
+                meeting.file_attachments,
+                key=lambda item: item.created_at,
+            )
+        ],
+    )
+
+
+def serialize_meeting_for_ai(db: Session, meeting: Meeting) -> dict[str, object]:
+    payload = _build_meeting_detail(db, meeting, file_attachments=[]).model_dump(
+        mode="json",
+        by_alias=True,
+    )
+    payload["file_attachments"] = [
+        {
+            "id": attachment.id,
+            "filename": attachment.filename,
+            "content_type": attachment.content_type,
+            "size_bytes": attachment.size_bytes,
+            "added_by_id": attachment.added_by_id,
+            "added_by_name": (
+                attachment.added_by.full_name if attachment.added_by is not None else ""
+            ),
+            "created_at": attachment.created_at.isoformat(),
+        }
+        for attachment in sorted(
+            meeting.file_attachments,
+            key=lambda item: item.created_at,
+        )
+    ]
+    return payload
+
+
+def _build_meeting_detail(
+    db: Session,
+    meeting: Meeting,
+    *,
+    file_attachments: list[MeetingFileAttachmentOut],
+) -> MeetingDetail:
     tasks_by_id = _load_task_link_task_map(db, meeting.task_links)
     docs_by_id = _load_doc_link_doc_map(db, meeting.doc_links)
     return build_meeting_detail(
@@ -464,10 +527,7 @@ def _serialize_meeting(db: Session, meeting: Meeting) -> MeetingDetail:
         ],
         doc_links=[_serialize_doc_link(link, docs_by_id=docs_by_id) for link in meeting.doc_links],
         whiteboard_link=_serialize_whiteboard_link(db, meeting),
-        file_attachments=[
-            _serialize_file_attachment(att)
-            for att in sorted(meeting.file_attachments, key=lambda a: a.created_at)
-        ],
+        file_attachments=file_attachments,
         recordings=recording_service.list_meeting_recording_outs(db, meeting=meeting),
         active_recording_lock=recording_service.resolve_active_recording_lock(db, meeting=meeting),
     )
@@ -613,7 +673,7 @@ def create_meeting(
     organizer: User,
     payload: MeetingCreateRequest,
     meeting_id: str | None = None,
-) -> MeetingDetail:
+) -> Meeting:
     _validate_time_range(payload.start_at, payload.end_at)
 
     if meeting_id is not None:
@@ -624,8 +684,7 @@ def create_meeting(
             )
         )
         if existing is not None:
-            fresh = _load_meeting(db, workspace, existing.id)
-            return _serialize_meeting(db, fresh)
+            return _load_meeting(db, workspace, existing.id)
 
     attendees_input = list(payload.attendees)
     if not any(item.user_id == organizer.id for item in attendees_input):
@@ -692,7 +751,7 @@ def create_meeting(
     db.commit()
 
     fresh = _load_meeting(db, workspace, meeting.id)
-    return _serialize_meeting(db, fresh)
+    return fresh
 
 
 def create_meeting_for_ai(
@@ -728,14 +787,14 @@ def create_meeting_for_ai(
         task_ids=[],
         doc_ids=[],
     )
-    result = create_meeting(
+    meeting = create_meeting(
         db,
         workspace=workspace,
         organizer=user,
         payload=payload,
         meeting_id=approved_call_id,
     )
-    return result.model_dump(mode="json", by_alias=True)
+    return serialize_meeting_for_ai(db, meeting)
 
 
 def update_meeting(
@@ -745,7 +804,7 @@ def update_meeting(
     user: User,
     meeting_id: str,
     payload: MeetingUpdateRequest,
-) -> MeetingDetail:
+) -> Meeting:
     from open_work_hub_api.domains.meeting.permissions import ensure_meeting_organizer
 
     meeting = _load_meeting(db, workspace, meeting_id)
@@ -800,7 +859,7 @@ def update_meeting(
     db.commit()
 
     fresh = _load_meeting(db, workspace, meeting.id)
-    return _serialize_meeting(db, fresh)
+    return fresh
 
 
 def delete_meeting(db: Session, *, workspace: Workspace, user: User, meeting_id: str) -> None:
@@ -849,11 +908,29 @@ def get_meeting(
     principal: CallerPrincipal,
     user: User,
     meeting_id: str,
-) -> MeetingDetail:
+) -> Meeting:
     _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
     meeting = _load_meeting(db, workspace, meeting_id)
     _ensure_user_can_view(user, meeting)
-    return _serialize_meeting(db, meeting)
+    return meeting
+
+
+def get_meeting_for_ai(
+    db: Session,
+    *,
+    workspace: Workspace,
+    principal: CallerPrincipal,
+    user: User,
+    meeting_id: str,
+) -> dict[str, object]:
+    meeting = get_meeting(
+        db,
+        workspace=workspace,
+        principal=principal,
+        user=user,
+        meeting_id=meeting_id,
+    )
+    return serialize_meeting_for_ai(db, meeting)
 
 
 def build_meeting_scope_prompt(
@@ -880,8 +957,9 @@ def build_meeting_scope_prompt(
     summary = ""
     transcript_excerpt = ""
     if latest_recording is not None:
-        summary = ""
-        transcript_excerpt = (latest_recording.transcript_text or "").strip()[:8000]
+        if latest_recording.result is not None:
+            summary = (latest_recording.result.summary_text or "").strip()[:4000]
+            transcript_excerpt = latest_recording.result.transcript_text.strip()[:8000]
     agenda = (meeting.agenda or "").strip()[:2000]
     lines = [
         "[회의 컨텍스트]",
@@ -932,14 +1010,14 @@ def ensure_meeting_notes(
     workspace: Workspace,
     user: User,
     meeting_id: str,
-) -> MeetingDetail:
+) -> Meeting:
     meeting = _load_meeting(db, workspace, meeting_id)
     ensure_meeting_participant(db, user, meeting)
     _ensure_meeting_notes_state(db, meeting=meeting)
     db.commit()
 
     fresh = _load_meeting(db, workspace, meeting_id)
-    return _serialize_meeting(db, fresh)
+    return fresh
 
 
 def list_meetings(
@@ -1038,7 +1116,7 @@ def add_attendees(
     user: User,
     meeting_id: str,
     attendees: list[MeetingAttendeeInput],
-) -> MeetingDetail:
+) -> Meeting:
     """Append attendees to an existing meeting.
 
     Permission: any meeting participant (organizer or existing attendee).
@@ -1076,12 +1154,17 @@ def add_attendees(
     db.commit()
 
     fresh = _load_meeting(db, workspace, meeting_id)
-    return _serialize_meeting(db, fresh)
+    return fresh
 
 
 def attach_task(
-    db: Session, *, workspace: Workspace, user: User, meeting_id: str, task_id: str
-) -> MeetingDetail:
+    db: Session,
+    *,
+    workspace: Workspace,
+    user: User,
+    meeting_id: str,
+    task_id: str,
+) -> Meeting:
     meeting = _load_meeting(db, workspace, meeting_id)
     ensure_meeting_participant(db, user, meeting)
     task = ensure_task_attachable(db, user, task_id)
@@ -1094,12 +1177,17 @@ def attach_task(
     db.commit()
 
     fresh = _load_meeting(db, workspace, meeting_id)
-    return _serialize_meeting(db, fresh)
+    return fresh
 
 
 def detach_task(
-    db: Session, *, workspace: Workspace, user: User, meeting_id: str, task_id: str
-) -> MeetingDetail:
+    db: Session,
+    *,
+    workspace: Workspace,
+    user: User,
+    meeting_id: str,
+    task_id: str,
+) -> Meeting:
     meeting = _load_meeting(db, workspace, meeting_id)
 
     link = db.scalar(
@@ -1126,12 +1214,17 @@ def detach_task(
         db.commit()
 
     fresh = _load_meeting(db, workspace, meeting_id)
-    return _serialize_meeting(db, fresh)
+    return fresh
 
 
 def attach_doc(
-    db: Session, *, workspace: Workspace, user: User, meeting_id: str, doc_id: str
-) -> MeetingDetail:
+    db: Session,
+    *,
+    workspace: Workspace,
+    user: User,
+    meeting_id: str,
+    doc_id: str,
+) -> Meeting:
     meeting = _load_meeting(db, workspace, meeting_id)
     ensure_meeting_participant(db, user, meeting)
     doc = ensure_doc_attachable(db, user, doc_id, workspace=workspace)
@@ -1149,12 +1242,17 @@ def attach_doc(
     db.commit()
 
     fresh = _load_meeting(db, workspace, meeting_id)
-    return _serialize_meeting(db, fresh)
+    return fresh
 
 
 def detach_doc(
-    db: Session, *, workspace: Workspace, user: User, meeting_id: str, doc_id: str
-) -> MeetingDetail:
+    db: Session,
+    *,
+    workspace: Workspace,
+    user: User,
+    meeting_id: str,
+    doc_id: str,
+) -> Meeting:
     meeting = _load_meeting(db, workspace, meeting_id)
 
     link = db.scalar(
@@ -1187,7 +1285,7 @@ def detach_doc(
         db.commit()
 
     fresh = _load_meeting(db, workspace, meeting_id)
-    return _serialize_meeting(db, fresh)
+    return fresh
 
 
 async def attach_file(
@@ -1197,7 +1295,7 @@ async def attach_file(
     user: User,
     meeting_id: str,
     upload: UploadFile,
-) -> MeetingDetail:
+) -> Meeting:
     """Upload a binary file and attach it to the meeting. Any participant
     (organizer or attendee) can upload."""
     meeting = _load_meeting(db, workspace, meeting_id)
@@ -1238,12 +1336,17 @@ async def attach_file(
     db.commit()
 
     fresh = _load_meeting(db, workspace, meeting_id)
-    return _serialize_meeting(db, fresh)
+    return fresh
 
 
 def detach_file(
-    db: Session, *, workspace: Workspace, user: User, meeting_id: str, file_id: str
-) -> MeetingDetail:
+    db: Session,
+    *,
+    workspace: Workspace,
+    user: User,
+    meeting_id: str,
+    file_id: str,
+) -> Meeting:
     """Remove a file attachment. Only the meeting organizer or the user
     who originally uploaded it may remove a file."""
     meeting = _load_meeting(db, workspace, meeting_id)
@@ -1273,4 +1376,4 @@ def detach_file(
     db.commit()
 
     fresh = _load_meeting(db, workspace, meeting_id)
-    return _serialize_meeting(db, fresh)
+    return fresh

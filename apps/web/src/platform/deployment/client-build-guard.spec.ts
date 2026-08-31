@@ -19,7 +19,7 @@ function makeRuntime(response: Response) {
     runtime: {
       fetch,
       location: {
-        href: 'https://app.test/w/hq/pms',
+        href: 'https://app.test/apps/pms/workspaces/hq',
         origin: 'https://app.test',
         replace,
       },
@@ -56,7 +56,10 @@ describe('client build fetch guard', () => {
 
     await runtime.fetch('https://files.example.test/download');
 
-    const [, init] = fetch.mock.calls[0] as [RequestInfo | URL, RequestInit | undefined];
+    const [, init] = fetch.mock.calls[0] as [
+      RequestInfo | URL,
+      RequestInit | undefined,
+    ];
     expect(new Headers(init?.headers).has(CLIENT_BUILD_HEADER)).toBe(false);
   });
 
@@ -91,7 +94,7 @@ describe('client build fetch guard', () => {
 
     expect(replace).toHaveBeenCalledTimes(1);
     expect(replace).toHaveBeenCalledWith(
-      'https://app.test/w/hq/pms?__reload=3000',
+      'https://app.test/apps/pms/workspaces/hq?__reload=3000',
     );
   });
 
@@ -135,7 +138,7 @@ describe('client build fetch guard', () => {
     request.responseHeaders.set('X-Open-Work-Hub-Reload-Required', '1');
     request.dispatchEvent(new Event('load'));
     expect(replace).toHaveBeenCalledWith(
-      'https://app.test/w/hq/pms?__reload=4000',
+      'https://app.test/apps/pms/workspaces/hq?__reload=4000',
     );
   });
 
@@ -211,7 +214,7 @@ describe('client build fetch guard', () => {
     });
     socket.dispatchEvent(closeEvent);
     expect(replace).toHaveBeenCalledWith(
-      'https://app.test/w/hq/pms?__reload=5000',
+      'https://app.test/apps/pms/workspaces/hq?__reload=5000',
     );
   });
 });

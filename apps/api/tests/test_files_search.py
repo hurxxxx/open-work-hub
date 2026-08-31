@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 import pytest
 from sqlalchemy import event, select
 
-from dev_accounts import auth_headers, dev_login
+from dev_accounts import auth_headers, content_headers, dev_login
 
 from open_work_hub_api.core.db import get_engine, get_session_factory
 from open_work_hub_api.domains.auth.models import User, Workspace
@@ -1543,7 +1543,11 @@ def test_workspace_transfer_reuses_projections_and_switches_search_and_download_
         headers=target_headers,
     )
     assert target_download.status_code == 200, target_download.text
-    content_response = client.get(target_download.json()["url"])
+    content_url = target_download.json()["url"]
+    content_response = client.get(
+        content_url,
+        headers=content_headers(target_session["token"], content_url),
+    )
     assert content_response.status_code == 200
     assert content_response.content == content.encode()
 

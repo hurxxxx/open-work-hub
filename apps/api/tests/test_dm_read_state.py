@@ -18,42 +18,34 @@ class _FakeDb:
         self,
         *,
         scalar_result=None,
-        scalars_result: list[SimpleNamespace] | None = None,
         get_result=None,
     ) -> None:
         self.scalar_result = scalar_result
-        self.scalars_result = scalars_result or []
         self.get_result = get_result
         self.get_calls: list[tuple[object, str]] = []
 
     def scalar(self, query):  # noqa: ANN001
         return self.scalar_result
 
-    def scalars(self, query):  # noqa: ANN001
-        return self.scalars_result
-
     def get(self, model, key: str):  # noqa: ANN001
         self.get_calls.append((model, key))
         return self.get_result
 
 
-def test_mark_conversation_read_updates_participant_and_notifications() -> None:
+def test_mark_conversation_read_updates_participant_marker() -> None:
     participant = _participant("user-1")
     conversation = _conversation(participants=[participant])
     latest_message = SimpleNamespace(id="message-1")
-    notifications = [_notification("notification-1"), _notification("notification-2")]
 
     receipt = read_state.mark_conversation_read(
-        _FakeDb(scalar_result=latest_message, scalars_result=notifications),
+        _FakeDb(scalar_result=latest_message),
         conversation=conversation,
         user_id="user-1",
     )
 
     assert receipt.participant is participant
     assert receipt.latest_message is latest_message
-    assert receipt.notifications == notifications
     assert participant.last_read_message_id == "message-1"
-    assert [notification.is_read for notification in notifications] == [True, True]
 
 
 def test_mark_conversation_read_clears_marker_when_no_visible_message() -> None:
@@ -122,7 +114,3 @@ def _participant(
         joined_at=NOW,
         last_read_message_id=last_read_message_id,
     )
-
-
-def _notification(notification_id: str) -> SimpleNamespace:
-    return SimpleNamespace(id=notification_id, is_read=False)

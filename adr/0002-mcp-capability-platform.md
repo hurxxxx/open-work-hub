@@ -13,8 +13,10 @@
 - Tool handler calls application/domain service, not router code.
 - Every capability has a `discoverability_predicate_id`.
 - Duplicate tool/predicate/preview/handler registration fails fast.
-- Discovery filters by platform/workspace entitlement and discoverability.
-- Execution repeats discoverability and then domain ACL/service authorization.
+- Discovery filters by the owning app's current runtime availability, required role/feature gates,
+  workspace context when required, and descriptor discoverability.
+- Execution repeats app availability and discoverability, then applies domain source ACL/service
+  authorization.
 - Hidden in discovery means blocked in execution.
 - Write capability requires `approval_required=True`, `preview_builder_id`, and `OPEN_WORK_HUB_AI_WRITE_TOOLS_ENABLED=true` for discovery exposure.
 

@@ -41,7 +41,6 @@ vi.mock('react-router-dom', async () => {
 });
 
 const user = {
-  default_workspace_id: 'default-workspace',
   workspaces: [{ id: 'default-workspace', slug: 'default' }],
 };
 
@@ -76,7 +75,7 @@ describe('PMS space scoped redirects', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Gantt|간트/ }));
     expect(mocks.navigate).toHaveBeenCalledWith(
-      '/w/delivery-hub/pms/spaces/space-1?tab=gantt',
+      '/apps/pms/workspaces/delivery-hub/spaces/space-1?tab=gantt',
     );
   });
 
@@ -88,6 +87,8 @@ describe('PMS space scoped redirects', () => {
         whiteboardId: 'board-1',
         workspaceSlug: 'delivery-hub',
       }),
-    ).toBe('/w/delivery-hub/whiteboard/board-1?space_id=space-1');
+    ).toBe(
+      '/apps/whiteboard/workspaces/delivery-hub/boards/board-1?space_id=space-1',
+    );
   });
 });

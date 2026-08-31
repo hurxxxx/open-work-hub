@@ -1,12 +1,8 @@
 from __future__ import annotations
 
-import base64
 from collections.abc import Iterable
-from dataclasses import dataclass
-import hashlib
-import hmac
+from dataclasses import asdict, dataclass
 from io import BytesIO
-import time
 from datetime import datetime
 from typing import Literal, Protocol
 from urllib.parse import quote
@@ -20,19 +16,29 @@ from open_work_hub_api.core.settings import get_settings
 from open_work_hub_api.core.storage import get_minio_client
 from open_work_hub_api.domains.auth.models import User, Workspace
 from open_work_hub_api.domains.auth.security import new_id
+from open_work_hub_api.domains.auth.workspace_app_gate import is_app_enabled_for_user_context
+from open_work_hub_api.domains.content_access.grants import (
+    ContentGrantClaims,
+    ContentGrantIssuer,
+    InvalidContentGrant,
+    build_content_grant_url,
+    object_identity,
+)
+from open_work_hub_api.domains.content_access.contracts import ContentStream
 from open_work_hub_api.domains.pms.access import (
     _ensure_list_editor,
-    _ensure_task_readable,
     _ensure_task_writable,
 )
 from open_work_hub_api.domains.pms.models import Attachment, Task, TaskActivityLog
 from open_work_hub_api.domains.pms.projections import task_reference
+from open_work_hub_api.domains.pms.source_access import resolve_pms_task_workspace_id
+from open_work_hub_api.domains.source_access import can_read_pms_task
 
 
 MAX_TASK_ATTACHMENT_UPLOAD_SIZE = 50 * 1024 * 1024
 DEFAULT_TASK_ATTACHMENT_FILENAME = "unnamed"
 DEFAULT_TASK_ATTACHMENT_CONTENT_TYPE = "application/octet-stream"
-TASK_ATTACHMENT_CONTENT_URL_EXPIRES_SECONDS = 60 * 60
+TASK_ATTACHMENT_CONTENT_URL_EXPIRES_SECONDS = 5 * 60
 TASK_ATTACHMENT_CONTENT_CHUNK_SIZE = 1024 * 1024
 TaskAttachmentDisposition = Literal["attachment", "inline"]
 
@@ -65,23 +71,20 @@ class TaskAttachmentUpload:
 
 
 @dataclass(frozen=True)
-class TaskAttachmentItem:
+class TaskAttachmentMetadata:
     id: str
     task_id: str
     filename: str
     content_type: str
     size_bytes: int
-    download_url: str
     uploaded_by_id: str
     uploaded_by_name: str
     created_at: datetime
 
 
 @dataclass(frozen=True)
-class TaskAttachmentContent:
-    body: Iterable[bytes]
-    media_type: str
-    headers: dict[str, str]
+class TaskAttachmentItem(TaskAttachmentMetadata):
+    download_url: str
 
 
 class MinioTaskAttachmentObjectStore:
@@ -123,6 +126,7 @@ def upload_task_attachment(
     user: User,
     task_id: str,
     upload: TaskAttachmentUpload,
+    content_grant_issuer: ContentGrantIssuer,
     store: TaskAttachmentObjectStore | None = None,
 ) -> TaskAttachmentItem:
     task = _ensure_task_writable(db, user, task_id)
@@ -165,20 +169,12 @@ def upload_task_attachment(
     )
     db.commit()
     db.refresh(attachment)
-    return serialize_task_attachment(attachment)
-
-
-def get_task_attachment_download_url(
-    db: Session,
-    *,
-    user: User,
-    attachment_id: str,
-) -> str:
-    attachment = db.scalar(select(Attachment).where(Attachment.id == attachment_id))
-    if attachment is None:
-        raise localized_http_exception(status_code=404, code="pms.attachment_not_found")
-    _ensure_task_readable(db, user, attachment.task_id)
-    return build_task_attachment_download_url(attachment)
+    return serialize_task_attachment(
+        db,
+        user=user,
+        attachment=attachment,
+        content_grant_issuer=content_grant_issuer,
+    )
 
 
 def delete_task_attachment(
@@ -214,15 +210,33 @@ def delete_task_attachment(
 
 
 def serialize_task_attachment(
+    db: Session,
+    *,
+    user: User,
     attachment: Attachment,
+    content_grant_issuer: ContentGrantIssuer,
 ) -> TaskAttachmentItem:
+    metadata = serialize_task_attachment_metadata(attachment)
     return TaskAttachmentItem(
+        **asdict(metadata),
+        download_url=build_task_attachment_download_url(
+            db,
+            user=user,
+            attachment=attachment,
+            content_grant_issuer=content_grant_issuer,
+        ),
+    )
+
+
+def serialize_task_attachment_metadata(
+    attachment: Attachment,
+) -> TaskAttachmentMetadata:
+    return TaskAttachmentMetadata(
         id=attachment.id,
         task_id=attachment.task_id,
         filename=attachment.filename,
         content_type=attachment.content_type,
         size_bytes=attachment.size_bytes,
-        download_url=build_task_attachment_download_url(attachment),
         uploaded_by_id=attachment.uploaded_by_id,
         uploaded_by_name=attachment.uploaded_by.full_name,
         created_at=attachment.created_at,
@@ -230,78 +244,80 @@ def serialize_task_attachment(
 
 
 def build_task_attachment_download_url(
-    attachment: Attachment,
+    db: Session,
     *,
+    user: User,
+    attachment: Attachment,
+    content_grant_issuer: ContentGrantIssuer,
     disposition: TaskAttachmentDisposition = "attachment",
     now: float | None = None,
     expires_seconds: int = TASK_ATTACHMENT_CONTENT_URL_EXPIRES_SECONDS,
 ) -> str:
-    expires = int(time.time() if now is None else now) + expires_seconds
-    signature = sign_task_attachment_content_url(
-        attachment,
-        expires=expires,
+    workspace_id = resolve_pms_task_workspace_id(db, task_id=attachment.task_id)
+    if workspace_id is None or content_grant_issuer.user_id != user.id:
+        raise ValueError("PMS attachment grants require matching workspace/user context")
+    return build_content_grant_url(
+        resource_kind="pms.attachment",
+        resource_id=attachment.id,
+        owner_app_id="pms",
+        issuer=content_grant_issuer,
+        execution_context_kind="workspace",
+        execution_workspace_id=workspace_id,
+        route_id=None,
+        source_type="pms_task",
+        source_id=attachment.task_id,
+        object_identity=object_identity(
+            attachment.id,
+            attachment.task_id,
+            attachment.storage_key,
+            attachment.size_bytes,
+        ),
+        resource_version=attachment.created_at.isoformat(timespec="microseconds"),
         disposition=disposition,
-    )
-    return (
-        f"{get_settings().api_prefix}/pms/attachments/{attachment.id}/content"
-        f"?expires={expires}&signature={signature}&disposition={disposition}"
+        expires_seconds=expires_seconds,
+        now=now,
     )
 
 
-def sign_task_attachment_content_url(
-    attachment: Attachment,
-    *,
-    expires: int,
-    disposition: TaskAttachmentDisposition,
-) -> str:
-    secret = get_settings().minio_secret_key.encode("utf-8")
-    message = (
-        f"v1:{attachment.id}:{attachment.task_id}:{attachment.storage_key}:{expires}:{disposition}"
-    ).encode("utf-8")
-    digest = hmac.new(secret, message, hashlib.sha256).digest()
-    return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
-
-
-def validate_task_attachment_content_signature(
-    attachment: Attachment,
-    *,
-    expires: int,
-    disposition: TaskAttachmentDisposition,
-    signature: str,
-    now: float | None = None,
-) -> bool:
-    if expires < int(time.time() if now is None else now):
-        return False
-    expected = sign_task_attachment_content_url(
-        attachment,
-        expires=expires,
-        disposition=disposition,
-    )
-    return hmac.compare_digest(signature, expected)
-
-
-def open_task_attachment_content(
+def open_task_attachment_content_grant(
     db: Session,
     *,
-    attachment_id: str,
-    expires: int,
-    signature: str,
-    disposition: TaskAttachmentDisposition,
+    claims: ContentGrantClaims,
     store: TaskAttachmentObjectStore | None = None,
-) -> TaskAttachmentContent:
-    attachment = db.scalar(select(Attachment).where(Attachment.id == attachment_id))
+) -> ContentStream:
+    attachment = db.scalar(select(Attachment).where(Attachment.id == claims.resource_id))
     if attachment is None:
-        raise localized_http_exception(status_code=404, code="pms.attachment_not_found")
-    if not validate_task_attachment_content_signature(
-        attachment,
-        expires=expires,
-        disposition=disposition,
-        signature=signature,
-    ):
-        raise localized_http_exception(
-            status_code=403,
-            code="pms.attachment_proxy_url_invalid",
+        raise InvalidContentGrant("resource")
+    workspace_id = resolve_pms_task_workspace_id(db, task_id=attachment.task_id)
+    if (
+        claims.owner_app_id != "pms"
+        or claims.execution_context_kind != "workspace"
+        or claims.execution_workspace_id != workspace_id
+        or claims.source_type != "pms_task"
+        or claims.source_id != attachment.task_id
+        or claims.object_identity
+        != object_identity(
+            attachment.id,
+            attachment.task_id,
+            attachment.storage_key,
+            attachment.size_bytes,
         )
+        or claims.resource_version
+        != attachment.created_at.isoformat(timespec="microseconds")
+    ):
+        raise InvalidContentGrant("binding")
+    if not is_app_enabled_for_user_context(
+        db,
+        app_id="pms",
+        user_id=claims.issuer_user_id,
+        workspace_id=workspace_id,
+    ):
+        raise InvalidContentGrant("app")
+    user = db.get(User, claims.issuer_user_id)
+    if user is None:
+        raise InvalidContentGrant("principal")
+    if not can_read_pms_task(db, user=user, task_id=attachment.task_id):
+        raise InvalidContentGrant("source_acl")
 
     try:
         body = (store or task_attachment_object_store()).open_stream(
@@ -313,14 +329,15 @@ def open_task_attachment_content(
             status_code=502,
             code="pms.attachment_download_failed",
         ) from exc
-
     encoded_filename = quote(attachment.filename or DEFAULT_TASK_ATTACHMENT_FILENAME, safe="")
-    return TaskAttachmentContent(
+    return ContentStream(
         body=body,
         media_type=attachment.content_type or DEFAULT_TASK_ATTACHMENT_CONTENT_TYPE,
         headers={
-            "Cache-Control": "private, max-age=300",
-            "Content-Disposition": (f"{disposition}; filename*=UTF-8''{encoded_filename}"),
+            "Cache-Control": "private, no-store",
+            "Content-Disposition": (
+                f"{claims.disposition}; filename*=UTF-8''{encoded_filename}"
+            ),
             "X-Content-Type-Options": "nosniff",
         },
     )

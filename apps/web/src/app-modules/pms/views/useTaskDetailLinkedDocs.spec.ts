@@ -36,6 +36,6 @@ describe('task detail linked docs helpers', () => {
         user: null,
         workspaceSlug: 'team space',
       }),
-    ).toBe('/w/team%20space/docs/doc-1');
+    ).toBe('/apps/docs/workspaces/team%20space/documents/doc-1');
   });
 });

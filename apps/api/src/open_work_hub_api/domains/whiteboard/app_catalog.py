@@ -1,18 +1,11 @@
 from open_work_hub_api.core.workspace_app_registry import (
-    WorkspaceAppRegistration,
     WorkspaceNavRegistration,
+    workspace_app_registration,
 )
 
 
-WHITEBOARD_WORKSPACE_APP = WorkspaceAppRegistration(
-    app_id="whiteboard",
-    title="WHITEBOARD",
-    route_base="/whiteboard",
-    icon_key="pencil-ruler",
-    enabled_by_default=True,
-    visible_by_default=True,
-    launcher_category=True,
-    launcher_pinned_by_default=True,
+WHITEBOARD_WORKSPACE_APP = workspace_app_registration(
+    "whiteboard",
     nav_items=(
         WorkspaceNavRegistration(
             id="whiteboard-all",

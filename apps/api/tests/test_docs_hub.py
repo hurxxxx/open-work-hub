@@ -1,6 +1,8 @@
 from fastapi.testclient import TestClient
 
 from dev_accounts import dev_login
+from open_work_hub_api.core.db import get_session_factory
+from open_work_hub_api.domains.auth.models import CompanyAppControl
 
 
 def _dev_login(client: TestClient, account_key: str) -> dict:
@@ -284,7 +286,10 @@ def test_internal_shared_links_require_auth_and_honor_read_vs_edit(client: TestC
     owner_token = _login(client, owner["user"]["email"], owner["temporary_password"])
 
     recipient = _create_user(
-        client, admin["token"], email="share-recipient@open-work-hub.local", full_name="Share Recipient"
+        client,
+        admin["token"],
+        email="share-recipient@open-work-hub.local",
+        full_name="Share Recipient",
     )
     recipient_token = _login(client, recipient["user"]["email"], recipient["temporary_password"])
 
@@ -310,6 +315,9 @@ def test_internal_shared_links_require_auth_and_honor_read_vs_edit(client: TestC
     )
     assert enable_read_link_response.status_code == 200
     share_token = enable_read_link_response.json()["link_share"]["token"]
+    assert enable_read_link_response.json()["link_share"]["share_path"] == (
+        f"/apps/docs/shared/{share_token}"
+    )
 
     unauthenticated_response = client.get(f"/api/v1/docs/shared-links/{share_token}")
     assert unauthenticated_response.status_code == 401
@@ -349,6 +357,20 @@ def test_internal_shared_links_require_auth_and_honor_read_vs_edit(client: TestC
         json={"content_blocks": [{"type": "paragraph", "content": "allowed"}]},
     )
     assert edit_via_link_response.status_code == 200
+
+    with get_session_factory()() as db:
+        control = db.get(CompanyAppControl, "docs")
+        assert control is not None
+        control.enabled = False
+        db.add(control)
+        db.commit()
+
+    disabled_response = client.get(
+        f"/api/v1/docs/shared-links/{updated_share_token}",
+        headers=_auth_headers(recipient_token),
+    )
+    assert disabled_response.status_code == 403
+    assert disabled_response.json()["code"] == "workspace.app_disabled"
 
 
 def test_workspace_scoped_shareable_users_stay_in_requested_docs_workspace(
@@ -433,7 +455,10 @@ def test_duplicate_doc_via_read_share_creates_private_copy_for_recipient(
     owner_token = _login(client, owner["user"]["email"], owner["temporary_password"])
 
     recipient = _create_user(
-        client, admin["token"], email="dup-share-recipient@open-work-hub.local", full_name="Recipient"
+        client,
+        admin["token"],
+        email="dup-share-recipient@open-work-hub.local",
+        full_name="Recipient",
     )
     _grant_workspace_access(client, admin["token"], recipient["user"]["id"], "administrator")
     recipient_token = _login(client, recipient["user"]["email"], recipient["temporary_password"])
@@ -474,7 +499,21 @@ def _bootstrap_admin_session(client: TestClient) -> dict:
         },
     )
     assert response.status_code == 201
-    return response.json()
+    session = response.json()
+    _grant_workspace_access(
+        client,
+        session["token"],
+        session["user"]["id"],
+        "administrator",
+        role="admin",
+    )
+    me_response = client.get(
+        "/api/v1/auth/me",
+        headers=_auth_headers(session["token"]),
+    )
+    assert me_response.status_code == 200, me_response.text
+    session["user"] = me_response.json()
+    return session
 
 
 def _create_user(client: TestClient, token: str, *, email: str, full_name: str) -> dict:

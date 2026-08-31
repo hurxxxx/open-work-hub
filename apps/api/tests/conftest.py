@@ -631,12 +631,15 @@ def _configure_test_application_environment(
     monkeypatch.setenv("OPEN_WORK_HUB_API_SESSION_TTL_HOURS", "1")
     monkeypatch.setenv("OPEN_WORK_HUB_API_ALLOW_DEV_ADMIN_LOGIN", "1")
     monkeypatch.setenv("OPEN_WORK_HUB_API_SEED_DEV_LOGIN_ACCOUNT", "0")
+    monkeypatch.setenv("OPEN_WORK_HUB_API_SERVE_FRONTEND", "0")
     monkeypatch.setenv("OPEN_WORK_HUB_LLM_HEALTHCHECK_ON_STARTUP", "0")
+    monkeypatch.setenv("OPEN_WORK_HUB_LLM_REQUIRED", "1")
     monkeypatch.setenv("OPEN_WORK_HUB_OPF_HEALTHCHECK_ON_STARTUP", "0")
     monkeypatch.setenv("OPEN_WORK_HUB_OPF_REQUIRED", "0")
     monkeypatch.setenv("OPEN_WORK_HUB_OPF_SERVICE_BASE_URL", "")
     monkeypatch.setenv("OPEN_WORK_HUB_API_AUTO_MIGRATE", "0")
     monkeypatch.setenv("OPEN_WORK_HUB_API_VIDEO_CHAT_ENABLED", "1")
+    monkeypatch.setenv("OPEN_WORK_HUB_API_AGENT_TERMINAL_ENABLED", "1")
     monkeypatch.setenv("OPEN_WORK_HUB_API_COLLAB_REDIS_URL", "redis://127.0.0.1:1/0")
     monkeypatch.setenv("OPEN_WORK_HUB_API_REALTIME_REDIS_URL", "redis://127.0.0.1:1/0")
     monkeypatch.setenv("OPEN_WORK_HUB_MINIO_ENDPOINT", minio_endpoint)
@@ -770,6 +773,7 @@ def _assert_reused_application_idle(app: FastAPI) -> None:
     active_state_names = [
         state_name
         for state_name in (
+            "agent_terminal_runtime",
             "app_realtime",
             "docs_collab",
             "whiteboard_collab",

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import type { ApiSchema } from '@open-work-hub/contracts/api';
 
 import { FAKE_PLATFORM_ADMIN_USER, stubShellBackend } from './helpers';
 
@@ -8,8 +9,11 @@ const MODEL_SETTINGS_FIXTURE = {
     {
       provider_id: 'anthropic',
       display_name: 'Anthropic',
+      route_mode: 'external',
+      credential_kind: 'api_key',
       enabled: true,
       endpoint_url: null,
+      endpoint_source: 'default',
       has_api_key: true,
       default_model_id: 'model-anthropic',
       version: 1,
@@ -22,8 +26,11 @@ const MODEL_SETTINGS_FIXTURE = {
       provider_id: 'anthropic',
       model_key: 'claude-sonnet-4-6',
       display_name: 'Claude Sonnet 4.6',
-      capabilities: ['text'],
+      capabilities: ['chat'],
       enabled: true,
+      source: 'manual',
+      discovery_status: 'active',
+      last_seen_at: null,
       version: 1,
       updated_at: null,
     },
@@ -38,11 +45,22 @@ const MODEL_SETTINGS_FIXTURE = {
       label_key: '',
       description_key: '',
       execution_kind: 'chat',
+      default_runtime_adapter: 'chat_completion',
+      effective_runtime_adapter: 'chat_completion',
+      allowed_runtime_adapters: ['chat_completion'],
+      runtime_adapters: [
+        {
+          adapter_id: 'chat_completion',
+          display_name: 'Chat completion',
+          allowed_routes: ['external'],
+          allowed_providers: ['anthropic'],
+        },
+      ],
       default_route: 'external',
       effective_route: 'external',
       allowed_routes: ['external'],
       allowed_providers: ['anthropic'],
-      required_capabilities: ['text'],
+      required_capabilities: ['chat'],
       model_roles: ['default'],
       external_data: true,
       local_max_output_tokens: 32 * 1024,
@@ -60,10 +78,11 @@ const MODEL_SETTINGS_FIXTURE = {
         },
       ],
       override: null,
+      management_surface: 'llm_routing',
     },
   ],
   orphaned_overrides: [],
-};
+} satisfies ApiSchema<'AiModelSettingsResponse'>;
 
 test('keeps compact LLM routing dropdown labels inside their controls', async ({
   page,

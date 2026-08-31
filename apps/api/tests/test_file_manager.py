@@ -9,7 +9,12 @@ from fastapi.testclient import TestClient
 import pytest
 from sqlalchemy import delete, select
 
-from dev_accounts import create_workspace_user_session, dev_login
+from dev_accounts import (
+    content_grant_headers,
+    content_headers,
+    create_workspace_user_session,
+    dev_login,
+)
 
 from open_work_hub_api.core.db import get_session_factory
 from open_work_hub_api.core.settings import get_settings
@@ -109,10 +114,32 @@ def test_file_manager_upload_download_and_delete_with_rag_job(
     )
     assert download_response.status_code == 200, download_response.text
     download_url = download_response.json()["url"]
-    assert download_url.startswith(f"/api/v1/files/content/{file['id']}?")
+    assert download_url.startswith("/api/v1/content#grant=")
     assert "127.0.0.1" not in download_url
 
-    content_response = client.get(download_url)
+    anonymous_response = client.get(
+        download_url,
+        headers=content_grant_headers(download_url),
+    )
+    assert anonymous_response.status_code == 403, anonymous_response.text
+
+    query_grant_response = client.get(
+        download_url.replace("#grant=", "?grant=", 1),
+        headers=headers,
+    )
+    assert query_grant_response.status_code == 403, query_grant_response.text
+
+    other_session = dev_login(client, "administrator")
+    other_session_response = client.get(
+        download_url,
+        headers=content_headers(other_session["token"], download_url),
+    )
+    assert other_session_response.status_code == 403, other_session_response.text
+
+    content_response = client.get(
+        download_url,
+        headers=content_headers(session["token"], download_url),
+    )
     assert content_response.status_code == 200, content_response.text
     assert content_response.content == b"plain file storage"
     assert content_response.headers["content-type"].startswith("text/plain")
@@ -628,10 +655,13 @@ def test_file_manager_image_preview_uses_inline_same_origin_content_url(
     )
     assert preview_response.status_code == 200, preview_response.text
     preview_url = preview_response.json()["url"]
-    assert preview_url.startswith(f"/api/v1/files/content/{file['id']}?")
+    assert preview_url.startswith("/api/v1/content#grant=")
     assert "127.0.0.1" not in preview_url
 
-    content_response = client.get(preview_url)
+    content_response = client.get(
+        preview_url,
+        headers=content_headers(session["token"], preview_url),
+    )
     assert content_response.status_code == 200, content_response.text
     assert content_response.content == b"\x89PNG\r\n\x1a\npng-bytes"
     assert content_response.headers["content-type"].startswith("image/png")
@@ -791,10 +821,13 @@ def test_signed_file_content_rechecks_workspace_membership(
         db.delete(binding)
         db.commit()
 
-    content_response = client.get(content_url)
+    content_response = client.get(
+        content_url,
+        headers=content_headers(member_session["token"], content_url),
+    )
 
     assert content_response.status_code == 403, content_response.text
-    assert content_response.json()["code"] == "files.file_access_required"
+    assert content_response.json()["code"] == "content.grant_invalid"
 
 
 def test_file_manager_archive_and_bulk_delete_selected_items(

@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next';
 import {
   AlertTriangle,
   BarChart3,
-  Bell,
   Calendar,
   CalendarDays,
   ChevronDown,
@@ -37,8 +36,16 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '@/src/platform/auth/auth-provider';
-import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
-import { useWorkspaceBootstrapProjection } from '@/src/platform/workspaces/workspace-bootstrap-context';
+import {
+  APP_CONTRACT_BY_ID,
+  type AppId,
+} from '@open-work-hub/contracts/app-contracts';
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
+import {
+  useWorkspaceBootstrapContext,
+  useWorkspaceBootstrapProjection,
+} from '@/src/platform/workspaces/workspace-bootstrap-context';
+import { WorkspaceContextSelector } from '@/src/platform/workspaces/WorkspaceContextSelector';
 import type { WorkspaceBootstrapNavItem } from '@/src/platform/workspaces/workspaces-api';
 import { getKoreanHolidayNames } from '@/src/lib/korean-holidays';
 import {
@@ -93,19 +100,6 @@ const AI_TOOL_ICON_BY_KEY: Record<string, LucideIcon> = {
   sparkles: Sparkles,
 };
 
-function buildBootstrapWorkspaceHref(
-  workspaceSlug: string,
-  appId: string,
-  suffix = '',
-): string {
-  const normalizedSuffix = suffix
-    ? suffix.startsWith('/') || suffix.startsWith('?') || suffix.startsWith('#')
-      ? suffix
-      : `/${suffix}`
-    : '';
-  return `/w/${encodeURIComponent(workspaceSlug)}/${appId}${normalizedSuffix}`;
-}
-
 function resolveAiToolHref(
   item: WorkspaceBootstrapNavItem,
   workspaceSlug: string,
@@ -113,30 +107,14 @@ function resolveAiToolHref(
   if (item.absolute_path) {
     return item.absolute_path;
   }
-  if (item.coming_soon) {
-    return `/tool/${item.id}`;
-  }
-  if (item.link_app_id) {
-    return buildBootstrapWorkspaceHref(
-      workspaceSlug,
-      item.link_app_id,
-      item.path_suffix ?? '',
-    );
-  }
-  if (item.path_suffix) {
-    return buildBootstrapWorkspaceHref(
-      workspaceSlug,
-      item.app_id,
-      item.path_suffix,
-    );
-  }
-  if (item.id === 'chatbot') {
-    return buildBootstrapWorkspaceHref(workspaceSlug, item.app_id);
-  }
-  const toolPath = `/tool/${item.id}`;
-  return workspaceSlug
-    ? `${toolPath}?workspace=${encodeURIComponent(workspaceSlug)}`
-    : toolPath;
+  const contract = APP_CONTRACT_BY_ID.get(
+    (item.link_app_id ?? item.app_id) as AppId,
+  );
+  if (!contract) return '/';
+  return buildAppHref({
+    routeId: contract.entry_route_id,
+    ...(contract.availability_scope === 'workspace' ? { workspaceSlug } : {}),
+  });
 }
 
 function SectionHeader({
@@ -164,15 +142,17 @@ function SectionHeader({
 }
 
 function WorkspaceHomeHeader({
-  isStartWorkspace,
+  onPreferenceChanged,
   timeZone,
   userName,
   workspaceName,
+  workspaceSlug,
 }: {
-  isStartWorkspace: boolean;
+  onPreferenceChanged?: () => void;
   timeZone: string;
   userName: string;
   workspaceName: string;
+  workspaceSlug: string;
 }) {
   const { t, i18n } = useTranslation('apps');
   const now = new Date();
@@ -189,13 +169,16 @@ function WorkspaceHomeHeader({
         <span className="app-text-overline text-app-ink/55">
           {t('home.workspaceLabel')}
         </span>
-        {isStartWorkspace ? (
-          <span className="app-text-micro rounded-full border border-app-border px-1.5 py-0.5 text-app-ink/55">
-            {t('home.startWorkspaceBadge')}
-          </span>
-        ) : null}
       </div>
-      <h1 className="app-text-title-lg text-app-ink">{workspaceName}</h1>
+      <div className="flex flex-wrap items-center gap-2">
+        <h1 className="app-text-title-lg text-app-ink">{workspaceName}</h1>
+        <WorkspaceContextSelector
+          appId="home"
+          onPreferenceChanged={onPreferenceChanged}
+          variant="compact"
+          workspaceSlug={workspaceSlug}
+        />
+      </div>
       <p className="app-text-body mt-1 text-app-ink/55">
         {getHomeGreeting(timeZone, t)}, {userName}
         <span className="mx-2 text-gray-300 dark:text-app-ink/40">/</span>
@@ -324,19 +307,31 @@ function QuickActionsRow({
     {
       appId: 'meeting',
       label: t('home.actionNewMeeting'),
-      to: buildWorkspaceAppPath(workspaceSlug, 'meeting', '?create=1'),
+      to: buildAppHref({
+        routeId: 'meeting.root',
+        workspaceSlug,
+        queryParams: { create: '1' },
+      }),
       icon: Video,
     },
     {
       appId: 'pms',
       label: t('home.actionNewTask'),
-      to: buildWorkspaceAppPath(workspaceSlug, 'pms', '?create=1'),
+      to: buildAppHref({
+        routeId: 'pms.root',
+        workspaceSlug,
+        queryParams: { create: '1' },
+      }),
       icon: ListTodo,
     },
     {
       appId: 'docs',
       label: t('home.actionNewDoc'),
-      to: buildWorkspaceAppPath(workspaceSlug, 'docs', '?create=1'),
+      to: buildAppHref({
+        routeId: 'docs.root',
+        workspaceSlug,
+        queryParams: { create: '1' },
+      }),
       icon: FileText,
     },
   ];
@@ -425,41 +420,6 @@ function WorkspaceSummaryRow({ row }: { row: WorkspaceHomeRow }) {
           className={`shrink-0 ${PRIORITY_TONE_COLOR[row.priorityTone]}`}
         />
       </Link>
-    );
-  }
-
-  if (row.kind === 'notification') {
-    const rowClass =
-      'group -mx-2 flex items-center gap-3 border-b border-app-border px-2 py-3 transition-colors last:border-b-0';
-    const content = (
-      <>
-        <Bell
-          size={16}
-          className={`shrink-0 ${row.isRead ? 'text-app-ink/45' : 'text-app-accent'}`}
-        />
-        <div className="min-w-0 flex-1">
-          <span className="app-text-body block truncate text-app-ink">
-            {row.title}
-          </span>
-          {row.subtitle ? (
-            <span className="app-text-caption block truncate text-app-ink/55">
-              {row.subtitle}
-            </span>
-          ) : null}
-        </div>
-        {row.trailing ? (
-          <span className="app-text-micro shrink-0 text-app-ink/45">
-            {row.trailing}
-          </span>
-        ) : null}
-      </>
-    );
-    return row.to ? (
-      <Link to={row.to} className={`${rowClass} hover:bg-app-surface-hover/50`}>
-        {content}
-      </Link>
-    ) : (
-      <div className={rowClass}>{content}</div>
     );
   }
 
@@ -556,6 +516,7 @@ export const WorkspaceHomeView = () => {
   const { workspaceSlug = '' } = useParams();
   const { apps: workspaceApps, loading: workspaceAppsLoading } =
     useWorkspaceBootstrapProjection();
+  const { reloadGlobalApps } = useWorkspaceBootstrapContext();
   const currentWorkspace =
     user?.workspaces.find((workspace) => workspace.slug === workspaceSlug) ??
     null;
@@ -563,9 +524,6 @@ export const WorkspaceHomeView = () => {
     user?.display_name || user?.full_name || t('home.userFallback');
   const workspaceName =
     currentWorkspace?.name || workspaceSlug || t('home.workspaceFallback');
-  const isStartWorkspace = Boolean(
-    currentWorkspace?.id && currentWorkspace.id === user?.default_workspace_id,
-  );
   const timeZone = normalizeTimeZone(user?.time_zone);
   const enabledAppIds = useMemo(
     () =>
@@ -613,17 +571,15 @@ export const WorkspaceHomeView = () => {
   const docsSection = enabledAppIdSet.has('docs')
     ? sections.find((section) => section.id === 'docs')
     : undefined;
-  const notificationsSection = sections.find(
-    (section) => section.id === 'notifications',
-  );
 
   return (
     <div className="custom-scrollbar h-full overflow-y-auto">
       <div className="w-full space-y-6 px-8 py-10">
         <WorkspaceHomeHeader
-          isStartWorkspace={isStartWorkspace}
+          onPreferenceChanged={reloadGlobalApps}
           userName={userName}
           workspaceName={workspaceName}
+          workspaceSlug={workspaceSlug}
           timeZone={timeZone}
         />
         <BriefingBanner briefing={briefing} />
@@ -654,9 +610,6 @@ export const WorkspaceHomeView = () => {
           />
           {docsSection ? (
             <WorkspaceSummarySection section={docsSection} />
-          ) : null}
-          {notificationsSection ? (
-            <WorkspaceSummarySection section={notificationsSection} />
           ) : null}
           <ComingSoonMailWidget />
         </div>

@@ -7,6 +7,7 @@ from typing import Protocol
 from fastapi import FastAPI
 
 from open_work_hub_api.core.realtime import AppRealtimeHub, InProcessAppRealtimeHub
+from open_work_hub_api.core.db import get_session_factory
 from open_work_hub_api.core.settings import Settings, get_settings
 from open_work_hub_api.core.storage import ensure_bucket
 from open_work_hub_api.domains.collaboration.yjs_runtime import (
@@ -15,6 +16,7 @@ from open_work_hub_api.domains.collaboration.yjs_runtime import (
 )
 from open_work_hub_api.domains.docs.collab import DocsCollabHub
 from open_work_hub_api.domains.whiteboard.collab import WhiteboardCollabHub
+from open_work_hub_api.domains.agent_terminal.runtime import AgentTerminalRuntime
 
 
 class ApiExternalRuntime(Protocol):
@@ -42,11 +44,13 @@ class _ComposedApiExternalRuntime:
     def __init__(
         self,
         *,
+        agent_terminal_factory: ServiceFactory,
         app_realtime_factory: ServiceFactory,
         docs_collab_factory: ServiceFactory,
         whiteboard_collab_factory: ServiceFactory,
     ) -> None:
         self._service_factories = (
+            ("agent_terminal_runtime", agent_terminal_factory),
             ("app_realtime", app_realtime_factory),
             ("docs_collab", docs_collab_factory),
             ("whiteboard_collab", whiteboard_collab_factory),
@@ -91,6 +95,10 @@ class ProductionApiExternalRuntime(_ComposedApiExternalRuntime):
         settings = settings or get_settings()
         self._storage_prepare = storage_prepare
         super().__init__(
+            agent_terminal_factory=lambda: AgentTerminalRuntime(
+                settings,
+                get_session_factory(),
+            ),
             app_realtime_factory=lambda: AppRealtimeHub(
                 settings.realtime_redis_url,
                 instance_id=settings.instance_id,
@@ -112,9 +120,14 @@ class InProcessApiExternalRuntime(_ComposedApiExternalRuntime):
         instance_id: str | None = None,
         storage_prepare: Callable[[], None] = _noop_prepare,
     ) -> None:
-        resolved_instance_id = instance_id or get_settings().instance_id
+        settings = get_settings()
+        resolved_instance_id = instance_id or settings.instance_id
         self._storage_prepare = storage_prepare
         super().__init__(
+            agent_terminal_factory=lambda: AgentTerminalRuntime(
+                settings,
+                get_session_factory(),
+            ),
             app_realtime_factory=lambda: InProcessAppRealtimeHub(
                 instance_id=resolved_instance_id
             ),
@@ -141,9 +154,14 @@ class UnavailableCollaborationApiExternalRuntime(_ComposedApiExternalRuntime):
         instance_id: str | None = None,
         storage_prepare: Callable[[], None] = _noop_prepare,
     ) -> None:
-        resolved_instance_id = instance_id or get_settings().instance_id
+        settings = get_settings()
+        resolved_instance_id = instance_id or settings.instance_id
         self._storage_prepare = storage_prepare
         super().__init__(
+            agent_terminal_factory=lambda: AgentTerminalRuntime(
+                settings,
+                get_session_factory(),
+            ),
             app_realtime_factory=lambda: InProcessAppRealtimeHub(
                 instance_id=resolved_instance_id
             ),

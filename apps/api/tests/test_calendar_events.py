@@ -31,7 +31,30 @@ def _bootstrap_admin_session(client: TestClient) -> dict:
         },
     )
     assert response.status_code == 201, response.text
-    return response.json()
+    session = response.json()
+    workspaces_response = client.get(
+        "/api/v1/admin/workspaces",
+        headers=_auth_headers(session["token"]),
+    )
+    assert workspaces_response.status_code == 200, workspaces_response.text
+    workspace = next(item for item in workspaces_response.json() if item["key"] == "administrator")
+    binding_response = client.put(
+        f"/api/v1/admin/workspaces/{workspace['id']}/bindings",
+        headers=_auth_headers(session["token"]),
+        json={
+            "users": [
+                {"subject_id": session["user"]["id"], "role": "admin"},
+            ]
+        },
+    )
+    assert binding_response.status_code == 200, binding_response.text
+    me_response = client.get(
+        "/api/v1/auth/me",
+        headers=_auth_headers(session["token"]),
+    )
+    assert me_response.status_code == 200, me_response.text
+    session["user"] = me_response.json()
+    return session
 
 
 def _create_meeting(

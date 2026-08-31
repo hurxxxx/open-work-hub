@@ -15,9 +15,7 @@ import {
   titleFor,
 } from './recording-view-model';
 
-function target(
-  overrides: Partial<RecordingTarget> = {},
-): RecordingTarget {
+function target(overrides: Partial<RecordingTarget> = {}): RecordingTarget {
   return {
     id: 'target-1',
     recording_id: 'recording-1',
@@ -46,15 +44,12 @@ function recording(overrides: Partial<Recording> = {}): Recording {
     storage_key: null,
     file_size: 1536,
     mime_type: 'audio/webm',
-    audio_status: 'ready',
-    transcript_status: 'ready',
-    raw_transcript_doc_status: 'ready',
-    minutes_doc_status: 'ready',
-    meeting_insight_status: 'ready',
+    audio_status: 'saved',
+    transcript_status: 'done',
+    summary_status: 'done',
+    meeting_insight_status: 'done',
     progress_pct: 100,
     failure_reason: null,
-    raw_transcript_doc_id: null,
-    minutes_doc_id: null,
     transcribe_started_at: null,
     transcribe_completed_at: null,
     created_at: '2026-05-30T09:00:00Z',
@@ -77,7 +72,9 @@ describe('recording view model', () => {
     expect(listTitleKey('processing', 'meeting')).toBe(
       'apps:recording.views.processing',
     );
-    expect(listTitleKey('mine', 'meeting')).toBe('apps:recording.views.meeting');
+    expect(listTitleKey('mine', 'meeting')).toBe(
+      'apps:recording.views.meeting',
+    );
     expect(listTitleKey('mine', 'unlinked')).toBe(
       'apps:recording.views.unlinked',
     );
@@ -118,7 +115,9 @@ describe('recording view model', () => {
 
     expect(compareRecordings(alpha, beta, 'title', 'en-US')).toBeLessThan(0);
     expect(compareRecordings(alpha, beta, 'latest', 'en-US')).toBeLessThan(0);
-    expect(compareRecordings(alpha, beta, 'oldest', 'en-US')).toBeGreaterThan(0);
+    expect(compareRecordings(alpha, beta, 'oldest', 'en-US')).toBeGreaterThan(
+      0,
+    );
   });
 
   it('builds searchable text and connection chips from targets', () => {
@@ -166,12 +165,10 @@ describe('recording view model', () => {
     expect(formatBytes(1536)).toBe('1.5 KB');
     expect(formatBytes(1024 * 1024)).toBe('1.0 MB');
     expect(titleFor(recording({ title: '  ' }), 'Untitled')).toBe('Untitled');
-    expect(
-      hasFailedStage(recording({ transcript_status: 'failed' })),
-    ).toBe(true);
-    expect(
-      hasFailedStage(recording({ audio_status: 'failed' })),
-    ).toBe(true);
+    expect(hasFailedStage(recording({ transcript_status: 'failed' }))).toBe(
+      true,
+    );
+    expect(hasFailedStage(recording({ audio_status: 'failed' }))).toBe(true);
     expect(
       hasFailedStage(recording({ meeting_insight_status: 'failed' })),
     ).toBe(true);

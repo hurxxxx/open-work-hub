@@ -8,7 +8,7 @@ description: Maintain Open Work Hub project skills, trigger metadata, supporting
 ## Rules
 
 - Project skills live only under `.agents/skills`.
-- `CLAUDE.md` uses symlink bridge; do not duplicate skills.
+- `.claude/skills` links to the canonical directory; run `pnpm setup:claude-skills` instead of copying skills.
 - Description must discriminate trigger, include `Use when`, and state boundary when adjacent skills overlap.
 - Skill reference is routing, not scope expansion.
 - `AGENTS.md` owns common rules; do not repeat them in every skill.
@@ -20,6 +20,7 @@ description: Maintain Open Work Hub project skills, trigger metadata, supporting
 ```bash
 python3 scripts/check-skill-harness.py
 python3 -m unittest scripts.tests.test_skill_harness
+pnpm test:claude-skills
 git diff --check
 ```
 

@@ -1,4 +1,5 @@
 import { Video } from 'lucide-react';
+import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
 
 import type { AppModuleManifest } from '@/src/app/shell/navigation-types';
 
@@ -27,8 +28,7 @@ export const videoChatManifest: AppModuleManifest = {
     },
   ],
   workspaceRoutePaths: [
-    '/w/:workspaceSlug/video-chat',
-    '/w/:workspaceSlug/video-chat/:sessionId',
+    getAppRoutePattern('video-chat.root'),
+    getAppRoutePattern('video-chat.session'),
   ],
 };
-

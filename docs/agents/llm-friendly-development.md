@@ -24,7 +24,8 @@
 - Register from `register_ai_capabilities(registry)`.
 - Workload unit = independently configurable function/stage.
 - Call only `execute_llm` or `stream_llm`.
-- Caller supplies constant `workload_id`, app/actor/workspace context, and input/messages.
+- Caller supplies constant `workload_id`, app/actor, declared execution context, and input/messages;
+  workspace is present only for workspace execution.
 - Caller never selects provider, model, pool, endpoint, credential, retry/fallback, or route by user input.
 - Providers and agent runtimes are approved adapters behind the common interface.
 - Output caps default to local 32K and external 64K unless descriptor/admin route is stricter.
@@ -32,7 +33,7 @@
 - Unknown workload, missing adapter, unsupported route, or security block fails closed.
 - Embedding/rerank/OCR/ASR use Inference Gateway, not LLM workload contracts.
 
-Owners: [AI Gateway](../domains/ai/gateway.md), [AI Write Policy](../domains/ai/write-policy.md), [ADR 0002](../../adr/0002-mcp-capability-platform.md), [ADR 0005](../../adr/0005-registered-llm-workload.md).
+Owners: [AI Domain](../domains/ai/README.md), [ADR 0002](../../adr/0002-mcp-capability-platform.md), [ADR 0005](../../adr/0005-registered-llm-workload.md).
 
 ## MCP/AI Tools
 
@@ -45,14 +46,17 @@ Owners: [AI Gateway](../domains/ai/gateway.md), [AI Write Policy](../domains/ai/
 ## Retrieval/RAG
 
 - New callers use Retrieval surfaces; `/rag` wrappers stay compatibility-only.
-- Active caller-facing sources: Qdrant `generic_rag`, OpenSearch `keyword`.
+- Active caller-facing backend channels: Qdrant `generic_rag`, OpenSearch `keyword`; resource
+  participation is listed separately in the RAG source matrix.
 - Do not compare raw scores across backends.
 - Workspace keyword search is declared by backend `SearchEntityAdapter`, not frontend flags/app allowlists.
 - `retrieval_partition_id` is candidate scope, not ACL.
 - Evidence, summaries, external LLM payloads, and citations pass source-owned final ACL.
 - Projection identity/version/cutover: ADR 0009.
 
-Owners: [Retrieval](../domains/retrieval/README.md), [RAG](../domains/rag/README.md), [ADR 0004](../../adr/0004-retrieval-rag-boundary-policy.md), [ADR 0009](../../adr/0009-retrieval-partition-projection-generations.md).
+Owners: [Retrieval](../domains/retrieval/README.md), [RAG](../domains/rag/README.md),
+[Source Access](../domains/source-access/README.md), [ADR 0004](../../adr/0004-retrieval-rag-boundary-policy.md),
+[ADR 0009](../../adr/0009-retrieval-partition-projection-generations.md).
 
 ## Avoid
 

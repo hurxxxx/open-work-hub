@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from fastapi import status
@@ -59,6 +59,41 @@ def utc_iso(value: datetime) -> str:
 def local_date_string(value: datetime, time_zone: str | None = None) -> str:
     aware = value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
     return aware.astimezone(event_time_zone(time_zone)).date().isoformat()
+
+
+def planner_event_calendar_bounds(
+    *,
+    all_day: bool,
+    start_at: datetime,
+    end_at: datetime,
+    start_has_time: bool,
+    end_has_time: bool,
+    time_zone: str | None,
+) -> tuple[str, str, bool]:
+    """Return the canonical bounds used to render a Planner event."""
+
+    if all_day:
+        return (
+            local_date_string(start_at, time_zone),
+            local_date_string(end_at, time_zone),
+            True,
+        )
+    if start_has_time and end_has_time:
+        return utc_iso(start_at), utc_iso(end_at), False
+    if start_has_time:
+        marker_end = min(end_at, start_at + timedelta(minutes=30))
+        if marker_end <= start_at:
+            marker_end = start_at + timedelta(minutes=30)
+        return utc_iso(start_at), utc_iso(marker_end), False
+    if end_has_time:
+        marker_start = max(start_at, end_at - timedelta(minutes=30))
+        if marker_start >= end_at:
+            marker_start = end_at - timedelta(minutes=30)
+        return utc_iso(marker_start), utc_iso(end_at), False
+
+    start = local_date_string(start_at, time_zone)
+    end = (date.fromisoformat(local_date_string(end_at, time_zone)) + timedelta(days=1)).isoformat()
+    return start, end, True
 
 
 def _local_day_start(value: date, time_zone: str | None) -> datetime:

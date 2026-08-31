@@ -1,7 +1,7 @@
 import {
-  buildWorkspaceAppPath,
-  resolveDefaultWorkspaceAppPath,
-} from '@/src/platform/workspaces/workspace-utils';
+  buildAppEntryHref,
+  buildAppHref,
+} from '@open-work-hub/contracts/app-routes';
 import type {
   createWhiteboard,
   listWhiteboardHub,
@@ -29,10 +29,6 @@ export type WhiteboardSortOption = {
 };
 export type WhiteboardHubListParams = Parameters<typeof listWhiteboardHub>[1];
 export type WhiteboardCreatePayload = Parameters<typeof createWhiteboard>[1];
-export type WhiteboardHubPathUser = Parameters<
-  typeof resolveDefaultWorkspaceAppPath
->[0];
-
 export interface WhiteboardTargetFilter {
   app: string;
   type: string;
@@ -270,21 +266,26 @@ export function buildWhiteboardCreatePayload(options: {
 export function buildWhiteboardHubItemPath(options: {
   itemId: string;
   searchParams: URLSearchParams;
-  user: WhiteboardHubPathUser;
   workspaceSlug?: string | null;
 }): string {
-  const suffix = `/${options.itemId}${searchSuffix(options.searchParams)}`;
-  return buildWhiteboardHubPath({ ...options, suffix });
+  if (!options.workspaceSlug) return buildAppEntryHref('whiteboard');
+  return buildAppHref({
+    routeId: 'whiteboard.board',
+    workspaceSlug: options.workspaceSlug,
+    pathParams: { whiteboardId: options.itemId },
+    queryParams: Object.fromEntries(options.searchParams),
+  });
 }
 
 export function buildWhiteboardHubRootPath(options: {
   searchParams: URLSearchParams;
-  user: WhiteboardHubPathUser;
   workspaceSlug?: string | null;
 }): string {
-  return buildWhiteboardHubPath({
-    ...options,
-    suffix: searchSuffix(options.searchParams),
+  if (!options.workspaceSlug) return buildAppEntryHref('whiteboard');
+  return buildAppHref({
+    routeId: 'whiteboard.root',
+    workspaceSlug: options.workspaceSlug,
+    queryParams: Object.fromEntries(options.searchParams),
   });
 }
 
@@ -301,25 +302,6 @@ export function writeStoredLayoutMode(
 ): void {
   if (!storage) return;
   storage.setItem(VIEW_MODE_STORAGE_KEY, layoutMode);
-}
-
-function buildWhiteboardHubPath(options: {
-  suffix: string;
-  user: WhiteboardHubPathUser;
-  workspaceSlug?: string | null;
-}): string {
-  return options.workspaceSlug
-    ? buildWorkspaceAppPath(options.workspaceSlug, 'whiteboard', options.suffix)
-    : resolveDefaultWorkspaceAppPath(
-        options.user,
-        'whiteboard',
-        options.suffix,
-      );
-}
-
-function searchSuffix(searchParams: URLSearchParams): string {
-  const search = searchParams.toString();
-  return search ? `?${search}` : '';
 }
 
 function getBrowserLayoutStorage(): LayoutModeStorage | null {

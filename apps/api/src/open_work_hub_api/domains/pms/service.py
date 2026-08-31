@@ -24,8 +24,12 @@ from open_work_hub_api.domains.auth.access import (
 )
 from open_work_hub_api.domains.auth.models import Team, TeamMember, User, Workspace
 from open_work_hub_api.domains.auth.security import new_id
+from open_work_hub_api.domains.content_access.grants import ContentGrantIssuer
 from open_work_hub_api.domains.media.service import cleanup_media_for_resource, sync_embedded_media
-from open_work_hub_api.domains.pms.attachments import serialize_task_attachment
+from open_work_hub_api.domains.pms.attachments import (
+    serialize_task_attachment,
+    serialize_task_attachment_metadata,
+)
 from open_work_hub_api.domains.pms.app_catalog import PMS_WORKSPACE_APP
 from open_work_hub_api.domains.pms.access import (
     _active_accessible_task_lists_query,
@@ -467,8 +471,9 @@ def _create_notification(
     title: str,
     body: str,
     *,
-    reference_type: str = "task",
-    reference_id: str | None = None,
+    source_type: str = "pms_task",
+    source_id: str | None = None,
+    origin_workspace_id: str,
     action_url: str | None = None,
     stable_key: str | None = None,
 ) -> None:
@@ -481,8 +486,10 @@ def _create_notification(
             type=ntype,
             title=title,
             body=body,
-            reference_type=reference_type,
-            reference_id=reference_id,
+            source_type=source_type,
+            source_id=source_id,
+            origin_app_id="pms",
+            origin_workspace_id=origin_workspace_id,
             action_url=action_url,
         )
     )
@@ -1559,10 +1566,47 @@ def get_task_detail(
     principal: CallerPrincipal,
     user: User,
     task_id: str,
+    content_grant_issuer: ContentGrantIssuer,
 ) -> dict[str, Any]:
     _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
 
     task, _task_list = _get_task_for_user(db, user, task_id)
+    attachments = [
+        asdict(
+            serialize_task_attachment(
+                db,
+                user=user,
+                attachment=attachment,
+                content_grant_issuer=content_grant_issuer,
+            )
+        )
+        for attachment in sorted(task.attachments, key=lambda item: item.created_at)
+    ]
+    return _task_detail_payload(task, attachments=attachments)
+
+
+def get_task_detail_for_ai(
+    db: Session,
+    *,
+    workspace: Workspace,
+    principal: CallerPrincipal,
+    user: User,
+    task_id: str,
+) -> dict[str, Any]:
+    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
+    task, _task_list = _get_task_for_user(db, user, task_id)
+    attachments = [
+        asdict(serialize_task_attachment_metadata(attachment))
+        for attachment in sorted(task.attachments, key=lambda item: item.created_at)
+    ]
+    return _task_detail_payload(task, attachments=attachments)
+
+
+def _task_detail_payload(
+    task: Task,
+    *,
+    attachments: list[dict[str, Any]],
+) -> dict[str, Any]:
     return {
         "task": _serialize_task(task),
         "comments": [
@@ -1579,10 +1623,7 @@ def get_task_detail(
             for subtask in sorted(task.subtasks, key=lambda item: item.created_at)
             if not subtask.archived
         ],
-        "attachments": [
-            asdict(serialize_task_attachment(attachment))
-            for attachment in sorted(task.attachments, key=lambda item: item.created_at)
-        ],
+        "attachments": attachments,
         "checklist_items": [
             {
                 "id": checklist_item.id,
@@ -1949,7 +1990,8 @@ def update_task(
                 "assigned",
                 f"{task_label} assigned to you",
                 f"{user.full_name} assigned {task_label_with_reference} to you.",
-                reference_id=task.id,
+                source_id=task.id,
+                origin_workspace_id=workspace.id,
                 action_url=action_url,
                 stable_key=(
                     _stable_replay_id(
@@ -1969,7 +2011,8 @@ def update_task(
                 "status_changed",
                 f"{task_label} status → {TASK_STATUS_LABELS.get(status, status)}",
                 f"{user.full_name} changed status of {task_label_with_reference} to {TASK_STATUS_LABELS.get(status, status)}.",
-                reference_id=task.id,
+                source_id=task.id,
+                origin_workspace_id=workspace.id,
                 action_url=action_url,
                 stable_key=(
                     _stable_replay_id(approved_call_id, f"notification.status_changed.{uid}")
@@ -2050,7 +2093,8 @@ def add_task_comment(
             "commented",
             f"New comment on {task.title}",
             f"{user.full_name} commented on {task.title} ({ref}).",
-            reference_id=task.id,
+            source_id=task.id,
+            origin_workspace_id=workspace.id,
             action_url=action_url,
             stable_key=(
                 _stable_replay_id(approved_call_id, f"notification.commented.{uid}")
@@ -2077,7 +2121,8 @@ def add_task_comment(
                 "mentioned",
                 f"Mentioned in {task.title}",
                 f"{user.full_name} mentioned you in a comment on {task.title} ({ref}).",
-                reference_id=task.id,
+                source_id=task.id,
+                origin_workspace_id=workspace.id,
                 action_url=action_url,
                 stable_key=(
                     _stable_replay_id(approved_call_id, f"notification.mentioned.{uid}")

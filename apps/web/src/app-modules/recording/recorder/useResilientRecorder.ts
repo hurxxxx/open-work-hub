@@ -543,11 +543,6 @@ export function useResilientRecorder({
         uploadCompletedAt: null,
         interruptedAt: null,
         interruptionReason: null,
-        meetingId:
-          initialTarget?.app === 'meeting' &&
-          initialTarget.type === 'meeting'
-            ? initialTarget.id
-            : null,
       };
       await upsertSession(sessionState);
       await startMediaRecorder(

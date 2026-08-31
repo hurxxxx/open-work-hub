@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ContentState } from '../data-display/content-state';
 import { ContextNote } from './context-note';
 import { FormMessage } from './form-message';
+import { InlineNotice } from './inline-notice';
 import { StatusSlot } from './status-slot';
 
 afterEach(cleanup);
@@ -15,7 +16,11 @@ describe('feedback surfaces', () => {
     const { rerender } = render(<StatusSlot message={null} size="compact" />);
     expect(screen.getByRole('status').getAttribute('data-state')).toBe('empty');
     rerender(
-      <StatusSlot message="Connection restored" size="compact" tone="success" />,
+      <StatusSlot
+        message="Connection restored"
+        size="compact"
+        tone="success"
+      />,
     );
     expect(screen.getByRole('status').getAttribute('data-state')).toBe(
       'populated',
@@ -69,5 +74,13 @@ describe('feedback surfaces', () => {
     const note = screen.getByText('Store this key safely.').parentElement
       ?.parentElement;
     expect(note?.getAttribute('role')).toBeNull();
+  });
+
+  it('uses accessible semantic warning colors for inline notices', () => {
+    render(<InlineNotice tone="warning">Request access.</InlineNotice>);
+
+    expect(
+      screen.getByText('Request access.').parentElement?.className,
+    ).toContain('text-[var(--ui-color-warning-text)]');
   });
 });

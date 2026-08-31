@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urlencode
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from open_work_hub_api.core.app_routes import InternalAppLocation, build_app_href
 from open_work_hub_api.domains.auth.models import User, Workspace
 from open_work_hub_api.domains.files.models import FileManagerFile
 from open_work_hub_api.domains.files.retrieval_contract import FILES_RAG_SOURCE_KIND
@@ -241,7 +241,13 @@ def _evidence_locator(
     query = {"file": source.file_id}
     if source.folder_id:
         query["folder"] = source.folder_id
-    return f"/w/{workspace.key}/files?{urlencode(query)}"
+    return build_app_href(
+        InternalAppLocation(
+            route_id="files.root",
+            workspace_slug=workspace.key,
+            query_params=query,
+        )
+    )
 
 
 __all__ = [

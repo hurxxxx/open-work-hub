@@ -6,17 +6,16 @@ import {
   Settings,
   Star,
 } from 'lucide-react';
+import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
 
 import type { AppModuleManifest } from '@/src/app/shell/navigation-types';
 
 export const mailManifest: AppModuleManifest = {
   appBarItem: { id: 'mail', title: 'mail', icon: Mail },
-  surfaces: { launcher: { globalPath: '/mail' } },
   contract: {
     owner: 'mail-platform',
     permissions: [],
     apiDomain: 'mail',
-    resourceScope: 'personal',
     aiCapabilities: ['mail.list_messages', 'mail.get_message'],
     writeAuditActions: [
       'mail.account.create',
@@ -78,5 +77,5 @@ export const mailManifest: AppModuleManifest = {
     },
   ],
   workspaceRoutePaths: [],
-  globalRoutePaths: ['/mail'],
+  globalRoutePaths: [getAppRoutePattern('mail.root')],
 };

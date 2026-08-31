@@ -15,7 +15,7 @@ Use current code/tests, owner docs, and root ADRs. Do not guess past a missing f
 4. Instrument one variable per probe. Use debugger/REPL first, then targeted tagged logs like `[DEBUG-a4f2]`. For perf, measure before fixing.
 5. Add regression test at the real bug seam when available. If no correct seam exists, report that as architecture risk.
 6. Fix. Re-run original loop and regression test.
-7. Remove debug logs/prototypes. Record actual cause and validation.
+7. Remove temporary debug code. Record actual cause and validation.
 
 ## Stop
 

@@ -17,7 +17,7 @@ def test_whiteboard_pms_space_target_link_filters_and_sort_order(client: TestCli
     second = _create_space_whiteboard(client, token, space_id, title="First", sort_order=10)
     assert (
         first["source_deeplink"]
-        == f"/w/delivery-hub/pms/spaces/{space_id}/whiteboards/{first['id']}"
+        == f"/apps/pms/workspaces/delivery-hub/spaces/{space_id}/whiteboards/{first['id']}"
     )
 
     list_response = client.get(

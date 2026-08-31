@@ -7,14 +7,14 @@ Under 2,700 chars. Link logs; explain N/A.
 ## Contract Map
 
 - Outcome/non-goals; scaffold/Core: <!-- open-work-hub:field:contract-outcome --> REPLACE_ME
-- App/owner/route/entitlement; data/RBAC: <!-- open-work-hub:field:contract-boundaries --> REPLACE_ME
+- App/owner/route/execution/resource scope and runtime availability; data/RBAC: <!-- open-work-hub:field:contract-boundaries --> REPLACE_ME
 - API/UI/i18n/a11y; file/network: <!-- open-work-hub:field:contract-interfaces --> REPLACE_ME
 - AI/data/caps; worker; migration/compat: <!-- open-work-hub:field:contract-runtime --> REPLACE_ME
 - Search (`none - reason` or `workspace - evidence`): <!-- open-work-hub:field:workspace-keyword-search --> REPLACE_ME
 
 - [ ] <!-- open-work-hub:check:scaffold --> Scaffold/Core ready.
 - [ ] <!-- open-work-hub:check:app-owned-surface --> App-only; no guard bypass.
-- [ ] <!-- open-work-hub:check:target --> Feature MR targets GitLab `dev`.
+- [ ] <!-- open-work-hub:check:target --> Target follows root `AGENTS.md`.
 
 ## Data, Authorization, And Safety
 

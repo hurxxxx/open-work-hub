@@ -181,13 +181,16 @@ class Settings:
     present: str = Field(validation_alias="OPEN_WORK_HUB_PRESENT")
     missing: str = Field(validation_alias="OPEN_WORK_HUB_MISSING")
 """
+        env_text = "OPEN_WORK_HUB_PRESENT=1\n" + "".join(
+            f"{key}=example\n" for key in sorted(env_contract.DEPLOY_ENV_KEYS)
+        )
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             report = self.evaluate(
                 root,
                 env_texts={
-                    "dev": "OPEN_WORK_HUB_PRESENT=1\n",
-                    "example": "OPEN_WORK_HUB_PRESENT=1\n",
+                    "dev": env_text,
+                    "example": env_text,
                 },
                 settings_texts={"settings.py": settings},
             )

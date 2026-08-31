@@ -1,16 +1,15 @@
 ---
 name: open-work-hub-release-promotion
-description: Prepare and validate an Open Work Hub GitLab release MR from `dev` to `main`, then hand off the merged revision to an explicitly owned release process. Use when preparing a release MR, validating a release candidate, or coordinating a Compose-infrastructure rollout. Do not use for ordinary feature MRs or claim full application deployment support.
+description: Prepare or validate an Open Work Hub promotion from `dev` to `main`. Use when the user explicitly requests that release action. Do not infer production checkout updates or deployment authorization from completed development work.
 ---
 
 # Release Promotion
 
-- Candidate branch: `dev`; target: protected `main`.
-- Create/inspect GitLab MR only when requested.
-- Merge only with explicit authorization; no direct push to `main`.
+- Authorization lives in root `AGENTS.md`; never trigger this workflow automatically.
+- Inspecting, creating an MR, merging, updating the production checkout, and deploying are separate actions and must each be in scope.
+- Never push directly to protected `main`.
 - Evidence binds to latest source SHA or equivalent merge result.
-- Production checkout update to `origin/main` only when rollout is scoped.
-- Repo owns production Compose infra, not full app deploy automation.
+- Application rollout uses the guarded `pnpm app:prod:deploy` entrypoint from the production checkout, but promotion and deployment remain separately authorized actions.
 
 ```bash
 git rev-parse HEAD
@@ -18,4 +17,4 @@ glab mr view <id-or-branch> --output json
 glab ci list -r main
 ```
 
-Required: affected checks, mergeability, configured GitLab checks, env/migration/data compatibility, rollback, known limitations. Stop on missing deploy entrypoint when full app rollout is requested.
+Required: affected checks, mergeability, configured GitLab checks, env/migration/data compatibility, image build evidence, rollback compatibility, and known limitations. After an explicitly authorized production-checkout update, hand deployment to the production-operations workflow.

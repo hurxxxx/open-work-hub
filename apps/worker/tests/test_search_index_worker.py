@@ -52,7 +52,11 @@ def _reload_worker_module(module_name: str):
     for cached_name in list(sys.modules):
         if cached_name == "open_work_hub_worker" or cached_name.startswith("open_work_hub_worker."):
             sys.modules.pop(cached_name, None)
-    return importlib.import_module(module_name)
+    module = importlib.import_module(module_name)
+    if module_name == "open_work_hub_worker.tasks.search_index":
+        module._search_job_app_enabled = lambda *_args, **_kwargs: True
+        module.load_app_availability_snapshot = lambda *_args, **_kwargs: object()
+    return module
 
 
 def _reset_search_registries() -> None:
@@ -151,6 +155,58 @@ def test_search_worker_keeps_non_file_jobs_on_the_legacy_index(monkeypatch) -> N
     )
 
     assert client is expected_client
+
+
+def test_search_worker_pauses_disabled_workspace_app_before_provider_io(
+    monkeypatch,
+) -> None:
+    tasks_module = _reload_worker_module("open_work_hub_worker.tasks.search_index")
+    job = SimpleNamespace(
+        id="job-disabled-app",
+        status="pending",
+        last_error=None,
+        next_retry_at=None,
+        updated_at=None,
+    )
+
+    class FakeSession:
+        def get(self, _model, job_id: str):
+            assert job_id == job.id
+            return job
+
+        def add(self, value) -> None:
+            assert value is job
+
+        def commit(self) -> None:
+            return None
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(tasks_module, "_db_session", FakeSession)
+    monkeypatch.setattr(
+        tasks_module,
+        "_search_job_app_enabled",
+        lambda *_args, **_kwargs: False,
+    )
+    monkeypatch.setattr(
+        tasks_module,
+        "_search_client_for_job",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("search provider must not be resolved while the app is disabled")
+        ),
+    )
+    monkeypatch.setattr(
+        tasks_module,
+        "process_search_index_job",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("disabled jobs must not enter the indexing core")
+        ),
+    )
+
+    assert tasks_module.index_resource.run(job.id) == "app-disabled"
+    assert job.status == "pending"
+    assert job.last_error == "app_disabled"
 
 
 def test_search_worker_fails_closed_when_files_operator_gate_is_disabled(

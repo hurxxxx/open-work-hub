@@ -35,7 +35,9 @@ def test_frontend_serving_returns_static_asset_and_spa_fallback(
         root_head_response = client.head("/")
         asset_response = client.get("/assets/app.js")
         worker_response = client.get("/recording-sync-sw.js")
-        route_response = client.get("/w/hq/meeting/example")
+        route_response = client.get(
+            "/apps/meeting/workspaces/hq/meetings/example"
+        )
     finally:
         get_settings.cache_clear()
 

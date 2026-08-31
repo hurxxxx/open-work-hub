@@ -112,10 +112,18 @@ def _meeting_service():
 
 
 def _recording_transcript(recording: MeetingRecording | Recording) -> str:
+    if isinstance(recording, Recording):
+        return recording.result.transcript_text.strip() if recording.result is not None else ""
     return (recording.transcript_text or "").strip()
 
 
 def _recording_summary(recording: MeetingRecording | Recording) -> str:
+    if isinstance(recording, Recording):
+        return (
+            (recording.result.summary_text or "").strip()
+            if recording.result is not None
+            else ""
+        )
     return (getattr(recording, "summary_text", None) or "").strip()
 
 
@@ -229,7 +237,7 @@ def _latest_canonical_meeting_recording(
     query = (
         select(Recording)
         .join(RecordingTarget)
-        .options(selectinload(Recording.targets))
+        .options(selectinload(Recording.targets), selectinload(Recording.result))
         .where(
             Recording.workspace_id == workspace_id,
             Recording.trashed_at.is_(None),
@@ -240,7 +248,9 @@ def _latest_canonical_meeting_recording(
         .order_by(RecordingTarget.sort_order.desc(), Recording.started_at.desc())
     )
     if require_transcript:
-        query = query.where(Recording.transcript_text.is_not(None))
+        from open_work_hub_api.domains.recording.models import RecordingResult
+
+        query = query.join(RecordingResult).where(RecordingResult.transcript_text != "")
     return db.scalar(query)
 
 
@@ -277,7 +287,7 @@ def _load_ready_recording_context(
         recording = db.scalar(
             select(Recording)
             .where(Recording.id == recording_id)
-            .options(selectinload(Recording.targets))
+            .options(selectinload(Recording.targets), selectinload(Recording.result))
         )
         if recording is not None:
             meeting_target = next(
@@ -293,7 +303,7 @@ def _load_ready_recording_context(
                     status_code=status.HTTP_404_NOT_FOUND,
                     code="meeting.recording_not_found",
                 )
-            if not recording.transcript_text:
+            if recording.result is None or not recording.result.transcript_text:
                 raise localized_http_exception(
                     status_code=status.HTTP_409_CONFLICT,
                     code="meeting.recording_summary_unavailable",

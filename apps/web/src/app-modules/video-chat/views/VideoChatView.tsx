@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
 import { Copy, Loader2, Plus, RefreshCw, Video, VideoOff } from 'lucide-react';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
@@ -8,7 +9,6 @@ import {
   formatDateTime as formatZonedDateTime,
   normalizeTimeZone,
 } from '@/src/platform/time/time-utils';
-import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
 import {
   createVideoChatSession,
   listVideoChatSessions,
@@ -88,7 +88,11 @@ export function VideoChatView() {
       });
       setTitleDraft('');
       navigate(
-        buildWorkspaceAppPath(activeWorkspaceSlug, 'video-chat', session.id),
+        buildAppHref({
+          routeId: 'video-chat.session',
+          workspaceSlug: activeWorkspaceSlug,
+          pathParams: { sessionId: session.id },
+        }),
       );
     } catch (createError) {
       setError(
@@ -102,7 +106,11 @@ export function VideoChatView() {
   }
 
   function roomPath(session: VideoChatSession): string {
-    return buildWorkspaceAppPath(activeWorkspaceSlug, 'video-chat', session.id);
+    return buildAppHref({
+      routeId: 'video-chat.session',
+      workspaceSlug: activeWorkspaceSlug,
+      pathParams: { sessionId: session.id },
+    });
   }
 
   async function copyInvite(session: VideoChatSession) {

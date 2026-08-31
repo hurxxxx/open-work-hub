@@ -14,6 +14,10 @@ export interface PersonalWidgetTodoLike {
 
 export const PERSONAL_WIDGET_STORAGE_KEY = 'open-work-hub.personalWidget.v1';
 
+export function personalWidgetStorageKey(userId: string): string {
+  return `${PERSONAL_WIDGET_STORAGE_KEY}.${encodeURIComponent(userId)}`;
+}
+
 export const DEFAULT_PERSONAL_WIDGET_PREFERENCES: PersonalWidgetPreferences = {
   activeWidget: 'todo',
   mode: 'collapsed',

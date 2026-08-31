@@ -49,17 +49,48 @@ describe('calendar events session', () => {
       events: [event()],
       loading: false,
       error: null,
+      hasUsableSnapshot: true,
     });
     expect(failed).toMatchObject({
-      events: [],
+      events: [event()],
       loading: false,
       error: 'Network failed',
+      hasUsableSnapshot: true,
     });
     expect(idle).toMatchObject({
       events: [],
       loading: false,
       error: null,
+      hasUsableSnapshot: false,
     });
+  });
+
+  it('upserts and removes events without waiting for a reload', () => {
+    const initial = {
+      ...INITIAL_CALENDAR_EVENTS_STATE,
+      events: [event()],
+    };
+    const updated = event({ title: 'Updated planning' });
+    const replaced = calendarEventsReducer(initial, {
+      type: 'upsert',
+      event: updated,
+    });
+    const appended = calendarEventsReducer(replaced, {
+      type: 'upsert',
+      event: event({ id: 'event-2', sourceId: 'meeting-2' }),
+    });
+    const removed = calendarEventsReducer(appended, {
+      type: 'remove',
+      eventId: 'event-1',
+    });
+
+    expect(replaced.events).toEqual([updated]);
+    expect(appended.events.map((item) => item.id)).toEqual([
+      'event-1',
+      'event-2',
+    ]);
+    expect(removed.events.map((item) => item.id)).toEqual(['event-2']);
+    expect(removed.hasUsableSnapshot).toBe(true);
   });
 
   it('increments refresh token without changing loaded data', () => {

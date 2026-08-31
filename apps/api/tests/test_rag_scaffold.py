@@ -323,6 +323,7 @@ def test_workspace_rag_reindex_requires_ai_enablement(monkeypatch) -> None:
 def test_company_rag_reindex_enqueues_company_scope_jobs(monkeypatch) -> None:
     captured: list[dict] = []
     adapter = SimpleNamespace(
+        app_id="docs",
         resource_type="docs_native_doc",
         company_resource_ids=lambda db: ["doc-1", "doc-2"],
     )
@@ -336,6 +337,11 @@ def test_company_rag_reindex_enqueues_company_scope_jobs(monkeypatch) -> None:
         rag_application,
         "company_reindex_resource_adapters",
         lambda app_ids=None: (adapter,),
+    )
+    monkeypatch.setattr(
+        rag_application,
+        "resolve_company_enabled_app_ids",
+        lambda db: ["docs"],
     )
 
     def fake_enqueue_rag_sync_job(db, **kwargs):
@@ -375,6 +381,31 @@ def test_company_rag_reindex_enqueues_company_scope_jobs(monkeypatch) -> None:
             "lane": RagSyncLane.BACKFILL,
         },
     ]
+
+
+def test_company_rag_reindex_excludes_disabled_workspace_app_adapters(
+    monkeypatch,
+) -> None:
+    adapter = SimpleNamespace(
+        app_id="files",
+        resource_type="file_manager_file",
+        company_resource_ids=lambda db: ["file-1"],
+    )
+    monkeypatch.setattr(
+        rag_application,
+        "company_reindex_resource_adapters",
+        lambda app_ids=None: (adapter,),
+    )
+    monkeypatch.setattr(
+        rag_application,
+        "resolve_company_enabled_app_ids",
+        lambda db: [],
+    )
+
+    assert rag_application._enabled_company_reindex_resource_adapters(
+        object(),
+        {"files"},
+    ) == ()
 
 
 def test_workspace_rag_sources_expose_official_docs(monkeypatch) -> None:
@@ -972,7 +1003,9 @@ def test_rag_hydrates_source_metadata_before_final_acl_and_grounding() -> None:
             source_kind="files",
             text_content="company handbook",
             visibility_refs=["workspace:workspace-before-publication"],
-            metadata={"origin_ref": "/w/workspace-before/files?file=file-1"},
+            metadata={
+                "origin_ref": "/apps/files/workspaces/workspace-before?file=file-1"
+            },
         ),
         collection="rag-source-hydration",
     )
@@ -1000,7 +1033,7 @@ def test_rag_hydrates_source_metadata_before_final_acl_and_grounding() -> None:
                             "scope_kind": RagScopeKind.COMPANY,
                             "workspace_id": None,
                             "visibility_refs": ["company_public"],
-                            "metadata": {"origin_ref": "/files?file=file-1"},
+                            "metadata": {"origin_ref": "/apps/files?file=file-1"},
                         }
                     )
                 }
@@ -1024,13 +1057,15 @@ def test_rag_hydrates_source_metadata_before_final_acl_and_grounding() -> None:
     assert response.hits[0].scope_kind == RagScopeKind.COMPANY
     assert response.hits[0].workspace_id is None
     assert response.hits[0].acl_summary == ["company public"]
-    assert response.hits[0].origin_ref == "/files?file=file-1"
+    assert response.hits[0].origin_ref == "/apps/files?file=file-1"
     assert response.grounded_answer is not None
     assert response.grounded_answer.citations[0].resource_id == "file-1"
 
 
 def test_company_rag_filter_requires_source_owned_acl(monkeypatch) -> None:
     calls: list[set[tuple[str, str]]] = []
+    user = SimpleNamespace(id="user-1", status="active", login_blocked=False)
+    db = SimpleNamespace(scalar=lambda _statement: user)
 
     class FakeCompanyPolicy:
         def authorize_many_rag_resources(self, resources):
@@ -1043,9 +1078,14 @@ def test_company_rag_filter_requires_source_owned_acl(monkeypatch) -> None:
         "for_company",
         lambda db, *, user: FakeCompanyPolicy(),
     )
+    monkeypatch.setattr(
+        rag_access_filter,
+        "is_company_app_enabled_for_user_context",
+        lambda *_args, **_kwargs: True,
+    )
     post_filter = rag_access_filter.build_company_rag_post_filter(
-        SimpleNamespace(),
-        user=SimpleNamespace(id="user-1"),
+        db,
+        user=user,
         source_kinds=["docs_native_doc"],
     )
 
@@ -1073,6 +1113,8 @@ def test_company_rag_filter_requires_source_owned_acl(monkeypatch) -> None:
 
 def test_partition_authorized_rag_filters_ignore_stale_scope_payload(monkeypatch) -> None:
     partition_id = "11111111-1111-1111-1111-111111111111"
+    user = SimpleNamespace(id="user-1", status="active", login_blocked=False)
+    db = SimpleNamespace(scalar=lambda _statement: user)
 
     class FakePolicy:
         def authorize_many_rag_resources(self, resources):
@@ -1082,6 +1124,16 @@ def test_partition_authorized_rag_filters_ignore_stale_scope_payload(monkeypatch
         rag_access_filter.SourceAclPolicy,
         "for_company",
         lambda db, *, user: FakePolicy(),
+    )
+    monkeypatch.setattr(
+        rag_access_filter,
+        "is_app_enabled_for_user_context",
+        lambda *_args, **_kwargs: True,
+    )
+    monkeypatch.setattr(
+        rag_access_filter,
+        "is_company_app_enabled_for_user_context",
+        lambda *_args, **_kwargs: True,
     )
     monkeypatch.setattr(
         rag_access_filter.SourceAclPolicy,
@@ -1113,14 +1165,14 @@ def test_partition_authorized_rag_filters_ignore_stale_scope_payload(monkeypatch
     )
 
     workspace_filter = rag_access_filter.build_user_rag_post_filter(
-        SimpleNamespace(),
-        user=SimpleNamespace(id="user-1"),
+        db,
+        user=user,
         workspace_id="current-workspace",
         authorized_partition_ids=[partition_id],
     )
     company_filter = rag_access_filter.build_company_rag_post_filter(
-        SimpleNamespace(),
-        user=SimpleNamespace(id="user-1"),
+        db,
+        user=user,
         source_kinds=["files"],
         authorized_partition_ids=[partition_id],
     )

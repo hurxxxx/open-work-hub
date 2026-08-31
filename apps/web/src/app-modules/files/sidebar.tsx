@@ -1,10 +1,10 @@
 import { Bot, FileUp, Folder } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
 
 import type { AppSidebarConfig } from '@/src/app/shell/sidebar-types';
 import { cn } from '@/src/lib/utils';
-import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
 import { FilesSidebarFolders } from './sidebar-folders';
 
 export const filesSidebarConfig: AppSidebarConfig = {
@@ -56,7 +56,10 @@ export function FilesChatSidebarLink({
   if (!currentWorkspaceSlug || hasBootstrapItem) {
     return null;
   }
-  const chatPath = `${buildWorkspaceAppPath(currentWorkspaceSlug, 'files')}/chat`;
+  const chatPath = buildAppHref({
+    routeId: 'files.chat',
+    workspaceSlug: currentWorkspaceSlug,
+  });
   return (
     <Link
       to={chatPath}

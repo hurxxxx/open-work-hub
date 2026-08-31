@@ -8,20 +8,18 @@ from sqlalchemy import select
 from open_work_hub_api.core.db import get_session_factory
 from open_work_hub_api.core.llm import get_supported_llm_tasks
 from open_work_hub_api.core.settings import get_settings
-from open_work_hub_api.domains.ai.chat_context_policy import filter_business_chat_context_app_ids
 from open_work_hub_api.domains.ai.registry import (
     get_ai_capability_registry,
-    get_chatbot_capable_app_ids,
 )
 from open_work_hub_api.domains.auth import access as auth_access
 from open_work_hub_api.domains.auth.models import (
+    CompanyAppControl,
     PlatformAppBarCategory,
     PlatformAppBarCategoryApp,
-    PlatformAppVisibility,
     Workspace,
-    WorkspaceAppEntitlement,
+    WorkspaceAppDefault,
+    WorkspaceAppOverride,
 )
-from open_work_hub_api.domains.auth.security import new_id
 from open_work_hub_api.domains.auth.workspace_apps import (
     WorkspaceAppCatalogItem,
     WorkspaceNavCatalogItem,
@@ -44,32 +42,17 @@ def test_workspace_app_catalog_is_a_unique_leaf_app_registry() -> None:
     assert {"ai", "collaboration", "business"}.isdisjoint(app_ids)
 
 
-def test_workspace_entitlement_seed_policy_uses_launcher_metadata() -> None:
-    fixed_app = WorkspaceAppCatalogItem(
-        app_id="fixed-app",
-        title="Fixed",
-        route_base="/fixed-app",
-        icon_key="home",
-        launcher_fixed=True,
-    )
-    non_fixed_home = WorkspaceAppCatalogItem(
-        app_id="home",
-        title="Home-like app",
-        route_base="/home-like-app",
-        icon_key="home",
-        launcher_fixed=False,
-    )
-    platform_app = WorkspaceAppCatalogItem(
-        app_id="platform-app",
-        title="Platform app",
-        route_base="/platform-app",
-        icon_key="home",
-        availability_scope="platform",
-    )
+def test_app_control_seed_is_complete_for_the_leaf_catalog(client: TestClient) -> None:
+    del client
+    catalog = tuple(iter_workspace_app_catalog())
+    with get_session_factory()() as db:
+        company_ids = set(db.scalars(select(CompanyAppControl.app_id)).all())
+        default_ids = set(db.scalars(select(WorkspaceAppDefault.app_id)).all())
 
-    assert auth_access._workspace_app_should_have_entitlement(fixed_app) is False
-    assert auth_access._workspace_app_should_have_entitlement(non_fixed_home) is True
-    assert auth_access._workspace_app_should_have_entitlement(platform_app) is False
+    assert company_ids == {app.app_id for app in catalog}
+    assert default_ids == {
+        app.app_id for app in catalog if app.availability_scope == "workspace"
+    }
 
 
 def test_apps_bootstrap_hard_hides_platform_disabled_app(
@@ -77,9 +60,9 @@ def test_apps_bootstrap_hard_hides_platform_disabled_app(
 ) -> None:
     session = _dev_login(client, "administrator")
     with get_session_factory()() as db:
-        row = db.scalar(select(PlatformAppVisibility).where(PlatformAppVisibility.app_id == "mail"))
+        row = db.scalar(select(CompanyAppControl).where(CompanyAppControl.app_id == "mail"))
         assert row is not None
-        row.visible = False
+        row.enabled = False
         db.add(row)
         db.commit()
 
@@ -91,8 +74,7 @@ def test_apps_bootstrap_hard_hides_platform_disabled_app(
     assert response.status_code == 200, response.text
     payload = response.json()
     assert "mail" not in {item["app_id"] for item in payload["apps"]}
-    assert "mail" not in {item["app_id"] for item in payload["personal_tools"]}
-    assert "mail" not in payload["platform_enabled_app_ids"]
+    assert "mail" not in payload["personal_tool_app_ids"]
 
 
 def test_workspace_bootstrap_projection_builds_apps_and_flat_nav() -> None:
@@ -100,7 +82,7 @@ def test_workspace_bootstrap_projection_builds_apps_and_flat_nav() -> None:
         WorkspaceAppCatalogItem(
             app_id="toolbox",
             title="Toolbox",
-            route_base="/toolbox",
+            route_base="/apps/toolbox",
             icon_key="brain",
             nav_items=(
                 WorkspaceNavCatalogItem(
@@ -134,7 +116,7 @@ def test_workspace_bootstrap_projection_builds_apps_and_flat_nav() -> None:
         WorkspaceAppCatalogItem(
             app_id="docs",
             title="DOCS",
-            route_base="/docs",
+            route_base="/apps/docs",
             icon_key="file-text",
             nav_items=(
                 WorkspaceNavCatalogItem(
@@ -149,7 +131,7 @@ def test_workspace_bootstrap_projection_builds_apps_and_flat_nav() -> None:
         WorkspaceAppCatalogItem(
             app_id="mail",
             title="MAIL",
-            route_base="/mail",
+            route_base="/apps/mail",
             icon_key="mail",
         ),
     )
@@ -190,7 +172,7 @@ def test_workspace_bootstrap_projection_includes_feature_flagged_nav() -> None:
         WorkspaceAppCatalogItem(
             app_id="toolbox",
             title="Toolbox",
-            route_base="/toolbox",
+            route_base="/apps/toolbox",
             icon_key="brain",
             nav_items=(
                 WorkspaceNavCatalogItem(
@@ -219,7 +201,7 @@ def test_workspace_bootstrap_projection_keeps_app_when_child_flag_is_disabled() 
         WorkspaceAppCatalogItem(
             app_id="toolbox",
             title="Toolbox",
-            route_base="/toolbox",
+            route_base="/apps/toolbox",
             icon_key="brain",
             nav_items=(
                 WorkspaceNavCatalogItem(
@@ -249,6 +231,25 @@ def test_workspace_bootstrap_projection_keeps_app_when_child_flag_is_disabled() 
 
     assert [item["app_id"] for item in projection.apps] == ["toolbox"]
     assert [item["id"] for item in projection.nav] == ["search"]
+
+
+def test_workspace_bootstrap_does_not_invent_nav_for_an_app_without_submenu() -> None:
+    projection = project_workspace_bootstrap_apps(
+        (
+            WorkspaceAppCatalogItem(
+                app_id="single-surface",
+                title="Single Surface",
+                route_base="/apps/single-surface",
+                icon_key="square",
+            ),
+        ),
+        enabled_app_ids={"single-surface"},
+        settings={},
+    )
+
+    assert [item["app_id"] for item in projection.apps] == ["single-surface"]
+    assert projection.apps[0]["nav_items"] == []
+    assert projection.nav == []
 
 
 def test_general_workspace_seed_and_admin_membership(client: TestClient) -> None:
@@ -302,10 +303,9 @@ def test_dev_seed_workspaces_expose_every_registered_app(client: TestClient) -> 
         global_response = client.get("/api/v1/apps/bootstrap", headers=headers)
         assert global_response.status_code == 200, global_response.text
         global_payload = global_response.json()
-        expected_platform_app_ids = {
-            app.app_id for app in catalog if app.availability_scope == "platform"
+        assert {item["app_id"] for item in global_payload["apps"]} == {
+            app.app_id for app in catalog
         }
-        assert {item["app_id"] for item in global_payload["apps"]} == (expected_platform_app_ids)
 
         categorized_app_ids = {
             item["app_id"]
@@ -313,7 +313,7 @@ def test_dev_seed_workspaces_expose_every_registered_app(client: TestClient) -> 
             for category in payload["app_bar_categories"]
             for item in category["items"]
         }
-        personal_tool_ids = {item["app_id"] for item in global_payload["personal_tools"]}
+        personal_tool_ids = set(global_payload["personal_tool_app_ids"])
         fixed_app_ids = {app.app_id for app in catalog if app.launcher_fixed}
         assert categorized_app_ids | personal_tool_ids | fixed_app_ids == {
             app.app_id for app in catalog
@@ -322,21 +322,16 @@ def test_dev_seed_workspaces_expose_every_registered_app(client: TestClient) -> 
         with get_session_factory()() as db:
             workspace = db.scalar(select(Workspace).where(Workspace.key == "general"))
             assert workspace is not None
-            overrides = dict(
+            defaults = dict(
                 db.execute(
-                    select(
-                        WorkspaceAppEntitlement.app_id,
-                        WorkspaceAppEntitlement.visibility_override,
-                    ).where(WorkspaceAppEntitlement.workspace_id == workspace.id)
+                    select(WorkspaceAppDefault.app_id, WorkspaceAppDefault.enabled)
                 ).all()
             )
-            expected_entitled_app_ids = {
-                app.app_id
-                for app in catalog
-                if auth_access._workspace_app_should_have_entitlement(app)
+            expected_workspace_app_ids = {
+                app.app_id for app in catalog if app.availability_scope == "workspace"
             }
-            assert expected_entitled_app_ids <= overrides.keys()
-            assert all(overrides[app_id] is True for app_id in expected_entitled_app_ids)
+            assert defaults.keys() == expected_workspace_app_ids
+            assert all(defaults[app_id] is True for app_id in expected_workspace_app_ids)
 
             category = db.scalar(
                 select(PlatformAppBarCategory).where(
@@ -356,7 +351,7 @@ def test_dev_seed_workspaces_expose_every_registered_app(client: TestClient) -> 
         get_settings.cache_clear()
 
 
-def test_workspace_bootstrap_ignores_stale_category_app_entitlement(
+def test_workspace_bootstrap_ignores_unknown_app_override(
     client: TestClient,
 ) -> None:
     session = _dev_login(client, "administrator")
@@ -366,11 +361,10 @@ def test_workspace_bootstrap_ignores_stale_category_app_entitlement(
         workspace = db.scalar(select(Workspace).where(Workspace.key == "general"))
         assert workspace is not None
         db.add(
-            WorkspaceAppEntitlement(
-                id=new_id(),
+            WorkspaceAppOverride(
                 workspace_id=workspace.id,
-                app_id="ai",
-                visibility_override=False,
+                app_id="unknown-app",
+                enabled=False,
             )
         )
         db.commit()
@@ -382,12 +376,12 @@ def test_workspace_bootstrap_ignores_stale_category_app_entitlement(
     assert response.status_code == 200
     payload = response.json()
 
-    assert "ai" not in {item["app_id"] for item in payload["apps"]}
-    assert all(item["app_id"] != "ai" for item in payload["nav"])
+    assert "unknown-app" not in {item["app_id"] for item in payload["apps"]}
+    assert all(item["app_id"] != "unknown-app" for item in payload["nav"])
     assert "docs" in {item["app_id"] for item in payload["apps"]}
 
 
-def test_workspace_bootstrap_hides_app_with_workspace_visibility_override(
+def test_workspace_bootstrap_hides_app_with_workspace_override(
     client: TestClient,
 ) -> None:
     session = _dev_login(client, "administrator")
@@ -396,15 +390,13 @@ def test_workspace_bootstrap_hides_app_with_workspace_visibility_override(
     with get_session_factory()() as db:
         workspace = db.scalar(select(Workspace).where(Workspace.key == "general"))
         assert workspace is not None
-        entitlement = db.scalar(
-            select(WorkspaceAppEntitlement).where(
-                WorkspaceAppEntitlement.workspace_id == workspace.id,
-                WorkspaceAppEntitlement.app_id == "docs",
+        db.add(
+            WorkspaceAppOverride(
+                workspace_id=workspace.id,
+                app_id="docs",
+                enabled=False,
             )
         )
-        assert entitlement is not None
-        entitlement.visibility_override = False
-        db.add(entitlement)
         db.commit()
 
     response = client.get(
@@ -419,7 +411,7 @@ def test_workspace_bootstrap_hides_app_with_workspace_visibility_override(
     assert "doc" not in {item["value"] for item in payload["keyword_search"]["entity_types"]}
 
 
-def test_workspace_app_gate_checks_leaf_visibility_override(client: TestClient) -> None:
+def test_workspace_app_gate_checks_leaf_override(client: TestClient) -> None:
     session = _dev_login(client, "administrator")
     token = session["token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -431,15 +423,13 @@ def test_workspace_app_gate_checks_leaf_visibility_override(client: TestClient) 
     with get_session_factory()() as db:
         workspace = db.scalar(select(Workspace).where(Workspace.key == "general"))
         assert workspace is not None
-        entitlement = db.scalar(
-            select(WorkspaceAppEntitlement).where(
-                WorkspaceAppEntitlement.workspace_id == workspace.id,
-                WorkspaceAppEntitlement.app_id == "docs",
+        db.add(
+            WorkspaceAppOverride(
+                workspace_id=workspace.id,
+                app_id="docs",
+                enabled=False,
             )
         )
-        assert entitlement is not None
-        entitlement.visibility_override = False
-        db.add(entitlement)
         db.commit()
 
     disabled_response = client.get(path, headers=headers)
@@ -447,34 +437,16 @@ def test_workspace_app_gate_checks_leaf_visibility_override(client: TestClient) 
     assert disabled_response.json()["code"] == "workspace.app_disabled"
 
 
-def test_ensure_seed_data_skips_entitlements_until_migration_exists(
+def test_workspace_bootstrap_fails_closed_when_app_default_is_missing(
     client: TestClient,
-    monkeypatch,
-) -> None:
-    monkeypatch.setattr(
-        auth_access,
-        "_workspace_app_entitlements_table_exists",
-        lambda db: False,
-    )
-
-    with get_session_factory()() as db:
-        auth_access.ensure_seed_data(db)
-        workspace_count = len(db.scalars(select(Workspace)).all())
-
-    assert workspace_count > 0
-
-
-def test_workspace_bootstrap_falls_back_to_default_catalog_without_entitlement_table(
-    client: TestClient,
-    monkeypatch,
 ) -> None:
     session = _dev_login(client, "administrator")
     token = session["token"]
-    monkeypatch.setattr(
-        auth_access,
-        "_workspace_app_entitlements_table_exists",
-        lambda db: False,
-    )
+    with get_session_factory()() as db:
+        row = db.get(WorkspaceAppDefault, "docs")
+        assert row is not None
+        db.delete(row)
+        db.commit()
 
     response = client.get(
         "/api/v1/workspaces/general/bootstrap",
@@ -483,18 +455,7 @@ def test_workspace_bootstrap_falls_back_to_default_catalog_without_entitlement_t
     assert response.status_code == 200
     payload = response.json()
 
-    assert {item["app_id"] for item in payload["apps"]} >= {
-        "home",
-        "pms",
-        "docs",
-    }
-    assert {"ai", "collaboration", "business"}.isdisjoint(
-        {item["app_id"] for item in payload["apps"]}
-    )
-    enabled_app_ids = {item["app_id"] for item in payload["apps"]}
-    assert payload["chatbot_app_ids"] == filter_business_chat_context_app_ids(
-        app_id for app_id in get_chatbot_capable_app_ids() if app_id in enabled_app_ids
-    )
+    assert "docs" not in {item["app_id"] for item in payload["apps"]}
 
 
 def test_registry_drives_llm_task_seed_and_tool_metadata(client: TestClient) -> None:

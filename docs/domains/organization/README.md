@@ -14,7 +14,7 @@
 - 비활성 조직 단위는 과거 사용자 소속과 계층을 보존하지만 새 사용자에게 배정할 수 없다.
 
 주 소속, 사번, 직책은 현재 권한 증거가 아니다. 조직 단위는 system role, workspace membership,
-resource ACL, app entitlement를 부여하거나 대체하지 않는다. 조직 기반 RBAC가 필요하면 별도 정책,
+resource ACL, runtime app availability를 부여하거나 대체하지 않는다. 조직 기반 RBAC가 필요하면 별도 정책,
 서버 실행 게이트, migration과 ADR을 먼저 추가한다.
 
 ## 관리 API와 UI

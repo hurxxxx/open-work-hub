@@ -7,6 +7,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     JSON,
@@ -45,7 +46,7 @@ class Workspace(Base):
         back_populates="workspace",
         cascade="all, delete-orphan",
     )
-    app_entitlements: Mapped[list["WorkspaceAppEntitlement"]] = relationship(
+    app_overrides: Mapped[list["WorkspaceAppOverride"]] = relationship(
         back_populates="workspace",
         cascade="all, delete-orphan",
     )
@@ -75,11 +76,6 @@ class User(Base):
     time_zone: Mapped[str] = mapped_column(String(64), default="Asia/Seoul", nullable=False)
     date_format: Mapped[str] = mapped_column(String(24), default="korean", nullable=False)
     app_bar_layout: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-    default_workspace_id: Mapped[str | None] = mapped_column(
-        ForeignKey("workspaces.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
     primary_organization_unit_id: Mapped[str | None] = mapped_column(
         ForeignKey("organization_units.id", ondelete="SET NULL"),
         nullable=True,
@@ -106,6 +102,10 @@ class User(Base):
         cascade="all, delete-orphan",
     )
     workspace_bindings: Mapped[list["WorkspaceUserBinding"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    app_workspace_preferences: Mapped[list["UserAppWorkspacePreference"]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
     )
@@ -144,16 +144,95 @@ class WorkspaceUserBinding(Base):
     user: Mapped[User] = relationship(back_populates="workspace_bindings")
 
 
-class WorkspaceAppEntitlement(Base):
-    __tablename__ = "workspace_app_entitlements"
+class CompanyAppControl(Base):
+    __tablename__ = "company_app_controls"
+
+    app_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, index=True)
+    updated_by_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        onupdate=utcnow_naive,
+        nullable=False,
+    )
+
+
+class WorkspaceAppDefault(Base):
+    __tablename__ = "workspace_app_defaults"
+
+    app_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, index=True)
+    updated_by_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        onupdate=utcnow_naive,
+        nullable=False,
+    )
+
+
+class WorkspaceAppOverride(Base):
+    __tablename__ = "workspace_app_overrides"
+    __table_args__ = (Index("ix_workspace_app_overrides_app_id", "app_id"),)
+
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    app_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, index=True)
+    updated_by_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        onupdate=utcnow_naive,
+        nullable=False,
+    )
+    workspace: Mapped[Workspace] = relationship(back_populates="app_overrides")
+
+
+class UserAppWorkspacePreference(Base):
+    __tablename__ = "user_app_workspace_preferences"
     __table_args__ = (
-        UniqueConstraint("workspace_id", "app_id", name="uq_workspace_app_entitlement"),
+        ForeignKeyConstraint(
+            ["workspace_id", "user_id"],
+            ["workspace_user_bindings.workspace_id", "workspace_user_bindings.user_id"],
+            name="fk_user_app_workspace_preference_membership",
+            ondelete="CASCADE",
+        ),
+        Index(
+            "ix_user_app_workspace_preferences_workspace_user",
+            "workspace_id",
+            "user_id",
+        ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), index=True)
-    app_id: Mapped[str] = mapped_column(String(64), index=True)
-    visibility_override: Mapped[bool | None] = mapped_column(Boolean, nullable=True, index=True)
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    app_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
@@ -161,22 +240,8 @@ class WorkspaceAppEntitlement(Base):
         onupdate=utcnow_naive,
         nullable=False,
     )
-    workspace: Mapped[Workspace] = relationship(back_populates="app_entitlements")
-
-
-class PlatformAppVisibility(Base):
-    __tablename__ = "platform_app_visibility"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    app_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
-    visible: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        default=utcnow_naive,
-        onupdate=utcnow_naive,
-        nullable=False,
-    )
+    user: Mapped[User] = relationship(back_populates="app_workspace_preferences")
+    workspace: Mapped[Workspace] = relationship()
 
 
 class PlatformAppBarCategory(Base):

@@ -12,7 +12,7 @@ import {
   type ProfilePageState,
   type SettingsTranslator,
 } from './settings-page-model';
-import type { AuthUser, ThemePreference } from './auth-api';
+import type { ThemePreference } from './auth-api';
 
 const themeOptions: {
   value: ThemePreference;
@@ -26,22 +26,18 @@ const themeOptions: {
 
 export function AppearanceSettingsSection({
   onDateFormatChange,
-  onDefaultWorkspaceChange,
   onLocaleChange,
   onThemeChange,
   onTimeZoneChange,
   state,
   t,
-  user,
 }: {
   onDateFormatChange: (value: string) => void;
-  onDefaultWorkspaceChange: (value: string) => void;
   onLocaleChange: (value: string) => void;
   onThemeChange: (value: ThemePreference) => void;
   onTimeZoneChange: (value: string) => void;
   state: ProfilePageState;
   t: SettingsTranslator;
-  user: AuthUser;
 }) {
   return (
     <div>
@@ -121,25 +117,6 @@ export function AppearanceSettingsSection({
             {DATE_FORMAT_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
                 {t(option.labelKey)}
-              </option>
-            ))}
-          </select>
-        </SettingsFieldRow>
-        <SettingsFieldRow
-          label={t('auth:settings.defaultWorkspace')}
-          description={t('auth:settings.defaultWorkspaceDescription')}
-        >
-          <select
-            aria-label={t('auth:settings.defaultWorkspace')}
-            className="app-field-input"
-            disabled={user.workspaces.length === 0}
-            onChange={(event) => onDefaultWorkspaceChange(event.target.value)}
-            value={state.defaultWorkspaceId}
-          >
-            <option value="">{t('auth:settings.defaultWorkspaceNone')}</option>
-            {user.workspaces.map((workspace) => (
-              <option key={workspace.id} value={workspace.id}>
-                {workspace.name}
               </option>
             ))}
           </select>

@@ -1,4 +1,10 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -105,7 +111,7 @@ describe('FloatingPmsWidget', () => {
     );
 
     render(
-      <MemoryRouter initialEntries={['/w/alpha/home']}>
+      <MemoryRouter initialEntries={['/apps/home/workspaces/alpha']}>
         <FloatingPmsWidget workspaceSlug="alpha" />
       </MemoryRouter>,
     );
@@ -270,7 +276,7 @@ describe('FloatingPmsWidget', () => {
 
   it('opens the full PMS app for the current workspace', () => {
     render(
-      <MemoryRouter initialEntries={['/w/team-alpha/home']}>
+      <MemoryRouter initialEntries={['/apps/home/workspaces/team-alpha']}>
         <FloatingPmsWidget workspaceSlug="team alpha" />
         <LocationProbe />
       </MemoryRouter>,
@@ -279,7 +285,7 @@ describe('FloatingPmsWidget', () => {
     fireEvent.click(screen.getByRole('button', { name: 'PMS' }));
 
     expect(screen.getByLabelText('current-location').textContent).toBe(
-      '/w/team%20alpha/pms',
+      '/apps/pms/workspaces/team%20alpha',
     );
   });
 

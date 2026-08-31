@@ -1,18 +1,12 @@
 from open_work_hub_api.core.workspace_app_registry import (
-    WorkspaceAppRegistration,
     WorkspaceNavRegistration,
+    workspace_app_registration,
 )
 
 
-MEETING_WORKSPACE_APP = WorkspaceAppRegistration(
-    app_id="meeting",
-    title="MEETING",
-    route_base="/meeting",
-    icon_key="users",
+MEETING_WORKSPACE_APP = workspace_app_registration(
+    "meeting",
     backend_domain="meeting",
-    enabled_by_default=True,
-    visible_by_default=True,
-    launcher_category=True,
     nav_items=(
         WorkspaceNavRegistration(
             id="meeting-upcoming",

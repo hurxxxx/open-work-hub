@@ -5,7 +5,7 @@
 - Prefer edge-to-edge sections, typography, subtle dividers; avoid heavy card wrappers and shadows.
 - Tables are flat rows, not bordered cards.
 - Toolbars are single-row and compact.
-- Mobile global hamburger opens only global app/workspace switcher.
+- Mobile global hamburger opens the global app launcher; workspace selection stays inside the current workspace app menu.
 - Mobile current-app title opens current app menu when internal nav exists.
 - Mobile dense workflows collapse to one primary flow with drawers/full-width detail.
 - Route changes close transient mobile chrome.

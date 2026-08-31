@@ -200,16 +200,19 @@ class AiArtifactRepository:
         *,
         workspace_id: str,
         user_id: str,
+        enabled_app_ids: frozenset[str],
         eager: bool = False,
     ) -> AiArtifact | None:
-        statement = select(AiArtifact).where(
+        predicates = [
             or_(AiArtifact.id == identifier, AiArtifact.artifact_number == identifier),
             AiArtifact.workspace_id == workspace_id,
             or_(
                 AiArtifact.owner_user_id == user_id,
                 AiArtifact.visibility == "workspace",
             ),
-        )
+        ]
+        predicates.append(AiArtifact.app_id.in_(enabled_app_ids))
+        statement = select(AiArtifact).where(*predicates)
         if eager:
             statement = statement.options(
                 selectinload(AiArtifact.sources),
@@ -228,6 +231,7 @@ class AiArtifactRepository:
         app_id: str | None = None,
         graph_run_id: str | None = None,
         conversation_id: str | None = None,
+        enabled_app_ids: frozenset[str],
         limit: int = 50,
         offset: int = 0,
     ) -> tuple[list[AiArtifact], int]:
@@ -238,6 +242,7 @@ class AiArtifactRepository:
                 AiArtifact.visibility == "workspace",
             ),
         ]
+        predicates.append(AiArtifact.app_id.in_(enabled_app_ids))
         if artifact_type:
             predicates.append(AiArtifact.artifact_type == artifact_type)
         if status:

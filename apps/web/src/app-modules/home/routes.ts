@@ -1,4 +1,8 @@
 import { createElement, lazy } from 'react';
+import {
+  getAppRouteChrome,
+  getAppRoutePattern,
+} from '@open-work-hub/contracts/app-routes';
 
 import { lazyRoute } from '@/src/app/shell/lazy-route';
 import type { WorkspaceRouteDefinition } from '@/src/app/shell/route-types';
@@ -12,7 +16,8 @@ const WorkspaceHomeView = lazy(() =>
 export const homeWorkspaceRoutes: WorkspaceRouteDefinition[] = [
   {
     appId: 'home',
-    path: '/w/:workspaceSlug/home',
+    chrome: getAppRouteChrome('home.root'),
+    path: getAppRoutePattern('home.root'),
     element: lazyRoute(createElement(WorkspaceHomeView)),
     subSidebar: 'hidden',
   },

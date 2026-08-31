@@ -1,19 +1,11 @@
 from open_work_hub_api.core.workspace_app_registry import (
-    WorkspaceAppRegistration,
     WorkspaceNavRegistration,
+    workspace_app_registration,
 )
 
 
-PLANNER_WORKSPACE_APP = WorkspaceAppRegistration(
-    app_id="planner",
-    title="Planner",
-    route_base="/planner",
-    icon_key="calendar",
-    availability_scope="platform",
-    enabled_by_default=True,
-    visible_by_default=True,
-    launcher_category=False,
-    launcher_personal_tools=True,
+PLANNER_WORKSPACE_APP = workspace_app_registration(
+    "planner",
     nav_items=(
         WorkspaceNavRegistration(
             id="planner-calendar",

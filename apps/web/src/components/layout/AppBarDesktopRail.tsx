@@ -18,10 +18,11 @@ import {
 } from './AppBarIconLink';
 import { AppBarLauncherMenus } from './AppBarLauncherMenus';
 import { AppBarNotificationButton } from './AppBarNotificationButton';
-import { AppBarWorkspaceSwitcher } from './AppBarWorkspaceSwitcher';
 import {
   createAppBarItemById,
   getInitials,
+  type AppBarAppContextLabelResolver,
+  type AppBarAppLabelResolver,
   type AppBarAppLinkResolver,
   type AppBarTranslator,
   type AppBarWorkspaceItem,
@@ -35,27 +36,18 @@ export function AppBarDesktopRail({
   appBarLayoutError,
   appBarLayoutSaving,
   appBarItems = [],
-  canCreateWorkspace,
-  canManageCurrentWorkspace,
   canOpenWorkspaceSearch,
   currentUser,
   currentPathname,
-  currentWorkspace,
   currentWorkspaceName,
-  defaultWorkspaceOptions,
-  defaultWorkspaceSaving,
   draftItems,
   draftPinnedAppIds,
   fixedItems,
   categoryMenuId,
   favoritesOpen,
   moreMenuRef,
-  normalizedDefaultWorkspaceId,
   onCloseEditor,
   onCloseLauncherMenus,
-  onCreateWorkspace,
-  onDefaultWorkspaceChange,
-  onManageCurrentWorkspace,
   onMovePinnedApp,
   onMouseEnter,
   onMouseLeave,
@@ -65,82 +57,61 @@ export function AppBarDesktopRail({
   onOpenWorkspaceSearch,
   onResetDraft,
   onSaveLayout,
-  onSearchQueryChange,
-  onSelectWorkspace,
   onToggleCategoryMenu,
   onToggleFavorites,
   onToggleNotifications,
+  notificationPanelOpen,
   onTogglePinnedApp,
   notificationsEnabled,
-  onToggleWorkspaceSwitcher,
-  otherWorkspaces,
   pinnedEligibleAppIds,
   pinnedItems,
-  pinnedWorkspace,
   resolveAppLink,
+  resolveAppContextLabel,
+  resolveAppLabel,
   t,
   unreadCount,
-  workspacePreferenceError,
-  workspaceQuery,
   workspaceAppBarCategories,
-  workspaceSwitcherRef,
-  workspaceSwitcherOpen,
 }: {
   activeAppId: string;
   appBarEditorOpen: boolean;
   appBarLayoutError: string | null;
   appBarLayoutSaving: boolean;
   appBarItems?: readonly AppBarItem[];
-  canCreateWorkspace: boolean;
-  canManageCurrentWorkspace: boolean;
   canOpenWorkspaceSearch: boolean;
   currentUser: AuthUser;
   currentPathname: string;
-  currentWorkspace: AuthUser['workspaces'][number] | null;
-  currentWorkspaceName: string;
-  defaultWorkspaceOptions: AuthUser['workspaces'];
-  defaultWorkspaceSaving: boolean;
+  currentWorkspaceName: string | null;
   draftItems: AppBarWorkspaceItem[];
   draftPinnedAppIds: WorkspaceAppId[];
   fixedItems: AppBarWorkspaceItem[];
   categoryMenuId: string | null;
   favoritesOpen: boolean;
   moreMenuRef: RefObject<HTMLDivElement | null>;
-  normalizedDefaultWorkspaceId: string | null;
   onCloseEditor: () => void;
   onCloseLauncherMenus: () => void;
-  onCreateWorkspace: () => void;
-  onDefaultWorkspaceChange: (workspaceId: string | null) => void;
-  onManageCurrentWorkspace: () => void;
   onMovePinnedApp: (appId: WorkspaceAppId, direction: -1 | 1) => void;
-  onMouseEnter?: MouseEventHandler<HTMLDivElement>;
-  onMouseLeave?: MouseEventHandler<HTMLDivElement>;
+  onMouseEnter?: MouseEventHandler<HTMLElement>;
+  onMouseLeave?: MouseEventHandler<HTMLElement>;
   onOpenAccount: () => void;
   onOpenEditor: () => void;
   onOpenHelp: () => void;
   onOpenWorkspaceSearch: () => void;
   onResetDraft: () => void;
   onSaveLayout: () => void;
-  onSearchQueryChange: (query: string) => void;
-  onSelectWorkspace: (workspaceSlug: string) => void;
   onToggleCategoryMenu: (categoryId: string) => void;
   onToggleFavorites: () => void;
-  onToggleNotifications: () => void;
+  onToggleNotifications: MouseEventHandler<HTMLButtonElement>;
+  notificationPanelOpen: boolean;
   onTogglePinnedApp: (appId: WorkspaceAppId, checked: boolean) => void;
   notificationsEnabled: boolean;
-  onToggleWorkspaceSwitcher: () => void;
-  otherWorkspaces: AuthUser['workspaces'];
   pinnedEligibleAppIds: ReadonlySet<WorkspaceAppId>;
   pinnedItems: AppBarWorkspaceItem[];
-  pinnedWorkspace: AuthUser['workspaces'][number] | null;
   resolveAppLink: AppBarAppLinkResolver;
+  resolveAppContextLabel: AppBarAppContextLabelResolver;
+  resolveAppLabel: AppBarAppLabelResolver;
   t: AppBarTranslator;
   unreadCount: number;
-  workspacePreferenceError: string | null;
-  workspaceQuery: string;
   workspaceAppBarCategories: WorkspaceBootstrapAppBarCategory[];
-  workspaceSwitcherRef: RefObject<HTMLDivElement | null>;
-  workspaceSwitcherOpen: boolean;
 }) {
   const appBarItemById = useMemo(
     () => createAppBarItemById(appBarItems),
@@ -155,33 +126,12 @@ export function AppBarDesktopRail({
   );
 
   return (
-    <div
+    <nav
+      aria-label={t('shell:appBar.primaryNavigation')}
       className="z-50 hidden h-full w-16 flex-col items-center gap-2 border-r border-app-border bg-app-bg-strong py-3 lg:flex"
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      <AppBarWorkspaceSwitcher
-        canCreateWorkspace={canCreateWorkspace}
-        canManageCurrentWorkspace={canManageCurrentWorkspace}
-        currentWorkspace={currentWorkspace}
-        defaultWorkspaceOptions={defaultWorkspaceOptions}
-        defaultWorkspaceSaving={defaultWorkspaceSaving}
-        normalizedDefaultWorkspaceId={normalizedDefaultWorkspaceId}
-        onCreateWorkspace={onCreateWorkspace}
-        onDefaultWorkspaceChange={onDefaultWorkspaceChange}
-        onManageCurrentWorkspace={onManageCurrentWorkspace}
-        onQueryChange={onSearchQueryChange}
-        onSelectWorkspace={onSelectWorkspace}
-        onToggle={onToggleWorkspaceSwitcher}
-        otherWorkspaces={otherWorkspaces}
-        pinnedWorkspace={pinnedWorkspace}
-        preferenceError={workspacePreferenceError}
-        query={workspaceQuery}
-        rootRef={workspaceSwitcherRef}
-        t={t}
-        workspaceSwitcherOpen={workspaceSwitcherOpen}
-      />
-
       {canOpenWorkspaceSearch ? (
         <DesktopRailSearchButton
           active={activeAppId === 'search'}
@@ -190,19 +140,19 @@ export function AppBarDesktopRail({
         />
       ) : null}
 
-      {fixedItems.map((item) => (
-        <AppBarIconLink
-          active={isAppBarItemPathActive(
-            currentPathname,
-            resolveAppLink(item.id),
-          )}
-          icon={item.icon}
-          key={item.id}
-          tone="fixed"
-          title={item.title}
-          to={resolveAppLink(item.id)}
-        />
-      ))}
+      {fixedItems.map((item) => {
+        const link = resolveAppLink(item.id);
+        return (
+          <AppBarIconLink
+            active={isAppBarItemPathActive(currentPathname, link)}
+            icon={item.icon}
+            key={item.id}
+            tone="fixed"
+            title={resolveAppLabel(item.id, item.title)}
+            to={link}
+          />
+        );
+      })}
 
       <AppBarLauncherMenus
         appBarEditorOpen={appBarEditorOpen}
@@ -229,6 +179,8 @@ export function AppBarDesktopRail({
         pinnedEligibleAppIds={pinnedEligibleAppIds}
         pinnedItems={pinnedItems}
         resolveAppLink={resolveAppLink}
+        resolveAppContextLabel={resolveAppContextLabel}
+        resolveAppLabel={resolveAppLabel}
         t={t}
       />
 
@@ -246,11 +198,12 @@ export function AppBarDesktopRail({
         onOpenAccount={onOpenAccount}
         onOpenHelp={onOpenHelp}
         onToggleNotifications={onToggleNotifications}
+        notificationPanelOpen={notificationPanelOpen}
         notificationsEnabled={notificationsEnabled}
         t={t}
         unreadCount={unreadCount}
       />
-    </div>
+    </nav>
   );
 }
 
@@ -316,6 +269,7 @@ function DesktopRailAccountControls({
   onOpenAccount,
   onOpenHelp,
   onToggleNotifications,
+  notificationPanelOpen,
   notificationsEnabled,
   t,
   unreadCount,
@@ -323,7 +277,8 @@ function DesktopRailAccountControls({
   currentUser: AuthUser;
   onOpenAccount: () => void;
   onOpenHelp: () => void;
-  onToggleNotifications: () => void;
+  onToggleNotifications: MouseEventHandler<HTMLButtonElement>;
+  notificationPanelOpen: boolean;
   notificationsEnabled: boolean;
   t: AppBarTranslator;
   unreadCount: number;
@@ -342,6 +297,7 @@ function DesktopRailAccountControls({
           iconSize={22}
           label={t('shell:notifications.title')}
           onClick={onToggleNotifications}
+          open={notificationPanelOpen}
           unreadCount={unreadCount}
         />
       ) : null}

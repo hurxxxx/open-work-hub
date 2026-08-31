@@ -7,7 +7,7 @@ import {
   FilesRagSourcesArtifact,
 } from './FilesRagSourcesArtifact';
 import { getFileDownloadUrl } from '../api/files-api';
-import { openDownloadUrl } from '@/src/platform/browser/browser-download';
+import { downloadAuthenticatedContent } from '@/src/platform/browser/browser-download';
 
 const logout = vi.fn();
 
@@ -42,16 +42,16 @@ vi.mock('@/src/platform/browser/browser-download', async (importOriginal) => {
     >();
   return {
     ...actual,
-    openDownloadUrl: vi.fn(),
+    downloadAuthenticatedContent: vi.fn().mockResolvedValue(undefined),
   };
 });
 
 function renderSources(content: string) {
   render(
-    <MemoryRouter initialEntries={['/w/hq/files/chat']}>
+    <MemoryRouter initialEntries={['/apps/files/workspaces/hq/chat']}>
       <Routes>
         <Route
-          path="/w/:workspaceSlug/files/chat"
+          path="/apps/files/workspaces/:workspaceSlug/chat"
           element={<FilesRagSourcesArtifact content={content} />}
         />
       </Routes>
@@ -108,7 +108,11 @@ describe('FilesRagSourcesArtifact', () => {
         'hq',
         'file-1',
       );
-      expect(openDownloadUrl).toHaveBeenCalledWith('/fresh-download/file-1');
+      expect(downloadAuthenticatedContent).toHaveBeenCalledWith(
+        'token-1',
+        '/fresh-download/file-1',
+        'roadmap.pdf',
+      );
     });
   });
 

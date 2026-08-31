@@ -1,4 +1,5 @@
 import { Files, History, Lock, Mic, Share2, User } from 'lucide-react';
+import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
 
 import type { AppModuleManifest } from '@/src/app/shell/navigation-types';
 
@@ -29,7 +30,6 @@ export const docsManifest: AppModuleManifest = {
     ],
   },
   defaultActiveNavItemId: 'docs-all',
-  surfaces: { launcher: { defaultPinOrder: 1 } },
   navItems: [
     {
       id: 'docs-all',
@@ -88,12 +88,12 @@ export const docsManifest: AppModuleManifest = {
     },
   ],
   workspaceRoutePaths: [
-    '/w/:workspaceSlug/docs',
-    '/w/:workspaceSlug/docs/:docId',
-    '/w/:workspaceSlug/docs/:docId/html/:pageId',
+    getAppRoutePattern('docs.root'),
+    getAppRoutePattern('docs.document'),
+    getAppRoutePattern('docs.document-html'),
   ],
   globalRoutePaths: [
-    '/docs/shared/:shareToken',
-    '/docs/shared/:shareToken/html/:pageId',
+    getAppRoutePattern('docs.shared'),
+    getAppRoutePattern('docs.shared-html'),
   ],
 };

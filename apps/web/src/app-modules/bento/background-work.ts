@@ -1,5 +1,5 @@
 import type { BackgroundWorkSource } from '@/src/platform/background-work/background-work-session';
-import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
 
 import { cancelBentoAiJob, listBentoAiJobs } from './api/bento-api';
 
@@ -30,8 +30,12 @@ export const bentoAiBackgroundWorkSource: Omit<BackgroundWorkSource, 'appId'> =
               : undefined),
         status: job.status,
         href: job.result_document_id
-          ? `${buildWorkspaceAppPath(workspaceSlug, 'bento')}/${encodeURIComponent(job.result_document_id)}`
-          : buildWorkspaceAppPath(workspaceSlug, 'bento'),
+          ? buildAppHref({
+              routeId: 'bento.presentation',
+              workspaceSlug,
+              pathParams: { documentId: job.result_document_id },
+            })
+          : buildAppHref({ routeId: 'bento.root', workspaceSlug }),
         cancellable: job.cancellable,
         updatedAt: job.updated_at,
       }));

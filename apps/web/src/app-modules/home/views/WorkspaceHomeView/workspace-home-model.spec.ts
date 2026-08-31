@@ -3,7 +3,6 @@ import type { RecentPageItem } from '@/src/app-modules/docs/public-api';
 import type { MeetingListItem } from '@/src/app-modules/meeting/public-api';
 import type { PlannerEvent } from '@/src/app-modules/planner/public-api';
 import type { PmsTask } from '@/src/app-modules/pms/public-api';
-import type { WorkspaceNotification } from '@/src/platform/notifications/notifications-api';
 import {
   INITIAL_WORKSPACE_HOME_STATE,
   buildWorkspaceHomeSections,
@@ -37,7 +36,10 @@ function task(id: string, overrides: Partial<PmsTask> = {}): PmsTask {
   } as PmsTask;
 }
 
-function page(id: string, overrides: Partial<RecentPageItem> = {}): RecentPageItem {
+function page(
+  id: string,
+  overrides: Partial<RecentPageItem> = {},
+): RecentPageItem {
   return {
     page_id: id,
     page_title: `Page ${id}`,
@@ -90,15 +92,21 @@ describe('workspace-home-model', () => {
     ];
 
     expect(
-      selectTodayMeetings(meetings, 'UTC', new Date('2026-01-10T12:00:00Z')).map(
-        (item) => item.id,
-      ),
+      selectTodayMeetings(
+        meetings,
+        'UTC',
+        new Date('2026-01-10T12:00:00Z'),
+      ).map((item) => item.id),
     ).toEqual(['a', 'b', 'c', 'd', 'e']);
   });
 
   it('caps task and recent page summaries', () => {
-    expect(selectTopAssignedTasks([1, 2, 3, 4, 5, 6].map(String).map(task))).toHaveLength(5);
-    expect(selectTopRecentPages([1, 2, 3, 4, 5, 6].map(String).map(page))).toHaveLength(5);
+    expect(
+      selectTopAssignedTasks([1, 2, 3, 4, 5, 6].map(String).map(task)),
+    ).toHaveLength(5);
+    expect(
+      selectTopRecentPages([1, 2, 3, 4, 5, 6].map(String).map(page)),
+    ).toHaveLength(5);
   });
 
   it('maps task priorities to summary tones', () => {
@@ -120,11 +128,10 @@ describe('workspace-home-model', () => {
         workspaceSlug: 'team alpha',
       }).map((section) => [section.id, section.status, section.actionTo]),
     ).toEqual([
-      ['planner', 'loading', '/w/team%20alpha/planner'],
-      ['meetings', 'loading', '/w/team%20alpha/meeting'],
-      ['tasks', 'loading', '/w/team%20alpha/pms/assigned'],
-      ['docs', 'loading', '/w/team%20alpha/docs'],
-      ['notifications', 'loading', ''],
+      ['planner', 'loading', '/apps/planner'],
+      ['meetings', 'loading', '/apps/meeting/workspaces/team%20alpha'],
+      ['tasks', 'loading', '/apps/pms/workspaces/team%20alpha/assigned'],
+      ['docs', 'loading', '/apps/docs/workspaces/team%20alpha'],
     ]);
 
     expect(
@@ -140,8 +147,6 @@ describe('workspace-home-model', () => {
           pagesLoading: false,
           plannerEvents: [],
           plannerLoading: false,
-          notifications: [],
-          notificationsLoading: false,
         },
         timeZone: 'UTC',
         t,
@@ -152,7 +157,6 @@ describe('workspace-home-model', () => {
       ['meetings', 'empty'],
       ['tasks', 'empty'],
       ['docs', 'empty'],
-      ['notifications', 'empty'],
     ]);
   });
 
@@ -183,8 +187,6 @@ describe('workspace-home-model', () => {
         pagesLoading: false,
         plannerEvents: [],
         plannerLoading: false,
-        notifications: [],
-        notificationsLoading: false,
       },
       timeZone: 'UTC',
       t,
@@ -196,7 +198,7 @@ describe('workspace-home-model', () => {
         kind: 'meeting',
         id: 'today',
         title: 'Meeting today',
-        to: '/w/team%20alpha/meeting/today',
+        to: '/apps/meeting/workspaces/team%20alpha/meetings/today',
       },
     ]);
     expect(sections[2]?.rows).toEqual([
@@ -204,7 +206,7 @@ describe('workspace-home-model', () => {
         kind: 'task',
         id: 'due',
         title: 'Task due',
-        to: '/w/team%20alpha/pms/assigned?task=due',
+        to: '/apps/pms/workspaces/team%20alpha/assigned?task=due',
         trailing: 'home.dueTomorrow',
         priorityTone: 'danger',
       },
@@ -215,7 +217,7 @@ describe('workspace-home-model', () => {
         id: 'page-1',
         title: 'home.untitled',
         subtitle: 'Project Notes',
-        to: '/w/team%20alpha/docs/doc-1',
+        to: '/apps/docs/workspaces/team%20alpha/documents/doc-1',
       },
     ]);
   });
@@ -248,8 +250,6 @@ describe('workspace-home-model', () => {
           } as PlannerEvent,
         ],
         plannerLoading: false,
-        notifications: [],
-        notificationsLoading: false,
       },
       timeZone: 'UTC',
       t,
@@ -262,76 +262,12 @@ describe('workspace-home-model', () => {
       {
         kind: 'planner',
         id: 'soon',
-        to: '/w/team%20alpha/planner',
+        to: '/apps/planner',
       },
       {
         kind: 'planner',
         id: 'later',
-        to: '/w/team%20alpha/planner',
-      },
-    ]);
-  });
-
-  it('builds notification rows with resolved deep links', () => {
-    const sections = buildWorkspaceHomeSections({
-      locale: 'en-US',
-      now: new Date('2026-06-10T03:00:00Z'),
-      state: {
-        meetings: [],
-        meetingsLoading: false,
-        issues: [],
-        issuesLoading: false,
-        recentPages: [],
-        pagesLoading: false,
-        plannerEvents: [],
-        plannerLoading: false,
-        notifications: [
-          {
-            id: 'n1',
-            type: 'task',
-            title: 'Assigned to you',
-            body: 'Task X',
-            reference_type: 'task',
-            reference_id: 'task-9',
-            action_url: null,
-            is_read: false,
-            created_at: '2026-06-10T02:00:00Z',
-          } as WorkspaceNotification,
-          {
-            id: 'n2',
-            type: 'mention',
-            title: 'Mentioned you',
-            body: '',
-            reference_type: 'doc',
-            reference_id: null,
-            action_url: '/w/team%20alpha/docs/d1',
-            is_read: true,
-            created_at: '2026-06-09T02:00:00Z',
-          } as WorkspaceNotification,
-        ],
-        notificationsLoading: false,
-      },
-      timeZone: 'UTC',
-      t,
-      workspaceSlug: 'team alpha',
-    });
-
-    const notifications = sections.find(
-      (section) => section.id === 'notifications',
-    );
-    expect(notifications?.status).toBe('ready');
-    expect(notifications?.rows).toMatchObject([
-      {
-        kind: 'notification',
-        id: 'n1',
-        to: '/w/team%20alpha/pms/assigned?task=task-9',
-        isRead: false,
-      },
-      {
-        kind: 'notification',
-        id: 'n2',
-        to: '/w/team%20alpha/docs/d1',
-        isRead: true,
+        to: '/apps/planner',
       },
     ]);
   });
@@ -351,7 +287,9 @@ describe('workspace-home-model', () => {
     expect(loadedState.meetings).toHaveLength(1);
     expect(loadedState.meetingsLoading).toBe(false);
 
-    const failedState = workspaceHomeReducer(loadedState, { type: 'meetings-failed' });
+    const failedState = workspaceHomeReducer(loadedState, {
+      type: 'meetings-failed',
+    });
     expect(failedState.meetings).toEqual([]);
     expect(failedState.meetingsLoading).toBe(false);
   });

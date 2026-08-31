@@ -97,12 +97,12 @@ export function resolveCoreWorkspaceAppGate({
     return { status: 'allowed' };
   }
 
-  if (bootstrapLoading || bootstrapAppIds === null) {
-    return { status: 'loading' };
-  }
-
   if (bootstrapError) {
     return { status: 'bootstrap_error', error: bootstrapError };
+  }
+
+  if (bootstrapLoading || bootstrapAppIds === null) {
+    return { status: 'loading' };
   }
 
   if (!bootstrapAppIds.includes(appId)) {

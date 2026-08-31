@@ -7,8 +7,23 @@ import {
   findLegacyPathReferences,
   formatPathHardcodingFindings,
   isExcludedPath,
+  isReadableRepoFile,
   runCli,
 } from './check-path-hardcoding.mjs';
+
+test('isReadableRepoFile skips tracked symlinks that resolve to directories', () => {
+  const fileSystem = {
+    statSync(file) {
+      return { isFile: () => file.endsWith('/source.ts') };
+    },
+  };
+
+  assert.equal(isReadableRepoFile('/repo', 'source.ts', fileSystem), true);
+  assert.equal(
+    isReadableRepoFile('/repo', '.claude/skills', fileSystem),
+    false,
+  );
+});
 
 const legacyBase = '/projects/open-work-hub-';
 const legacyPath = (suffix) => `${legacyBase}${suffix}`;

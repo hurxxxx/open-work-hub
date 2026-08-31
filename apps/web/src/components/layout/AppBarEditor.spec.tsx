@@ -49,14 +49,14 @@ const launcherCategories: WorkspaceBootstrapAppBarCategory[] = [
       {
         app_id: 'chatbot',
         title: '챗봇',
-        route_base: '/chatbot',
+        route_base: '/apps/chatbot',
         icon_key: 'message-square',
         enabled: true,
       },
       {
         app_id: 'web-search',
         title: '웹 검색',
-        route_base: '/web-search',
+        route_base: '/apps/web-search',
         icon_key: 'search',
         enabled: true,
       },
@@ -72,7 +72,7 @@ const launcherCategories: WorkspaceBootstrapAppBarCategory[] = [
       {
         app_id: 'docs',
         title: '문서',
-        route_base: '/docs',
+        route_base: '/apps/docs',
         icon_key: 'file-text',
         enabled: true,
       },

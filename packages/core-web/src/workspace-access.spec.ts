@@ -105,6 +105,17 @@ describe('core workspace access', () => {
         bootstrapAppIds: null,
         bootstrapError: 'bootstrap failed',
         bootstrapLoading: true,
+        user: buildUser(),
+        workspaceSlug: 'hq',
+      }),
+    ).toEqual({ status: 'bootstrap_error', error: 'bootstrap failed' });
+
+    expect(
+      resolveCoreWorkspaceAppGate({
+        appId: 'research',
+        bootstrapAppIds: null,
+        bootstrapError: 'bootstrap failed',
+        bootstrapLoading: true,
         user: buildUser({ workspaces: [] }),
         workspaceSlug: 'hq',
       }),

@@ -40,7 +40,8 @@
 - Search/RAG supersession identity: `(backend, resource_type, resource_id)`.
 - Delete is versioned tombstone; stale workers exit `superseded`.
 - OpenSearch uses strict external version.
-- Qdrant uses PostgreSQL head fence; conditional update behavior/version is pinned by tests.
+- Qdrant workers acquire the PostgreSQL projection-head fence and recheck current version before
+  writing; concurrent stale/current worker behavior requires a two-session fence test.
 
 ## Generation Cutover
 
@@ -62,7 +63,8 @@
 - Bounded refill fills after ACL rejection; OpenSearch refill uses PIT and `search_after`.
 - Source adapter provides batch authorization and records rejection/refill metrics.
 - Response metadata hydrates from canonical resource/source metadata, not backend payload.
-- Signed raw-content capability binds principal and ACL version; rechecks immediately before byte stream; no cache.
+- Signed raw-content capability issuance, caller binding, reauthorization, and response handling
+  follow [Content Access](../docs/domains/content-access/README.md).
 
 ## PostgreSQL Rollout
 

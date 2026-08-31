@@ -1,4 +1,8 @@
 import { createElement, lazy } from 'react';
+import {
+  getAppRouteChrome,
+  getAppRoutePattern,
+} from '@open-work-hub/contracts/app-routes';
 
 import { lazyRoute } from '@/src/app/shell/lazy-route';
 import type { WorkspaceRouteDefinition } from '@/src/app/shell/route-types';
@@ -12,13 +16,14 @@ const BentoView = lazy(() =>
 export const bentoWorkspaceRoutes: WorkspaceRouteDefinition[] = [
   {
     appId: 'bento',
-    path: '/w/:workspaceSlug/bento',
+    chrome: getAppRouteChrome('bento.root'),
+    path: getAppRoutePattern('bento.root'),
     element: lazyRoute(createElement(BentoView)),
   },
   {
     appId: 'bento',
-    chrome: 'fullSurface',
-    path: '/w/:workspaceSlug/bento/:documentId',
+    chrome: getAppRouteChrome('bento.presentation'),
+    path: getAppRoutePattern('bento.presentation'),
     element: lazyRoute(createElement(BentoView)),
   },
 ];

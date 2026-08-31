@@ -189,35 +189,23 @@ def test_dev_login_is_idempotent_and_preserves_user_spaces(
     assert any(item["id"] == space_id for item in list_response.json())
 
 
-def test_dev_login_seed_syncs_new_workspace_app_catalog_rows(
+def test_dev_login_seed_does_not_recreate_missing_app_controls(
     client: TestClient,
 ) -> None:
-    """A completed dev seed must still pick up newly shipped app catalog rows.
-
-    The full seed reconciler stays guarded to preserve user data, but app
-    visibility rows are additive product metadata and need to be inserted when
-    a new app such as web-search is added after a DB already exists.
-    """
+    """Control completeness is migration-owned and missing rows fail closed."""
     from open_work_hub_api.core.db import get_session_factory
     from open_work_hub_api.domains.auth.access import ensure_dev_login_seed_data
     from open_work_hub_api.domains.auth.models import (
-        PlatformAppVisibility,
-        Workspace,
-        WorkspaceAppEntitlement,
+        CompanyAppControl,
+        WorkspaceAppDefault,
     )
 
     _seed_dev_accounts()
     session_factory = get_session_factory()
 
     with session_factory() as db:
-        workspace_ids = set(db.scalars(select(Workspace.id)).all())
-        assert workspace_ids
-        db.execute(
-            delete(WorkspaceAppEntitlement).where(WorkspaceAppEntitlement.app_id == "web-search")
-        )
-        db.execute(
-            delete(PlatformAppVisibility).where(PlatformAppVisibility.app_id == "web-search")
-        )
+        db.execute(delete(WorkspaceAppDefault).where(WorkspaceAppDefault.app_id == "web-search"))
+        db.execute(delete(CompanyAppControl).where(CompanyAppControl.app_id == "web-search"))
         db.commit()
 
     with session_factory() as db:
@@ -225,20 +213,8 @@ def test_dev_login_seed_syncs_new_workspace_app_catalog_rows(
         db.commit()
 
     with session_factory() as db:
-        web_search_workspace_ids = set(
-            db.scalars(
-                select(WorkspaceAppEntitlement.workspace_id).where(
-                    WorkspaceAppEntitlement.app_id == "web-search"
-                )
-            ).all()
-        )
-        visible = db.scalar(
-            select(PlatformAppVisibility.visible).where(
-                PlatformAppVisibility.app_id == "web-search"
-            )
-        )
-        assert workspace_ids <= web_search_workspace_ids
-        assert visible is True
+        assert db.get(WorkspaceAppDefault, "web-search") is None
+        assert db.get(CompanyAppControl, "web-search") is None
 
 
 def test_ensure_seed_data_does_not_overwrite_workspace_renames(

@@ -7,7 +7,16 @@ import {
   formatPlannerHeading,
   persistTimelineRangeDays,
   readTimelineRangeDays,
+  shouldBlockPlannerCalendar,
 } from './planner-calendar-view-model';
+
+describe('planner calendar error presentation', () => {
+  it('blocks only when no usable calendar snapshot exists', () => {
+    expect(shouldBlockPlannerCalendar('Initial load failed', false)).toBe(true);
+    expect(shouldBlockPlannerCalendar('Refresh failed', true)).toBe(false);
+    expect(shouldBlockPlannerCalendar(null, false)).toBe(false);
+  });
+});
 
 describe('planner calendar view model', () => {
   afterEach(() => {
@@ -50,7 +59,10 @@ describe('planner calendar view model', () => {
     persistTimelineRangeDays(56);
     expect(readTimelineRangeDays()).toBe(56);
 
-    window.localStorage.setItem('open-work-hub:planner-timeline-range-days', '7');
+    window.localStorage.setItem(
+      'open-work-hub:planner-timeline-range-days',
+      '7',
+    );
     expect(readTimelineRangeDays()).toBe(28);
   });
 
@@ -107,11 +119,11 @@ describe('planner calendar view model', () => {
     const leadingBlanks = new Date(2026, 1, 1).getDay();
 
     expect(cells).toHaveLength(42);
-    expect(cells.slice(0, leadingBlanks).every((cell) => cell.kind === 'blank')).toBe(true);
     expect(
-      cells
-        .filter((cell) => cell.kind === 'day')
-        .map((cell) => cell.day),
+      cells.slice(0, leadingBlanks).every((cell) => cell.kind === 'blank'),
+    ).toBe(true);
+    expect(
+      cells.filter((cell) => cell.kind === 'day').map((cell) => cell.day),
     ).toEqual(Array.from({ length: 28 }, (_, index) => index + 1));
   });
 
@@ -123,9 +135,8 @@ describe('planner calendar view model', () => {
       viewMonth: 1,
       selectedDate: 1,
       today: new Date(2026, 1, 2),
-      getHolidayNames: (_year, _month, day) => (
-        day === 2 ? ['Observed holiday'] : null
-      ),
+      getHolidayNames: (_year, _month, day) =>
+        day === 2 ? ['Observed holiday'] : null,
     });
     const first = cells.find((cell) => cell.kind === 'day' && cell.day === 1);
     const second = cells.find((cell) => cell.kind === 'day' && cell.day === 2);

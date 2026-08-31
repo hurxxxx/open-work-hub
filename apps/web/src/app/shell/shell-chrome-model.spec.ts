@@ -6,11 +6,7 @@ import {
   APP_GLOBAL_ROUTES,
   APP_WORKSPACE_ROUTES,
 } from '@/src/app/shell/app-registry';
-import {
-  buildShellWorkspaceSelectionKey,
-  resolveInitialShellWorkspaceSlug,
-  resolveShellChromeState,
-} from './shell-chrome-model';
+import { resolveShellChromeState } from './shell-chrome-model';
 
 function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
   return {
@@ -47,9 +43,11 @@ function resolveChrome(
   return resolveShellChromeState({
     enabledWorkspaceAppIds: [
       'community',
+      'chatbot',
       'docs',
       'planner',
       'pms',
+      'retrieval-search',
       'docs',
       'web-search',
       'whiteboard',
@@ -58,7 +56,6 @@ function resolveChrome(
     pathname,
     resolveShellStateForPath: resolveShellState,
     search,
-    shellWorkspaceSlug: 'hq',
     user: buildUser(),
     workspaceRoutes: APP_WORKSPACE_ROUTES,
     ...overrides,
@@ -66,49 +63,18 @@ function resolveChrome(
 }
 
 describe('shell chrome model', () => {
-  it('builds a workspace selection key that changes with memberships', () => {
-    expect(buildShellWorkspaceSelectionKey(null, 'hq')).toBe('anonymous:hq');
-    expect(buildShellWorkspaceSelectionKey(buildUser(), 'hq')).toBe(
-      ['user-1', '', 'hq', 'workspace-hq:hq'].join('\u0000'),
-    );
-  });
-
-  it('resolves the initial shell workspace from route or user preference', () => {
-    expect(resolveInitialShellWorkspaceSlug(buildUser(), 'hq')).toBe('hq');
+  it('keeps workspace context chrome on workspace surfaces', () => {
     expect(
-      resolveInitialShellWorkspaceSlug(
-        buildUser({
-          default_workspace_id: 'workspace-demo',
-          workspaces: [
-            {
-              id: 'workspace-hq',
-              name: 'Open Work Hub HQ',
-              role: 'admin',
-              slug: 'hq',
-            },
-            {
-              id: 'workspace-demo',
-              name: 'Open Work Hub Demo',
-              role: 'member',
-              slug: 'demo',
-            },
-          ],
-        }),
-        'missing',
-      ),
-    ).toBe('demo');
-  });
-
-  it('hides sidebar chrome for full-surface routes', () => {
-    expect(resolveChrome('/w/hq/whiteboard/board-1')).toMatchObject({
-      activeAppId: 'collaboration',
+      resolveChrome('/apps/whiteboard/workspaces/hq/boards/board-1'),
+    ).toMatchObject({
+      activeAppId: 'whiteboard',
       activeNavItemId: 'whiteboard-all',
-      canOpenMobileAppMenu: false,
+      canOpenMobileAppMenu: true,
       mainClassName: 'flex-1 overflow-hidden relative',
-      showSubSidebar: false,
+      showSubSidebar: true,
     });
 
-    expect(resolveChrome('/planner')).toMatchObject({
+    expect(resolveChrome('/apps/planner')).toMatchObject({
       activeAppId: 'planner',
       activeNavItemId: 'planner-calendar',
       canOpenMobileAppMenu: false,
@@ -116,11 +82,11 @@ describe('shell chrome model', () => {
     });
   });
 
-  it('uses subSidebar route options for home and integrated search', () => {
-    expect(resolveChrome('/w/hq/home')).toMatchObject({
+  it('uses generated route chrome for home and workspace search apps', () => {
+    expect(resolveChrome('/apps/home/workspaces/hq')).toMatchObject({
       activeAppId: 'home',
       canOpenMobileAppMenu: false,
-      mainClassName: 'flex-1 overflow-y-auto relative',
+      mainClassName: 'flex-1 overflow-hidden relative',
       showSubSidebar: false,
     });
 
@@ -138,38 +104,53 @@ describe('shell chrome model', () => {
       showSubSidebar: false,
     });
 
-    expect(resolveChrome('/tool/search', '?workspace=hq')).toMatchObject({
-      activeAppId: 'search',
-      activeNavItemId: 'search',
-      canOpenMobileAppMenu: false,
-      mainClassName: 'flex-1 overflow-y-auto relative',
-      showSubSidebar: false,
-    });
+    expect(resolveChrome('/apps/retrieval-search/workspaces/hq')).toMatchObject(
+      {
+        activeAppId: 'retrieval-search',
+        activeNavItemId: 'retrieval-search',
+        canOpenMobileAppMenu: true,
+        mainClassName: 'flex-1 overflow-y-auto relative',
+        showSubSidebar: true,
+      },
+    );
 
-    expect(resolveChrome('/w/hq/web-search')).toMatchObject({
-      activeAppId: 'ai',
+    for (const pathname of [
+      '/apps/chatbot/workspaces/hq',
+      '/apps/web-search/workspaces/hq',
+    ]) {
+      expect(resolveChrome(pathname)).toMatchObject({
+        canOpenMobileAppMenu: true,
+        mainClassName: 'flex-1 overflow-hidden relative',
+        showSubSidebar: true,
+      });
+    }
+
+    expect(resolveChrome('/apps/web-search/workspaces/hq')).toMatchObject({
+      activeAppId: 'web-search',
       activeNavItemId: 'web-search',
-      canOpenMobileAppMenu: false,
+      canOpenMobileAppMenu: true,
       mainClassName: 'flex-1 overflow-hidden relative',
-      showSubSidebar: false,
+      showSubSidebar: true,
     });
   });
 
-  it('hides sidebar chrome for document render routes', () => {
-    expect(resolveChrome('/w/hq/docs/doc-1/html/page-1')).toMatchObject({
-      activeAppId: 'collaboration',
-      canOpenMobileAppMenu: false,
-      showSubSidebar: false,
+  it('keeps context chrome on workspace renders but not shared renders', () => {
+    expect(
+      resolveChrome('/apps/docs/workspaces/hq/documents/doc-1/html/page-1'),
+    ).toMatchObject({
+      activeAppId: 'docs',
+      canOpenMobileAppMenu: true,
+      showSubSidebar: true,
     });
-    expect(resolveChrome('/docs/shared/link/html/page-1')).toMatchObject({
-      activeAppId: 'collaboration',
+    expect(resolveChrome('/apps/docs/shared/link/html/page-1')).toMatchObject({
+      activeAppId: 'docs',
       canOpenMobileAppMenu: false,
       showSubSidebar: false,
     });
   });
 
   it('keeps community eligible for app submenus without switching to full-surface chrome', () => {
-    expect(resolveChrome('/community')).toMatchObject({
+    expect(resolveChrome('/apps/community')).toMatchObject({
       activeAppId: 'community',
       activeNavItemId: '',
       canOpenMobileAppMenu: true,
@@ -179,13 +160,14 @@ describe('shell chrome model', () => {
   });
 
   it('keeps normal workspace routes scrollable and eligible for mobile app menu', () => {
-    expect(resolveChrome('/w/hq/docs', '?view=mine')).toMatchObject({
-      activeAppId: 'collaboration',
+    expect(
+      resolveChrome('/apps/docs/workspaces/hq', '?view=mine'),
+    ).toMatchObject({
+      activeAppId: 'docs',
       activeNavItemId: 'docs-my',
       bootstrapWorkspaceSlug: 'hq',
       canOpenMobileAppMenu: true,
       mainClassName: 'flex-1 overflow-y-auto relative',
-      routeStorageSelection: { appId: 'docs', workspaceSlug: 'hq' },
       routeWorkspaceAppId: 'docs',
       routeWorkspaceSlug: 'hq',
       showSubSidebar: true,
@@ -193,55 +175,53 @@ describe('shell chrome model', () => {
   });
 
   it('keeps PMS sidebar visible while PMS routes own their content scroll', () => {
-    expect(resolveChrome('/w/hq/pms')).toMatchObject({
-      activeAppId: 'collaboration',
+    expect(resolveChrome('/apps/pms/workspaces/hq')).toMatchObject({
+      activeAppId: 'pms',
       mainClassName: 'flex-1 overflow-hidden relative',
       showSubSidebar: true,
     });
 
-    expect(resolveChrome('/w/hq/pms/lists/list-1')).toMatchObject({
-      activeAppId: 'collaboration',
-      activeNavItemId: 'pms-list-list-1',
-      mainClassName: 'flex-1 overflow-hidden relative',
-      showSubSidebar: true,
-    });
+    expect(resolveChrome('/apps/pms/workspaces/hq/lists/list-1')).toMatchObject(
+      {
+        activeAppId: 'pms',
+        activeNavItemId: 'pms-list-list-1',
+        mainClassName: 'flex-1 overflow-hidden relative',
+        showSubSidebar: true,
+      },
+    );
 
-    expect(resolveChrome('/w/hq/pms/assigned')).toMatchObject({
-      activeAppId: 'collaboration',
+    expect(resolveChrome('/apps/pms/workspaces/hq/assigned')).toMatchObject({
+      activeAppId: 'pms',
       activeNavItemId: 'pms-tasks-assigned',
       mainClassName: 'flex-1 overflow-hidden relative',
       showSubSidebar: true,
     });
   });
 
-  it('uses enabled app ids for active chrome but still identifies route storage', () => {
+  it('uses the route-scoped enabled app ids for active chrome', () => {
     expect(
-      resolveChrome('/w/hq/docs', '?view=mine', {
+      resolveChrome('/apps/docs/workspaces/hq', '?view=mine', {
         enabledWorkspaceAppIds: ['planner'],
       }),
     ).toMatchObject({
       activeAppId: 'home',
       activeNavItemId: '',
-      canOpenMobileAppMenu: false,
-      routeStorageSelection: null,
+      canOpenMobileAppMenu: true,
       showSubSidebar: true,
     });
   });
 
-  it('does not persist an unregistered workspace app segment', () => {
-    expect(resolveChrome('/w/hq/typo-app')).toMatchObject({
+  it('rejects an unregistered workspace app route', () => {
+    expect(resolveChrome('/apps/typo-app/workspaces/hq')).toMatchObject({
       activeAppId: 'home',
-      routeStorageSelection: null,
-      routeWorkspaceAppId: 'typo-app',
+      routeWorkspaceAppId: null,
     });
   });
 
-  it('does not persist route storage when the workspace is not a membership', () => {
-    expect(
-      resolveChrome('/w/demo/docs', '', {
-        shellWorkspaceSlug: 'hq',
-        user: buildUser(),
-      }).routeStorageSelection,
-    ).toBeNull();
+  it('does not bootstrap a workspace that is not a membership', () => {
+    expect(resolveChrome('/apps/docs/workspaces/demo')).toMatchObject({
+      bootstrapWorkspaceSlug: null,
+      routeWorkspaceSlug: 'demo',
+    });
   });
 });

@@ -1,17 +1,11 @@
 from open_work_hub_api.core.workspace_app_registry import (
-    WorkspaceAppRegistration,
     WorkspaceNavRegistration,
+    workspace_app_registration,
 )
 
 
-BENTO_WORKSPACE_APP = WorkspaceAppRegistration(
-    app_id="bento",
-    title="bento/slides",
-    route_base="/bento",
-    icon_key="presentation",
-    enabled_by_default=True,
-    visible_by_default=True,
-    launcher_category=True,
+BENTO_WORKSPACE_APP = workspace_app_registration(
+    "bento",
     nav_items=(
         WorkspaceNavRegistration(
             id="bento-all",

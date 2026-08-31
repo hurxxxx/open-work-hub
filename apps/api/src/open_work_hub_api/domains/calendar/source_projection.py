@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import timedelta
 
-from open_work_hub_api.domains.planner.event_time import local_date_string, utc_iso
+from open_work_hub_api.domains.planner.event_time import planner_event_calendar_bounds, utc_iso
 
 from .schemas import (
     CalendarEventMetadata,
@@ -95,37 +95,15 @@ def project_pms_task_calendar_events(
     return []
 
 
-def _add_date_string_days(value: str, days: int) -> str:
-    return (date.fromisoformat(value) + timedelta(days=days)).isoformat()
-
-
-def _project_planner_event_render_bounds(event) -> tuple[str, str, bool]:
-    if event.all_day:
-        return (
-            local_date_string(event.start_at, event.time_zone),
-            local_date_string(event.end_at, event.time_zone),
-            True,
-        )
-    if event.start_has_time and event.end_has_time:
-        return utc_iso(event.start_at), utc_iso(event.end_at), False
-    if event.start_has_time:
-        marker_end = min(event.end_at, event.start_at + timedelta(minutes=30))
-        if marker_end <= event.start_at:
-            marker_end = event.start_at + timedelta(minutes=30)
-        return utc_iso(event.start_at), utc_iso(marker_end), False
-    if event.end_has_time:
-        marker_start = max(event.start_at, event.end_at - timedelta(minutes=30))
-        if marker_start >= event.end_at:
-            marker_start = event.end_at - timedelta(minutes=30)
-        return utc_iso(marker_start), utc_iso(event.end_at), False
-
-    start = local_date_string(event.start_at, event.time_zone)
-    end = _add_date_string_days(local_date_string(event.end_at, event.time_zone), 1)
-    return start, end, True
-
-
 def project_planner_calendar_event(event) -> CalendarEventOut:
-    start, end, calendar_all_day = _project_planner_event_render_bounds(event)
+    start, end, calendar_all_day = planner_event_calendar_bounds(
+        all_day=event.all_day,
+        start_at=event.start_at,
+        end_at=event.end_at,
+        start_has_time=event.start_has_time,
+        end_has_time=event.end_has_time,
+        time_zone=event.time_zone,
+    )
     return CalendarEventOut(
         id=f"planner-event-{event.id}",
         title=event.title,

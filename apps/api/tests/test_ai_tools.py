@@ -12,7 +12,7 @@ from open_work_hub_api.domains.ai.tool_service import _extract_resource_ids
 from open_work_hub_api.core.db import get_engine
 from open_work_hub_api.domains.auth.models import (
     AuditLog,
-    PlatformAppVisibility,
+    CompanyAppControl,
 )
 
 
@@ -30,12 +30,12 @@ def _workspace_tool_path(workspace_slug: str, tool_name: str) -> str:
 
 def _disable_platform_app(app_id: str) -> None:
     with Session(get_engine()) as session:
-        visibility = session.scalar(
-            select(PlatformAppVisibility).where(PlatformAppVisibility.app_id == app_id)
+        control = session.scalar(
+            select(CompanyAppControl).where(CompanyAppControl.app_id == app_id)
         )
-        assert visibility is not None
-        visibility.visible = False
-        session.add(visibility)
+        assert control is not None
+        control.enabled = False
+        session.add(control)
         session.commit()
 
 

@@ -1,4 +1,5 @@
 import type { Page, Route } from '@playwright/test';
+import { APP_CONTRACTS } from '@open-work-hub/contracts/app-contracts';
 import {
   REALTIME_CLIENT_EVENT_TYPES,
   REALTIME_SERVER_EVENT_TYPES,
@@ -132,24 +133,6 @@ function categoryItem(
 // Full WorkspaceBootstrapResponse nav payload. It mirrors the app manifests
 // closely enough for shell/AppBar/SubSidebar E2E smoke tests to stay hermetic.
 const NAV_ITEMS_BY_APP: Record<string, WorkspaceBootstrapNavFixture[]> = {
-  chatbot: [
-    navItem({
-      id: 'chatbot',
-      app_id: 'chatbot',
-      title: 'AI 챗봇',
-      category: 'AI 앱',
-      icon_key: 'message-square',
-    }),
-  ],
-  'web-search': [
-    navItem({
-      id: 'web-search',
-      app_id: 'web-search',
-      title: '웹 검색 봇',
-      category: 'AI 앱',
-      icon_key: 'globe-2',
-    }),
-  ],
   pms: [
     navItem({
       id: 'pms-inbox',
@@ -289,13 +272,13 @@ const APP_BAR_CATEGORIES: WorkspaceBootstrapAppBarCategoryFixture[] = [
       categoryItem({
         app_id: 'chatbot',
         title: 'AI 어시스턴트 챗봇',
-        route_base: '/chatbot',
+        route_base: '/apps/chatbot',
         icon_key: 'message-square',
       }),
       categoryItem({
         app_id: 'web-search',
         title: '웹 검색 봇',
-        route_base: '/web-search',
+        route_base: '/apps/web-search',
         icon_key: 'globe-2',
       }),
     ],
@@ -310,41 +293,44 @@ const APP_BAR_CATEGORIES: WorkspaceBootstrapAppBarCategoryFixture[] = [
       categoryItem({
         app_id: 'pms',
         title: 'PMS',
-        route_base: '/pms',
+        route_base: '/apps/pms',
         icon_key: 'folder-kanban',
       }),
       categoryItem({
         app_id: 'docs',
         title: 'DOCS',
-        route_base: '/docs',
+        route_base: '/apps/docs',
         icon_key: 'files',
       }),
       categoryItem({
         app_id: 'meeting',
         title: 'MEETING',
-        route_base: '/meeting',
+        route_base: '/apps/meeting',
         icon_key: 'users',
       }),
       categoryItem({
         app_id: 'planner',
         title: 'Planner',
-        route_base: '/planner',
+        route_base: '/apps/planner',
         icon_key: 'calendar',
       }),
     ],
   },
 ];
 
-const APP_FIXTURES = [
-  { app_id: 'home', title: 'HOME', icon_key: 'home' },
-  ...APP_BAR_CATEGORIES.flatMap((category) => category.items).map((item) => ({
-    app_id: item.app_id,
-    title: item.title,
-    icon_key: item.icon_key,
-  })),
-];
+const APP_FIXTURES = APP_CONTRACTS.map((app) => ({
+  app_id: app.app_id,
+  title: app.title,
+  icon_key: app.icon_key,
+}));
 
-const DEFAULT_ENABLED_APP_IDS = APP_FIXTURES.map((app) => app.app_id);
+const DEFAULT_ENABLED_APP_IDS = APP_CONTRACTS.filter(
+  (app) => app.app_id !== 'agent-terminal',
+).map((app) => app.app_id);
+
+function findAppContract(appId: string) {
+  return APP_CONTRACTS.find((app) => app.app_id === appId);
+}
 
 const KEYWORD_SEARCH_ENTITY_TYPES_BY_APP: Record<
   string,
@@ -367,59 +353,6 @@ const KEYWORD_SEARCH_ENTITY_TYPES_BY_APP: Record<
   },
 };
 
-const GLOBAL_APPS_BOOTSTRAP = {
-  apps: [
-    {
-      app_id: 'mail',
-      title: 'Mail',
-      route_base: '/mail',
-      icon_key: 'mail',
-      availability_scope: 'platform',
-      enabled: true,
-      coming_soon: false,
-    },
-    {
-      app_id: 'planner',
-      title: 'Planner',
-      route_base: '/planner',
-      icon_key: 'calendar',
-      availability_scope: 'platform',
-      enabled: true,
-      coming_soon: false,
-    },
-  ],
-  app_bar_categories: [],
-  personal_tools: [
-    {
-      app_id: 'mail',
-      title: 'Mail',
-      route_base: '/mail',
-      icon_key: 'mail',
-      availability_scope: 'platform',
-      enabled: true,
-      coming_soon: false,
-    },
-    {
-      app_id: 'planner',
-      title: 'Planner',
-      route_base: '/planner',
-      icon_key: 'calendar',
-      availability_scope: 'platform',
-      enabled: true,
-      coming_soon: false,
-    },
-  ],
-  platform_enabled_app_ids: ['mail', 'planner'],
-  principal: {
-    kind: 'user',
-    scope: 'personal',
-    workspace_id: null,
-    source: 'e2e.apps_bootstrap',
-    user_id: 'user-e2e',
-    session_id: null,
-  },
-};
-
 function buildApp(
   app_id: string,
   title: string,
@@ -430,7 +363,7 @@ function buildApp(
   return {
     app_id,
     title,
-    route_base: app_id,
+    route_base: findAppContract(app_id)?.route_base ?? `/apps/${app_id}`,
     icon_key,
     enabled,
     coming_soon: false,
@@ -441,10 +374,12 @@ function buildApp(
 function buildWorkspaceBootstrap(
   enabledAppIds: readonly string[] = DEFAULT_ENABLED_APP_IDS,
 ) {
-  const apps = APP_FIXTURES.map((app) =>
-    buildApp(app.app_id, app.title, app.icon_key, enabledAppIds),
-  );
   const enabledAppIdSet = new Set(enabledAppIds);
+  const apps = APP_FIXTURES.filter(
+    (app) =>
+      enabledAppIdSet.has(app.app_id) &&
+      findAppContract(app.app_id)?.availability_scope === 'workspace',
+  ).map((app) => buildApp(app.app_id, app.title, app.icon_key, enabledAppIds));
   const app_bar_categories = APP_BAR_CATEGORIES.map((category) => ({
     ...category,
     items: category.items
@@ -466,6 +401,77 @@ function buildWorkspaceBootstrap(
         const descriptor = KEYWORD_SEARCH_ENTITY_TYPES_BY_APP[appId];
         return descriptor ? [descriptor] : [];
       }),
+    },
+  };
+}
+
+function buildAppsBootstrap(enabledAppIds: readonly string[], user: E2EUser) {
+  const enabledAppIdSet = new Set(enabledAppIds);
+  const eligibleWorkspaces = user.workspaces.map((workspace) => ({
+    id: workspace.id,
+    slug: workspace.slug,
+    name: workspace.name,
+  }));
+  const apps = APP_CONTRACTS.flatMap((app) => {
+    if (!enabledAppIdSet.has(app.app_id)) return [];
+    if (
+      app.availability_scope === 'workspace' &&
+      eligibleWorkspaces.length === 0
+    ) {
+      return [];
+    }
+    const singleEligibleWorkspace =
+      app.availability_scope === 'workspace' && eligibleWorkspaces.length === 1
+        ? eligibleWorkspaces[0]
+        : null;
+    return [
+      {
+        app_id: app.app_id,
+        title: app.title,
+        route_base: app.route_base,
+        entry_route_id: app.entry_route_id,
+        icon_key: app.icon_key,
+        availability_scope: app.availability_scope,
+        execution_context_kind: app.execution_context_kind,
+        resource_scope: app.resource_scope,
+        coming_soon: false,
+        eligible_workspace_count:
+          app.availability_scope === 'workspace'
+            ? eligibleWorkspaces.length
+            : 0,
+        preferred_workspace: singleEligibleWorkspace,
+        single_eligible_workspace: singleEligibleWorkspace,
+      },
+    ];
+  });
+  const executableAppIds = new Set<string>(apps.map((app) => app.app_id));
+  return {
+    apps,
+    global_route_app_ids: apps.map((app) => app.app_id),
+    app_bar_categories: APP_BAR_CATEGORIES.map((category) => ({
+      ...category,
+      items: category.items
+        .filter((item) => executableAppIds.has(item.app_id))
+        .map((item, position) => ({
+          ...item,
+          availability_scope:
+            findAppContract(item.app_id)?.availability_scope ?? 'workspace',
+          enabled: true,
+          position,
+        })),
+    })).filter((category) => category.items.length > 0),
+    personal_tool_app_ids: APP_CONTRACTS.filter(
+      (app) =>
+        executableAppIds.has(app.app_id) &&
+        app.launcher.placement === 'personal_tools',
+    ).map((app) => app.app_id),
+    principal: {
+      kind: 'user',
+      scope: 'personal',
+      workspace_id: null,
+      source: 'e2e.apps_bootstrap',
+      user_id: user.id,
+      session_id: null,
     },
   };
 }
@@ -635,6 +641,10 @@ export async function stubWorkspaceAppDataBackend(page: Page): Promise<void> {
   await page.route('**/api/v1/workspaces/*/rag/query**', (route: Route) =>
     route.fulfill({ json: EMPTY_RAG_QUERY_RESPONSE }),
   );
+  await page.route(
+    '**/api/v1/workspaces/*/retrieval/sources**',
+    (route: Route) => route.fulfill({ json: { sources: [] } }),
+  );
 
   await page.route(
     '**/api/v1/workspaces/*/images/generations**',
@@ -679,9 +689,6 @@ interface ShellBackendOptions {
   ) => void;
 }
 
-// Legacy constant retained for compatibility with older helper consumers.
-const FAKE_USER = FAKE_WORKSPACE_USER;
-
 const LLM_HEALTH = {
   ready: true,
   local: {
@@ -707,14 +714,16 @@ export async function stubShellBackend(
   options: ShellBackendOptions = {},
 ): Promise<void> {
   let user: E2EUser = {
-    ...(options.user ?? FAKE_USER),
-    workspaces: [...(options.user ?? FAKE_USER).workspaces],
-    workspace_roles: [...(options.user ?? FAKE_USER).workspace_roles],
-    system_roles: [...(options.user ?? FAKE_USER).system_roles],
-    group_ids: [...(options.user ?? FAKE_USER).group_ids],
-    group_slugs: [...(options.user ?? FAKE_USER).group_slugs],
+    ...(options.user ?? FAKE_WORKSPACE_USER),
+    workspaces: [...(options.user ?? FAKE_WORKSPACE_USER).workspaces],
+    workspace_roles: [...(options.user ?? FAKE_WORKSPACE_USER).workspace_roles],
+    system_roles: [...(options.user ?? FAKE_WORKSPACE_USER).system_roles],
+    group_ids: [...(options.user ?? FAKE_WORKSPACE_USER).group_ids],
+    group_slugs: [...(options.user ?? FAKE_WORKSPACE_USER).group_slugs],
   };
-  const workspaceBootstrap = buildWorkspaceBootstrap(options.enabledAppIds);
+  const enabledAppIds = options.enabledAppIds ?? DEFAULT_ENABLED_APP_IDS;
+  const workspaceBootstrap = buildWorkspaceBootstrap(enabledAppIds);
+  const appsBootstrap = buildAppsBootstrap(enabledAppIds, user);
 
   await page.routeWebSocket('**/api/v1/realtime/ws', (webSocket) => {
     webSocket.onMessage((message) => {
@@ -764,7 +773,65 @@ export async function stubShellBackend(
     route.fulfill({ json: workspaceBootstrap }),
   );
   await page.route('**/api/v1/apps/bootstrap', (route: Route) =>
-    route.fulfill({ json: GLOBAL_APPS_BOOTSTRAP }),
+    route.fulfill({ json: appsBootstrap }),
+  );
+  await page.route('**/api/v1/apps/*/eligible-workspaces**', (route: Route) => {
+    const url = new URL(route.request().url());
+    const segments = url.pathname.split('/');
+    const appId = decodeURIComponent(segments.at(-2) ?? '');
+    const app = findAppContract(appId);
+    const pageNumber = Number(url.searchParams.get('page') ?? '1');
+    const pageSize = Number(url.searchParams.get('page_size') ?? '50');
+    const slug = url.searchParams.get('slug')?.trim().toLocaleLowerCase();
+    const query = url.searchParams.get('q')?.trim().toLocaleLowerCase();
+    let items =
+      app?.availability_scope === 'workspace' && enabledAppIds.includes(appId)
+        ? user.workspaces.map((workspace) => ({
+            id: workspace.id,
+            slug: workspace.slug,
+            name: workspace.name,
+          }))
+        : [];
+    if (slug) {
+      items = items.filter(
+        (workspace) => workspace.slug.toLocaleLowerCase() === slug,
+      );
+    }
+    if (query) {
+      items = items.filter((workspace) =>
+        `${workspace.name}\n${workspace.slug}`
+          .toLocaleLowerCase()
+          .includes(query),
+      );
+    }
+    const total = items.length;
+    const offset = (pageNumber - 1) * pageSize;
+    return route.fulfill({
+      json: {
+        app_id: appId,
+        items: items.slice(offset, offset + pageSize),
+        total,
+        page: pageNumber,
+        page_size: pageSize,
+      },
+    });
+  });
+  await page.route(
+    '**/api/v1/apps/*/workspace-preference',
+    async (route: Route) => {
+      const url = new URL(route.request().url());
+      const appId = decodeURIComponent(url.pathname.split('/').at(-2) ?? '');
+      const payload = route.request().postDataJSON() as {
+        workspace_id: string;
+      };
+      await route.fulfill({
+        json: {
+          app_id: appId,
+          workspace_id: payload.workspace_id,
+          updated_at: '2026-08-28T00:00:00Z',
+        },
+      });
+    },
   );
 
   // Chatbot health: drives the ChatTopBar model pill and shield icon. The frontend

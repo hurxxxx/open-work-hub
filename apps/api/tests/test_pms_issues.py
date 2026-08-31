@@ -768,10 +768,13 @@ def test_task_comment_mention_notification_identifies_task(client: TestClient) -
     assert "Mention target task" in notification["title"]
     assert "Mention target task" in notification["body"]
     assert issue["reference"] in notification["body"]
-    assert notification["reference_id"] == issue["id"]
+    assert notification["source_type"] == "pms_task"
+    assert notification["source_id"] == issue["id"]
+    assert notification["origin_app_id"] == "pms"
+    assert notification["origin_workspace_id"] == admin_session["user"]["workspaces"][0]["id"]
     assert (
         notification["action_url"]
-        == f"/w/administrator/pms/lists/{task_list['id']}?task={issue['id']}"
+        == f"/apps/pms/workspaces/administrator/lists/{task_list['id']}?task={issue['id']}"
     )
 
 
@@ -851,7 +854,10 @@ def test_task_assignment_notification_identifies_task_by_title(client: TestClien
     assert notification["title"] == "AI 서버 근크림 그리기 assigned to you"
     assert issue["reference"] not in notification["title"]
     assert notification["body"].startswith("Open Work Hub Admin assigned AI 서버 근크림 그리기")
-    assert notification["reference_id"] == issue["id"]
+    assert notification["source_type"] == "pms_task"
+    assert notification["source_id"] == issue["id"]
+    assert notification["origin_app_id"] == "pms"
+    assert notification["origin_workspace_id"] == admin_session["user"]["workspaces"][0]["id"]
 
 
 def test_explicit_null_clears_nullable_issue_fields(client: TestClient) -> None:
@@ -891,7 +897,10 @@ def test_issue_assignees_reject_non_members(client: TestClient) -> None:
     task_list = _create_task_list(client, admin_session["token"])
     issue = _create_issue(client, admin_session["token"], task_list["id"], title="Assignee guard")
     outsider = _create_user(
-        client, admin_session["token"], email="outsider@open-work-hub.local", full_name="Outsider User"
+        client,
+        admin_session["token"],
+        email="outsider@open-work-hub.local",
+        full_name="Outsider User",
     )
 
     response = client.put(
@@ -2139,7 +2148,22 @@ def _bootstrap_admin_session(client: TestClient) -> dict:
         },
     )
     assert response.status_code == 201
-    return response.json()
+    session = response.json()
+    for workspace_key in ("administrator", "general"):
+        _grant_workspace_access(
+            client,
+            session["token"],
+            session["user"]["id"],
+            workspace_key,
+            role="admin",
+        )
+    me_response = client.get(
+        "/api/v1/auth/me",
+        headers=_auth_headers(session["token"]),
+    )
+    assert me_response.status_code == 200, me_response.text
+    session["user"] = me_response.json()
+    return session
 
 
 def _create_task_list(

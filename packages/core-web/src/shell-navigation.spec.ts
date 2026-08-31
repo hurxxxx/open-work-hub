@@ -39,11 +39,11 @@ const navItems: readonly CoreShellNavigationNavItem<TestAppId>[] = [
 const manifests: readonly CoreShellNavigationManifest<TestAppId>[] = [
   {
     appBarItem: { id: 'research' },
-    globalRoutePaths: ['/research/public/:shareId'],
+    globalRoutePaths: ['/apps/research/public/:shareId'],
     staticGlobalRoutePaths: ['/research/help'],
     workspaceRoutePaths: [
-      '/w/:workspaceSlug/research',
-      '/w/:workspaceSlug/research/articles/:articleId',
+      '/apps/research/workspaces/:workspaceSlug',
+      '/apps/research/workspaces/:workspaceSlug/articles/:articleId',
     ],
   },
   {
@@ -56,12 +56,14 @@ const manifests: readonly CoreShellNavigationManifest<TestAppId>[] = [
 describe('core shell navigation model', () => {
   it('separates pathname and query parameters from shell paths', () => {
     expect(
-      getCoreShellPathname('/w/lab/research/doc-1?view=recent#page-2'),
-    ).toBe('/w/lab/research/doc-1');
+      getCoreShellPathname(
+        '/apps/research/workspaces/lab/doc-1?view=recent#page-2',
+      ),
+    ).toBe('/apps/research/workspaces/lab/doc-1');
     expect(getCoreShellPathname('?view=recent')).toBe('/');
 
     const params = getCoreShellSearchParams(
-      '/w/lab/research/doc-1?view=recent&page=page-1#page-2',
+      '/apps/research/workspaces/lab/doc-1?view=recent&page=page-1#page-2',
     );
     expect(params.get('view')).toBe('recent');
     expect(params.get('page')).toBe('page-1');
@@ -73,7 +75,7 @@ describe('core shell navigation model', () => {
         appId: 'research',
         fallbackNavItemId: 'research-all',
         navItems,
-        path: '/w/lab/research/articles?status=pending',
+        path: '/apps/research/workspaces/lab/articles?status=pending',
       }),
     ).toBe('research-pending');
 
@@ -82,7 +84,7 @@ describe('core shell navigation model', () => {
         appId: 'research',
         fallbackNavItemId: 'research-all',
         navItems,
-        path: '/w/lab/research?view=archived',
+        path: '/apps/research/workspaces/lab?view=archived',
       }),
     ).toBe('research-archived');
 
@@ -91,7 +93,7 @@ describe('core shell navigation model', () => {
         appId: 'research',
         fallbackNavItemId: 'research-all',
         navItems,
-        path: '/w/lab/research?view=unknown',
+        path: '/apps/research/workspaces/lab?view=unknown',
       }),
     ).toBe('research-all');
   });
@@ -100,20 +102,20 @@ describe('core shell navigation model', () => {
     expect(
       resolveCoreWorkspaceRouteAppId({
         manifests,
-        pathname: '/w/lab/research/articles/article-1',
+        pathname: '/apps/research/workspaces/lab/articles/article-1',
       }),
     ).toBe('research');
     expect(
       resolveCoreWorkspaceRouteAppId({
         manifests,
-        pathname: '/w/lab/unknown',
+        pathname: '/apps/unknown/workspaces/lab',
       }),
     ).toBeNull();
 
     expect(
       resolveCoreGlobalRouteAppId({
         manifests,
-        pathname: '/research/public/share-1',
+        pathname: '/apps/research/public/share-1',
       }),
     ).toBe('research');
     expect(
@@ -133,36 +135,39 @@ describe('core shell navigation model', () => {
   it('matches route path patterns and workspace app relative paths', () => {
     expect(
       coreRoutePathMatchesPathname(
-        '/research/public/:shareId',
-        '/research/public/share-1',
+        '/apps/research/public/:shareId',
+        '/apps/research/public/share-1',
       ),
     ).toBe(true);
     expect(
       coreRoutePathMatchesPathname(
-        '/research/public/:shareId',
-        '/research/public/share-1/extra',
+        '/apps/research/public/:shareId',
+        '/apps/research/public/share-1/extra',
       ),
     ).toBe(false);
     expect(
       coreRoutePathMatchesPathname(
-        '/w/:workspaceSlug/research/articles/*',
-        '/w/lab/research/articles',
+        '/apps/research/workspaces/:workspaceSlug/articles/*',
+        '/apps/research/workspaces/lab/articles',
       ),
     ).toBe(true);
     expect(
       coreRoutePathMatchesPathname(
-        '/w/:workspaceSlug/research/articles/*',
-        '/w/lab/research/articles/article-1/page-2',
+        '/apps/research/workspaces/:workspaceSlug/articles/*',
+        '/apps/research/workspaces/lab/articles/article-1/page-2',
       ),
     ).toBe(true);
     expect(
       coreRoutePathMatchesPathname(
-        '/w/:workspaceSlug/research/articles/*',
-        '/w/lab/research',
+        '/apps/research/workspaces/:workspaceSlug/articles/*',
+        '/apps/research/workspaces/lab',
       ),
     ).toBe(false);
     expect(
-      getCoreWorkspaceAppRelativePath('/w/lab/research/articles', 'research'),
+      getCoreWorkspaceAppRelativePath(
+        '/apps/research/workspaces/lab/articles',
+        'research',
+      ),
     ).toBe('/articles');
   });
 });

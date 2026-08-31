@@ -7,7 +7,6 @@ import type { AppModuleId, NavItem } from './navigation-types';
 
 export interface AppSidebarActionContext {
   activeAppId?: AppModuleId;
-  activeFeatureAppId?: string | null;
   currentPathname: string;
   currentWorkspaceSlug: string | null;
   enabledWorkspaceAppIds: readonly string[];
@@ -25,7 +24,6 @@ export interface AppSidebarCreateAction {
 
 export interface AppSidebarRenderContext extends AppSidebarActionContext {
   activeAppId: AppModuleId;
-  activeFeatureAppId?: string | null;
   activeNavItemId: string;
   canReadWorkspace: boolean;
   filteredItems: NavItem[];
@@ -40,7 +38,7 @@ export interface AppSidebarConfig {
   ) => AppSidebarCreateAction[];
   extendCategories?: (
     categories: string[],
-    context: { activeFeatureAppId?: string | null; canReadWorkspace: boolean },
+    context: { canReadWorkspace: boolean },
   ) => string[];
   beforeCategories?: (context: AppSidebarRenderContext) => ReactNode;
   afterCategories?: (context: AppSidebarRenderContext) => ReactNode;

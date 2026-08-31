@@ -1,16 +1,21 @@
 import type { ComponentType } from 'react';
+import {
+  APP_CONTRACT_BY_ID,
+  type AppId,
+} from '@open-work-hub/contracts/app-contracts';
+import { buildAppEntryHref } from '@open-work-hub/contracts/app-routes';
 
 import type {
   AppBarItem,
   LauncherGlobalPaths,
 } from '@/src/app/shell/navigation-types';
+import type { AppLaunchDestinationResolver } from '@/src/app/shell/app-launch-destination';
 import type {
   AppBarLayoutPreference,
   AuthUser,
 } from '@/src/platform/auth/auth-api';
 import {
   buildWorkspaceAppPath,
-  getPreferredWorkspace,
   type WorkspaceAppId,
 } from '@/src/platform/workspaces/workspace-utils';
 import type {
@@ -31,6 +36,10 @@ const EMPTY_APP_BAR_LAUNCHER_POLICY: AppBarLauncherPolicy = {
 
 function normalizeAppBarAppId(appId: string): WorkspaceAppId {
   return appId as WorkspaceAppId;
+}
+
+function isExecutableAppId(appId: string): boolean {
+  return APP_CONTRACT_BY_ID.has(appId as AppId);
 }
 
 export function createAppBarItemById(appBarItems: readonly AppBarItem[]) {
@@ -54,22 +63,16 @@ export type AppBarState = {
   appBarLayoutError: string | null;
   appBarLayoutSaving: boolean;
   categoryMenuId: string | null;
-  defaultWorkspaceSaving: boolean;
   draftPinnedAppIds: WorkspaceAppId[];
   favoritesOpen: boolean;
   notificationRefreshSeq: number;
   notifOpen: boolean;
-  optimisticDefaultWorkspaceId: string | null | undefined;
   unreadCount: number;
-  workspacePreferenceError: string | null;
-  workspaceQuery: string;
-  workspaceSwitcherOpen: boolean;
 };
 
 export type AppBarAction =
   | { type: 'patch'; patch: Partial<AppBarState> }
   | { type: 'toggleNotifications' }
-  | { type: 'toggleWorkspaceSwitcher' }
   | { type: 'toggleFavorites' }
   | { type: 'toggleCategoryMenu'; categoryId: string }
   | { type: 'closeLauncherMenus' }
@@ -81,20 +84,16 @@ export const INITIAL_APP_BAR_STATE: AppBarState = {
   appBarLayoutError: null,
   appBarLayoutSaving: false,
   categoryMenuId: null,
-  defaultWorkspaceSaving: false,
   draftPinnedAppIds: [],
   favoritesOpen: false,
   notificationRefreshSeq: 0,
   notifOpen: false,
-  optimisticDefaultWorkspaceId: undefined,
   unreadCount: 0,
-  workspacePreferenceError: null,
-  workspaceQuery: '',
-  workspaceSwitcherOpen: false,
 };
 
 export type AppBarProps = {
   activeAppId: string;
+  activeContextLabel: string | null;
   appBarFixedAppIds?: readonly string[];
   appBarItems?: readonly AppBarItem[];
   appBarPinnedByDefaultAppIds?: readonly string[];
@@ -102,6 +101,7 @@ export type AppBarProps = {
   canOpenMobileAppMenu?: boolean;
   currentPathname: string;
   currentUser: AuthUser;
+  currentWorkspaceName: string | null;
   launcherGlobalPaths?: LauncherGlobalPaths;
   /** App that owns issue destinations surfaced by the notification adapter. */
   notificationIssueAppId?: string | null;
@@ -114,7 +114,7 @@ export type AppBarProps = {
   onDesktopRailMouseLeave?: () => void;
   onOpenHelp: () => void;
   onOpenMobileAppMenu?: () => void;
-  onShellWorkspaceChange: (workspaceSlug: string | null) => void;
+  resolveAppDestination: AppLaunchDestinationResolver;
   shellWorkspaceSlug: string | null;
   workspaceAppBarCategories: WorkspaceBootstrapAppBarCategory[];
   workspaceApps: WorkspaceBootstrapApp[];
@@ -147,21 +147,12 @@ export function appBarReducer(
         ...state,
         notifOpen: !state.notifOpen,
       };
-    case 'toggleWorkspaceSwitcher':
-      return {
-        ...state,
-        appBarEditorOpen: false,
-        categoryMenuId: null,
-        favoritesOpen: false,
-        workspaceSwitcherOpen: !state.workspaceSwitcherOpen,
-      };
     case 'toggleFavorites':
       return {
         ...state,
         appBarEditorOpen: false,
         categoryMenuId: null,
         favoritesOpen: !state.favoritesOpen,
-        workspaceSwitcherOpen: false,
       };
     case 'toggleCategoryMenu':
       return {
@@ -170,7 +161,6 @@ export function appBarReducer(
         categoryMenuId:
           state.categoryMenuId === action.categoryId ? null : action.categoryId,
         favoritesOpen: false,
-        workspaceSwitcherOpen: false,
       };
     case 'closeLauncherMenus':
       return {
@@ -269,10 +259,8 @@ export function getInitials(label: string, fallback: string): string {
   return initials || fallback;
 }
 
-export function buildAppLink(
+function buildNotificationAppEntryLink(
   appId: WorkspaceAppId,
-  currentUser: AuthUser,
-  shellWorkspaceSlug: string | null,
   launcherGlobalPaths: LauncherGlobalPaths,
 ): string {
   const globalPath = launcherGlobalPaths.get(appId);
@@ -280,39 +268,25 @@ export function buildAppLink(
     return globalPath;
   }
 
-  const workspaceForShellSlug = shellWorkspaceSlug
-    ? currentUser.workspaces.find(
-        (workspace) => workspace.slug === shellWorkspaceSlug,
-      )
-    : undefined;
-  const selectedWorkspace =
-    workspaceForShellSlug ?? getPreferredWorkspace(currentUser, appId);
-
-  return selectedWorkspace
-    ? buildWorkspaceAppPath(selectedWorkspace.slug, appId)
-    : '/';
+  const contract = APP_CONTRACT_BY_ID.get(appId as AppId);
+  if (!contract) return '/';
+  return buildAppEntryHref(contract.app_id);
 }
 
 export function buildNotificationIssueHref({
   appId,
-  currentUser,
   launcherGlobalPaths,
-  shellWorkspaceSlug,
   taskId,
 }: {
   appId: string | null | undefined;
-  currentUser: AuthUser;
   launcherGlobalPaths: LauncherGlobalPaths;
-  shellWorkspaceSlug: string | null;
   taskId: string;
 }): string | null {
   if (!appId) {
     return null;
   }
-  const appPath = buildAppLink(
+  const appPath = buildNotificationAppEntryLink(
     appId as WorkspaceAppId,
-    currentUser,
-    shellWorkspaceSlug,
     launcherGlobalPaths,
   );
   return appPath === '/'
@@ -321,83 +295,11 @@ export function buildNotificationIssueHref({
 }
 
 export type AppBarAppLinkResolver = (appId: WorkspaceAppId) => string;
-
-type AppBarWorkspace = AuthUser['workspaces'][number];
-
-export function sortAppBarWorkspacesByName(
-  workspaces: AuthUser['workspaces'],
-  locale: string,
-): AuthUser['workspaces'] {
-  const sorted = Array.from(workspaces);
-  sorted.sort((left, right) => left.name.localeCompare(right.name, locale));
-  return sorted;
-}
-
-export interface AppBarWorkspaceProjection {
-  currentWorkspace: AppBarWorkspace | null;
-  currentWorkspaceName: string;
-  defaultWorkspaceOptions: AuthUser['workspaces'];
-  normalizedDefaultWorkspaceId: string | null;
-  otherWorkspaces: AuthUser['workspaces'];
-  pinnedWorkspace: AppBarWorkspace | null;
-}
-
-export function buildAppBarWorkspaceProjection({
-  defaultWorkspaceId,
-  locale,
-  shellWorkspaceSlug,
-  workspaceFallbackLabel,
-  workspaceQuery,
-  workspaces,
-}: {
-  defaultWorkspaceId: string | null | undefined;
-  locale: string;
-  shellWorkspaceSlug: string | null;
-  workspaceFallbackLabel: string;
-  workspaceQuery: string;
-  workspaces: AuthUser['workspaces'];
-}): AppBarWorkspaceProjection {
-  const currentWorkspace =
-    workspaces.find((workspace) => workspace.slug === shellWorkspaceSlug) ??
-    null;
-  const normalizedWorkspaceQuery = workspaceQuery.trim().toLowerCase();
-  const matchingWorkspaces = workspaces.filter((workspace) => {
-    if (!normalizedWorkspaceQuery) {
-      return true;
-    }
-
-    const haystack = `${workspace.name} ${workspace.slug}`.toLowerCase();
-    return haystack.includes(normalizedWorkspaceQuery);
-  });
-  const matchingWorkspaceIds = new Set(
-    matchingWorkspaces.map((workspace) => workspace.id),
-  );
-  const defaultWorkspaceOptions = sortAppBarWorkspacesByName(
-    workspaces,
-    locale,
-  );
-
-  return {
-    currentWorkspace,
-    currentWorkspaceName: currentWorkspace?.name ?? workspaceFallbackLabel,
-    defaultWorkspaceOptions,
-    normalizedDefaultWorkspaceId: defaultWorkspaceOptions.some(
-      (workspace) => workspace.id === defaultWorkspaceId,
-    )
-      ? (defaultWorkspaceId ?? null)
-      : null,
-    otherWorkspaces: sortAppBarWorkspacesByName(
-      matchingWorkspaces.filter(
-        (workspace) => workspace.id !== currentWorkspace?.id,
-      ),
-      locale,
-    ),
-    pinnedWorkspace:
-      currentWorkspace && matchingWorkspaceIds.has(currentWorkspace.id)
-        ? currentWorkspace
-        : null,
-  };
-}
+export type AppBarAppContextLabelResolver = (appId: WorkspaceAppId) => string;
+export type AppBarAppLabelResolver = (
+  appId: WorkspaceAppId,
+  title: string,
+) => string;
 
 export function buildVisibleAppBarItems(
   workspaceApps: WorkspaceBootstrapApp[],
@@ -411,7 +313,7 @@ export function buildVisibleAppBarItems(
   const itemIds = new Set<WorkspaceAppId>();
 
   for (const item of workspaceApps) {
-    if (!item.enabled) {
+    if (!item.enabled || !isExecutableAppId(item.app_id)) {
       continue;
     }
     const id = item.app_id as WorkspaceAppId;
@@ -434,7 +336,7 @@ export function buildVisibleAppBarItems(
 
   for (const category of appBarCategories) {
     for (const launcherItem of category.items) {
-      if (!launcherItem.enabled) {
+      if (!launcherItem.enabled || !isExecutableAppId(launcherItem.app_id)) {
         continue;
       }
       const id = launcherItem.app_id as WorkspaceAppId;
@@ -506,14 +408,16 @@ export function buildAppBarItemsProjection({
     activeAppTitle:
       activeAppId === 'settings'
         ? translate('shell:apps.settings')
-        : activeAppId === 'search'
-          ? translate('shell:search.title')
-          : (activeWorkspaceApp?.title ??
-            translate(`shell:apps.${activeAppId}`, {
-              defaultValue:
-                appBarItemById.get(activeAppId as AppBarItem['id'])?.title ??
-                'Open Work Hub',
-            })),
+        : activeAppId === 'launcher'
+          ? translate('shell:launcher.title')
+          : activeAppId === 'search'
+            ? translate('shell:search.title')
+            : (activeWorkspaceApp?.title ??
+              translate(`shell:apps.${activeAppId}`, {
+                defaultValue:
+                  appBarItemById.get(activeAppId as AppBarItem['id'])?.title ??
+                  'Open Work Hub',
+              })),
     draftItems,
     fixedItems,
     pinnedEligibleAppIds,
@@ -556,6 +460,6 @@ export function buildWorkspaceSearchHref(
   shellWorkspaceSlug: string | null,
 ): string {
   return shellWorkspaceSlug
-    ? `/tool/search?workspace=${encodeURIComponent(shellWorkspaceSlug)}`
-    : '/tool/search';
+    ? buildWorkspaceAppPath(shellWorkspaceSlug, 'retrieval-search')
+    : buildAppEntryHref('retrieval-search');
 }

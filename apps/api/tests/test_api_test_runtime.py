@@ -151,13 +151,13 @@ def test_application_database_reset_restores_migration_owned_seed(
                 (
                     "workspaces",
                     "teams",
-                    "workspace_app_entitlements",
-                    "platform_app_visibility",
+                    "company_app_controls",
+                    "workspace_app_defaults",
                 ),
             )
             assert all(rows != "[]" for rows in expected_rows.values())
-            connection.execute(text("DELETE FROM platform_app_visibility"))
-            connection.execute(text("DELETE FROM workspace_app_entitlements"))
+            connection.execute(text("DELETE FROM workspace_app_defaults"))
+            connection.execute(text("DELETE FROM company_app_controls"))
             connection.execute(text("UPDATE workspaces SET name = 'corrupted'"))
 
         conftest._restore_application_postgres_state(application_postgres_state)
@@ -173,7 +173,8 @@ def _application_seed_rows(connection, table_names) -> dict[str, str]:
     return {
         table_name: connection.scalar(
             text(
-                f"SELECT COALESCE(jsonb_agg(to_jsonb(row_data) ORDER BY id), "
+                f"SELECT COALESCE(jsonb_agg(to_jsonb(row_data) "
+                f"ORDER BY to_jsonb(row_data)::text), "
                 f"'[]'::jsonb)::text FROM {table_name} AS row_data"
             )
         )

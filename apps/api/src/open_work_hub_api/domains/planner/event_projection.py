@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from open_work_hub_api.domains.planner.event_time import serialize_event_bounds
+from open_work_hub_api.domains.planner.event_time import (
+    planner_event_calendar_bounds,
+    serialize_event_bounds,
+)
 
 from .models import PlannerEvent
 from .schemas import PlannerEventOut
@@ -8,6 +11,14 @@ from .schemas import PlannerEventOut
 
 def project_planner_event(event: PlannerEvent) -> PlannerEventOut:
     start, end = serialize_event_bounds(
+        all_day=event.all_day,
+        start_at=event.start_at,
+        end_at=event.end_at,
+        start_has_time=event.start_has_time,
+        end_has_time=event.end_has_time,
+        time_zone=event.time_zone,
+    )
+    calendar_start, calendar_end, calendar_all_day = planner_event_calendar_bounds(
         all_day=event.all_day,
         start_at=event.start_at,
         end_at=event.end_at,
@@ -28,6 +39,9 @@ def project_planner_event(event: PlannerEvent) -> PlannerEventOut:
         end_has_time=event.end_has_time,
         start=start,
         end=end,
+        calendar_start=calendar_start,
+        calendar_end=calendar_end,
+        calendar_all_day=calendar_all_day,
         created_at=event.created_at,
         updated_at=event.updated_at,
     )

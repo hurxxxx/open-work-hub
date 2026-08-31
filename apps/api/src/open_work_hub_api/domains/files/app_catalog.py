@@ -1,17 +1,11 @@
 from open_work_hub_api.core.workspace_app_registry import (
-    WorkspaceAppRegistration,
     WorkspaceNavRegistration,
+    workspace_app_registration,
 )
 
 
-FILES_WORKSPACE_APP = WorkspaceAppRegistration(
-    app_id="files",
-    title="FILES",
-    route_base="/files",
-    icon_key="folder",
-    enabled_by_default=True,
-    visible_by_default=True,
-    launcher_category=True,
+FILES_WORKSPACE_APP = workspace_app_registration(
+    "files",
     backend_domain="files",
     nav_items=(
         WorkspaceNavRegistration(

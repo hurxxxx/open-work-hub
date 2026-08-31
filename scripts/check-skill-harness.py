@@ -13,18 +13,44 @@ ROOT = Path(__file__).resolve().parents[1]
 SKILLS_DIR = ROOT / ".agents" / "skills"
 SELF = Path(__file__).resolve()
 MAX_SKILL_BYTES = 8 * 1024
+MAX_SKILL_LINES = 130
+MAX_SKILL_DESCRIPTION_CHARS = 400
 SKILL_NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 MARKDOWN_LINK_RE = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
+LOWERCASE_AGENTS_REFERENCE_RE = re.compile(r"(?<![A-Za-z])agents\.md\b")
+
+SCOPED_INSTRUCTION_DIRECTORIES = (
+    Path(".agents/skills"),
+    Path("apps/api"),
+    Path("apps/web"),
+    Path("apps/worker"),
+    Path("docs"),
+)
+
+INSTRUCTION_LINE_LIMITS = {
+    Path("AGENTS.md"): 60,
+    Path("CLAUDE.md"): 12,
+    **{
+        directory / "AGENTS.md": 24
+        for directory in SCOPED_INSTRUCTION_DIRECTORIES
+    },
+    **{
+        directory / "CLAUDE.md": 1
+        for directory in SCOPED_INSTRUCTION_DIRECTORIES
+    },
+}
+
+ALLOWED_INSTRUCTION_PATHS = frozenset(INSTRUCTION_LINE_LIMITS)
+SCOPED_CLAUDE_PATHS = frozenset(
+    directory / "CLAUDE.md" for directory in SCOPED_INSTRUCTION_DIRECTORIES
+)
 
 REQUIRED_SKILLS = {
     "agent-browser",
-    "caveman",
     "diagnose",
-    "grill-me",
     "grill-with-docs",
     "improve-codebase-architecture",
     "open-work-hub-agent-skill-governance",
-    "open-work-hub-agent-work-intake",
     "open-work-hub-codex-review-harness",
     "open-work-hub-development-environment",
     "open-work-hub-docs-organization",
@@ -38,19 +64,22 @@ REQUIRED_SKILLS = {
     "open-work-hub-runtime-separation-audit",
     "open-work-hub-vibe-app-delivery",
     "open-work-hub-worktree-management",
-    "prototype",
-    "tdd",
     "to-issues",
     "to-prd",
     "triage",
-    "write-a-skill",
-    "zoom-out",
 }
 
 RETIRED_SKILLS = {
+    "caveman",
+    "grill-me",
+    "open-work-hub-agent-work-intake",
     "open-work-hub-desktop-release",
     "open-work-hub-pr-review-validation",
+    "prototype",
     "setup-matt-pocock-skills",
+    "tdd",
+    "write-a-skill",
+    "zoom-out",
 }
 
 REQUIRED_RESOURCES = {
@@ -62,13 +91,6 @@ REQUIRED_RESOURCES = {
     Path(".agents/skills/open-work-hub-docs-reader/scripts/read_open_work_hub_doc.py"),
     Path(".agents/skills/open-work-hub-env-management/scripts/env-inventory.sh"),
     Path(".agents/skills/open-work-hub-env-management/scripts/local-env-files.sh"),
-    Path(".agents/skills/prototype/LOGIC.md"),
-    Path(".agents/skills/prototype/UI.md"),
-    Path(".agents/skills/tdd/deep-modules.md"),
-    Path(".agents/skills/tdd/interface-design.md"),
-    Path(".agents/skills/tdd/mocking.md"),
-    Path(".agents/skills/tdd/refactoring.md"),
-    Path(".agents/skills/tdd/tests.md"),
     Path(".agents/skills/triage/AGENT-BRIEF.md"),
 }
 
@@ -90,7 +112,6 @@ RETIRED_TRIAGE_PATTERNS = {
 }
 
 TRIAGE_GUIDANCE_PATHS = {
-    Path(".agents/skills/open-work-hub-agent-work-intake/SKILL.md"),
     Path(".agents/skills/to-issues/SKILL.md"),
     Path(".agents/skills/to-prd/SKILL.md"),
     Path("docs/agents/triage-labels.md"),
@@ -174,6 +195,7 @@ class TextFileContent:
 @dataclass(frozen=True)
 class SkillHarnessSnapshot:
     root: Path
+    instruction_files: tuple[TextFileContent, ...]
     skill_files: tuple[TextFileContent, ...]
     skill_guides: tuple[TextFileContent, ...]
     checked_files: tuple[TextFileContent, ...]
@@ -252,6 +274,26 @@ def skill_guides(root: Path = ROOT) -> list[Path]:
     return sorted(path for path in skills_dir.rglob("*.md") if path.is_file())
 
 
+def instruction_files(root: Path = ROOT) -> list[Path]:
+    if not root.exists():
+        return []
+    names = {
+        "AGENTS.md",
+        "AGENTS.override.md",
+        "CLAUDE.md",
+        "agents.md",
+        "agents.override.md",
+        "claude.md",
+    }
+    return sorted(
+        path
+        for path in root.rglob("*")
+        if path.is_file()
+        and path.name in names
+        and not _should_skip_checked_file(root, path)
+    )
+
+
 def project_skill_entries(root: Path = ROOT) -> list[Path]:
     skills_dir = root / ".agents" / "skills"
     if not skills_dir.exists():
@@ -295,6 +337,7 @@ def checked_files(root: Path = ROOT) -> list[Path]:
                 if path.is_file()
                 and not _should_skip_checked_file(root, path)
             )
+    files.extend(instruction_files(root))
     return sorted({path.resolve() for path in files})
 
 
@@ -320,6 +363,13 @@ def build_skill_harness_snapshot(
     runtime_separation_path = resolved_root / "scripts" / "check-runtime-separation.py"
     return SkillHarnessSnapshot(
         root=resolved_root,
+        instruction_files=tuple(
+            TextFileContent(
+                path=path.resolve(),
+                text=path.read_text(encoding="utf-8"),
+            )
+            for path in instruction_files(resolved_root)
+        ),
         skill_files=tuple(
             TextFileContent(
                 path=path.resolve(),
@@ -372,10 +422,9 @@ def _is_triage_guidance(root: Path, path: Path) -> bool:
 def _is_core_agent_guidance(root: Path, path: Path) -> bool:
     relative = path.relative_to(root)
     return (
-        relative
+        relative in ALLOWED_INSTRUCTION_PATHS
+        or relative
         in {
-            Path("AGENTS.md"),
-            Path("CLAUDE.md"),
             Path("README.md"),
             Path("docs/README.md"),
             Path(".github/copilot-instructions.md"),
@@ -427,6 +476,62 @@ def evaluate_skill_harness(
     root = snapshot.root.resolve()
     findings: list[SkillHarnessFinding] = []
 
+    instruction_paths = {
+        file_content.path.relative_to(root): file_content
+        for file_content in snapshot.instruction_files
+    }
+    unexpected_instruction_paths = sorted(
+        str(path)
+        for path in instruction_paths
+        if path not in ALLOWED_INSTRUCTION_PATHS
+    )
+    if unexpected_instruction_paths:
+        findings.append(
+            _finding(
+                "unexpected_agent_instruction",
+                "agent instruction files may exist only at approved scopes: "
+                + ", ".join(unexpected_instruction_paths),
+            )
+        )
+
+    if require_tool_bridges:
+        missing_instruction_paths = sorted(
+            str(path)
+            for path in ALLOWED_INSTRUCTION_PATHS
+            if path not in instruction_paths
+        )
+        if missing_instruction_paths:
+            findings.append(
+                _finding(
+                    "missing_agent_instruction",
+                    "missing required root/scoped agent instructions: "
+                    + ", ".join(missing_instruction_paths),
+                )
+            )
+
+    for relative, file_content in sorted(instruction_paths.items()):
+        limit = INSTRUCTION_LINE_LIMITS.get(relative)
+        if limit is None:
+            continue
+        line_count = len(file_content.text.splitlines())
+        if line_count > limit:
+            findings.append(
+                _finding(
+                    "agent_instruction_too_long",
+                    f"{relative}: {line_count} lines exceeds the {limit}-line limit",
+                )
+            )
+        if (
+            relative in SCOPED_CLAUDE_PATHS
+            and file_content.text.strip() != "@AGENTS.md"
+        ):
+            findings.append(
+                _finding(
+                    "invalid_scoped_claude_bridge",
+                    f"{relative}: scoped CLAUDE.md must contain only @AGENTS.md",
+                )
+            )
+
     if snapshot.codex_skill_entries:
         findings.append(
             _finding(
@@ -467,11 +572,15 @@ def evaluate_skill_harness(
 
         claude_skills = root / ".claude" / "skills"
         canonical_skills = root / ".agents" / "skills"
-        if not claude_skills.is_symlink() or claude_skills.resolve() != canonical_skills.resolve():
+        if (
+            not claude_skills.is_symlink()
+            or claude_skills.resolve() != canonical_skills.resolve()
+        ):
             findings.append(
                 _finding(
                     "invalid_claude_skills_bridge",
-                    ".claude/skills must be a symlink to ../.agents/skills",
+                    ".claude/skills must link to ../.agents/skills; "
+                    "run pnpm setup:claude-skills",
                 )
             )
 
@@ -512,6 +621,7 @@ def evaluate_skill_harness(
 
     for file_content in sorted(snapshot.skill_files, key=lambda item: str(item.path)):
         skill_size = len(file_content.text.encode("utf-8"))
+        skill_line_count = len(file_content.text.splitlines())
         if skill_size > MAX_SKILL_BYTES:
             findings.append(
                 _finding(
@@ -520,6 +630,15 @@ def evaluate_skill_harness(
                     f"SKILL.md is {skill_size} bytes; keep it at or below "
                     f"{MAX_SKILL_BYTES} bytes and move optional detail to "
                     "references or scripts",
+                )
+            )
+        if skill_line_count > MAX_SKILL_LINES:
+            findings.append(
+                _finding(
+                    "skill_guide_too_long",
+                    f"{_display_path(root, file_content.path)}: "
+                    f"SKILL.md is {skill_line_count} lines; keep it at or below "
+                    f"{MAX_SKILL_LINES} lines",
                 )
             )
         try:
@@ -558,6 +677,24 @@ def evaluate_skill_harness(
                     "missing_use_when_trigger",
                     f"{_display_path(root, file_content.path)}: "
                     "description must include 'Use when'",
+                )
+            )
+        description = metadata.get("description", "")
+        if description in {"", ">", "|", ">-", "|-"}:
+            findings.append(
+                _finding(
+                    "invalid_skill_description",
+                    f"{_display_path(root, file_content.path)}: "
+                    "description must be a concise single-line scalar",
+                )
+            )
+        elif len(description) > MAX_SKILL_DESCRIPTION_CHARS:
+            findings.append(
+                _finding(
+                    "skill_description_too_long",
+                    f"{_display_path(root, file_content.path)}: description is "
+                    f"{len(description)} characters; keep it at or below "
+                    f"{MAX_SKILL_DESCRIPTION_CHARS}",
                 )
             )
 
@@ -628,6 +765,14 @@ def evaluate_skill_harness(
     for file_content in sorted(snapshot.checked_files, key=lambda item: str(item.path)):
         if file_content.path.resolve() in stale_skip_paths:
             continue
+        if LOWERCASE_AGENTS_REFERENCE_RE.search(file_content.text):
+            findings.append(
+                _finding(
+                    "lowercase_agents_reference",
+                    f"{_display_path(root, file_content.path)}: "
+                    "refer to the canonical filename as AGENTS.md",
+                )
+            )
         for retired_skill in RETIRED_SKILLS:
             if retired_skill in file_content.text:
                 findings.append(

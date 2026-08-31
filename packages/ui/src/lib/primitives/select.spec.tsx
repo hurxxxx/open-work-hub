@@ -7,6 +7,7 @@ describe('Select enterprise styling', () => {
   it('keeps the trigger on the shared compact control chrome', () => {
     render(
       <Select
+        ariaLabel="Working root"
         onValueChange={() => undefined}
         options={[
           {
@@ -18,7 +19,7 @@ describe('Select enterprise styling', () => {
       />,
     );
 
-    const trigger = screen.getByRole('combobox');
+    const trigger = screen.getByRole('combobox', { name: 'Working root' });
     expect(trigger.className).toContain('h-[var(--ui-density-dense)]');
     expect(trigger.className).toContain('min-w-[148px]');
     expect(trigger.className).toContain('px-2');

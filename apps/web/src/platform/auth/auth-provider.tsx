@@ -17,6 +17,7 @@ import {
   setupFirstUser as setupFirstUserRequest,
   signup as signupRequest,
   updatePreferences as updatePreferencesRequest,
+  AuthApiError,
   type AuthSessionResponse,
   type AuthUser,
   type ChangePasswordPayload,
@@ -85,6 +86,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 function useAuthProviderElement(children: ReactNode) {
   const [state, setState] = useState<AuthState>(() => initialAuthState());
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const mountedRef = useRef(true);
   const requestIdRef = useRef(0);
 
@@ -176,6 +179,55 @@ function useAuthProviderElement(children: ReactNode) {
     }
   }, [requestIsCurrent]);
 
+  const refreshAccessUser = useCallback(async (): Promise<AuthUser> => {
+    const sessionToken = state.token;
+    if (!sessionToken) {
+      throw new Error(i18n.t('auth:errors.noActiveSession'));
+    }
+
+    const requestId = ++requestIdRef.current;
+    try {
+      const user = await getCurrentUser(sessionToken);
+      if (requestIsCurrent(requestId)) {
+        syncLocale(user.locale);
+        syncDateFormatPreference(user.date_format);
+        syncTimeZonePreference(user.time_zone);
+        identifyMatomoUser(resolveMatomoUserIdentity(user));
+        setState((current) =>
+          current.token === sessionToken
+            ? toAuthenticatedAuthState({
+                user,
+                token: sessionToken,
+                devAdminLoginAvailable: current.devAdminLoginAvailable,
+                devLoginAccounts: current.devLoginAccounts,
+              })
+            : current,
+        );
+      }
+      return user;
+    } catch (caughtError) {
+      if (
+        caughtError instanceof AuthApiError &&
+        (caughtError.status === 401 || caughtError.status === 403) &&
+        requestIsCurrent(requestId)
+      ) {
+        clearStoredAuthToken();
+        syncDesktopLogoutSession();
+        clearMatomoUser();
+        setState((current) => ({
+          status: 'unauthenticated',
+          user: null,
+          token: null,
+          requiresSetup: false,
+          devAdminLoginAvailable: current.devAdminLoginAvailable,
+          devLoginAccounts: current.devLoginAccounts,
+          bootstrapError: null,
+        }));
+      }
+      throw caughtError;
+    }
+  }, [requestIsCurrent, state.token]);
+
   useEffect(() => {
     void refreshSession();
   }, [refreshSession]);
@@ -248,18 +300,10 @@ function useAuthProviderElement(children: ReactNode) {
   const logout = useCallback(async () => {
     const requestId = ++requestIdRef.current;
     const sessionToken = state.token;
-
-    try {
-      if (sessionToken) {
-        await logoutRequest(sessionToken);
-      }
-    } finally {
-      clearStoredAuthToken();
-      markPostLogoutHomeRedirect();
-      syncDesktopLogoutSession();
-      clearMatomoUser();
-    }
-
+    clearStoredAuthToken();
+    markPostLogoutHomeRedirect();
+    syncDesktopLogoutSession();
+    clearMatomoUser();
     if (requestIsCurrent(requestId)) {
       setState({
         status: 'unauthenticated',
@@ -271,6 +315,10 @@ function useAuthProviderElement(children: ReactNode) {
         bootstrapError: null,
       });
     }
+
+    if (sessionToken) {
+      await logoutRequest(sessionToken).catch(() => undefined);
+    }
   }, [
     requestIsCurrent,
     state.devAdminLoginAvailable,
@@ -280,25 +328,44 @@ function useAuthProviderElement(children: ReactNode) {
 
   const updatePreferences = useCallback(
     async (payload: UpdatePreferencesPayload) => {
-      if (!state.token) {
+      const sessionToken = state.token;
+      if (!sessionToken) {
         throw new Error(i18n.t('auth:errors.noActiveSession'));
       }
 
-      const user = await updatePreferencesRequest(state.token, payload);
-      if (mountedRef.current) {
-        syncLocale(user.locale);
-        syncDateFormatPreference(user.date_format);
-        syncTimeZonePreference(user.time_zone);
-        identifyMatomoUser(resolveMatomoUserIdentity(user));
-        setState((current) =>
-          toAuthenticatedAuthState({
-            user,
-            token: current.token ?? state.token ?? '',
-            devAdminLoginAvailable: current.devAdminLoginAvailable,
-            devLoginAccounts: current.devLoginAccounts,
-          }),
-        );
+      const user = await updatePreferencesRequest(sessionToken, payload);
+      const currentState = stateRef.current;
+      if (
+        !mountedRef.current ||
+        currentState.token !== sessionToken ||
+        !currentState.user
+      ) {
+        return;
       }
+      const mergedUser: AuthUser = {
+        ...currentState.user,
+        app_bar_layout: user.app_bar_layout,
+        date_format: user.date_format,
+        display_name: user.display_name,
+        full_name: user.full_name,
+        locale: user.locale,
+        theme_preference: user.theme_preference,
+        time_zone: user.time_zone,
+      };
+      syncLocale(mergedUser.locale);
+      syncDateFormatPreference(mergedUser.date_format);
+      syncTimeZonePreference(mergedUser.time_zone);
+      identifyMatomoUser(resolveMatomoUserIdentity(mergedUser));
+      setState((current) =>
+        current.token === sessionToken
+          ? toAuthenticatedAuthState({
+              user: mergedUser,
+              token: sessionToken,
+              devAdminLoginAvailable: current.devAdminLoginAvailable,
+              devLoginAccounts: current.devLoginAccounts,
+            })
+          : current,
+      );
     },
     [state.token],
   );
@@ -373,6 +440,7 @@ function useAuthProviderElement(children: ReactNode) {
       switchSession,
       logout,
       refreshSession,
+      refreshAccessUser,
       updatePreferences,
       changePassword,
       listSessions,
@@ -390,6 +458,7 @@ function useAuthProviderElement(children: ReactNode) {
       switchSession,
       logout,
       refreshSession,
+      refreshAccessUser,
       updatePreferences,
       changePassword,
       listSessions,

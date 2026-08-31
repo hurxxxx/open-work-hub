@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   type RefObject,
+  type ReactNode,
   type SetStateAction,
 } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
@@ -45,7 +46,6 @@ import {
   widthFromSubSidebarPointer,
   SUB_SIDEBAR_DEFAULT_WIDTH,
 } from './sub-sidebar-frame-model';
-import { resolveActiveFeatureAppId } from './sub-sidebar-feature-model';
 import {
   buildSubSidebarNavigationProjection,
   normalizeSubSidebarCategoryExpansionState,
@@ -53,12 +53,12 @@ import {
   type SubSidebarCategoryExpansionState,
 } from './sub-sidebar-navigation-model';
 import { resolveSubSidebarTitle } from './sub-sidebar-title-model';
+import { resolveAppSidebarConfig } from './sub-sidebar-app-gate';
 
 const getNoopAppSidebarConfig = () => null;
 
 function SubSidebarHeader({
   activeAppId,
-  activeFeatureAppId,
   appBarItems,
   createActions,
   createButtonRef,
@@ -75,7 +75,6 @@ function SubSidebarHeader({
   workspaceAppRegistry,
 }: {
   activeAppId: string;
-  activeFeatureAppId: string | null;
   appBarItems: readonly AppBarItem[];
   createActions: AppSidebarCreateAction[];
   createButtonRef: RefObject<HTMLButtonElement | null>;
@@ -94,7 +93,6 @@ function SubSidebarHeader({
   const { t } = useTranslation('shell');
   const appTitle = resolveSubSidebarTitle({
     activeAppId,
-    activeFeatureAppId,
     appBarItems,
     t,
     workspaceAppRegistry,
@@ -181,7 +179,6 @@ function SidebarCategorySection({
   currentWorkspaceSlug,
   expanded,
   filteredItems,
-  launcherGlobalPaths,
   onNavigate,
   onToggleCategory,
   user,
@@ -191,7 +188,6 @@ function SidebarCategorySection({
   currentWorkspaceSlug: string | null;
   expanded: boolean;
   filteredItems: NavItem[];
-  launcherGlobalPaths: LauncherGlobalPaths;
   onNavigate?: () => void;
   onToggleCategory: (category: string) => void;
   user: AuthUser | null;
@@ -234,12 +230,7 @@ function SidebarCategorySection({
                 return (
                   <Link
                     key={item.id}
-                    to={resolveNavItemHref(
-                      item,
-                      currentWorkspaceSlug,
-                      user,
-                      launcherGlobalPaths,
-                    )}
+                    to={resolveNavItemHref(item, currentWorkspaceSlug, user)}
                     className={cn(
                       'sidebar-submenu-item ml-1',
                       activeNavItemId === item.id &&
@@ -275,7 +266,6 @@ function SidebarCategoryList({
   currentWorkspaceSlug,
   expandedCategories,
   filteredItems,
-  launcherGlobalPaths,
   onNavigate,
   sidebarConfig,
   sidebarContext,
@@ -287,7 +277,6 @@ function SidebarCategoryList({
   currentWorkspaceSlug: string | null;
   expandedCategories: string[];
   filteredItems: NavItem[];
-  launcherGlobalPaths: LauncherGlobalPaths;
   onNavigate?: () => void;
   sidebarConfig: AppSidebarConfig | null | undefined;
   sidebarContext: AppSidebarRenderContext;
@@ -314,7 +303,6 @@ function SidebarCategoryList({
             currentWorkspaceSlug={currentWorkspaceSlug}
             expanded={expandedCategories.includes(category)}
             filteredItems={filteredItems}
-            launcherGlobalPaths={launcherGlobalPaths}
             onNavigate={onNavigate}
             onToggleCategory={toggleCategory}
             user={user}
@@ -498,9 +486,8 @@ type SubSidebarNavigationState = {
 
 function useSubSidebarNavigation({
   activeAppId,
-  activeFeatureAppId,
   activeNavItemId,
-  canReadTeams,
+  canReadWorkspace,
   currentWorkspaceSlug,
   enabledWorkspaceAppIds,
   getAppSidebarConfig,
@@ -514,9 +501,8 @@ function useSubSidebarNavigation({
   workspaceNavItems,
 }: {
   activeAppId: string;
-  activeFeatureAppId: string | null;
   activeNavItemId: string;
-  canReadTeams: boolean;
+  canReadWorkspace: boolean;
   currentWorkspaceSlug: string | null;
   enabledWorkspaceAppIds: readonly string[];
   getAppSidebarConfig: (appId: string) => AppSidebarConfig | null;
@@ -535,14 +521,19 @@ function useSubSidebarNavigation({
       key: '',
       expandedCategories: [],
     });
-  const sidebarConfig = getAppSidebarConfig(activeAppId);
+  const sidebarConfig = resolveAppSidebarConfig({
+    activeAppId,
+    canReadWorkspace,
+    enabledWorkspaceAppIds,
+    globalAppIds,
+    load: getAppSidebarConfig,
+  });
 
   const navigationProjection = useMemo(
     () =>
       buildSubSidebarNavigationProjection({
         activeAppId,
-        activeFeatureAppId,
-        canReadWorkspace: canReadTeams,
+        canReadWorkspace,
         extendCategories: sidebarConfig?.extendCategories,
         globalAppIds,
         hasAdminSectionAccess,
@@ -553,8 +544,7 @@ function useSubSidebarNavigation({
       }),
     [
       activeAppId,
-      activeFeatureAppId,
-      canReadTeams,
+      canReadWorkspace,
       hasAdminSectionAccess,
       globalAppIds,
       sidebarConfig?.extendCategories,
@@ -568,7 +558,6 @@ function useSubSidebarNavigation({
   const sidebarActionContext = useMemo<AppSidebarActionContext>(
     () => ({
       activeAppId: activeAppId as AppModuleId,
-      activeFeatureAppId,
       currentPathname: locationPathname,
       currentWorkspaceSlug,
       enabledWorkspaceAppIds,
@@ -577,7 +566,6 @@ function useSubSidebarNavigation({
     }),
     [
       activeAppId,
-      activeFeatureAppId,
       currentWorkspaceSlug,
       enabledWorkspaceAppIds,
       locationPathname,
@@ -610,9 +598,8 @@ function useSubSidebarNavigation({
     () => ({
       ...sidebarActionContext,
       activeAppId: activeAppId as AppModuleId,
-      activeFeatureAppId,
       activeNavItemId,
-      canReadWorkspace: canReadTeams,
+      canReadWorkspace,
       filteredItems,
       isCategoryExpanded,
       onNavigate,
@@ -620,9 +607,8 @@ function useSubSidebarNavigation({
     }),
     [
       activeAppId,
-      activeFeatureAppId,
       activeNavItemId,
-      canReadTeams,
+      canReadWorkspace,
       filteredItems,
       isCategoryExpanded,
       onNavigate,
@@ -654,6 +640,7 @@ export const SubSidebar = ({
   currentWorkspaceSlug,
   enabledWorkspaceAppIds,
   getAppSidebarConfig = getNoopAppSidebarConfig,
+  headerSlot,
   hasAdminSectionAccess,
   launcherGlobalPaths = EMPTY_LAUNCHER_GLOBAL_PATHS,
   navItems = [],
@@ -671,6 +658,7 @@ export const SubSidebar = ({
   currentWorkspaceSlug: string | null;
   enabledWorkspaceAppIds?: readonly string[];
   getAppSidebarConfig?: (appId: string) => AppSidebarConfig | null;
+  headerSlot?: ReactNode;
   hasAdminSectionAccess?: AdminSectionAccessResolver;
   launcherGlobalPaths?: LauncherGlobalPaths;
   navItems?: readonly NavItem[];
@@ -686,7 +674,9 @@ export const SubSidebar = ({
   const navigate = useNavigate();
   const { user } = useAuth();
   const isMobile = variant === 'mobile';
-  const canReadTeams = hasWorkspaceMembership(user, currentWorkspaceSlug);
+  const canReadWorkspace = Boolean(
+    currentWorkspaceSlug && hasWorkspaceMembership(user, currentWorkspaceSlug),
+  );
   const workspaceAppRegistry = useMemo(
     () => new Map(workspaceApps.map((item) => [item.app_id, item])),
     [workspaceApps],
@@ -702,21 +692,10 @@ export const SubSidebar = ({
     [launcherGlobalPaths],
   );
   const frameState = useSubSidebarFrameState(activeAppId);
-  const activeFeatureAppId = useMemo(
-    () =>
-      resolveActiveFeatureAppId({
-        activeAppId,
-        activeNavItemId,
-        navItems,
-        pathname: locationPathname,
-      }),
-    [activeAppId, activeNavItemId, locationPathname, navItems],
-  );
   const navigationState = useSubSidebarNavigation({
     activeAppId,
-    activeFeatureAppId,
     activeNavItemId,
-    canReadTeams,
+    canReadWorkspace,
     currentWorkspaceSlug,
     enabledWorkspaceAppIds: resolvedEnabledWorkspaceAppIds,
     getAppSidebarConfig,
@@ -748,7 +727,6 @@ export const SubSidebar = ({
     >
       <SubSidebarHeader
         activeAppId={activeAppId}
-        activeFeatureAppId={activeFeatureAppId}
         appBarItems={appBarItems}
         createActions={navigationState.createActions}
         createButtonRef={frameState.createButtonRef}
@@ -765,13 +743,14 @@ export const SubSidebar = ({
         workspaceAppRegistry={workspaceAppRegistry}
       />
 
+      {headerSlot}
+
       <SidebarCategoryList
         activeNavItemId={activeNavItemId}
         categories={navigationState.categories}
         currentWorkspaceSlug={currentWorkspaceSlug}
         expandedCategories={navigationState.expandedCategories}
         filteredItems={navigationState.filteredItems}
-        launcherGlobalPaths={launcherGlobalPaths}
         onNavigate={onNavigate}
         sidebarConfig={navigationState.sidebarConfig}
         sidebarContext={navigationState.sidebarContext}

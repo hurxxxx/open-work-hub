@@ -1,11 +1,9 @@
 import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-
-import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
-  buildWorkspaceAppPath,
-  resolveDefaultWorkspaceAppPath,
-} from '@/src/platform/workspaces/workspace-utils';
+  buildAppEntryHref,
+  buildAppHref,
+} from '@open-work-hub/contracts/app-routes';
 
 export const SpaceWhiteboardsView = ({
   spaceId,
@@ -19,42 +17,42 @@ export const SpaceWhiteboardsView = ({
 }) => {
   const navigate = useNavigate();
   const { workspaceSlug: routeWorkspaceSlug } = useParams();
-  const { user } = useAuth();
   const workspaceSlug = workspaceSlugProp ?? routeWorkspaceSlug ?? null;
 
   useEffect(() => {
     navigate(
       resolveSpaceWhiteboardsRedirectPath({
         spaceId,
-        user,
         whiteboardId,
         workspaceSlug,
       }),
       { replace: true },
     );
-  }, [navigate, spaceId, user, whiteboardId, workspaceSlug]);
+  }, [navigate, spaceId, whiteboardId, workspaceSlug]);
 
   return null;
 };
 
-type WorkspaceUser = Parameters<typeof resolveDefaultWorkspaceAppPath>[0];
-
 export function resolveSpaceWhiteboardsRedirectPath({
   spaceId,
-  user,
   whiteboardId,
   workspaceSlug,
 }: {
   spaceId: string;
-  user: WorkspaceUser;
   whiteboardId?: string | null;
   workspaceSlug: string | null;
 }): string {
-  const search = new URLSearchParams({ space_id: spaceId });
-  const suffix = whiteboardId
-    ? `/${whiteboardId}?${search}`
-    : `?view=all&${search}`;
-  return workspaceSlug
-    ? buildWorkspaceAppPath(workspaceSlug, 'whiteboard', suffix)
-    : resolveDefaultWorkspaceAppPath(user, 'whiteboard', suffix);
+  if (!workspaceSlug) return buildAppEntryHref('whiteboard');
+  return whiteboardId
+    ? buildAppHref({
+        routeId: 'whiteboard.board',
+        workspaceSlug,
+        pathParams: { whiteboardId },
+        queryParams: { space_id: spaceId },
+      })
+    : buildAppHref({
+        routeId: 'whiteboard.root',
+        workspaceSlug,
+        queryParams: { space_id: spaceId, view: 'all' },
+      });
 }

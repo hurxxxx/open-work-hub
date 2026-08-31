@@ -24,7 +24,7 @@ import sys
 import tempfile
 import time
 from typing import Any, Protocol, Sequence
-from urllib.parse import quote, urljoin, urlparse
+from urllib.parse import parse_qs, quote, urljoin, urlparse
 
 import httpx
 
@@ -413,15 +413,9 @@ class HttpFilesApi:
             timeout=timeout_seconds,
             follow_redirects=False,
         )
-        self._public_client = httpx.Client(
-            base_url=self._base_url,
-            timeout=timeout_seconds,
-            follow_redirects=False,
-        )
 
     def close(self) -> None:
         self._client.close()
-        self._public_client.close()
 
     def _workspace_path(self, workspace_slug: str, suffix: str) -> str:
         return f"/api/v1/workspaces/{quote(workspace_slug, safe='')}/files{suffix}"
@@ -466,7 +460,9 @@ class HttpFilesApi:
         )
         if not isinstance(browse, dict) or not isinstance(browse.get("files"), list):
             raise LiveE2EContractError("files_workspace_preflight_failed")
-        query = _sha256_bytes(b"open-work-hub-files-live-preflight-v1\0" + secrets.token_bytes(16))[:16]
+        query = _sha256_bytes(b"open-work-hub-files-live-preflight-v1\0" + secrets.token_bytes(16))[
+            :16
+        ]
         search = self._json_request(
             "POST",
             self._workspace_path(workspace_slug, "/search"),
@@ -589,22 +585,33 @@ class HttpFilesApi:
             raise LiveE2EContractError("invalid_search_contract")
         return payload
 
-    def _validated_content_url(self, raw_url: object) -> str:
+    def _validated_content_url(self, raw_url: object) -> tuple[str, str]:
         if not isinstance(raw_url, str) or not raw_url:
             raise LiveE2EContractError("invalid_download_url")
         absolute = urljoin(f"{self._base_url}/", raw_url)
         parsed = urlparse(absolute)
+        try:
+            fragment = parse_qs(
+                parsed.fragment,
+                keep_blank_values=True,
+                strict_parsing=True,
+            )
+        except ValueError as error:
+            raise LiveE2EContractError("invalid_download_url") from error
         if (
             parsed.scheme != self._origin.scheme
             or parsed.hostname != self._origin.hostname
             or parsed.port != self._origin.port
-            or not parsed.path.startswith("/api/v1/files/content/")
+            or parsed.path != "/api/v1/content"
+            or parsed.query
+            or set(fragment) != {"grant"}
+            or len(fragment["grant"]) != 1
+            or not fragment["grant"][0]
             or parsed.username is not None
             or parsed.password is not None
-            or parsed.fragment
         ):
             raise LiveE2EContractError("invalid_download_url")
-        return absolute
+        return parsed._replace(fragment="").geturl(), fragment["grant"][0]
 
     def fresh_download(self, workspace_slug: str, file_id: str) -> tuple[str, str, int]:
         payload = self._json_request(
@@ -615,11 +622,16 @@ class HttpFilesApi:
         )
         if not isinstance(payload, dict):
             raise LiveE2EContractError("invalid_download_url")
-        url = self._validated_content_url(payload.get("url"))
+        raw_url = payload.get("url")
+        url, grant = self._validated_content_url(raw_url)
         digest = hashlib.sha256()
         byte_count = 0
         try:
-            with self._public_client.stream("GET", url) as response:
+            with self._client.stream(
+                "GET",
+                url,
+                headers={"X-Open-Work-Hub-Content-Grant": grant},
+            ) as response:
                 if response.status_code != 200:
                     raise LiveE2EContractError("fresh_download_failed")
                 if response.headers.get("cache-control") != "private, no-store":
@@ -633,12 +645,16 @@ class HttpFilesApi:
             raise
         except httpx.HTTPError as error:
             raise LiveE2EContractError("fresh_download_failed") from error
-        return url, digest.hexdigest(), byte_count
+        return str(raw_url), digest.hexdigest(), byte_count
 
     def assert_stale_download_denied(self, url: str) -> None:
-        validated = self._validated_content_url(url)
+        validated, grant = self._validated_content_url(url)
         try:
-            with self._public_client.stream("GET", validated) as response:
+            with self._client.stream(
+                "GET",
+                validated,
+                headers={"X-Open-Work-Hub-Content-Grant": grant},
+            ) as response:
                 if response.status_code not in {403, 404}:
                     raise LiveE2EContractError("stale_download_still_valid")
         except LiveE2EContractError:
@@ -757,7 +773,9 @@ class DevelopmentProjectionInspector:
         return names["opensearch"], names["qdrant"]
 
     def _opensearch_records(self, physical_name: str, file_ids: Sequence[str]) -> list[Any]:
-        from open_work_hub_api.domains.retrieval.projection_identity import canonical_search_document_id
+        from open_work_hub_api.domains.retrieval.projection_identity import (
+            canonical_search_document_id,
+        )
         from open_work_hub_api.domains.source_access.resource_types import (
             FILE_MANAGER_FILE_RESOURCE_TYPE,
         )

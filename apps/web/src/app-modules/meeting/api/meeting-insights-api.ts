@@ -1,9 +1,13 @@
-import { invokeAiTool } from '@/src/app-modules/ai/public-api';
+import { invokeAiTool } from '@/src/platform/ai/ai-api';
 
 import type { MeetingAvailabilityResponse } from './meeting-api';
 
 export type MeetingInsightType = 'action' | 'decision' | 'followup_schedule';
-export type MeetingInsightStatus = 'draft' | 'accepted' | 'rejected' | 'superseded';
+export type MeetingInsightStatus =
+  | 'draft'
+  | 'accepted'
+  | 'rejected'
+  | 'superseded';
 
 export interface MeetingInsightSourceSpan {
   start_ms: number | null;

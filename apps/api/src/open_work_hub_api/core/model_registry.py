@@ -9,6 +9,7 @@ def import_all_models() -> None:
     from open_work_hub_api.domains.ai.runtime import models as ai_runtime_models  # noqa: F401
     from open_work_hub_api.domains.ai_artifacts import models as ai_artifact_models  # noqa: F401
     from open_work_hub_api.domains.ai_graph import models as ai_graph_models  # noqa: F401
+    from open_work_hub_api.domains.agent_terminal import models as agent_terminal_models  # noqa: F401
     from open_work_hub_api.domains.announcements import models as announcements_models  # noqa: F401
     from open_work_hub_api.domains.auth import models as auth_models  # noqa: F401
     from open_work_hub_api.domains.integrations import models as integration_models  # noqa: F401
@@ -25,7 +26,6 @@ def import_all_models() -> None:
     from open_work_hub_api.domains.mail import models as mail_models  # noqa: F401
     from open_work_hub_api.domains.media import models as media_models  # noqa: F401
     from open_work_hub_api.domains.meeting import models as meeting_models  # noqa: F401
-    from open_work_hub_api.domains.notifications import models as notifications_models  # noqa: F401
     from open_work_hub_api.domains.personal_widgets import models as personal_widgets_models  # noqa: F401
     from open_work_hub_api.domains.pms import models as pms_models  # noqa: F401
     from open_work_hub_api.domains.planner import models as planner_models  # noqa: F401

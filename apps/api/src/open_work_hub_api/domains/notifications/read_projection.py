@@ -33,6 +33,21 @@ def build_notification_list_response(
     )
 
 
+def build_notification_page_response(
+    rows: Sequence[Notification],
+    *,
+    total: int,
+    page: int,
+    page_size: int,
+) -> GlobalNotificationListResponse:
+    return GlobalNotificationListResponse(
+        items=[service.serialize_notification(row) for row in rows],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
 def notification_event_payload(
     item: GlobalNotificationItem | None,
 ) -> dict[str, Any] | None:

@@ -24,4 +24,4 @@ Synthesize current conversation and repo context. Do not interview user. Draft f
 - Out of Scope
 - Further Notes
 
-Avoid brittle file paths/snippets unless a prototype produced decision-rich state/schema/interface detail.
+Avoid brittle file paths/snippets unless an exploratory implementation produced decision-rich state/schema/interface detail.

@@ -1,6 +1,7 @@
 # Inference Gateway Domain
 
-API/worker call embedding, rerank, parser, and ASR backends through one HTTP contract.
+API/worker call embedding, rerank, OCR, and ASR backends through approved gateway adapters. The RAG
+provider factory owns embedding/rerank/OCR composition; the core ASR adapter owns speech requests.
 
 - Deployment chooses actual models/hardware.
 - App code must not assume hostnames, servers, or devices.

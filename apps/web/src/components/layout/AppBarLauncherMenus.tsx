@@ -1,5 +1,11 @@
 import { Check, Search, SlidersHorizontal, Star } from 'lucide-react';
-import { useMemo, useState, type ReactNode, type RefObject } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import { Link } from 'react-router-dom';
 
 import { cn } from '@/src/lib/utils';
@@ -16,6 +22,8 @@ import {
 } from './AppBarIconLink';
 import { AppBarEditor } from './AppBarEditor';
 import {
+  type AppBarAppContextLabelResolver,
+  type AppBarAppLabelResolver,
   type AppBarAppLinkResolver,
   type AppBarTranslator,
   type AppBarWorkspaceItem,
@@ -72,6 +80,8 @@ export function AppBarLauncherMenus({
   pinnedEligibleAppIds,
   pinnedItems,
   resolveAppLink,
+  resolveAppContextLabel,
+  resolveAppLabel,
   t,
 }: {
   appBarEditorOpen: boolean;
@@ -79,7 +89,7 @@ export function AppBarLauncherMenus({
   appBarLayoutSaving: boolean;
   categoryMenuId: string | null;
   currentPathname: string;
-  currentWorkspaceName: string;
+  currentWorkspaceName: string | null;
   draftItems: AppBarWorkspaceItem[];
   draftPinnedAppIds: WorkspaceAppId[];
   favoritesActive: boolean;
@@ -98,6 +108,8 @@ export function AppBarLauncherMenus({
   pinnedEligibleAppIds: ReadonlySet<WorkspaceAppId>;
   pinnedItems: AppBarWorkspaceItem[];
   resolveAppLink: AppBarAppLinkResolver;
+  resolveAppContextLabel: AppBarAppContextLabelResolver;
+  resolveAppLabel: AppBarAppLabelResolver;
   t: AppBarTranslator;
 }) {
   const visibleCategories = launcherCategories
@@ -113,6 +125,28 @@ export function AppBarLauncherMenus({
     (category) => category.pinnable !== false,
   );
   const favoritesColumnCount = launcherGridColumnCount(pinnedItems.length);
+
+  useEffect(() => {
+    if (!favoritesOpen && !categoryMenuId) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') {
+        return;
+      }
+      const trigger = menuRef.current?.querySelector<HTMLButtonElement>(
+        'button[aria-haspopup="menu"][aria-expanded="true"]',
+      );
+      event.preventDefault();
+      event.stopPropagation();
+      onCloseLauncherMenus();
+      window.requestAnimationFrame(() => trigger?.focus());
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [categoryMenuId, favoritesOpen, menuRef, onCloseLauncherMenus]);
 
   return (
     <div
@@ -140,6 +174,8 @@ export function AppBarLauncherMenus({
                   item={item}
                   key={item.id}
                   onClose={onCloseLauncherMenus}
+                  resolveAppContextLabel={resolveAppContextLabel}
+                  resolveAppLabel={resolveAppLabel}
                   resolveAppLink={resolveAppLink}
                   t={t}
                 />
@@ -179,6 +215,8 @@ export function AppBarLauncherMenus({
             onToggle={() => onToggleCategoryMenu(category.id)}
             open={categoryMenuId === category.id}
             resolveAppLink={resolveAppLink}
+            resolveAppContextLabel={resolveAppContextLabel}
+            resolveAppLabel={resolveAppLabel}
             t={t}
           />
         );
@@ -217,6 +255,8 @@ export function AppBarLauncherMenus({
                 onToggle={() => onToggleCategoryMenu(category.id)}
                 open={categoryMenuId === category.id}
                 resolveAppLink={resolveAppLink}
+                resolveAppContextLabel={resolveAppContextLabel}
+                resolveAppLabel={resolveAppLabel}
                 t={t}
               />
             </div>
@@ -282,17 +322,21 @@ function CategoryLauncher({
   onClose,
   onToggle,
   open,
+  resolveAppContextLabel,
+  resolveAppLabel,
   resolveAppLink,
   t,
 }: {
   active: boolean;
   activeItem: WorkspaceBootstrapAppBarCategoryItem | null;
   category: WorkspaceBootstrapAppBarCategory;
-  currentWorkspaceName: string;
+  currentWorkspaceName: string | null;
   currentPathname: string;
   onClose: () => void;
   onToggle: () => void;
   open: boolean;
+  resolveAppContextLabel: AppBarAppContextLabelResolver;
+  resolveAppLabel: AppBarAppLabelResolver;
   resolveAppLink: AppBarAppLinkResolver;
   t: AppBarTranslator;
 }) {
@@ -346,6 +390,8 @@ function CategoryLauncher({
             currentPathname={currentPathname}
             columnCount={columnCount}
             onClose={onClose}
+            resolveAppContextLabel={resolveAppContextLabel}
+            resolveAppLabel={resolveAppLabel}
             resolveAppLink={resolveAppLink}
             t={t}
           />
@@ -360,6 +406,8 @@ function CategoryItemSearch({
   columnCount,
   currentPathname,
   onClose,
+  resolveAppContextLabel,
+  resolveAppLabel,
   resolveAppLink,
   t,
 }: {
@@ -367,6 +415,8 @@ function CategoryItemSearch({
   columnCount: LauncherGridColumnCount;
   currentPathname: string;
   onClose: () => void;
+  resolveAppContextLabel: AppBarAppContextLabelResolver;
+  resolveAppLabel: AppBarAppLabelResolver;
   resolveAppLink: AppBarAppLinkResolver;
   t: AppBarTranslator;
 }) {
@@ -406,6 +456,8 @@ function CategoryItemSearch({
               item={item}
               key={item.app_id}
               onClose={onClose}
+              resolveAppContextLabel={resolveAppContextLabel}
+              resolveAppLabel={resolveAppLabel}
               resolveAppLink={resolveAppLink}
               t={t}
             />
@@ -484,21 +536,27 @@ function FavoriteLauncherItem({
   currentPathname,
   item,
   onClose,
+  resolveAppContextLabel,
+  resolveAppLabel,
   resolveAppLink,
   t,
 }: {
   currentPathname: string;
   item: AppBarWorkspaceItem;
   onClose: () => void;
+  resolveAppContextLabel: AppBarAppContextLabelResolver;
+  resolveAppLabel: AppBarAppLabelResolver;
   resolveAppLink: AppBarAppLinkResolver;
   t: AppBarTranslator;
 }) {
   const link = resolveAppLink(item.id);
   return (
     <LauncherLink
+      accessibleLabel={resolveAppLabel(item.id, item.title)}
       active={isLauncherPathActive({ currentPathname, link })}
       icon={item.icon}
       onClose={onClose}
+      scopeLabel={resolveAppContextLabel(item.id)}
       title={item.title}
       to={link}
       t={t}
@@ -510,12 +568,16 @@ function CategoryLauncherItem({
   currentPathname,
   item,
   onClose,
+  resolveAppContextLabel,
+  resolveAppLabel,
   resolveAppLink,
   t,
 }: {
   currentPathname: string;
   item: WorkspaceBootstrapAppBarCategoryItem;
   onClose: () => void;
+  resolveAppContextLabel: AppBarAppContextLabelResolver;
+  resolveAppLabel: AppBarAppLabelResolver;
   resolveAppLink: AppBarAppLinkResolver;
   t: AppBarTranslator;
 }) {
@@ -523,13 +585,16 @@ function CategoryLauncherItem({
   const title = t(`shell:apps.${item.app_id}`, {
     defaultValue: item.title,
   });
-  const link = resolveAppLink(item.app_id as WorkspaceAppId);
+  const appId = item.app_id as WorkspaceAppId;
+  const link = resolveAppLink(appId);
   return (
     <LauncherLink
+      accessibleLabel={resolveAppLabel(appId, title)}
       active={isLauncherPathActive({ currentPathname, link })}
       comingSoon={item.coming_soon}
       icon={Icon}
       onClose={onClose}
+      scopeLabel={resolveAppContextLabel(appId)}
       title={title}
       to={link}
       t={t}
@@ -538,27 +603,31 @@ function CategoryLauncherItem({
 }
 
 function LauncherLink({
+  accessibleLabel,
   active,
   comingSoon = false,
   icon: Icon,
   onClose,
+  scopeLabel,
   title,
   to,
   t,
 }: {
+  accessibleLabel: string;
   active: boolean;
   comingSoon?: boolean | null;
   icon: AppBarWorkspaceItem['icon'];
   onClose: () => void;
+  scopeLabel?: string | null;
   title: string;
   to: string;
   t: AppBarTranslator;
 }) {
   return (
     <Link
-      aria-label={t('shell:appLauncher.openApp', { title })}
+      aria-label={accessibleLabel}
       className={cn(
-        'group/app relative flex h-24 min-w-0 flex-col items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-center text-app-ink transition-colors hover:border-app-border hover:bg-app-surface-hover',
+        'group/app relative flex h-28 min-w-0 flex-col items-center justify-center gap-1 rounded-lg border px-2 py-2 text-center text-app-ink transition-colors hover:border-app-border hover:bg-app-surface-hover',
         active
           ? 'border-app-accent/35 bg-app-bg text-app-accent'
           : 'border-transparent',
@@ -581,6 +650,11 @@ function LauncherLink({
       <span className="app-text-caption line-clamp-2 max-w-full font-medium leading-snug">
         {title}
       </span>
+      {scopeLabel ? (
+        <span className="app-text-micro max-w-full truncate rounded-full bg-app-surface px-1.5 py-0.5 text-app-ink/50">
+          {scopeLabel}
+        </span>
+      ) : null}
       {active ? (
         <Check size={15} className="absolute right-1.5 top-1.5 shrink-0" />
       ) : null}

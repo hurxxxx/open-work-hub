@@ -8,6 +8,7 @@ Default AI behavior is read/search/summarize. Source-changing tools execute only
 - First execution creates approval preview and stops before mutation.
 - Only requesting user principal can approve/reject.
 - Approved resume rechecks domain service ACL and business rules.
+- Resume scope, frozen tool set, and snapshot lifecycle follow [AI Execution](execution.md).
 - Approval row, tool audit, and resource IDs are linked.
 - External provider input follows [AI Gateway](./gateway.md) security/transfer policy.
 
