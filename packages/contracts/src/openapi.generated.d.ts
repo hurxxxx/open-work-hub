@@ -8568,6 +8568,8 @@ export interface components {
             current_password: string;
             /** New Password */
             new_password: string;
+            /** New Password Confirm */
+            new_password_confirm: string;
         };
         /**
          * ChatArtifact

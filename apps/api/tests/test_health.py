@@ -513,6 +513,7 @@ def test_auth_preferences_password_and_sessions(client: TestClient) -> None:
         json={
             "current_password": "supersecret123",
             "new_password": "newsupersecret123",
+            "new_password_confirm": "newsupersecret123",
         },
     )
     assert password_response.status_code == 204
@@ -534,6 +535,33 @@ def test_auth_preferences_password_and_sessions(client: TestClient) -> None:
         },
     )
     assert new_login_response.status_code == 200
+
+
+def test_auth_change_password_validates_confirmation(client: TestClient) -> None:
+    token = _bootstrap_admin(client)
+
+    mismatch_response = client.post(
+        "/api/v1/auth/change-password",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "current_password": "supersecret123",
+            "new_password": "newsupersecret123",
+            "new_password_confirm": "differentsecret123",
+        },
+    )
+
+    assert mismatch_response.status_code == 422
+    assert mismatch_response.json()["code"] == "auth.password_confirmation_mismatch"
+    assert mismatch_response.json()["detail"] == "비밀번호 확인이 일치하지 않습니다."
+
+    original_login_response = client.post(
+        "/api/v1/auth/login",
+        json={
+            "login_id": "admin",
+            "password": "supersecret123",
+        },
+    )
+    assert original_login_response.status_code == 200
 
 
 def _bootstrap_admin(

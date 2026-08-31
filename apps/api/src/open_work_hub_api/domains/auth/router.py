@@ -280,6 +280,13 @@ class DevLoginRequest(BaseModel):
 class ChangePasswordRequest(BaseModel):
     current_password: str = Field(..., min_length=8, max_length=128)
     new_password: str = Field(..., min_length=8, max_length=128)
+    new_password_confirm: str = Field(..., min_length=8, max_length=128)
+
+    @model_validator(mode="after")
+    def validate_password_confirmation(self) -> "ChangePasswordRequest":
+        if self.new_password != self.new_password_confirm:
+            raise _password_confirmation_mismatch_error()
+        return self
 
 
 class UpdatePreferencesRequest(BaseModel):
