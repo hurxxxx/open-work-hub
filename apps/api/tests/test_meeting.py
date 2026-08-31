@@ -86,22 +86,28 @@ def _grant_workspace_access(
     assert bindings_response.status_code == 200
     bindings = bindings_response.json()
 
-    roles_by_user_id = {
-        item["subject_id"]: item["role"] for item in bindings if item["subject_type"] == "user"
-    }
-    existing_role = roles_by_user_id.get(user_id)
-    if existing_role != "admin" or role == "admin":
-        roles_by_user_id[user_id] = role
-    user_bindings = [
-        {"subject_id": subject_id, "role": subject_role}
-        for subject_id, subject_role in roles_by_user_id.items()
-    ]
-    update_response = client.put(
-        f"/api/v1/admin/workspaces/{workspace['id']}/bindings",
-        headers=_auth_headers(admin_token),
-        json={"users": user_bindings},
+    existing_role = next(
+        (
+            item["role"]
+            for item in bindings
+            if item["subject_type"] == "user" and item["subject_id"] == user_id
+        ),
+        None,
     )
-    assert update_response.status_code == 200
+    if existing_role is None:
+        update_response = client.post(
+            f"/api/v1/admin/workspaces/{workspace['id']}/members",
+            headers=_auth_headers(admin_token),
+            json={"subject_id": user_id, "subject_type": "user", "role": role},
+        )
+        assert update_response.status_code == 201, update_response.text
+    elif existing_role != role and (existing_role != "admin" or role == "admin"):
+        update_response = client.patch(
+            f"/api/v1/admin/workspaces/{workspace['id']}/members/user/{user_id}",
+            headers=_auth_headers(admin_token),
+            json={"role": role},
+        )
+        assert update_response.status_code == 200, update_response.text
 
 
 def _login(client: TestClient, email: str, password: str) -> str:
