@@ -43,53 +43,81 @@ export function SecuritySettingsSection({
       />
 
       <div className="border-t border-app-border">
-          {user.must_change_password ? (
-            <div className="py-4">
-              <InlineNotice tone="warning">
-                {t('auth:settings.passwordRequired')}
-              </InlineNotice>
-            </div>
-          ) : null}
+        {user.must_change_password ? (
+          <div className="py-4">
+            <InlineNotice tone="warning">
+              {t('auth:settings.passwordRequired')}
+            </InlineNotice>
+          </div>
+        ) : null}
 
-          <form onSubmit={onPasswordSubmit}>
-            <SettingsFieldRow label={t('auth:settings.currentPassword')}>
-              <input
-                aria-label={t('auth:settings.currentPassword')}
-                className={fieldClassName}
-                onChange={(event) =>
-                  dispatch({
-                    type: 'patch',
-                    patch: { currentPassword: event.target.value },
-                  })
-                }
-                placeholder="********"
-                type="password"
-                value={state.currentPassword}
-              />
-            </SettingsFieldRow>
+        <form onSubmit={onPasswordSubmit}>
+          <SettingsFieldRow label={t('auth:settings.currentPassword')}>
+            <input
+              aria-label={t('auth:settings.currentPassword')}
+              autoComplete="current-password"
+              className={fieldClassName}
+              maxLength={128}
+              minLength={8}
+              onChange={(event) =>
+                dispatch({
+                  type: 'patch',
+                  patch: { currentPassword: event.target.value },
+                })
+              }
+              placeholder="********"
+              required
+              type="password"
+              value={state.currentPassword}
+            />
+          </SettingsFieldRow>
 
-            <SettingsFieldRow label={t('auth:settings.newPassword')}>
-              <input
-                aria-label={t('auth:settings.newPassword')}
-                className={fieldClassName}
-                onChange={(event) =>
-                  dispatch({
-                    type: 'patch',
-                    patch: { newPassword: event.target.value },
-                  })
-                }
-                placeholder="********"
-                type="password"
-                value={state.newPassword}
-              />
-            </SettingsFieldRow>
+          <SettingsFieldRow label={t('auth:settings.newPassword')}>
+            <input
+              aria-label={t('auth:settings.newPassword')}
+              autoComplete="new-password"
+              className={fieldClassName}
+              maxLength={128}
+              minLength={8}
+              onChange={(event) =>
+                dispatch({
+                  type: 'patch',
+                  patch: { newPassword: event.target.value },
+                })
+              }
+              placeholder="********"
+              required
+              type="password"
+              value={state.newPassword}
+            />
+          </SettingsFieldRow>
 
-            <div className="py-4">
-              <Button variant="primary" type="submit">
-                {t('auth:settings.updatePassword')}
-              </Button>
-            </div>
-          </form>
+          <SettingsFieldRow label={t('auth:settings.newPasswordConfirm')}>
+            <input
+              aria-label={t('auth:settings.newPasswordConfirm')}
+              autoComplete="new-password"
+              className={fieldClassName}
+              maxLength={128}
+              minLength={8}
+              onChange={(event) =>
+                dispatch({
+                  type: 'patch',
+                  patch: { newPasswordConfirm: event.target.value },
+                })
+              }
+              placeholder="********"
+              required
+              type="password"
+              value={state.newPasswordConfirm}
+            />
+          </SettingsFieldRow>
+
+          <div className="py-4">
+            <Button variant="primary" type="submit">
+              {t('auth:settings.updatePassword')}
+            </Button>
+          </div>
+        </form>
       </div>
 
       <div className="mt-8">

@@ -40,6 +40,7 @@ export interface ProfilePageState {
   error: string | null;
   currentPassword: string;
   newPassword: string;
+  newPasswordConfirm: string;
   sessions: AuthSessionItem[];
   loadingSessions: boolean;
 }
@@ -119,6 +120,7 @@ export function createInitialProfilePageState(
     error: null,
     currentPassword: '',
     newPassword: '',
+    newPasswordConfirm: '',
     sessions: [],
     loadingSessions: false,
   };
@@ -244,11 +246,13 @@ export function preparePasswordChange(
     payload: {
       current_password: state.currentPassword,
       new_password: state.newPassword,
+      new_password_confirm: state.newPasswordConfirm,
     },
     successPatch: (message) => ({
       currentPassword: '',
       message,
       newPassword: '',
+      newPasswordConfirm: '',
     }),
     failurePatch: (caughtError, fallback) => ({
       error: getErrorMessage(caughtError, fallback),

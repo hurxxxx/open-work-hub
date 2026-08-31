@@ -21,6 +21,7 @@ function state(overrides: Partial<ProfilePageState> = {}): ProfilePageState {
     locale: 'ko-KR',
     message: 'previous message',
     newPassword: '',
+    newPasswordConfirm: '',
     sessions: [],
     submitting: false,
     themePreference: 'system',
@@ -151,6 +152,7 @@ describe('settings page model', () => {
       state({
         currentPassword: 'old-password',
         newPassword: 'new-password',
+        newPasswordConfirm: 'new-password',
       }),
     );
 
@@ -158,11 +160,13 @@ describe('settings page model', () => {
     expect(plan.payload).toEqual({
       current_password: 'old-password',
       new_password: 'new-password',
+      new_password_confirm: 'new-password',
     });
     expect(plan.successPatch('Changed')).toEqual({
       currentPassword: '',
       message: 'Changed',
       newPassword: '',
+      newPasswordConfirm: '',
     });
     expect(plan.failurePatch('Bad password', 'Fallback')).toEqual({
       error: 'Bad password',
