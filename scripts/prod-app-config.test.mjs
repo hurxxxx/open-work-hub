@@ -17,8 +17,8 @@ function validEnv(overrides = {}) {
       OPEN_WORK_HUB_DM_ATTACHMENT_SIGNING_KEY: 'production-test-signing-key',
       OPEN_WORK_HUB_APP_BIND_HOST: '127.0.0.1',
       OPEN_WORK_HUB_APP_FORWARDED_ALLOW_IPS: '127.0.0.1',
-      OPEN_WORK_HUB_APP_PORT: '14201',
-      OPEN_WORK_HUB_APP_PUBLIC_URL: 'https://owh.example.com',
+      OPEN_WORK_HUB_APP_PORT: '8000',
+      OPEN_WORK_HUB_APP_PUBLIC_URL: 'https://prod.example.com',
       OPEN_WORK_HUB_ENV_PROFILE: 'prod',
       OPEN_WORK_HUB_INFRA_NGINX_PORT: '14200',
       OPEN_WORK_HUB_OPF_ENABLED: 'true',
@@ -34,21 +34,21 @@ test('parses dotenv assignments without evaluating shell syntax', () => {
   const values = parseEnvText(`
     # comment
     export OPEN_WORK_HUB_ENV_PROFILE=prod
-    OPEN_WORK_HUB_APP_PUBLIC_URL="https://owh.example.com"
+    OPEN_WORK_HUB_APP_PUBLIC_URL="https://prod.example.com"
     ignored shell text
   `);
   assert.equal(values.get('OPEN_WORK_HUB_ENV_PROFILE'), 'prod');
   assert.equal(
     values.get('OPEN_WORK_HUB_APP_PUBLIC_URL'),
-    'https://owh.example.com',
+    'https://prod.example.com',
   );
   assert.equal(values.has('ignored shell text'), false);
 });
 
 test('accepts a separated production runtime configuration', () => {
   const config = assertProductionAppEnv(validEnv());
-  assert.equal(config.appPort, 14201);
-  assert.equal(config.publicBaseUrl.href, 'https://owh.example.com/');
+  assert.equal(config.appPort, 8000);
+  assert.equal(config.publicBaseUrl.href, 'https://prod.example.com/');
 });
 
 test('rejects development access and port collisions', () => {
@@ -71,9 +71,9 @@ test('rejects development access and port collisions', () => {
 test('requires a credential-free HTTPS public origin', () => {
   for (const value of [
     '',
-    'http://owh.example.com',
-    'https://localhost:14201',
-    'https://user:password@owh.example.com',
+    'http://prod.example.com',
+    'https://localhost:8000',
+    'https://user:password@prod.example.com',
   ]) {
     assert.throws(() =>
       assertProductionAppEnv(
@@ -108,7 +108,7 @@ test('requires a separate loopback privacy-filter origin', () => {
     () =>
       assertProductionAppEnv(
         validEnv({
-          OPEN_WORK_HUB_OPF_SERVICE_BASE_URL: 'http://127.0.0.1:14201',
+          OPEN_WORK_HUB_OPF_SERVICE_BASE_URL: 'http://127.0.0.1:8000',
         }),
       ),
     /must not collide/,

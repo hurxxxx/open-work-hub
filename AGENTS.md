@@ -15,8 +15,9 @@
 ## Git And Delivery
 
 - GitLab `origin` is canonical; GitHub `upstream` is source-only. Never send site changes through GitHub PRs.
-- Work on `dev` unless the latest request names another branch. Routine work does not create a persistent branch, worktree, or MR.
-- If `dev` has unrelated dirty work, use a temporary detached worktree from `origin/dev`, integrate only the task diff, then remove it.
+- The checkout root contains `dev`, `prod`, and `worktrees/<feature>`; `prod` is reserved for `main` production operations.
+- Work in clean `dev` by default. Create a feature branch/worktree under `../worktrees/<slug>` only when the latest request asks for branch, worktree, or MR isolation.
+- If `dev` has unrelated dirty work, use a temporary detached `../worktrees/<slug>` from `origin/dev`, integrate only the task diff, then remove it.
 - Protected `main` is production. A `dev -> main` MR, merge, production-checkout update, and deploy each require explicit current authorization.
 - Commit, push, MR mutation, merge, deploy, and destructive cleanup each require explicit current authorization.
 - Leave finished work as an uncommitted diff by default. Keep upstream core updates and site patches in separate commits when commits are requested.

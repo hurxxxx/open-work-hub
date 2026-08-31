@@ -85,4 +85,4 @@ RUN mkdir -p .runtime/opf-cache .runtime/recording-spool \
 
 USER open-work-hub
 
-CMD ["apps/api/.venv/bin/uvicorn", "open_work_hub_api.main:app", "--app-dir", "apps/api/src", "--host", "127.0.0.1", "--port", "14201"]
+CMD ["apps/api/.venv/bin/uvicorn", "open_work_hub_api.main:app", "--app-dir", "apps/api/src", "--host", "127.0.0.1", "--port", "8000"]

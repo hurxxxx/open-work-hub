@@ -25,13 +25,13 @@ test('validates production health and the expected revision', async (context) =>
 
   await assertDeploymentHealth(
     'health',
-    new URL('https://owh.example.com/healthz'),
+    new URL('https://prod.example.com/healthz'),
     'abc123',
   );
   await assert.rejects(
     assertDeploymentHealth(
       'health',
-      new URL('https://owh.example.com/healthz'),
+      new URL('https://prod.example.com/healthz'),
       'other',
     ),
     /different runtime revision/,
@@ -55,7 +55,7 @@ test('requires production readiness at the expected revision', async (context) =
 
   await assertDeploymentReadiness(
     'readiness',
-    new URL('https://owh.example.com/readyz'),
+    new URL('https://prod.example.com/readyz'),
     'abc123',
   );
 });
@@ -71,7 +71,7 @@ test('requires bootstrap JSON objects', async (context) => {
     });
   await assertBootstrapJson(
     'bootstrap',
-    new URL('https://owh.example.com/api/v1/auth/bootstrap-status'),
+    new URL('https://prod.example.com/api/v1/auth/bootstrap-status'),
   );
 });
 
@@ -106,18 +106,18 @@ test('checks local and public surfaces in one smoke loop', async (context) => {
   };
 
   await runProductionSmoke({
-    appPort: 14201,
-    publicBaseUrl: new URL('https://owh.example.com/'),
+    appPort: 8000,
+    publicBaseUrl: new URL('https://prod.example.com/'),
     expectedRevision: 'abc123',
   });
   assert.deepEqual(requestedPaths, [
-    'http://127.0.0.1:14201/healthz',
-    'http://127.0.0.1:14201/readyz',
-    'http://127.0.0.1:14201/api/v1/auth/bootstrap-status',
-    'http://127.0.0.1:14201/login',
-    'https://owh.example.com/healthz',
-    'https://owh.example.com/readyz',
-    'https://owh.example.com/api/v1/auth/bootstrap-status',
-    'https://owh.example.com/login',
+    'http://127.0.0.1:8000/healthz',
+    'http://127.0.0.1:8000/readyz',
+    'http://127.0.0.1:8000/api/v1/auth/bootstrap-status',
+    'http://127.0.0.1:8000/login',
+    'https://prod.example.com/healthz',
+    'https://prod.example.com/readyz',
+    'https://prod.example.com/api/v1/auth/bootstrap-status',
+    'https://prod.example.com/login',
   ]);
 });

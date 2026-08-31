@@ -37,7 +37,7 @@ services:
         exec apps/api/.venv/bin/uvicorn open_work_hub_api.main:app \
           --app-dir apps/api/src \
           --host "$${OPEN_WORK_HUB_APP_BIND_HOST:-127.0.0.1}" \
-          --port "$${OPEN_WORK_HUB_APP_PORT:-14201}" \
+          --port "$${OPEN_WORK_HUB_APP_PORT:-8000}" \
           --proxy-headers \
           --forwarded-allow-ips "$${OPEN_WORK_HUB_APP_FORWARDED_ALLOW_IPS:-127.0.0.1}"
     restart: unless-stopped
@@ -49,7 +49,7 @@ services:
           apps/api/.venv/bin/python -c
           'import os, urllib.request;
           urllib.request.urlopen(
-          "http://127.0.0.1:" + os.environ.get("OPEN_WORK_HUB_APP_PORT", "14201") + "/healthz",
+          "http://127.0.0.1:" + os.environ.get("OPEN_WORK_HUB_APP_PORT", "8000") + "/healthz",
           timeout=5).read()'
       interval: 15s
       timeout: 8s
