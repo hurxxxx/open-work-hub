@@ -19,7 +19,7 @@
 - Work in clean `dev` by default. Create a feature branch/worktree under `../worktrees/<slug>` only when the latest request asks for branch, worktree, or MR isolation.
 - If `dev` has unrelated dirty work, use a temporary detached `../worktrees/<slug>` from `origin/dev`, integrate only the task diff, then remove it.
 - Protected `main` is production. A `dev -> main` MR, merge, production-checkout update, and deploy each require explicit current authorization.
-- Commit, push, MR mutation, merge, deploy, and destructive cleanup each require explicit current authorization.
+- Commit, push, MR mutation, merge, deploy, and unrelated or force cleanup require explicit current authorization. An authorized MR delivery includes removing only its clean local worktree and verified-merged local branch.
 - Leave finished work as an uncommitted diff by default. Keep upstream core updates and site patches in separate commits when commits are requested.
 - Never weaken tests, checkers, CI, agent policy, exclusions, auth, or guardrails to make a change pass.
 
