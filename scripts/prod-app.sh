@@ -57,13 +57,19 @@ image_revision() {
 }
 
 build_release_image() {
-  local revision short_revision image
+  local revision short_revision image bento_server_url
   revision="$(git -C "$ROOT_DIR" rev-parse HEAD)"
   short_revision="$(git -C "$ROOT_DIR" rev-parse --short=12 HEAD)"
   image="$IMAGE_REPOSITORY:$short_revision"
+  bento_server_url="$(
+    node "$ROOT_DIR/scripts/prod-app-config.mjs" \
+      "$ENV_FILE" \
+      --print-bento-server-url
+  )"
   docker build \
     --file "$ROOT_DIR/ops/app/Dockerfile" \
     --target runtime \
+    --build-arg "OPEN_WORK_HUB_BENTO_SERVER_URL=$bento_server_url" \
     --build-arg "OPEN_WORK_HUB_BUILD_REVISION=$revision" \
     --tag "$image" \
     "$ROOT_DIR" >&2
@@ -111,9 +117,10 @@ start_runtime() {
   compose up \
     --detach \
     --force-recreate \
+    --remove-orphans \
     --wait \
     --wait-timeout 600 \
-    privacy-filter api worker beat edge
+    privacy-filter api worker beat
 }
 
 run_smoke() {
