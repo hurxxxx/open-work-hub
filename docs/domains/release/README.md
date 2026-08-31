@@ -18,7 +18,7 @@
 
 - Run app commands only from a clean checkout named `prod` at `origin/main`.
 - Keep `.env` aligned with `.env.example`; production preflight rejects dev login/seed flags, an unsafe attachment-signing key, an untrusted proxy wildcard, non-public or shared app/Bento origins, and host-port collisions.
-- Route each public hostname directly from the external HTTPS proxy to its declared service port. `OPEN_WORK_HUB_APP_FORWARDED_ALLOW_IPS` lists only the exact external proxy IPs.
+- Route each public hostname directly from the external HTTPS proxy to its declared service port. `OPEN_WORK_HUB_APP_FORWARDED_ALLOW_IPS` lists only the exact external proxy IPs. Bind Bento to loopback for a local proxy or the exact private proxy-facing interface IP; production rejects wildcard, public-IP, and hostname bindings.
 - The app image contains the web build, API, worker, migrations, and collaboration codec at one source revision. The Compose runtime starts the privacy filter, API, worker, and scheduler with restart policies and health checks.
 - The image build embeds the validated `OPEN_WORK_HUB_BENTO_SERVER_URL` in the static web bundle; changing that public origin requires a new app image.
 - `pnpm app:prod:deploy` builds and verifies the revision image, applies migrations, replaces the app runtime, then requires direct and public health identity plus readiness, revision, bootstrap, and login-shell checks.

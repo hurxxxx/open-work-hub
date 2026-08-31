@@ -94,6 +94,28 @@ function parsePort(values, key, { required = false } = {}) {
   return port;
 }
 
+function isPrivateOrLoopbackIp(value) {
+  const version = isIP(value);
+  if (version === 4) {
+    const [first, second] = value.split('.').map(Number);
+    return (
+      first === 10 ||
+      first === 127 ||
+      (first === 172 && second >= 16 && second <= 31) ||
+      (first === 192 && second === 168)
+    );
+  }
+  if (version === 6) {
+    const normalized = value.toLowerCase();
+    return (
+      normalized === '::1' ||
+      normalized.startsWith('fc') ||
+      normalized.startsWith('fd')
+    );
+  }
+  return false;
+}
+
 export function assertProductionAppEnv(values) {
   requireExact(values, 'OPEN_WORK_HUB_ENV_PROFILE', 'prod');
   requireExact(values, 'OPEN_WORK_HUB_API_ENVIRONMENT', 'production');
@@ -159,6 +181,15 @@ export function assertProductionAppEnv(values) {
     );
   }
 
+  const bentoBindHost = (
+    values.get('OPEN_WORK_HUB_BENTO_BIND_HOST') ?? ''
+  ).trim();
+  if (!isPrivateOrLoopbackIp(bentoBindHost)) {
+    throw new Error(
+      'OPEN_WORK_HUB_BENTO_BIND_HOST must be an exact private or loopback IP address; wildcard, public, and hostname bindings are forbidden',
+    );
+  }
+
   const opfServiceUrlValue = (
     values.get('OPEN_WORK_HUB_OPF_SERVICE_BASE_URL') ?? ''
   ).trim();
@@ -189,6 +220,7 @@ export function assertProductionAppEnv(values) {
   }
   return {
     appPort,
+    bentoBindHost,
     bentoServerUrl,
     bindHost,
     forwardedAllowIps,

@@ -17,6 +17,7 @@ function validEnv(overrides = {}) {
       OPEN_WORK_HUB_APP_FORWARDED_ALLOW_IPS: '127.0.0.1',
       OPEN_WORK_HUB_APP_PORT: '8000',
       OPEN_WORK_HUB_APP_PUBLIC_URL: 'https://prod.example.com',
+      OPEN_WORK_HUB_BENTO_BIND_HOST: '127.0.0.1',
       OPEN_WORK_HUB_BENTO_PORT: '18084',
       OPEN_WORK_HUB_BENTO_SERVER_URL: 'https://bento.example.com',
       OPEN_WORK_HUB_DRAWIO_PORT: '18083',
@@ -49,8 +50,35 @@ test('parses dotenv assignments without evaluating shell syntax', () => {
 test('accepts a separated production runtime configuration', () => {
   const config = assertProductionAppEnv(validEnv());
   assert.equal(config.appPort, 8000);
+  assert.equal(config.bentoBindHost, '127.0.0.1');
   assert.equal(config.bentoServerUrl.href, 'https://bento.example.com/');
   assert.equal(config.publicBaseUrl.href, 'https://prod.example.com/');
+});
+
+test('requires an exact private or loopback Bento bind address', () => {
+  for (const value of ['', '0.0.0.0', '::', '203.0.113.10', 'proxy.internal']) {
+    assert.throws(
+      () =>
+        assertProductionAppEnv(
+          validEnv({ OPEN_WORK_HUB_BENTO_BIND_HOST: value }),
+        ),
+      /exact private or loopback IP address/,
+    );
+  }
+
+  for (const value of [
+    '10.20.30.40',
+    '172.16.0.1',
+    '192.168.1.10',
+    'fd00::1',
+  ]) {
+    assert.equal(
+      assertProductionAppEnv(
+        validEnv({ OPEN_WORK_HUB_BENTO_BIND_HOST: value }),
+      ).bentoBindHost,
+      value,
+    );
+  }
 });
 
 test('rejects development access and port collisions', () => {
