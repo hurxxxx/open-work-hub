@@ -113,7 +113,7 @@ start_runtime() {
     --force-recreate \
     --wait \
     --wait-timeout 600 \
-    privacy-filter api worker beat
+    privacy-filter api worker beat edge
 }
 
 run_smoke() {
