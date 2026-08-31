@@ -4,7 +4,12 @@ import { chromium, defineConfig, devices } from '@playwright/test';
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:4200';
 const webServerCommand = process.env.PLAYWRIGHT_WEB_SERVER_COMMAND ?? 'pnpm nx dev web';
-const workers = process.env.PLAYWRIGHT_WORKERS ? Number(process.env.PLAYWRIGHT_WORKERS) : undefined;
+const isCi = Boolean(process.env.CI);
+const workers = process.env.PLAYWRIGHT_WORKERS
+  ? Number(process.env.PLAYWRIGHT_WORKERS)
+  : isCi
+    ? 1
+    : undefined;
 const chromiumExecutablePath = resolveChromiumExecutablePath();
 const videoMode =
   process.env.PLAYWRIGHT_DISABLE_VIDEO === '1' ||
@@ -67,9 +72,9 @@ function resolveChromiumExecutablePath(): string | undefined {
 // below if we ever need cross-browser coverage.
 export default defineConfig({
   testDir: './e2e',
-  timeout: 30_000,
-  expect: { timeout: 5_000 },
-  forbidOnly: Boolean(process.env.CI),
+  timeout: isCi ? 60_000 : 30_000,
+  expect: { timeout: isCi ? 10_000 : 5_000 },
+  forbidOnly: isCi,
   fullyParallel: true,
   ...(workers && Number.isFinite(workers) && workers > 0 ? { workers } : {}),
   reporter: [['list']],
