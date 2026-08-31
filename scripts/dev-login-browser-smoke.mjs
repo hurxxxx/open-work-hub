@@ -34,12 +34,10 @@ try {
   await page.waitForURL((url) => url.pathname === '/', { timeout: 15_000 });
 
   const applicationRoot = page.locator('#root');
-  if (
-    (await applicationRoot.count()) !== 1 ||
-    !(await applicationRoot.isVisible())
-  ) {
+  if ((await applicationRoot.count()) !== 1) {
     throw new Error('Authenticated application root is not visible.');
   }
+  await applicationRoot.waitFor({ state: 'visible', timeout: 15_000 });
   if ((await page.locator('#auth-login-id').count()) !== 0) {
     throw new Error('Login form remained visible after authentication.');
   }
