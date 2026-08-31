@@ -114,7 +114,7 @@ services:
         - >-
           apps/worker/.venv/bin/celery
           -A open_work_hub_worker.celery_app:celery_app inspect ping
-          --destination "prod-worker@$$(hostname)" --timeout 5
+          --destination "prod-worker@$${HOSTNAME}" --timeout 5
           | grep -q pong
       interval: 20s
       timeout: 10s

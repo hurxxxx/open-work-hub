@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import {
@@ -122,4 +123,13 @@ test('requires a separate loopback privacy-filter origin', () => {
       ),
     /loopback HTTP origin/,
   );
+});
+
+test('worker healthcheck uses the container hostname without spawning hostname', async () => {
+  const composeText = await readFile(
+    new URL('../ops/compose/open-work-hub-prod.app.yml', import.meta.url),
+    'utf8',
+  );
+  assert.match(composeText, /--destination "prod-worker@\$\$\{HOSTNAME\}"/);
+  assert.doesNotMatch(composeText, /\$\$\(hostname\)/);
 });
