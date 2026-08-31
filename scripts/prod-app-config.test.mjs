@@ -55,14 +55,22 @@ test('accepts a separated production runtime configuration', () => {
   assert.equal(config.publicBaseUrl.href, 'https://prod.example.com/');
 });
 
-test('requires an exact private or loopback Bento bind address', () => {
-  for (const value of ['', '0.0.0.0', '::', '203.0.113.10', 'proxy.internal']) {
+test('requires an exact private or loopback Bento IPv4 bind address', () => {
+  for (const value of [
+    '',
+    '0.0.0.0',
+    '::',
+    '::1',
+    'fd00::1',
+    '203.0.113.10',
+    'proxy.internal',
+  ]) {
     assert.throws(
       () =>
         assertProductionAppEnv(
           validEnv({ OPEN_WORK_HUB_BENTO_BIND_HOST: value }),
         ),
-      /exact private or loopback IP address/,
+      /exact private or loopback IPv4 address/,
     );
   }
 
@@ -70,7 +78,6 @@ test('requires an exact private or loopback Bento bind address', () => {
     '10.20.30.40',
     '172.16.0.1',
     '192.168.1.10',
-    'fd00::1',
   ]) {
     assert.equal(
       assertProductionAppEnv(

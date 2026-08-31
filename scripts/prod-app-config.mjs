@@ -94,26 +94,17 @@ function parsePort(values, key, { required = false } = {}) {
   return port;
 }
 
-function isPrivateOrLoopbackIp(value) {
-  const version = isIP(value);
-  if (version === 4) {
-    const [first, second] = value.split('.').map(Number);
-    return (
-      first === 10 ||
-      first === 127 ||
-      (first === 172 && second >= 16 && second <= 31) ||
-      (first === 192 && second === 168)
-    );
+function isPrivateOrLoopbackIpv4(value) {
+  if (isIP(value) !== 4) {
+    return false;
   }
-  if (version === 6) {
-    const normalized = value.toLowerCase();
-    return (
-      normalized === '::1' ||
-      normalized.startsWith('fc') ||
-      normalized.startsWith('fd')
-    );
-  }
-  return false;
+  const [first, second] = value.split('.').map(Number);
+  return (
+    first === 10 ||
+    first === 127 ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168)
+  );
 }
 
 export function assertProductionAppEnv(values) {
@@ -184,9 +175,9 @@ export function assertProductionAppEnv(values) {
   const bentoBindHost = (
     values.get('OPEN_WORK_HUB_BENTO_BIND_HOST') ?? ''
   ).trim();
-  if (!isPrivateOrLoopbackIp(bentoBindHost)) {
+  if (!isPrivateOrLoopbackIpv4(bentoBindHost)) {
     throw new Error(
-      'OPEN_WORK_HUB_BENTO_BIND_HOST must be an exact private or loopback IP address; wildcard, public, and hostname bindings are forbidden',
+      'OPEN_WORK_HUB_BENTO_BIND_HOST must be an exact private or loopback IPv4 address; wildcard, public, IPv6, and hostname bindings are forbidden',
     );
   }
 
