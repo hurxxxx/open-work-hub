@@ -219,9 +219,12 @@ def execute_tool(
         if descriptor is not None
         else definition.approval_required
     )
-    if externally_approved_call_id is not None and source != "hermes-mcp":
+    if externally_approved_call_id is not None and source not in {
+        "hermes-mcp",
+        "hermes-terminal-mcp",
+    }:
         raise RuntimeError(
-            "External approval evidence is restricted to the Hermes MCP bridge."
+            "External approval evidence is restricted to Hermes MCP bridges."
         )
     if approval_required:
         if principal.kind != "user":

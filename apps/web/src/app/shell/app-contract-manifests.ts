@@ -7,6 +7,7 @@ import { diagramsManifest } from '@/src/app-modules/diagrams/manifest';
 import { docsManifest } from '@/src/app-modules/docs/manifest';
 import { filesManifest } from '@/src/app-modules/files/manifest';
 import { homeManifest } from '@/src/app-modules/home/manifest';
+import { hermesTerminalManifest } from '@/src/app-modules/hermes-terminal/manifest';
 import { mailManifest } from '@/src/app-modules/mail/manifest';
 import { meetingManifest } from '@/src/app-modules/meeting/manifest';
 import { plannerManifest } from '@/src/app-modules/planner/manifest';
@@ -28,6 +29,7 @@ export {
   docsManifest,
   filesManifest,
   homeManifest,
+  hermesTerminalManifest,
   mailManifest,
   meetingManifest,
   plannerManifest,
@@ -43,6 +45,7 @@ export {
 export const DEFAULT_APP_CONTRACT_MANIFESTS = [
   homeManifest,
   agentTerminalManifest,
+  hermesTerminalManifest,
   chatbotManifest,
   webSearchManifest,
   pmsManifest,

@@ -258,7 +258,13 @@ start_dev_infra() {
         echo "OPENROUTER_API_KEY is required when Hermes is enabled." >&2
         exit 1
       fi
-      desired+=(hermes-bootstrap hermes-gateway hermes-dashboard)
+      desired+=(
+        hermes-bootstrap
+        hermes-gateway
+        hermes-dashboard
+        hermes-terminal-egress
+        hermes-terminal-broker
+      )
     fi
     if dev_use_local_postgres; then
       desired+=(postgres)
@@ -298,6 +304,7 @@ start_dev_infra() {
   local livekit_port="${OPEN_WORK_HUB_LIVEKIT_PORT:-7880}"
   local hermes_runtime_port="${OPEN_WORK_HUB_HERMES_RUNTIME_PORT:-18642}"
   local hermes_management_port="${OPEN_WORK_HUB_HERMES_MANAGEMENT_PORT:-19119}"
+  local hermes_terminal_broker_port="${OPEN_WORK_HUB_HERMES_TERMINAL_BROKER_PORT:-18765}"
   local services=()
   local skipped=()
   local svc
@@ -312,8 +319,24 @@ start_dev_infra() {
       livekit) port="$livekit_port" ;;
       hermes-bootstrap|hermes-gateway) port="$hermes_runtime_port" ;;
       hermes-dashboard) port="$hermes_management_port" ;;
+      hermes-terminal-broker) port="$hermes_terminal_broker_port" ;;
     esac
     if [[ -n "$port" && -n "$(find_listener "$port")" ]]; then
+      if [[ "$svc" == "hermes-terminal-broker" ]]; then
+        local broker_container="open-work-hub-dev-hermes-terminal-broker"
+        local broker_running
+        local broker_binding
+        broker_running="$(dev_docker inspect -f '{{.State.Running}}' "$broker_container" 2>/dev/null || true)"
+        broker_binding="$(dev_docker port "$broker_container" 18765/tcp 2>/dev/null || true)"
+        if [[ "$broker_running" != "true" || "$broker_binding" != "127.0.0.1:${port}" ]]; then
+          echo "Cannot start Hermes Terminal broker: fixed port ${port} is already in use." >&2
+          echo >&2
+          find_listener "$port" >&2
+          echo >&2
+          echo "Stop the existing process; no fallback port will be selected." >&2
+          exit 1
+        fi
+      fi
       skipped+=("${svc}(:${port})")
     else
       services+=("$svc")

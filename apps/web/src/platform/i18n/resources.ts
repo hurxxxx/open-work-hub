@@ -348,6 +348,7 @@ export const resources = {
       },
       apps: {
         'agent-terminal': 'Codex 터미널',
+        'hermes-terminal': 'Hermes 터미널',
         ai: 'AI',
         bento: 'bento/slides',
         business: '업무',
@@ -372,6 +373,8 @@ export const resources = {
       appDescriptions: {
         bento: '프레젠테이션을 만들고 워크스페이스에 저장합니다.',
         chatbot: '사내 데이터와 도구를 활용하는 대화형 어시스턴트',
+        'hermes-terminal':
+          '개인 격리 작업공간에서 Hermes 자율형 에이전트를 실행합니다.',
         pms: '스페이스, 리스트, 태스크를 관리합니다.',
         docs: '문서를 작성하고 공유합니다.',
         files: '업무 파일을 저장하고 공유합니다.',
@@ -1309,6 +1312,117 @@ export const resources = {
           '지속 가능한 터미널 세션에 필요한 tmux 실행 파일을 서버에서 찾을 수 없습니다.',
         title: 'Codex 터미널',
         unavailableTitle: 'Codex 터미널을 사용할 수 없습니다.',
+      },
+      hermesTerminal: {
+        actions: {
+          approveOnce: '이번 요청만 승인',
+          cancel: '취소',
+          deny: '거부',
+          download: '다운로드',
+          downloadFile: '{{name}} 다운로드',
+          newSession: '새 세션',
+          parentFolder: '상위 폴더',
+          reconnect: '다시 연결',
+          refresh: '새로고침',
+          refreshResults: '결과 새로고침',
+          retry: '다시 시도',
+          stop: '세션 종료',
+        },
+        activity: {
+          approvals: '승인',
+          files: '결과 파일',
+          label: 'Hermes 실행 결과 및 승인',
+          loadingApprovals: '승인 요청을 불러오는 중입니다.',
+          loadingFiles: '작업 파일을 불러오는 중입니다.',
+          noApprovalsDescription:
+            'Open Work Hub 쓰기 도구를 요청하면 여기에 표시됩니다.',
+          noApprovalsTitle: '승인 요청이 없습니다.',
+          noFilesDescription:
+            'Hermes가 /workspace에 생성한 파일이 여기에 표시됩니다.',
+          noFilesTitle: '생성된 결과 파일이 없습니다.',
+          oneTimeApproval: '도구와 인자가 일치하는 이번 호출에만 적용됩니다.',
+        },
+        approvalStatus: {
+          approved: '승인됨',
+          denied: '거부됨',
+          expired: '만료됨',
+          pending: '승인 대기',
+        },
+        connection: {
+          connected: '연결됨',
+          connecting: '연결 중',
+          ended: '종료됨',
+          offline: '연결 끊김',
+        },
+        create: {
+          description:
+            '세션 모드는 매번 선택하며 YOLO는 기본값으로 저장되지 않습니다.',
+          standardDescription: 'Hermes의 위험 명령 승인 프롬프트를 유지합니다.',
+          standardTitle: '표준 모드',
+          start: 'Hermes 시작',
+          starting: '시작 중...',
+          title: '새 Hermes 터미널 세션',
+          yoloAcknowledgement:
+            'Hermes의 위험 명령 확인을 건너뛰는 위험을 이해합니다. Open Work Hub 쓰기 승인과 격리 정책은 계속 적용됩니다.',
+          yoloDescription:
+            '공식 --yolo 플래그로 Hermes 자체 위험 명령 확인만 건너뜁니다.',
+          yoloTitle: 'YOLO 모드',
+        },
+        disabledDescription:
+          '서버 환경 설정에서 Hermes 통합을 먼저 활성화해야 합니다.',
+        eyebrow: '개인 자율형 에이전트',
+        feedback: {
+          approvalFailed: '승인 요청을 처리하지 못했습니다.',
+          approvalsLoadFailed: '승인 요청을 불러오지 못했습니다.',
+          approved: '이번 도구 요청을 승인했습니다.',
+          connectionFailed: 'Hermes 터미널 연결을 유지하지 못했습니다.',
+          createFailed: 'Hermes 터미널 세션을 시작하지 못했습니다.',
+          created: 'Hermes 터미널 세션을 시작했습니다.',
+          denied: '도구 요청을 거부했습니다.',
+          downloadFailed: '결과 파일을 다운로드하지 못했습니다.',
+          downloaded: '결과 파일을 다운로드했습니다.',
+          filesLoadFailed: '결과 파일을 불러오지 못했습니다.',
+          loadFailed: 'Hermes 터미널 정보를 불러오지 못했습니다.',
+          stopFailed: 'Hermes 터미널 세션을 종료하지 못했습니다.',
+          stopped: 'Hermes 터미널 세션을 종료했습니다.',
+        },
+        loadFailedDescription:
+          '워크스페이스 권한, 앱 활성화 상태와 Hermes 런타임을 확인해 주세요.',
+        loadFailedTitle: 'Hermes 터미널을 불러오지 못했습니다.',
+        loading: 'Hermes 터미널을 불러오는 중입니다.',
+        mode: {
+          standard: '표준',
+          yolo: 'YOLO',
+        },
+        noSessionDescription:
+          '개인 격리 작업공간에서 Hermes TUI를 시작하고 성능을 확인하세요.',
+        noSessionTitle: 'Hermes 세션이 없습니다.',
+        preparingDescription:
+          '격리 컨테이너와 개인 Hermes 프로필을 준비하고 있습니다.',
+        preparingTitle: 'Hermes 세션을 준비 중입니다.',
+        privateWorkspace: '사용자 전용 작업공간',
+        securityNotice:
+          'OpenRouter 키는 격리 실행기에 전달되지 않습니다. YOLO에서도 Open Work Hub 쓰기 승인, 인증, 네트워크 격리는 유지됩니다.',
+        sessionCapacity: '실행 세션 {{active}}/{{limit}}',
+        sessionEndedDescription:
+          '보존 기간 동안 오른쪽 결과 파일을 내려받을 수 있습니다.',
+        sessionEndedTitle: '터미널 세션이 종료되었습니다.',
+        sessionLimitReached:
+          '이 워크스페이스에서 실행 중인 개인 세션을 먼저 종료하세요.',
+        sessionsLabel: 'Hermes 터미널 세션 선택',
+        status: {
+          archiving: '결과 보관 중',
+          awaiting_approval: '승인 대기',
+          exited: '완료',
+          failed: '실패',
+          running: '실행 중',
+          starting: '시작 중',
+          stopping: '종료 중',
+          terminated: '종료됨',
+        },
+        terminalLabel: 'Hermes TUI 터미널',
+        title: 'Hermes 터미널',
+        unavailableTitle: 'Hermes 터미널을 사용할 수 없습니다.',
       },
       mail: {
         eyebrow: '로컬 AI 메일',
@@ -6352,6 +6466,7 @@ export const resources = {
       },
       apps: {
         'agent-terminal': 'Codex Terminal',
+        'hermes-terminal': 'Hermes Terminal',
         ai: 'AI',
         bento: 'bento/slides',
         business: 'Business',
@@ -6376,6 +6491,8 @@ export const resources = {
       appDescriptions: {
         bento: 'Create presentations and store them in the workspace.',
         chatbot: 'Conversational assistant using internal data and tools.',
+        'hermes-terminal':
+          'Run the Hermes autonomous agent in a private isolated workspace.',
         pms: 'Manage spaces, lists, and tasks.',
         docs: 'Create and share documents.',
         files: 'Store and share work files.',
@@ -7322,6 +7439,120 @@ export const resources = {
           'The tmux executable required for persistent terminal sessions was not found on the server.',
         title: 'Codex Terminal',
         unavailableTitle: 'The Codex terminal is unavailable.',
+      },
+      hermesTerminal: {
+        actions: {
+          approveOnce: 'Approve this request',
+          cancel: 'Cancel',
+          deny: 'Deny',
+          download: 'Download',
+          downloadFile: 'Download {{name}}',
+          newSession: 'New session',
+          parentFolder: 'Parent folder',
+          reconnect: 'Reconnect',
+          refresh: 'Refresh',
+          refreshResults: 'Refresh results',
+          retry: 'Try again',
+          stop: 'Stop session',
+        },
+        activity: {
+          approvals: 'Approvals',
+          files: 'Result files',
+          label: 'Hermes results and approvals',
+          loadingApprovals: 'Loading approval requests.',
+          loadingFiles: 'Loading workspace files.',
+          noApprovalsDescription:
+            'Open Work Hub write-tool requests will appear here.',
+          noApprovalsTitle: 'No approval requests.',
+          noFilesDescription:
+            'Files Hermes creates under /workspace will appear here.',
+          noFilesTitle: 'No result files yet.',
+          oneTimeApproval:
+            'Applies once to this exact tool and argument payload.',
+        },
+        approvalStatus: {
+          approved: 'Approved',
+          denied: 'Denied',
+          expired: 'Expired',
+          pending: 'Pending',
+        },
+        connection: {
+          connected: 'Connected',
+          connecting: 'Connecting',
+          ended: 'Ended',
+          offline: 'Offline',
+        },
+        create: {
+          description:
+            'Choose a mode for this session. YOLO is never saved as the default.',
+          standardDescription:
+            'Keep Hermes dangerous-command approval prompts enabled.',
+          standardTitle: 'Standard mode',
+          start: 'Start Hermes',
+          starting: 'Starting...',
+          title: 'New Hermes terminal session',
+          yoloAcknowledgement:
+            'I understand the risk of skipping Hermes dangerous-command prompts. Open Work Hub write approvals and isolation still apply.',
+          yoloDescription:
+            'Use the official --yolo flag to skip only Hermes native dangerous-command prompts.',
+          yoloTitle: 'YOLO mode',
+        },
+        disabledDescription:
+          'Enable the Hermes integration in the server environment first.',
+        eyebrow: 'Private autonomous agent',
+        feedback: {
+          approvalFailed: 'Could not resolve the approval request.',
+          approvalsLoadFailed: 'Could not load approval requests.',
+          approved: 'Approved this tool request once.',
+          connectionFailed:
+            'The Hermes terminal connection could not be maintained.',
+          createFailed: 'Could not start a Hermes terminal session.',
+          created: 'Hermes terminal session started.',
+          denied: 'Denied the tool request.',
+          downloadFailed: 'Could not download the result file.',
+          downloaded: 'Result file downloaded.',
+          filesLoadFailed: 'Could not load result files.',
+          loadFailed: 'Could not load Hermes terminal information.',
+          stopFailed: 'Could not stop the Hermes terminal session.',
+          stopped: 'Hermes terminal session stopped.',
+        },
+        loadFailedDescription:
+          'Check workspace access, app availability, and the Hermes runtime.',
+        loadFailedTitle: 'Could not load the Hermes terminal.',
+        loading: 'Loading the Hermes terminal.',
+        mode: {
+          standard: 'Standard',
+          yolo: 'YOLO',
+        },
+        noSessionDescription:
+          'Start the Hermes TUI in your private isolated workspace to evaluate it.',
+        noSessionTitle: 'No Hermes session exists.',
+        preparingDescription:
+          'Preparing the isolated container and your private Hermes profile.',
+        preparingTitle: 'Preparing the Hermes session.',
+        privateWorkspace: 'User-private workspace',
+        securityNotice:
+          'The OpenRouter key never enters the isolated runner. Open Work Hub write approvals, authentication, and network isolation remain active in YOLO mode.',
+        sessionCapacity: 'Running sessions {{active}}/{{limit}}',
+        sessionEndedDescription:
+          'You can download result files on the right during the retention period.',
+        sessionEndedTitle: 'The terminal session has ended.',
+        sessionLimitReached:
+          'Stop your active private session in this workspace before starting another.',
+        sessionsLabel: 'Select a Hermes terminal session',
+        status: {
+          archiving: 'Archiving results',
+          awaiting_approval: 'Awaiting approval',
+          exited: 'Completed',
+          failed: 'Failed',
+          running: 'Running',
+          starting: 'Starting',
+          stopping: 'Stopping',
+          terminated: 'Stopped',
+        },
+        terminalLabel: 'Hermes TUI terminal',
+        title: 'Hermes Terminal',
+        unavailableTitle: 'The Hermes terminal is unavailable.',
       },
       mail: {
         eyebrow: 'AI Mail',

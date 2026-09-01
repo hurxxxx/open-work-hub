@@ -54,6 +54,10 @@ from open_work_hub_api.domains.files.router import router as files_router
 from open_work_hub_api.domains.hermes.router import router as hermes_router
 from open_work_hub_api.domains.hermes.mcp_router import router as hermes_mcp_router
 from open_work_hub_api.domains.hermes.admin_router import router as admin_hermes_router
+from open_work_hub_api.domains.hermes_terminal.router import (
+    router as hermes_terminal_router,
+    ws_router as hermes_terminal_ws_router,
+)
 from open_work_hub_api.domains.mail.router import router as mail_router
 from open_work_hub_api.domains.media.router import router as media_router
 from open_work_hub_api.domains.meeting.router import router as meeting_router
@@ -162,6 +166,8 @@ def _router_specs() -> list[_RouterSpec]:
         _RouterSpec(files_router, "workspace", "workspace"),
         _RouterSpec(hermes_router, "workspace", "workspace"),
         _RouterSpec(hermes_mcp_router, "api"),
+        _RouterSpec(hermes_terminal_router, "workspace", "workspace"),
+        _RouterSpec(hermes_terminal_ws_router, "workspace"),
         _RouterSpec(ocr_router, "workspace", "workspace"),
         _RouterSpec(pms_router, "workspace", "workspace"),
         _RouterSpec(meeting_router, "workspace", "workspace"),

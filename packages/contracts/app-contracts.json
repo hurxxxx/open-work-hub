@@ -32,6 +32,21 @@
       ]
     },
     {
+      "app_id": "hermes-terminal",
+      "title": "Hermes Terminal",
+      "icon_key": "square-terminal",
+      "availability_scope": "workspace",
+      "execution_context_kind": "workspace",
+      "resource_scope": "personal",
+      "route_base": "/apps/hermes-terminal",
+      "entry_route_id": "hermes-terminal.root",
+      "launcher": { "placement": "category", "pinned_by_default": false },
+      "feature_flag": "hermes_enabled",
+      "routes": [
+        { "route_id": "hermes-terminal.root", "context_scope": "workspace", "suffix": "", "chrome": "fullSurface" }
+      ]
+    },
+    {
       "app_id": "chatbot",
       "title": "AI Assistant",
       "icon_key": "message-square",

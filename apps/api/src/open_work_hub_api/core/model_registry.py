@@ -24,6 +24,9 @@ def import_all_models() -> None:
     from open_work_hub_api.domains.dm import models as dm_models  # noqa: F401
     from open_work_hub_api.domains.files import models as files_models  # noqa: F401
     from open_work_hub_api.domains.hermes import models as hermes_models  # noqa: F401
+    from open_work_hub_api.domains.hermes_terminal import (  # noqa: F401
+        models as hermes_terminal_models,
+    )
     from open_work_hub_api.domains.mail import models as mail_models  # noqa: F401
     from open_work_hub_api.domains.media import models as media_models  # noqa: F401
     from open_work_hub_api.domains.meeting import models as meeting_models  # noqa: F401

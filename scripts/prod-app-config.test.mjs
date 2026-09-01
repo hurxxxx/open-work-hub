@@ -37,6 +37,9 @@ function validEnv(overrides = {}) {
       OPEN_WORK_HUB_HERMES_PROFILE_CLONE_SOURCE: 'default',
       OPEN_WORK_HUB_HERMES_RUNTIME_BASE_URL: 'http://127.0.0.1:8642',
       OPEN_WORK_HUB_HERMES_RUNTIME_PORT: '8642',
+      OPEN_WORK_HUB_HERMES_TERMINAL_BROKER_BASE_URL:
+        'http://127.0.0.1:18765',
+      OPEN_WORK_HUB_HERMES_TERMINAL_BROKER_PORT: '18765',
       OPEN_WORK_HUB_INFRA_NGINX_PORT: '14200',
       OPEN_WORK_HUB_OPF_ENABLED: 'true',
       OPEN_WORK_HUB_OPF_REQUIRED: 'true',
@@ -68,6 +71,10 @@ test('accepts a separated production runtime configuration', () => {
   assert.equal(config.bentoBindHost, '127.0.0.1');
   assert.equal(config.bentoServerUrl.href, 'https://bento.example.com/');
   assert.equal(config.hermesRuntimeBaseUrl.href, 'http://127.0.0.1:8642/');
+  assert.equal(
+    config.hermesTerminalBrokerBaseUrl.href,
+    'http://127.0.0.1:18765/',
+  );
   assert.equal(config.publicBaseUrl.href, 'https://prod.example.com/');
 });
 
@@ -232,6 +239,16 @@ test('requires loopback Hermes endpoints on their declared ports', () => {
         }),
       ),
     /internal Hermes MCP endpoint/,
+  );
+  assert.throws(
+    () =>
+      assertProductionAppEnv(
+        validEnv({
+          OPEN_WORK_HUB_HERMES_TERMINAL_BROKER_BASE_URL:
+            'http://127.0.0.1:18766',
+        }),
+      ),
+    /Hermes Terminal broker port/,
   );
 });
 

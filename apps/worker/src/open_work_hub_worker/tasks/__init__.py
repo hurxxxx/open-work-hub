@@ -5,6 +5,7 @@ from open_work_hub_worker.tasks import (  # noqa: F401
     documents,
     file_storage_cleanup,
     hermes,
+    hermes_terminal,
     mail,
     media,
     meeting,

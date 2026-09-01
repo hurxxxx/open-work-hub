@@ -16,6 +16,7 @@ const PORT_KEYS = [
   'OPEN_WORK_HUB_DRAWIO_PORT',
   'OPEN_WORK_HUB_HERMES_MANAGEMENT_PORT',
   'OPEN_WORK_HUB_HERMES_RUNTIME_PORT',
+  'OPEN_WORK_HUB_HERMES_TERMINAL_BROKER_PORT',
   'OPEN_WORK_HUB_INFRA_MINIO_CONSOLE_PORT',
   'OPEN_WORK_HUB_INFRA_MINIO_PORT',
   'OPEN_WORK_HUB_INFRA_NGINX_PORT',
@@ -256,14 +257,22 @@ export function assertProductionAppEnv(values) {
     'OPEN_WORK_HUB_HERMES_MANAGEMENT_PORT',
     { required: true },
   );
+  const hermesTerminalBrokerPort = parsePort(
+    values,
+    'OPEN_WORK_HUB_HERMES_TERMINAL_BROKER_PORT',
+    { required: true },
+  );
   const reservedPorts = new Set([
     appPort,
     Number(opfServiceBaseUrl.port),
     hermesRuntimePort,
     hermesManagementPort,
+    hermesTerminalBrokerPort,
   ]);
-  if (reservedPorts.size !== 4) {
-    throw new Error('Hermes, API, and privacy-filter ports must be distinct');
+  if (reservedPorts.size !== 5) {
+    throw new Error(
+      'Hermes, Hermes Terminal broker, API, and privacy-filter ports must be distinct',
+    );
   }
 
   const hermesRuntimeBaseUrl = requireLoopbackHttpUrl(
@@ -285,6 +294,18 @@ export function assertProductionAppEnv(values) {
     Number(hermesManagementBaseUrl.port) !== hermesManagementPort
   ) {
     throw new Error('OPEN_WORK_HUB_HERMES_MANAGEMENT_BASE_URL must match the configured Hermes management port');
+  }
+  const hermesTerminalBrokerBaseUrl = requireLoopbackHttpUrl(
+    values,
+    'OPEN_WORK_HUB_HERMES_TERMINAL_BROKER_BASE_URL',
+  );
+  if (
+    hermesTerminalBrokerBaseUrl.pathname !== '/' ||
+    Number(hermesTerminalBrokerBaseUrl.port) !== hermesTerminalBrokerPort
+  ) {
+    throw new Error(
+      'OPEN_WORK_HUB_HERMES_TERMINAL_BROKER_BASE_URL must match the configured Hermes Terminal broker port',
+    );
   }
   const hermesMcpServerUrl = requireLoopbackHttpUrl(
     values,
@@ -316,6 +337,7 @@ export function assertProductionAppEnv(values) {
     hermesManagementBaseUrl,
     hermesMcpServerUrl,
     hermesRuntimeBaseUrl,
+    hermesTerminalBrokerBaseUrl,
     opfServiceBaseUrl,
     publicBaseUrl,
   };

@@ -14,6 +14,7 @@ from open_work_hub_worker.queue_contract import (
     DEFAULT_QUEUE,
     FILE_STORAGE_CLEANUP_REPUBLISH_TASK_NAME,
     HERMES_REPUBLISH_TASK_NAME,
+    HERMES_TERMINAL_MAINTENANCE_TASK_NAME,
     assert_worker_queue_access,
     celery_task_routes,
     celery_worker_queue_argument,
@@ -123,6 +124,11 @@ celery_app.conf.beat_schedule = {
     "republish-pending-hermes-runs": {
         "task": HERMES_REPUBLISH_TASK_NAME,
         "schedule": 30.0,
+        "options": {"queue": DEFAULT_QUEUE},
+    },
+    "maintain-hermes-terminal-sessions": {
+        "task": HERMES_TERMINAL_MAINTENANCE_TASK_NAME,
+        "schedule": 300.0,
         "options": {"queue": DEFAULT_QUEUE},
     },
     "republish-pending-ai-graph-runs": {

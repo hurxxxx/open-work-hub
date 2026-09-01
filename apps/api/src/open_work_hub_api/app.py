@@ -50,6 +50,9 @@ from open_work_hub_api.domains.rag.runtime import (
     get_rag_runtime_health,
     preload_rag_runtime,
 )
+from open_work_hub_api.domains.hermes_terminal.mcp_socket_server import (
+    HermesTerminalMcpSocketServer,
+)
 from open_work_hub_api.external_runtime import ApiExternalRuntime, ProductionApiExternalRuntime
 from open_work_hub_api.openapi_contract import stable_operation_id
 from open_work_hub_api.platform_extensions import initialize_platform_extensions
@@ -153,8 +156,10 @@ def create_app(
             yield
             return
         assert selected_external_runtime is not None
+        terminal_mcp_socket = HermesTerminalMcpSocketServer(settings)
         try:
             async with selected_external_runtime.activate(app):
+                await terminal_mcp_socket.startup()
                 if settings.llm_healthcheck_on_startup:
                     with get_session_factory()() as session:
                         llm_status = inspect_registered_llm_runtime(
@@ -188,6 +193,7 @@ def create_app(
                     await asyncio.gather(loop_lag_watchdog, return_exceptions=True)
                     app.state.loop_lag_watchdog = None
         finally:
+            await terminal_mcp_socket.shutdown()
             close_rag_runtime_resources()
 
     app = FastAPI(

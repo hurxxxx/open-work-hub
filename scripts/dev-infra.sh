@@ -47,7 +47,13 @@ case "$COMMAND" in
         echo "OPENROUTER_API_KEY is required when Hermes is enabled." >&2
         exit 1
       fi
-      services+=(hermes-bootstrap hermes-gateway hermes-dashboard)
+      services+=(
+        hermes-bootstrap
+        hermes-gateway
+        hermes-dashboard
+        hermes-terminal-egress
+        hermes-terminal-broker
+      )
     fi
     compose up -d "${services[@]}"
     ;;
