@@ -249,6 +249,7 @@ test.describe('AI-friendly app boundary smoke', () => {
         assert: async (current) => {
           await expect(
             current.getByRole('heading', {
+              level: 1,
               name: /Retrieval 진단 검색|Retrieval diagnostics search/,
             }),
           ).toBeVisible();
@@ -283,7 +284,7 @@ test.describe('AI-friendly app boundary smoke', () => {
           ? { workspaceSlug: 'hq' }
           : {}),
       });
-      await page.goto(href);
+      await page.goto(href, { waitUntil: 'domcontentloaded' });
       await expect(page).toHaveURL(
         new RegExp(`${href.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`),
       );
