@@ -269,36 +269,44 @@ test.describe('AI-friendly app boundary smoke', () => {
   });
 
   test('mounts every executable app entry without falling through to NotFoundView', async ({
-    page,
+    context,
   }) => {
-    await stubWorkspaceAppDataBackend(page);
-    await stubShellBackend(page, {
-      enabledAppIds: APP_CONTRACTS.map((app) => app.app_id),
-    });
-    await stubConversationsApi(page);
-
+    test.setTimeout(120_000);
     for (const app of APP_CONTRACTS) {
-      const href = buildAppHref({
-        routeId: app.entry_route_id,
-        ...(app.availability_scope === 'workspace'
-          ? { workspaceSlug: 'hq' }
-          : {}),
+      await test.step(app.app_id, async () => {
+        const appPage = await context.newPage();
+        try {
+          await stubWorkspaceAppDataBackend(appPage);
+          await stubShellBackend(appPage, {
+            enabledAppIds: APP_CONTRACTS.map((contract) => contract.app_id),
+          });
+          await stubConversationsApi(appPage);
+
+          const href = buildAppHref({
+            routeId: app.entry_route_id,
+            ...(app.availability_scope === 'workspace'
+              ? { workspaceSlug: 'hq' }
+              : {}),
+          });
+          await appPage.goto(href, { waitUntil: 'domcontentloaded' });
+          await expect(appPage).toHaveURL(
+            new RegExp(`${href.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`),
+          );
+          await expect(
+            appPage.getByRole('navigation', {
+              name: /주요 앱 탐색|Primary app navigation/,
+            }),
+          ).toBeVisible();
+          await expect(
+            appPage.getByRole('heading', {
+              name: /페이지를 찾을 수 없습니다|Page not found/,
+            }),
+            app.app_id,
+          ).toHaveCount(0);
+        } finally {
+          await appPage.close();
+        }
       });
-      await page.goto(href, { waitUntil: 'domcontentloaded' });
-      await expect(page).toHaveURL(
-        new RegExp(`${href.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`),
-      );
-      await expect(
-        page.getByRole('navigation', {
-          name: /주요 앱 탐색|Primary app navigation/,
-        }),
-      ).toBeVisible();
-      await expect(
-        page.getByRole('heading', {
-          name: /페이지를 찾을 수 없습니다|Page not found/,
-        }),
-        app.app_id,
-      ).toHaveCount(0);
     }
   });
 
