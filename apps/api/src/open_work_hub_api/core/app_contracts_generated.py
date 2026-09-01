@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Final
 
-APP_CONTRACT_REVISION: Final = "sha256:fa42fe2986e326110b910c22df65fccb980f300535ffc5a0ae73a942d044a809"
+APP_CONTRACT_REVISION: Final = "sha256:3ee1c4fa22b9eef33431af50fda0b2451dbc95719db270a592e43f38d244acb0"
 APP_CONTRACTS: Final = [
   {
     "app_id": "home",
@@ -49,6 +49,29 @@ APP_CONTRACTS: Final = [
       {
         "route_id": "agent-terminal.root",
         "context_scope": "global",
+        "suffix": "",
+        "chrome": "fullSurface"
+      }
+    ]
+  },
+  {
+    "app_id": "hermes-terminal",
+    "title": "Hermes Terminal",
+    "icon_key": "square-terminal",
+    "availability_scope": "workspace",
+    "execution_context_kind": "workspace",
+    "resource_scope": "personal",
+    "route_base": "/apps/hermes-terminal",
+    "entry_route_id": "hermes-terminal.root",
+    "launcher": {
+      "placement": "category",
+      "pinned_by_default": False
+    },
+    "feature_flag": "hermes_enabled",
+    "routes": [
+      {
+        "route_id": "hermes-terminal.root",
+        "context_scope": "workspace",
         "suffix": "",
         "chrome": "fullSurface"
       }

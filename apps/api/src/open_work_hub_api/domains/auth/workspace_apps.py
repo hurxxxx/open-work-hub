@@ -14,6 +14,7 @@ from open_work_hub_api.domains.conversations.app_catalog import CHATBOT_WORKSPAC
 from open_work_hub_api.domains.diagrams.app_catalog import DIAGRAMS_WORKSPACE_APP
 from open_work_hub_api.domains.docs.app_catalog import DOCS_WORKSPACE_APP
 from open_work_hub_api.domains.files.app_catalog import FILES_WORKSPACE_APP
+from open_work_hub_api.domains.hermes_terminal.app_catalog import HERMES_TERMINAL_APP
 from open_work_hub_api.domains.mail.app_catalog import MAIL_WORKSPACE_APP
 from open_work_hub_api.domains.meeting.app_catalog import MEETING_WORKSPACE_APP
 from open_work_hub_api.domains.planner.app_catalog import PLANNER_WORKSPACE_APP
@@ -30,6 +31,7 @@ from .home_app_catalog import HOME_WORKSPACE_APP
 _WORKSPACE_APP_REGISTRATIONS = (
     HOME_WORKSPACE_APP,
     AGENT_TERMINAL_APP,
+    HERMES_TERMINAL_APP,
     CHATBOT_WORKSPACE_APP,
     *WEB_SEARCH_WORKSPACE_APPS,
     PMS_WORKSPACE_APP,

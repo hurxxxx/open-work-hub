@@ -27,6 +27,7 @@
 ## Platform Boundaries
 
 - Use existing composition roots, registries, manifests, public APIs, generated contracts, and migrations.
+- For third-party libraries and external tools, prefer the pinned version's documented configuration, public APIs, extension points, and official headless/lifecycle features. Before adding a wrapper, monkey patch, compatibility shim, or duplicated lifecycle/state logic, verify that the official surface cannot meet the requirement. Keep any necessary adapter narrow, version-pinned, fail-closed, tested, and documented with the specific upstream gap; remove it when an official capability replaces it.
 - Shared/auditable state belongs in PostgreSQL or object storage, not UI hiding, browser storage, `/tmp`, process memory, or JSON load-modify-write.
 - Server enforcement owns auth, workspace/execution context, runtime app availability, resource ACL, and fail-closed AI write approval.
 - External file/URL input needs size, type, scheme, host, redirect, timeout, SSRF, cleanup, and failure boundaries.
@@ -43,6 +44,7 @@
 ## Documentation And Skills
 
 - Keep one owner per fact and link to it. Do not create parallel current-truth trees, nested ADRs, progress dumps, or raw QA artifacts.
+- `docs/domains/ai/hermes.md` is the single owner for Hermes setup and runtime configuration. Any change to the pinned image/digest, provider/model/fallback policy, Hermes environment or config keys, ports/base URLs, profile/MCP/tool/egress policy, terminal mounts/workspace/TUI behavior, service topology, lifecycle/limits, or dev/prod bootstrap and deployment must update that document in the same change and run its validation checklist.
 - Keep skills single-purpose and on-demand: concise trigger, boundaries, invariants, workflow, and only necessary resources.
 
 ## Parallel Work

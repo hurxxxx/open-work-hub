@@ -1,0 +1,426 @@
+from __future__ import annotations
+
+import asyncio
+import base64
+import binascii
+import hashlib
+import hmac
+import json
+import os
+from functools import lru_cache
+from typing import Annotated, Any
+
+import httpx
+from fastapi import (
+    Depends,
+    FastAPI,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    WebSocket,
+    status,
+)
+from pydantic import BaseModel, Field
+from starlette.websockets import WebSocketDisconnect
+
+from open_work_hub_api.domains.hermes_terminal.broker_runtime import (
+    BrokerRuntimeError,
+    HermesTerminalBrokerRuntime,
+)
+app = FastAPI(
+    title="Open Work Hub Hermes Terminal Broker",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+)
+
+
+class ResizeRequest(BaseModel):
+    cols: int = Field(ge=20, le=500)
+    rows: int = Field(ge=5, le=300)
+
+
+class BrokerSessionCreateRequest(BaseModel):
+    session_id: str
+    profile_key: str
+    mode: str
+    cols: int = Field(ge=20, le=500)
+    rows: int = Field(ge=5, le=300)
+    mcp_url: str
+    mcp_token: str
+    profile_archive_base64: str | None = None
+
+
+class BrokerSessionResponse(BaseModel):
+    session_id: str
+    runtime_handle: str
+    broker_instance_id: str
+    status: str
+    exit_code: int | None = None
+    failure_code: str | None = None
+
+
+class BrokerFileEntry(BaseModel):
+    relative_path: str
+    name: str
+    kind: str
+    size_bytes: int | None = None
+    modified_at: str | None = None
+
+
+class BrokerFileListResponse(BaseModel):
+    path: str
+    items: list[BrokerFileEntry]
+
+
+def normalize_relative_path(value: str | None, *, allow_root: bool = True) -> str:
+    from pathlib import PurePosixPath
+
+    raw = (value or "").replace("\\", "/").strip()
+    if not raw or raw == ".":
+        if allow_root:
+            return ""
+        raise ValueError("A file path is required.")
+    path = PurePosixPath(raw)
+    if path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts):
+        raise ValueError("The path must stay inside the session workspace.")
+    normalized = path.as_posix()
+    if len(normalized) > 1024:
+        raise ValueError("The path is too long.")
+    return normalized
+
+
+def _broker_token() -> str:
+    secret = os.environ.get("OPEN_WORK_HUB_HERMES_MCP_SHARED_SECRET", "").strip()
+    if not secret:
+        return ""
+    return hmac.new(
+        secret.encode(),
+        b"open-work-hub-hermes-terminal-broker:v1",
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def require_broker_auth(authorization: str | None = Header(default=None)) -> None:
+    supplied = ""
+    if authorization and authorization.lower().startswith("bearer "):
+        supplied = authorization[7:].strip()
+    expected = _broker_token()
+    if not expected or not supplied or not hmac.compare_digest(expected, supplied):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+
+
+@lru_cache(maxsize=1)
+def runtime() -> HermesTerminalBrokerRuntime:
+    return HermesTerminalBrokerRuntime()
+
+
+def _runtime_error(error: BrokerRuntimeError) -> HTTPException:
+    if error.code.endswith("not_found"):
+        status_code = status.HTTP_404_NOT_FOUND
+    elif error.code in {
+        "hermes_terminal.session_active",
+        "hermes_terminal.session_exists",
+        "hermes_terminal.session_not_running",
+    }:
+        status_code = status.HTTP_409_CONFLICT
+    elif error.code.endswith("invalid") or error.code.endswith("too_large"):
+        status_code = status.HTTP_400_BAD_REQUEST
+    else:
+        status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    return HTTPException(status_code=status_code, detail={"code": error.code})
+
+
+@app.get("/healthz")
+async def healthz() -> dict[str, Any]:
+    try:
+        broker = await asyncio.to_thread(runtime)
+        return {"ready": True, "instance_id": broker.instance_id}
+    except BrokerRuntimeError as error:
+        return {"ready": False, "code": error.code}
+
+
+@app.post(
+    "/v1/sessions",
+    response_model=BrokerSessionResponse,
+    dependencies=[Depends(require_broker_auth)],
+)
+async def create_session(payload: BrokerSessionCreateRequest) -> dict[str, Any]:
+    try:
+        return await asyncio.to_thread(
+            runtime().create_session,
+            session_id=payload.session_id,
+            profile_key=payload.profile_key,
+            mode=payload.mode,
+            cols=payload.cols,
+            rows=payload.rows,
+            mcp_url=payload.mcp_url,
+            mcp_token=payload.mcp_token,
+            profile_archive_base64=payload.profile_archive_base64,
+        )
+    except BrokerRuntimeError as error:
+        raise _runtime_error(error) from error
+
+
+@app.get(
+    "/v1/sessions/{session_id}",
+    response_model=BrokerSessionResponse,
+    dependencies=[Depends(require_broker_auth)],
+)
+async def get_session(session_id: str) -> dict[str, Any]:
+    try:
+        return await asyncio.to_thread(runtime().session_status, session_id)
+    except BrokerRuntimeError as error:
+        raise _runtime_error(error) from error
+
+
+@app.post(
+    "/v1/sessions/{session_id}/stop",
+    response_model=BrokerSessionResponse,
+    dependencies=[Depends(require_broker_auth)],
+)
+async def stop_session(session_id: str) -> dict[str, Any]:
+    try:
+        return await asyncio.to_thread(runtime().stop_session, session_id)
+    except BrokerRuntimeError as error:
+        raise _runtime_error(error) from error
+
+
+@app.delete(
+    "/v1/sessions/{session_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_broker_auth)],
+)
+async def forget_session(session_id: str) -> Response:
+    try:
+        await asyncio.to_thread(runtime().forget_session, session_id)
+    except BrokerRuntimeError as error:
+        raise _runtime_error(error) from error
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@app.post(
+    "/v1/sessions/{session_id}/resize",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_broker_auth)],
+)
+async def resize_session(session_id: str, payload: ResizeRequest) -> Response:
+    try:
+        await asyncio.to_thread(
+            runtime().resize_session,
+            session_id,
+            cols=payload.cols,
+            rows=payload.rows,
+        )
+    except BrokerRuntimeError as error:
+        raise _runtime_error(error) from error
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@app.get(
+    "/v1/sessions/{session_id}/files",
+    response_model=BrokerFileListResponse,
+    dependencies=[Depends(require_broker_auth)],
+)
+async def list_files(
+    session_id: str,
+    path: Annotated[str, Query(max_length=1024)] = "",
+) -> dict[str, Any]:
+    try:
+        relative_path = normalize_relative_path(path)
+        return await asyncio.to_thread(
+            runtime().list_files,
+            session_id,
+            path=relative_path,
+        )
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "hermes_terminal.path_invalid"},
+        ) from error
+    except BrokerRuntimeError as error:
+        raise _runtime_error(error) from error
+
+
+@app.get(
+    "/v1/sessions/{session_id}/file",
+    dependencies=[Depends(require_broker_auth)],
+)
+async def read_file(
+    session_id: str,
+    path: Annotated[str, Query(min_length=1, max_length=1024)],
+) -> Response:
+    try:
+        relative_path = normalize_relative_path(path, allow_root=False)
+        data = await asyncio.to_thread(runtime().read_file, session_id, path=relative_path)
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "hermes_terminal.path_invalid"},
+        ) from error
+    except BrokerRuntimeError as error:
+        raise _runtime_error(error) from error
+    return Response(data, media_type="application/octet-stream")
+
+
+@app.post(
+    "/v1/sessions/{session_id}/profile/export",
+    dependencies=[Depends(require_broker_auth)],
+)
+async def export_profile(session_id: str) -> Response:
+    try:
+        data = await asyncio.to_thread(runtime().export_profile, session_id)
+    except BrokerRuntimeError as error:
+        raise _runtime_error(error) from error
+    return Response(data, media_type="application/gzip")
+
+
+@app.post(
+    "/v1/sessions/{session_id}/workspace/export",
+    dependencies=[Depends(require_broker_auth)],
+)
+async def export_workspace(session_id: str) -> Response:
+    try:
+        data = await asyncio.to_thread(runtime().export_workspace, session_id)
+    except BrokerRuntimeError as error:
+        raise _runtime_error(error) from error
+    return Response(data, media_type="application/x-tar")
+
+
+@app.api_route("/mcp/{session_id}", methods=["GET", "POST"])
+async def relay_mcp(session_id: str, request: Request) -> Response:
+    body = await request.body()
+    if len(body) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
+    socket_path = os.environ.get(
+        "OWH_HERMES_TERMINAL_MCP_SOCKET_PATH",
+        "/run/open-work-hub/hermes-terminal-mcp.sock",
+    ).strip()
+    headers = {
+        name: value
+        for name, value in request.headers.items()
+        if name.lower() in {"authorization", "accept", "content-type", "mcp-session-id"}
+    }
+    transport = httpx.AsyncHTTPTransport(uds=socket_path)
+    try:
+        async with httpx.AsyncClient(transport=transport, base_url="http://open-work-hub") as client:
+            upstream = await client.request(
+                request.method,
+                "/mcp",
+                params={"session": session_id},
+                headers=headers,
+                content=body,
+                timeout=360.0,
+            )
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE) from exc
+    response_headers = {
+        name: value
+        for name, value in upstream.headers.items()
+        if name.lower() in {"content-type", "mcp-session-id"}
+    }
+    return Response(
+        upstream.content,
+        status_code=upstream.status_code,
+        headers=response_headers,
+        media_type=None,
+    )
+
+
+@app.websocket("/v1/sessions/{session_id}/attach")
+async def attach_session(websocket: WebSocket, session_id: str) -> None:
+    authorization = websocket.headers.get("authorization")
+    try:
+        require_broker_auth(authorization)
+        attached, container = await asyncio.to_thread(runtime().attach_socket, session_id)
+    except HTTPException:
+        await websocket.close(code=4401)
+        return
+    except BrokerRuntimeError:
+        await websocket.close(code=4409)
+        return
+    await websocket.accept()
+    await websocket.send_json({"type": "ready", "active": True})
+    raw_socket = getattr(attached, "_sock", attached)
+
+    async def send_output() -> None:
+        while True:
+            try:
+                data = await asyncio.to_thread(raw_socket.recv, 65536)
+            except OSError:
+                data = b""
+            if data:
+                await websocket.send_json(
+                    {"type": "output", "data": base64.b64encode(data).decode("ascii")}
+                )
+                continue
+            await asyncio.to_thread(container.reload)
+            if container.status != "running":
+                state = container.attrs.get("State") or {}
+                value = state.get("ExitCode")
+                await websocket.send_json(
+                    {
+                        "type": "exit",
+                        "exit_code": value if isinstance(value, int) else None,
+                    }
+                )
+                return
+            await asyncio.sleep(0.1)
+
+    async def receive_input() -> None:
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError:
+                await websocket.send_json(
+                    {"type": "error", "code": "hermes_terminal.message_invalid"}
+                )
+                continue
+            if not isinstance(payload, dict):
+                continue
+            message_type = payload.get("type")
+            if message_type == "input":
+                encoded = payload.get("data")
+                if not isinstance(encoded, str) or len(encoded) > 90_000:
+                    continue
+                try:
+                    data = base64.b64decode(encoded, validate=True)
+                except binascii.Error:
+                    continue
+                await asyncio.to_thread(raw_socket.sendall, data)
+            elif message_type == "resize":
+                cols = payload.get("cols")
+                rows = payload.get("rows")
+                if isinstance(cols, int) and isinstance(rows, int):
+                    await asyncio.to_thread(
+                        runtime().resize_session,
+                        session_id,
+                        cols=cols,
+                        rows=rows,
+                    )
+            elif message_type == "ping":
+                await websocket.send_json({"type": "pong"})
+
+    try:
+        sender = asyncio.create_task(send_output())
+        receiver = asyncio.create_task(receive_input())
+        done, pending = await asyncio.wait(
+            {sender, receiver},
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+        for task in done:
+            if not task.cancelled():
+                task.result()
+    except (BrokerRuntimeError, OSError, WebSocketDisconnect):
+        pass
+    finally:
+        try:
+            attached.close()
+        except Exception:
+            pass

@@ -1,31 +1,79 @@
-import { apiFetchJsonWithMappedError } from '@/src/platform/api/client';
-import type { ApiSchema } from '@/src/platform/api/types';
 import { i18n } from '@/src/platform/i18n';
-import { resolveWorkspaceChatbotApiPath } from './workspace-chatbot-api-path';
+import {
+  HermesAgentApiError,
+  HERMES_APPROVAL_TTL_MS,
+  createHermesSession,
+  deleteHermesSession,
+  encodeHermesApprovalReference,
+  getHermesSession,
+  getHermesSessionMessages,
+  hermesApprovalToolName,
+  listHermesRuns,
+  listHermesSessions,
+  updateHermesSession,
+  type HermesRun,
+  type HermesSession,
+} from './hermes-agent-api';
 
-export type ConversationArtifact = ApiSchema<'ArtifactOut'>;
+export interface ConversationArtifact {
+  id: string;
+  type: string;
+  title?: string | null;
+  language?: string | null;
+  content: string;
+  status?: string | null;
+}
 
-// Mirrors ConversationTurnOut on the server — the backend flattens its stored
-// `meta` dict into top-level camelCase fields so MessageBubble/ThinkingPanel/
-// ToolCallCard/ArtifactCard can render a reloaded turn without a second
-// translation pass.
-export type ConversationTurn = Omit<
-  ApiSchema<'ConversationTurnOut'>,
-  'chosenPool' | 'role'
-> & {
-  chosenPool?: 'local' | 'external' | null;
+export interface ConversationTurn {
+  id: string;
+  seq: number;
   role: 'user' | 'assistant';
-};
-export type ConversationSummary = ApiSchema<'ConversationSummary'>;
-export type ConversationLivePendingApproval =
-  ApiSchema<'ConversationLivePendingApproval'>;
-export type ConversationDetail = Omit<
-  ApiSchema<'ConversationDetail'>,
-  'turns'
-> & {
+  content: string;
+  reasoning?: string | null;
+  reasoningStatus?: string | null;
+  finishReason?: string | null;
+  responseStatus?: string | null;
+  provider?: string | null;
+  policy?: string | null;
+  chosenPool?: 'local' | 'external' | null;
+  decisionReason?: string | null;
+  forcedLocal?: boolean | null;
+  piiHits?: string[];
+  toolCalls?: Record<string, unknown>[];
+  pendingApprovals?: Record<string, unknown>[];
+  artifacts?: ConversationArtifact[];
+  createdAt: string;
+}
+
+export interface ConversationSummary {
+  id: string;
+  title: string;
+  scopeRef?: string | null;
+  scopeResourceId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConversationLivePendingApproval {
+  approvalId: string;
+  agentRunId: string;
+  callId: string;
+  tool: string;
+  resourcePreview?: string | null;
+  expiresAtMs: number;
+  status: 'pending' | 'approved' | 'rejected';
+  reason?: string | null;
+}
+
+export interface ConversationDetail extends ConversationSummary {
+  livePendingApproval?: ConversationLivePendingApproval | null;
   turns: ConversationTurn[];
-};
-export type ConversationListResponse = ApiSchema<'ConversationListResponse'>;
+}
+
+export interface ConversationListResponse {
+  items: ConversationSummary[];
+  nextCursor?: string | null;
+}
 
 export class ConversationsApiError extends Error {
   status: number;
@@ -37,50 +85,22 @@ export class ConversationsApiError extends Error {
   }
 }
 
-async function request<T>(
-  path: string,
-  token: string,
-  init: RequestInit = {},
-  workspaceSlug?: string | null,
-): Promise<T> {
-  try {
-    return await apiFetchJsonWithMappedError<T>(
-      resolveWorkspaceChatbotApiPath(path, workspaceSlug),
-      token,
-      init,
-      (error) => {
-        const message =
-          error.payload &&
-          typeof error.payload === 'object' &&
-          'detail' in error.payload &&
-          typeof (error.payload as { detail?: unknown }).detail === 'string'
-            ? (error.payload as { detail: string }).detail
-            : i18n.t('apps:ai.errors.conversationRequestFailed', {
-                status: error.status,
-              });
-        return new ConversationsApiError(error.status, message);
-      },
-    );
-  } catch (error) {
-    if (error instanceof ConversationsApiError) {
-      throw error;
-    }
-    throw new ConversationsApiError(
-      0,
-      i18n.t('apps:ai.errors.conversationConnect'),
-    );
+function mapError(error: unknown): never {
+  if (error instanceof HermesAgentApiError) {
+    throw new ConversationsApiError(error.status, error.message);
   }
+  throw new ConversationsApiError(
+    0,
+    error instanceof Error
+      ? error.message
+      : i18n.t('apps:ai.errors.conversationConnect'),
+  );
 }
 
-/**
- * Window custom event fired by the chat view whenever a turn finishes
- * persisting. The conversation list listens for it to refresh recent threads —
- * `updated_at` bumps on follow-up replies don't change the URL, so the
- * route search params alone won't catch them.
- */
+/** Fired after Hermes persists a turn so recent sessions refresh in place. */
 export const CONVERSATIONS_UPDATED_EVENT = 'corporate:ai:conversations-updated';
 
-export function listConversations(
+export async function listConversations(
   token: string,
   params: {
     limit?: number;
@@ -90,43 +110,54 @@ export function listConversations(
     workspaceSlug?: string | null;
   } = {},
 ): Promise<ConversationListResponse> {
-  const searchParams = new URLSearchParams();
-  if (params.limit != null) {
-    searchParams.set('limit', String(params.limit));
+  const limit = params.limit ?? 50;
+  const parsedOffset = Number.parseInt(params.cursor ?? '0', 10);
+  const offset = Number.isFinite(parsedOffset) ? Math.max(0, parsedOffset) : 0;
+  try {
+    const response = await listHermesSessions(token, {
+      limit,
+      offset,
+      scopeRef: params.scopeRef,
+      scopeResourceId: params.scopeResourceId,
+      workspaceSlug: params.workspaceSlug,
+    });
+    return {
+      items: response.data.map(sessionToSummary),
+      nextCursor: response.has_more ? String(offset + limit) : null,
+    };
+  } catch (error) {
+    return mapError(error);
   }
-  if (params.cursor) {
-    searchParams.set('cursor', params.cursor);
-  }
-  if (params.scopeRef) {
-    searchParams.set('scope_ref', params.scopeRef);
-  }
-  if (params.scopeResourceId) {
-    searchParams.set('scope_resource_id', params.scopeResourceId);
-  }
-  const qs = searchParams.toString();
-  const suffix = qs ? `?${qs}` : '';
-  return request<ConversationListResponse>(
-    `/api/v1/chatbot/conversations${suffix}`,
-    token,
-    undefined,
-    params.workspaceSlug,
-  );
 }
 
-export function getConversation(
+export async function getConversation(
   token: string,
   conversationId: string,
   options: { workspaceSlug?: string | null } = {},
 ): Promise<ConversationDetail> {
-  return request<ConversationDetail>(
-    `/api/v1/chatbot/conversations/${encodeURIComponent(conversationId)}`,
-    token,
-    undefined,
-    options.workspaceSlug,
-  );
+  try {
+    const [session, messages, runs] = await Promise.all([
+      getHermesSession(token, conversationId, options.workspaceSlug),
+      getHermesSessionMessages(token, conversationId, options.workspaceSlug),
+      listHermesRuns(token, {
+        sessionId: conversationId,
+        limit: 1,
+        workspaceSlug: options.workspaceSlug,
+      }),
+    ]);
+    return {
+      ...sessionToSummary(session),
+      turns: messages.data
+        .map((message, index) => messageToTurn(message, index, session.id))
+        .filter((turn): turn is ConversationTurn => turn !== null),
+      livePendingApproval: runToPendingApproval(runs.data[0]),
+    };
+  } catch (error) {
+    return mapError(error);
+  }
 }
 
-export function createConversation(
+export async function createConversation(
   token: string,
   init: {
     title?: string;
@@ -135,44 +166,176 @@ export function createConversation(
     workspaceSlug?: string | null;
   } = {},
 ): Promise<ConversationDetail> {
-  return request<ConversationDetail>(
-    `/api/v1/chatbot/conversations`,
-    token,
-    {
-      method: 'POST',
-      body: JSON.stringify({
-        title: init.title ?? '',
-        scopeRef: init.scopeRef,
-        scopeResourceId: init.scopeResourceId,
-      }),
-    },
-    init.workspaceSlug,
-  );
+  try {
+    const session = await createHermesSession(
+      token,
+      {
+        title: init.title || null,
+        scope_ref: init.scopeRef || null,
+        scope_resource_id: init.scopeResourceId || null,
+      },
+      init.workspaceSlug,
+    );
+    return {
+      ...sessionToSummary(session),
+      turns: [],
+      livePendingApproval: null,
+    };
+  } catch (error) {
+    return mapError(error);
+  }
 }
 
-export function renameConversation(
+export async function renameConversation(
   token: string,
   conversationId: string,
   title: string,
   options: { workspaceSlug?: string | null } = {},
 ): Promise<ConversationDetail> {
-  return request<ConversationDetail>(
-    `/api/v1/chatbot/conversations/${encodeURIComponent(conversationId)}`,
-    token,
-    { method: 'PATCH', body: JSON.stringify({ title }) },
-    options.workspaceSlug,
-  );
+  try {
+    const session = await updateHermesSession(
+      token,
+      conversationId,
+      { title },
+      options.workspaceSlug,
+    );
+    const detail = await getConversation(token, conversationId, options);
+    return { ...detail, ...sessionToSummary(session) };
+  } catch (error) {
+    return mapError(error);
+  }
 }
 
-export function deleteConversation(
+export async function deleteConversation(
   token: string,
   conversationId: string,
   options: { workspaceSlug?: string | null } = {},
 ): Promise<void> {
-  return request<void>(
-    `/api/v1/chatbot/conversations/${encodeURIComponent(conversationId)}`,
-    token,
-    { method: 'DELETE' },
-    options.workspaceSlug,
-  );
+  try {
+    await deleteHermesSession(token, conversationId, options.workspaceSlug);
+  } catch (error) {
+    return mapError(error);
+  }
+}
+
+function sessionToSummary(session: HermesSession): ConversationSummary {
+  return {
+    id: session.id,
+    title: session.title?.trim() || '',
+    scopeRef: session.scope_ref ?? null,
+    scopeResourceId: session.scope_resource_id ?? null,
+    createdAt: session.created_at,
+    updatedAt: session.updated_at,
+  };
+}
+
+function messageToTurn(
+  message: Record<string, unknown>,
+  index: number,
+  sessionId: string,
+): ConversationTurn | null {
+  const role = message.role;
+  if (role !== 'user' && role !== 'assistant') return null;
+  const reasoning = stringValue(message.reasoning_content ?? message.reasoning);
+  const timestamp = timestampToIso(message.timestamp);
+  return {
+    id: stringValue(message.id) || `${sessionId}:${index + 1}`,
+    seq: index + 1,
+    role,
+    content: displayContent(message),
+    reasoning,
+    reasoningStatus: reasoning ? 'done' : null,
+    finishReason: stringValue(message.finish_reason) || null,
+    responseStatus: role === 'assistant' ? 'done' : null,
+    provider: role === 'assistant' ? 'openrouter' : null,
+    policy: role === 'assistant' ? 'hermes' : null,
+    chosenPool: role === 'assistant' ? 'external' : null,
+    decisionReason: role === 'assistant' ? 'Hermes headless agent' : null,
+    forcedLocal: false,
+    piiHits: [],
+    toolCalls:
+      role === 'assistant' ? mapStoredToolCalls(message.tool_calls, timestamp) : [],
+    pendingApprovals: [],
+    artifacts: [],
+    createdAt: timestamp,
+  };
+}
+
+function displayContent(message: Record<string, unknown>): string {
+  const display = stringValue(message.display_content);
+  return display || stringValue(message.content);
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
+function timestampToIso(value: unknown): string {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return new Date(value < 10_000_000_000 ? value * 1000 : value).toISOString();
+  }
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) return new Date(parsed).toISOString();
+  }
+  return new Date().toISOString();
+}
+
+function mapStoredToolCalls(value: unknown, timestamp: string) {
+  if (!Array.isArray(value)) return [];
+  const startedAtMs = Date.parse(timestamp);
+  return value.flatMap((entry, index) => {
+    if (!entry || typeof entry !== 'object') return [];
+    const row = entry as Record<string, unknown>;
+    const fn =
+      row.function && typeof row.function === 'object'
+        ? (row.function as Record<string, unknown>)
+        : {};
+    const name = stringValue(fn.name ?? row.name);
+    if (!name) return [];
+    return [
+      {
+        call_id: stringValue(row.id) || `stored-tool-${index}`,
+        name,
+        args_preview: stringValue(fn.arguments ?? row.arguments) || null,
+        argsBuffer: stringValue(fn.arguments ?? row.arguments),
+        startedAtMs,
+        completedAtMs: startedAtMs,
+        status: 'ok',
+        result: null,
+      },
+    ];
+  });
+}
+
+function runToPendingApproval(
+  run: HermesRun | undefined,
+): ConversationLivePendingApproval | null {
+  const payload = run?.pending_approval;
+  if (!run || run.status !== 'awaiting_approval' || !payload) return null;
+  const requestId = stringValue(payload.request_id);
+  if (!requestId) return null;
+  const sequenceValue = payload.sequence;
+  const sequence =
+    typeof sequenceValue === 'number' && Number.isFinite(sequenceValue)
+      ? sequenceValue
+      : 0;
+  const timestamp =
+    typeof payload.timestamp === 'number' ? payload.timestamp * 1000 : Date.now();
+  return {
+    approvalId: encodeHermesApprovalReference({
+      runId: run.id,
+      requestId,
+      sequence,
+    }),
+    agentRunId: run.id,
+    callId: stringValue(payload.call_id) || requestId,
+    tool: hermesApprovalToolName(payload),
+    resourcePreview:
+      stringValue(payload.preview ?? payload.command ?? payload.description) ||
+      null,
+    expiresAtMs: timestamp + HERMES_APPROVAL_TTL_MS,
+    status: 'pending',
+    reason: null,
+  };
 }

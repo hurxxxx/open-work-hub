@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -334,6 +334,37 @@ class Settings(BaseSettings):
         default="opensearch",
         validation_alias="OPEN_WORK_HUB_KEYWORD_SEARCH_BACKEND",
     )
+    hermes_enabled: bool = Field(
+        default=False,
+        validation_alias="OPEN_WORK_HUB_HERMES_ENABLED",
+    )
+    hermes_runtime_base_url: str = Field(
+        default="http://127.0.0.1:8642",
+        validation_alias="OPEN_WORK_HUB_HERMES_RUNTIME_BASE_URL",
+    )
+    hermes_api_key: SecretStr = Field(
+        default=SecretStr(""),
+        validation_alias="OPEN_WORK_HUB_HERMES_API_KEY",
+        repr=False,
+    )
+    hermes_request_timeout_seconds: float = Field(
+        default=30.0,
+        ge=1.0,
+        le=300.0,
+        validation_alias="OPEN_WORK_HUB_HERMES_REQUEST_TIMEOUT_SECONDS",
+    )
+    hermes_run_timeout_seconds: int = Field(
+        default=3600,
+        ge=60,
+        le=3600,
+        validation_alias="OPEN_WORK_HUB_HERMES_RUN_TIMEOUT_SECONDS",
+    )
+    hermes_dispatch_lease_seconds: int = Field(
+        default=300,
+        ge=30,
+        le=3600,
+        validation_alias="OPEN_WORK_HUB_HERMES_DISPATCH_LEASE_SECONDS",
+    )
     otel_enabled: bool = Field(
         default=True,
         validation_alias="OPEN_WORK_HUB_OTEL_ENABLED",
@@ -359,6 +390,21 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @model_validator(mode="after")
+    def validate_hermes_runtime(self) -> "Settings":
+        self.hermes_runtime_base_url = self.hermes_runtime_base_url.strip().rstrip("/")
+        if not self.hermes_enabled:
+            return self
+        if not self.hermes_runtime_base_url:
+            raise ValueError(
+                "OPEN_WORK_HUB_HERMES_RUNTIME_BASE_URL is required when Hermes is enabled."
+            )
+        if len(self.hermes_api_key.get_secret_value()) < 16:
+            raise ValueError(
+                "OPEN_WORK_HUB_HERMES_API_KEY must be at least 16 characters when Hermes is enabled."
+            )
+        return self
 
 
 @lru_cache(maxsize=1)

@@ -12,6 +12,9 @@ from open_work_hub_api.domains.ai.registry import (
     get_ai_capability_registry,
 )
 from open_work_hub_api.domains.auth import access as auth_access
+from open_work_hub_api.domains.auth.workspace_app_features import (
+    is_workspace_catalog_feature_enabled,
+)
 from open_work_hub_api.domains.auth.models import (
     CompanyAppControl,
     PlatformAppBarCategory,
@@ -279,13 +282,22 @@ def test_general_workspace_seed_and_admin_membership(client: TestClient) -> None
     assert any(item["current_user_role"] == "owner" for item in spaces_response.json())
 
 
-def test_dev_seed_workspaces_expose_every_registered_app(client: TestClient) -> None:
+def test_dev_seed_workspaces_register_every_app_and_expose_enabled_apps(
+    client: TestClient,
+) -> None:
     get_settings.cache_clear()
     try:
         session = _dev_login(client, "administrator")
         token = session["token"]
         headers = {"Authorization": f"Bearer {token}"}
         catalog = tuple(iter_workspace_app_catalog())
+        settings = get_settings()
+        enabled_catalog = tuple(
+            app
+            for app in catalog
+            if app.feature_flag is None
+            or is_workspace_catalog_feature_enabled(settings, app.feature_flag)
+        )
 
         workspace_response = client.get(
             "/api/v1/workspaces/general/bootstrap",
@@ -294,7 +306,9 @@ def test_dev_seed_workspaces_expose_every_registered_app(client: TestClient) -> 
         assert workspace_response.status_code == 200, workspace_response.text
         workspace_payload = workspace_response.json()
         expected_workspace_app_ids = {
-            app.app_id for app in catalog if app.availability_scope == "workspace"
+            app.app_id
+            for app in enabled_catalog
+            if app.availability_scope == "workspace"
         }
         assert {item["app_id"] for item in workspace_payload["apps"]} == (
             expected_workspace_app_ids
@@ -304,7 +318,7 @@ def test_dev_seed_workspaces_expose_every_registered_app(client: TestClient) -> 
         assert global_response.status_code == 200, global_response.text
         global_payload = global_response.json()
         assert {item["app_id"] for item in global_payload["apps"]} == {
-            app.app_id for app in catalog
+            app.app_id for app in enabled_catalog
         }
 
         categorized_app_ids = {
@@ -314,9 +328,9 @@ def test_dev_seed_workspaces_expose_every_registered_app(client: TestClient) -> 
             for item in category["items"]
         }
         personal_tool_ids = set(global_payload["personal_tool_app_ids"])
-        fixed_app_ids = {app.app_id for app in catalog if app.launcher_fixed}
+        fixed_app_ids = {app.app_id for app in enabled_catalog if app.launcher_fixed}
         assert categorized_app_ids | personal_tool_ids | fixed_app_ids == {
-            app.app_id for app in catalog
+            app.app_id for app in enabled_catalog
         }
 
         with get_session_factory()() as db:

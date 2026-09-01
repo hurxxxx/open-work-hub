@@ -24,6 +24,9 @@ ENV_FILE = WORKSPACE_ROOT / ".env"
 DEFAULT_FRONTEND_DIST_DIR = str(WORKSPACE_ROOT / "dist" / "apps" / "web")
 DEFAULT_DM_ATTACHMENT_SIGNING_KEY = "dev-dm-attachment-signing-key"
 DEFAULT_OPF_CHECKPOINT = "openai/privacy-filter"
+HERMES_RELEASE = "v2026.8.31"
+HERMES_PROVIDER = "openrouter"
+HERMES_MODEL = "qwen/qwen3.8-flash"
 PRODUCTION_ENVIRONMENT = "production"
 PREVIEW_ENVIRONMENT = "preview"
 PRODUCTION_LIKE_ENVIRONMENTS = frozenset({PREVIEW_ENVIRONMENT, PRODUCTION_ENVIRONMENT})
@@ -489,6 +492,109 @@ class Settings(BaseSettings):
         le=60000,
         validation_alias="OPEN_WORK_HUB_OPF_SERVICE_TIMEOUT_MS",
     )
+    hermes_enabled: bool = Field(
+        default=False,
+        validation_alias="OPEN_WORK_HUB_HERMES_ENABLED",
+    )
+    hermes_runtime_base_url: str = Field(
+        default="http://127.0.0.1:8642",
+        validation_alias="OPEN_WORK_HUB_HERMES_RUNTIME_BASE_URL",
+    )
+    hermes_management_base_url: str = Field(
+        default="http://127.0.0.1:9119",
+        validation_alias="OPEN_WORK_HUB_HERMES_MANAGEMENT_BASE_URL",
+    )
+    hermes_api_key: SecretStr = Field(
+        default=SecretStr(""),
+        validation_alias="OPEN_WORK_HUB_HERMES_API_KEY",
+        repr=False,
+    )
+    hermes_management_token: SecretStr = Field(
+        default=SecretStr(""),
+        validation_alias="OPEN_WORK_HUB_HERMES_MANAGEMENT_TOKEN",
+        repr=False,
+    )
+    hermes_mcp_shared_secret: SecretStr = Field(
+        default=SecretStr(""),
+        validation_alias="OPEN_WORK_HUB_HERMES_MCP_SHARED_SECRET",
+        repr=False,
+    )
+    hermes_mcp_server_url: str = Field(
+        default="",
+        validation_alias="OPEN_WORK_HUB_HERMES_MCP_SERVER_URL",
+    )
+    hermes_request_timeout_seconds: float = Field(
+        default=30.0,
+        ge=1.0,
+        le=300.0,
+        validation_alias="OPEN_WORK_HUB_HERMES_REQUEST_TIMEOUT_SECONDS",
+    )
+    hermes_profile_clone_source: str = Field(
+        default="default",
+        validation_alias="OPEN_WORK_HUB_HERMES_PROFILE_CLONE_SOURCE",
+    )
+    hermes_terminal_broker_base_url: str = Field(
+        default="http://127.0.0.1:18765",
+        validation_alias="OPEN_WORK_HUB_HERMES_TERMINAL_BROKER_BASE_URL",
+    )
+    hermes_terminal_mcp_relay_url: str = Field(
+        default="http://hermes-terminal-broker:18765/mcp",
+        validation_alias="OPEN_WORK_HUB_HERMES_TERMINAL_MCP_RELAY_URL",
+    )
+    hermes_terminal_mcp_socket_path: str = Field(
+        default=str(WORKSPACE_ROOT / ".runtime" / "hermes-terminal-mcp.sock"),
+        validation_alias="OPEN_WORK_HUB_HERMES_TERMINAL_MCP_SOCKET_PATH",
+    )
+    hermes_terminal_max_sessions_per_workspace_user: int = Field(
+        default=1,
+        ge=1,
+        le=4,
+        validation_alias=(
+            "OPEN_WORK_HUB_HERMES_TERMINAL_MAX_SESSIONS_PER_WORKSPACE_USER"
+        ),
+    )
+    hermes_terminal_max_sessions_per_user: int = Field(
+        default=2,
+        ge=1,
+        le=8,
+        validation_alias="OPEN_WORK_HUB_HERMES_TERMINAL_MAX_SESSIONS_PER_USER",
+    )
+    hermes_terminal_max_sessions_total: int = Field(
+        default=20,
+        ge=1,
+        le=200,
+        validation_alias="OPEN_WORK_HUB_HERMES_TERMINAL_MAX_SESSIONS_TOTAL",
+    )
+    hermes_terminal_idle_timeout_seconds: int = Field(
+        default=7200,
+        ge=300,
+        le=86400,
+        validation_alias="OPEN_WORK_HUB_HERMES_TERMINAL_IDLE_TIMEOUT_SECONDS",
+    )
+    hermes_terminal_artifact_retention_days: int = Field(
+        default=30,
+        ge=1,
+        le=365,
+        validation_alias="OPEN_WORK_HUB_HERMES_TERMINAL_ARTIFACT_RETENTION_DAYS",
+    )
+    hermes_terminal_approval_timeout_seconds: int = Field(
+        default=300,
+        ge=30,
+        le=900,
+        validation_alias="OPEN_WORK_HUB_HERMES_TERMINAL_APPROVAL_TIMEOUT_SECONDS",
+    )
+    hermes_terminal_profile_archive_max_bytes: int = Field(
+        default=64 * 1024 * 1024,
+        ge=1024 * 1024,
+        le=512 * 1024 * 1024,
+        validation_alias="OPEN_WORK_HUB_HERMES_TERMINAL_PROFILE_ARCHIVE_MAX_BYTES",
+    )
+    hermes_terminal_workspace_archive_max_bytes: int = Field(
+        default=256 * 1024 * 1024,
+        ge=1024 * 1024,
+        le=2 * 1024 * 1024 * 1024,
+        validation_alias="OPEN_WORK_HUB_HERMES_TERMINAL_WORKSPACE_ARCHIVE_MAX_BYTES",
+    )
     ai_tool_calling_enabled: bool = Field(
         default=True,
         validation_alias="OPEN_WORK_HUB_AI_TOOL_CALLING_ENABLED",
@@ -867,6 +973,80 @@ class Settings(BaseSettings):
         )
         self.opf_device = "cpu"
         self.opf_service_base_url = self.opf_service_base_url.strip().rstrip("/")
+        self.hermes_runtime_base_url = self.hermes_runtime_base_url.strip().rstrip("/")
+        self.hermes_management_base_url = self.hermes_management_base_url.strip().rstrip("/")
+        self.hermes_mcp_server_url = self.hermes_mcp_server_url.strip()
+        self.hermes_profile_clone_source = (
+            self.hermes_profile_clone_source.strip() or "default"
+        )
+        self.hermes_terminal_broker_base_url = (
+            self.hermes_terminal_broker_base_url.strip().rstrip("/")
+        )
+        self.hermes_terminal_mcp_relay_url = (
+            self.hermes_terminal_mcp_relay_url.strip().rstrip("/")
+        )
+        terminal_mcp_socket = Path(
+            self.hermes_terminal_mcp_socket_path.strip()
+            or WORKSPACE_ROOT / ".runtime" / "hermes-terminal-mcp.sock"
+        ).expanduser()
+        if not terminal_mcp_socket.is_absolute():
+            terminal_mcp_socket = WORKSPACE_ROOT / terminal_mcp_socket
+        self.hermes_terminal_mcp_socket_path = str(terminal_mcp_socket.resolve())
+        if (
+            self.hermes_terminal_max_sessions_per_user
+            < self.hermes_terminal_max_sessions_per_workspace_user
+        ):
+            raise ValueError(
+                "OPEN_WORK_HUB_HERMES_TERMINAL_MAX_SESSIONS_PER_USER must be "
+                "greater than or equal to the per-workspace-user limit."
+            )
+        if (
+            self.hermes_terminal_max_sessions_total
+            < self.hermes_terminal_max_sessions_per_user
+        ):
+            raise ValueError(
+                "OPEN_WORK_HUB_HERMES_TERMINAL_MAX_SESSIONS_TOTAL must be "
+                "greater than or equal to the per-user limit."
+            )
+        if self.hermes_enabled:
+            missing = [
+                name
+                for name, value in (
+                    ("runtime base URL", self.hermes_runtime_base_url),
+                    ("management base URL", self.hermes_management_base_url),
+                    ("runtime API key", self.hermes_api_key.get_secret_value()),
+                    ("management token", self.hermes_management_token.get_secret_value()),
+                    ("MCP server URL", self.hermes_mcp_server_url),
+                    ("MCP shared secret", self.hermes_mcp_shared_secret.get_secret_value()),
+                    ("terminal broker base URL", self.hermes_terminal_broker_base_url),
+                    ("terminal MCP relay URL", self.hermes_terminal_mcp_relay_url),
+                    ("terminal MCP socket path", self.hermes_terminal_mcp_socket_path),
+                )
+                if not value
+            ]
+            if missing:
+                raise ValueError(
+                    "Hermes integration is enabled but missing: " + ", ".join(missing)
+                )
+            if len(self.hermes_api_key.get_secret_value()) < 16:
+                raise ValueError(
+                    "OPEN_WORK_HUB_HERMES_API_KEY must be at least 16 characters."
+                )
+            if len(self.hermes_management_token.get_secret_value()) < 16:
+                raise ValueError(
+                    "OPEN_WORK_HUB_HERMES_MANAGEMENT_TOKEN must be at least 16 characters."
+                )
+            if len(self.hermes_mcp_shared_secret.get_secret_value()) < 32:
+                raise ValueError(
+                    "OPEN_WORK_HUB_HERMES_MCP_SHARED_SECRET must be at least 32 characters."
+                )
+        if (
+            self.hermes_mcp_server_url
+            and not self.hermes_mcp_shared_secret.get_secret_value()
+        ):
+            raise ValueError(
+                "OPEN_WORK_HUB_HERMES_MCP_SHARED_SECRET is required when the Hermes MCP URL is set."
+            )
         self.ai_allowed_external_providers = _normalize_external_provider_list_text(
             self.ai_allowed_external_providers,
         )

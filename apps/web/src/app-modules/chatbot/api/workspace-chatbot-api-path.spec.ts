@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import { resetWorkspaceApiRoutePolicy } from '@/src/platform/api/workspace-api-path-policy';
-import { resolveWorkspaceChatbotApiPath } from './workspace-chatbot-api-path';
+import {
+  resolveWorkspaceAgentApiPath,
+  resolveWorkspaceChatbotApiPath,
+} from './workspace-chatbot-api-path';
 
 describe('resolveWorkspaceChatbotApiPath', () => {
   it('builds the canonical workspace-scoped chatbot path without relying on route policy prefixes', () => {
@@ -21,5 +24,13 @@ describe('resolveWorkspaceChatbotApiPath', () => {
     expect(resolveWorkspaceChatbotApiPath('/api/v1/chatbot/health')).toBe(
       '/api/v1/chatbot/health',
     );
+  });
+
+  it('builds the canonical workspace-scoped Hermes agent path', () => {
+    resetWorkspaceApiRoutePolicy();
+
+    expect(
+      resolveWorkspaceAgentApiPath('/api/v1/agent/runs/run-1', 'research / one'),
+    ).toBe('/api/v1/workspaces/research%20%2F%20one/agent/runs/run-1');
   });
 });
