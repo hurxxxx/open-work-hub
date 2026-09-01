@@ -15,6 +15,7 @@ export const ADMIN_SECTION_DEFINITIONS = defineCoreAdminSections([
   },
   { id: 'apps', path: '/admin/apps/platform', roles: ['platform_admin'] },
   { id: 'llm', path: '/admin/llm', roles: ['platform_admin'] },
+  { id: 'ai-tools', path: '/admin/ai-tools', roles: ['platform_admin'] },
   {
     id: 'model-monitoring',
     path: '/admin/model-monitoring',

@@ -46,6 +46,9 @@ def test_bootstrap_uses_official_settings_to_replace_gemini_fallback(monkeypatch
             {"provider": "openai-codex", "model": "gpt-codex"}
         ],
         "fallback_model": {"provider": "google", "model": "gemini"},
+        "agent": {"environment_probe": False},
+        "compression": {"progress_notices": True},
+        "provider_routing": {"sort": "price", "only": ["stale-provider"]},
         "auxiliary": {
             "openrouter_model": "google/gemini-3.6-flash",
             "approval": {
@@ -81,9 +84,30 @@ def test_bootstrap_uses_official_settings_to_replace_gemini_fallback(monkeypatch
     assert reconciled["model"] == {
         "provider": "openrouter",
         "default": "qwen/qwen3.8-flash",
+        "default_headers": {"X-OpenRouter-Metadata": "enabled"},
     }
-    assert reconciled["fallback_providers"] == []
+    assert reconciled["fallback_providers"] == [
+        {"provider": "openrouter", "model": "z-ai/glm-5.3-flash"}
+    ]
     assert "fallback_model" not in reconciled
+    assert reconciled["agent"]["api_max_retries"] == 1
+    assert reconciled["agent"]["environment_probe"] is False
+    assert "environment_hint" not in reconciled["agent"]
+    assert reconciled["compression"] == {
+        "progress_notices": True,
+        "enabled": True,
+        "threshold": 0.50,
+        "threshold_tokens": 100_000,
+        "target_ratio": 0.20,
+        "protect_last_n": 20,
+        "proactive_prune_tokens": 48_000,
+        "proactive_prune_min_result_chars": 8_000,
+        "proactive_prune_min_reclaim_tokens": 4_096,
+    }
+    assert reconciled["provider_routing"] == {
+        "sort": "throughput",
+        "require_parameters": True,
+    }
     assert reconciled["auxiliary"]["openrouter_model"] == "qwen/qwen3.8-flash"
     assert reconciled["auxiliary"]["free_only"] is False
     assert reconciled["auxiliary"]["approval"] == {

@@ -1777,6 +1777,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/hermes/research-sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Hermes Research Sources */
+        get: operations["admin_hermes_get_hermes_research_sources_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/hermes/research-sources/{source_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Put Hermes Research Source */
+        put: operations["admin_hermes_put_hermes_research_source_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/hermes/profiles/{binding_id}/model/enforce": {
         parameters: {
             query?: never;
@@ -6482,6 +6516,8 @@ export interface components {
             capabilities?: {
                 [key: string]: unknown;
             };
+            /** Toolsets */
+            toolsets?: components["schemas"]["AdminHermesToolsetResponse"][];
             /** Mcp Servers */
             mcp_servers?: {
                 [key: string]: unknown;
@@ -6541,6 +6577,38 @@ export interface components {
             /** Last Error Code */
             last_error_code?: string | null;
         };
+        /** AdminHermesResearchSettingsResponse */
+        AdminHermesResearchSettingsResponse: {
+            /** Revision */
+            revision: number;
+            /** Sources */
+            sources: components["schemas"]["AdminHermesResearchSourceResponse"][];
+            /** Updated At */
+            updated_at?: string | null;
+            /** Updated By */
+            updated_by?: string | null;
+        };
+        /** AdminHermesResearchSourceResponse */
+        AdminHermesResearchSourceResponse: {
+            /**
+             * Id
+             * @enum {string}
+             */
+            id: "semantic_scholar" | "arxiv" | "openalex" | "crossref";
+            /** Display Name */
+            display_name: string;
+            /** Enabled */
+            enabled: boolean;
+            /** Domains */
+            domains: string[];
+        };
+        /** AdminHermesResearchSourceUpdate */
+        AdminHermesResearchSourceUpdate: {
+            /** Enabled */
+            enabled: boolean;
+            /** Expected Revision */
+            expected_revision: number;
+        };
         /** AdminHermesSkillToggle */
         AdminHermesSkillToggle: {
             /** Name */
@@ -6558,6 +6626,8 @@ export interface components {
             provider: string;
             /** Model */
             model: string;
+            /** Fallback Model */
+            fallback_model: string;
             /** Profile Counts */
             profile_counts: {
                 [key: string]: number;
@@ -6566,6 +6636,21 @@ export interface components {
             run_counts: {
                 [key: string]: number;
             };
+        };
+        /** AdminHermesToolsetResponse */
+        AdminHermesToolsetResponse: {
+            /** Name */
+            name: string;
+            /** Label */
+            label: string;
+            /** Description */
+            description: string;
+            /** Enabled */
+            enabled: boolean;
+            /** Configured */
+            configured: boolean;
+            /** Tools */
+            tools?: string[];
         };
         /** AdminModelRuntimeStatusResponse */
         AdminModelRuntimeStatusResponse: {
@@ -22226,6 +22311,97 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminHermesInventoryResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_hermes_get_hermes_research_sources_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminHermesResearchSettingsResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    admin_hermes_put_hermes_research_source_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: "semantic_scholar" | "arxiv" | "openalex" | "crossref";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminHermesResearchSourceUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminHermesResearchSettingsResponse"];
                 };
             };
             /** @description Authentication required. */

@@ -21,7 +21,7 @@
 - Route each public hostname directly from the external HTTPS proxy to its declared service port. `OPEN_WORK_HUB_APP_FORWARDED_ALLOW_IPS` lists only the exact external proxy IPs. Bind Bento to loopback for a local proxy or the exact private proxy-facing IPv4 address; production rejects wildcard, public-IP, IPv6, and hostname bindings.
 - The app image contains the web build, API, worker, migrations, and collaboration codec at one source revision. The Compose runtime starts the privacy filter, API, worker, and scheduler with restart policies and health checks.
 - The image build embeds the validated `OPEN_WORK_HUB_BENTO_SERVER_URL` in the static web bundle; changing that public origin requires a new app image.
-- `pnpm app:prod:deploy` builds and verifies the revision image, applies migrations, replaces the app runtime, then requires direct and public health identity plus readiness, revision, bootstrap, and login-shell checks.
+- `pnpm app:prod:deploy` first rejects a terminal broker listener that is not the expected existing production container, then builds and verifies the revision image, applies migrations, replaces the app runtime, and requires direct and public health identity plus readiness, revision, bootstrap, and login-shell checks.
 - A failed runtime or public smoke restores the previous app image when one exists. Database migrations are not automatically reversed; releases must keep migrations backward-compatible with the previous image.
 
 Read-only checks:

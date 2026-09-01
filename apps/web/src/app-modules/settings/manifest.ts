@@ -12,6 +12,7 @@ import {
   Settings,
   ShieldCheck,
   User,
+  Wrench,
 } from 'lucide-react';
 
 import type { AppModuleManifest } from '@/src/app/shell/navigation-types';
@@ -39,6 +40,7 @@ export const settingsManifest: AppModuleManifest = {
       'community.channel.delete',
       'admin.organization_unit.create',
       'admin.organization_unit.update',
+      'admin.hermes.research_source.update',
       'admin.platform_api_key.issue',
       'admin.platform_api_key.reveal',
       'admin.platform_api_key.revoke',
@@ -116,6 +118,14 @@ export const settingsManifest: AppModuleManifest = {
       absolutePath: '/admin/llm',
     },
     {
+      id: 'settings-ai-tools',
+      title: 'settings-ai-tools',
+      icon: Wrench,
+      category: 'AIPlatform',
+      appId: 'settings',
+      absolutePath: '/admin/ai-tools',
+    },
+    {
       id: 'settings-model-monitoring',
       title: 'settings-model-monitoring',
       icon: Server,
@@ -185,6 +195,7 @@ export const settingsManifest: AppModuleManifest = {
     '/admin/apps/workspace',
     '/admin/apps/app-bar',
     '/admin/llm',
+    '/admin/ai-tools',
     '/admin/model-monitoring',
     '/admin/document-processing',
     '/admin/ai-security',

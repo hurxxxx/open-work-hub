@@ -61,6 +61,7 @@ from open_work_hub_api.domains.hermes.service import (
     ensure_profile_binding,
     runtime_client,
 )
+from open_work_hub_api.domains.hermes.research_settings import get_research_settings
 
 
 router = APIRouter(prefix="/agent", tags=["hermes-agent"])
@@ -148,7 +149,12 @@ async def _job_profile_for_request(
 ) -> tuple[HermesProfileBinding, str]:
     binding = await _profile_for_request(db, workspace=workspace, user=user)
     try:
-        return binding, await ensure_job_profile(binding)
+        research_settings = get_research_settings(db)
+        return binding, await ensure_job_profile(
+            binding,
+            research_sources=research_settings.policy,
+            research_policy_revision=research_settings.revision,
+        )
     except (HermesIntegrationDisabledError, HermesClientError) as error:
         _raise_integration_error(error)
 

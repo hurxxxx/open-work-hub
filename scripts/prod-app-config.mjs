@@ -338,6 +338,7 @@ export function assertProductionAppEnv(values) {
     hermesMcpServerUrl,
     hermesRuntimeBaseUrl,
     hermesTerminalBrokerBaseUrl,
+    hermesTerminalBrokerPort,
     opfServiceBaseUrl,
     publicBaseUrl,
   };
@@ -349,6 +350,10 @@ function runCli() {
   const outputMode = process.argv[3];
   if (outputMode === '--print-bento-server-url') {
     process.stdout.write(config.bentoServerUrl.href);
+    return;
+  }
+  if (outputMode === '--print-hermes-terminal-broker-port') {
+    process.stdout.write(String(config.hermesTerminalBrokerPort));
     return;
   }
   if (outputMode) {

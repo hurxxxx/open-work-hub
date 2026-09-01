@@ -14,6 +14,7 @@ import { AppsSection, type AdminAppsPage } from './admin-apps-section';
 import { AuditSection } from './admin-audit-section';
 import { CommunitySection } from './admin-community-section';
 import { AdminDocumentProcessingSection } from './admin-document-processing-section';
+import { AdminHermesToolsSection } from './admin-hermes-tools-section';
 import { AdminLlmManagementSection } from './admin-llm-management-section';
 import { AdminModelRuntimeStatusSection } from './admin-model-runtime-status-section';
 import { AdminOrganizationSection } from './admin-organization-section';
@@ -57,6 +58,10 @@ const sectionMeta: Record<
   llm: {
     titleKey: 'admin.console.sections.llm.title',
     descriptionKey: 'admin.console.sections.llm.description',
+  },
+  'ai-tools': {
+    titleKey: 'admin.console.sections.aiTools.title',
+    descriptionKey: 'admin.console.sections.aiTools.description',
   },
   'model-monitoring': {
     titleKey: 'admin.console.sections.modelMonitoring.title',
@@ -326,6 +331,9 @@ export function AdminConsoleView({
       break;
     case 'llm':
       content = <AdminLlmManagementSection token={token} />;
+      break;
+    case 'ai-tools':
+      content = <AdminHermesToolsSection token={token} />;
       break;
     case 'model-monitoring':
       content = <AdminModelRuntimeStatusSection token={token} />;

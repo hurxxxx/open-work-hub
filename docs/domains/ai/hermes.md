@@ -13,7 +13,9 @@ Code and tests remain authoritative for implemented behavior. Use the [configura
 - Hermes image: `nousresearch/hermes-agent:v2026.8.31@sha256:64923faeae267792bf9bf87fe3b4c4869e35004e360c7df01730ad801b74d524`.
 - Provider: `openrouter`.
 - Model: `qwen/qwen3.8-flash`.
-- Model policy: the main model is fixed, primary fallback chains are disabled, and Hermes' official `auxiliary.openrouter_model` setting replaces its built-in Gemini auxiliary fallback with the same Qwen model. Bootstrap also removes the legacy `fallback_model` key; no Hermes runtime patch is used for model routing.
+- Model policy: the main model is fixed and `z-ai/glm-5.3-flash` is the single ordered fallback. Hermes' official `auxiliary.openrouter_model` setting replaces its built-in Gemini auxiliary fallback with the primary Qwen model. Bootstrap removes the legacy `fallback_model` key; no Hermes runtime patch is used for model routing.
+- Resilience policy: the primary SDK performs no nested retries at this Hermes pin, `agent.api_max_retries=1` gives the primary one total attempt before fallback, and OpenRouter routes only to providers supporting every requested parameter with `sort=throughput`. Requests opt into OpenRouter router metadata through `model.default_headers`.
+- Context policy: compression is enabled at the lower of the normal 50% threshold or 100,000 tokens, retains a 20% target and the last 20 messages, and deterministically prunes old tool results starting at 48,000 tokens when at least 4,096 tokens can be reclaimed.
 - Provider credential: `OPENROUTER_API_KEY`. Headless bootstrap persists it in the Hermes profile store. Terminal mode passes the real key only to the trusted iron-proxy container; terminal runners receive a revocable proxy token and public CA instead. The credential is explicitly removed from Open Work Hub API, worker, web, migration, beat, terminal broker, and terminal runner processes.
 - Runtime, dashboard, and terminal broker bind to loopback host addresses. The API reaches them through the declared `OPEN_WORK_HUB_HERMES_*_BASE_URL` values.
 - The official image runtime user is UID/GID `10000`. Named-volume ownership and runner processes must continue to use that identity.
@@ -24,7 +26,7 @@ Do not add a model selector to the chatbot or accept a caller-supplied provider/
 
 Open Work Hub uses the official Hermes Docker image rather than running the macOS, Windows, or Linux host installer. At the current pin the image includes Hermes and its Python extras, Node.js/npm, Playwright Chromium assets, `ripgrep`, `ffmpeg`, Git, SSH client, `xz`, and build tooling. It is not a reduced API-only Hermes installation.
 
-Hermes can register broad built-in toolsets including web, browser, terminal, file, code execution, vision, image generation, text-to-speech, skills, todo, memory, session search, clarification, delegation, cron, and computer use. Registration does not mean every tool is operational. Optional search/browser/media backends still require their documented credentials, services, or lazy-installed executables. The current Open Work Hub contract supplies OpenRouter and the Open Work Hub MCP bridge only; it does not implicitly provision Firecrawl, Exa, Browserbase, FAL, voice providers, Home Assistant, Spotify, or host desktop access.
+Hermes can register broad built-in toolsets including web, browser, terminal, file, code execution, vision, image generation, text-to-speech, skills, todo, memory, session search, clarification, delegation, cron, and computer use. Registration does not mean every tool is operational. Optional search/browser/media backends still require their documented credentials, services, or lazy-installed executables. The current Open Work Hub contract supplies OpenRouter and the Open Work Hub MCP bridge only; it does not implicitly provision Firecrawl, Exa, Browserbase, FAL, voice providers, Home Assistant, Spotify, or host desktop access. Platform administrators manage Semantic Scholar, arXiv, OpenAlex, and Crossref independently at `/admin/ai-tools`. Defaults are Semantic Scholar off and the other three on.
 
 Terminal runners are headless, container-isolated environments. They do not inherit the host user's home directory, GUI applications, native clipboard, Docker socket, private network, or macOS/Windows integrations. Use Hermes' official `hermes doctor` and `hermes tools list` commands to inspect a pinned image or profile, but never treat a registered tool as ready without checking its credential and runtime requirements. Do not make a paid inference solely as a readiness check.
 
@@ -34,7 +36,8 @@ Terminal runners are headless, container-isolated environments. They do not inhe
 | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Release, provider, model        | `apps/api/src/open_work_hub_api/core/settings.py`, `ops/hermes/bootstrap.py`, `apps/api/src/open_work_hub_api/domains/hermes_terminal/broker_runtime.py`, `apps/web/src/app-modules/chatbot/api/chatbot-api.ts` | Keep release/provider/model metadata identical; regenerate API contracts when the exposed schema changes.                                                       |
 | Official image and digest       | `ops/compose/open-work-hub-dev.infra.yml`, `ops/compose/open-work-hub-prod.app.yml`, terminal broker runtime                                                                                                    | Pin every service and dynamically created runner to the same immutable digest.                                                                                  |
-| Headless profile bootstrap      | `ops/hermes/bootstrap.py`                                                                                                                                                                                       | Use Hermes public config/profile APIs for credentials, model, auxiliary model, and fallback policy.                                                             |
+| Headless profile bootstrap      | `ops/hermes/bootstrap.py`                                                                                                                                                                                       | Use Hermes public config/profile APIs for credentials, model, fallback, retry, routing, compression, and the observability header; do not overwrite DB policy.  |
+| Research source policy          | `hermes_research_source_settings`, `domains/hermes/research_settings.py`, `domains/hermes/research_sources.py`, `/admin/ai-tools`                                                                              | Persist one audited platform policy; reconcile headless profiles on their next admission and pass the same exact policy to every new terminal session.          |
 | Multiplex gateway adapter       | `ops/hermes/gateway_entry.py`                                                                                                                                                                                   | Keep the adapter narrow and version-bound; remove it when the pinned Hermes release exposes an official per-profile discovery hook.                             |
 | Terminal runner/profile/TUI     | `apps/api/src/open_work_hub_api/domains/hermes_terminal/broker_runtime.py`                                                                                                                                      | Use official CLI flags, environment variables, and config keys; keep `/workspace` consistent across command, safe root, mounts, listing, archive, and download. |
 | Terminal egress                 | `ops/hermes/terminal_egress.py`, both Compose files                                                                                                                                                             | The real OpenRouter key stays in iron-proxy; runners receive only proxy credentials and the public CA.                                                          |
@@ -48,8 +51,8 @@ Terminal runners are headless, container-isolated environments. They do not inhe
 
 - Docker Engine with Compose and permission to create named volumes, private networks, and the trusted broker container that owns the Docker socket.
 - The normal repository development or production prerequisites from the root `README.md`.
-- An OpenRouter key valid for `qwen/qwen3.8-flash`.
-- An OpenRouter provider-side guardrail that allows `qwen/qwen3.8-flash` and rejects other models. This is required because a YOLO terminal can issue arbitrary public network requests through the controlled egress path.
+- An OpenRouter key valid for both `qwen/qwen3.8-flash` and `z-ai/glm-5.3-flash`.
+- An OpenRouter provider-side guardrail that allows exactly `qwen/qwen3.8-flash` and `z-ai/glm-5.3-flash` and rejects other models. This is required because a YOLO terminal can issue arbitrary public network requests through the controlled egress path.
 - Distinct, non-placeholder runtime, management, and MCP secrets in production.
 
 Do not install Hermes globally on the host for this service. Compose pulls the pinned official image and named volumes hold its durable state.
@@ -69,7 +72,7 @@ Do not install Hermes globally on the host for this service. Compose pulls the p
 
 5. Open All Apps and verify both the general chatbot path and a personal Hermes Terminal session. The worker is required for queued headless runs.
 
-The development defaults are runtime `18642`, dashboard `19119`, and terminal broker `18765`. The application API remains on its separately declared development port. A foreign listener on a fixed Hermes Terminal broker port is a startup error; stop the listener instead of selecting a random replacement port.
+The development defaults are runtime `18642`, dashboard `19119`, and terminal broker `18765`. The production defaults are runtime `8642`, dashboard `9119`, and terminal broker `8765`. These fixed host ports intentionally differ when both environments run on one machine; the broker container still listens internally on `18765`. The application API remains on its separately declared environment port. A foreign listener on a fixed Hermes Terminal broker port is a startup/deployment error; stop the listener instead of selecting a random replacement port.
 
 ### Production checkout
 
@@ -87,7 +90,7 @@ Production `.env` must explicitly provide and align:
 - `OPEN_WORK_HUB_HERMES_PROFILE_CLONE_SOURCE=default`
 - the terminal admission, timeout, approval, retention, and archive limits listed in `.env.example`
 
-The production validator rejects disabled Hermes, missing or duplicate secrets, non-loopback control URLs, mismatched URL/port pairs, port collisions, the wrong MCP path, and a non-default clone source. Validate before using the normal release runbook:
+The production validator rejects disabled Hermes, missing or duplicate secrets, non-loopback control URLs, mismatched URL/port pairs, configured port collisions, the wrong MCP path, and a non-default clone source. Before building or migrating, the guarded deployment also rejects a live terminal broker port unless it belongs to the expected existing production broker container. Validate before using the normal release runbook:
 
 ```bash
 node scripts/prod-app-config.mjs .env
@@ -98,7 +101,7 @@ Deployment remains governed by `docs/domains/release/README.md` and requires exp
 
 ## Ownership and authorization
 
-Each `(workspace_id, user_id)` has one deterministic, isolated Hermes profile. Open Work Hub never exposes Hermes credentials to the browser. User routes are workspace-scoped under `/api/v1/workspaces/{workspace_slug}/agent`; administrator inventory and reconciliation routes are under `/api/v1/admin/hermes`.
+Each `(workspace_id, user_id)` has one deterministic, isolated Hermes profile. Open Work Hub never exposes Hermes credentials to the browser. User routes are workspace-scoped under `/api/v1/workspaces/{workspace_slug}/agent`; administrator inventory, toolset status, research-source settings, and reconciliation routes are under `/api/v1/admin/hermes`. The administrator screen at `/admin/ai-tools` reads Hermes' official `/v1/toolsets` response for a selected managed profile and also shows MCP servers and skills.
 
 Hermes accesses Open Work Hub tools only through `/api/v1/internal/hermes/mcp` with a profile-derived HMAC bearer token. The bridge revalidates the workspace, user, and membership on every request. It exposes a stable workspace/user-entitled discovery surface only while that profile has exactly one active local run, then re-lists and validates tools against that run's `allowed_app_ids` immediately before every call. Missing run context fails closed. The headless internal MCP server is configured as `untrusted`, so write-capable tools pass through Hermes approval before execution. Approval evidence is bound to the exact server, tool, local run, and normalized argument digest, expires after five minutes, and cannot be replayed.
 
@@ -132,7 +135,13 @@ Terminal profile configuration uses Hermes' public `config set`, `config unset`,
 
 - `model.provider=openrouter`
 - `model.default=qwen/qwen3.8-flash`
-- `fallback_providers=[]` and no legacy `fallback_model`
+- `model.default_headers={"X-OpenRouter-Metadata":"enabled"}`
+- `fallback_providers=[{"provider":"openrouter","model":"z-ai/glm-5.3-flash"}]` and no legacy `fallback_model`
+- `agent.api_max_retries=1`
+- `agent.environment_hint` is generated from the current administrator policy only when at least one managed research source is disabled; it is unset when all four sources are enabled
+- `compression.enabled=true`, `threshold=0.50`, `threshold_tokens=100000`, `target_ratio=0.20`, and `protect_last_n=20`
+- `compression.proactive_prune_tokens=48000`, `proactive_prune_min_result_chars=8000`, and `proactive_prune_min_reclaim_tokens=4096`
+- `provider_routing.sort=throughput` and `provider_routing.require_parameters=true`
 - `auxiliary.free_only=false`
 - `auxiliary.openrouter_model=qwen/qwen3.8-flash`
 - `display.mouse_tracking=off`
@@ -141,30 +150,35 @@ Terminal profile configuration uses Hermes' public `config set`, `config unset`,
 The runner environment and mounts must preserve these path contracts:
 
 - `HERMES_HOME=/opt/data/profiles/terminal`: private user profile and Hermes state.
+- `XDG_CACHE_HOME=/opt/data/cache` and `UV_CACHE_DIR=/opt/data/cache/uv`: regenerable package caches remain private and reusable while staying outside the durable profile archive.
 - `/opt/data`: a private named profile volume. It is a container path, not the host machine's `/opt` directory.
 - `/workspace`: a separate private session volume and the only generated-result root exposed by file listing and download.
 - `HERMES_WRITE_SAFE_ROOT=/workspace`: Hermes' official file safety boundary, aligned with `--in /workspace` and the artifact panel.
 - `HERMES_TUI_DISABLE_MOUSE=1` plus `display.mouse_tracking=off`: Hermes' official browser-TUI behavior, allowing xterm drag selection and normal clipboard copy shortcuts.
 - `HTTP_PROXY`/`HTTPS_PROXY`, the iron-proxy CA variables, and the sandbox network: the only runner egress route.
+- `NO_PROXY` includes the apex and wildcard domains for every disabled research source. Those domains bypass iron-proxy into the runner's internal-only network and therefore fail closed; enabled sources continue through controlled proxy egress.
+
+Research-source switches are server-owned settings, not prompt-only preferences. The generated environment hint guides generic web search and is needed for headless profiles, where Hermes has no upstream per-source switch. Terminal enforcement is additionally authoritative at the network layer. Changing a switch clears the headless reconciliation cache; it applies on the next headless profile admission and to newly created terminal sessions. Running terminal containers are never mutated.
 
 Do not move generated results to `/opt/data`, extend artifact listing into the profile volume, add Gemini filtering, rewrite model requests, patch the TUI, or add a file-copy workaround. Correct the official Hermes setting or the shared `/workspace` contract instead. Existing containers receive environment changes only after a new terminal session starts.
 
-Terminal profiles are separate from headless profiles while retaining the same deterministic workspace/user binding. Before a profile archive is exported, the broker uses the official `hermes config unset` command to remove the temporary proxy token and session MCP token. The next session restores fresh values through the same public configuration surface; durable profile archives never carry those ephemeral credentials.
+Terminal profiles are separate from headless profiles while retaining the same deterministic workspace/user binding. Before a profile archive is exported, the broker uses official `hermes checkpoints clear --force` and `uv cache clean --force` commands to remove filesystem rollback data that belongs to the ended workspace and regenerable package cache data. It then uses the official `hermes config unset` command to remove the temporary proxy token and session MCP token before invoking official profile export. The export is staged at the reserved private-volume path `/opt/data/.owh-terminal-profile-export.tar.gz` and removed immediately after Docker copies it; Docker's archive API cannot read the utility container's tmpfs-backed `/tmp` at this runtime pin. Hermes sessions, memories, skills, configuration, and other durable profile data remain in the archive. The next session restores fresh credentials through the same public configuration surface; durable profile archives never carry ephemeral credentials or ended-workspace caches.
 
 The terminal MCP server is trusted by the Hermes profile because Open Work Hub itself creates and enforces the exact write approval at the MCP boundary. Discovery is restricted to server-derived `allowed_app_ids`; every write request is bound to the exact tool and normalized argument digest, expires after five minutes, and is consumed atomically once. This approval remains mandatory in YOLO mode.
 
 ### Terminal isolation and retention
 
 - The trusted terminal broker is the only component with the Docker socket. Runners have a read-only root filesystem, private workspace/profile volumes, dropped capabilities, resource limits, no Docker socket, and only the internal sandbox network.
-- Hermes' official iron-proxy is the runner's only egress path. Its loopback, link-local, RFC1918, and cloud-metadata deny list remains enabled. The pinned iron-proxy 0.39 secrets transform uses its supported `require: false` setting so TLS CONNECT can complete before the inner proxy token is replaced; the real OpenRouter key remains available only inside the proxy process. The egress service publishes no host port.
+- Runner containers start detached with a reusable open TTY. The broker drives Docker attach sockets with cancellable non-blocking I/O and explicitly shuts down the raw socket when a browser WebSocket closes, so reconnects cannot strand blocking reader threads or exhaust broker health and control requests.
+- Hermes' official iron-proxy is the runner's only public egress path. Its loopback, link-local, RFC1918, and cloud-metadata deny list remains enabled. The pinned iron-proxy 0.39 secrets transform uses its supported `require: false` setting so TLS CONNECT can complete before the inner proxy token is replaced; the real OpenRouter key remains available only inside the proxy process. The managed adapter raises `proxy.upstream_response_header_timeout` from the pinned helper's 120 seconds to 300 seconds. The egress service publishes no host port.
 - The pinned release's public `hermes egress setup` command is interactive and does not expose the required container listen/allow-list settings. `ops/hermes/terminal_egress.py` is a narrow non-interactive adapter over Hermes' exported iron-proxy functions; replace it with the CLI when Hermes exposes those controls.
-- The broker binds only to `127.0.0.1:${OPEN_WORK_HUB_HERMES_TERMINAL_BROKER_PORT}`. The default is `18765`. A foreign listener or mismatched project container is a hard error; there is no automatic port fallback.
+- The broker binds only to `127.0.0.1:${OPEN_WORK_HUB_HERMES_TERMINAL_BROKER_PORT}`. Development uses fixed host port `18765`; production uses fixed host port `8765`; the container port remains `18765`. A foreign listener or mismatched project container is a hard error before production build or migration; there is no automatic port fallback.
 - Limits default to one active session per workspace/user pair, two per user across workspaces, and twenty total. Admission is serialized in PostgreSQL. Idle sessions stop after two hours, completed artifacts expire after thirty days, and profile/workspace archives use the bounds in `.env.example`.
 - A failed or interrupted archive remains in `archiving` while maintenance retries it. If the same runtime is running again after an operator restart, reconciliation restores the live session instead of archiving it as exited. After three genuine archive failures the session closes with an archive failure and maintenance removes its stopped runner and workspace volume. Profile volumes remain private and reusable.
 
 ## Operations and verification
 
-The bootstrap service must complete before gateway startup; gateway and dashboard must be healthy before API and worker startup. Re-run Compose startup after rotating Hermes runtime or OpenRouter credentials so bootstrap synchronizes the root and existing named profiles. The gateway uses Hermes' official `--no-supervise`/`HERMES_GATEWAY_NO_SUPERVISE` behavior while Compose owns restart; bootstrap records stopped s6 intent with the official `hermes gateway stop` command so the image does not restore a second gateway.
+The bootstrap service must complete before gateway startup; gateway and dashboard must be healthy before API and worker startup. Re-run Compose startup after changing the managed Hermes policy or rotating runtime/OpenRouter credentials so bootstrap synchronizes the root and existing named profiles. Terminal runner environment and in-memory agent settings apply only after a new terminal session starts. The gateway uses Hermes' official `--no-supervise`/`HERMES_GATEWAY_NO_SUPERVISE` behavior while Compose owns restart; bootstrap records stopped s6 intent with the official `hermes gateway stop` command so the image does not restore a second gateway.
 
 Development non-inference checks:
 
@@ -186,7 +200,9 @@ For a terminal session, verify that generated files appear under `/workspace`, t
 | Symptom                                           | Check                                                                                                         | Resolution boundary                                                                                                                                        |
 | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Public site returns `502 Bad Gateway`             | API/web listener, development reverse proxy, then Hermes service health                                       | Restore the expected fixed listener; do not move a service to an arbitrary port.                                                                           |
-| Chat request returns `500`                        | `hermes-bootstrap` completion, gateway health/logs, enabled flag, API key, OpenRouter key, fixed model config | Correct environment/bootstrap configuration; do not add provider fallback or request rewriting.                                                            |
+| Chat request returns `500`                        | `hermes-bootstrap` completion, gateway health/logs, enabled flag, API key, both allowed OpenRouter models, managed policy | Correct environment/bootstrap configuration; preserve the single explicit fallback and do not add request rewriting.                                      |
+| Model call returns `502` after about 300 seconds  | iron-proxy log, OpenRouter provider attempts/router metadata, primary/fallback transition                     | Treat 300 seconds as the bounded upstream-header deadline; repair provider routing or credentials instead of adding layered retries.                        |
+| Paper research repeatedly returns `429`           | `/admin/ai-tools`, selected profile toolsets, and the enabled research source                                  | Disable the throttled source or provision its supported credential, then use another enabled source. Start a new terminal for terminal-policy changes.      |
 | Terminal remains “preparing”                      | broker and egress health, Docker socket access, sandbox network, session row/runtime reconciliation           | Repair the failed control-plane dependency; preserve the user's private profile and workspace volume.                                                      |
 | `Title already in use by session ...`             | active/archiving session ownership and whether its labeled runner is actually live                            | Adopt the one valid live runtime or complete archival; do not create a second session with the same profile.                                               |
 | Generated file is absent from downloads           | file location, `HERMES_WRITE_SAFE_ROOT`, `/workspace` mount, broker listing                                   | Results belong in `/workspace`; `/opt/data` is profile state and must never be exposed as artifacts. Start a new session after runner-environment changes. |
@@ -208,11 +224,17 @@ For every Hermes setup or runtime configuration change:
 ```bash
 cd apps/api
 uv run --python 3.12 --group dev pytest \
+  tests/test_admin_hermes_tools.py \
   tests/test_hermes_bootstrap.py \
   tests/test_hermes_integration.py \
-  tests/test_hermes_terminal.py -q
+  tests/test_hermes_terminal.py \
+  tests/test_hermes_terminal_egress.py \
+  tests/test_alembic_migrations.py -q
 cd ../..
+pnpm check:api-contract
 pnpm check:api-architecture
+pnpm check:web-architecture
+pnpm nx typecheck web
 pnpm test:prod-app
 pnpm check:skills
 git diff --check

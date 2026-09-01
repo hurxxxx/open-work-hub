@@ -38,8 +38,8 @@ function validEnv(overrides = {}) {
       OPEN_WORK_HUB_HERMES_RUNTIME_BASE_URL: 'http://127.0.0.1:8642',
       OPEN_WORK_HUB_HERMES_RUNTIME_PORT: '8642',
       OPEN_WORK_HUB_HERMES_TERMINAL_BROKER_BASE_URL:
-        'http://127.0.0.1:18765',
-      OPEN_WORK_HUB_HERMES_TERMINAL_BROKER_PORT: '18765',
+        'http://127.0.0.1:8765',
+      OPEN_WORK_HUB_HERMES_TERMINAL_BROKER_PORT: '8765',
       OPEN_WORK_HUB_INFRA_NGINX_PORT: '14200',
       OPEN_WORK_HUB_OPF_ENABLED: 'true',
       OPEN_WORK_HUB_OPF_REQUIRED: 'true',
@@ -73,8 +73,9 @@ test('accepts a separated production runtime configuration', () => {
   assert.equal(config.hermesRuntimeBaseUrl.href, 'http://127.0.0.1:8642/');
   assert.equal(
     config.hermesTerminalBrokerBaseUrl.href,
-    'http://127.0.0.1:18765/',
+    'http://127.0.0.1:8765/',
   );
+  assert.equal(config.hermesTerminalBrokerPort, 8765);
   assert.equal(config.publicBaseUrl.href, 'https://prod.example.com/');
 });
 
@@ -245,7 +246,7 @@ test('requires loopback Hermes endpoints on their declared ports', () => {
       assertProductionAppEnv(
         validEnv({
           OPEN_WORK_HUB_HERMES_TERMINAL_BROKER_BASE_URL:
-            'http://127.0.0.1:18766',
+            'http://127.0.0.1:8766',
         }),
       ),
     /Hermes Terminal broker port/,
@@ -287,4 +288,14 @@ test('production image build embeds the validated Bento public URL', async () =>
     releaseScript,
     /--build-arg "OPEN_WORK_HUB_BENTO_SERVER_URL=\$bento_server_url"/,
   );
+});
+
+test('production runtime checks the fixed terminal broker port before mutation', async () => {
+  const releaseScript = await readFile(
+    new URL('./prod-app.sh', import.meta.url),
+    'utf8',
+  );
+  assert.match(releaseScript, /require_terminal_broker_port_available/);
+  assert.match(releaseScript, /refusing before build or migration/);
+  assert.match(releaseScript, /expected_binding" == "127\.0\.0\.1:\$port"/);
 });

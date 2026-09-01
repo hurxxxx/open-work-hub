@@ -229,7 +229,7 @@ services:
       - "18765"
       - --no-access-log
     ports:
-      - "127.0.0.1:${OPEN_WORK_HUB_HERMES_TERMINAL_BROKER_PORT:-18765}:18765"
+      - "127.0.0.1:${OPEN_WORK_HUB_HERMES_TERMINAL_BROKER_PORT:-8765}:18765"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - open-work-hub-prod-app-runtime:/run/open-work-hub

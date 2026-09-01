@@ -9,6 +9,7 @@ import os
 import re
 import socket
 import tarfile
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import PurePosixPath
@@ -21,6 +22,12 @@ from docker.errors import APIError, DockerException, NotFound
 from docker.models.containers import Container
 from docker.types import Mount
 
+from open_work_hub_api.domains.hermes.research_sources import (
+    academic_research_environment_hint,
+    disabled_research_source_domains,
+    normalize_research_source_policy,
+)
+
 
 HERMES_IMAGE = (
     "nousresearch/hermes-agent:v2026.8.31@"
@@ -28,6 +35,7 @@ HERMES_IMAGE = (
 )
 HERMES_PROVIDER = "openrouter"
 HERMES_MODEL = "qwen/qwen3.8-flash"
+HERMES_FALLBACK_MODEL = "z-ai/glm-5.3-flash"
 PROFILE_NAME = "terminal"
 SESSION_LABEL = "open-work-hub.hermes-terminal.session-id"
 PROFILE_LABEL = "open-work-hub.hermes-terminal.profile-key"
@@ -35,8 +43,13 @@ MANAGED_LABEL = "open-work-hub.hermes-terminal.managed"
 _PROFILE_KEY = re.compile(r"^[a-z0-9]{8,63}$")
 _ACTIVE_DOCKER_STATES = frozenset({"created", "running", "restarting", "paused"})
 _HERMES_BIN = "/opt/hermes/.venv/bin/hermes"
+_UV_BIN = "/usr/local/bin/uv"
 _HERMES_USER = "10000:10000"
 _PROFILE_HOME = "/opt/data/profiles/terminal"
+_PROFILE_EXPORT_PATH = "/opt/data/.owh-terminal-profile-export.tar.gz"
+_PROFILE_UV_CACHE = f"{_PROFILE_HOME}/home/.cache/uv"
+_RUNTIME_CACHE_HOME = "/opt/data/cache"
+_OPENROUTER_METADATA_HEADERS = {"X-OpenRouter-Metadata": "enabled"}
 _EPHEMERAL_PROFILE_SECRET_KEYS = (
     "OPENROUTER_API_KEY",
     "MCP_OPEN_WORK_HUB_API_KEY",
@@ -48,7 +61,9 @@ def build_profile_config_commands(
     mcp_url: str,
     proxy_token: str,
     mcp_token: str,
+    research_sources: Mapping[str, object] | None = None,
 ) -> list[list[str]]:
+    research_hint = academic_research_environment_hint(research_sources)
     mcp_servers = json.dumps(
         {
             "open-work-hub": {
@@ -65,7 +80,33 @@ def build_profile_config_commands(
     values = (
         ("model.provider", HERMES_PROVIDER),
         ("model.default", HERMES_MODEL),
-        ("fallback_providers", "[]"),
+        (
+            "model.default_headers",
+            json.dumps(_OPENROUTER_METADATA_HEADERS, separators=(",", ":")),
+        ),
+        (
+            "fallback_providers",
+            json.dumps(
+                [
+                    {
+                        "provider": HERMES_PROVIDER,
+                        "model": HERMES_FALLBACK_MODEL,
+                    }
+                ],
+                separators=(",", ":"),
+            ),
+        ),
+        ("agent.api_max_retries", "1"),
+        ("compression.enabled", "true"),
+        ("compression.threshold", "0.50"),
+        ("compression.threshold_tokens", "100000"),
+        ("compression.target_ratio", "0.20"),
+        ("compression.protect_last_n", "20"),
+        ("compression.proactive_prune_tokens", "48000"),
+        ("compression.proactive_prune_min_result_chars", "8000"),
+        ("compression.proactive_prune_min_reclaim_tokens", "4096"),
+        ("provider_routing.sort", "throughput"),
+        ("provider_routing.require_parameters", "true"),
         ("auxiliary.free_only", "false"),
         ("auxiliary.openrouter_model", HERMES_MODEL),
         ("display.mouse_tracking", "off"),
@@ -77,6 +118,21 @@ def build_profile_config_commands(
         [_HERMES_BIN, "config", "set", "--force", key, value]
         for key, value in values
     ]
+    if research_hint:
+        commands.append(
+            [
+                _HERMES_BIN,
+                "config",
+                "set",
+                "--force",
+                "agent.environment_hint",
+                research_hint,
+            ]
+        )
+    else:
+        commands.append(
+            [_HERMES_BIN, "config", "unset", "agent.environment_hint"]
+        )
     commands.append([_HERMES_BIN, "config", "unset", "fallback_model"])
     commands.append([_HERMES_BIN, "config", "check"])
     return commands
@@ -86,6 +142,22 @@ def build_profile_sanitize_commands() -> list[list[str]]:
     return [
         [_HERMES_BIN, "config", "unset", key]
         for key in _EPHEMERAL_PROFILE_SECRET_KEYS
+    ]
+
+
+def build_profile_export_cleanup_commands() -> list[list[str]]:
+    """Return official cleanup commands for session-scoped, regenerable data."""
+
+    return [
+        [_HERMES_BIN, "checkpoints", "clear", "--force"],
+        [
+            _UV_BIN,
+            "cache",
+            "clean",
+            "--force",
+            "--cache-dir",
+            _PROFILE_UV_CACHE,
+        ],
     ]
 
 
@@ -190,11 +262,23 @@ def build_runner_command(mode: str) -> list[str]:
     return command
 
 
-def build_runner_environment(*, proxy_token: str) -> dict[str, str]:
+def build_runner_environment(
+    *,
+    proxy_token: str,
+    research_sources: Mapping[str, object] | None = None,
+) -> dict[str, str]:
+    no_proxy = ",".join(
+        (
+            "hermes-terminal-broker",
+            *disabled_research_source_domains(research_sources),
+        )
+    )
     return {
         "HERMES_HOME": _PROFILE_HOME,
         "HERMES_UID": "10000",
         "HERMES_GID": "10000",
+        "XDG_CACHE_HOME": _RUNTIME_CACHE_HOME,
+        "UV_CACHE_DIR": f"{_RUNTIME_CACHE_HOME}/uv",
         "HERMES_WRITE_SAFE_ROOT": "/workspace",
         "HERMES_TUI_DISABLE_MOUSE": "1",
         "OPENROUTER_API_KEY": proxy_token,
@@ -202,13 +286,24 @@ def build_runner_environment(*, proxy_token: str) -> dict[str, str]:
         "HTTPS_PROXY": "http://hermes-terminal-egress:19090",
         "http_proxy": "http://hermes-terminal-egress:19091",
         "https_proxy": "http://hermes-terminal-egress:19090",
-        "NO_PROXY": "hermes-terminal-broker",
-        "no_proxy": "hermes-terminal-broker",
+        # The runner is attached only to an internal Docker network. Routing
+        # disabled sources outside the proxy enforces the administrator policy
+        # without weakening enabled public-web access through iron-proxy.
+        "NO_PROXY": no_proxy,
+        "no_proxy": no_proxy,
         "REQUESTS_CA_BUNDLE": "/run/owh-egress/ca.crt",
         "SSL_CERT_FILE": "/run/owh-egress/ca.crt",
         "NODE_EXTRA_CA_CERTS": "/run/owh-egress/ca.crt",
         "TERM": "xterm-256color",
         "COLORTERM": "truecolor",
+    }
+
+
+def build_runner_io_options() -> dict[str, bool]:
+    return {
+        "detach": True,
+        "stdin_open": True,
+        "tty": True,
     }
 
 
@@ -499,6 +594,7 @@ class HermesTerminalBrokerRuntime:
         profile_archive: bytes | None,
         mcp_url: str,
         mcp_token: str,
+        research_sources: Mapping[str, object],
     ) -> None:
         utility = self._utility_container(profile_volume_name)
         try:
@@ -549,6 +645,7 @@ class HermesTerminalBrokerRuntime:
                 mcp_url=mcp_url,
                 proxy_token=self._proxy_token(),
                 mcp_token=mcp_token,
+                research_sources=research_sources,
             ):
                 result = utility.exec_run(
                     command,
@@ -558,9 +655,7 @@ class HermesTerminalBrokerRuntime:
                 output = bytes(result.output or b"")
                 if result.exit_code == 0:
                     continue
-                if command[-2:] == ["unset", "fallback_model"] and (
-                    b"Config key not set" in output
-                ):
+                if "unset" in command and b"Config key not set" in output:
                     continue
                 raise BrokerRuntimeError("hermes_terminal.profile_configuration_failed")
         finally:
@@ -585,6 +680,22 @@ class HermesTerminalBrokerRuntime:
                 continue
             raise BrokerRuntimeError("hermes_terminal.profile_configuration_failed")
 
+    @staticmethod
+    def _cleanup_profile_for_export(utility: Container) -> None:
+        profile_environment = {
+            "HOME": _PROFILE_HOME,
+            "HERMES_HOME": _PROFILE_HOME,
+            "UV_CACHE_DIR": _PROFILE_UV_CACHE,
+        }
+        for command in build_profile_export_cleanup_commands():
+            result = utility.exec_run(
+                command,
+                environment=profile_environment,
+                user=_HERMES_USER,
+            )
+            if result.exit_code != 0:
+                raise BrokerRuntimeError("hermes_terminal.profile_cleanup_failed")
+
     def create_session(
         self,
         *,
@@ -595,6 +706,7 @@ class HermesTerminalBrokerRuntime:
         rows: int,
         mcp_url: str,
         mcp_token: str,
+        research_sources: Mapping[str, object],
         profile_archive_base64: str | None,
     ) -> dict[str, Any]:
         session_id = self._validate_session_id(session_id)
@@ -606,6 +718,14 @@ class HermesTerminalBrokerRuntime:
         expected_mcp_url = f"{self.mcp_relay_base_url}/{session_id}"
         if mcp_url != expected_mcp_url or len(mcp_token) < 32:
             raise BrokerRuntimeError("hermes_terminal.mcp_configuration_invalid")
+        try:
+            normalized_research_sources = normalize_research_source_policy(
+                research_sources
+            )
+        except ValueError as exc:
+            raise BrokerRuntimeError(
+                "hermes_terminal.research_source_policy_invalid"
+            ) from exc
         profile_archive = None
         if profile_archive_base64:
             try:
@@ -641,6 +761,7 @@ class HermesTerminalBrokerRuntime:
                     profile_archive=profile_archive,
                     mcp_url=mcp_url,
                     mcp_token=mcp_token,
+                    research_sources=normalized_research_sources,
                 )
             except (BrokerRuntimeError, DockerException) as error:
                 try:
@@ -666,7 +787,8 @@ class HermesTerminalBrokerRuntime:
                     name=container_name,
                     command=command,
                     environment=build_runner_environment(
-                        proxy_token=self._proxy_token()
+                        proxy_token=self._proxy_token(),
+                        research_sources=normalized_research_sources,
                     ),
                     mounts=build_runner_mounts(
                         profile_volume_name=profile_volume_name,
@@ -675,8 +797,7 @@ class HermesTerminalBrokerRuntime:
                     ),
                     working_dir="/workspace",
                     network=self.network_name,
-                    stdin_open=True,
-                    tty=True,
+                    **build_runner_io_options(),
                     read_only=True,
                     tmpfs={
                         "/tmp": "rw,exec,nosuid,nodev,mode=1777,size=512m",
@@ -834,6 +955,7 @@ class HermesTerminalBrokerRuntime:
             raise BrokerRuntimeError("hermes_terminal.session_active")
         utility = self._utility_container(record.profile_volume_name)
         try:
+            self._cleanup_profile_for_export(utility)
             self._sanitize_profile_for_export(utility)
             self._exec_ok(
                 utility,
@@ -843,20 +965,30 @@ class HermesTerminalBrokerRuntime:
                     "export",
                     PROFILE_NAME,
                     "--output",
-                    "/tmp/profile.tar.gz",
+                    _PROFILE_EXPORT_PATH,
                 ],
             )
-            stream, _stat = utility.get_archive("/tmp/profile.tar.gz")
-            archive = self._read_stream(
-                stream,
-                max_bytes=self.profile_archive_max_bytes + 2 * 1024 * 1024,
-            )
-            return self._extract_single_file(
-                archive,
-                basename="profile.tar.gz",
-                max_bytes=self.profile_archive_max_bytes,
-            )
+            try:
+                stream, _stat = utility.get_archive(_PROFILE_EXPORT_PATH)
+                archive = self._read_stream(
+                    stream,
+                    max_bytes=self.profile_archive_max_bytes + 2 * 1024 * 1024,
+                )
+                return self._extract_single_file(
+                    archive,
+                    basename=PurePosixPath(_PROFILE_EXPORT_PATH).name,
+                    max_bytes=self.profile_archive_max_bytes,
+                )
+            except DockerException as exc:
+                raise BrokerRuntimeError("hermes_terminal.profile_export_failed") from exc
         finally:
+            try:
+                utility.exec_run(
+                    ["rm", "-f", _PROFILE_EXPORT_PATH],
+                    user=_HERMES_USER,
+                )
+            except DockerException:
+                pass
             try:
                 utility.remove(force=True)
             except DockerException:

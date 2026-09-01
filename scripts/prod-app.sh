@@ -42,6 +42,41 @@ validate_environment() {
   node "$ROOT_DIR/scripts/prod-app-config.mjs" "$ENV_FILE"
 }
 
+require_terminal_broker_port_available() {
+  local port expected_container expected_running expected_binding
+  port="$(
+    node "$ROOT_DIR/scripts/prod-app-config.mjs" \
+      "$ENV_FILE" \
+      --print-hermes-terminal-broker-port
+  )"
+  expected_container="open-work-hub-prod-hermes-terminal-broker"
+
+  if ! command -v ss >/dev/null 2>&1; then
+    echo "Production port preflight requires the ss command." >&2
+    return 1
+  fi
+  if ! ss -H -ltn "sport = :$port" | grep -q .; then
+    return 0
+  fi
+
+  expected_running="$(
+    docker inspect --format '{{.State.Running}}' "$expected_container" 2>/dev/null || true
+  )"
+  expected_binding="$(
+    docker inspect \
+      --format '{{range (index .NetworkSettings.Ports "18765/tcp")}}{{printf "%s:%s" .HostIp .HostPort}}{{end}}' \
+      "$expected_container" 2>/dev/null || true
+  )"
+  if [[ "$expected_running" == "true" && "$expected_binding" == "127.0.0.1:$port" ]]; then
+    return 0
+  fi
+
+  echo \
+    "Production Hermes Terminal broker port 127.0.0.1:$port is already in use by another listener; refusing before build or migration." \
+    >&2
+  return 1
+}
+
 compose() {
   docker compose \
     --project-name "$COMPOSE_PROJECT_NAME" \
@@ -172,6 +207,7 @@ case "$COMMAND" in
     require_prod_checkout
     require_release_source
     validate_environment
+    require_terminal_broker_port_available
     deploy
     ;;
   migrate)
@@ -184,6 +220,7 @@ case "$COMMAND" in
     require_prod_checkout
     require_release_source
     validate_environment
+    require_terminal_broker_port_available
     restore_previous_runtime
     ;;
   smoke)
@@ -199,6 +236,7 @@ case "$COMMAND" in
     require_prod_checkout
     require_release_source
     validate_environment
+    require_terminal_broker_port_available
     docker image inspect "$CURRENT_IMAGE" >/dev/null
     run_migrations
     start_runtime

@@ -15,6 +15,8 @@ WORKDIR /opt/broker
 
 COPY apps/api/src/open_work_hub_api/__init__.py open_work_hub_api/__init__.py
 COPY apps/api/src/open_work_hub_api/domains/__init__.py open_work_hub_api/domains/__init__.py
+COPY apps/api/src/open_work_hub_api/domains/hermes/__init__.py open_work_hub_api/domains/hermes/__init__.py
+COPY apps/api/src/open_work_hub_api/domains/hermes/research_sources.py open_work_hub_api/domains/hermes/research_sources.py
 COPY apps/api/src/open_work_hub_api/domains/hermes_terminal/__init__.py open_work_hub_api/domains/hermes_terminal/__init__.py
 COPY apps/api/src/open_work_hub_api/domains/hermes_terminal/broker_app.py open_work_hub_api/domains/hermes_terminal/broker_app.py
 COPY apps/api/src/open_work_hub_api/domains/hermes_terminal/broker_runtime.py open_work_hub_api/domains/hermes_terminal/broker_runtime.py
