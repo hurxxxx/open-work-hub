@@ -12,6 +12,7 @@ RAG_SYNC_BACKFILL_QUEUE = "rag_sync_backfill"
 RAG_VISIBILITY_RECOMPUTE_QUEUE = "rag_visibility_recompute"
 SEARCH_INDEX_REALTIME_QUEUE = "search_index_realtime"
 AI_GRAPH_QUEUE = "ai-graph"
+HERMES_QUEUE = "hermes"
 
 FILE_STORAGE_CLEANUP_TASK_NAME = "files.cleanup_storage_object"
 FILE_STORAGE_CLEANUP_REPUBLISH_TASK_NAME = "files.republish_storage_cleanup_jobs"
@@ -22,6 +23,8 @@ RAG_VISIBILITY_RECOMPUTE_TASK_NAME = "rag.recompute_visibility"
 SEARCH_INDEX_RESOURCE_TASK_NAME = "search.index_resource"
 AI_GRAPH_RUN_TASK_NAME = "ai_graph.run"
 AI_GRAPH_REPUBLISH_TASK_NAME = "ai_graph.republish"
+HERMES_RUN_TASK_NAME = "hermes.run"
+HERMES_REPUBLISH_TASK_NAME = "hermes.republish"
 
 TASK_QUEUE_ROUTES: Mapping[str, str] = {
     "documents.sync": DEFAULT_QUEUE,
@@ -47,6 +50,8 @@ TASK_QUEUE_ROUTES: Mapping[str, str] = {
     SEARCH_INDEX_RESOURCE_TASK_NAME: SEARCH_INDEX_REALTIME_QUEUE,
     AI_GRAPH_RUN_TASK_NAME: AI_GRAPH_QUEUE,
     AI_GRAPH_REPUBLISH_TASK_NAME: DEFAULT_QUEUE,
+    HERMES_RUN_TASK_NAME: HERMES_QUEUE,
+    HERMES_REPUBLISH_TASK_NAME: DEFAULT_QUEUE,
     "search.republish_pending_index_jobs": DEFAULT_QUEUE,
     MAIL_SYNC_TASK_NAME: MAIL_SYNC_QUEUE,
     "mail.sync_account": MAIL_SYNC_QUEUE,
@@ -67,12 +72,14 @@ WORKER_QUEUE_GROUPS: Mapping[str, tuple[str, ...]] = {
         RAG_SYNC_BACKFILL_QUEUE,
     ),
     "ai_graph": (AI_GRAPH_QUEUE,),
+    "hermes": (HERMES_QUEUE,),
 }
 WORKER_QUEUE_GROUP_CONCURRENCY: Mapping[str, int] = {
     "default": 1,
     "realtime": 2,
     "long": 1,
     "ai_graph": 1,
+    "hermes": 2,
 }
 WORKER_BOOTSTRAP_GROUP_ALL = "all"
 WORKER_BOOTSTRAP_GROUP_BEAT = "beat"
@@ -163,6 +170,9 @@ __all__ = [
     "AI_GRAPH_QUEUE",
     "AI_GRAPH_REPUBLISH_TASK_NAME",
     "AI_GRAPH_RUN_TASK_NAME",
+    "HERMES_QUEUE",
+    "HERMES_REPUBLISH_TASK_NAME",
+    "HERMES_RUN_TASK_NAME",
     "DEFAULT_QUEUE",
     "FILE_STORAGE_CLEANUP_REPUBLISH_TASK_NAME",
     "FILE_STORAGE_CLEANUP_TASK_NAME",

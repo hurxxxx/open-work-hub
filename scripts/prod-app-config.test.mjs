@@ -7,6 +7,7 @@ import { assertProductionAppEnv, parseEnvText } from './prod-app-config.mjs';
 function validEnv(overrides = {}) {
   return new Map(
     Object.entries({
+      OPENROUTER_API_KEY: 'sk-or-v1-production-test-key',
       OPEN_WORK_HUB_API_ALLOW_DEV_ADMIN_LOGIN: '0',
       OPEN_WORK_HUB_API_DEV_PORT: '8001',
       OPEN_WORK_HUB_API_ENVIRONMENT: 'production',
@@ -22,6 +23,20 @@ function validEnv(overrides = {}) {
       OPEN_WORK_HUB_BENTO_SERVER_URL: 'https://bento.example.com',
       OPEN_WORK_HUB_DRAWIO_PORT: '18083',
       OPEN_WORK_HUB_ENV_PROFILE: 'prod',
+      OPEN_WORK_HUB_HERMES_API_KEY:
+        'production-hermes-runtime-secret-00000001',
+      OPEN_WORK_HUB_HERMES_ENABLED: 'true',
+      OPEN_WORK_HUB_HERMES_MANAGEMENT_BASE_URL: 'http://127.0.0.1:9119',
+      OPEN_WORK_HUB_HERMES_MANAGEMENT_PORT: '9119',
+      OPEN_WORK_HUB_HERMES_MANAGEMENT_TOKEN:
+        'production-hermes-management-secret-0001',
+      OPEN_WORK_HUB_HERMES_MCP_SERVER_URL:
+        'http://127.0.0.1:8000/api/v1/internal/hermes/mcp',
+      OPEN_WORK_HUB_HERMES_MCP_SHARED_SECRET:
+        'production-hermes-mcp-secret-0000000001',
+      OPEN_WORK_HUB_HERMES_PROFILE_CLONE_SOURCE: 'default',
+      OPEN_WORK_HUB_HERMES_RUNTIME_BASE_URL: 'http://127.0.0.1:8642',
+      OPEN_WORK_HUB_HERMES_RUNTIME_PORT: '8642',
       OPEN_WORK_HUB_INFRA_NGINX_PORT: '14200',
       OPEN_WORK_HUB_OPF_ENABLED: 'true',
       OPEN_WORK_HUB_OPF_REQUIRED: 'true',
@@ -52,6 +67,7 @@ test('accepts a separated production runtime configuration', () => {
   assert.equal(config.appPort, 8000);
   assert.equal(config.bentoBindHost, '127.0.0.1');
   assert.equal(config.bentoServerUrl.href, 'https://bento.example.com/');
+  assert.equal(config.hermesRuntimeBaseUrl.href, 'http://127.0.0.1:8642/');
   assert.equal(config.publicBaseUrl.href, 'https://prod.example.com/');
 });
 
@@ -173,6 +189,49 @@ test('requires a separate loopback privacy-filter origin', () => {
         }),
       ),
     /loopback HTTP origin/,
+  );
+});
+
+test('requires isolated production Hermes credentials', () => {
+  for (const [key, value] of [
+    ['OPENROUTER_API_KEY', ''],
+    ['OPEN_WORK_HUB_HERMES_API_KEY', 'change-me'],
+    ['OPEN_WORK_HUB_HERMES_MANAGEMENT_TOKEN', 'short'],
+    ['OPEN_WORK_HUB_HERMES_MCP_SHARED_SECRET', 'dev-secret'],
+  ]) {
+    assert.throws(() => assertProductionAppEnv(validEnv({ [key]: value })));
+  }
+  assert.throws(
+    () =>
+      assertProductionAppEnv(
+        validEnv({
+          OPEN_WORK_HUB_HERMES_MANAGEMENT_TOKEN:
+            'production-hermes-runtime-secret-00000001',
+        }),
+      ),
+    /must be distinct/,
+  );
+});
+
+test('requires loopback Hermes endpoints on their declared ports', () => {
+  assert.throws(
+    () =>
+      assertProductionAppEnv(
+        validEnv({
+          OPEN_WORK_HUB_HERMES_RUNTIME_BASE_URL: 'http://0.0.0.0:8642',
+        }),
+      ),
+    /loopback HTTP endpoint/,
+  );
+  assert.throws(
+    () =>
+      assertProductionAppEnv(
+        validEnv({
+          OPEN_WORK_HUB_HERMES_MCP_SERVER_URL:
+            'http://127.0.0.1:8000/api/v1/tools/mcp',
+        }),
+      ),
+    /internal Hermes MCP endpoint/,
   );
 });
 

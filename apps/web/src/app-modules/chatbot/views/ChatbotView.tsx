@@ -243,7 +243,6 @@ function ChatbotViewContent({
   const {
     activeArtifact,
     allArtifacts,
-    backendMode,
     confirmDialog,
     durableRun,
     experience,
@@ -277,9 +276,9 @@ function ChatbotViewContent({
           <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-app-surface">
             <ChatTopBar
               title={experience.title}
-              backendMode={backendMode}
               health={health}
               healthError={healthError}
+              workspaceSlug={workspaceSlug}
             />
 
             {turns.length === 0 && !isRunInProgress ? (

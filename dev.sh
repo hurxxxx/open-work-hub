@@ -129,6 +129,7 @@ if (( minimal_infra )); then
   export OPEN_WORK_HUB_OPF_REQUIRED=false
   export OPEN_WORK_HUB_RAG_ENABLED=false
   export OPEN_WORK_HUB_RAG_PRELOAD_ON_STARTUP=false
+  export OPEN_WORK_HUB_HERMES_ENABLED=false
   export OPEN_WORK_HUB_API_RECORDING_SPOOL_DIR="$OPEN_WORK_HUB_DEV_RUNTIME_DIR/recording-spool"
 fi
 
@@ -202,7 +203,7 @@ require_free_port() {
     echo >&2
     echo "$listeners" >&2
     echo >&2
-    echo "Stop the existing process or change the port before running ./dev.sh again." >&2
+    echo "Stop the existing process before running ./dev.sh again; no fallback port will be selected." >&2
     exit 1
   fi
 }
@@ -252,6 +253,13 @@ start_dev_infra() {
     if [[ "$(printf '%s' "${OPEN_WORK_HUB_API_VIDEO_CHAT_ENABLED:-true}" | tr '[:upper:]' '[:lower:]')" != "false" ]]; then
       desired+=(livekit)
     fi
+    if [[ "$(dev_lower "${OPEN_WORK_HUB_HERMES_ENABLED:-false}")" == "true" ]]; then
+      if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
+        echo "OPENROUTER_API_KEY is required when Hermes is enabled." >&2
+        exit 1
+      fi
+      desired+=(hermes-bootstrap hermes-gateway hermes-dashboard)
+    fi
     if dev_use_local_postgres; then
       desired+=(postgres)
     fi
@@ -288,6 +296,8 @@ start_dev_infra() {
   local opensearch_port="${OPEN_WORK_HUB_INFRA_OPENSEARCH_PORT:-59210}"
   local qdrant_port="${OPEN_WORK_HUB_INFRA_QDRANT_PORT:-16333}"
   local livekit_port="${OPEN_WORK_HUB_LIVEKIT_PORT:-7880}"
+  local hermes_runtime_port="${OPEN_WORK_HUB_HERMES_RUNTIME_PORT:-18642}"
+  local hermes_management_port="${OPEN_WORK_HUB_HERMES_MANAGEMENT_PORT:-19119}"
   local services=()
   local skipped=()
   local svc
@@ -300,6 +310,8 @@ start_dev_infra() {
       opensearch) port="$opensearch_port" ;;
       qdrant) port="$qdrant_port" ;;
       livekit) port="$livekit_port" ;;
+      hermes-bootstrap|hermes-gateway) port="$hermes_runtime_port" ;;
+      hermes-dashboard) port="$hermes_management_port" ;;
     esac
     if [[ -n "$port" && -n "$(find_listener "$port")" ]]; then
       skipped+=("${svc}(:${port})")
@@ -438,6 +450,10 @@ fi
 if (( infra_enabled )); then
   start_dev_infra
 fi
+
+# The provider credential belongs to the isolated Hermes containers. API,
+# worker, web, and migration subprocesses only receive Hermes control tokens.
+unset OPENROUTER_API_KEY
 
 for project in "${projects[@]}"; do
   case "$project" in

@@ -14,6 +14,8 @@ const PORT_KEYS = [
   'OPEN_WORK_HUB_API_DEV_PORT',
   'OPEN_WORK_HUB_BENTO_PORT',
   'OPEN_WORK_HUB_DRAWIO_PORT',
+  'OPEN_WORK_HUB_HERMES_MANAGEMENT_PORT',
+  'OPEN_WORK_HUB_HERMES_RUNTIME_PORT',
   'OPEN_WORK_HUB_INFRA_MINIO_CONSOLE_PORT',
   'OPEN_WORK_HUB_INFRA_MINIO_PORT',
   'OPEN_WORK_HUB_INFRA_NGINX_PORT',
@@ -94,6 +96,39 @@ function parsePort(values, key, { required = false } = {}) {
   return port;
 }
 
+function requireSecret(values, key, { minLength = 32 } = {}) {
+  const value = (values.get(key) ?? '').trim();
+  if (value.length < minLength) {
+    throw new Error(`${key} must use a production secret of at least ${minLength} characters`);
+  }
+  if (/^(dev|development|example|placeholder|change[-_]?me)/i.test(value)) {
+    throw new Error(`${key} must not use a development or placeholder value`);
+  }
+  return value;
+}
+
+function requireLoopbackHttpUrl(values, key) {
+  const rawValue = (values.get(key) ?? '').trim();
+  let url;
+  try {
+    url = new URL(rawValue);
+  } catch {
+    throw new Error(`${key} must be a valid URL`);
+  }
+  if (
+    url.protocol !== 'http:' ||
+    url.hostname !== '127.0.0.1' ||
+    !url.port ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash
+  ) {
+    throw new Error(`${key} must be a loopback HTTP endpoint with an explicit port`);
+  }
+  return url;
+}
+
 function isPrivateOrLoopbackIpv4(value) {
   if (isIP(value) !== 4) {
     return false;
@@ -115,6 +150,7 @@ export function assertProductionAppEnv(values) {
   requireBoolean(values, 'OPEN_WORK_HUB_API_OBJECT_STORAGE_REQUIRED', true);
   requireBoolean(values, 'OPEN_WORK_HUB_OPF_ENABLED', true);
   requireBoolean(values, 'OPEN_WORK_HUB_OPF_REQUIRED', true);
+  requireBoolean(values, 'OPEN_WORK_HUB_HERMES_ENABLED', true);
 
   const bindHost = (values.get('OPEN_WORK_HUB_APP_BIND_HOST') ?? '').trim();
   if (!['0.0.0.0', '127.0.0.1'].includes(bindHost)) {
@@ -209,12 +245,77 @@ export function assertProductionAppEnv(values) {
       'OPEN_WORK_HUB_OPF_SERVICE_BASE_URL must not collide with OPEN_WORK_HUB_APP_PORT',
     );
   }
+
+  const hermesRuntimePort = parsePort(
+    values,
+    'OPEN_WORK_HUB_HERMES_RUNTIME_PORT',
+    { required: true },
+  );
+  const hermesManagementPort = parsePort(
+    values,
+    'OPEN_WORK_HUB_HERMES_MANAGEMENT_PORT',
+    { required: true },
+  );
+  const reservedPorts = new Set([
+    appPort,
+    Number(opfServiceBaseUrl.port),
+    hermesRuntimePort,
+    hermesManagementPort,
+  ]);
+  if (reservedPorts.size !== 4) {
+    throw new Error('Hermes, API, and privacy-filter ports must be distinct');
+  }
+
+  const hermesRuntimeBaseUrl = requireLoopbackHttpUrl(
+    values,
+    'OPEN_WORK_HUB_HERMES_RUNTIME_BASE_URL',
+  );
+  if (
+    hermesRuntimeBaseUrl.pathname !== '/' ||
+    Number(hermesRuntimeBaseUrl.port) !== hermesRuntimePort
+  ) {
+    throw new Error('OPEN_WORK_HUB_HERMES_RUNTIME_BASE_URL must match the configured Hermes runtime port');
+  }
+  const hermesManagementBaseUrl = requireLoopbackHttpUrl(
+    values,
+    'OPEN_WORK_HUB_HERMES_MANAGEMENT_BASE_URL',
+  );
+  if (
+    hermesManagementBaseUrl.pathname !== '/' ||
+    Number(hermesManagementBaseUrl.port) !== hermesManagementPort
+  ) {
+    throw new Error('OPEN_WORK_HUB_HERMES_MANAGEMENT_BASE_URL must match the configured Hermes management port');
+  }
+  const hermesMcpServerUrl = requireLoopbackHttpUrl(
+    values,
+    'OPEN_WORK_HUB_HERMES_MCP_SERVER_URL',
+  );
+  if (
+    Number(hermesMcpServerUrl.port) !== appPort ||
+    hermesMcpServerUrl.pathname !== '/api/v1/internal/hermes/mcp'
+  ) {
+    throw new Error('OPEN_WORK_HUB_HERMES_MCP_SERVER_URL must target the production API internal Hermes MCP endpoint');
+  }
+
+  requireSecret(values, 'OPENROUTER_API_KEY', { minLength: 16 });
+  const hermesSecrets = [
+    requireSecret(values, 'OPEN_WORK_HUB_HERMES_API_KEY'),
+    requireSecret(values, 'OPEN_WORK_HUB_HERMES_MANAGEMENT_TOKEN'),
+    requireSecret(values, 'OPEN_WORK_HUB_HERMES_MCP_SHARED_SECRET'),
+  ];
+  if (new Set(hermesSecrets).size !== hermesSecrets.length) {
+    throw new Error('Hermes runtime, management, and MCP secrets must be distinct');
+  }
+  requireExact(values, 'OPEN_WORK_HUB_HERMES_PROFILE_CLONE_SOURCE', 'default');
   return {
     appPort,
     bentoBindHost,
     bentoServerUrl,
     bindHost,
     forwardedAllowIps,
+    hermesManagementBaseUrl,
+    hermesMcpServerUrl,
+    hermesRuntimeBaseUrl,
     opfServiceBaseUrl,
     publicBaseUrl,
   };

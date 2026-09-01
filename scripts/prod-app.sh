@@ -120,7 +120,7 @@ start_runtime() {
     --remove-orphans \
     --wait \
     --wait-timeout 600 \
-    privacy-filter api worker beat
+    hermes-bootstrap hermes-gateway hermes-dashboard privacy-filter api worker beat
 }
 
 run_smoke() {

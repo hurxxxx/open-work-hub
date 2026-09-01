@@ -13,6 +13,7 @@ from open_work_hub_worker.queue_contract import (
     AI_GRAPH_REPUBLISH_TASK_NAME,
     DEFAULT_QUEUE,
     FILE_STORAGE_CLEANUP_REPUBLISH_TASK_NAME,
+    HERMES_REPUBLISH_TASK_NAME,
     assert_worker_queue_access,
     celery_task_routes,
     celery_worker_queue_argument,
@@ -119,6 +120,11 @@ celery_app.autodiscover_tasks(["open_work_hub_worker.tasks"])
 celery_app.conf.timezone = "UTC"
 
 celery_app.conf.beat_schedule = {
+    "republish-pending-hermes-runs": {
+        "task": HERMES_REPUBLISH_TASK_NAME,
+        "schedule": 30.0,
+        "options": {"queue": DEFAULT_QUEUE},
+    },
     "republish-pending-ai-graph-runs": {
         "task": AI_GRAPH_REPUBLISH_TASK_NAME,
         "schedule": 60.0,

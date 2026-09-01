@@ -76,6 +76,7 @@ def execute_tool(
     agent_run_id: str | None = None,
     conversation_id: str | None = None,
     approved_call_id: str | None = None,
+    externally_approved_call_id: str | None = None,
 ) -> dict[str, Any]:
     started = perf_counter()
     registry = get_ai_capability_registry()
@@ -218,6 +219,10 @@ def execute_tool(
         if descriptor is not None
         else definition.approval_required
     )
+    if externally_approved_call_id is not None and source != "hermes-mcp":
+        raise RuntimeError(
+            "External approval evidence is restricted to the Hermes MCP bridge."
+        )
     if approval_required:
         if principal.kind != "user":
             _log_tool_call(
@@ -237,7 +242,9 @@ def execute_tool(
                 status_code=status.HTTP_403_FORBIDDEN,
                 code="ai.only_user_principal_approval_tools",
             )
-        if approved_call_id is None:
+        if externally_approved_call_id is not None:
+            approved_call_id = externally_approved_call_id
+        elif approved_call_id is None:
             _log_tool_call(
                 source=source,
                 principal=principal,
@@ -261,59 +268,60 @@ def execute_tool(
                 parsed_args=argument_validation.parsed_args,
             )
 
-        approval = ai_approvals.get_approval(
-            db,
-            workspace=workspace,
-            user=user,
-            approval_id=approved_call_id,
-            for_update=True,
-        )
-        validate_replayed_approval(
-            approval=approval,
-            tool_name=tool_name,
-            call_id=call_id,
-        )
-        if approval.status == "approved":
-            pass
-        elif approval.status == "rejected":
-            payload = build_rejected_approval_payload(
-                tool_name=definition.name,
-                owner_domain=definition.owner_domain,
-                approval_required=approval_required,
-                reject_reason=approval.reject_reason,
-            )
-            ai_approvals.record_approval_execution_result(
+        if externally_approved_call_id is None:
+            approval = ai_approvals.get_approval(
                 db,
-                approval=approval,
-                execution_result=payload["result"],
-                status="rejected",
-            )
-            _log_tool_call(
-                source=source,
-                principal=principal,
                 workspace=workspace,
+                user=user,
+                approval_id=approved_call_id,
+                for_update=True,
+            )
+            validate_replayed_approval(
+                approval=approval,
                 tool_name=tool_name,
-                args_summary=args_summary,
-                status="ok",
-                latency_ms=_elapsed_ms(started),
                 call_id=call_id,
-                approval_id=approval.id,
-                agent_run_id=agent_run_id,
-                conversation_id=conversation_id,
             )
-            return payload
-        elif approval.status in {"cancelled", "expired"}:
-            raise localized_http_exception(
-                status_code=status.HTTP_410_GONE,
-                code="ai.tool_approval_no_longer_usable",
-                status=approval.status,
-            )
-        else:
-            raise localized_http_exception(
-                status_code=status.HTTP_409_CONFLICT,
-                code="ai.tool_approval_already_status",
-                status=approval.status,
-            )
+            if approval.status == "approved":
+                pass
+            elif approval.status == "rejected":
+                payload = build_rejected_approval_payload(
+                    tool_name=definition.name,
+                    owner_domain=definition.owner_domain,
+                    approval_required=approval_required,
+                    reject_reason=approval.reject_reason,
+                )
+                ai_approvals.record_approval_execution_result(
+                    db,
+                    approval=approval,
+                    execution_result=payload["result"],
+                    status="rejected",
+                )
+                _log_tool_call(
+                    source=source,
+                    principal=principal,
+                    workspace=workspace,
+                    tool_name=tool_name,
+                    args_summary=args_summary,
+                    status="ok",
+                    latency_ms=_elapsed_ms(started),
+                    call_id=call_id,
+                    approval_id=approval.id,
+                    agent_run_id=agent_run_id,
+                    conversation_id=conversation_id,
+                )
+                return payload
+            elif approval.status in {"cancelled", "expired"}:
+                raise localized_http_exception(
+                    status_code=status.HTTP_410_GONE,
+                    code="ai.tool_approval_no_longer_usable",
+                    status=approval.status,
+                )
+            else:
+                raise localized_http_exception(
+                    status_code=status.HTTP_409_CONFLICT,
+                    code="ai.tool_approval_already_status",
+                    status=approval.status,
+                )
 
     tracer = get_tracer("open_work_hub_api.ai.tools")
     with bind_tool_execution_context(

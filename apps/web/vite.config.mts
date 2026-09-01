@@ -44,6 +44,7 @@ export default defineConfig(() => ({
   },
   server: {
     port: webDevPort,
+    strictPort: true,
     host: process.env.OPEN_WORK_HUB_WEB_DEV_HOST ?? '127.0.0.1',
     allowedHosts: webDevAllowedHosts,
     proxy: {
@@ -75,6 +76,7 @@ export default defineConfig(() => ({
   },
   preview: {
     port: webDevPort,
+    strictPort: true,
     host: process.env.OPEN_WORK_HUB_WEB_DEV_HOST ?? '127.0.0.1',
     allowedHosts: webDevAllowedHosts,
     proxy: {

@@ -3926,6 +3926,21 @@ export const resources = {
           stage: '{{stage}}',
           title: '답변 작성 중',
         },
+        agentControl: {
+          title: 'Hermes 에이전트 제어',
+          runtime: 'Hermes · OpenRouter · Qwen 3.8 Flash',
+          refresh: '에이전트 상태 새로고침',
+          recentRuns: '최근 실행',
+          scheduledJobs: '예약 작업',
+          noRuns: '아직 실행 기록이 없습니다.',
+          noJobs: '등록된 예약 작업이 없습니다.',
+          stopRun: '실행 중단',
+          runNow: '지금 실행',
+          pauseJob: '예약 작업 일시정지',
+          resumeJob: '예약 작업 재개',
+          loadFailed: '에이전트 제어 상태를 불러오지 못했습니다.',
+          actionFailed: '에이전트 제어 요청을 처리하지 못했습니다.',
+        },
         errors: {
           connect:
             'AI 서버에 연결하지 못했습니다. API 서버가 실행 중인지 확인해 주세요.',
@@ -9963,6 +9978,21 @@ export const resources = {
           percent: '{{progress}}%',
           stage: '{{stage}}',
           title: 'Writing the response',
+        },
+        agentControl: {
+          title: 'Hermes agent controls',
+          runtime: 'Hermes · OpenRouter · Qwen 3.8 Flash',
+          refresh: 'Refresh agent status',
+          recentRuns: 'Recent runs',
+          scheduledJobs: 'Scheduled jobs',
+          noRuns: 'No agent runs yet.',
+          noJobs: 'No scheduled jobs.',
+          stopRun: 'Stop run',
+          runNow: 'Run now',
+          pauseJob: 'Pause scheduled job',
+          resumeJob: 'Resume scheduled job',
+          loadFailed: 'Could not load agent control status.',
+          actionFailed: 'Could not complete the agent control request.',
         },
         errors: {
           connect:

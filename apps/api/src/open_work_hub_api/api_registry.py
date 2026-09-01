@@ -51,6 +51,9 @@ from open_work_hub_api.domains.diagrams.router import router as diagrams_router
 from open_work_hub_api.domains.dm.router import public_router as dm_public_router
 from open_work_hub_api.domains.dm.router import router as dm_router
 from open_work_hub_api.domains.files.router import router as files_router
+from open_work_hub_api.domains.hermes.router import router as hermes_router
+from open_work_hub_api.domains.hermes.mcp_router import router as hermes_mcp_router
+from open_work_hub_api.domains.hermes.admin_router import router as admin_hermes_router
 from open_work_hub_api.domains.mail.router import router as mail_router
 from open_work_hub_api.domains.media.router import router as media_router
 from open_work_hub_api.domains.meeting.router import router as meeting_router
@@ -136,6 +139,7 @@ def _router_specs() -> list[_RouterSpec]:
         _RouterSpec(admin_ai_model_settings_router, "api", "protected"),
         _RouterSpec(admin_document_processing_router, "api", "protected"),
         _RouterSpec(admin_model_runtime_status_router, "api", "protected"),
+        _RouterSpec(admin_hermes_router, "api", "protected"),
         _RouterSpec(admin_organization_router, "api", "protected"),
         _RouterSpec(admin_platform_api_keys_router, "api", "protected"),
         _RouterSpec(directory_integrations_router, "api"),
@@ -156,6 +160,8 @@ def _router_specs() -> list[_RouterSpec]:
         _RouterSpec(docs_ws_router, "workspace"),
         _RouterSpec(whiteboard_ws_router, "workspace"),
         _RouterSpec(files_router, "workspace", "workspace"),
+        _RouterSpec(hermes_router, "workspace", "workspace"),
+        _RouterSpec(hermes_mcp_router, "api"),
         _RouterSpec(ocr_router, "workspace", "workspace"),
         _RouterSpec(pms_router, "workspace", "workspace"),
         _RouterSpec(meeting_router, "workspace", "workspace"),

@@ -6,6 +6,8 @@ x-open-work-hub-app: &open-work-hub-app
   env_file:
     - ../../.env
   environment: &open-work-hub-app-environment
+    # The external provider credential is available only to Hermes services.
+    OPENROUTER_API_KEY: ""
     OPEN_WORK_HUB_API_AUTO_MIGRATE: "0"
     OPEN_WORK_HUB_API_FRONTEND_DIST_DIR: /opt/open-work-hub/dist/apps/web
     OPEN_WORK_HUB_API_RECORDING_SPOOL_DIR: /opt/open-work-hub/.runtime/recording-spool
@@ -16,6 +18,118 @@ x-open-work-hub-app: &open-work-hub-app
     - open-work-hub-prod-app-runtime:/opt/open-work-hub/.runtime
 
 services:
+  hermes-bootstrap:
+    image: nousresearch/hermes-agent:v2026.8.31@sha256:64923faeae267792bf9bf87fe3b4c4869e35004e360c7df01730ad801b74d524
+    container_name: open-work-hub-prod-hermes-bootstrap
+    network_mode: host
+    restart: "no"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /run:rw,exec,nosuid,nodev,mode=0755
+      - /tmp:rw,exec,nosuid,nodev,mode=1777
+    environment:
+      API_SERVER_KEY: ${OPEN_WORK_HUB_HERMES_API_KEY:-}
+      HERMES_GATEWAY_NO_SUPERVISE: "1"
+      HERMES_GID: "10000"
+      HERMES_UID: "10000"
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+    command:
+      - /bin/sh
+      - -ec
+      - >-
+        /opt/hermes/.venv/bin/python /opt/open-work-hub-hermes/bootstrap.py &&
+        /opt/hermes/.venv/bin/hermes gateway stop
+    volumes:
+      - open-work-hub-prod-hermes-data:/opt/data
+      - ../hermes/bootstrap.py:/opt/open-work-hub-hermes/bootstrap.py:ro
+
+  hermes-gateway:
+    image: nousresearch/hermes-agent:v2026.8.31@sha256:64923faeae267792bf9bf87fe3b4c4869e35004e360c7df01730ad801b74d524
+    container_name: open-work-hub-prod-hermes-gateway
+    network_mode: host
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /run:rw,exec,nosuid,nodev,mode=0755
+      - /tmp:rw,exec,nosuid,nodev,mode=1777
+    depends_on:
+      hermes-bootstrap:
+        condition: service_completed_successfully
+    environment:
+      API_SERVER_ENABLED: "true"
+      API_SERVER_HOST: 127.0.0.1
+      API_SERVER_KEY: ${OPEN_WORK_HUB_HERMES_API_KEY:-}
+      API_SERVER_PORT: ${OPEN_WORK_HUB_HERMES_RUNTIME_PORT:-8642}
+      GATEWAY_MULTIPLEX_PROFILES: "true"
+      HERMES_GATEWAY_NO_SUPERVISE: "1"
+      HERMES_GID: "10000"
+      HERMES_MODEL: qwen/qwen3.8-flash
+      HERMES_UID: "10000"
+    command:
+      - /opt/hermes/.venv/bin/python
+      - /opt/open-work-hub-hermes/gateway_entry.py
+      - gateway
+      - run
+      - --no-supervise
+    volumes:
+      - open-work-hub-prod-hermes-data:/opt/data
+      - ../hermes/gateway_entry.py:/opt/open-work-hub-hermes/gateway_entry.py:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          curl -fsS
+          -H "Authorization: Bearer $${API_SERVER_KEY}"
+          "http://127.0.0.1:$${API_SERVER_PORT}/health/detailed" >/dev/null
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  hermes-dashboard:
+    image: nousresearch/hermes-agent:v2026.8.31@sha256:64923faeae267792bf9bf87fe3b4c4869e35004e360c7df01730ad801b74d524
+    container_name: open-work-hub-prod-hermes-dashboard
+    network_mode: host
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /run:rw,exec,nosuid,nodev,mode=0755
+      - /tmp:rw,exec,nosuid,nodev,mode=1777
+    depends_on:
+      hermes-gateway:
+        condition: service_healthy
+    environment:
+      GATEWAY_MULTIPLEX_PROFILES: "true"
+      HERMES_DASHBOARD_SESSION_TOKEN: ${OPEN_WORK_HUB_HERMES_MANAGEMENT_TOKEN:-}
+      HERMES_GID: "10000"
+      HERMES_UID: "10000"
+    command:
+      - dashboard
+      - --host
+      - 127.0.0.1
+      - --port
+      - ${OPEN_WORK_HUB_HERMES_MANAGEMENT_PORT:-9119}
+      - --no-open
+    volumes:
+      - open-work-hub-prod-hermes-data:/opt/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          curl -fsS
+          "http://127.0.0.1:${OPEN_WORK_HUB_HERMES_MANAGEMENT_PORT:-9119}/api/health"
+          >/dev/null
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
   migrate:
     <<: *open-work-hub-app
     command:
@@ -28,6 +142,10 @@ services:
     <<: *open-work-hub-app
     container_name: open-work-hub-prod-api
     depends_on:
+      hermes-dashboard:
+        condition: service_healthy
+      hermes-gateway:
+        condition: service_healthy
       privacy-filter:
         condition: service_healthy
     command:
@@ -93,6 +211,11 @@ services:
   worker:
     <<: *open-work-hub-app
     container_name: open-work-hub-prod-worker
+    depends_on:
+      hermes-dashboard:
+        condition: service_healthy
+      hermes-gateway:
+        condition: service_healthy
     environment:
       <<: *open-work-hub-app-environment
       OPEN_WORK_HUB_WORKER_QUEUE_GROUP: all
@@ -139,3 +262,5 @@ services:
 volumes:
   open-work-hub-prod-app-runtime:
     name: open-work-hub-prod-app-runtime
+  open-work-hub-prod-hermes-data:
+    name: open-work-hub-prod-hermes-data

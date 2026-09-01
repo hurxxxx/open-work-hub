@@ -27,6 +27,7 @@
 ## Platform Boundaries
 
 - Use existing composition roots, registries, manifests, public APIs, generated contracts, and migrations.
+- For third-party libraries and external tools, prefer the pinned version's documented configuration, public APIs, extension points, and official headless/lifecycle features. Before adding a wrapper, monkey patch, compatibility shim, or duplicated lifecycle/state logic, verify that the official surface cannot meet the requirement. Keep any necessary adapter narrow, version-pinned, fail-closed, tested, and documented with the specific upstream gap; remove it when an official capability replaces it.
 - Shared/auditable state belongs in PostgreSQL or object storage, not UI hiding, browser storage, `/tmp`, process memory, or JSON load-modify-write.
 - Server enforcement owns auth, workspace/execution context, runtime app availability, resource ACL, and fail-closed AI write approval.
 - External file/URL input needs size, type, scheme, host, redirect, timeout, SSRF, cleanup, and failure boundaries.
