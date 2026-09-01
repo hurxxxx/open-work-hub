@@ -68,6 +68,7 @@ def build_profile_config_commands(
         ("fallback_providers", "[]"),
         ("auxiliary.free_only", "false"),
         ("auxiliary.openrouter_model", HERMES_MODEL),
+        ("display.mouse_tracking", "off"),
         ("OPENROUTER_API_KEY", proxy_token),
         ("MCP_OPEN_WORK_HUB_API_KEY", mcp_token),
         ("mcp_servers", mcp_servers),
@@ -187,6 +188,28 @@ def build_runner_command(mode: str) -> list[str]:
     if mode == "yolo":
         command.append("--yolo")
     return command
+
+
+def build_runner_environment(*, proxy_token: str) -> dict[str, str]:
+    return {
+        "HERMES_HOME": _PROFILE_HOME,
+        "HERMES_UID": "10000",
+        "HERMES_GID": "10000",
+        "HERMES_WRITE_SAFE_ROOT": "/workspace",
+        "HERMES_TUI_DISABLE_MOUSE": "1",
+        "OPENROUTER_API_KEY": proxy_token,
+        "HTTP_PROXY": "http://hermes-terminal-egress:19091",
+        "HTTPS_PROXY": "http://hermes-terminal-egress:19090",
+        "http_proxy": "http://hermes-terminal-egress:19091",
+        "https_proxy": "http://hermes-terminal-egress:19090",
+        "NO_PROXY": "hermes-terminal-broker",
+        "no_proxy": "hermes-terminal-broker",
+        "REQUESTS_CA_BUNDLE": "/run/owh-egress/ca.crt",
+        "SSL_CERT_FILE": "/run/owh-egress/ca.crt",
+        "NODE_EXTRA_CA_CERTS": "/run/owh-egress/ca.crt",
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor",
+    }
 
 
 class BrokerRuntimeError(RuntimeError):
@@ -642,23 +665,9 @@ class HermesTerminalBrokerRuntime:
                     self.image,
                     name=container_name,
                     command=command,
-                    environment={
-                        "HERMES_HOME": "/opt/data/profiles/terminal",
-                        "HERMES_UID": "10000",
-                        "HERMES_GID": "10000",
-                        "OPENROUTER_API_KEY": self._proxy_token(),
-                        "HTTP_PROXY": "http://hermes-terminal-egress:19091",
-                        "HTTPS_PROXY": "http://hermes-terminal-egress:19090",
-                        "http_proxy": "http://hermes-terminal-egress:19091",
-                        "https_proxy": "http://hermes-terminal-egress:19090",
-                        "NO_PROXY": "hermes-terminal-broker",
-                        "no_proxy": "hermes-terminal-broker",
-                        "REQUESTS_CA_BUNDLE": "/run/owh-egress/ca.crt",
-                        "SSL_CERT_FILE": "/run/owh-egress/ca.crt",
-                        "NODE_EXTRA_CA_CERTS": "/run/owh-egress/ca.crt",
-                        "TERM": "xterm-256color",
-                        "COLORTERM": "truecolor",
-                    },
+                    environment=build_runner_environment(
+                        proxy_token=self._proxy_token()
+                    ),
                     mounts=build_runner_mounts(
                         profile_volume_name=profile_volume_name,
                         workspace_volume_name=workspace_volume_name,

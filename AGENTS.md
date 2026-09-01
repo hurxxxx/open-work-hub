@@ -44,6 +44,7 @@
 ## Documentation And Skills
 
 - Keep one owner per fact and link to it. Do not create parallel current-truth trees, nested ADRs, progress dumps, or raw QA artifacts.
+- `docs/domains/ai/hermes.md` is the single owner for Hermes setup and runtime configuration. Any change to the pinned image/digest, provider/model/fallback policy, Hermes environment or config keys, ports/base URLs, profile/MCP/tool/egress policy, terminal mounts/workspace/TUI behavior, service topology, lifecycle/limits, or dev/prod bootstrap and deployment must update that document in the same change and run its validation checklist.
 - Keep skills single-purpose and on-demand: concise trigger, boundaries, invariants, workflow, and only necessary resources.
 
 ## Parallel Work

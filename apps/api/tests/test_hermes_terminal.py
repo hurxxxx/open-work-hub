@@ -26,6 +26,7 @@ from open_work_hub_api.domains.hermes_terminal.broker_runtime import (
     build_profile_config_commands,
     build_profile_sanitize_commands,
     build_runner_command,
+    build_runner_environment,
     build_runner_mounts,
 )
 from open_work_hub_api.domains.hermes_terminal.schemas import (
@@ -101,9 +102,25 @@ def test_profile_configuration_disables_fallback_without_model_rewriting() -> No
     assert ["/opt/hermes/.venv/bin/hermes", "config", "unset", "fallback_model"] in commands
     assert "fallback_providers" in serialized
     assert HERMES_MODEL in serialized
+    assert [
+        "/opt/hermes/.venv/bin/hermes",
+        "config",
+        "set",
+        "--force",
+        "display.mouse_tracking",
+        "off",
+    ] in commands
     assert mcp_servers["open-work-hub"]["trust"] == "full"
     assert "google/gemini" not in serialized
     assert "rewrite" not in serialized.lower()
+
+
+def test_runner_environment_uses_official_workspace_and_browser_tui_settings() -> None:
+    environment = build_runner_environment(proxy_token="proxy-token")
+
+    assert environment["HERMES_WRITE_SAFE_ROOT"] == "/workspace"
+    assert environment["HERMES_TUI_DISABLE_MOUSE"] == "1"
+    assert environment["OPENROUTER_API_KEY"] == "proxy-token"
 
 
 def test_profile_export_removes_only_ephemeral_session_credentials() -> None:
@@ -276,6 +293,7 @@ def test_starting_session_adopts_a_runtime_after_an_ambiguous_create_response(
         runtime_handle=None,
         broker_instance_id=None,
         failure_code="hermes_terminal.broker_unavailable",
+        archive_target_status=None,
         started_at=None,
         updated_at=None,
     )
@@ -313,6 +331,62 @@ def test_starting_session_adopts_a_runtime_after_an_ambiguous_create_response(
     assert row.broker_instance_id == "broker-1"
     assert row.failure_code is None
     assert row.started_at is not None
+
+
+def test_archiving_session_recovers_when_an_exited_runtime_restarts(
+    monkeypatch,
+) -> None:
+    ended_at = utcnow_naive()
+    row = SimpleNamespace(
+        status="archiving",
+        runtime_handle="container-old",
+        broker_instance_id="broker-old",
+        failure_code=None,
+        exit_code=0,
+        ended_at=ended_at,
+        archive_target_status="exited",
+        archive_attempts=1,
+        archive_started_at=ended_at,
+        archive_failure_code="hermes_terminal.archive_failed",
+        updated_at=ended_at,
+    )
+
+    class FakeDb:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def scalar(self, _statement):
+            return row
+
+        def add(self, _value):
+            return None
+
+        def commit(self):
+            return None
+
+    monkeypatch.setattr(lifecycle, "get_session_factory", lambda: lambda: FakeDb())
+
+    lifecycle._adopt_terminal_runtime(
+        "session-1",
+        SimpleNamespace(
+            runtime_handle="container-current",
+            broker_instance_id="broker-current",
+            status="running",
+        ),
+    )
+
+    assert row.status == "running"
+    assert row.runtime_handle == "container-current"
+    assert row.broker_instance_id == "broker-current"
+    assert row.exit_code is None
+    assert row.ended_at is None
+    assert row.archive_target_status is None
+    assert row.archive_attempts == 0
+    assert row.archive_started_at is None
+    assert row.archive_failure_code is None
 
 
 def test_consumed_write_approval_fails_closed_without_waiting(monkeypatch) -> None:

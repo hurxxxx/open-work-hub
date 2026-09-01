@@ -242,6 +242,22 @@ def _adopt_terminal_runtime(session_id: str, broker_row) -> None:
             row.status = "running"
             row.failure_code = None
             row.started_at = row.started_at or now
+        elif (
+            row.status == "archiving"
+            and row.archive_target_status == "exited"
+            and broker_row.status == "running"
+        ):
+            # Docker can report a brief exit while an operator restarts the
+            # container. If that same runtime is running again, keep the live
+            # terminal instead of retrying an archive that requires it stopped.
+            row.status = "running"
+            row.failure_code = None
+            row.exit_code = None
+            row.ended_at = None
+            row.archive_target_status = None
+            row.archive_attempts = 0
+            row.archive_started_at = None
+            row.archive_failure_code = None
         row.updated_at = now
         db.add(row)
         db.commit()
