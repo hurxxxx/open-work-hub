@@ -123,6 +123,7 @@ class BrokerSessionCreateRequest(BaseModel):
     rows: int
     mcp_url: str
     mcp_token: str
+    research_sources: dict[str, bool]
     profile_archive_base64: str | None = None
 
 

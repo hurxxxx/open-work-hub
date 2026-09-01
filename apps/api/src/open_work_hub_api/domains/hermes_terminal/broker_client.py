@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+from collections.abc import Mapping
 from urllib.parse import quote
 
 import httpx
@@ -72,6 +73,7 @@ class HermesTerminalBrokerClient:
         rows: int,
         mcp_url: str,
         mcp_token: str,
+        research_sources: Mapping[str, bool],
         profile_archive: bytes | None,
     ) -> BrokerSessionResponse:
         payload = BrokerSessionCreateRequest(
@@ -82,6 +84,7 @@ class HermesTerminalBrokerClient:
             rows=rows,
             mcp_url=mcp_url,
             mcp_token=mcp_token,
+            research_sources=dict(research_sources),
             profile_archive_base64=(
                 base64.b64encode(profile_archive).decode("ascii")
                 if profile_archive is not None

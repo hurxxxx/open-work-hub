@@ -439,6 +439,7 @@ export const resources = {
         'settings-community': '커뮤니티 채널',
         'settings-usage': '사용량 분석',
         'settings-llm': 'LLM 관리',
+        'settings-ai-tools': 'AI 도구 상태',
         'settings-model-monitoring': 'AI 모델 상태',
         'settings-document-processing': '문서 처리 현황',
         'settings-ai-security': 'AI 보안',
@@ -1628,6 +1629,7 @@ export const resources = {
             actions: {
               adminAiRuntimeRetentionScrub: 'AI 런타임 보존 정리',
               adminCompanyAppControlsUpdate: '회사 앱 제어 변경',
+              adminHermesResearchSourceUpdate: 'Hermes 논문 소스 설정 변경',
               adminTeamCreate: '팀 생성',
               adminTeamDelete: '팀 삭제',
               adminTeamMembersReplace: '팀 멤버 교체',
@@ -1759,6 +1761,64 @@ export const resources = {
               models: '모델 카탈로그',
               providers: 'LLM Provider',
               routing: 'LLM 라우팅',
+            },
+          },
+          hermesTools: {
+            extensions: {
+              emptyDescription: '등록되거나 활성화된 항목이 없습니다.',
+              mcp: 'MCP 서버',
+              skills: '스킬',
+            },
+            inventoryLoadFailed:
+              '선택한 프로필의 도구 상태를 불러오지 못했습니다.',
+            loadFailed: 'Hermes 도구 설정을 불러오지 못했습니다.',
+            loading: 'Hermes 런타임 정보를 불러오는 중입니다.',
+            none: '없음',
+            profile: 'Hermes 프로필',
+            profilesEmptyDescription:
+              '사용자가 Hermes를 처음 실행하면 관리 프로필이 생성됩니다.',
+            profilesEmptyTitle: 'Hermes 프로필이 없습니다.',
+            refresh: '새로고침',
+            research: {
+              applicationNote:
+                '변경값은 다음 headless 프로필 조정과 새 터미널 세션부터 적용됩니다. 실행 중인 터미널은 변경하지 않습니다.',
+              columns: {
+                control: '사용',
+                domains: '차단 대상 도메인',
+                source: '논문 소스',
+                status: '현재 설정',
+              },
+              conflict:
+                '다른 관리자가 먼저 변경했습니다. 최신 설정을 다시 불러왔습니다.',
+              description:
+                '논문 조사에 사용할 외부 소스를 각각 켜거나 끕니다. 꺼진 소스는 새 터미널에서 네트워크 수준으로 차단됩니다.',
+              loadingDescription: '저장된 논문 소스 정책을 확인합니다.',
+              loadingTitle: '논문 소스 설정을 불러오는 중입니다.',
+              saveFailed: '논문 소스 설정을 변경하지 못했습니다.',
+              saved: '논문 소스 설정을 저장했습니다.',
+              title: '논문 검색 소스',
+              toggleLabel: '{{source}} 사용 여부',
+            },
+            runtimeSummary:
+              'Hermes {{release}} · 기본 {{model}} · fallback {{fallback}}',
+            status: {
+              disabled: '꺼짐',
+              enabled: '켜짐',
+            },
+            toolsets: {
+              columns: {
+                configured: '구성됨',
+                enabled: '활성',
+                tools: '포함 도구',
+                toolset: '툴셋',
+              },
+              description:
+                '선택한 관리 프로필에서 Hermes 공식 toolsets API가 보고한 활성화·구성 상태입니다.',
+              emptyDescription: 'Hermes가 보고한 툴셋이 없습니다.',
+              emptyTitle: '툴셋 상태가 없습니다.',
+              loadingDescription: '선택한 프로필의 toolsets를 확인합니다.',
+              loadingTitle: '툴셋 상태를 불러오는 중입니다.',
+              title: 'Hermes 툴 상태',
             },
           },
           modelMonitoring: {
@@ -3730,6 +3790,11 @@ export const resources = {
               description:
                 'Provider 연결과 승인 모델, 앱·기능별 실행 경로 및 출력 상한을 관리합니다.',
               title: 'LLM 관리',
+            },
+            aiTools: {
+              description:
+                'Hermes 툴셋, MCP, 스킬 상태와 논문 검색 소스 정책을 확인하고 관리합니다.',
+              title: 'AI 도구 상태',
             },
             modelMonitoring: {
               description:
@@ -6557,6 +6622,7 @@ export const resources = {
         'settings-community': 'Community Channels',
         'settings-usage': 'Usage Analytics',
         'settings-llm': 'LLM Management',
+        'settings-ai-tools': 'AI Tool Status',
         'settings-model-monitoring': 'AI Model Status',
         'settings-document-processing': 'Document Processing',
         'settings-ai-security': 'AI Security',
@@ -7763,6 +7829,8 @@ export const resources = {
             actions: {
               adminAiRuntimeRetentionScrub: 'AI runtime retention scrub',
               adminCompanyAppControlsUpdate: 'Company app controls changed',
+              adminHermesResearchSourceUpdate:
+                'Hermes research source setting changed',
               adminTeamCreate: 'Team created',
               adminTeamDelete: 'Team deleted',
               adminTeamMembersReplace: 'Team members replaced',
@@ -7899,6 +7967,64 @@ export const resources = {
               models: 'Model catalog',
               providers: 'LLM Providers',
               routing: 'LLM Routing',
+            },
+          },
+          hermesTools: {
+            extensions: {
+              emptyDescription: 'No registered or active items are available.',
+              mcp: 'MCP servers',
+              skills: 'Skills',
+            },
+            inventoryLoadFailed:
+              'Failed to load tool status for the selected profile.',
+            loadFailed: 'Failed to load Hermes tool settings.',
+            loading: 'Loading Hermes runtime information.',
+            none: 'None',
+            profile: 'Hermes profile',
+            profilesEmptyDescription:
+              'A managed profile is created when a user first runs Hermes.',
+            profilesEmptyTitle: 'No Hermes profiles',
+            refresh: 'Refresh',
+            research: {
+              applicationNote:
+                'Changes apply on the next headless profile reconciliation and to new terminal sessions. Running terminals are not changed.',
+              columns: {
+                control: 'Use',
+                domains: 'Blocked domains',
+                source: 'Research source',
+                status: 'Current setting',
+              },
+              conflict:
+                'Another administrator changed the setting first. The latest settings were reloaded.',
+              description:
+                'Enable or disable each external paper-research source. Disabled sources are blocked at the network layer in new terminals.',
+              loadingDescription: 'Checking the saved research source policy.',
+              loadingTitle: 'Loading research source settings',
+              saveFailed: 'Failed to change the research source setting.',
+              saved: 'Research source setting saved.',
+              title: 'Paper research sources',
+              toggleLabel: 'Use {{source}}',
+            },
+            runtimeSummary:
+              'Hermes {{release}} · primary {{model}} · fallback {{fallback}}',
+            status: {
+              disabled: 'Off',
+              enabled: 'On',
+            },
+            toolsets: {
+              columns: {
+                configured: 'Configured',
+                enabled: 'Enabled',
+                tools: 'Included tools',
+                toolset: 'Toolset',
+              },
+              description:
+                'Enablement and configuration status reported by the official Hermes toolsets API for the selected managed profile.',
+              emptyDescription: 'Hermes did not report any toolsets.',
+              emptyTitle: 'No toolset status',
+              loadingDescription: 'Checking toolsets for the selected profile.',
+              loadingTitle: 'Loading toolset status',
+              title: 'Hermes tool status',
             },
           },
           modelMonitoring: {
@@ -9897,6 +10023,11 @@ export const resources = {
               description:
                 'Manage provider connections, approved models, and per-app and per-feature routes and output limits.',
               title: 'LLM management',
+            },
+            aiTools: {
+              description:
+                'Review and manage Hermes toolsets, MCP and skill status, and paper-research source policy.',
+              title: 'AI tool status',
             },
             modelMonitoring: {
               description:

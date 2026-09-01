@@ -39,6 +39,9 @@ from open_work_hub_api.domains.auth.workspace_app_gate import (
     resolve_enabled_app_ids_for_user_context,
 )
 from open_work_hub_api.domains.hermes.repository import get_or_create_profile_binding
+from open_work_hub_api.domains.hermes.research_settings import (
+    get_research_source_policy,
+)
 from open_work_hub_api.domains.hermes_terminal.broker_client import (
     HermesTerminalBrokerClient,
     HermesTerminalBrokerError,
@@ -352,6 +355,7 @@ async def create_session(
             rows=payload.rows,
             mcp_url=f"{settings.hermes_terminal_mcp_relay_url}/{session_id}",
             mcp_token=mcp_token,
+            research_sources=get_research_source_policy(db),
             profile_archive=profile_archive,
         )
     except (HermesTerminalBrokerError, S3Error, OSError) as error:

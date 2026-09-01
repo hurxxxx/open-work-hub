@@ -18,6 +18,10 @@ from open_work_hub_api.domains.hermes.client import (
     HermesRuntimeClient,
 )
 from open_work_hub_api.domains.hermes.models import HermesProfileBinding
+from open_work_hub_api.domains.hermes.research_settings import (
+    get_research_settings,
+)
+from open_work_hub_api.domains.hermes.research_sources import ResearchSourceId
 from open_work_hub_api.domains.hermes.repository import get_or_create_profile_binding
 
 
@@ -29,6 +33,11 @@ _JOB_PROFILE_RECONCILE_TTL_SECONDS = 300.0
 _PROFILE_RECONCILE_TTL_SECONDS = 300.0
 _job_profile_reconciled_until: dict[str, float] = {}
 _profile_reconciled_until: dict[str, float] = {}
+
+
+def invalidate_profile_policy_cache() -> None:
+    _job_profile_reconciled_until.clear()
+    _profile_reconciled_until.clear()
 
 
 def _reconcile_cache_hit(
@@ -187,6 +196,8 @@ async def ensure_job_profile(
     *,
     settings: Settings | None = None,
     client: HermesManagementClient | None = None,
+    research_sources: dict[ResearchSourceId, bool] | None = None,
+    research_policy_revision: int = 0,
 ) -> str:
     """Provision the cron-only profile without any MCP servers.
 
@@ -196,10 +207,11 @@ async def ensure_job_profile(
     """
     resolved = require_hermes_enabled(settings)
     profile_name = job_profile_name(binding)
+    reconcile_key = f"{profile_name}:research:{research_policy_revision}"
     now = monotonic()
     if _reconcile_cache_hit(
         _job_profile_reconciled_until,
-        profile_name,
+        reconcile_key,
         now=now,
     ):
         return profile_name
@@ -219,7 +231,10 @@ async def ensure_job_profile(
             profiles = await control.list_profiles()
             if profile_name not in _profile_names(profiles):
                 raise
-    await control.set_profile_model(profile_name)
+    await control.set_profile_model(
+        profile_name,
+        research_sources=research_sources,
+    )
     mcp_servers = await control.list_mcp_servers(profile_name)
     for server_name in sorted(_mcp_server_names(mcp_servers)):
         try:
@@ -235,7 +250,7 @@ async def ensure_job_profile(
             code="hermes.job_profile_mcp_not_empty",
             message="The isolated Hermes job profile still has MCP servers configured.",
         )
-    _job_profile_reconciled_until[profile_name] = (
+    _job_profile_reconciled_until[reconcile_key] = (
         monotonic() + _JOB_PROFILE_RECONCILE_TTL_SECONDS
     )
     return profile_name
@@ -248,15 +263,27 @@ async def ensure_profile_binding(
     user: User,
     settings: Settings | None = None,
     client: HermesManagementClient | None = None,
+    research_sources: dict[ResearchSourceId, bool] | None = None,
+    research_policy_revision: int | None = None,
 ) -> HermesProfileBinding:
     resolved = require_hermes_enabled(settings)
     binding = get_or_create_profile_binding(db, workspace=workspace, user=user)
     db.commit()
     db.refresh(binding)
+    if research_sources is None or research_policy_revision is None:
+        research_settings = get_research_settings(db)
+        resolved_research_sources = research_settings.policy
+        resolved_research_policy_revision = research_settings.revision
+    else:
+        resolved_research_sources = research_sources
+        resolved_research_policy_revision = research_policy_revision
+    reconcile_key = (
+        f"{binding.profile_name}:research:{resolved_research_policy_revision}"
+    )
     cache_now = monotonic()
     if binding.status == "active" and _reconcile_cache_hit(
         _profile_reconciled_until,
-        binding.profile_name,
+        reconcile_key,
         now=cache_now,
     ):
         return binding
@@ -281,7 +308,10 @@ async def ensure_profile_binding(
                 profiles = await control.list_profiles()
                 if binding.profile_name not in _profile_names(profiles):
                     raise
-        await control.set_profile_model(binding.profile_name)
+        await control.set_profile_model(
+            binding.profile_name,
+            research_sources=resolved_research_sources,
+        )
         mcp_servers = await control.list_mcp_servers(binding.profile_name)
         server_rows = _mcp_server_rows(mcp_servers)
         server_names = set(server_rows)
@@ -376,7 +406,7 @@ async def ensure_profile_binding(
     db.add(binding)
     db.commit()
     db.refresh(binding)
-    _profile_reconciled_until[binding.profile_name] = (
+    _profile_reconciled_until[reconcile_key] = (
         monotonic() + _PROFILE_RECONCILE_TTL_SECONDS
     )
     return binding

@@ -10,17 +10,30 @@ from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.db import get_db_session
 from open_work_hub_api.core.settings import (
+    HERMES_FALLBACK_MODEL,
     HERMES_MODEL,
     HERMES_PROVIDER,
     HERMES_RELEASE,
     get_settings,
 )
+from open_work_hub_api.domains.auth.access import record_audit_log
 from open_work_hub_api.domains.auth.dependencies import AuthContext, require_admin_context
 from open_work_hub_api.domains.auth.models import User, Workspace
 from open_work_hub_api.domains.hermes.client import HermesClientError
 from open_work_hub_api.domains.hermes.models import (
     HermesProfileBinding,
     HermesRunProjection,
+)
+from open_work_hub_api.domains.hermes.research_settings import (
+    HermesResearchSettingsConflictError,
+    HermesResearchSettingsSnapshot,
+    get_research_settings,
+    get_research_source_policy,
+    update_research_source,
+)
+from open_work_hub_api.domains.hermes.research_sources import (
+    RESEARCH_SOURCE_DEFINITIONS,
+    ResearchSourceId,
 )
 from open_work_hub_api.domains.hermes.service import (
     ensure_profile_binding,
@@ -29,6 +42,7 @@ from open_work_hub_api.domains.hermes.service import (
     management_client,
     runtime_client,
     scoped_mcp_server_name,
+    invalidate_profile_policy_cache,
 )
 
 
@@ -40,6 +54,7 @@ class AdminHermesSummaryResponse(BaseModel):
     release: str
     provider: str
     model: str
+    fallback_model: str
     profile_counts: dict[str, int]
     run_counts: dict[str, int]
 
@@ -60,9 +75,19 @@ class AdminHermesProfileListResponse(BaseModel):
     data: list[AdminHermesProfileResponse]
 
 
+class AdminHermesToolsetResponse(BaseModel):
+    name: str
+    label: str
+    description: str
+    enabled: bool
+    configured: bool
+    tools: list[str] = Field(default_factory=list)
+
+
 class AdminHermesInventoryResponse(BaseModel):
     profile: AdminHermesProfileResponse
     capabilities: dict[str, Any] = Field(default_factory=dict)
+    toolsets: list[AdminHermesToolsetResponse] = Field(default_factory=list)
     mcp_servers: list[dict[str, Any]] = Field(default_factory=list)
     skills: list[dict[str, Any]] = Field(default_factory=list)
 
@@ -92,6 +117,25 @@ class AdminHermesMcpToggle(BaseModel):
     enabled: bool
 
 
+class AdminHermesResearchSourceResponse(BaseModel):
+    id: ResearchSourceId
+    display_name: str
+    enabled: bool
+    domains: list[str]
+
+
+class AdminHermesResearchSettingsResponse(BaseModel):
+    revision: int
+    sources: list[AdminHermesResearchSourceResponse]
+    updated_at: str | None = None
+    updated_by: str | None = None
+
+
+class AdminHermesResearchSourceUpdate(BaseModel):
+    enabled: bool
+    expected_revision: int = Field(ge=0)
+
+
 def _profile_response(binding: HermesProfileBinding) -> AdminHermesProfileResponse:
     return AdminHermesProfileResponse.model_validate(
         {
@@ -113,6 +157,27 @@ def _require_profile(db: Session, binding_id: str) -> HermesProfileBinding:
     if binding is None:
         raise HTTPException(status_code=404, detail={"code": "hermes.profile_not_found"})
     return binding
+
+
+def _research_settings_response(
+    snapshot: HermesResearchSettingsSnapshot,
+) -> AdminHermesResearchSettingsResponse:
+    return AdminHermesResearchSettingsResponse(
+        revision=snapshot.revision,
+        sources=[
+            AdminHermesResearchSourceResponse(
+                id=source.id,
+                display_name=source.display_name,
+                enabled=snapshot.policy[source.id],
+                domains=list(source.domains),
+            )
+            for source in RESEARCH_SOURCE_DEFINITIONS
+        ],
+        updated_at=(
+            snapshot.updated_at.isoformat() if snapshot.updated_at is not None else None
+        ),
+        updated_by=snapshot.updated_by,
+    )
 
 
 def _raise_client_error(error: HermesClientError) -> None:
@@ -147,6 +212,7 @@ def get_hermes_summary(
         release=HERMES_RELEASE,
         provider=HERMES_PROVIDER,
         model=HERMES_MODEL,
+        fallback_model=HERMES_FALLBACK_MODEL,
         profile_counts=profile_counts,
         run_counts=run_counts,
     )
@@ -203,8 +269,9 @@ async def get_hermes_profile_inventory(
 ) -> AdminHermesInventoryResponse:
     binding = _require_profile(db, binding_id)
     try:
-        capabilities, mcp_payload, skills_payload = await asyncio.gather(
+        capabilities, toolsets_payload, mcp_payload, skills_payload = await asyncio.gather(
             runtime_client().capabilities(binding.profile_name),
+            runtime_client().toolsets(binding.profile_name),
             management_client().list_mcp_servers(binding.profile_name),
             management_client().list_skills(binding.profile_name),
         )
@@ -213,11 +280,65 @@ async def get_hermes_profile_inventory(
     return AdminHermesInventoryResponse(
         profile=_profile_response(binding),
         capabilities=capabilities,
+        toolsets=(
+            toolsets_payload.get("data", [])
+            if isinstance(toolsets_payload, dict)
+            else []
+        ),
         mcp_servers=(
             mcp_payload.get("servers", []) if isinstance(mcp_payload, dict) else []
         ),
         skills=(skills_payload.get("skills", []) if isinstance(skills_payload, dict) else []),
     )
+
+
+@router.get(
+    "/research-sources",
+    response_model=AdminHermesResearchSettingsResponse,
+)
+def get_hermes_research_sources(
+    db: Session = Depends(get_db_session),
+    _admin: AuthContext = Depends(require_admin_context),
+) -> AdminHermesResearchSettingsResponse:
+    return _research_settings_response(get_research_settings(db))
+
+
+@router.put(
+    "/research-sources/{source_id}",
+    response_model=AdminHermesResearchSettingsResponse,
+)
+def put_hermes_research_source(
+    source_id: ResearchSourceId,
+    body: AdminHermesResearchSourceUpdate,
+    db: Session = Depends(get_db_session),
+    admin: AuthContext = Depends(require_admin_context),
+) -> AdminHermesResearchSettingsResponse:
+    try:
+        snapshot = update_research_source(
+            db,
+            source_id=source_id,
+            enabled=body.enabled,
+            expected_revision=body.expected_revision,
+            actor_user_id=admin.user.id,
+        )
+    except HermesResearchSettingsConflictError as error:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "hermes.research_settings_conflict"},
+        ) from error
+    record_audit_log(
+        db,
+        actor_user_id=admin.user.id,
+        action="admin.hermes.research_source.update",
+        entity_kind="hermes_research_source",
+        entity_id=source_id,
+        summary=f"Updated Hermes research source {source_id}",
+        payload={"source_id": source_id, "enabled": body.enabled},
+    )
+    db.commit()
+    invalidate_profile_policy_cache()
+    return _research_settings_response(snapshot)
 
 
 @router.post(
@@ -231,7 +352,10 @@ async def enforce_hermes_profile_model(
 ) -> AdminHermesProfileResponse:
     binding = _require_profile(db, binding_id)
     try:
-        await management_client().set_profile_model(binding.profile_name)
+        await management_client().set_profile_model(
+            binding.profile_name,
+            research_sources=get_research_source_policy(db),
+        )
     except HermesClientError as error:
         _raise_client_error(error)
     binding.provider = HERMES_PROVIDER

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import os
+import socket
+import threading
 from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -10,23 +13,39 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
+from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from open_work_hub_api.core.app_contracts_generated import APP_CONTRACT_BY_ID
-from open_work_hub_api.core.settings import HERMES_MODEL, HERMES_PROVIDER, Settings
+from open_work_hub_api.core.settings import (
+    HERMES_FALLBACK_MODEL,
+    HERMES_MODEL,
+    HERMES_PROVIDER,
+    Settings,
+)
 from open_work_hub_api.domains.auth.models import User, Workspace, utcnow_naive
 from open_work_hub_api.domains.hermes.models import HermesProfileBinding
+from open_work_hub_api.domains.hermes.research_sources import (
+    DEFAULT_RESEARCH_SOURCE_POLICY,
+)
 from open_work_hub_api.domains.hermes_terminal.app_catalog import HERMES_TERMINAL_APP
-from open_work_hub_api.domains.hermes_terminal import lifecycle, maintenance, mcp_router
+from open_work_hub_api.domains.hermes_terminal import (
+    broker_app,
+    lifecycle,
+    maintenance,
+    mcp_router,
+)
 from open_work_hub_api.domains.hermes_terminal.broker_runtime import (
     BrokerRuntimeError,
     HermesTerminalBrokerRuntime,
     build_profile_config_commands,
+    build_profile_export_cleanup_commands,
     build_profile_sanitize_commands,
     build_runner_command,
     build_runner_environment,
+    build_runner_io_options,
     build_runner_mounts,
 )
 from open_work_hub_api.domains.hermes_terminal.schemas import (
@@ -56,6 +75,16 @@ def test_catalog_exposes_a_workspace_personal_app_to_all_members() -> None:
     assert APP_CONTRACT_BY_ID["hermes-terminal"]["resource_scope"] == "personal"
     assert HERMES_TERMINAL_APP.required_system_roles == ()
     assert HERMES_TERMINAL_APP.feature_flag == "hermes_enabled"
+
+
+def test_broker_image_packages_research_source_policy_module() -> None:
+    repository_root = Path(__file__).resolve().parents[3]
+    dockerfile = (
+        repository_root / "ops/hermes-terminal-broker/Dockerfile"
+    ).read_text(encoding="utf-8")
+
+    assert "domains/hermes/__init__.py" in dockerfile
+    assert "domains/hermes/research_sources.py" in dockerfile
 
 
 def test_standard_and_yolo_commands_use_only_official_hermes_flags() -> None:
@@ -88,13 +117,18 @@ def test_yolo_requires_a_fresh_explicit_acknowledgement() -> None:
     assert request.risk_acknowledged is True
 
 
-def test_profile_configuration_disables_fallback_without_model_rewriting() -> None:
+def test_profile_configuration_applies_managed_resilience_policy() -> None:
     commands = build_profile_config_commands(
         mcp_url="http://hermes-terminal-broker:18765/mcp/session-id",
         proxy_token="proxy-token-for-test-00000001",
         mcp_token="session-token-for-test-00000001",
     )
     serialized = json.dumps(commands)
+    values = {
+        command[-2]: command[-1]
+        for command in commands
+        if command[1:4] == ["config", "set", "--force"]
+    }
     mcp_command = next(command for command in commands if command[-2] == "mcp_servers")
     mcp_servers = json.loads(mcp_command[-1])
 
@@ -102,6 +136,18 @@ def test_profile_configuration_disables_fallback_without_model_rewriting() -> No
     assert ["/opt/hermes/.venv/bin/hermes", "config", "unset", "fallback_model"] in commands
     assert "fallback_providers" in serialized
     assert HERMES_MODEL in serialized
+    assert json.loads(values["fallback_providers"]) == [
+        {"provider": HERMES_PROVIDER, "model": HERMES_FALLBACK_MODEL}
+    ]
+    assert json.loads(values["model.default_headers"]) == {
+        "X-OpenRouter-Metadata": "enabled"
+    }
+    assert values["agent.api_max_retries"] == "1"
+    assert "Semantic Scholar is disabled" in values["agent.environment_hint"]
+    assert values["compression.threshold_tokens"] == "100000"
+    assert values["compression.proactive_prune_tokens"] == "48000"
+    assert values["provider_routing.sort"] == "throughput"
+    assert values["provider_routing.require_parameters"] == "true"
     assert [
         "/opt/hermes/.venv/bin/hermes",
         "config",
@@ -120,7 +166,148 @@ def test_runner_environment_uses_official_workspace_and_browser_tui_settings() -
 
     assert environment["HERMES_WRITE_SAFE_ROOT"] == "/workspace"
     assert environment["HERMES_TUI_DISABLE_MOUSE"] == "1"
+    assert environment["XDG_CACHE_HOME"] == "/opt/data/cache"
+    assert environment["UV_CACHE_DIR"] == "/opt/data/cache/uv"
     assert environment["OPENROUTER_API_KEY"] == "proxy-token"
+    assert "semanticscholar.org" in environment["NO_PROXY"]
+    assert environment["no_proxy"] == environment["NO_PROXY"]
+
+
+def test_research_sources_are_individually_enabled_and_disabled() -> None:
+    policy = dict(DEFAULT_RESEARCH_SOURCE_POLICY)
+    policy["semantic_scholar"] = True
+    policy["arxiv"] = False
+    policy["crossref"] = False
+
+    commands = build_profile_config_commands(
+        mcp_url="http://hermes-terminal-broker:18765/mcp/session-id",
+        proxy_token="proxy-token-for-test-00000001",
+        mcp_token="session-token-for-test-00000001",
+        research_sources=policy,
+    )
+    values = {
+        command[-2]: command[-1]
+        for command in commands
+        if command[1:4] == ["config", "set", "--force"]
+    }
+    environment = build_runner_environment(
+        proxy_token="proxy-token",
+        research_sources=policy,
+    )
+
+    assert "arXiv, Crossref are disabled" in values["agent.environment_hint"]
+    assert "Semantic Scholar, OpenAlex" in values["agent.environment_hint"]
+    assert "arxiv.org" in environment["NO_PROXY"]
+    assert "crossref.org" in environment["NO_PROXY"]
+    assert "semanticscholar.org" not in environment["NO_PROXY"]
+    assert "openalex.org" not in environment["NO_PROXY"]
+
+
+def test_all_enabled_research_sources_remove_the_managed_hint() -> None:
+    policy = {source_id: True for source_id in DEFAULT_RESEARCH_SOURCE_POLICY}
+    commands = build_profile_config_commands(
+        mcp_url="http://hermes-terminal-broker:18765/mcp/session-id",
+        proxy_token="proxy-token-for-test-00000001",
+        mcp_token="session-token-for-test-00000001",
+        research_sources=policy,
+    )
+
+    assert [
+        "/opt/hermes/.venv/bin/hermes",
+        "config",
+        "unset",
+        "agent.environment_hint",
+    ] in commands
+    assert build_runner_environment(
+        proxy_token="proxy-token",
+        research_sources=policy,
+    )["NO_PROXY"] == "hermes-terminal-broker"
+
+
+def test_runner_keeps_a_reusable_detached_tty() -> None:
+    assert build_runner_io_options() == {
+        "detach": True,
+        "stdin_open": True,
+        "tty": True,
+    }
+
+
+def test_broker_websocket_disconnect_closes_the_raw_docker_socket(
+    monkeypatch,
+) -> None:
+    root_secret = "terminal-test-mcp-secret-00000000000000000001"
+    monkeypatch.setenv("OPEN_WORK_HUB_HERMES_MCP_SHARED_SECRET", root_secret)
+
+    class FakeAttached:
+        def __init__(self) -> None:
+            self._sock, self.peer = socket.socketpair()
+            self.wrapper_closed = threading.Event()
+
+        def close(self) -> None:
+            self.wrapper_closed.set()
+
+    class FakeContainer:
+        status = "running"
+        attrs = {"State": {}}
+
+        def reload(self) -> None:
+            return None
+
+    class FakeRuntime:
+        instance_id = "test-broker"
+
+        def __init__(self) -> None:
+            self.attachments: list[FakeAttached] = []
+
+        def attach_socket(self, _session_id: str):
+            attached = FakeAttached()
+            self.attachments.append(attached)
+            return attached, FakeContainer()
+
+    fake_runtime = FakeRuntime()
+    monkeypatch.setattr(broker_app, "runtime", lambda: fake_runtime)
+    session_id = str(uuid4())
+    headers = {"authorization": f"Bearer {broker_app._broker_token()}"}
+
+    with TestClient(broker_app.app) as client:
+        with client.websocket_connect(
+            f"/v1/sessions/{session_id}/attach",
+            headers=headers,
+        ) as websocket:
+            assert websocket.receive_json() == {"type": "ready", "active": True}
+            attached = fake_runtime.attachments[-1]
+            attached.peer.sendall(b"terminal output")
+            output = websocket.receive_json()
+            assert output["type"] == "output"
+            assert base64.b64decode(output["data"]) == b"terminal output"
+
+            websocket.send_json(
+                {
+                    "type": "input",
+                    "data": base64.b64encode(b"terminal input").decode("ascii"),
+                }
+            )
+            attached.peer.settimeout(1)
+            assert attached.peer.recv(1024) == b"terminal input"
+
+            websocket.close()
+            assert attached.wrapper_closed.wait(timeout=1)
+
+        assert attached._sock.fileno() == -1
+        attached.peer.close()
+
+        with client.websocket_connect(
+            f"/v1/sessions/{session_id}/attach",
+            headers=headers,
+        ) as websocket:
+            assert websocket.receive_json() == {"type": "ready", "active": True}
+            reattached = fake_runtime.attachments[-1]
+
+            websocket.close()
+            assert reattached.wrapper_closed.wait(timeout=1)
+
+        assert reattached._sock.fileno() == -1
+        reattached.peer.close()
 
 
 def test_profile_export_removes_only_ephemeral_session_credentials() -> None:
@@ -138,6 +325,101 @@ def test_profile_export_removes_only_ephemeral_session_credentials() -> None:
             "MCP_OPEN_WORK_HUB_API_KEY",
         ],
     ]
+
+
+def test_profile_export_cleans_regenerable_state_with_official_commands() -> None:
+    assert build_profile_export_cleanup_commands() == [
+        [
+            "/opt/hermes/.venv/bin/hermes",
+            "checkpoints",
+            "clear",
+            "--force",
+        ],
+        [
+            "/usr/local/bin/uv",
+            "cache",
+            "clean",
+            "--force",
+            "--cache-dir",
+            "/opt/data/profiles/terminal/home/.cache/uv",
+        ],
+    ]
+
+
+def test_profile_export_cleanup_uses_the_private_profile_identity() -> None:
+    calls: list[tuple[list[str], dict[str, object]]] = []
+
+    class FakeContainer:
+        def exec_run(self, command, **kwargs):
+            calls.append((command, kwargs))
+            return SimpleNamespace(exit_code=0, output=b"")
+
+    HermesTerminalBrokerRuntime._cleanup_profile_for_export(  # type: ignore[arg-type]
+        FakeContainer(),
+    )
+
+    expected_environment = {
+        "HOME": "/opt/data/profiles/terminal",
+        "HERMES_HOME": "/opt/data/profiles/terminal",
+        "UV_CACHE_DIR": "/opt/data/profiles/terminal/home/.cache/uv",
+    }
+    assert calls == [
+        (
+            command,
+            {
+                "environment": expected_environment,
+                "user": "10000:10000",
+            },
+        )
+        for command in build_profile_export_cleanup_commands()
+    ]
+
+
+def test_profile_export_stages_on_the_private_volume_for_docker_copy() -> None:
+    calls: list[tuple[list[str], dict[str, object]]] = []
+    archive_paths: list[str] = []
+
+    class FakeRunner:
+        status = "exited"
+
+        def reload(self) -> None:
+            return None
+
+    class FakeUtility:
+        def exec_run(self, command, **kwargs):
+            calls.append((command, kwargs))
+            return SimpleNamespace(exit_code=0, output=b"")
+
+        def get_archive(self, path):
+            archive_paths.append(path)
+            return iter([b"docker archive"]), {}
+
+        def remove(self, *, force):
+            assert force is True
+
+    runtime = object.__new__(HermesTerminalBrokerRuntime)
+    runtime.profile_archive_max_bytes = 64 * 1024 * 1024
+    runtime._find_container = lambda _session_id: (  # type: ignore[method-assign]
+        FakeRunner(),
+        SimpleNamespace(profile_volume_name="private-profile-volume"),
+    )
+    utility = FakeUtility()
+    runtime._utility_container = lambda _volume_name: utility  # type: ignore[method-assign]
+    runtime._extract_single_file = (  # type: ignore[method-assign]
+        lambda _archive, *, basename, max_bytes: (
+            b"profile archive"
+            if basename == ".owh-terminal-profile-export.tar.gz"
+            and max_bytes == 64 * 1024 * 1024
+            else b"unexpected"
+        )
+    )
+
+    assert runtime.export_profile("session-1") == b"profile archive"
+    assert archive_paths == ["/opt/data/.owh-terminal-profile-export.tar.gz"]
+    assert (
+        ["rm", "-f", "/opt/data/.owh-terminal-profile-export.tar.gz"],
+        {"user": "10000:10000"},
+    ) in calls
 
 
 def test_profile_cli_uses_runner_identity_and_repairs_only_ownership() -> None:

@@ -23,6 +23,8 @@ const ACTION_LABEL_KEYS: Record<string, string> = {
     'admin.console.audit.actions.adminAiRuntimeRetentionScrub',
   'admin.company_app_controls.update':
     'admin.console.audit.actions.adminCompanyAppControlsUpdate',
+  'admin.hermes.research_source.update':
+    'admin.console.audit.actions.adminHermesResearchSourceUpdate',
   'admin.team.create': 'admin.console.audit.actions.adminTeamCreate',
   'admin.team.delete': 'admin.console.audit.actions.adminTeamDelete',
   'admin.team.members.replace':

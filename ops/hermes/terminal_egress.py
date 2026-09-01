@@ -30,6 +30,7 @@ from agent.proxy_sources.iron_proxy import (
 
 
 _TUNNEL_PORT = 19090
+_UPSTREAM_RESPONSE_HEADER_TIMEOUT = "300s"
 _CLIENT_DIR = Path(os.environ.get("OWH_HERMES_TERMINAL_EGRESS_CLIENT_DIR", "/opt/data/home/egress-client"))
 _stop_requested = False
 
@@ -53,6 +54,15 @@ def _write_client_file(name: str, data: str, *, mode: int) -> None:
     temporary.write_text(data, encoding="utf-8")
     temporary.chmod(mode)
     temporary.replace(target)
+
+
+def _apply_managed_proxy_policy(config: dict) -> None:
+    proxy = config.get("proxy")
+    if not isinstance(proxy, dict):
+        raise RuntimeError("Hermes iron-proxy config is missing its proxy section")
+    # The pinned upstream helper emits 120s. Long model turns observed in this
+    # deployment need more headroom, while 300s still bounds a dead upstream.
+    proxy["upstream_response_header_timeout"] = _UPSTREAM_RESPONSE_HEADER_TIMEOUT
 
 
 def main() -> None:
@@ -88,6 +98,7 @@ def main() -> None:
         # never exposed on a host/LAN interface.
         http_listen=[f"0.0.0.0:{_TUNNEL_PORT}"],
     )
+    _apply_managed_proxy_policy(config)
     # v0.39 evaluates this setting on CONNECT before origin headers exist.
     config["transforms"][1]["config"]["secrets"][0]["replace"]["require"] = False
     config_path = write_proxy_config(config)

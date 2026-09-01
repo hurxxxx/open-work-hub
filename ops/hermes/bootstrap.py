@@ -27,6 +27,18 @@ from hermes_constants import (
 _MANAGED_PROFILE_PATTERN = re.compile(r"^owh-[0-9a-f]{32}(?:-jobs)?$")
 _FIXED_PROVIDER = "openrouter"
 _FIXED_MODEL = "qwen/qwen3.8-flash"
+_FALLBACK_MODEL = "z-ai/glm-5.3-flash"
+_OPENROUTER_METADATA_HEADERS = {"X-OpenRouter-Metadata": "enabled"}
+_COMPRESSION_POLICY = {
+    "enabled": True,
+    "threshold": 0.50,
+    "threshold_tokens": 100_000,
+    "target_ratio": 0.20,
+    "protect_last_n": 20,
+    "proactive_prune_tokens": 48_000,
+    "proactive_prune_min_result_chars": 8_000,
+    "proactive_prune_min_reclaim_tokens": 4_096,
+}
 
 
 def _is_open_work_hub_profile(profile_name: str) -> bool:
@@ -36,21 +48,47 @@ def _is_open_work_hub_profile(profile_name: str) -> bool:
 
 
 def _apply_fixed_model_policy(config: dict[str, Any]) -> bool:
-    """Apply Hermes' official fixed-model and fallback settings.
+    """Apply Open Work Hub's managed Hermes resilience policy.
 
     Hermes auxiliary tasks have an independent built-in OpenRouter fallback
     model. ``auxiliary.openrouter_model`` replaces that default without
-    patching Hermes' runtime. Modern and legacy primary fallback chains are
-    disabled separately.
+    patching Hermes' runtime. The primary chain uses Hermes' public fallback,
+    routing, retry, and compression settings. Research-source policy is owned
+    by the administrator setting and reconciled by the API per managed profile.
     """
 
     before = deepcopy(config)
     config["model"] = {
         "provider": _FIXED_PROVIDER,
         "default": _FIXED_MODEL,
+        "default_headers": dict(_OPENROUTER_METADATA_HEADERS),
     }
-    config["fallback_providers"] = []
+    config["fallback_providers"] = [
+        {"provider": _FIXED_PROVIDER, "model": _FALLBACK_MODEL}
+    ]
     config.pop("fallback_model", None)
+
+    agent = config.get("agent")
+    if not isinstance(agent, dict):
+        agent = {}
+        config["agent"] = agent
+    # In the pinned Hermes release, 1 means one total primary attempt before
+    # fallback. The primary OpenAI-compatible client already sets SDK retries
+    # to zero, so this remains the single retry/failover owner.
+    agent["api_max_retries"] = 1
+
+    config["compression"] = {
+        **(
+            config["compression"]
+            if isinstance(config.get("compression"), dict)
+            else {}
+        ),
+        **_COMPRESSION_POLICY,
+    }
+    config["provider_routing"] = {
+        "sort": "throughput",
+        "require_parameters": True,
+    }
 
     auxiliary = config.get("auxiliary")
     if not isinstance(auxiliary, dict):

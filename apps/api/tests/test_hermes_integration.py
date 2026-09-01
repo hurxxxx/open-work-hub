@@ -11,7 +11,11 @@ from fastapi import HTTPException
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-from open_work_hub_api.core.settings import HERMES_MODEL, HERMES_PROVIDER
+from open_work_hub_api.core.settings import (
+    HERMES_FALLBACK_MODEL,
+    HERMES_MODEL,
+    HERMES_PROVIDER,
+)
 from open_work_hub_api.domains.auth.models import User, Workspace
 from open_work_hub_api.domains.hermes import mcp_router
 from open_work_hub_api.domains.hermes import router as hermes_router
@@ -31,6 +35,9 @@ from open_work_hub_api.domains.hermes.models import (
 from open_work_hub_api.domains.hermes.repository import (
     HermesRunRepository,
     sanitize_event_payload,
+)
+from open_work_hub_api.domains.hermes.research_sources import (
+    DEFAULT_RESEARCH_SOURCE_POLICY,
 )
 from open_work_hub_api.domains.hermes.schemas import HermesApprovalDecision, HermesRunCreate
 from open_work_hub_api.domains.hermes.service import (
@@ -201,7 +208,7 @@ async def test_management_client_pins_openrouter_model_and_dashboard_token() -> 
     }
 
 
-async def test_management_client_replaces_auxiliary_gemini_fallback() -> None:
+async def test_management_client_applies_managed_resilience_policy() -> None:
     requests: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -227,7 +234,34 @@ async def test_management_client_replaces_auxiliary_gemini_fallback() -> None:
     assert policy_request["profile"] == "owh/profile"
     policy = policy_request["config"]
     assert policy == {
-        "fallback_providers": [],
+        "model": {
+            "default_headers": {"X-OpenRouter-Metadata": "enabled"},
+        },
+        "fallback_providers": [
+            {"provider": HERMES_PROVIDER, "model": HERMES_FALLBACK_MODEL}
+        ],
+        "agent": {
+            "api_max_retries": 1,
+            "environment_hint": (
+                "Academic research source policy: Semantic Scholar is disabled. "
+                "Do not access or cite disabled sources, including through generic "
+                "web search. Enabled sources: arXiv, OpenAlex, Crossref."
+            ),
+        },
+        "compression": {
+            "enabled": True,
+            "threshold": 0.50,
+            "threshold_tokens": 100_000,
+            "target_ratio": 0.20,
+            "protect_last_n": 20,
+            "proactive_prune_tokens": 48_000,
+            "proactive_prune_min_result_chars": 8_000,
+            "proactive_prune_min_reclaim_tokens": 4_096,
+        },
+        "provider_routing": {
+            "sort": "throughput",
+            "require_parameters": True,
+        },
         "auxiliary": {
             "free_only": False,
             "openrouter_model": HERMES_MODEL,
@@ -600,7 +634,7 @@ async def test_scheduled_jobs_use_a_separate_profile_without_any_mcp() -> None:
         async def list_profiles(self):
             return {"profiles": [{"name": "owh-owner-profile-jobs"}]}
 
-        async def set_profile_model(self, profile_name):
+        async def set_profile_model(self, profile_name, **_kwargs):
             assert profile_name == "owh-owner-profile-jobs"
             return {"ok": True}
 
@@ -641,7 +675,7 @@ async def test_scheduled_job_profile_clones_the_interactive_profile() -> None:
             profiles.add(kwargs["profile_name"])
             return {"ok": True}
 
-        async def set_profile_model(self, _profile_name):
+        async def set_profile_model(self, _profile_name, **_kwargs):
             return {"ok": True}
 
         async def list_mcp_servers(self, _profile_name):
@@ -706,7 +740,7 @@ async def test_profile_reconciliation_replaces_stale_internal_mcp_url(
         async def list_profiles(self):
             return {"profiles": [{"name": profile_name}]}
 
-        async def set_profile_model(self, resolved_profile_name):
+        async def set_profile_model(self, resolved_profile_name, **_kwargs):
             assert resolved_profile_name == profile_name
             return {"ok": True}
 
@@ -764,6 +798,8 @@ async def test_profile_reconciliation_replaces_stale_internal_mcp_url(
         user=SimpleNamespace(),
         settings=settings,
         client=FakeManagementClient(),
+        research_sources=dict(DEFAULT_RESEARCH_SOURCE_POLICY),
+        research_policy_revision=1,
     )
 
     assert reconciled is binding

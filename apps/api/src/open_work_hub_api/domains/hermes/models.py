@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
+    Boolean,
     JSON,
     CheckConstraint,
     DateTime,
@@ -53,6 +54,69 @@ JSONB_COMPAT = JSONB(astext_type=Text()).with_variant(JSON(), "sqlite")
 def _sql_in_clause(column_name: str, values: tuple[str, ...]) -> str:
     quoted_values = ",".join(f"'{value}'" for value in values)
     return f"{column_name} IN ({quoted_values})"
+
+
+class HermesResearchSourceSettings(Base):
+    __tablename__ = "hermes_research_source_settings"
+    __table_args__ = (
+        CheckConstraint("id = 1", name="ck_hermes_research_source_settings_singleton"),
+        CheckConstraint(
+            "revision >= 1",
+            name="ck_hermes_research_source_settings_revision",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        default=1,
+        server_default=text("1"),
+    )
+    semantic_scholar_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default=text("false"),
+        nullable=False,
+    )
+    arxiv_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        server_default=text("true"),
+        nullable=False,
+    )
+    openalex_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        server_default=text("true"),
+        nullable=False,
+    )
+    crossref_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        server_default=text("true"),
+        nullable=False,
+    )
+    revision: Mapped[int] = mapped_column(
+        Integer,
+        default=1,
+        server_default=text("1"),
+        nullable=False,
+    )
+    updated_by: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        onupdate=utcnow_naive,
+        nullable=False,
+    )
 
 
 class HermesProfileBinding(Base):

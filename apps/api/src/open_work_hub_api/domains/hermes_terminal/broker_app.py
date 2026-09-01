@@ -7,6 +7,7 @@ import hashlib
 import hmac
 import json
 import os
+import socket
 from functools import lru_cache
 from typing import Annotated, Any
 
@@ -50,6 +51,7 @@ class BrokerSessionCreateRequest(BaseModel):
     rows: int = Field(ge=5, le=300)
     mcp_url: str
     mcp_token: str
+    research_sources: dict[str, bool]
     profile_archive_base64: str | None = None
 
 
@@ -133,6 +135,49 @@ def _runtime_error(error: BrokerRuntimeError) -> HTTPException:
     return HTTPException(status_code=status_code, detail={"code": error.code})
 
 
+class _DockerAttachment:
+    def __init__(self, attached: Any) -> None:
+        self._attached = attached
+        raw_socket = getattr(attached, "_sock", attached)
+        if not isinstance(raw_socket, socket.socket):
+            try:
+                attached.close()
+            except Exception:
+                pass
+            raise BrokerRuntimeError("hermes_terminal.attach_failed")
+        self._socket = raw_socket
+        try:
+            self._socket.setblocking(False)
+        except OSError as exc:
+            self.close()
+            raise BrokerRuntimeError("hermes_terminal.attach_failed") from exc
+        self._closed = False
+
+    async def receive(self, max_bytes: int) -> bytes:
+        return await asyncio.get_running_loop().sock_recv(self._socket, max_bytes)
+
+    async def send(self, data: bytes) -> None:
+        await asyncio.get_running_loop().sock_sendall(self._socket, data)
+
+    def close(self) -> None:
+        if getattr(self, "_closed", False):
+            return
+        self._closed = True
+        try:
+            self._socket.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+        try:
+            self._socket.close()
+        except OSError:
+            pass
+        if self._attached is not self._socket:
+            try:
+                self._attached.close()
+            except Exception:
+                pass
+
+
 @app.get("/healthz")
 async def healthz() -> dict[str, Any]:
     try:
@@ -158,6 +203,7 @@ async def create_session(payload: BrokerSessionCreateRequest) -> dict[str, Any]:
             rows=payload.rows,
             mcp_url=payload.mcp_url,
             mcp_token=payload.mcp_token,
+            research_sources=payload.research_sources,
             profile_archive_base64=payload.profile_archive_base64,
         )
     except BrokerRuntimeError as error:
@@ -332,23 +378,25 @@ async def relay_mcp(session_id: str, request: Request) -> Response:
 @app.websocket("/v1/sessions/{session_id}/attach")
 async def attach_session(websocket: WebSocket, session_id: str) -> None:
     authorization = websocket.headers.get("authorization")
+    attachment: _DockerAttachment | None = None
     try:
         require_broker_auth(authorization)
         attached, container = await asyncio.to_thread(runtime().attach_socket, session_id)
+        attachment = _DockerAttachment(attached)
     except HTTPException:
         await websocket.close(code=4401)
         return
     except BrokerRuntimeError:
         await websocket.close(code=4409)
         return
+    assert attachment is not None
     await websocket.accept()
     await websocket.send_json({"type": "ready", "active": True})
-    raw_socket = getattr(attached, "_sock", attached)
 
     async def send_output() -> None:
         while True:
             try:
-                data = await asyncio.to_thread(raw_socket.recv, 65536)
+                data = await attachment.receive(65536)
             except OSError:
                 data = b""
             if data:
@@ -390,7 +438,7 @@ async def attach_session(websocket: WebSocket, session_id: str) -> None:
                     data = base64.b64decode(encoded, validate=True)
                 except binascii.Error:
                     continue
-                await asyncio.to_thread(raw_socket.sendall, data)
+                await attachment.send(data)
             elif message_type == "resize":
                 cols = payload.get("cols")
                 rows = payload.get("rows")
@@ -404,23 +452,23 @@ async def attach_session(websocket: WebSocket, session_id: str) -> None:
             elif message_type == "ping":
                 await websocket.send_json({"type": "pong"})
 
+    tasks = {
+        asyncio.create_task(send_output()),
+        asyncio.create_task(receive_input()),
+    }
     try:
-        sender = asyncio.create_task(send_output())
-        receiver = asyncio.create_task(receive_input())
-        done, pending = await asyncio.wait(
-            {sender, receiver},
+        done, _pending = await asyncio.wait(
+            tasks,
             return_when=asyncio.FIRST_COMPLETED,
         )
-        for task in pending:
-            task.cancel()
-        await asyncio.gather(*pending, return_exceptions=True)
         for task in done:
             if not task.cancelled():
                 task.result()
     except (BrokerRuntimeError, OSError, WebSocketDisconnect):
         pass
     finally:
-        try:
-            attached.close()
-        except Exception:
-            pass
+        for task in tasks:
+            task.cancel()
+        if attachment is not None:
+            attachment.close()
+        await asyncio.gather(*tasks, return_exceptions=True)

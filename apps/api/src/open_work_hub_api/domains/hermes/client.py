@@ -7,14 +7,51 @@ from urllib.parse import quote
 
 import httpx
 
-from open_work_hub_api.core.settings import HERMES_MODEL, HERMES_PROVIDER
+from open_work_hub_api.core.settings import (
+    HERMES_FALLBACK_MODEL,
+    HERMES_MODEL,
+    HERMES_PROVIDER,
+)
+from open_work_hub_api.domains.hermes.research_sources import (
+    academic_research_environment_hint,
+)
 
 
-def fixed_model_runtime_policy() -> dict[str, Any]:
-    """Return official Hermes settings for the selected model and fallbacks."""
+_OPENROUTER_METADATA_HEADERS = {"X-OpenRouter-Metadata": "enabled"}
+
+
+def fixed_model_runtime_policy(
+    research_sources: Mapping[str, object] | None = None,
+) -> dict[str, Any]:
+    """Return the managed Hermes model and resilience settings."""
 
     return {
-        "fallback_providers": [],
+        "model": {
+            "default_headers": dict(_OPENROUTER_METADATA_HEADERS),
+        },
+        "fallback_providers": [
+            {"provider": HERMES_PROVIDER, "model": HERMES_FALLBACK_MODEL}
+        ],
+        "agent": {
+            "api_max_retries": 1,
+            "environment_hint": academic_research_environment_hint(
+                research_sources
+            ),
+        },
+        "compression": {
+            "enabled": True,
+            "threshold": 0.50,
+            "threshold_tokens": 100_000,
+            "target_ratio": 0.20,
+            "protect_last_n": 20,
+            "proactive_prune_tokens": 48_000,
+            "proactive_prune_min_result_chars": 8_000,
+            "proactive_prune_min_reclaim_tokens": 4_096,
+        },
+        "provider_routing": {
+            "sort": "throughput",
+            "require_parameters": True,
+        },
         "auxiliary": {
             "free_only": False,
             "openrouter_model": HERMES_MODEL,
@@ -168,6 +205,14 @@ class HermesRuntimeClient:
             profile_name=profile_name,
             path="/v1/capabilities",
             operation="capabilities",
+        )
+
+    async def toolsets(self, profile_name: str) -> dict[str, Any]:
+        return await self._request(
+            "GET",
+            profile_name=profile_name,
+            path="/v1/toolsets",
+            operation="toolsets",
         )
 
     async def list_sessions(
@@ -622,7 +667,12 @@ class HermesManagementClient:
             expected=frozenset({200, 201}),
         )
 
-    async def set_profile_model(self, profile_name: str) -> dict[str, Any]:
+    async def set_profile_model(
+        self,
+        profile_name: str,
+        *,
+        research_sources: Mapping[str, object] | None = None,
+    ) -> dict[str, Any]:
         result = await self._request(
             "PUT",
             f"/api/profiles/{quote(profile_name, safe='')}/model",
@@ -635,7 +685,7 @@ class HermesManagementClient:
             operation="set_profile_model_policy",
             body={
                 "profile": profile_name,
-                "config": fixed_model_runtime_policy(),
+                "config": fixed_model_runtime_policy(research_sources),
             },
         )
         return result
