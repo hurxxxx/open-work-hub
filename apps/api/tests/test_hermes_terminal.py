@@ -22,9 +22,11 @@ from open_work_hub_api.domains.hermes_terminal.app_catalog import HERMES_TERMINA
 from open_work_hub_api.domains.hermes_terminal import lifecycle, maintenance, mcp_router
 from open_work_hub_api.domains.hermes_terminal.broker_runtime import (
     BrokerRuntimeError,
+    HermesTerminalBrokerRuntime,
     build_profile_config_commands,
     build_profile_sanitize_commands,
     build_runner_command,
+    build_runner_mounts,
 )
 from open_work_hub_api.domains.hermes_terminal.schemas import (
     HermesTerminalSessionCreateRequest,
@@ -118,6 +120,66 @@ def test_profile_export_removes_only_ephemeral_session_credentials() -> None:
             "unset",
             "MCP_OPEN_WORK_HUB_API_KEY",
         ],
+    ]
+
+
+def test_profile_cli_uses_runner_identity_and_repairs_only_ownership() -> None:
+    calls: list[tuple[list[str], dict[str, object]]] = []
+
+    class FakeContainer:
+        def exec_run(self, command, **kwargs):
+            calls.append((command, kwargs))
+            return SimpleNamespace(exit_code=0, output=b"ok")
+
+    container = FakeContainer()
+    HermesTerminalBrokerRuntime._exec_ok(  # type: ignore[arg-type]
+        container,
+        ["hermes", "config", "check"],
+    )
+    HermesTerminalBrokerRuntime._chown_profile_path(  # type: ignore[arg-type]
+        container,
+        "/opt/data/profiles/terminal",
+        recursive=True,
+    )
+
+    assert calls == [
+        (["hermes", "config", "check"], {"environment": None, "user": "10000:10000"}),
+        (
+            ["chown", "-R", "10000:10000", "/opt/data/profiles/terminal"],
+            {"user": "0:0"},
+        ),
+    ]
+
+
+def test_runner_volumes_disable_image_copy_up_and_keep_egress_read_only() -> None:
+    mounts = build_runner_mounts(
+        profile_volume_name="profile-volume",
+        workspace_volume_name="workspace-volume",
+        egress_client_volume="egress-volume",
+    )
+
+    assert [dict(mount) for mount in mounts] == [
+        {
+            "Target": "/opt/data",
+            "Source": "profile-volume",
+            "Type": "volume",
+            "ReadOnly": False,
+            "VolumeOptions": {"NoCopy": True},
+        },
+        {
+            "Target": "/workspace",
+            "Source": "workspace-volume",
+            "Type": "volume",
+            "ReadOnly": False,
+            "VolumeOptions": {"NoCopy": True},
+        },
+        {
+            "Target": "/run/owh-egress",
+            "Source": "egress-volume",
+            "Type": "volume",
+            "ReadOnly": True,
+            "VolumeOptions": {"NoCopy": True},
+        },
     ]
 
 

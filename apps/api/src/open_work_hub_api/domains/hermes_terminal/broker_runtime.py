@@ -19,6 +19,7 @@ from uuid import UUID, uuid4
 import docker
 from docker.errors import APIError, DockerException, NotFound
 from docker.models.containers import Container
+from docker.types import Mount
 
 
 HERMES_IMAGE = (
@@ -34,6 +35,7 @@ MANAGED_LABEL = "open-work-hub.hermes-terminal.managed"
 _PROFILE_KEY = re.compile(r"^[a-z0-9]{8,63}$")
 _ACTIVE_DOCKER_STATES = frozenset({"created", "running", "restarting", "paused"})
 _HERMES_BIN = "/opt/hermes/.venv/bin/hermes"
+_HERMES_USER = "10000:10000"
 _PROFILE_HOME = "/opt/data/profiles/terminal"
 _EPHEMERAL_PROFILE_SECRET_KEYS = (
     "OPENROUTER_API_KEY",
@@ -83,6 +85,35 @@ def build_profile_sanitize_commands() -> list[list[str]]:
     return [
         [_HERMES_BIN, "config", "unset", key]
         for key in _EPHEMERAL_PROFILE_SECRET_KEYS
+    ]
+
+
+def build_runner_mounts(
+    *,
+    profile_volume_name: str,
+    workspace_volume_name: str,
+    egress_client_volume: str,
+) -> list[Mount]:
+    return [
+        Mount(
+            target="/opt/data",
+            source=profile_volume_name,
+            type="volume",
+            no_copy=True,
+        ),
+        Mount(
+            target="/workspace",
+            source=workspace_volume_name,
+            type="volume",
+            no_copy=True,
+        ),
+        Mount(
+            target="/run/owh-egress",
+            source=egress_client_volume,
+            type="volume",
+            read_only=True,
+            no_copy=True,
+        ),
     ]
 
 
@@ -414,10 +445,29 @@ class HermesTerminalBrokerRuntime:
         *,
         environment: dict[str, str] | None = None,
     ) -> bytes:
-        result = container.exec_run(command, environment=environment)
+        result = container.exec_run(
+            command,
+            environment=environment,
+            user=_HERMES_USER,
+        )
         if result.exit_code != 0:
             raise BrokerRuntimeError("hermes_terminal.profile_configuration_failed")
         return bytes(result.output or b"")
+
+    @staticmethod
+    def _chown_profile_path(
+        container: Container,
+        path: str,
+        *,
+        recursive: bool = False,
+    ) -> None:
+        command = ["chown"]
+        if recursive:
+            command.append("-R")
+        command.extend([_HERMES_USER, path])
+        result = container.exec_run(command, user="0:0")
+        if result.exit_code != 0:
+            raise BrokerRuntimeError("hermes_terminal.profile_configuration_failed")
 
     def _configure_profile(
         self,
@@ -429,7 +479,11 @@ class HermesTerminalBrokerRuntime:
     ) -> None:
         utility = self._utility_container(profile_volume_name)
         try:
-            exists = utility.exec_run(["test", "-d", "/opt/data/profiles/terminal"])
+            self._chown_profile_path(utility, "/opt/data")
+            exists = utility.exec_run(
+                ["test", "-d", _PROFILE_HOME],
+                user=_HERMES_USER,
+            )
             if exists.exit_code != 0:
                 if profile_archive is not None:
                     if len(profile_archive) > self.profile_archive_max_bytes:
@@ -438,6 +492,7 @@ class HermesTerminalBrokerRuntime:
                         "/tmp",
                         self._tar_bytes("profile.tar.gz", profile_archive),
                     )
+                    self._chown_profile_path(utility, "/tmp/profile.tar.gz")
                     self._exec_ok(
                         utility,
                         [
@@ -462,6 +517,7 @@ class HermesTerminalBrokerRuntime:
                             "Private Open Work Hub Hermes terminal profile",
                         ],
                     )
+            self._chown_profile_path(utility, _PROFILE_HOME, recursive=True)
             profile_environment = {
                 "HOME": _PROFILE_HOME,
                 "HERMES_HOME": _PROFILE_HOME,
@@ -471,7 +527,11 @@ class HermesTerminalBrokerRuntime:
                 proxy_token=self._proxy_token(),
                 mcp_token=mcp_token,
             ):
-                result = utility.exec_run(command, environment=profile_environment)
+                result = utility.exec_run(
+                    command,
+                    environment=profile_environment,
+                    user=_HERMES_USER,
+                )
                 output = bytes(result.output or b"")
                 if result.exit_code == 0:
                     continue
@@ -492,7 +552,11 @@ class HermesTerminalBrokerRuntime:
             "HERMES_HOME": _PROFILE_HOME,
         }
         for command in build_profile_sanitize_commands():
-            result = utility.exec_run(command, environment=profile_environment)
+            result = utility.exec_run(
+                command,
+                environment=profile_environment,
+                user=_HERMES_USER,
+            )
             output = bytes(result.output or b"")
             if result.exit_code == 0 or b"Config key not set" in output:
                 continue
@@ -595,11 +659,11 @@ class HermesTerminalBrokerRuntime:
                         "TERM": "xterm-256color",
                         "COLORTERM": "truecolor",
                     },
-                    volumes={
-                        profile_volume_name: {"bind": "/opt/data", "mode": "rw"},
-                        workspace_volume_name: {"bind": "/workspace", "mode": "rw"},
-                        self.egress_client_volume: {"bind": "/run/owh-egress", "mode": "ro"},
-                    },
+                    mounts=build_runner_mounts(
+                        profile_volume_name=profile_volume_name,
+                        workspace_volume_name=workspace_volume_name,
+                        egress_client_volume=self.egress_client_volume,
+                    ),
                     working_dir="/workspace",
                     network=self.network_name,
                     stdin_open=True,

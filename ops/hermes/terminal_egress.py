@@ -88,6 +88,8 @@ def main() -> None:
         # never exposed on a host/LAN interface.
         http_listen=[f"0.0.0.0:{_TUNNEL_PORT}"],
     )
+    # v0.39 evaluates this setting on CONNECT before origin headers exist.
+    config["transforms"][1]["config"]["secrets"][0]["replace"]["require"] = False
     config_path = write_proxy_config(config)
     _write_client_file("openrouter.token", mappings[0].proxy_token + "\n", mode=0o600)
     _CLIENT_DIR.mkdir(parents=True, exist_ok=True)
