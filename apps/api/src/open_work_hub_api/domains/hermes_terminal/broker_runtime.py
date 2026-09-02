@@ -20,7 +20,7 @@ from uuid import UUID, uuid4
 import docker
 from docker.errors import APIError, DockerException, NotFound
 from docker.models.containers import Container
-from docker.types import Mount
+from docker.types import Mount, Ulimit
 
 from open_work_hub_api.domains.hermes.research_sources import (
     academic_research_environment_hint,
@@ -40,7 +40,11 @@ PROFILE_NAME = "terminal"
 SESSION_LABEL = "open-work-hub.hermes-terminal.session-id"
 PROFILE_LABEL = "open-work-hub.hermes-terminal.profile-key"
 MANAGED_LABEL = "open-work-hub.hermes-terminal.managed"
+NAMESPACE_LABEL = "open-work-hub.hermes-terminal.namespace"
+RESOURCE_KIND_LABEL = "open-work-hub.hermes-terminal.resource-kind"
+UTILITY_LABEL = "open-work-hub.hermes-terminal.utility"
 _PROFILE_KEY = re.compile(r"^[a-z0-9]{8,63}$")
+_RESOURCE_NAMESPACE = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}$")
 _ACTIVE_DOCKER_STATES = frozenset({"created", "running", "restarting", "paused"})
 _HERMES_BIN = "/opt/hermes/.venv/bin/hermes"
 _UV_BIN = "/usr/local/bin/uv"
@@ -49,6 +53,25 @@ _PROFILE_HOME = "/opt/data/profiles/terminal"
 _PROFILE_EXPORT_PATH = "/opt/data/.owh-terminal-profile-export.tar.gz"
 _PROFILE_UV_CACHE = f"{_PROFILE_HOME}/home/.cache/uv"
 _RUNTIME_CACHE_HOME = "/opt/data/cache"
+_WORKSPACE_USAGE_SCRIPT = r"""
+import os
+import stat
+
+total = 0
+for root, directories, files in os.walk('/workspace', followlinks=False):
+    directories[:] = [
+        name for name in directories
+        if not os.path.islink(os.path.join(root, name))
+    ]
+    for name in files:
+        try:
+            info = os.lstat(os.path.join(root, name))
+        except FileNotFoundError:
+            continue
+        if stat.S_ISREG(info.st_mode):
+            total += info.st_size
+print(total)
+"""
 _OPENROUTER_METADATA_HEADERS = {"X-OpenRouter-Metadata": "enabled"}
 _EPHEMERAL_PROFILE_SECRET_KEYS = (
     "OPENROUTER_API_KEY",
@@ -114,10 +137,7 @@ def build_profile_config_commands(
         ("MCP_OPEN_WORK_HUB_API_KEY", mcp_token),
         ("mcp_servers", mcp_servers),
     )
-    commands = [
-        [_HERMES_BIN, "config", "set", "--force", key, value]
-        for key, value in values
-    ]
+    commands = [[_HERMES_BIN, "config", "set", "--force", key, value] for key, value in values]
     if research_hint:
         commands.append(
             [
@@ -130,19 +150,14 @@ def build_profile_config_commands(
             ]
         )
     else:
-        commands.append(
-            [_HERMES_BIN, "config", "unset", "agent.environment_hint"]
-        )
+        commands.append([_HERMES_BIN, "config", "unset", "agent.environment_hint"])
     commands.append([_HERMES_BIN, "config", "unset", "fallback_model"])
     commands.append([_HERMES_BIN, "config", "check"])
     return commands
 
 
 def build_profile_sanitize_commands() -> list[list[str]]:
-    return [
-        [_HERMES_BIN, "config", "unset", key]
-        for key in _EPHEMERAL_PROFILE_SECRET_KEYS
-    ]
+    return [[_HERMES_BIN, "config", "unset", key] for key in _EPHEMERAL_PROFILE_SECRET_KEYS]
 
 
 def build_profile_export_cleanup_commands() -> list[list[str]]:
@@ -320,6 +335,7 @@ class RuntimeSession:
     container_name: str
     profile_volume_name: str
     workspace_volume_name: str
+    namespace: str | None = None
 
 
 class HermesTerminalBrokerRuntime:
@@ -335,6 +351,12 @@ class HermesTerminalBrokerRuntime:
         self.image = os.environ.get("OWH_HERMES_TERMINAL_IMAGE", HERMES_IMAGE).strip()
         if self.image != HERMES_IMAGE:
             raise BrokerRuntimeError("hermes_terminal.image_not_pinned")
+        self.resource_namespace = os.environ.get(
+            "OWH_HERMES_TERMINAL_RESOURCE_NAMESPACE",
+            "local",
+        ).strip()
+        if not _RESOURCE_NAMESPACE.fullmatch(self.resource_namespace):
+            raise BrokerRuntimeError("hermes_terminal.resource_namespace_invalid")
         self.network_name = os.environ.get(
             "OWH_HERMES_TERMINAL_SANDBOX_NETWORK",
             "open-work-hub-hermes-terminal-sandbox",
@@ -347,21 +369,41 @@ class HermesTerminalBrokerRuntime:
             "OWH_HERMES_TERMINAL_EGRESS_CLIENT_VOLUME",
             "open-work-hub-hermes-terminal-egress-client",
         ).strip()
-        self.mcp_relay_base_url = os.environ.get(
-            "OWH_HERMES_TERMINAL_MCP_RELAY_BASE_URL",
-            "http://hermes-terminal-broker:18765/mcp",
-        ).strip().rstrip("/")
-        self.profile_archive_max_bytes = int(
-            os.environ.get("OWH_HERMES_TERMINAL_PROFILE_ARCHIVE_MAX_BYTES", str(64 * 1024 * 1024))
-        )
-        self.workspace_archive_max_bytes = int(
+        self.mcp_relay_base_url = (
             os.environ.get(
-                "OWH_HERMES_TERMINAL_WORKSPACE_ARCHIVE_MAX_BYTES",
-                str(256 * 1024 * 1024),
+                "OWH_HERMES_TERMINAL_MCP_RELAY_BASE_URL",
+                "http://hermes-terminal-broker:18765/mcp",
             )
+            .strip()
+            .rstrip("/")
         )
+        self.profile_archive_max_bytes = self._environment_int(
+            "OWH_HERMES_TERMINAL_PROFILE_ARCHIVE_MAX_BYTES",
+            64 * 1024 * 1024,
+        )
+        self.workspace_archive_max_bytes = self._environment_int(
+            "OWH_HERMES_TERMINAL_WORKSPACE_ARCHIVE_MAX_BYTES",
+            256 * 1024 * 1024,
+        )
+        self.workspace_live_max_bytes = self._environment_int(
+            "OWH_HERMES_TERMINAL_WORKSPACE_LIVE_MAX_BYTES",
+            256 * 1024 * 1024,
+        )
+        if self.workspace_live_max_bytes < 1024 * 1024:
+            raise BrokerRuntimeError("hermes_terminal.workspace_live_limit_invalid")
+        self._forced_failure_codes: dict[str, str] = {}
         self._lock = RLock()
         self._ensure_dependencies()
+
+    @staticmethod
+    def _environment_int(name: str, default: int) -> int:
+        try:
+            value = int(os.environ.get(name, str(default)))
+        except ValueError as exc:
+            raise BrokerRuntimeError("hermes_terminal.runtime_setting_invalid") from exc
+        if value <= 0:
+            raise BrokerRuntimeError("hermes_terminal.runtime_setting_invalid")
+        return value
 
     def _ensure_dependencies(self) -> None:
         try:
@@ -370,10 +412,24 @@ class HermesTerminalBrokerRuntime:
             self.client.volumes.get(self.egress_client_volume)
         except NotFound as exc:
             raise BrokerRuntimeError("hermes_terminal.runtime_dependency_missing") from exc
+        except DockerException as exc:
+            raise BrokerRuntimeError("hermes_terminal.docker_unavailable") from exc
         token_path = os.path.join(self.egress_client_dir, "openrouter.token")
         ca_path = os.path.join(self.egress_client_dir, "ca.crt")
         if not os.path.isfile(token_path) or not os.path.isfile(ca_path):
             raise BrokerRuntimeError("hermes_terminal.egress_not_ready")
+
+    def healthcheck(self) -> dict[str, Any]:
+        try:
+            self.client.ping()
+        except DockerException as exc:
+            raise BrokerRuntimeError("hermes_terminal.docker_unavailable") from exc
+        self._ensure_dependencies()
+        return {
+            "ready": True,
+            "instance_id": self.instance_id,
+            "resource_namespace": self.resource_namespace,
+        }
 
     def _proxy_token(self) -> str:
         path = os.path.join(self.egress_client_dir, "openrouter.token")
@@ -399,45 +455,110 @@ class HermesTerminalBrokerRuntime:
             raise BrokerRuntimeError("hermes_terminal.profile_key_invalid")
         return profile_key
 
-    @staticmethod
-    def _volume_name(kind: str, value: str) -> str:
+    def _volume_name(self, kind: str, value: str) -> str:
         digest = hashlib.sha256(value.encode()).hexdigest()[:24]
-        return f"owh-hermes-terminal-{kind}-{digest}"
+        return f"owh-hermes-terminal-{self.resource_namespace}-{kind}-{digest}"
+
+    def _container_name(self, session_id: str) -> str:
+        return f"owh-hermes-terminal-{self.resource_namespace}-{session_id.replace('-', '')}"
 
     @staticmethod
-    def _container_name(session_id: str) -> str:
-        return f"owh-hermes-terminal-{session_id.replace('-', '')}"
+    def _mount_sources(container: Container) -> dict[str, str]:
+        mounts = container.attrs.get("Mounts") or []
+        return {
+            str(item.get("Destination") or ""): str(item.get("Name") or item.get("Source") or "")
+            for item in mounts
+            if isinstance(item, dict)
+        }
+
+    def _legacy_container_matches_runtime(self, container: Container) -> bool:
+        networks = (container.attrs.get("NetworkSettings") or {}).get("Networks") or {}
+        mounts = self._mount_sources(container)
+        return (
+            self.network_name in networks
+            and mounts.get("/run/owh-egress") == self.egress_client_volume
+            and bool(mounts.get("/opt/data"))
+            and bool(mounts.get("/workspace"))
+        )
 
     def _record_from_container(self, container: Container) -> RuntimeSession:
         labels = container.labels or {}
         session_id = str(labels.get(SESSION_LABEL) or "")
         profile_key = str(labels.get(PROFILE_LABEL) or "")
+        namespace = str(labels.get(NAMESPACE_LABEL) or "").strip() or None
         self._validate_session_id(session_id)
         self._validate_profile_key(profile_key)
+        if namespace is not None and namespace != self.resource_namespace:
+            raise BrokerRuntimeError("hermes_terminal.resource_namespace_mismatch")
+        mounts = self._mount_sources(container)
+        profile_volume_name = mounts.get("/opt/data")
+        workspace_volume_name = mounts.get("/workspace")
+        if not profile_volume_name or not workspace_volume_name:
+            raise BrokerRuntimeError("hermes_terminal.runtime_mounts_invalid")
         return RuntimeSession(
             session_id=session_id,
             profile_key=profile_key,
             container_name=container.name,
-            profile_volume_name=self._volume_name("profile", profile_key),
-            workspace_volume_name=self._volume_name("workspace", session_id),
+            profile_volume_name=profile_volume_name,
+            workspace_volume_name=workspace_volume_name,
+            namespace=namespace,
         )
 
     def _find_container(self, session_id: str) -> tuple[Container, RuntimeSession]:
         normalized = self._validate_session_id(session_id)
-        matches = self.client.containers.list(
-            all=True,
-            filters={"label": [f"{SESSION_LABEL}={normalized}", f"{MANAGED_LABEL}=true"]},
-        )
-        if len(matches) != 1:
+        try:
+            matches = self.client.containers.list(
+                all=True,
+                filters={
+                    "label": [
+                        f"{SESSION_LABEL}={normalized}",
+                        f"{MANAGED_LABEL}=true",
+                    ]
+                },
+            )
+        except DockerException as exc:
+            raise BrokerRuntimeError("hermes_terminal.docker_unavailable") from exc
+        namespaced = [
+            item
+            for item in matches
+            if str((item.labels or {}).get(NAMESPACE_LABEL) or "") == self.resource_namespace
+        ]
+        if len(namespaced) > 1:
+            raise BrokerRuntimeError("hermes_terminal.session_resource_ambiguous")
+        if len(namespaced) == 1:
+            container = namespaced[0]
+            return container, self._record_from_container(container)
+        legacy = [
+            item
+            for item in matches
+            if not str((item.labels or {}).get(NAMESPACE_LABEL) or "")
+            and self._legacy_container_matches_runtime(item)
+        ]
+        if len(legacy) > 1:
+            raise BrokerRuntimeError("hermes_terminal.session_resource_ambiguous")
+        if len(legacy) != 1:
             raise BrokerRuntimeError("hermes_terminal.session_not_found")
-        container = matches[0]
+        container = legacy[0]
         return container, self._record_from_container(container)
 
     def _ensure_volume(self, name: str, *, labels: dict[str, str]) -> tuple[Any, bool]:
         try:
-            return self.client.volumes.get(name), False
+            volume = self.client.volumes.get(name)
         except NotFound:
             return self.client.volumes.create(name=name, labels=labels), True
+        actual_labels = volume.attrs.get("Labels") or {}
+        if any(str(actual_labels.get(key) or "") != value for key, value in labels.items()):
+            raise BrokerRuntimeError("hermes_terminal.volume_identity_mismatch")
+        return volume, False
+
+    @staticmethod
+    def _reload_container(container: Container) -> None:
+        try:
+            container.reload()
+        except NotFound as exc:
+            raise BrokerRuntimeError("hermes_terminal.session_not_found") from exc
+        except DockerException as exc:
+            raise BrokerRuntimeError("hermes_terminal.docker_unavailable") from exc
 
     @staticmethod
     def _tar_bytes(name: str, data: bytes, *, mode: int = 0o600) -> bytes:
@@ -454,36 +575,46 @@ class HermesTerminalBrokerRuntime:
     def _read_stream(stream: Any, *, max_bytes: int) -> bytes:
         chunks: list[bytes] = []
         total = 0
-        for chunk in stream:
-            total += len(chunk)
-            if total > max_bytes:
-                raise BrokerRuntimeError("hermes_terminal.archive_too_large")
-            chunks.append(chunk)
+        try:
+            for chunk in stream:
+                total += len(chunk)
+                if total > max_bytes:
+                    raise BrokerRuntimeError("hermes_terminal.archive_too_large")
+                chunks.append(chunk)
+        except BrokerRuntimeError:
+            raise
+        except DockerException as exc:
+            raise BrokerRuntimeError("hermes_terminal.archive_read_failed") from exc
         return b"".join(chunks)
 
     @staticmethod
     def _extract_single_file(archive: bytes, *, basename: str, max_bytes: int) -> bytes:
-        with tarfile.open(fileobj=io.BytesIO(archive), mode="r:*") as tar:
-            candidates = [
-                member
-                for member in tar
-                if member.isfile()
-                and not member.issym()
-                and not member.islnk()
-                and PurePosixPath(member.name).name == basename
-            ]
-            if len(candidates) != 1 or candidates[0].size > max_bytes:
-                raise BrokerRuntimeError("hermes_terminal.archive_invalid")
-            source = tar.extractfile(candidates[0])
-            if source is None:
-                raise BrokerRuntimeError("hermes_terminal.archive_invalid")
-            data = source.read(max_bytes + 1)
-            if len(data) != candidates[0].size or len(data) > max_bytes:
-                raise BrokerRuntimeError("hermes_terminal.archive_invalid")
-            return data
+        try:
+            with tarfile.open(fileobj=io.BytesIO(archive), mode="r:*") as tar:
+                candidates = [
+                    member
+                    for member in tar
+                    if member.isfile()
+                    and not member.issym()
+                    and not member.islnk()
+                    and PurePosixPath(member.name).name == basename
+                ]
+                if len(candidates) != 1 or candidates[0].size > max_bytes:
+                    raise BrokerRuntimeError("hermes_terminal.archive_invalid")
+                source = tar.extractfile(candidates[0])
+                if source is None:
+                    raise BrokerRuntimeError("hermes_terminal.archive_invalid")
+                data = source.read(max_bytes + 1)
+                if len(data) != candidates[0].size or len(data) > max_bytes:
+                    raise BrokerRuntimeError("hermes_terminal.archive_invalid")
+                return data
+        except BrokerRuntimeError:
+            raise
+        except (tarfile.TarError, OSError) as exc:
+            raise BrokerRuntimeError("hermes_terminal.archive_invalid") from exc
 
     def _utility_container(self, profile_volume_name: str) -> Container:
-        name = f"owh-hermes-terminal-init-{uuid4().hex[:16]}"
+        name = f"owh-hermes-terminal-{self.resource_namespace}-init-{uuid4().hex[:12]}"
         try:
             container = self.client.containers.create(
                 self.image,
@@ -506,7 +637,12 @@ class HermesTerminalBrokerRuntime:
                 cap_add=["CHOWN", "SETUID", "SETGID", "DAC_OVERRIDE"],
                 pids_limit=256,
                 mem_limit="1g",
-                labels={MANAGED_LABEL: "true", "open-work-hub.hermes-terminal.utility": "true"},
+                labels={
+                    MANAGED_LABEL: "true",
+                    NAMESPACE_LABEL: self.resource_namespace,
+                    RESOURCE_KIND_LABEL: "utility",
+                    UTILITY_LABEL: "true",
+                },
             )
             container.start()
             return container
@@ -514,7 +650,7 @@ class HermesTerminalBrokerRuntime:
             raise BrokerRuntimeError("hermes_terminal.profile_utility_failed") from exc
 
     def _initialize_workspace_volume(self, workspace_volume_name: str) -> None:
-        name = f"owh-hermes-terminal-volume-init-{uuid4().hex[:16]}"
+        name = f"owh-hermes-terminal-{self.resource_namespace}-volume-init-{uuid4().hex[:12]}"
         container: Container | None = None
         try:
             container = self.client.containers.create(
@@ -522,8 +658,7 @@ class HermesTerminalBrokerRuntime:
                 name=name,
                 entrypoint=["/bin/sh", "-ec"],
                 command=[
-                    "chown 0:0 /workspace && chmod 0700 /workspace && "
-                    "chown 10000:10000 /workspace"
+                    "chown 0:0 /workspace && chmod 0700 /workspace && chown 10000:10000 /workspace"
                 ],
                 user="0:0",
                 volumes={workspace_volume_name: {"bind": "/workspace", "mode": "rw"}},
@@ -536,7 +671,9 @@ class HermesTerminalBrokerRuntime:
                 mem_limit="128m",
                 labels={
                     MANAGED_LABEL: "true",
-                    "open-work-hub.hermes-terminal.utility": "true",
+                    NAMESPACE_LABEL: self.resource_namespace,
+                    RESOURCE_KIND_LABEL: "utility",
+                    UTILITY_LABEL: "true",
                 },
             )
             container.start()
@@ -546,9 +683,7 @@ class HermesTerminalBrokerRuntime:
         except BrokerRuntimeError:
             raise
         except (APIError, DockerException) as exc:
-            raise BrokerRuntimeError(
-                "hermes_terminal.workspace_initialization_failed"
-            ) from exc
+            raise BrokerRuntimeError("hermes_terminal.workspace_initialization_failed") from exc
         finally:
             if container is not None:
                 try:
@@ -563,11 +698,14 @@ class HermesTerminalBrokerRuntime:
         *,
         environment: dict[str, str] | None = None,
     ) -> bytes:
-        result = container.exec_run(
-            command,
-            environment=environment,
-            user=_HERMES_USER,
-        )
+        try:
+            result = container.exec_run(
+                command,
+                environment=environment,
+                user=_HERMES_USER,
+            )
+        except DockerException as exc:
+            raise BrokerRuntimeError("hermes_terminal.profile_configuration_failed") from exc
         if result.exit_code != 0:
             raise BrokerRuntimeError("hermes_terminal.profile_configuration_failed")
         return bytes(result.output or b"")
@@ -719,13 +857,9 @@ class HermesTerminalBrokerRuntime:
         if mcp_url != expected_mcp_url or len(mcp_token) < 32:
             raise BrokerRuntimeError("hermes_terminal.mcp_configuration_invalid")
         try:
-            normalized_research_sources = normalize_research_source_policy(
-                research_sources
-            )
+            normalized_research_sources = normalize_research_source_policy(research_sources)
         except ValueError as exc:
-            raise BrokerRuntimeError(
-                "hermes_terminal.research_source_policy_invalid"
-            ) from exc
+            raise BrokerRuntimeError("hermes_terminal.research_source_policy_invalid") from exc
         profile_archive = None
         if profile_archive_base64:
             try:
@@ -736,15 +870,21 @@ class HermesTerminalBrokerRuntime:
                 raise BrokerRuntimeError("hermes_terminal.profile_archive_too_large")
 
         with self._lock:
-            existing = self.client.containers.list(
-                all=True,
-                filters={"label": f"{SESSION_LABEL}={session_id}"},
-            )
-            if existing:
+            try:
+                self._find_container(session_id)
+            except BrokerRuntimeError as error:
+                if error.code != "hermes_terminal.session_not_found":
+                    raise
+            else:
                 raise BrokerRuntimeError("hermes_terminal.session_exists")
             profile_volume_name = self._volume_name("profile", profile_key)
             workspace_volume_name = self._volume_name("workspace", session_id)
-            labels = {MANAGED_LABEL: "true", PROFILE_LABEL: profile_key}
+            labels = {
+                MANAGED_LABEL: "true",
+                NAMESPACE_LABEL: self.resource_namespace,
+                RESOURCE_KIND_LABEL: "profile",
+                PROFILE_LABEL: profile_key,
+            }
             profile_volume_created = False
             try:
                 _profile_volume, profile_volume_created = self._ensure_volume(
@@ -753,7 +893,12 @@ class HermesTerminalBrokerRuntime:
                 )
                 self._ensure_volume(
                     workspace_volume_name,
-                    labels={MANAGED_LABEL: "true", SESSION_LABEL: session_id},
+                    labels={
+                        MANAGED_LABEL: "true",
+                        NAMESPACE_LABEL: self.resource_namespace,
+                        RESOURCE_KIND_LABEL: "workspace",
+                        SESSION_LABEL: session_id,
+                    },
                 )
                 self._initialize_workspace_volume(workspace_volume_name)
                 self._configure_profile(
@@ -775,9 +920,7 @@ class HermesTerminalBrokerRuntime:
                         pass
                 if isinstance(error, BrokerRuntimeError):
                     raise
-                raise BrokerRuntimeError(
-                    "hermes_terminal.profile_configuration_failed"
-                ) from error
+                raise BrokerRuntimeError("hermes_terminal.profile_configuration_failed") from error
 
             command = build_runner_command(mode)
             container_name = self._container_name(session_id)
@@ -802,19 +945,31 @@ class HermesTerminalBrokerRuntime:
                     tmpfs={
                         "/tmp": "rw,exec,nosuid,nodev,mode=1777,size=512m",
                         "/run": "rw,exec,nosuid,nodev,mode=0755,size=64m",
+                        "/opt/data/cache": "rw,nosuid,nodev,mode=0700,size=512m,uid=10000,gid=10000",
                     },
                     security_opt=["no-new-privileges:true"],
                     cap_drop=["ALL"],
                     cap_add=["CHOWN", "SETUID", "SETGID", "DAC_OVERRIDE"],
                     pids_limit=512,
                     mem_limit="2g",
+                    memswap_limit="2g",
                     nano_cpus=2_000_000_000,
+                    ulimits=[
+                        Ulimit(name="nofile", soft=1024, hard=2048),
+                        Ulimit(
+                            name="fsize",
+                            soft=64 * 1024 * 1024,
+                            hard=64 * 1024 * 1024,
+                        ),
+                    ],
                     log_config={
                         "type": "json-file",
                         "config": {"max-size": "8m", "max-file": "1"},
                     },
                     labels={
                         MANAGED_LABEL: "true",
+                        NAMESPACE_LABEL: self.resource_namespace,
+                        RESOURCE_KIND_LABEL: "runner",
                         SESSION_LABEL: session_id,
                         PROFILE_LABEL: profile_key,
                         "open-work-hub.hermes-terminal.mode": mode,
@@ -836,18 +991,35 @@ class HermesTerminalBrokerRuntime:
 
     def session_status(self, session_id: str) -> dict[str, Any]:
         container, record = self._find_container(session_id)
-        container.reload()
+        self._reload_container(container)
         state = container.attrs.get("State") or {}
         docker_status = str(state.get("Status") or container.status)
         if docker_status in _ACTIVE_DOCKER_STATES:
             status = "running" if docker_status == "running" else "starting"
             exit_code = None
+            failure_code = None
         else:
-            status = "exited" if docker_status == "exited" else "failed"
-            exit_code = state.get("ExitCode")
-        failure_code = None
-        if status == "failed":
-            failure_code = "hermes_terminal.runner_failed"
+            value = state.get("ExitCode")
+            exit_code = value if isinstance(value, int) else None
+            forced_failure = self._forced_failure_codes.get(record.session_id)
+            if forced_failure:
+                status = "failed"
+                failure_code = forced_failure
+            elif bool(state.get("OOMKilled")):
+                status = "failed"
+                failure_code = "hermes_terminal.runner_oom"
+            elif docker_status == "exited" and exit_code in {0, 130}:
+                status = "exited"
+                failure_code = None
+            elif docker_status == "dead":
+                status = "failed"
+                failure_code = "hermes_terminal.runner_dead"
+            elif str(state.get("Error") or "").strip():
+                status = "failed"
+                failure_code = "hermes_terminal.runner_state_error"
+            else:
+                status = "failed"
+                failure_code = "hermes_terminal.runner_exit_nonzero"
         return {
             "session_id": record.session_id,
             "runtime_handle": container.id,
@@ -855,11 +1027,210 @@ class HermesTerminalBrokerRuntime:
             "status": status,
             "exit_code": exit_code,
             "failure_code": failure_code,
+            "resource_namespace": record.namespace or "legacy",
+        }
+
+    def workspace_usage_bytes(self, session_id: str) -> int:
+        container, _record = self._find_container(session_id)
+        self._reload_container(container)
+        if container.status != "running":
+            return 0
+        try:
+            result = container.exec_run(
+                ["/opt/hermes/.venv/bin/python", "-c", _WORKSPACE_USAGE_SCRIPT]
+            )
+            if result.exit_code != 0:
+                raise BrokerRuntimeError("hermes_terminal.workspace_measure_failed")
+            return max(0, int(bytes(result.output).decode().strip()))
+        except (DockerException, UnicodeDecodeError, ValueError) as exc:
+            raise BrokerRuntimeError("hermes_terminal.workspace_measure_failed") from exc
+
+    def enforce_workspace_quotas(self) -> dict[str, int]:
+        checked = 0
+        stopped = 0
+        containers = self.client.containers.list(
+            all=False,
+            filters={
+                "label": [
+                    f"{MANAGED_LABEL}=true",
+                    f"{NAMESPACE_LABEL}={self.resource_namespace}",
+                    f"{RESOURCE_KIND_LABEL}=runner",
+                ]
+            },
+        )
+        for container in containers:
+            session_id = str((container.labels or {}).get(SESSION_LABEL) or "")
+            try:
+                self._validate_session_id(session_id)
+                usage = self.workspace_usage_bytes(session_id)
+            except BrokerRuntimeError:
+                continue
+            checked += 1
+            if usage <= self.workspace_live_max_bytes:
+                continue
+            self._forced_failure_codes[session_id] = "hermes_terminal.workspace_quota_exceeded"
+            try:
+                container.stop(timeout=15)
+            except DockerException:
+                continue
+            stopped += 1
+        return {"checked": checked, "stopped": stopped}
+
+    @staticmethod
+    def _created_at(container: Container) -> datetime | None:
+        value = str(container.attrs.get("Created") or "")
+        if not value:
+            return None
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _volume_created_at(volume: Any) -> datetime | None:
+        value = str(volume.attrs.get("CreatedAt") or "")
+        if not value:
+            return None
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed
+        except ValueError:
+            return None
+
+    def inventory(self) -> dict[str, Any]:
+        sessions: list[dict[str, Any]] = []
+        utilities: list[dict[str, Any]] = []
+        try:
+            containers = self.client.containers.list(
+                all=True,
+                filters={
+                    "label": [
+                        f"{MANAGED_LABEL}=true",
+                        f"{NAMESPACE_LABEL}={self.resource_namespace}",
+                    ]
+                },
+            )
+        except DockerException as exc:
+            raise BrokerRuntimeError("hermes_terminal.docker_unavailable") from exc
+        for container in containers:
+            labels = container.labels or {}
+            item = {
+                "container_id": container.id,
+                "name": container.name,
+                "status": container.status,
+                "created_at": str(container.attrs.get("Created") or "") or None,
+            }
+            if labels.get(RESOURCE_KIND_LABEL) == "runner":
+                item["session_id"] = str(labels.get(SESSION_LABEL) or "")
+                sessions.append(item)
+            elif labels.get(UTILITY_LABEL) == "true":
+                utilities.append(item)
+        return {
+            "resource_namespace": self.resource_namespace,
+            "sessions": sessions,
+            "utilities": utilities,
+        }
+
+    def reconcile_resources(
+        self,
+        *,
+        known_session_ids: set[str],
+        orphan_grace_seconds: int = 600,
+        utility_grace_seconds: int = 900,
+    ) -> dict[str, int]:
+        now = datetime.now(UTC)
+        removed_runners = 0
+        removed_workspaces = 0
+        removed_utilities = 0
+        referenced_workspaces: set[str] = set()
+        try:
+            containers = self.client.containers.list(
+                all=True,
+                filters={
+                    "label": [
+                        f"{MANAGED_LABEL}=true",
+                        f"{NAMESPACE_LABEL}={self.resource_namespace}",
+                    ]
+                },
+            )
+        except DockerException as exc:
+            raise BrokerRuntimeError("hermes_terminal.docker_unavailable") from exc
+        for container in containers:
+            labels = container.labels or {}
+            created_at = self._created_at(container)
+            age_seconds = (now - created_at).total_seconds() if created_at is not None else 0
+            if labels.get(UTILITY_LABEL) == "true":
+                if age_seconds < utility_grace_seconds:
+                    continue
+                try:
+                    container.remove(force=True)
+                except DockerException:
+                    continue
+                removed_utilities += 1
+                continue
+            if labels.get(RESOURCE_KIND_LABEL) != "runner":
+                continue
+            session_id = str(labels.get(SESSION_LABEL) or "")
+            workspace_volume = self._mount_sources(container).get("/workspace")
+            if workspace_volume:
+                referenced_workspaces.add(workspace_volume)
+            if session_id in known_session_ids or age_seconds < orphan_grace_seconds:
+                continue
+            try:
+                container.remove(force=True)
+                removed_runners += 1
+            except DockerException:
+                continue
+            self._forced_failure_codes.pop(session_id, None)
+            if workspace_volume:
+                try:
+                    volume = self.client.volumes.get(workspace_volume)
+                    volume_labels = volume.attrs.get("Labels") or {}
+                    if (
+                        volume_labels.get(NAMESPACE_LABEL) == self.resource_namespace
+                        and volume_labels.get(RESOURCE_KIND_LABEL) == "workspace"
+                    ):
+                        volume.remove(force=True)
+                        removed_workspaces += 1
+                except (NotFound, DockerException):
+                    pass
+                referenced_workspaces.discard(workspace_volume)
+        try:
+            volumes = self.client.volumes.list(
+                filters={
+                    "label": [
+                        f"{MANAGED_LABEL}=true",
+                        f"{NAMESPACE_LABEL}={self.resource_namespace}",
+                        f"{RESOURCE_KIND_LABEL}=workspace",
+                    ]
+                }
+            )
+        except DockerException as exc:
+            raise BrokerRuntimeError("hermes_terminal.docker_unavailable") from exc
+        for volume in volumes:
+            labels = volume.attrs.get("Labels") or {}
+            session_id = str(labels.get(SESSION_LABEL) or "")
+            if volume.name in referenced_workspaces or session_id in known_session_ids:
+                continue
+            created_at = self._volume_created_at(volume)
+            age_seconds = (now - created_at).total_seconds() if created_at is not None else 0
+            if age_seconds < orphan_grace_seconds:
+                continue
+            try:
+                volume.remove(force=True)
+            except DockerException:
+                continue
+            removed_workspaces += 1
+        return {
+            "removed_runners": removed_runners,
+            "removed_workspaces": removed_workspaces,
+            "removed_utilities": removed_utilities,
         }
 
     def stop_session(self, session_id: str) -> dict[str, Any]:
         container, _record = self._find_container(session_id)
-        container.reload()
+        self._reload_container(container)
         if container.status in _ACTIVE_DOCKER_STATES:
             try:
                 container.stop(timeout=15)
@@ -877,7 +1248,7 @@ class HermesTerminalBrokerRuntime:
                 raise
         else:
             workspace_volume_name = record.workspace_volume_name
-            container.reload()
+            self._reload_container(container)
             if container.status in _ACTIVE_DOCKER_STATES:
                 raise BrokerRuntimeError("hermes_terminal.session_active")
             try:
@@ -890,6 +1261,7 @@ class HermesTerminalBrokerRuntime:
             pass
         except DockerException as exc:
             raise BrokerRuntimeError("hermes_terminal.workspace_remove_failed") from exc
+        self._forced_failure_codes.pop(normalized, None)
 
     def resize_session(self, session_id: str, *, cols: int, rows: int) -> None:
         if not (20 <= cols <= 500 and 5 <= rows <= 300):
@@ -902,12 +1274,15 @@ class HermesTerminalBrokerRuntime:
 
     def list_files(self, session_id: str, *, path: str) -> dict[str, Any]:
         container, _record = self._find_container(session_id)
-        container.reload()
+        self._reload_container(container)
         if container.status != "running":
             raise BrokerRuntimeError("hermes_terminal.session_not_running")
-        result = container.exec_run(
-            ["/opt/hermes/.venv/bin/python", "-c", _LIST_FILES_SCRIPT, path]
-        )
+        try:
+            result = container.exec_run(
+                ["/opt/hermes/.venv/bin/python", "-c", _LIST_FILES_SCRIPT, path]
+            )
+        except DockerException as exc:
+            raise BrokerRuntimeError("hermes_terminal.file_listing_failed") from exc
         if result.exit_code != 0:
             raise BrokerRuntimeError("hermes_terminal.path_not_found")
         try:
@@ -918,12 +1293,15 @@ class HermesTerminalBrokerRuntime:
 
     def read_file(self, session_id: str, *, path: str) -> bytes:
         container, _record = self._find_container(session_id)
-        container.reload()
+        self._reload_container(container)
         if container.status != "running":
             raise BrokerRuntimeError("hermes_terminal.session_not_running")
-        result = container.exec_run(
-            ["/opt/hermes/.venv/bin/python", "-c", _FILE_INFO_SCRIPT, path]
-        )
+        try:
+            result = container.exec_run(
+                ["/opt/hermes/.venv/bin/python", "-c", _FILE_INFO_SCRIPT, path]
+            )
+        except DockerException as exc:
+            raise BrokerRuntimeError("hermes_terminal.file_read_failed") from exc
         if result.exit_code != 0:
             raise BrokerRuntimeError("hermes_terminal.file_not_found")
         try:
@@ -932,7 +1310,10 @@ class HermesTerminalBrokerRuntime:
             raise BrokerRuntimeError("hermes_terminal.file_read_failed") from exc
         if size > 64 * 1024 * 1024:
             raise BrokerRuntimeError("hermes_terminal.file_too_large")
-        stream, _stat = container.get_archive(f"/workspace/{path}")
+        try:
+            stream, _stat = container.get_archive(f"/workspace/{path}")
+        except DockerException as exc:
+            raise BrokerRuntimeError("hermes_terminal.file_read_failed") from exc
         archive = self._read_stream(stream, max_bytes=size + 2 * 1024 * 1024)
         return self._extract_single_file(
             archive,
@@ -942,7 +1323,10 @@ class HermesTerminalBrokerRuntime:
 
     def export_workspace(self, session_id: str) -> bytes:
         container, _record = self._find_container(session_id)
-        stream, _stat = container.get_archive("/workspace")
+        try:
+            stream, _stat = container.get_archive("/workspace")
+        except DockerException as exc:
+            raise BrokerRuntimeError("hermes_terminal.workspace_export_failed") from exc
         return self._read_stream(
             stream,
             max_bytes=self.workspace_archive_max_bytes + 16 * 1024 * 1024,
@@ -950,7 +1334,7 @@ class HermesTerminalBrokerRuntime:
 
     def export_profile(self, session_id: str) -> bytes:
         container, record = self._find_container(session_id)
-        container.reload()
+        self._reload_container(container)
         if container.status in _ACTIVE_DOCKER_STATES:
             raise BrokerRuntimeError("hermes_terminal.session_active")
         utility = self._utility_container(record.profile_volume_name)
@@ -996,7 +1380,7 @@ class HermesTerminalBrokerRuntime:
 
     def attach_socket(self, session_id: str) -> tuple[Any, Container]:
         container, _record = self._find_container(session_id)
-        container.reload()
+        self._reload_container(container)
         if container.status != "running":
             raise BrokerRuntimeError("hermes_terminal.session_not_running")
         try:

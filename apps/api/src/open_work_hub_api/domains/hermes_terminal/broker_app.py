@@ -8,10 +8,13 @@ import hmac
 import json
 import os
 import socket
+from contextlib import asynccontextmanager
 from functools import lru_cache
+from threading import RLock
 from typing import Annotated, Any
 
 import httpx
+from docker.errors import DockerException
 from fastapi import (
     Depends,
     FastAPI,
@@ -23,6 +26,7 @@ from fastapi import (
     WebSocket,
     status,
 )
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from starlette.websockets import WebSocketDisconnect
 
@@ -30,12 +34,49 @@ from open_work_hub_api.domains.hermes_terminal.broker_runtime import (
     BrokerRuntimeError,
     HermesTerminalBrokerRuntime,
 )
+
+
+async def _workspace_quota_watchdog() -> None:
+    while True:
+        try:
+            await asyncio.to_thread(runtime().enforce_workspace_quotas)
+        except Exception:
+            # The watchdog is a safety loop. A transient Docker/API failure
+            # must not permanently disable quota enforcement.
+            pass
+        await asyncio.sleep(5)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    watchdog = asyncio.create_task(_workspace_quota_watchdog())
+    try:
+        yield
+    finally:
+        watchdog.cancel()
+        await asyncio.gather(watchdog, return_exceptions=True)
+
+
 app = FastAPI(
     title="Open Work Hub Hermes Terminal Broker",
     docs_url=None,
     redoc_url=None,
     openapi_url=None,
+    lifespan=lifespan,
 )
+_ATTACHMENT_GUARD = RLock()
+_ATTACHED_SESSION_IDS: set[str] = set()
+
+
+@app.exception_handler(DockerException)
+async def docker_unavailable_handler(
+    _request: Request,
+    _error: DockerException,
+) -> JSONResponse:
+    return JSONResponse(
+        {"detail": {"code": "hermes_terminal.docker_unavailable"}},
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+    )
 
 
 class ResizeRequest(BaseModel):
@@ -62,6 +103,17 @@ class BrokerSessionResponse(BaseModel):
     status: str
     exit_code: int | None = None
     failure_code: str | None = None
+    resource_namespace: str | None = None
+
+
+class BrokerResourceReconcileRequest(BaseModel):
+    known_session_ids: set[str] = Field(default_factory=set, max_length=5000)
+
+
+class BrokerResourceReconcileResponse(BaseModel):
+    removed_runners: int
+    removed_workspaces: int
+    removed_utilities: int
 
 
 class BrokerFileEntry(BaseModel):
@@ -179,12 +231,15 @@ class _DockerAttachment:
 
 
 @app.get("/healthz")
-async def healthz() -> dict[str, Any]:
+async def healthz() -> Response:
     try:
         broker = await asyncio.to_thread(runtime)
-        return {"ready": True, "instance_id": broker.instance_id}
+        return JSONResponse(await asyncio.to_thread(broker.healthcheck))
     except BrokerRuntimeError as error:
-        return {"ready": False, "code": error.code}
+        return JSONResponse(
+            {"ready": False, "code": error.code},
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
 
 
 @app.post(
@@ -245,6 +300,34 @@ async def forget_session(session_id: str) -> Response:
     except BrokerRuntimeError as error:
         raise _runtime_error(error) from error
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@app.get(
+    "/v1/resources",
+    dependencies=[Depends(require_broker_auth)],
+)
+async def inventory_resources() -> dict[str, Any]:
+    try:
+        return await asyncio.to_thread(runtime().inventory)
+    except BrokerRuntimeError as error:
+        raise _runtime_error(error) from error
+
+
+@app.post(
+    "/v1/resources/reconcile",
+    response_model=BrokerResourceReconcileResponse,
+    dependencies=[Depends(require_broker_auth)],
+)
+async def reconcile_resources(
+    payload: BrokerResourceReconcileRequest,
+) -> dict[str, int]:
+    try:
+        return await asyncio.to_thread(
+            runtime().reconcile_resources,
+            known_session_ids=payload.known_session_ids,
+        )
+    except BrokerRuntimeError as error:
+        raise _runtime_error(error) from error
 
 
 @app.post(
@@ -351,7 +434,9 @@ async def relay_mcp(session_id: str, request: Request) -> Response:
     }
     transport = httpx.AsyncHTTPTransport(uds=socket_path)
     try:
-        async with httpx.AsyncClient(transport=transport, base_url="http://open-work-hub") as client:
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://open-work-hub"
+        ) as client:
             upstream = await client.request(
                 request.method,
                 "/mcp",
@@ -381,12 +466,21 @@ async def attach_session(websocket: WebSocket, session_id: str) -> None:
     attachment: _DockerAttachment | None = None
     try:
         require_broker_auth(authorization)
-        attached, container = await asyncio.to_thread(runtime().attach_socket, session_id)
+        with _ATTACHMENT_GUARD:
+            if session_id in _ATTACHED_SESSION_IDS:
+                raise BrokerRuntimeError("hermes_terminal.session_already_attached")
+            _ATTACHED_SESSION_IDS.add(session_id)
+        attached, _container = await asyncio.to_thread(
+            runtime().attach_socket,
+            session_id,
+        )
         attachment = _DockerAttachment(attached)
     except HTTPException:
         await websocket.close(code=4401)
         return
     except BrokerRuntimeError:
+        with _ATTACHMENT_GUARD:
+            _ATTACHED_SESSION_IDS.discard(session_id)
         await websocket.close(code=4409)
         return
     assert attachment is not None
@@ -394,63 +488,93 @@ async def attach_session(websocket: WebSocket, session_id: str) -> None:
     await websocket.send_json({"type": "ready", "active": True})
 
     async def send_output() -> None:
+        empty_reads = 0
         while True:
             try:
                 data = await attachment.receive(65536)
             except OSError:
                 data = b""
             if data:
+                empty_reads = 0
                 await websocket.send_json(
                     {"type": "output", "data": base64.b64encode(data).decode("ascii")}
                 )
                 continue
-            await asyncio.to_thread(container.reload)
-            if container.status != "running":
-                state = container.attrs.get("State") or {}
-                value = state.get("ExitCode")
+            empty_reads += 1
+            try:
+                terminal_status = await asyncio.to_thread(
+                    runtime().session_status,
+                    session_id,
+                )
+            except BrokerRuntimeError as error:
+                await websocket.send_json({"type": "error", "code": error.code})
+                return
+            if terminal_status.get("status") not in {"starting", "running"}:
                 await websocket.send_json(
                     {
                         "type": "exit",
-                        "exit_code": value if isinstance(value, int) else None,
+                        "status": terminal_status.get("status"),
+                        "exit_code": terminal_status.get("exit_code"),
+                        "failure_code": terminal_status.get("failure_code"),
                     }
                 )
+                return
+            if empty_reads >= 20:
+                await websocket.send_json({"type": "error", "code": "hermes_terminal.attach_eof"})
                 return
             await asyncio.sleep(0.1)
 
     async def receive_input() -> None:
         while True:
             raw = await websocket.receive_text()
+            if len(raw.encode("utf-8")) > 100_000:
+                await websocket.close(code=4400)
+                return
             try:
                 payload = json.loads(raw)
             except json.JSONDecodeError:
-                await websocket.send_json(
-                    {"type": "error", "code": "hermes_terminal.message_invalid"}
-                )
-                continue
+                await websocket.close(code=4400)
+                return
             if not isinstance(payload, dict):
-                continue
+                await websocket.close(code=4400)
+                return
             message_type = payload.get("type")
             if message_type == "input":
                 encoded = payload.get("data")
                 if not isinstance(encoded, str) or len(encoded) > 90_000:
-                    continue
+                    await websocket.close(code=4400)
+                    return
                 try:
                     data = base64.b64decode(encoded, validate=True)
                 except binascii.Error:
-                    continue
+                    await websocket.close(code=4400)
+                    return
+                if len(data) > 64 * 1024:
+                    await websocket.close(code=4400)
+                    return
                 await attachment.send(data)
             elif message_type == "resize":
                 cols = payload.get("cols")
                 rows = payload.get("rows")
-                if isinstance(cols, int) and isinstance(rows, int):
-                    await asyncio.to_thread(
-                        runtime().resize_session,
-                        session_id,
-                        cols=cols,
-                        rows=rows,
-                    )
+                if (
+                    not isinstance(cols, int)
+                    or not isinstance(rows, int)
+                    or not 20 <= cols <= 500
+                    or not 5 <= rows <= 300
+                ):
+                    await websocket.close(code=4400)
+                    return
+                await asyncio.to_thread(
+                    runtime().resize_session,
+                    session_id,
+                    cols=cols,
+                    rows=rows,
+                )
             elif message_type == "ping":
                 await websocket.send_json({"type": "pong"})
+            else:
+                await websocket.close(code=4400)
+                return
 
     tasks = {
         asyncio.create_task(send_output()),
@@ -464,11 +588,13 @@ async def attach_session(websocket: WebSocket, session_id: str) -> None:
         for task in done:
             if not task.cancelled():
                 task.result()
-    except (BrokerRuntimeError, OSError, WebSocketDisconnect):
+    except (BrokerRuntimeError, OSError, RuntimeError, ValueError, WebSocketDisconnect):
         pass
     finally:
         for task in tasks:
             task.cancel()
         if attachment is not None:
             attachment.close()
+        with _ATTACHMENT_GUARD:
+            _ATTACHED_SESSION_IDS.discard(session_id)
         await asyncio.gather(*tasks, return_exceptions=True)

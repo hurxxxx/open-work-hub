@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import timedelta
 from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
@@ -9,7 +10,7 @@ import httpx
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import create_engine, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from open_work_hub_api.core.settings import (
     HERMES_FALLBACK_MODEL,
@@ -18,6 +19,7 @@ from open_work_hub_api.core.settings import (
 )
 from open_work_hub_api.domains.auth.models import User, Workspace
 from open_work_hub_api.domains.hermes import mcp_router
+from open_work_hub_api.domains.hermes import maintenance as hermes_maintenance
 from open_work_hub_api.domains.hermes import router as hermes_router
 from open_work_hub_api.domains.hermes import service as hermes_service
 from open_work_hub_api.domains.hermes.client import (
@@ -27,14 +29,19 @@ from open_work_hub_api.domains.hermes.client import (
 )
 from open_work_hub_api.domains.hermes.models import (
     HermesDispatchOutbox,
+    HermesMaintenanceState,
     HermesProfileBinding,
     HermesRunEvent,
     HermesRunInput,
     HermesRunProjection,
+    HermesToolApproval,
 )
 from open_work_hub_api.domains.hermes.repository import (
+    HermesDispatchRepository,
+    HermesRunIdempotencyConflict,
     HermesRunRepository,
     sanitize_event_payload,
+    utcnow_naive,
 )
 from open_work_hub_api.domains.hermes.research_sources import (
     DEFAULT_RESEARCH_SOURCE_POLICY,
@@ -93,19 +100,371 @@ def test_stage_persists_run_before_foreign_key_children(
                 input_text="Verify atomic run staging",
                 instructions=None,
                 conversation_history=[],
+                client_request_id="request-1",
+                request_sha256="a" * 64,
             )
 
             assert db.get(HermesRunProjection, run.id) is run
             assert db.get(HermesRunInput, run.id) is not None
-            assert db.scalar(
-                select(HermesDispatchOutbox).where(
-                    HermesDispatchOutbox.run_id == run.id
+            assert (
+                db.scalar(select(HermesDispatchOutbox).where(HermesDispatchOutbox.run_id == run.id))
+                is not None
+            )
+            assert (
+                db.scalar(select(HermesRunEvent).where(HermesRunEvent.run_id == run.id)) is not None
+            )
+            replay = HermesRunRepository(db).stage(
+                binding=binding,
+                session=None,
+                input_text="Verify atomic run staging",
+                instructions=None,
+                conversation_history=[],
+                client_request_id="request-1",
+                request_sha256="a" * 64,
+            )
+            assert replay.id == run.id
+            with pytest.raises(HermesRunIdempotencyConflict):
+                HermesRunRepository(db).stage(
+                    binding=binding,
+                    session=None,
+                    input_text="Different request",
+                    instructions=None,
+                    conversation_history=[],
+                    client_request_id="request-1",
+                    request_sha256="b" * 64,
                 )
-            ) is not None
-            assert db.scalar(
-                select(HermesRunEvent).where(HermesRunEvent.run_id == run.id)
-            ) is not None
+
+            outbox = db.scalar(
+                select(HermesDispatchOutbox).where(HermesDispatchOutbox.run_id == run.id)
+            )
+            assert outbox is not None
+            outbox.status = "dispatched"
+            outbox.dispatched_at = utcnow_naive() - timedelta(minutes=5)
+            db.add(outbox)
+            db.flush()
+            assert HermesDispatchRepository(db).requeue_stale_dispatched(limit=1) == 1
+            assert outbox.status == "pending"
+            assert outbox.celery_task_id is None
             db.rollback()
+    finally:
+        engine.dispose()
+
+
+async def test_headless_maintenance_records_a_durable_heartbeat_without_work(
+    application_postgres_dsn: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = create_engine(application_postgres_dsn)
+    factory = sessionmaker(bind=engine)
+    monkeypatch.setattr(hermes_maintenance, "get_session_factory", lambda: factory)
+    monkeypatch.setattr(
+        hermes_maintenance,
+        "get_settings",
+        lambda: SimpleNamespace(hermes_terminal_artifact_retention_days=30),
+    )
+    try:
+        counters = await hermes_maintenance.maintain_headless_hermes_once(limit=1)
+
+        assert counters == {
+            "expired_approvals": 0,
+            "revoked_runs_claimed": 0,
+            "revoked_runs_stopped": 0,
+            "revoked_jobs_paused": 0,
+            "events_deleted": 0,
+            "errors": 0,
+        }
+        with Session(engine) as db:
+            state = db.get(HermesMaintenanceState, "headless")
+            assert state is not None
+            assert state.last_started_at is not None
+            assert state.last_succeeded_at is not None
+            assert state.last_error_code is None
+            assert state.counters == counters
+    finally:
+        engine.dispose()
+
+
+async def test_headless_maintenance_skips_while_another_lease_is_live(
+    application_postgres_dsn: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = create_engine(application_postgres_dsn)
+    factory = sessionmaker(bind=engine)
+    monkeypatch.setattr(hermes_maintenance, "get_session_factory", lambda: factory)
+    lease_started_at = utcnow_naive()
+    try:
+        with Session(engine) as db:
+            db.add(
+                HermesMaintenanceState(
+                    component="headless",
+                    counters={"previous": 1},
+                    lease_token="active-maintenance-lease",
+                    lease_expires_at=lease_started_at + timedelta(minutes=1),
+                    last_started_at=lease_started_at,
+                )
+            )
+            db.commit()
+
+        assert await hermes_maintenance.maintain_headless_hermes_once(limit=1) == {
+            "maintenance_skipped": 1,
+            "errors": 0,
+        }
+
+        with Session(engine) as db:
+            state = db.get(HermesMaintenanceState, "headless")
+            assert state is not None
+            assert state.lease_token == "active-maintenance-lease"
+            assert state.counters == {"previous": 1}
+            assert state.last_started_at == lease_started_at
+    finally:
+        engine.dispose()
+
+
+def test_revoked_run_scan_advances_past_authorized_windows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state = SimpleNamespace(run_scan_cursor=None)
+    authorized = [
+        SimpleNamespace(
+            id=f"00000000-0000-0000-0000-{index:012d}",
+            user_id=f"allowed-{index}",
+            workspace_id="workspace-1",
+            status="running",
+            execution_claim_token=None,
+            execution_claim_expires_at=None,
+            hermes_run_id=f"remote-{index}",
+            profile_binding_id=f"profile-{index}",
+        )
+        for index in range(1, 6)
+    ]
+    revoked = SimpleNamespace(
+        id="00000000-0000-0000-0000-000000000006",
+        user_id="revoked-user",
+        workspace_id="workspace-1",
+        status="running",
+        execution_claim_token=None,
+        execution_claim_expires_at=None,
+        hermes_run_id="remote-revoked",
+        profile_binding_id="profile-revoked",
+    )
+    pages = iter([authorized, [revoked]])
+    appended: list[str] = []
+
+    class FakeDb:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def scalars(self, _statement):
+            return iter(next(pages))
+
+        def get(self, _model, binding_id: str):
+            return SimpleNamespace(profile_name=f"name-{binding_id}")
+
+        def add(self, _value):
+            return None
+
+        def commit(self):
+            return None
+
+    class FakeRepository:
+        def __init__(self, _db):
+            pass
+
+        def append_event(self, run_id: str, _payload):
+            appended.append(run_id)
+
+    monkeypatch.setattr(
+        hermes_maintenance,
+        "get_session_factory",
+        lambda: lambda: FakeDb(),
+    )
+    monkeypatch.setattr(
+        hermes_maintenance,
+        "_maintenance_state_for_update",
+        lambda _db: state,
+    )
+    monkeypatch.setattr(
+        hermes_maintenance,
+        "is_app_enabled_for_user_context",
+        lambda _db, **kwargs: kwargs["user_id"] != "revoked-user",
+    )
+    monkeypatch.setattr(
+        hermes_maintenance,
+        "HermesRunRepository",
+        FakeRepository,
+    )
+
+    assert hermes_maintenance._claim_revoked_runs(limit=1) == []
+    assert state.run_scan_cursor == authorized[-1].id
+    assert hermes_maintenance._claim_revoked_runs(limit=1) == [
+        (revoked.id, "name-profile-revoked", "remote-revoked")
+    ]
+    assert appended == [revoked.id]
+
+
+async def test_revoked_job_scan_advances_past_authorized_windows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state = SimpleNamespace(job_scan_cursor=None)
+    authorized = [
+        SimpleNamespace(
+            id=f"10000000-0000-0000-0000-{index:012d}",
+            user_id=f"allowed-{index}",
+            workspace_id="workspace-1",
+            status="active",
+            profile_binding_id=f"profile-{index}",
+            hermes_job_id=f"remote-job-{index}",
+            updated_at=utcnow_naive(),
+        )
+        for index in range(1, 6)
+    ]
+    revoked = SimpleNamespace(
+        id="10000000-0000-0000-0000-000000000006",
+        user_id="revoked-user",
+        workspace_id="workspace-1",
+        status="active",
+        profile_binding_id="profile-revoked",
+        hermes_job_id="remote-job-revoked",
+        updated_at=utcnow_naive(),
+    )
+    pages = iter([authorized, [revoked]])
+    paused: list[tuple[str, str, str]] = []
+
+    class FakeDb:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def scalars(self, _statement):
+            return iter(next(pages))
+
+        def scalar(self, _statement):
+            return revoked
+
+        def get(self, _model, binding_id: str):
+            return SimpleNamespace(profile_name=f"name-{binding_id}")
+
+        def add(self, _value):
+            return None
+
+        def commit(self):
+            return None
+
+        def rollback(self):
+            return None
+
+    class FakeClient:
+        async def job_action(self, profile_name: str, job_id: str, action: str):
+            paused.append((profile_name, job_id, action))
+
+    monkeypatch.setattr(
+        hermes_maintenance,
+        "get_session_factory",
+        lambda: lambda: FakeDb(),
+    )
+    monkeypatch.setattr(
+        hermes_maintenance,
+        "_maintenance_state_for_update",
+        lambda _db: state,
+    )
+    monkeypatch.setattr(
+        hermes_maintenance,
+        "is_app_enabled_for_user_context",
+        lambda _db, **kwargs: kwargs["user_id"] != "revoked-user",
+    )
+    monkeypatch.setattr(
+        hermes_maintenance,
+        "runtime_client",
+        lambda: FakeClient(),
+    )
+
+    assert await hermes_maintenance._pause_revoked_jobs(limit=1) == (0, 0)
+    assert state.job_scan_cursor == authorized[-1].id
+    assert await hermes_maintenance._pause_revoked_jobs(limit=1) == (1, 0)
+    assert revoked.status == "paused"
+    assert paused == [("name-profile-revoked-jobs", "remote-job-revoked", "pause")]
+
+
+async def test_expired_approval_without_a_remote_run_fails_the_local_run(
+    application_postgres_dsn: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = create_engine(application_postgres_dsn)
+    factory = sessionmaker(bind=engine)
+    monkeypatch.setattr(hermes_maintenance, "get_session_factory", lambda: factory)
+
+    def unexpected_runtime_client():
+        raise AssertionError("A local-only expiry must not initialize Hermes")
+
+    monkeypatch.setattr(
+        hermes_maintenance,
+        "runtime_client",
+        unexpected_runtime_client,
+    )
+    suffix = uuid4().hex
+    workspace = Workspace(
+        id=str(uuid4()),
+        key=f"hermes-expired-{suffix[:16]}",
+        name="Hermes expired approval",
+    )
+    user = User(
+        id=str(uuid4()),
+        login_id=f"hermes-expired-{suffix[:16]}",
+        email=f"hermes-expired-{suffix[:16]}@example.test",
+        full_name="Hermes Expired Approval",
+        password_hash="not-used",
+    )
+    binding = HermesProfileBinding(
+        id=str(uuid4()),
+        workspace_id=workspace.id,
+        user_id=user.id,
+        profile_name=f"owh-expired-{suffix[:24]}",
+        status="active",
+        provider=HERMES_PROVIDER,
+        model=HERMES_MODEL,
+    )
+    try:
+        with Session(engine) as db:
+            db.add_all([workspace, user, binding])
+            db.flush()
+            run = HermesRunRepository(db).stage(
+                binding=binding,
+                session=None,
+                input_text="Wait for approval",
+                instructions=None,
+                conversation_history=[],
+            )
+            run.status = "awaiting_approval"
+            run.pending_approval = {"request_id": "approval-1"}
+            approval = HermesToolApproval(
+                id=str(uuid4()),
+                run_id=run.id,
+                request_id="approval-1",
+                status="pending",
+                request_payload={"tool": "shell"},
+                expires_at=utcnow_naive() - timedelta(seconds=1),
+            )
+            db.add_all([run, approval])
+            db.commit()
+            run_id = run.id
+            approval_id = approval.id
+
+        assert await hermes_maintenance._expire_approvals(limit=1) == (1, 0)
+
+        with Session(engine) as db:
+            stored_run = db.get(HermesRunProjection, run_id)
+            stored_approval = db.get(HermesToolApproval, approval_id)
+            assert stored_run is not None
+            assert stored_run.status == "failed"
+            assert stored_run.error_code == "hermes.remote_run_missing"
+            assert stored_approval is not None
+            assert stored_approval.status == "expired"
+            assert stored_approval.choice == "deny"
     finally:
         engine.dispose()
 
@@ -237,9 +596,7 @@ async def test_management_client_applies_managed_resilience_policy() -> None:
         "model": {
             "default_headers": {"X-OpenRouter-Metadata": "enabled"},
         },
-        "fallback_providers": [
-            {"provider": HERMES_PROVIDER, "model": HERMES_FALLBACK_MODEL}
-        ],
+        "fallback_providers": [{"provider": HERMES_PROVIDER, "model": HERMES_FALLBACK_MODEL}],
         "agent": {
             "api_max_retries": 1,
             "environment_hint": (
@@ -366,9 +723,7 @@ def _mcp_approval_payload(profile_name: str, tool_name: str) -> dict[str, Any]:
 
 def test_mcp_write_approval_matches_the_exact_hermes_trust_prompt() -> None:
     profile_name = "owh-profile-a"
-    approval = SimpleNamespace(
-        request_payload=_mcp_approval_payload(profile_name, "tasks.create")
-    )
+    approval = SimpleNamespace(request_payload=_mcp_approval_payload(profile_name, "tasks.create"))
 
     assert mcp_router._approval_matches_mcp_tool(
         approval,
@@ -719,8 +1074,7 @@ async def test_profile_reconciliation_replaces_stale_internal_mcp_url(
     servers = {
         internal_name: {
             "name": internal_name,
-            "url": "http://127.0.0.1:8001/api/v1/internal/hermes/mcp"
-            f"?profile={profile_name}",
+            "url": f"http://127.0.0.1:8001/api/v1/internal/hermes/mcp?profile={profile_name}",
             "auth": "header",
             "enabled": True,
             "tools": None,
@@ -784,9 +1138,7 @@ async def test_profile_reconciliation_replaces_stale_internal_mcp_url(
     settings = SimpleNamespace(
         hermes_enabled=True,
         hermes_profile_clone_source="default",
-        hermes_mcp_server_url=(
-            "http://127.0.0.1:8002/api/v1/internal/hermes/mcp"
-        ),
+        hermes_mcp_server_url=("http://127.0.0.1:8002/api/v1/internal/hermes/mcp"),
         hermes_mcp_shared_secret=SimpleNamespace(
             get_secret_value=lambda: "mcp-root-secret-00000000000000000001"
         ),
@@ -807,8 +1159,7 @@ async def test_profile_reconciliation_replaces_stale_internal_mcp_url(
     assert len(added) == 1
     assert added[0]["name"] == internal_name
     assert added[0]["url"] == (
-        "http://127.0.0.1:8002/api/v1/internal/hermes/mcp"
-        f"?profile={profile_name}"
+        f"http://127.0.0.1:8002/api/v1/internal/hermes/mcp?profile={profile_name}"
     )
     assert external_name in servers
 

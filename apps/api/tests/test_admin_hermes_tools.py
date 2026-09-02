@@ -58,6 +58,24 @@ def test_admin_can_toggle_each_research_source_with_revision_control(
     assert conflict.json()["detail"]["code"] == "hermes.research_settings_conflict"
 
 
+def test_admin_runtime_health_exposes_recovery_and_quarantine_counts(
+    client: TestClient,
+) -> None:
+    response = client.get(
+        "/api/v1/admin/hermes/runtime-health",
+        headers=_admin_headers(client),
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert set(payload["services"]) == {"headless", "terminal_broker"}
+    assert payload["active_runs"] >= 0
+    assert payload["pending_dispatches"] >= 0
+    assert payload["pending_approvals"] >= 0
+    assert payload["active_terminal_sessions"] >= 0
+    assert payload["quarantined_terminal_workspaces"] >= 0
+
+
 def test_research_source_policy_generates_guidance_and_terminal_blocks() -> None:
     policy = dict(DEFAULT_RESEARCH_SOURCE_POLICY)
     hint = academic_research_environment_hint(policy)

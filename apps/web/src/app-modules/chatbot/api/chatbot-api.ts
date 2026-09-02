@@ -132,11 +132,7 @@ export async function sendAiChat(
   options: { workspaceSlug?: string | null } = {},
 ): Promise<AiChatResponse> {
   try {
-    const started = await startHermesRun(
-      payload,
-      token,
-      options.workspaceSlug,
-    );
+    const started = await startHermesRun(payload, token, options.workspaceSlug);
     const run = await waitForHermesRun(
       token,
       started.run.id,
@@ -185,7 +181,9 @@ export async function streamAiChat({
   try {
     const started = await startHermesRun(payload, token, workspaceSlug);
     const stopOnAbort = () => {
-      void stopHermesRun(token, started.run.id, workspaceSlug).catch(() => undefined);
+      void stopHermesRun(token, started.run.id, workspaceSlug).catch(
+        () => undefined,
+      );
     };
     signal.addEventListener('abort', stopOnAbort, { once: true });
     const response = await legacyEventStreamResponse({
@@ -209,10 +207,18 @@ export async function getAiApprovalStatus(
 ): Promise<AiApprovalStatusResponse> {
   const reference = requireApprovalReference(approvalId);
   try {
-    const run = await getHermesRun(token, reference.runId, options.workspaceSlug);
+    const run = await getHermesRun(
+      token,
+      reference.runId,
+      options.workspaceSlug,
+    );
     const payload = run.pending_approval ?? {};
     const argumentsValue =
-      payload.arguments ?? payload.args ?? payload.command ?? payload.preview ?? {};
+      payload.arguments ??
+      payload.args ??
+      payload.command ??
+      payload.preview ??
+      {};
     const timestamp = eventTimestampMs(payload);
     return {
       id: approvalId,
@@ -226,8 +232,9 @@ export async function getAiApprovalStatus(
           ? argumentsValue
           : JSON.stringify(argumentsValue, null, 2),
       resource_preview:
-        stringValue(payload.preview ?? payload.command ?? payload.description) ||
-        null,
+        stringValue(
+          payload.preview ?? payload.command ?? payload.description,
+        ) || null,
       status: run.status === 'awaiting_approval' ? 'pending' : run.status,
       requested_by_user_id: '',
       resolved_by_user_id: null,
@@ -319,6 +326,7 @@ async function startHermesRun(
   token: string,
   workspaceSlug?: string | null,
 ): Promise<StartedHermesRun> {
+  const idempotencyKey = createHermesRequestId();
   const input = latestUserContent(payload);
   const shouldBranch = hasRewriteDirective(payload);
   let sessionId = payload.conversation_id ?? null;
@@ -359,18 +367,48 @@ async function startHermesRun(
         content: message.content,
       }))
     : [];
-  const run = await createHermesRun(
-    token,
-    sessionId,
-    {
-      input,
-      instructions: systemInstructions || null,
-      conversation_history: history,
-      allowed_app_ids: payload.allowed_app_ids ?? null,
-    },
-    workspaceSlug,
-  );
+  const runBody = {
+    input,
+    instructions: systemInstructions || null,
+    conversation_history: history,
+    allowed_app_ids: payload.allowed_app_ids ?? null,
+  };
+  let run: HermesRun;
+  try {
+    run = await createHermesRun(
+      token,
+      sessionId,
+      runBody,
+      workspaceSlug,
+      idempotencyKey,
+    );
+  } catch (error) {
+    if (
+      !(error instanceof HermesAgentApiError) ||
+      (error.status !== 0 && error.status < 500)
+    ) {
+      throw error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    run = await createHermesRun(
+      token,
+      sessionId,
+      runBody,
+      workspaceSlug,
+      idempotencyKey,
+    );
+  }
   return { run, sessionId };
+}
+
+function createHermesRequestId(): string {
+  if (
+    typeof globalThis.crypto !== 'undefined' &&
+    typeof globalThis.crypto.randomUUID === 'function'
+  ) {
+    return globalThis.crypto.randomUUID();
+  }
+  return `owh-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
 function hasRewriteDirective(payload: AiChatRequest): boolean {
@@ -389,7 +427,10 @@ function latestUserContent(payload: AiChatRequest): string {
       return message.content.trim();
     }
   }
-  throw new AiApiError(422, i18n.t('apps:ai.errors.requestFailed', { status: 422 }));
+  throw new AiApiError(
+    422,
+    i18n.t('apps:ai.errors.requestFailed', { status: 422 }),
+  );
 }
 
 async function waitForHermesRun(
@@ -400,7 +441,10 @@ async function waitForHermesRun(
   const deadline = Date.now() + 60 * 60 * 1000;
   while (Date.now() < deadline) {
     const run = await getHermesRun(token, runId, workspaceSlug);
-    if (TERMINAL_RUN_STATUSES.has(run.status) || run.status === 'awaiting_approval') {
+    if (
+      TERMINAL_RUN_STATUSES.has(run.status) ||
+      run.status === 'awaiting_approval'
+    ) {
       return run;
     }
     await new Promise((resolve) => setTimeout(resolve, 750));
@@ -452,17 +496,14 @@ interface LegacyEventStreamArgs {
 async function legacyEventStreamResponse(
   args: LegacyEventStreamArgs,
 ): Promise<Response> {
-  const sourceAbort = new AbortController();
-  const forwardAbort = () => sourceAbort.abort();
+  let sourceAbort: AbortController | null = null;
+  let cancelled = false;
+  const loopAbort = new AbortController();
+  const forwardAbort = () => {
+    sourceAbort?.abort();
+    loopAbort.abort();
+  };
   args.signal.addEventListener('abort', forwardAbort, { once: true });
-  const source = await streamHermesRunEvents(args.token, args.runId, {
-    afterSequence: args.afterSequence,
-    signal: sourceAbort.signal,
-    workspaceSlug: args.workspaceSlug,
-  });
-  if (!source.body) {
-    throw new AiApiError(0, i18n.t('apps:ai.errors.emptySseBody'));
-  }
 
   const encoder = new TextEncoder();
   const openTools: Array<{ id: string; name: string }> = [];
@@ -472,6 +513,7 @@ async function legacyEventStreamResponse(
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const emit = (type: string, data: unknown, sequence?: number) => {
+        if (cancelled) return;
         syntheticSequence = Math.max(syntheticSequence + 1, sequence ?? 0);
         controller.enqueue(
           encoder.encode(
@@ -487,137 +529,297 @@ async function legacyEventStreamResponse(
 
       emit('conversation_attached', { conversation_id: args.conversationId });
       try {
-        for await (const message of iterSseEvents(
-          source.body as ReadableStream<Uint8Array>,
-          sourceAbort.signal,
-        )) {
-          const payload = parseRecord(message.data);
-          if (!payload) continue;
-          const eventType = stringValue(payload.event) || message.event;
-          const sequence = Number.parseInt(message.id ?? '', 10);
-          const resolvedSequence = Number.isFinite(sequence)
-            ? sequence
-            : undefined;
+        let afterSequence = args.afterSequence;
+        let reconnectAttempt = 0;
+        const reconnectDeadline = Date.now() + 60 * 60 * 1000;
+        while (
+          !terminal &&
+          !cancelled &&
+          !args.signal.aborted &&
+          Date.now() < reconnectDeadline
+        ) {
+          sourceAbort = new AbortController();
+          let source: Response;
+          try {
+            source = await streamHermesRunEvents(args.token, args.runId, {
+              afterSequence,
+              signal: sourceAbort.signal,
+              workspaceSlug: args.workspaceSlug,
+            });
+          } catch (error) {
+            sourceAbort = null;
+            if (cancelled || args.signal.aborted || loopAbort.signal.aborted)
+              break;
+            if (
+              error instanceof HermesAgentApiError &&
+              error.status >= 400 &&
+              error.status < 500
+            ) {
+              throw error;
+            }
+            reconnectAttempt += 1;
+            await abortableDelay(
+              Math.min(30_000, 1000 * 2 ** Math.min(reconnectAttempt - 1, 5)),
+              loopAbort.signal,
+            );
+            continue;
+          }
+          if (!source.body) {
+            throw new AiApiError(0, i18n.t('apps:ai.errors.emptySseBody'));
+          }
+          let receivedEvent = false;
+          try {
+            for await (const message of iterSseEvents(
+              source.body,
+              sourceAbort.signal,
+            )) {
+              const payload = parseRecord(message.data);
+              if (!payload) continue;
+              receivedEvent = true;
+              const eventType = stringValue(payload.event) || message.event;
+              const sequence = Number.parseInt(message.id ?? '', 10);
+              const resolvedSequence = Number.isFinite(sequence)
+                ? sequence
+                : undefined;
+              if (resolvedSequence != null) {
+                afterSequence = Math.max(afterSequence, resolvedSequence);
+              }
 
-          if (eventType === 'message.delta') {
-            const text = stringValue(payload.delta ?? payload.text);
-            if (text) {
-              contentSeen = true;
-              emit('content_delta', { text }, resolvedSequence);
+              if (eventType === 'error') {
+                emit('error', {
+                  code: stringValue(payload.code) || 'hermes.stream_failed',
+                  message:
+                    stringValue(payload.message) ||
+                    i18n.t('apps:ai.errors.streamFailed'),
+                  retryable: false,
+                });
+                emit('done', {
+                  finish_reason: 'error',
+                  audit_id: null,
+                  meta: doneMeta(args.runId),
+                });
+                terminal = true;
+                break;
+              } else if (eventType === 'message.delta') {
+                const text = stringValue(payload.delta ?? payload.text);
+                if (text) {
+                  contentSeen = true;
+                  emit('content_delta', { text }, resolvedSequence);
+                }
+              } else if (eventType === 'reasoning.available') {
+                const text = stringValue(payload.text ?? payload.preview);
+                if (text) emit('reasoning_delta', { text }, resolvedSequence);
+              } else if (eventType === 'tool.started') {
+                const name =
+                  stringValue(payload.tool ?? payload.name) || 'tool';
+                const id =
+                  stringValue(payload.call_id) ||
+                  `hermes-tool-${args.runId}-${resolvedSequence ?? syntheticSequence + 1}`;
+                openTools.push({ id, name });
+                emit(
+                  'tool_call_started',
+                  {
+                    call_id: id,
+                    name,
+                    args_preview: stringValue(payload.preview) || null,
+                  },
+                  resolvedSequence,
+                );
+              } else if (
+                eventType === 'tool.completed' ||
+                eventType === 'tool.failed'
+              ) {
+                const name =
+                  stringValue(payload.tool ?? payload.name) || 'tool';
+                const matchingIndex = findOpenTool(openTools, name);
+                const call =
+                  matchingIndex >= 0
+                    ? openTools.splice(matchingIndex, 1)[0]
+                    : {
+                        id: `hermes-tool-${args.runId}-${syntheticSequence + 1}`,
+                        name,
+                      };
+                const failed =
+                  eventType === 'tool.failed' ||
+                  Boolean(payload.error === true);
+                emit(
+                  'tool_result',
+                  {
+                    call_id: call.id,
+                    status: failed ? 'error' : 'ok',
+                    result_preview:
+                      stringValue(payload.preview ?? payload.result) || null,
+                    error: failed
+                      ? stringValue(payload.message ?? payload.error) ||
+                        'Tool failed.'
+                      : null,
+                  },
+                  resolvedSequence,
+                );
+              } else if (eventType === 'approval.request') {
+                const requestId = stringValue(payload.request_id);
+                if (!requestId) continue;
+                const approvalSequence =
+                  resolvedSequence ?? syntheticSequence + 1;
+                const tool = hermesApprovalToolName(payload);
+                emit(
+                  'approval_required',
+                  {
+                    approval_id: encodeHermesApprovalReference({
+                      runId: args.runId,
+                      requestId,
+                      sequence: approvalSequence,
+                    }),
+                    call_id: stringValue(payload.call_id) || requestId,
+                    tool,
+                    resource_preview:
+                      stringValue(
+                        payload.preview ??
+                          payload.command ??
+                          payload.description,
+                      ) || null,
+                    expires_at_ms:
+                      eventTimestampMs(payload) + HERMES_APPROVAL_TTL_MS,
+                  },
+                  approvalSequence,
+                );
+                emit('done', {
+                  finish_reason: 'awaiting_approval',
+                  audit_id: null,
+                  meta: doneMeta(args.runId),
+                });
+                terminal = true;
+                break;
+              } else if (eventType === 'stream.closed') {
+                // The durable event log may have been retained less long than
+                // the run projection, or Last-Event-ID may already point past
+                // the terminal event. Resolve the authoritative projection
+                // instead of reconnecting to an intentionally closed stream.
+                const run = await getHermesRun(
+                  args.token,
+                  args.runId,
+                  args.workspaceSlug,
+                );
+                const output = run.output_text?.trim();
+                if (output && !contentSeen) {
+                  contentSeen = true;
+                  emit('content_delta', { text: output }, resolvedSequence);
+                }
+                const usage = normalizeUsage(run.usage);
+                if (usage) emit('usage', usage);
+                if (run.status === 'completed') {
+                  emit('done', {
+                    finish_reason: 'stop',
+                    audit_id: null,
+                    meta: doneMeta(args.runId),
+                  });
+                  terminal = true;
+                  break;
+                }
+                if (run.status === 'failed' || run.status === 'invalid_output') {
+                  emit('error', {
+                    code: run.error_code || 'hermes.run_failed',
+                    message:
+                      run.error_message ||
+                      i18n.t('apps:ai.errors.responseFailed'),
+                    retryable: false,
+                  });
+                  emit('done', {
+                    finish_reason: 'error',
+                    audit_id: null,
+                    meta: doneMeta(args.runId),
+                  });
+                  terminal = true;
+                  break;
+                }
+                if (
+                  run.status === 'cancelled' ||
+                  run.status === 'interrupted'
+                ) {
+                  emit('done', {
+                    finish_reason: 'cancelled',
+                    audit_id: null,
+                    meta: doneMeta(args.runId),
+                  });
+                  terminal = true;
+                  break;
+                }
+              } else if (eventType === 'run.completed') {
+                const output = stringValue(payload.output);
+                if (output && !contentSeen) {
+                  emit('content_delta', { text: output }, resolvedSequence);
+                }
+                const usage = normalizeUsage(payload.usage);
+                if (usage) emit('usage', usage);
+                emit('done', {
+                  finish_reason: 'stop',
+                  audit_id: null,
+                  meta: doneMeta(args.runId),
+                });
+                terminal = true;
+                break;
+              } else if (eventType === 'run.failed') {
+                emit('error', {
+                  code: stringValue(payload.error_code) || 'hermes.run_failed',
+                  message:
+                    stringValue(payload.error ?? payload.message) ||
+                    i18n.t('apps:ai.errors.responseFailed'),
+                  retryable: false,
+                });
+                emit('done', {
+                  finish_reason: 'error',
+                  audit_id: null,
+                  meta: doneMeta(args.runId),
+                });
+                terminal = true;
+                break;
+              } else if (
+                eventType === 'run.cancelled' ||
+                eventType === 'run.interrupted'
+              ) {
+                emit('done', {
+                  finish_reason: 'cancelled',
+                  audit_id: null,
+                  meta: doneMeta(args.runId),
+                });
+                terminal = true;
+                break;
+              }
             }
-          } else if (eventType === 'reasoning.available') {
-            const text = stringValue(payload.text ?? payload.preview);
-            if (text) emit('reasoning_delta', { text }, resolvedSequence);
-          } else if (eventType === 'tool.started') {
-            const name = stringValue(payload.tool ?? payload.name) || 'tool';
-            const id =
-              stringValue(payload.call_id) ||
-              `hermes-tool-${args.runId}-${resolvedSequence ?? syntheticSequence + 1}`;
-            openTools.push({ id, name });
-            emit(
-              'tool_call_started',
-              {
-                call_id: id,
-                name,
-                args_preview: stringValue(payload.preview) || null,
-              },
-              resolvedSequence,
-            );
-          } else if (eventType === 'tool.completed' || eventType === 'tool.failed') {
-            const name = stringValue(payload.tool ?? payload.name) || 'tool';
-            const matchingIndex = findOpenTool(openTools, name);
-            const call =
-              matchingIndex >= 0
-                ? openTools.splice(matchingIndex, 1)[0]
-                : { id: `hermes-tool-${args.runId}-${syntheticSequence + 1}`, name };
-            const failed =
-              eventType === 'tool.failed' || Boolean(payload.error === true);
-            emit(
-              'tool_result',
-              {
-                call_id: call.id,
-                status: failed ? 'error' : 'ok',
-                result_preview: stringValue(payload.preview ?? payload.result) || null,
-                error: failed
-                  ? stringValue(payload.message ?? payload.error) || 'Tool failed.'
-                  : null,
-              },
-              resolvedSequence,
-            );
-          } else if (eventType === 'approval.request') {
-            const requestId = stringValue(payload.request_id);
-            if (!requestId) continue;
-            const approvalSequence = resolvedSequence ?? syntheticSequence + 1;
-            const tool = hermesApprovalToolName(payload);
-            emit(
-              'approval_required',
-              {
-                approval_id: encodeHermesApprovalReference({
-                  runId: args.runId,
-                  requestId,
-                  sequence: approvalSequence,
-                }),
-                call_id: stringValue(payload.call_id) || requestId,
-                tool,
-                resource_preview:
-                  stringValue(
-                    payload.preview ?? payload.command ?? payload.description,
-                  ) || null,
-                expires_at_ms:
-                  eventTimestampMs(payload) + HERMES_APPROVAL_TTL_MS,
-              },
-              approvalSequence,
-            );
-            emit('done', {
-              finish_reason: 'awaiting_approval',
-              audit_id: null,
-              meta: doneMeta(args.runId),
-            });
-            terminal = true;
-            break;
-          } else if (eventType === 'run.completed') {
-            const output = stringValue(payload.output);
-            if (output && !contentSeen) {
-              emit('content_delta', { text: output }, resolvedSequence);
+          } catch (error) {
+            if (
+              cancelled ||
+              args.signal.aborted ||
+              loopAbort.signal.aborted ||
+              sourceAbort.signal.aborted
+            )
+              break;
+            if (
+              error instanceof HermesAgentApiError &&
+              error.status >= 400 &&
+              error.status < 500
+            ) {
+              throw error;
             }
-            const usage = normalizeUsage(payload.usage);
-            if (usage) emit('usage', usage);
-            emit('done', {
-              finish_reason: 'stop',
-              audit_id: null,
-              meta: doneMeta(args.runId),
-            });
-            terminal = true;
-            break;
-          } else if (eventType === 'run.failed') {
-            emit('error', {
-              code: stringValue(payload.error_code) || 'hermes.run_failed',
-              message:
-                stringValue(payload.error ?? payload.message) ||
-                i18n.t('apps:ai.errors.responseFailed'),
-              retryable: false,
-            });
-            emit('done', {
-              finish_reason: 'error',
-              audit_id: null,
-              meta: doneMeta(args.runId),
-            });
-            terminal = true;
-            break;
-          } else if (
-            eventType === 'run.cancelled' ||
-            eventType === 'run.interrupted'
+          } finally {
+            sourceAbort.abort();
+            sourceAbort = null;
+          }
+          if (
+            !terminal &&
+            !cancelled &&
+            !args.signal.aborted &&
+            !loopAbort.signal.aborted
           ) {
-            emit('done', {
-              finish_reason: 'cancelled',
-              audit_id: null,
-              meta: doneMeta(args.runId),
-            });
-            terminal = true;
-            break;
+            if (receivedEvent) reconnectAttempt = 0;
+            reconnectAttempt += 1;
+            await abortableDelay(
+              Math.min(30_000, 1000 * 2 ** Math.min(reconnectAttempt - 1, 5)),
+              loopAbort.signal,
+            );
           }
         }
-        if (!terminal && !args.signal.aborted) {
+        if (!terminal && !cancelled && !args.signal.aborted) {
           emit('error', {
             code: 'hermes.stream_closed',
             message: i18n.t('apps:ai.errors.streamFailed'),
@@ -629,23 +831,45 @@ async function legacyEventStreamResponse(
             meta: doneMeta(args.runId),
           });
         }
-        controller.close();
+        if (!cancelled) controller.close();
       } catch (error) {
-        if (args.signal.aborted || sourceAbort.signal.aborted) {
+        if (cancelled) {
+          return;
+        }
+        if (
+          args.signal.aborted ||
+          loopAbort.signal.aborted ||
+          sourceAbort?.signal.aborted
+        ) {
           controller.close();
         } else {
-          controller.error(error);
+          emit('error', {
+            code: 'hermes.stream_failed',
+            message:
+              error instanceof Error
+                ? error.message
+                : i18n.t('apps:ai.errors.streamFailed'),
+            retryable: false,
+          });
+          emit('done', {
+            finish_reason: 'error',
+            audit_id: null,
+            meta: doneMeta(args.runId),
+          });
+          controller.close();
         }
       } finally {
         args.signal.removeEventListener('abort', forwardAbort);
-        sourceAbort.abort();
+        sourceAbort?.abort();
         if (terminal && typeof window !== 'undefined') {
           window.dispatchEvent(new Event('corporate:ai:conversations-updated'));
         }
       }
     },
     cancel() {
-      sourceAbort.abort();
+      cancelled = true;
+      loopAbort.abort();
+      sourceAbort?.abort();
       args.signal.removeEventListener('abort', forwardAbort);
     },
   });
@@ -655,6 +879,24 @@ async function legacyEventStreamResponse(
       'Cache-Control': 'no-cache',
       'Content-Type': 'text/event-stream',
     },
+  });
+}
+
+function abortableDelay(
+  milliseconds: number,
+  signal: AbortSignal,
+): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    const timeout = window.setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, milliseconds);
+    const onAbort = () => {
+      window.clearTimeout(timeout);
+      resolve();
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
   });
 }
 
@@ -717,7 +959,8 @@ function normalizeUsage(value: unknown): AiChatUsage | null {
   const completion = numberValue(
     usage.completion_tokens ?? usage.output_tokens,
   );
-  const total = numberValue(usage.total_tokens) ??
+  const total =
+    numberValue(usage.total_tokens) ??
     (prompt != null || completion != null
       ? (prompt ?? 0) + (completion ?? 0)
       : null);

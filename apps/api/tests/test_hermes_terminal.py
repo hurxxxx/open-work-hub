@@ -5,14 +5,17 @@ import base64
 import json
 import os
 import socket
+import tarfile
 import threading
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
+from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
+from docker.errors import DockerException
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy import create_engine
@@ -36,10 +39,12 @@ from open_work_hub_api.domains.hermes_terminal import (
     lifecycle,
     maintenance,
     mcp_router,
+    storage,
 )
 from open_work_hub_api.domains.hermes_terminal.broker_runtime import (
     BrokerRuntimeError,
     HermesTerminalBrokerRuntime,
+    RuntimeSession,
     build_profile_config_commands,
     build_profile_export_cleanup_commands,
     build_profile_sanitize_commands,
@@ -79,9 +84,9 @@ def test_catalog_exposes_a_workspace_personal_app_to_all_members() -> None:
 
 def test_broker_image_packages_research_source_policy_module() -> None:
     repository_root = Path(__file__).resolve().parents[3]
-    dockerfile = (
-        repository_root / "ops/hermes-terminal-broker/Dockerfile"
-    ).read_text(encoding="utf-8")
+    dockerfile = (repository_root / "ops/hermes-terminal-broker/Dockerfile").read_text(
+        encoding="utf-8"
+    )
 
     assert "domains/hermes/__init__.py" in dockerfile
     assert "domains/hermes/research_sources.py" in dockerfile
@@ -106,6 +111,189 @@ def test_standard_and_yolo_commands_use_only_official_hermes_flags() -> None:
     assert yolo == [*standard, "--yolo"]
     with pytest.raises(BrokerRuntimeError, match="hermes_terminal.mode_invalid"):
         build_runner_command("unsafe-default")
+
+
+def test_broker_rejects_invalid_numeric_runtime_settings(monkeypatch) -> None:
+    monkeypatch.setenv("OWH_HERMES_TERMINAL_WORKSPACE_LIVE_MAX_BYTES", "invalid")
+
+    with pytest.raises(BrokerRuntimeError, match="runtime_setting_invalid"):
+        HermesTerminalBrokerRuntime._environment_int(
+            "OWH_HERMES_TERMINAL_WORKSPACE_LIVE_MAX_BYTES",
+            1024,
+        )
+
+
+def test_broker_dependency_api_failure_is_reported_as_unavailable() -> None:
+    class FailingImages:
+        def get(self, _image: str):
+            raise DockerException("daemon unavailable")
+
+    runtime = object.__new__(HermesTerminalBrokerRuntime)
+    runtime.image = "pinned-image"
+    runtime.network_name = "sandbox"
+    runtime.egress_client_volume = "egress"
+    runtime.egress_client_dir = "/not-used"
+    runtime.client = SimpleNamespace(
+        images=FailingImages(),
+        networks=SimpleNamespace(),
+        volumes=SimpleNamespace(),
+    )
+
+    with pytest.raises(BrokerRuntimeError, match="docker_unavailable"):
+        runtime._ensure_dependencies()
+
+
+def test_broker_normalizes_reload_failures_and_naive_resource_timestamps() -> None:
+    class MissingContainer:
+        def reload(self):
+            raise DockerException("daemon unavailable")
+
+    with pytest.raises(BrokerRuntimeError, match="docker_unavailable"):
+        HermesTerminalBrokerRuntime._reload_container(MissingContainer())  # type: ignore[arg-type]
+
+    created_at = HermesTerminalBrokerRuntime._created_at(
+        SimpleNamespace(attrs={"Created": "2026-09-02T01:02:03"})
+    )
+    assert created_at is not None
+    assert created_at.tzinfo is UTC
+
+
+def test_forgetting_a_session_clears_forced_failure_state() -> None:
+    session_id = str(uuid4())
+
+    class FakeContainer:
+        status = "exited"
+
+        def reload(self):
+            return None
+
+        def remove(self, *, force: bool):
+            assert force is True
+
+    class FakeVolume:
+        def remove(self, *, force: bool):
+            assert force is True
+
+    runtime = object.__new__(HermesTerminalBrokerRuntime)
+    runtime.resource_namespace = "dev"
+    runtime._forced_failure_codes = {session_id: "hermes_terminal.workspace_quota_exceeded"}
+    runtime._find_container = lambda _session_id: (
+        FakeContainer(),
+        SimpleNamespace(workspace_volume_name="workspace-volume"),
+    )
+    runtime.client = SimpleNamespace(volumes=SimpleNamespace(get=lambda _name: FakeVolume()))
+
+    runtime.forget_session(session_id)
+
+    assert session_id not in runtime._forced_failure_codes
+
+
+def test_partial_archive_upload_removes_every_ambiguous_attempt_object(
+    monkeypatch,
+) -> None:
+    attempted: list[str] = []
+    removed: list[str] = []
+    monkeypatch.setattr(
+        lifecycle,
+        "collect_workspace_artifacts",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            items=[
+                ("first.txt", b"first", "text/plain", "a" * 64),
+                ("second.txt", b"second", "text/plain", "b" * 64),
+            ],
+            archived_bytes=11,
+            omitted_count=0,
+        ),
+    )
+
+    def put(*, key: str, **_kwargs) -> None:
+        attempted.append(key)
+        if len(attempted) == 3:
+            raise OSError("ambiguous object-store failure")
+
+    monkeypatch.setattr(lifecycle, "put_object", put)
+    monkeypatch.setattr(lifecycle, "remove_object", removed.append)
+
+    with pytest.raises(OSError, match="ambiguous object-store failure"):
+        lifecycle._persist_archive_objects(
+            workspace_id="workspace-1",
+            user_id="user-1",
+            session_id="session-1",
+            profile_archive=b"profile",
+            workspace_archive=b"workspace",
+            workspace_archive_max_bytes=1024,
+            attempt_id="attempt-1",
+        )
+
+    assert len(attempted) == 3
+    assert removed == attempted
+
+
+def test_workspace_artifact_scan_reports_every_unsupported_or_duplicate_file() -> None:
+    payload = BytesIO()
+    with tarfile.open(fileobj=payload, mode="w") as archive:
+
+        def add_file(path: str, data: bytes) -> None:
+            info = tarfile.TarInfo(path)
+            info.size = len(data)
+            archive.addfile(info, BytesIO(data))
+
+        add_file("workspace/result.txt", b"result")
+        add_file("workspace/.owh-runtime/private", b"internal")
+        link = tarfile.TarInfo("workspace/link.txt")
+        link.type = tarfile.SYMTYPE
+        link.linkname = "result.txt"
+        archive.addfile(link)
+        fifo = tarfile.TarInfo("workspace/pipe")
+        fifo.type = tarfile.FIFOTYPE
+        archive.addfile(fifo)
+        add_file("workspace/../escape.txt", b"escape")
+        add_file("workspace/result.txt", b"duplicate")
+
+    scan = storage.collect_workspace_artifacts(
+        payload.getvalue(),
+        max_total_bytes=1024,
+    )
+
+    assert [item[0] for item in scan.items] == ["result.txt"]
+    assert scan.archived_bytes == len(b"result")
+    assert scan.omitted_count == 5
+
+
+def test_workspace_artifact_scan_bounds_zero_byte_file_count(monkeypatch) -> None:
+    payload = BytesIO()
+    with tarfile.open(fileobj=payload, mode="w") as archive:
+        for name in ("first.txt", "second.txt"):
+            info = tarfile.TarInfo(f"workspace/{name}")
+            info.size = 0
+            archive.addfile(info, BytesIO())
+    monkeypatch.setattr(storage, "MAX_ARTIFACT_FILES", 1)
+
+    scan = storage.collect_workspace_artifacts(
+        payload.getvalue(),
+        max_total_bytes=1024,
+    )
+
+    assert [item[0] for item in scan.items] == ["first.txt"]
+    assert scan.omitted_count == 1
+
+
+def test_terminal_maintenance_serializes_archive_capable_operations() -> None:
+    active = 0
+    maximum_active = 0
+
+    async def operation(value: int) -> int:
+        nonlocal active, maximum_active
+        active += 1
+        maximum_active = max(maximum_active, active)
+        await asyncio.sleep(0)
+        active -= 1
+        return value
+
+    results = asyncio.run(maintenance._gather_bounded([1, 2, 3], operation))
+
+    assert results == [1, 2, 3]
+    assert maximum_active == 1
 
 
 def test_yolo_requires_a_fresh_explicit_acknowledgement() -> None:
@@ -139,9 +327,7 @@ def test_profile_configuration_applies_managed_resilience_policy() -> None:
     assert json.loads(values["fallback_providers"]) == [
         {"provider": HERMES_PROVIDER, "model": HERMES_FALLBACK_MODEL}
     ]
-    assert json.loads(values["model.default_headers"]) == {
-        "X-OpenRouter-Metadata": "enabled"
-    }
+    assert json.loads(values["model.default_headers"]) == {"X-OpenRouter-Metadata": "enabled"}
     assert values["agent.api_max_retries"] == "1"
     assert "Semantic Scholar is disabled" in values["agent.environment_hint"]
     assert values["compression.threshold_tokens"] == "100000"
@@ -218,10 +404,13 @@ def test_all_enabled_research_sources_remove_the_managed_hint() -> None:
         "unset",
         "agent.environment_hint",
     ] in commands
-    assert build_runner_environment(
-        proxy_token="proxy-token",
-        research_sources=policy,
-    )["NO_PROXY"] == "hermes-terminal-broker"
+    assert (
+        build_runner_environment(
+            proxy_token="proxy-token",
+            research_sources=policy,
+        )["NO_PROXY"]
+        == "hermes-terminal-broker"
+    )
 
 
 def test_runner_keeps_a_reusable_detached_tty() -> None:
@@ -230,6 +419,174 @@ def test_runner_keeps_a_reusable_detached_tty() -> None:
         "stdin_open": True,
         "tty": True,
     }
+
+
+@pytest.mark.parametrize(
+    ("state", "expected_status", "expected_failure"),
+    [
+        ({"Status": "exited", "ExitCode": 0}, "exited", None),
+        ({"Status": "exited", "ExitCode": 130}, "exited", None),
+        (
+            {"Status": "exited", "ExitCode": 137, "OOMKilled": True},
+            "failed",
+            "hermes_terminal.runner_oom",
+        ),
+        (
+            {"Status": "dead", "ExitCode": 255},
+            "failed",
+            "hermes_terminal.runner_dead",
+        ),
+        (
+            {"Status": "exited", "ExitCode": 2, "Error": "runtime error"},
+            "failed",
+            "hermes_terminal.runner_state_error",
+        ),
+    ],
+)
+def test_broker_classifies_terminal_exit_edges(
+    state: dict[str, object],
+    expected_status: str,
+    expected_failure: str | None,
+) -> None:
+    container = SimpleNamespace(
+        id="container-1",
+        status=state["Status"],
+        attrs={"State": state},
+        reload=lambda: None,
+    )
+    record = RuntimeSession(
+        session_id=str(uuid4()),
+        profile_key="profilekey1234",
+        container_name="runner",
+        profile_volume_name="profile-volume",
+        workspace_volume_name="workspace-volume",
+        namespace="dev",
+    )
+    runtime = object.__new__(HermesTerminalBrokerRuntime)
+    runtime.instance_id = "broker-test"
+    runtime.resource_namespace = "dev"
+    runtime._forced_failure_codes = {}
+    runtime._find_container = lambda _session_id: (container, record)
+
+    result = runtime.session_status(record.session_id)
+
+    assert result["status"] == expected_status
+    assert result["failure_code"] == expected_failure
+
+
+def test_broker_reconciles_only_old_namespaced_orphan_workspaces() -> None:
+    old = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+
+    class FakeVolume:
+        name = "owh-hermes-terminal-dev-workspace-orphan"
+        attrs = {
+            "CreatedAt": old,
+            "Labels": {
+                "open-work-hub.hermes-terminal.managed": "true",
+                "open-work-hub.hermes-terminal.namespace": "dev",
+                "open-work-hub.hermes-terminal.resource-kind": "workspace",
+                "open-work-hub.hermes-terminal.session-id": str(uuid4()),
+            },
+        }
+
+        def __init__(self) -> None:
+            self.removed = False
+
+        def remove(self, *, force: bool) -> None:
+            assert force is True
+            self.removed = True
+
+    volume = FakeVolume()
+    runtime = object.__new__(HermesTerminalBrokerRuntime)
+    runtime.resource_namespace = "dev"
+    runtime._forced_failure_codes = {}
+    runtime.client = SimpleNamespace(
+        containers=SimpleNamespace(list=lambda **_kwargs: []),
+        volumes=SimpleNamespace(list=lambda **_kwargs: [volume]),
+    )
+
+    result = runtime.reconcile_resources(known_session_ids=set())
+
+    assert result == {
+        "removed_runners": 0,
+        "removed_workspaces": 1,
+        "removed_utilities": 0,
+    }
+    assert volume.removed is True
+
+
+def test_broker_reconciles_old_namespaced_orphan_runner_and_workspace() -> None:
+    session_id = str(uuid4())
+    old = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+
+    class FakeVolume:
+        name = "owh-hermes-terminal-dev-workspace-orphan-runner"
+        attrs = {
+            "CreatedAt": old,
+            "Labels": {
+                "open-work-hub.hermes-terminal.managed": "true",
+                "open-work-hub.hermes-terminal.namespace": "dev",
+                "open-work-hub.hermes-terminal.resource-kind": "workspace",
+                "open-work-hub.hermes-terminal.session-id": session_id,
+            },
+        }
+
+        def __init__(self) -> None:
+            self.removed = False
+
+        def remove(self, *, force: bool) -> None:
+            assert force is True
+            self.removed = True
+
+    class FakeContainer:
+        id = "orphan-runner"
+        name = "owh-hermes-terminal-dev-orphan"
+        status = "exited"
+        labels = {
+            "open-work-hub.hermes-terminal.managed": "true",
+            "open-work-hub.hermes-terminal.namespace": "dev",
+            "open-work-hub.hermes-terminal.resource-kind": "runner",
+            "open-work-hub.hermes-terminal.session-id": session_id,
+        }
+        attrs = {
+            "Created": old,
+            "Mounts": [
+                {
+                    "Destination": "/workspace",
+                    "Name": "owh-hermes-terminal-dev-workspace-orphan-runner",
+                }
+            ],
+        }
+
+        def __init__(self) -> None:
+            self.removed = False
+
+        def remove(self, *, force: bool) -> None:
+            assert force is True
+            self.removed = True
+
+    volume = FakeVolume()
+    container = FakeContainer()
+    runtime = object.__new__(HermesTerminalBrokerRuntime)
+    runtime.resource_namespace = "dev"
+    runtime._forced_failure_codes = {}
+    runtime.client = SimpleNamespace(
+        containers=SimpleNamespace(list=lambda **_kwargs: [container]),
+        volumes=SimpleNamespace(
+            get=lambda name: volume if name == volume.name else None,
+            list=lambda **_kwargs: [] if volume.removed else [volume],
+        ),
+    )
+
+    result = runtime.reconcile_resources(known_session_ids=set())
+
+    assert result == {
+        "removed_runners": 1,
+        "removed_workspaces": 1,
+        "removed_utilities": 0,
+    }
+    assert container.removed is True
+    assert volume.removed is True
 
 
 def test_broker_websocket_disconnect_closes_the_raw_docker_socket(
@@ -408,8 +765,7 @@ def test_profile_export_stages_on_the_private_volume_for_docker_copy() -> None:
     runtime._extract_single_file = (  # type: ignore[method-assign]
         lambda _archive, *, basename, max_bytes: (
             b"profile archive"
-            if basename == ".owh-terminal-profile-export.tar.gz"
-            and max_bytes == 64 * 1024 * 1024
+            if basename == ".owh-terminal-profile-export.tar.gz" and max_bytes == 64 * 1024 * 1024
             else b"unexpected"
         )
     )
@@ -523,9 +879,7 @@ def test_terminal_limits_default_to_two_hours_and_thirty_days() -> None:
 
 
 def test_terminal_mcp_socket_is_rooted_independently_of_process_cwd() -> None:
-    settings = _settings(
-        hermes_terminal_mcp_socket_path=".runtime/hermes-terminal-test.sock"
-    )
+    settings = _settings(hermes_terminal_mcp_socket_path=".runtime/hermes-terminal-test.sock")
 
     path = Path(settings.hermes_terminal_mcp_socket_path)
     assert path.is_absolute()
@@ -629,6 +983,8 @@ def test_archiving_session_recovers_when_an_exited_runtime_restarts(
         archive_target_status="exited",
         archive_attempts=1,
         archive_started_at=ended_at,
+        archive_claim_token="stale-claim",
+        archive_claim_expires_at=ended_at,
         archive_failure_code="hermes_terminal.archive_failed",
         updated_at=ended_at,
     )
@@ -668,7 +1024,96 @@ def test_archiving_session_recovers_when_an_exited_runtime_restarts(
     assert row.archive_target_status is None
     assert row.archive_attempts == 0
     assert row.archive_started_at is None
+    assert row.archive_claim_token is None
+    assert row.archive_claim_expires_at is None
     assert row.archive_failure_code is None
+
+
+def test_manual_archive_recovery_stops_a_restarted_runtime(monkeypatch) -> None:
+    stopped: list[str] = []
+
+    class FakeBrokerClient:
+        async def get_session(self, session_id: str):
+            assert session_id == "session-1"
+            return SimpleNamespace(status="running")
+
+        async def stop_session(self, session_id: str):
+            stopped.append(session_id)
+            return SimpleNamespace(status="exited", exit_code=130)
+
+    monkeypatch.setattr(lifecycle, "HermesTerminalBrokerClient", FakeBrokerClient)
+    row = SimpleNamespace(
+        id="session-1",
+        status="archiving",
+        archive_target_status="terminated",
+        user_id="user-1",
+    )
+
+    asyncio.run(lifecycle.reconcile_terminal_session_if_finished(row))
+
+    assert stopped == ["session-1"]
+    assert "archiving" in maintenance._RECONCILE_STATUSES
+
+
+def test_missing_live_runtime_quarantines_workspace_instead_of_deleting_it(
+    monkeypatch,
+) -> None:
+    row = SimpleNamespace(
+        id="session-1",
+        status="running",
+        mode="standard",
+        user_id="user-1",
+        failure_code=None,
+        archive_target_status=None,
+        archive_started_at=None,
+        archive_claim_token=None,
+        archive_claim_expires_at=None,
+        workspace_retained=False,
+        quarantine_reason=None,
+        ended_at=None,
+        updated_at=None,
+    )
+
+    class FakeDb:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def scalar(self, _statement):
+            return row
+
+        def add(self, _value):
+            return None
+
+        def commit(self):
+            return None
+
+    class UnexpectedBrokerClient:
+        async def forget_session(self, _session_id: str):
+            raise AssertionError("A quarantined workspace must not be deleted")
+
+    monkeypatch.setattr(lifecycle, "get_session_factory", lambda: lambda: FakeDb())
+    monkeypatch.setattr(lifecycle, "record_audit_log", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        lifecycle,
+        "HermesTerminalBrokerClient",
+        UnexpectedBrokerClient,
+    )
+
+    changed = asyncio.run(
+        lifecycle.fail_missing_terminal_runtime(
+            "session-1",
+            actor_user_id=None,
+        )
+    )
+
+    assert changed is True
+    assert row.status == "failed"
+    assert row.failure_code == "hermes_terminal.runtime_missing"
+    assert row.workspace_retained is True
+    assert row.quarantine_reason == "hermes_terminal.runtime_missing"
 
 
 def test_consumed_write_approval_fails_closed_without_waiting(monkeypatch) -> None:
@@ -895,24 +1340,44 @@ def test_archive_recovery_reclaims_stale_sessions_without_releasing_early(
 
         claimed = maintenance._claim_archive_retries(limit=1)
 
-        assert claimed == [(row_id, "terminated", None, user_id)]
+        assert len(claimed) == 1
+        assert claimed[0][:4] == (row_id, "terminated", None, user_id)
+        assert len(claimed[0][4]) == 32
         with Session(engine) as db:
             stored = db.get(HermesTerminalSession, row_id)
             assert stored is not None
             assert stored.status == "archiving"
             assert stored.runtime_handle == runtime_handle
+            assert stored.archive_claim_token == claimed[0][4]
+            assert stored.archive_claim_expires_at is not None
+
+        assert maintenance._claim_archive_retries(limit=1) == []
+        with Session(engine) as db:
+            stored = db.get(HermesTerminalSession, row_id)
+            assert stored is not None
             stored.archive_attempts = 3
             stored.archive_failure_code = maintenance.HERMES_TERMINAL_ARCHIVE_FAILURE
             stored.updated_at = stale
             db.add(stored)
             db.commit()
 
+        assert maintenance._abandon_exhausted_archives(limit=1) == 0
+        with Session(engine) as db:
+            stored = db.get(HermesTerminalSession, row_id)
+            assert stored is not None
+            stored.archive_claim_expires_at = stale
+            stored.updated_at = stale - timedelta(seconds=1)
+            db.add(stored)
+            db.commit()
+
         assert maintenance._abandon_exhausted_archives(limit=1) == 1
-        assert maintenance._runtime_release_candidates(limit=1) == [(row_id, True)]
+        assert maintenance._runtime_release_candidates(limit=1) == []
         with Session(engine) as db:
             stored = db.get(HermesTerminalSession, row_id)
             assert stored is not None
             assert stored.status == "terminated"
             assert stored.archive_failure_code == "hermes_terminal.archive_failed"
+            assert stored.workspace_retained is True
+            assert stored.quarantine_reason == "hermes_terminal.archive_exhausted"
     finally:
         engine.dispose()

@@ -9,7 +9,7 @@ from uuid import uuid4
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
-from open_work_hub_api.core.settings import HERMES_MODEL, HERMES_PROVIDER
+from open_work_hub_api.core.settings import HERMES_MODEL, HERMES_PROVIDER, get_settings
 from open_work_hub_api.domains.auth.models import User, Workspace
 from open_work_hub_api.domains.hermes.models import (
     HermesDispatchOutbox,
@@ -39,6 +39,10 @@ class HermesSessionNotFoundError(LookupError):
 
 
 class HermesRunBusyError(RuntimeError):
+    pass
+
+
+class HermesRunIdempotencyConflict(RuntimeError):
     pass
 
 
@@ -206,6 +210,8 @@ class HermesRunRepository:
         allowed_app_ids: list[str] | None = None,
         kind: str = "interactive",
         workload_id: str | None = None,
+        client_request_id: str | None = None,
+        request_sha256: str | None = None,
     ) -> HermesRunProjection:
         # Serialize run admission per Hermes profile so the MCP tool scope can
         # always be resolved to exactly one active Open Work Hub run.
@@ -214,6 +220,17 @@ class HermesRunRepository:
             .where(HermesProfileBinding.id == binding.id)
             .with_for_update()
         ).scalar_one()
+        if client_request_id is not None:
+            existing = self.db.scalar(
+                select(HermesRunProjection).where(
+                    HermesRunProjection.profile_binding_id == binding.id,
+                    HermesRunProjection.client_request_id == client_request_id,
+                )
+            )
+            if existing is not None:
+                if existing.request_sha256 == request_sha256:
+                    return existing
+                raise HermesRunIdempotencyConflict(client_request_id)
         active = self.db.scalar(
             select(HermesRunProjection.id).where(
                 HermesRunProjection.profile_binding_id == binding.id,
@@ -231,6 +248,8 @@ class HermesRunRepository:
             user_id=binding.user_id,
             kind=kind,
             workload_id=workload_id,
+            client_request_id=client_request_id,
+            request_sha256=request_sha256,
             status="pending",
             stage="dispatch.pending",
             current_activity="Waiting for an agent worker.",
@@ -541,6 +560,10 @@ class HermesRunRepository:
                         request_id=request_id,
                         status="pending",
                         request_payload=payload,
+                        expires_at=now
+                        + timedelta(
+                            seconds=get_settings().hermes_terminal_approval_timeout_seconds
+                        ),
                     )
                 )
         elif event_type == "approval.responded":
@@ -658,6 +681,43 @@ class HermesDispatchRepository:
         self.db.flush()
         return rows
 
+    def requeue_stale_dispatched(
+        self,
+        *,
+        limit: int,
+        stale_after_seconds: int = 120,
+    ) -> int:
+        now = utcnow_naive()
+        cutoff = now - timedelta(seconds=stale_after_seconds)
+        rows = list(
+            self.db.scalars(
+                select(HermesDispatchOutbox)
+                .join(HermesRunProjection, HermesRunProjection.id == HermesDispatchOutbox.run_id)
+                .where(
+                    HermesDispatchOutbox.status == "dispatched",
+                    HermesDispatchOutbox.dispatched_at <= cutoff,
+                    HermesRunProjection.status.in_(ACTIVE_RUN_STATUSES),
+                    or_(
+                        HermesRunProjection.execution_claim_token.is_(None),
+                        HermesRunProjection.execution_claim_expires_at <= now,
+                    ),
+                )
+                .order_by(HermesDispatchOutbox.dispatched_at)
+                .limit(limit)
+                .with_for_update(skip_locked=True)
+            )
+        )
+        for row in rows:
+            row.status = "pending"
+            row.available_at = now
+            row.celery_task_id = None
+            row.last_error_code = "dispatch.stale_requeued"
+            row.dispatched_at = None
+            row.updated_at = now
+            self.db.add(row)
+        self.db.flush()
+        return len(rows)
+
     def mark_dispatched(
         self,
         outbox_id: str,
@@ -692,6 +752,17 @@ class HermesDispatchRepository:
         row.claim_expires_at = None
         row.updated_at = utcnow_naive()
         self.db.add(row)
+        if row.status == "dead_letter":
+            run = self.db.get(HermesRunProjection, row.run_id)
+            if run is not None and run.status not in TERMINAL_RUN_STATUSES:
+                HermesRunRepository(self.db).append_event(
+                    run.id,
+                    {
+                        "event": "run.failed",
+                        "error_code": "hermes.dispatch_exhausted",
+                        "error": "Hermes dispatch retries were exhausted.",
+                    },
+                )
         self.db.flush()
 
     def mark_cancelled(self, outbox_id: str, *, claim_token: str, error_code: str) -> None:

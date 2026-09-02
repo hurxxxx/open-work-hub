@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -21,9 +22,17 @@ from open_work_hub_api.domains.auth.dependencies import AuthContext, require_adm
 from open_work_hub_api.domains.auth.models import User, Workspace
 from open_work_hub_api.domains.hermes.client import HermesClientError
 from open_work_hub_api.domains.hermes.models import (
+    HermesDispatchOutbox,
+    HermesMaintenanceState,
     HermesProfileBinding,
     HermesRunProjection,
+    HermesToolApproval,
 )
+from open_work_hub_api.domains.hermes.repository import ACTIVE_RUN_STATUSES
+from open_work_hub_api.domains.hermes_terminal.broker_client import (
+    HermesTerminalBrokerClient,
+)
+from open_work_hub_api.domains.hermes_terminal.models import HermesTerminalSession
 from open_work_hub_api.domains.hermes.research_settings import (
     HermesResearchSettingsConflictError,
     HermesResearchSettingsSnapshot,
@@ -57,6 +66,25 @@ class AdminHermesSummaryResponse(BaseModel):
     fallback_model: str
     profile_counts: dict[str, int]
     run_counts: dict[str, int]
+
+
+class AdminHermesMaintenanceStateResponse(BaseModel):
+    component: str
+    last_started_at: datetime | None = None
+    last_succeeded_at: datetime | None = None
+    last_error_code: str | None = None
+    counters: dict[str, Any] = Field(default_factory=dict)
+
+
+class AdminHermesRuntimeHealthResponse(BaseModel):
+    enabled: bool
+    services: dict[str, str]
+    active_runs: int
+    pending_dispatches: int
+    pending_approvals: int
+    active_terminal_sessions: int
+    quarantined_terminal_workspaces: int
+    maintenance: list[AdminHermesMaintenanceStateResponse]
 
 
 class AdminHermesProfileResponse(BaseModel):
@@ -215,6 +243,93 @@ def get_hermes_summary(
         fallback_model=HERMES_FALLBACK_MODEL,
         profile_counts=profile_counts,
         run_counts=run_counts,
+    )
+
+
+@router.get("/runtime-health", response_model=AdminHermesRuntimeHealthResponse)
+async def get_hermes_runtime_health(
+    db: Session = Depends(get_db_session),
+    _admin: AuthContext = Depends(require_admin_context),
+) -> AdminHermesRuntimeHealthResponse:
+    settings = get_settings()
+    profile = db.scalar(
+        select(HermesProfileBinding)
+        .where(HermesProfileBinding.status == "active")
+        .order_by(HermesProfileBinding.updated_at.desc())
+        .limit(1)
+    )
+    services = {
+        "headless": "disabled" if not settings.hermes_enabled else "not_configured",
+        "terminal_broker": "disabled" if not settings.hermes_enabled else "checking",
+    }
+    if settings.hermes_enabled:
+        checks = []
+        check_names = []
+        if profile is not None:
+            checks.append(runtime_client().health(profile.profile_name))
+            check_names.append("headless")
+        checks.append(HermesTerminalBrokerClient(settings).health())
+        check_names.append("terminal_broker")
+        results = await asyncio.gather(*checks, return_exceptions=True)
+        for check_name, result in zip(check_names, results, strict=True):
+            services[check_name] = "offline" if isinstance(result, BaseException) else "online"
+
+    maintenance = list(
+        db.scalars(
+            select(HermesMaintenanceState).order_by(HermesMaintenanceState.component)
+        )
+    )
+    return AdminHermesRuntimeHealthResponse(
+        enabled=settings.hermes_enabled,
+        services=services,
+        active_runs=int(
+            db.scalar(
+                select(func.count())
+                .select_from(HermesRunProjection)
+                .where(HermesRunProjection.status.in_(ACTIVE_RUN_STATUSES))
+            )
+            or 0
+        ),
+        pending_dispatches=int(
+            db.scalar(
+                select(func.count())
+                .select_from(HermesDispatchOutbox)
+                .where(HermesDispatchOutbox.status.in_({"pending", "claimed"}))
+            )
+            or 0
+        ),
+        pending_approvals=int(
+            db.scalar(
+                select(func.count())
+                .select_from(HermesToolApproval)
+                .where(HermesToolApproval.status == "pending")
+            )
+            or 0
+        ),
+        active_terminal_sessions=int(
+            db.scalar(
+                select(func.count())
+                .select_from(HermesTerminalSession)
+                .where(
+                    HermesTerminalSession.status.in_(
+                        {"starting", "running", "awaiting_approval", "stopping", "archiving"}
+                    )
+                )
+            )
+            or 0
+        ),
+        quarantined_terminal_workspaces=int(
+            db.scalar(
+                select(func.count())
+                .select_from(HermesTerminalSession)
+                .where(HermesTerminalSession.workspace_retained.is_(True))
+            )
+            or 0
+        ),
+        maintenance=[
+            AdminHermesMaintenanceStateResponse.model_validate(state, from_attributes=True)
+            for state in maintenance
+        ],
     )
 
 

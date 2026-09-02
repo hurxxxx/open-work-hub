@@ -2,6 +2,7 @@ import {
   Badge,
   Button,
   EmptyState,
+  InlineNotice,
   Select,
   useFeedback,
 } from '@open-work-hub/ui';
@@ -12,7 +13,7 @@ import {
   ShieldAlert,
   SquareTerminal,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 
@@ -70,6 +71,12 @@ function utcDate(value: string): Date {
   return new Date(/[zZ]|[+-]\d\d:\d\d$/.test(value) ? value : `${value}Z`);
 }
 
+interface SessionsRequest {
+  promise: Promise<void>;
+  token: string;
+  workspaceSlug: string;
+}
+
 export function HermesTerminalView() {
   const { i18n, t } = useTranslation('apps');
   const feedback = useFeedback();
@@ -92,6 +99,10 @@ export function HermesTerminalView() {
   const [connectionState, setConnectionState] =
     useState<TerminalConnectionState>('offline');
   const [terminalVersion, setTerminalVersion] = useState(0);
+  const sessionsRequestRef = useRef<SessionsRequest | null>(null);
+  const loadAllRequestRef = useRef(0);
+  const requestContextRef = useRef({ token, workspaceSlug });
+  requestContextRef.current = { token, workspaceSlug };
 
   const applySessions = useCallback((items: HermesTerminalSession[]) => {
     setSessions(items);
@@ -102,13 +113,42 @@ export function HermesTerminalView() {
     });
   }, []);
 
-  const loadSessions = useCallback(async () => {
-    if (!token || !workspaceSlug) return;
-    const response = await listHermesTerminalSessions(token, workspaceSlug);
-    applySessions(response.items ?? []);
+  const loadSessions = useCallback(() => {
+    if (!token || !workspaceSlug) return Promise.resolve();
+    const current = sessionsRequestRef.current;
+    if (
+      current?.token === token &&
+      current.workspaceSlug === workspaceSlug
+    ) {
+      return current.promise;
+    }
+    const request: SessionsRequest = {
+      promise: Promise.resolve(),
+      token,
+      workspaceSlug,
+    };
+    request.promise = listHermesTerminalSessions(token, workspaceSlug)
+      .then((response) => {
+        if (
+          sessionsRequestRef.current === request &&
+          requestContextRef.current.token === token &&
+          requestContextRef.current.workspaceSlug === workspaceSlug
+        ) {
+          applySessions(response.items ?? []);
+        }
+      })
+      .finally(() => {
+        if (sessionsRequestRef.current === request) {
+          sessionsRequestRef.current = null;
+        }
+      });
+    sessionsRequestRef.current = request;
+    return request.promise;
   }, [applySessions, token, workspaceSlug]);
 
   const loadAll = useCallback(async () => {
+    const requestId = loadAllRequestRef.current + 1;
+    loadAllRequestRef.current = requestId;
     if (!token || !workspaceSlug) {
       setLoading(false);
       setLoadFailed(true);
@@ -120,14 +160,34 @@ export function HermesTerminalView() {
         getHermesTerminalConfig(token, workspaceSlug),
         listHermesTerminalSessions(token, workspaceSlug),
       ]);
+      if (
+        loadAllRequestRef.current !== requestId ||
+        requestContextRef.current.token !== token ||
+        requestContextRef.current.workspaceSlug !== workspaceSlug
+      ) {
+        return;
+      }
       setConfig(nextConfig);
       applySessions(response.items ?? []);
       setLoadFailed(false);
     } catch {
+      if (
+        loadAllRequestRef.current !== requestId ||
+        requestContextRef.current.token !== token ||
+        requestContextRef.current.workspaceSlug !== workspaceSlug
+      ) {
+        return;
+      }
       setLoadFailed(true);
       feedback.error(t('hermesTerminal.feedback.loadFailed'));
     } finally {
-      setLoading(false);
+      if (
+        loadAllRequestRef.current === requestId &&
+        requestContextRef.current.token === token &&
+        requestContextRef.current.workspaceSlug === workspaceSlug
+      ) {
+        setLoading(false);
+      }
     }
   }, [applySessions, feedback, t, token, workspaceSlug]);
 
@@ -138,10 +198,25 @@ export function HermesTerminalView() {
   const hasActiveSession = sessions.some(isActive);
   useEffect(() => {
     if (!hasActiveSession) return;
-    const timer = window.setInterval(() => {
-      void loadSessions().catch(() => undefined);
-    }, 3000);
-    return () => window.clearInterval(timer);
+    let cancelled = false;
+    let timer: number | null = null;
+    const poll = async () => {
+      if (cancelled) return;
+      if (document.visibilityState === 'visible') {
+        await loadSessions().catch(() => undefined);
+      }
+      if (!cancelled) {
+        timer = window.setTimeout(
+          () => void poll(),
+          document.visibilityState === 'visible' ? 3000 : 10_000,
+        );
+      }
+    };
+    timer = window.setTimeout(() => void poll(), 3000);
+    return () => {
+      cancelled = true;
+      if (timer !== null) window.clearTimeout(timer);
+    };
   }, [hasActiveSession, loadSessions]);
 
   const selectedSession =
@@ -198,6 +273,7 @@ export function HermesTerminalView() {
       return;
     }
     setCreating(true);
+    const knownSessionIds = new Set(sessions.map((session) => session.id));
     try {
       const session = await createHermesTerminalSession(token, workspaceSlug, {
         mode: createMode,
@@ -205,6 +281,12 @@ export function HermesTerminalView() {
         cols: 120,
         rows: 36,
       });
+      if (
+        requestContextRef.current.token !== token ||
+        requestContextRef.current.workspaceSlug !== workspaceSlug
+      ) {
+        return;
+      }
       setSessions((current) => [session, ...current]);
       setSelectedSessionId(session.id);
       setCreateDialogOpen(false);
@@ -212,6 +294,36 @@ export function HermesTerminalView() {
       setYoloAcknowledged(false);
       feedback.success(t('hermesTerminal.feedback.created'));
     } catch {
+      if (
+        requestContextRef.current.token !== token ||
+        requestContextRef.current.workspaceSlug !== workspaceSlug
+      ) {
+        return;
+      }
+      try {
+        const response = await listHermesTerminalSessions(token, workspaceSlug);
+        if (
+          requestContextRef.current.token !== token ||
+          requestContextRef.current.workspaceSlug !== workspaceSlug
+        ) {
+          return;
+        }
+        const items = response.items ?? [];
+        applySessions(items);
+        const adopted = items.find(
+          (session) => !knownSessionIds.has(session.id) && isActive(session),
+        );
+        if (adopted) {
+          setSelectedSessionId(adopted.id);
+          setCreateDialogOpen(false);
+          setCreateMode('standard');
+          setYoloAcknowledged(false);
+          feedback.success(t('hermesTerminal.feedback.created'));
+          return;
+        }
+      } catch {
+        // Preserve the original create failure when reconciliation also fails.
+      }
       feedback.error(t('hermesTerminal.feedback.createFailed'));
     } finally {
       setCreating(false);
@@ -220,7 +332,9 @@ export function HermesTerminalView() {
     createMode,
     creating,
     feedback,
+    applySessions,
     sessionLimitReached,
+    sessions,
     t,
     token,
     workspaceSlug,
@@ -237,12 +351,23 @@ export function HermesTerminalView() {
           workspaceSlug,
           session.id,
         );
+        if (
+          requestContextRef.current.token !== token ||
+          requestContextRef.current.workspaceSlug !== workspaceSlug
+        ) {
+          return;
+        }
         setSessions((current) =>
           current.map((item) => (item.id === stopped.id ? stopped : item)),
         );
         feedback.success(t('hermesTerminal.feedback.stopped'));
       } catch {
-        feedback.error(t('hermesTerminal.feedback.stopFailed'));
+        if (
+          requestContextRef.current.token === token &&
+          requestContextRef.current.workspaceSlug === workspaceSlug
+        ) {
+          feedback.error(t('hermesTerminal.feedback.stopFailed'));
+        }
       } finally {
         setStoppingSessionId(null);
       }
@@ -409,6 +534,17 @@ export function HermesTerminalView() {
                   ) : null}
                 </div>
               </div>
+              {selectedSession.workspace_retained ? (
+                <InlineNotice role="alert" tone="warning">
+                  {t('hermesTerminal.archive.workspaceRetained')}
+                </InlineNotice>
+              ) : selectedSession.artifact_omitted_count > 0 ? (
+                <InlineNotice role="status" tone="warning">
+                  {t('hermesTerminal.archive.partial', {
+                    count: selectedSession.artifact_omitted_count,
+                  })}
+                </InlineNotice>
+              ) : null}
               <div className="min-h-0 flex-1 bg-[var(--ui-color-surface-inverse)]">
                 {selectedAttachable ? (
                   <WebSocketTerminalSurface
@@ -434,7 +570,11 @@ export function HermesTerminalView() {
                       description={
                         isActive(selectedSession)
                           ? t('hermesTerminal.preparingDescription')
-                          : t('hermesTerminal.sessionEndedDescription')
+                          : selectedSession.failure_code
+                            ? t('hermesTerminal.failureDescription', {
+                                code: selectedSession.failure_code,
+                              })
+                            : t('hermesTerminal.sessionEndedDescription')
                       }
                     />
                   </div>

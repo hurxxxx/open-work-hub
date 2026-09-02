@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 from collections.abc import AsyncIterator
 from typing import NoReturn
@@ -22,6 +23,9 @@ from open_work_hub_api.domains.auth.dependencies import (
     require_current_workspace,
 )
 from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.workspace_app_gate import (
+    is_app_enabled_for_user_context,
+)
 from open_work_hub_api.domains.hermes.client import HermesClientError
 from open_work_hub_api.domains.hermes.models import (
     HermesJobBinding,
@@ -34,6 +38,7 @@ from open_work_hub_api.domains.hermes.publication import publish_pending_hermes_
 from open_work_hub_api.domains.hermes.repository import (
     TERMINAL_RUN_STATUSES,
     HermesRunBusyError,
+    HermesRunIdempotencyConflict,
     HermesRunRepository,
     get_owned_session,
     register_session,
@@ -403,6 +408,11 @@ async def get_session_messages(
 async def create_run(
     session_id: str,
     body: HermesRunCreate,
+    idempotency_key: str | None = Header(
+        default=None,
+        alias="Idempotency-Key",
+        max_length=128,
+    ),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     current_workspace: Workspace = Depends(require_current_workspace),
@@ -416,6 +426,24 @@ async def create_run(
     )
     if session is None:
         raise HTTPException(status_code=404, detail={"code": "hermes.session_not_found"})
+    request_sha256 = None
+    if idempotency_key is not None:
+        idempotency_key = idempotency_key.strip()
+        if not idempotency_key:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={"code": "hermes.idempotency_key_invalid"},
+            )
+        canonical_request = json.dumps(
+            {
+                "session_id": session.id,
+                "body": body.model_dump(mode="json"),
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        request_sha256 = hashlib.sha256(canonical_request.encode()).hexdigest()
     try:
         run = HermesRunRepository(db).stage(
             binding=profile,
@@ -424,11 +452,18 @@ async def create_run(
             instructions=body.instructions,
             conversation_history=body.conversation_history,
             allowed_app_ids=body.allowed_app_ids,
+            client_request_id=idempotency_key,
+            request_sha256=request_sha256,
         )
     except HermesRunBusyError as error:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": "hermes.profile_run_active"},
+        ) from error
+    except HermesRunIdempotencyConflict as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "hermes.idempotency_key_reused"},
         ) from error
     db.commit()
     db.refresh(run)
@@ -507,6 +542,7 @@ async def _event_stream(
 ) -> AsyncIterator[str]:
     next_sequence = after_sequence
     idle_ticks = 0
+    access_ticks = 0
     while True:
         with get_session_factory()() as db:
             repository = HermesRunRepository(db)
@@ -518,6 +554,17 @@ async def _event_stream(
             if run is None:
                 yield 'event: error\ndata: {"code":"hermes.run_not_found"}\n\n'
                 return
+            access_ticks += 1
+            if access_ticks >= 20:
+                access_ticks = 0
+                if not is_app_enabled_for_user_context(
+                    db,
+                    app_id="chatbot",
+                    user_id=user_id,
+                    workspace_id=workspace_id,
+                ):
+                    yield 'event: error\ndata: {"code":"hermes.access_revoked"}\n\n'
+                    return
             events = repository.list_events_after(run_id, after_sequence=next_sequence)
             terminal = run.status in TERMINAL_RUN_STATUSES
         if events:
@@ -606,6 +653,14 @@ async def stop_run(
         db.refresh(run)
         return HermesRunResponse.model_validate(run)
     hermes_run_id = run.hermes_run_id
+    repository.append_event(
+        run.id,
+        {
+            "event": "run.stop_requested",
+            "status": "stopping",
+            "reason": "user_requested",
+        },
+    )
     db.commit()
     profile = await _profile_for_request(db, workspace=current_workspace, user=current_user)
     try:
@@ -680,6 +735,9 @@ async def resolve_approval(
     )
     if approval is None:
         raise HTTPException(status_code=409, detail={"code": "hermes.approval_not_pending"})
+    approval_expires_at = getattr(approval, "expires_at", None)
+    if approval_expires_at is not None and approval_expires_at <= utcnow_naive():
+        raise HTTPException(status_code=409, detail={"code": "hermes.approval_expired"})
     local_run_id = run.id
     hermes_run_id = run.hermes_run_id
     profile_name = profile.profile_name

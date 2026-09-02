@@ -4,6 +4,7 @@ import hashlib
 import mimetypes
 import tarfile
 from collections.abc import Iterable
+from dataclasses import dataclass
 from io import BytesIO
 from pathlib import PurePosixPath
 
@@ -16,17 +17,41 @@ from open_work_hub_api.domains.hermes_terminal.security import normalize_relativ
 
 STREAM_CHUNK_SIZE = 1024 * 1024
 MAX_ARTIFACT_FILE_BYTES = 64 * 1024 * 1024
+MAX_ARTIFACT_FILES = 10_000
 
 
-def profile_storage_key(*, workspace_id: str, user_id: str) -> str:
-    return f"workspaces/{workspace_id}/users/{user_id}/hermes-terminal/profile.tar.gz"
+@dataclass(frozen=True)
+class WorkspaceArtifactScan:
+    items: list[tuple[str, bytes, str, str]]
+    archived_bytes: int
+    omitted_count: int
 
 
-def artifact_storage_key(*, workspace_id: str, user_id: str, session_id: str, path: str) -> str:
+def profile_storage_key(
+    *,
+    workspace_id: str,
+    user_id: str,
+    session_id: str,
+    attempt_id: str,
+) -> str:
+    return (
+        f"workspaces/{workspace_id}/users/{user_id}/hermes-terminal/"
+        f"profiles/{session_id}/{attempt_id}.tar.gz"
+    )
+
+
+def artifact_storage_key(
+    *,
+    workspace_id: str,
+    user_id: str,
+    session_id: str,
+    attempt_id: str,
+    path: str,
+) -> str:
     path_digest = hashlib.sha256(path.encode()).hexdigest()
     return (
         f"workspaces/{workspace_id}/users/{user_id}/hermes-terminal/"
-        f"sessions/{session_id}/artifacts/{path_digest}"
+        f"sessions/{session_id}/attempts/{attempt_id}/artifacts/{path_digest}"
     )
 
 
@@ -60,39 +85,67 @@ def remove_object(key: str) -> None:
     settings = get_settings()
     try:
         get_minio_client().remove_object(settings.minio_bucket, key)
-    except S3Error:
-        pass
+    except S3Error as error:
+        if error.code not in {"NoSuchKey", "NoSuchObject", "NoSuchBucket"}:
+            raise
 
 
-def iter_workspace_artifacts(
+def collect_workspace_artifacts(
     archive: bytes,
     *,
     max_total_bytes: int,
-) -> Iterable[tuple[str, bytes, str, str]]:
+) -> WorkspaceArtifactScan:
     total = 0
+    omitted_count = 0
+    items: list[tuple[str, bytes, str, str]] = []
+    seen_paths: set[str] = set()
     with tarfile.open(fileobj=BytesIO(archive), mode="r:*") as tar:
         for member in tar:
+            if member.isdir():
+                continue
             if not member.isfile() or member.issym() or member.islnk():
+                omitted_count += 1
                 continue
             parts = PurePosixPath(member.name).parts
             if parts and parts[0] == "workspace":
                 parts = parts[1:]
             if not parts:
+                omitted_count += 1
+                continue
+            if parts[0] == ".owh-runtime":
+                omitted_count += 1
                 continue
             try:
                 relative_path = normalize_relative_path("/".join(parts), allow_root=False)
             except ValueError:
+                omitted_count += 1
+                continue
+            if relative_path in seen_paths:
+                omitted_count += 1
+                continue
+            seen_paths.add(relative_path)
+            if len(items) >= MAX_ARTIFACT_FILES:
+                omitted_count += 1
                 continue
             if member.size < 0 or member.size > MAX_ARTIFACT_FILE_BYTES:
+                omitted_count += 1
                 continue
-            total += member.size
-            if total > max_total_bytes:
-                raise ValueError("Hermes terminal workspace archive exceeds the configured limit.")
+            if total + member.size > max_total_bytes:
+                omitted_count += 1
+                continue
             source = tar.extractfile(member)
             if source is None:
+                omitted_count += 1
                 continue
             data = source.read(MAX_ARTIFACT_FILE_BYTES + 1)
             if len(data) != member.size or len(data) > MAX_ARTIFACT_FILE_BYTES:
+                omitted_count += 1
                 continue
             media_type = mimetypes.guess_type(relative_path)[0] or "application/octet-stream"
-            yield relative_path, data, media_type, hashlib.sha256(data).hexdigest()
+            total += len(data)
+            items.append((relative_path, data, media_type, hashlib.sha256(data).hexdigest()))
+    return WorkspaceArtifactScan(
+        items=items,
+        archived_bytes=total,
+        omitted_count=omitted_count,
+    )

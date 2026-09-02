@@ -47,7 +47,7 @@ function defaultShouldReconnect(code: number): boolean {
 }
 
 function defaultReconnectDelay(attempt: number): number {
-  return Math.min(10_000, 500 * 2 ** Math.min(attempt, 5));
+  return Math.min(30_000, 500 * 2 ** Math.min(attempt, 6));
 }
 
 export function WebSocketTerminalSurface({
@@ -104,18 +104,33 @@ export function WebSocketTerminalSurface({
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
     terminal.open(container);
+    terminal.attachCustomKeyEventHandler((event) => {
+      const copyShortcut =
+        event.type === 'keydown' &&
+        event.key.toLowerCase() === 'c' &&
+        (event.metaKey || event.ctrlKey) &&
+        terminal.hasSelection();
+      if (!copyShortcut) return true;
+      void navigator.clipboard
+        ?.writeText(terminal.getSelection())
+        .catch(() => undefined);
+      return false;
+    });
 
     let disposed = false;
     let errorReported = false;
     let reconnectAttempt = 0;
     let reconnectTimer: number | null = null;
     let handshakeTimer: number | null = null;
+    let heartbeatTimer: number | null = null;
     let scrollBatchTimer: number | null = null;
     let pendingScrollLines = 0;
     let remoteScrollActive = false;
     let replayWritesPending = 0;
     let ready = false;
     let ended = false;
+    let connectedOnce = false;
+    let lastPongAt = Date.now();
     let socket: WebSocket | null = null;
     onConnectionStateChange('connecting');
 
@@ -203,12 +218,15 @@ export function WebSocketTerminalSurface({
         socket.send(JSON.stringify({ type: 'scroll_end' }));
         remoteScrollActive = false;
       }
-      socket.send(
-        JSON.stringify({
-          type: 'input',
-          data: bytesToBase64(new TextEncoder().encode(data)),
-        }),
-      );
+      const bytes = new TextEncoder().encode(data);
+      for (let offset = 0; offset < bytes.length; offset += 64 * 1024) {
+        socket.send(
+          JSON.stringify({
+            type: 'input',
+            data: bytesToBase64(bytes.subarray(offset, offset + 64 * 1024)),
+          }),
+        );
+      }
     });
 
     const clearHandshakeTimer = () => {
@@ -216,8 +234,32 @@ export function WebSocketTerminalSurface({
       window.clearTimeout(handshakeTimer);
       handshakeTimer = null;
     };
+    const clearHeartbeatTimer = () => {
+      if (heartbeatTimer === null) return;
+      window.clearInterval(heartbeatTimer);
+      heartbeatTimer = null;
+    };
+    const startHeartbeat = (target: WebSocket) => {
+      clearHeartbeatTimer();
+      lastPongAt = Date.now();
+      heartbeatTimer = window.setInterval(() => {
+        if (
+          socket !== target ||
+          target.readyState !== WebSocket.OPEN ||
+          !ready
+        ) {
+          return;
+        }
+        if (Date.now() - lastPongAt > 75_000) {
+          target.close(4001, 'terminal heartbeat timeout');
+          return;
+        }
+        target.send(JSON.stringify({ type: 'ping' }));
+      }, 25_000);
+    };
     const scheduleReconnect = () => {
       if (disposed || ended || reconnectTimer !== null) return;
+      if (document.visibilityState === 'hidden') return;
       const delay = reconnectDelayMs(reconnectAttempt);
       reconnectAttempt += 1;
       reconnectTimer = window.setTimeout(() => {
@@ -256,25 +298,43 @@ export function WebSocketTerminalSurface({
         }
         if (message.type === 'ready') {
           clearHandshakeTimer();
+          if (connectedOnce) {
+            terminal.reset();
+          }
+          connectedOnce = true;
           ready = message.active === true;
           reconnectAttempt = 0;
           errorReported = false;
           onConnectionStateChange(message.active ? 'connected' : 'ended');
+          if (ready) startHeartbeat(nextSocket);
           fit();
           terminal.focus();
         } else if (
           message.type === 'replay' &&
           typeof message.data === 'string'
         ) {
-          replayWritesPending += 1;
-          terminal.write(base64ToBytes(message.data), () => {
+          try {
+            replayWritesPending += 1;
+            terminal.write(base64ToBytes(message.data), () => {
+              replayWritesPending = Math.max(0, replayWritesPending - 1);
+            });
+          } catch {
             replayWritesPending = Math.max(0, replayWritesPending - 1);
-          });
+            reportError();
+            nextSocket.close(4400, 'invalid terminal replay');
+          }
         } else if (
           message.type === 'output' &&
           typeof message.data === 'string'
         ) {
-          terminal.write(base64ToBytes(message.data));
+          try {
+            terminal.write(base64ToBytes(message.data));
+          } catch {
+            reportError();
+            nextSocket.close(4400, 'invalid terminal output');
+          }
+        } else if (message.type === 'pong') {
+          lastPongAt = Date.now();
         } else if (message.type === 'exit') {
           ready = false;
           ended = true;
@@ -288,6 +348,7 @@ export function WebSocketTerminalSurface({
         if (socket !== nextSocket) return;
         socket = null;
         ready = false;
+        clearHeartbeatTimer();
         clearHandshakeTimer();
         if (disposed || ended) return;
         onConnectionStateChange('offline');
@@ -299,6 +360,18 @@ export function WebSocketTerminalSurface({
       });
     }
 
+    const handleVisibilityChange = () => {
+      if (
+        document.visibilityState === 'visible' &&
+        !disposed &&
+        !ended &&
+        (!socket || socket.readyState === WebSocket.CLOSED)
+      ) {
+        reconnectAttempt = Math.min(reconnectAttempt, 3);
+        connect();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     connect();
     const initialFit = window.requestAnimationFrame(fit);
     return () => {
@@ -307,6 +380,8 @@ export function WebSocketTerminalSurface({
       if (reconnectTimer !== null) window.clearTimeout(reconnectTimer);
       if (scrollBatchTimer !== null) window.clearTimeout(scrollBatchTimer);
       clearHandshakeTimer();
+      clearHeartbeatTimer();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       resizeObserver.disconnect();
       dataDisposable.dispose();
       socket?.close(1000);

@@ -33,6 +33,7 @@ class HermesTerminalConfigResponse(BaseModel):
     artifact_retention_days: int
     max_sessions_per_user: int
     max_sessions_per_workspace_user: int
+    workspace_live_max_bytes: int
 
 
 class HermesTerminalSessionCreateRequest(BaseModel):
@@ -57,6 +58,10 @@ class HermesTerminalSessionResponse(BaseModel):
     rows: int
     exit_code: int | None = None
     failure_code: str | None = None
+    artifact_archived_bytes: int = 0
+    artifact_omitted_count: int = 0
+    workspace_retained: bool = False
+    quarantine_reason: str | None = None
     last_activity_at: datetime
     idle_expires_at: datetime
     started_at: datetime | None = None
@@ -134,6 +139,7 @@ class BrokerSessionResponse(BaseModel):
     status: Literal["starting", "running", "exited", "failed"]
     exit_code: int | None = None
     failure_code: str | None = None
+    resource_namespace: str | None = None
 
 
 class BrokerFileEntry(BaseModel):

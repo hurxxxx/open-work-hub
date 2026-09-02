@@ -9,8 +9,7 @@ import { resolveWorkspaceAgentApiPath } from './workspace-chatbot-api-path';
 export type HermesAgentStatus = ApiSchema<'HermesAgentStatusResponse'>;
 export type HermesSession = ApiSchema<'HermesSessionResponse'>;
 export type HermesSessionList = ApiSchema<'HermesSessionListResponse'>;
-export type HermesSessionMessages =
-  ApiSchema<'HermesSessionMessagesResponse'>;
+export type HermesSessionMessages = ApiSchema<'HermesSessionMessagesResponse'>;
 export type HermesRun = ApiSchema<'HermesRunResponse'>;
 export type HermesRunList = ApiSchema<'HermesRunListResponse'>;
 export type HermesJob = ApiSchema<'HermesJobResponse'>;
@@ -240,11 +239,18 @@ export function createHermesRun(
     allowed_app_ids?: string[] | null;
   },
   workspaceSlug?: string | null,
+  idempotencyKey?: string,
 ): Promise<HermesRun> {
   return request(
     `/api/v1/agent/sessions/${encodeURIComponent(sessionId)}/runs`,
     token,
-    { method: 'POST', body: JSON.stringify(body) },
+    {
+      method: 'POST',
+      body: JSON.stringify(body),
+      headers: idempotencyKey
+        ? { 'Idempotency-Key': idempotencyKey }
+        : undefined,
+    },
     workspaceSlug,
   );
 }
