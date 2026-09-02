@@ -322,6 +322,13 @@ def build_runner_io_options() -> dict[str, bool]:
     }
 
 
+def build_runner_ulimits() -> list[Ulimit]:
+    return [
+        Ulimit(name="nofile", soft=1024, hard=2048),
+        Ulimit(name="core", soft=0, hard=0),
+    ]
+
+
 class BrokerRuntimeError(RuntimeError):
     def __init__(self, code: str) -> None:
         super().__init__(code)
@@ -954,14 +961,7 @@ class HermesTerminalBrokerRuntime:
                     mem_limit="2g",
                     memswap_limit="2g",
                     nano_cpus=2_000_000_000,
-                    ulimits=[
-                        Ulimit(name="nofile", soft=1024, hard=2048),
-                        Ulimit(
-                            name="fsize",
-                            soft=64 * 1024 * 1024,
-                            hard=64 * 1024 * 1024,
-                        ),
-                    ],
+                    ulimits=build_runner_ulimits(),
                     log_config={
                         "type": "json-file",
                         "config": {"max-size": "8m", "max-file": "1"},

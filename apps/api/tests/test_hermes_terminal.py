@@ -52,6 +52,7 @@ from open_work_hub_api.domains.hermes_terminal.broker_runtime import (
     build_runner_environment,
     build_runner_io_options,
     build_runner_mounts,
+    build_runner_ulimits,
 )
 from open_work_hub_api.domains.hermes_terminal.schemas import (
     HermesTerminalSessionCreateRequest,
@@ -111,6 +112,14 @@ def test_standard_and_yolo_commands_use_only_official_hermes_flags() -> None:
     assert yolo == [*standard, "--yolo"]
     with pytest.raises(BrokerRuntimeError, match="hermes_terminal.mode_invalid"):
         build_runner_command("unsafe-default")
+
+
+def test_runner_ulimits_allow_official_package_installs_without_core_dumps() -> None:
+    limits = {str(limit["Name"]): limit for limit in build_runner_ulimits()}
+
+    assert limits["nofile"] == {"Name": "nofile", "Soft": 1024, "Hard": 2048}
+    assert limits["core"] == {"Name": "core", "Soft": 0, "Hard": 0}
+    assert "fsize" not in limits
 
 
 def test_broker_rejects_invalid_numeric_runtime_settings(monkeypatch) -> None:
