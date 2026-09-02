@@ -1349,6 +1349,12 @@ export const resources = {
           expired: '만료됨',
           pending: '승인 대기',
         },
+        archive: {
+          partial:
+            '보관 한도를 초과한 결과 파일 {{count}}개는 다운로드 목록에서 제외되었습니다.',
+          workspaceRetained:
+            '결과 보관을 완료하지 못해 원본 작업공간을 관리자 복구용으로 안전하게 보존했습니다.',
+        },
         connection: {
           connected: '연결됨',
           connecting: '연결 중',
@@ -1387,6 +1393,8 @@ export const resources = {
           stopFailed: 'Hermes 터미널 세션을 종료하지 못했습니다.',
           stopped: 'Hermes 터미널 세션을 종료했습니다.',
         },
+        failureDescription:
+          '세션이 안전하게 종료되었습니다. 장애 코드: {{code}}',
         loadFailedDescription:
           '워크스페이스 권한, 앱 활성화 상태와 Hermes 런타임을 확인해 주세요.',
         loadFailedTitle: 'Hermes 터미널을 불러오지 못했습니다.',
@@ -1801,6 +1809,31 @@ export const resources = {
             },
             runtimeSummary:
               'Hermes {{release}} · 기본 {{model}} · fallback {{fallback}}',
+            runtime: {
+              description:
+                'headless 및 개인 터미널 실행 상태, 복구 대기열과 유지보수 heartbeat를 확인합니다.',
+              maintenance: '유지보수 heartbeat',
+              metrics: {
+                activeRuns: '실행 중 headless',
+                activeTerminals: '활성 터미널',
+                pendingApprovals: '대기 승인',
+                pendingDispatches: '배포 대기',
+                quarantined: '보존 격리 작업공간',
+              },
+              neverSucceeded: '성공 기록 없음',
+              services: {
+                headless: 'Hermes headless',
+                terminal_broker: 'Hermes 터미널 브로커',
+              },
+              status: {
+                checking: '확인 중',
+                disabled: '꺼짐',
+                not_configured: '프로필 없음',
+                offline: '오프라인',
+                online: '온라인',
+              },
+              title: 'Hermes 런타임 상태',
+            },
             status: {
               disabled: '꺼짐',
               enabled: '켜짐',
@@ -7542,6 +7575,12 @@ export const resources = {
           expired: 'Expired',
           pending: 'Pending',
         },
+        archive: {
+          partial:
+            '{{count}} result files exceeded the archive limit and are not available in the download list.',
+          workspaceRetained:
+            'The original workspace was retained safely for administrator recovery because archiving could not finish.',
+        },
         connection: {
           connected: 'Connected',
           connecting: 'Connecting',
@@ -7582,6 +7621,7 @@ export const resources = {
           stopFailed: 'Could not stop the Hermes terminal session.',
           stopped: 'Hermes terminal session stopped.',
         },
+        failureDescription: 'The session ended safely. Failure code: {{code}}',
         loadFailedDescription:
           'Check workspace access, app availability, and the Hermes runtime.',
         loadFailedTitle: 'Could not load the Hermes terminal.',
@@ -8007,6 +8047,31 @@ export const resources = {
             },
             runtimeSummary:
               'Hermes {{release}} · primary {{model}} · fallback {{fallback}}',
+            runtime: {
+              description:
+                'Review headless and private-terminal availability, recovery queues, and maintenance heartbeats.',
+              maintenance: 'Maintenance heartbeat',
+              metrics: {
+                activeRuns: 'Active headless runs',
+                activeTerminals: 'Active terminals',
+                pendingApprovals: 'Pending approvals',
+                pendingDispatches: 'Pending dispatches',
+                quarantined: 'Retained quarantines',
+              },
+              neverSucceeded: 'No successful run recorded',
+              services: {
+                headless: 'Hermes headless',
+                terminal_broker: 'Hermes terminal broker',
+              },
+              status: {
+                checking: 'Checking',
+                disabled: 'Disabled',
+                not_configured: 'No profile',
+                offline: 'Offline',
+                online: 'Online',
+              },
+              title: 'Hermes runtime status',
+            },
             status: {
               disabled: 'Off',
               enabled: 'On',

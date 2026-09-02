@@ -35,6 +35,7 @@ def publish_pending_hermes_dispatches(
     publisher: Celery | None = None,
 ) -> int:
     repository = HermesDispatchRepository(db)
+    repository.requeue_stale_dispatched(limit=limit)
     claim_token = uuid4().hex
     claimed = repository.claim_due(claim_token=claim_token, limit=limit)
     publishable = []

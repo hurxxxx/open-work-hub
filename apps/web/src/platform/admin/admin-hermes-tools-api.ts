@@ -2,6 +2,8 @@ import { apiFetchJsonWithMappedError } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
 
 export type AdminHermesSummary = ApiSchema<'AdminHermesSummaryResponse'>;
+export type AdminHermesRuntimeHealth =
+  ApiSchema<'AdminHermesRuntimeHealthResponse'>;
 export type AdminHermesProfile = ApiSchema<'AdminHermesProfileResponse'>;
 export type AdminHermesProfileList =
   ApiSchema<'AdminHermesProfileListResponse'>;
@@ -45,6 +47,14 @@ export function getAdminHermesSummary(
   token: string,
 ): Promise<AdminHermesSummary> {
   return request(token, '/api/v1/admin/hermes', { cache: 'no-store' });
+}
+
+export function getAdminHermesRuntimeHealth(
+  token: string,
+): Promise<AdminHermesRuntimeHealth> {
+  return request(token, '/api/v1/admin/hermes/runtime-health', {
+    cache: 'no-store',
+  });
 }
 
 export function listAdminHermesProfiles(

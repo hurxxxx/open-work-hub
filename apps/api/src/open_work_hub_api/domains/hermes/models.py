@@ -278,6 +278,14 @@ class HermesRunProjection(Base):
             "session_binding_id",
             "created_at",
         ),
+        Index(
+            "uq_hermes_run_projections_profile_client_request",
+            "profile_binding_id",
+            "client_request_id",
+            unique=True,
+            postgresql_where=text("client_request_id IS NOT NULL"),
+            sqlite_where=text("client_request_id IS NOT NULL"),
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -307,6 +315,8 @@ class HermesRunProjection(Base):
         unique=True,
         index=True,
     )
+    client_request_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    request_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     kind: Mapped[str] = mapped_column(String(24), nullable=False)
     workload_id: Mapped[str | None] = mapped_column(String(160), nullable=True, index=True)
     status: Mapped[str] = mapped_column(
@@ -494,6 +504,7 @@ class HermesToolApproval(Base):
             name="ck_hermes_tool_approvals_consumption",
         ),
         Index("ix_hermes_tool_approvals_status_created", "status", "created_at"),
+        Index("ix_hermes_tool_approvals_status_expiry", "status", "expires_at"),
         Index(
             "ix_hermes_tool_approvals_external_call_id",
             "external_call_id",
@@ -521,6 +532,7 @@ class HermesToolApproval(Base):
         nullable=True,
     )
     decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     consumed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     consumed_tool_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
     consumed_arguments_sha256: Mapped[str | None] = mapped_column(
@@ -534,6 +546,31 @@ class HermesToolApproval(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=utcnow_naive,
+        nullable=False,
+    )
+
+
+class HermesMaintenanceState(Base):
+    __tablename__ = "hermes_maintenance_states"
+
+    component: Mapped[str] = mapped_column(String(64), primary_key=True)
+    last_started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_succeeded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_error_code: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    run_scan_cursor: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    job_scan_cursor: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    lease_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    counters: Mapped[dict[str, Any]] = mapped_column(
+        JSONB_COMPAT,
+        default=dict,
+        server_default=text("'{}'"),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        onupdate=utcnow_naive,
         nullable=False,
     )
 

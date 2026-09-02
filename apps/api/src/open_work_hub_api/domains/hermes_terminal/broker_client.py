@@ -158,6 +158,39 @@ class HermesTerminalBrokerClient:
         )
         return response.content
 
+    async def inventory_resources(self) -> dict:
+        response = await self._request("GET", "/v1/resources", timeout=15.0)
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise HermesTerminalBrokerError(
+                "hermes_terminal.broker_response_invalid"
+            ) from exc
+        if not isinstance(payload, dict):
+            raise HermesTerminalBrokerError(
+                "hermes_terminal.broker_response_invalid"
+            )
+        return payload
+
+    async def reconcile_resources(self, known_session_ids: set[str]) -> dict[str, int]:
+        response = await self._request(
+            "POST",
+            "/v1/resources/reconcile",
+            json={"known_session_ids": sorted(known_session_ids)},
+            timeout=60.0,
+        )
+        try:
+            payload = response.json()
+            return {
+                "removed_runners": int(payload.get("removed_runners") or 0),
+                "removed_workspaces": int(payload.get("removed_workspaces") or 0),
+                "removed_utilities": int(payload.get("removed_utilities") or 0),
+            }
+        except (AttributeError, TypeError, ValueError) as exc:
+            raise HermesTerminalBrokerError(
+                "hermes_terminal.broker_response_invalid"
+            ) from exc
+
     def websocket_url(self, session_id: str) -> str:
         base = self.settings.hermes_terminal_broker_base_url
         if base.startswith("https://"):

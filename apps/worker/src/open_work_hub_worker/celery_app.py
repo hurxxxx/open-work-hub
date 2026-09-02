@@ -128,7 +128,7 @@ celery_app.conf.beat_schedule = {
     },
     "maintain-hermes-terminal-sessions": {
         "task": HERMES_TERMINAL_MAINTENANCE_TASK_NAME,
-        "schedule": 300.0,
+        "schedule": 60.0,
         "options": {"queue": DEFAULT_QUEUE},
     },
     "republish-pending-ai-graph-runs": {

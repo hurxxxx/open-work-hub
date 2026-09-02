@@ -1726,6 +1726,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/hermes/runtime-health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Hermes Runtime Health */
+        get: operations["admin_hermes_get_hermes_runtime_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/hermes/profiles": {
         parameters: {
             query?: never;
@@ -6527,6 +6544,21 @@ export interface components {
                 [key: string]: unknown;
             }[];
         };
+        /** AdminHermesMaintenanceStateResponse */
+        AdminHermesMaintenanceStateResponse: {
+            /** Component */
+            component: string;
+            /** Last Started At */
+            last_started_at?: string | null;
+            /** Last Succeeded At */
+            last_succeeded_at?: string | null;
+            /** Last Error Code */
+            last_error_code?: string | null;
+            /** Counters */
+            counters?: {
+                [key: string]: unknown;
+            };
+        };
         /** AdminHermesMcpServerCreate */
         AdminHermesMcpServerCreate: {
             /** Name */
@@ -6608,6 +6640,27 @@ export interface components {
             enabled: boolean;
             /** Expected Revision */
             expected_revision: number;
+        };
+        /** AdminHermesRuntimeHealthResponse */
+        AdminHermesRuntimeHealthResponse: {
+            /** Enabled */
+            enabled: boolean;
+            /** Services */
+            services: {
+                [key: string]: string;
+            };
+            /** Active Runs */
+            active_runs: number;
+            /** Pending Dispatches */
+            pending_dispatches: number;
+            /** Pending Approvals */
+            pending_approvals: number;
+            /** Active Terminal Sessions */
+            active_terminal_sessions: number;
+            /** Quarantined Terminal Workspaces */
+            quarantined_terminal_workspaces: number;
+            /** Maintenance */
+            maintenance: components["schemas"]["AdminHermesMaintenanceStateResponse"][];
         };
         /** AdminHermesSkillToggle */
         AdminHermesSkillToggle: {
@@ -11937,6 +11990,8 @@ export interface components {
             max_sessions_per_user: number;
             /** Max Sessions Per Workspace User */
             max_sessions_per_workspace_user: number;
+            /** Workspace Live Max Bytes */
+            workspace_live_max_bytes: number;
         };
         /** HermesTerminalFileEntryResponse */
         HermesTerminalFileEntryResponse: {
@@ -12018,6 +12073,23 @@ export interface components {
             exit_code?: number | null;
             /** Failure Code */
             failure_code?: string | null;
+            /**
+             * Artifact Archived Bytes
+             * @default 0
+             */
+            artifact_archived_bytes: number;
+            /**
+             * Artifact Omitted Count
+             * @default 0
+             */
+            artifact_omitted_count: number;
+            /**
+             * Workspace Retained
+             * @default false
+             */
+            workspace_retained: boolean;
+            /** Quarantine Reason */
+            quarantine_reason?: string | null;
             /**
              * Last Activity At
              * Format: date-time
@@ -22206,6 +22278,44 @@ export interface operations {
             };
         };
     };
+    admin_hermes_get_hermes_runtime_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminHermesRuntimeHealthResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     admin_hermes_list_hermes_profiles_get: {
         parameters: {
             query?: never;
@@ -30032,7 +30142,9 @@ export interface operations {
     hermes_agent_create_run_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
             path: {
                 session_id: string;
             };

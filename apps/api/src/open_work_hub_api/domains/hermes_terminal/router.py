@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import json
 import secrets
 from datetime import timedelta
@@ -18,7 +20,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.websockets import WebSocketDisconnect
 from websockets.asyncio.client import connect as websocket_connect
-from websockets.exceptions import WebSocketException
+from websockets.exceptions import ConnectionClosed, WebSocketException
 
 from open_work_hub_api.core.db import get_db_session, get_session_factory
 from open_work_hub_api.core.settings import Settings, get_settings
@@ -151,6 +153,10 @@ def _session_response(row: HermesTerminalSession) -> HermesTerminalSessionRespon
         rows=row.rows,
         exit_code=row.exit_code,
         failure_code=row.archive_failure_code or row.failure_code,
+        artifact_archived_bytes=row.artifact_archived_bytes,
+        artifact_omitted_count=row.artifact_omitted_count,
+        workspace_retained=row.workspace_retained,
+        quarantine_reason=row.quarantine_reason,
         last_activity_at=row.last_activity_at,
         idle_expires_at=row.idle_expires_at,
         started_at=row.started_at,
@@ -222,6 +228,7 @@ async def get_config(
         max_sessions_per_workspace_user=(
             settings.hermes_terminal_max_sessions_per_workspace_user
         ),
+        workspace_live_max_bytes=settings.hermes_terminal_workspace_archive_max_bytes,
     )
 
 
@@ -743,6 +750,8 @@ def decide_approval(
 
 async def _resolve_ws_token(websocket: WebSocket) -> str:
     message = await asyncio.wait_for(websocket.receive_text(), timeout=10)
+    if len(message.encode("utf-8")) > 16 * 1024:
+        raise ValueError("auth frame too large")
     payload = json.loads(message)
     if not isinstance(payload, dict) or payload.get("type") != "auth":
         raise ValueError("invalid auth frame")
@@ -821,11 +830,14 @@ async def terminal_websocket(websocket: WebSocket, session_id: str) -> None:
             max_size=2 * 1024 * 1024,
         ) as upstream:
             exit_code: int | None = None
+            exit_status: str | None = None
+            exit_failure_code: str | None = None
             saw_exit = False
             last_activity_update = 0.0
+            last_resize_forwarded = 0.0
 
             async def broker_to_browser() -> None:
-                nonlocal saw_exit, exit_code, last_activity_update
+                nonlocal saw_exit, exit_code, exit_failure_code, exit_status, last_activity_update
                 async for message in upstream:
                     if isinstance(message, bytes):
                         await websocket.send_bytes(message)
@@ -846,21 +858,63 @@ async def terminal_websocket(websocket: WebSocket, session_id: str) -> None:
                         saw_exit = True
                         value = payload.get("exit_code")
                         exit_code = value if isinstance(value, int) else None
+                        value = payload.get("status")
+                        exit_status = value if isinstance(value, str) else None
+                        value = payload.get("failure_code")
+                        exit_failure_code = value if isinstance(value, str) else None
                         return
 
             async def browser_to_broker() -> None:
-                nonlocal last_activity_update
+                nonlocal last_activity_update, last_resize_forwarded
                 while True:
                     message = await websocket.receive_text()
-                    await upstream.send(message)
+                    if len(message.encode("utf-8")) > 100_000:
+                        await websocket.close(code=4400)
+                        return
                     try:
                         payload = json.loads(message)
                     except json.JSONDecodeError:
-                        continue
-                    now = monotonic()
-                    if not isinstance(payload, dict) or now - last_activity_update < _WS_ACTIVITY_UPDATE_SECONDS:
-                        continue
+                        await websocket.close(code=4400)
+                        return
+                    if not isinstance(payload, dict):
+                        await websocket.close(code=4400)
+                        return
                     message_type = payload.get("type")
+                    if message_type == "input":
+                        encoded = payload.get("data")
+                        if not isinstance(encoded, str) or len(encoded) > 90_000:
+                            await websocket.close(code=4400)
+                            return
+                        try:
+                            decoded = base64.b64decode(encoded, validate=True)
+                        except (ValueError, binascii.Error):
+                            await websocket.close(code=4400)
+                            return
+                        if len(decoded) > 64 * 1024:
+                            await websocket.close(code=4400)
+                            return
+                    elif message_type == "resize":
+                        cols = payload.get("cols")
+                        rows = payload.get("rows")
+                        if (
+                            not isinstance(cols, int)
+                            or not isinstance(rows, int)
+                            or not 20 <= cols <= 500
+                            or not 5 <= rows <= 300
+                        ):
+                            await websocket.close(code=4400)
+                            return
+                        now = monotonic()
+                        if now - last_resize_forwarded < 0.1:
+                            continue
+                        last_resize_forwarded = now
+                    elif message_type != "ping":
+                        await websocket.close(code=4400)
+                        return
+                    await upstream.send(message)
+                    now = monotonic()
+                    if now - last_activity_update < _WS_ACTIVITY_UPDATE_SECONDS:
+                        continue
                     if message_type not in {"input", "resize"}:
                         continue
                     cols = payload.get("cols") if message_type == "resize" else None
@@ -900,12 +954,23 @@ async def terminal_websocket(websocket: WebSocket, session_id: str) -> None:
                 if not task.cancelled():
                     task.result()
             if saw_exit:
+                target_status = "failed" if exit_status == "failed" else "exited"
+                with get_session_factory()() as db:
+                    current = db.get(HermesTerminalSession, session_id)
+                    if current is not None and current.status == "stopping":
+                        target_status = "terminated"
                 await finalize_terminal_session(
                     session_id,
-                    target_status="exited",
+                    target_status=target_status,
                     exit_code=exit_code,
                     actor_user_id=owner_id,
+                    failure_code=exit_failure_code,
                 )
+    except ConnectionClosed as error:
+        try:
+            await websocket.close(code=error.code if 4000 <= error.code <= 4999 else 1013)
+        except RuntimeError:
+            pass
     except (HTTPException, RuntimeError, WebSocketDisconnect, WebSocketException, OSError):
         try:
             await websocket.close(code=1013)

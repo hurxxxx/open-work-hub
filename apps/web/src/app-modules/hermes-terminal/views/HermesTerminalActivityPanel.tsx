@@ -58,40 +58,57 @@ export function HermesTerminalActivityPanel({
   const [downloadingPath, setDownloadingPath] = useState<string | null>(null);
   const [decidingId, setDecidingId] = useState<string | null>(null);
   const requestIdRef = useRef(0);
+  const loadRequestRef = useRef<{
+    key: string;
+    promise: Promise<void>;
+  } | null>(null);
   const seenPendingIdsRef = useRef<Set<string>>(new Set());
 
   const load = useCallback(
     async (showLoading = false) => {
+      const requestKey = `${session.id}:${path}`;
+      if (loadRequestRef.current?.key === requestKey) {
+        return loadRequestRef.current.promise;
+      }
       const requestId = ++requestIdRef.current;
       if (showLoading) {
         setFilesLoading(true);
         setApprovalsLoading(true);
       }
-      const [filesResult, approvalsResult] = await Promise.allSettled([
+      const request = Promise.allSettled([
         listHermesTerminalFiles(token, workspaceSlug, session.id, path),
         listHermesTerminalApprovals(token, workspaceSlug, session.id),
-      ]);
-      if (requestId !== requestIdRef.current) return;
-      if (filesResult.status === 'fulfilled') {
-        setFiles(filesResult.value.items ?? []);
-      } else if (showLoading) {
-        feedback.error(t('hermesTerminal.feedback.filesLoadFailed'));
-      }
-      if (approvalsResult.status === 'fulfilled') {
-        const items = approvalsResult.value.items ?? [];
-        setApprovals(items);
-        const pendingIds = items
-          .filter((item) => item.status === 'pending')
-          .map((item) => item.id);
-        if (pendingIds.some((id) => !seenPendingIdsRef.current.has(id))) {
-          setTab('approvals');
-        }
-        seenPendingIdsRef.current = new Set(pendingIds);
-      } else if (showLoading) {
-        feedback.error(t('hermesTerminal.feedback.approvalsLoadFailed'));
-      }
-      setFilesLoading(false);
-      setApprovalsLoading(false);
+      ])
+        .then(([filesResult, approvalsResult]) => {
+          if (requestId !== requestIdRef.current) return;
+          if (filesResult.status === 'fulfilled') {
+            setFiles(filesResult.value.items ?? []);
+          } else if (showLoading) {
+            feedback.error(t('hermesTerminal.feedback.filesLoadFailed'));
+          }
+          if (approvalsResult.status === 'fulfilled') {
+            const items = approvalsResult.value.items ?? [];
+            setApprovals(items);
+            const pendingIds = items
+              .filter((item) => item.status === 'pending')
+              .map((item) => item.id);
+            if (pendingIds.some((id) => !seenPendingIdsRef.current.has(id))) {
+              setTab('approvals');
+            }
+            seenPendingIdsRef.current = new Set(pendingIds);
+          } else if (showLoading) {
+            feedback.error(t('hermesTerminal.feedback.approvalsLoadFailed'));
+          }
+          setFilesLoading(false);
+          setApprovalsLoading(false);
+        })
+        .finally(() => {
+          if (loadRequestRef.current?.promise === request) {
+            loadRequestRef.current = null;
+          }
+        });
+      loadRequestRef.current = { key: requestKey, promise: request };
+      return request;
     },
     [feedback, path, session.id, t, token, workspaceSlug],
   );
@@ -115,15 +132,27 @@ export function HermesTerminalActivityPanel({
       'archiving',
     ].includes(session.status);
     if (!active && !hasPendingApproval) return;
-    const timer = window.setInterval(() => void load(), 1500);
-    return () => window.clearInterval(timer);
+    let cancelled = false;
+    let timer: number | null = null;
+    const poll = async () => {
+      if (cancelled) return;
+      if (document.visibilityState === 'visible') await load();
+      if (!cancelled) {
+        timer = window.setTimeout(
+          () => void poll(),
+          document.visibilityState === 'visible' ? 1500 : 10_000,
+        );
+      }
+    };
+    timer = window.setTimeout(() => void poll(), 1500);
+    return () => {
+      cancelled = true;
+      if (timer !== null) window.clearTimeout(timer);
+    };
   }, [hasPendingApproval, load, session.status]);
 
   useEffect(() => {
-    const showTransition = !['running', 'awaiting_approval'].includes(
-      session.status,
-    );
-    void load(showTransition);
+    void load(true);
   }, [load, session.status]);
 
   const parentPath = useMemo(() => {

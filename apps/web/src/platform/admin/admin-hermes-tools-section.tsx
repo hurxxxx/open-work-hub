@@ -8,6 +8,7 @@ import {
   AdminHermesToolsApiError,
   getAdminHermesInventory,
   getAdminHermesResearchSettings,
+  getAdminHermesRuntimeHealth,
   getAdminHermesSummary,
   listAdminHermesProfiles,
   updateAdminHermesResearchSource,
@@ -15,6 +16,7 @@ import {
   type AdminHermesProfile,
   type AdminHermesResearchSettings,
   type AdminHermesResearchSourceId,
+  type AdminHermesRuntimeHealth,
   type AdminHermesSummary,
 } from './admin-hermes-tools-api';
 import {
@@ -47,6 +49,20 @@ function EffectiveStatus({ enabled }: { enabled: boolean }) {
           ? 'admin.console.hermesTools.status.enabled'
           : 'admin.console.hermesTools.status.disabled',
       )}
+    </Badge>
+  );
+}
+
+function RuntimeStatus({ status }: { status: string }) {
+  const { t } = useTranslation('apps');
+  const healthy = status === 'online';
+  return (
+    <Badge
+      tone={healthy ? 'green' : status === 'disabled' ? 'default' : 'amber'}
+    >
+      {t(`admin.console.hermesTools.runtime.status.${status}`, {
+        defaultValue: status,
+      })}
     </Badge>
   );
 }
@@ -239,6 +255,8 @@ export function AdminHermesToolsSection({ token }: { token: string }) {
   const { t } = useTranslation('apps');
   const feedback = useFeedback();
   const [summary, setSummary] = useState<AdminHermesSummary | null>(null);
+  const [runtimeHealth, setRuntimeHealth] =
+    useState<AdminHermesRuntimeHealth | null>(null);
   const [profiles, setProfiles] = useState<AdminHermesProfile[]>([]);
   const [researchSettings, setResearchSettings] =
     useState<AdminHermesResearchSettings | null>(null);
@@ -257,26 +275,35 @@ export function AdminHermesToolsSection({ token }: { token: string }) {
     setLoadError(false);
     void Promise.all([
       getAdminHermesSummary(token),
+      getAdminHermesRuntimeHealth(token),
       listAdminHermesProfiles(token),
       getAdminHermesResearchSettings(token),
     ])
-      .then(([nextSummary, profileList, nextResearchSettings]) => {
-        if (cancelled) return;
-        setSummary(nextSummary);
-        setProfiles(profileList.data);
-        setResearchSettings(nextResearchSettings);
-        setSelectedProfileId((current) => {
-          if (profileList.data.some((profile) => profile.id === current)) {
-            return current;
-          }
-          return (
-            profileList.data.find((profile) => profile.status === 'active')
-              ?.id ??
-            profileList.data[0]?.id ??
-            ''
-          );
-        });
-      })
+      .then(
+        ([
+          nextSummary,
+          nextRuntimeHealth,
+          profileList,
+          nextResearchSettings,
+        ]) => {
+          if (cancelled) return;
+          setSummary(nextSummary);
+          setRuntimeHealth(nextRuntimeHealth);
+          setProfiles(profileList.data);
+          setResearchSettings(nextResearchSettings);
+          setSelectedProfileId((current) => {
+            if (profileList.data.some((profile) => profile.id === current)) {
+              return current;
+            }
+            return (
+              profileList.data.find((profile) => profile.status === 'active')
+                ?.id ??
+              profileList.data[0]?.id ??
+              ''
+            );
+          });
+        },
+      )
       .catch(() => {
         if (!cancelled) setLoadError(true);
       })
@@ -376,6 +403,88 @@ export function AdminHermesToolsSection({ token }: { token: string }) {
           {t('admin.console.hermesTools.loadFailed')}
         </InlineNotice>
       ) : null}
+
+      <SurfaceCard
+        description={t('admin.console.hermesTools.runtime.description')}
+        title={t('admin.console.hermesTools.runtime.title')}
+      >
+        {runtimeHealth ? (
+          <div className="space-y-5">
+            <div className="grid gap-3 sm:grid-cols-2">
+              {Object.entries(runtimeHealth.services).map(
+                ([service, serviceStatus]) => (
+                  <div
+                    className="flex items-center justify-between gap-3 border-b border-app-border py-2"
+                    key={service}
+                  >
+                    <span className="app-text-body-sm text-app-ink">
+                      {t(
+                        `admin.console.hermesTools.runtime.services.${service}`,
+                        {
+                          defaultValue: service,
+                        },
+                      )}
+                    </span>
+                    <RuntimeStatus status={serviceStatus} />
+                  </div>
+                ),
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+              {(
+                [
+                  ['activeRuns', runtimeHealth.active_runs],
+                  ['pendingDispatches', runtimeHealth.pending_dispatches],
+                  ['pendingApprovals', runtimeHealth.pending_approvals],
+                  ['activeTerminals', runtimeHealth.active_terminal_sessions],
+                  [
+                    'quarantined',
+                    runtimeHealth.quarantined_terminal_workspaces,
+                  ],
+                ] as const
+              ).map(([label, value]) => (
+                <div className="border border-app-border p-3" key={label}>
+                  <div className="app-text-title-sm text-app-ink">{value}</div>
+                  <div className="app-text-caption mt-1 text-app-ink/55">
+                    {t(`admin.console.hermesTools.runtime.metrics.${label}`)}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="space-y-2">
+              <h3 className="app-text-label text-app-ink">
+                {t('admin.console.hermesTools.runtime.maintenance')}
+              </h3>
+              {runtimeHealth.maintenance.length > 0 ? (
+                runtimeHealth.maintenance.map((state) => (
+                  <div
+                    className="flex flex-wrap items-center justify-between gap-2 border-b border-app-border py-2 app-text-body-sm"
+                    key={state.component}
+                  >
+                    <span className="text-app-ink">{state.component}</span>
+                    <span className="text-app-ink/55">
+                      {state.last_succeeded_at
+                        ? new Date(state.last_succeeded_at).toLocaleString()
+                        : t('admin.console.hermesTools.runtime.neverSucceeded')}
+                      {state.last_error_code
+                        ? ` · ${state.last_error_code}`
+                        : ''}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <p className="app-text-body-sm text-app-ink/55">
+                  {t('admin.console.hermesTools.runtime.neverSucceeded')}
+                </p>
+              )}
+            </div>
+          </div>
+        ) : (
+          <p className="app-text-body-sm text-app-ink/55">
+            {t('admin.console.hermesTools.loading')}
+          </p>
+        )}
+      </SurfaceCard>
 
       <SurfaceCard
         description={t('admin.console.hermesTools.research.description')}

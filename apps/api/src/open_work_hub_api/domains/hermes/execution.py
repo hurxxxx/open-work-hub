@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+from contextlib import suppress
+from typing import Any
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
@@ -15,10 +18,38 @@ from open_work_hub_api.domains.hermes.repository import (
     HermesRunNotFoundError,
     HermesRunRepository,
 )
+from open_work_hub_api.domains.auth.workspace_app_gate import (
+    is_app_enabled_for_user_context,
+)
 
 
 class HermesExecutionConfigurationError(RuntimeError):
     pass
+
+
+def hermes_run_access_allowed(db: Session, run: Any) -> bool:
+    return is_app_enabled_for_user_context(
+        db,
+        app_id="chatbot",
+        user_id=run.user_id,
+        workspace_id=run.workspace_id,
+    )
+
+
+async def _stream_hermes_events(
+    client: HermesRuntimeClient,
+    *,
+    profile_name: str,
+    hermes_run_id: str,
+    queue: asyncio.Queue[tuple[str, object]],
+) -> None:
+    try:
+        async for event in client.iter_run_events(profile_name, hermes_run_id):
+            await queue.put(("event", event))
+    except Exception as error:
+        await queue.put(("error", error))
+    else:
+        await queue.put(("closed", None))
 
 
 async def execute_hermes_run(
@@ -53,6 +84,15 @@ async def execute_hermes_run(
         profile = db.get(HermesProfileBinding, run.profile_binding_id)
         if profile is None or profile.status != "active":
             raise HermesExecutionConfigurationError("Hermes profile is not active.")
+        if not hermes_run_access_allowed(db, run):
+            repository.mark_failure(
+                run.id,
+                claim_token=claim_token,
+                code="hermes.access_revoked",
+                message="Hermes access was revoked before execution.",
+            )
+            db.commit()
+            return "failed"
         session = (
             db.get(HermesSessionBinding, run.session_binding_id)
             if run.session_binding_id is not None
@@ -113,6 +153,7 @@ async def execute_hermes_run(
             if current is not None and current.status in TERMINAL_RUN_STATUSES:
                 return current.status
 
+        stop_relayed = False
         current = repository.get(run_id)
         if current is not None and current.status == "stopping":
             stop_payload = await client.stop_run(profile.profile_name, hermes_run_id)
@@ -122,19 +163,95 @@ async def execute_hermes_run(
                 claim_token=claim_token,
             )
             db.commit()
+            stop_relayed = True
 
+        event_queue: asyncio.Queue[tuple[str, object]] = asyncio.Queue(maxsize=200)
+        stream_task = asyncio.create_task(
+            _stream_hermes_events(
+                client,
+                profile_name=profile.profile_name,
+                hermes_run_id=hermes_run_id,
+                queue=event_queue,
+            )
+        )
+        stream_error: HermesClientError | None = None
         try:
-            async for event in client.iter_run_events(profile.profile_name, hermes_run_id):
+            while True:
+                try:
+                    item_kind, item = await asyncio.wait_for(event_queue.get(), timeout=2.0)
+                except TimeoutError:
+                    item_kind, item = "tick", None
+
+                db.expire_all()
                 current = repository.get(run_id)
                 if current is None:
                     raise HermesRunNotFoundError(run_id)
                 if current.status in TERMINAL_RUN_STATUSES:
                     break
-                repository.append_event(run_id, event, claim_token=claim_token)
-                db.commit()
-        except HermesClientError as error:
+
+                access_allowed = hermes_run_access_allowed(db, current)
+                if not access_allowed and current.status != "stopping":
+                    repository.append_event(
+                        run_id,
+                        {
+                            "event": "run.stop_requested",
+                            "status": "stopping",
+                            "reason": "access_revoked",
+                        },
+                        claim_token=claim_token,
+                    )
+                    db.commit()
+                    current = repository.get(run_id)
+
+                if current is not None and current.status == "stopping" and not stop_relayed:
+                    try:
+                        stop_payload = await client.stop_run(
+                            profile.profile_name,
+                            hermes_run_id,
+                        )
+                    except HermesClientError:
+                        # Keep the durable stop request and retry it on the next
+                        # control tick while the event stream remains attached.
+                        pass
+                    else:
+                        repository.append_event(
+                            run_id,
+                            {
+                                **stop_payload,
+                                "event": "run.stop_requested",
+                                "status": "stopping",
+                            },
+                            claim_token=claim_token,
+                        )
+                        db.commit()
+                        stop_relayed = True
+
+                if item_kind == "event":
+                    if not isinstance(item, dict):
+                        continue
+                    repository.append_event(run_id, item, claim_token=claim_token)
+                    db.commit()
+                    continue
+                if item_kind == "error":
+                    if isinstance(item, HermesClientError):
+                        stream_error = item
+                    else:
+                        raise item if isinstance(item, Exception) else RuntimeError(
+                            "Hermes event stream failed."
+                        )
+                    break
+                if item_kind == "closed":
+                    break
+        finally:
+            if not stream_task.done():
+                stream_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await stream_task
+
+        if stream_error is not None:
+            error = stream_error
             if error.status_code != 404:
-                raise
+                raise error
             # The prior subscriber may have consumed and closed Hermes' live
             # queue. Poll once now and let Celery retry this lightweight
             # recovery loop until the durable status becomes terminal.
