@@ -342,6 +342,20 @@ def test_app_bar_categories_are_admin_managed_presentation_groups(
     )
     assert list_response.status_code == 200, list_response.text
     payload = list_response.json()
+    # Migrations may provision launcher categories. Establish an empty layout
+    # through the admin API, which must also allow removing those categories.
+    for category in payload["categories"]:
+        clear_response = client.delete(
+            f"/api/v1/admin/app-bar-categories/{category['id']}",
+            headers=_auth_headers(token),
+        )
+        assert clear_response.status_code == 200, clear_response.text
+    list_response = client.get(
+        "/api/v1/admin/app-bar-categories",
+        headers=_auth_headers(token),
+    )
+    assert list_response.status_code == 200, list_response.text
+    payload = list_response.json()
     assert payload["categories"] == []
     available_app_ids = {item["app_id"] for item in payload["available_apps"]}
     assert {DOCS_WORKSPACE_APP.app_id, "pms"} <= available_app_ids
