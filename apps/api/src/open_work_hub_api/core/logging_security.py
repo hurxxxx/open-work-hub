@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 
-_SENSITIVE_HTTP_LOGGER_NAMES = ("httpx", "httpcore")
+_SENSITIVE_HTTP_LOGGER_NAMES = ("httpx", "httpx2", "httpcore")
 _DISABLED_LEVEL = logging.CRITICAL + 1
 
 

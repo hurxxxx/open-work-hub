@@ -9,7 +9,7 @@ LABEL io.open-work-hub.build-cache="true"
 
 RUN npm install --global --force corepack@0.34.0 \
     && corepack enable \
-    && corepack prepare pnpm@10.33.0 --activate
+    && corepack prepare pnpm@10.34.5 --activate
 
 ARG NODE_DEPENDENCY_SHA256
 
@@ -75,7 +75,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && npm install --global --force corepack@0.34.0 \
     && corepack enable \
-    && corepack prepare pnpm@10.33.0 --activate \
+    && corepack prepare pnpm@10.34.5 --activate \
     && node --version \
     && pnpm --version \
     && python --version \
@@ -109,7 +109,7 @@ RUN test -n "${API_DEPENDENCY_SHA256}" \
     && printf '%s\n' "${API_DEPENDENCY_SHA256}" \
       > /opt/open-work-hub/locks/api/dependency.sha256 \
     && UV_OFFLINE=1 /opt/open-work-hub/venvs/api/bin/python -I -c \
-      'import pytest, xdist; assert pytest.version_tuple[0] == 8' \
+      'import pytest, xdist; assert pytest.version_tuple[0] == 9' \
     && rm -rf /root/.cache/uv
 
 ARG WORKER_DEPENDENCY_SHA256
@@ -136,7 +136,7 @@ RUN test -n "${WORKER_DEPENDENCY_SHA256}" \
     && printf '%s\n' "${WORKER_DEPENDENCY_SHA256}" \
       > /opt/open-work-hub/locks/worker/dependency.sha256 \
     && UV_OFFLINE=1 /opt/open-work-hub/venvs/worker/bin/python -I -c \
-      'import pytest; assert pytest.version_tuple[0] == 8' \
+      'import pytest; assert pytest.version_tuple[0] == 9' \
     && rm -rf /root/.cache/uv
 
 COPY --from=validation_node_runtime \

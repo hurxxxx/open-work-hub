@@ -2,7 +2,7 @@
   "name": "open-work-hub",
   "version": "0.1.1",
   "private": true,
-  "packageManager": "pnpm@10.33.0",
+  "packageManager": "pnpm@10.34.5",
   "engines": {
     "node": ">=22"
   },
