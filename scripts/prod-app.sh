@@ -93,6 +93,7 @@ image_revision() {
 
 build_release_image() {
   local revision short_revision image bento_server_url
+  node "$ROOT_DIR/scripts/docker-storage.mjs" check >&2 || return 1
   revision="$(git -C "$ROOT_DIR" rev-parse HEAD)"
   short_revision="$(git -C "$ROOT_DIR" rev-parse --short=12 HEAD)"
   image="$IMAGE_REPOSITORY:$short_revision"
@@ -107,8 +108,8 @@ build_release_image() {
     --build-arg "OPEN_WORK_HUB_BENTO_SERVER_URL=$bento_server_url" \
     --build-arg "OPEN_WORK_HUB_BUILD_REVISION=$revision" \
     --tag "$image" \
-    "$ROOT_DIR" >&2
-  verify_release_image "$image" "$revision"
+    "$ROOT_DIR" >&2 || return 1
+  verify_release_image "$image" "$revision" || return 1
   printf '%s\n' "$image"
 }
 
@@ -180,6 +181,8 @@ restore_previous_runtime() {
 
 deploy() {
   local image
+  # Retention is part of an explicitly authorized deploy, never status/smoke.
+  node "$ROOT_DIR/scripts/docker-storage.mjs" cleanup --apply
   image="$(build_release_image)"
   promote_image "$image"
   if ! run_migrations || ! start_runtime || ! run_smoke; then
@@ -188,6 +191,10 @@ deploy() {
     return 1
   fi
   echo "Production application deployment completed and passed public smoke."
+  if ! node "$ROOT_DIR/scripts/docker-storage.mjs" cleanup --apply; then
+    echo "Deployment is healthy, but project image retention needs operator attention." >&2
+    return 1
+  fi
 }
 
 COMMAND="${1:-}"

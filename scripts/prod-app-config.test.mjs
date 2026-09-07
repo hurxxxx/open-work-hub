@@ -1,8 +1,225 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import { assertProductionAppEnv, parseEnvText } from './prod-app-config.mjs';
+import { cleanup, diskHeadroom, retirementPlan } from './docker-storage.mjs';
+
+const oldImage = (id, tags, extra = {}) => ({
+  Id: id,
+  RepoTags: tags,
+  Created: '2020-01-01T00:00:00Z',
+  Config: { Labels: { 'org.opencontainers.image.title': 'Open Work Hub' } },
+  ...extra,
+});
+const appTag = (id) => `open-work-hub-app:${id.repeat(12)}`;
+
+test('build command substitution stops on storage, build or image-verification failure', async () => {
+  const script = await readFile(
+    new URL('./prod-app.sh', import.meta.url),
+    'utf8',
+  );
+  const build = script.slice(
+    script.indexOf('build_release_image()'),
+    script.indexOf('verify_release_image()'),
+  );
+  for (const failed of ['storage', 'build', 'verify']) {
+    const result = spawnSync(
+      'bash',
+      [
+        '-c',
+        `
+      set -euo pipefail
+      ROOT_DIR=/synthetic ENV_FILE=/synthetic/env IMAGE_REPOSITORY=synthetic
+      node() { return ${failed === 'storage' ? 1 : 0}; }
+      git() { printf 'aaaaaaaaaaaa'; }
+      docker() { return ${failed === 'build' ? 1 : 0}; }
+      verify_release_image() { return ${failed === 'verify' ? 1 : 0}; }
+      ${build}
+      image="$(build_release_image)"
+      exit 99
+    `,
+      ],
+      { encoding: 'utf8', env: { PATH: process.env.PATH } },
+    );
+    assert.equal(result.status, 1, `${failed}: ${result.stderr}`);
+    assert.equal(result.stdout, '');
+  }
+});
+const storageImages = () => [
+  oldImage('current', ['open-work-hub-app:prod', appTag('a')]),
+  oldImage('previous', ['open-work-hub-app:prod-previous', appTag('b')]),
+  oldImage('ci', [
+    'open-work-hub-validation:node22-python312',
+    'open-work-hub-validation:redis64-impact-release',
+  ]),
+  oldImage('retired', [appTag('c')]),
+];
+
+test('storage requires both absolute and proportional disk headroom', () => {
+  const stats = (available, total) => ({
+    bavail: available,
+    blocks: total,
+    bsize: 1024 ** 3,
+  });
+  assert.equal(diskHeadroom(stats(20, 100)).ok, true);
+  assert.equal(diskHeadroom(stats(15, 100)).ok, true);
+  assert.equal(diskHeadroom(stats(14, 50)).ok, false);
+  assert.equal(diskHeadroom(stats(20, 200)).ok, false);
+  assert.equal(diskHeadroom(stats(20, 0)).ok, false);
+  assert.equal(diskHeadroom(stats(NaN, 100)).ok, false);
+});
+
+test('retention preserves current, rollback, CI, container refs, recent and unknown images', () => {
+  const images = [
+    ...storageImages(),
+    oldImage('running', [appTag('d')]),
+    oldImage('stopped', [appTag('e')]),
+    oldImage('manual', [
+      appTag('f'),
+      'open-work-hub-app:keep-for-investigation',
+    ]),
+    oldImage('foreign', ['another-project:old']),
+    oldImage('unlabeled', [appTag('1')], { Config: {} }),
+    oldImage('recent', [appTag('2')], { Created: new Date().toISOString() }),
+    oldImage('undated', [appTag('3')], { Created: 'unknown' }),
+    oldImage('dangling', []),
+    oldImage('old-ci', ['open-work-hub-validation:deps-aaaaaaaaaaaa']),
+  ];
+  assert.deepEqual(
+    retirementPlan(images, [{ Image: 'running' }, { Image: 'stopped' }]).map(
+      (i) => i.id,
+    ),
+    ['retired', 'old-ci'],
+  );
+  assert.deepEqual(retirementPlan([images[3]], []), []);
+});
+
+test('cleanup is read-only by default and uses only scoped non-force image removal', () => {
+  const state = { images: storageImages(), containers: [] };
+  const calls = [];
+  const options = { inspect: () => state, invoke: (args) => calls.push(args) };
+  cleanup(options);
+  assert.deepEqual(calls, []);
+  cleanup({ ...options, apply: true });
+  assert.deepEqual(calls, [
+    ['image', 'rm', '--no-prune', appTag('c')],
+    [
+      'image',
+      'prune',
+      '--force',
+      '--filter',
+      'label=io.open-work-hub.build-cache=true',
+      '--filter',
+      'until=48h',
+    ],
+    [
+      'image',
+      'prune',
+      '--force',
+      '--filter',
+      'label=org.opencontainers.image.title=Open Work Hub',
+      '--filter',
+      'until=48h',
+    ],
+  ]);
+});
+
+test('cleanup stops if a candidate gains a reference or tag after inspection', () => {
+  for (const change of ['container', 'tag']) {
+    let count = 0;
+    assert.throws(
+      () =>
+        cleanup({
+          apply: true,
+          inspect: () => {
+            const state = { images: storageImages(), containers: [] };
+            if (count++ > 0) {
+              if (change === 'container')
+                state.containers.push({ Image: 'retired' });
+              else
+                state.images[3].RepoTags.push(
+                  'open-work-hub-app:prod-previous',
+                );
+            }
+            return state;
+          },
+          invoke: () =>
+            assert.fail('changed references must prevent any deletion'),
+        }),
+      /references changed/,
+    );
+  }
+});
+
+test('production dependency layers exclude revision churn, uv cache and local test artifacts', async () => {
+  const dockerfile = await readFile(
+    new URL('../ops/app/Dockerfile', import.meta.url),
+    'utf8',
+  );
+  const ignore = await readFile(
+    new URL('../.dockerignore', import.meta.url),
+    'utf8',
+  );
+  const [buildStages, runtime] = dockerfile.split('AS runtime');
+  assert.equal(
+    (buildStages.match(/uv sync --no-cache --frozen/g) ?? []).length,
+    4,
+  );
+  assert.ok(
+    buildStages.indexOf('ARG OPEN_WORK_HUB_BENTO_SERVER_URL') >
+      buildStages.indexOf('RUN pnpm install'),
+  );
+  assert.equal(
+    (buildStages.match(/io.open-work-hub.build-cache="true"/g) ?? []).length,
+    2,
+  );
+  assert.ok(
+    runtime.indexOf('ARG OPEN_WORK_HUB_BUILD_REVISION') >
+      runtime.lastIndexOf('COPY '),
+  );
+  assert.ok(
+    runtime.indexOf('ARG OPEN_WORK_HUB_BUILD_REVISION') >
+      runtime.lastIndexOf('RUN '),
+  );
+  assert.match(
+    runtime,
+    /org.opencontainers.image.revision="\$\{OPEN_WORK_HUB_BUILD_REVISION\}"/,
+  );
+  assert.doesNotMatch(runtime, /io.open-work-hub.build-cache/);
+  for (const entry of [
+    '.runtime',
+    '.dev',
+    '**/test-results',
+    '**/playwright-report',
+    '**/blob-report',
+    '**/celerybeat-schedule*',
+    '**/celerybeat-heartbeat',
+  ]) {
+    assert.ok(
+      ignore.split('\n').includes(entry),
+      `missing Docker context exclusion: ${entry}`,
+    );
+  }
+  const release = await readFile(
+    new URL('./prod-app.sh', import.meta.url),
+    'utf8',
+  );
+  const build = release.slice(
+    release.indexOf('build_release_image()'),
+    release.indexOf('verify_release_image()'),
+  );
+  assert.ok(
+    build.indexOf('docker-storage.mjs" check') < build.indexOf('docker build'),
+  );
+  const deploy = release.slice(
+    release.indexOf('deploy()'),
+    release.indexOf('COMMAND='),
+  );
+  assert.match(deploy, /cleanup --apply[\s\S]+build_release_image/);
+  assert.match(deploy, /passed public smoke[\s\S]+cleanup --apply/);
+});
 
 function validEnv(overrides = {}) {
   return new Map(
@@ -23,8 +240,7 @@ function validEnv(overrides = {}) {
       OPEN_WORK_HUB_BENTO_SERVER_URL: 'https://bento.example.com',
       OPEN_WORK_HUB_DRAWIO_PORT: '18083',
       OPEN_WORK_HUB_ENV_PROFILE: 'prod',
-      OPEN_WORK_HUB_HERMES_API_KEY:
-        'production-hermes-runtime-secret-00000001',
+      OPEN_WORK_HUB_HERMES_API_KEY: 'production-hermes-runtime-secret-00000001',
       OPEN_WORK_HUB_HERMES_ENABLED: 'true',
       OPEN_WORK_HUB_HERMES_MANAGEMENT_BASE_URL: 'http://127.0.0.1:9119',
       OPEN_WORK_HUB_HERMES_MANAGEMENT_PORT: '9119',
@@ -37,8 +253,7 @@ function validEnv(overrides = {}) {
       OPEN_WORK_HUB_HERMES_PROFILE_CLONE_SOURCE: 'default',
       OPEN_WORK_HUB_HERMES_RUNTIME_BASE_URL: 'http://127.0.0.1:8642',
       OPEN_WORK_HUB_HERMES_RUNTIME_PORT: '8642',
-      OPEN_WORK_HUB_HERMES_TERMINAL_BROKER_BASE_URL:
-        'http://127.0.0.1:8765',
+      OPEN_WORK_HUB_HERMES_TERMINAL_BROKER_BASE_URL: 'http://127.0.0.1:8765',
       OPEN_WORK_HUB_HERMES_TERMINAL_BROKER_PORT: '8765',
       OPEN_WORK_HUB_INFRA_NGINX_PORT: '14200',
       OPEN_WORK_HUB_OPF_ENABLED: 'true',
@@ -98,15 +313,10 @@ test('requires an exact private or loopback Bento IPv4 bind address', () => {
     );
   }
 
-  for (const value of [
-    '10.20.30.40',
-    '172.16.0.1',
-    '192.168.1.10',
-  ]) {
+  for (const value of ['10.20.30.40', '172.16.0.1', '192.168.1.10']) {
     assert.equal(
-      assertProductionAppEnv(
-        validEnv({ OPEN_WORK_HUB_BENTO_BIND_HOST: value }),
-      ).bentoBindHost,
+      assertProductionAppEnv(validEnv({ OPEN_WORK_HUB_BENTO_BIND_HOST: value }))
+        .bentoBindHost,
       value,
     );
   }

@@ -4,8 +4,7 @@ ARG NODE_IMAGE=node:22-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe
 ARG PYTHON_IMAGE=python:3.12-slim-bookworm@sha256:0f5b26b9518d002b6173fd61daad821fa340635ebfec5bba471013f9ca114579
 
 FROM ${NODE_IMAGE} AS web-build
-
-ARG OPEN_WORK_HUB_BENTO_SERVER_URL
+LABEL io.open-work-hub.build-cache="true"
 
 WORKDIR /opt/open-work-hub
 
@@ -20,6 +19,7 @@ COPY packages/ui/package.json packages/ui/package.json
 RUN pnpm install --frozen-lockfile
 
 COPY . .
+ARG OPEN_WORK_HUB_BENTO_SERVER_URL
 RUN test -n "${OPEN_WORK_HUB_BENTO_SERVER_URL}" \
   && OPEN_WORK_HUB_BENTO_SERVER_URL="${OPEN_WORK_HUB_BENTO_SERVER_URL}" \
     pnpm nx build web --skip-nx-cache
@@ -27,6 +27,7 @@ RUN pnpm --filter @open-work-hub/collab-codec-runtime deploy \
     --prod --legacy /opt/collab-codec-runtime
 
 FROM ${PYTHON_IMAGE} AS python-build
+LABEL io.open-work-hub.build-cache="true"
 
 COPY --from=ghcr.io/astral-sh/uv:0.11.3@sha256:90bbb3c16635e9627f49eec6539f956d70746c409209041800a0280b93152823 /uv /usr/local/bin/uv
 
@@ -39,28 +40,22 @@ WORKDIR /opt/open-work-hub
 COPY apps/api/pyproject.toml apps/api/uv.lock apps/api/README.md apps/api/
 COPY apps/worker/pyproject.toml apps/worker/uv.lock apps/worker/README.md apps/worker/
 RUN UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy \
-    uv sync --frozen --no-dev --no-install-project --directory apps/api \
+    uv sync --no-cache --frozen --no-dev --no-install-project --directory apps/api \
   && UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy \
-    uv sync --frozen --no-dev --no-install-project --directory apps/worker
+    uv sync --no-cache --frozen --no-dev --no-install-project --directory apps/worker
 
 COPY apps/api/src apps/api/src
 COPY apps/api/alembic apps/api/alembic
 COPY apps/api/alembic.ini apps/api/alembic.ini
 COPY apps/worker/src apps/worker/src
 RUN UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy \
-    uv sync --frozen --no-dev --no-editable --directory apps/api \
+    uv sync --no-cache --frozen --no-dev --no-editable --directory apps/api \
   && UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy \
-    uv sync --frozen --no-dev --no-editable --directory apps/worker
+    uv sync --no-cache --frozen --no-dev --no-editable --directory apps/worker
 
 FROM ${PYTHON_IMAGE} AS runtime
 
-ARG OPEN_WORK_HUB_BUILD_REVISION=unmanaged
-
-LABEL org.opencontainers.image.title="Open Work Hub" \
-  org.opencontainers.image.revision="${OPEN_WORK_HUB_BUILD_REVISION}"
-
-ENV OPEN_WORK_HUB_RUNTIME_REVISION="${OPEN_WORK_HUB_BUILD_REVISION}" \
-  PYTHONUNBUFFERED=1 \
+ENV PYTHONUNBUFFERED=1 \
   PYTHONDONTWRITEBYTECODE=1
 
 RUN apt-get update \
@@ -88,5 +83,11 @@ RUN mkdir -p .runtime/opf-cache .runtime/recording-spool \
   && chown -R open-work-hub:open-work-hub .runtime
 
 USER open-work-hub
+
+# Revision metadata must not invalidate dependency copies or OS package layers.
+ARG OPEN_WORK_HUB_BUILD_REVISION=unmanaged
+LABEL org.opencontainers.image.title="Open Work Hub" \
+  org.opencontainers.image.revision="${OPEN_WORK_HUB_BUILD_REVISION}"
+ENV OPEN_WORK_HUB_RUNTIME_REVISION="${OPEN_WORK_HUB_BUILD_REVISION}"
 
 CMD ["apps/api/.venv/bin/uvicorn", "open_work_hub_api.main:app", "--app-dir", "apps/api/src", "--host", "127.0.0.1", "--port", "8000"]

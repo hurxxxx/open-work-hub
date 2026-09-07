@@ -4,6 +4,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
+import { requireDiskHeadroom } from './docker-storage.mjs';
 
 export const MARKER = '<!-- open-work-hub:release-validation:v1';
 export const LIMITS = Object.freeze({ files: 40, lines: 1000 });
@@ -240,10 +241,19 @@ export function renderEvidence(plan, results = [], status = 'pending') {
   ].join('\n');
 }
 
-export function executePlan(plan, { run, record, fresh }) {
+export function executePlan(plan, { run, record, fresh, preflight }) {
   const results = [];
   record(renderEvidence(plan, results));
   try {
+    if (preflight) {
+      const result = {
+        command: 'storage headroom preflight',
+        status: 'failed',
+      };
+      results.push(result);
+      preflight();
+      result.status = 'passed';
+    }
     const commands = [
       ['git', ['diff', '--check', plan.target, plan.source, '--']],
       ...plan.checks.map((check) => ['pnpm', [check]]),
@@ -345,6 +355,7 @@ export function runCi({ env = process.env, cwd = process.cwd() } = {}) {
     `[release-validation] ${plan.mode}; selected: ${plan.checks.join(', ')}`,
   );
   executePlan(plan, {
+    preflight: () => requireDiskHeadroom(cwd),
     run: (command, args) =>
       spawnSync(command, args, { cwd, env, stdio: 'inherit' }).status,
     record: (evidence) => {

@@ -255,6 +255,34 @@ function fixture(t) {
   return { root, git, write, commit, base };
 }
 
+test('storage exhaustion fails before suites and cannot produce passing evidence', () => {
+  let evidence = '';
+  assert.throws(
+    () =>
+      executePlan(
+        {
+          source,
+          target,
+          mergeTree: source,
+          ...planFor([change('README.md')]),
+        },
+        {
+          preflight: () => {
+            throw new Error('Insufficient disk headroom');
+          },
+          run: () => assert.fail('must not launch suites'),
+          fresh: () => assert.fail('must not reach final success'),
+          record: (value) => {
+            evidence = value;
+          },
+        },
+      ),
+    /Insufficient disk headroom/,
+  );
+  assert.match(evidence, /Status: failed/);
+  assert.match(evidence, /storage headroom preflight: failed/);
+});
+
 test('real Git snapshots catch deleted/renamed runtime paths and filenames with tabs', (t) => {
   const f = fixture(t);
   fs.mkdirSync(path.join(f.root, 'docs'));
