@@ -787,6 +787,61 @@ def test_profile_export_stages_on_the_private_volume_for_docker_copy() -> None:
     ) in calls
 
 
+def test_profile_import_stages_on_the_writable_private_volume() -> None:
+    calls: list[tuple[list[str], dict[str, object]]] = []
+    staged: list[tuple[str, bytes]] = []
+
+    class FakeUtility:
+        def exec_run(self, command, **kwargs):
+            calls.append((command, kwargs))
+            if command == ["test", "-d", "/opt/data/profiles/terminal"]:
+                return SimpleNamespace(exit_code=1, output=b"")
+            return SimpleNamespace(exit_code=0, output=b"")
+
+        def put_archive(self, path, archive):
+            staged.append((path, archive))
+
+        def remove(self, *, force):
+            assert force is True
+
+    runtime = object.__new__(HermesTerminalBrokerRuntime)
+    runtime.profile_archive_max_bytes = 64 * 1024 * 1024
+    runtime._utility_container = lambda _volume_name: FakeUtility()  # type: ignore[method-assign]
+    runtime._proxy_token = lambda: "proxy-token"  # type: ignore[method-assign]
+
+    runtime._configure_profile(
+        profile_volume_name="private-profile-volume",
+        profile_archive=b"profile archive",
+        mcp_url="http://hermes-terminal-broker:18765/mcp/session-1",
+        mcp_token="mcp-token",
+        research_sources=DEFAULT_RESEARCH_SOURCE_POLICY,
+    )
+
+    assert len(staged) == 1
+    destination, docker_archive = staged[0]
+    assert destination == "/opt/data"
+    with tarfile.open(fileobj=BytesIO(docker_archive), mode="r:") as archive:
+        member = archive.getmember(".owh-terminal-profile-import.tar.gz")
+        source = archive.extractfile(member)
+        assert source is not None
+        assert source.read() == b"profile archive"
+    assert (
+        [
+            "/opt/hermes/.venv/bin/hermes",
+            "profile",
+            "import",
+            "/opt/data/.owh-terminal-profile-import.tar.gz",
+            "--name",
+            "terminal",
+        ],
+        {"environment": None, "user": "10000:10000"},
+    ) in calls
+    assert (
+        ["rm", "-f", "/opt/data/.owh-terminal-profile-import.tar.gz"],
+        {"user": "10000:10000"},
+    ) in calls
+
+
 def test_profile_cli_uses_runner_identity_and_repairs_only_ownership() -> None:
     calls: list[tuple[list[str], dict[str, object]]] = []
 

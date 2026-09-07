@@ -287,6 +287,12 @@ def test_dev_seed_workspaces_register_every_app_and_expose_enabled_apps(
 ) -> None:
     get_settings.cache_clear()
     try:
+        with get_session_factory()() as db:
+            initial_category_by_app = dict(
+                db.execute(
+                    select(PlatformAppBarCategoryApp.app_id, PlatformAppBarCategoryApp.category_id)
+                ).all()
+            )
         session = _dev_login(client, "administrator")
         token = session["token"]
         headers = {"Authorization": f"Bearer {token}"}
@@ -360,7 +366,30 @@ def test_dev_seed_workspaces_register_every_app_and_expose_enabled_apps(
                     )
                 ).all()
             )
-            assert category_app_ids == {app.app_id for app in catalog if app.launcher_category}
+            expected_category_app_ids = {app.app_id for app in catalog if app.launcher_category}
+            # Development seeding fills gaps without moving migration/admin
+            # assignments into its own category.
+            previously_assigned_elsewhere = {
+                app_id
+                for app_id, category_id in initial_category_by_app.items()
+                if category_id != category.id
+            }
+            assert category_app_ids == expected_category_app_ids - previously_assigned_elsewhere
+            assignments = db.execute(
+                select(PlatformAppBarCategoryApp.app_id, PlatformAppBarCategoryApp.category_id)
+            ).all()
+            category_by_app = dict(assignments)
+            assert len(assignments) == len(category_by_app)
+            assert category_by_app.keys() == expected_category_app_ids
+            assert all(
+                category_by_app[app_id] == category_id
+                for app_id, category_id in initial_category_by_app.items()
+            )
+            auth_access.ensure_dev_seed_app_access(db, {workspace.key: workspace})
+            repeated_assignments = db.execute(
+                select(PlatformAppBarCategoryApp.app_id, PlatformAppBarCategoryApp.category_id)
+            ).all()
+            assert sorted(repeated_assignments) == sorted(assignments)
     finally:
         get_settings.cache_clear()
 

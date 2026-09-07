@@ -51,6 +51,7 @@ _UV_BIN = "/usr/local/bin/uv"
 _HERMES_USER = "10000:10000"
 _PROFILE_HOME = "/opt/data/profiles/terminal"
 _PROFILE_EXPORT_PATH = "/opt/data/.owh-terminal-profile-export.tar.gz"
+_PROFILE_IMPORT_PATH = "/opt/data/.owh-terminal-profile-import.tar.gz"
 _PROFILE_UV_CACHE = f"{_PROFILE_HOME}/home/.cache/uv"
 _RUNTIME_CACHE_HOME = "/opt/data/cache"
 _WORKSPACE_USAGE_SCRIPT = r"""
@@ -753,17 +754,20 @@ class HermesTerminalBrokerRuntime:
                     if len(profile_archive) > self.profile_archive_max_bytes:
                         raise BrokerRuntimeError("hermes_terminal.profile_archive_too_large")
                     utility.put_archive(
-                        "/tmp",
-                        self._tar_bytes("profile.tar.gz", profile_archive),
+                        "/opt/data",
+                        self._tar_bytes(
+                            PurePosixPath(_PROFILE_IMPORT_PATH).name,
+                            profile_archive,
+                        ),
                     )
-                    self._chown_profile_path(utility, "/tmp/profile.tar.gz")
+                    self._chown_profile_path(utility, _PROFILE_IMPORT_PATH)
                     self._exec_ok(
                         utility,
                         [
                             "/opt/hermes/.venv/bin/hermes",
                             "profile",
                             "import",
-                            "/tmp/profile.tar.gz",
+                            _PROFILE_IMPORT_PATH,
                             "--name",
                             PROFILE_NAME,
                         ],
@@ -804,6 +808,13 @@ class HermesTerminalBrokerRuntime:
                     continue
                 raise BrokerRuntimeError("hermes_terminal.profile_configuration_failed")
         finally:
+            try:
+                utility.exec_run(
+                    ["rm", "-f", _PROFILE_IMPORT_PATH],
+                    user=_HERMES_USER,
+                )
+            except DockerException:
+                pass
             try:
                 utility.remove(force=True)
             except DockerException:
