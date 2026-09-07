@@ -4,6 +4,9 @@ from datetime import UTC, datetime
 
 from sqlalchemy import and_, exists, false, or_, select, true
 
+from open_work_hub_api.domains.auth.models import Team, TeamMember
+from open_work_hub_api.domains.auth.roles import team_role_allows_predicate
+
 from open_work_hub_api.domains.docs.models import (
     DocMeetingAccess,
     NativeDoc,
@@ -42,21 +45,38 @@ def _target_acl_keys(*, app: str, target_type: str, target_id: str) -> list[str]
     )
 
 
+def _direct_target_team_ids_query(policy):
+    # PMS targets project direct space membership, even for workspace administrators.
+    return (
+        select(Team.id)
+        .join(TeamMember, TeamMember.team_id == Team.id)
+        .where(
+            Team.workspace_id == policy.workspace.id,
+            Team.active.is_(True),
+            Team.trashed_at.is_(None),
+            TeamMember.user_id == policy.user.id,
+            team_role_allows_predicate(TeamMember.role),
+        )
+    )
+
+
 def native_doc_read_predicate(policy):
     now = _utcnow()
-    accessible_team_ids = policy._active_team_ids_query()
+    accessible_team_ids = _direct_target_team_ids_query(policy)
     return or_(
         NativeDoc.owner_id == policy.user.id,
         exists(
             select(NativeDocUserShare.id).where(
                 NativeDocUserShare.doc_id == NativeDoc.id,
                 NativeDocUserShare.user_id == policy.user.id,
+                NativeDocUserShare.access_level.in_(("read", "edit")),
             )
         ),
         exists(
             select(DocMeetingAccess.id).where(
                 DocMeetingAccess.doc_id == NativeDoc.id,
                 DocMeetingAccess.user_id == policy.user.id,
+                DocMeetingAccess.access_level.in_(("read", "edit")),
                 DocMeetingAccess.revoked_at.is_(None),
                 or_(DocMeetingAccess.expires_at.is_(None), DocMeetingAccess.expires_at > now),
             )
@@ -229,7 +249,11 @@ class NativeDocSourceAccessAdapter:
 
     def keyword_acl_branches(self, policy):
         user_id = policy.user.id
-        team_ids = policy._accessible_team_ids()
+        team_ids = (
+            list(policy.db.scalars(_direct_target_team_ids_query(policy)))
+            if hasattr(policy, "db")
+            else policy._accessible_team_ids()
+        )
         clauses = [
             policy._keyword_acl_clause("owner_user_id", user_id),
             policy._keyword_acl_clause("shared_user_ids", user_id),

@@ -23,6 +23,7 @@ from open_work_hub_api.domains.auth.access import (
     slugify,
 )
 from open_work_hub_api.domains.auth.models import Team, TeamMember, User, Workspace
+from open_work_hub_api.domains.auth.roles import team_role_allows_predicate
 from open_work_hub_api.domains.auth.security import new_id
 from open_work_hub_api.domains.content_access.grants import ContentGrantIssuer
 from open_work_hub_api.domains.media.service import cleanup_media_for_resource, sync_embedded_media
@@ -1451,6 +1452,7 @@ def list_personal_widget_assigned_tasks(
         .join(TeamMember, TeamMember.team_id == Team.id)
         .where(
             TeamMember.user_id == user.id,
+            team_role_allows_predicate(TeamMember.role),
             TaskList.archived.is_(False),
             Team.active.is_(True),
             Team.trashed_at.is_(None),

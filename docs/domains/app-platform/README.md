@@ -39,12 +39,21 @@
   an old assignment arose. An explicit system-role replacement clears the independent legacy
   flag and replaces the role rows in the same transaction, so removing administrator rights
   cannot leave authority behind through `is_admin`.
+- Impersonated sessions require the initiating account to remain active, unblocked, and a
+  platform administrator on every authentication check. Explicit administrator demotion revokes
+  sessions issued through that account's impersonation in the same transaction; restoring the
+  role does not revive them. The target user's independently issued sessions remain independent.
+  Account deletion revokes delegated sessions before the initiating-account foreign key is cleared;
+  deletion must never convert an impersonated session into an independent one.
+  Reused authentication sessions reload the current user graph instead of trusting cached roles
+  or account state.
 - Authorization resolves workspace role from current PostgreSQL membership, active workspace,
   and active/unblocked user state. Retained team memberships cannot bypass a revoked workspace
   membership. Platform administrators retain their explicit tenant administration endpoints;
   a workspace role does not grant blanket access to private PMS tasks or meeting participation.
 - HTTP, queued execution, and batched app visibility reject unknown/unsupported workspace roles.
-  Membership-row existence alone is insufficient.
+  Team-based list/source predicates likewise require a supported team role; membership-row
+  existence alone is insufficient. Team viewers retain read access and cannot modify resources.
 - Docs and Whiteboard services require an explicitly bound workspace for workspace operations;
   they never select a user's first workspace. Global sharing uses an explicit active link instead.
 - Docs and Whiteboard shared routes authenticate the user, require company app enablement, and

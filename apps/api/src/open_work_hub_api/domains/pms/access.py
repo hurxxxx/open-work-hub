@@ -12,6 +12,8 @@ from open_work_hub_api.domains.auth.access import (
     normalize_team_role,
 )
 from open_work_hub_api.domains.auth.models import Team, TeamMember, User, Workspace
+from open_work_hub_api.domains.auth.roles import team_role_allows_predicate
+from open_work_hub_api.domains.auth.workspace_app_gate import is_app_enabled_for_user_context
 from open_work_hub_api.domains.pms.models import Task, TaskUserAccess, TaskList
 from open_work_hub_api.domains.source_access import can_read_pms_task
 
@@ -126,6 +128,7 @@ def _accessible_space_ids(db: Session, user: User) -> set[str]:
             .join(Team, Team.id == TeamMember.team_id)
             .where(
                 TeamMember.user_id == user.id,
+                team_role_allows_predicate(TeamMember.role),
                 Team.active.is_(True),
                 Team.trashed_at.is_(None),
                 Team.workspace.has(Workspace.active.is_(True)),
@@ -143,6 +146,7 @@ def _space_query_for_user(db: Session, user: User):
         .join(TeamMember, TeamMember.team_id == Team.id)
         .where(
             TeamMember.user_id == user.id,
+            team_role_allows_predicate(TeamMember.role),
             Team.active.is_(True),
             Team.trashed_at.is_(None),
             Team.workspace.has(Workspace.active.is_(True)),
@@ -342,6 +346,7 @@ def _active_task_grant(db: Session, *, task_id: str, user_id: str) -> TaskUserAc
         select(TaskUserAccess).where(
             TaskUserAccess.task_id == task_id,
             TaskUserAccess.user_id == user_id,
+            TaskUserAccess.access_level.in_(("read", "edit")),
             TaskUserAccess.revoked_at.is_(None),
             (TaskUserAccess.expires_at.is_(None) | (TaskUserAccess.expires_at > now)),
         )
@@ -350,6 +355,12 @@ def _active_task_grant(db: Session, *, task_id: str, user_id: str) -> TaskUserAc
 
 def _ensure_task_readable(db: Session, user: User, task_or_id: Task | str) -> Task:
     task = _load_task(db, task_or_id)
+    task_list = _load_list(db, task.list_id)
+    team = _load_active_team(db, task_list.team_id) if task_list is not None else None
+    if team is None or not is_app_enabled_for_user_context(
+        db, app_id="pms", user_id=user.id, workspace_id=team.workspace_id
+    ):
+        raise localized_http_exception(status_code=403, code="pms.task_access_required")
     if has_list_access(db, user, task.list_id):
         return task
     if _active_task_grant(db, task_id=task.id, user_id=user.id) is not None:

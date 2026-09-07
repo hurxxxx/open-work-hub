@@ -83,6 +83,19 @@ def resolve_auth_context_from_token(
             code="auth.user_inactive",
         )
 
+    if auth_session.impersonator_user_id:
+        impersonator = load_user_graph(db, auth_session.impersonator_user_id)
+        if (
+            impersonator is None
+            or impersonator.status != "active"
+            or impersonator.login_blocked
+            or "platform_admin" not in resolve_system_roles(db, impersonator)
+        ):
+            raise localized_http_exception(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                code="auth.session_invalid_or_expired",
+            )
+
     if update_last_seen:
         auth_session.last_seen_at = now
         db.add(auth_session)
@@ -299,7 +312,9 @@ def require_team_access(min_role: str = "member", team_param: str = "team_id"):
 
         request_workspace = getattr(request.state, "current_workspace", None)
         bound_workspace = (
-            request_workspace if isinstance(request_workspace, Workspace) else get_current_workspace(db)
+            request_workspace
+            if isinstance(request_workspace, Workspace)
+            else get_current_workspace(db)
         )
         if bound_workspace is not None and team.workspace_id != bound_workspace.id:
             raise localized_http_exception(

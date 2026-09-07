@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from sqlalchemy import exists, false, or_, select
 
 from open_work_hub_api.domains.auth.models import Team, TeamMember
+from open_work_hub_api.domains.auth.roles import team_role_allows_predicate
 from open_work_hub_api.domains.pms.models import Task, TaskList, TaskUserAccess
 from open_work_hub_api.domains.retrieval.partition_adapter_ids import (
     PMS_RETRIEVAL_PARTITION_ADAPTER_ID,
@@ -29,6 +30,7 @@ def accessible_pms_task_query(policy):
             Team.active.is_(True),
             Team.trashed_at.is_(None),
             TeamMember.user_id == policy.user.id,
+            team_role_allows_predicate(TeamMember.role),
         )
     )
     team_access = TaskList.team_id.in_(accessible_team_ids)
@@ -36,6 +38,7 @@ def accessible_pms_task_query(policy):
         select(TaskUserAccess.id).where(
             TaskUserAccess.task_id == Task.id,
             TaskUserAccess.user_id == policy.user.id,
+            TaskUserAccess.access_level.in_(("read", "edit")),
             TaskUserAccess.revoked_at.is_(None),
             or_(TaskUserAccess.expires_at.is_(None), TaskUserAccess.expires_at > now),
         )
@@ -154,6 +157,7 @@ class PmsTaskSourceAccessAdapter:
                         Team.active.is_(True),
                         Team.trashed_at.is_(None),
                         TeamMember.user_id == policy.user.id,
+                        team_role_allows_predicate(TeamMember.role),
                     )
                 ).all()
                 if team_id

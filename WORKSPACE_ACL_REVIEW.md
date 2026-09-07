@@ -15,9 +15,12 @@
 특히 워크스페이스 탈퇴 뒤 잘못된 공유 토큰으로 문서를 읽는 경우와,
 명시적 관리자 역할 회수 후에도 기존 관리자 플래그가 남는 경우를 실제 API 테스트로 재현했다.
 확인한 문제를 아래와 같이 수정하고 거부·정상 접근 회귀 테스트를 추가했다.
-최종 API 기본 테스트 2,095개와 정적·아키텍처·API 계약 검사가 통과했다.
+1차 검토에서는 문제 9종을 수정하고 API 기본 테스트 2,095개와 정적·아키텍처·API 계약 검사를 통과했다.
+후속 재검토에서 문제 4종(ACL-10~13)을 추가로 재현·수정했다. 검증 결과는 아래 차수별로 구분했다.
+최종 2차 코드의 API 기본 테스트는 2,109개가 모두 통과했다.
 
-커밋·푸시·배포는 수행하지 않았으며 검토 가능한 미커밋 변경으로 남겼다.
+사용자의 후속 커밋·푸시 요청에 따라 1차 수정 `accb30bb`를 GitLab `origin/dev`에 푸시했다.
+2차 개선과 이 보고서 갱신도 같은 `dev → origin/dev` 전달 범위에 포함한다. 운영 배포는 수행하지 않았다.
 운영 계정·권한 데이터는 열람하거나 일괄 변경하지 않았다.
 
 ## 검토 범위와 판단 기준
@@ -151,6 +154,65 @@ Docs/Whiteboard 서비스는 컨텍스트가 없으면 사용자의 첫 워크�
 이미 로드된 역할 관계도 무효화한다. 사용자의 기존 로그인 세션으로 다음 관리 API 요청을 보내면
 현재 권한에 따라 거부된다. 관리자가 명시적으로 교체하지 않은 다른 계정은 일괄 변경하지 않는다.
 
+### ACL-10 · 높음 · 관리자 권한 회수 후 대리 로그인 세션 유지
+
+대리 로그인 발급 시에는 관리자 역할을 검사했지만 이후 요청은 대리 대상 계정만 검사했다.
+관리 API에서 최초 관리자의 역할을 제거한 뒤에도 이미 발급한 대리 세션으로 `/auth/me`가 200을 반환했다.
+별도 DB 트랜잭션으로 최초 계정의 역할·활성·차단 상태를 바꾸는 경우도 재현했다.
+일반 관리 API의 계정 차단은 기존에도 대리 세션을 회수했으며, 이 부분이 누락되어 있었다고 주장하는 것은 아니다.
+
+수정: 공통 인증 경계가 최초 대리 실행자의 현재 계정 상태와 `platform_admin`을 매번 검사한다.
+명시적인 역할 교체로 관리자 권한이 없어지면 해당 계정이 발급한 대리 세션들을 같은 트랜잭션에서 폐기한다.
+관리자 역할을 다시 부여해도 폐기된 대리 세션은 살아나지 않는다. 대상 계정의 독립 로그인 세션은 유지한다.
+인증용 사용자 그래프도 새로 로드해 같은 ORM 세션 재사용 시 계정 차단을 반영한다.
+계정 삭제에서는 외래 키의 `ON DELETE SET NULL`로 대리 실행자 정보가 지워져 세션이 일반 로그인처럼
+남는 200 응답도 별도로 재현했다. 삭제 트랜잭션에서 먼저 해당 사용자의 직접·대리 세션을 회수하여 차단했다.
+
+근거: `auth/access.py`, `auth/dependencies.py`, `auth/session_lifecycle.py`, `admin/router.py`;
+`test_impersonation_requires_current_origin_admin`, `test_reused_auth_context_refreshes_current_account_state`,
+`test_deleting_impersonator_cannot_turn_delegation_into_independent_session`.
+기존 콘텐츠·실시간 인증 호출도 동일한 토큰 해석기를 사용한다. 이미 열린 연결의 재검사 주기는 변경하지 않았다.
+
+### ACL-11 · 높음 · 문서 REST보다 넓은 검색·RAG 원본 ACL
+
+PMS 비공개 스페이스에 연결된 문서는 직접 스페이스 멤버가 아니면 REST에서 404였지만,
+소스 SQL은 일반 관리자 범위 규칙을 재사용해 워크스페이스 관리자에게 모든 팀 문서를 허용했다.
+별도로 미지원 `access_level`의 직접 공유·회의 공유 행도 원본 SQL에서는 존재만으로 읽기 권한이 됐다.
+원본 REST 거부와 공통 소스 읽기 허용이 동시에 발생하는 테스트로 재현했다.
+
+수정: Docs 원본 SQL과 키워드 팀 후보를 직접 스페이스 멤버십으로 제한한다.
+명시적 공유 행은 `read`/`edit`만 인정한다. 단건·배치·RAG·자료 유형 조회에 같은 SQL이 적용된다.
+소유권 및 유효한 독립 공유는 유지하며, 정상 공유/팀 역할 부여 시 허용되고 회수 시 다시 거부되는 것을 검사했다.
+
+근거: `docs/source_access.py`; `test_docs_source_acl_cannot_exceed_document_acl`.
+키워드 등록 검사의 DB 없는 프로브 계약은 기존 인터페이스를 유지하며 실제 실행은 DB의 직접 멤버십을 조회한다.
+
+### ACL-12 · 높음 · 태스크 공유 권한으로 다른 워크스페이스 경계 우회
+
+태스크 읽기 헬퍼는 직접 목록 접근이 실패해도 유효한 `TaskUserAccess`가 있으면 태스크를 반환했다.
+원본 워크스페이스에서 탈퇴한 사용자가 자신의 다른 워크스페이스 경로에 원본 태스크 ID를 넣어
+상세를 읽는 200 응답을 재현했다. 원본 팀이 비활성·휴지통 상태인 경우도 공유 권한이 이를 우회했다.
+
+수정: 공유를 인정하기 전에 요청의 명시적 워크스페이스에 속한 활성 스페이스인지,
+현재 원본 멤버십과 PMS 실행 권한이 있는지 검사한다. 태스크 상세와 커스텀 필드 조회 모두 기존 403 계약으로 거부한다.
+미지원 태스크 공유 수준도 REST·소스 SQL에서 거부한다. 기존 보관된 목록의 상세 읽기 정책은 유지한다.
+
+근거: `pms/access.py`, `pms/source_access.py`;
+`test_task_grant_does_not_bypass_resource_context`, 기존 `test_pms_list_archive.py`.
+
+### ACL-13 · 중간 · 미지원 팀 역할의 목록·소스 접근 허용
+
+단건 역할 해석기는 알 수 없는 팀 역할을 거부했지만 PMS 목록·개인 태스크 위젯·소스 SQL과
+공통 팀 범위 쿼리는 멤버십 행의 존재만 사용했다. `unknown` 역할의 스페이스가 목록에 나타나는 것을 재현했다.
+이는 과거/비정상 저장 역할의 처리 문제이며 일반 사용자가 임의 역할을 저장할 수 있음을 확인한 것은 아니다.
+
+수정: 지원 역할과 최소 역할을 검사하는 공통 SQL 조건을 추가해 목록·위젯·소스·범위 쿼리에 적용했다.
+`viewer`의 정상 읽기 및 대소문자·주변 공백 호환을 유지하고 쓰기는 거부한다.
+기존 역할 행을 일괄 변경하거나 관리자 권한을 자동 부여하지 않는다.
+
+근거: `auth/roles.py`, `pms/access.py`, `pms/service.py`, `pms/source_access.py`,
+`source_access/access_scope.py`; `test_unsupported_team_role_cannot_read_lists_or_sources`.
+
 ## 변경 범위
 
 - 권한·관리: `auth/access.py`, `auth/roles.py`, `auth/workspace_app_gate.py`, `admin/workspace_members.py`.
@@ -159,11 +221,14 @@ Docs/Whiteboard 서비스는 컨텍스트가 없으면 사용자의 첫 워크�
 - 회귀 검증: 새 [test_workspace_acl_boundaries.py](apps/api/tests/test_workspace_acl_boundaries.py),
   기존 역할·관리·소스 범위·어댑터·미디어·커뮤니티·회사 파일 코퍼스 테스트.
 - 문서: 위 세 개 소유 문서와 이 루트 보고서.
+- 2차 추가: `auth/dependencies.py`, `auth/session_lifecycle.py`, `admin/router.py`, `pms/access.py`, `pms/service.py`,
+  `tests/test_workspace_acl_followup.py`; 기존 `auth/access.py`, `auth/roles.py`, Docs/PMS 소스 SQL,
+  공통 팀 범위 및 App Platform/Source Access 소유 문서도 후속 보강했다.
 
 공통 권한 경계 보강을 기존 등록·실행 인터페이스에 적용했다. 새로운 앱·공급자·모델·API 경로·
 응답 스키마·DB 스키마·작업 큐·환경 설정은 추가하지 않았다. 마이그레이션은 필요하지 않다.
 
-## 검증 기록
+## 1차 검증 기록
 
 새 보안 회귀 파일에 26개 실행 케이스를 추가했다. 수정 전에 기존 집중 테스트는 18개가 통과했지만,
 새로 작성한 탈퇴·공유 토큰·정책 재사용 테스트로 기존 허용/예외 동작을 재현했다.
@@ -193,6 +258,34 @@ DB 스키마·worker 코드·UI 코드는 변경하지 않았다. 실제 Redis �
 검증 중 Starlette/AnyIO deprecation과 일부 Yjs 객체의 다른 스레드 정리 경고가 관찰되었으며,
 해당 라이브러리 경고는 이번 ACL 변경에서 수정하지 않았다.
 
+## 2차 검증 기록
+
+`tests/test_workspace_acl_followup.py`에 14개 실행 케이스를 추가했다.
+기존 동작에서 대리 권한 회수·Docs 소스 ACL·태스크 컨텍스트·팀 역할 11개 실패 케이스를 확인했고,
+관리자 삭제 후 대리 세션 유지도 별도 API 테스트로 재현한 뒤 수정했다.
+같은 인증용 ORM 세션에서 계정 차단 반영, 정상 공유/뷰어 읽기, 공유 회수,
+관리자 역할 재부여 후 폐기 세션 비복구, 대상 계정의 독립 세션 보존도 확인했다.
+
+아래 `pytest`, `ruff`, `compileall`은 `apps/api`에서 실행했다.
+
+| 명령·검사 | 결과 |
+| --- | --- |
+| `uv run --python 3.12 --group dev python -m pytest tests/test_workspace_acl_followup.py tests/test_workspace_acl_boundaries.py tests/test_auth_impersonation.py tests/test_source_access_policy.py tests/test_pms_list_archive.py -n 4 -q --tb=short --show-capture=no` | 49 passed; 삭제 경로 케이스 추가 전 |
+| `uv run --python 3.12 --group dev python -m pytest tests/test_workspace_acl_followup.py -k deleting_impersonator -q --tb=short --show-capture=no` | 수정 전 200 응답으로 실패, 수정 후 1 passed |
+| `uv run --python 3.12 --group dev python -m pytest -n 4 --dist=worksteal -m 'not slow and not external_integration and not migration' -q --tb=short --show-capture=no` | 최종 삭제 경로 수정 포함 2,109 passed, 경고 6건, 182.05초 |
+| `uv run --python 3.12 --group dev ruff check .` | 통과 |
+| `uv run --python 3.12 python -m compileall -q src` | 통과 |
+| `pnpm check:api-architecture` | API i18n 및 import 계약 2개 통과 |
+| `pnpm check:api-contract` | 통과, 생성 API 계약 변경 없음 |
+| `git diff --check`, 변경 Markdown 3개의 상대 링크 및 새 테스트 공백 검사 | 통과 |
+
+검증 중 테스트용 목록 키 길이 오류를 고쳤으며, 소스 키워드 등록 검사의 DB 없는 프로브 계약에 맞게
+후속 SQL 변경을 보완했다. 두 경우 모두 제품 취약점의 증거로 계산하지 않았다.
+집중 테스트를 8개 프로세스로 동시에 준비할 때 테스트 PostgreSQL에서
+`out of shared memory / max_locks_per_transaction` 오류가 발생했다.
+DB 설정이나 검사 제외 조건을 바꾸지 않고 병렬 수를 4개로 낮춰 같은 범위의 검사를 통과했다.
+1차 기록의 미실행 검사와 라이브러리 경고에 대한 한계는 2차에도 적용한다.
+
 ## 호환성 영향과 검토 한계
 
 1. 과거 `workspace_admin`/`audit_viewer` 또는 워크스페이스 `viewer`만 가진 계정은 이제 해당 권한이 없다.
@@ -206,3 +299,9 @@ DB 스키마·worker 코드·UI 코드는 변경하지 않았다. 실제 Redis �
 5. 테스트 전용 DB와 저장소 대역을 사용했다. 운영 데이터, 외부 실제 서비스, 프록시/네트워크 배포 구성,
    실제 브라우저 수동 조작과 부하 측정은 이 검토에 포함하지 않았다.
    자동 회귀 통과를 미발견 취약점이 없다는 보장으로 해석해서는 안 된다.
+6. 2차 개선 후에는 관리자 강등·삭제로 폐기된 대리 세션을 다시 사용할 수 없다. 지원 작업을 계속하려면
+   현재 권한이 있는 관리자가 새 대리 세션을 발급해야 한다. 워크스페이스 관리자라도 비공개 PMS 문서를
+   검색하려면 직접 팀 멤버십 또는 별도의 유효한 문서 권한이 필요하다.
+7. 과거 잘못된 역할/공유 수준 행은 권한을 부여하지 않는다. 이미 삭제되어 최초 실행자 정보가 사라진
+   기존 대리 세션은 일반 세션과 런타임에서 구별할 수 없으므로 자동 정정하지 않았다.
+   이번 삭제 경로 보강은 앞으로의 삭제에서 동일한 상태가 생기는 것을 방지한다.

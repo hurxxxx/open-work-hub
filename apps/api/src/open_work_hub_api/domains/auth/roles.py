@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from sqlalchemy import func
+
 SYSTEM_PLATFORM_ADMIN = "platform_admin"
 
 SYSTEM_ROLE_ORDER = (SYSTEM_PLATFORM_ADMIN,)
@@ -105,6 +107,12 @@ def team_role_allows(role: str | None, min_role: str) -> bool:
     if normalized_role is None:
         return False
     return TEAM_ROLE_RANK[normalized_role] >= TEAM_ROLE_RANK[normalized_min_role]
+
+
+def team_role_allows_predicate(role_column, min_role: str = "viewer"):
+    """SQL counterpart for stored team roles, including supported spelling normalization."""
+    allowed = [role for role in TEAM_ROLE_ALIASES if team_role_allows(role, min_role)]
+    return func.lower(func.trim(role_column)).in_(allowed)
 
 
 def _sorted_system_roles(roles: set[str]) -> list[str]:

@@ -24,6 +24,15 @@ the same source-owned authorization semantics.
   their own cohort/explicit-grant ACL. Company scope never admits workspace-only sources.
 - The source app owns direct and batch authorization predicates, inactive/deleted handling, and
   keyword ACL branches. The shared policy groups candidates and dispatches to those adapters.
+- Docs linked to PMS spaces use direct, supported space membership for source SQL and keyword
+  candidates, matching document REST and collaboration access. Workspace administration alone
+  does not grant those private documents. Explicit document/meeting shares must carry a supported
+  `read` or `edit` level. Other independent owner or valid sharing rights still apply.
+- PMS task grants require the task's active space in the explicitly bound workspace, current
+  membership and PMS availability, and a supported grant level. They cannot bypass workspace
+  revocation through another workspace's URL or expose inactive/trashed spaces. This applies to
+  task detail and custom-field reads as well as source authorization. Archived-list detail remains
+  readable under its existing source policy; active search/RAG excludes archived work.
 - Registered resource types are `docs_native_doc`, `file_manager_file`, `meeting`, `pms_task`, and
   `planner_event`.
 - Candidate partition, workspace metadata, search index fields, notification rows, signed content

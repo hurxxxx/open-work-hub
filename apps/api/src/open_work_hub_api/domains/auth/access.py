@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -66,6 +67,7 @@ from open_work_hub_api.domains.auth.security import (
     hash_password,
     new_id,
 )
+from open_work_hub_api.domains.auth.session_lifecycle import revoke_active_impersonation_sessions
 
 logger = logging.getLogger(__name__)
 
@@ -197,10 +199,21 @@ def replace_user_system_roles(db: Session, user_id: str, roles: Sequence[str]) -
     db.flush()
     if user is not None:
         db.expire(user, ["system_role_links"])
+        if SYSTEM_PLATFORM_ADMIN not in resolve_system_roles(db, user):
+            revoke_active_impersonation_sessions(
+                db,
+                impersonator_user_id=user.id,
+                revoked_at=datetime.now(UTC).replace(tzinfo=None),
+            )
 
 
 def load_user_graph(db: Session, user_id: str) -> User | None:
-    return db.scalar(select(User).options(*USER_GRAPH_OPTIONS).where(User.id == user_id))
+    return db.scalar(
+        select(User)
+        .options(*USER_GRAPH_OPTIONS)
+        .where(User.id == user_id)
+        .execution_options(populate_existing=True)
+    )
 
 
 CURRENT_WORKSPACE_DB_INFO_KEY = "current_workspace"

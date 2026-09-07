@@ -4801,6 +4801,12 @@ def delete_user(
     if user is None:
         raise localized_http_exception(status_code=404, code="auth.user_not_found")
     email = user.email
+    # Revoke delegated sessions before ON DELETE SET NULL removes their origin.
+    revoke_active_user_sessions(
+        db,
+        user_id=user.id,
+        revoked_at=datetime.now(UTC).replace(tzinfo=None),
+    )
     db.execute(
         sa_update(AuditLog).where(AuditLog.actor_user_id == user_id).values(actor_user_id=None)
     )

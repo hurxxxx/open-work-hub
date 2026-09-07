@@ -9,6 +9,7 @@ from sqlalchemy import and_, false, or_, select
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.domains.auth.models import Team, TeamMember
+from open_work_hub_api.domains.auth.roles import team_role_allows_predicate
 
 
 @dataclass(frozen=True)
@@ -99,7 +100,8 @@ class AccessScopePolicy:
         if self.workspace_role != "member":
             return query.where(false())
         return query.join(TeamMember, TeamMember.team_id == Team.id).where(
-            TeamMember.user_id == self.user_id
+            TeamMember.user_id == self.user_id,
+            team_role_allows_predicate(TeamMember.role),
         )
 
     def accessible_team_ids(self) -> list[str]:
