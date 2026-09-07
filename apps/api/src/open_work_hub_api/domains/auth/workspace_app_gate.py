@@ -10,7 +10,11 @@ from open_work_hub_api.core.db import get_db_session
 from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.core.principal import CallerPrincipal
 from open_work_hub_api.core.workspace_app_registry import app_is_available_to_system_roles
-from open_work_hub_api.domains.auth.access import resolve_system_roles
+from open_work_hub_api.domains.auth.access import (
+    resolve_system_roles,
+    resolve_workspace_role,
+    workspace_role_allows,
+)
 from open_work_hub_api.domains.auth.app_availability import (
     is_app_enabled,
     is_company_app_enabled,
@@ -71,17 +75,9 @@ def is_app_enabled_for_user_context(
         return is_app_enabled(db, app_id)
     if workspace_id is None:
         return False
-    membership_exists = db.scalar(
-        select(WorkspaceUserBinding.id)
-        .join(Workspace, Workspace.id == WorkspaceUserBinding.workspace_id)
-        .where(
-            WorkspaceUserBinding.workspace_id == workspace_id,
-            WorkspaceUserBinding.user_id == user_id,
-            Workspace.active.is_(True),
-        )
-        .limit(1)
-    )
-    return bool(membership_exists) and is_app_enabled(
+    return workspace_role_allows(
+        resolve_workspace_role(db, user, workspace_id), "member"
+    ) and is_app_enabled(
         db,
         app_id,
         workspace_id=workspace_id,
@@ -131,17 +127,7 @@ def resolve_enabled_app_ids_for_user_context(
     )
     if fresh_user is None or fresh_user.status != "active" or fresh_user.login_blocked:
         return frozenset()
-    membership_exists = db.scalar(
-        select(WorkspaceUserBinding.id)
-        .join(Workspace, Workspace.id == WorkspaceUserBinding.workspace_id)
-        .where(
-            WorkspaceUserBinding.workspace_id == workspace_id,
-            WorkspaceUserBinding.user_id == user.id,
-            Workspace.active.is_(True),
-        )
-        .limit(1)
-    )
-    if not membership_exists:
+    if not workspace_role_allows(resolve_workspace_role(db, fresh_user, workspace_id), "member"):
         return frozenset()
     roles = set(resolve_system_roles(db, fresh_user))
     runtime_enabled = set(resolve_workspace_runtime_enabled_app_ids(db, workspace_id))
@@ -174,9 +160,10 @@ def resolve_enabled_app_contexts_for_user(
     workspace_ids = {
         workspace_id for _, workspace_id in normalized_contexts if workspace_id is not None
     }
-    member_workspace_ids = set(
-        db.scalars(
-            select(WorkspaceUserBinding.workspace_id)
+    member_workspace_ids = {
+        workspace_id
+        for workspace_id, role in db.execute(
+            select(WorkspaceUserBinding.workspace_id, WorkspaceUserBinding.role)
             .join(Workspace, Workspace.id == WorkspaceUserBinding.workspace_id)
             .where(
                 WorkspaceUserBinding.workspace_id.in_(workspace_ids),
@@ -184,7 +171,8 @@ def resolve_enabled_app_contexts_for_user(
                 Workspace.active.is_(True),
             )
         )
-    )
+        if workspace_role_allows(role, "member")
+    }
     snapshot = load_app_availability_snapshot(db, workspace_ids=workspace_ids)
     roles = set(resolve_system_roles(db, fresh_user))
     enabled: set[tuple[str, str | None]] = set()

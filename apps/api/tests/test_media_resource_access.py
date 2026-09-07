@@ -10,11 +10,14 @@ from sqlalchemy.orm import Session
 from open_work_hub_api.core.db import Base
 from open_work_hub_api.core.i18n import ERROR_CODE_HEADER
 from open_work_hub_api.domains.auth.models import (
+    CompanyAppControl,
     Team,
     TeamMember,
     User,
     UserSystemRole,
     Workspace,
+    WorkspaceAppDefault,
+    WorkspaceAppOverride,
     WorkspaceUserBinding,
 )
 from open_work_hub_api.domains.docs.models import (
@@ -40,7 +43,7 @@ from open_work_hub_api.domains.media.resource_access import (
     media_ids_from_urls,
 )
 from open_work_hub_api.domains.meeting.models import Meeting
-from open_work_hub_api.domains.pms.models import Folder, Milestone, Task, TaskList
+from open_work_hub_api.domains.pms.models import Folder, Milestone, Task, TaskList, TaskUserAccess
 
 
 def _session() -> Session:
@@ -49,6 +52,9 @@ def _session() -> Session:
         engine,
         tables=[
             Workspace.__table__,
+            CompanyAppControl.__table__,
+            WorkspaceAppDefault.__table__,
+            WorkspaceAppOverride.__table__,
             User.__table__,
             WorkspaceUserBinding.__table__,
             UserSystemRole.__table__,
@@ -58,6 +64,7 @@ def _session() -> Session:
             TaskList.__table__,
             Milestone.__table__,
             Task.__table__,
+            TaskUserAccess.__table__,
             DocsCollection.__table__,
             NativeDoc.__table__,
             NativeDocPage.__table__,
@@ -157,6 +164,11 @@ def test_can_resolve_task_media_through_space_membership() -> None:
                     active=True,
                 ),
                 TeamMember(id="membership-1", team_id="team-1", user_id="member", role="member"),
+                WorkspaceUserBinding(
+                    id="workspace-member", workspace_id="workspace-1", user_id="member", role="member",
+                ),
+                CompanyAppControl(app_id="pms", enabled=True),
+                WorkspaceAppDefault(app_id="pms", enabled=True),
                 TaskList(
                     id="list-1",
                     key="LIST",

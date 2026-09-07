@@ -471,7 +471,7 @@ def test_resolve_secret_post_media_accepts_post_password(
 ) -> None:
     monkeypatch.setattr(
         media_content_access,
-        "is_company_app_enabled_for_user_context",
+        "media_owner_app_enabled",
         lambda *_args, **_kwargs: True,
     )
     author = _make_user(db, "author")
@@ -1259,7 +1259,7 @@ def test_admin_only_channel_masks_content_and_media_for_regular_viewers(
 ) -> None:
     monkeypatch.setattr(
         media_content_access,
-        "is_company_app_enabled_for_user_context",
+        "media_owner_app_enabled",
         lambda *_args, **_kwargs: True,
     )
     monkeypatch.setattr(

@@ -2,14 +2,18 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import false, select
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.domains.auth.access import get_current_workspace, resolve_workspace_role
 from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.workspace_app_gate import (
+    is_app_enabled_for_user_context,
+    is_company_app_enabled_for_user_context,
+)
 from open_work_hub_api.domains.search.backend_contracts import (
     KeywordAclBranch,
     KeywordAclClause,
@@ -86,17 +90,23 @@ class SourceAclPolicy:
     def can_read_resource(self, resource_type: str, resource_id: str) -> bool:
         ensure_builtin_source_access_adapters_registered()
         adapter = get_source_access_adapter(resource_type)
-        return adapter is not None and adapter.can_read_resource(
-            self, resource_type=resource_type, resource_id=resource_id
+        current = self._authorized_policy(resource_type)
+        return (
+            adapter is not None
+            and current is not None
+            and adapter.can_read_resource(
+                current, resource_type=resource_type, resource_id=resource_id
+            )
         )
 
     def can_read_rag_resource(self, resource_type: str, resource_id: str) -> bool:
         ensure_builtin_source_access_adapters_registered()
         adapter = get_source_access_adapter(resource_type)
-        if adapter is None or not self._adapter_allows_execution_scope(resource_type):
+        current = self._authorized_policy(resource_type)
+        if adapter is None or current is None:
             return False
         return adapter.can_read_rag_resource(
-            self, resource_type=resource_type, resource_id=resource_id
+            current, resource_type=resource_type, resource_id=resource_id
         )
 
     def authorize_many_rag_resources(
@@ -128,7 +138,8 @@ class SourceAclPolicy:
         allowed: set[tuple[str, str]] = set()
         for resource_type, resource_ids in ids_by_type.items():
             adapter = get_source_access_adapter(resource_type)
-            if adapter is None or not self._adapter_allows_execution_scope(resource_type):
+            current = self._authorized_policy(resource_type)
+            if adapter is None or current is None:
                 continue
             authorize_many = getattr(
                 adapter,
@@ -137,7 +148,7 @@ class SourceAclPolicy:
             )
             if callable(authorize_many):
                 allowed_ids = authorize_many(
-                    self,
+                    current,
                     resource_type=resource_type,
                     resource_ids=tuple(resource_ids),
                 )
@@ -147,20 +158,51 @@ class SourceAclPolicy:
                     for resource_id in resource_ids
                     if (
                         adapter.can_read_rag_resource(
-                            self,
+                            current,
                             resource_type=resource_type,
                             resource_id=resource_id,
                         )
                         if rag
                         else adapter.can_read_resource(
-                            self,
+                            current,
                             resource_type=resource_type,
                             resource_id=resource_id,
                         )
                     )
                 }
-            allowed.update((resource_type, resource_id) for resource_id in allowed_ids)
+            allowed.update(
+                (resource_type, resource_id)
+                for resource_id in set(allowed_ids).intersection(resource_ids)
+            )
         return allowed
+
+    def _authorized_policy(self, resource_type: str) -> SourceAclPolicy | None:
+        """Recheck execution before dispatch; a saved policy is never a grant."""
+        adapter = get_source_access_adapter(resource_type)
+        app_id = getattr(adapter, "app_id", None)
+        if not app_id or not self._adapter_allows_execution_scope(resource_type):
+            return None
+        if self.execution_scope_kind == "workspace":
+            if self.workspace is None:
+                return None
+            role = resolve_workspace_role(self.db, self.user, self.workspace.id)
+            if role is None or not is_app_enabled_for_user_context(
+                self.db,
+                app_id=app_id,
+                user_id=self.user.id,
+                workspace_id=self.workspace.id,
+            ):
+                return None
+            return replace(self, workspace_role=role)
+        if self.execution_scope_kind != "company" or self.workspace is not None:
+            return None
+        if not is_company_app_enabled_for_user_context(
+            self.db,
+            app_id=app_id,
+            user_id=self.user.id,
+        ):
+            return None
+        return self
 
     def _adapter_allows_execution_scope(self, resource_type: str) -> bool:
         if self.execution_scope_kind == "workspace":
@@ -195,55 +237,67 @@ class SourceAclPolicy:
         ensure_builtin_source_access_adapters_registered()
         branches: list[KeywordAclBranch] = []
         for adapter in get_source_access_adapters():
-            branches.extend(adapter.keyword_acl_branches(self))
+            current = next(
+                (
+                    policy
+                    for resource_type in adapter.resource_types
+                    if (policy := self._authorized_policy(resource_type)) is not None
+                ),
+                None,
+            )
+            if current is not None:
+                branches.extend(adapter.keyword_acl_branches(current))
         return KeywordAclFilter(branches=tuple(branches))
 
     def restrict_visible_native_docs(self, base):
         from open_work_hub_api.domains.docs import source_access
 
-        return source_access.restrict_visible_native_docs(self, base)
+        ensure_builtin_source_access_adapters_registered()
+        current = self._authorized_policy(NATIVE_DOC_RESOURCE_TYPE)
+        return (
+            base.where(false())
+            if current is None
+            else source_access.restrict_visible_native_docs(current, base)
+        )
 
     def visible_native_doc_source_kinds(self) -> list[str]:
         from open_work_hub_api.domains.docs import source_access
 
-        return source_access.visible_native_doc_source_kinds(self)
+        ensure_builtin_source_access_adapters_registered()
+        current = self._authorized_policy(NATIVE_DOC_RESOURCE_TYPE)
+        return [] if current is None else source_access.visible_native_doc_source_kinds(current)
 
     def visible_rag_native_doc_source_kinds(self) -> list[str]:
         from open_work_hub_api.domains.docs import source_access
 
-        return source_access.visible_rag_native_doc_source_kinds(self)
+        ensure_builtin_source_access_adapters_registered()
+        current = self._authorized_policy(NATIVE_DOC_RESOURCE_TYPE)
+        return [] if current is None else source_access.visible_rag_native_doc_source_kinds(current)
 
     def has_accessible_source(self, resource_type: str) -> bool:
         ensure_builtin_source_access_adapters_registered()
         adapter = get_source_access_adapter(resource_type)
-        return adapter is not None and adapter.has_accessible_source(
-            self, resource_type=resource_type
+        current = self._authorized_policy(resource_type)
+        return (
+            adapter is not None
+            and current is not None
+            and adapter.has_accessible_source(current, resource_type=resource_type)
         )
 
     def can_read_native_doc(self, doc_id: str) -> bool:
-        from open_work_hub_api.domains.docs import source_access
-
-        return source_access.can_read_native_doc(self, doc_id)
+        return self.can_read_resource(NATIVE_DOC_RESOURCE_TYPE, doc_id)
 
     def can_read_official_native_doc(self, doc_id: str) -> bool:
-        from open_work_hub_api.domains.docs import source_access
-
-        return source_access.can_read_official_native_doc(self, doc_id)
+        return self.can_read_rag_resource(NATIVE_DOC_RESOURCE_TYPE, doc_id)
 
     def can_read_pms_task(self, task_id: str) -> bool:
-        from open_work_hub_api.domains.pms import source_access
-
-        return source_access.can_read_pms_task(self, task_id)
+        return self.can_read_resource(PMS_TASK_RESOURCE_TYPE, task_id)
 
     def can_read_meeting(self, meeting_id: str) -> bool:
-        from open_work_hub_api.domains.meeting import source_access
-
-        return source_access.can_read_meeting(self, meeting_id)
+        return self.can_read_resource(MEETING_RESOURCE_TYPE, meeting_id)
 
     def can_read_planner_event(self, event_id: str) -> bool:
-        from open_work_hub_api.domains.planner import source_access
-
-        return source_access.can_read_planner_event(self, event_id)
+        return self.can_read_resource(PLANNER_EVENT_RESOURCE_TYPE, event_id)
 
     def _keyword_entity_branch(
         self, entity_type: str, clauses: list[KeywordAclClause]

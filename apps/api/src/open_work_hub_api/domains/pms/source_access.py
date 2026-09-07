@@ -76,6 +76,7 @@ def resolve_pms_task_workspace_id(db, *, task_id: str) -> str | None:
 
 
 class PmsTaskSourceAccessAdapter:
+    app_id = "pms"
     adapter_id = PMS_RETRIEVAL_PARTITION_ADAPTER_ID
     partition_adapter_id = PMS_RETRIEVAL_PARTITION_ADAPTER_ID
     source_namespace = "pms"

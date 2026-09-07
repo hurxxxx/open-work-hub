@@ -189,7 +189,14 @@ def _replace_user_system_roles(db: Session, user_id: str, roles: Sequence[str]) 
 
 
 def replace_user_system_roles(db: Session, user_id: str, roles: Sequence[str]) -> None:
+    user = db.get(User, user_id)
+    if user is not None:
+        # An explicit replacement supersedes the legacy independent admin grant.
+        user.is_admin = False
     _replace_user_system_roles(db, user_id, roles)
+    db.flush()
+    if user is not None:
+        db.expire(user, ["system_role_links"])
 
 
 def load_user_graph(db: Session, user_id: str) -> User | None:
@@ -646,12 +653,27 @@ def resolve_workspace_role_map(db: Session, user: User) -> dict[str, str]:
 
 
 def resolve_workspace_role(db: Session, user: User, workspace_id: str) -> str | None:
-    return resolve_workspace_role_map(db, user).get(workspace_id)
+    # Authorization must not reuse a relationship loaded before a revocation.
+    role = db.scalar(
+        select(WorkspaceUserBinding.role)
+        .join(Workspace, Workspace.id == WorkspaceUserBinding.workspace_id)
+        .join(User, User.id == WorkspaceUserBinding.user_id)
+        .where(
+            WorkspaceUserBinding.workspace_id == workspace_id,
+            WorkspaceUserBinding.user_id == user.id,
+            Workspace.active.is_(True),
+            User.status == "active",
+            User.login_blocked.is_(False),
+        )
+    )
+    return normalize_workspace_role(role)
 
 
 def resolve_team_role(db: Session, user: User, team: Team) -> str | None:
     effective_role = None
     workspace_role = resolve_workspace_role(db, user, team.workspace_id)
+    if workspace_role is None or not team.active or team.trashed_at is not None:
+        return None
     if workspace_role == "admin":
         effective_role = _higher_team_role(effective_role, "admin")
 

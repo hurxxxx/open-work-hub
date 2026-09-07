@@ -13,7 +13,6 @@ from open_work_hub_api.core.principal import CallerPrincipal
 from open_work_hub_api.domains.auth.access import (
     bind_current_workspace,
     get_current_workspace,
-    resolve_workspaces,
 )
 from open_work_hub_api.domains.auth.models import User, Workspace
 from open_work_hub_api.domains.docs.hub_projection import select_primary_target
@@ -121,18 +120,6 @@ def ensure_docs_workspace_access(db: Session, user: User) -> Workspace:
     if current_workspace is not None:
         return current_workspace
 
-    for summary in resolve_workspaces(db, user):
-        workspace = db.scalar(
-            select(Workspace).where(
-                Workspace.id == summary["id"],
-                Workspace.active.is_(True),
-            )
-        )
-        if workspace is None:
-            continue
-        bind_current_workspace(db, workspace)
-        return workspace
-
     raise localized_http_exception(
         status_code=status.HTTP_403_FORBIDDEN,
         code="docs.requests_workspace_context_required",
@@ -228,6 +215,21 @@ def resolve_native_doc_access(
     *,
     share_token: str | None = None,
 ) -> NativeAccess:
+    if share_token is not None:
+        matched_link = next(
+            (item for item in doc.link_shares if item.active and item.token == share_token),
+            None,
+        )
+        # A link executes with its own grant, including for a former owner or editor.
+        level = getattr(matched_link, "access_level", None)
+        return NativeAccess(
+            access_level=level,
+            can_view=level in TEAM_ACCESS_LEVEL_RANK,
+            can_edit=level == "edit",
+            can_share=False,
+            can_manage=False,
+            matched_link=matched_link,
+        )
     if doc.owner_id == user.id:
         link_match = next((item for item in doc.link_shares if item.active), None)
         return NativeAccess(
@@ -240,14 +242,6 @@ def resolve_native_doc_access(
         )
 
     direct_share = next((item for item in doc.user_shares if item.user_id == user.id), None)
-    matched_link = next(
-        (
-            item
-            for item in doc.link_shares
-            if item.active and share_token and item.token == share_token
-        ),
-        None,
-    )
     meeting_grant = db.scalar(
         select(DocMeetingAccess).where(
             DocMeetingAccess.doc_id == doc.id,
@@ -259,7 +253,6 @@ def resolve_native_doc_access(
     target_level, target_can_manage = target_access_level(db, doc, user)
     access_level = max_access_level(
         getattr(direct_share, "access_level", None),
-        getattr(matched_link, "access_level", None),
         getattr(meeting_grant, "access_level", None),
         target_level,
     )
@@ -269,18 +262,22 @@ def resolve_native_doc_access(
         can_edit=access_level == "edit",
         can_share=target_can_manage,
         can_manage=target_can_manage,
-        matched_link=matched_link,
+        matched_link=None,
     )
 
 
 def doc_query():
-    return select(NativeDoc).options(
-        selectinload(NativeDoc.owner),
-        selectinload(NativeDoc.pages).selectinload(NativeDocPage.created_by),
-        selectinload(NativeDoc.user_shares).selectinload(NativeDocUserShare.user),
-        selectinload(NativeDoc.link_shares),
-        selectinload(NativeDoc.targets),
-        selectinload(NativeDoc.collection),
+    return (
+        select(NativeDoc)
+        .where(NativeDoc.workspace.has(Workspace.active.is_(True)))
+        .options(
+            selectinload(NativeDoc.owner),
+            selectinload(NativeDoc.pages).selectinload(NativeDocPage.created_by),
+            selectinload(NativeDoc.user_shares).selectinload(NativeDocUserShare.user),
+            selectinload(NativeDoc.link_shares),
+            selectinload(NativeDoc.targets),
+            selectinload(NativeDoc.collection),
+        )
     )
 
 

@@ -9,9 +9,11 @@ from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.db import Base
 from open_work_hub_api.domains.auth.models import (
+    CompanyAppControl,
     User,
     UserSystemRole,
     Workspace,
+    WorkspaceAppDefault,
     WorkspaceUserBinding,
 )
 from open_work_hub_api.domains.files import service as files_service
@@ -64,6 +66,8 @@ def db() -> Session:
         engine,
         tables=[
             Workspace.__table__,
+            CompanyAppControl.__table__,
+            WorkspaceAppDefault.__table__,
             OrganizationUnit.__table__,
             User.__table__,
             UserSystemRole.__table__,
@@ -80,6 +84,7 @@ def db() -> Session:
     with Session(engine) as session:
         session.add_all(
             [
+                CompanyAppControl(app_id="files", enabled=True),
                 Workspace(id=WORKSPACE_A_ID, key="workspace-a", name="Workspace A"),
                 Workspace(id=WORKSPACE_B_ID, key="workspace-b", name="Workspace B"),
                 _user(DUAL_ADMIN_ID),
@@ -509,6 +514,8 @@ def test_company_publication_is_platform_admin_only_and_keeps_partition_identity
     assert company_policy.authorize_many_rag_resources([("file_manager_file", file.id)]) == {
         ("file_manager_file", file.id)
     }
+    assert company_policy.can_read_resource("file_manager_file", file.id) is True
+    assert company_policy.has_accessible_source("file_manager_file") is True
     assert has_accessible_file(company_policy) is True
 
     with pytest.raises(files_service.FileCorpusConflict, match="metadata version"):

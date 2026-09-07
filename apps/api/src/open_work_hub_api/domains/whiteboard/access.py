@@ -8,9 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.domains.auth.access import (
-    bind_current_workspace,
     get_current_workspace,
-    resolve_workspaces,
 )
 from open_work_hub_api.domains.auth.models import User, Workspace
 from open_work_hub_api.domains.whiteboard.models import (
@@ -55,19 +53,6 @@ def max_access_level(*levels: str | None) -> str | None:
 
 def ensure_whiteboard_workspace_access(db: Session, user: User) -> Workspace:
     current_workspace = get_current_workspace(db)
-    if current_workspace is None:
-        for summary in resolve_workspaces(db, user):
-            workspace = db.scalar(
-                select(Workspace).where(
-                    Workspace.id == summary["id"],
-                    Workspace.active.is_(True),
-                )
-            )
-            if workspace is None:
-                continue
-            current_workspace = workspace
-            bind_current_workspace(db, current_workspace)
-            break
     if current_workspace is None:
         raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -143,6 +128,19 @@ def resolve_whiteboard_access(
     user: User,
     share_token: str | None = None,
 ) -> WhiteboardAccess:
+    if share_token is not None:
+        matched_link = next(
+            (item for item in whiteboard.link_shares if item.active and item.token == share_token),
+            None,
+        )
+        level = getattr(matched_link, "access_level", None)
+        return WhiteboardAccess(
+            access_level=level,
+            can_view=level in TEAM_ACCESS_LEVEL_RANK,
+            can_edit=level == "edit",
+            can_share=False,
+            can_manage=False,
+        )
     if whiteboard.owner_id == user.id:
         return WhiteboardAccess(
             access_level="edit",
@@ -152,18 +150,9 @@ def resolve_whiteboard_access(
             can_manage=True,
         )
     direct_share = next((item for item in whiteboard.user_shares if item.user_id == user.id), None)
-    matched_link = (
-        next(
-            (item for item in whiteboard.link_shares if item.active and item.token == share_token),
-            None,
-        )
-        if share_token
-        else None
-    )
     target_level, target_can_manage = target_access_level(db, whiteboard, user)
     access_level = max_access_level(
         getattr(direct_share, "access_level", None),
-        getattr(matched_link, "access_level", None),
         target_level,
     )
     return WhiteboardAccess(
@@ -176,11 +165,15 @@ def resolve_whiteboard_access(
 
 
 def whiteboard_query():
-    return select(Whiteboard).options(
-        selectinload(Whiteboard.owner),
-        selectinload(Whiteboard.targets),
-        selectinload(Whiteboard.user_shares).selectinload(WhiteboardUserShare.user),
-        selectinload(Whiteboard.link_shares),
+    return (
+        select(Whiteboard)
+        .where(Whiteboard.workspace.has(Workspace.active.is_(True)))
+        .options(
+            selectinload(Whiteboard.owner),
+            selectinload(Whiteboard.targets),
+            selectinload(Whiteboard.user_shares).selectinload(WhiteboardUserShare.user),
+            selectinload(Whiteboard.link_shares),
+        )
     )
 
 

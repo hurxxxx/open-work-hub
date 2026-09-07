@@ -8,10 +8,6 @@ from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.domains.auth.models import User
-from open_work_hub_api.domains.auth.workspace_app_gate import (
-    is_app_enabled_for_user_context,
-    is_company_app_enabled_for_user_context,
-)
 from open_work_hub_api.domains.content_access.contracts import ContentStream
 from open_work_hub_api.domains.content_access.grants import (
     ContentGrantClaims,
@@ -28,8 +24,8 @@ from open_work_hub_api.domains.media.object_storage import (
     media_object_storage,
 )
 from open_work_hub_api.domains.media.resource_access import (
-    MediaAccessContext,
     can_resolve_media,
+    media_owner_app_enabled,
     resolve_media_access_context,
 )
 
@@ -54,7 +50,7 @@ def build_media_content_url(
         raise ValueError("media grants require authoritative source/user context")
     if _normalized_media_content_type(media) not in SAFE_MEDIA_CONTENT_TYPES:
         raise ValueError("media grants require a safe raster content type")
-    if not _media_owner_app_enabled(db, user=user, context=context):
+    if not media_owner_app_enabled(db, user=user, context=context):
         raise ValueError("media owner app is disabled")
     if authorization_mode == "community_password":
         if (
@@ -107,7 +103,7 @@ def open_media_content_grant(db: Session, *, claims: ContentGrantClaims) -> Cont
     user = db.get(User, claims.issuer_user_id)
     if user is None or user.status != "active" or user.login_blocked:
         raise InvalidContentGrant("principal")
-    if not _media_owner_app_enabled(db, user=user, context=context):
+    if not media_owner_app_enabled(db, user=user, context=context):
         raise InvalidContentGrant("app")
     authorization_mode = claims.extra.get("authorization_mode")
     if authorization_mode == "community_password":
@@ -161,28 +157,6 @@ def _media_object_identity(media: MediaFile) -> str:
         media.resource_type,
         media.resource_id,
         media.created_at,
-    )
-
-
-def _media_owner_app_enabled(
-    db: Session,
-    *,
-    user: User,
-    context: MediaAccessContext,
-) -> bool:
-    if context.owner_app_id == "shell":
-        return True
-    if context.execution_context_kind == "company":
-        return is_company_app_enabled_for_user_context(
-            db,
-            app_id=context.owner_app_id,
-            user_id=user.id,
-        )
-    return is_app_enabled_for_user_context(
-        db,
-        app_id=context.owner_app_id,
-        user_id=user.id,
-        workspace_id=context.workspace_id,
     )
 
 

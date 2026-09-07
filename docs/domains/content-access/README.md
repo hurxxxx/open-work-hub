@@ -39,6 +39,14 @@ App availability follows the [App Platform Contract](../app-platform/README.md).
 adapters follow [Source Access](../source-access/README.md); every content kind still invokes its
 own source's direct authorization before streaming.
 
+Embedded PMS task media uses the same source-owned read ACL as the task: direct space membership
+or an active task grant, within an active authorized workspace. A workspace administrator without
+either grant cannot read private task media. Linking media is a write and requires a direct PMS
+space editor role; a viewer or meeting-origin read grant does not authorize it. Grant revocation and
+archiving are rechecked through the task source policy.
+All supported media-link writes also use the same owning-app execution gate as content delivery,
+including current workspace membership for Docs/PMS and company enablement for Community.
+
 ## Checks
 
 ```bash

@@ -27,6 +27,36 @@
 - Route scope does not grant access. Server gates recheck membership, role, availability, resource ACL, and AI approval.
 - API paths remain under `/api/v1`; they are not browser route aliases.
 
+## Authorization Roles And Shared Routes
+
+- Supported workspace roles are `member` and `admin`. The legacy `owner` spelling maps down to
+  `admin`; `viewer` is unsupported and never silently becomes a writing member. Team `viewer`
+  remains a supported read-only team role.
+- Only `platform_admin` (or the equivalent `platform-admin` spelling) grants the system role.
+  Legacy `workspace_admin` and `audit_viewer` system-role names, including hyphenated spellings,
+  grant nothing. Existing canonical `platform_admin` assignments and the explicit `is_admin`
+  compatibility flag retain their authority until explicitly replaced; runtime cannot infer how
+  an old assignment arose. An explicit system-role replacement clears the independent legacy
+  flag and replaces the role rows in the same transaction, so removing administrator rights
+  cannot leave authority behind through `is_admin`.
+- Authorization resolves workspace role from current PostgreSQL membership, active workspace,
+  and active/unblocked user state. Retained team memberships cannot bypass a revoked workspace
+  membership. Platform administrators retain their explicit tenant administration endpoints;
+  a workspace role does not grant blanket access to private PMS tasks or meeting participation.
+- HTTP, queued execution, and batched app visibility reject unknown/unsupported workspace roles.
+  Membership-row existence alone is insufficient.
+- Docs and Whiteboard services require an explicitly bound workspace for workspace operations;
+  they never select a user's first workspace. Global sharing uses an explicit active link instead.
+- Docs and Whiteboard shared routes authenticate the user, require company app enablement, and
+  validate the exact active link for the requested resource. A supplied invalid/revoked link
+  cannot fall back to ownership, direct shares, or target rights. The link's `read`/`edit` level
+  bounds access even for a former owner/editor; it never grants sharing or management authority.
+  Valid links can be used by company users without workspace membership. Inactive workspaces
+  do not serve shared resources.
+- Restoring unsupported historical roles requires an administrator's explicit assignment of a
+  supported role through existing management APIs. Do not auto-promote legacy rows or rewrite
+  them in a migration based only on their names.
+
 ## Runtime Availability
 
 The compiled leaf catalog provides metadata only. PostgreSQL controls execution and missing rows fail closed.

@@ -14,10 +14,17 @@ from sqlalchemy.orm import Session, joinedload
 from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.domains.auth.access import (
     is_platform_admin_user,
-    resolve_team_role,
 )
 from open_work_hub_api.domains.auth.models import Team, User, Workspace
-from open_work_hub_api.domains.docs.models import DocMeetingAccess, NativeDocPage, NativeDocUserShare
+from open_work_hub_api.domains.auth.workspace_app_gate import (
+    is_app_enabled_for_user_context,
+    is_company_app_enabled_for_user_context,
+)
+from open_work_hub_api.domains.docs.models import (
+    DocMeetingAccess,
+    NativeDocPage,
+    NativeDocUserShare,
+)
 from open_work_hub_api.domains.media.models import MediaFile
 from open_work_hub_api.domains.media.service import MEDIA_ID_PATTERN
 from open_work_hub_api.domains.source_access.targets import (
@@ -102,10 +109,14 @@ def resolve_media_access_context(
             source_id=page.doc_id,
             source_version=_media_source_version(page.updated_at, page.doc.updated_at),
         )
-    if media.resource_type in {
-        MEDIA_RESOURCE_COMMUNITY_POST,
-        MEDIA_RESOURCE_COMMUNITY_COMMENT,
-    } and media.resource_id:
+    if (
+        media.resource_type
+        in {
+            MEDIA_RESOURCE_COMMUNITY_POST,
+            MEDIA_RESOURCE_COMMUNITY_COMMENT,
+        }
+        and media.resource_id
+    ):
         from open_work_hub_api.domains.community.models import (
             CommunityComment,
             CommunityPost,
@@ -156,6 +167,23 @@ def _media_source_version(*values: object) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def media_owner_app_enabled(db: Session, *, user: User, context: MediaAccessContext) -> bool:
+    if context.owner_app_id == "shell":
+        return True
+    if context.execution_context_kind == "company":
+        return is_company_app_enabled_for_user_context(
+            db,
+            app_id=context.owner_app_id,
+            user_id=user.id,
+        )
+    return is_app_enabled_for_user_context(
+        db,
+        app_id=context.owner_app_id,
+        user_id=user.id,
+        workspace_id=context.workspace_id,
+    )
+
+
 def media_ids_from_urls(urls: Iterable[str]) -> list[str]:
     media_ids: list[str] = []
     for url in urls:
@@ -196,6 +224,16 @@ def ensure_media_link_resource_access(
     resource_type: str,
     resource_id: str,
 ) -> None:
+    if resource_type not in SUPPORTED_MEDIA_LINK_RESOURCE_TYPES:
+        raise localized_http_exception(status_code=400, code="media.unsupported_resource_type")
+    context = resolve_media_access_context(
+        db,
+        MediaFile(resource_type=resource_type, resource_id=resource_id),
+    )
+    if context is None:
+        raise localized_http_exception(status_code=404, code="media.not_found")
+    if not media_owner_app_enabled(db, user=user, context=context):
+        raise localized_http_exception(status_code=403, code="platform.app_disabled")
     if resource_type == MEDIA_RESOURCE_TASK:
         _ensure_task_access(db, user, resource_id)
         return
@@ -222,45 +260,32 @@ def _can_access_task_resource(db: Session, user: User, task_id: str | None) -> b
     if task_id is None:
         return False
 
-    from open_work_hub_api.domains.pms.models import Task, TaskList
+    from open_work_hub_api.domains.source_access import can_read_pms_task
 
-    task = db.scalar(select(Task).where(Task.id == task_id))
-    if task is None:
-        return False
-    task_list = db.scalar(select(TaskList).where(TaskList.id == task.list_id))
-    return _has_space_access(db, user, task_list.team_id if task_list else None)
+    return can_read_pms_task(db, user=user, task_id=task_id)
 
 
 def _ensure_task_access(db: Session, user: User, task_id: str) -> None:
+    from open_work_hub_api.domains.pms.access import (
+        SPACE_TEAM_EDITOR_ROLES,
+        resolve_pms_space_role,
+    )
     from open_work_hub_api.domains.pms.models import Task, TaskList
 
     task = db.scalar(select(Task).where(Task.id == task_id))
     if task is None:
         raise localized_http_exception(status_code=404, code="pms.task_not_found")
     task_list = db.scalar(select(TaskList).where(TaskList.id == task.list_id))
-    if not _has_space_access(db, user, task_list.team_id if task_list else None):
+    team = db.get(Team, task_list.team_id) if task_list else None
+    if (
+        team is None
+        or not _can_access_task_resource(db, user, task_id)
+        or resolve_pms_space_role(db, user, team) not in SPACE_TEAM_EDITOR_ROLES
+    ):
         raise localized_http_exception(
             status_code=403,
             code="media.task_list_space_access_required",
         )
-
-
-def _has_space_access(db: Session, user: User, team_id: str | None) -> bool:
-    if team_id is None:
-        return False
-    team = db.scalar(
-        select(Team)
-        .options(joinedload(Team.workspace))
-        .where(
-            Team.id == team_id,
-            Team.active.is_(True),
-            Team.trashed_at.is_(None),
-            Team.workspace.has(Workspace.active.is_(True)),
-        )
-    )
-    if team is None:
-        return False
-    return resolve_team_role(db, user, team) is not None
 
 
 def can_access_docs_native_page(

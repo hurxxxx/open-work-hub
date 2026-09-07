@@ -187,6 +187,7 @@ def _corpus_scope_allows(policy, corpus: FileManagerCorpus) -> bool:
 
 
 class FileManagerSourceAccessAdapter:
+    app_id = "files"
     adapter_id = FILES_RETRIEVAL_PARTITION_ADAPTER_ID
     partition_adapter_id = FILES_RETRIEVAL_PARTITION_ADAPTER_ID
     source_namespace = "files"

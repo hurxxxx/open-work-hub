@@ -16,9 +16,10 @@ from open_work_hub_api.domains.auth.roles import (
 
 
 def test_workspace_role_aliases_collapse_to_supported_roles() -> None:
-    assert normalize_workspace_role("viewer") == "member"
+    assert normalize_workspace_role("viewer") is None
     assert normalize_workspace_role("owner") == "admin"
-    assert is_valid_workspace_role("viewer")
+    assert not is_valid_workspace_role("viewer")
+    assert not workspace_role_allows("viewer", "member")
     assert is_valid_workspace_role("owner")
 
 
@@ -43,16 +44,22 @@ def test_team_role_rank_order() -> None:
     assert not team_role_allows("admin", "owner")
 
 
-def test_system_role_aliases_collapse_legacy_names_to_platform_admin() -> None:
+def test_system_role_spelling_alias_preserves_platform_admin() -> None:
     for role in (
         "platform_admin",
         "platform-admin",
+    ):
+        assert normalize_system_role(role) == SYSTEM_PLATFORM_ADMIN
+
+
+def test_legacy_narrow_system_roles_never_grant_platform_admin() -> None:
+    for role in (
         "workspace_admin",
         "workspace-admin",
         "audit_viewer",
         "audit-viewer",
     ):
-        assert normalize_system_role(role) == SYSTEM_PLATFORM_ADMIN
+        assert normalize_system_role(role) is None
 
 
 def test_sorted_system_roles_are_deterministic() -> None:
@@ -66,8 +73,8 @@ def test_sorted_system_roles_are_deterministic() -> None:
 def test_higher_workspace_role_merges_aliases_and_unknowns() -> None:
     assert _higher_workspace_role("member", "admin") == "admin"
     assert _higher_workspace_role("owner", "member") == "admin"
-    assert _higher_workspace_role(None, "viewer") == "member"
-    assert _higher_workspace_role("unknown", "viewer") == "member"
+    assert _higher_workspace_role(None, "viewer") is None
+    assert _higher_workspace_role("unknown", "viewer") is None
     assert _higher_workspace_role("member", "unknown") == "member"
 
 

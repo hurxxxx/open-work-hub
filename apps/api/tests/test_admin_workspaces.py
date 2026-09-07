@@ -992,7 +992,7 @@ def test_paginated_members_endpoint_filter_search_and_role_counts(client: TestCl
         )
         user_ids.append(u["id"])
 
-    roles_to_assign = ["admin", "admin", "member", "member", "member", "viewer"]
+    roles_to_assign = ["admin", "admin", "member", "member", "member", "member"]
     for user_id, role in zip(user_ids, roles_to_assign):
         resp = client.post(
             f"/api/v1/admin/workspaces/{workspace['id']}/members",

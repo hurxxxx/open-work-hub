@@ -54,7 +54,7 @@ def workspace_role_storage_values(role: str) -> tuple[str, ...]:
     if normalized_role == "admin":
         return ("admin", "owner")
     if normalized_role == "member":
-        return ("member", "viewer")
+        return ("member",)
     return ()
 
 
@@ -418,7 +418,7 @@ def _load_directory_items(
     if subject_type not in (None, "user"):
         return []
     user_role_priority = sa_case(
-        {"admin": 0, "owner": 0, "member": 1, "viewer": 1},
+        {"admin": 0, "owner": 0, "member": 1},
         value=WorkspaceUserBinding.role,
         else_=99,
     )

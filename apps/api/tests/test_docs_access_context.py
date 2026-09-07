@@ -43,7 +43,6 @@ def test_missing_docs_workspace_context_raises_access_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(access_context, "get_current_workspace", lambda _db: None)
-    monkeypatch.setattr(access_context, "resolve_workspaces", lambda _db, _user: [])
 
     with pytest.raises(HTTPException) as exc_info:
         access_context.ensure_docs_workspace_access(object(), SimpleNamespace(id="user-1"))

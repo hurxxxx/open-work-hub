@@ -2360,8 +2360,14 @@ def test_source_access_policy_import_does_not_register_default_adapters() -> Non
     assert has_source_access_adapter(NATIVE_DOC_RESOURCE_TYPE)
 
 
-def test_default_source_access_adapters_allow_partial_resource_override() -> None:
+def test_default_source_access_adapters_allow_partial_resource_override(monkeypatch) -> None:
+    from open_work_hub_api.domains.source_access import policy as source_policy
+
+    monkeypatch.setattr(source_policy, "resolve_workspace_role", lambda *args: "member")
+    monkeypatch.setattr(source_policy, "is_app_enabled_for_user_context", lambda *args, **kwargs: True)
+
     class ExtensionNativeDocAccessAdapter:
+        app_id = "docs"
         resource_types = (NATIVE_DOC_RESOURCE_TYPE,)
         keyword_acl_entity_types: tuple[str, ...] = ()
 
@@ -2393,6 +2399,8 @@ def test_default_source_access_adapters_allow_partial_resource_override() -> Non
         )
 
         assert policy.can_read_resource(NATIVE_DOC_RESOURCE_TYPE, "extension-doc") is True
+        monkeypatch.setattr(source_policy, "resolve_workspace_role", lambda *args: None)
+        assert policy.can_read_resource(NATIVE_DOC_RESOURCE_TYPE, "extension-doc") is False
         assert get_source_access_adapter(NATIVE_DOC_RESOURCE_TYPE) is adapter
         assert has_source_access_adapter("knowledge_source_document") is not (
             KNOWLEDGE_SOURCE_REGISTRY_RETIRED

@@ -6,6 +6,7 @@ from open_work_hub_api.domains.search.backend_contracts import KeywordAclBranch
 
 
 class SourceAccessAdapter(Protocol):
+    app_id: str
     partition_adapter_id: str | None
     resource_types: tuple[str, ...]
     keyword_acl_entity_types: tuple[str, ...]

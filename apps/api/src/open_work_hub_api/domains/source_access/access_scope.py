@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from functools import cached_property
 from typing import Any
 
-from sqlalchemy import and_, false, or_, select, true
+from sqlalchemy import and_, false, or_, select
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.domains.auth.models import Team, TeamMember
@@ -22,22 +22,18 @@ class AccessScopeRules:
         object.__setattr__(self, "team_ids", tuple(str(item) for item in self.team_ids if item))
 
     def can_access(self, scope_kind: str | None, scope_id: str | None) -> bool:
-        if self.workspace_role == "admin":
-            return True
-        if self.workspace_role is None:
+        if self.workspace_role not in {"member", "admin"}:
             return False
         if scope_kind == "workspace":
             return scope_id in {None, self.workspace_id}
         if scope_kind == "team":
             return bool(scope_id) and scope_id in set(self.team_ids)
         if scope_kind == "user":
-            return scope_id == self.user_id
+            return bool(scope_id) and (self.workspace_role == "admin" or scope_id == self.user_id)
         return False
 
     def predicate(self, scope_kind_column: Any, scope_id_column: Any):
-        if self.workspace_role == "admin":
-            return true()
-        if self.workspace_role is None:
+        if self.workspace_role not in {"member", "admin"}:
             return false()
         return or_(
             and_(
@@ -50,7 +46,9 @@ class AccessScopeRules:
             ),
             and_(
                 scope_kind_column == "user",
-                scope_id_column == self.user_id,
+                and_(scope_id_column.is_not(None), scope_id_column != "")
+                if self.workspace_role == "admin"
+                else scope_id_column == self.user_id,
             ),
         )
 
@@ -72,14 +70,12 @@ class AccessScopePolicy:
         )
 
     def can_access(self, scope_kind: str | None, scope_id: str | None) -> bool:
-        if self.workspace_role == "admin":
-            return True
-        if self.workspace_role is None:
+        if self.workspace_role not in {"member", "admin"}:
             return False
         if scope_kind == "workspace":
             return scope_id in {None, self.workspace_id}
         if scope_kind == "user":
-            return scope_id == self.user_id
+            return bool(scope_id) and (self.workspace_role == "admin" or scope_id == self.user_id)
         if scope_kind == "team":
             return AccessScopeRules(
                 workspace_id=self.workspace_id,
@@ -100,6 +96,8 @@ class AccessScopePolicy:
         )
         if self.workspace_role == "admin":
             return query
+        if self.workspace_role != "member":
+            return query.where(false())
         return query.join(TeamMember, TeamMember.team_id == Team.id).where(
             TeamMember.user_id == self.user_id
         )

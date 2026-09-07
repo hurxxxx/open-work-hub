@@ -14,17 +14,22 @@ def _member_rules() -> AccessScopeRules:
     )
 
 
-def test_access_scope_rules_admin_allows_any_scope() -> None:
+def test_access_scope_rules_admin_preserves_workspace_and_scope_boundaries() -> None:
     rules = AccessScopeRules(
         workspace_id="workspace-1",
         workspace_role="admin",
         user_id="user-1",
-        team_ids=(),
+        team_ids=("team-1",),
     )
 
-    assert rules.can_access("workspace", "other-workspace") is True
-    assert rules.can_access("team", None) is True
-    assert rules.can_access("unknown", "scope-1") is True
+    assert rules.can_access("workspace", "other-workspace") is False
+    assert rules.can_access("team", None) is False
+    assert rules.can_access("team", "other-workspace-team") is False
+    assert rules.can_access("unknown", "scope-1") is False
+    assert rules.can_access("workspace", "workspace-1") is True
+    assert rules.can_access("team", "team-1") is True
+    assert rules.can_access("user", "other-user") is True
+    assert rules.can_access("user", None) is False
 
 
 def test_access_scope_rules_without_workspace_role_blocks_all_scopes() -> None:
@@ -80,6 +85,7 @@ def test_access_scope_rules_predicate_handles_admin_and_no_workspace_role() -> N
         workspace_id="workspace-1",
         workspace_role="admin",
         user_id="user-1",
+        team_ids=("team-1",),
     )
     blocked_rules = AccessScopeRules(
         workspace_id="workspace-1",
@@ -90,7 +96,6 @@ def test_access_scope_rules_predicate_handles_admin_and_no_workspace_role() -> N
 
     assert _matching_predicate_labels(admin_rules) == [
         "team",
-        "unknown",
         "user",
         "workspace-id",
         "workspace-null",

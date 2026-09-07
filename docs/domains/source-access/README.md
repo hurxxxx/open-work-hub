@@ -9,13 +9,19 @@ the same source-owned authorization semantics.
 ## Contract
 
 - `SourceAclPolicy` is built for an authenticated workspace or company execution context.
-- Each registered resource type has exactly one source-access adapter. Missing adapters deny
+- Each registered resource type has exactly one source-access adapter with an explicit owning
+  `app_id`. Missing adapters or owner app identities deny
   access. Batch/RAG authorization admits a non-workspace context only when the paired retrieval
   partition adapter declares that candidate scope; callers must not use a workspace-only adapter
   through an unguarded direct path.
-- Current direct `can_read_resource` dispatch does not centrally repeat that scope admission;
-  workspace-only adapters assume a workspace. Dynamic/company callers must use the guarded batch
-  path until direct dispatch applies the same fail-closed check.
+- Direct, batch, RAG, and source-discovery dispatch apply the same execution-scope admission.
+  Company calls to workspace-only sources return a denial without invoking their adapter.
+- Every dispatch rechecks current account status, login blocking, runtime app availability, and
+  active workspace membership where applicable. A previously constructed `SourceAclPolicy` and
+  an ORM-loaded user graph are not authorization snapshots that survive revocation. Adapters
+  receive the current workspace role; batch calls check execution once per resource type.
+- Company file corpora remain accessible through an authenticated company execution policy and
+  their own cohort/explicit-grant ACL. Company scope never admits workspace-only sources.
 - The source app owns direct and batch authorization predicates, inactive/deleted handling, and
   keyword ACL branches. The shared policy groups candidates and dispatches to those adapters.
 - Registered resource types are `docs_native_doc`, `file_manager_file`, `meeting`, `pms_task`, and
@@ -26,7 +32,12 @@ the same source-owned authorization semantics.
 - Final authorization precedes result counts, facets, highlights, reranking, summaries, external
   LLM input, grounding, and citations.
 - Batch authorization may optimize the decision but must preserve the same result as direct
-  source authorization. Filtering survivors must not reorder them.
+  source authorization. Returned IDs are intersected with requested candidates. Filtering
+  survivors must not reorder them.
+- Scope rules accept only supported scope kinds. A workspace administrator may manage user
+  scopes within an already workspace-constrained source query, but cannot authorize another
+  workspace ID, an inactive/foreign team, or an unknown scope kind. Source queries must still
+  constrain resource ownership to the policy workspace.
 - A new indexed resource type requires a source-access adapter, explicit registry composition,
   retrieval-partition alignment when applicable, and direct/batch/revocation tests. A non-indexed
   notification/content source may instead use its owning dispatcher's explicit branch.

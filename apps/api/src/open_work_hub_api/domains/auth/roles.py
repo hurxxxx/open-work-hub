@@ -8,10 +8,6 @@ VALID_SYSTEM_ROLES = frozenset(SYSTEM_ROLE_ORDER)
 SYSTEM_ROLE_ALIASES = {
     "platform_admin": SYSTEM_PLATFORM_ADMIN,
     "platform-admin": SYSTEM_PLATFORM_ADMIN,
-    "workspace_admin": SYSTEM_PLATFORM_ADMIN,
-    "workspace-admin": SYSTEM_PLATFORM_ADMIN,
-    "audit_viewer": SYSTEM_PLATFORM_ADMIN,
-    "audit-viewer": SYSTEM_PLATFORM_ADMIN,
 }
 
 SYSTEM_ROLE_PERMISSION_MAP = {
@@ -49,7 +45,6 @@ VALID_WORKSPACE_ROLES = frozenset(WORKSPACE_ROLE_RANK)
 VALID_TEAM_ROLES = frozenset(TEAM_ROLE_RANK)
 
 WORKSPACE_ROLE_ALIASES = {
-    "viewer": "member",
     "member": "member",
     "admin": "admin",
     "owner": "admin",

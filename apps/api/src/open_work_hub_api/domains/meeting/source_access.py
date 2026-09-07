@@ -52,6 +52,7 @@ def has_accessible_meeting(policy) -> bool:
 
 
 class MeetingSourceAccessAdapter:
+    app_id = "meeting"
     adapter_id = MEETING_RETRIEVAL_PARTITION_ADAPTER_ID
     partition_adapter_id = MEETING_RETRIEVAL_PARTITION_ADAPTER_ID
     source_namespace = "meeting"

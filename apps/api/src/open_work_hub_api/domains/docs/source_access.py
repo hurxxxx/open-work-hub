@@ -159,6 +159,7 @@ def resolve_native_doc_workspace_id(db, *, doc_id: str) -> str | None:
 
 
 class NativeDocSourceAccessAdapter:
+    app_id = "docs"
     adapter_id = DOCS_RETRIEVAL_PARTITION_ADAPTER_ID
     partition_adapter_id = DOCS_RETRIEVAL_PARTITION_ADAPTER_ID
     source_namespace = "docs"
