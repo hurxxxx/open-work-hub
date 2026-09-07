@@ -53,6 +53,10 @@ OPEN_WORK_HUB_UAT_BASE_URL=https://your-public-dev-domain.example pnpm uat:prefl
 that the public root, login, health, readiness, and bootstrap surfaces resolve to the same development
 runtime. `uat:preflight` additionally requires the Worker and object storage.
 
+For a continuously available development domain, follow the
+[persistent development runtime contract](./docs/domains/release/README.md#persistent-development-runtime).
+The foreground `dev.sh` process stops its servers when its terminal session ends.
+
 The repeatable personas, state restoration rules, and expected evidence are owned by
 [Core Platform User Acceptance](./docs/product/core-platform-user-acceptance.md).
 

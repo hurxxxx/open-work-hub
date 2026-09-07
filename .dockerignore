@@ -4,6 +4,12 @@
 !.env.example
 .runtime
 .nx
+.dev
+**/test-results
+**/playwright-report
+**/blob-report
+**/celerybeat-schedule*
+**/celerybeat-heartbeat
 node_modules
 **/node_modules
 **/.venv

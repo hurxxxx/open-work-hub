@@ -21,6 +21,7 @@ apps/**/.ruff_cache/
 apps/**/__pycache__/
 *.pyc
 celerybeat-schedule*
+celerybeat-heartbeat
 .env
 .env.local
 .env.*

@@ -5,6 +5,7 @@ ARG POSTGRES_CLIENT_IMAGE=postgres@sha256:7bade6d532592ca8ce7ee32def7399dad2607c
 FROM ${NODE_IMAGE} AS node_toolchain
 
 FROM node_toolchain AS validation_node_runtime
+LABEL io.open-work-hub.build-cache="true"
 
 RUN npm install --global --force corepack@0.34.0 \
     && corepack enable \
@@ -37,6 +38,7 @@ RUN test -n "${NODE_DEPENDENCY_SHA256}" \
     && pnpm exec openapi-typescript --version
 
 FROM ${POSTGRES_CLIENT_IMAGE} AS postgres_client
+LABEL io.open-work-hub.build-cache="true"
 
 RUN set -eux; \
     client_bin_dir="$(pg_config --bindir)"; \

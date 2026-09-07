@@ -96,5 +96,11 @@ link_runtime \
   "$worker_runtime" \
   "${OPEN_WORK_HUB_WORKER_CHECKOUT_VENV_LINK:-$repo_root/.runtime/ci-worker-venv}"
 
+# Full CI invokes ordinary `uv run` too, not only the explicit ci-contracts
+# environment. Reuse the same identity-checked dependencies at uv's default
+# project path; uv still installs the current checkout's editable package.
+link_runtime "API default" "$api_runtime" "$api_root/.venv"
+link_runtime "worker default" "$worker_runtime" "$worker_root/.venv"
+
 echo \
   "[validation-runtime] ready node=${node_dependency_sha256} api=${api_dependency_sha256} worker=${worker_dependency_sha256}"

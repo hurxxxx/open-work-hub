@@ -170,7 +170,7 @@ show_project_status() {
       fi
       ;;
     worker)
-      process_lines="$(pgrep -af "celery -A open_work_hub_worker.celery_app:celery_app worker" || true)"
+      process_lines="$(find_worker_processes worker)"
       if [[ -n "$process_lines" ]]; then
         echo "worker running"
         echo "$process_lines"
@@ -190,6 +190,19 @@ project_selected() {
     fi
   done
   return 1
+}
+
+find_worker_processes() {
+  local role="${1:-}"
+  local pid args
+  while read -r pid args; do
+    # A sibling production container can expose the same Celery command line.
+    # The project-local interpreter path identifies this checkout's workers.
+    if [[ "$args" == *"$ROOT_DIR/apps/worker/"* ]] &&
+       { [[ -z "$role" ]] || [[ "$args" == *"celery_app $role"* ]]; }; then
+      printf '%s %s\n' "$pid" "$args"
+    fi
+  done < <(pgrep -af "celery -A open_work_hub_worker.celery_app:celery_app" || true)
 }
 
 require_free_port() {
@@ -422,12 +435,10 @@ stop_project_processes() {
       fi
       ;;
     worker)
-      pgrep -af "celery -A open_work_hub_worker.celery_app:celery_app" 2>/dev/null | while read -r pid args; do
-        if [[ "$args" == *"$ROOT_DIR/apps/worker"* ]]; then
-          kill_if_running "$pid"
-          stopped=1
-        fi
-      done
+      while read -r pid args; do
+        kill_if_running "$pid"
+        stopped=1
+      done < <(find_worker_processes)
       ;;
   esac
 

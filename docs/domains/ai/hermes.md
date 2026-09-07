@@ -186,6 +186,8 @@ The terminal MCP server is trusted by the Hermes profile because Open Work Hub i
 
 ## Operations and verification
 
+App build/deploy storage preflight and generated-image retention follow [Release Domain](../release/README.md#build-and-test-storage). Retention preserves current/previous app images and all container references; it must not delete Hermes profile/workspace volumes or archive objects. After storage maintenance, verify gateway/dashboard, terminal broker/egress and shared Beat health. No paid inference is required for this check.
+
 The bootstrap service must complete before gateway startup; gateway and dashboard must be healthy before API and worker startup. The terminal broker health endpoint performs a live Docker/dependency check and returns `503` when it is not ready. Re-run Compose startup after changing the managed Hermes policy or rotating runtime/OpenRouter credentials so bootstrap synchronizes the root and existing named profiles. Terminal runner environment and in-memory agent settings apply only after a new terminal session starts. The gateway uses Hermes' official `--no-supervise`/`HERMES_GATEWAY_NO_SUPERVISE` behavior while Compose owns restart; bootstrap records stopped s6 intent with the official `hermes gateway stop` command so the image does not restore a second gateway.
 
 Development non-inference checks:
@@ -220,6 +222,8 @@ For a terminal session, verify that generated files appear under `/workspace`, t
 | Fixed port is occupied                            | exact listener and expected project container identity                                                        | Stop the foreign or stale listener. No automatic fallback ports are allowed.                                                                               |
 
 ## Change checklist
+
+Hermes run republishing and terminal-session maintenance depend on the shared Celery Beat scheduler. Its Redis dependency and successful-publication health check are owned by [Release Domain](../release/README.md#production-app-contract). Check Beat health when maintenance stops even if the API, gateway, and worker are healthy. A persistent development runtime must also outlive the interactive terminal that launched it; use the supervisor contract in [Release Domain](../release/README.md#persistent-development-runtime).
 
 For every Hermes setup or runtime configuration change:
 

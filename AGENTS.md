@@ -40,6 +40,7 @@
 
 - Start with focused behavior/contract checks; widen for shared, migration, external, or uncertain blast radius.
 - Use `docs/agents/vibe-coding-harness.md` to select checks. CI files and tests own exact job routing.
+- An explicit simplified/urgent/fast release request may select impact-based validation under `docs/domains/release/README.md`; never infer a test bypass or additional publication/deployment authority. Runtime, large, unknown, or release-control changes retain full validation.
 - MR-only review and release checks apply only to explicitly requested MR/release work.
 - Report files changed, commands run, results, skipped checks, and residual risk.
 - Passing automatic hooks proves only their named checks. Verify the requested behavior with focused evidence; report unavailable or failed checks without claiming completion.

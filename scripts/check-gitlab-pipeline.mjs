@@ -135,7 +135,7 @@ export function expectedGitlabPipelineConfig() {
         'pnpm test:gitlab-pipeline',
         'pnpm test:mr-target-policy',
         'pnpm test:mr-contract-evidence',
-        'pnpm ci:all',
+        'node scripts/release-validation.mjs ci',
       ],
       after_script: [],
       artifacts: {

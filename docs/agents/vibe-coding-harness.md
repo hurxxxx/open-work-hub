@@ -70,6 +70,7 @@ Use `pnpm ci:app-api-contracts`, `pnpm ci:app-web-contracts`, or `pnpm ci:all` o
 - Pipeline contract lives in `.gitlab-ci.yml`, `ops/ci/ci-first.gitlab-ci.yml`, and `scripts/check-gitlab-pipeline.mjs`.
 - For explicitly requested MR work, source changes require affected evidence refresh and target changes require rechecking the merged surface.
 - Contract package tags `contracts-v*` publish through GitLab Package Registry.
+- Explicit simplified/urgent/fast releases use the [impact-based release procedure](../domains/release/README.md#impact-based-release-validation). It selects related checks for a bounded non-runtime diff; it does not disable CI, waive failed checks, or replace production rollout gates.
 - Use `owh-mr-review` only when review/merge decision is requested.
 
 ## Stop

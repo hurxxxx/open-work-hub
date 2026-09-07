@@ -9,6 +9,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 from open_work_hub_worker.settings import get_settings
+from open_work_hub_worker.beat_health import install_beat_health
 from open_work_hub_worker.queue_contract import (
     AI_GRAPH_REPUBLISH_TASK_NAME,
     DEFAULT_QUEUE,
@@ -47,6 +48,7 @@ from open_work_hub_api.platform_extensions import initialize_platform_extensions
 
 settings = get_settings()
 install_sensitive_http_logging_guard()
+install_beat_health()
 
 
 @after_setup_logger.connect
