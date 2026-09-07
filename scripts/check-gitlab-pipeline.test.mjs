@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 // The release selector is part of the pipeline contract, including in ci:harness.
 import './release-validation.test.mjs';
+import './prepare-validation-runtime.test.mjs';
 
 import {
   CODEX_ENTRYPOINT,
