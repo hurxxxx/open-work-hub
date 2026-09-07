@@ -6,10 +6,10 @@ ENV PYTHONUNBUFFERED=1 \
 
 RUN pip install --no-cache-dir \
       docker==7.2.0 \
-      fastapi==0.135.3 \
+      fastapi==0.141.1 \
       httpx==0.28.1 \
-      pydantic==2.12.5 \
-      'uvicorn[standard]==0.43.0'
+      pydantic==2.13.5 \
+      'uvicorn[standard]==0.52.4'
 
 WORKDIR /opt/broker
 

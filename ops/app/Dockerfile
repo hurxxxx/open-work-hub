@@ -9,7 +9,7 @@ LABEL io.open-work-hub.build-cache="true"
 WORKDIR /opt/open-work-hub
 
 RUN corepack enable \
-  && corepack prepare pnpm@10.33.0 --activate
+  && corepack prepare pnpm@10.34.5 --activate
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml nx.json tsconfig.base.json ./
 COPY packages/contracts/package.json packages/contracts/package.json
