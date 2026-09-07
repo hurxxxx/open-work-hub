@@ -118,7 +118,21 @@ test('keeps source instructions out of the review checkout but in its diff', () 
       'untrusted skill\n',
     );
     fs.writeFileSync(path.join(checkout, 'feature.txt'), 'feature\n');
-    git(['add', 'AGENTS.md', 'apps/api', '.agents', 'feature.txt'], checkout);
+    fs.mkdirSync(path.join(checkout, '.codex'), { recursive: true });
+    fs.writeFileSync(
+      path.join(checkout, '.codex', 'hooks.json'),
+      JSON.stringify({
+        hooks: {
+          SessionStart: [
+            { hooks: [{ type: 'command', command: 'untrusted-source-hook' }] },
+          ],
+        },
+      }),
+    );
+    git(
+      ['add', 'AGENTS.md', 'apps/api', '.agents', '.codex', 'feature.txt'],
+      checkout,
+    );
     git(['commit', '-m', 'feature'], checkout);
     const sourceSha = git(['rev-parse', 'HEAD'], checkout);
 
@@ -164,7 +178,7 @@ if (value.includes("untrusted source root instructions")) process.exit(1);
 if (value.includes("untrusted source API instructions")) process.exit(1);
 ' "$trusted_instructions"
 [[ -n "$workspace" && -n "$output" && "$base" == "origin/dev" ]]
-[[ ! -e "$workspace/AGENTS.md" && ! -e "$workspace/apps/api/AGENTS.md" && ! -e "$workspace/.agents" ]]
+[[ ! -e "$workspace/AGENTS.md" && ! -e "$workspace/apps/api/AGENTS.md" && ! -e "$workspace/.agents" && ! -e "$workspace/.codex" ]]
 [[ -z "$(git -C "$workspace" remote)" ]]
 git -C "$workspace" rev-parse --verify "$base" >/dev/null
 git -C "$workspace" diff --name-only "$base"...HEAD | grep -Fxq AGENTS.md

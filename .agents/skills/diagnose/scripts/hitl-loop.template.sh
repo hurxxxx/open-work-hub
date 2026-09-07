@@ -10,9 +10,14 @@
 #   step "<instruction>"          → show instruction, wait for Enter
 #   capture VAR "<question>"      → show question, read response into VAR
 #
-# At the end, captured values are printed as KEY=VALUE for the agent to parse.
+# Capture only a bounded reproduction signal, never raw logs or credentials.
 
 set -euo pipefail
+
+if [[ "${1:-}" == "--help" ]]; then
+  printf '%s\n' 'Copy this template, set REPRO_INSTRUCTION to the task-specific reproduction action, then run it interactively. Do not paste raw logs, tokens, prompts, or customer data.'
+  exit 0
+fi
 
 step() {
   printf '\n>>> %s\n' "$1"
@@ -28,14 +33,19 @@ capture() {
 
 # --- edit below ---------------------------------------------------------
 
-step "Open the app at http://localhost:3000 and sign in."
-
-capture ERRORED "Click the 'Export' button. Did it throw an error? (y/n)"
-
-capture ERROR_MSG "Paste the error message (or 'none'):"
+REPRO_INSTRUCTION=""
+if [[ -z "$REPRO_INSTRUCTION" ]]; then
+  printf '%s\n' 'Set REPRO_INSTRUCTION in a task-local copy before running this template.' >&2
+  exit 2
+fi
+step "$REPRO_INSTRUCTION"
+capture REPRODUCED "Did the specified failure reproduce? (y/n/unknown; no raw error text)"
+case "$REPRODUCED" in
+  y|n|unknown) ;;
+  *) REPRODUCED=unknown ;;
+esac
 
 # --- edit above ---------------------------------------------------------
 
 printf '\n--- Captured ---\n'
-printf 'ERRORED=%s\n' "$ERRORED"
-printf 'ERROR_MSG=%s\n' "$ERROR_MSG"
+printf 'REPRODUCED=%s\n' "$REPRODUCED"

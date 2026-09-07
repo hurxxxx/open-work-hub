@@ -32,6 +32,41 @@ def valid_skill_text(name: str) -> str:
 
 
 class SkillHarnessScannerTest(unittest.TestCase):
+    def test_rejects_duplicate_frontmatter_keys(self):
+        with self.assertRaisesRegex(ValueError, "duplicate key"):
+            skill_harness.parse_frontmatter("---\nname: first\nname: second\n---\n")
+
+    def test_trigger_must_be_in_description_not_other_metadata(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_text(root / '.agents/skills/sample/SKILL.md', '---\nname: sample\ndescription: A capability.\nnote: Use when testing.\n---\n')
+            report = self.evaluate(root, required_skills={'sample'})
+        self.assertIn('missing_use_when_trigger', self.codes(report))
+
+    def test_aggregate_discovery_budget(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            names = {f'skill-{index}' for index in range(20)}
+            for name in names:
+                write_text(root / f'.agents/skills/{name}/SKILL.md', f'---\nname: {name}\ndescription: Use when {"x" * 240}\n---\n')
+            report = self.evaluate(root, required_skills=names)
+        self.assertIn('skill_catalog_too_large', self.codes(report))
+
+    def test_pruned_scan_preserves_owned_scopes_and_ignores_runtime_fixtures(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ['node_modules/dependency/AGENTS.md', '.runtime/eval/AGENTS.md', 'apps/new/AGENTS.md', 'packages/ui/AGENTS.md']:
+                write_text(root / name, 'instruction\n')
+            paths = {str(item.relative_to(root)) for item in skill_harness.instruction_files(root)}
+        self.assertEqual(paths, {'apps/new/AGENTS.md', 'packages/ui/AGENTS.md'})
+
+    def test_instruction_symlinks_cannot_bypass_scope_checks_or_read_external_data(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'AGENTS.md').symlink_to('/nonexistent-outside-instructions')
+            report = self.evaluate(root, required_skills=set())
+        self.assertIn('symlink_agent_instruction', self.codes(report))
+
     def snapshot(self, root: Path):
         return skill_harness.build_skill_harness_snapshot(
             root,
@@ -344,7 +379,7 @@ class SkillHarnessScannerTest(unittest.TestCase):
                 valid_skill_text("clean"),
             )
             write_text(
-                root / ".agents" / "skills" / "triage" / "GUIDE.md",
+                root / ".agents" / "skills" / "owh-issues" / "GUIDE.md",
                 "Move incomplete work to needs-info, then ready-for-human.\n",
             )
             write_text(
@@ -356,7 +391,7 @@ class SkillHarnessScannerTest(unittest.TestCase):
 
         messages = self.messages(report)
         self.assertIn("retired_triage_contract", self.codes(report))
-        self.assertIn(".agents/skills/triage/GUIDE.md", messages)
+        self.assertIn(".agents/skills/owh-issues/GUIDE.md", messages)
         self.assertNotIn("docs/archive/history.md", messages)
 
     def test_allows_current_gitlab_triage_labels(self) -> None:
