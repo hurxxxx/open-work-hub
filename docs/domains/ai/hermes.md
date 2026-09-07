@@ -221,6 +221,8 @@ For a terminal session, verify that generated files appear under `/workspace`, t
 
 ## Change checklist
 
+Hermes run republishing and terminal-session maintenance depend on the shared Celery Beat scheduler. Its Redis dependency and successful-publication health check are owned by [Release Domain](../release/README.md#production-app-contract). Check Beat health when maintenance stops even if the API, gateway, and worker are healthy. A persistent development runtime must also outlive the interactive terminal that launched it; use the supervisor contract in [Release Domain](../release/README.md#persistent-development-runtime).
+
 For every Hermes setup or runtime configuration change:
 
 1. Check the pinned Hermes release's official CLI, config key, environment variable, headless mode, or extension point before adding an adapter. Record any remaining upstream gap next to the narrow adapter.
