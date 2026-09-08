@@ -95,6 +95,9 @@ export function expectedGitlabPipelineConfig() {
       environment: { name: 'ci-validation', action: 'access' },
       variables: {
         GIT_DEPTH: '0',
+        OPEN_WORK_HUB_API_PYTEST_WORKERS: '2',
+        VITEST_MAX_WORKERS: '1',
+        PLAYWRIGHT_WORKERS: '1',
         OPEN_WORK_HUB_API_COLLAB_REDIS_URL: 'redis://redis:6379/0',
         OPEN_WORK_HUB_API_REALTIME_REDIS_URL: 'redis://redis:6379/0',
         OPEN_WORK_HUB_API_TEST_RUN_ID: '$CI_JOB_ID',

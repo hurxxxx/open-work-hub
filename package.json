@@ -18,7 +18,7 @@
     "test:mr-target-policy": "node --test scripts/check-mr-target-policy.test.mjs",
     "test:mr-contract-evidence": "node --test scripts/check-mr-contract-evidence.test.mjs",
     "test:live-uat-preflight": "node --test scripts/live-uat-preflight.test.mjs",
-    "test:prod-app": "bash -n scripts/prod-app.sh && node --test scripts/prod-app-config.test.mjs scripts/prod-app-smoke.test.mjs",
+    "test:prod-app": "bash -n scripts/prod-app.sh && node --test scripts/prod-app-config.test.mjs scripts/prod-app-smoke.test.mjs scripts/prod-app-rollback.test.mjs",
     "test:skill-harness": "python3 -m unittest scripts.tests.test_skill_harness",
     "test:skill-scripts": "python3 -m unittest scripts.tests.test_docs_reader scripts.tests.test_env_helpers",
     "test:codex-hooks": "node --test scripts/codex-hooks.test.mjs scripts/agent-guidance-eval.test.mjs",

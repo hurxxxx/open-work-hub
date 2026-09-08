@@ -65,7 +65,7 @@ Selector maintenance checks: `node --test scripts/release-validation.test.mjs`, 
 - Beat health requires a successful broker publication within 180 seconds. The official Celery `beat_init` and `after_task_publish` signals maintain a disposable `celerybeat-heartbeat` marker in Beat's working directory. Startup discards the previous marker; API and worker publications cannot refresh it. The marker stores no task or business data. Container health detects a stalled publisher after the freshness window and two failed 30-second checks; Docker restart policies alone do not restart an unhealthy process that is still running.
 - The image build embeds the validated `OPEN_WORK_HUB_BENTO_SERVER_URL` in the static web bundle; changing that public origin requires a new app image.
 - `pnpm app:prod:deploy` first rejects a terminal broker listener that is not the expected existing production container, then builds and verifies the revision image, applies migrations, replaces the app runtime, and requires direct and public health identity plus readiness, revision, bootstrap, and login-shell checks.
-- A failed runtime or public smoke restores the previous app image when one exists. Database migrations are not automatically reversed; releases must keep migrations backward-compatible with the previous image.
+- A failed migration, runtime start, or public smoke attempts to restore the previous app image and reports restoration failure explicitly. Default rollback retains the current database/configuration, so ordinary releases must keep them compatible with the previous image. Incompatible cutovers require the paired recovery procedure below.
 
 Read-only checks:
 
@@ -82,6 +82,25 @@ pnpm app:prod:rollback
 pnpm app:prod:up
 ```
 
+## Incompatible database and configuration cutovers
+
+A replacement Alembic baseline cannot upgrade an existing database from a deleted revision. Create a separate empty production database, apply the new baseline through the release's Alembic entrypoint, and retain the old database. Never stamp or clear the old schema to bypass this check. Isolate the new bucket, search index and vector collection prefixes, and Redis broker/result/collaboration/realtime namespaces so queued work and cleanup cannot affect retained data. Keep physical infrastructure identities unchanged unless separate instances are required.
+
+Redis database numbers isolate stored keys and queues, [not Pub/Sub channels](https://redis.io/docs/latest/develop/pubsub/#database--scoping). The replacement uses new user/resource IDs and replaces the previous runtime; do not run a clone with retained IDs concurrently on the same Pub/Sub channels. Concurrent independent deployments require distinct channel prefixes or Redis instances. Preserve this distinction when checking namespace separation.
+
+Before exposing an empty deployment, initialize its administrator through the new application model and role/audit services in an isolated process. For an authorized replacement, transfer only explicitly retained active, unblocked administrator login identity and password hashes; use new user IDs and copy no sessions, business data, groups, or app grants. Verify that public first-user setup is closed before starting the public runtime. Business apps remain disabled until an administrator enables them and configures their audiences.
+
+An incompatible deployment must supply both options to the guarded entrypoint:
+
+```bash
+pnpm app:prod:deploy --rollback-env-file /protected/path/previous.env --rollback-image sha256:<previous-image-id>
+pnpm app:prod:rollback --rollback-env-file /protected/path/previous.env --rollback-image sha256:<previous-image-id>
+```
+
+The env backup must be a regular non-symlink file with mode 0600. The image must be immutable and match the current image before deploy or the previous image before manual rollback. Its full revision label must identify an available Git commit. Preflight snapshots that revision's `ops`, `scripts`, and `package.json` under the ignored, protected `.runtime/prod-app/rollback/` directory and validates the backup with the previous revision's config validator before build or migration.
+
+Recovery stops only the production app Compose project without deleting volumes, atomically restores the root `.env` with mode 0600, and starts the immutable previous image using the previous revision's Compose and host-mounted helpers. The snapshot also contains its matching `.env`, because Compose's service `env_file` is resolved relative to its file. Recovery uses the previous revision's smoke validator and does not run migrations. Restoring a tag alone, or validating an old env with the new code's renamed keys, is insufficient. Keep the paired old database/namespaces and backup until the rollback retention decision is made; do not automatically delete them after a successful deployment. Snapshot restoration does not rewind shared persistent volumes or external side effects, which require separate compatibility review.
+
 ## Persistent development runtime
 
 `./dev.sh --with-worker` is a foreground development command: its children stop when its session exits. A continuously available development domain requires an independent host supervisor with restart-on-exit and persistent logs, using the same entrypoint and checkout. Manage that runtime through its supervisor instead of starting a second copy or stopping its children directly. Development workers use two concurrent processes to bound their memory use on a host shared with other environments. Keep host-specific service definitions outside the repository. Validate local listeners and the public domain with `pnpm dev:public-smoke` after startup or recovery.
@@ -95,6 +114,8 @@ An explicitly authorized production deploy applies retention before building and
 Production Dockerfile revision metadata follows the dependency layers so a new commit does not invalidate heavy dependency copies. Build stages have a project cache label; the final runtime does not inherit the cache label. Python installs use `uv --no-cache`; do not retain package downloads alongside installed environments. The Docker context excludes local runtime, Beat state and browser test reports. Failed test evidence remains governed by CI artifact expiry; do not add local copies of every run.
 
 CI preparation links both ordinary `apps/{api,worker}/.venv` and focused `.runtime/ci-*-venv` paths to the same hash-verified image environments. Normal `uv run` still installs the current source package; do not skip dependency identity checks or redirect API and worker into one shared environment. Missing/mismatched identity or an existing foreign environment fails closed without overwriting it. This avoids downloading/installing the full dependency tree again during each full suite. Test with `node --test scripts/prepare-validation-runtime.test.mjs` and confirm an actual CI run does not recreate a multi-gigabyte uv cache.
+
+The full release job bounds API pytest to two processes and Vitest/Playwright to one worker each through their supported environment settings. Test selection, full-suite routing and failure gates remain unchanged. This avoids unbounded CPU-count concurrency exhausting memory on a runner that shares resources with services. Do not overlap a production image build with the full release suites on a constrained runner.
 
 Do not export Docker tar backups for reproducible builds/test images. Preserve the current and previous runtime tags for image rollback; back up persistent business data only through its separately authorized data-retention policy. Image sizes share layers: compare filesystem free space before/after cleanup rather than summing `docker image ls` sizes. Verify current/previous image IDs and runtime health remain unchanged after maintenance. Run `pnpm test:prod-app`, `node --test scripts/release-validation.test.mjs`, and the release pipeline when changing these controls.
 

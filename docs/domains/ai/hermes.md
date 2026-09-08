@@ -100,6 +100,8 @@ node scripts/prod-app-config.mjs .env
 
 Deployment remains governed by `docs/domains/release/README.md` and requires explicit release authorization. Development and production checkouts have separate `.env` files and must not share placeholder secrets.
 
+For an incompatible application/database cutover, the [paired rollback procedure](../release/README.md#incompatible-database-and-configuration-cutovers) restores the previous revision's Compose and host-mounted Hermes bootstrap, gateway, and terminal helpers together with its env. Reusing new host helpers with the old API image is not a complete rollback. This operation preserves Hermes volumes; it does not reverse profile mutations or external actions. New deployment identities must not adopt retained users' profile identities implicitly.
+
 ## Ownership and authorization
 
 Each `(environment, user_id)` has one deterministic, isolated Hermes profile. Open Work Hub never exposes Hermes credentials to the browser. User routes are under `/api/v1/agent`; administrator inventory, toolset status, research-source settings, runtime health, and reconciliation routes are under `/api/v1/admin/hermes`. The administrator screen at `/admin/ai-tools` reads Hermes' official `/v1/toolsets` response for a selected managed profile, shows MCP servers and skills, and reports headless/broker readiness, recovery backlogs, quarantined workspaces, and durable maintenance heartbeats.
