@@ -141,17 +141,19 @@ describe('whiteboard-context-slot-panel-model', () => {
 
   it('builds create and attach request payloads from the context', () => {
     expect(
-      buildWhiteboardContextSlotCreatePayload(context, 'Task whiteboard'),
+      buildWhiteboardContextSlotCreatePayload(context, 'Task whiteboard', true),
     ).toEqual({
       ...context,
       title: 'Task whiteboard',
+      company_admin_read_acknowledged: true,
     });
 
     expect(
-      buildWhiteboardContextSlotAttachPayload(context, 'whiteboard-1'),
+      buildWhiteboardContextSlotAttachPayload(context, 'whiteboard-1', false),
     ).toEqual({
       ...context,
       whiteboard_id: 'whiteboard-1',
+      company_admin_read_acknowledged: false,
     });
   });
 

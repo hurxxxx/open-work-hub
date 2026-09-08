@@ -76,20 +76,20 @@ import {
 } from './space-overview-model';
 
 const AVATAR_COLORS = [
-  'bg-rose-500',
-  'bg-pink-500',
-  'bg-fuchsia-500',
-  'bg-purple-500',
-  'bg-violet-500',
-  'bg-indigo-500',
-  'bg-blue-500',
-  'bg-sky-500',
-  'bg-cyan-500',
-  'bg-teal-500',
-  'bg-emerald-500',
-  'bg-green-500',
-  'bg-amber-500',
-  'bg-orange-500',
+  'bg-rose-700',
+  'bg-pink-700',
+  'bg-fuchsia-700',
+  'bg-purple-700',
+  'bg-violet-700',
+  'bg-indigo-700',
+  'bg-blue-700',
+  'bg-sky-700',
+  'bg-cyan-700',
+  'bg-teal-700',
+  'bg-emerald-700',
+  'bg-green-700',
+  'bg-amber-700',
+  'bg-orange-700',
 ];
 
 function avatarColor(seed: string): string {
@@ -228,6 +228,10 @@ function useSpaceOverviewViewElement({
     spaceMeta?.current_user_role,
     'member',
   );
+  const canCreateList = canEditSpaceOrder;
+  const openCreateList = () => {
+    if (canCreateList) dispatch({ type: 'setCreateListOpen', open: true });
+  };
   const fallbackSpaceName = t('pms.spaceOverview.fallbackSpaceName');
   const displaySpaceName = spaceMeta?.name ?? spaceName ?? fallbackSpaceName;
 
@@ -298,6 +302,7 @@ function useSpaceOverviewViewElement({
     async (payload: SpaceOrderSavePayload) => {
       if (!token || !canEditSpaceOrder) return;
       const changes = buildSpaceOrderChanges({
+        spaceId,
         currentDocs: spaceDocs,
         currentLists: lists,
         payload,
@@ -433,13 +438,15 @@ function useSpaceOverviewViewElement({
               </button>
             ) : null}
           </div>
-          <button
-            className="app-text-control-sm rounded-md bg-app-ink px-3 py-1.5 text-app-bg transition-colors hover:bg-app-ink/90"
-            onClick={() => dispatch({ type: 'setCreateListOpen', open: true })}
-            type="button"
-          >
-            {t('pms.spaceOverview.newList')}
-          </button>
+          {canCreateList ? (
+            <button
+              className="app-text-control-sm rounded-md bg-app-ink px-3 py-1.5 text-app-bg transition-colors hover:bg-app-ink/90"
+              onClick={openCreateList}
+              type="button"
+            >
+              {t('pms.spaceOverview.newList')}
+            </button>
+          ) : null}
         </div>
 
         <PmsSpaceToolTabs
@@ -726,16 +733,16 @@ function useSpaceOverviewViewElement({
                 <FolderKanban size={16} className="text-app-accent" />
                 {t('pms.spaceOverview.lists')}
               </h2>
-              <button
-                className="app-text-caption inline-flex items-center gap-1 text-app-ink/50 hover:text-app-accent"
-                onClick={() =>
-                  dispatch({ type: 'setCreateListOpen', open: true })
-                }
-                type="button"
-              >
-                <Plus size={13} />
-                {t('pms.spaceOverview.newList')}
-              </button>
+              {canCreateList ? (
+                <button
+                  className="app-text-caption inline-flex items-center gap-1 text-app-ink/50 hover:text-app-accent"
+                  onClick={openCreateList}
+                  type="button"
+                >
+                  <Plus size={13} />
+                  {t('pms.spaceOverview.newList')}
+                </button>
+              ) : null}
             </div>
             <div className="divide-y divide-app-border">
               {[...rootLists, ...lists.filter((list) => list.folder_id)].map(
@@ -782,7 +789,8 @@ function useSpaceOverviewViewElement({
       </main>
 
       <CreateTaskListModal
-        isOpen={createListOpen}
+        isOpen={createListOpen && canCreateList}
+        canCreate={canCreateList}
         onClose={() => dispatch({ type: 'setCreateListOpen', open: false })}
         teamId={spaceId}
         onCreated={(taskList) => {
@@ -805,6 +813,7 @@ function useSpaceOverviewViewElement({
         onChanged={() => dispatch({ type: 'membersChanged' })}
       />
       <SpaceOrderEditorModal
+        spaceId={spaceId}
         isOpen={spaceOrderEditorOpen && canEditSpaceOrder}
         onClose={() => setSpaceOrderEditorOpen(false)}
         spaceName={displaySpaceName}

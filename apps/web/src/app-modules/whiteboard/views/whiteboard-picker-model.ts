@@ -54,7 +54,7 @@ export function filterWhiteboardsForPicker(
     limit = WHITEBOARD_PICKER_RESULT_LIMIT,
   } = options;
   return projectPickerItems({
-    items,
+    items: items.filter((item) => item.can_share),
     excludeIds: excludeWhiteboardIds,
     getItemId: (item) => item.id,
     limit,

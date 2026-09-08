@@ -71,6 +71,10 @@ export type WhiteboardContextSlotResponse = Omit<
 > & {
   item: WhiteboardDetail | null;
 };
+export type WhiteboardContextSlotCreatePayload =
+  ApiSchema<'CreateWhiteboardContextSlotRequest'>;
+export type WhiteboardContextSlotAttachPayload =
+  ApiSchema<'AttachWhiteboardContextSlotRequest'>;
 export type ShareableUserItem = ApiSchema<'ShareableUserItem'>;
 export type WhiteboardUserShareItem = ApiSchema<'WhiteboardUserShareItem'>;
 export type WhiteboardLinkShareItem = ApiSchema<'WhiteboardLinkShareItem'>;
@@ -311,7 +315,7 @@ export function getWhiteboardContextSlot(
 
 export function createWhiteboardContextSlot(
   token: string,
-  payload: { app: string; type: string; id: string; title?: string },
+  payload: WhiteboardContextSlotCreatePayload,
 ): Promise<WhiteboardDetail> {
   return request<WhiteboardDetail>(whiteboardApiRoutes.contextSlot(), token, {
     method: 'POST',
@@ -321,7 +325,7 @@ export function createWhiteboardContextSlot(
 
 export function attachWhiteboardContextSlot(
   token: string,
-  payload: { app: string; type: string; id: string; whiteboard_id: string },
+  payload: WhiteboardContextSlotAttachPayload,
 ): Promise<WhiteboardDetail> {
   return request<WhiteboardDetail>(whiteboardApiRoutes.contextSlot(), token, {
     method: 'PUT',

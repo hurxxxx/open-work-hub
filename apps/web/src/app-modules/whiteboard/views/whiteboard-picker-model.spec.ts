@@ -10,10 +10,20 @@ function whiteboard(id: string, title: string): WhiteboardHubItem {
   return {
     id,
     title,
+    can_share: true,
   } as WhiteboardHubItem;
 }
 
 describe('whiteboard-picker-model', () => {
+  it('excludes boards whose sharing the user cannot manage', () => {
+    const allowed = whiteboard('owner', 'Owner');
+    expect(
+      filterWhiteboardsForPicker(
+        [allowed, { ...whiteboard('reader', 'Reader'), can_share: false }],
+        { query: '', excludeWhiteboardIds: [] },
+      ),
+    ).toEqual([allowed]);
+  });
   it('tracks loading, failure, query, and submit state transitions', () => {
     const loading = whiteboardPickerReducer(INITIAL_WHITEBOARD_PICKER_STATE, {
       type: 'load',

@@ -32,7 +32,8 @@ export type ResourcePickerSessionOptions<
   getPickFailedMessage: (error: unknown) => string;
   initialState: TState;
   onClose: () => void;
-  onPick: (item: TItem) => Promise<void> | void;
+  // Returning false keeps the picker open after a cancelled confirmation.
+  onPick: (item: TItem) => Promise<void | boolean> | void | boolean;
   reducer: Reducer<TState, TAction>;
   resetOnClose?: boolean;
 };
@@ -77,6 +78,13 @@ export function useResourcePickerSession<
   TState
 > {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const operation = useRef(0);
+  useEffect(
+    () => () => {
+      operation.current += 1;
+    },
+    [],
+  );
   const handlersRef = useRef({
     actions,
     getPickFailedMessage,
@@ -94,6 +102,7 @@ export function useResourcePickerSession<
   };
 
   const handleClose = useCallback(() => {
+    operation.current += 1;
     const {
       actions: currentActions,
       onClose: close,
@@ -111,6 +120,7 @@ export function useResourcePickerSession<
 
   const handlePick = useCallback(
     async (item: TItem) => {
+      const currentOperation = ++operation.current;
       const {
         actions: currentActions,
         getPickFailedMessage: getFailureMessage,
@@ -118,14 +128,18 @@ export function useResourcePickerSession<
       } = handlersRef.current;
 
       dispatch(currentActions.submit(item));
+      let shouldClose = false;
       try {
-        await pick(item);
-        handleClose();
+        shouldClose = (await pick(item)) !== false;
       } catch (error) {
+        if (currentOperation !== operation.current) return;
         dispatch(currentActions.submitFailed(getFailureMessage(error)));
       } finally {
-        dispatch(currentActions.submitFinished());
+        if (currentOperation === operation.current) {
+          dispatch(currentActions.submitFinished());
+        }
       }
+      if (shouldClose && currentOperation === operation.current) handleClose();
     },
     [handleClose],
   );

@@ -461,14 +461,7 @@ function useSpaceItemContent({
 
         {canCreateSpaceContent || canManageSpace ? (
           <>
-            <div
-              className={cn(
-                'items-center gap-0.5 pr-1 shrink-0',
-                addPopoverOpen || spaceMenuOpen
-                  ? 'flex'
-                  : 'hidden group-hover:flex',
-              )}
-            >
+            <div className="flex items-center gap-0.5 pr-1 shrink-0">
               {canCreateSpaceContent ? (
                 <button
                   type="button"
@@ -536,7 +529,7 @@ function useSpaceItemContent({
               onClose={() => setAddPopoverOpen(false)}
               onCreateList={onAddList}
               onCreateFolder={onAddFolder}
-              onOpenDocs={onOpenDocs}
+              onOpenDocs={canManageCollections ? onOpenDocs : undefined}
             />
           </>
         ) : null}
@@ -682,7 +675,11 @@ function useSpaceItemContent({
                                   onCreateList={() =>
                                     onAddListToFolder(folder.id)
                                   }
-                                  onCreateDoc={onOpenDocs}
+                                  onCreateDoc={
+                                    canManageCollections
+                                      ? onOpenDocs
+                                      : undefined
+                                  }
                                 />
                                 <FolderContextMenu
                                   open={isFolderMenuOpen}

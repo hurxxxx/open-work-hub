@@ -41,7 +41,31 @@ docker compose --env-file .env.example -f ops/compose/open-work-hub-dev.infra.ym
 - Delete flow: archive first, permanent delete second.
 - Iframe bridge validates exact origin and `window` sender. No Hub auth token enters iframe.
 - Import parses only `#bento-doc` JSON; it never executes imported HTML.
-- Export uses official runtime `serialize()`.
+- Writable sessions export through the official runtime `serialize()`. Read-only sessions export the
+  official presentation-only copy used by their viewer; the stored source JSON remains unchanged.
+- Bridge protocol v2 carries explicit `readOnly` derived from server `can_edit` (missing access is
+  read-only). Old protocol envelopes are rejected. Publish the web and rebuilt Bento image together;
+  do not reuse a v1 bridge image with the v2 host.
+- Bento v1.0.17 selects its official `readonly: true` player only at boot. `loadDoc()` cannot
+  switch modes; no public option disables the runtime's IndexedDB recovery/version/asset stores.
+  The bridge uses the official serializer's shell and replaces only inert `#bento-doc` JSON. It
+  boots every content document in an opaque child iframe **without `allow-same-origin`**. The outer
+  Bento frame never loads content into its editor store. The native sandbox denies persistent
+  browser storage; the pinned runtime gracefully handles unavailable IndexedDB. No upstream
+  function or browser storage API is patched. Remove this boot adapter when an upstream supported
+  embedded lifecycle provides both mode selection and storage isolation.
+- The Hub validates the outer frame's exact Bento origin and Window. The outer frame validates
+  each child reply against its exact owned Window and opaque origin `null`; only token-free
+  commands to that Window use `targetOrigin: '*'`. Child receivers require the exact outer Window
+  and Bento origin. Arbitrary frames cannot relay writes. Read-only frames never relay mutations.
+- The dedicated Bento origin sends `Clear-Site-Data: "storage"` to retire recovery/assets left by
+  earlier versions. Hub storage is on a different origin and is unaffected. The opaque content frame
+  cannot recreate those persistent records.
+- Company-read copies remove collaboration metadata and never enter the storage-capable editor.
+  Source JSON in PostgreSQL is unchanged. Blob URLs are released on replacement/exit; principal,
+  document or access-mode changes remount the frame. Import consumes JSON only.
+- Host save/autosave and AI edits require current edit permission. A reader receives no usable editor,
+  save or AI modification action. No document data or Hub credentials enter a runtime URL.
 
 ## AI Generation
 
@@ -80,4 +104,9 @@ pnpm dev:qwen:smoke
 
 ## Rollback
 
-Set `OPEN_WORK_HUB_BENTO_IMAGE_TAG` to previous image tag and recreate service. Source rollback must restore version, revision, and checksums as one set.
+Record the existing Bento image ID and bridge hash before rollout; the release tag alone does not
+identify a bridge revision. Build/recreate the Bento infra service separately from `pnpm app:prod:deploy`.
+That app command does not deploy or roll back this service. For a protocol rollback, restore the matching
+web image and Bento image together, then smoke their handshake and rendered editor/viewer. Source rollback
+also restores the pinned version, revision, checksums and bridge as one set. Do not pair a v1 host with a
+v2 bridge or the reverse.

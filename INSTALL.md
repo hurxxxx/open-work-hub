@@ -197,7 +197,7 @@ Bento처럼 별도 주소를 쓰는 기능은 해당 기능 문서의 접속 설
 | 개인정보 필터 | `OPEN_WORK_HUB_OPF_SERVICE_BASE_URL`에 별도 서비스 주소가 있으면 해당 서비스를 먼저 준비한다. 아래 실행 예와 [서비스 구현](apps/api/src/open_work_hub_api/domains/ai/privacy_filter_service.py)을 따른다. |
 | 일반 챗봇·Hermes Terminal | 키·서비스 활성화·공급자 정책·검증은 [Hermes 설치 문서](docs/domains/ai/hermes.md#fresh-environment-setup)를 따른다. 호스트에 Hermes를 별도 설치하지 않는다. |
 | 문서 AI·OCR·음성 인식 | 설정한 [Inference Gateway](docs/domains/inference-gateway/README.md)와 [RAG](docs/domains/rag/README.md) 연결을 준비한다. 개발 Compose가 외부 추론 서버까지 설치하지는 않는다. |
-| 슬라이드·다이어그램 | [Bento](docs/apps/bento/README.md)와 [Diagrams](docs/apps/diagrams/README.md)의 서버 주소·브라우저 연결을 확인한다. |
+| 슬라이드·다이어그램 | [Bento](docs/apps/bento/README.md)와 [Diagrams](docs/apps/diagrams/README.md)의 서버 주소·브라우저 연결을 확인한다. Bento의 별도 런타임 이미지와 Web bridge 프로토콜도 함께 맞춘다. |
 | 화상회의·녹음 | [Recording](docs/apps/recording/README.md)의 LiveKit·네트워크·추론 서비스 요구사항을 확인한다. |
 
 개발 개인정보 필터를 이 서버에서 실행하는 경우, 별도 터미널에서 설정된 loopback 주소를 사용한다.

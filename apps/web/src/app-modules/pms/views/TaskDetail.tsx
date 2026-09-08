@@ -87,6 +87,7 @@ type TaskDetailProps = {
   spaceId?: string | null;
 
   canEdit?: boolean;
+  canPublishDoc?: boolean;
   onClose: () => void;
   onUpdate?: () => void | Promise<void>;
 };
@@ -106,6 +107,7 @@ function TaskDetailContent({
   spaceName,
   spaceId = null,
   canEdit: canEditProp = true,
+  canPublishDoc = false,
   onClose,
   onUpdate,
 }: TaskDetailContentProps) {
@@ -269,6 +271,7 @@ function TaskDetailContent({
   });
   const {
     buildDocPath,
+    confirmDialog,
     docPickerOpen,
     handleLinkDoc,
     handlePromoteDescriptionToDoc,
@@ -277,6 +280,7 @@ function TaskDetailContent({
     setDocPickerOpen,
   } = useTaskDetailLinkedDocs({
     canEdit,
+    canPublishDoc,
     descriptionBlocksRef,
     issue: issueState,
     onUpdate,
@@ -370,6 +374,7 @@ function TaskDetailContent({
 
   return (
     <div className="flex h-full min-w-0 flex-col overflow-hidden">
+      {confirmDialog}
       {/* Top bar */}
       <div className="flex items-center justify-between gap-3 border-b border-app-border px-4 py-3 shrink-0 lg:px-5">
         <div className="app-text-caption flex min-w-0 items-center gap-2 text-app-ink/50">
@@ -743,7 +748,7 @@ function TaskDetailContent({
                   {t('pms.description')}
                 </h3>
                 <div className="flex shrink-0 items-center gap-1">
-                  {canEdit ? (
+                  {canEdit && (!spaceId || canPublishDoc) ? (
                     <Button
                       variant="ghost"
                       onClick={handlePromoteDescriptionToDoc}

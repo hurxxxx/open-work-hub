@@ -422,6 +422,10 @@ export function FloatingPmsWidget({
             onClose={closeSelectedTask}
           >
             <TaskDetail
+              canPublishDoc={taskListRoleAllows(
+                selectedTaskList?.role,
+                'admin',
+              )}
               canEdit={taskListRoleAllows(selectedTaskList?.role, 'member')}
               onClose={closeSelectedTask}
               onUpdate={handleTaskUpdated}

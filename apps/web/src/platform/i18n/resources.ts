@@ -3472,13 +3472,14 @@ export const resources = {
             allUsers: '전체 사용자 ({{count}})',
             blockLogin: '로그인 차단',
             blockLoginDescription:
-              '계정 정보는 보존하면서 새로운 로그인을 차단합니다.',
+              '계정 정보는 보존하면서 기존 세션을 종료하고 로그인을 차단합니다.',
             columns: {
               actions: '작업',
               created: '생성일',
               email: '이메일',
               employeeCode: '사번',
               enabledApps: '관리 앱',
+              groups: '그룹',
               jobTitle: '직책',
               lastActive: '최근 활동',
               loginId: '아이디',
@@ -3534,6 +3535,7 @@ export const resources = {
               '임시 비밀번호를 재발급했습니다. 새 비밀번호: {{password}}',
             passwordResetFailed: '비밀번호를 재발급하지 못했습니다.',
             platformAdmin: '플랫폼 관리자',
+            regularUser: '일반 사용자',
             platformAdminDescription:
               '전체 관리자 콘솔과 회사 전역 설정을 관리할 수 있습니다.',
             profileSection: '기본 정보',
@@ -5397,7 +5399,7 @@ export const resources = {
           removeFromSpace: '스페이스에서 내보내기',
           roleDescription: {
             admin: '멤버 관리 및 설정 변경 가능',
-            member: '리스트, 폴더, 문서 생성 및 편집',
+            member: '리스트와 폴더 생성 및 작업 생성·편집 가능',
             owner: '관리자 지정과 소유권 변경 가능',
             viewer: '읽기 전용',
           },
@@ -9497,7 +9499,7 @@ export const resources = {
             allUsers: 'All users ({{count}})',
             blockLogin: 'Block login',
             blockLoginDescription:
-              'Keep the account information while blocking new sign-ins.',
+              'Keep account information, end existing sessions, and block sign-in.',
             columns: {
               actions: 'Actions',
               created: 'Created',
@@ -9560,6 +9562,7 @@ export const resources = {
               'Temporary password reset. New password: {{password}}',
             passwordResetFailed: 'Could not reset the password.',
             platformAdmin: 'Platform admin',
+            regularUser: 'Regular user',
             platformAdminDescription:
               'Can manage the full admin console and company-wide settings.',
             profileSection: 'Profile',
@@ -11464,7 +11467,7 @@ export const resources = {
           removeFromSpace: 'Remove from space',
           roleDescription: {
             admin: 'Can manage members and change settings',
-            member: 'Can create and edit lists, folders, and documents',
+            member: 'Can create lists and folders, and create and edit tasks',
             owner: 'Can assign admins and transfer ownership',
             viewer: 'Read only',
           },

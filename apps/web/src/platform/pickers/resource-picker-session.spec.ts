@@ -64,7 +64,7 @@ function deferred<T>(): Deferred<T> {
 function useTestSession(
   args: {
     onClose?: () => void;
-    onPick?: (item: Item) => Promise<void> | void;
+    onPick?: (item: Item) => Promise<void | boolean> | void | boolean;
     resetOnClose?: boolean;
   } = {},
 ) {
@@ -137,6 +137,20 @@ describe('resource-picker-session', () => {
     expect(result.current.state.error).toBeNull();
   });
 
+  it('keeps the selection and query when publication confirmation is cancelled', async () => {
+    const onClose = vi.fn();
+    const onPick = vi.fn().mockResolvedValue(false);
+    const { result } = renderHook(() => useTestSession({ onClose, onPick }));
+    act(() => result.current.setQuery('draft'));
+    await act(async () => {
+      await result.current.handlePick(item('one'));
+    });
+    expect(onClose).not.toHaveBeenCalled();
+    expect(result.current.state.query).toBe('draft');
+    expect(result.current.state.submittingId).toBeNull();
+    expect(result.current.state.error).toBeNull();
+  });
+
   it('keeps the picker open and records submit failures', async () => {
     const onClose = vi.fn();
     const onPick = vi
@@ -187,6 +201,69 @@ describe('resource-picker-session', () => {
     });
     expect(result.current.items).toEqual([item('new')]);
     expect(result.current.loading).toBe(false);
+  });
+
+  it.each(['resolve', 'reject'] as const)(
+    'ignores a late %s after closing and starting another selection',
+    async (completion) => {
+      const older = deferred<void | boolean>();
+      const newer = deferred<void | boolean>();
+      const onClose = vi.fn();
+      const onPick = vi
+        .fn()
+        .mockReturnValueOnce(older.promise)
+        .mockReturnValueOnce(newer.promise);
+      const { result } = renderHook(() => useTestSession({ onClose, onPick }));
+      let olderPick: Promise<void>;
+      let newerPick: Promise<void>;
+      act(() => {
+        olderPick = result.current.handlePick(item('old'));
+      });
+      act(() => result.current.handleClose());
+      act(() => {
+        result.current.setQuery('new query');
+        newerPick = result.current.handlePick(item('new'));
+      });
+      await act(async () => {
+        if (completion === 'resolve') older.resolve(undefined);
+        else older.reject(new Error('Old failure'));
+        await olderPick;
+      });
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(result.current.state).toMatchObject({
+        query: 'new query',
+        submittingId: 'new',
+        error: null,
+      });
+      await act(async () => {
+        newer.resolve(false);
+        await newerPick;
+      });
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(result.current.state).toMatchObject({
+        query: 'new query',
+        submittingId: null,
+        error: null,
+      });
+    },
+  );
+
+  it('does not close a later picker after its own session unmounts', async () => {
+    const pending = deferred<void>();
+    const onClose = vi.fn();
+    const { result, unmount } = renderHook(() =>
+      useTestSession({ onClose, onPick: () => pending.promise }),
+    );
+    let pick: Promise<void>;
+    act(() => {
+      pick = result.current.handlePick(item('old'));
+    });
+    unmount();
+    await act(async () => {
+      pending.resolve();
+      await pick;
+    });
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('honors deferred load delays', async () => {

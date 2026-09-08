@@ -102,8 +102,8 @@ export function PeopleSection({ token }: { token: string }) {
   const peopleFormatter = useMemo<AdminPeopleFormatter>(
     () => ({
       role: {
-        admin: t('admin.shared.roles.admin.label'),
-        member: t('admin.shared.roles.member.label'),
+        admin: t('admin.console.people.platformAdmin'),
+        member: t('admin.console.people.regularUser'),
       },
       status: (status) => formatStatusLabel(status, t),
       date: (value) => formatDateLabel(value, locale, timeZone),

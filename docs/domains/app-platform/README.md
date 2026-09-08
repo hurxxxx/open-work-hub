@@ -70,6 +70,10 @@ Standalone Docs, Whiteboard, Bento, Diagrams and uploaded files begin personal. 
 preserves personal ownership. Publishing to a company or PMS context requires source sharing authority,
 explicit company-admin-read acknowledgment and a same-transaction audit record. Company ownership is
 irreversible; unlinking or revoking an audience does not restore personal ownership.
+The same acknowledgment is required when creating Docs from a PMS sidebar/task description or
+creating/linking a personal Whiteboard from PMS and Meeting. Cancellation sends no publication request
+and keeps a resource picker open. Reordering a PMS space must only change documents managed by the
+actor whose primary target is that exact space; task references and other primary targets are excluded.
 
 Docs/Whiteboard `company_visible` separately grants read access to everyone admitted to that app.
 Project publication alone leaves this flag false. Removing company-wide visibility preserves project,
@@ -201,3 +205,11 @@ pnpm check:alembic-graph
 pnpm test:alembic-graph
 (cd apps/api && uv run --python 3.12 --group dev python -m pytest tests/test_app_routes.py tests/test_app_availability.py tests/test_apps_launch_catalog.py tests/test_app_registry.py tests/test_company_groups.py tests/test_company_content_boundaries.py -q)
 ```
+
+### Revoked realtime sessions
+
+The server closes a revoked user session before sending another realtime payload. Authorization close
+codes (1008, 4401, 4403) therefore trigger the existing client account-access refresh boundary: protected
+content becomes inert/hidden while current identity is fetched, and denial clears the session. Ordinary
+network failures retain reconnect behavior; a policy close is not an unbounded reconnect trigger.
+Account suspension and login blocking end existing sessions; reactivation requires a fresh login.

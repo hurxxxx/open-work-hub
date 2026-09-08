@@ -5,7 +5,10 @@ import {
 } from '@/src/app-modules/docs/public-api';
 
 import { reorderPmsTaskLists, type PmsTaskList } from '../api/pms-api';
-import type { SpaceOrderSavePayload } from './space-order-editor-model';
+import {
+  isSpaceOrderDoc,
+  type SpaceOrderSavePayload,
+} from './space-order-editor-model';
 
 export type SpaceOrderListChange = Pick<
   SpaceOrderSavePayload['lists'][number],
@@ -23,10 +26,12 @@ export interface SpaceOrderChanges {
 }
 
 export function buildSpaceOrderChanges({
+  spaceId,
   currentDocs,
   currentLists,
   payload,
 }: {
+  spaceId: string;
   currentDocs: DocsHubItem[];
   currentLists: PmsTaskList[];
   payload: SpaceOrderSavePayload;
@@ -36,7 +41,11 @@ export function buildSpaceOrderChanges({
       .filter((list) => !list.archived)
       .map((list) => [list.id, list]),
   );
-  const currentDocMap = new Map(currentDocs.map((doc) => [doc.id, doc]));
+  const currentDocMap = new Map(
+    currentDocs
+      .filter((doc) => isSpaceOrderDoc(doc, spaceId))
+      .map((doc) => [doc.id, doc]),
+  );
 
   return {
     listChanges: payload.lists.flatMap((item) => {

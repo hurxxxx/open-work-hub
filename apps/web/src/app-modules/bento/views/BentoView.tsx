@@ -71,7 +71,12 @@ function viewFromSearch(value: string | null): BentoHubView {
 
 export function BentoView() {
   const { documentId } = useParams();
-  return documentId ? <BentoEditor /> : <BentoHub />;
+  const { token } = useAuth();
+  return documentId ? (
+    <BentoEditor key={`${token}:${documentId}`} />
+  ) : (
+    <BentoHub />
+  );
 }
 
 function BentoHub() {
@@ -852,6 +857,11 @@ function BentoEditor() {
     null,
   );
   const embedConfig = useMemo(() => currentBentoEmbedConfig(), []);
+  const canEdit = Boolean(detail?.can_edit);
+  useEffect(() => {
+    setIframeReady(false);
+    loadedDocumentRef.current = null;
+  }, [canEdit]);
 
   const applyDetail = useCallback((next: BentoDocumentDetail) => {
     detailRef.current = next;
@@ -879,7 +889,7 @@ function BentoEditor() {
         .catch(() => undefined)
         .then(async () => {
           const current = detailRef.current;
-          if (!token || !documentId || !current) return;
+          if (!token || !documentId || !current?.can_edit) return;
           setSaveStatus('saving');
           setError(null);
           const updated = await updateBentoDocument(token, documentId, {
@@ -904,7 +914,11 @@ function BentoEditor() {
 
   const queueDocumentSave = useCallback(
     (documentJson: string, immediate = false) => {
-      if (documentJson === lastSavedJsonRef.current) return;
+      if (
+        !detailRef.current?.can_edit ||
+        documentJson === lastSavedJsonRef.current
+      )
+        return;
       if (pendingSaveTimerRef.current) {
         clearTimeout(pendingSaveTimerRef.current);
       }
@@ -923,6 +937,7 @@ function BentoEditor() {
     if (!token || !documentId) return undefined;
     let active = true;
     detailRef.current = null;
+    setIframeReady(false);
     loadedDocumentRef.current = null;
     lastSavedJsonRef.current = null;
     setDetail(null);
@@ -946,7 +961,7 @@ function BentoEditor() {
     if (!iframeReady || !detail || !embedConfig) return;
     if (loadedDocumentRef.current === detail.id) return;
     loadedDocumentRef.current = detail.id;
-    postToBento(buildBentoLoadMessage(detail.document_json));
+    postToBento(buildBentoLoadMessage(detail.document_json, !detail.can_edit));
   }, [detail, embedConfig, iframeReady, postToBento]);
 
   useEffect(() => {
@@ -1017,6 +1032,7 @@ function BentoEditor() {
         return;
       }
       if (
+        detailRef.current?.can_edit &&
         (message.type === 'document-changed' ||
           message.type === 'save-request') &&
         message.documentJson
@@ -1108,7 +1124,13 @@ function BentoEditor() {
 
   const handleAiEdit = useCallback(async () => {
     const prompt = aiEditPrompt.trim();
-    if (!token || !documentId || !detail || prompt.length < 3 || aiEditing) {
+    if (
+      !token ||
+      !documentId ||
+      !detail?.can_edit ||
+      prompt.length < 3 ||
+      aiEditing
+    ) {
       return;
     }
     setAiEditing(true);
@@ -1121,7 +1143,7 @@ function BentoEditor() {
       }
       const currentDocumentJson = await requestCurrentDocument();
       let current = detailRef.current;
-      if (!current) throw new Error(t('bento.loadFailed'));
+      if (!current?.can_edit) throw new Error(t('bento.loadFailed'));
 
       if (currentDocumentJson !== lastSavedJsonRef.current) {
         setSaveStatus('saving');
@@ -1198,7 +1220,7 @@ function BentoEditor() {
             setAiEditError(null);
             setAiEditOpen(true);
           }}
-          disabled={!detail || !iframeReady || aiEditing}
+          disabled={!detail?.can_edit || !iframeReady || aiEditing}
           title={t('bento.aiEdit')}
           className="inline-flex h-9 items-center gap-2 rounded-md bg-app-success px-3 text-sm font-semibold text-white hover:bg-app-success/90 disabled:opacity-40"
         >
@@ -1207,8 +1229,11 @@ function BentoEditor() {
         </button>
         <button
           type="button"
-          onClick={() => postToBento(buildBentoSaveRequestMessage())}
-          disabled={!iframeReady || aiEditing}
+          onClick={() => {
+            if (detailRef.current?.can_edit)
+              postToBento(buildBentoSaveRequestMessage());
+          }}
+          disabled={!detail?.can_edit || !iframeReady || aiEditing}
           title={t('bento.saveNow')}
           className="inline-flex size-9 items-center justify-center rounded-md border border-app-border bg-app-surface text-app-ink/65 disabled:opacity-40"
         >
@@ -1282,8 +1307,9 @@ function BentoEditor() {
               )}
             </div>
           ) : null}
-          {embedConfig ? (
+          {embedConfig && detail ? (
             <iframe
+              key={`${detail.id}:${detail.can_edit}`}
               ref={iframeRef}
               title={t('bento.editorTitle')}
               src={embedConfig.src}
@@ -1299,7 +1325,7 @@ function BentoEditor() {
           ) : null}
         </div>
 
-        {aiEditOpen ? (
+        {aiEditOpen && detail?.can_edit ? (
           <aside className="relative z-20 flex w-[min(380px,92vw)] shrink-0 flex-col border-l border-app-border bg-app-bg shadow-xl">
             <div className="flex items-start gap-3 border-b border-app-border p-4">
               <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-app-success/10 text-app-success">

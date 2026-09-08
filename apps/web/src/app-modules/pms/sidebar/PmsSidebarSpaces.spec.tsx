@@ -23,7 +23,10 @@ const mocks = vi.hoisted(() => ({
   listSpaceMembers: vi.fn(),
   listPmsUsers: vi.fn(),
   listDocsHub: vi.fn(),
-  feedback: vi.fn(),
+  feedback: { success: vi.fn(), error: vi.fn() },
+  prompt: vi.fn(),
+  confirm: vi.fn(),
+  createNativeDoc: vi.fn(),
   translate: (key: string) => key,
 }));
 
@@ -44,13 +47,14 @@ vi.mock('@open-work-hub/ui', async (importOriginal) => ({
   useFeedback: () => mocks.feedback,
 }));
 vi.mock('@open-work-hub/ui/feedback/confirm-dialog', () => ({
-  useConfirm: () => ({ confirm: vi.fn(), confirmDialog: null }),
+  useConfirm: () => ({ confirm: mocks.confirm, confirmDialog: null }),
 }));
 vi.mock('@open-work-hub/ui/feedback/prompt-dialog', () => ({
-  usePrompt: () => ({ prompt: vi.fn(), promptDialog: null }),
+  usePrompt: () => ({ prompt: mocks.prompt, promptDialog: null }),
 }));
 vi.mock('@/src/app-modules/docs/public-api', () => ({
   listDocsHub: mocks.listDocsHub,
+  createNativeDoc: mocks.createNativeDoc,
 }));
 vi.mock('../api/pms-api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api/pms-api')>()),
@@ -176,6 +180,72 @@ describe('PMS sidebar space creation navigation', () => {
       return beta;
     });
     mocks.createPmsTaskList.mockResolvedValue(betaList);
+  });
+
+  it('requires company confirmation for a sidebar document and reports server failure', async () => {
+    mocks.prompt.mockResolvedValue('Team notes');
+    mocks.confirm.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    mocks.createNativeDoc.mockRejectedValue(new Error('Publication rejected'));
+    renderAlpha();
+    await screen.findByRole('heading', { name: 'Alpha', level: 1 });
+    fireEvent.click(screen.getByRole('button', { name: 'common:actions.add' }));
+    fireEvent.click(screen.getByRole('button', { name: /pms.spaceTree.doc / }));
+    await waitFor(() => expect(mocks.confirm).toHaveBeenCalledOnce());
+    expect(mocks.createNativeDoc).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'common:actions.add' }));
+    fireEvent.click(screen.getByRole('button', { name: /pms.spaceTree.doc / }));
+    await waitFor(() =>
+      expect(mocks.feedback.error).toHaveBeenCalledWith('Publication rejected'),
+    );
+    expect(mocks.createNativeDoc).toHaveBeenCalledWith(
+      'test-token',
+      expect.objectContaining({
+        title: 'Team notes',
+        primary_target: {
+          app: 'pms',
+          type: 'space',
+          id: alpha.id,
+          company_admin_read_acknowledged: true,
+        },
+      }),
+    );
+  });
+
+  it('does not offer list creation to a space viewer', async () => {
+    mocks.listSpaces.mockResolvedValue([
+      { ...alpha, current_user_role: 'viewer' },
+    ]);
+    renderAlpha();
+    await screen.findByRole('heading', { name: 'Alpha', level: 1 });
+    expect(
+      screen.queryByRole('button', { name: 'pms.spaceOverview.newList' }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: 'common:actions.add' }),
+    ).toBeNull();
+    expect(mocks.createPmsTaskList).not.toHaveBeenCalled();
+  });
+
+  it('lets a member create lists and folders without offering company document publication', async () => {
+    mocks.listSpaces.mockResolvedValue([
+      { ...alpha, current_user_role: 'member' },
+    ]);
+    renderAlpha();
+    await screen.findByRole('heading', { name: 'Alpha', level: 1 });
+    expect(
+      screen.getAllByRole('button', { name: 'pms.spaceOverview.newList' }),
+    ).toHaveLength(2);
+    fireEvent.click(screen.getByRole('button', { name: 'common:actions.add' }));
+    expect(
+      screen.getByRole('button', { name: /pms.spaceTree.list / }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: /pms.spaceTree.folder / }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole('button', { name: /pms.spaceTree.doc / }),
+    ).toBeNull();
+    expect(mocks.prompt).not.toHaveBeenCalled();
   });
 
   it('opens the created space and targets its id when creating a list from the overview', async () => {

@@ -277,6 +277,11 @@ export const AssignedToMeView = (_context: Record<string, never>) => {
               onClose={handleClose}
             >
               <TaskDetail
+                spaceId={selectedTaskList?.team_id ?? null}
+                canPublishDoc={taskListRoleAllows(
+                  selectedTaskList?.role,
+                  'admin',
+                )}
                 task={state.selectedTask}
                 spaceName={selectedTaskList?.team_name}
                 canEdit={taskListRoleAllows(selectedTaskList?.role, 'member')}

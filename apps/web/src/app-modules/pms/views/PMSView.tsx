@@ -1788,6 +1788,10 @@ function usePMSViewElement(): ReactNode {
               onClose={clearSelectedIssue}
             >
               <TaskDetail
+                canPublishDoc={taskListRoleAllows(
+                  selectedTaskList?.role,
+                  'admin',
+                )}
                 task={selectedIssue}
                 members={members}
                 milestones={milestones}

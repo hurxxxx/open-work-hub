@@ -27,3 +27,15 @@ Draw.io runs as a separate container. API stores diagram XML and PNG previews.
 - The iframe bridge accepts messages only from the exact resolved draw.io origin and window. Hub
   access tokens and storage credentials never enter the iframe.
 - Rollback may keep draw.io container, but reactivation requires healthy container, TLS, diagram tables, and MinIO access.
+
+## Read-only viewing
+
+Server `can_edit` selects the official draw.io 30.2.5 chromeless lightbox (`chrome=0`,
+`lightbox=1`) with embed JSON loading. Read-only sessions set `autosave:0`, `noSaveBtn=1`,
+`saveAndExit=0`, and `noExitBtn=1`; the title is read-only and host save handlers recheck
+current edit permission. The official base EditorUi overrides `graph.isEnabled()` to false
+for a noneditable chromeless view, including after embed initialization.
+
+The iframe mounts only after an authorized detail response and remounts for a principal,
+document or access-mode change. Incoming messages must match both the configured origin
+and that exact iframe window. See the [official embed protocol](https://www.drawio.com/docs/reference/embed-mode/).
