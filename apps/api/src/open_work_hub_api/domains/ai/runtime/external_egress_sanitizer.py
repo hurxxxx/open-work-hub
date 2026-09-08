@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-
 SENSITIVE_BLOCK_ENTITY_TYPES = frozenset({"credential"})
 _ENTITY_TOKEN_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     (

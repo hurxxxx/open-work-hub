@@ -22,6 +22,7 @@ COPY . .
 ARG OPEN_WORK_HUB_BENTO_SERVER_URL
 RUN test -n "${OPEN_WORK_HUB_BENTO_SERVER_URL}" \
   && OPEN_WORK_HUB_BENTO_SERVER_URL="${OPEN_WORK_HUB_BENTO_SERVER_URL}" \
+    NODE_OPTIONS=--max-old-space-size=3072 \
     pnpm nx build web --skip-nx-cache
 RUN pnpm --filter @open-work-hub/collab-codec-runtime deploy \
     --prod --legacy /opt/collab-codec-runtime

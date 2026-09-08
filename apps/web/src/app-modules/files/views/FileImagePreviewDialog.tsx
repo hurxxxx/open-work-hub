@@ -1,5 +1,5 @@
-import { useState } from 'react';
 import { RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { FullscreenImageDialog } from '@/src/components/media/FullscreenImageDialog';

@@ -2,14 +2,9 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from test_meeting import (
-    _auth_headers,
-    _bootstrap_admin_session,
-    _create_user_with_workspaces,
-    _login,
-)
+from test_meeting import _auth_headers, _bootstrap_admin_session, _create_company_user, _login
 
-_BASE = "/api/v1/workspaces/administrator/announcements"
+_BASE = "/api/v1/announcements"
 
 
 def test_announcement_crud_and_pin_ordering(client: TestClient) -> None:
@@ -68,12 +63,11 @@ def test_announcement_crud_and_pin_ordering(client: TestClient) -> None:
 def test_announcement_requires_admin_to_write(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
     admin_token = admin["token"]
-    member = _create_user_with_workspaces(
+    member = _create_company_user(
         client,
         admin_token,
         email="ann-member@open-work-hub.local",
         full_name="Announcement Member",
-        workspace_keys=["administrator"],
     )
     member_token = _login(
         client,
@@ -88,91 +82,61 @@ def test_announcement_requires_admin_to_write(client: TestClient) -> None:
     )
     assert forbidden.status_code == 403, forbidden.text
 
-    # Reading announcements is allowed for any workspace member.
+    # Reading announcements is allowed for any admitted company user.
     listing = client.get(_BASE, headers=_auth_headers(member_token))
     assert listing.status_code == 200, listing.text
 
 
-def test_announcement_company_scope_visibility(client: TestClient) -> None:
+def test_announcement_default_and_explicit_company_audience_require_active_company_user(
+    client: TestClient,
+) -> None:
+    from open_work_hub_api.core.db import get_session_factory
+    from open_work_hub_api.domains.auth.models import User
+
     admin = _bootstrap_admin_session(client)
-    token = admin["token"]  # bootstrap admin is also a platform admin
-    other = _create_user_with_workspaces(
+    other = _create_company_user(
         client,
-        token,
-        email="ann-other-workspace@open-work-hub.local",
-        full_name="Other Workspace User",
-        workspace_keys=["general"],
+        admin["token"],
+        email="ann-colleague@open-work-hub.local",
+        full_name="Company Colleague",
     )
-    other_token = _login(
-        client,
-        other["user"]["email"],
-        other["temporary_password"],
-    )
-
-    company = client.post(
-        _BASE,
-        headers=_auth_headers(token),
-        json={"title": "전사 공지", "scope": "company", "isPinned": True},
-    )
-    assert company.status_code == 201, company.text
-    assert company.json()["scope"] == "company"
-    company_id = company.json()["id"]
-
-    workspace_only = client.post(
-        _BASE,
-        headers=_auth_headers(token),
-        json={"title": "팀 공지"},
-    )
-    assert workspace_only.status_code == 201, workspace_only.text
-
-    company_list = client.get(
-        _BASE,
-        headers=_auth_headers(token),
-        params={"scope": "company"},
-    )
-    assert company_list.status_code == 200, company_list.text
-    company_ids = {item["id"] for item in company_list.json()["items"]}
-    assert company_id in company_ids
-    assert workspace_only.json()["id"] not in company_ids
-
-    workspace_list = client.get(
-        _BASE,
-        headers=_auth_headers(token),
-        params={"scope": "workspace"},
-    )
-    assert workspace_list.status_code == 200, workspace_list.text
-    assert company_id not in {item["id"] for item in workspace_list.json()["items"]}
-
-    visible_from_other_workspace = client.get(
-        "/api/v1/workspaces/general/announcements",
-        headers=_auth_headers(other_token),
-        params={"scope": "company"},
-    )
-    assert visible_from_other_workspace.status_code == 200, (
-        visible_from_other_workspace.text
-    )
-    assert company_id in {
-        item["id"] for item in visible_from_other_workspace.json()["items"]
-    }
-
-    detail_from_other_workspace = client.get(
-        f"/api/v1/workspaces/general/announcements/{company_id}",
-        headers=_auth_headers(other_token),
-    )
-    assert detail_from_other_workspace.status_code == 200, (
-        detail_from_other_workspace.text
-    )
+    other_token = _login(client, other["user"]["email"], other["temporary_password"])
+    ids = set()
+    for payload in (
+        {"title": "Default audience"},
+        {"title": "Explicit audience", "scope": "company"},
+    ):
+        created = client.post(_BASE, headers=_auth_headers(admin["token"]), json=payload)
+        assert created.status_code == 201, created.text
+        assert created.json()["scope"] == "company"
+        ids.add(created.json()["id"])
+    listing = client.get(_BASE, headers=_auth_headers(other_token))
+    assert listing.status_code == 200, listing.text
+    assert ids <= {item["id"] for item in listing.json()["items"]}
+    for resource_id in ids:
+        assert (
+            client.get(f"{_BASE}/{resource_id}", headers=_auth_headers(other_token)).status_code
+            == 200
+        )
+    with get_session_factory()() as db:
+        db.get(User, other["user"]["id"]).login_blocked = True
+        db.commit()
+    assert client.get(_BASE, headers=_auth_headers(other_token)).status_code == 403
+    for resource_id in ids:
+        assert (
+            client.get(f"{_BASE}/{resource_id}", headers=_auth_headers(other_token)).status_code
+            == 403
+        )
 
 
 def test_company_announcement_requires_platform_admin(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
     admin_token = admin["token"]
-    member = _create_user_with_workspaces(
+    member = _create_company_user(
         client,
         admin_token,
         email="ann-company-member@open-work-hub.local",
         full_name="Company Member",
-        workspace_keys=["administrator"],
     )
     member_token = _login(
         client,

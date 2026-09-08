@@ -61,12 +61,7 @@ def resolve_llm_pool_config_values(
 
 def llm_pool_config_resolver_keys() -> tuple[str, ...]:
     ensure_default_llm_pool_config_resolvers_registered()
-    return tuple(
-        sorted(
-            f"{pool}:{provider or '*'}"
-            for pool, provider in _resolvers_by_key
-        )
-    )
+    return tuple(sorted(f"{pool}:{provider or '*'}" for pool, provider in _resolvers_by_key))
 
 
 def reset_llm_pool_config_resolvers() -> None:

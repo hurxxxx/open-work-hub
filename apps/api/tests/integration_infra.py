@@ -58,9 +58,7 @@ def _value(test_name: str, runtime_name: str) -> str:
         value = os.getenv(name) or _file_value(name)
         if value:
             return value
-    raise RuntimeError(
-        f"Shared integration tests require {test_name} or {runtime_name}."
-    )
+    raise RuntimeError(f"Shared integration tests require {test_name} or {runtime_name}.")
 
 
 def _approved_dev_values(name: str) -> set[str]:
@@ -102,8 +100,10 @@ def stale_resource_cutoff() -> datetime:
 
 def _assert_non_production(selected: dict[str, str]) -> None:
     profile = (
-        os.getenv("OPEN_WORK_HUB_ENV_PROFILE") or _file_value("OPEN_WORK_HUB_ENV_PROFILE") or ""
-    ).strip().lower()
+        (os.getenv("OPEN_WORK_HUB_ENV_PROFILE") or _file_value("OPEN_WORK_HUB_ENV_PROFILE") or "")
+        .strip()
+        .lower()
+    )
     if profile not in _NON_PRODUCTION_PROFILES:
         raise RuntimeError(
             "Shared integration tests require an explicit non-production environment profile."
@@ -127,8 +127,10 @@ def _assert_non_production(selected: dict[str, str]) -> None:
 
 def assert_non_production_postgres_dsn(dsn: str) -> None:
     profile = (
-        os.getenv("OPEN_WORK_HUB_ENV_PROFILE") or _file_value("OPEN_WORK_HUB_ENV_PROFILE") or ""
-    ).strip().lower()
+        (os.getenv("OPEN_WORK_HUB_ENV_PROFILE") or _file_value("OPEN_WORK_HUB_ENV_PROFILE") or "")
+        .strip()
+        .lower()
+    )
     if profile not in _NON_PRODUCTION_PROFILES:
         raise RuntimeError(
             "PostgreSQL tests require an explicit non-production environment profile."
@@ -146,10 +148,7 @@ def assert_non_production_postgres_dsn(dsn: str) -> None:
     raw_prod_dsn = _env_values(prod_env).get("OPEN_WORK_HUB_POSTGRES_DSN")
     if raw_prod_dsn:
         production = make_url(str(raw_prod_dsn))
-        if (
-            selected.database == production.database
-            and selected.username == production.username
-        ):
+        if selected.database == production.database and selected.username == production.username:
             raise RuntimeError("PostgreSQL tests refuse the production database identity.")
 
 
@@ -161,9 +160,7 @@ def _validate_http_endpoint(name: str, endpoint: str) -> str:
 
 
 def _postgres_admin_dsn(template_dsn: str) -> str:
-    return make_url(template_dsn).set(database="postgres").render_as_string(
-        hide_password=False
-    )
+    return make_url(template_dsn).set(database="postgres").render_as_string(hide_password=False)
 
 
 def _drop_test_postgres_database(template_dsn: str, database: str) -> None:
@@ -185,9 +182,7 @@ def _drop_test_postgres_database(template_dsn: str, database: str) -> None:
                 """,
                 (database,),
             )
-            cursor.execute(
-                sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(database))
-            )
+            cursor.execute(sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(database)))
 
 
 def cleanup_current_postgres_databases(
@@ -317,9 +312,7 @@ class IntegrationInfra:
 
     def verify_available(self) -> None:
         redis = urlparse(self.redis_url)
-        with socket.create_connection(
-            (redis.hostname or "", redis.port or 6379), timeout=3
-        ):
+        with socket.create_connection((redis.hostname or "", redis.port or 6379), timeout=3):
             pass
         self._minio_client().list_buckets()
         response = httpx.get(self.opensearch_url, timeout=5)
@@ -382,9 +375,7 @@ class IntegrationInfra:
         if response.status_code not in {200, 404}:
             response.raise_for_status()
         if self._opensearch_indices(pattern):
-            raise RuntimeError(
-                f"Failed to remove integration test indices with prefix {prefix}."
-            )
+            raise RuntimeError(f"Failed to remove integration test indices with prefix {prefix}.")
 
     def _cleanup_current_minio(self) -> None:
         client = self._minio_client()
@@ -440,9 +431,7 @@ class IntegrationInfra:
             raw_created_at = item.get("creation.date")
             if not name.startswith(TEST_INDEX_PREFIX) or not raw_created_at:
                 continue
-            created_at = datetime.fromtimestamp(
-                int(raw_created_at) / 1000, tz=timezone.utc
-            )
+            created_at = datetime.fromtimestamp(int(raw_created_at) / 1000, tz=timezone.utc)
             if created_at < cutoff:
                 self._cleanup_any_test_index(name)
 
@@ -479,9 +468,7 @@ class IntegrationInfra:
             assert_non_production_postgres_dsn(configured)
             return configured
         root = _workspace_root()
-        template = _file_value(
-            "OPEN_WORK_HUB_POSTGRES_DSN", (root / ".env", root / ".env.local")
-        )
+        template = _file_value("OPEN_WORK_HUB_POSTGRES_DSN", (root / ".env", root / ".env.local"))
         if template:
             assert_non_production_postgres_dsn(template)
         return template

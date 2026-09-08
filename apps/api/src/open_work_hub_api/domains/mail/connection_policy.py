@@ -6,7 +6,6 @@ from typing import Protocol
 
 from open_work_hub_api.core.settings import get_settings
 
-
 _MAIL_INCOMING_ALLOWED_PORTS = {
     "imap": {143, 993},
     "pop3": {110, 995},

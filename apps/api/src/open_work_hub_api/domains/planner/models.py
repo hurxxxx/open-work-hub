@@ -25,29 +25,9 @@ class PlannerEvent(Base):
             "owner_id",
             "end_at",
         ),
-        Index(
-            "ix_planner_events_workspace_owner_start",
-            "workspace_id",
-            "owner_id",
-            "start_at",
-        ),
-        Index(
-            "ix_planner_events_workspace_owner_end",
-            "workspace_id",
-            "owner_id",
-            "end_at",
-        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    # Preserve pre-global scope and visibility for audit and rollback. New
-    # personal rows use no workspace and remain private by default.
-    legacy_workspace_id: Mapped[str | None] = mapped_column(
-        "workspace_id",
-        ForeignKey("workspaces.id"),
-        index=True,
-        nullable=True,
-    )
     retrieval_partition_id: Mapped[str | None] = mapped_column(
         ForeignKey("retrieval_partitions.id", ondelete="RESTRICT"),
         nullable=True,

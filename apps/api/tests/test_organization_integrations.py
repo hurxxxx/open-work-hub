@@ -99,6 +99,7 @@ def test_organization_hierarchy_user_metadata_and_filters(client: TestClient) ->
     assert created_user["employee_code"] == "E-1001"
     assert created_user["job_title"] == "Staff Researcher"
     assert created_user["primary_organization_unit"] == {
+        "head_user_id": None,
         "id": child["id"],
         "name": child["name"],
         "slug": child["slug"],

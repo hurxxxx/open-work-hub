@@ -1,15 +1,12 @@
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
+import type { BlockContent } from '@open-work-hub/ui';
+import type { TFunction } from 'i18next';
 import {
   useCallback,
   useState,
   type RefObject,
   type SetStateAction,
 } from 'react';
-import type { TFunction } from 'i18next';
-import type { BlockContent } from '@open-work-hub/ui';
-import {
-  buildAppEntryHref,
-  buildAppHref,
-} from '@open-work-hub/contracts/app-routes';
 
 import {
   createNativeDoc,
@@ -41,20 +38,11 @@ export function resolveTaskDetailPromotedDocContent({
   );
 }
 
-export function resolveTaskDetailDocPath({
-  docId,
-  workspaceSlug,
-}: {
-  docId: string;
-  workspaceSlug: string | null;
-}): string {
-  return workspaceSlug
-    ? buildAppHref({
-        routeId: 'docs.document',
-        workspaceSlug,
-        pathParams: { docId },
-      })
-    : buildAppEntryHref('docs');
+export function resolveTaskDetailDocPath({ docId }: { docId: string }): string {
+  return buildAppHref({
+    routeId: 'docs.document',
+    pathParams: { docId },
+  });
 }
 
 export function useTaskDetailLinkedDocs({
@@ -67,7 +55,6 @@ export function useTaskDetailLinkedDocs({
   spaceId,
   token,
   t,
-  workspaceSlug,
 }: {
   canEdit: boolean;
   descriptionBlocksRef: RefObject<BlockContent | null>;
@@ -78,14 +65,13 @@ export function useTaskDetailLinkedDocs({
   spaceId: string | null;
   token: string | null;
   t: TFunction;
-  workspaceSlug: string | null;
 }) {
   const [docPickerOpen, setDocPickerOpen] = useState(false);
   const [promotingDescription, setPromotingDescription] = useState(false);
 
   const buildDocPath = useCallback(
-    (docId: string) => resolveTaskDetailDocPath({ docId, workspaceSlug }),
-    [workspaceSlug],
+    (docId: string) => resolveTaskDetailDocPath({ docId }),
+    [],
   );
 
   const handlePromoteDescriptionToDoc = useCallback(async () => {
@@ -98,28 +84,24 @@ export function useTaskDetailLinkedDocs({
         descriptionBlocks: descriptionBlocksRef.current,
         issueDescriptionBlocks: issue.description_blocks,
       });
-      const doc = await createNativeDoc(
-        token,
-        {
-          title: issue.title,
-          first_page_title: t('pms.taskDetail.promotedDocPageTitle'),
-          source_app: 'pms',
-          source_kind: 'task_description',
-          source_ref: issue.id,
-          doc_type: 'memo',
-          content_format: 'block',
-          primary_target: spaceId
-            ? {
-                app: 'pms',
-                type: 'space',
-                id: spaceId,
-              }
-            : null,
-        },
-        workspaceSlug,
-      );
+      const doc = await createNativeDoc(token, {
+        title: issue.title,
+        first_page_title: t('pms.taskDetail.promotedDocPageTitle'),
+        source_app: 'pms',
+        source_kind: 'task_description',
+        source_ref: issue.id,
+        doc_type: 'memo',
+        content_format: 'block',
+        primary_target: spaceId
+          ? {
+              app: 'pms',
+              type: 'space',
+              id: spaceId,
+            }
+          : null,
+      });
 
-      const pages = await listDocPages(token, doc.id, null, workspaceSlug);
+      const pages = await listDocPages(token, doc.id, null);
       const firstPage = pages.items[0];
       if (firstPage) {
         await updateDocPage(
@@ -130,16 +112,10 @@ export function useTaskDetailLinkedDocs({
             content_blocks: contentBlocks,
           },
           null,
-          workspaceSlug,
         );
       }
 
-      const response = await attachTaskDoc(
-        token,
-        issue.id,
-        doc.id,
-        workspaceSlug,
-      );
+      const response = await attachTaskDoc(token, issue.id, doc.id);
       setLinkedDocs(response.items);
       await notifyTaskDetailUpdated(onUpdate);
     } catch (error) {
@@ -165,19 +141,13 @@ export function useTaskDetailLinkedDocs({
     spaceId,
     t,
     token,
-    workspaceSlug,
   ]);
 
   const handleLinkDoc = useCallback(
     async (docId: string) => {
       if (!token || !canEdit) return;
       try {
-        const response = await attachTaskDoc(
-          token,
-          issue.id,
-          docId,
-          workspaceSlug,
-        );
+        const response = await attachTaskDoc(token, issue.id, docId);
         setLinkedDocs(response.items);
         await notifyTaskDetailUpdated(onUpdate);
       } catch (error) {
@@ -189,28 +159,14 @@ export function useTaskDetailLinkedDocs({
         throw new Error(message);
       }
     },
-    [
-      canEdit,
-      issue.id,
-      onUpdate,
-      setLinkedDocs,
-      setSaveError,
-      t,
-      token,
-      workspaceSlug,
-    ],
+    [canEdit, issue.id, onUpdate, setLinkedDocs, setSaveError, t, token],
   );
 
   const handleUnlinkDoc = useCallback(
     async (docId: string) => {
       if (!token || !canEdit) return;
       try {
-        const response = await detachTaskDoc(
-          token,
-          issue.id,
-          docId,
-          workspaceSlug,
-        );
+        const response = await detachTaskDoc(token, issue.id, docId);
         setLinkedDocs(response.items);
         await notifyTaskDetailUpdated(onUpdate);
       } catch (error) {
@@ -222,16 +178,7 @@ export function useTaskDetailLinkedDocs({
         );
       }
     },
-    [
-      canEdit,
-      issue.id,
-      onUpdate,
-      setLinkedDocs,
-      setSaveError,
-      t,
-      token,
-      workspaceSlug,
-    ],
+    [canEdit, issue.id, onUpdate, setLinkedDocs, setSaveError, t, token],
   );
 
   return {

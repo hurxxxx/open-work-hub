@@ -7,7 +7,6 @@ from typing import Protocol
 from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.domains.dm import attachment_policy
 
-
 DM_ATTACHMENT_UPLOAD_CHUNK_SIZE = 1024 * 1024
 DM_ATTACHMENT_UPLOAD_SPOOL_MAX_SIZE = 16 * 1024 * 1024
 DM_ATTACHMENT_MULTIPART_OVERHEAD_BYTES = 1024 * 1024

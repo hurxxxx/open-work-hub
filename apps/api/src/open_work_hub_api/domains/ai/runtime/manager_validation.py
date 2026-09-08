@@ -15,7 +15,6 @@ from open_work_hub_api.domains.ai.runtime.registry_validation import (
     validate_execution_graph,
 )
 
-
 EXECUTION_GRAPH_SCHEMA_NAME = "ExecutionGraph"
 ManagerGraphCandidateSource = Literal["local_manager", "external_planning"]
 ManagerGraphFallbackReason = Literal[

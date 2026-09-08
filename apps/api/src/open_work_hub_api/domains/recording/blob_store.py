@@ -58,17 +58,13 @@ def spool_dir_for_recording(staging_id: str) -> Path:
 
 def build_recording_storage_key(
     *,
-    workspace_id: str,
     user_id: str,
     recording_id: str,
     started_at: datetime,
     file_extension: str,
 ) -> str:
     timestamp = f"{started_at:%Y%m%dT%H%M%SZ}"
-    return (
-        f"recordings/{workspace_id}/{user_id}/{started_at:%Y/%m/%d}/"
-        f"{timestamp}-{recording_id}{file_extension}"
-    )
+    return f"recordings/{user_id}/{started_at:%Y/%m/%d}/{timestamp}-{recording_id}{file_extension}"
 
 
 def write_chunk(*, spool_path: str, seq: int, data: bytes) -> None:

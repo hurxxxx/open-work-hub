@@ -10,14 +10,13 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, Index, Integer, JSON, String, Text
+from sqlalchemy import JSON, DateTime, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from open_work_hub_api.core.db import Base
 from open_work_hub_api.domains.auth.models import utcnow_naive
 from open_work_hub_api.domains.auth.security import new_id
-
 
 JSONB_COMPAT = JSONB(astext_type=Text()).with_variant(JSON(), "sqlite")
 
@@ -26,8 +25,7 @@ class AiInteraction(Base):
     __tablename__ = "ai_interactions"
     __table_args__ = (
         Index(
-            "ix_ai_interactions_workspace_created",
-            "workspace_id",
+            "ix_ai_interactions_created",
             "created_at",
         ),
         Index(
@@ -49,7 +47,6 @@ class AiInteraction(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     action: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    workspace_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     actor_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     principal_kind: Mapped[str | None] = mapped_column(String(32), nullable=True)
     principal_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
@@ -81,7 +78,6 @@ def record_ai_interaction(
     action: str,
     source: str,
     status: str,
-    workspace_id: str | None = None,
     actor_user_id: str | None = None,
     principal_kind: str | None = None,
     principal_id: str | None = None,
@@ -106,7 +102,6 @@ def record_ai_interaction(
     interaction = AiInteraction(
         id=new_id(),
         action=action,
-        workspace_id=_clean_optional(workspace_id),
         actor_user_id=_clean_optional(actor_user_id),
         principal_kind=_clean_optional(principal_kind),
         principal_id=_clean_optional(principal_id),

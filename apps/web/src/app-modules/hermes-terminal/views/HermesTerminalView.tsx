@@ -15,7 +15,6 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useParams } from 'react-router-dom';
 
 import { FormDialog } from '@/src/components/form/FormDialog';
 import {
@@ -74,14 +73,13 @@ function utcDate(value: string): Date {
 interface SessionsRequest {
   promise: Promise<void>;
   token: string;
-  workspaceSlug: string;
 }
 
 export function HermesTerminalView() {
   const { i18n, t } = useTranslation('apps');
   const feedback = useFeedback();
   const { token } = useAuth();
-  const { workspaceSlug } = useParams();
+
   const [config, setConfig] = useState<HermesTerminalConfig | null>(null);
   const [sessions, setSessions] = useState<HermesTerminalSession[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
@@ -101,8 +99,8 @@ export function HermesTerminalView() {
   const [terminalVersion, setTerminalVersion] = useState(0);
   const sessionsRequestRef = useRef<SessionsRequest | null>(null);
   const loadAllRequestRef = useRef(0);
-  const requestContextRef = useRef({ token, workspaceSlug });
-  requestContextRef.current = { token, workspaceSlug };
+  const requestContextRef = useRef({ token });
+  requestContextRef.current = { token };
 
   const applySessions = useCallback((items: HermesTerminalSession[]) => {
     setSessions(items);
@@ -114,25 +112,20 @@ export function HermesTerminalView() {
   }, []);
 
   const loadSessions = useCallback(() => {
-    if (!token || !workspaceSlug) return Promise.resolve();
+    if (!token) return Promise.resolve();
     const current = sessionsRequestRef.current;
-    if (
-      current?.token === token &&
-      current.workspaceSlug === workspaceSlug
-    ) {
+    if (current?.token === token) {
       return current.promise;
     }
     const request: SessionsRequest = {
       promise: Promise.resolve(),
       token,
-      workspaceSlug,
     };
-    request.promise = listHermesTerminalSessions(token, workspaceSlug)
+    request.promise = listHermesTerminalSessions(token)
       .then((response) => {
         if (
           sessionsRequestRef.current === request &&
-          requestContextRef.current.token === token &&
-          requestContextRef.current.workspaceSlug === workspaceSlug
+          requestContextRef.current.token === token
         ) {
           applySessions(response.items ?? []);
         }
@@ -144,12 +137,12 @@ export function HermesTerminalView() {
       });
     sessionsRequestRef.current = request;
     return request.promise;
-  }, [applySessions, token, workspaceSlug]);
+  }, [applySessions, token]);
 
   const loadAll = useCallback(async () => {
     const requestId = loadAllRequestRef.current + 1;
     loadAllRequestRef.current = requestId;
-    if (!token || !workspaceSlug) {
+    if (!token) {
       setLoading(false);
       setLoadFailed(true);
       return;
@@ -157,13 +150,12 @@ export function HermesTerminalView() {
     setLoading(true);
     try {
       const [nextConfig, response] = await Promise.all([
-        getHermesTerminalConfig(token, workspaceSlug),
-        listHermesTerminalSessions(token, workspaceSlug),
+        getHermesTerminalConfig(token),
+        listHermesTerminalSessions(token),
       ]);
       if (
         loadAllRequestRef.current !== requestId ||
-        requestContextRef.current.token !== token ||
-        requestContextRef.current.workspaceSlug !== workspaceSlug
+        requestContextRef.current.token !== token
       ) {
         return;
       }
@@ -173,8 +165,7 @@ export function HermesTerminalView() {
     } catch {
       if (
         loadAllRequestRef.current !== requestId ||
-        requestContextRef.current.token !== token ||
-        requestContextRef.current.workspaceSlug !== workspaceSlug
+        requestContextRef.current.token !== token
       ) {
         return;
       }
@@ -183,13 +174,12 @@ export function HermesTerminalView() {
     } finally {
       if (
         loadAllRequestRef.current === requestId &&
-        requestContextRef.current.token === token &&
-        requestContextRef.current.workspaceSlug === workspaceSlug
+        requestContextRef.current.token === token
       ) {
         setLoading(false);
       }
     }
-  }, [applySessions, feedback, t, token, workspaceSlug]);
+  }, [applySessions, feedback, t, token]);
 
   useEffect(() => {
     void loadAll();
@@ -248,7 +238,7 @@ export function HermesTerminalView() {
   );
   const activeCount = sessions.filter(isActive).length;
   const sessionLimitReached =
-    activeCount >= (config?.max_sessions_per_workspace_user ?? 1);
+    activeCount >= (config?.max_sessions_per_user ?? 1);
 
   const openCreateDialog = useCallback(() => {
     setCreateMode('standard');
@@ -265,7 +255,6 @@ export function HermesTerminalView() {
   const createSession = useCallback(async () => {
     if (
       !token ||
-      !workspaceSlug ||
       creating ||
       sessionLimitReached ||
       (createMode === 'yolo' && !yoloAcknowledged)
@@ -275,16 +264,13 @@ export function HermesTerminalView() {
     setCreating(true);
     const knownSessionIds = new Set(sessions.map((session) => session.id));
     try {
-      const session = await createHermesTerminalSession(token, workspaceSlug, {
+      const session = await createHermesTerminalSession(token, {
         mode: createMode,
         risk_acknowledged: createMode === 'yolo' && yoloAcknowledged,
         cols: 120,
         rows: 36,
       });
-      if (
-        requestContextRef.current.token !== token ||
-        requestContextRef.current.workspaceSlug !== workspaceSlug
-      ) {
+      if (requestContextRef.current.token !== token) {
         return;
       }
       setSessions((current) => [session, ...current]);
@@ -294,18 +280,12 @@ export function HermesTerminalView() {
       setYoloAcknowledged(false);
       feedback.success(t('hermesTerminal.feedback.created'));
     } catch {
-      if (
-        requestContextRef.current.token !== token ||
-        requestContextRef.current.workspaceSlug !== workspaceSlug
-      ) {
+      if (requestContextRef.current.token !== token) {
         return;
       }
       try {
-        const response = await listHermesTerminalSessions(token, workspaceSlug);
-        if (
-          requestContextRef.current.token !== token ||
-          requestContextRef.current.workspaceSlug !== workspaceSlug
-        ) {
+        const response = await listHermesTerminalSessions(token);
+        if (requestContextRef.current.token !== token) {
           return;
         }
         const items = response.items ?? [];
@@ -337,24 +317,16 @@ export function HermesTerminalView() {
     sessions,
     t,
     token,
-    workspaceSlug,
     yoloAcknowledged,
   ]);
 
   const stopSession = useCallback(
     async (session: HermesTerminalSession) => {
-      if (!token || !workspaceSlug || !isActive(session)) return;
+      if (!token || !isActive(session)) return;
       setStoppingSessionId(session.id);
       try {
-        const stopped = await stopHermesTerminalSession(
-          token,
-          workspaceSlug,
-          session.id,
-        );
-        if (
-          requestContextRef.current.token !== token ||
-          requestContextRef.current.workspaceSlug !== workspaceSlug
-        ) {
+        const stopped = await stopHermesTerminalSession(token, session.id);
+        if (requestContextRef.current.token !== token) {
           return;
         }
         setSessions((current) =>
@@ -362,17 +334,14 @@ export function HermesTerminalView() {
         );
         feedback.success(t('hermesTerminal.feedback.stopped'));
       } catch {
-        if (
-          requestContextRef.current.token === token &&
-          requestContextRef.current.workspaceSlug === workspaceSlug
-        ) {
+        if (requestContextRef.current.token === token) {
           feedback.error(t('hermesTerminal.feedback.stopFailed'));
         }
       } finally {
         setStoppingSessionId(null);
       }
     },
-    [feedback, t, token, workspaceSlug],
+    [feedback, t, token],
   );
 
   const handleTerminalExit = useCallback(() => {
@@ -390,7 +359,7 @@ export function HermesTerminalView() {
       </div>
     );
   }
-  if (loadFailed || !config || !workspaceSlug || !token) {
+  if (loadFailed || !config || !token) {
     return (
       <div className="grid h-full place-items-center bg-app-bg p-6">
         <EmptyState
@@ -442,7 +411,7 @@ export function HermesTerminalView() {
             <Badge tone={sessionLimitReached ? 'warning' : 'neutral'}>
               {t('hermesTerminal.sessionCapacity', {
                 active: activeCount,
-                limit: config.max_sessions_per_workspace_user,
+                limit: config.max_sessions_per_user,
               })}
             </Badge>
             <Button
@@ -555,7 +524,6 @@ export function HermesTerminalView() {
                     onExit={handleTerminalExit}
                     token={token}
                     webSocketUrl={hermesTerminalWebSocketUrl(
-                      workspaceSlug,
                       selectedSession.id,
                     )}
                   />
@@ -585,7 +553,6 @@ export function HermesTerminalView() {
               <HermesTerminalActivityPanel
                 session={selectedSession}
                 token={token}
-                workspaceSlug={workspaceSlug}
               />
             </aside>
           </div>

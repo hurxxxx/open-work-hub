@@ -17,7 +17,6 @@ from open_work_hub_api.domains.release_notes.service import (
     list_release_notes,
 )
 
-
 router = APIRouter(prefix="/release-notes", tags=["release-notes"])
 
 

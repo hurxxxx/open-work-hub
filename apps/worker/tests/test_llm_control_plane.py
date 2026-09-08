@@ -124,7 +124,7 @@ def test_meeting_summarize_uses_complete_chat_without_local_precheck(
         summary_text=None,
         transcript_text="회의 전사",
         progress_pct=60,
-        meeting=SimpleNamespace(workspace_id="ws-1"),
+        meeting=SimpleNamespace(id="meeting-1"),
         transcription_status="summarizing",
     )
 
@@ -147,13 +147,19 @@ def test_meeting_summarize_uses_complete_chat_without_local_precheck(
     fake_session = FakeSession()
     captured: dict[str, Any] = {}
 
+    from open_work_hub_api.domains.meeting import rag_sync as meeting_rag_sync
+
+    monkeypatch.setattr(
+        meeting_rag_sync, "enqueue_meeting_rag_sync_by_id", lambda *_args, **_kwargs: None
+    )
     monkeypatch.setattr(meeting_module, "_db_session", lambda: fake_session)
     monkeypatch.setattr(meeting_module, "_load_active_recording", lambda *_args: recording)
+    monkeypatch.setattr(meeting_module, "_meeting_requester_is_participant", lambda *_args: True)
     monkeypatch.setattr(meeting_module, "_heartbeat", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(meeting_module, "_mark_failed", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         meeting_module,
-        "is_app_enabled_for_user_context",
+        "can_use_app",
         lambda *_args, **_kwargs: True,
     )
 
@@ -183,7 +189,8 @@ def test_meeting_summarize_uses_complete_chat_without_local_precheck(
     assert captured["db"] is fake_session
     assert captured["workload_id"] == "meeting_summary"
     assert captured["context"].app_id == "meeting"
-    assert captured["context"].workspace_id == "ws-1"
+    assert captured["context"].actor_user_id == "user-1"
+    assert not hasattr(captured["context"], "workspace_id")
 
 
 def test_mail_sync_task_imports_after_control_plane_ready(
@@ -259,7 +266,7 @@ def test_meeting_extract_insights_invokes_worker_service_without_stopping_pipeli
         summary_text="요약 결과",
         transcript_text="회의 전사",
         progress_pct=90,
-        meeting=SimpleNamespace(workspace_id="ws-1"),
+        meeting=SimpleNamespace(id="meeting-1"),
         transcription_status="extracting_insights",
     )
 
@@ -285,8 +292,14 @@ def test_meeting_extract_insights_invokes_worker_service_without_stopping_pipeli
     captured: dict[str, object] = {}
     heartbeats: list[tuple[int, str | None]] = []
 
+    from open_work_hub_api.domains.meeting import rag_sync as meeting_rag_sync
+
+    monkeypatch.setattr(
+        meeting_rag_sync, "enqueue_meeting_rag_sync_by_id", lambda *_args, **_kwargs: None
+    )
     monkeypatch.setattr(meeting_module, "_db_session", lambda: fake_session)
     monkeypatch.setattr(meeting_module, "_load_active_recording", lambda *_args: recording)
+    monkeypatch.setattr(meeting_module, "_meeting_requester_is_participant", lambda *_args: True)
     monkeypatch.setattr(
         meeting_module,
         "_heartbeat",
@@ -294,7 +307,7 @@ def test_meeting_extract_insights_invokes_worker_service_without_stopping_pipeli
     )
     monkeypatch.setattr(
         meeting_module,
-        "is_app_enabled_for_user_context",
+        "can_use_app",
         lambda *_args, **_kwargs: True,
     )
 
@@ -316,7 +329,7 @@ def test_meeting_extract_insights_invokes_worker_service_without_stopping_pipeli
     assert captured["kwargs"] == {
         "recording_id": "rec-2",
         "source": "worker.meeting.extract_insights",
-        "actor_user_id": None,
+        "actor_user_id": "user-1",
     }
     assert fake_session.committed is True
     assert fake_session.rolled_back is False

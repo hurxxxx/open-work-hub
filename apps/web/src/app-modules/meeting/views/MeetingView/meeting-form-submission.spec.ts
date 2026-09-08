@@ -1,9 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type {
-  MeetingDetail,
-  MeetingUser,
-} from '../../api/meeting-api';
+import type { MeetingDetail, MeetingUser } from '../../api/meeting-api';
 import {
   createInitialMeetingEditState,
   createInitialMeetingState,
@@ -49,10 +46,14 @@ function meeting(overrides: Partial<MeetingDetail> = {}): MeetingDetail {
   } as MeetingDetail;
 }
 
-function ports(overrides: Partial<MeetingFormSubmissionPorts> = {}): MeetingFormSubmissionPorts {
+function ports(
+  overrides: Partial<MeetingFormSubmissionPorts> = {},
+): MeetingFormSubmissionPorts {
   return {
     createMeeting: vi.fn().mockResolvedValue(meeting({ id: 'created-1' })),
-    updateMeeting: vi.fn().mockResolvedValue(meeting({ id: 'meeting-1', title: 'Updated' })),
+    updateMeeting: vi
+      .fn()
+      .mockResolvedValue(meeting({ id: 'meeting-1', title: 'Updated' })),
     uploadMeetingFile: vi.fn().mockResolvedValue(meeting({ id: 'created-1' })),
     ...overrides,
   };
@@ -71,7 +72,11 @@ describe('meeting form submission', () => {
   it('returns validation failure without calling ports when dates are invalid', async () => {
     const fakePorts = ports();
     const state = {
-      ...createInitialMeetingState(null, 'current-user', new Date(2026, 4, 30, 8, 0)),
+      ...createInitialMeetingState(
+        null,
+        'current-user',
+        new Date(2026, 4, 30, 8, 0),
+      ),
       title: 'Planning',
       startAt: '2026-05-30T10:00',
       endAt: '2026-05-30T09:00',
@@ -79,7 +84,6 @@ describe('meeting form submission', () => {
 
     const result = await submitMeetingCreateForm({
       token: 'token-1',
-      workspaceSlug: 'hq',
       state,
       ports: fakePorts,
       messages,
@@ -96,7 +100,11 @@ describe('meeting form submission', () => {
   it('trims create payload and returns the created result', async () => {
     const fakePorts = ports();
     const state = {
-      ...createInitialMeetingState(null, 'current-user', new Date(2026, 4, 30, 8, 0)),
+      ...createInitialMeetingState(
+        null,
+        'current-user',
+        new Date(2026, 4, 30, 8, 0),
+      ),
       title: '  Planning  ',
       agenda: '  Agenda  ',
       attendees: [{ user_id: 'current-user', role: 'required' as const }],
@@ -109,7 +117,6 @@ describe('meeting form submission', () => {
 
     const result = await submitMeetingCreateForm({
       token: 'token-1',
-      workspaceSlug: 'hq',
       state,
       ports: fakePorts,
       messages,
@@ -117,7 +124,6 @@ describe('meeting form submission', () => {
 
     expect(fakePorts.createMeeting).toHaveBeenCalledWith(
       'token-1',
-      'hq',
       expect.objectContaining({
         title: 'Planning',
         agenda: 'Agenda',
@@ -136,14 +142,18 @@ describe('meeting form submission', () => {
     const successful = new File(['ok'], 'ok.txt', { type: 'text/plain' });
     const failed = new File(['bad'], 'bad.txt', { type: 'text/plain' });
     const fakePorts = ports({
-      uploadMeetingFile: vi.fn((_token, _workspace, _meetingId, file: File) =>
+      uploadMeetingFile: vi.fn((_token, _meetingId, file: File) =>
         file.name === 'bad.txt'
           ? Promise.reject(new Error('virus scan failed'))
           : Promise.resolve(meeting({ id: 'created-1' })),
       ),
     });
     const state = {
-      ...createInitialMeetingState(null, 'current-user', new Date(2026, 4, 30, 8, 0)),
+      ...createInitialMeetingState(
+        null,
+        'current-user',
+        new Date(2026, 4, 30, 8, 0),
+      ),
       title: 'Planning',
       startAt: '2026-05-30T09:00',
       endAt: '2026-05-30T10:00',
@@ -152,7 +162,6 @@ describe('meeting form submission', () => {
 
     const result = await submitMeetingCreateForm({
       token: 'token-1',
-      workspaceSlug: 'hq',
       state,
       ports: fakePorts,
       messages,
@@ -179,7 +188,6 @@ describe('meeting form submission', () => {
 
     const result = await submitMeetingEditForm({
       token: 'token-1',
-      workspaceSlug: 'hq',
       meetingId: 'meeting-1',
       state,
       ports: fakePorts,
@@ -188,7 +196,6 @@ describe('meeting form submission', () => {
 
     expect(fakePorts.updateMeeting).toHaveBeenCalledWith(
       'token-1',
-      'hq',
       'meeting-1',
       expect.objectContaining({
         title: 'Updated title',
@@ -212,7 +219,11 @@ describe('meeting form submission', () => {
       updateMeeting: vi.fn().mockRejectedValue(null),
     });
     const createState = {
-      ...createInitialMeetingState(null, 'current-user', new Date(2026, 4, 30, 8, 0)),
+      ...createInitialMeetingState(
+        null,
+        'current-user',
+        new Date(2026, 4, 30, 8, 0),
+      ),
       title: 'Planning',
       startAt: '2026-05-30T09:00',
       endAt: '2026-05-30T10:00',
@@ -228,33 +239,36 @@ describe('meeting form submission', () => {
       endAt: '2026-05-30T10:00',
     };
 
-    await expect(submitMeetingCreateForm({
-      token: 'token-1',
-      workspaceSlug: 'hq',
-      state: createState,
-      ports: createPorts,
-      messages,
-    })).resolves.toEqual({ status: 'failed', error: 'Create failed.' });
-    await expect(submitMeetingCreateForm({
-      token: 'token-1',
-      workspaceSlug: 'hq',
-      state: uploadState,
-      ports: uploadPorts,
-      messages,
-    })).resolves.toEqual({
+    await expect(
+      submitMeetingCreateForm({
+        token: 'token-1',
+        state: createState,
+        ports: createPorts,
+        messages,
+      }),
+    ).resolves.toEqual({ status: 'failed', error: 'Create failed.' });
+    await expect(
+      submitMeetingCreateForm({
+        token: 'token-1',
+        state: uploadState,
+        ports: uploadPorts,
+        messages,
+      }),
+    ).resolves.toEqual({
       status: 'partial_upload_failed',
       createdMeetingId: 'created-1',
       error: 'Some files failed.',
       failures: ['bad.txt: Upload failed.'],
       remainingFiles: uploadState.pickedFiles,
     });
-    await expect(submitMeetingEditForm({
-      token: 'token-1',
-      workspaceSlug: 'hq',
-      meetingId: 'meeting-1',
-      state: editState,
-      ports: editPorts,
-      messages,
-    })).resolves.toEqual({ status: 'failed', error: 'Edit failed.' });
+    await expect(
+      submitMeetingEditForm({
+        token: 'token-1',
+        meetingId: 'meeting-1',
+        state: editState,
+        ports: editPorts,
+        messages,
+      }),
+    ).resolves.toEqual({ status: 'failed', error: 'Edit failed.' });
   });
 });

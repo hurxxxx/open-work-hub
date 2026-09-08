@@ -16,7 +16,8 @@ export interface MarkDmThreadReadInput {
   token: string | null | undefined;
 }
 
-export interface MarkVisibleDmThreadReadInput extends Omit<MarkDmThreadReadInput, 'conversationId'> {
+export interface MarkVisibleDmThreadReadInput
+  extends Omit<MarkDmThreadReadInput, 'conversationId'> {
   presence: DmReadPresenceInput;
   selectedThreadId: string | null | undefined;
 }

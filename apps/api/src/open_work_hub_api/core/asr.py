@@ -71,7 +71,9 @@ class CohereASRBackend:
         if response.status_code >= 500:
             raise TransientError(f"Cohere transcription failed: {response.status_code}")
         if response.status_code >= 400:
-            raise PermanentError(f"Cohere transcription failed: {response.status_code} {response.text}")
+            raise PermanentError(
+                f"Cohere transcription failed: {response.status_code} {response.text}"
+            )
 
         payload = response.json()
         if not isinstance(payload, dict):
@@ -105,9 +107,12 @@ class QwenASRBackend:
 
     def healthcheck(self, *, deep: bool = False) -> ASRHealth:
         try:
-            from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor  # type: ignore  # noqa: F401
             import torch  # type: ignore  # noqa: F401
             import torchaudio  # type: ignore  # noqa: F401
+            from transformers import (  # type: ignore  # noqa: F401
+                AutoModelForSpeechSeq2Seq,
+                AutoProcessor,
+            )
         except ImportError as exc:
             return ASRHealth(backend="qwen_asr", ready=False, detail=str(exc))
         if not deep:
@@ -146,7 +151,9 @@ class QwenASRBackend:
         text = processor.batch_decode(generated, skip_special_tokens=True)[0]
         if on_progress is not None:
             on_progress(1.0)
-        return TranscriptResult(text=text.strip(), segments=[], language=language_hint, duration_sec=None)
+        return TranscriptResult(
+            text=text.strip(), segments=[], language=language_hint, duration_sec=None
+        )
 
 
 class WhisperASRBackend:

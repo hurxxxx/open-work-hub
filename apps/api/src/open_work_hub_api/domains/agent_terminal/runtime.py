@@ -31,7 +31,6 @@ from open_work_hub_api.domains.agent_terminal.service import (
 )
 from open_work_hub_api.domains.auth.access import record_audit_log
 
-
 _ACTIVE_STATUSES = frozenset({"starting", "running"})
 _ATTACHMENT_CHECK_SECONDS = 0.75
 _TMUX_COMMAND_TIMEOUT_SECONDS = 5

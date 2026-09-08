@@ -29,9 +29,7 @@ from open_work_hub_api.domains.ai.registry import (
     ApprovalPreview,
     PreviewField,
 )
-from open_work_hub_api.domains.auth.access import ensure_dev_login_seed_data
 from open_work_hub_api.domains.auth.access import load_user_graph
-from open_work_hub_api.domains.auth.models import Workspace
 from open_work_hub_api.domains.conversations import service as conversations_service
 from test_meeting import _auth_headers, _dev_login
 
@@ -39,12 +37,12 @@ from test_meeting import _auth_headers, _dev_login
 pytestmark = pytest.mark.usefixtures("configured_local_llm_control_plane")
 
 
-def _workspace_ai_path(workspace_slug: str, suffix: str) -> str:
-    return f"/api/v1/workspaces/{workspace_slug}/chatbot{suffix}"
+def _ai_path(suffix: str) -> str:
+    return f"/api/v1/chatbot{suffix}"
 
 
 def _legacy_ai_path(suffix: str) -> str:
-    return f"/api/v1/chatbot{suffix}"
+    return f"/api/v1/workspaces/retired/chatbot{suffix}"
 
 
 def _parse_sse(body: str) -> list[dict[str, Any]]:
@@ -76,12 +74,11 @@ class _ApprovalToolArgs(BaseModel):
 
 def _approval_tool_handler(
     db: Any,
-    workspace: Any,
     principal: Any,
     user: Any,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
-    del db, workspace, principal, user
+    del db, principal, user
     title = str(arguments["title"])
     slug = title.lower().replace(" ", "-")
     return {
@@ -92,10 +89,9 @@ def _approval_tool_handler(
 
 def _approval_preview_builder(
     principal: Any,
-    workspace_context: Any,
     parsed_args: BaseModel | dict[str, Any],
 ) -> ApprovalPreview:
-    del principal, workspace_context
+    del principal
     if isinstance(parsed_args, BaseModel):
         title = str(getattr(parsed_args, "title"))
     else:
@@ -115,7 +111,7 @@ def _build_test_approval_registry(
     registry = AiCapabilityRegistry()
     registry.register_discoverability_predicate(
         predicate_id="test.enabled",
-        predicate=lambda principal, workspace_context, entitlements: True,
+        predicate=lambda principal, entitlements: True,
     )
     registry.register_preview_builder(
         preview_builder_id="test.preview",
@@ -131,9 +127,9 @@ def _build_test_approval_registry(
         mode="write",
         discoverability_predicate_id="test.enabled",
         preview_builder_id="test.preview",
-        # owner_domain is a synthetic test value; pin the workspace_app_id to
-        # a real workspace app so the registry validation passes.
-        workspace_app_id="chatbot",
+        # owner_domain is a synthetic test value; pin the owner_app_id to
+        # a registered company app so the registry validation passes.
+        owner_app_id="chatbot",
     )
     if include_second_tool:
         registry.register_tool(
@@ -146,7 +142,7 @@ def _build_test_approval_registry(
             mode="write",
             discoverability_predicate_id="test.enabled",
             preview_builder_id="test.preview",
-            workspace_app_id="chatbot",
+            owner_app_id="chatbot",
         )
     registry.compile_capabilities()
     return registry
@@ -169,26 +165,19 @@ def _seed_pending_approval(
     resource_preview: str = "Create PMS issue Approval issue",
     model_meta: dict[str, Any] | None = None,
 ) -> dict[str, str]:
-    with get_session_factory()() as db:
-        ensure_dev_login_seed_data(db)
     session = _dev_login(client, "delivery-hub-admin")
-    workspace_slug = "delivery-hub"
 
     with get_session_factory()() as db:
         user = load_user_graph(db, session["user"]["id"])
-        workspace = db.scalar(select(Workspace).where(Workspace.key == workspace_slug))
         assert user is not None
-        assert workspace is not None
 
         conversation = conversations_service.create_conversation(
             db,
-            workspace=workspace,
             user=user,
             title="approval test",
         )
         snapshot = ai_approvals.persist_snapshot_on_halt(
             db,
-            workspace=workspace,
             conversation=conversation,
             requested_by_user=user,
             messages_json=[{"role": "user", "content": "create an issue"}],
@@ -206,7 +195,6 @@ def _seed_pending_approval(
         )
         approval = ai_approvals.create_pending_approval(
             db,
-            workspace=workspace,
             conversation=conversation,
             requested_by_user=user,
             agent_run_id=snapshot.id,
@@ -221,7 +209,6 @@ def _seed_pending_approval(
         return {
             "token": session["token"],
             "user_id": user.id,
-            "workspace_slug": workspace_slug,
             "conversation_id": conversation.id,
             "approval_id": approval.id,
             "agent_run_id": snapshot.id,
@@ -232,7 +219,6 @@ def test_filter_resume_tool_specs_uses_frozen_tool_names() -> None:
     snapshot = ai_approvals.AgentRunSnapshot(
         id="snapshot-1",
         conversation_id="conversation-1",
-        workspace_id="workspace-1",
         requested_by_user_id="user-1",
         blocked_call_id="call-1",
         model_meta={
@@ -285,7 +271,6 @@ def test_runtime_inspection_endpoint_returns_scrubbed_trace(
         append_trace_event(
             db,
             agent_run_id=runtime_run.id,
-            workspace_id=runtime_run.workspace_id,
             conversation_id=runtime_run.conversation_id,
             event_type="unsafe_payload_fixture",
             payload={
@@ -298,7 +283,7 @@ def test_runtime_inspection_endpoint_returns_scrubbed_trace(
         db.commit()
 
     response = client.get(
-        _workspace_ai_path(seed["workspace_slug"], f"/runtime/runs/{seed['agent_run_id']}"),
+        _ai_path(f"/runtime/runs/{seed['agent_run_id']}"),
         headers=headers,
     )
 
@@ -324,12 +309,12 @@ def test_runtime_inspection_endpoint_returns_scrubbed_trace(
     assert recorded_results == ["ok"]
 
 
-def test_runtime_inspection_endpoint_enforces_workspace_isolation(client: TestClient) -> None:
+def test_platform_admin_cannot_inspect_another_users_personal_runtime(client: TestClient) -> None:
     seed = _seed_pending_approval(client)
     other_session = _dev_login(client, "administrator")
 
     response = client.get(
-        _workspace_ai_path("administrator", f"/runtime/runs/{seed['agent_run_id']}"),
+        _ai_path(f"/runtime/runs/{seed['agent_run_id']}"),
         headers=_auth_headers(other_session["token"]),
     )
 
@@ -341,7 +326,7 @@ def test_runtime_inspection_endpoint_enforces_requesting_user(client: TestClient
     other_session = _dev_login(client, "delivery-hub-member")
 
     response = client.get(
-        _workspace_ai_path(seed["workspace_slug"], f"/runtime/runs/{seed['agent_run_id']}"),
+        _ai_path(f"/runtime/runs/{seed['agent_run_id']}"),
         headers=_auth_headers(other_session["token"]),
     )
 
@@ -352,7 +337,6 @@ def test_resume_allowed_app_ids_omission_reuses_frozen_scope() -> None:
     snapshot = ai_approvals.AgentRunSnapshot(
         id="snapshot-1",
         conversation_id="conversation-1",
-        workspace_id="workspace-1",
         requested_by_user_id="user-1",
         blocked_call_id="call-1",
         model_meta={"scope": {"allowed_app_ids": ["pms", "docs"]}},
@@ -365,7 +349,6 @@ def test_resume_allowed_app_ids_accepts_narrower_scope() -> None:
     snapshot = ai_approvals.AgentRunSnapshot(
         id="snapshot-1",
         conversation_id="conversation-1",
-        workspace_id="workspace-1",
         requested_by_user_id="user-1",
         blocked_call_id="call-1",
         model_meta={"scope": {"allowed_app_ids": ["pms", "docs"]}},
@@ -378,7 +361,6 @@ def test_resume_allowed_app_ids_rejects_wider_scope() -> None:
     snapshot = ai_approvals.AgentRunSnapshot(
         id="snapshot-1",
         conversation_id="conversation-1",
-        workspace_id="workspace-1",
         requested_by_user_id="user-1",
         blocked_call_id="call-1",
         model_meta={"scope": {"allowed_app_ids": ["pms"]}},
@@ -394,7 +376,6 @@ def test_resume_allowed_app_ids_keeps_text_only_scope() -> None:
     snapshot = ai_approvals.AgentRunSnapshot(
         id="snapshot-1",
         conversation_id="conversation-1",
-        workspace_id="workspace-1",
         requested_by_user_id="user-1",
         blocked_call_id="call-1",
         model_meta={"scope": {"allowed_app_ids": []}},
@@ -414,7 +395,7 @@ def test_get_and_resolve_approval_routes_work_and_legacy_mount_is_removed(
     headers = _auth_headers(seed["token"])
 
     resolve_response = client.post(
-        _workspace_ai_path(seed["workspace_slug"], f"/approvals/{seed['approval_id']}/resolve"),
+        _ai_path(f"/approvals/{seed['approval_id']}/resolve"),
         headers=headers,
         json={"decision": "approved"},
     )
@@ -424,12 +405,12 @@ def test_get_and_resolve_approval_routes_work_and_legacy_mount_is_removed(
     assert resolved["tool_call_id"] == "call-1"
     assert resolved["snapshot_status"] == "awaiting_approval"
 
-    workspace_get = client.get(
-        _workspace_ai_path(seed["workspace_slug"], f"/approvals/{seed['approval_id']}"),
+    approval_get = client.get(
+        _ai_path(f"/approvals/{seed['approval_id']}"),
         headers=headers,
     )
-    assert workspace_get.status_code == 200, workspace_get.text
-    assert workspace_get.json()["status"] == "approved"
+    assert approval_get.status_code == 200, approval_get.text
+    assert approval_get.json()["status"] == "approved"
 
     legacy_get = client.get(
         _legacy_ai_path(f"/approvals/{seed['approval_id']}"),
@@ -444,7 +425,7 @@ def test_resolve_approval_forbidden_for_different_user(client: TestClient) -> No
     headers = _auth_headers(session["token"])
 
     response = client.post(
-        _workspace_ai_path(seed["workspace_slug"], f"/approvals/{seed['approval_id']}/resolve"),
+        _ai_path(f"/approvals/{seed['approval_id']}/resolve"),
         headers=headers,
         json={"decision": "approved"},
     )
@@ -458,14 +439,14 @@ def test_chat_resume_rejects_mismatched_conversation_id(client: TestClient) -> N
     headers = _auth_headers(seed["token"])
 
     resolve_response = client.post(
-        _workspace_ai_path(seed["workspace_slug"], f"/approvals/{seed['approval_id']}/resolve"),
+        _ai_path(f"/approvals/{seed['approval_id']}/resolve"),
         headers=headers,
         json={"decision": "approved"},
     )
     assert resolve_response.status_code == 200, resolve_response.text
 
     response = client.post(
-        _workspace_ai_path(seed["workspace_slug"], "/chat/resume"),
+        _ai_path("/chat/resume"),
         headers=headers,
         json={
             "conversation_id": "different-conversation-id",
@@ -482,7 +463,7 @@ def test_chat_resume_rejects_pending_approval(client: TestClient) -> None:
     headers = _auth_headers(seed["token"])
 
     response = client.post(
-        _workspace_ai_path(seed["workspace_slug"], "/chat/resume"),
+        _ai_path("/chat/resume"),
         headers=headers,
         json={
             "conversation_id": seed["conversation_id"],
@@ -508,14 +489,14 @@ def test_chat_resume_rejects_narrower_scope_that_excludes_approved_tool(
     headers = _auth_headers(seed["token"])
 
     resolve_response = client.post(
-        _workspace_ai_path(seed["workspace_slug"], f"/approvals/{seed['approval_id']}/resolve"),
+        _ai_path(f"/approvals/{seed['approval_id']}/resolve"),
         headers=headers,
         json={"decision": "approved"},
     )
     assert resolve_response.status_code == 200, resolve_response.text
 
     response = client.post(
-        _workspace_ai_path(seed["workspace_slug"], "/chat/resume"),
+        _ai_path("/chat/resume"),
         headers=headers,
         json={
             "conversation_id": seed["conversation_id"],
@@ -536,12 +517,11 @@ def test_chat_resume_replays_rejected_tool_without_running_handler(
 
     def handler(
         db: Any,
-        workspace: Any,
         principal: Any,
         user: Any,
         arguments: dict[str, Any],
     ) -> dict[str, Any]:
-        del db, workspace, principal, user
+        del db, principal, user
         handler_calls.append(arguments)
         return {"id": "unexpected", "title": arguments["title"]}
 
@@ -584,14 +564,14 @@ def test_chat_resume_replays_rejected_tool_without_running_handler(
     )
 
     resolve_response = client.post(
-        _workspace_ai_path(seed["workspace_slug"], f"/approvals/{seed['approval_id']}/resolve"),
+        _ai_path(f"/approvals/{seed['approval_id']}/resolve"),
         headers=headers,
         json={"decision": "rejected", "reason": "not now"},
     )
     assert resolve_response.status_code == 200, resolve_response.text
 
     response = client.post(
-        _workspace_ai_path(seed["workspace_slug"], "/chat/resume"),
+        _ai_path("/chat/resume"),
         headers=headers,
         json={
             "conversation_id": seed["conversation_id"],
@@ -645,7 +625,7 @@ def test_chat_resume_cancellation_after_tool_exec_does_not_rewind(
     headers = _auth_headers(seed["token"])
 
     resolve_response = client.post(
-        _workspace_ai_path(seed["workspace_slug"], f"/approvals/{seed['approval_id']}/resolve"),
+        _ai_path(f"/approvals/{seed['approval_id']}/resolve"),
         headers=headers,
         json={"decision": "approved"},
     )
@@ -669,7 +649,7 @@ def test_chat_resume_cancellation_after_tool_exec_does_not_rewind(
     monkeypatch.setattr(ai_agent, "iter_tool_call_events", fake_iter_tool_call_events)
 
     response = client.post(
-        _workspace_ai_path(seed["workspace_slug"], "/chat/resume"),
+        _ai_path("/chat/resume"),
         headers=headers,
         json={
             "conversation_id": seed["conversation_id"],
@@ -691,7 +671,7 @@ def test_chat_resume_cancellation_after_tool_exec_does_not_rewind(
         assert snapshot.status == "completed"
 
     second_resume = client.post(
-        _workspace_ai_path(seed["workspace_slug"], "/chat/resume"),
+        _ai_path("/chat/resume"),
         headers=headers,
         json={
             "conversation_id": seed["conversation_id"],
@@ -708,12 +688,10 @@ def test_ai_tool_invoke_returns_409_for_approval_required_tool(
 ) -> None:
     registry = _build_test_approval_registry()
     _patch_test_approval_registry(monkeypatch, registry)
-    with get_session_factory()() as db:
-        ensure_dev_login_seed_data(db)
     session = _dev_login(client, "delivery-hub-admin")
 
     response = client.post(
-        _workspace_ai_path("delivery-hub", f"/tools/{_APPROVAL_TOOL_NAME}/invoke"),
+        _ai_path(f"/tools/{_APPROVAL_TOOL_NAME}/invoke"),
         headers=_auth_headers(session["token"]),
         json={"arguments": {"title": "Approval issue"}},
     )
@@ -736,11 +714,8 @@ def test_mcp_call_tool_returns_409_for_approval_required_tool(
 
     with get_session_factory()() as db:
         user = load_user_graph(db, seed["user_id"])
-        workspace = db.scalar(select(Workspace).where(Workspace.key == seed["workspace_slug"]))
         assert user is not None
-        assert workspace is not None
         principal = user_principal(
-            workspace_id=workspace.id,
             user_id=user.id,
             source="test.mcp",
         )
@@ -748,7 +723,6 @@ def test_mcp_call_tool_returns_409_for_approval_required_tool(
         with pytest.raises(HTTPException) as exc_info:
             ai_mcp.AiMcpClient(registry=registry).call_tool(
                 db,
-                workspace=workspace,
                 principal=principal,
                 user=user,
                 tool_name=_APPROVAL_TOOL_NAME,

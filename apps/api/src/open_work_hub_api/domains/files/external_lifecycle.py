@@ -1,16 +1,16 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from hashlib import sha256
-import json
 from typing import BinaryIO, Literal
 
 from sqlalchemy import delete, event, func, select
 from sqlalchemy.orm import Session, SessionTransaction
 
-from open_work_hub_api.domains.auth.models import Team, User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.auth.security import new_id
 from open_work_hub_api.domains.files import service as files_service
 from open_work_hub_api.domains.files import storage_adapter as file_storage
@@ -23,12 +23,13 @@ from open_work_hub_api.domains.files.models import (
     FileManagerFileSourceMetadata,
 )
 from open_work_hub_api.domains.files.rag_sync import enqueue_file_retrieval_sync
+from open_work_hub_api.domains.groups.models import Group
+from open_work_hub_api.domains.pms.space_models import Team
 from open_work_hub_api.domains.rag.contracts import RagSyncOperation
 from open_work_hub_api.domains.retrieval.models import RetrievalPartition, RetrievalPartitionState
 
-
-ExternalFileGrantType = Literal["company", "workspace", "user", "team"]
-EXTERNAL_FILE_GRANT_TYPES = frozenset({"company", "workspace", "user", "team"})
+ExternalFileGrantType = Literal["company", "group", "user", "team"]
+EXTERNAL_FILE_GRANT_TYPES = frozenset({"company", "group", "user", "team"})
 _CONTENT_HASH_CHUNK_BYTES = 1024 * 1024
 _MAX_RAW_METADATA_BYTES = 64 * 1024
 _PENDING_STORAGE_COMPENSATIONS_KEY = "files_external_storage_compensations"
@@ -142,7 +143,6 @@ def upsert_external_file(
         db,
         normalized_grants,
         declared_resolved=bool(acl_resolved),
-        workspace_id=corpus.managed_workspace_id,
     )
     matching_source_metadata = list(
         db.scalars(
@@ -245,7 +245,6 @@ def upsert_external_file(
         if row is None:
             row = FileManagerFile(
                 id=file_id,
-                workspace_id=corpus.managed_workspace_id,
                 retrieval_partition_id=corpus.retrieval_partition_id,
                 corpus_id=corpus.id,
                 folder_id=None,
@@ -254,19 +253,18 @@ def upsert_external_file(
                 content_type=normalized_content_type,
                 size_bytes=normalized_size,
                 storage_key=storage_key,
-                visibility="workspace",
+                visibility="company",
             )
             db.add(row)
             db.flush()
         else:
-            row.workspace_id = corpus.managed_workspace_id
             row.retrieval_partition_id = corpus.retrieval_partition_id
             row.folder_id = None
             row.filename = normalized_filename
             row.content_type = normalized_content_type
             row.size_bytes = normalized_size
             row.storage_key = storage_key
-            row.visibility = "workspace"
+            row.visibility = "company"
             row.deleted_at = None
             db.add(row)
 
@@ -534,17 +532,12 @@ def _require_source_managed_corpus(
     ):
         raise ExternalFileCorpusConflict("source-managed file corpus was not found")
     partition = db.get(RetrievalPartition, corpus.retrieval_partition_id)
-    expected_workspace_id = (
-        corpus.managed_workspace_id if corpus.access_scope_kind == "workspace" else None
-    )
     if (
         partition is None
         or partition.source_namespace != "files"
         or partition.is_default_ingest
         or partition.state != RetrievalPartitionState.ACTIVE.value
-        or partition.managed_workspace_id != corpus.managed_workspace_id
         or partition.candidate_scope_kind != corpus.access_scope_kind
-        or partition.candidate_workspace_id != expected_workspace_id
         or partition.candidate_user_id is not None
     ):
         raise ExternalFileCorpusConflict("file corpus partition metadata is invalid")
@@ -575,7 +568,6 @@ def _resolve_grants(
     grants: tuple[ExternalFileGrant, ...],
     *,
     declared_resolved: bool,
-    workspace_id: str,
 ) -> tuple[tuple[ExternalFileGrant, ...], bool]:
     if not declared_resolved:
         return (), False
@@ -585,11 +577,9 @@ def _resolve_grants(
             targets_by_type.setdefault(str(grant.grant_type), set()).add(grant.target_id)
 
     resolved_by_type: dict[str, set[str]] = {}
-    if targets := targets_by_type.get("workspace"):
-        resolved_by_type["workspace"] = set(
-            db.scalars(
-                select(Workspace.id).where(Workspace.id.in_(targets), Workspace.active.is_(True))
-            ).all()
+    if targets := targets_by_type.get("group"):
+        resolved_by_type["group"] = set(
+            db.scalars(select(Group.id).where(Group.id.in_(targets), Group.active.is_(True))).all()
         )
     if targets := targets_by_type.get("user"):
         resolved_by_type["user"] = set(
@@ -606,7 +596,6 @@ def _resolve_grants(
             db.scalars(
                 select(Team.id).where(
                     Team.id.in_(targets),
-                    Team.workspace_id == workspace_id,
                     Team.active.is_(True),
                     Team.trashed_at.is_(None),
                 )

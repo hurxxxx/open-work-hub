@@ -1,4 +1,4 @@
-"""Simple workspace file drive domain and its registered LLM workloads."""
+"""Company and personal file drive domain and its registered LLM workloads."""
 
 from __future__ import annotations
 

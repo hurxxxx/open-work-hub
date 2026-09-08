@@ -23,9 +23,8 @@ export interface UserDateTimeFormatterOptions {
   timeZone?: string | null;
 }
 
-export interface UserDateTimeFormatOptions
-  extends ZonedFormatOptions,
-    RelativeTimeOptions {}
+export type UserDateTimeFormatOptions = ZonedFormatOptions &
+  RelativeTimeOptions;
 
 export interface UserDateTimeFormatter {
   dateFormat: DateFormatPreference;

@@ -20,7 +20,7 @@ vi.mock('@/src/app-modules/chatbot/public-api', () => ({
 }));
 
 describe('FilesChatView', () => {
-  it('binds common chat to the Files workspace scope without auto-opening sources', () => {
+  it('binds common chat to the Files company scope without auto-opening sources', () => {
     render(<FilesChatView />);
 
     expect(chatbotView).toHaveBeenCalledTimes(1);
@@ -28,7 +28,7 @@ describe('FilesChatView', () => {
       autoOpenArtifacts: false,
       conversationScope: {
         ref: 'files',
-        resourceId: 'workspace',
+        resourceId: 'company',
       },
       emptyGreeting: 'files.chat.emptyGreeting',
       emptySubline: 'files.chat.emptySubline',

@@ -84,11 +84,13 @@ function createClient(): RetrievalSearchControllerClient {
   };
 }
 
-function renderController(options: {
-  client?: RetrievalSearchControllerClient;
-  reactStrictMode?: boolean;
-  searchParams?: string;
-} = {}) {
+function renderController(
+  options: {
+    client?: RetrievalSearchControllerClient;
+    reactStrictMode?: boolean;
+    searchParams?: string;
+  } = {},
+) {
   const client = options.client ?? createClient();
   const logout = vi.fn();
   const searchParams = new URLSearchParams(
@@ -104,7 +106,6 @@ function renderController(options: {
         searchParams,
         setSearchParams,
         token: 'token-1',
-        workspaceSlug: 'hq',
       }),
     { reactStrictMode: options.reactStrictMode },
   );
@@ -124,8 +125,7 @@ describe('useRetrievalSearchController', () => {
 
   it('runs deep-linked retrieval criteria without rewriting the URL', async () => {
     const { client, setSearchParams } = renderController({
-      searchParams:
-        'workspace=hq&q=release&strategy=semantic&source=generic_rag&top_k=12',
+      searchParams: 'q=release&strategy=semantic&source=generic_rag&top_k=12',
     });
 
     await waitFor(() => expect(client.query).toHaveBeenCalledTimes(1));
@@ -139,7 +139,6 @@ describe('useRetrievalSearchController', () => {
         top_k: 12,
       }),
       'token-1',
-      'hq',
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(setSearchParams).not.toHaveBeenCalled();
@@ -148,7 +147,7 @@ describe('useRetrievalSearchController', () => {
   it('retries a deep-linked search after StrictMode aborts the first effect pass', async () => {
     let queryCalls = 0;
     const client = createClient();
-    vi.mocked(client.query).mockImplementation((payload, _token, _workspace, options) => {
+    vi.mocked(client.query).mockImplementation((payload, _token, options) => {
       queryCalls += 1;
       if (queryCalls === 1) {
         return new Promise((_, reject) => {
@@ -164,7 +163,7 @@ describe('useRetrievalSearchController', () => {
     const { result } = renderController({
       client,
       reactStrictMode: true,
-      searchParams: 'workspace=hq&q=release',
+      searchParams: 'q=release',
     });
 
     await waitFor(() => expect(client.query).toHaveBeenCalledTimes(2));
@@ -198,13 +197,12 @@ describe('useRetrievalSearchController', () => {
         top_k: 20,
       }),
       'token-1',
-      'hq',
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     await waitFor(() => expect(setSearchParams).toHaveBeenCalledTimes(1));
     const [nextSearchParams, options] = setSearchParams.mock.calls[0];
     expect(nextSearchParams.toString()).toBe(
-      'workspace=hq&q=release+plan&strategy=graph_hybrid&answer_mode=grounded-answer&top_k=20&source=keyword',
+      'q=release+plan&strategy=graph_hybrid&answer_mode=grounded-answer&top_k=20&source=keyword',
     );
     expect(options).toEqual({ replace: true });
   });

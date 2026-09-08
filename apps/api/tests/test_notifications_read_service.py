@@ -33,7 +33,7 @@ def _isolate_read_service_from_source_policy(monkeypatch) -> None:
     monkeypatch.setattr(
         read_service,
         "notification_is_visible",
-        lambda _db, *, notification, user: (notification.user_id == user.id),
+        lambda _db, *, notification, user: notification.user_id == user.id,
     )
 
 
@@ -75,7 +75,6 @@ def _add_notification(
             source_type="community_post",
             source_id="post-1",
             origin_app_id="community",
-            origin_workspace_id=None,
             action_url=action_url,
             is_read=is_read,
             created_at=created_at,
@@ -128,13 +127,13 @@ def test_list_user_notifications_preserves_canonical_pms_action_urls() -> None:
             notification_id="pms-notification",
             user_id="user-1",
             created_at=datetime(2026, 1, 1, tzinfo=UTC).replace(tzinfo=None),
-            action_url="/apps/pms/workspaces/hq/lists/list-1?task=task-1",
+            action_url="/apps/pms/lists/list-1?task=task-1",
         )
         session.commit()
 
         response = list_user_notifications(session, user_id="user-1", page=1, page_size=20)
 
-        assert response.items[0].action_url == "/apps/pms/workspaces/hq/lists/list-1?task=task-1"
+        assert response.items[0].action_url == "/apps/pms/lists/list-1?task=task-1"
     finally:
         session.close()
 
@@ -226,7 +225,6 @@ def test_mark_one_read_and_publish_emits_read_event_with_serialized_notification
                     "source_type": "community_post",
                     "source_id": "post-1",
                     "origin_app_id": "community",
-                    "origin_workspace_id": None,
                     "action_url": "/dm/conversations/conversation-1",
                     "is_read": True,
                     "created_at": created_at.isoformat(),

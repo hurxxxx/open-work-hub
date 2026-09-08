@@ -1,3 +1,4 @@
+import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
 import {
   AlertTriangle,
   Archive,
@@ -8,7 +9,6 @@ import {
   Mic,
   Users,
 } from 'lucide-react';
-import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
 
 import type { AppModuleManifest } from '@/src/app/shell/navigation-types';
 
@@ -18,7 +18,6 @@ export const recordingManifest: AppModuleManifest = {
     owner: 'recording-platform',
     permissions: [],
     apiDomain: 'recording',
-    workspaceApiPrefixes: ['/api/v1/recording'],
     aiCapabilities: [],
     writeAuditActions: [],
     appLocalTests: ['apps/api/tests/test_recording_targets.py'],
@@ -89,7 +88,7 @@ export const recordingManifest: AppModuleManifest = {
       pathSuffix: '?view=archived',
     },
   ],
-  workspaceRoutePaths: [
+  appRoutePaths: [
     getAppRoutePattern('recording.root'),
     getAppRoutePattern('recording.detail'),
   ],

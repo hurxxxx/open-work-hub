@@ -1,6 +1,6 @@
+import { Hash, Plus, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Hash, Plus, Trash2 } from 'lucide-react';
 
 import { Button } from '@open-work-hub/ui';
 
@@ -14,15 +14,15 @@ import {
   type AdminCommunityChannelItem,
 } from './admin-api';
 import {
+  FORM_FIELD_CLASS as fieldClassName,
+  getErrorMessage,
+  SectionMessage,
+} from './admin-shared';
+import {
   buildCommunityChannelPayload,
   sanitizeCommunityChannelKeyInput,
   type CommunityChannelDraft,
 } from './community-channel-form-model';
-import {
-  FORM_FIELD_CLASS as fieldClassName,
-  SectionMessage,
-  getErrorMessage,
-} from './admin-shared';
 
 const EMPTY_COMMUNITY_CHANNEL_DRAFT: CommunityChannelDraft = {
   key: '',

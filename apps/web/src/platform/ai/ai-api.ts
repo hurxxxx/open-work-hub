@@ -1,6 +1,5 @@
 import { apiFetchJsonWithMappedError } from '@/src/platform/api/client';
 import { i18n } from '@/src/platform/i18n';
-import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
 export class AiApiError extends Error {
   status: number;
@@ -34,7 +33,7 @@ async function aiRequest<T>(
 ): Promise<T> {
   try {
     return await apiFetchJsonWithMappedError<T>(
-      rewriteWorkspaceApiPath(path),
+      path,
       token,
       init,
       (error) =>

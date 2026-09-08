@@ -1,6 +1,6 @@
 # Open Work Hub
 
-Modular ALM platform: workspaces, tasks, docs, meetings, files, search, and AI-assisted workflows.
+Company work platform: users and groups, app access policies, PMS spaces, docs, meetings, files, search, and AI-assisted workflows.
 
 ## Layout
 
@@ -29,6 +29,7 @@ pnpm dev
 - Web default: `http://127.0.0.1:4200`
 - API default: `http://127.0.0.1:8001`
 - Runtime env prefix: `OPEN_WORK_HUB_*`
+- API hot reload watches `apps/api/src`; test and script edits do not restart active browser sessions.
 
 Minimal auth/UI stack:
 

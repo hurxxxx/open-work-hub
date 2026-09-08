@@ -2,15 +2,15 @@ import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 
 import {
+  syncLocale as syncLocaleSession,
+  type LocaleI18n,
+} from './locale-session';
+import {
   DEFAULT_LOCALE,
   LOCALE_SESSION_CONFIG,
   readStoredLocale,
   type AppLocale,
 } from './locales';
-import {
-  syncLocale as syncLocaleSession,
-  type LocaleI18n,
-} from './locale-session';
 import { resources } from './resources';
 
 void i18n.use(initReactI18next).init({

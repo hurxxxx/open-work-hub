@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import type { AuthUser } from '@/src/platform/auth/auth-api';
-import type { AppsBootstrapResponse } from '@/src/platform/workspaces/workspaces-api';
+import type { AppsBootstrapResponse } from '@/src/platform/apps/apps-api';
 import { createAccessProjectionKey } from './access-projection-key';
 
 const user = {
   id: 'user-1',
   system_roles: [],
-  workspaces: [{ id: 'workspace-1', name: 'One', role: 'member', slug: 'one' }],
+  group_ids: ['group-1'],
+  managed_organization_unit_ids: ['org-1'],
 } as AuthUser;
 
 const apps = {
@@ -20,7 +21,6 @@ const apps = {
     scope: 'personal',
     source: 'test',
     user_id: 'user-1',
-    workspace_id: null,
   },
 } as AppsBootstrapResponse;
 
@@ -40,17 +40,19 @@ describe('createAccessProjectionKey', () => {
     );
     expect(
       createAccessProjectionKey(
-        { ...user, workspaces: [{ ...user.workspaces[0], role: 'admin' }] },
+        { ...user, managed_organization_unit_ids: ['org-2'] },
         apps,
       ),
     ).not.toBe(baseline);
     expect(
-      createAccessProjectionKey({ ...user, workspaces: [] }, apps),
+      createAccessProjectionKey({ ...user, group_ids: [] }, apps),
     ).not.toBe(baseline);
     expect(
       createAccessProjectionKey(user, {
         ...apps,
-        global_route_app_ids: ['planner', 'mail'],
+        apps: [
+          { app_id: 'mail', enabled: true },
+        ] as AppsBootstrapResponse['apps'],
       }),
     ).not.toBe(baseline);
     expect(createAccessProjectionKey({ ...user, id: 'user-2' }, apps)).not.toBe(

@@ -1,19 +1,18 @@
 from __future__ import annotations
 
+import uuid
 from datetime import datetime
 from typing import Any
-import uuid
 
 from open_work_hub_api.domains.search.target_keys import search_target_document_keys
 
 
 def document_id(document: dict[str, Any]) -> str:
-    return f"{document['workspace_id']}:{document['entity_type']}:{document['entity_id']}"
+    return f"{document['entity_type']}:{document['entity_id']}"
 
 
 def build_search_document(
     *,
-    workspace_id: str,
     entity_type: object,
     entity_id: str,
     title: str,
@@ -29,6 +28,8 @@ def build_search_document(
     team_ids: list[str],
     participant_user_ids: list[str],
     shared_user_ids: list[str],
+    shared_group_ids: list[str] | None = None,
+    ownership_kind: str = "personal",
     granted_user_ids: list[str],
     date_markers: dict[str, Any],
     deep_link: str,
@@ -38,7 +39,6 @@ def build_search_document(
     search_text = _weighted_search_text(title=title, keywords=keywords, summary=summary, body=body)
     return {
         "id": str(uuid.uuid4()),
-        "workspace_id": workspace_id,
         "dataset_id": _metadata_dataset_id(metadata),
         "entity_type": str(entity_type),
         "entity_id": entity_id,
@@ -54,6 +54,8 @@ def build_search_document(
         "team_ids": _unique_nonempty(team_ids),
         "participant_user_ids": _unique_nonempty(participant_user_ids),
         "shared_user_ids": _unique_nonempty(shared_user_ids),
+        "shared_group_ids": _unique_nonempty(shared_group_ids or []),
+        "ownership_kind": ownership_kind,
         "granted_user_ids": _unique_nonempty(granted_user_ids),
         "people": [person for person in people if person["user_id"]],
         "targets": targets,
@@ -94,11 +96,7 @@ def _unique_nonempty(values: list[str]) -> list[str]:
 
 def _target_keys(targets: list[dict[str, str]]) -> list[str]:
     return list(
-        dict.fromkeys(
-            key
-            for target in targets
-            for key in search_target_document_keys(target)
-        )
+        dict.fromkeys(key for target in targets for key in search_target_document_keys(target))
     )
 
 

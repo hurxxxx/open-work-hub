@@ -1,3 +1,13 @@
+import { useFeedback } from '@open-work-hub/ui';
+import {
+  AlertCircle,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Loader2,
+  UploadCloud,
+  X,
+} from 'lucide-react';
 import {
   createContext,
   use,
@@ -9,16 +19,6 @@ import {
   type ReactNode,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  AlertCircle,
-  CheckCircle2,
-  ChevronDown,
-  ChevronUp,
-  Loader2,
-  UploadCloud,
-  X,
-} from 'lucide-react';
-import { useFeedback } from '@open-work-hub/ui';
 
 import { cn } from '@/src/lib/utils';
 import { formatByteSize } from '@/src/platform/format/byte-size';
@@ -138,16 +138,17 @@ export function FileUploadProvider({ children }: { children: ReactNode }) {
           signal,
           token,
           visibility,
-          workspaceSlug,
+          company_admin_read_acknowledged,
         }) =>
-          uploadDriveFile(token, workspaceSlug, file, {
+          uploadDriveFile(token, file, {
             folderId,
             onProgress,
             signal,
             visibility,
+            company_admin_read_acknowledged,
           }),
         uploadVisibility: input.uploadVisibility,
-        workspaceSlug: input.workspaceSlug,
+        companyAdminReadAcknowledged: input.companyAdminReadAcknowledged,
       }).then((result) => {
         if (result.ok) {
           releaseUpload();
@@ -166,7 +167,6 @@ export function FileUploadProvider({ children }: { children: ReactNode }) {
           );
           for (const event of getFileUploadSuccessEvents({
             folderId: input.folderId,
-            workspaceSlug: input.workspaceSlug,
           })) {
             window.dispatchEvent(
               new CustomEvent(event.name, { detail: event.detail }),

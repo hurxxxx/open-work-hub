@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef } from 'react';
 import type * as React from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 export function useSuppressClickAfterDrag(isDragging: boolean) {
   const justDraggedRef = useRef(false);

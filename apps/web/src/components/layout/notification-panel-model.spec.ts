@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { WorkspaceNotification } from '@/src/platform/notifications/notifications-api';
+import type { NotificationItem } from '@/src/platform/notifications/notifications-api';
 import {
   INITIAL_NOTIFICATION_PANEL_STATE,
   countUnreadNotifications,
@@ -22,6 +22,7 @@ describe('notification panel model', () => {
       notifications: [{ id: 'n1' }],
     });
     expect(loading.loading).toBe(true);
+    expect(loading.notifications).toEqual([]);
     expect(signedOut).toEqual({ loading: false, notifications: [] });
   });
 
@@ -57,11 +58,11 @@ describe('notification panel model', () => {
     expect(
       resolveNotificationAction(
         notification('route', {
-          action_url: '/apps/pms/workspaces/hq/assigned',
+          action_url: '/apps/pms/assigned',
           source_id: 'issue-1',
         }),
       ),
-    ).toEqual({ kind: 'route', to: '/apps/pms/workspaces/hq/assigned' });
+    ).toEqual({ kind: 'route', to: '/apps/pms/assigned' });
     expect(
       resolveNotificationAction(
         notification('dm', {
@@ -99,8 +100,8 @@ describe('notification panel model', () => {
 
 function notification(
   id: string,
-  overrides: Partial<WorkspaceNotification> = {},
-): WorkspaceNotification {
+  overrides: Partial<NotificationItem> = {},
+): NotificationItem {
   return {
     action_url: null,
     body: 'Body',
@@ -110,9 +111,8 @@ function notification(
     source_id: null,
     source_type: 'system',
     origin_app_id: 'shell',
-    origin_workspace_id: null,
     title: 'Title',
     type: 'issue_assigned',
     ...overrides,
-  } as WorkspaceNotification;
+  } as NotificationItem;
 }

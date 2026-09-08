@@ -1,4 +1,4 @@
-import { getWorkspaceAppIdFromPath } from '@/src/platform/workspaces/workspace-utils';
+import { getAppIdFromPath } from '@/src/platform/apps/app-links';
 
 export function resolveShellDisplayAppId({
   activeAppId,
@@ -7,5 +7,5 @@ export function resolveShellDisplayAppId({
   activeAppId: string;
   pathname: string;
 }): string {
-  return getWorkspaceAppIdFromPath(pathname) ?? activeAppId;
+  return getAppIdFromPath(pathname) ?? activeAppId;
 }

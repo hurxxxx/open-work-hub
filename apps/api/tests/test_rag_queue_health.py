@@ -6,7 +6,6 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.db import Base
-from open_work_hub_api.domains.auth.models import Workspace
 from open_work_hub_api.domains.rag import queue_health
 from open_work_hub_api.domains.rag.contracts import RagJobStatus, RagSyncLane, RagSyncOperation
 from open_work_hub_api.domains.rag.models import RagSyncJob, RagVisibilityRecomputeJob
@@ -17,7 +16,6 @@ def _engine():
     Base.metadata.create_all(
         engine,
         tables=[
-            Workspace.__table__,
             RagSyncJob.__table__,
             RagVisibilityRecomputeJob.__table__,
         ],
@@ -29,20 +27,10 @@ def test_rag_queue_health_reports_stale_and_overdue_lanes(monkeypatch) -> None:
     engine = _engine()
     now = datetime.now(UTC).replace(tzinfo=None)
     with Session(engine) as session:
-        session.add(
-            Workspace(
-                id="ws-1",
-                key="ws-1",
-                name="Workspace 1",
-                description="",
-                active=True,
-            )
-        )
         session.add_all(
             [
                 RagSyncJob(
                     id="realtime-overdue",
-                    workspace_id="ws-1",
                     resource_type="doc",
                     resource_id="doc-overdue",
                     operation=RagSyncOperation.UPSERT.value,
@@ -54,7 +42,6 @@ def test_rag_queue_health_reports_stale_and_overdue_lanes(monkeypatch) -> None:
                 ),
                 RagSyncJob(
                     id="backfill-stale",
-                    workspace_id="ws-1",
                     resource_type="doc",
                     resource_id="doc-stale",
                     operation=RagSyncOperation.UPSERT.value,
@@ -66,7 +53,6 @@ def test_rag_queue_health_reports_stale_and_overdue_lanes(monkeypatch) -> None:
                 ),
                 RagSyncJob(
                     id="realtime-succeeded",
-                    workspace_id="ws-1",
                     resource_type="doc",
                     resource_id="doc-succeeded",
                     operation=RagSyncOperation.UPSERT.value,
@@ -78,7 +64,6 @@ def test_rag_queue_health_reports_stale_and_overdue_lanes(monkeypatch) -> None:
                 ),
                 RagVisibilityRecomputeJob(
                     id="visibility-delayed-retry",
-                    workspace_id="ws-1",
                     scope_type="workspace_membership",
                     scope_id="binding-1",
                     status=RagJobStatus.PENDING.value,

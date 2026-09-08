@@ -1,6 +1,6 @@
+import { X } from 'lucide-react';
 import { useEffect, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/src/lib/utils';

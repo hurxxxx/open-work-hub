@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 
-
 _TOKEN_RE = re.compile(r"[0-9a-zA-Z][0-9a-zA-Z_.:/#-]*|[가-힣]+")
 _HANGUL_RE = re.compile(r"^[가-힣]+$")
 

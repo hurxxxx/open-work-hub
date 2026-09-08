@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
-from open_work_hub_api.domains.ai.registry import ApprovalPreview, PreviewField, WorkspaceContext
+from open_work_hub_api.domains.ai.registry import ApprovalPreview, PreviewField
 
 if TYPE_CHECKING:
     from open_work_hub_api.core.principal import CallerPrincipal
@@ -19,7 +19,6 @@ def _preview_values(parsed_args: BaseModel | Mapping[str, Any]) -> dict[str, Any
 
 def build_create_event_preview(
     principal: CallerPrincipal,
-    workspace: WorkspaceContext,
     parsed_args: BaseModel | Mapping[str, Any],
 ) -> ApprovalPreview:
     values = _preview_values(parsed_args)
@@ -37,7 +36,6 @@ def build_create_event_preview(
 
 def build_update_event_preview(
     principal: CallerPrincipal,
-    workspace: WorkspaceContext,
     parsed_args: BaseModel | Mapping[str, Any],
 ) -> ApprovalPreview:
     values = _preview_values(parsed_args)
@@ -58,7 +56,6 @@ def build_update_event_preview(
 
 def build_delete_event_preview(
     principal: CallerPrincipal,
-    workspace: WorkspaceContext,
     parsed_args: BaseModel | Mapping[str, Any],
 ) -> ApprovalPreview:
     values = _preview_values(parsed_args)

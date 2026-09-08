@@ -3,11 +3,11 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.notifications.schemas import GlobalNotificationItem
 from open_work_hub_api.domains.notifications.visibility import (
     iter_visible_notification_batches,
 )
-from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.pms.models import Notification
 
 
@@ -22,7 +22,6 @@ def serialize_notification(notification: Notification) -> GlobalNotificationItem
         source_type=notification.source_type,
         source_id=notification.source_id,
         origin_app_id=notification.origin_app_id,
-        origin_workspace_id=notification.origin_workspace_id,
         action_url=notification.action_url,
         is_read=notification.is_read,
         created_at=notification.created_at,

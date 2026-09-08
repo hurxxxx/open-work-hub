@@ -37,7 +37,6 @@ class RuntimeTraceEventResponse(BaseModel):
 
 class RuntimeRunInspectionResponse(BaseModel):
     id: str
-    workspace_id: str
     conversation_id: str
     requested_by_user_id: str
     legacy_snapshot_id: str | None = None
@@ -60,7 +59,6 @@ def runtime_run_inspection_response(
 ) -> RuntimeRunInspectionResponse:
     return RuntimeRunInspectionResponse(
         id=runtime_run.id,
-        workspace_id=runtime_run.workspace_id,
         conversation_id=runtime_run.conversation_id,
         requested_by_user_id=runtime_run.requested_by_user_id,
         legacy_snapshot_id=runtime_run.legacy_snapshot_id,

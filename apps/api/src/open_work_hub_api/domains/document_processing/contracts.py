@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field, replace
 import time
+from dataclasses import asdict, dataclass, field, replace
 from typing import Protocol
 
 _MAX_EXTRACTED_CHARS = 200_000
@@ -41,10 +41,7 @@ class _ExtractionBudget:
     chars: int = 0
 
     def should_continue(self) -> bool:
-        return (
-            self.chars < self.max_chars
-            and time.monotonic() - self.started_at < self.max_seconds
-        )
+        return self.chars < self.max_chars and time.monotonic() - self.started_at < self.max_seconds
 
     def append(self, blocks: list[EvidenceBlock], block: EvidenceBlock) -> bool:
         if not self.should_continue():
@@ -86,8 +83,7 @@ class DocumentExtractBundle:
 
 
 class DocumentExtractor(Protocol):
-    def supports(self, *, mime_type: str, filename: str) -> bool:
-        ...
+    def supports(self, *, mime_type: str, filename: str) -> bool: ...
 
     def extract(
         self,
@@ -96,5 +92,4 @@ class DocumentExtractor(Protocol):
         filename: str,
         mime_type: str,
         content: bytes,
-    ) -> DocumentExtractBundle:
-        ...
+    ) -> DocumentExtractBundle: ...

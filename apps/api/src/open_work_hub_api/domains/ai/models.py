@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, JSON, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -56,9 +56,6 @@ class AiSecurityPolicyRule(Base):
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
     user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
-    workspace_id: Mapped[str | None] = mapped_column(
-        ForeignKey("workspaces.id"), nullable=True, index=True
-    )
     app_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     task_kind: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     task_kinds_json: Mapped[list[str] | None] = mapped_column(
@@ -97,9 +94,6 @@ class AiSecurityExternalTransferException(Base):
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
     user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
-    workspace_id: Mapped[str | None] = mapped_column(
-        ForeignKey("workspaces.id"), nullable=True, index=True
-    )
     app_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     task_kind: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     task_kinds_json: Mapped[list[str] | None] = mapped_column(
@@ -155,11 +149,6 @@ class AiSecurityDetectedValue(Base):
     )
     actor_user_id: Mapped[str | None] = mapped_column(
         ForeignKey("users.id"),
-        nullable=True,
-        index=True,
-    )
-    workspace_id: Mapped[str | None] = mapped_column(
-        String(36),
         nullable=True,
         index=True,
     )

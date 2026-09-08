@@ -1,11 +1,11 @@
-import { createElement, lazy } from 'react';
 import {
   getAppRouteChrome,
   getAppRoutePattern,
 } from '@open-work-hub/contracts/app-routes';
+import { createElement, lazy } from 'react';
 
 import { lazyRoute } from '@/src/app/shell/lazy-route';
-import type { WorkspaceRouteDefinition } from '@/src/app/shell/route-types';
+import type { AppRouteDefinition } from '@/src/app/shell/route-types';
 
 const VideoChatView = lazy(() =>
   import('./views/VideoChatView').then((module) => ({
@@ -18,7 +18,7 @@ const VideoChatRoomPage = lazy(() =>
   })),
 );
 
-export const videoChatWorkspaceRoutes: WorkspaceRouteDefinition[] = [
+export const videoChatAppRoutes: AppRouteDefinition[] = [
   {
     appId: 'video-chat',
     chrome: getAppRouteChrome('video-chat.root'),

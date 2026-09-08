@@ -32,7 +32,6 @@ describe('useMeetingUserSearch', () => {
         isOpen: true,
         query: '   ',
         token: 'token-1',
-        workspaceSlug: 'workspace',
       }),
     );
 
@@ -53,7 +52,6 @@ describe('useMeetingUserSearch', () => {
         isOpen: true,
         query: '  ada  ',
         token: 'token-1',
-        workspaceSlug: 'workspace',
       }),
     );
 
@@ -66,7 +64,7 @@ describe('useMeetingUserSearch', () => {
       await Promise.resolve();
     });
 
-    expect(meetingApi.listMeetingUsers).toHaveBeenCalledWith('token-1', 'workspace', {
+    expect(meetingApi.listMeetingUsers).toHaveBeenCalledWith('token-1', {
       q: 'ada',
       limit: 30,
     });
@@ -84,7 +82,6 @@ describe('useMeetingUserSearch', () => {
         isOpen: true,
         query: 'ada',
         token: 'token-1',
-        workspaceSlug: 'workspace',
       }),
     );
 
@@ -109,7 +106,6 @@ describe('useMeetingUserSearch', () => {
           isOpen: true,
           query,
           token: 'token-1',
-          workspaceSlug: 'workspace',
         }),
       { initialProps: { query: 'ada' } },
     );
@@ -122,7 +118,7 @@ describe('useMeetingUserSearch', () => {
     });
 
     expect(meetingApi.listMeetingUsers).toHaveBeenCalledTimes(1);
-    expect(meetingApi.listMeetingUsers).toHaveBeenCalledWith('token-1', 'workspace', {
+    expect(meetingApi.listMeetingUsers).toHaveBeenCalledWith('token-1', {
       q: 'grace',
       limit: 30,
     });

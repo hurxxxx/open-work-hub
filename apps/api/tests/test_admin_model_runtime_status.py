@@ -18,12 +18,14 @@ from open_work_hub_api.domains.admin.model_runtime_status_schemas import (
 from open_work_hub_api.domains.admin.model_runtime_status_service import (
     collect_model_runtime_status,
 )
-from tests.dev_accounts import auth_headers, dev_login
+from dev_accounts import auth_headers, dev_login
 
 
 def _settings(**overrides: object) -> Settings:
     values = {
-        "postgres_dsn": ("postgresql+psycopg://open_work_hub_test:open_work_hub_test@127.0.0.1:5432/open_work_hub_test"),
+        "postgres_dsn": (
+            "postgresql+psycopg://open_work_hub_test:open_work_hub_test@127.0.0.1:5432/open_work_hub_test"
+        ),
         "inference_gateway_base_url": "http://current-server:18080",
         "inference_gateway_api_key": "gateway-secret",
         "llm_local_base_url": "http://local-llm:8000/v1",
@@ -134,9 +136,7 @@ async def test_model_runtime_status_prefers_admin_provider_default(
         model_runtime_status_service,
         "get_ai_model_provider_default_model_key",
         lambda received_db, *, provider_id: (
-            selected_model
-            if received_db is db and provider_id == "local"
-            else None
+            selected_model if received_db is db and provider_id == "local" else None
         ),
     )
 
@@ -173,9 +173,7 @@ async def test_model_runtime_status_preserves_partial_results_without_leaking_er
         model_runtime_status_service,
         "get_ai_model_provider_default_model_key",
         lambda received_db, *, provider_id: (
-            selected_model
-            if received_db is db and provider_id == "local"
-            else None
+            selected_model if received_db is db and provider_id == "local" else None
         ),
     )
 

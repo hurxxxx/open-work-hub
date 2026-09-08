@@ -28,7 +28,6 @@ def _projection_event(
         desired_state="deleted" if deleted else "active",
         content_checksum=None,
         visibility_checksum=None,
-        diagnostic_workspace_id="ws-1",
     )
 
 
@@ -40,13 +39,12 @@ def _record_enqueues(
     def fake_enqueue_search_index_job(
         db: Session,
         *,
-        workspace_id: str,
         entity_type: SearchEntityType,
         entity_id: str,
         operation: str,
         projection_event: ProjectionEventRef | None = None,
     ) -> None:
-        calls.append((workspace_id, entity_type, entity_id, operation, projection_event))
+        calls.append((entity_type, entity_id, operation, projection_event))
 
     monkeypatch.setattr(
         pms_search_hooks,
@@ -56,17 +54,10 @@ def _record_enqueues(
     return calls
 
 
-def test_enqueue_task_search_index_by_id_skips_missing_workspace(monkeypatch: Any) -> None:
+def test_enqueue_task_search_index_by_id_skips_missing_task(monkeypatch: Any) -> None:
     calls = _record_enqueues(monkeypatch)
-    db = cast(Session, object())
-    monkeypatch.setattr(
-        pms_search_hooks,
-        "load_task_workspace_id",
-        lambda db, *, task_id: None,
-    )
-
-    pms_search_hooks.enqueue_task_search_index_by_id(db, task_id="task-1")
-
+    db = cast(Session, SimpleNamespace(get=lambda *args: None))
+    pms_search_hooks.enqueue_task_search_index_by_id(db, task_id="missing-task")
     assert calls == []
 
 
@@ -83,13 +74,8 @@ def test_enqueue_task_search_index_by_id_delegates_to_search_outbox(monkeypatch:
     )
     monkeypatch.setattr(
         pms_search_hooks,
-        "load_task_workspace_id",
-        lambda db, *, task_id: "ws-1",
-    )
-    monkeypatch.setattr(
-        pms_search_hooks,
         "_record_task_projection_event",
-        lambda db, *, task, workspace_id, operation: _projection_event(
+        lambda db, *, task, operation: _projection_event(
             task.id,
             deleted=operation == "delete",
         ),
@@ -103,7 +89,6 @@ def test_enqueue_task_search_index_by_id_delegates_to_search_outbox(monkeypatch:
 
     assert calls == [
         (
-            "ws-1",
             SearchEntityType.PMS_TASK,
             "task-1",
             "delete",
@@ -127,13 +112,8 @@ def test_enqueue_label_task_search_recompute_filters_and_sorts_task_ids(monkeypa
     task_ids = cast(list[str], ["task-b", "", None, "task-a", "task-a"])
     monkeypatch.setattr(
         pms_search_hooks,
-        "load_task_list_workspace_id",
-        lambda db, *, list_id: "ws-1",
-    )
-    monkeypatch.setattr(
-        pms_search_hooks,
         "_record_task_projection_event",
-        lambda db, *, task, workspace_id, operation: _projection_event(task.id),
+        lambda db, *, task, operation: _projection_event(task.id),
     )
 
     pms_search_hooks.enqueue_label_task_search_recompute(
@@ -144,14 +124,12 @@ def test_enqueue_label_task_search_recompute_filters_and_sorts_task_ids(monkeypa
 
     assert calls == [
         (
-            "ws-1",
             SearchEntityType.PMS_TASK,
             "task-a",
             "upsert",
             _projection_event("task-a"),
         ),
         (
-            "ws-1",
             SearchEntityType.PMS_TASK,
             "task-b",
             "upsert",
@@ -170,8 +148,7 @@ def test_task_projection_event_assigns_missing_source_binding(monkeypatch: Any) 
         assert target is task
         assert kwargs == {
             "source_namespace": "pms",
-            "candidate_scope_kind": "workspace",
-            "workspace_id": "ws-1",
+            "candidate_scope_kind": "company",
         }
         target.retrieval_partition_id = partition_id
         return partition_id
@@ -195,7 +172,6 @@ def test_task_projection_event_assigns_missing_source_binding(monkeypatch: Any) 
     result = pms_search_hooks._record_task_projection_event(
         cast(Session, object()),
         task=task,
-        workspace_id="ws-1",
         operation="upsert",
     )
 
@@ -208,7 +184,6 @@ def test_meeting_projection_event_assigns_missing_source_binding(monkeypatch: An
     partition_id = "722c2043-fc6f-4446-9811-dc35c263d445"
     meeting = SimpleNamespace(
         id="meeting-unbound",
-        workspace_id="ws-1",
         retrieval_partition_id=None,
     )
     captured: dict[str, Any] = {}
@@ -222,7 +197,6 @@ def test_meeting_projection_event_assigns_missing_source_binding(monkeypatch: An
         desired_state="active",
         content_checksum=None,
         visibility_checksum=None,
-        diagnostic_workspace_id="ws-1",
     )
 
     def fake_assign_default_partition(db: Session, *, target: Any, **kwargs: Any) -> str:
@@ -230,8 +204,7 @@ def test_meeting_projection_event_assigns_missing_source_binding(monkeypatch: An
         assert target is meeting
         assert kwargs == {
             "source_namespace": "meeting",
-            "candidate_scope_kind": "workspace",
-            "workspace_id": "ws-1",
+            "candidate_scope_kind": "company",
         }
         target.retrieval_partition_id = partition_id
         return partition_id

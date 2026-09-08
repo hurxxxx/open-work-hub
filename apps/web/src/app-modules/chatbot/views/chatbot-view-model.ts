@@ -1,4 +1,10 @@
 import type {
+  ArtifactBuffer,
+  ChatStreamStatus,
+  PendingApproval,
+  ToolCallBuffer,
+} from '../api/agent-events';
+import type {
   AiBackendMode,
   AiChatStreamRequest,
   ResolveAiApprovalRequest,
@@ -8,12 +14,6 @@ import type {
   ConversationDetail,
   ConversationLivePendingApproval,
 } from '../api/conversations-api';
-import type {
-  ArtifactBuffer,
-  ChatStreamStatus,
-  PendingApproval,
-  ToolCallBuffer,
-} from '../api/agent-events';
 import {
   serializeTurnsForModel as serializeTurnsForModelForRequest,
   type AssistantTurnStreamState,
@@ -30,9 +30,9 @@ export {
   serializeTurnsForModel,
 } from './chat-turn-model';
 export type {
-  ChatbotConversationScopeInfo,
   AssistantTurnContentMessages,
   AssistantTurnStreamState,
+  ChatbotConversationScopeInfo,
   NormalizedConversationDetail,
   TerminalChatStreamStatus,
 } from './chat-turn-model';

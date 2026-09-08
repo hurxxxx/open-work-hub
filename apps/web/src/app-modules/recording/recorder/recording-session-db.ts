@@ -14,7 +14,7 @@ export type RecordingSessionSource = 'quick_record' | 'live_recording';
 
 export interface RecordingSessionState {
   stagingId: string;
-  workspaceSlug: string;
+  userId: string;
   scopeKey: string;
   idempotencyKey: string;
   mimeType: string;
@@ -49,8 +49,8 @@ type StoredRecordingChunkState = Omit<RecordingChunkState, 'blob'> & {
   blob?: Blob | null;
 };
 
-const DB_NAME = 'open-work-hub-recording';
-const DB_VERSION = 4;
+const DB_NAME = 'open-work-hub-personal-recording';
+const DB_VERSION = 1;
 const SESSION_STORE = 'sessions';
 const CHUNK_STORE = 'chunks';
 
@@ -60,26 +60,11 @@ function openDb(): Promise<IDBDatabase> {
     request.onerror = () => reject(request.error);
     request.onupgradeneeded = () => {
       const db = request.result;
-      if (!db.objectStoreNames.contains(SESSION_STORE)) {
-        const store = db.createObjectStore(SESSION_STORE, {
-          keyPath: 'stagingId',
-        });
-        store.createIndex('workspaceSlug', 'workspaceSlug', { unique: false });
-        store.createIndex('scopeKey', 'scopeKey', { unique: false });
-      } else {
-        const store = request.transaction?.objectStore(SESSION_STORE);
-        if (store?.indexNames.contains('meetingId')) {
-          store.deleteIndex('meetingId');
-        }
-        if (store && !store.indexNames.contains('workspaceSlug')) {
-          store.createIndex('workspaceSlug', 'workspaceSlug', {
-            unique: false,
-          });
-        }
-        if (store && !store.indexNames.contains('scopeKey')) {
-          store.createIndex('scopeKey', 'scopeKey', { unique: false });
-        }
-      }
+      const sessions = db.createObjectStore(SESSION_STORE, {
+        keyPath: 'stagingId',
+      });
+      sessions.createIndex('userId', 'userId', { unique: false });
+      sessions.createIndex('scopeKey', 'scopeKey', { unique: false });
       if (!db.objectStoreNames.contains(CHUNK_STORE)) {
         const store = db.createObjectStore(CHUNK_STORE, {
           keyPath: ['stagingId', 'seq'],
@@ -134,13 +119,13 @@ function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
 }
 
 export function buildRecordingScopeKey(
-  workspaceSlug: string,
+  userId: string,
   target: RecordingTargetRef | null | undefined,
 ): string {
   if (!target) {
-    return `${workspaceSlug}:recording:unlinked`;
+    return `${userId}:recording:unlinked`;
   }
-  return `${workspaceSlug}:${target.app}:${target.type}:${target.id}`;
+  return `${userId}:${target.app}:${target.type}:${target.id}`;
 }
 
 export function sessionTarget(
@@ -171,11 +156,11 @@ function normalizeSession(
           id: value.initialTargetId,
         }
       : null;
-  const workspaceSlug = value.workspaceSlug ?? '';
   return {
     stagingId: value.stagingId ?? '',
-    workspaceSlug,
-    scopeKey: value.scopeKey ?? buildRecordingScopeKey(workspaceSlug, target),
+    userId: value.userId ?? '',
+    scopeKey:
+      value.scopeKey ?? buildRecordingScopeKey(value.userId ?? '', target),
     idempotencyKey: value.idempotencyKey ?? '',
     mimeType: value.mimeType ?? 'audio/webm',
     title: value.title ?? null,
@@ -218,7 +203,7 @@ export async function getSession(
 }
 
 export async function listIncompleteSessions(options: {
-  workspaceSlug: string;
+  userId: string;
   scopeKey?: string | null;
 }): Promise<RecordingSessionState[]> {
   return withStore(SESSION_STORE, 'readonly', async (store) => {
@@ -231,10 +216,7 @@ export async function listIncompleteSessions(options: {
       if (item.completedAt != null) {
         continue;
       }
-      if (
-        options.workspaceSlug &&
-        item.workspaceSlug !== options.workspaceSlug
-      ) {
+      if (!options.userId || item.userId !== options.userId) {
         continue;
       }
       if (options.scopeKey && item.scopeKey !== options.scopeKey) {

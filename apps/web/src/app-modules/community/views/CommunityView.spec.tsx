@@ -215,7 +215,6 @@ describe('CommunityView', () => {
             id: 'notification-1',
             is_read: false,
             origin_app_id: 'community',
-            origin_workspace_id: null,
             source_id: 'post-1',
             source_type: 'community_post',
             title: 'New comment',

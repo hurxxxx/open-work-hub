@@ -32,7 +32,8 @@ export function MessageList({
         messages.map((message) => {
           const preview = extractMailPreviewText(message.snippet);
           const rowTone = message.is_read ? 'text-app-ink/70' : 'text-app-ink';
-          const rowBg = selectedId === message.id ? 'bg-app-surface-muted' : 'bg-app-bg';
+          const rowBg =
+            selectedId === message.id ? 'bg-app-surface-muted' : 'bg-app-bg';
           return (
             <div
               className={`flex border-b border-app-border transition-colors hover:bg-app-surface-muted ${rowBg} ${rowTone}`}
@@ -44,11 +45,17 @@ export function MessageList({
                 type="button"
               >
                 <div className="min-w-0">
-                  <p className="truncate app-text-control">{message.from_text || t('mail.unknownSender')}</p>
-                  <p className="mt-1 truncate app-text-body font-medium">{message.subject || t('mail.noSubject')}</p>
+                  <p className="truncate app-text-control">
+                    {message.from_text || t('mail.unknownSender')}
+                  </p>
+                  <p className="mt-1 truncate app-text-body font-medium">
+                    {message.subject || t('mail.noSubject')}
+                  </p>
                 </div>
                 {preview ? (
-                  <p className="mt-1 line-clamp-2 app-text-caption text-app-ink/55">{preview}</p>
+                  <p className="mt-1 line-clamp-2 app-text-caption text-app-ink/55">
+                    {preview}
+                  </p>
                 ) : null}
                 <p className="mt-2 app-text-caption text-app-ink/40">
                   {formatMailDate(message.received_at, locale, timeZone)}
@@ -61,7 +68,10 @@ export function MessageList({
                   onClick={() => onStar(message)}
                   type="button"
                 >
-                  <Star size={15} fill={message.is_starred ? 'currentColor' : 'none'} />
+                  <Star
+                    size={15}
+                    fill={message.is_starred ? 'currentColor' : 'none'}
+                  />
                 </button>
               </div>
             </div>

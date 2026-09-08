@@ -14,7 +14,6 @@ from open_work_hub_api.domains.retrieval.models import (
     RetrievalPartitionState,
 )
 
-
 RetrievalPartitionId = NewType("RetrievalPartitionId", str)
 
 _SOURCE_NAMESPACE_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,79}$")
@@ -133,22 +132,16 @@ def ensure_default_partition(
     *,
     source_namespace: str,
     candidate_scope_kind: RetrievalPartitionCandidateScope | str,
-    workspace_id: str | None = None,
     user_id: str | None = None,
 ) -> RetrievalPartition:
     namespace = normalize_source_namespace(source_namespace)
-    scope_kind, candidate_workspace_id, candidate_user_id = _normalize_candidate_target(
+    scope_kind, candidate_user_id = _normalize_candidate_target(
         candidate_scope_kind,
-        workspace_id=workspace_id,
         user_id=user_id,
-    )
-    managed_workspace_id = (
-        candidate_workspace_id if scope_kind == RetrievalPartitionCandidateScope.WORKSPACE else None
     )
     predicate = _default_partition_predicate(
         source_namespace=namespace,
         scope_kind=scope_kind,
-        managed_workspace_id=managed_workspace_id,
         candidate_user_id=candidate_user_id,
     )
     existing = db.scalar(select(RetrievalPartition).where(*predicate))
@@ -157,9 +150,7 @@ def ensure_default_partition(
 
     candidate = RetrievalPartition(
         source_namespace=namespace,
-        managed_workspace_id=managed_workspace_id,
         candidate_scope_kind=scope_kind.value,
-        candidate_workspace_id=candidate_workspace_id,
         candidate_user_id=candidate_user_id,
         state=RetrievalPartitionState.ACTIVE.value,
         metadata_version=1,
@@ -181,36 +172,17 @@ def create_managed_partition(
     db: Session,
     *,
     source_namespace: str,
-    managed_workspace_id: str,
     candidate_scope_kind: RetrievalPartitionCandidateScope | str,
-    workspace_id: str | None = None,
     user_id: str | None = None,
 ) -> RetrievalPartition:
-    """Create a source-owned, non-default partition for one managed aggregate."""
-
+    """Create an app-owned partition; its identity confers no resource access."""
     namespace = normalize_source_namespace(source_namespace)
-    normalized_managed_workspace_id = _normalize_optional_id(managed_workspace_id)
-    if normalized_managed_workspace_id is None:
-        raise RetrievalPartitionInvalidTarget("managed partition requires managed_workspace_id")
-    try:
-        requested_scope = RetrievalPartitionCandidateScope(str(candidate_scope_kind))
-    except ValueError as exc:
-        raise RetrievalPartitionInvalidTarget(
-            f"unsupported retrieval partition candidate scope: {candidate_scope_kind}"
-        ) from exc
-    resolved_workspace_id = workspace_id
-    if requested_scope == RetrievalPartitionCandidateScope.WORKSPACE and workspace_id is None:
-        resolved_workspace_id = normalized_managed_workspace_id
-    scope_kind, candidate_workspace_id, candidate_user_id = _normalize_candidate_target(
-        requested_scope,
-        workspace_id=resolved_workspace_id,
-        user_id=user_id,
+    scope_kind, candidate_user_id = _normalize_candidate_target(
+        candidate_scope_kind, user_id=user_id
     )
     partition = RetrievalPartition(
         source_namespace=namespace,
-        managed_workspace_id=normalized_managed_workspace_id,
         candidate_scope_kind=scope_kind.value,
-        candidate_workspace_id=candidate_workspace_id,
         candidate_user_id=candidate_user_id,
         state=RetrievalPartitionState.ACTIVE.value,
         metadata_version=1,
@@ -227,7 +199,6 @@ def assign_default_partition(
     target: object,
     source_namespace: str,
     candidate_scope_kind: RetrievalPartitionCandidateScope | str,
-    workspace_id: str | None = None,
     user_id: str | None = None,
 ) -> RetrievalPartitionId:
     """Dual-write a source row binding in the caller's source transaction."""
@@ -239,7 +210,6 @@ def assign_default_partition(
         db,
         source_namespace=source_namespace,
         candidate_scope_kind=candidate_scope_kind,
-        workspace_id=workspace_id,
         user_id=user_id,
     )
     setattr(target, "retrieval_partition_id", partition.id)
@@ -250,7 +220,6 @@ def resolve_read_scope(
     db: Session,
     *,
     source_namespaces: tuple[str, ...] | list[str],
-    workspace_id: str | None,
     user_id: str | None,
 ) -> RetrievalReadScope:
     namespaces = tuple(
@@ -262,14 +231,6 @@ def resolve_read_scope(
     access_predicates = [
         RetrievalPartition.candidate_scope_kind == RetrievalPartitionCandidateScope.COMPANY.value,
     ]
-    if workspace_id is not None:
-        access_predicates.append(
-            and_(
-                RetrievalPartition.candidate_scope_kind
-                == RetrievalPartitionCandidateScope.WORKSPACE.value,
-                RetrievalPartition.candidate_workspace_id == workspace_id,
-            )
-        )
     if user_id is not None:
         access_predicates.append(
             and_(
@@ -308,7 +269,6 @@ def resolve_resource_read_scope(
     db: Session,
     *,
     resource_types: tuple[str, ...] | list[str],
-    workspace_id: str | None,
     user_id: str | None,
 ) -> RetrievalReadScope:
     """Resolve trusted partition IDs from registered resource ownership."""
@@ -335,7 +295,6 @@ def resolve_resource_read_scope(
     return resolve_read_scope(
         db,
         source_namespaces=source_namespaces,
-        workspace_id=workspace_id,
         user_id=user_id,
     )
 
@@ -352,7 +311,6 @@ def transition_partition_candidate_scope(
     transition_operation: str,
     expected_metadata_version: int,
     candidate_scope_kind: RetrievalPartitionCandidateScope | str,
-    workspace_id: str | None = None,
     user_id: str | None = None,
 ) -> RetrievalPartition:
     from open_work_hub_api.domains.retrieval.partition_adapter_registry import (
@@ -374,9 +332,8 @@ def transition_partition_candidate_scope(
         raise RetrievalPartitionConflict(
             f"retrieval partition transition is not allowed: {normalized_operation}"
         )
-    scope_kind, candidate_workspace_id, candidate_user_id = _normalize_candidate_target(
+    scope_kind, candidate_user_id = _normalize_candidate_target(
         candidate_scope_kind,
-        workspace_id=workspace_id,
         user_id=user_id,
     )
     partition = db.scalar(
@@ -404,7 +361,6 @@ def transition_partition_candidate_scope(
         raise RetrievalPartitionConflict("retrieval partition metadata version does not match")
 
     partition.candidate_scope_kind = scope_kind.value
-    partition.candidate_workspace_id = candidate_workspace_id
     partition.candidate_user_id = candidate_user_id
     partition.metadata_version += 1
     db.flush()
@@ -412,30 +368,20 @@ def transition_partition_candidate_scope(
 
 
 def _normalize_candidate_target(
-    candidate_scope_kind: RetrievalPartitionCandidateScope | str,
-    *,
-    workspace_id: str | None,
-    user_id: str | None,
-) -> tuple[RetrievalPartitionCandidateScope, str | None, str | None]:
+    candidate_scope_kind: RetrievalPartitionCandidateScope | str, *, user_id: str | None
+) -> tuple[RetrievalPartitionCandidateScope, str | None]:
     try:
         scope_kind = RetrievalPartitionCandidateScope(str(candidate_scope_kind))
     except ValueError as exc:
         raise RetrievalPartitionInvalidTarget(
-            f"unsupported retrieval partition candidate scope: {candidate_scope_kind}"
+            f"unsupported candidate scope: {candidate_scope_kind}"
         ) from exc
-    normalized_workspace_id = _normalize_optional_id(workspace_id)
     normalized_user_id = _normalize_optional_id(user_id)
-    if scope_kind == RetrievalPartitionCandidateScope.COMPANY:
-        if normalized_workspace_id is not None or normalized_user_id is not None:
-            raise RetrievalPartitionInvalidTarget(
-                "company partition cannot declare workspace_id or user_id"
-            )
-    elif scope_kind == RetrievalPartitionCandidateScope.WORKSPACE:
-        if normalized_workspace_id is None or normalized_user_id is not None:
-            raise RetrievalPartitionInvalidTarget("workspace partition requires only workspace_id")
-    elif normalized_user_id is None or normalized_workspace_id is not None:
-        raise RetrievalPartitionInvalidTarget("personal partition requires only user_id")
-    return scope_kind, normalized_workspace_id, normalized_user_id
+    if scope_kind == RetrievalPartitionCandidateScope.COMPANY and normalized_user_id is not None:
+        raise RetrievalPartitionInvalidTarget("company partition cannot declare user_id")
+    if scope_kind == RetrievalPartitionCandidateScope.PERSONAL and normalized_user_id is None:
+        raise RetrievalPartitionInvalidTarget("personal partition requires user_id")
+    return scope_kind, normalized_user_id
 
 
 def _normalize_optional_id(value: object | None) -> str | None:
@@ -451,31 +397,14 @@ def _default_partition_predicate(
     *,
     source_namespace: str,
     scope_kind: RetrievalPartitionCandidateScope,
-    managed_workspace_id: str | None,
     candidate_user_id: str | None,
 ) -> tuple[object, ...]:
-    common: tuple[object, ...] = (
+    return (
         RetrievalPartition.source_namespace == source_namespace,
         RetrievalPartition.is_default_ingest.is_(True),
         RetrievalPartition.state != RetrievalPartitionState.RETIRED.value,
-    )
-    if scope_kind == RetrievalPartitionCandidateScope.WORKSPACE:
-        return (
-            *common,
-            RetrievalPartition.managed_workspace_id == managed_workspace_id,
-            RetrievalPartition.candidate_user_id.is_(None),
-        )
-    if scope_kind == RetrievalPartitionCandidateScope.PERSONAL:
-        return (
-            *common,
-            RetrievalPartition.candidate_scope_kind
-            == RetrievalPartitionCandidateScope.PERSONAL.value,
-            RetrievalPartition.candidate_user_id == candidate_user_id,
-        )
-    return (
-        *common,
-        RetrievalPartition.managed_workspace_id.is_(None),
-        RetrievalPartition.candidate_scope_kind == RetrievalPartitionCandidateScope.COMPANY.value,
+        RetrievalPartition.candidate_scope_kind == scope_kind.value,
+        RetrievalPartition.candidate_user_id == candidate_user_id,
     )
 
 

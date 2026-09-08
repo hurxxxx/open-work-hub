@@ -6,8 +6,8 @@ import type { SettingsTranslator } from './settings-page-model';
 export function NotificationsSettingsSection({ t }: { t: SettingsTranslator }) {
   const items = [
     {
-      title: t('auth:settings.notificationsWorkspaceTitle'),
-      desc: t('auth:settings.notificationsWorkspaceDescription'),
+      title: t('auth:settings.notificationsCompanyTitle'),
+      desc: t('auth:settings.notificationsCompanyDescription'),
       email: true,
       push: true,
     },

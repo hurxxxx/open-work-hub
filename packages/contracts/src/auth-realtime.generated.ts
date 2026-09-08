@@ -6,5 +6,5 @@ export const AUTH_REALTIME_EVENT_TYPES = {
 
 export const AUTH_ACCESS_CHANGE_REASONS = {
   appAvailability: "app_availability",
-  workspaceMembership: "workspace_membership",
+  principalAccess: "principal",
 } as const;

@@ -1,7 +1,4 @@
-import type {
-  Collaborator,
-  SocketId,
-} from '@excalidraw/excalidraw/types';
+import type { Collaborator, SocketId } from '@excalidraw/excalidraw/types';
 
 import { colorForUser, type CollabStatus } from './whiteboard-editor-utils';
 

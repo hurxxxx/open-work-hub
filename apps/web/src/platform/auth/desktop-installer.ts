@@ -77,8 +77,7 @@ export const DESKTOP_INSTALLER_URLS = resolveDesktopInstallerUrls(
 
 export class DesktopInstallerCatalog {
   constructor(
-    private readonly platforms: DesktopInstallerPlatformDefinition[] =
-      DESKTOP_INSTALLER_PLATFORMS,
+    private readonly platforms: DesktopInstallerPlatformDefinition[] = DESKTOP_INSTALLER_PLATFORMS,
   ) {}
 
   rows(

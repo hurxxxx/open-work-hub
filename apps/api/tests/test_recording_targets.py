@@ -17,7 +17,7 @@ from open_work_hub_api.domains.recording.models import (
     RecordingResult,
 )
 
-from test_meeting import _auth_headers, _bootstrap_admin_session, _first_workspace_slug
+from test_meeting import _auth_headers, _bootstrap_admin_session
 
 
 class _FakeRecordingMinio:
@@ -50,10 +50,10 @@ def _install_fake_recording_storage(monkeypatch) -> _FakeRecordingMinio:
     return fake
 
 
-def _create_meeting(client, token: str, *, workspace_slug: str, title: str) -> dict:
+def _create_meeting(client, token: str, *, title: str) -> dict:
     start = datetime(2026, 5, 1, 10, 0, 0)
     response = client.post(
-        f"/api/v1/workspaces/{workspace_slug}/meeting/meetings",
+        "/api/v1/meeting/meetings",
         headers=_auth_headers(token),
         json={
             "title": title,
@@ -69,9 +69,9 @@ def _create_meeting(client, token: str, *, workspace_slug: str, title: str) -> d
     return response.json()
 
 
-def _import_recording(client, token: str, *, workspace_slug: str, title: str) -> dict:
+def _import_recording(client, token: str, *, title: str) -> dict:
     response = client.post(
-        f"/api/v1/workspaces/{workspace_slug}/recording/recordings/import",
+        "/api/v1/recording/recordings/import",
         headers=_auth_headers(token),
         data={"title": title, "source": "manual_upload"},
         files={"file": (f"{title}.wav", b"audio-bytes", "audio/wav")},
@@ -80,9 +80,9 @@ def _import_recording(client, token: str, *, workspace_slug: str, title: str) ->
     return response.json()
 
 
-def _attach_meeting(client, token: str, *, workspace_slug: str, recording_id: str, meeting_id: str):
+def _attach_meeting(client, token: str, *, recording_id: str, meeting_id: str):
     return client.post(
-        f"/api/v1/workspaces/{workspace_slug}/recording/recordings/{recording_id}/targets",
+        f"/api/v1/recording/recordings/{recording_id}/targets",
         headers=_auth_headers(token),
         json={
             "target_app": "meeting",
@@ -120,14 +120,12 @@ def test_recording_result_requires_explicit_idempotent_docs_publication(
 ) -> None:
     _install_fake_recording_storage(monkeypatch)
     admin = _bootstrap_admin_session(client)
-    workspace_slug = _first_workspace_slug(client, admin["token"])
     recording = _import_recording(
         client,
         admin["token"],
-        workspace_slug=workspace_slug,
         title="explicit publication",
     )
-    detail_path = f"/api/v1/workspaces/{workspace_slug}/recording/recordings/{recording['id']}"
+    detail_path = f"/api/v1/recording/recordings/{recording['id']}"
     publish_path = f"{detail_path}/publications/docs"
 
     with get_session_factory()() as session:
@@ -151,7 +149,7 @@ def test_recording_result_requires_explicit_idempotent_docs_publication(
     assert detail.json()["publications"] == []
 
     listing = client.get(
-        f"/api/v1/workspaces/{workspace_slug}/recording/recordings",
+        "/api/v1/recording/recordings",
         headers=_auth_headers(admin["token"]),
     )
     assert listing.status_code == 200, listing.text
@@ -189,36 +187,29 @@ def test_recording_result_requires_explicit_idempotent_docs_publication(
 def test_recording_meeting_attach_assigns_sequence_and_is_idempotent(client, monkeypatch):
     _install_fake_recording_storage(monkeypatch)
     admin = _bootstrap_admin_session(client)
-    workspace_slug = _first_workspace_slug(client, admin["token"])
     meeting = _create_meeting(
         client,
         admin["token"],
-        workspace_slug=workspace_slug,
         title="Recording attach target",
     )
-    first = _import_recording(client, admin["token"], workspace_slug=workspace_slug, title="first")
-    second = _import_recording(
-        client, admin["token"], workspace_slug=workspace_slug, title="second"
-    )
+    first = _import_recording(client, admin["token"], title="first")
+    second = _import_recording(client, admin["token"], title="second")
 
     first_attach = _attach_meeting(
         client,
         admin["token"],
-        workspace_slug=workspace_slug,
         recording_id=first["id"],
         meeting_id=meeting["id"],
     )
     first_again = _attach_meeting(
         client,
         admin["token"],
-        workspace_slug=workspace_slug,
         recording_id=first["id"],
         meeting_id=meeting["id"],
     )
     second_attach = _attach_meeting(
         client,
         admin["token"],
-        workspace_slug=workspace_slug,
         recording_id=second["id"],
         meeting_id=meeting["id"],
     )
@@ -237,7 +228,7 @@ def test_recording_meeting_attach_assigns_sequence_and_is_idempotent(client, mon
     assert first_meeting_links[0]["sort_order"] == 1
 
     detail = client.get(
-        f"/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting['id']}",
+        f"/api/v1/meeting/meetings/{meeting['id']}",
         headers=_auth_headers(admin["token"]),
     )
     assert detail.status_code == 200, detail.text
@@ -247,16 +238,14 @@ def test_recording_meeting_attach_assigns_sequence_and_is_idempotent(client, mon
 def test_import_recording_can_attach_initial_meeting_target(client, monkeypatch):
     _install_fake_recording_storage(monkeypatch)
     admin = _bootstrap_admin_session(client)
-    workspace_slug = _first_workspace_slug(client, admin["token"])
     meeting = _create_meeting(
         client,
         admin["token"],
-        workspace_slug=workspace_slug,
         title="Initial import target",
     )
 
     response = client.post(
-        f"/api/v1/workspaces/{workspace_slug}/recording/recordings/import",
+        "/api/v1/recording/recordings/import",
         headers=_auth_headers(admin["token"]),
         data={
             "title": "field recording",
@@ -280,7 +269,7 @@ def test_import_recording_can_attach_initial_meeting_target(client, monkeypatch)
     assert meeting_links[0]["sort_order"] == 1
 
     detail = client.get(
-        f"/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting['id']}",
+        f"/api/v1/meeting/meetings/{meeting['id']}",
         headers=_auth_headers(admin["token"]),
     )
     assert detail.status_code == 200, detail.text
@@ -290,11 +279,10 @@ def test_import_recording_can_attach_initial_meeting_target(client, monkeypatch)
 def test_recording_staging_accepts_tus_offset_upload(client, monkeypatch):
     fake = _install_fake_recording_storage(monkeypatch)
     admin = _bootstrap_admin_session(client)
-    workspace_slug = _first_workspace_slug(client, admin["token"])
     auth_headers = _auth_headers(admin["token"])
 
     init = client.post(
-        f"/api/v1/workspaces/{workspace_slug}/recording/recordings/staging",
+        "/api/v1/recording/recordings/staging",
         headers=auth_headers,
         json={
             "idempotency_key": "tus-offset-test",
@@ -306,7 +294,7 @@ def test_recording_staging_accepts_tus_offset_upload(client, monkeypatch):
     staging_id = init.json()["id"]
 
     head = client.head(
-        f"/api/v1/workspaces/{workspace_slug}/recording/recordings/staging/{staging_id}/tus",
+        f"/api/v1/recording/recordings/staging/{staging_id}/tus",
         headers={**auth_headers, "Tus-Resumable": "1.0.0"},
     )
     assert head.status_code == 204, head.text
@@ -315,7 +303,7 @@ def test_recording_staging_accepts_tus_offset_upload(client, monkeypatch):
     first = b"audio-"
     first_checksum = base64.b64encode(hashlib.sha256(first).digest()).decode("ascii")
     patch_first = client.patch(
-        f"/api/v1/workspaces/{workspace_slug}/recording/recordings/staging/{staging_id}/tus",
+        f"/api/v1/recording/recordings/staging/{staging_id}/tus",
         headers={
             **auth_headers,
             "Tus-Resumable": "1.0.0",
@@ -329,7 +317,7 @@ def test_recording_staging_accepts_tus_offset_upload(client, monkeypatch):
     assert patch_first.headers["Upload-Offset"] == str(len(first))
 
     conflict = client.patch(
-        f"/api/v1/workspaces/{workspace_slug}/recording/recordings/staging/{staging_id}/tus",
+        f"/api/v1/recording/recordings/staging/{staging_id}/tus",
         headers={
             **auth_headers,
             "Tus-Resumable": "1.0.0",
@@ -343,7 +331,7 @@ def test_recording_staging_accepts_tus_offset_upload(client, monkeypatch):
 
     second = b"bytes"
     patch_second = client.patch(
-        f"/api/v1/workspaces/{workspace_slug}/recording/recordings/staging/{staging_id}/tus",
+        f"/api/v1/recording/recordings/staging/{staging_id}/tus",
         headers={
             **auth_headers,
             "Tus-Resumable": "1.0.0",
@@ -356,7 +344,7 @@ def test_recording_staging_accepts_tus_offset_upload(client, monkeypatch):
     assert patch_second.headers["Upload-Offset"] == str(len(first) + len(second))
 
     complete = client.post(
-        f"/api/v1/workspaces/{workspace_slug}/recording/recordings/staging/{staging_id}/complete",
+        f"/api/v1/recording/recordings/staging/{staging_id}/complete",
         headers=auth_headers,
         json={
             "title": "Tus upload",
@@ -373,13 +361,12 @@ def test_recording_staging_accepts_tus_offset_upload(client, monkeypatch):
 def test_recording_tus_creation_uses_upload_metadata(client, monkeypatch):
     _install_fake_recording_storage(monkeypatch)
     admin = _bootstrap_admin_session(client)
-    workspace_slug = _first_workspace_slug(client, admin["token"])
 
     def metadata_value(value: str) -> str:
         return base64.b64encode(value.encode("utf-8")).decode("ascii")
 
     response = client.post(
-        f"/api/v1/workspaces/{workspace_slug}/recording/recordings/tus",
+        "/api/v1/recording/recordings/tus",
         headers={
             **_auth_headers(admin["token"]),
             "Tus-Resumable": "1.0.0",

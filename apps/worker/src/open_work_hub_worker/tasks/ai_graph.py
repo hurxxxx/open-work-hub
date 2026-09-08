@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from open_work_hub_api.domains.ai_graph.execution_registry import execute_registered_ai_graph
+from open_work_hub_api.domains.ai_graph.publication import publish_pending_graph_dispatches
+
 from open_work_hub_worker.celery_app import celery_app
 from open_work_hub_worker.queue_contract import (
     AI_GRAPH_REPUBLISH_TASK_NAME,
@@ -7,13 +10,7 @@ from open_work_hub_worker.queue_contract import (
 )
 from open_work_hub_worker.runtime import db_session as _db_session
 
-from open_work_hub_api.domains.ai_graph.execution_registry import execute_registered_ai_graph
-from open_work_hub_api.domains.ai_graph.publication import publish_pending_graph_dispatches
-
-
-_RETRYABLE_EXECUTION_RESULTS = frozenset(
-    {"active_lease", "already_running", "lease_lost"}
-)
+_RETRYABLE_EXECUTION_RESULTS = frozenset({"active_lease", "already_running", "lease_lost"})
 
 
 class AiGraphTerminalFailure(RuntimeError):

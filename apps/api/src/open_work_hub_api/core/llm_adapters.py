@@ -20,7 +20,6 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
 
-
 StreamChunkKind = Literal[
     "content",
     "reasoning",
@@ -46,9 +45,7 @@ class StreamChunk:
 class LlmStreamAdapter(Protocol):
     supports_tools: bool
 
-    def open_stream(
-        self, client: Any, payload: dict[str, Any]
-    ) -> AsyncIterator[StreamChunk]: ...
+    def open_stream(self, client: Any, payload: dict[str, Any]) -> AsyncIterator[StreamChunk]: ...
 
 
 class _BaseOpenAICompatAdapter:
@@ -60,9 +57,7 @@ class _BaseOpenAICompatAdapter:
 
     supports_tools = True
 
-    async def open_stream(
-        self, client: Any, payload: dict[str, Any]
-    ) -> AsyncIterator[StreamChunk]:
+    async def open_stream(self, client: Any, payload: dict[str, Any]) -> AsyncIterator[StreamChunk]:
         stream_payload = _build_stream_payload(payload)
         stream = await client.chat.completions.create(**stream_payload)
         normalizer = _OpenAICompatStreamNormalizer(self, stream_payload)

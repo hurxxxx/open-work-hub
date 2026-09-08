@@ -51,7 +51,7 @@ def test_task_templates_crud_and_list_member_permissions(client: TestClient) -> 
     )
 
     create_response = client.post(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/templates",
+        f"/api/v1/pms/lists/{task_list['id']}/templates",
         headers=_auth_headers(member_token),
         json={
             "name": "  Launch task  ",
@@ -67,14 +67,14 @@ def test_task_templates_crud_and_list_member_permissions(client: TestClient) -> 
     assert template["description"] == "Template body"
 
     viewer_list_response = client.get(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/templates",
+        f"/api/v1/pms/lists/{task_list['id']}/templates",
         headers=_auth_headers(viewer_token),
     )
     assert viewer_list_response.status_code == 200
     assert [item["id"] for item in viewer_list_response.json()["items"]] == [template["id"]]
 
     viewer_create_response = client.post(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/templates",
+        f"/api/v1/pms/lists/{task_list['id']}/templates",
         headers=_auth_headers(viewer_token),
         json={"name": "Viewer template"},
     )
@@ -82,7 +82,7 @@ def test_task_templates_crud_and_list_member_permissions(client: TestClient) -> 
     assert viewer_create_response.json()["code"] == "pms.task_list_viewer_modify_denied"
 
     update_response = client.patch(
-        f"/api/v1/workspaces/administrator/pms/templates/{template['id']}",
+        f"/api/v1/pms/templates/{template['id']}",
         headers=_auth_headers(member_token),
         json={
             "name": "  Updated launch  ",
@@ -101,13 +101,13 @@ def test_task_templates_crud_and_list_member_permissions(client: TestClient) -> 
     assert updated["checklist_items"] == [{"text": "Review"}]
 
     delete_response = client.delete(
-        f"/api/v1/workspaces/administrator/pms/templates/{template['id']}",
+        f"/api/v1/pms/templates/{template['id']}",
         headers=_auth_headers(admin["token"]),
     )
     assert delete_response.status_code == 204
 
     final_list_response = client.get(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/templates",
+        f"/api/v1/pms/lists/{task_list['id']}/templates",
         headers=_auth_headers(member_token),
     )
     assert final_list_response.status_code == 200
@@ -147,7 +147,7 @@ def test_custom_fields_values_wrong_list_and_permissions(client: TestClient) -> 
     )
 
     select_field_response = client.post(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/custom-fields",
+        f"/api/v1/pms/lists/{task_list['id']}/custom-fields",
         headers=_auth_headers(admin["token"]),
         json={
             "name": "Severity",
@@ -160,7 +160,7 @@ def test_custom_fields_values_wrong_list_and_permissions(client: TestClient) -> 
     select_field = select_field_response.json()
 
     text_field_response = client.post(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/custom-fields",
+        f"/api/v1/pms/lists/{task_list['id']}/custom-fields",
         headers=_auth_headers(admin["token"]),
         json={"name": "Notes", "field_type": "text", "sort_order": 20},
     )
@@ -168,7 +168,7 @@ def test_custom_fields_values_wrong_list_and_permissions(client: TestClient) -> 
     text_field = text_field_response.json()
 
     list_response = client.get(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/custom-fields",
+        f"/api/v1/pms/lists/{task_list['id']}/custom-fields",
         headers=_auth_headers(viewer_token),
     )
     assert list_response.status_code == 200
@@ -177,7 +177,7 @@ def test_custom_fields_values_wrong_list_and_permissions(client: TestClient) -> 
     assert fields[0]["options"] == ["low", "high"]
 
     member_create_response = client.post(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/custom-fields",
+        f"/api/v1/pms/lists/{task_list['id']}/custom-fields",
         headers=_auth_headers(member_token),
         json={"name": "Member field", "field_type": "text"},
     )
@@ -185,7 +185,7 @@ def test_custom_fields_values_wrong_list_and_permissions(client: TestClient) -> 
     assert member_create_response.json()["code"] == "pms.task_list_owner_admin_required"
 
     first_value_response = client.put(
-        f"/api/v1/workspaces/administrator/pms/tasks/{task['id']}/custom-field-values",
+        f"/api/v1/pms/tasks/{task['id']}/custom-field-values",
         headers=_auth_headers(member_token),
         json={"field_id": select_field["id"], "value": "low"},
     )
@@ -193,21 +193,21 @@ def test_custom_fields_values_wrong_list_and_permissions(client: TestClient) -> 
     assert first_value_response.json() == {"field_id": select_field["id"], "value": "low"}
 
     updated_value_response = client.put(
-        f"/api/v1/workspaces/administrator/pms/tasks/{task['id']}/custom-field-values",
+        f"/api/v1/pms/tasks/{task['id']}/custom-field-values",
         headers=_auth_headers(member_token),
         json={"field_id": select_field["id"], "value": "high"},
     )
     assert updated_value_response.status_code == 200
 
     values_response = client.get(
-        f"/api/v1/workspaces/administrator/pms/tasks/{task['id']}/custom-field-values",
+        f"/api/v1/pms/tasks/{task['id']}/custom-field-values",
         headers=_auth_headers(viewer_token),
     )
     assert values_response.status_code == 200
     assert values_response.json() == [{"field_id": select_field["id"], "value": "high"}]
 
     viewer_set_response = client.put(
-        f"/api/v1/workspaces/administrator/pms/tasks/{task['id']}/custom-field-values",
+        f"/api/v1/pms/tasks/{task['id']}/custom-field-values",
         headers=_auth_headers(viewer_token),
         json={"field_id": select_field["id"], "value": "low"},
     )
@@ -215,14 +215,14 @@ def test_custom_fields_values_wrong_list_and_permissions(client: TestClient) -> 
     assert viewer_set_response.json()["code"] == "pms.task_list_viewer_modify_denied"
 
     foreign_field_response = client.post(
-        f"/api/v1/workspaces/administrator/pms/lists/{other_task_list['id']}/custom-fields",
+        f"/api/v1/pms/lists/{other_task_list['id']}/custom-fields",
         headers=_auth_headers(admin["token"]),
         json={"name": "Foreign field", "field_type": "text"},
     )
     assert foreign_field_response.status_code == 201
 
     wrong_list_response = client.put(
-        f"/api/v1/workspaces/administrator/pms/tasks/{task['id']}/custom-field-values",
+        f"/api/v1/pms/tasks/{task['id']}/custom-field-values",
         headers=_auth_headers(admin["token"]),
         json={"field_id": foreign_field_response.json()["id"], "value": "wrong"},
     )
@@ -230,13 +230,13 @@ def test_custom_fields_values_wrong_list_and_permissions(client: TestClient) -> 
     assert wrong_list_response.json()["code"] == "pms.custom_field_wrong_list"
 
     delete_response = client.delete(
-        f"/api/v1/workspaces/administrator/pms/custom-fields/{select_field['id']}",
+        f"/api/v1/pms/custom-fields/{select_field['id']}",
         headers=_auth_headers(admin["token"]),
     )
     assert delete_response.status_code == 204
 
     values_after_delete_response = client.get(
-        f"/api/v1/workspaces/administrator/pms/tasks/{task['id']}/custom-field-values",
+        f"/api/v1/pms/tasks/{task['id']}/custom-field-values",
         headers=_auth_headers(member_token),
     )
     assert values_after_delete_response.status_code == 200

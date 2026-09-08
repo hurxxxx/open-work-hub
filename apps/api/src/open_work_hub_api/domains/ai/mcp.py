@@ -11,6 +11,11 @@ from open_work_hub_api.domains.ai.registry import (
     get_ai_capability_registry,
 )
 from open_work_hub_api.domains.ai.tool_contracts import agent_tool_spec_to_openai_function
+from open_work_hub_api.domains.ai.tool_service import (
+    ToolRequiresApproval,
+    approval_required_http_exception,
+    execute_tool,
+)
 from open_work_hub_api.domains.ai.tool_surface import (
     FilteredCapabilityTool,
     descriptor_matches_app,
@@ -20,12 +25,7 @@ from open_work_hub_api.domains.ai.tool_surface_projection import (
     build_tool_manifest,
     build_tool_openapi_export,
 )
-from open_work_hub_api.domains.ai.tool_service import (
-    ToolRequiresApproval,
-    approval_required_http_exception,
-    execute_tool,
-)
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 
 
 class InProcTransport:
@@ -33,7 +33,6 @@ class InProcTransport:
         self,
         db: Session,
         *,
-        workspace: Workspace,
         principal: CallerPrincipal,
         user: User,
         tool_name: str,
@@ -47,7 +46,6 @@ class InProcTransport:
         try:
             return execute_tool(
                 db,
-                workspace=workspace,
                 principal=principal,
                 user=user,
                 tool_name=tool_name,
@@ -76,7 +74,6 @@ class AiMcpClient:
         self,
         db: Session,
         *,
-        workspace: Workspace,
         principal: CallerPrincipal,
         app_id: str | None = None,
         app_ids: Iterable[str] | None = None,
@@ -86,7 +83,6 @@ class AiMcpClient:
         return resolve_filtered_capability_tools(
             db,
             registry=self._registry,
-            workspace=workspace,
             principal=principal,
             app_id=app_id,
             app_ids=app_ids,
@@ -98,7 +94,6 @@ class AiMcpClient:
         self,
         db: Session,
         *,
-        workspace: Workspace,
         principal: CallerPrincipal,
         include_approval_required: bool = False,
     ) -> list[dict[str, Any]]:
@@ -106,7 +101,6 @@ class AiMcpClient:
             agent_tool_spec_to_openai_function(item.tool_spec)
             for item in self.list_tools(
                 db,
-                workspace=workspace,
                 principal=principal,
                 include_meta=False,
                 include_approval_required=include_approval_required,
@@ -117,7 +111,6 @@ class AiMcpClient:
         self,
         db: Session,
         *,
-        workspace: Workspace,
         principal: CallerPrincipal,
         app_id: str | None = None,
         include_meta: bool = True,
@@ -125,38 +118,34 @@ class AiMcpClient:
     ) -> dict[str, Any]:
         tools = self.list_tools(
             db,
-            workspace=workspace,
             principal=principal,
             app_id=app_id,
             include_meta=include_meta,
             include_approval_required=include_approval_required,
         )
-        return build_tool_manifest(tools, workspace=workspace, app_id=app_id)
+        return build_tool_manifest(tools, app_id=app_id)
 
     def build_openapi_export(
         self,
         db: Session,
         *,
-        workspace: Workspace,
         principal: CallerPrincipal,
         app_id: str | None = None,
         include_approval_required: bool = False,
     ) -> dict[str, Any]:
         tools = self.list_tools(
             db,
-            workspace=workspace,
             principal=principal,
             app_id=app_id,
             include_meta=False,
             include_approval_required=include_approval_required,
         )
-        return build_tool_openapi_export(tools, workspace=workspace, app_id=app_id)
+        return build_tool_openapi_export(tools, app_id=app_id)
 
     def call_tool(
         self,
         db: Session,
         *,
-        workspace: Workspace,
         principal: CallerPrincipal,
         user: User,
         tool_name: str,
@@ -169,7 +158,6 @@ class AiMcpClient:
     ) -> dict[str, Any]:
         return self._transport.call_tool(
             db,
-            workspace=workspace,
             principal=principal,
             user=user,
             tool_name=tool_name,

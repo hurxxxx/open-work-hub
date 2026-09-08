@@ -6,17 +6,17 @@ from typing import Protocol
 
 from fastapi import FastAPI
 
-from open_work_hub_api.core.realtime import AppRealtimeHub, InProcessAppRealtimeHub
 from open_work_hub_api.core.db import get_session_factory
+from open_work_hub_api.core.realtime import AppRealtimeHub, InProcessAppRealtimeHub
 from open_work_hub_api.core.settings import Settings, get_settings
 from open_work_hub_api.core.storage import ensure_bucket
+from open_work_hub_api.domains.agent_terminal.runtime import AgentTerminalRuntime
 from open_work_hub_api.domains.collaboration.yjs_runtime import (
     InProcessCollabBus,
     UnavailableCollabBus,
 )
 from open_work_hub_api.domains.docs.collab import DocsCollabHub
 from open_work_hub_api.domains.whiteboard.collab import WhiteboardCollabHub
-from open_work_hub_api.domains.agent_terminal.runtime import AgentTerminalRuntime
 
 
 class ApiExternalRuntime(Protocol):
@@ -128,9 +128,7 @@ class InProcessApiExternalRuntime(_ComposedApiExternalRuntime):
                 settings,
                 get_session_factory(),
             ),
-            app_realtime_factory=lambda: InProcessAppRealtimeHub(
-                instance_id=resolved_instance_id
-            ),
+            app_realtime_factory=lambda: InProcessAppRealtimeHub(instance_id=resolved_instance_id),
             docs_collab_factory=lambda: DocsCollabHub(
                 instance_id=resolved_instance_id,
                 bus=InProcessCollabBus(instance_id=resolved_instance_id),
@@ -162,9 +160,7 @@ class UnavailableCollaborationApiExternalRuntime(_ComposedApiExternalRuntime):
                 settings,
                 get_session_factory(),
             ),
-            app_realtime_factory=lambda: InProcessAppRealtimeHub(
-                instance_id=resolved_instance_id
-            ),
+            app_realtime_factory=lambda: InProcessAppRealtimeHub(instance_id=resolved_instance_id),
             docs_collab_factory=lambda: DocsCollabHub(
                 instance_id=resolved_instance_id,
                 bus=UnavailableCollabBus(instance_id=resolved_instance_id),

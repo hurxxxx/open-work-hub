@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.i18n import localized_http_exception
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.meeting.models import MeetingTaskLink
 from open_work_hub_api.domains.pms.access import _ensure_task_readable
 from open_work_hub_api.domains.recording.target_access import can_attach_recording_target
@@ -23,7 +23,6 @@ class InitialRecordingTargetResolution:
 def resolve_initial_recording_target(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     target_app: str | None,
     target_type: str | None,
@@ -45,7 +44,6 @@ def resolve_initial_recording_target(
     if not can_attach_recording_target(
         db,
         user=user,
-        workspace=workspace,
         target_app=ref.target_app,
         target_type=ref.target_type,
         target_id=ref.target_id,

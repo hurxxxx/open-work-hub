@@ -1,13 +1,13 @@
 import type { TFunction } from 'i18next';
 
 import { AiApiError } from '@/src/platform/ai/ai-api';
+import { formatDateTime } from '@/src/platform/time/time-utils';
 import type { MeetingDetail } from '../../api/meeting-api';
 import type {
   MeetingFollowupResult,
   MeetingInsightItem,
   MeetingInsightListResult,
 } from '../../api/meeting-insights-api';
-import { formatDateTime } from '@/src/platform/time/time-utils';
 
 export const EXTRACTING_STATUSES = new Set([
   'extracting_insights',

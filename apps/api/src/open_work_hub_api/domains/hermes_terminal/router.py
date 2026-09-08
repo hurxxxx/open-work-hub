@@ -24,22 +24,17 @@ from websockets.exceptions import ConnectionClosed, WebSocketException
 
 from open_work_hub_api.core.db import get_db_session, get_session_factory
 from open_work_hub_api.core.settings import Settings, get_settings
-from open_work_hub_api.domains.auth.access import (
-    load_active_workspace_by_key,
-    record_audit_log,
-    resolve_workspace_role,
+from open_work_hub_api.domains.auth.access import record_audit_log
+from open_work_hub_api.domains.auth.app_gate import (
+    allowed_app_ids,
+    can_use_app,
+    require_app_access,
 )
 from open_work_hub_api.domains.auth.dependencies import (
-    resolve_auth_context_from_token,
     require_current_user,
-    require_current_workspace,
+    resolve_auth_context_from_token,
 )
-from open_work_hub_api.domains.auth.models import User, Workspace, utcnow_naive
-from open_work_hub_api.domains.auth.workspace_app_gate import (
-    is_app_enabled_for_user_context,
-    require_workspace_app_enabled,
-    resolve_enabled_app_ids_for_user_context,
-)
+from open_work_hub_api.domains.auth.models import User, utcnow_naive
 from open_work_hub_api.domains.hermes.repository import get_or_create_profile_binding
 from open_work_hub_api.domains.hermes.research_settings import (
     get_research_source_policy,
@@ -48,17 +43,17 @@ from open_work_hub_api.domains.hermes_terminal.broker_client import (
     HermesTerminalBrokerClient,
     HermesTerminalBrokerError,
 )
+from open_work_hub_api.domains.hermes_terminal.lifecycle import (
+    fail_missing_terminal_runtime,
+    finalize_terminal_session,
+    reconcile_terminal_session_if_finished,
+)
 from open_work_hub_api.domains.hermes_terminal.models import (
     HERMES_TERMINAL_ACTIVE_STATUSES,
     HermesTerminalArtifact,
     HermesTerminalProfileState,
     HermesTerminalSession,
     HermesTerminalToolApproval,
-)
-from open_work_hub_api.domains.hermes_terminal.lifecycle import (
-    fail_missing_terminal_runtime,
-    finalize_terminal_session,
-    reconcile_terminal_session_if_finished,
 )
 from open_work_hub_api.domains.hermes_terminal.schemas import (
     HermesTerminalApprovalDecisionRequest,
@@ -82,10 +77,9 @@ from open_work_hub_api.domains.hermes_terminal.storage import (
     read_object,
 )
 
-
 router = APIRouter(prefix="/hermes-terminal", tags=["hermes-terminal"])
 ws_router = APIRouter(prefix="/hermes-terminal", tags=["hermes-terminal"])
-_require_app_enabled = require_workspace_app_enabled(
+_require_app_enabled = require_app_access(
     "hermes-terminal",
     error_code="hermes_terminal.app_disabled",
 )
@@ -114,10 +108,7 @@ def _lock_terminal_admission(db: Session) -> None:
     if bind.dialect.name != "postgresql":
         return
     db.execute(
-        text(
-            "SELECT pg_advisory_xact_lock("
-            "hashtextextended(:identity, CAST(0 AS bigint)))"
-        ),
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:identity, CAST(0 AS bigint)))"),
         {"identity": _TERMINAL_ADMISSION_LOCK},
     )
 
@@ -126,13 +117,11 @@ def _owned_session(
     db: Session,
     *,
     session_id: str,
-    workspace_id: str,
     user_id: str,
     for_update: bool = False,
 ) -> HermesTerminalSession:
     statement = select(HermesTerminalSession).where(
         HermesTerminalSession.id == session_id,
-        HermesTerminalSession.workspace_id == workspace_id,
         HermesTerminalSession.user_id == user_id,
     )
     if for_update:
@@ -217,7 +206,6 @@ def _load_profile_archive(state: HermesTerminalProfileState | None) -> bytes | N
 async def get_config(
     settings: Settings = Depends(get_settings),
     _user: User = Depends(require_current_user),
-    _workspace: Workspace = Depends(require_current_workspace),
     _app_enabled: None = Depends(_require_app_enabled),
 ) -> HermesTerminalConfigResponse:
     return HermesTerminalConfigResponse(
@@ -225,9 +213,6 @@ async def get_config(
         idle_timeout_seconds=settings.hermes_terminal_idle_timeout_seconds,
         artifact_retention_days=settings.hermes_terminal_artifact_retention_days,
         max_sessions_per_user=settings.hermes_terminal_max_sessions_per_user,
-        max_sessions_per_workspace_user=(
-            settings.hermes_terminal_max_sessions_per_workspace_user
-        ),
         workspace_live_max_bytes=settings.hermes_terminal_workspace_archive_max_bytes,
     )
 
@@ -236,14 +221,12 @@ async def get_config(
 async def list_sessions(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
     _app_enabled: None = Depends(_require_app_enabled),
 ) -> HermesTerminalSessionListResponse:
     rows = list(
         db.scalars(
             select(HermesTerminalSession)
             .where(
-                HermesTerminalSession.workspace_id == current_workspace.id,
                 HermesTerminalSession.user_id == current_user.id,
             )
             .order_by(HermesTerminalSession.created_at.desc())
@@ -257,7 +240,6 @@ async def list_sessions(
         db.scalars(
             select(HermesTerminalSession)
             .where(
-                HermesTerminalSession.workspace_id == current_workspace.id,
                 HermesTerminalSession.user_id == current_user.id,
             )
             .order_by(HermesTerminalSession.created_at.desc())
@@ -277,39 +259,28 @@ async def create_session(
     db: Session = Depends(get_db_session),
     settings: Settings = Depends(get_settings),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
     _app_enabled: None = Depends(_require_app_enabled),
 ) -> HermesTerminalSessionResponse:
     if not settings.hermes_enabled:
         raise _http_error("hermes_terminal.disabled", status.HTTP_503_SERVICE_UNAVAILABLE)
     _lock_terminal_admission(db)
     active_clause = HermesTerminalSession.status.in_(HERMES_TERMINAL_ACTIVE_STATUSES)
-    workspace_user_count = db.scalar(
-        select(func.count(HermesTerminalSession.id)).where(
-            HermesTerminalSession.workspace_id == current_workspace.id,
-            HermesTerminalSession.user_id == current_user.id,
-            active_clause,
-        )
-    )
     user_count = db.scalar(
         select(func.count(HermesTerminalSession.id)).where(
             HermesTerminalSession.user_id == current_user.id,
             active_clause,
         )
     )
-    total_count = db.scalar(
-        select(func.count(HermesTerminalSession.id)).where(active_clause)
-    )
-    if int(workspace_user_count or 0) >= settings.hermes_terminal_max_sessions_per_workspace_user:
-        raise _http_error("hermes_terminal.workspace_session_limit", status.HTTP_409_CONFLICT)
+    total_count = db.scalar(select(func.count(HermesTerminalSession.id)).where(active_clause))
     if int(user_count or 0) >= settings.hermes_terminal_max_sessions_per_user:
         raise _http_error("hermes_terminal.user_session_limit", status.HTTP_409_CONFLICT)
     if int(total_count or 0) >= settings.hermes_terminal_max_sessions_total:
-        raise _http_error("hermes_terminal.global_session_limit", status.HTTP_503_SERVICE_UNAVAILABLE)
+        raise _http_error(
+            "hermes_terminal.global_session_limit", status.HTTP_503_SERVICE_UNAVAILABLE
+        )
 
     binding = get_or_create_profile_binding(
         db,
-        workspace=current_workspace,
         user=current_user,
     )
     profile_state = db.get(HermesTerminalProfileState, binding.id)
@@ -325,24 +296,21 @@ async def create_session(
     row = HermesTerminalSession(
         id=session_id,
         profile_binding_id=binding.id,
-        workspace_id=current_workspace.id,
         user_id=current_user.id,
         title=f"Hermes Terminal · {now:%Y-%m-%d %H:%M}",
         mode=payload.mode,
         status="starting",
         allowed_app_ids=sorted(
-            resolve_enabled_app_ids_for_user_context(
+            allowed_app_ids(
                 db,
-                user=current_user,
-                workspace_id=current_workspace.id,
+                user_id=current_user.id,
             )
         ),
         mcp_token_digest=token_digest(mcp_token),
         cols=payload.cols,
         rows=payload.rows,
         last_activity_at=now,
-        idle_expires_at=now
-        + timedelta(seconds=settings.hermes_terminal_idle_timeout_seconds),
+        idle_expires_at=now + timedelta(seconds=settings.hermes_terminal_idle_timeout_seconds),
     )
     db.add(row)
     try:
@@ -367,8 +335,7 @@ async def create_session(
         )
     except (HermesTerminalBrokerError, S3Error, OSError) as error:
         broker_result_is_ambiguous = (
-            isinstance(error, HermesTerminalBrokerError)
-            and error.status_code is None
+            isinstance(error, HermesTerminalBrokerError) and error.status_code is None
         )
         row.status = "starting" if broker_result_is_ambiguous else "failed"
         row.failure_code = (
@@ -402,7 +369,6 @@ async def create_session(
         summary="Started private Hermes terminal session",
         payload={
             "mode": row.mode,
-            "workspace_id": current_workspace.id,
             "yolo_acknowledged": payload.mode == "yolo" and payload.risk_acknowledged,
         },
     )
@@ -416,13 +382,11 @@ async def get_session(
     session_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
     _app_enabled: None = Depends(_require_app_enabled),
 ) -> HermesTerminalSessionResponse:
     row = _owned_session(
         db,
         session_id=session_id,
-        workspace_id=current_workspace.id,
         user_id=current_user.id,
     )
     await reconcile_terminal_session_if_finished(row)
@@ -430,7 +394,6 @@ async def get_session(
     row = _owned_session(
         db,
         session_id=session_id,
-        workspace_id=current_workspace.id,
         user_id=current_user.id,
     )
     return _session_response(row)
@@ -441,13 +404,11 @@ async def stop_session(
     session_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
     _app_enabled: None = Depends(_require_app_enabled),
 ) -> HermesTerminalSessionResponse:
     row = _owned_session(
         db,
         session_id=session_id,
-        workspace_id=current_workspace.id,
         user_id=current_user.id,
         for_update=True,
     )
@@ -471,7 +432,6 @@ async def stop_session(
                 _owned_session(
                     db,
                     session_id=session_id,
-                    workspace_id=current_workspace.id,
                     user_id=current_user.id,
                 )
             )
@@ -491,7 +451,6 @@ async def stop_session(
         _owned_session(
             db,
             session_id=session_id,
-            workspace_id=current_workspace.id,
             user_id=current_user.id,
         )
     )
@@ -542,7 +501,6 @@ async def list_files(
     path: Annotated[str, Query(max_length=1024)] = "",
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
     _app_enabled: None = Depends(_require_app_enabled),
 ) -> HermesTerminalFileListResponse:
     try:
@@ -552,7 +510,6 @@ async def list_files(
     row = _owned_session(
         db,
         session_id=session_id,
-        workspace_id=current_workspace.id,
         user_id=current_user.id,
     )
     if row.status in _LIVE_WORKSPACE_STATUSES:
@@ -563,10 +520,7 @@ async def list_files(
         return HermesTerminalFileListResponse(
             path=payload.path,
             active=True,
-            items=[
-                HermesTerminalFileEntryResponse(**item.model_dump())
-                for item in payload.items
-            ],
+            items=[HermesTerminalFileEntryResponse(**item.model_dump()) for item in payload.items],
         )
     artifacts = list(
         db.scalars(
@@ -591,7 +545,6 @@ async def download_file(
     path: Annotated[str, Query(min_length=1, max_length=1024)],
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
     _app_enabled: None = Depends(_require_app_enabled),
 ) -> Response:
     try:
@@ -601,7 +554,6 @@ async def download_file(
     row = _owned_session(
         db,
         session_id=session_id,
-        workspace_id=current_workspace.id,
         user_id=current_user.id,
     )
     filename = PurePosixPath(relative_path).name
@@ -640,13 +592,11 @@ def list_approvals(
     session_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
     _app_enabled: None = Depends(_require_app_enabled),
 ) -> HermesTerminalApprovalListResponse:
     row = _owned_session(
         db,
         session_id=session_id,
-        workspace_id=current_workspace.id,
         user_id=current_user.id,
     )
     now = utcnow_naive()
@@ -691,13 +641,11 @@ def decide_approval(
     payload: HermesTerminalApprovalDecisionRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
     _app_enabled: None = Depends(_require_app_enabled),
 ) -> HermesTerminalApprovalResponse:
     row = _owned_session(
         db,
         session_id=session_id,
-        workspace_id=current_workspace.id,
         user_id=current_user.id,
     )
     approval = db.scalar(
@@ -761,23 +709,22 @@ async def _resolve_ws_token(websocket: WebSocket) -> str:
     return token
 
 
-def _authorize_ws(token: str, *, session_id: str, workspace_slug: str) -> str:
+def _authorize_ws(
+    token: str,
+    *,
+    session_id: str,
+) -> str:
     with get_session_factory()() as db:
         context = resolve_auth_context_from_token(db, token)
-        workspace = load_active_workspace_by_key(db, workspace_slug)
-        if workspace is None or resolve_workspace_role(db, context.user, workspace.id) is None:
-            raise _http_error("hermes_terminal.workspace_forbidden", status.HTTP_403_FORBIDDEN)
-        if not is_app_enabled_for_user_context(
+        if not can_use_app(
             db,
             app_id="hermes-terminal",
             user_id=context.user.id,
-            workspace_id=workspace.id,
         ):
             raise _http_error("hermes_terminal.app_disabled", status.HTTP_403_FORBIDDEN)
         row = _owned_session(
             db,
             session_id=session_id,
-            workspace_id=workspace.id,
             user_id=context.user.id,
         )
         if row.status not in HERMES_TERMINAL_ACTIVE_STATUSES:
@@ -805,14 +752,12 @@ def _touch_session(session_id: str, *, cols: int | None = None, rows: int | None
 @ws_router.websocket("/sessions/{session_id}/ws")
 async def terminal_websocket(websocket: WebSocket, session_id: str) -> None:
     await websocket.accept()
-    workspace_slug = str(websocket.path_params.get("workspace_slug") or "")
     try:
         token = await _resolve_ws_token(websocket)
         owner_id = await asyncio.to_thread(
             _authorize_ws,
             token,
             session_id=session_id,
-            workspace_slug=workspace_slug,
         )
     except (HTTPException, TimeoutError, ValueError, WebSocketDisconnect):
         await websocket.close(code=4403)
@@ -823,9 +768,7 @@ async def terminal_websocket(websocket: WebSocket, session_id: str) -> None:
     try:
         async with websocket_connect(
             broker.websocket_url(session_id),
-            additional_headers={
-                "Authorization": f"Bearer {broker_bearer_token(settings)}"
-            },
+            additional_headers={"Authorization": f"Bearer {broker_bearer_token(settings)}"},
             proxy=None,
             max_size=2 * 1024 * 1024,
         ) as upstream:
@@ -936,7 +879,6 @@ async def terminal_websocket(websocket: WebSocket, session_id: str) -> None:
                         _authorize_ws,
                         token,
                         session_id=session_id,
-                        workspace_slug=workspace_slug,
                     )
                     if current_owner != owner_id:
                         raise RuntimeError("terminal owner changed")

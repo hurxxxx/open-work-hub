@@ -13,7 +13,6 @@ class GlobalNotificationItem(BaseModel):
     source_type: str
     source_id: str | None
     origin_app_id: str
-    origin_workspace_id: str | None
     action_url: str | None = None
     is_read: bool
     created_at: datetime

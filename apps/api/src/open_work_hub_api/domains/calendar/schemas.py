@@ -8,7 +8,6 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 
-
 CalendarSourceType = Literal["meeting", "pms_due", "pms_block", "planner_event"]
 
 
@@ -46,14 +45,6 @@ class CalendarEventMetadata(BaseModel):
     planner_time_zone: str | None = None
 
 
-class CalendarWorkspaceRef(BaseModel):
-    model_config = _camel_config()
-
-    id: str
-    slug: str
-    name: str
-
-
 class CalendarEventOut(BaseModel):
     """Unified event row returned by GET /calendar/events.
 
@@ -72,7 +63,6 @@ class CalendarEventOut(BaseModel):
     source_type: CalendarSourceType
     source_id: str
     color: str
-    workspace: CalendarWorkspaceRef | None
     metadata: CalendarEventMetadata
 
 
@@ -85,7 +75,6 @@ __all__ = [
     "CalendarEventMetadata",
     "CalendarEventOut",
     "CalendarEventsResponse",
-    "CalendarWorkspaceRef",
 ]
 
 

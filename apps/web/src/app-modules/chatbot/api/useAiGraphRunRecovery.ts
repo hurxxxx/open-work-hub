@@ -31,26 +31,22 @@ export function useAiGraphRunRecovery({
   enabled,
   refreshKey,
   token,
-  workspaceSlug,
 }: {
   appId: string;
   conversationId: string | null;
   enabled: boolean;
   refreshKey?: string | number | null;
   token: string | null;
-  workspaceSlug?: string | null;
 }): AiGraphRunRecoveryState {
   const [state, setState] = useState<AiGraphRunRecoveryState>(INITIAL_STATE);
   const ownerKey = useMemo(
     () =>
-      enabled && token && workspaceSlug && conversationId
-        ? `${workspaceSlug}:${appId}:${conversationId}`
-        : null,
-    [appId, conversationId, enabled, token, workspaceSlug],
+      enabled && token && conversationId ? `${appId}:${conversationId}` : null,
+    [appId, conversationId, enabled, token],
   );
 
   useEffect(() => {
-    if (!ownerKey || !token || !workspaceSlug || !conversationId) {
+    if (!ownerKey || !token || !conversationId) {
       setState(INITIAL_STATE);
       return;
     }
@@ -72,7 +68,6 @@ export function useAiGraphRunRecovery({
           conversationId,
           signal: controller.signal,
           token,
-          workspaceSlug,
         });
         if (cancelled) return;
         const run = latestAiGraphRun(response.items);
@@ -81,7 +76,6 @@ export function useAiGraphRunRecovery({
           conversationId,
           signal: controller.signal,
           token,
-          workspaceSlug,
         });
         if (cancelled) return;
         setState({
@@ -120,7 +114,7 @@ export function useAiGraphRunRecovery({
       controller?.abort();
       if (pollTimer) clearTimeout(pollTimer);
     };
-  }, [appId, conversationId, ownerKey, refreshKey, token, workspaceSlug]);
+  }, [appId, conversationId, ownerKey, refreshKey, token]);
 
   return state;
 }
@@ -161,13 +155,11 @@ async function loadCompletedReportArtifacts({
   conversationId,
   signal,
   token,
-  workspaceSlug,
 }: {
   appId: string;
   conversationId: string;
   signal: AbortSignal;
   token: string;
-  workspaceSlug: string;
 }): Promise<ArtifactBuffer[]> {
   const response = await listAiArtifacts({
     appId,
@@ -178,7 +170,6 @@ async function loadCompletedReportArtifacts({
     signal,
     status: 'completed',
     token,
-    workspaceSlug,
   });
   return response.items.map(aiArtifactToBuffer);
 }

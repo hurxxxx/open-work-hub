@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
 import json
 import logging
 import math
 import re
-from typing import Any, Literal
 import uuid
+from datetime import UTC, datetime
+from typing import Any, Literal
 
 from sqlalchemy.orm import Session
 
@@ -19,7 +19,6 @@ from open_work_hub_api.domains.bento import (
     BENTO_PLAN_MAX_OUTPUT_TOKENS,
     BENTO_PLAN_WORKLOAD_ID,
 )
-
 
 BentoGenerationLanguage = Literal["auto", "ko", "en"]
 BENTO_GENERATION_MAX_SLIDES = 12
@@ -315,7 +314,6 @@ class BentoGenerationError(RuntimeError):
 def _plan_bento_presentation(
     db: Session,
     *,
-    workspace_id: str,
     actor_user_id: str,
     request_payload: dict[str, Any],
 ) -> dict[str, Any]:
@@ -324,7 +322,6 @@ def _plan_bento_presentation(
             BENTO_PLAN_WORKLOAD_ID,
             LlmWorkloadContext(
                 source="api.bento.generate.plan",
-                workspace_id=workspace_id,
                 actor_user_id=actor_user_id,
                 principal_id=actor_user_id,
                 app_id="bento",
@@ -380,7 +377,6 @@ def _plan_bento_presentation(
 def generate_bento_document_json(
     db: Session,
     *,
-    workspace_id: str,
     actor_user_id: str,
     prompt: str,
     slide_count: int,
@@ -400,7 +396,6 @@ def generate_bento_document_json(
     }
     presentation_plan = _plan_bento_presentation(
         db,
-        workspace_id=workspace_id,
         actor_user_id=actor_user_id,
         request_payload=request_payload,
     )
@@ -410,7 +405,6 @@ def generate_bento_document_json(
             BENTO_GENERATE_WORKLOAD_ID,
             LlmWorkloadContext(
                 source="api.bento.generate",
-                workspace_id=workspace_id,
                 actor_user_id=actor_user_id,
                 principal_id=actor_user_id,
                 app_id="bento",
@@ -444,7 +438,6 @@ def generate_bento_document_json(
         db,
         workload_id=BENTO_GENERATE_WORKLOAD_ID,
         source="api.bento.generate",
-        workspace_id=workspace_id,
         actor_user_id=actor_user_id,
         original_request=render_payload,
         model_response=_completion_document_candidate(result.completion),
@@ -460,7 +453,6 @@ def generate_bento_document_json(
 def revise_bento_document_json(
     db: Session,
     *,
-    workspace_id: str,
     actor_user_id: str,
     prompt: str,
     current_document_json: str,
@@ -501,7 +493,6 @@ def revise_bento_document_json(
             BENTO_EDIT_WORKLOAD_ID,
             LlmWorkloadContext(
                 source="api.bento.edit",
-                workspace_id=workspace_id,
                 actor_user_id=actor_user_id,
                 principal_id=actor_user_id,
                 app_id="bento",
@@ -535,7 +526,6 @@ def revise_bento_document_json(
         db,
         workload_id=BENTO_EDIT_WORKLOAD_ID,
         source="api.bento.edit",
-        workspace_id=workspace_id,
         actor_user_id=actor_user_id,
         original_request=request_payload,
         model_response=_completion_document_candidate(result.completion),
@@ -555,7 +545,6 @@ def _normalize_or_repair_document(
     *,
     workload_id: str,
     source: str,
-    workspace_id: str,
     actor_user_id: str,
     original_request: dict[str, Any],
     model_response: str,
@@ -600,7 +589,6 @@ def _normalize_or_repair_document(
             workload_id,
             LlmWorkloadContext(
                 source=f"{source}.repair",
-                workspace_id=workspace_id,
                 actor_user_id=actor_user_id,
                 principal_id=actor_user_id,
                 app_id="bento",

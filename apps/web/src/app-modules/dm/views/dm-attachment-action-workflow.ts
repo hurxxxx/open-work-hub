@@ -1,15 +1,10 @@
+import { downloadAuthenticatedContent } from '@/src/platform/browser/browser-download';
 import type {
   DmAttachmentUrlResponse,
   DmMessageAttachment,
 } from '../api/dm-api';
 import {
-  defaultBrowserDownloadAdapter,
-  type BrowserDownloadAdapter,
-  type BrowserDownloadAnchor,
-} from '@/src/platform/browser/browser-download';
-import {
   downloadSpecForAttachment,
-  imageViewerForAttachment,
   type DmAttachmentDownloadSpec,
   type DmImageViewerState,
 } from './dm-attachment-url';
@@ -17,11 +12,10 @@ import type { DmComposerAttachmentAction } from './dm-composer-attachments';
 
 export interface DmAttachmentActionApi {
   getDownloadUrl(attachmentId: string): Promise<DmAttachmentUrlResponse>;
-  getPreviewUrl(attachmentId: string): Promise<DmAttachmentUrlResponse>;
 }
 
 export interface DmAttachmentBrowserAdapter {
-  download(spec: DmAttachmentDownloadSpec): void;
+  download(spec: DmAttachmentDownloadSpec): Promise<void>;
 }
 
 export interface DmAttachmentActionMessages {
@@ -36,6 +30,7 @@ export interface DmAttachmentActionWorkflow {
 
 export interface DmAttachmentActionWorkflowOptions {
   api: DmAttachmentActionApi | null;
+  isCurrent: () => boolean;
   browser: DmAttachmentBrowserAdapter;
   busyAttachmentId: string | null;
   dispatchAttachmentAction: (action: DmComposerAttachmentAction) => void;
@@ -48,26 +43,16 @@ function errorMessage(caughtError: unknown, fallback: string): string {
   return caughtError instanceof Error ? caughtError.message : fallback;
 }
 
-export function triggerDmAttachmentBrowserDownload(
+export async function triggerDmAttachmentBrowserDownload(
+  token: string,
   spec: DmAttachmentDownloadSpec,
-  adapter: BrowserDownloadAdapter = defaultBrowserDownloadAdapter,
-): void {
-  const anchor = adapter.createAnchor() as BrowserDownloadAnchor & {
-    rel?: string;
-  };
-  anchor.href = spec.href;
-  anchor.download = spec.filename;
-  anchor.rel = spec.rel;
-  adapter.appendAnchor(anchor);
-  try {
-    anchor.click();
-  } finally {
-    anchor.remove();
-  }
+): Promise<void> {
+  await downloadAuthenticatedContent(token, spec.href, spec.filename);
 }
 
 export function createDmAttachmentActionWorkflow({
   api,
+  isCurrent,
   browser,
   busyAttachmentId,
   dispatchAttachmentAction,
@@ -80,15 +65,16 @@ export function createDmAttachmentActionWorkflow({
     fallbackMessage: string,
     action: () => Promise<void>,
   ) => {
-    if (!api || busyAttachmentId) return;
+    if (!api || busyAttachmentId || !isCurrent()) return;
     dispatchAttachmentAction({ type: 'action', attachmentId: attachment.id });
     setError(null);
     try {
       await action();
     } catch (caughtError) {
-      setError(errorMessage(caughtError, fallbackMessage));
+      if (isCurrent()) setError(errorMessage(caughtError, fallbackMessage));
     } finally {
-      dispatchAttachmentAction({ type: 'action', attachmentId: null });
+      if (isCurrent())
+        dispatchAttachmentAction({ type: 'action', attachmentId: null });
     }
   };
 
@@ -99,12 +85,11 @@ export function createDmAttachmentActionWorkflow({
         messages.previewFailed,
         async () => {
           if (!api) return;
-          const response = await api.getPreviewUrl(attachment.id);
-          const viewer = imageViewerForAttachment(attachment, response.url);
-          if (!viewer) {
-            throw new Error(messages.previewFailed);
-          }
-          setImageViewer(viewer);
+          if (isCurrent())
+            setImageViewer({
+              filename: attachment.filename,
+              attachmentId: attachment.id,
+            });
         },
       );
     },
@@ -116,11 +101,12 @@ export function createDmAttachmentActionWorkflow({
         async () => {
           if (!api) return;
           const response = await api.getDownloadUrl(attachment.id);
+          if (!isCurrent()) return;
           const spec = downloadSpecForAttachment(attachment, response.url);
           if (!spec) {
             throw new Error(messages.downloadFailed);
           }
-          browser.download(spec);
+          await browser.download(spec);
         },
       );
     },

@@ -1,6 +1,4 @@
-import { useMemo } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
+import { Button, useConfirm } from '@open-work-hub/ui';
 import {
   AlertCircle,
   ArrowLeft,
@@ -13,19 +11,21 @@ import {
   RefreshCw,
   Send,
 } from 'lucide-react';
-import { Button, useConfirm } from '@open-work-hub/ui';
+import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useNavigate, useParams } from 'react-router-dom';
 
-import { useAuth } from '@/src/platform/auth/auth-provider';
 import { DocsViewerModal } from '@/src/app-modules/docs/public-api';
+import {
+  isBootstrapAppEnabled,
+  useAppBootstrapContext,
+} from '@/src/platform/apps/app-bootstrap-context';
+import { buildAppPath } from '@/src/platform/apps/app-links';
+import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   formatDateTime as formatZonedDateTime,
   normalizeTimeZone,
 } from '@/src/platform/time/time-utils';
-import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
-import {
-  isWorkspaceBootstrapAppEnabled,
-  useWorkspaceBootstrapContext,
-} from '@/src/platform/workspaces/workspace-bootstrap-context';
 import { MeetingPickerModal } from './MeetingPickerModal';
 import { DocLink, LinkedSubsection } from './RecordingDetailLinkedItems';
 import { RecordingStageRail } from './RecordingStageRail';
@@ -49,13 +49,10 @@ function formatDateTime(
 function useRecordingDetailElement() {
   const { t, i18n } = useTranslation(['apps', 'common']);
   const { token, user } = useAuth();
-  const { workspaceSlug, recordingId } = useParams();
+  const { recordingId } = useParams();
   const navigate = useNavigate();
-  const workspaceBootstrap = useWorkspaceBootstrapContext();
-  const docsEnabled = isWorkspaceBootstrapAppEnabled(
-    workspaceBootstrap.data,
-    'docs',
-  );
+  const appBootstrap = useAppBootstrapContext();
+  const docsEnabled = isBootstrapAppEnabled(appBootstrap.data, 'docs');
   const timeZone = normalizeTimeZone(user?.time_zone);
   const { confirm, confirmDialog } = useConfirm();
 
@@ -78,7 +75,6 @@ function useRecordingDetailElement() {
   );
   const controller = useRecordingDetailController({
     token,
-    workspaceSlug,
     recordingId,
     messages,
     confirm,
@@ -97,8 +93,11 @@ function useRecordingDetailElement() {
   } = controller.state;
   const { meetingTargets, taskTargets, otherTargets, retryable } =
     controller.derived;
-
-  if (!workspaceSlug) return null;
+  const emptyResultMessage = retryable
+    ? t('apps:recording.detail.resultFailed')
+    : recording?.summary_status === 'done'
+      ? t('apps:recording.detail.resultUnavailable')
+      : t('apps:recording.detail.resultPending');
 
   return (
     <div className="flex h-full flex-col bg-app-bg">
@@ -106,9 +105,7 @@ function useRecordingDetailElement() {
         <div className="flex min-w-0 items-center gap-3">
           <button
             type="button"
-            onClick={() =>
-              navigate(buildWorkspaceAppPath(workspaceSlug, 'recording'))
-            }
+            onClick={() => navigate(buildAppPath('recording'))}
             className="inline-flex size-8 items-center justify-center rounded border border-app-border bg-app-surface-raised text-app-ink hover:bg-app-surface-subtle"
             aria-label={t('apps:recording.detail.back')}
           >
@@ -257,7 +254,7 @@ function useRecordingDetailElement() {
                         ? t('apps:recording.detail.resultVersion', {
                             version: recording.result.version,
                           })
-                        : t('apps:recording.detail.resultPending')}
+                        : emptyResultMessage}
                     </p>
                   </div>
                   {docsEnabled ? (
@@ -297,8 +294,7 @@ function useRecordingDetailElement() {
                         {t('apps:recording.detail.summaryTitle')}
                       </h3>
                       <div className="app-text-body mt-2 whitespace-pre-wrap rounded-md border border-app-border bg-app-surface-raised p-3 text-app-ink/80">
-                        {recording.result.summary_text ??
-                          t('apps:recording.detail.resultPending')}
+                        {recording.result.summary_text ?? emptyResultMessage}
                       </div>
                     </article>
                     {recording.result.verifier_note ? (
@@ -358,7 +354,6 @@ function useRecordingDetailElement() {
                     emptyLabel={t('apps:recording.detail.noLinkedMeetings')}
                     items={meetingTargets}
                     busyId={busy}
-                    workspaceSlug={workspaceSlug}
                     onDetach={controller.actions.detachTarget}
                     detachLabel={t('apps:recording.detail.detach')}
                   />
@@ -372,7 +367,6 @@ function useRecordingDetailElement() {
                     emptyLabel={t('apps:recording.detail.noLinkedTasks')}
                     items={taskTargets}
                     busyId={busy}
-                    workspaceSlug={workspaceSlug}
                     onDetach={controller.actions.detachTarget}
                     detachLabel={t('apps:recording.detail.detach')}
                   />
@@ -384,7 +378,6 @@ function useRecordingDetailElement() {
                     emptyLabel={t('apps:recording.detail.noOtherConnections')}
                     items={otherTargets}
                     busyId={busy}
-                    workspaceSlug={workspaceSlug}
                     onDetach={controller.actions.detachTarget}
                     detachLabel={t('apps:recording.detail.detach')}
                   />
@@ -400,7 +393,6 @@ function useRecordingDetailElement() {
           <MeetingPickerModal
             isOpen={meetingPickerOpen}
             onClose={() => controller.actions.setMeetingPickerOpen(false)}
-            workspaceSlug={workspaceSlug}
             excludeMeetingIds={meetingTargets.map((target) => target.target_id)}
             onPick={(meeting) =>
               void controller.actions.attachMeeting(meeting.id)
@@ -409,7 +401,6 @@ function useRecordingDetailElement() {
           <TaskPickerModal
             isOpen={taskPickerOpen}
             onClose={() => controller.actions.setTaskPickerOpen(false)}
-            workspaceSlug={workspaceSlug}
             excludeTaskIds={taskTargets.map((target) => target.target_id)}
             onPick={(task) => void controller.actions.attachTask(task.id)}
           />
@@ -417,7 +408,6 @@ function useRecordingDetailElement() {
             open={docPreview !== null}
             itemId={docPreview?.docId}
             fallbackTitle={docPreview?.label}
-            workspaceSlug={workspaceSlug}
             onOpenChange={(nextOpen) => {
               if (!nextOpen) controller.actions.setDocPreview(null);
             }}

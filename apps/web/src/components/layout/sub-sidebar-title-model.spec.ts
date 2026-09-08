@@ -17,7 +17,7 @@ describe('sub sidebar title model', () => {
         activeAppId: 'docs',
         appBarItems: [],
         t,
-        workspaceAppRegistry: new Map([
+        appRegistry: new Map([
           [
             'docs',
             {
@@ -40,7 +40,7 @@ describe('sub sidebar title model', () => {
         activeAppId: 'community',
         appBarItems: [{ id: 'community', title: 'community', icon: FileText }],
         t,
-        workspaceAppRegistry: new Map(),
+        appRegistry: new Map(),
       }),
     ).toBe('커뮤니티');
   });

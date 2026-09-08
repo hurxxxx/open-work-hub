@@ -1,50 +1,49 @@
-from open_work_hub_api.core.workspace_app_registry import (
-    WorkspaceNavRegistration,
-    workspace_app_registration,
+from open_work_hub_api.core.app_registry import (
+    AppNavRegistration,
+    app_registration,
 )
 
-
-DOCS_WORKSPACE_APP = workspace_app_registration(
+DOCS_APP = app_registration(
     "docs",
     backend_domain="docs",
     nav_items=(
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="docs-all",
             title="All Docs",
             category="Library",
             icon_key="files",
         ),
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="docs-my",
             title="My Docs",
             category="Library",
             icon_key="user",
         ),
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="docs-shared",
             title="Shared with me",
             category="Library",
             icon_key="share-2",
         ),
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="docs-private",
             title="Private",
             category="Library",
             icon_key="lock",
         ),
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="docs-notes",
             title="Meeting Notes",
             category="Library",
             icon_key="mic",
         ),
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="docs-recent",
             title="Recent Pages",
             category="Library",
             icon_key="history",
         ),
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="docs-archived",
             title="Archived",
             category="Library",

@@ -97,12 +97,11 @@ describe('web DM API client', () => {
       searchDmUsers('token-1', 'user', {
         includeCurrent: true,
         limit: 10,
-        workspaceKey: '기술연구소',
       }),
     ).resolves.toEqual([]);
 
     expect(fetchMock()).toHaveBeenCalledWith(
-      '/api/v1/dm/users?q=user&limit=10&include_current=true&workspace_key=%EA%B8%B0%EC%88%A0%EC%97%B0%EA%B5%AC%EC%86%8C',
+      '/api/v1/dm/users?q=user&limit=10&include_current=true',
       expect.objectContaining({
         cache: 'no-store',
       }),

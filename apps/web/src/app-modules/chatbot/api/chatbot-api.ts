@@ -1,9 +1,8 @@
 import type { ApiSchema } from '@/src/platform/api/types';
 import { i18n } from '@/src/platform/i18n';
-import { iterSseEvents } from './sse-parser';
 import {
-  HermesAgentApiError,
   HERMES_APPROVAL_TTL_MS,
+  HermesAgentApiError,
   createHermesRun,
   createHermesSession,
   decodeHermesApprovalReference,
@@ -17,6 +16,7 @@ import {
   streamHermesRunEvents,
   type HermesRun,
 } from './hermes-agent-api';
+import { iterSseEvents } from './sse-parser';
 
 const HERMES_PROVIDER = 'openrouter';
 const HERMES_MODEL = 'qwen/qwen3.8-flash';
@@ -101,10 +101,10 @@ export class AiApiError extends Error {
 
 export async function getLlmHealth(
   token: string,
-  options: { workspaceSlug?: string | null } = {},
+  options: Record<string, never> = {},
 ): Promise<LlmHealthResponse> {
   try {
-    const status = await getHermesAgentStatus(token, options.workspaceSlug);
+    const status = await getHermesAgentStatus(token);
     const ready = status.enabled && status.profile_status === 'active';
     return {
       ready,
@@ -129,15 +129,11 @@ export async function getLlmHealth(
 export async function sendAiChat(
   payload: AiChatRequest,
   token: string,
-  options: { workspaceSlug?: string | null } = {},
+  options: Record<string, never> = {},
 ): Promise<AiChatResponse> {
   try {
-    const started = await startHermesRun(payload, token, options.workspaceSlug);
-    const run = await waitForHermesRun(
-      token,
-      started.run.id,
-      options.workspaceSlug,
-    );
+    const started = await startHermesRun(payload, token);
+    const run = await waitForHermesRun(token, started.run.id);
     return runToChatResponse(run, started.sessionId, payload.backend_mode);
   } catch (error) {
     return raiseAiError(error);
@@ -152,7 +148,6 @@ export interface StreamAiChatArgs {
   payload: AiChatStreamRequest;
   token: string;
   signal: AbortSignal;
-  workspaceSlug?: string | null;
 }
 
 export type AiApprovalStatusResponse = ApiSchema<'ApprovalStatusResponse'>;
@@ -169,21 +164,17 @@ export interface StreamAiResumeArgs {
   payload: ResumeAiChatRequest;
   token: string;
   signal: AbortSignal;
-  workspaceSlug?: string | null;
 }
 
 export async function streamAiChat({
   payload,
   token,
   signal,
-  workspaceSlug,
 }: StreamAiChatArgs): Promise<Response> {
   try {
-    const started = await startHermesRun(payload, token, workspaceSlug);
+    const started = await startHermesRun(payload, token);
     const stopOnAbort = () => {
-      void stopHermesRun(token, started.run.id, workspaceSlug).catch(
-        () => undefined,
-      );
+      void stopHermesRun(token, started.run.id).catch(() => undefined);
     };
     signal.addEventListener('abort', stopOnAbort, { once: true });
     const response = await legacyEventStreamResponse({
@@ -192,7 +183,6 @@ export async function streamAiChat({
       runId: started.run.id,
       signal,
       token,
-      workspaceSlug,
     });
     return withAbortListenerCleanup(response, signal, stopOnAbort);
   } catch (error) {
@@ -203,15 +193,11 @@ export async function streamAiChat({
 export async function getAiApprovalStatus(
   token: string,
   approvalId: string,
-  options: { workspaceSlug?: string | null } = {},
+  options: Record<string, never> = {},
 ): Promise<AiApprovalStatusResponse> {
   const reference = requireApprovalReference(approvalId);
   try {
-    const run = await getHermesRun(
-      token,
-      reference.runId,
-      options.workspaceSlug,
-    );
+    const run = await getHermesRun(token, reference.runId);
     const payload = run.pending_approval ?? {};
     const argumentsValue =
       payload.arguments ??
@@ -222,7 +208,6 @@ export async function getAiApprovalStatus(
     const timestamp = eventTimestampMs(payload);
     return {
       id: approvalId,
-      workspace_id: '',
       conversation_id: run.session_binding_id ?? '',
       agent_run_id: run.id,
       tool_call_id: stringValue(payload.call_id) || reference.requestId,
@@ -255,7 +240,7 @@ export async function resolveAiApproval(
   token: string,
   approvalId: string,
   payload: ResolveAiApprovalRequest,
-  options: { workspaceSlug?: string | null } = {},
+  options: Record<string, never> = {},
 ): Promise<AiApprovalStatusResponse> {
   const reference = requireApprovalReference(approvalId);
   try {
@@ -264,7 +249,6 @@ export async function resolveAiApproval(
       reference.runId,
       reference.requestId,
       payload.decision === 'approved' ? 'once' : 'deny',
-      options.workspaceSlug,
     );
     const current = await getAiApprovalStatus(token, approvalId, options);
     return {
@@ -282,7 +266,7 @@ export function abandonAiApproval(
   token: string,
   approvalId: string,
   payload: AbandonAiApprovalRequest = {},
-  options: { workspaceSlug?: string | null } = {},
+  options: Record<string, never> = {},
 ): Promise<AiApprovalStatusResponse> {
   return resolveAiApproval(
     token,
@@ -299,7 +283,6 @@ export async function streamAiChatResume({
   payload,
   token,
   signal,
-  workspaceSlug,
 }: StreamAiResumeArgs): Promise<Response> {
   const reference = requireApprovalReference(payload.approval_id);
   try {
@@ -309,7 +292,6 @@ export async function streamAiChatResume({
       runId: reference.runId,
       signal,
       token,
-      workspaceSlug,
     });
   } catch (error) {
     return raiseAiError(error);
@@ -324,7 +306,6 @@ interface StartedHermesRun {
 async function startHermesRun(
   payload: AiChatRequest,
   token: string,
-  workspaceSlug?: string | null,
 ): Promise<StartedHermesRun> {
   const idempotencyKey = createHermesRequestId();
   const input = latestUserContent(payload);
@@ -334,25 +315,21 @@ async function startHermesRun(
   let scopeResourceId = payload.scope_resource_id ?? null;
 
   if (sessionId && shouldBranch) {
-    const source = await getHermesSession(token, sessionId, workspaceSlug);
+    const source = await getHermesSession(token, sessionId);
     scopeRef = source.scope_ref ?? scopeRef;
     scopeResourceId = source.scope_resource_id ?? scopeResourceId;
     sessionId = null;
   }
 
   if (!sessionId) {
-    const session = await createHermesSession(
-      token,
-      {
-        // Hermes derives and de-duplicates the title from the opening turn.
-        // Supplying the first message here bypasses that official flow and can
-        // fail session creation when another session already has that title.
-        title: null,
-        scope_ref: scopeRef,
-        scope_resource_id: scopeResourceId,
-      },
-      workspaceSlug,
-    );
+    const session = await createHermesSession(token, {
+      // Hermes derives and de-duplicates the title from the opening turn.
+      // Supplying the first message here bypasses that official flow and can
+      // fail session creation when another session already has that title.
+      title: null,
+      scope_ref: scopeRef,
+      scope_resource_id: scopeResourceId,
+    });
     sessionId = session.id;
   }
 
@@ -375,13 +352,7 @@ async function startHermesRun(
   };
   let run: HermesRun;
   try {
-    run = await createHermesRun(
-      token,
-      sessionId,
-      runBody,
-      workspaceSlug,
-      idempotencyKey,
-    );
+    run = await createHermesRun(token, sessionId, runBody, idempotencyKey);
   } catch (error) {
     if (
       !(error instanceof HermesAgentApiError) ||
@@ -390,13 +361,7 @@ async function startHermesRun(
       throw error;
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
-    run = await createHermesRun(
-      token,
-      sessionId,
-      runBody,
-      workspaceSlug,
-      idempotencyKey,
-    );
+    run = await createHermesRun(token, sessionId, runBody, idempotencyKey);
   }
   return { run, sessionId };
 }
@@ -436,11 +401,10 @@ function latestUserContent(payload: AiChatRequest): string {
 async function waitForHermesRun(
   token: string,
   runId: string,
-  workspaceSlug?: string | null,
 ): Promise<HermesRun> {
   const deadline = Date.now() + 60 * 60 * 1000;
   while (Date.now() < deadline) {
-    const run = await getHermesRun(token, runId, workspaceSlug);
+    const run = await getHermesRun(token, runId);
     if (
       TERMINAL_RUN_STATUSES.has(run.status) ||
       run.status === 'awaiting_approval'
@@ -490,7 +454,6 @@ interface LegacyEventStreamArgs {
   runId: string;
   signal: AbortSignal;
   token: string;
-  workspaceSlug?: string | null;
 }
 
 async function legacyEventStreamResponse(
@@ -544,7 +507,6 @@ async function legacyEventStreamResponse(
             source = await streamHermesRunEvents(args.token, args.runId, {
               afterSequence,
               signal: sourceAbort.signal,
-              workspaceSlug: args.workspaceSlug,
             });
           } catch (error) {
             sourceAbort = null;
@@ -695,11 +657,7 @@ async function legacyEventStreamResponse(
                 // the run projection, or Last-Event-ID may already point past
                 // the terminal event. Resolve the authoritative projection
                 // instead of reconnecting to an intentionally closed stream.
-                const run = await getHermesRun(
-                  args.token,
-                  args.runId,
-                  args.workspaceSlug,
-                );
+                const run = await getHermesRun(args.token, args.runId);
                 const output = run.output_text?.trim();
                 if (output && !contentSeen) {
                   contentSeen = true;
@@ -716,7 +674,10 @@ async function legacyEventStreamResponse(
                   terminal = true;
                   break;
                 }
-                if (run.status === 'failed' || run.status === 'invalid_output') {
+                if (
+                  run.status === 'failed' ||
+                  run.status === 'invalid_output'
+                ) {
                   emit('error', {
                     code: run.error_code || 'hermes.run_failed',
                     message:

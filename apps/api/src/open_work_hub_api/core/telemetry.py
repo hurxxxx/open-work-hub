@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
-from contextlib import contextmanager
 import logging
 import os
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 
 from opentelemetry import metrics, propagate, trace
 from opentelemetry.sdk.metrics import MeterProvider
@@ -15,12 +15,15 @@ from opentelemetry.trace import Span, SpanKind
 
 from open_work_hub_api.core.trace_context import (
     build_trace_context_propagator,
-    extract_trace_context as extract_trace_context,
-    serialize_current_trace_context as serialize_current_trace_context,
     start_span_with_trace_context,
 )
+from open_work_hub_api.core.trace_context import (
+    extract_trace_context as extract_trace_context,
+)
+from open_work_hub_api.core.trace_context import (
+    serialize_current_trace_context as serialize_current_trace_context,
+)
 from open_work_hub_api.version import VERSION as APP_VERSION
-
 
 logger = logging.getLogger(__name__)
 
@@ -96,9 +99,7 @@ def bootstrap_telemetry(
                     export_interval_millis=metrics_export_interval_ms,
                 )
             )
-        metrics.set_meter_provider(
-            MeterProvider(resource=resource, metric_readers=metric_readers)
-        )
+        metrics.set_meter_provider(MeterProvider(resource=resource, metric_readers=metric_readers))
 
     propagate.set_global_textmap(build_trace_context_propagator())
     return True
@@ -185,7 +186,7 @@ def _resolve_otlp_protocol(signal: str) -> str:
         raise RuntimeError(f"Unsupported OTLP signal: {signal}")
     signal_env = f"OTEL_EXPORTER_OTLP_{normalized_signal.upper()}_PROTOCOL"
     return (
-        os.getenv(signal_env)
-        or os.getenv("OTEL_EXPORTER_OTLP_PROTOCOL")
-        or "http/protobuf"
-    ).strip().lower()
+        (os.getenv(signal_env) or os.getenv("OTEL_EXPORTER_OTLP_PROTOCOL") or "http/protobuf")
+        .strip()
+        .lower()
+    )

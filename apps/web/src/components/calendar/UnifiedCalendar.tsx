@@ -16,27 +16,30 @@
 // Styling: theme is applied globally via apps/web/src/styles/fullcalendar-theme.css
 // which overrides FullCalendar CSS variables to match the app's design tokens
 // (light + dark mode). This component does NOT inline styles.
-import { useImperativeHandle, useMemo, useRef, type Ref } from 'react';
-import FullCalendar from '@fullcalendar/react';
-import dayGridPlugin from '@fullcalendar/daygrid';
-import timeGridPlugin from '@fullcalendar/timegrid';
-import listPlugin from '@fullcalendar/list';
-import interactionPlugin from '@fullcalendar/interaction';
-import luxon3Plugin from '@fullcalendar/luxon3';
-import koLocale from '@fullcalendar/core/locales/ko';
 import type {
-  EventInput,
-  EventContentArg,
-  EventHoveringArg,
-  EventClickArg,
   DateSelectArg,
   DatesSetArg,
+  EventClickArg,
+  EventContentArg,
   EventDropArg,
+  EventHoveringArg,
+  EventInput,
 } from '@fullcalendar/core';
+import koLocale from '@fullcalendar/core/locales/ko';
+import dayGridPlugin from '@fullcalendar/daygrid';
 import type { EventResizeDoneArg } from '@fullcalendar/interaction';
+import interactionPlugin from '@fullcalendar/interaction';
+import listPlugin from '@fullcalendar/list';
+import luxon3Plugin from '@fullcalendar/luxon3';
+import FullCalendar from '@fullcalendar/react';
+import timeGridPlugin from '@fullcalendar/timegrid';
+import { useImperativeHandle, useMemo, useRef, type Ref } from 'react';
 
-import { DEFAULT_TIME_ZONE, normalizeTimeZone } from '@/src/platform/time/time-utils';
 import type { CalendarEvent } from '@/src/platform/calendar/calendar-types';
+import {
+  DEFAULT_TIME_ZONE,
+  normalizeTimeZone,
+} from '@/src/platform/time/time-utils';
 import {
   buildDateSelectPayload,
   buildDatesSetPayload,
@@ -178,139 +181,136 @@ export function UnifiedCalendar({
   className,
   ref,
 }: UnifiedCalendarProps & { ref?: Ref<UnifiedCalendarHandle> }) {
-    const resolvedTimeZone = normalizeTimeZone(timeZone);
+  const resolvedTimeZone = normalizeTimeZone(timeZone);
 
-    const calendarRef = useRef<FullCalendar | null>(null);
+  const calendarRef = useRef<FullCalendar | null>(null);
 
-    useImperativeHandle(
-      ref,
-      () => ({
-        changeView: (view) => calendarRef.current?.getApi().changeView(view),
-        today: () => calendarRef.current?.getApi().today(),
-        prev: () => calendarRef.current?.getApi().prev(),
-        next: () => calendarRef.current?.getApi().next(),
-        gotoDate: (date) => calendarRef.current?.getApi().gotoDate(date),
-        getCurrentView: () => calendarRef.current?.getApi().view.type,
-      }),
-      [],
-    );
+  useImperativeHandle(
+    ref,
+    () => ({
+      changeView: (view) => calendarRef.current?.getApi().changeView(view),
+      today: () => calendarRef.current?.getApi().today(),
+      prev: () => calendarRef.current?.getApi().prev(),
+      next: () => calendarRef.current?.getApi().next(),
+      gotoDate: (date) => calendarRef.current?.getApi().gotoDate(date),
+      getCurrentView: () => calendarRef.current?.getApi().view.type,
+    }),
+    [],
+  );
 
-    const fcEvents = useMemo<EventInput[]>(
-      () => events.map(toFullCalendarEvent),
-      [events],
-    );
-    const wrapperClassName = [
-      layout === 'fill' ? 'absolute inset-0' : 'relative min-h-full',
-      className,
-    ]
-      .filter(Boolean)
-      .join(' ');
+  const fcEvents = useMemo<EventInput[]>(
+    () => events.map(toFullCalendarEvent),
+    [events],
+  );
+  const wrapperClassName = [
+    layout === 'fill' ? 'absolute inset-0' : 'relative min-h-full',
+    className,
+  ]
+    .filter(Boolean)
+    .join(' ');
 
-    return (
-      <div
-        className={wrapperClassName}
-        data-unified-calendar=""
-      >
-        <FullCalendar
-          ref={calendarRef}
-          plugins={PLUGINS}
-          initialView={initialView}
-          initialDate={initialDate}
-          timeZone={resolvedTimeZone}
-          locale={koLocale}
-          firstDay={0}
-          weekNumbers
-          weekNumberCalculation="ISO"
-          headerToolbar={false}
-          nowIndicator
-          dayMaxEvents={dayMaxEvents}
-          selectable={Boolean(onDateSelect)}
-          editable={Boolean(onEventDrop || onEventResize)}
-          eventDurationEditable={Boolean(onEventResize)}
-          height={height}
-          events={fcEvents}
-          eventClassNames={
-            eventClassNames
-              ? (arg: EventContentArg) => {
-                  const original = getCalendarEventOriginal(arg.event);
-                  return original ? eventClassNames(original) : [];
+  return (
+    <div className={wrapperClassName} data-unified-calendar="">
+      <FullCalendar
+        ref={calendarRef}
+        plugins={PLUGINS}
+        initialView={initialView}
+        initialDate={initialDate}
+        timeZone={resolvedTimeZone}
+        locale={koLocale}
+        firstDay={0}
+        weekNumbers
+        weekNumberCalculation="ISO"
+        headerToolbar={false}
+        nowIndicator
+        dayMaxEvents={dayMaxEvents}
+        selectable={Boolean(onDateSelect)}
+        editable={Boolean(onEventDrop || onEventResize)}
+        eventDurationEditable={Boolean(onEventResize)}
+        height={height}
+        events={fcEvents}
+        eventClassNames={
+          eventClassNames
+            ? (arg: EventContentArg) => {
+                const original = getCalendarEventOriginal(arg.event);
+                return original ? eventClassNames(original) : [];
+              }
+            : undefined
+        }
+        eventMouseEnter={(arg: EventHoveringArg) => {
+          const original = getCalendarEventOriginal(arg.event);
+          if (!original) return;
+          onEventMouseEnter?.(original, arg.el);
+        }}
+        eventMouseLeave={(arg: EventHoveringArg) => {
+          const original = getCalendarEventOriginal(arg.event);
+          if (!original) return;
+          onEventMouseLeave?.(original, arg.el);
+        }}
+        datesSet={(arg: DatesSetArg) => {
+          const payload = buildDatesSetPayload(arg);
+          onDatesSet?.({
+            view: payload.view as UnifiedCalendarView,
+            currentDate: payload.currentDate,
+            rangeStart: payload.rangeStart,
+            rangeEnd: payload.rangeEnd,
+          });
+        }}
+        dayCellClassNames={
+          showKoreanHolidays
+            ? (arg) => getKoreanHolidayDayClass(arg.date)
+            : undefined
+        }
+        dayCellDidMount={
+          showKoreanHolidays
+            ? (arg) => {
+                const labelText = getKoreanHolidayLabel(arg.date);
+                if (!labelText) return;
+                // Inject the holiday label as a sibling of the day-top area
+                // (inside the day frame) so it flows as its own block line
+                // below the date number rather than being squeezed into the
+                // tiny flex row next to the date. Month view only — week/day
+                // cells don't have `.fc-daygrid-day-frame`.
+                const frame = arg.el.querySelector('.fc-daygrid-day-frame');
+                if (!frame) return;
+                if (frame.querySelector('.fc-korean-holiday-label')) return;
+                const top = frame.querySelector('.fc-daygrid-day-top');
+                const label = document.createElement('div');
+                label.className = 'fc-korean-holiday-label';
+                label.textContent = labelText;
+                if (top && top.nextSibling) {
+                  frame.insertBefore(label, top.nextSibling);
+                } else {
+                  frame.appendChild(label);
                 }
-              : undefined
-          }
-          eventMouseEnter={(arg: EventHoveringArg) => {
-            const original = getCalendarEventOriginal(arg.event);
-            if (!original) return;
-            onEventMouseEnter?.(original, arg.el);
-          }}
-          eventMouseLeave={(arg: EventHoveringArg) => {
-            const original = getCalendarEventOriginal(arg.event);
-            if (!original) return;
-            onEventMouseLeave?.(original, arg.el);
-          }}
-          datesSet={(arg: DatesSetArg) => {
-            const payload = buildDatesSetPayload(arg);
-            onDatesSet?.({
-              view: payload.view as UnifiedCalendarView,
-              currentDate: payload.currentDate,
-              rangeStart: payload.rangeStart,
-              rangeEnd: payload.rangeEnd,
-            });
-          }}
-          dayCellClassNames={
-            showKoreanHolidays
-              ? (arg) => getKoreanHolidayDayClass(arg.date)
-              : undefined
-          }
-          dayCellDidMount={
-            showKoreanHolidays
-              ? (arg) => {
-                  const labelText = getKoreanHolidayLabel(arg.date);
-                  if (!labelText) return;
-                  // Inject the holiday label as a sibling of the day-top area
-                  // (inside the day frame) so it flows as its own block line
-                  // below the date number rather than being squeezed into the
-                  // tiny flex row next to the date. Month view only — week/day
-                  // cells don't have `.fc-daygrid-day-frame`.
-                  const frame = arg.el.querySelector('.fc-daygrid-day-frame');
-                  if (!frame) return;
-                  if (frame.querySelector('.fc-korean-holiday-label')) return;
-                  const top = frame.querySelector('.fc-daygrid-day-top');
-                  const label = document.createElement('div');
-                  label.className = 'fc-korean-holiday-label';
-                  label.textContent = labelText;
-                  if (top && top.nextSibling) {
-                    frame.insertBefore(label, top.nextSibling);
-                  } else {
-                    frame.appendChild(label);
-                  }
-                }
-              : undefined
-          }
-          select={(arg: DateSelectArg) => {
-            onDateSelect?.(buildDateSelectPayload(arg));
-          }}
-          eventClick={(arg: EventClickArg) => {
-            const original = getCalendarEventOriginal(arg.event);
-            if (!original) return;
-            onEventClick?.(original, arg.el);
-          }}
-          eventDrop={(arg: EventDropArg) => {
-            const payload = buildEventDropPayload(arg);
-            if (!payload) return;
-            onEventDrop?.(
-              payload.event,
-              payload.newStart,
-              payload.newEnd,
-              payload.newAllDay,
-              payload.revert,
-            );
-          }}
-          eventResize={(arg: EventResizeDoneArg) => {
-            const payload = buildEventResizePayload(arg);
-            if (!payload) return;
-            onEventResize?.(payload.event, payload.newEnd, payload.revert);
-          }}
-        />
-      </div>
-    );
+              }
+            : undefined
+        }
+        select={(arg: DateSelectArg) => {
+          onDateSelect?.(buildDateSelectPayload(arg));
+        }}
+        eventClick={(arg: EventClickArg) => {
+          const original = getCalendarEventOriginal(arg.event);
+          if (!original) return;
+          onEventClick?.(original, arg.el);
+        }}
+        eventDrop={(arg: EventDropArg) => {
+          const payload = buildEventDropPayload(arg);
+          if (!payload) return;
+          onEventDrop?.(
+            payload.event,
+            payload.newStart,
+            payload.newEnd,
+            payload.newAllDay,
+            payload.revert,
+          );
+        }}
+        eventResize={(arg: EventResizeDoneArg) => {
+          const payload = buildEventResizePayload(arg);
+          if (!payload) return;
+          onEventResize?.(payload.event, payload.newEnd, payload.revert);
+        }}
+      />
+    </div>
+  );
 }

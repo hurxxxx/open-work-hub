@@ -1,22 +1,21 @@
-import { useEffect } from 'react';
 import { AnimatePresence } from 'motion/react';
+import { useEffect } from 'react';
 
+import {
+  translateAppLaunchContext,
+  translateAppLaunchLabel,
+} from '@/src/app/shell/app-launch-destination';
 import { AppBarDesktopRail } from './AppBarDesktopRail';
 import { AppBarMobileHeader } from './AppBarMobileHeader';
 import { type AppBarAppLinkResolver, type AppBarProps } from './app-bar-model';
 import { useAppBarController } from './useAppBarController';
 import { useNotificationPanelFocus } from './useNotificationPanelFocus';
-import {
-  translateAppLaunchContext,
-  translateAppLaunchLabel,
-} from '@/src/app/shell/app-launch-destination';
 
 export function AppBar(props: AppBarProps) {
   const {
     activeAppId,
-    activeContextLabel,
     canOpenMobileAppMenu,
-    currentWorkspaceName,
+    currentCompanyLabel,
     currentUser,
     onDesktopMenuOpenChange,
     onDesktopRailMouseEnter,
@@ -26,8 +25,7 @@ export function AppBar(props: AppBarProps) {
     onOpenMobileAppMenu,
     onOpenMobileNavigation,
     resolveAppDestination,
-    shellWorkspaceSlug,
-    workspaceAppBarCategories,
+    appBarCategories,
   } = props;
   const NotificationPanel = props.notificationPanel ?? null;
   const notificationsEnabled =
@@ -35,7 +33,7 @@ export function AppBar(props: AppBarProps) {
   const controller = useAppBarController({ ...props, notificationsEnabled });
   const {
     activeAppTitle,
-    canOpenWorkspaceSearch,
+    canOpenSearch,
     draftItems,
     fixedItems,
     handleCountChange,
@@ -45,7 +43,7 @@ export function AppBar(props: AppBarProps) {
     onCloseLauncherMenus,
     onMovePinnedApp,
     onOpenEditor,
-    onOpenWorkspaceSearch,
+    onOpenSearch,
     onResetDraft,
     onSaveLayout,
     onToggleCategoryMenu,
@@ -79,21 +77,15 @@ export function AppBar(props: AppBarProps) {
   return (
     <>
       <AppBarMobileHeader
-        activeContextLabel={activeContextLabel}
         activeAppTitle={activeAppTitle}
         canOpenMobileAppMenu={canOpenMobileAppMenu}
-        canOpenWorkspaceSearch={canOpenWorkspaceSearch}
+        canOpenSearch={canOpenSearch}
         currentUser={currentUser}
         labels={{
           accountTitle: t('auth:settings.mySettings'),
-          mobileMenuTitle: activeContextLabel
-            ? t('shell:mobileAppMenu.titleWithContext', {
-                context: activeContextLabel,
-                title: activeAppTitle,
-              })
-            : t('shell:mobileAppMenu.title', {
-                title: activeAppTitle,
-              }),
+          mobileMenuTitle: t('shell:mobileAppMenu.title', {
+            title: activeAppTitle,
+          }),
           mobileNavigationOpen: t('shell:mobileNavigation.open'),
           notificationsTitle: t('shell:notifications.title'),
           primaryNavigation: t('shell:appBar.primaryNavigation'),
@@ -103,7 +95,7 @@ export function AppBar(props: AppBarProps) {
         onOpenAccount={onOpenAccount}
         onOpenMobileAppMenu={onOpenMobileAppMenu}
         onOpenMobileNavigation={onOpenMobileNavigation}
-        onOpenWorkspaceSearch={onOpenWorkspaceSearch}
+        onOpenSearch={onOpenSearch}
         onToggleNotifications={notificationPanelFocus.onToggle}
         notificationPanelOpen={state.notifOpen}
         notificationsEnabled={notificationsEnabled}
@@ -116,10 +108,10 @@ export function AppBar(props: AppBarProps) {
         appBarLayoutError={state.appBarLayoutError}
         appBarLayoutSaving={state.appBarLayoutSaving}
         appBarItems={props.appBarItems}
-        canOpenWorkspaceSearch={canOpenWorkspaceSearch}
+        canOpenSearch={canOpenSearch}
         currentUser={currentUser}
         currentPathname={props.currentPathname}
-        currentWorkspaceName={currentWorkspaceName}
+        currentCompanyLabel={currentCompanyLabel}
         draftItems={draftItems}
         draftPinnedAppIds={state.draftPinnedAppIds}
         fixedItems={fixedItems}
@@ -134,7 +126,7 @@ export function AppBar(props: AppBarProps) {
         onOpenAccount={onOpenAccount}
         onOpenEditor={onOpenEditor}
         onOpenHelp={onOpenHelp}
-        onOpenWorkspaceSearch={onOpenWorkspaceSearch}
+        onOpenSearch={onOpenSearch}
         onResetDraft={onResetDraft}
         onSaveLayout={onSaveLayout}
         onToggleCategoryMenu={onToggleCategoryMenu}
@@ -150,7 +142,7 @@ export function AppBar(props: AppBarProps) {
         resolveAppLabel={resolveAppLabel}
         t={t}
         unreadCount={state.unreadCount}
-        workspaceAppBarCategories={workspaceAppBarCategories}
+        appBarCategories={appBarCategories}
       />
 
       <AnimatePresence>
@@ -160,7 +152,6 @@ export function AppBar(props: AppBarProps) {
             onCountChange={handleCountChange}
             onNavigateToIssue={handleNavigateToIssue}
             refreshKey={state.notificationRefreshSeq}
-            workspaceSlug={shellWorkspaceSlug}
           />
         ) : null}
       </AnimatePresence>

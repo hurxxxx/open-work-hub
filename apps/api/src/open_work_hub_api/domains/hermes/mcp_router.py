@@ -16,12 +16,8 @@ from open_work_hub_api.core.db import get_db_session
 from open_work_hub_api.core.principal import user_principal
 from open_work_hub_api.core.settings import get_settings
 from open_work_hub_api.domains.ai.mcp import AiMcpClient
-from open_work_hub_api.domains.auth.models import (
-    User,
-    Workspace,
-    WorkspaceUserBinding,
-    utcnow_naive,
-)
+from open_work_hub_api.domains.auth.app_access import can_use_app
+from open_work_hub_api.domains.auth.models import User, utcnow_naive
 from open_work_hub_api.domains.hermes.models import (
     HermesProfileBinding,
     HermesRunProjection,
@@ -32,7 +28,6 @@ from open_work_hub_api.domains.hermes.service import (
     internal_mcp_server_name,
     mcp_profile_bearer_secret,
 )
-
 
 router = APIRouter(prefix="/internal/hermes/mcp", tags=["hermes-mcp"])
 _APPROVAL_EVIDENCE_MAX_AGE = timedelta(minutes=5)
@@ -153,7 +148,7 @@ def _resolve_mcp_identity(
     *,
     profile_name: str,
     authorization: str | None,
-) -> tuple[HermesProfileBinding, Workspace, User]:
+) -> tuple[HermesProfileBinding, User]:
     settings = get_settings()
     expected = mcp_profile_bearer_secret(settings, profile_name)
     supplied = ""
@@ -169,31 +164,21 @@ def _resolve_mcp_identity(
     )
     if binding is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    workspace = db.get(Workspace, binding.workspace_id)
     user = db.get(User, binding.user_id)
-    membership = db.scalar(
-        select(WorkspaceUserBinding.id).where(
-            WorkspaceUserBinding.workspace_id == binding.workspace_id,
-            WorkspaceUserBinding.user_id == binding.user_id,
-        )
-    )
     if (
-        workspace is None
-        or not workspace.active
-        or user is None
+        user is None
         or user.status != "active"
         or user.login_blocked
-        or membership is None
+        or not can_use_app(db, user_id=binding.user_id, app_id="chatbot")
     ):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    return binding, workspace, user
+    return binding, user
 
 
 def _available_tools(
     db: Session,
     *,
     binding: HermesProfileBinding,
-    workspace: Workspace,
     user: User,
     apply_run_scope: bool = True,
 ):
@@ -214,7 +199,6 @@ def _available_tools(
             detail={"code": "hermes.active_run_required"},
         )
     principal = user_principal(
-        workspace_id=workspace.id,
         user_id=user.id,
         source="hermes-mcp",
     )
@@ -222,7 +206,6 @@ def _available_tools(
         principal,
         AiMcpClient().list_tools(
             db,
-            workspace=workspace,
             principal=principal,
             app_ids=active_run.allowed_app_ids if apply_run_scope else None,
             include_meta=True,
@@ -250,7 +233,7 @@ async def handle_mcp_request(
     mcp_session_id: str | None = Header(default=None, alias="Mcp-Session-Id"),
     db: Session = Depends(get_db_session),
 ) -> Response:
-    binding, workspace, user = _resolve_mcp_identity(
+    binding, user = _resolve_mcp_identity(
         db,
         profile_name=profile,
         authorization=authorization,
@@ -287,7 +270,6 @@ async def handle_mcp_request(
         _principal, tools, _active_run = _available_tools(
             db,
             binding=binding,
-            workspace=workspace,
             user=user,
             apply_run_scope=False,
         )
@@ -310,14 +292,13 @@ async def handle_mcp_request(
     principal, tools, active_run = _available_tools(
         db,
         binding=binding,
-        workspace=workspace,
         user=user,
         apply_run_scope=True,
     )
     tool = next((item for item in tools if item.descriptor.name == tool_name), None)
     if tool is None:
         return JSONResponse(
-            _rpc_error(request_id, -32602, "Tool is not available in this workspace"),
+            _rpc_error(request_id, -32602, "Tool is not available for this user"),
             status_code=404,
         )
 
@@ -357,7 +338,6 @@ async def handle_mcp_request(
     try:
         result = AiMcpClient().call_tool(
             db,
-            workspace=workspace,
             principal=principal,
             user=user,
             tool_name=tool_name,

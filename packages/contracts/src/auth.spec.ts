@@ -19,9 +19,7 @@ describe('auth route contract', () => {
     );
     expect(authRoutes.developmentAccountLogin()).toBe('/api/v1/auth/dev-login');
     expect(authRoutes.setup()).toBe('/api/v1/auth/setup');
-    expect(authRoutes.impersonateUser('user 1')).toBe(
-      '/api/v1/auth/impersonations/user%201',
-    );
+    expect(authRoutes).not.toHaveProperty('impersonateUser');
     expect(authRoutes.currentUser()).toBe('/api/v1/auth/me');
     expect(authRoutes.logout()).toBe('/api/v1/auth/logout');
     expect(authRoutes.desktopSessionLinks()).toBe(
@@ -42,7 +40,7 @@ describe('auth route contract', () => {
     const membershipEvent = {
       type: AUTH_REALTIME_EVENT_TYPES.accessChanged,
       data: {
-        reason: AUTH_ACCESS_CHANGE_REASONS.workspaceMembership,
+        reason: AUTH_ACCESS_CHANGE_REASONS.principalAccess,
       },
     };
 
@@ -51,7 +49,7 @@ describe('auth route contract', () => {
     });
     expect(AUTH_ACCESS_CHANGE_REASONS).toEqual({
       appAvailability: 'app_availability',
-      workspaceMembership: 'workspace_membership',
+      principalAccess: 'principal',
     });
     expect(isAuthAccessChangedRealtimeEvent(membershipEvent)).toBe(true);
     expect(

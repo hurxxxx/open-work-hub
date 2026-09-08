@@ -67,7 +67,6 @@ class AiGraphRunRepository:
         resolved_run_id = run_id or str(uuid4())
         run = AiGraphRun(
             id=resolved_run_id,
-            workspace_id=request.workspace_id,
             requested_by_user_id=request.requested_by_user_id,
             conversation_id=request.conversation_id,
             app_id=request.app_id,
@@ -98,17 +97,15 @@ class AiGraphRunRepository:
         self,
         run_id: str,
         *,
-        workspace_id: str,
         user_id: str,
         enabled_app_ids: frozenset[str],
     ) -> AiGraphRun | None:
         predicates = [
-                AiGraphRun.id == run_id,
-                AiGraphRun.workspace_id == workspace_id,
-                or_(
-                    AiGraphRun.requested_by_user_id == user_id,
-                    AiGraphRun.visibility == "workspace",
-                ),
+            AiGraphRun.id == run_id,
+            or_(
+                AiGraphRun.requested_by_user_id == user_id,
+                AiGraphRun.visibility == "company",
+            ),
         ]
         predicates.append(AiGraphRun.app_id.in_(enabled_app_ids))
         return self.db.scalar(select(AiGraphRun).where(*predicates))
@@ -116,7 +113,6 @@ class AiGraphRunRepository:
     def list_visible(
         self,
         *,
-        workspace_id: str,
         user_id: str,
         status: str | None = None,
         app_id: str | None = None,
@@ -126,10 +122,9 @@ class AiGraphRunRepository:
         offset: int = 0,
     ) -> tuple[list[AiGraphRun], int]:
         predicates = [
-            AiGraphRun.workspace_id == workspace_id,
             or_(
                 AiGraphRun.requested_by_user_id == user_id,
-                AiGraphRun.visibility == "workspace",
+                AiGraphRun.visibility == "company",
             ),
         ]
         predicates.append(AiGraphRun.app_id.in_(enabled_app_ids))
@@ -166,9 +161,8 @@ class AiGraphRunRepository:
         claim_token: str | None = None,
     ) -> AiGraphRun:
         run = self.require(run_id)
-        if (
-            run.execution_claim_token != claim_token
-            and (run.execution_claim_token is not None or claim_token is not None)
+        if run.execution_claim_token != claim_token and (
+            run.execution_claim_token is not None or claim_token is not None
         ):
             raise AiGraphExecutionLeaseLostError(run_id)
         if status != run.status:
@@ -192,11 +186,15 @@ class AiGraphRunRepository:
             run.stage = stage
         if current_step is not None:
             if current_step < run.current_step or current_step > run.total_steps:
-                raise AiGraphRunTransitionError("current_step must be monotonic and within total_steps")
+                raise AiGraphRunTransitionError(
+                    "current_step must be monotonic and within total_steps"
+                )
             run.current_step = current_step
         if progress_percent is not None:
             if progress_percent < run.progress_percent or not 0 <= progress_percent <= 100:
-                raise AiGraphRunTransitionError("progress_percent must be monotonic and within 0..100")
+                raise AiGraphRunTransitionError(
+                    "progress_percent must be monotonic and within 0..100"
+                )
             run.progress_percent = progress_percent
         if status_message_key is not None:
             run.status_message_key = status_message_key
@@ -216,9 +214,7 @@ class AiGraphRunRepository:
         now: datetime | None = None,
     ) -> AiGraphExecutionClaim:
         resolved_now = now or _utcnow_naive()
-        run = self.db.scalar(
-            select(AiGraphRun).where(AiGraphRun.id == run_id).with_for_update()
-        )
+        run = self.db.scalar(select(AiGraphRun).where(AiGraphRun.id == run_id).with_for_update())
         if run is None:
             raise AiGraphRunNotFoundError(run_id)
         if run.status in {"completed", "failed", "cancelled"}:
@@ -268,9 +264,7 @@ class AiGraphRunRepository:
         """Extend an active execution lease while fencing stale workers."""
 
         resolved_now = now or _utcnow_naive()
-        run = self.db.scalar(
-            select(AiGraphRun).where(AiGraphRun.id == run_id).with_for_update()
-        )
+        run = self.db.scalar(select(AiGraphRun).where(AiGraphRun.id == run_id).with_for_update())
         if run is None:
             raise AiGraphRunNotFoundError(run_id)
         if run.status != "running" or run.execution_claim_token != claim_token:
@@ -289,16 +283,13 @@ class AiGraphRunRepository:
         claim_token: str | None = None,
         lease_duration: timedelta = timedelta(minutes=15),
     ) -> AiGraphRun:
-        run = self.db.scalar(
-            select(AiGraphRun).where(AiGraphRun.id == run_id).with_for_update()
-        )
+        run = self.db.scalar(select(AiGraphRun).where(AiGraphRun.id == run_id).with_for_update())
         if run is None:
             raise AiGraphRunNotFoundError(run_id)
         if run.status != "running":
             return run
-        if (
-            run.execution_claim_token != claim_token
-            and (run.execution_claim_token is not None or claim_token is not None)
+        if run.execution_claim_token != claim_token and (
+            run.execution_claim_token is not None or claim_token is not None
         ):
             raise AiGraphExecutionLeaseLostError(run_id)
         marker = self.db.get(

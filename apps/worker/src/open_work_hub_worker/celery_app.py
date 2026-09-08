@@ -8,7 +8,6 @@ from celery.signals import after_setup_logger, after_setup_task_logger, celeryd_
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
-from open_work_hub_worker.settings import get_settings
 from open_work_hub_worker.beat_health import install_beat_health
 from open_work_hub_worker.queue_contract import (
     AI_GRAPH_REPUBLISH_TASK_NAME,
@@ -21,6 +20,7 @@ from open_work_hub_worker.queue_contract import (
     celery_worker_queue_argument,
     worker_bootstrap_group_requires_llm_routing,
 )
+from open_work_hub_worker.settings import get_settings
 
 
 def _workspace_root() -> Path:
@@ -39,12 +39,11 @@ def _ensure_api_src_on_path() -> None:
 
 _ensure_api_src_on_path()
 
-from open_work_hub_api.core.telemetry import bootstrap_telemetry  # noqa: E402
 from open_work_hub_api.core.logging_security import (  # noqa: E402
     install_sensitive_http_logging_guard,
 )
+from open_work_hub_api.core.telemetry import bootstrap_telemetry  # noqa: E402
 from open_work_hub_api.platform_extensions import initialize_platform_extensions  # noqa: E402
-
 
 settings = get_settings()
 install_sensitive_http_logging_guard()

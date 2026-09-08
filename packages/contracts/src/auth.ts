@@ -46,8 +46,6 @@ export const authRoutes = {
   developmentAdminLogin: () => `${AUTH_API_PREFIX}/dev-admin-login`,
   developmentAccountLogin: () => `${AUTH_API_PREFIX}/dev-login`,
   setup: () => `${AUTH_API_PREFIX}/setup`,
-  impersonateUser: (userId: string) =>
-    `${AUTH_API_PREFIX}/impersonations/${encodeURIComponent(userId)}`,
   currentUser: () => `${AUTH_API_PREFIX}/me`,
   logout: () => `${AUTH_API_PREFIX}/logout`,
   desktopSessionLinks: () => `${AUTH_API_PREFIX}/desktop-session-links`,

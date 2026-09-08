@@ -6,18 +6,18 @@ import hashlib
 import json
 import logging
 from collections import OrderedDict
+from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import Protocol, cast
 
-from fastapi import WebSocket
+from fastapi import HTTPException, WebSocket
 from redis import asyncio as redis_asyncio
 from redis.asyncio.client import PubSub
 from starlette.websockets import WebSocketDisconnect, WebSocketState
 from uvicorn.protocols.utils import ClientDisconnected
 from ypy_websocket.yroom import YRoom
 from ypy_websocket.yutils import YMessageType
-
 
 logger = logging.getLogger(__name__)
 
@@ -383,11 +383,14 @@ class FastAPIYjsWebsocket:
         path: str,
         room_runtime: CollabRoomRuntime,
         user_id: str,
+        *,
+        authorize: Callable[[], Awaitable[bool | None]],
     ):
         self._websocket = websocket
         self._path = path
         self._room_runtime: CollabRoomRuntime | None = room_runtime
         self._user_id = user_id
+        self._authorize = authorize
         self._send_lock = asyncio.Lock()
         self._closed = False
 
@@ -406,12 +409,17 @@ class FastAPIYjsWebsocket:
             raise StopAsyncIteration() from None
 
     async def recv(self) -> bytes:
+        if self._closed:
+            raise WebSocketDisconnect(code=1008)
         message = await self._websocket.receive()
         if message["type"] == "websocket.disconnect":
             raise RuntimeError("WebSocket disconnected.")
         payload = message.get("bytes")
         if payload is None:
             raise RuntimeError("Unexpected non-binary WebSocket frame.")
+        if not await self._authorize_frame():
+            await self.close(code=1008, reason="access_revoked")
+            raise WebSocketDisconnect(code=1008)
         if payload and payload[0] == YMessageType.SYNC and self._room_runtime is not None:
             self._room_runtime.last_editor_user_id = self._user_id
         return payload
@@ -431,13 +439,30 @@ class FastAPIYjsWebsocket:
             if not self._is_connected():
                 self._mark_closed()
                 return
-            try:
-                await self._websocket.send_bytes(message)
-            except (ClientDisconnected, WebSocketDisconnect, RuntimeError, AssertionError) as exc:
-                if self._is_closed_send_error(exc):
-                    self._mark_closed()
-                    return
-                raise
+            allowed = await self._authorize_frame()
+            if allowed:
+                try:
+                    await self._websocket.send_bytes(message)
+                except (
+                    ClientDisconnected,
+                    WebSocketDisconnect,
+                    RuntimeError,
+                    AssertionError,
+                ) as exc:
+                    if self._is_closed_send_error(exc):
+                        self._mark_closed()
+                        return
+                    raise
+        if not allowed:
+            # close() owns the same send lock. Do not reenter it or fail the
+            # YRoom broadcast task group for other, still-authorized clients.
+            await self.close(code=1008, reason="access_revoked")
+
+    async def _authorize_frame(self) -> bool:
+        try:
+            return await self._authorize() is not False
+        except HTTPException:
+            return False
 
     async def close(self, code: int = 1000, reason: str | None = None) -> None:
         if self._closed:

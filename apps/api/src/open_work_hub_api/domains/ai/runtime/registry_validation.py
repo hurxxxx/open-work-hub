@@ -52,8 +52,7 @@ def validate_execution_graph(
                 f"{blocked_direct_invocation_agents[0]} cannot be a direct invocation target"
             )
         raise RuntimeRegistryValidationError(
-            "blocked direct invocation agent id(s): "
-            f"{blocked_direct_invocation_agents}"
+            f"blocked direct invocation agent id(s): {blocked_direct_invocation_agents}"
         )
 
     _validate_invocation_graph_shape(graph)

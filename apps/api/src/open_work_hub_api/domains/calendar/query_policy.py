@@ -10,7 +10,6 @@ from open_work_hub_api.domains.planner.event_time import parse_iso_or_date
 from .schemas import CalendarSourceType
 from .source_catalog import DEFAULT_CALENDAR_SOURCES, VALID_CALENDAR_SOURCES
 
-
 MAX_CALENDAR_RANGE_DAYS = 366
 
 

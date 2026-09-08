@@ -10,11 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 
 import type { AuthUser } from '@/src/platform/auth/auth-api';
-import {
-  removeWorkspaceMember,
-  updateAdminUser,
-  type WorkspaceItem,
-} from './admin-api';
+import { updateAdminUser } from './admin-api';
 import { PeopleSection } from './admin-people-section';
 import { useAdminPeopleDirectoryController } from './useAdminPeopleDirectoryController';
 
@@ -62,23 +58,12 @@ vi.mock('@open-work-hub/ui', async (importOriginal) => ({
 
 vi.mock('./admin-api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./admin-api')>()),
-  bulkWorkspaceMembers: vi.fn(),
-  removeWorkspaceMember: vi.fn(),
   updateAdminUser: vi.fn(),
 }));
 
 vi.mock('./useAdminPeopleDirectoryController', () => ({
   useAdminPeopleDirectoryController: vi.fn(),
 }));
-
-const workspace = {
-  active: true,
-  description: '',
-  id: 'workspace-1',
-  key: 'workspace-one',
-  member_count: 1,
-  name: 'Workspace One',
-} as WorkspaceItem;
 
 const member = {
   app_bar_layout: { pinned_app_ids: [] },
@@ -93,24 +78,15 @@ const member = {
   must_change_password: false,
   status: 'active',
   system_roles: [],
+  group_ids: [],
+  managed_organization_unit_ids: [],
   theme_preference: 'system',
   time_zone: 'Asia/Seoul',
-  workspaces: [
-    {
-      id: workspace.id,
-      name: workspace.name,
-      role: 'member',
-      slug: workspace.key,
-    },
-  ],
-  workspace_roles: [],
 } as AuthUser;
 
 beforeEach(() => {
   vi.mocked(updateAdminUser).mockReset();
   vi.mocked(updateAdminUser).mockResolvedValue(member);
-  vi.mocked(removeWorkspaceMember).mockReset();
-  vi.mocked(removeWorkspaceMember).mockResolvedValue(undefined);
   vi.mocked(useAdminPeopleDirectoryController).mockReturnValue({
     actions: {
       organizationUnitChanged: vi.fn(),
@@ -133,64 +109,46 @@ beforeEach(() => {
       totalUsers: 1,
       unassignedOnly: false,
       users: [member],
-      workspaces: [workspace],
     },
   });
 });
 
-describe('PeopleSection workspace membership removal', () => {
-  it('does not save profile or revoke access until the removal is confirmed', async () => {
+describe('PeopleSection account editing', () => {
+  it('saves profile and account status in one authorized update', async () => {
     render(
       <MemoryRouter>
         <PeopleSection token="test-token" />
       </MemoryRouter>,
     );
     fireEvent.click(
-      screen.getByRole('button', {
-        name: 'admin.console.people.editUser',
-      }),
+      screen.getByRole('button', { name: 'admin.console.people.editUser' }),
     );
-    const editDialog = await screen.findByRole('dialog', {
+    const dialog = await screen.findByRole('dialog', {
       name: 'admin.console.people.editUser',
     });
-    fireEvent.click(
-      within(editDialog).getByRole('checkbox', { name: /Workspace One/ }),
+    fireEvent.change(
+      within(dialog).getByLabelText('admin.console.people.fullName'),
+      { target: { value: 'Renamed Member' } },
     );
-    fireEvent.click(
-      within(editDialog).getByRole('button', { name: 'common:actions.save' }),
-    );
-
-    const confirmation = await screen.findByRole('dialog', {
-      name: 'admin.console.people.workspaceRemovalConfirmTitle',
-    });
-    expect(updateAdminUser).not.toHaveBeenCalled();
-    expect(removeWorkspaceMember).not.toHaveBeenCalled();
-    fireEvent.click(
-      within(confirmation).getByRole('button', {
-        name: 'common:actions.cancel',
-      }),
+    fireEvent.change(
+      within(dialog).getByLabelText('admin.console.people.columns.status'),
+      { target: { value: 'suspended' } },
     );
     expect(updateAdminUser).not.toHaveBeenCalled();
-
     fireEvent.click(
-      within(editDialog).getByRole('button', { name: 'common:actions.save' }),
+      within(dialog).getByRole('button', { name: 'common:actions.save' }),
     );
-    fireEvent.click(
-      within(
-        await screen.findByRole('dialog', {
-          name: 'admin.console.people.workspaceRemovalConfirmTitle',
-        }),
-      ).getByRole('button', {
-        name: 'admin.console.people.workspaceRemovalConfirmAction',
-      }),
-    );
-
     await waitFor(() => expect(updateAdminUser).toHaveBeenCalledTimes(1));
-    expect(removeWorkspaceMember).toHaveBeenCalledWith(
+    expect(updateAdminUser).toHaveBeenCalledWith(
       'test-token',
-      'workspace-1',
-      'user',
       'user-1',
+      expect.objectContaining({
+        full_name: 'Renamed Member',
+        status: 'suspended',
+      }),
+    );
+    expect(vi.mocked(updateAdminUser).mock.calls[0]?.[2]).not.toHaveProperty(
+      'workspace_ids',
     );
   });
 });

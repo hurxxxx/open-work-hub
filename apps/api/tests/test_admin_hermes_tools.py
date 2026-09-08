@@ -29,7 +29,7 @@ def test_admin_can_toggle_each_research_source_with_revision_control(
 
     assert initial.status_code == 200, initial.text
     payload = initial.json()
-    assert payload["revision"] == 1
+    assert payload["revision"] == 0
     assert {
         source["id"]: source["enabled"] for source in payload["sources"]
     } == DEFAULT_RESEARCH_SOURCE_POLICY
@@ -42,12 +42,13 @@ def test_admin_can_toggle_each_research_source_with_revision_control(
 
     assert updated.status_code == 200, updated.text
     updated_payload = updated.json()
-    assert updated_payload["revision"] == 2
-    assert next(
-        source
-        for source in updated_payload["sources"]
-        if source["id"] == "semantic_scholar"
-    )["enabled"] is True
+    assert updated_payload["revision"] == 1
+    assert (
+        next(source for source in updated_payload["sources"] if source["id"] == "semantic_scholar")[
+            "enabled"
+        ]
+        is True
+    )
 
     conflict = client.put(
         "/api/v1/admin/hermes/research-sources/crossref",
@@ -98,7 +99,6 @@ async def test_profile_inventory_includes_official_toolset_status(
 ) -> None:
     binding = SimpleNamespace(
         id="binding-id",
-        workspace_id="workspace-id",
         user_id="user-id",
         profile_name="owh-profile",
         status="active",

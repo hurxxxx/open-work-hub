@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
 import hashlib
 import json
+from collections.abc import Iterator
 from typing import Literal
 from urllib.parse import quote
 
@@ -11,22 +11,20 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from open_work_hub_api.core.i18n import localized_http_exception
-from open_work_hub_api.domains.auth.models import User, Workspace
-from open_work_hub_api.domains.auth.workspace_app_gate import (
-    is_app_enabled_for_user_context,
-    is_company_app_enabled_for_user_context,
+from open_work_hub_api.domains.auth.app_gate import (
+    can_use_app,
 )
+from open_work_hub_api.domains.auth.models import User
+from open_work_hub_api.domains.content_access.contracts import ContentStream
 from open_work_hub_api.domains.content_access.grants import (
     ContentGrantClaims,
     ContentGrantIssuer,
     InvalidContentGrant,
     build_content_grant_url,
 )
-from open_work_hub_api.domains.content_access.contracts import ContentStream
 from open_work_hub_api.domains.files import service as files_service
 from open_work_hub_api.domains.files.models import FileManagerFile
 from open_work_hub_api.domains.files.storage_adapter import FileStorageObject, open_file_object
-
 
 FileContentDisposition = Literal["attachment", "inline"]
 # Content URLs are bearer capabilities. Every fetch rechecks the current source
@@ -51,7 +49,6 @@ def build_file_content_url(
     file: FileManagerFile,
     *,
     issuer: ContentGrantIssuer,
-    execution_workspace_id: str,
     disposition: FileContentDisposition,
     now: float | None = None,
     expires_seconds: int = FILE_CONTENT_URL_EXPIRES_SECONDS,
@@ -62,8 +59,7 @@ def build_file_content_url(
         resource_id=file.id,
         owner_app_id="files",
         issuer=issuer,
-        execution_context_kind="workspace",
-        execution_workspace_id=execution_workspace_id,
+        execution_context_kind="company",
         route_id=None,
         source_type="file_corpus",
         source_id=corpus_id,
@@ -97,33 +93,21 @@ def open_file_content_grant(db: Session, *, claims: ContentGrantClaims) -> Conte
         raise InvalidContentGrant("binding")
 
     user = db.get(User, claims.issuer_user_id)
-    workspace = (
-        db.get(Workspace, claims.execution_workspace_id)
-        if claims.execution_workspace_id is not None
-        else None
-    )
-    if (
-        user is None
-        or user.status != "active"
-        or user.login_blocked
-        or workspace is None
-        or not workspace.active
-    ):
+    if user is None or user.status != "active" or user.login_blocked:
         raise InvalidContentGrant("principal")
-    if claims.execution_context_kind != "workspace":
+    if claims.execution_context_kind != "company":
         raise InvalidContentGrant("app")
     app_enabled = (
-        is_company_app_enabled_for_user_context(
+        can_use_app(
             db,
             app_id="files",
             user_id=user.id,
         )
         if file.corpus is not None and file.corpus.access_scope_kind == "company"
-        else is_app_enabled_for_user_context(
+        else can_use_app(
             db,
             app_id="files",
             user_id=user.id,
-            workspace_id=workspace.id,
         )
     )
     if not app_enabled:
@@ -131,7 +115,6 @@ def open_file_content_grant(db: Session, *, claims: ContentGrantClaims) -> Conte
     try:
         authorized_file = files_service.require_file_access(
             db,
-            workspace=workspace,
             user=user,
             file_id=file.id,
         )

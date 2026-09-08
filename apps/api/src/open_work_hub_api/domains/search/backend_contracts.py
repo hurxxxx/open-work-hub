@@ -67,7 +67,6 @@ class KeywordSearchSortSpec:
 
 @dataclass(frozen=True, slots=True)
 class KeywordSearchQuery:
-    workspace_id: str
     retrieval_partition_ids: tuple[str, ...] | None = None
     text: str = ""
     entity_types: tuple[str, ...] = ()
@@ -128,10 +127,9 @@ class KeywordSearchClient(Protocol):
 
     def index_exists(self) -> bool: ...
 
-    def rebuild_workspace(
+    def rebuild_company_index(
         self,
         *,
-        workspace_id: str,
         documents: list[dict[str, Any]],
     ) -> None: ...
 
@@ -140,15 +138,13 @@ class KeywordSearchClient(Protocol):
     def delete_document(
         self,
         *,
-        workspace_id: str,
         entity_type: str,
         entity_id: str,
     ) -> None: ...
 
-    def count_workspace_documents(
+    def count_company_documents(
         self,
         *,
-        workspace_id: str,
         entity_types: tuple[str, ...] = (),
     ) -> int: ...
 

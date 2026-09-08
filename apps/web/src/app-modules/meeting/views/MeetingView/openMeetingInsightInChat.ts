@@ -1,9 +1,9 @@
 import type { NavigateFunction } from 'react-router-dom';
 
 import { createConversation } from '@/src/app-modules/chatbot/public-api';
+import { i18n } from '@/src/platform/i18n';
 import type { MeetingDetail } from '../../api/meeting-api';
 import type { MeetingInsightItem } from '../../api/meeting-insights-api';
-import { i18n } from '@/src/platform/i18n';
 import {
   buildMeetingInsightPromptDraft,
   extractMeetingInsightTitle,
@@ -14,7 +14,7 @@ import {
 export interface OpenMeetingInsightInChatArgs {
   navigate: NavigateFunction;
   token: string;
-  workspaceSlug: string;
+
   meeting: Pick<MeetingDetail, 'id' | 'title'>;
   insight: MeetingInsightItem;
 }
@@ -33,12 +33,10 @@ const translateMeetingInsightChatPrompt: MeetingInsightChatTranslator = (
 export async function openMeetingInsightInChat({
   navigate,
   token,
-  workspaceSlug,
   meeting,
   insight,
 }: OpenMeetingInsightInChatArgs): Promise<void> {
   const handoffPlan = planMeetingInsightChatHandoff({
-    workspaceSlug,
     meeting,
     insight,
     translate: translateMeetingInsightChatPrompt,

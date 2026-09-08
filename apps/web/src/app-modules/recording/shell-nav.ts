@@ -1,5 +1,5 @@
-import type { AppShellNavResolver } from '@/src/app/shell/navigation-types';
 import { getShellSearchParams } from '@/src/app-shell-navigation-model';
+import type { AppShellNavResolver } from '@/src/app/shell/navigation-types';
 
 export const recordingShellNavResolver: AppShellNavResolver = ({ path }) => {
   const params = getShellSearchParams(path);

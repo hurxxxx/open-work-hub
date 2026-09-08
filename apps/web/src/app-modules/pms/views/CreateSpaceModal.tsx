@@ -1,17 +1,17 @@
-import { useEffect, useMemo, useReducer } from 'react';
-import { Layout, UserPlus } from 'lucide-react';
-import { InlineNotice } from '@open-work-hub/ui';
-import { useTranslation } from 'react-i18next';
-import { useAuth } from '@/src/platform/auth/auth-provider';
-import { hasWorkspaceMembership } from '@/src/platform/auth/auth-api';
 import {
   FORM_FIELD_CONTROL_CLASS_NAME,
   FORM_TEXTAREA_CONTROL_CLASS_NAME,
   FormDialog,
   FormFieldRow,
 } from '@/src/components/form/FormDialog';
+import { useAppAdmission } from '@/src/platform/apps/app-bootstrap-context';
+import { useAuth } from '@/src/platform/auth/auth-provider';
 import { UserSearchMultiSelect } from '@/src/platform/users/UserSearchMultiSelect';
 import { selectUserOptionsForPicker } from '@/src/platform/users/user-option-picker-model';
+import { InlineNotice } from '@open-work-hub/ui';
+import { Layout, UserPlus } from 'lucide-react';
+import { useEffect, useMemo, useReducer } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   addSpaceMember,
   createSpace,
@@ -105,12 +105,10 @@ export const CreateSpaceModal = ({
   isOpen,
   onClose,
   onCreated,
-  workspaceSlug,
 }: {
   isOpen: boolean;
   onClose: () => void;
   onCreated?: (space: PmsSpace) => void;
-  workspaceSlug?: string | null;
 }) => {
   const { t } = useTranslation(['apps', 'common']);
   const { token, user } = useAuth();
@@ -128,9 +126,7 @@ export const CreateSpaceModal = ({
     dispatch,
   ] = useReducer(createSpaceModalReducer, INITIAL_CREATE_SPACE_MODAL_STATE);
 
-  const canCreateSpace = Boolean(
-    workspaceSlug && hasWorkspaceMembership(user, workspaceSlug),
-  );
+  const canCreateSpace = Boolean(useAppAdmission('pms'));
 
   useEffect(() => {
     if (!isOpen) return;
@@ -140,7 +136,7 @@ export const CreateSpaceModal = ({
   useEffect(() => {
     if (!isOpen || !token || !canCreateSpace) return;
     let cancelled = false;
-    listPmsUsers(token, workspaceSlug)
+    listPmsUsers(token)
       .then((users) => {
         if (!cancelled) dispatch({ type: 'usersLoaded', users });
       })
@@ -150,7 +146,7 @@ export const CreateSpaceModal = ({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, token, workspaceSlug, canCreateSpace]);
+  }, [isOpen, token, canCreateSpace]);
 
   const excludedCandidateIds = useMemo(
     () =>
@@ -186,31 +182,22 @@ export const CreateSpaceModal = ({
   }
 
   async function handleCreate() {
-    if (!token || !workspaceSlug || !name.trim() || !canCreateSpace) return;
+    if (!token || !name.trim() || !canCreateSpace) return;
     dispatch({ type: 'createStarted' });
     try {
-      const space = await createSpace(
-        token,
-        {
-          name: name.trim(),
-          description: description.trim(),
-        },
-        workspaceSlug,
-      );
+      const space = await createSpace(token, {
+        name: name.trim(),
+        description: description.trim(),
+      });
 
       const failures = (
         await Promise.all(
           picked.map(async (member) => {
             try {
-              await addSpaceMember(
-                token,
-                space.id,
-                {
-                  user_id: member.id,
-                  role: 'member',
-                },
-                workspaceSlug,
-              );
+              await addSpaceMember(token, space.id, {
+                user_id: member.id,
+                role: 'member',
+              });
               return null;
             } catch (err) {
               const message =

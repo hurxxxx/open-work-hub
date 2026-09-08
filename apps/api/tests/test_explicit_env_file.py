@@ -4,10 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from open_work_hub_api.core.explicit_env_file import (
-    ExplicitEnvFileError,
-    load_explicit_env_file,
-)
+from open_work_hub_api.core.explicit_env_file import ExplicitEnvFileError, load_explicit_env_file
 
 
 def test_explicit_env_file_parses_dotenv_and_projects_allowlist(tmp_path: Path) -> None:

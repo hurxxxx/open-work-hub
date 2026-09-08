@@ -1,15 +1,15 @@
-import { useCallback, useMemo, useState, type SetStateAction } from 'react';
 import type { TFunction } from 'i18next';
+import { useCallback, useMemo, useState, type SetStateAction } from 'react';
 
+import {
+  userOptionDisplayName,
+  userOptionMatchesQuery,
+} from '@/src/platform/users/user-option-picker-model';
 import {
   createTaskComment,
   type PmsComment,
   type PmsTaskListMember,
 } from '../api/pms-api';
-import {
-  userOptionMatchesQuery,
-  userOptionDisplayName,
-} from '@/src/platform/users/user-option-picker-model';
 import {
   getTaskDetailMutationErrorMessage,
   notifyTaskDetailUpdated,
@@ -111,7 +111,6 @@ export function useTaskDetailComments({
   taskId,
   token,
   t,
-  workspaceSlug,
 }: {
   canEdit: boolean;
   members: PmsTaskListMember[];
@@ -121,7 +120,6 @@ export function useTaskDetailComments({
   taskId: string;
   token: string | null;
   t: TFunction;
-  workspaceSlug: string;
 }) {
   const [commentDraft, setCommentDraft] = useState('');
   const [mentionOpen, setMentionOpen] = useState(false);
@@ -166,11 +164,11 @@ export function useTaskDetailComments({
   }, []);
 
   const handleCommentSubmit = useCallback(() => {
-    if (!token || !canEdit || !workspaceSlug || !commentDraft.trim()) return;
+    if (!token || !canEdit || !commentDraft.trim()) return;
     setSaveError(null);
     const body = commentDraft.trim();
     const bodyBlocks = buildTaskCommentBodyBlocks(body, mentionTokens);
-    createTaskComment(token, taskId, body, bodyBlocks, workspaceSlug)
+    createTaskComment(token, taskId, body, bodyBlocks)
       .then(async (newComment) => {
         setComments((prev) => [...prev, newComment]);
         setCommentDraft('');
@@ -197,7 +195,6 @@ export function useTaskDetailComments({
     t,
     taskId,
     token,
-    workspaceSlug,
   ]);
 
   return {

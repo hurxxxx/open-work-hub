@@ -5,13 +5,13 @@ import { blocksToYDoc, withCollaboration } from '@blocknote/core/yjs';
 import { BlockNoteView } from '@blocknote/mantine';
 import { useCreateBlockNote } from '@blocknote/react';
 import { Loader2 } from 'lucide-react';
-import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
 import '@mantine/core/styles.css';
 import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 
 import { BlockViewer } from './block-viewer';
+import { createAuthenticatedCollabProvider } from './authenticated-collab-provider';
 import {
   normalizeBlockNoteCopyPlainText,
   preferRichTextPaste,
@@ -148,16 +148,12 @@ function CollaborativeBlockEditorInner({
   }, [session.snapshotContent, session.yjsState]);
 
   const provider = useMemo(() => {
-    return new WebsocketProvider(
-      toCollaborativeWebSocketUrl(session.wsPath, window.location.origin),
-      session.roomKey,
-      ydoc,
-      {
-        connect: false,
-        maxBackoffTime: 4000,
-        params: { token: authToken },
-      },
-    );
+    return createAuthenticatedCollabProvider({
+      url: toCollaborativeWebSocketUrl(session.wsPath, window.location.origin),
+      roomKey: session.roomKey,
+      doc: ydoc,
+      token: authToken,
+    });
   }, [authToken, session.roomKey, session.wsPath, ydoc]);
 
   const editor = useCreateBlockNote(

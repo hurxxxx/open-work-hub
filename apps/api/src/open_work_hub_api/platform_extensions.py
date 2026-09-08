@@ -9,28 +9,6 @@ from open_work_hub_api.core.asr_backend_registry import (
     asr_backend_names,
     normalize_asr_backend_name,
 )
-from open_work_hub_api.core.settings import get_settings
-from open_work_hub_api.domains.ai.registry import (
-    get_ai_capability_registry,
-    initialize_ai_capability_registry,
-)
-from open_work_hub_api.domains.ai.agent_runtime import agent_runtime_adapter_ids
-from open_work_hub_api.domains.ai.local_gateway_tool_catalog import (
-    default_gateway_tools_by_agent,
-    read_gateway_tool_builders,
-)
-from open_work_hub_api.domains.ai.runtime.external_adapters import (
-    normalize_external_execution_adapter_name,
-    supported_external_planner_execution_adapters,
-    supported_external_search_execution_adapters,
-)
-from open_work_hub_api.domains.ai.runtime.agent_catalog import default_agent_definitions
-from open_work_hub_api.core.llm_provider_registry import (
-    ensure_default_external_llm_providers_registered,
-    external_llm_provider_descriptor,
-    external_llm_provider_ids,
-    normalize_external_llm_provider_id,
-)
 from open_work_hub_api.core.llm_execution_adapters import (
     ensure_default_llm_execution_adapters_registered,
     llm_execution_adapter_keys,
@@ -43,9 +21,34 @@ from open_work_hub_api.core.llm_pool_config_registry import (
     ensure_default_llm_pool_config_resolvers_registered,
     llm_pool_config_resolver_keys,
 )
-from open_work_hub_api.domains.auth.workspace_apps import (
-    get_workspace_app_catalog_item,
-    get_workspace_app_registration,
+from open_work_hub_api.core.llm_provider_registry import (
+    ensure_default_external_llm_providers_registered,
+    external_llm_provider_descriptor,
+    external_llm_provider_ids,
+    normalize_external_llm_provider_id,
+)
+from open_work_hub_api.core.settings import get_settings
+from open_work_hub_api.domains.ai.agent_runtime import agent_runtime_adapter_ids
+from open_work_hub_api.domains.ai.local_gateway_tool_catalog import (
+    default_gateway_tools_by_agent,
+    read_gateway_tool_builders,
+)
+from open_work_hub_api.domains.ai.registry import (
+    get_ai_capability_registry,
+    initialize_ai_capability_registry,
+)
+from open_work_hub_api.domains.ai.runtime.agent_catalog import default_agent_definitions
+from open_work_hub_api.domains.ai.runtime.external_adapters import (
+    normalize_external_execution_adapter_name,
+    supported_external_planner_execution_adapters,
+    supported_external_search_execution_adapters,
+)
+from open_work_hub_api.domains.auth.app_catalog import (
+    get_app_catalog_item,
+    get_app_registration,
+)
+from open_work_hub_api.domains.bento.execution import (
+    ensure_bento_agent_executor_registered,
 )
 from open_work_hub_api.domains.conversations.default_scope_adapters import (
     ensure_conversation_scope_adapters_registered,
@@ -53,9 +56,6 @@ from open_work_hub_api.domains.conversations.default_scope_adapters import (
 from open_work_hub_api.domains.conversations.scope_registry import (
     conversation_scope_adapters,
     supported_conversation_scope_refs,
-)
-from open_work_hub_api.domains.bento.execution import (
-    ensure_bento_agent_executor_registered,
 )
 from open_work_hub_api.domains.rag.default_source_adapters import (
     ensure_rag_source_adapters_registered,
@@ -74,21 +74,21 @@ from open_work_hub_api.domains.retrieval.partition_adapter_registry import (
     get_retrieval_partition_adapter,
     retrieval_partition_adapters,
 )
-from open_work_hub_api.domains.search.default_entity_adapters import (
-    ensure_search_entity_adapters_registered,
-)
-from open_work_hub_api.domains.search.default_index_hook_adapters import (
-    ensure_search_index_hooks_registered,
+from open_work_hub_api.domains.search.backend_contracts import (
+    KeywordAclBranch,
+    KeywordAclClause,
+    keyword_acl_clause,
 )
 from open_work_hub_api.domains.search.backend_factory import (
     ensure_default_keyword_search_backends_registered,
     keyword_search_backend_names,
     normalize_keyword_search_backend_name,
 )
-from open_work_hub_api.domains.search.backend_contracts import (
-    KeywordAclBranch,
-    KeywordAclClause,
-    keyword_acl_clause,
+from open_work_hub_api.domains.search.default_entity_adapters import (
+    ensure_search_entity_adapters_registered,
+)
+from open_work_hub_api.domains.search.default_index_hook_adapters import (
+    ensure_search_index_hooks_registered,
 )
 from open_work_hub_api.domains.search.entity_adapter_registry import search_entity_adapters
 from open_work_hub_api.domains.search.entity_registry import search_entity_descriptors
@@ -98,14 +98,14 @@ from open_work_hub_api.domains.search.hook_registry import (
 )
 from open_work_hub_api.domains.search.index_gateway import keyword_acl_query_field_names
 from open_work_hub_api.domains.search.projection_registry import get_search_projection_adapters
-from open_work_hub_api.domains.source_access.targets import (
-    target_access_app_ids,
-    ensure_builtin_target_access_adapters_registered,
-)
 from open_work_hub_api.domains.source_access.default_adapters import (
     ensure_builtin_source_access_adapters_registered,
 )
 from open_work_hub_api.domains.source_access.registry import get_source_access_adapters
+from open_work_hub_api.domains.source_access.targets import (
+    ensure_builtin_target_access_adapters_registered,
+    target_access_app_ids,
+)
 
 
 class PlatformExtensionBootstrapError(RuntimeError):
@@ -297,7 +297,7 @@ def _validate_conversation_scope_registry_contracts() -> list[str]:
     problems: list[str] = []
     for adapter in conversation_scope_adapters():
         experience = adapter.experience
-        if get_workspace_app_catalog_item(experience.owner_app_id) is None:
+        if get_app_catalog_item(experience.owner_app_id) is None:
             problems.append(
                 "conversation scope owner app is not registered: "
                 f"{adapter.scope_ref} -> {experience.owner_app_id}"
@@ -617,7 +617,7 @@ def _configured_external_llm_provider_ids(
 
 def _validate_retrieval_partition_registry_contracts() -> list[str]:
     problems: list[str] = []
-    supported_candidate_scopes = {"company", "workspace", "personal"}
+    supported_candidate_scopes = {"company", "personal"}
     supported_transition_modes = {"generic", "source_owned"}
     for adapter in retrieval_partition_adapters():
         normalized_scopes = tuple(
@@ -771,29 +771,23 @@ def _validate_search_registry_contracts(
 
     problems: list[str] = []
     for adapter in search_entity_adapters():
-        owner = get_workspace_app_catalog_item(adapter.owner_app_id)
-        owner_registration = get_workspace_app_registration(adapter.owner_app_id)
+        owner = get_app_catalog_item(adapter.owner_app_id)
+        owner_registration = get_app_registration(adapter.owner_app_id)
         if owner is None:
             problems.append(
-                "workspace keyword search entity "
+                "keyword search entity "
                 f"{adapter.entity_type} references unknown owner app: {adapter.owner_app_id}"
-            )
-        elif owner.availability_scope != "workspace":
-            problems.append(
-                "workspace keyword search entity "
-                f"{adapter.entity_type} owner app must be workspace-available: "
-                f"{adapter.owner_app_id}"
             )
         elif owner_registration is not adapter.owner_app:
             problems.append(
-                "workspace keyword search entity "
+                "keyword search entity "
                 f"{adapter.entity_type} must use its canonical owner app registration: "
                 f"{adapter.owner_app_id}"
             )
         backend_domain = adapter.owner_app.backend_domain
         if not backend_domain:
             problems.append(
-                "workspace keyword search entity "
+                "keyword search entity "
                 f"{adapter.entity_type} owner app must declare backend_domain: "
                 f"{adapter.owner_app_id}"
             )
@@ -801,7 +795,7 @@ def _validate_search_registry_contracts(
             [
                 f"{loader_name}={_callable_module_name(loader)}"
                 for loader_name, loader in (
-                    ("workspace_loader", adapter.workspace_loader),
+                    ("company_loader", adapter.company_loader),
                     ("document_loader", adapter.document_loader),
                 )
                 if not _callable_belongs_to_backend_domain(loader, backend_domain)
@@ -811,7 +805,7 @@ def _validate_search_registry_contracts(
         )
         if loader_domain_mismatches:
             problems.append(
-                "workspace keyword search entity "
+                "keyword search entity "
                 f"{adapter.entity_type} loaders must belong to backend domain "
                 f"{backend_domain}: " + ", ".join(loader_domain_mismatches)
             )
@@ -823,7 +817,7 @@ def _validate_search_registry_contracts(
         ]
         if missing_lifecycle_operations:
             problems.append(
-                "workspace keyword search entity "
+                "keyword search entity "
                 f"{adapter.entity_type} must declare index hooks for: "
                 + ", ".join(missing_lifecycle_operations)
             )
@@ -854,31 +848,31 @@ def _validate_search_registry_contracts(
                     )
         if missing_index_hooks:
             problems.append(
-                "workspace keyword search entity "
+                "keyword search entity "
                 f"{adapter.entity_type} references unregistered index hooks: "
                 + ", ".join(sorted(missing_index_hooks))
             )
         if owner_mismatched_hooks:
             problems.append(
-                "workspace keyword search entity "
+                "keyword search entity "
                 f"{adapter.entity_type} references index hooks owned by another app: "
                 + ", ".join(sorted(owner_mismatched_hooks))
             )
         if entity_mismatched_hooks:
             problems.append(
-                "workspace keyword search entity "
+                "keyword search entity "
                 f"{adapter.entity_type} references index hooks for another entity: "
                 + ", ".join(sorted(entity_mismatched_hooks))
             )
         if operation_mismatched_hooks:
             problems.append(
-                "workspace keyword search entity "
+                "keyword search entity "
                 f"{adapter.entity_type} references index hooks without lifecycle operation: "
                 + ", ".join(sorted(operation_mismatched_hooks))
             )
         if hook_domain_mismatches:
             problems.append(
-                "workspace keyword search entity "
+                "keyword search entity "
                 f"{adapter.entity_type} index hook callables must belong to their owner app "
                 "domain: " + ", ".join(sorted(hook_domain_mismatches))
             )
@@ -968,11 +962,13 @@ def _callable_module_name(value: Any) -> str:
 
 
 class _KeywordAclShapePolicy:
-    workspace = SimpleNamespace(id="__workspace__")
     user = SimpleNamespace(id="__user__")
 
-    def __init__(self, workspace_role: str | None) -> None:
-        self.workspace_role = workspace_role
+    def __init__(self, is_platform_admin: bool) -> None:
+        self.is_platform_admin = is_platform_admin
+
+    def _current_group_ids(self) -> list[str]:
+        return ["__group__"]
 
     def _accessible_team_ids(self) -> list[str]:
         return ["__team__"]
@@ -1012,9 +1008,9 @@ def _keyword_acl_shape(
     try:
         shape = _merge_keyword_acl_shapes(
             _keyword_acl_shape_from_value(
-                adapter.keyword_acl_branches(_KeywordAclShapePolicy(workspace_role))
+                adapter.keyword_acl_branches(_KeywordAclShapePolicy(is_platform_admin))
             )
-            for workspace_role in (None, "member", "admin")
+            for is_platform_admin in (False, True)
         )
     except Exception as exc:
         cache[cache_key] = str(exc)
@@ -1158,22 +1154,22 @@ def _validate_rag_registry_contracts(
             problems.append(
                 f"RAG resource adapter lacks source access adapter: {adapter.resource_type}"
             )
-        if adapter.include_in_workspace_reindex:
-            if adapter.workspace_resource_ids is None:
+        if adapter.include_in_reindex:
+            if adapter.company_resource_ids is None:
                 problems.append(
-                    f"RAG reindex adapter lacks workspace resource loader: {adapter.resource_type}"
+                    f"RAG reindex adapter lacks company resource loader: {adapter.resource_type}"
                 )
             if adapter.load_projection is None:
                 problems.append(
                     f"RAG reindex adapter lacks projection loader: {adapter.resource_type}"
                 )
         if (
-            adapter.include_in_default_query or adapter.include_in_workspace_reindex
+            adapter.include_in_default_query or adapter.include_in_reindex
         ) and adapter.resource_type not in listed_source_resource_types:
             problems.append(
                 f"RAG query/reindex adapter lacks listed source adapter: {adapter.resource_type}"
             )
-        if adapter.include_in_default_query or adapter.include_in_workspace_reindex:
+        if adapter.include_in_default_query or adapter.include_in_reindex:
             app_id = str(adapter.app_id or "").strip()
             if not app_id:
                 problems.append(

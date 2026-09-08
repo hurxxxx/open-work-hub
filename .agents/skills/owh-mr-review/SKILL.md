@@ -16,7 +16,7 @@ description: Use when reviewing a GitLab MR, deciding merge readiness, or addres
 ## Review Lens
 
 - Contract: API/OpenAPI/generated clients/migrations/env/i18n/public TS types.
-- Platform: manifests, workspace API prefixes, router composition, registries, LLM workloads, approval/audit/discovery.
+- Platform: manifests, app API routes, router composition, registries, LLM workloads, approval/audit/discovery.
 - Security: server auth, secrets, upload/preview, SSRF, input bounds, prompt/log leakage.
 - Architecture: app-module imports, extension points, state ownership, a11y, stable keys, test surface.
 - Runtime/data: transactions, concurrency, retention, cleanup, queue routing, migrations, rollback.

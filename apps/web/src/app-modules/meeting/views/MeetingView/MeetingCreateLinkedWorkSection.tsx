@@ -1,11 +1,11 @@
-import type { RefObject } from 'react';
 import { CheckSquare, FileText, Paperclip } from 'lucide-react';
+import type { RefObject } from 'react';
 
-import type { PickedDoc, PickedTask } from './MeetingCreateModal';
 import {
   MeetingCreateActionButton,
   MeetingCreateChip,
 } from './MeetingCreateChip';
+import type { PickedDoc, PickedTask } from './MeetingCreateModal';
 
 type LinkedWorkLabels = {
   addDoc: string;

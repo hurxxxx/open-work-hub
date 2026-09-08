@@ -101,7 +101,6 @@ def test_rag_query_service_forwards_explicit_partition_candidate_scope() -> None
     service.query(
         RagQueryRequest(
             collection="partition-v3",
-            workspace_id="diagnostic-workspace",
             retrieval_partition_ids=["a3b6638a-7547-45f8-81f2-973bfa6080d6"],
             query="heater",
         )
@@ -127,14 +126,13 @@ def test_ensure_rag_enabled_raises_domain_error(monkeypatch) -> None:
 def test_workspace_rag_sources_require_ai_app_enablement(monkeypatch) -> None:
     monkeypatch.setattr(
         rag_application,
-        "resolve_workspace_runtime_enabled_app_ids",
-        lambda db, workspace_id: {"docs"},
+        "allowed_app_ids",
+        lambda db, **kwargs: {"docs"},
     )
 
     with pytest.raises(rag_application.RagAccessDeniedError) as exc_info:
-        rag_application.list_workspace_rag_sources(
+        rag_application.list_rag_sources(
             db=object(),
-            workspace=SimpleNamespace(id="ws-1"),
             user=SimpleNamespace(id="user-1"),
             settings=SimpleNamespace(rag_enabled=True),
         )
@@ -144,14 +142,13 @@ def test_workspace_rag_sources_require_ai_app_enablement(monkeypatch) -> None:
 def test_workspace_rag_query_requires_searchable_app_enablement(monkeypatch) -> None:
     monkeypatch.setattr(
         rag_application,
-        "resolve_workspace_runtime_enabled_app_ids",
-        lambda db, workspace_id: {"chatbot"},
+        "allowed_app_ids",
+        lambda db, **kwargs: {"chatbot"},
     )
 
     with pytest.raises(rag_application.RagAccessDeniedError) as exc_info:
-        rag_application.query_workspace_rag(
+        rag_application.query_rag(
             db=object(),
-            workspace=SimpleNamespace(id="ws-1"),
             user=SimpleNamespace(id="user-1"),
             query="budget risk",
             answer_mode=RagAnswerMode.SEARCH_ONLY,
@@ -188,13 +185,13 @@ def test_workspace_rag_query_propagates_relaxed_app_gate_to_source_listing(
 
     monkeypatch.setattr(
         rag_application,
-        "resolve_workspace_runtime_enabled_app_ids",
-        lambda db, workspace_id: {"docs"},
+        "allowed_app_ids",
+        lambda db, **kwargs: {"docs"},
     )
     monkeypatch.setattr(
         rag_application.SourceAclPolicy,
-        "for_workspace",
-        lambda db, workspace, user: StubPolicy(),
+        "for_user",
+        lambda db, user: StubPolicy(),
     )
     monkeypatch.setattr(
         rag_application, "ensure_default_collection_ready", lambda *args, **kwargs: "rag-test"
@@ -208,9 +205,8 @@ def test_workspace_rag_query_propagates_relaxed_app_gate_to_source_listing(
         lambda db, user, **kwargs: lambda hit: True,
     )
 
-    response = rag_application.query_workspace_rag(
+    response = rag_application.query_rag(
         db=object(),
-        workspace=SimpleNamespace(id="ws-1"),
         user=SimpleNamespace(id="user-1"),
         query="budget risk",
         answer_mode=RagAnswerMode.SEARCH_ONLY,
@@ -245,17 +241,17 @@ def test_workspace_rag_query_allows_explicit_rag_app_gate(monkeypatch) -> None:
 
     monkeypatch.setattr(
         rag_application,
-        "resolve_workspace_runtime_enabled_app_ids",
-        lambda db, workspace_id: {"docs"},
+        "allowed_app_ids",
+        lambda db, **kwargs: {"docs"},
     )
     monkeypatch.setattr(
         rag_application.SourceAclPolicy,
-        "for_workspace",
-        lambda db, workspace, user: StubPolicy(),
+        "for_user",
+        lambda db, user: StubPolicy(),
     )
     monkeypatch.setattr(
         rag_application,
-        "list_registered_workspace_rag_sources",
+        "list_registered_rag_sources",
         lambda policy, enabled_app_ids: [],
     )
     monkeypatch.setattr(
@@ -275,9 +271,8 @@ def test_workspace_rag_query_allows_explicit_rag_app_gate(monkeypatch) -> None:
         lambda db, user, **kwargs: lambda hit: True,
     )
 
-    response = rag_application.query_workspace_rag(
+    response = rag_application.query_rag(
         db=object(),
-        workspace=SimpleNamespace(id="ws-1"),
         user=SimpleNamespace(id="user-1"),
         query="benefit points",
         answer_mode=RagAnswerMode.SEARCH_ONLY,
@@ -307,14 +302,13 @@ def test_rag_query_filters_accept_storage_width_resource_ids() -> None:
 def test_workspace_rag_reindex_requires_ai_enablement(monkeypatch) -> None:
     monkeypatch.setattr(
         rag_application,
-        "resolve_workspace_runtime_enabled_app_ids",
-        lambda db, workspace_id: {"planner"},
+        "resolve_company_enabled_app_ids",
+        lambda db, **kwargs: {"planner"},
     )
 
     with pytest.raises(rag_application.RagAccessDeniedError) as exc_info:
-        rag_application.enqueue_workspace_rag_reindex(
+        rag_application.enqueue_rag_reindex(
             db=object(),
-            workspace=SimpleNamespace(id="ws-1"),
             settings=SimpleNamespace(rag_enabled=True),
         )
     assert exc_info.value.code == "rag.access_denied_not_enabled"
@@ -368,14 +362,12 @@ def test_company_rag_reindex_enqueues_company_scope_jobs(monkeypatch) -> None:
     assert captured == [
         {
             "scope_kind": RagScopeKind.COMPANY,
-            "workspace_id": None,
             "resource_type": "docs_native_doc",
             "resource_id": "doc-1",
             "lane": RagSyncLane.BACKFILL,
         },
         {
             "scope_kind": RagScopeKind.COMPANY,
-            "workspace_id": None,
             "resource_type": "docs_native_doc",
             "resource_id": "doc-2",
             "lane": RagSyncLane.BACKFILL,
@@ -402,10 +394,13 @@ def test_company_rag_reindex_excludes_disabled_workspace_app_adapters(
         lambda db: [],
     )
 
-    assert rag_application._enabled_company_reindex_resource_adapters(
-        object(),
-        {"files"},
-    ) == ()
+    assert (
+        rag_application._enabled_company_reindex_resource_adapters(
+            object(),
+            {"files"},
+        )
+        == ()
+    )
 
 
 def test_workspace_rag_sources_expose_official_docs(monkeypatch) -> None:
@@ -419,18 +414,17 @@ def test_workspace_rag_sources_expose_official_docs(monkeypatch) -> None:
 
     monkeypatch.setattr(
         rag_application,
-        "resolve_workspace_runtime_enabled_app_ids",
-        lambda db, workspace_id: {"chatbot", "docs", "meeting"},
+        "allowed_app_ids",
+        lambda db, **kwargs: {"chatbot", "docs", "meeting"},
     )
     monkeypatch.setattr(
         rag_application.SourceAclPolicy,
-        "for_workspace",
-        lambda db, workspace, user: StubPolicy(),
+        "for_user",
+        lambda db, user: StubPolicy(),
     )
 
-    sources = rag_application.list_workspace_rag_sources(
+    sources = rag_application.list_rag_sources(
         db=object(),
-        workspace=SimpleNamespace(id="ws-1"),
         user=SimpleNamespace(id="user-1"),
         settings=SimpleNamespace(rag_enabled=True),
     )
@@ -467,18 +461,17 @@ def test_workspace_rag_sources_include_registered_domain_sources(monkeypatch) ->
 
     monkeypatch.setattr(
         rag_application,
-        "resolve_workspace_runtime_enabled_app_ids",
-        lambda db, workspace_id: {"chatbot", "docs", "meeting", "pms", "planner"},
+        "allowed_app_ids",
+        lambda db, **kwargs: {"chatbot", "docs", "meeting", "pms", "planner"},
     )
     monkeypatch.setattr(
         rag_application.SourceAclPolicy,
-        "for_workspace",
-        lambda db, workspace, user: StubPolicy(),
+        "for_user",
+        lambda db, user: StubPolicy(),
     )
 
-    sources = rag_application.list_workspace_rag_sources(
+    sources = rag_application.list_rag_sources(
         db=object(),
-        workspace=SimpleNamespace(id="ws-1"),
         user=SimpleNamespace(id="user-1"),
         settings=SimpleNamespace(rag_enabled=True),
     )
@@ -495,34 +488,33 @@ def test_workspace_rag_reindex_enqueues_official_docs(monkeypatch) -> None:
 
     monkeypatch.setattr(
         rag_application,
-        "resolve_workspace_runtime_enabled_app_ids",
-        lambda db, workspace_id: {"chatbot", "docs", "meeting"},
+        "resolve_company_enabled_app_ids",
+        lambda db, **kwargs: {"chatbot", "docs", "meeting"},
     )
     monkeypatch.setattr(
         rag_application, "ensure_default_collection_ready", lambda *args, **kwargs: None
     )
     monkeypatch.setattr(
         rag_application,
-        "workspace_reindex_resource_adapters",
+        "reindex_resource_adapters",
         lambda enabled_app_ids: (
             SimpleNamespace(
                 resource_type="docs_native_doc",
-                workspace_resource_ids=lambda db, workspace: ["doc-1", "doc-2"],
+                company_resource_ids=lambda db, **kwargs: ["doc-1", "doc-2"],
             ),
         ),
     )
     monkeypatch.setattr(
         rag_application,
         "_enqueue_ids",
-        lambda db, workspace, resource_type, resource_ids: enqueued.extend(
-            (resource_type, resource_id) for resource_id in resource_ids
-        )
-        or len(list(resource_ids)),
+        lambda db, resource_type, resource_ids: (
+            enqueued.extend((resource_type, resource_id) for resource_id in resource_ids)
+            or len(list(resource_ids))
+        ),
     )
 
-    result = rag_application.enqueue_workspace_rag_reindex(
+    result = rag_application.enqueue_rag_reindex(
         db=StubDb(),
-        workspace=SimpleNamespace(id="ws-1"),
         settings=SimpleNamespace(rag_enabled=True),
     )
 
@@ -545,41 +537,38 @@ def test_workspace_rag_reindex_force_bypasses_cooldown(monkeypatch) -> None:
 
     monkeypatch.setattr(
         rag_application,
-        "resolve_workspace_runtime_enabled_app_ids",
-        lambda db, workspace_id: {"chatbot", "docs"},
+        "resolve_company_enabled_app_ids",
+        lambda db, **kwargs: {"chatbot", "docs"},
     )
     monkeypatch.setattr(
         rag_application,
-        "_ensure_workspace_reindex_available",
-        lambda db, *, workspace: (_ for _ in ()).throw(
-            AssertionError("force should bypass cooldown")
-        ),
+        "_ensure_reindex_available",
+        lambda db, **kwargs: (_ for _ in ()).throw(AssertionError("force should bypass cooldown")),
     )
     monkeypatch.setattr(
         rag_application, "ensure_default_collection_ready", lambda *args, **kwargs: None
     )
     monkeypatch.setattr(
         rag_application,
-        "workspace_reindex_resource_adapters",
+        "reindex_resource_adapters",
         lambda enabled_app_ids: (
             SimpleNamespace(
                 resource_type="docs_native_doc",
-                workspace_resource_ids=lambda db, workspace: ["doc-1"],
+                company_resource_ids=lambda db, **kwargs: ["doc-1"],
             ),
         ),
     )
     monkeypatch.setattr(
         rag_application,
         "_enqueue_ids",
-        lambda db, workspace, resource_type, resource_ids: enqueued.extend(
-            (resource_type, resource_id) for resource_id in resource_ids
-        )
-        or len(list(resource_ids)),
+        lambda db, resource_type, resource_ids: (
+            enqueued.extend((resource_type, resource_id) for resource_id in resource_ids)
+            or len(list(resource_ids))
+        ),
     )
 
-    result = rag_application.enqueue_workspace_rag_reindex(
+    result = rag_application.enqueue_rag_reindex(
         db=StubDb(),
-        workspace=SimpleNamespace(id="ws-1"),
         settings=SimpleNamespace(rag_enabled=True),
         force=True,
     )
@@ -591,23 +580,22 @@ def test_workspace_rag_reindex_force_bypasses_cooldown(monkeypatch) -> None:
 def test_workspace_rag_reindex_resource_count_uses_registry(monkeypatch) -> None:
     monkeypatch.setattr(
         rag_application,
-        "resolve_workspace_runtime_enabled_app_ids",
-        lambda db, workspace_id: {"chatbot", "docs"},
+        "resolve_company_enabled_app_ids",
+        lambda db, **kwargs: {"chatbot", "docs"},
     )
     monkeypatch.setattr(
         rag_application,
-        "workspace_reindex_resource_adapters",
+        "reindex_resource_adapters",
         lambda enabled_app_ids: (
             SimpleNamespace(
                 resource_type="docs_native_doc",
-                workspace_resource_ids=lambda db, workspace: ["doc-1", "doc-2"],
+                company_resource_ids=lambda db, **kwargs: ["doc-1", "doc-2"],
             ),
         ),
     )
 
-    result = rag_application.count_workspace_rag_reindex_resources(
+    result = rag_application.count_rag_reindex_resources(
         db=object(),
-        workspace=SimpleNamespace(id="ws-1"),
         settings=SimpleNamespace(rag_enabled=True),
     )
 
@@ -636,7 +624,7 @@ def test_workspace_rag_query_defaults_to_text_hits_when_binary_hits_not_requeste
 
     monkeypatch.setattr(
         rag_application,
-        "list_workspace_rag_sources",
+        "list_rag_sources",
         lambda *args, **kwargs: [
             {
                 "source_kind": "manual",
@@ -648,8 +636,8 @@ def test_workspace_rag_query_defaults_to_text_hits_when_binary_hits_not_requeste
     )
     monkeypatch.setattr(
         rag_application,
-        "resolve_workspace_runtime_enabled_app_ids",
-        lambda db, workspace_id: {"chatbot", "docs"},
+        "allowed_app_ids",
+        lambda db, **kwargs: {"chatbot", "docs"},
     )
     monkeypatch.setattr(
         rag_application, "ensure_default_collection_ready", lambda *args, **kwargs: "rag-test"
@@ -663,9 +651,8 @@ def test_workspace_rag_query_defaults_to_text_hits_when_binary_hits_not_requeste
         lambda db, user, **kwargs: lambda hit: True,
     )
 
-    response = rag_application.query_workspace_rag(
+    response = rag_application.query_rag(
         db=object(),
-        workspace=SimpleNamespace(id="ws-1"),
         user=SimpleNamespace(id="user-1"),
         query="budget risk",
         answer_mode=RagAnswerMode.SEARCH_ONLY,
@@ -699,7 +686,7 @@ def test_workspace_rag_query_respects_explicit_content_modality_filter(monkeypat
 
     monkeypatch.setattr(
         rag_application,
-        "list_workspace_rag_sources",
+        "list_rag_sources",
         lambda *args, **kwargs: [
             {
                 "source_kind": "manual",
@@ -711,8 +698,8 @@ def test_workspace_rag_query_respects_explicit_content_modality_filter(monkeypat
     )
     monkeypatch.setattr(
         rag_application,
-        "resolve_workspace_runtime_enabled_app_ids",
-        lambda db, workspace_id: {"chatbot", "docs"},
+        "allowed_app_ids",
+        lambda db, **kwargs: {"chatbot", "docs"},
     )
     monkeypatch.setattr(
         rag_application, "ensure_default_collection_ready", lambda *args, **kwargs: "rag-test"
@@ -726,9 +713,8 @@ def test_workspace_rag_query_respects_explicit_content_modality_filter(monkeypat
         lambda db, user, **kwargs: lambda hit: True,
     )
 
-    rag_application.query_workspace_rag(
+    rag_application.query_rag(
         db=object(),
-        workspace=SimpleNamespace(id="ws-1"),
         user=SimpleNamespace(id="user-1"),
         query="budget risk",
         answer_mode=RagAnswerMode.SEARCH_ONLY,
@@ -829,7 +815,6 @@ def test_rag_service_prunes_stale_tail_chunks_for_same_resource() -> None:
 
     initial = rag_service.sync_projection(
         RagProjection(
-            workspace_id="ws-1",
             resource_type="doc",
             resource_id="doc-1",
             source_kind="docs",
@@ -839,7 +824,6 @@ def test_rag_service_prunes_stale_tail_chunks_for_same_resource() -> None:
     )
     updated = rag_service.sync_projection(
         RagProjection(
-            workspace_id="ws-1",
             resource_type="doc",
             resource_id="doc-1",
             source_kind="docs",
@@ -879,7 +863,6 @@ def test_rag_service_acquires_final_fence_after_embedding_before_vector_write() 
 
     rag_service.sync_projection_with_fence(
         RagProjection(
-            workspace_id="ws-1",
             resource_type="doc",
             resource_id="doc-fenced",
             source_kind="docs",
@@ -906,7 +889,6 @@ def test_rag_query_oversamples_when_post_filter_removes_top_hit() -> None:
 
     rag_service.sync_projection(
         RagProjection(
-            workspace_id="ws-1",
             resource_type="doc",
             resource_id="doc-denied",
             source_kind="docs",
@@ -917,7 +899,6 @@ def test_rag_query_oversamples_when_post_filter_removes_top_hit() -> None:
     )
     rag_service.sync_projection(
         RagProjection(
-            workspace_id="ws-1",
             resource_type="doc",
             resource_id="doc-allowed",
             source_kind="docs",
@@ -930,7 +911,6 @@ def test_rag_query_oversamples_when_post_filter_removes_top_hit() -> None:
     response = query_service.query(
         RagQueryRequest(
             collection="rag-post-filter",
-            workspace_id="ws-1",
             query="budget risk urgent",
             top_k=1,
         ),
@@ -949,7 +929,6 @@ def test_rag_query_reauthorizes_after_retrieval_before_response_projection() -> 
         embedding_client=embedding_client,
     ).sync_projection(
         RagProjection(
-            workspace_id="ws-1",
             resource_type="doc",
             resource_id="doc-revoked",
             source_kind="docs",
@@ -977,7 +956,6 @@ def test_rag_query_reauthorizes_after_retrieval_before_response_projection() -> 
     response = query_service.query(
         RagQueryRequest(
             collection="rag-final-acl",
-            workspace_id="ws-1",
             query="authorization revoked",
             top_k=1,
         ),
@@ -996,16 +974,13 @@ def test_rag_hydrates_source_metadata_before_final_acl_and_grounding() -> None:
         embedding_client=embedding_client,
     ).sync_projection(
         RagProjection(
-            scope_kind=RagScopeKind.WORKSPACE,
-            workspace_id="workspace-before-publication",
+            scope_kind=RagScopeKind.COMPANY,
             resource_type="file_manager_file",
             resource_id="file-1",
             source_kind="files",
             text_content="company handbook",
             visibility_refs=["workspace:workspace-before-publication"],
-            metadata={
-                "origin_ref": "/apps/files/workspaces/workspace-before?file=file-1"
-            },
+            metadata={"origin_ref": "/apps/files/workspaces/workspace-before?file=file-1"},
         ),
         collection="rag-source-hydration",
     )
@@ -1031,7 +1006,6 @@ def test_rag_hydrates_source_metadata_before_final_acl_and_grounding() -> None:
                     "projection": hit.projection.model_copy(
                         update={
                             "scope_kind": RagScopeKind.COMPANY,
-                            "workspace_id": None,
                             "visibility_refs": ["company_public"],
                             "metadata": {"origin_ref": "/apps/files?file=file-1"},
                         }
@@ -1044,7 +1018,6 @@ def test_rag_hydrates_source_metadata_before_final_acl_and_grounding() -> None:
     response = query_service.query(
         RagQueryRequest(
             collection="rag-source-hydration",
-            workspace_id="workspace-before-publication",
             query="company handbook",
             answer_mode=RagAnswerMode.GROUNDED_ANSWER,
             top_k=1,
@@ -1053,9 +1026,9 @@ def test_rag_hydrates_source_metadata_before_final_acl_and_grounding() -> None:
         hit_hydrator=hydrate,
     )
 
-    assert source_acl.observed_scopes == [RagScopeKind.WORKSPACE, RagScopeKind.COMPANY]
+    assert source_acl.observed_scopes == [RagScopeKind.COMPANY, RagScopeKind.COMPANY]
     assert response.hits[0].scope_kind == RagScopeKind.COMPANY
-    assert response.hits[0].workspace_id is None
+    assert not hasattr(response.hits[0], "workspace_id")
     assert response.hits[0].acl_summary == ["company public"]
     assert response.hits[0].origin_ref == "/apps/files?file=file-1"
     assert response.grounded_answer is not None
@@ -1075,13 +1048,8 @@ def test_company_rag_filter_requires_source_owned_acl(monkeypatch) -> None:
 
     monkeypatch.setattr(
         rag_access_filter.SourceAclPolicy,
-        "for_company",
+        "for_user",
         lambda db, *, user: FakeCompanyPolicy(),
-    )
-    monkeypatch.setattr(
-        rag_access_filter,
-        "is_company_app_enabled_for_user_context",
-        lambda *_args, **_kwargs: True,
     )
     post_filter = rag_access_filter.build_company_rag_post_filter(
         db,
@@ -1096,7 +1064,6 @@ def test_company_rag_filter_requires_source_owned_acl(monkeypatch) -> None:
             score=1.0,
             projection=RagProjection(
                 scope_kind=RagScopeKind.COMPANY,
-                workspace_id=None,
                 resource_type="docs_native_doc",
                 resource_id=resource_id,
                 source_kind="docs_native_doc",
@@ -1122,23 +1089,13 @@ def test_partition_authorized_rag_filters_ignore_stale_scope_payload(monkeypatch
 
     monkeypatch.setattr(
         rag_access_filter.SourceAclPolicy,
-        "for_company",
+        "for_user",
         lambda db, *, user: FakePolicy(),
     )
     monkeypatch.setattr(
-        rag_access_filter,
-        "is_app_enabled_for_user_context",
-        lambda *_args, **_kwargs: True,
-    )
-    monkeypatch.setattr(
-        rag_access_filter,
-        "is_company_app_enabled_for_user_context",
-        lambda *_args, **_kwargs: True,
-    )
-    monkeypatch.setattr(
         rag_access_filter.SourceAclPolicy,
-        "for_workspace_id",
-        lambda db, *, workspace_id, user: FakePolicy(),
+        "for_user",
+        lambda db, *, user: FakePolicy(),
     )
 
     stale_hit = RagVectorSearchHit(
@@ -1148,8 +1105,7 @@ def test_partition_authorized_rag_filters_ignore_stale_scope_payload(monkeypatch
         projection=RagProjection(
             retrieval_partition_id=partition_id,
             projection_version=7,
-            scope_kind=RagScopeKind.WORKSPACE,
-            workspace_id="stale-workspace",
+            scope_kind=RagScopeKind.COMPANY,
             resource_type="file_manager_file",
             resource_id="file-1",
             source_kind="files",
@@ -1167,7 +1123,6 @@ def test_partition_authorized_rag_filters_ignore_stale_scope_payload(monkeypatch
     workspace_filter = rag_access_filter.build_user_rag_post_filter(
         db,
         user=user,
-        workspace_id="current-workspace",
         authorized_partition_ids=[partition_id],
     )
     company_filter = rag_access_filter.build_company_rag_post_filter(
@@ -1197,7 +1152,6 @@ def test_rag_query_uses_wider_default_candidate_pool_for_rerank() -> None:
     for index in range(30):
         rag_service.sync_projection(
             RagProjection(
-                workspace_id="ws-1",
                 resource_type="doc",
                 resource_id=f"doc-{index}",
                 source_kind="docs",
@@ -1210,7 +1164,6 @@ def test_rag_query_uses_wider_default_candidate_pool_for_rerank() -> None:
     response = query_service.query(
         RagQueryRequest(
             collection="rag-rerank-candidate-pool",
-            workspace_id="ws-1",
             query="budget risk",
             top_k=20,
         )

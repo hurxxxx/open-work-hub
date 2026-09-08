@@ -20,8 +20,8 @@ def _auth_headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def _workspace_ai_path(workspace_slug: str, suffix: str) -> str:
-    return f"/api/v1/workspaces/{workspace_slug}/chatbot{suffix}"
+def _ai_path(suffix: str) -> str:
+    return f"/api/v1/chatbot{suffix}"
 
 
 def _disable_platform_app(app_id: str) -> None:
@@ -45,7 +45,7 @@ def _reset_settings_and_registry() -> None:
 def test_capability_manifest_returns_filtered_tool_inventory(client: TestClient) -> None:
     auth = _dev_login(client, "delivery-hub-admin")
     response = client.get(
-        _workspace_ai_path("delivery-hub", "/capabilities/manifest"),
+        _ai_path("/capabilities/manifest"),
         headers=_auth_headers(auth["token"]),
     )
 
@@ -74,7 +74,7 @@ def test_app_manifest_and_openapi_are_scoped_to_one_app(client: TestClient) -> N
     auth = _dev_login(client, "delivery-hub-admin")
 
     manifest_response = client.get(
-        _workspace_ai_path("delivery-hub", "/apps/planner/manifest"),
+        _ai_path("/apps/planner/manifest"),
         headers=_auth_headers(auth["token"]),
     )
     assert manifest_response.status_code == 200, manifest_response.text
@@ -82,7 +82,7 @@ def test_app_manifest_and_openapi_are_scoped_to_one_app(client: TestClient) -> N
     assert [item["name"] for item in manifest_payload["tools"]] == ["planner.list_events"]
 
     openapi_response = client.get(
-        _workspace_ai_path("delivery-hub", "/apps/planner/openapi.json"),
+        _ai_path("/apps/planner/openapi.json"),
         headers=_auth_headers(auth["token"]),
     )
     assert openapi_response.status_code == 200, openapi_response.text
@@ -97,7 +97,7 @@ def test_manifest_and_openapi_reflect_platform_visibility_changes_on_next_reques
     _disable_platform_app("planner")
 
     manifest_response = client.get(
-        _workspace_ai_path("delivery-hub", "/capabilities/manifest"),
+        _ai_path("/capabilities/manifest"),
         headers=_auth_headers(auth["token"]),
     )
     assert manifest_response.status_code == 200, manifest_response.text
@@ -105,7 +105,7 @@ def test_manifest_and_openapi_reflect_platform_visibility_changes_on_next_reques
     assert "planner.list_events" not in {item["name"] for item in manifest_payload["tools"]}
 
     openapi_response = client.get(
-        _workspace_ai_path("delivery-hub", "/capabilities/openapi.json"),
+        _ai_path("/capabilities/openapi.json"),
         headers=_auth_headers(auth["token"]),
     )
     assert openapi_response.status_code == 200, openapi_response.text
@@ -123,7 +123,7 @@ def test_manifest_and_openapi_include_pms_write_tools_when_enabled(
         auth = _dev_login(client, "delivery-hub-admin")
 
         manifest_response = client.get(
-            _workspace_ai_path("delivery-hub", "/capabilities/manifest"),
+            _ai_path("/capabilities/manifest"),
             headers=_auth_headers(auth["token"]),
         )
         assert manifest_response.status_code == 200, manifest_response.text
@@ -142,7 +142,7 @@ def test_manifest_and_openapi_include_pms_write_tools_when_enabled(
         assert "docs.create_page" not in tool_names
 
         openapi_response = client.get(
-            _workspace_ai_path("delivery-hub", "/capabilities/openapi.json"),
+            _ai_path("/capabilities/openapi.json"),
             headers=_auth_headers(auth["token"]),
         )
         assert openapi_response.status_code == 200, openapi_response.text
@@ -171,7 +171,7 @@ def test_planner_app_manifest_and_openapi_include_write_tool_when_enabled(
         auth = _dev_login(client, "delivery-hub-admin")
 
         manifest_response = client.get(
-            _workspace_ai_path("delivery-hub", "/apps/planner/manifest"),
+            _ai_path("/apps/planner/manifest"),
             headers=_auth_headers(auth["token"]),
         )
         assert manifest_response.status_code == 200, manifest_response.text
@@ -184,7 +184,7 @@ def test_planner_app_manifest_and_openapi_include_write_tool_when_enabled(
         }
 
         openapi_response = client.get(
-            _workspace_ai_path("delivery-hub", "/apps/planner/openapi.json"),
+            _ai_path("/apps/planner/openapi.json"),
             headers=_auth_headers(auth["token"]),
         )
         assert openapi_response.status_code == 200, openapi_response.text

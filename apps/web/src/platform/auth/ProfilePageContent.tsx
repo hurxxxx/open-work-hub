@@ -1,9 +1,9 @@
-import { LogOut } from 'lucide-react';
 import { InlineNotice } from '@open-work-hub/ui/feedback/inline-notice';
+import { LogOut } from 'lucide-react';
 
-import { OpenWorkHubDesktopSettingsSection } from './OpenWorkHubDesktopSettingsSection';
 import { AppearanceSettingsSection } from './AppearanceSettingsSection';
 import { NotificationsSettingsSection } from './NotificationsSettingsSection';
+import { OpenWorkHubDesktopSettingsSection } from './OpenWorkHubDesktopSettingsSection';
 import { ProfileSettingsSection } from './ProfileSettingsSection';
 import { ReleaseNotesSettingsSection } from './ReleaseNotesSettingsSection';
 import { SecuritySettingsSection } from './SecuritySettingsSection';

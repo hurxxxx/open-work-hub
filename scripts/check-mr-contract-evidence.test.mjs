@@ -32,8 +32,8 @@ const completeChecks = REQUIRED_CHECK_IDS.map(
 const completeFields = REQUIRED_FIELD_IDS.map(
   (fieldId) =>
     `Field: <!-- open-work-hub:field:${fieldId} --> ${
-      fieldId === 'workspace-keyword-search'
-        ? 'none - this app does not expose workspace keyword search'
+      fieldId === 'company-keyword-search'
+        ? 'none - this app does not expose company keyword search'
         : `evidence for ${fieldId}`
     }`,
 ).join('\n');
@@ -55,8 +55,8 @@ const completeCoreChecks = CORE_REQUIRED_CHECK_IDS.map(
 const completeCoreFields = CORE_REQUIRED_FIELD_IDS.map(
   (fieldId) =>
     `Field: <!-- open-work-hub:field:${fieldId} --> ${
-      fieldId === 'workspace-keyword-search'
-        ? 'none - this enablement does not change workspace keyword search'
+      fieldId === 'company-keyword-search'
+        ? 'none - this enablement does not change company keyword search'
         : `evidence for ${fieldId}`
     }`,
 ).join('\n');
@@ -89,6 +89,18 @@ test('recognizes app-owned and protected-core paths', () => {
   );
   assert.equal(isProtectedCorePath('.gitlab-ci.yml'), true);
   assert.equal(isProtectedCorePath('packages/contracts/src/index.ts'), true);
+  for (const domain of [
+    'admin',
+    'auth',
+    'groups',
+    'organization',
+    'content_access',
+    'workspaces',
+  ]) {
+    const filePath = `apps/api/src/open_work_hub_api/domains/${domain}/router.py`;
+    assert.equal(isProtectedCorePath(filePath), true);
+    assert.equal(isDomainAppDeliveryPath(filePath), false);
+  }
 });
 
 test('repository MR templates fit inside the GitLab CI description variable', () => {

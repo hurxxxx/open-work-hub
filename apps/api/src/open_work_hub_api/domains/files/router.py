@@ -11,15 +11,13 @@ from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.db import get_db_session
 from open_work_hub_api.core.i18n import localized_http_exception
-from open_work_hub_api.domains.auth.dependencies import (
-    require_current_user,
-    require_current_workspace,
-)
-from open_work_hub_api.domains.auth.models import User, Workspace
-from open_work_hub_api.domains.auth.workspace_app_gate import require_workspace_app_enabled
+from open_work_hub_api.domains.auth.app_gate import require_app_access
+from open_work_hub_api.domains.auth.dependencies import require_current_user
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.content_access.dependencies import require_content_grant_issuer
 from open_work_hub_api.domains.content_access.grants import ContentGrantIssuer
-from open_work_hub_api.domains.files.app_catalog import FILES_WORKSPACE_APP
+from open_work_hub_api.domains.files import service as files_service
+from open_work_hub_api.domains.files.app_catalog import FILES_APP
 from open_work_hub_api.domains.files.browse_projection import (
     FileBrowseResponse,
     FileFolderItem,
@@ -40,11 +38,9 @@ from open_work_hub_api.domains.files.search import (
     query_files,
     resolve_file_search_runtime,
 )
-from open_work_hub_api.domains.files import service as files_service
 
-
-require_files_app_enabled = require_workspace_app_enabled(
-    FILES_WORKSPACE_APP.app_id,
+require_files_app_enabled = require_app_access(
+    FILES_APP.app_id,
     error_code="files.app_disabled",
 )
 
@@ -56,11 +52,12 @@ router = APIRouter(
 )
 
 
-FileVisibility = Literal["private", "workspace"]
+FileVisibility = Literal["private", "company"]
 MAX_MULTIPART_UPLOAD_OVERHEAD_BYTES = 1024 * 1024
 
 
 class FileFolderCreateRequest(BaseModel):
+    company_admin_read_acknowledged: bool = False
     name: str = Field(min_length=1, max_length=255)
     parent_id: str | None = Field(default=None, max_length=36)
     visibility: FileVisibility = "private"
@@ -85,19 +82,10 @@ class FileCorpusCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
 
 
-class FileCorpusTransitionRequest(BaseModel):
-    expected_metadata_version: int = Field(ge=1)
-    access_scope_kind: Literal["workspace", "company"]
-    reason: str = Field(min_length=1, max_length=2000)
-    target_workspace_id: str | None = Field(default=None, max_length=36)
-    request_id: str | None = Field(default=None, max_length=128)
-
-
 class FileCorpusItem(BaseModel):
     id: str
     name: str
-    managed_workspace_id: str
-    access_scope_kind: Literal["workspace", "company"]
+    access_scope_kind: Literal["company"]
     retrieval_partition_id: str
     metadata_version: int
     created_by_id: str
@@ -110,11 +98,9 @@ def browse_files(
     folder_id: str | None = None,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> FileBrowseResponse:
     accessible_folders = files_service.list_accessible_folders(
         db,
-        workspace=current_workspace,
         user=current_user,
     )
     accessible_folder_ids = {folder.id for folder in accessible_folders}
@@ -122,11 +108,10 @@ def browse_files(
         raise localized_http_exception(status_code=404, code="files.folder_not_found")
     accessible_files = files_service.list_accessible_files(
         db,
-        workspace=current_workspace,
         user=current_user,
         accessible_folder_ids=accessible_folder_ids,
     )
-    is_admin = files_service.is_workspace_admin(db, workspace=current_workspace, user=current_user)
+    is_admin = files_service.is_corpus_admin(db, user=current_user)
     visible_files = [file for file in accessible_files if file.folder_id == folder_id]
     rag_states = load_file_rag_states(db, files=visible_files)
     return build_file_browse_response(
@@ -156,12 +141,10 @@ def search_files(
     payload: FileSearchRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
     runtime=Depends(require_file_search_runtime),
 ) -> FileSearchResponse:
     return query_files(
         db,
-        workspace=current_workspace,
         user=current_user,
         request=payload,
         runtime=runtime,
@@ -173,23 +156,22 @@ def create_folder(
     payload: FileFolderCreateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> FileFolderItem:
     try:
         folder = files_service.create_folder(
             db,
-            workspace=current_workspace,
             user=current_user,
             name=payload.name,
             parent_id=payload.parent_id,
             visibility=payload.visibility,
+            company_admin_read_acknowledged=payload.company_admin_read_acknowledged,
             corpus_id=payload.corpus_id,
         )
     except files_service.FileCorpusError as error:
         _raise_file_corpus_http_error(error)
     db.commit()
     db.refresh(folder)
-    is_admin = files_service.is_workspace_admin(db, workspace=current_workspace, user=current_user)
+    is_admin = files_service.is_corpus_admin(db, user=current_user)
     return serialize_folder_item(folder, user=current_user, is_admin=is_admin)
 
 
@@ -197,12 +179,10 @@ def create_folder(
 def list_file_corpora(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> list[FileCorpusItem]:
     try:
         corpora = files_service.list_managed_file_corpora(
             db,
-            workspace=current_workspace,
             user=current_user,
         )
     except files_service.FileCorpusError as error:
@@ -219,49 +199,12 @@ def create_file_corpus(
     payload: FileCorpusCreateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> FileCorpusItem:
     try:
         corpus = files_service.create_file_corpus(
             db,
-            workspace=current_workspace,
             user=current_user,
             name=payload.name,
-        )
-    except files_service.FileCorpusError as error:
-        _raise_file_corpus_http_error(error)
-    db.commit()
-    db.refresh(corpus)
-    return _serialize_file_corpus(corpus)
-
-
-@router.post(
-    "/corpora/{corpus_id}/transition",
-    response_model=FileCorpusItem,
-)
-def transition_file_corpus(
-    corpus_id: str,
-    payload: FileCorpusTransitionRequest,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
-) -> FileCorpusItem:
-    try:
-        files_service.require_managed_file_corpus(
-            db,
-            workspace=current_workspace,
-            user=current_user,
-            corpus_id=corpus_id,
-        )
-        corpus = files_service.transition_file_corpus(
-            db,
-            corpus_id=corpus_id,
-            actor=current_user,
-            expected_metadata_version=payload.expected_metadata_version,
-            access_scope_kind=payload.access_scope_kind,
-            reason=payload.reason,
-            target_workspace_id=payload.target_workspace_id,
-            request_id=payload.request_id,
         )
     except files_service.FileCorpusError as error:
         _raise_file_corpus_http_error(error)
@@ -276,12 +219,10 @@ def update_folder(
     payload: FileFolderUpdateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> FileFolderItem:
     try:
         folder = files_service.update_folder(
             db,
-            workspace=current_workspace,
             user=current_user,
             folder_id=folder_id,
             name=payload.name,
@@ -291,7 +232,7 @@ def update_folder(
         _raise_file_corpus_http_error(error)
     db.commit()
     db.refresh(folder)
-    is_admin = files_service.is_workspace_admin(db, workspace=current_workspace, user=current_user)
+    is_admin = files_service.is_corpus_admin(db, user=current_user)
     return serialize_folder_item(folder, user=current_user, is_admin=is_admin)
 
 
@@ -300,12 +241,10 @@ def delete_folder(
     folder_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> Response:
     try:
         storage_keys = files_service.delete_folder(
             db,
-            workspace=current_workspace,
             user=current_user,
             folder_id=folder_id,
         )
@@ -323,17 +262,16 @@ async def upload_file(
     file: UploadFile = File(...),
     folder_id: str | None = Form(default=None),
     visibility: FileVisibility = Form(default="private"),
+    company_admin_read_acknowledged: bool = Form(default=False),
     corpus_id: str | None = Form(default=None, max_length=36),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> FileItem:
     upload_buffer, size_bytes = await _read_upload_to_spooled_file(file, request=request)
     try:
         try:
             row = files_service.upload_file(
                 db,
-                workspace=current_workspace,
                 user=current_user,
                 filename=file.filename,
                 content_type=file.content_type,
@@ -341,6 +279,7 @@ async def upload_file(
                 size_bytes=size_bytes,
                 folder_id=folder_id,
                 visibility=visibility,
+                company_admin_read_acknowledged=company_admin_read_acknowledged,
                 corpus_id=corpus_id,
             )
         except files_service.FileCorpusError as error:
@@ -355,7 +294,7 @@ async def upload_file(
     finally:
         upload_buffer.close()
     db.refresh(row)
-    is_admin = files_service.is_workspace_admin(db, workspace=current_workspace, user=current_user)
+    is_admin = files_service.is_corpus_admin(db, user=current_user)
     rag_state = load_file_rag_states(db, files=[row])[row.id]
     return serialize_file_item(
         row,
@@ -369,7 +308,6 @@ def _serialize_file_corpus(corpus) -> FileCorpusItem:
     return FileCorpusItem(
         id=corpus.id,
         name=corpus.name,
-        managed_workspace_id=corpus.managed_workspace_id,
         access_scope_kind=corpus.access_scope_kind,
         retrieval_partition_id=str(corpus.retrieval_partition_id),
         metadata_version=corpus.metadata_version,
@@ -395,12 +333,10 @@ def get_file_download(
     file_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
     content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> FileDownloadResponse:
     file = files_service.require_file_access(
         db,
-        workspace=current_workspace,
         user=current_user,
         file_id=file_id,
     )
@@ -408,7 +344,6 @@ def get_file_download(
         url=build_file_content_url(
             file,
             issuer=content_grant_issuer,
-            execution_workspace_id=current_workspace.id,
             disposition="attachment",
         )
     )
@@ -419,12 +354,10 @@ def get_file_preview(
     file_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
     content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> FileDownloadResponse:
     file = files_service.require_file_access(
         db,
-        workspace=current_workspace,
         user=current_user,
         file_id=file_id,
     )
@@ -434,7 +367,6 @@ def get_file_preview(
         url=build_file_content_url(
             file,
             issuer=content_grant_issuer,
-            execution_workspace_id=current_workspace.id,
             disposition="inline",
         )
     )
@@ -445,11 +377,9 @@ def download_archive(
     payload: FileBulkRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> StreamingResponse:
     archive_file = files_service.build_archive(
         db,
-        workspace=current_workspace,
         user=current_user,
         file_ids=payload.file_ids,
         folder_ids=payload.folder_ids,
@@ -477,12 +407,10 @@ def bulk_delete(
     payload: FileBulkRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> Response:
     try:
         storage_keys = files_service.delete_items(
             db,
-            workspace=current_workspace,
             user=current_user,
             file_ids=payload.file_ids,
             folder_ids=payload.folder_ids,
@@ -500,12 +428,10 @@ def delete_file(
     file_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> Response:
     try:
         storage_key = files_service.delete_file(
             db,
-            workspace=current_workspace,
             user=current_user,
             file_id=file_id,
         )

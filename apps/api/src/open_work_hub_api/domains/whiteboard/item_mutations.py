@@ -34,7 +34,9 @@ class WhiteboardItemUpdateResult:
     scene_changed: bool
 
 
-def update_whiteboard_item(db: Session, command: WhiteboardItemUpdateCommand) -> WhiteboardItemUpdateResult:
+def update_whiteboard_item(
+    db: Session, command: WhiteboardItemUpdateCommand
+) -> WhiteboardItemUpdateResult:
     if not command.access.can_edit:
         raise localized_http_exception(
             status_code=403,

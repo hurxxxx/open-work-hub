@@ -14,7 +14,7 @@ describe('mobile navigation model', () => {
     const items = projectMobileNavigationItems({
       appBarItems,
       fixedAppIds: ['home'],
-      workspaceApps: [
+      apps: [
         {
           app_id: 'home',
           enabled: true,
@@ -156,7 +156,7 @@ describe('mobile navigation model', () => {
       ],
       appBarItems,
       fixedAppIds: ['home', 'fixed-feature'],
-      workspaceApps: [
+      apps: [
         {
           app_id: 'home',
           enabled: true,

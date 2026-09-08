@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from functools import lru_cache
-import logging
 from typing import Any
 
 from celery import Celery
@@ -12,11 +12,11 @@ from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.settings import get_settings
 from open_work_hub_api.core.telemetry import serialize_current_trace_context
-from open_work_hub_api.core.worker_task_publisher import create_fail_fast_celery_publisher
 from open_work_hub_api.core.worker_queue_contract import (
     SEARCH_INDEX_REALTIME_QUEUE,
     SEARCH_INDEX_RESOURCE_TASK_NAME,
 )
+from open_work_hub_api.core.worker_task_publisher import create_fail_fast_celery_publisher
 from open_work_hub_api.domains.auth.security import new_id
 from open_work_hub_api.domains.retrieval.models import RetrievalProjectionEvent
 from open_work_hub_api.domains.retrieval.projection_fencing import ProjectionEventRef
@@ -27,7 +27,6 @@ from open_work_hub_api.domains.search.entity_adapter_registry import get_search_
 from open_work_hub_api.domains.search.models import SearchIndexJob
 from open_work_hub_api.domains.search.projection_registry import get_search_projection_adapter
 
-
 logger = logging.getLogger(__name__)
 PENDING_STATUS = "pending"
 _PENDING_SEARCH_PUBLISHES_KEY = "search_index_publish_after_commit"
@@ -35,7 +34,6 @@ _PENDING_SEARCH_PUBLISHES_KEY = "search_index_publish_after_commit"
 
 @dataclass(frozen=True, slots=True)
 class _ProjectionJobSnapshot:
-    workspace_id: str
     entity_type: str
     entity_id: str
     resource_type: str
@@ -59,7 +57,6 @@ def get_celery_client() -> Celery:
 def enqueue_search_index_job(
     db: Session,
     *,
-    workspace_id: str,
     entity_type: object,
     entity_id: str,
     operation: str = "upsert",
@@ -73,7 +70,6 @@ def enqueue_search_index_job(
     )
     projection_snapshot = _projection_job_snapshot(
         db,
-        workspace_id=workspace_id,
         entity_type=resolved_entity_type,
         entity_id=entity_id,
         operation=operation,
@@ -81,7 +77,6 @@ def enqueue_search_index_job(
     )
     job = _upsert_pending_job(
         db,
-        workspace_id=workspace_id,
         entity_type=resolved_entity_type,
         entity_id=entity_id,
         operation=operation,
@@ -120,7 +115,6 @@ def _ensure_upsert_projection_contract(entity_type: str) -> None:
 def _projection_job_snapshot(
     db: Session,
     *,
-    workspace_id: str,
     entity_type: str,
     entity_id: str,
     operation: str,
@@ -143,7 +137,6 @@ def _projection_job_snapshot(
         persisted.desired_state,
         persisted.content_checksum,
         persisted.visibility_checksum,
-        persisted.diagnostic_workspace_id,
     )
     incoming_snapshot = (
         projection_event.resource_type,
@@ -154,7 +147,6 @@ def _projection_job_snapshot(
         projection_event.desired_state,
         projection_event.content_checksum,
         projection_event.visibility_checksum,
-        projection_event.diagnostic_workspace_id,
     )
     if incoming_snapshot != persisted_snapshot:
         raise ValueError(
@@ -183,7 +175,6 @@ def _projection_job_snapshot(
             f"{projection_event.desired_state} != {operation}"
         )
     return _ProjectionJobSnapshot(
-        workspace_id=workspace_id,
         entity_type=entity_type,
         entity_id=entity_id,
         resource_type=projection_event.resource_type,
@@ -198,7 +189,6 @@ def _projection_job_snapshot(
 def _upsert_pending_job(
     db: Session,
     *,
-    workspace_id: str,
     entity_type: str,
     entity_id: str,
     operation: str,
@@ -207,7 +197,6 @@ def _upsert_pending_job(
 ) -> SearchIndexJob:
     existing = _select_pending_job(
         db,
-        workspace_id=workspace_id,
         entity_type=entity_type,
         entity_id=entity_id,
         projection_snapshot=projection_snapshot,
@@ -215,7 +204,6 @@ def _upsert_pending_job(
     if existing is None and projection_snapshot is not None:
         existing = _select_legacy_pending_job(
             db,
-            workspace_id=workspace_id,
             entity_type=entity_type,
             entity_id=entity_id,
         )
@@ -223,7 +211,6 @@ def _upsert_pending_job(
         return _apply_pending_job_update(
             db,
             existing,
-            workspace_id=workspace_id,
             entity_type=entity_type,
             entity_id=entity_id,
             operation=operation,
@@ -233,7 +220,6 @@ def _upsert_pending_job(
 
     job = SearchIndexJob(
         id=new_id(),
-        workspace_id=workspace_id,
         retrieval_partition_id=(
             projection_snapshot.retrieval_partition_id if projection_snapshot else None
         ),
@@ -261,7 +247,6 @@ def _upsert_pending_job(
         db.expire_all()
         existing = _select_pending_job(
             db,
-            workspace_id=workspace_id,
             entity_type=entity_type,
             entity_id=entity_id,
             projection_snapshot=projection_snapshot,
@@ -269,7 +254,6 @@ def _upsert_pending_job(
         if existing is None and projection_snapshot is not None:
             existing = _select_legacy_pending_job(
                 db,
-                workspace_id=workspace_id,
                 entity_type=entity_type,
                 entity_id=entity_id,
             )
@@ -278,7 +262,6 @@ def _upsert_pending_job(
         return _apply_pending_job_update(
             db,
             existing,
-            workspace_id=workspace_id,
             entity_type=entity_type,
             entity_id=entity_id,
             operation=operation,
@@ -291,7 +274,6 @@ def _apply_pending_job_update(
     db: Session,
     job: SearchIndexJob,
     *,
-    workspace_id: str,
     entity_type: str,
     entity_id: str,
     operation: str,
@@ -322,12 +304,10 @@ def _apply_pending_job_update(
     _cancel_conflicting_legacy_pending_job(
         db,
         job=job,
-        workspace_id=workspace_id,
         entity_type=entity_type,
         entity_id=entity_id,
     )
     job.retrieval_partition_id = projection_snapshot.retrieval_partition_id
-    job.workspace_id = workspace_id
     job.entity_type = entity_type
     job.entity_id = entity_id
     job.resource_type = projection_snapshot.resource_type
@@ -363,7 +343,6 @@ def _projection_snapshot_from_job(job: SearchIndexJob) -> _ProjectionJobSnapshot
     ):
         raise ValueError(f"Search pending job has incomplete projection fence: {job.id}")
     return _ProjectionJobSnapshot(
-        workspace_id=job.workspace_id,
         entity_type=job.entity_type,
         entity_id=job.entity_id,
         resource_type=job.resource_type,
@@ -378,7 +357,6 @@ def _projection_snapshot_from_job(job: SearchIndexJob) -> _ProjectionJobSnapshot
 def _select_pending_job(
     db: Session,
     *,
-    workspace_id: str,
     entity_type: str,
     entity_id: str,
     projection_snapshot: _ProjectionJobSnapshot | None,
@@ -386,7 +364,6 @@ def _select_pending_job(
     statement = select(SearchIndexJob)
     if projection_snapshot is None:
         statement = statement.where(
-            SearchIndexJob.workspace_id == workspace_id,
             SearchIndexJob.entity_type == entity_type,
             SearchIndexJob.entity_id == entity_id,
             SearchIndexJob.status == PENDING_STATUS,
@@ -406,14 +383,12 @@ def _select_pending_job(
 def _select_legacy_pending_job(
     db: Session,
     *,
-    workspace_id: str,
     entity_type: str,
     entity_id: str,
 ) -> SearchIndexJob | None:
     return db.scalar(
         select(SearchIndexJob)
         .where(
-            SearchIndexJob.workspace_id == workspace_id,
             SearchIndexJob.entity_type == entity_type,
             SearchIndexJob.entity_id == entity_id,
             SearchIndexJob.resource_type.is_(None),
@@ -429,7 +404,6 @@ def _cancel_conflicting_legacy_pending_job(
     db: Session,
     *,
     job: SearchIndexJob,
-    workspace_id: str,
     entity_type: str,
     entity_id: str,
 ) -> None:
@@ -437,7 +411,6 @@ def _cancel_conflicting_legacy_pending_job(
         select(SearchIndexJob)
         .where(
             SearchIndexJob.id != job.id,
-            SearchIndexJob.workspace_id == workspace_id,
             SearchIndexJob.entity_type == entity_type,
             SearchIndexJob.entity_id == entity_id,
             SearchIndexJob.status == PENDING_STATUS,

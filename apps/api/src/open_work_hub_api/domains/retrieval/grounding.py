@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.rag.contracts import RagQueryHit, RagScopeKind
 from open_work_hub_api.domains.rag.grounded_answer import LlmGroundedAnswerSynthesizer
 from open_work_hub_api.domains.rag.query_projection import build_default_grounded_answer
@@ -26,7 +26,6 @@ class RetrievalGroundingResult:
 def ground_ranked_hits(
     *,
     db: Session,
-    workspace: Workspace,
     user: User,
     query: str,
     hits: Sequence[RetrievalHit],
@@ -42,7 +41,6 @@ def ground_ranked_hits(
 
     synthesizer = LlmGroundedAnswerSynthesizer(
         db=db,
-        workspace_id=workspace.id,
         actor_user_id=user.id,
         principal_kind=principal_kind,
         principal_id=principal_id or user.id,
@@ -91,17 +89,16 @@ def ground_ranked_hits(
 
 
 def _to_rag_query_hit(hit: RetrievalHit) -> RagQueryHit:
-    raw_scope = str(hit.metadata.get("scope_kind") or RagScopeKind.WORKSPACE.value)
+    raw_scope = str(hit.metadata.get("scope_kind") or RagScopeKind.COMPANY.value)
     try:
         scope_kind = RagScopeKind(raw_scope)
     except ValueError:
-        scope_kind = RagScopeKind.WORKSPACE
+        scope_kind = RagScopeKind.COMPANY
     return RagQueryHit(
         scope_kind=scope_kind,
         source_kind=hit.source_kind or hit.source,
         resource_type=hit.resource_type,
         resource_id=hit.resource_id,
-        workspace_id=hit.workspace_id,
         title=hit.title,
         summary=hit.summary,
         excerpt=hit.excerpt,

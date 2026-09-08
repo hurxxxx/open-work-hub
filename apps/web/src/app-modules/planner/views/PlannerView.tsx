@@ -1,13 +1,22 @@
+import { MeetingCreateModal } from '@/src/app-modules/meeting';
+import { updateMeeting } from '@/src/app-modules/meeting/public-api';
+import { updateTask } from '@/src/app-modules/pms/public-api';
 import {
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { LazyMotion, domAnimation, m } from 'motion/react';
+  UnifiedCalendar,
+  type UnifiedCalendarHandle,
+  type UnifiedCalendarView,
+} from '@/src/components/calendar/UnifiedCalendar';
+import { getKoreanHolidayNames } from '@/src/lib/korean-holidays';
+import { cn } from '@/src/lib/utils';
+import { useAppAdmission } from '@/src/platform/apps/app-bootstrap-context';
+import { useAuth } from '@/src/platform/auth/auth-provider';
+import type {
+  CalendarEvent,
+  CalendarSourceFilter,
+} from '@/src/platform/calendar/calendar-types';
+import { useCalendarEvents } from '@/src/platform/calendar/use-calendar-events';
+import { dispatchFloatingPmsOpen } from '@/src/platform/personal-widgets/floating-panel-events';
+import { normalizeTimeZone } from '@/src/platform/time/time-utils';
 import {
   Activity,
   CalendarDays,
@@ -15,39 +24,19 @@ import {
   ChevronRight,
   Plus,
 } from 'lucide-react';
+import { LazyMotion, domAnimation, m } from 'motion/react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { useTranslation } from 'react-i18next';
-import { cn } from '@/src/lib/utils';
-import { getKoreanHolidayNames } from '@/src/lib/korean-holidays';
-import { useAuth } from '@/src/platform/auth/auth-provider';
-import { useCalendarEvents } from '@/src/platform/calendar/use-calendar-events';
-import type {
-  CalendarEvent,
-  CalendarSourceFilter,
-} from '@/src/platform/calendar/calendar-types';
-import { dispatchFloatingPmsOpen } from '@/src/platform/personal-widgets/floating-panel-events';
-import { normalizeTimeZone } from '@/src/platform/time/time-utils';
-import {
-  getAllEligibleWorkspaces,
-  type EligibleWorkspace,
-} from '@/src/platform/workspaces/workspaces-api';
-import { updateMeeting } from '@/src/app-modules/meeting/public-api';
-import { updateTask } from '@/src/app-modules/pms/public-api';
+import { useSearchParams } from 'react-router-dom';
 import { updatePlannerEvent } from '../api/planner-api';
-import {
-  UnifiedCalendar,
-  type UnifiedCalendarHandle,
-  type UnifiedCalendarView,
-} from '@/src/components/calendar/UnifiedCalendar';
-import { MeetingCreateModal } from '@/src/app-modules/meeting';
 import { MeetingPreviewModal } from './calendar/MeetingPreviewModal';
-import { PlannerEventModal } from './PlannerEventModal';
-import { PlannerEventChoicePopover } from './PlannerEventChoicePopover';
-import { PlannerTimelineView } from './PlannerTimelineView';
-import {
-  plannerCalendarEventId,
-  plannerEventToCalendarEvent,
-} from './planner-calendar-event-projection';
-import { createPlannerCalendarScheduleWorkflow } from './planner-calendar-schedule-workflow';
 import {
   buildPlannerSurfaceModeSearchParams,
   movePlannerVisiblePeriod,
@@ -56,17 +45,10 @@ import {
   runPlannerCalendarCommand,
 } from './planner-calendar-controller';
 import {
-  TIMELINE_RANGE_OPTIONS,
-  buildPlannerDatePickerGrid,
-  formatPlannerHeading,
-  getPlannerDateFormatter,
-  persistTimelineRangeDays,
-  readTimelineRangeDays,
-  shouldBlockPlannerCalendar,
-  type PlannerSurfaceMode,
-  type PlannerViewMode,
-  type TimelineRangeDays,
-} from './planner-calendar-view-model';
+  plannerCalendarEventId,
+  plannerEventToCalendarEvent,
+} from './planner-calendar-event-projection';
+import { createPlannerCalendarScheduleWorkflow } from './planner-calendar-schedule-workflow';
 import {
   applyCalendarDatesSet,
   applySurfaceMode,
@@ -80,13 +62,28 @@ import {
   initializePlannerCalendarSession,
   movePickerMonth,
   openMeetingCreate,
-  openPicker as openPlannerPicker,
   openPlannerEventCreate as openPlannerEventCreateSession,
   openPlannerEventEdit as openPlannerEventEditSession,
+  openPicker as openPlannerPicker,
   selectTimelineRangeDays as selectTimelineRangeDaysSession,
   toggleCreateMenu,
   type PlannerEventDraftRange,
 } from './planner-calendar-session';
+import {
+  TIMELINE_RANGE_OPTIONS,
+  buildPlannerDatePickerGrid,
+  formatPlannerHeading,
+  getPlannerDateFormatter,
+  persistTimelineRangeDays,
+  readTimelineRangeDays,
+  shouldBlockPlannerCalendar,
+  type PlannerSurfaceMode,
+  type PlannerViewMode,
+  type TimelineRangeDays,
+} from './planner-calendar-view-model';
+import { PlannerEventChoicePopover } from './PlannerEventChoicePopover';
+import { PlannerEventModal } from './PlannerEventModal';
+import { PlannerTimelineView } from './PlannerTimelineView';
 
 const SURFACE_MODE_LABEL_KEYS: Record<PlannerSurfaceMode, string> = {
   calendar: 'planner.surfaces.calendar',
@@ -257,20 +254,7 @@ function usePlannerViewElement(): ReactNode {
   const today = new Date();
   const { token, user } = useAuth();
   const timeZone = normalizeTimeZone(user?.time_zone);
-  const [meetingWorkspaceSlug, setMeetingWorkspaceSlug] = useState<
-    string | null
-  >(null);
-  const [meetingWorkspaces, setMeetingWorkspaces] = useState<
-    EligibleWorkspace[]
-  >([]);
-  const [meetingWorkspacesLoading, setMeetingWorkspacesLoading] =
-    useState(false);
-  const [meetingWorkspaceError, setMeetingWorkspaceError] = useState<
-    string | null
-  >(null);
-  const meetingEnabled = Boolean(meetingWorkspaceSlug);
-  const [previewMeetingWorkspaceSlug, setPreviewMeetingWorkspaceSlug] =
-    useState<string | null>(null);
+  const meetingEnabled = useAppAdmission('meeting');
   const [searchParams, setSearchParams] = useSearchParams();
   const surfaceMode: PlannerSurfaceMode =
     searchParams.get('view') === 'timeline' ? 'timeline' : 'calendar';
@@ -294,42 +278,6 @@ function usePlannerViewElement(): ReactNode {
     ? null
     : session.plannerEventRange;
 
-  useEffect(() => {
-    if (!token) {
-      setMeetingWorkspaces([]);
-      setMeetingWorkspaceSlug(null);
-      return;
-    }
-    let cancelled = false;
-    setMeetingWorkspacesLoading(true);
-    setMeetingWorkspaceError(null);
-    getAllEligibleWorkspaces(token, 'meeting')
-      .then((workspaces) => {
-        if (cancelled) return;
-        setMeetingWorkspaces(workspaces);
-        setMeetingWorkspaceSlug((current) => {
-          if (workspaces.some((workspace) => workspace.slug === current)) {
-            return current;
-          }
-          return workspaces.length === 1 ? workspaces[0].slug : null;
-        });
-      })
-      .catch((caught: unknown) => {
-        if (cancelled) return;
-        setMeetingWorkspaces([]);
-        setMeetingWorkspaceSlug(null);
-        setMeetingWorkspaceError(
-          caught instanceof Error ? caught.message : String(caught),
-        );
-      })
-      .finally(() => {
-        if (!cancelled) setMeetingWorkspacesLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [token]);
-
   const calendarRef = useRef<UnifiedCalendarHandle | null>(null);
   const previousSurfaceMode = useRef(surfaceMode);
   const previousTimelineRangeDays = useRef(timelineRangeDays);
@@ -348,15 +296,7 @@ function usePlannerViewElement(): ReactNode {
     sources: PLANNER_SOURCES,
     useMockData: false,
   });
-  const calendarEvents = useMemo(
-    () =>
-      events.map((event) =>
-        event.workspace
-          ? { ...event, title: `[${event.workspace.name}] ${event.title}` }
-          : event,
-      ),
-    [events],
-  );
+  const calendarEvents = useMemo(() => events, [events]);
 
   // Mini date-picker popover. The picker has its own (year, month) cursor so
   // the user can browse without committing — the main view only updates when
@@ -596,7 +536,6 @@ function usePlannerViewElement(): ReactNode {
     if (action.type === 'openPlannerEvent') {
       openPlannerEventEdit(action.eventId);
     } else if (action.type === 'previewMeeting') {
-      setPreviewMeetingWorkspaceSlug(action.workspaceSlug);
       setSession((current) => ({
         ...current,
         previewMeetingId: action.meetingId,
@@ -606,7 +545,6 @@ function usePlannerViewElement(): ReactNode {
         mode: 'openTask',
         taskId: action.taskId,
         taskListId: action.taskListId,
-        workspaceSlug: action.workspaceSlug,
       });
     } else if (action.type === 'missingTaskList') {
       setActionError(t('planner.taskLocationMissing'));
@@ -719,14 +657,13 @@ function usePlannerViewElement(): ReactNode {
   );
   const handleMeetingCreated = useCallback(
     (meetingId: string) => {
-      setPreviewMeetingWorkspaceSlug(meetingWorkspaceSlug);
       setSession((current) => {
         const result = handleMeetingCreatedSession(current, meetingId);
         return result.session;
       });
       refresh();
     },
-    [meetingWorkspaceSlug, refresh],
+    [refresh],
   );
 
   return (
@@ -902,51 +839,18 @@ function usePlannerViewElement(): ReactNode {
                     <Plus size={14} className="text-app-ink/45" />
                     <span>{t('planner.event')}</span>
                   </button>
-                  {meetingWorkspaces.length > 0 || meetingWorkspacesLoading ? (
-                    <>
-                      {meetingWorkspaces.length > 1 ? (
-                        <label className="block border-t border-app-border px-3 py-2">
-                          <span className="app-text-overline mb-1 block text-app-ink/45">
-                            {t('common:labels.workspace')}
-                          </span>
-                          <select
-                            aria-label={t('common:labels.workspace')}
-                            className="app-field-input w-full"
-                            onChange={(event) =>
-                              setMeetingWorkspaceSlug(
-                                event.target.value || null,
-                              )
-                            }
-                            value={meetingWorkspaceSlug ?? ''}
-                          >
-                            <option value="">
-                              {t('planner.chooseMeetingWorkspace')}
-                            </option>
-                            {meetingWorkspaces.map((workspace) => (
-                              <option key={workspace.id} value={workspace.slug}>
-                                {workspace.name}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      ) : null}
-                      <button
-                        type="button"
-                        disabled={!meetingEnabled || meetingWorkspacesLoading}
-                        onClick={() =>
-                          setSession((current) => openMeetingCreate(current))
-                        }
-                        className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink transition-colors hover:bg-app-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        <Plus size={14} className="text-app-ink/45" />
-                        <span>{t('planner.meeting')}</span>
-                      </button>
-                    </>
-                  ) : null}
-                  {meetingWorkspaceError ? (
-                    <p className="app-text-caption border-t border-app-border px-3 py-2 text-app-danger">
-                      {meetingWorkspaceError}
-                    </p>
+                  {meetingEnabled ? (
+                    <button
+                      type="button"
+                      disabled={!meetingEnabled}
+                      onClick={() =>
+                        setSession((current) => openMeetingCreate(current))
+                      }
+                      className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink transition-colors hover:bg-app-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Plus size={14} className="text-app-ink/45" />
+                      <span>{t('planner.meeting')}</span>
+                    </button>
                   ) : null}
                 </div>
               ) : null}
@@ -1037,9 +941,7 @@ function usePlannerViewElement(): ReactNode {
         {session.previewMeetingId ? (
           <MeetingPreviewModal
             meetingId={session.previewMeetingId}
-            workspaceSlug={previewMeetingWorkspaceSlug ?? undefined}
             onClose={() => {
-              setPreviewMeetingWorkspaceSlug(null);
               setSession(closePreviewMeeting);
             }}
             onChanged={refresh}
@@ -1047,10 +949,9 @@ function usePlannerViewElement(): ReactNode {
         ) : null}
         {meetingEnabled ? (
           <MeetingCreateModal
-            isOpen={session.meetingCreateOpen && Boolean(meetingWorkspaceSlug)}
+            isOpen={session.meetingCreateOpen && meetingEnabled}
             onClose={() => setSession(closeMeetingCreate)}
             onCreated={handleMeetingCreated}
-            workspaceSlug={meetingWorkspaceSlug ?? ''}
             initialRange={session.meetingCreateRange}
           />
         ) : null}

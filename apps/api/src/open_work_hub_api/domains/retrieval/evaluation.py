@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import hashlib
 import json
+from dataclasses import dataclass
 from math import ceil, log2
 from typing import Literal
 
@@ -104,7 +104,6 @@ class RetrievalQualityCorpusCase(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     query_id: str = Field(min_length=1, max_length=160)
-    workspace_id: str = Field(min_length=1, max_length=128)
     user_id: str = Field(min_length=1, max_length=128)
     query: str = Field(min_length=1, max_length=2000)
     relevant_resource_ids: list[str] = Field(min_length=1, max_length=100)

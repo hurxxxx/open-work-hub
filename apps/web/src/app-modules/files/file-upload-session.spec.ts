@@ -128,7 +128,6 @@ describe('file upload session', () => {
         token: 'token',
         uploadFile,
         uploadVisibility: 'workspace',
-        workspaceSlug: 'acme',
       }),
     ).resolves.toEqual({ ok: true });
 
@@ -154,22 +153,20 @@ describe('file upload session', () => {
           throw new Error('Network failed');
         },
         uploadVisibility: 'private',
-        workspaceSlug: 'acme',
       }),
     ).resolves.toEqual({ errorMessage: 'Network failed', ok: false });
 
     expect(
       getFileUploadSuccessEvents({
         folderId: 'folder-1',
-        workspaceSlug: 'acme',
       }),
     ).toEqual([
       {
-        detail: { folderId: 'folder-1', workspaceSlug: 'acme' },
+        detail: { folderId: 'folder-1' },
         name: FILES_UPLOAD_COMPLETED_EVENT,
       },
       {
-        detail: { folderId: 'folder-1', workspaceSlug: 'acme' },
+        detail: { folderId: 'folder-1' },
         name: FILES_CHANGED_EVENT,
       },
     ]);

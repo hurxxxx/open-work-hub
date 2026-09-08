@@ -11,7 +11,6 @@ describe('Meeting TaskPickerModal', () => {
       onClose: vi.fn(),
       onPick: vi.fn(),
       excludeTaskIds,
-      workspaceSlug: 'main',
     });
 
     expect(isValidElement(element)).toBe(true);
@@ -23,16 +22,15 @@ describe('Meeting TaskPickerModal', () => {
       copy: Record<string, string>;
       excludeTaskIds: string[];
       isOpen: boolean;
-      workspaceSlug: string;
     };
 
     expect(props.isOpen).toBe(true);
-    expect(props.workspaceSlug).toBe('main');
+    expect(props).not.toHaveProperty('workspaceSlug');
     expect(props.excludeTaskIds).toBe(excludeTaskIds);
     expect(props.copy).toEqual({
       titleKey: 'meeting.taskPicker.title',
       descriptionKey: 'meeting.taskPicker.description',
-      workspaceLabelKey: 'meeting.taskPicker.pmsWorkspace',
+      appLabelKey: 'meeting.taskPicker.pmsWorkspace',
       noAccessActionKey: 'meeting.taskPicker.attachAction',
       loadListsErrorKey: 'meeting.taskPicker.listLoadFailed',
       loadTasksErrorKey: 'meeting.taskPicker.issueLoadFailed',

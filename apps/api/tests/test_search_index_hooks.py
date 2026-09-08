@@ -22,8 +22,7 @@ from test_meeting import (
     _auth_headers,
     _bootstrap_admin_session,
     _create_meeting,
-    _create_user_with_workspaces,
-    _first_workspace_slug,
+    _create_company_user,
     _login,
 )
 
@@ -31,13 +30,13 @@ from test_meeting import (
 class _RecordingSearchClient:
     def __init__(self) -> None:
         self.upserts: list[dict] = []
-        self.deletes: list[tuple[str, str, str]] = []
+        self.deletes: list[tuple[str, str]] = []
 
     def upsert_document(self, document: dict) -> None:
         self.upserts.append(document)
 
-    def delete_document(self, *, workspace_id: str, entity_type: str, entity_id: str) -> None:
-        self.deletes.append((workspace_id, entity_type, entity_id))
+    def delete_document(self, *, entity_type: str, entity_id: str) -> None:
+        self.deletes.append((entity_type, entity_id))
 
     def upsert_partitioned_document(self, document: dict) -> str:
         self.upserts.append(document)
@@ -71,7 +70,6 @@ class _RecordingSearchClient:
         )
         self.deletes.append(
             (
-                str(prior["workspace_id"]) if prior is not None else "",
                 entity_type,
                 resource_id,
             )
@@ -141,7 +139,7 @@ def _process_pending_delete(
     entity_type: str,
     entity_id: str,
     lifecycle_operation: Literal["delete"],
-) -> tuple[str, str, str]:
+) -> tuple[str, str]:
     with get_session_factory()() as db:
         job_ids = list(
             db.scalars(
@@ -163,15 +161,15 @@ def _process_pending_delete(
             process_search_index_job(db, job_id, client=search_client)
 
     matches = [
-        item for item in search_client.deletes if item[1] == entity_type and item[2] == entity_id
+        item for item in search_client.deletes if item[0] == entity_type and item[1] == entity_id
     ]
     assert matches, f"expected search delete for {entity_type}:{entity_id}"
     return matches[-1]
 
 
-def _create_space(client: TestClient, token: str, *, workspace_slug: str, name: str) -> dict:
+def _create_space(client: TestClient, token: str, *, name: str) -> dict:
     response = client.post(
-        f"/api/v1/workspaces/{workspace_slug}/pms/spaces",
+        "/api/v1/pms/spaces",
         headers=_auth_headers(token),
         json={"name": name, "description": ""},
     )
@@ -183,13 +181,12 @@ def _create_task_list(
     client: TestClient,
     token: str,
     *,
-    workspace_slug: str,
     team_id: str,
     key: str,
     name: str,
 ) -> dict:
     response = client.post(
-        f"/api/v1/workspaces/{workspace_slug}/pms/lists",
+        "/api/v1/pms/lists",
         headers=_auth_headers(token),
         json={
             "key": key,
@@ -206,12 +203,11 @@ def _create_issue(
     client: TestClient,
     token: str,
     *,
-    workspace_slug: str,
     list_id: str,
     title: str,
 ) -> dict:
     response = client.post(
-        f"/api/v1/workspaces/{workspace_slug}/pms/lists/{list_id}/tasks",
+        f"/api/v1/pms/lists/{list_id}/tasks",
         headers=_auth_headers(token),
         json={
             "title": title,
@@ -234,7 +230,7 @@ def test_file_extraction_and_delete_drive_search_projection_lifecycle(
     monkeypatch.setattr(file_rag_sync, "FILES_RETRIEVAL_ACTIVE", True)
     monkeypatch.setattr(file_search_hooks, "FILES_RETRIEVAL_ACTIVE", True)
     active_file_adapter = replace(
-        file_search_projection.FILES_WORKSPACE_KEYWORD_SEARCH_ADAPTER,
+        file_search_projection.FILES_KEYWORD_SEARCH_ADAPTER,
         active=True,
     )
     original_projection_adapter = search_indexing.get_search_projection_adapter
@@ -258,12 +254,11 @@ def test_file_extraction_and_delete_drive_search_projection_lifecycle(
     )
     search_client = _RecordingSearchClient()
     admin = _bootstrap_admin_session(client)
-    workspace_slug = _first_workspace_slug(client, admin["token"])
 
     upload_response = client.post(
-        f"/api/v1/workspaces/{workspace_slug}/files/upload",
+        "/api/v1/files/upload",
         headers=_auth_headers(admin["token"]),
-        data={"visibility": "workspace"},
+        data={"visibility": "company", "company_admin_read_acknowledged": True},
         files={"file": ("search-lifecycle.txt", b"first searchable body", "text/plain")},
     )
     assert upload_response.status_code == 201, upload_response.text
@@ -305,7 +300,7 @@ def test_file_extraction_and_delete_drive_search_projection_lifecycle(
     assert updated_projection["body"] == "updated searchable body"
 
     delete_response = client.delete(
-        f"/api/v1/workspaces/{workspace_slug}/files/{file_id}",
+        f"/api/v1/files/{file_id}",
         headers=_auth_headers(admin["token"]),
     )
     assert delete_response.status_code == 204, delete_response.text
@@ -324,25 +319,22 @@ def test_doc_user_share_grant_and_revoke_refresh_search_acl_projection(
     _stub_search_publish(monkeypatch)
     search_client = _RecordingSearchClient()
     admin = _bootstrap_admin_session(client)
-    workspace_slug = _first_workspace_slug(client, admin["token"])
-    owner = _create_user_with_workspaces(
+    owner = _create_company_user(
         client,
         admin["token"],
         email="search-doc-owner@open-work-hub.local",
         full_name="Search Doc Owner",
-        workspace_keys=["administrator"],
     )
-    recipient = _create_user_with_workspaces(
+    recipient = _create_company_user(
         client,
         admin["token"],
         email="search-doc-recipient@open-work-hub.local",
         full_name="Search Doc Recipient",
-        workspace_keys=["administrator"],
     )
     owner_token = _login(client, owner["user"]["email"], owner["temporary_password"])
 
     create_response = client.post(
-        f"/api/v1/workspaces/{workspace_slug}/docs/items",
+        "/api/v1/docs/items",
         headers=_auth_headers(owner_token),
         json={"title": "Incremental Search Doc"},
     )
@@ -357,7 +349,7 @@ def test_doc_user_share_grant_and_revoke_refresh_search_acl_projection(
     assert created_projection["entity_id"] == doc["id"]
 
     share_response = client.put(
-        f"/api/v1/workspaces/{workspace_slug}/docs/items/{doc['id']}/sharing/users/{recipient['user']['id']}",
+        f"/api/v1/docs/items/{doc['id']}/sharing/users/{recipient['user']['id']}",
         headers=_auth_headers(owner_token),
         json={"access_level": "read"},
     )
@@ -372,7 +364,7 @@ def test_doc_user_share_grant_and_revoke_refresh_search_acl_projection(
     assert recipient["user"]["id"] in granted_projection["shared_user_ids"]
 
     revoke_response = client.delete(
-        f"/api/v1/workspaces/{workspace_slug}/docs/items/{doc['id']}/sharing/users/{recipient['user']['id']}",
+        f"/api/v1/docs/items/{doc['id']}/sharing/users/{recipient['user']['id']}",
         headers=_auth_headers(owner_token),
     )
     assert revoke_response.status_code == 200, revoke_response.text
@@ -386,7 +378,7 @@ def test_doc_user_share_grant_and_revoke_refresh_search_acl_projection(
     assert recipient["user"]["id"] not in revoked_projection["shared_user_ids"]
 
     delete_response = client.delete(
-        f"/api/v1/workspaces/{workspace_slug}/docs/items/{doc['id']}",
+        f"/api/v1/docs/items/{doc['id']}",
         headers=_auth_headers(owner_token),
     )
     assert delete_response.status_code == 204, delete_response.text
@@ -405,18 +397,15 @@ def test_meeting_attendee_add_and_remove_refresh_search_acl_projection(
     _stub_search_publish(monkeypatch)
     search_client = _RecordingSearchClient()
     admin = _bootstrap_admin_session(client)
-    workspace_slug = _first_workspace_slug(client, admin["token"])
-    attendee = _create_user_with_workspaces(
+    attendee = _create_company_user(
         client,
         admin["token"],
         email="search-meeting-attendee@open-work-hub.local",
         full_name="Search Meeting Attendee",
-        workspace_keys=["administrator"],
     )
     meeting = _create_meeting(
         client,
         admin["token"],
-        workspace_slug=workspace_slug,
         title="Incremental Search Meeting",
         attendees=[],
     )
@@ -429,7 +418,7 @@ def test_meeting_attendee_add_and_remove_refresh_search_acl_projection(
     assert created_projection["entity_id"] == meeting["id"]
 
     add_response = client.post(
-        f"/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting['id']}/attendees",
+        f"/api/v1/meeting/meetings/{meeting['id']}/attendees",
         headers=_auth_headers(admin["token"]),
         json={"attendees": [{"user_id": attendee["user"]["id"], "role": "required"}]},
     )
@@ -444,7 +433,7 @@ def test_meeting_attendee_add_and_remove_refresh_search_acl_projection(
     assert attendee["user"]["id"] in added_projection["participant_user_ids"]
 
     remove_response = client.patch(
-        f"/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting['id']}",
+        f"/api/v1/meeting/meetings/{meeting['id']}",
         headers=_auth_headers(admin["token"]),
         json={"attendees": []},
     )
@@ -466,24 +455,20 @@ def test_meeting_delete_detaches_access_grant_foreign_keys_and_deletes_search_do
     _stub_search_publish(monkeypatch)
     search_client = _RecordingSearchClient()
     admin = _bootstrap_admin_session(client)
-    workspace_slug = _first_workspace_slug(client, admin["token"])
-    attendee = _create_user_with_workspaces(
+    attendee = _create_company_user(
         client,
         admin["token"],
         email="search-meeting-delete-attendee@open-work-hub.local",
         full_name="Search Meeting Delete Attendee",
-        workspace_keys=["administrator"],
     )
     space = _create_space(
         client,
         admin["token"],
-        workspace_slug=workspace_slug,
         name="Search Meeting Delete Space",
     )
     task_list = _create_task_list(
         client,
         admin["token"],
-        workspace_slug=workspace_slug,
         team_id=space["id"],
         key="SMDL",
         name="Search Meeting Delete List",
@@ -491,35 +476,33 @@ def test_meeting_delete_detaches_access_grant_foreign_keys_and_deletes_search_do
     issue = _create_issue(
         client,
         admin["token"],
-        workspace_slug=workspace_slug,
         list_id=task_list["id"],
         title="Meeting Delete Task",
     )
     meeting = _create_meeting(
         client,
         admin["token"],
-        workspace_slug=workspace_slug,
         title="Delete Meeting With Grants",
         attendees=[],
         task_ids=[issue["id"]],
     )
 
     add_response = client.post(
-        f"/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting['id']}/attendees",
+        f"/api/v1/meeting/meetings/{meeting['id']}/attendees",
         headers=_auth_headers(admin["token"]),
         json={"attendees": [{"user_id": attendee["user"]["id"], "role": "required"}]},
     )
     assert add_response.status_code == 200, add_response.text
 
     remove_response = client.patch(
-        f"/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting['id']}",
+        f"/api/v1/meeting/meetings/{meeting['id']}",
         headers=_auth_headers(admin["token"]),
         json={"attendees": []},
     )
     assert remove_response.status_code == 200, remove_response.text
 
     delete_response = client.delete(
-        f"/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting['id']}",
+        f"/api/v1/meeting/meetings/{meeting['id']}",
         headers=_auth_headers(admin["token"]),
     )
     assert delete_response.status_code == 204, delete_response.text
@@ -539,24 +522,20 @@ def test_pms_task_user_access_grant_and_revoke_refresh_search_acl_projection(
     _stub_search_publish(monkeypatch)
     search_client = _RecordingSearchClient()
     admin = _bootstrap_admin_session(client)
-    workspace_slug = _first_workspace_slug(client, admin["token"])
-    recipient = _create_user_with_workspaces(
+    recipient = _create_company_user(
         client,
         admin["token"],
         email="search-pms-recipient@open-work-hub.local",
         full_name="Search PMS Recipient",
-        workspace_keys=["administrator"],
     )
     space = _create_space(
         client,
         admin["token"],
-        workspace_slug=workspace_slug,
         name="Search PMS Space",
     )
     task_list = _create_task_list(
         client,
         admin["token"],
-        workspace_slug=workspace_slug,
         team_id=space["id"],
         key="SRCH",
         name="Search PMS List",
@@ -564,7 +543,6 @@ def test_pms_task_user_access_grant_and_revoke_refresh_search_acl_projection(
     issue = _create_issue(
         client,
         admin["token"],
-        workspace_slug=workspace_slug,
         list_id=task_list["id"],
         title="Incremental Search Task",
     )
@@ -617,7 +595,7 @@ def test_pms_task_user_access_grant_and_revoke_refresh_search_acl_projection(
     assert recipient["user"]["id"] not in revoked_projection["granted_user_ids"]
 
     delete_response = client.delete(
-        f"/api/v1/workspaces/{workspace_slug}/pms/tasks/{issue['id']}",
+        f"/api/v1/pms/tasks/{issue['id']}",
         headers=_auth_headers(admin["token"]),
     )
     assert delete_response.status_code == 204, delete_response.text

@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useReducer } from 'react';
 import { Button, InlineNotice } from '@open-work-hub/ui';
 import { Loader2, PencilRuler, Plus, Search } from 'lucide-react';
+import { useCallback, useEffect, useReducer } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/src/lib/utils';
@@ -27,7 +27,7 @@ export type { WhiteboardContextRef } from './whiteboard-context-slot-panel-model
 
 export interface WhiteboardContextSlotPanelProps {
   context: WhiteboardContextRef;
-  workspaceSlug?: string | null;
+
   defaultTitle: string;
   canEditContext: boolean;
   className?: string;
@@ -36,7 +36,6 @@ export interface WhiteboardContextSlotPanelProps {
 
 export function WhiteboardContextSlotPanel({
   context,
-  workspaceSlug,
   defaultTitle,
   canEditContext,
   className,
@@ -53,11 +52,7 @@ export function WhiteboardContextSlotPanel({
     if (!token) return;
     dispatch({ type: 'load-started' });
     try {
-      const response = await getWhiteboardContextSlot(
-        token,
-        context,
-        workspaceSlug,
-      );
+      const response = await getWhiteboardContextSlot(token, context);
       dispatch({ type: 'load-succeeded', item: response.item });
     } catch (err) {
       dispatch({
@@ -66,7 +61,7 @@ export function WhiteboardContextSlotPanel({
           err instanceof Error ? err.message : t('whiteboard.loadSlotFailed'),
       });
     }
-  }, [context, t, token, workspaceSlug]);
+  }, [context, t, token]);
 
   useEffect(() => {
     void loadSlot();
@@ -79,7 +74,6 @@ export function WhiteboardContextSlotPanel({
       const created = await createWhiteboardContextSlot(
         token,
         buildWhiteboardContextSlotCreatePayload(context, defaultTitle),
-        workspaceSlug,
       );
       dispatch({ type: 'create-succeeded', item: created });
     } catch (err) {
@@ -96,7 +90,6 @@ export function WhiteboardContextSlotPanel({
     const attached = await attachWhiteboardContextSlot(
       token,
       buildWhiteboardContextSlotAttachPayload(context, selected.id),
-      workspaceSlug,
     );
     dispatch({ type: 'attach-succeeded', item: attached });
   }
@@ -105,7 +98,7 @@ export function WhiteboardContextSlotPanel({
     if (!token) return;
     dispatch({ type: 'detach-started' });
     try {
-      await detachWhiteboardContextSlot(token, context, workspaceSlug);
+      await detachWhiteboardContextSlot(token, context);
       dispatch({ type: 'detach-succeeded' });
     } catch (err) {
       dispatch({
@@ -141,7 +134,6 @@ export function WhiteboardContextSlotPanel({
         <WhiteboardEditorSurface
           key={state.item.id}
           boardId={state.item.id}
-          workspaceSlug={workspaceSlug}
           showArchive={false}
           showDetach={canEditContext}
           onDetach={handleDetach}
@@ -191,7 +183,6 @@ export function WhiteboardContextSlotPanel({
 
       <WhiteboardPickerModal
         isOpen={state.pickerOpen}
-        workspaceSlug={workspaceSlug}
         excludeWhiteboardIds={getWhiteboardContextSlotExcludeIds(state.item)}
         onClose={() => dispatch({ type: 'picker-closed' })}
         onPick={handleAttach}

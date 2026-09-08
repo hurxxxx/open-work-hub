@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import argparse
-from datetime import UTC, datetime
 import html
 import json
-from pathlib import Path
 import shutil
 import subprocess
 import sys
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
-
 
 CANVAS_WIDTH = 1280
 CANVAS_HEIGHT = 720
@@ -75,7 +74,9 @@ def validate_document(document: dict[str, Any]) -> list[str]:
             if element_type not in SUPPORTED_ELEMENTS:
                 errors.append(f"{slide_id}/{element_id}: unsupported type {element_type}")
             frame = [element.get(key) for key in ("x", "y", "w", "h")]
-            if any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in frame):
+            if any(
+                isinstance(value, bool) or not isinstance(value, (int, float)) for value in frame
+            ):
                 errors.append(f"{slide_id}/{element_id}: invalid frame")
                 continue
             x, y, width, height = frame
@@ -97,7 +98,9 @@ def inspect_document(document: dict[str, Any]) -> dict[str, Any]:
             if left.get("type") == "text":
                 raw = str(left.get("html", ""))
                 plain = raw.replace("<br>", "\n").replace("<br/>", "\n")
-                if len(plain) > max(20, int(float(left.get("w", 1)) * float(left.get("h", 1)) / 320)):
+                if len(plain) > max(
+                    20, int(float(left.get("w", 1)) * float(left.get("h", 1)) / 320)
+                ):
                     warnings.append(f"{left.get('id')}: text may be dense for its frame")
             for right in elements[index + 1 :]:
                 if not isinstance(right, dict):
@@ -105,9 +108,7 @@ def inspect_document(document: dict[str, Any]) -> dict[str, Any]:
                 if left.get("type") == "shape" or right.get("type") == "shape":
                     continue
                 if _overlap(left, right) > 0.35:
-                    warnings.append(
-                        f"{left.get('id')} overlaps {right.get('id')} by more than 35%"
-                    )
+                    warnings.append(f"{left.get('id')} overlaps {right.get('id')} by more than 35%")
         slides.append(
             {
                 "id": slide.get("id") if isinstance(slide, dict) else None,
@@ -163,7 +164,7 @@ def render_document(document: dict[str, Any], output_dir: Path) -> list[str]:
                 label = "CHART" if element.get("type") == "chart" else "TABLE"
                 parts.append(
                     f'<rect x="{x}" y="{y}" width="{width}" height="{height}" fill="#f3f4f6" '
-                    f'stroke="#94a3b8"/><text x="{float(x)+16}" y="{float(y)+32}" '
+                    f'stroke="#94a3b8"/><text x="{float(x) + 16}" y="{float(y) + 32}" '
                     f'font-family="Arial" font-size="18" fill="#475569">{label}</text>'
                 )
         parts.append("</svg>")
@@ -204,7 +205,9 @@ def _plain_text(value: str) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(prog="bento-tool")
-    parser.add_argument("command", choices=("read", "validate", "inspect", "render", "replace-slide", "metadata"))
+    parser.add_argument(
+        "command", choices=("read", "validate", "inspect", "render", "replace-slide", "metadata")
+    )
     parser.add_argument("--document", default="document.json")
     parser.add_argument("--input")
     parser.add_argument("--slide-id")

@@ -3,13 +3,13 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
     Integer,
-    JSON,
     String,
     Text,
     UniqueConstraint,
@@ -18,23 +18,17 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from open_work_hub_api.core.db import Base
+
+
 def utcnow_naive() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
 class Recording(Base):
     __tablename__ = "recordings"
-    __table_args__ = (
-        Index("ix_recordings_workspace_owner_started", "workspace_id", "owner_id", "started_at"),
-        Index("ix_recordings_workspace_audio_status", "workspace_id", "audio_status"),
-        Index("ix_recordings_workspace_transcript_status", "workspace_id", "transcript_status"),
-        Index("ix_recordings_workspace_summary_status", "workspace_id", "summary_status"),
-    )
+    __table_args__ = (Index("ix_recordings_owner_started", "owner_id", "started_at"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id"), index=True, nullable=False
-    )
     owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
     title: Mapped[str] = mapped_column(String(200), default="", nullable=False)
     started_at: Mapped[datetime] = mapped_column(
@@ -68,8 +62,6 @@ class Recording(Base):
         DateTime, default=utcnow_naive, onupdate=utcnow_naive, nullable=False
     )
     trashed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
-
-    workspace = relationship("Workspace")
     owner = relationship("User", foreign_keys=[owner_id])
     result: Mapped["RecordingResult | None"] = relationship(
         back_populates="recording",
@@ -89,9 +81,7 @@ class Recording(Base):
 
 class RecordingResult(Base):
     __tablename__ = "recording_results"
-    __table_args__ = (
-        CheckConstraint("version >= 1", name="ck_recording_results_version"),
-    )
+    __table_args__ = (CheckConstraint("version >= 1", name="ck_recording_results_version"),)
 
     recording_id: Mapped[str] = mapped_column(
         ForeignKey("recordings.id", ondelete="CASCADE"),
@@ -153,27 +143,22 @@ class RecordingStaging(Base):
     __tablename__ = "recording_staging"
     __table_args__ = (
         UniqueConstraint(
-            "workspace_id",
             "uploaded_by_id",
             "idempotency_key",
-            name="uq_recording_staging_workspace_uploader_idempotency",
+            name="uq_recording_staging_uploader_idempotency",
         ),
         Index(
             "ix_recording_staging_initial_target",
-            "workspace_id",
             "initial_target_app",
             "initial_target_type",
             "initial_target_id",
             "completed_at",
         ),
-        Index("ix_recording_staging_workspace_started", "workspace_id", "started_at"),
+        Index("ix_recording_staging_started", "started_at"),
         Index("ix_recording_staging_promoted_recording", "promoted_recording_id"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id"), index=True, nullable=False
-    )
     uploaded_by_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
     idempotency_key: Mapped[str] = mapped_column(String(80), nullable=False)
     status: Mapped[str] = mapped_column(String(24), default="recording", index=True, nullable=False)
@@ -196,8 +181,6 @@ class RecordingStaging(Base):
     initial_target_app: Mapped[str | None] = mapped_column(String(64), nullable=True)
     initial_target_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
     initial_target_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
-
-    workspace = relationship("Workspace")
     uploaded_by = relationship("User")
     promoted_recording = relationship("Recording")
 

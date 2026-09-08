@@ -2,111 +2,93 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from functools import cached_property
 from typing import Any
 
-from sqlalchemy import and_, false, or_, select, true
+from sqlalchemy import and_, false, or_, select
 from sqlalchemy.orm import Session
 
-from open_work_hub_api.domains.auth.models import Team, TeamMember
+from open_work_hub_api.domains.auth.models import User, UserSystemRole
+from open_work_hub_api.domains.groups.service import current_group_ids
 
 
 @dataclass(frozen=True)
 class AccessScopeRules:
-    workspace_id: str
-    workspace_role: str | None
-    user_id: str
-    team_ids: Sequence[str] = ()
+    """Pure projection of source-owned grants; personal scope has no admin override."""
 
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "team_ids", tuple(str(item) for item in self.team_ids if item))
+    user_id: str
+    active: bool = False
+    platform_admin: bool = False
+    team_ids: Sequence[str] = ()
+    group_ids: Sequence[str] = ()
 
     def can_access(self, scope_kind: str | None, scope_id: str | None) -> bool:
-        if self.workspace_role == "admin":
-            return True
-        if self.workspace_role is None:
+        if not self.active:
             return False
-        if scope_kind == "workspace":
-            return scope_id in {None, self.workspace_id}
-        if scope_kind == "team":
-            return bool(scope_id) and scope_id in set(self.team_ids)
+        if scope_kind == "company":
+            return scope_id is None
         if scope_kind == "user":
-            return scope_id == self.user_id
+            return bool(scope_id) and scope_id == self.user_id
+        if scope_kind == "group":
+            return bool(scope_id) and scope_id in self.group_ids
+        if scope_kind == "team":
+            return bool(scope_id) and scope_id in self.team_ids
         return False
 
     def predicate(self, scope_kind_column: Any, scope_id_column: Any):
-        if self.workspace_role == "admin":
-            return true()
-        if self.workspace_role is None:
+        if not self.active:
             return false()
         return or_(
-            and_(
-                scope_kind_column == "workspace",
-                or_(scope_id_column == self.workspace_id, scope_id_column.is_(None)),
-            ),
-            and_(
-                scope_kind_column == "team",
-                scope_id_column.in_(self.team_ids) if self.team_ids else false(),
-            ),
-            and_(
-                scope_kind_column == "user",
-                scope_id_column == self.user_id,
-            ),
+            and_(scope_kind_column == "company", scope_id_column.is_(None)),
+            and_(scope_kind_column == "user", scope_id_column == self.user_id),
+            and_(scope_kind_column == "group", scope_id_column.in_(self.group_ids)),
+            and_(scope_kind_column == "team", scope_id_column.in_(self.team_ids)),
         )
 
 
 @dataclass(frozen=True)
 class AccessScopePolicy:
     db: Session
-    workspace_id: str
-    workspace_role: str | None
     user_id: str
 
-    @cached_property
+    @property
     def rules(self) -> AccessScopeRules:
+        active = (
+            self.db.scalar(
+                select(User.id).where(
+                    User.id == self.user_id,
+                    User.status == "active",
+                    User.login_blocked.is_(False),
+                    User.must_change_password.is_(False),
+                )
+            )
+            is not None
+        )
+        admin = (
+            self.db.scalar(
+                select(UserSystemRole.id).where(
+                    UserSystemRole.user_id == self.user_id, UserSystemRole.role == "platform_admin"
+                )
+            )
+            is not None
+        )
         return AccessScopeRules(
-            workspace_id=self.workspace_id,
-            workspace_role=self.workspace_role,
             user_id=self.user_id,
+            active=active,
+            platform_admin=admin,
             team_ids=self.accessible_team_ids(),
+            group_ids=current_group_ids(self.db, self.user_id),
         )
 
     def can_access(self, scope_kind: str | None, scope_id: str | None) -> bool:
-        if self.workspace_role == "admin":
-            return True
-        if self.workspace_role is None:
-            return False
-        if scope_kind == "workspace":
-            return scope_id in {None, self.workspace_id}
-        if scope_kind == "user":
-            return scope_id == self.user_id
-        if scope_kind == "team":
-            return AccessScopeRules(
-                workspace_id=self.workspace_id,
-                workspace_role=self.workspace_role,
-                user_id=self.user_id,
-                team_ids=self.accessible_team_ids(),
-            ).can_access(scope_kind, scope_id)
-        return False
+        return self.rules.can_access(scope_kind, scope_id)
 
     def predicate(self, scope_kind_column: Any, scope_id_column: Any):
         return self.rules.predicate(scope_kind_column, scope_id_column)
 
     def active_team_ids_query(self):
-        query = select(Team.id).where(
-            Team.workspace_id == self.workspace_id,
-            Team.active.is_(True),
-            Team.trashed_at.is_(None),
-        )
-        if self.workspace_role == "admin":
-            return query
-        return query.join(TeamMember, TeamMember.team_id == Team.id).where(
-            TeamMember.user_id == self.user_id
-        )
+        from open_work_hub_api.domains.pms.access import accessible_space_ids_query
+
+        return accessible_space_ids_query(self.db, user_id=self.user_id)
 
     def accessible_team_ids(self) -> list[str]:
-        return [
-            str(team_id)
-            for team_id in self.db.scalars(self.active_team_ids_query()).all()
-            if team_id
-        ]
+        return list(self.db.scalars(self.active_team_ids_query()))

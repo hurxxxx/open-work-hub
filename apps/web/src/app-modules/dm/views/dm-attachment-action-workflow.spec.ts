@@ -13,11 +13,11 @@ function attachment(
 ): DmMessageAttachment {
   return {
     content_type: 'image/png',
-    download_url: '/api/v1/dm/attachments/attachment-1/download',
+
     filename: 'screen.png',
     id: 'attachment-1',
     is_image: true,
-    preview_url: '/api/v1/dm/attachments/attachment-1/preview',
+
     size_bytes: 1024,
     ...overrides,
   };
@@ -26,28 +26,30 @@ function attachment(
 function harness({
   api,
   busyAttachmentId = null,
+  isCurrent = () => true,
 }: {
   api?: Partial<DmAttachmentActionApi> | null;
   busyAttachmentId?: string | null;
+  isCurrent?: () => boolean;
 } = {}) {
   const actions: DmComposerAttachmentAction[] = [];
   const errors: Array<string | null> = [];
   const viewers: unknown[] = [];
-  const browser: DmAttachmentBrowserAdapter = { download: vi.fn() };
+  const browser: DmAttachmentBrowserAdapter = {
+    download: vi.fn().mockResolvedValue(undefined),
+  };
   const resolvedApi: DmAttachmentActionApi | null =
     api === null
       ? null
       : {
           getDownloadUrl: vi.fn(async () => ({
-            url: '/api/v1/dm/attachments/attachment-1/download',
-          })),
-          getPreviewUrl: vi.fn(async () => ({
-            url: '/api/v1/dm/attachments/attachment-1/preview',
+            url: '/api/v1/content#grant=example',
           })),
           ...api,
         };
   const workflow = createDmAttachmentActionWorkflow({
     api: resolvedApi,
+    isCurrent,
     browser,
     busyAttachmentId,
     dispatchAttachmentAction: (action) => actions.push(action),
@@ -63,7 +65,7 @@ function harness({
 }
 
 describe('dm attachment action workflow', () => {
-  it('opens image attachments through a preview URL', async () => {
+  it('opens the image viewer by identity so its component requests fresh access', async () => {
     const context = harness();
 
     await context.workflow.openImageAttachment(attachment());
@@ -73,29 +75,12 @@ describe('dm attachment action workflow', () => {
       { type: 'action', attachmentId: null },
     ]);
     expect(context.errors).toEqual([null]);
-    expect(context.api?.getPreviewUrl).toHaveBeenCalledWith('attachment-1');
     expect(context.viewers).toEqual([
       {
         filename: 'screen.png',
-        url: 'http://localhost:3000/api/v1/dm/attachments/attachment-1/preview',
+        attachmentId: 'attachment-1',
       },
     ]);
-  });
-
-  it('reports preview fallback errors when the returned URL is unsafe', async () => {
-    const context = harness({
-      api: {
-        getPreviewUrl: vi.fn(async () => ({
-          url: 'https://cdn.example.test/screen.png',
-        })),
-      },
-    });
-
-    await context.workflow.openImageAttachment(attachment());
-
-    expect(context.viewers).toEqual([]);
-    expect(context.errors).toEqual([null, 'Preview failed']);
-    expect(context.actions.at(-1)).toEqual({ type: 'action', attachmentId: null });
   });
 
   it('downloads attachments through the browser adapter', async () => {
@@ -108,10 +93,30 @@ describe('dm attachment action workflow', () => {
     expect(context.api?.getDownloadUrl).toHaveBeenCalledWith('attachment-1');
     expect(context.browser.download).toHaveBeenCalledWith({
       filename: 'report.pdf',
-      href: 'http://localhost:3000/api/v1/dm/attachments/attachment-1/download',
-      rel: 'noreferrer',
+      href: '/api/v1/content#grant=example',
     });
     expect(context.errors).toEqual([null]);
+  });
+
+  it('discards late grant responses after the account or conversation changes', async () => {
+    let current = true;
+    let resolve!: (value: { url: string }) => void;
+    const context = harness({
+      isCurrent: () => current,
+      api: {
+        getDownloadUrl: vi.fn(
+          () =>
+            new Promise((done) => {
+              resolve = done;
+            }),
+        ),
+      },
+    });
+    const pending = context.workflow.downloadAttachment(attachment());
+    current = false;
+    resolve({ url: '/api/v1/content#grant=old' });
+    await pending;
+    expect(context.browser.download).not.toHaveBeenCalled();
   });
 
   it('reports API errors and always clears the active action', async () => {
@@ -140,6 +145,5 @@ describe('dm attachment action workflow', () => {
     const busy = harness({ busyAttachmentId: 'other-attachment' });
     await busy.workflow.openImageAttachment(attachment());
     expect(busy.actions).toEqual([]);
-    expect(busy.api?.getPreviewUrl).not.toHaveBeenCalled();
   });
 });

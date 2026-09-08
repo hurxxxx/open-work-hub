@@ -53,11 +53,10 @@ describe('AI artifact API', () => {
       offset: 60,
       status: 'completed',
       token: 'token',
-      workspaceSlug: 'research / one',
     });
 
     expect(apiFetchJson).toHaveBeenCalledWith(
-      '/api/v1/workspaces/research%20%2F%20one/ai/artifacts?limit=30&offset=60&artifact_type=report&status=completed&app_id=docs&conversation_id=conversation+%2F+one',
+      '/api/v1/ai/artifacts?limit=30&offset=60&artifact_type=report&status=completed&app_id=docs&conversation_id=conversation+%2F+one',
       'token',
       { signal: undefined },
     );
@@ -93,11 +92,10 @@ describe('AI artifact API', () => {
     const artifact = await getAiArtifact({
       artifactId: 'legacy/artifact',
       token: 'token',
-      workspaceSlug: 'research',
     });
 
     expect(apiFetchJson).toHaveBeenCalledWith(
-      '/api/v1/workspaces/research/ai/artifacts/legacy%2Fartifact',
+      '/api/v1/ai/artifacts/legacy%2Fartifact',
       'token',
       { signal: undefined },
     );
@@ -125,7 +123,6 @@ describe('AI artifact API', () => {
     const artifact = await getAiArtifact({
       artifactId: 'artifact-current',
       token: 'token',
-      workspaceSlug: 'research',
     });
 
     expect(artifact).toMatchObject({
@@ -158,7 +155,6 @@ describe('AI artifact API', () => {
     const sources = await listAiArtifactSources({
       artifactId: 'report-1',
       token: 'token',
-      workspaceSlug: 'research',
     });
 
     expect(sources[0]).toEqual({
@@ -199,7 +195,6 @@ describe('AI artifact API', () => {
     const sources = await listAiArtifactSources({
       artifactId: 'report-current',
       token: 'token',
-      workspaceSlug: 'research',
     });
 
     expect(sources[0]).toMatchObject({
@@ -233,11 +228,10 @@ describe('AI artifact API', () => {
       appId: 'docs',
       conversationId: 'conversation/1',
       token: 'token',
-      workspaceSlug: 'research',
     });
 
     expect(apiFetchJson).toHaveBeenCalledWith(
-      '/api/v1/workspaces/research/ai/graph-runs?conversation_id=conversation%2F1&app_id=docs',
+      '/api/v1/ai/graph-runs?conversation_id=conversation%2F1&app_id=docs',
       'token',
       { signal: undefined },
     );

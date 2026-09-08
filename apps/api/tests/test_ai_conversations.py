@@ -4,13 +4,12 @@ from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.domains.ai.conversation_scope import conversation_scope_turn_context
 from open_work_hub_api.core.db import get_engine
 from open_work_hub_api.domains.ai import approvals as ai_approvals
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.conversations.default_scope_adapters import (
     ensure_conversation_scope_adapters_registered,
 )
@@ -25,15 +24,8 @@ from open_work_hub_api.platform_extensions import _validate_conversation_scope_r
 from test_meeting import _auth_headers, _bootstrap_admin_session, _create_meeting
 
 
-def _workspace_slug(client, token: str) -> str:
-    response = client.get("/api/v1/admin/workspaces", headers=_auth_headers(token))
-    assert response.status_code == 200, response.text
-    workspace = response.json()[0]
-    return workspace.get("slug", workspace["key"])
-
-
-def _workspace_ai_conversations_path(workspace_slug: str, suffix: str = "") -> str:
-    return f"/api/v1/workspaces/{workspace_slug}/chatbot/conversations{suffix}"
+def _ai_conversations_path(suffix: str = "") -> str:
+    return f"/api/v1/chatbot/conversations{suffix}"
 
 
 class _ExtensionConversationScopeAdapter:
@@ -163,11 +155,10 @@ def test_conversation_scope_contract_rejects_unknown_owner_and_workload() -> Non
 def test_create_ai_conversation_with_meeting_scope(client) -> None:
     session = _bootstrap_admin_session(client)
     token = session["token"]
-    slug = _workspace_slug(client, token)
-    meeting = _create_meeting(client, token, workspace_slug=slug, title="Scoped kickoff")
+    meeting = _create_meeting(client, token, title="Scoped kickoff")
 
     response = client.post(
-        _workspace_ai_conversations_path(slug),
+        _ai_conversations_path(),
         headers=_auth_headers(token),
         json={
             "title": "",
@@ -187,7 +178,6 @@ def test_create_ai_conversation_with_meeting_scope(client) -> None:
 def test_create_ai_conversation_rejects_scope_adapter_without_prompt(client) -> None:
     session = _bootstrap_admin_session(client)
     token = session["token"]
-    slug = _workspace_slug(client, token)
 
     reset_conversation_scope_adapters()
     try:
@@ -195,7 +185,7 @@ def test_create_ai_conversation_rejects_scope_adapter_without_prompt(client) -> 
         register_conversation_scope_adapter(_MissingPromptConversationScopeAdapter())
 
         response = client.post(
-            _workspace_ai_conversations_path(slug),
+            _ai_conversations_path(),
             headers=_auth_headers(token),
             json={
                 "title": "",
@@ -220,7 +210,6 @@ def test_existing_conversation_scope_is_revalidated_for_turn_context() -> None:
 
         context = conversation_scope_turn_context(
             SimpleNamespace(),
-            workspace=SimpleNamespace(),
             principal=SimpleNamespace(),
             user=SimpleNamespace(),
             conversation=SimpleNamespace(
@@ -247,7 +236,6 @@ def test_turn_context_preserves_direct_response_and_owned_artifact_types() -> No
 
         context = conversation_scope_turn_context(
             SimpleNamespace(),
-            workspace=SimpleNamespace(),
             principal=SimpleNamespace(),
             user=SimpleNamespace(),
             conversation=SimpleNamespace(
@@ -268,7 +256,6 @@ def test_turn_context_preserves_direct_response_and_owned_artifact_types() -> No
 
 def test_create_conversation_preserves_extension_scope_resource_key(client) -> None:
     session = _bootstrap_admin_session(client)
-    slug = _workspace_slug(client, session["token"])
     scope_resource_id = "external-system:project-alpha:record-" + ("x" * 64)
 
     reset_conversation_scope_adapters()
@@ -276,14 +263,11 @@ def test_create_conversation_preserves_extension_scope_resource_key(client) -> N
         ensure_conversation_scope_adapters_registered()
         register_conversation_scope_adapter(_ExtensionConversationScopeAdapter())
         with Session(get_engine()) as db:
-            workspace = db.scalar(select(Workspace).where(Workspace.key == slug))
             user = db.get(User, session["user"]["id"])
-            assert workspace is not None
             assert user is not None
 
             conversation = conversations_service.create_conversation(
                 db,
-                workspace=workspace,
                 user=user,
                 title="",
                 scope_ref=_ExtensionConversationScopeAdapter.scope_ref,
@@ -300,7 +284,6 @@ def test_create_conversation_preserves_extension_scope_resource_key(client) -> N
 def test_list_conversations_accepts_extension_scope_filter_lengths(client) -> None:
     session = _bootstrap_admin_session(client)
     token = session["token"]
-    slug = _workspace_slug(client, token)
     scope_resource_id = "external-system:project-alpha:record-" + ("x" * 64)
 
     reset_conversation_scope_adapters()
@@ -308,14 +291,11 @@ def test_list_conversations_accepts_extension_scope_filter_lengths(client) -> No
         ensure_conversation_scope_adapters_registered()
         register_conversation_scope_adapter(_ExtensionConversationScopeAdapter())
         with Session(get_engine()) as db:
-            workspace = db.scalar(select(Workspace).where(Workspace.key == slug))
             user = db.get(User, session["user"]["id"])
-            assert workspace is not None
             assert user is not None
 
             conversation = conversations_service.create_conversation(
                 db,
-                workspace=workspace,
                 user=user,
                 title="",
                 scope_ref=_ExtensionConversationScopeAdapter.scope_ref,
@@ -323,7 +303,7 @@ def test_list_conversations_accepts_extension_scope_filter_lengths(client) -> No
             )
 
         response = client.get(
-            _workspace_ai_conversations_path(slug),
+            _ai_conversations_path(),
             headers=_auth_headers(token),
             params={
                 "scope_ref": _ExtensionConversationScopeAdapter.scope_ref,
@@ -341,10 +321,9 @@ def test_list_conversations_accepts_extension_scope_filter_lengths(client) -> No
 def test_list_conversations_rejects_scope_resource_without_scope_ref(client) -> None:
     session = _bootstrap_admin_session(client)
     token = session["token"]
-    slug = _workspace_slug(client, token)
 
     response = client.get(
-        _workspace_ai_conversations_path(slug),
+        _ai_conversations_path(),
         headers=_auth_headers(token),
         params={"scope_resource_id": "meeting-1"},
     )
@@ -356,17 +335,13 @@ def test_list_conversations_rejects_scope_resource_without_scope_ref(client) -> 
 def test_get_ai_conversation_returns_live_pending_approval(client) -> None:
     session = _bootstrap_admin_session(client)
     token = session["token"]
-    slug = _workspace_slug(client, token)
-    meeting = _create_meeting(client, token, workspace_slug=slug, title="Approval scoped meeting")
+    meeting = _create_meeting(client, token, title="Approval scoped meeting")
 
     with Session(get_engine()) as db:
-        workspace = db.scalar(select(Workspace).where(Workspace.key == slug))
         user = db.get(User, session["user"]["id"])
-        assert workspace is not None
         assert user is not None
         conversation = conversations_service.create_conversation(
             db,
-            workspace=workspace,
             user=user,
             title="",
             scope_ref="meeting",
@@ -374,7 +349,6 @@ def test_get_ai_conversation_returns_live_pending_approval(client) -> None:
         )
         snapshot = ai_approvals.persist_snapshot_on_halt(
             db,
-            workspace=workspace,
             conversation=conversation,
             requested_by_user=user,
             messages_json=[{"role": "system", "content": "scoped"}],
@@ -383,7 +357,6 @@ def test_get_ai_conversation_returns_live_pending_approval(client) -> None:
         )
         approval = ai_approvals.create_pending_approval(
             db,
-            workspace=workspace,
             conversation=conversation,
             requested_by_user=user,
             agent_run_id=snapshot.id,
@@ -398,7 +371,7 @@ def test_get_ai_conversation_returns_live_pending_approval(client) -> None:
         snapshot_id = snapshot.id
 
     response = client.get(
-        _workspace_ai_conversations_path(slug, f"/{conversation_id}"),
+        _ai_conversations_path(f"/{conversation_id}"),
         headers=_auth_headers(token),
     )
 
@@ -419,17 +392,13 @@ def test_get_ai_conversation_returns_live_pending_approval(client) -> None:
 def test_get_ai_conversation_omits_terminal_live_pending_approval(client) -> None:
     session = _bootstrap_admin_session(client)
     token = session["token"]
-    slug = _workspace_slug(client, token)
-    meeting = _create_meeting(client, token, workspace_slug=slug, title="Expired approval meeting")
+    meeting = _create_meeting(client, token, title="Expired approval meeting")
 
     with Session(get_engine()) as db:
-        workspace = db.scalar(select(Workspace).where(Workspace.key == slug))
         user = db.get(User, session["user"]["id"])
-        assert workspace is not None
         assert user is not None
         conversation = conversations_service.create_conversation(
             db,
-            workspace=workspace,
             user=user,
             title="",
             scope_ref="meeting",
@@ -437,7 +406,6 @@ def test_get_ai_conversation_omits_terminal_live_pending_approval(client) -> Non
         )
         snapshot = ai_approvals.persist_snapshot_on_halt(
             db,
-            workspace=workspace,
             conversation=conversation,
             requested_by_user=user,
             messages_json=[{"role": "system", "content": "scoped"}],
@@ -446,7 +414,6 @@ def test_get_ai_conversation_omits_terminal_live_pending_approval(client) -> Non
         )
         approval = ai_approvals.create_pending_approval(
             db,
-            workspace=workspace,
             conversation=conversation,
             requested_by_user=user,
             agent_run_id=snapshot.id,
@@ -461,7 +428,7 @@ def test_get_ai_conversation_omits_terminal_live_pending_approval(client) -> Non
         conversation_id = conversation.id
 
     response = client.get(
-        _workspace_ai_conversations_path(slug, f"/{conversation_id}"),
+        _ai_conversations_path(f"/{conversation_id}"),
         headers=_auth_headers(token),
     )
 
@@ -475,8 +442,7 @@ def test_get_ai_conversation_lazy_expires_stale_pending_approval(
 ) -> None:
     session = _bootstrap_admin_session(client)
     token = session["token"]
-    slug = _workspace_slug(client, token)
-    meeting = _create_meeting(client, token, workspace_slug=slug, title="Lazy expire meeting")
+    meeting = _create_meeting(client, token, title="Lazy expire meeting")
     audit_calls: list[dict[str, object | None]] = []
 
     def _capture_audit(**kwargs):
@@ -485,13 +451,10 @@ def test_get_ai_conversation_lazy_expires_stale_pending_approval(
     monkeypatch.setattr(ai_approvals, "log_llm_tool_approval_resolved", _capture_audit)
 
     with Session(get_engine()) as db:
-        workspace = db.scalar(select(Workspace).where(Workspace.key == slug))
         user = db.get(User, session["user"]["id"])
-        assert workspace is not None
         assert user is not None
         conversation = conversations_service.create_conversation(
             db,
-            workspace=workspace,
             user=user,
             title="",
             scope_ref="meeting",
@@ -499,7 +462,6 @@ def test_get_ai_conversation_lazy_expires_stale_pending_approval(
         )
         snapshot = ai_approvals.persist_snapshot_on_halt(
             db,
-            workspace=workspace,
             conversation=conversation,
             requested_by_user=user,
             messages_json=[{"role": "system", "content": "scoped"}],
@@ -508,7 +470,6 @@ def test_get_ai_conversation_lazy_expires_stale_pending_approval(
         )
         approval = ai_approvals.create_pending_approval(
             db,
-            workspace=workspace,
             conversation=conversation,
             requested_by_user=user,
             agent_run_id=snapshot.id,
@@ -524,7 +485,7 @@ def test_get_ai_conversation_lazy_expires_stale_pending_approval(
         snapshot_id = snapshot.id
 
     response = client.get(
-        _workspace_ai_conversations_path(slug, f"/{conversation_id}"),
+        _ai_conversations_path(f"/{conversation_id}"),
         headers=_auth_headers(token),
     )
 
@@ -546,11 +507,10 @@ def test_get_ai_conversation_lazy_expires_stale_pending_approval(
 def test_create_ai_conversation_reuses_latest_empty_scoped_conversation(client) -> None:
     session = _bootstrap_admin_session(client)
     token = session["token"]
-    slug = _workspace_slug(client, token)
-    meeting = _create_meeting(client, token, workspace_slug=slug, title="Reuse scoped meeting")
+    meeting = _create_meeting(client, token, title="Reuse scoped meeting")
 
     first = client.post(
-        _workspace_ai_conversations_path(slug),
+        _ai_conversations_path(),
         headers=_auth_headers(token),
         json={
             "title": "",
@@ -561,7 +521,7 @@ def test_create_ai_conversation_reuses_latest_empty_scoped_conversation(client) 
     assert first.status_code == 201, first.text
 
     second = client.post(
-        _workspace_ai_conversations_path(slug),
+        _ai_conversations_path(),
         headers=_auth_headers(token),
         json={
             "title": "",
@@ -576,11 +536,10 @@ def test_create_ai_conversation_reuses_latest_empty_scoped_conversation(client) 
 def test_get_ai_conversation_tolerates_legacy_unsupported_scope_row(client) -> None:
     session = _bootstrap_admin_session(client)
     token = session["token"]
-    slug = _workspace_slug(client, token)
-    meeting = _create_meeting(client, token, workspace_slug=slug, title="Legacy scope row")
+    meeting = _create_meeting(client, token, title="Legacy scope row")
 
     response = client.post(
-        _workspace_ai_conversations_path(slug),
+        _ai_conversations_path(),
         headers=_auth_headers(token),
         json={
             "title": "",
@@ -600,7 +559,7 @@ def test_get_ai_conversation_tolerates_legacy_unsupported_scope_row(client) -> N
         db.commit()
 
     detail = client.get(
-        _workspace_ai_conversations_path(slug, f"/{conversation_id}"),
+        _ai_conversations_path(f"/{conversation_id}"),
         headers=_auth_headers(token),
     )
     assert detail.status_code == 200, detail.text

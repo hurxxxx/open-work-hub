@@ -4,11 +4,10 @@ This disposable marker is not task or business state. Each standalone Beat
 process owns it in its working directory, alongside its Celery schedule file.
 """
 
-from pathlib import Path
 import time
+from pathlib import Path
 
 from celery.signals import after_task_publish, beat_init
-
 
 HEARTBEAT_FILE = Path("celerybeat-heartbeat")
 MAX_AGE_SECONDS = 180

@@ -1,10 +1,4 @@
 import {
-  type DateFormatPreference,
-  formatDateOnly,
-  normalizeDateFormatPreference,
-  readStoredDateFormatPreference,
-} from '@/src/platform/time/time-utils';
-import {
   formatNativeDateInputParts,
   formatNativeDateTimeInputValue,
   NATIVE_DATE_INPUT_VALUE_RE,
@@ -12,6 +6,12 @@ import {
   normalizeNativeDateTimeInputValue,
   parseNativeDateInputValue,
 } from '@/src/platform/time/native-date-input';
+import {
+  type DateFormatPreference,
+  formatDateOnly,
+  normalizeDateFormatPreference,
+  readStoredDateFormatPreference,
+} from '@/src/platform/time/time-utils';
 
 interface DateParts {
   day: number;
@@ -75,7 +75,8 @@ export function normalizeDateInputText(
     const middle = Number(slashParts[1]);
     const year = Number(slashParts[2]);
     const preferEuropean =
-      dateFormat === 'european' || (dateFormat === 'locale' && !locale.startsWith('en-US'));
+      dateFormat === 'european' ||
+      (dateFormat === 'locale' && !locale.startsWith('en-US'));
     const day = preferEuropean ? left : middle;
     const month = preferEuropean ? middle : left;
     return toIsoDate({ day, month, year });
@@ -92,7 +93,9 @@ export function normalizeDateTimeInputText(
   const trimmed = input.trim();
   if (!trimmed) return '';
 
-  const dateTimeMatch = trimmed.replace('T', ' ').match(/^(.*)\s+(\d{1,2}:\d{2})$/);
+  const dateTimeMatch = trimmed
+    .replace('T', ' ')
+    .match(/^(.*)\s+(\d{1,2}:\d{2})$/);
   if (!dateTimeMatch) return null;
   const [, datePart, timePart] = dateTimeMatch;
   const normalizedDate = normalizeDateInputText(datePart, dateFormat, locale);
@@ -160,6 +163,8 @@ export function normalizeDateValue(value: string | null | undefined): string {
   return normalizeNativeDateInputValue(value);
 }
 
-export function normalizeDateTimeValue(value: string | null | undefined): string {
+export function normalizeDateTimeValue(
+  value: string | null | undefined,
+): string {
   return normalizeNativeDateTimeInputValue(value);
 }

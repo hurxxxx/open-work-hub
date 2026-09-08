@@ -4,15 +4,14 @@ from __future__ import annotations
 
 from typing import Final
 
-APP_CONTRACT_REVISION: Final = "sha256:3ee1c4fa22b9eef33431af50fda0b2451dbc95719db270a592e43f38d244acb0"
+APP_CONTRACT_REVISION: Final = "sha256:d504dd9bcd96168b809b63b545d8f2d97e3bb79a90ecc6a78551acfd0bcbdabe"
 APP_CONTRACTS: Final = [
   {
     "app_id": "home",
     "title": "Home",
     "icon_key": "home",
-    "availability_scope": "workspace",
-    "execution_context_kind": "workspace",
-    "resource_scope": "workspace",
+    "execution_context_kind": "personal",
+    "resource_scope": "personal",
     "route_base": "/apps/home",
     "entry_route_id": "home.root",
     "launcher": {
@@ -22,7 +21,6 @@ APP_CONTRACTS: Final = [
     "routes": [
       {
         "route_id": "home.root",
-        "context_scope": "workspace",
         "suffix": "",
         "chrome": "containedSurface"
       }
@@ -32,7 +30,6 @@ APP_CONTRACTS: Final = [
     "app_id": "agent-terminal",
     "title": "Codex Terminal",
     "icon_key": "square-terminal",
-    "availability_scope": "platform",
     "execution_context_kind": "personal",
     "resource_scope": "personal",
     "route_base": "/apps/agent-terminal",
@@ -48,7 +45,6 @@ APP_CONTRACTS: Final = [
     "routes": [
       {
         "route_id": "agent-terminal.root",
-        "context_scope": "global",
         "suffix": "",
         "chrome": "fullSurface"
       }
@@ -58,8 +54,7 @@ APP_CONTRACTS: Final = [
     "app_id": "hermes-terminal",
     "title": "Hermes Terminal",
     "icon_key": "square-terminal",
-    "availability_scope": "workspace",
-    "execution_context_kind": "workspace",
+    "execution_context_kind": "personal",
     "resource_scope": "personal",
     "route_base": "/apps/hermes-terminal",
     "entry_route_id": "hermes-terminal.root",
@@ -71,7 +66,6 @@ APP_CONTRACTS: Final = [
     "routes": [
       {
         "route_id": "hermes-terminal.root",
-        "context_scope": "workspace",
         "suffix": "",
         "chrome": "fullSurface"
       }
@@ -81,9 +75,8 @@ APP_CONTRACTS: Final = [
     "app_id": "chatbot",
     "title": "AI Assistant",
     "icon_key": "message-square",
-    "availability_scope": "workspace",
-    "execution_context_kind": "workspace",
-    "resource_scope": "hybrid",
+    "execution_context_kind": "personal",
+    "resource_scope": "personal",
     "route_base": "/apps/chatbot",
     "entry_route_id": "chatbot.root",
     "launcher": {
@@ -93,7 +86,6 @@ APP_CONTRACTS: Final = [
     "routes": [
       {
         "route_id": "chatbot.root",
-        "context_scope": "workspace",
         "suffix": "",
         "chrome": "containedSurface"
       }
@@ -103,9 +95,8 @@ APP_CONTRACTS: Final = [
     "app_id": "web-search",
     "title": "Web Search",
     "icon_key": "globe-2",
-    "availability_scope": "workspace",
-    "execution_context_kind": "workspace",
-    "resource_scope": "workspace",
+    "execution_context_kind": "personal",
+    "resource_scope": "personal",
     "route_base": "/apps/web-search",
     "entry_route_id": "web-search.root",
     "launcher": {
@@ -115,7 +106,6 @@ APP_CONTRACTS: Final = [
     "routes": [
       {
         "route_id": "web-search.root",
-        "context_scope": "workspace",
         "suffix": "",
         "chrome": "containedSurface"
       }
@@ -125,9 +115,8 @@ APP_CONTRACTS: Final = [
     "app_id": "pms",
     "title": "PMS",
     "icon_key": "folder-kanban",
-    "availability_scope": "workspace",
-    "execution_context_kind": "workspace",
-    "resource_scope": "workspace",
+    "execution_context_kind": "company",
+    "resource_scope": "company",
     "route_base": "/apps/pms",
     "entry_route_id": "pms.root",
     "launcher": {
@@ -137,55 +126,46 @@ APP_CONTRACTS: Final = [
     "routes": [
       {
         "route_id": "pms.root",
-        "context_scope": "workspace",
         "suffix": "",
         "chrome": "containedSurface"
       },
       {
         "route_id": "pms.assigned",
-        "context_scope": "workspace",
         "suffix": "/assigned",
         "chrome": "containedSurface"
       },
       {
         "route_id": "pms.today",
-        "context_scope": "workspace",
         "suffix": "/today",
         "chrome": "containedSurface"
       },
       {
         "route_id": "pms.list",
-        "context_scope": "workspace",
         "suffix": "/lists/:taskListId",
         "chrome": "containedSurface"
       },
       {
         "route_id": "pms.space",
-        "context_scope": "workspace",
         "suffix": "/spaces/:spaceId",
         "chrome": "containedSurface"
       },
       {
         "route_id": "pms.space-docs",
-        "context_scope": "workspace",
         "suffix": "/spaces/:spaceId/docs",
         "chrome": "containedSurface"
       },
       {
         "route_id": "pms.space-doc",
-        "context_scope": "workspace",
         "suffix": "/spaces/:spaceId/docs/:docId",
         "chrome": "containedSurface"
       },
       {
         "route_id": "pms.space-whiteboards",
-        "context_scope": "workspace",
         "suffix": "/spaces/:spaceId/whiteboards",
         "chrome": "containedSurface"
       },
       {
         "route_id": "pms.space-whiteboard",
-        "context_scope": "workspace",
         "suffix": "/spaces/:spaceId/whiteboards/:whiteboardId",
         "chrome": "containedSurface"
       }
@@ -195,9 +175,8 @@ APP_CONTRACTS: Final = [
     "app_id": "docs",
     "title": "Docs",
     "icon_key": "files",
-    "availability_scope": "workspace",
-    "execution_context_kind": "workspace",
-    "resource_scope": "workspace",
+    "execution_context_kind": "personal",
+    "resource_scope": "hybrid",
     "route_base": "/apps/docs",
     "entry_route_id": "docs.root",
     "launcher": {
@@ -207,31 +186,26 @@ APP_CONTRACTS: Final = [
     "routes": [
       {
         "route_id": "docs.root",
-        "context_scope": "workspace",
         "suffix": "",
         "chrome": "standard"
       },
       {
         "route_id": "docs.document",
-        "context_scope": "workspace",
         "suffix": "/documents/:docId",
         "chrome": "standard"
       },
       {
         "route_id": "docs.document-html",
-        "context_scope": "workspace",
         "suffix": "/documents/:docId/html/:pageId",
         "chrome": "containedSurface"
       },
       {
         "route_id": "docs.shared",
-        "context_scope": "global",
         "suffix": "/shared/:shareToken",
         "chrome": "shared"
       },
       {
         "route_id": "docs.shared-html",
-        "context_scope": "global",
         "suffix": "/shared/:shareToken/html/:pageId",
         "chrome": "shared"
       }
@@ -241,8 +215,7 @@ APP_CONTRACTS: Final = [
     "app_id": "files",
     "title": "Files",
     "icon_key": "folder",
-    "availability_scope": "workspace",
-    "execution_context_kind": "workspace",
+    "execution_context_kind": "personal",
     "resource_scope": "hybrid",
     "route_base": "/apps/files",
     "entry_route_id": "files.root",
@@ -253,13 +226,11 @@ APP_CONTRACTS: Final = [
     "routes": [
       {
         "route_id": "files.root",
-        "context_scope": "workspace",
         "suffix": "",
         "chrome": "standard"
       },
       {
         "route_id": "files.chat",
-        "context_scope": "workspace",
         "suffix": "/chat",
         "chrome": "standard"
       }
@@ -269,7 +240,6 @@ APP_CONTRACTS: Final = [
     "app_id": "mail",
     "title": "Mail",
     "icon_key": "mail",
-    "availability_scope": "platform",
     "execution_context_kind": "personal",
     "resource_scope": "personal",
     "route_base": "/apps/mail",
@@ -281,7 +251,6 @@ APP_CONTRACTS: Final = [
     "routes": [
       {
         "route_id": "mail.root",
-        "context_scope": "global",
         "suffix": "",
         "chrome": "standard"
       }
@@ -291,7 +260,6 @@ APP_CONTRACTS: Final = [
     "app_id": "community",
     "title": "Community",
     "icon_key": "message-square",
-    "availability_scope": "platform",
     "execution_context_kind": "company",
     "resource_scope": "company",
     "route_base": "/apps/community",
@@ -303,13 +271,11 @@ APP_CONTRACTS: Final = [
     "routes": [
       {
         "route_id": "community.root",
-        "context_scope": "global",
         "suffix": "",
         "chrome": "standard"
       },
       {
         "route_id": "community.post",
-        "context_scope": "global",
         "suffix": "/posts/:postId",
         "chrome": "standard"
       }
@@ -319,9 +285,8 @@ APP_CONTRACTS: Final = [
     "app_id": "whiteboard",
     "title": "Whiteboard",
     "icon_key": "pencil-ruler",
-    "availability_scope": "workspace",
-    "execution_context_kind": "workspace",
-    "resource_scope": "workspace",
+    "execution_context_kind": "personal",
+    "resource_scope": "hybrid",
     "route_base": "/apps/whiteboard",
     "entry_route_id": "whiteboard.root",
     "launcher": {
@@ -331,19 +296,16 @@ APP_CONTRACTS: Final = [
     "routes": [
       {
         "route_id": "whiteboard.root",
-        "context_scope": "workspace",
         "suffix": "",
         "chrome": "standard"
       },
       {
         "route_id": "whiteboard.board",
-        "context_scope": "workspace",
         "suffix": "/boards/:whiteboardId",
         "chrome": "containedSurface"
       },
       {
         "route_id": "whiteboard.shared",
-        "context_scope": "global",
         "suffix": "/shared/:shareToken",
         "chrome": "shared"
       }
@@ -353,9 +315,8 @@ APP_CONTRACTS: Final = [
     "app_id": "diagrams",
     "title": "Diagrams",
     "icon_key": "workflow",
-    "availability_scope": "workspace",
-    "execution_context_kind": "workspace",
-    "resource_scope": "workspace",
+    "execution_context_kind": "personal",
+    "resource_scope": "hybrid",
     "route_base": "/apps/diagrams",
     "entry_route_id": "diagrams.root",
     "launcher": {
@@ -365,13 +326,11 @@ APP_CONTRACTS: Final = [
     "routes": [
       {
         "route_id": "diagrams.root",
-        "context_scope": "workspace",
         "suffix": "",
         "chrome": "standard"
       },
       {
         "route_id": "diagrams.diagram",
-        "context_scope": "workspace",
         "suffix": "/diagrams/:diagramId",
         "chrome": "containedSurface"
       }
@@ -381,8 +340,7 @@ APP_CONTRACTS: Final = [
     "app_id": "bento",
     "title": "Bento",
     "icon_key": "presentation",
-    "availability_scope": "workspace",
-    "execution_context_kind": "workspace",
+    "execution_context_kind": "personal",
     "resource_scope": "hybrid",
     "route_base": "/apps/bento",
     "entry_route_id": "bento.root",
@@ -393,20 +351,12 @@ APP_CONTRACTS: Final = [
     "routes": [
       {
         "route_id": "bento.root",
-        "context_scope": "workspace",
         "suffix": "",
         "chrome": "standard"
       },
       {
         "route_id": "bento.presentation",
-        "context_scope": "workspace",
         "suffix": "/presentations/:documentId",
-        "chrome": "containedSurface"
-      },
-      {
-        "route_id": "bento.presentation-legacy",
-        "context_scope": "workspace",
-        "suffix": "/:documentId",
         "chrome": "containedSurface"
       }
     ]
@@ -415,7 +365,6 @@ APP_CONTRACTS: Final = [
     "app_id": "planner",
     "title": "Planner",
     "icon_key": "calendar",
-    "availability_scope": "platform",
     "execution_context_kind": "personal",
     "resource_scope": "personal",
     "route_base": "/apps/planner",
@@ -427,7 +376,6 @@ APP_CONTRACTS: Final = [
     "routes": [
       {
         "route_id": "planner.root",
-        "context_scope": "global",
         "suffix": "",
         "chrome": "fullSurface"
       }
@@ -437,9 +385,8 @@ APP_CONTRACTS: Final = [
     "app_id": "meeting",
     "title": "Meeting",
     "icon_key": "users",
-    "availability_scope": "workspace",
-    "execution_context_kind": "workspace",
-    "resource_scope": "workspace",
+    "execution_context_kind": "company",
+    "resource_scope": "company",
     "route_base": "/apps/meeting",
     "entry_route_id": "meeting.root",
     "launcher": {
@@ -449,13 +396,11 @@ APP_CONTRACTS: Final = [
     "routes": [
       {
         "route_id": "meeting.root",
-        "context_scope": "workspace",
         "suffix": "",
         "chrome": "standard"
       },
       {
         "route_id": "meeting.detail",
-        "context_scope": "workspace",
         "suffix": "/meetings/:meetingId",
         "chrome": "standard"
       }
@@ -465,9 +410,8 @@ APP_CONTRACTS: Final = [
     "app_id": "video-chat",
     "title": "Video Chat",
     "icon_key": "video",
-    "availability_scope": "workspace",
-    "execution_context_kind": "workspace",
-    "resource_scope": "workspace",
+    "execution_context_kind": "company",
+    "resource_scope": "company",
     "route_base": "/apps/video-chat",
     "entry_route_id": "video-chat.root",
     "launcher": {
@@ -477,13 +421,11 @@ APP_CONTRACTS: Final = [
     "routes": [
       {
         "route_id": "video-chat.root",
-        "context_scope": "workspace",
         "suffix": "",
         "chrome": "standard"
       },
       {
         "route_id": "video-chat.session",
-        "context_scope": "workspace",
         "suffix": "/sessions/:sessionId",
         "chrome": "containedSurface"
       }
@@ -493,9 +435,8 @@ APP_CONTRACTS: Final = [
     "app_id": "recording",
     "title": "Recording",
     "icon_key": "mic",
-    "availability_scope": "workspace",
-    "execution_context_kind": "workspace",
-    "resource_scope": "workspace",
+    "execution_context_kind": "personal",
+    "resource_scope": "personal",
     "route_base": "/apps/recording",
     "entry_route_id": "recording.root",
     "launcher": {
@@ -505,13 +446,11 @@ APP_CONTRACTS: Final = [
     "routes": [
       {
         "route_id": "recording.root",
-        "context_scope": "workspace",
         "suffix": "",
         "chrome": "standard"
       },
       {
         "route_id": "recording.detail",
-        "context_scope": "workspace",
         "suffix": "/recordings/:recordingId",
         "chrome": "standard"
       }
@@ -521,8 +460,7 @@ APP_CONTRACTS: Final = [
     "app_id": "retrieval-search",
     "title": "Retrieval Search",
     "icon_key": "search",
-    "availability_scope": "workspace",
-    "execution_context_kind": "workspace",
+    "execution_context_kind": "personal",
     "resource_scope": "hybrid",
     "route_base": "/apps/retrieval-search",
     "entry_route_id": "retrieval-search.root",
@@ -533,7 +471,6 @@ APP_CONTRACTS: Final = [
     "routes": [
       {
         "route_id": "retrieval-search.root",
-        "context_scope": "workspace",
         "suffix": "",
         "chrome": "standard"
       }

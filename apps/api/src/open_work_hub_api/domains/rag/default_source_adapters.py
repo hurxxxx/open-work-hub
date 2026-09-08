@@ -2,28 +2,22 @@ from __future__ import annotations
 
 from sqlalchemy import select
 
-from open_work_hub_api.domains.docs.app_catalog import DOCS_WORKSPACE_APP
-from open_work_hub_api.domains.files.app_catalog import FILES_WORKSPACE_APP
+from open_work_hub_api.domains.docs.app_catalog import DOCS_APP
 from open_work_hub_api.domains.docs.models import NativeDoc
-from open_work_hub_api.domains.meeting.app_catalog import MEETING_WORKSPACE_APP
-from open_work_hub_api.domains.planner.app_catalog import PLANNER_WORKSPACE_APP
-from open_work_hub_api.domains.pms.app_catalog import PMS_WORKSPACE_APP
-from open_work_hub_api.domains.retrieval.partition_adapter_ids import (
-    DOCS_RETRIEVAL_PARTITION_ADAPTER_ID,
-    FILES_RETRIEVAL_PARTITION_ADAPTER_ID,
-    MEETING_RETRIEVAL_PARTITION_ADAPTER_ID,
-    PLANNER_RETRIEVAL_PARTITION_ADAPTER_ID,
-    PMS_RETRIEVAL_PARTITION_ADAPTER_ID,
-)
+from open_work_hub_api.domains.files.app_catalog import FILES_APP
+from open_work_hub_api.domains.meeting.app_catalog import MEETING_APP
+from open_work_hub_api.domains.planner.app_catalog import PLANNER_APP
+from open_work_hub_api.domains.pms.app_catalog import PMS_APP
+from open_work_hub_api.domains.rag.contracts import RagSyncLane, RagSyncOperation
 from open_work_hub_api.domains.rag.source_adapter_registry import (
     RagResourceAdapter,
     RagSourceAdapter,
     RagVisibilityScopeAdapter,
-    has_rag_source_adapter,
+    company_reindex_rag_resource_adapters,
     has_rag_resource_adapter,
+    has_rag_source_adapter,
     has_rag_visibility_scope_adapter,
     listed_rag_source_adapters,
-    company_reindex_rag_resource_adapters,
     rag_resource_adapters,
     rag_source_adapters,
     register_rag_resource_adapter,
@@ -31,11 +25,17 @@ from open_work_hub_api.domains.rag.source_adapter_registry import (
     register_rag_visibility_scope_adapter,
     resource_types_for_rag_source_kinds,
     searchable_rag_app_ids,
-    workspace_reindex_rag_resource_adapters,
+    reindex_rag_resource_adapters,
 )
-from open_work_hub_api.domains.rag.contracts import RagSyncLane, RagSyncOperation
 from open_work_hub_api.domains.rag.source_registry import (
     OFFICIAL_NATIVE_DOC_SOURCE_KIND_LABELS,
+)
+from open_work_hub_api.domains.retrieval.partition_adapter_ids import (
+    DOCS_RETRIEVAL_PARTITION_ADAPTER_ID,
+    FILES_RETRIEVAL_PARTITION_ADAPTER_ID,
+    MEETING_RETRIEVAL_PARTITION_ADAPTER_ID,
+    PLANNER_RETRIEVAL_PARTITION_ADAPTER_ID,
+    PMS_RETRIEVAL_PARTITION_ADAPTER_ID,
 )
 from open_work_hub_api.domains.source_access.resource_types import (
     MEETING_RESOURCE_TYPE,
@@ -53,7 +53,7 @@ def ensure_rag_source_adapters_registered() -> None:
     from open_work_hub_api.domains.files.rag_projection import (
         FILES_RAG_SOURCE_KIND,
         load_file_rag_projection,
-        workspace_file_resource_ids,
+        file_resource_ids,
     )
     from open_work_hub_api.domains.files.rag_sync import (
         mark_file_projection_deleted,
@@ -82,16 +82,16 @@ def ensure_rag_source_adapters_registered() -> None:
     _register_default_resource_adapter(
         RagResourceAdapter(
             resource_type=FILE_MANAGER_FILE_RESOURCE_TYPE,
-            app_id=FILES_WORKSPACE_APP.app_id,
+            app_id=FILES_APP.app_id,
             partition_adapter_id=FILES_RETRIEVAL_PARTITION_ADAPTER_ID,
             load_projection=lambda db, resource_id, rag_service: load_file_rag_projection(
                 db,
                 file_id=resource_id,
                 rag_service=rag_service,
             ),
-            workspace_resource_ids=workspace_file_resource_ids,
+            company_resource_ids=file_resource_ids,
             include_in_default_query=FILES_RETRIEVAL_ACTIVE,
-            include_in_workspace_reindex=FILES_RETRIEVAL_ACTIVE,
+            include_in_reindex=FILES_RETRIEVAL_ACTIVE,
             on_projection_deleted=lambda db, resource_id: mark_file_projection_deleted(
                 db,
                 file_id=resource_id,
@@ -103,34 +103,32 @@ def ensure_rag_source_adapters_registered() -> None:
                     projection_event=projection_event,
                 )
             ),
-            on_projection_failed=lambda db, resource_id, error, phase: (
-                mark_file_projection_failed(
-                    db,
-                    file_id=resource_id,
-                    error=error,
-                    phase=phase,
-                )
+            on_projection_failed=lambda db, resource_id, error, phase: mark_file_projection_failed(
+                db,
+                file_id=resource_id,
+                error=error,
+                phase=phase,
             ),
         )
     )
     _register_default_resource_adapter(
         RagResourceAdapter(
             resource_type=NATIVE_DOC_RESOURCE_TYPE,
-            app_id=DOCS_WORKSPACE_APP.app_id,
+            app_id=DOCS_APP.app_id,
             partition_adapter_id=DOCS_RETRIEVAL_PARTITION_ADAPTER_ID,
             load_projection=lambda db, resource_id, rag_service: load_native_doc_projection(
                 db,
                 doc_id=resource_id,
             ),
-            workspace_resource_ids=_workspace_official_native_doc_ids,
+            company_resource_ids=_company_official_native_doc_ids,
             include_in_default_query=True,
-            include_in_workspace_reindex=True,
+            include_in_reindex=True,
         )
     )
     _register_default_resource_adapter(
         RagResourceAdapter(
             resource_type=MEETING_RESOURCE_TYPE,
-            app_id=MEETING_WORKSPACE_APP.app_id,
+            app_id=MEETING_APP.app_id,
             partition_adapter_id=MEETING_RETRIEVAL_PARTITION_ADAPTER_ID,
             load_projection=lambda db, resource_id, rag_service: load_meeting_projection(
                 db,
@@ -141,7 +139,7 @@ def ensure_rag_source_adapters_registered() -> None:
     _register_default_resource_adapter(
         RagResourceAdapter(
             resource_type=PMS_TASK_RESOURCE_TYPE,
-            app_id=PMS_WORKSPACE_APP.app_id,
+            app_id=PMS_APP.app_id,
             partition_adapter_id=PMS_RETRIEVAL_PARTITION_ADAPTER_ID,
             load_projection=lambda db, resource_id, rag_service: load_task_projection(
                 db,
@@ -152,7 +150,7 @@ def ensure_rag_source_adapters_registered() -> None:
     _register_default_resource_adapter(
         RagResourceAdapter(
             resource_type=PLANNER_EVENT_RESOURCE_TYPE,
-            app_id=PLANNER_WORKSPACE_APP.app_id,
+            app_id=PLANNER_APP.app_id,
             partition_adapter_id=PLANNER_RETRIEVAL_PARTITION_ADAPTER_ID,
             load_projection=lambda db, resource_id, rag_service: load_planner_event_projection(
                 db,
@@ -165,7 +163,7 @@ def ensure_rag_source_adapters_registered() -> None:
             RagSourceAdapter(
                 source_kind=source_kind,
                 resource_type=NATIVE_DOC_RESOURCE_TYPE,
-                app_id=DOCS_WORKSPACE_APP.app_id,
+                app_id=DOCS_APP.app_id,
                 label=_native_doc_source_label(source_kind),
                 include_in_source_listing=True,
                 visible=_source_kind_in_visible_rag_native_docs,
@@ -175,26 +173,26 @@ def ensure_rag_source_adapters_registered() -> None:
         RagSourceAdapter(
             source_kind=FILES_RAG_SOURCE_KIND,
             resource_type=FILE_MANAGER_FILE_RESOURCE_TYPE,
-            app_id=FILES_WORKSPACE_APP.app_id,
+            app_id=FILES_APP.app_id,
             label="Files / Uploaded files",
             include_in_source_listing=FILES_RETRIEVAL_ACTIVE,
         ),
         RagSourceAdapter(
             source_kind="meeting",
             resource_type=MEETING_RESOURCE_TYPE,
-            app_id=MEETING_WORKSPACE_APP.app_id,
+            app_id=MEETING_APP.app_id,
             label="Meeting / Meetings",
         ),
         RagSourceAdapter(
             source_kind="pms_task",
             resource_type=PMS_TASK_RESOURCE_TYPE,
-            app_id=PMS_WORKSPACE_APP.app_id,
+            app_id=PMS_APP.app_id,
             label="PMS / Tasks",
         ),
         RagSourceAdapter(
             source_kind="planner_event",
             resource_type=PLANNER_EVENT_RESOURCE_TYPE,
-            app_id=PLANNER_WORKSPACE_APP.app_id,
+            app_id=PLANNER_APP.app_id,
             label="Planner / Events",
         ),
     ):
@@ -256,7 +254,7 @@ def resolve_rag_resource_types_for_source_kinds(source_kinds: list[str]) -> tupl
     return resource_types_for_rag_source_kinds(source_kinds)
 
 
-def list_registered_workspace_rag_sources(
+def list_registered_rag_sources(
     policy, enabled_app_ids: set[str]
 ) -> list[dict[str, str]]:
     ensure_rag_source_adapters_registered()
@@ -312,11 +310,11 @@ def registered_rag_app_ids() -> frozenset[str]:
     )
 
 
-def workspace_reindex_resource_adapters(
+def reindex_resource_adapters(
     enabled_app_ids: set[str],
 ) -> tuple[RagResourceAdapter, ...]:
     ensure_rag_source_adapters_registered()
-    return workspace_reindex_rag_resource_adapters(enabled_app_ids)
+    return reindex_rag_resource_adapters(enabled_app_ids)
 
 
 def company_reindex_resource_adapters(
@@ -405,7 +403,7 @@ def _append_dynamic_native_doc_sources(
     visible_source_kinds: tuple[str, ...],
     emitted_source_kinds: set[str],
 ) -> None:
-    if DOCS_WORKSPACE_APP.app_id not in enabled_app_ids:
+    if DOCS_APP.app_id not in enabled_app_ids:
         return
     for source_kind in visible_source_kinds:
         if source_kind in emitted_source_kinds:
@@ -415,17 +413,18 @@ def _append_dynamic_native_doc_sources(
                 "source_kind": source_kind,
                 "resource_type": NATIVE_DOC_RESOURCE_TYPE,
                 "label": _native_doc_source_label(source_kind),
-                "app_id": DOCS_WORKSPACE_APP.app_id,
+                "app_id": DOCS_APP.app_id,
             }
         )
         emitted_source_kinds.add(source_kind)
 
 
-def _workspace_official_native_doc_ids(db, workspace) -> list[str]:
+def _company_official_native_doc_ids(
+    db,
+) -> list[str]:
     return list(
         db.scalars(
             select(NativeDoc.id).where(
-                NativeDoc.workspace_id == workspace.id,
                 NativeDoc.trashed_at.is_(None),
                 NativeDoc.rag_scope == "official",
             )
@@ -436,9 +435,9 @@ def _workspace_official_native_doc_ids(db, workspace) -> list[str]:
 __all__ = [
     "ensure_rag_source_adapters_registered",
     "company_reindex_resource_adapters",
-    "list_registered_workspace_rag_sources",
+    "list_registered_rag_sources",
     "registered_rag_app_ids",
     "registered_searchable_rag_app_ids",
     "resolve_rag_resource_types_for_source_kinds",
-    "workspace_reindex_resource_adapters",
+    "reindex_resource_adapters",
 ]

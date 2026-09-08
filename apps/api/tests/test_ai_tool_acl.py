@@ -25,12 +25,12 @@ def _auth_headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def _workspace_tool_path(workspace_slug: str, tool_name: str) -> str:
-    return f"/api/v1/workspaces/{workspace_slug}/chatbot/tools/{tool_name}/invoke"
+def _tool_path(tool_name: str) -> str:
+    return f"/api/v1/chatbot/tools/{tool_name}/invoke"
 
 
-def _workspace_ai_path(slug: str, suffix: str) -> str:
-    return f"/api/v1/workspaces/{slug}/chatbot{suffix}"
+def _ai_path(suffix: str) -> str:
+    return f"/api/v1/chatbot{suffix}"
 
 
 def _set_policy(task_kind: str, mode: str) -> None:
@@ -135,14 +135,14 @@ def _tool_call_delta(
     )
 
 
-def test_docs_tool_invoke_blocks_cross_workspace_page_access_and_audits_error(
+def test_docs_tool_invoke_blocks_other_users_private_page_access_and_audits_error(
     client: TestClient,
 ) -> None:
     owner = _dev_login(client, "delivery-hub-admin")
     outsider = _dev_login(client, "knowledge-base-admin")
 
     doc_response = client.post(
-        "/api/v1/workspaces/delivery-hub/docs/items",
+        "/api/v1/docs/items",
         headers=_auth_headers(owner["token"]),
         json={"title": "Restricted Doc"},
     )
@@ -150,7 +150,7 @@ def test_docs_tool_invoke_blocks_cross_workspace_page_access_and_audits_error(
     doc = doc_response.json()
 
     page_response = client.post(
-        f"/api/v1/workspaces/delivery-hub/docs/items/{doc['id']}/pages",
+        f"/api/v1/docs/items/{doc['id']}/pages",
         headers=_auth_headers(owner["token"]),
         json={
             "title": "Restricted Page",
@@ -161,19 +161,19 @@ def test_docs_tool_invoke_blocks_cross_workspace_page_access_and_audits_error(
     page = page_response.json()
 
     response = client.post(
-        _workspace_tool_path("knowledge-base", "docs.read_page"),
+        _tool_path("docs.read_page"),
         headers=_auth_headers(outsider["token"]),
         json={"arguments": {"page_id": page["id"]}},
     )
 
-    assert response.status_code == 404
+    assert response.status_code == 403
     audit_payload = _tool_audit_rows()[-1].payload
     assert audit_payload["tool_name"] == "docs.read_page"
     assert audit_payload["status"] == "error"
 
 
 @pytest.mark.usefixtures("configured_local_llm_control_plane")
-def test_agent_loop_tool_error_does_not_leak_cross_workspace_doc_content(
+def test_agent_loop_tool_error_does_not_leak_other_users_private_doc_content(
     client: TestClient,
     monkeypatch,
 ) -> None:
@@ -183,7 +183,7 @@ def test_agent_loop_tool_error_does_not_leak_cross_workspace_doc_content(
     monkeypatch.setattr(get_settings(), "ai_local_tool_calling_enabled", True)
 
     doc_response = client.post(
-        "/api/v1/workspaces/delivery-hub/docs/items",
+        "/api/v1/docs/items",
         headers=_auth_headers(owner["token"]),
         json={"title": "Restricted Agent Doc"},
     )
@@ -191,7 +191,7 @@ def test_agent_loop_tool_error_does_not_leak_cross_workspace_doc_content(
     doc = doc_response.json()
 
     page_response = client.post(
-        f"/api/v1/workspaces/delivery-hub/docs/items/{doc['id']}/pages",
+        f"/api/v1/docs/items/{doc['id']}/pages",
         headers=_auth_headers(owner["token"]),
         json={
             "title": "Restricted Agent Page",
@@ -228,7 +228,7 @@ def test_agent_loop_tool_error_does_not_leak_cross_workspace_doc_content(
     )
 
     response = client.post(
-        _workspace_ai_path("knowledge-base", "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(outsider["token"]),
         json={
             "messages": [{"role": "user", "content": "문서를 읽어줘"}],

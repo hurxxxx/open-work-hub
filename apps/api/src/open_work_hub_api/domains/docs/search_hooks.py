@@ -19,7 +19,6 @@ def enqueue_doc_search_index(
 ) -> None:
     _enqueue_search_target(
         db,
-        workspace_id=doc.workspace_id,
         entity_id=doc.id,
         operation=operation,
         projection_event=projection_event,
@@ -47,16 +46,12 @@ def enqueue_doc_search_index_by_id(
 def _enqueue_search_target(
     db: Session,
     *,
-    workspace_id: str | None,
     entity_id: str,
     operation: str,
     projection_event: ProjectionEventRef | None,
 ) -> None:
-    if workspace_id is None:
-        return
     enqueue_search_index_job(
         db,
-        workspace_id=workspace_id,
         entity_type=SearchEntityType.DOC,
         entity_id=entity_id,
         operation=operation,

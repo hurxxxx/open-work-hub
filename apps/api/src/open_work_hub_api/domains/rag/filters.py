@@ -6,7 +6,6 @@ from typing import TypeAlias
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic_core import PydanticCustomError
 
-
 FilterScalar: TypeAlias = str | int | bool
 FilterValue: TypeAlias = FilterScalar | list[FilterScalar]
 _METADATA_KEY_PATTERN = re.compile(r"^[A-Za-z0-9_:-]+$")

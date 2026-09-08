@@ -7,7 +7,11 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from open_work_hub_api.domains.rag.contracts import RagGroundedAnswer, RagGroundedCitation, RagQueryHit
+from open_work_hub_api.domains.rag.contracts import (
+    RagGroundedAnswer,
+    RagGroundedCitation,
+    RagQueryHit,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -155,16 +159,12 @@ class GroundedAnswerAssembler:
         if not statements or not used_indexes:
             return None
 
-        citations = [
-            self.citation_from_hit(available_hits[index - 1]) for index in used_indexes
-        ]
+        citations = [self.citation_from_hit(available_hits[index - 1]) for index in used_indexes]
         return RagGroundedAnswer(
             text="\n".join(statements),
             citations=citations,
             unsupported_claims=[
-                cleaned
-                for claim in parsed.unsupported_claims
-                if (cleaned := clean_text(claim))
+                cleaned for claim in parsed.unsupported_claims if (cleaned := clean_text(claim))
             ],
             sources_used=sorted({citation.source_kind for citation in citations}),
         )
@@ -269,10 +269,7 @@ def clean_text(value: str | None, *, max_chars: int | None = None) -> str:
 
 def xml_escape(value: str) -> str:
     return (
-        value.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
+        value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
     )
 
 

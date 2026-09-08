@@ -16,8 +16,10 @@ from open_work_hub_api.domains.rag.outbox import (
     enqueue_rag_visibility_recompute_job,
 )
 from open_work_hub_api.domains.retrieval.projection_fencing import record_projection_event
-from open_work_hub_api.domains.search.hooks import enqueue_doc_search_index, enqueue_doc_search_index_by_id
-
+from open_work_hub_api.domains.search.hooks import (
+    enqueue_doc_search_index,
+    enqueue_doc_search_index_by_id,
+)
 
 MEETING_VISIBILITY_SCOPE = "meeting"
 
@@ -42,7 +44,6 @@ def enqueue_native_doc_rag_sync(
         retrieval_partition_id=partition_id,
         change_kind=("delete" if operation == RagSyncOperation.DELETE else "content"),
         desired_state=("deleted" if operation == RagSyncOperation.DELETE else "active"),
-        diagnostic_workspace_id=doc.workspace_id,
     )
     enqueue_doc_search_index(
         db,
@@ -55,7 +56,6 @@ def enqueue_native_doc_rag_sync(
 
     enqueue_rag_sync_job(
         db,
-        workspace_id=doc.workspace_id,
         resource_type=NATIVE_DOC_RESOURCE_TYPE,
         resource_id=doc.id,
         operation=operation,
@@ -105,7 +105,6 @@ def collect_meeting_visibility_doc_ids(
 def enqueue_meeting_visibility_recompute(
     db: Session,
     *,
-    workspace_id: str,
     meeting_id: str,
     doc_ids: list[str] | None = None,
 ) -> None:
@@ -122,7 +121,6 @@ def enqueue_meeting_visibility_recompute(
     cursor = {"doc_ids": targets.cursor_doc_ids} if targets.cursor_doc_ids else None
     enqueue_rag_visibility_recompute_job(
         db,
-        workspace_id=workspace_id,
         scope_type=MEETING_VISIBILITY_SCOPE,
         scope_id=meeting_id,
         cursor=cursor,

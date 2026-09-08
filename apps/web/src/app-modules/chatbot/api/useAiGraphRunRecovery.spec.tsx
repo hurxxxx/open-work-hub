@@ -70,7 +70,6 @@ describe('useAiGraphRunRecovery', () => {
         conversationId: 'conversation-1',
         enabled: true,
         token: 'token',
-        workspaceSlug: 'research',
       }),
     );
 
@@ -103,7 +102,6 @@ describe('useAiGraphRunRecovery', () => {
         conversationId: 'conversation-1',
         enabled: false,
         token: 'token',
-        workspaceSlug: 'research',
       }),
     );
 
@@ -124,7 +122,6 @@ describe('useAiGraphRunRecovery', () => {
           enabled: true,
           refreshKey,
           token: 'token',
-          workspaceSlug: 'research',
         }),
       { initialProps: { refreshKey: 'idle' } },
     );

@@ -5,10 +5,10 @@ from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.db import get_db_session
 from open_work_hub_api.core.i18n import localized_http_exception
+from open_work_hub_api.domains.auth.app_gate import require_app_access
 from open_work_hub_api.domains.auth.dependencies import require_current_user
 from open_work_hub_api.domains.auth.models import User
-from open_work_hub_api.domains.auth.workspace_app_gate import require_platform_app_enabled
-from open_work_hub_api.domains.planner.app_catalog import PLANNER_WORKSPACE_APP
+from open_work_hub_api.domains.planner.app_catalog import PLANNER_APP
 from open_work_hub_api.domains.planner.event_application import (
     PlannerEventCreateCommand,
     PlannerEventUpdateCommand,
@@ -23,9 +23,8 @@ from .schemas import (
 )
 from .service import create_event, delete_event, get_event, list_events, update_event
 
-
-require_planner_app_enabled = require_platform_app_enabled(
-    PLANNER_WORKSPACE_APP.app_id,
+require_planner_app_enabled = require_app_access(
+    PLANNER_APP.app_id,
     error_code="platform.app_disabled",
 )
 

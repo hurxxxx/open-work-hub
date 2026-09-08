@@ -6,10 +6,9 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from open_work_hub_api.core.settings import Settings, WORKSPACE_ROOT
+from open_work_hub_api.core.settings import WORKSPACE_ROOT, Settings
 from open_work_hub_api.domains.agent_terminal.models import AgentTerminalSession
 from open_work_hub_api.domains.agent_terminal.schemas import AgentTerminalSessionResponse
-
 
 _ROOT_KEY_PATTERN = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
 _SAFE_ENVIRONMENT_KEYS = (

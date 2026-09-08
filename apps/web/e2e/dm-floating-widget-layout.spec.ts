@@ -3,7 +3,7 @@ import { expect, test, type Page, type Route } from '@playwright/test';
 import {
   FAKE_PLATFORM_ADMIN_USER,
   stubShellBackend,
-  stubWorkspaceAppDataBackend,
+  stubAppDataBackend,
 } from './helpers';
 
 const CREATED_AT = '2026-06-25T08:00:00.000Z';
@@ -160,7 +160,7 @@ test('keeps the floating DM composer inside the widget viewport', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1770, height: 856 });
-  await stubWorkspaceAppDataBackend(page);
+  await stubAppDataBackend(page);
   await stubShellBackend(page, { user: FAKE_PLATFORM_ADMIN_USER });
   await stubDmLayoutBackend(page);
 

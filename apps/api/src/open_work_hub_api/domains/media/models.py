@@ -14,9 +14,7 @@ def _utcnow_naive() -> datetime:
 
 class MediaFile(Base):
     __tablename__ = "media_files"
-    __table_args__ = (
-        Index("ix_media_files_resource", "resource_type", "resource_id"),
-    )
+    __table_args__ = (Index("ix_media_files_resource", "resource_type", "resource_id"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     storage_key: Mapped[str] = mapped_column(String(512), unique=True)

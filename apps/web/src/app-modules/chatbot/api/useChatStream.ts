@@ -1,12 +1,6 @@
+import { i18n } from '@/src/platform/i18n';
 import { useCallback, useMemo, useRef, useSyncExternalStore } from 'react';
-import {
-  AiApiError,
-  sendAiChat,
-  streamAiChat,
-  streamAiChatResume,
-  type AiChatStreamRequest,
-  type ResumeAiChatRequest,
-} from './chatbot-api';
+import type { PendingApproval, RawAgentEvent } from './agent-events';
 import {
   applyChatStreamEvent,
   cancelChatStreamState,
@@ -20,9 +14,15 @@ import {
   upsertChatStreamPendingApproval,
   type ChatStreamState,
 } from './chat-stream-state';
-import type { PendingApproval, RawAgentEvent } from './agent-events';
+import {
+  AiApiError,
+  sendAiChat,
+  streamAiChat,
+  streamAiChatResume,
+  type AiChatStreamRequest,
+  type ResumeAiChatRequest,
+} from './chatbot-api';
 import { iterSseEvents } from './sse-parser';
-import { i18n } from '@/src/platform/i18n';
 
 export type { ChatStreamState, ChatTransport } from './chat-stream-state';
 
@@ -120,7 +120,6 @@ function updateRuntimeState(
 
 export function useChatStream(
   token: string | null,
-  workspaceSlug?: string | null,
   runtimeKey?: string | null,
   options: { disableSyncFallback?: boolean } = {},
 ): UseChatStreamApi {
@@ -237,7 +236,6 @@ export function useChatStream(
           token,
           runId,
           setStateForRun,
-          workspaceSlug,
         });
         return;
       }
@@ -257,7 +255,6 @@ export function useChatStream(
           payload,
           token,
           signal: controller.signal,
-          workspaceSlug,
         });
         if (!response.body) {
           throw new AiApiError(0, i18n.t('apps:ai.errors.emptySseBody'));
@@ -329,7 +326,6 @@ export function useChatStream(
             runId,
             setStateForRun,
             fallbackReason: error,
-            workspaceSlug,
           });
           return;
         }
@@ -348,7 +344,7 @@ export function useChatStream(
         }
       }
     },
-    [disableSyncFallback, runtime, setStateForRun, token, workspaceSlug],
+    [disableSyncFallback, runtime, setStateForRun, token],
   );
 
   const resume = useCallback(
@@ -382,7 +378,6 @@ export function useChatStream(
           payload,
           token,
           signal: controller.signal,
-          workspaceSlug,
         });
         if (!response.body) {
           throw new AiApiError(0, i18n.t('apps:ai.errors.emptySseBody'));
@@ -445,7 +440,7 @@ export function useChatStream(
         }
       }
     },
-    [runtime, setStateForRun, token, workspaceSlug],
+    [runtime, setStateForRun, token],
   );
 
   return {
@@ -466,7 +461,6 @@ async function sendViaSyncFallback({
   runId,
   setStateForRun,
   fallbackReason,
-  workspaceSlug,
 }: {
   payload: AiChatStreamRequest;
   token: string;
@@ -476,7 +470,6 @@ async function sendViaSyncFallback({
     next: ChatStreamState | ((prev: ChatStreamState) => ChatStreamState),
   ) => void;
   fallbackReason?: unknown;
-  workspaceSlug?: string | null;
 }) {
   setStateForRun(
     runId,
@@ -490,7 +483,7 @@ async function sendViaSyncFallback({
   void _streamReasoning;
 
   try {
-    const response = await sendAiChat(syncPayload, token, { workspaceSlug });
+    const response = await sendAiChat(syncPayload, token, {});
     setStateForRun(runId, syncResponseToChatStreamState(response));
   } catch (error) {
     const resolved = error instanceof Error ? error : fallbackReason;

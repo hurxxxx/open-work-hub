@@ -31,4 +31,23 @@ def revoke_active_user_sessions(
     return max(result.rowcount or 0, 0)
 
 
-__all__ = ["revoke_active_user_sessions"]
+def revoke_active_impersonation_sessions(
+    db: Session,
+    *,
+    impersonator_user_id: str,
+    revoked_at: datetime,
+) -> int:
+    """End delegated authority without revoking another user's own sessions."""
+    result = db.execute(
+        update(AuthSession)
+        .where(
+            AuthSession.impersonator_user_id == impersonator_user_id,
+            AuthSession.revoked_at.is_(None),
+            AuthSession.expires_at > revoked_at,
+        )
+        .values(revoked_at=revoked_at)
+    )
+    return max(result.rowcount or 0, 0)
+
+
+__all__ = ["revoke_active_user_sessions", "revoke_active_impersonation_sessions"]

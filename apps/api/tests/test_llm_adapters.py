@@ -144,7 +144,6 @@ def _ctx() -> LlmTaskContext:
     return LlmTaskContext(
         source="test.stream",
         actor_user_id=None,
-        workspace_id="ws-stream-test",
         task_kind="chatbot",
         app_id="chatbot",
         workload_id="chatbot",
@@ -226,7 +225,7 @@ async def _drain(**kwargs: Any) -> list[StreamChunk]:
         db.close()
 
 
-@pytest.mark.usefixtures("client_seed_workspace")
+@pytest.mark.usefixtures("configured_llm_test_runtime")
 async def test_complete_chat_stream_commits_ok_audit_on_normal_finish(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -256,7 +255,7 @@ async def test_complete_chat_stream_commits_ok_audit_on_normal_finish(
     assert payload["chosen_pool"] == "local"
 
 
-@pytest.mark.usefixtures("client_seed_workspace")
+@pytest.mark.usefixtures("configured_llm_test_runtime")
 async def test_complete_chat_stream_audits_error_and_reraises_on_provider_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -272,7 +271,7 @@ async def test_complete_chat_stream_audits_error_and_reraises_on_provider_failur
     assert "provider down" in payload["error"]
 
 
-@pytest.mark.usefixtures("client_seed_workspace")
+@pytest.mark.usefixtures("configured_llm_test_runtime")
 async def test_complete_chat_stream_audits_cancelled_on_generator_close(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -311,7 +310,7 @@ async def test_complete_chat_stream_audits_cancelled_on_generator_close(
     assert rows[-1].payload["status"] == "cancelled"
 
 
-@pytest.mark.usefixtures("client_seed_workspace")
+@pytest.mark.usefixtures("configured_llm_test_runtime")
 async def test_complete_chat_stream_treats_tool_calls_finish_as_ok_for_audit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -341,7 +340,7 @@ async def test_complete_chat_stream_treats_tool_calls_finish_as_ok_for_audit(
     assert rows[-1].payload["finish_reason"] == "tool_calls"
 
 
-@pytest.mark.usefixtures("client_seed_workspace")
+@pytest.mark.usefixtures("configured_llm_test_runtime")
 async def test_complete_chat_stream_unconfigured_pool_audits_error_and_raises() -> None:
     _set_policy("chatbot", "local_only")
     unconfigured_execution = resolve_registered_chat_execution(
@@ -494,8 +493,8 @@ async def test_official_provider_execution_adapter_wraps_provider_errors(
             pass
 
 
-@pytest.fixture(name="client_seed_workspace")
-def _client_seed_workspace(configured_local_llm_control_plane: None) -> None:
+@pytest.fixture(name="configured_llm_test_runtime")
+def _configured_llm_test_runtime(configured_local_llm_control_plane: None) -> None:
     """Use the explicit DB-managed local model for LLM execution tests."""
 
     return configured_local_llm_control_plane

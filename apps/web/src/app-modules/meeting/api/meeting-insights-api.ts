@@ -26,7 +26,7 @@ export interface MeetingInsightItem {
   id: string;
   meeting_id: string;
   recording_id: string | null;
-  workspace_id: string;
+
   insight_type: MeetingInsightType;
   payload: Record<string, unknown>;
   confidence: number | null;

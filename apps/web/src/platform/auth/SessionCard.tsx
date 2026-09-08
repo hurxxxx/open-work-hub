@@ -1,5 +1,5 @@
-import { Button } from '@open-work-hub/ui/primitives/button';
 import { formatDateTime } from '@/src/platform/time/time-utils';
+import { Button } from '@open-work-hub/ui/primitives/button';
 
 import type { AuthSessionItem } from './auth-api';
 import type { SettingsTranslator } from './settings-page-model';

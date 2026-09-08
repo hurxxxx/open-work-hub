@@ -7,9 +7,9 @@ approval policy remain in [AI Write Policy](write-policy.md).
 ## Approval Pause And Resume
 
 - A write tool halts before mutation and persists the exact conversation messages, resolved model
-  metadata, allowed app IDs, resolved tool names, tool call, arguments, preview, actor, workspace,
+  metadata, allowed app IDs, resolved tool names, tool call, arguments, preview, actor, owning app,
   and conversation identity.
-- Only the requesting user in the same workspace and conversation may resolve and resume it.
+- Only the requesting user in the same conversation may resolve and resume it.
 - Resume replays the frozen snapshot. A request may narrow but never widen the stored app scope;
   the available tool set is intersected with the stored tool names, and the approved tool's app
   must remain in scope.
@@ -20,7 +20,7 @@ approval policy remain in [AI Write Policy](write-policy.md).
 
 ## Durable Graph Runs
 
-- Current graph runs are workspace-scoped and bind the requester, owning executable app, graph ID
+- Current graph runs bind the requester, owning executable app, graph ID
   and version, checkpoint namespace, visibility, and input schema version.
 - The caller transaction stages the run, bootstrap input, optional pending artifact, and dispatch
   outbox together. The broker message carries a reference, not mutable graph state.
@@ -36,14 +36,19 @@ approval policy remain in [AI Write Policy](write-policy.md).
 
 ## Artifacts And Visibility
 
-- Runs and artifacts are visible only inside their workspace, to their owner or workspace audience,
-  and while the owning app remains enabled for the viewer.
+- Runs and artifacts default to private and are visible to their requesting/owning user while
+  currently admitted to the owning app. A platform administrator never bypasses this personal ACL.
+  Explicit company visibility is a separate application-controlled audience; it is never inferred
+  from the caller's role, a candidate partition, or an app-local space.
 - Artifacts build through `pending`/`building` and finish as `completed` or `failed`. Content,
   sources, queries, and generation evidence are mutable only while building.
 - Completion atomically records content hash, size, and completion time. Completed artifact content
-  is immutable; an owner may change only `private`/`workspace` visibility.
+  is immutable. Company publication requires explicit administrator-read acknowledgement and a
+  same-transaction audit. Publication is irreversible; company artifacts cannot become private.
+  The repository exposes this contract to trusted app workflows; the common artifact API exposes
+  reads and does not offer an unapproved publication endpoint.
 - A replacement creates a new artifact that explicitly supersedes a completed artifact of the same
-  workspace and type. It never edits the prior artifact in place.
+  owner, app, and type. It never edits the prior artifact in place.
 
 ## Checks
 

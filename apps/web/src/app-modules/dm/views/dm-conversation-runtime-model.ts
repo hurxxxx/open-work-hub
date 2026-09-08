@@ -1,3 +1,4 @@
+import type { DmRealtimeStateResult } from '@open-work-hub/contracts/dm';
 import {
   appendDmMessage,
   applyDmRealtimeEvent,
@@ -8,7 +9,6 @@ import {
   shouldSubmitDmComposerKey as shouldSubmitContractDmComposerKey,
   upsertDmConversation,
 } from '@open-work-hub/contracts/dm';
-import type { DmRealtimeStateResult } from '@open-work-hub/contracts/dm';
 
 import type { DmMessage, DmThread } from '../api/dm-api';
 

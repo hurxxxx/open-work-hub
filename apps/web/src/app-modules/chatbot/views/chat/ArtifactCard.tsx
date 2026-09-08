@@ -7,9 +7,9 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
+import { cn } from '@/src/lib/utils';
 import type { ArtifactBuffer } from '../../api/agent-events';
 import type { ChatbotArtifactRenderer } from '../chatbot-experience';
-import { cn } from '@/src/lib/utils';
 
 export interface ArtifactCardProps {
   artifact: ArtifactBuffer;

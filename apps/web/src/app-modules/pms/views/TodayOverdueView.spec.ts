@@ -29,21 +29,16 @@ describe('loadTodayOverdueTasks', () => {
     } as never);
 
     await expect(
-      loadTodayOverdueTasks('token-1', '2026-07-09', 'delivery-hub'),
+      loadTodayOverdueTasks('token-1', '2026-07-09'),
     ).resolves.toEqual({
       taskLists: [firstList, secondList],
       tasks: [firstTask, secondTask],
     });
 
-    expect(listAllPmsTaskListsMock).toHaveBeenCalledWith(
-      'token-1',
-      undefined,
-      'delivery-hub',
-    );
+    expect(listAllPmsTaskListsMock).toHaveBeenCalledWith('token-1', undefined);
     expect(listAllTodayOverdueTasksMock).toHaveBeenCalledWith(
       'token-1',
       '2026-07-09',
-      'delivery-hub',
     );
   });
 });

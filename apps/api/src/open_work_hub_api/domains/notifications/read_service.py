@@ -6,17 +6,20 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.i18n import localized_http_exception
-from open_work_hub_api.domains.notifications import realtime_event_types, realtime_events
-from open_work_hub_api.domains.notifications import read_projection
-from open_work_hub_api.domains.notifications import service
-from open_work_hub_api.domains.notifications.visibility import (
-    iter_visible_notification_batches,
-    notification_is_visible,
-)
 from open_work_hub_api.domains.auth.models import User
+from open_work_hub_api.domains.notifications import (
+    read_projection,
+    realtime_event_types,
+    realtime_events,
+    service,
+)
 from open_work_hub_api.domains.notifications.schemas import (
     GlobalNotificationItem,
     GlobalNotificationListResponse,
+)
+from open_work_hub_api.domains.notifications.visibility import (
+    iter_visible_notification_batches,
+    notification_is_visible,
 )
 from open_work_hub_api.domains.pms.models import Notification
 

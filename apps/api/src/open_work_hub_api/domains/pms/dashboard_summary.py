@@ -18,17 +18,12 @@ def active_dashboard_tasks(task_lists: list[Any]) -> list[Any]:
         task
         for task_list in task_lists
         for task in task_list.tasks
-        if not task.archived
-        and not is_overdue_exempt_status(task.status, task.task_list)
+        if not task.archived and not is_overdue_exempt_status(task.status, task.task_list)
     ]
 
 
 def overdue_dashboard_tasks(tasks: list[Any], *, today: date) -> list[Any]:
-    return [
-        task
-        for task in tasks
-        if task.due_date is not None and task.due_date < today
-    ]
+    return [task for task in tasks if task.due_date is not None and task.due_date < today]
 
 
 def milestone_due_soon_count(task_lists: list[Any], *, today: date) -> int:
@@ -42,12 +37,7 @@ def milestone_due_soon_count(task_lists: list[Any], *, today: date) -> int:
 
 
 def status_count_payloads(task_lists: list[Any]) -> list[dict[str, Any]]:
-    tasks = [
-        task
-        for task_list in task_lists
-        for task in task_list.tasks
-        if not task.archived
-    ]
+    tasks = [task for task_list in task_lists for task in task_list.tasks if not task.archived]
     status_labels = {task.status: status_label(task.status, task.task_list) for task in tasks}
     return [
         {
@@ -60,12 +50,7 @@ def status_count_payloads(task_lists: list[Any]) -> list[dict[str, Any]]:
 
 
 def priority_count_payloads(task_lists: list[Any]) -> list[dict[str, Any]]:
-    tasks = [
-        task
-        for task_list in task_lists
-        for task in task_list.tasks
-        if not task.archived
-    ]
+    tasks = [task for task_list in task_lists for task in task_list.tasks if not task.archived]
     return [
         {
             "priority": priority_key,
@@ -79,9 +64,7 @@ def priority_count_payloads(task_lists: list[Any]) -> list[dict[str, Any]]:
 def dashboard_task_list_payload(task_list: Any, *, today: date) -> dict[str, Any]:
     task_progress_scope = [task for task in task_list.tasks if not task.archived]
     open_task_count = sum(
-        1
-        for task in task_progress_scope
-        if not is_overdue_exempt_status(task.status, task_list)
+        1 for task in task_progress_scope if not is_overdue_exempt_status(task.status, task_list)
     )
     overdue_task_count = sum(
         1
@@ -93,8 +76,7 @@ def dashboard_task_list_payload(task_list: Any, *, today: date) -> dict[str, Any
     due_dates = sorted(
         task.due_date
         for task in task_progress_scope
-        if task.due_date is not None
-        and not is_overdue_exempt_status(task.status, task_list)
+        if task.due_date is not None and not is_overdue_exempt_status(task.status, task_list)
     )
     return {
         "list_id": task_list.id,
@@ -131,18 +113,13 @@ def dashboard_summary_payload(
         "list_count": len(task_lists),
         "active_task_count": len(active_tasks),
         "overdue_task_count": len(overdue_tasks),
-        "my_task_count": sum(
-            1 for task in active_tasks if task.assignee_id == current_user_id
-        ),
+        "my_task_count": sum(1 for task in active_tasks if task.assignee_id == current_user_id),
         "milestone_due_soon_count": milestone_due_soon_count(
             task_lists,
             today=today,
         ),
         "status_counts": status_count_payloads(task_lists),
         "priority_counts": priority_count_payloads(task_lists),
-        "lists": [
-            dashboard_task_list_payload(task_list, today=today)
-            for task_list in task_lists
-        ],
+        "lists": [dashboard_task_list_payload(task_list, today=today) for task_list in task_lists],
         "recent_activity": [recent_activity_payload(log) for log in recent_logs],
     }

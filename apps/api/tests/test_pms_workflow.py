@@ -118,15 +118,18 @@ def test_pms_workflow_reports_incompatible_statuses_for_inherit_mode() -> None:
 
 
 def test_pms_workflow_calculates_progress_without_archived_or_closed_tasks() -> None:
-    assert calculate_progress(
-        [
-            TaskStub("todo"),
-            TaskStub("review"),
-            TaskStub("done"),
-            TaskStub("complete"),
-            TaskStub("in_progress", archived=True),
-        ],
-    ) == 0.58
+    assert (
+        calculate_progress(
+            [
+                TaskStub("todo"),
+                TaskStub("review"),
+                TaskStub("done"),
+                TaskStub("complete"),
+                TaskStub("in_progress", archived=True),
+            ],
+        )
+        == 0.58
+    )
 
 
 def test_pms_task_summary_projection_uses_workflow_and_people_links() -> None:
@@ -187,6 +190,4 @@ def test_pms_task_summary_projection_uses_workflow_and_people_links() -> None:
     assert summary["follower_names"] == ["Grace Hopper"]
     assert summary["checklist_total"] == 2
     assert summary["checklist_done"] == 1
-    assert summary["labels"] == [
-        {"id": "label-1", "name": "blocked", "color": "#b45309"}
-    ]
+    assert summary["labels"] == [{"id": "label-1", "name": "blocked", "color": "#b45309"}]

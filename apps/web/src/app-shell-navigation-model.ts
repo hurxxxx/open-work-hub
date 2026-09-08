@@ -1,11 +1,11 @@
 import {
   coreRoutePathMatchesPathname,
+  getCoreAppRelativePath,
   getCoreShellPathname,
   getCoreShellSearchParams,
-  getCoreWorkspaceAppRelativePath,
+  resolveCoreAppRouteAppId,
   resolveCoreGlobalRouteAppId,
   resolveCoreManifestNavItemId,
-  resolveCoreWorkspaceRouteAppId,
 } from '@open-work-hub/core-web/shell-navigation';
 
 import type {
@@ -16,7 +16,7 @@ import type {
 
 export const getShellPathname = getCoreShellPathname;
 export const getShellSearchParams = getCoreShellSearchParams;
-export const getWorkspaceAppRelativePath = getCoreWorkspaceAppRelativePath;
+export const getAppRelativePath = getCoreAppRelativePath;
 export const routePathMatchesPathname = coreRoutePathMatchesPathname;
 
 export function resolveManifestNavItemId({
@@ -107,7 +107,7 @@ function linkedNavItemMatchesPath({
   if (!targetAppId) {
     return false;
   }
-  const appRelativePath = getCoreWorkspaceAppRelativePath(pathname, targetAppId);
+  const appRelativePath = getCoreAppRelativePath(pathname, targetAppId);
   if (appRelativePath === null) {
     return false;
   }
@@ -140,14 +140,14 @@ function querySuffixMatches(path: string, suffix: string): boolean {
   return true;
 }
 
-export function resolveWorkspaceRouteAppId({
+export function resolveAppRouteAppId({
   manifests,
   pathname,
 }: {
   manifests: readonly AppModuleManifest[];
   pathname: string;
 }): AppModuleId | null {
-  return resolveCoreWorkspaceRouteAppId({ manifests, pathname });
+  return resolveCoreAppRouteAppId({ manifests, pathname });
 }
 
 export function resolveGlobalRouteAppId({

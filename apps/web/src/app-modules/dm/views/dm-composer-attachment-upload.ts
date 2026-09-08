@@ -37,10 +37,11 @@ export function uploadDmComposerAttachments({
   return Promise.all(
     files.map(async (file) => {
       const localId = createLocalId();
-      const pendingAttachment: PendingAttachment = createUploadingPendingAttachment({
-        localId,
-        file,
-      });
+      const pendingAttachment: PendingAttachment =
+        createUploadingPendingAttachment({
+          localId,
+          file,
+        });
       dispatch({ type: 'add', attachment: pendingAttachment });
 
       try {
@@ -48,7 +49,9 @@ export function uploadDmComposerAttachments({
         dispatch({ type: 'uploaded', localId, attachment });
       } catch (caughtError) {
         const message =
-          caughtError instanceof Error ? caughtError.message : fallbackErrorMessage;
+          caughtError instanceof Error
+            ? caughtError.message
+            : fallbackErrorMessage;
         dispatch({ type: 'failed', localId, error: message });
         onError(message);
       }

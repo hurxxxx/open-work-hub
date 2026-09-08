@@ -2,8 +2,8 @@
 
 - Start with current API code/tests and the closest owning domain document; read accepted ADRs only for touched contracts.
 - Assemble FastAPI routers through `open_work_hub_api.api_registry`; keep routers thin and domain behavior in application/service layers.
-- Enforce actor, declared execution context, workspace membership, runtime app availability, and resource ACL on the server.
-- Workspace routes never infer a workspace; global routes never invent one.
+- Enforce actor, declared execution identity, current company app admission, and source-owned resource ACL on the server.
+- Product workspaces are removed under ADR 0012. App-local spaces and groups never become a global execution container.
 - API/OpenAPI changes must update response models and regenerate the client when `pnpm check:api-contract` requires it.
 - Schema changes require an Alembic migration from current head; do not use `create_all`, hand SQL compatibility, `stamp`, or destructive repair.
 - AI, retrieval, and external file/URL changes follow the root boundaries and their owner ADRs/docs.

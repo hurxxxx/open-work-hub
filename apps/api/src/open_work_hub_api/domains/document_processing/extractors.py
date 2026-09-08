@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import zipfile
 from collections.abc import Iterable
 from io import BytesIO
 from pathlib import Path
-import zipfile
 
 from .contracts import (
     DocumentExtractBundle,
@@ -143,9 +143,7 @@ class DocxExtractor:
                 if table_rows_seen + len(rows) >= _MAX_DOCX_TABLE_ROWS:
                     break
                 try:
-                    cells = [
-                        (cell.text or "").strip()[:_MAX_CELL_CHARS] for cell in row.cells
-                    ]
+                    cells = [(cell.text or "").strip()[:_MAX_CELL_CHARS] for cell in row.cells]
                 except ValueError:
                     # Some Word producers emit a vertical-merge continuation whose
                     # preceding row omits the referenced grid cell. python-docx

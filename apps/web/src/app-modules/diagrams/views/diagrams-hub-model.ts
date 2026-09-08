@@ -1,7 +1,4 @@
-import {
-  buildAppEntryHref,
-  buildAppHref,
-} from '@open-work-hub/contracts/app-routes';
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
 import type { DiagramHubView, DiagramItem } from '../api/diagrams-api';
 
 export type DiagramLayoutMode = 'grid' | 'list';
@@ -73,33 +70,18 @@ export function viewFromSearch(value: string | null): DiagramHubView {
   return 'all';
 }
 
-export function itemPath({
-  itemId,
-  workspaceSlug,
-}: {
-  itemId: string;
-  workspaceSlug?: string | null;
-}): string {
-  return workspaceSlug
-    ? buildAppHref({
-        routeId: 'diagrams.diagram',
-        workspaceSlug,
-        pathParams: { diagramId: itemId },
-      })
-    : buildAppEntryHref('diagrams');
+export function itemPath({ itemId }: { itemId: string }): string {
+  return buildAppHref({
+    routeId: 'diagrams.diagram',
+    pathParams: { diagramId: itemId },
+  });
 }
 
-export function rootPath(
-  workspaceSlug: string | undefined | null,
-  searchParams: URLSearchParams,
-): string {
-  return workspaceSlug
-    ? buildAppHref({
-        routeId: 'diagrams.root',
-        workspaceSlug,
-        queryParams: Object.fromEntries(searchParams),
-      })
-    : buildAppEntryHref('diagrams');
+export function rootPath(searchParams: URLSearchParams): string {
+  return buildAppHref({
+    routeId: 'diagrams.root',
+    queryParams: Object.fromEntries(searchParams),
+  });
 }
 
 function getBrowserLayoutStorage(): LayoutModeStorage | null {

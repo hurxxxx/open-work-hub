@@ -1,5 +1,5 @@
-import { createElement, type ReactNode } from 'react';
 import DOMPurify from 'dompurify';
+import { createElement, type ReactNode } from 'react';
 
 const SVG_ATTRIBUTE_ALIASES: Record<string, string> = {
   class: 'className',
@@ -14,18 +14,22 @@ export function svgReactAttributeName(name: string): string {
   return name.replace(/-([a-z])/g, (_, char: string) => char.toUpperCase());
 }
 
-export function parseSvgStyleAttribute(styleText: string): Record<string, string> {
-  return styleText.split(';').reduce<Record<string, string>>((style, declaration) => {
-    const trimmed = declaration.trim();
-    if (!trimmed) return style;
-    const [property, ...valueParts] = trimmed.split(':');
-    const name = svgReactAttributeName(property.trim());
-    const value = valueParts.join(':').trim();
-    if (name && value) {
-      style[name] = value;
-    }
-    return style;
-  }, {});
+export function parseSvgStyleAttribute(
+  styleText: string,
+): Record<string, string> {
+  return styleText
+    .split(';')
+    .reduce<Record<string, string>>((style, declaration) => {
+      const trimmed = declaration.trim();
+      if (!trimmed) return style;
+      const [property, ...valueParts] = trimmed.split(':');
+      const name = svgReactAttributeName(property.trim());
+      const value = valueParts.join(':').trim();
+      if (name && value) {
+        style[name] = value;
+      }
+      return style;
+    }, {});
 }
 
 function svgElementProps(element: Element): Record<string, unknown> {

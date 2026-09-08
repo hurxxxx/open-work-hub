@@ -5,9 +5,12 @@ from typing import Protocol
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.domains.auth.models import User
-from open_work_hub_api.domains.dm import attachment_content, attachment_records, attachment_upload, serialization
-from open_work_hub_api.domains.dm.attachment_content import DmAttachmentContent
-from open_work_hub_api.domains.dm.attachment_links import DmAttachmentDisposition
+from open_work_hub_api.domains.content_access.grants import ContentGrantIssuer
+from open_work_hub_api.domains.dm import (
+    attachment_records,
+    attachment_upload,
+    serialization,
+)
 from open_work_hub_api.domains.dm.schemas import DmAttachmentUrlResponse, DmMessageAttachmentItem
 
 
@@ -21,12 +24,14 @@ def get_dm_attachment_download_url(
     *,
     current_user: User,
     attachment_id: str,
+    issuer: ContentGrantIssuer,
 ) -> DmAttachmentUrlResponse:
     return DmAttachmentUrlResponse(
         url=attachment_records.attachment_download_url(
             db,
             current_user=current_user,
             attachment_id=attachment_id,
+            issuer=issuer,
         )
     )
 
@@ -36,30 +41,15 @@ def get_dm_attachment_preview_url(
     *,
     current_user: User,
     attachment_id: str,
+    issuer: ContentGrantIssuer,
 ) -> DmAttachmentUrlResponse:
     return DmAttachmentUrlResponse(
         url=attachment_records.attachment_preview_url(
             db,
             current_user=current_user,
             attachment_id=attachment_id,
+            issuer=issuer,
         )
-    )
-
-
-def open_dm_attachment_content(
-    db: Session,
-    *,
-    attachment_id: str,
-    expires: int,
-    signature: str,
-    disposition: DmAttachmentDisposition,
-) -> DmAttachmentContent:
-    return attachment_content.open_dm_attachment_content(
-        db,
-        attachment_id=attachment_id,
-        expires=expires,
-        signature=signature,
-        disposition=disposition,
     )
 
 

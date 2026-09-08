@@ -14,13 +14,13 @@ export type PlannerCalendarScheduleCommand =
   | {
       type: 'updateMeeting';
       sourceId: string;
-      workspaceSlug: string | null;
+
       payload: { start_at?: string; end_at: string };
     }
   | {
       type: 'updateTask';
       sourceId: string;
-      workspaceSlug: string | null;
+
       payload: { due_date?: string | null; start_date?: string | null };
     };
 
@@ -134,7 +134,6 @@ export function getPlannerCalendarDropPolicy(
       command: {
         type: 'updateMeeting',
         sourceId: event.sourceId,
-        workspaceSlug: event.workspace?.slug ?? null,
         payload: {
           start_at: newStartIso,
           end_at: newEndIso,
@@ -159,7 +158,6 @@ export function getPlannerCalendarDropPolicy(
     command: {
       type: 'updateTask',
       sourceId: event.sourceId,
-      workspaceSlug: event.workspace?.slug ?? null,
       payload,
     },
   };
@@ -175,7 +173,6 @@ export function getPlannerCalendarResizePolicy(
       command: {
         type: 'updateMeeting',
         sourceId: event.sourceId,
-        workspaceSlug: event.workspace?.slug ?? null,
         payload: { end_at: newEndIso },
       },
     };
@@ -216,7 +213,6 @@ export function getPlannerCalendarResizePolicy(
       command: {
         type: 'updateTask',
         sourceId: event.sourceId,
-        workspaceSlug: event.workspace?.slug ?? null,
         payload: {
           due_date: inclusiveDateFromExclusiveAllDayEnd(newEndIso),
         },

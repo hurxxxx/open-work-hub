@@ -24,7 +24,6 @@ def test_execute_tool_call_maps_approval_required_exception_to_blocked(
 
     result = tool_runtime.execute_tool_call(
         SimpleNamespace(),
-        workspace=SimpleNamespace(id="ws-1"),
         principal=SimpleNamespace(kind="user", user_id="user-1"),
         user=SimpleNamespace(id="user-1"),
         tool_name="pms.delete_task",

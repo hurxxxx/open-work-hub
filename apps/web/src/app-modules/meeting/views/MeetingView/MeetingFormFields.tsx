@@ -60,7 +60,6 @@ type MeetingFormFieldsProps = {
   projection: MeetingFormFieldsProjection;
   state: MeetingFormFieldsState;
   timeZone?: string | null;
-  workspaceSlug: string;
 };
 
 export function MeetingFormFields({
@@ -69,7 +68,6 @@ export function MeetingFormFields({
   projection,
   state,
   timeZone,
-  workspaceSlug,
 }: MeetingFormFieldsProps) {
   const titleInputId = useId();
   const startInputId = useId();
@@ -113,7 +111,6 @@ export function MeetingFormFields({
       </div>
 
       <MeetingAvailabilityPanel
-        workspaceSlug={workspaceSlug}
         attendeeUsers={projection.availabilityUsers}
         meetingStart={state.startAt ? new Date(state.startAt) : null}
         meetingEnd={state.endAt ? new Date(state.endAt) : null}

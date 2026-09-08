@@ -1,7 +1,9 @@
-import { apiFetchJsonWithMappedError, jsonHeaders } from '@/src/platform/api/client';
+import {
+  apiFetchJsonWithMappedError,
+  jsonHeaders,
+} from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
 import { parseApiDateTime } from '@/src/platform/time/time-utils';
-import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
 export type MeetingStatus = ApiSchema<'MeetingDetail'>['status'];
 export type AttendeeRole = ApiSchema<'MeetingAttendeeInput'>['role'];
@@ -31,13 +33,14 @@ export type MeetingRecordingStatus =
  * row (transcribe → summarize → extract insights → generate doc). UI
  * polling keeps refetching while the recording is in one of these.
  */
-export const ACTIVE_RECORDING_STATUSES: ReadonlySet<MeetingRecordingStatus> = new Set([
-  'pending',
-  'transcribing',
-  'summarizing',
-  'extracting_insights',
-  'generating_doc',
-]);
+export const ACTIVE_RECORDING_STATUSES: ReadonlySet<MeetingRecordingStatus> =
+  new Set([
+    'pending',
+    'transcribing',
+    'summarizing',
+    'extracting_insights',
+    'generating_doc',
+  ]);
 
 /**
  * States where the progress rail should be rendered. ``done`` is shown
@@ -45,15 +48,19 @@ export const ACTIVE_RECORDING_STATUSES: ReadonlySet<MeetingRecordingStatus> = ne
  * pipeline is finished. ``pending`` only means the audio is saved and queued,
  * so it is represented by the transcript status line instead of a progress rail.
  */
-export const RAIL_VISIBLE_STATUSES: ReadonlySet<MeetingRecordingStatus> = new Set([
-  'transcribing',
-  'summarizing',
-  'extracting_insights',
-  'generating_doc',
-  'failed',
-]);
+export const RAIL_VISIBLE_STATUSES: ReadonlySet<MeetingRecordingStatus> =
+  new Set([
+    'transcribing',
+    'summarizing',
+    'extracting_insights',
+    'generating_doc',
+    'failed',
+  ]);
 
-export type MeetingRecording = Omit<ApiSchema<'MeetingRecordingOut'>, 'transcription_status'> & {
+export type MeetingRecording = Omit<
+  ApiSchema<'MeetingRecordingOut'>,
+  'transcription_status'
+> & {
   transcription_status: MeetingRecordingStatus;
   transcript_extracted?: boolean;
   summary_generated?: boolean;
@@ -102,15 +109,22 @@ export type MeetingAvailabilityBlock = ApiSchema<'MeetingAvailabilityBlock'>;
 
 export type MeetingAvailabilityItem = ApiSchema<'MeetingAvailabilityItem'>;
 
-export type MeetingAvailabilityResponse = ApiSchema<'MeetingAvailabilityResponse'>;
+export type MeetingAvailabilityResponse =
+  ApiSchema<'MeetingAvailabilityResponse'>;
 
 export type MeetingAttendeeInput = ApiSchema<'MeetingAttendeeInput'>;
 
-export type MeetingCreateInput = Omit<ApiSchema<'MeetingCreateRequest'>, 'attendees'> & {
+export type MeetingCreateInput = Omit<
+  ApiSchema<'MeetingCreateRequest'>,
+  'attendees'
+> & {
   attendees: MeetingAttendeeInput[];
 };
 
-export type MeetingUpdateInput = Omit<ApiSchema<'MeetingUpdateRequest'>, 'attendees' | 'status'> & {
+export type MeetingUpdateInput = Omit<
+  ApiSchema<'MeetingUpdateRequest'>,
+  'attendees' | 'status'
+> & {
   status?: MeetingStatus;
   attendees?: MeetingAttendeeInput[];
 };
@@ -151,11 +165,10 @@ export class MeetingApiError extends Error {
 async function request<T>(
   path: string,
   token: string,
-  workspaceSlug: string,
   init: RequestInit = {},
 ): Promise<T> {
   return apiFetchJsonWithMappedError<T>(
-    resolveMeetingPath(path, workspaceSlug),
+    resolveMeetingPath(path),
     token,
     init,
     (error) => new MeetingApiError(error.status, error.message),
@@ -165,19 +178,17 @@ async function request<T>(
 async function multipartRequest<T>(
   path: string,
   token: string,
-  workspaceSlug: string,
   init: RequestInit = {},
 ): Promise<T> {
-  return request<T>(path, token, workspaceSlug, init);
+  return request<T>(path, token, init);
 }
 
-function resolveMeetingPath(path: string, workspaceSlug: string): string {
-  return rewriteWorkspaceApiPath(path, workspaceSlug);
+function resolveMeetingPath(path: string): string {
+  return path;
 }
 
 export function listMeetings(
   token: string,
-  workspaceSlug: string,
   options: { scope?: MeetingScope; from?: string; to?: string } = {},
 ): Promise<MeetingListResponse> {
   const params = new URLSearchParams();
@@ -188,40 +199,34 @@ export function listMeetings(
   return request<MeetingListResponse>(
     `/api/v1/meeting/meetings${query ? `?${query}` : ''}`,
     token,
-    workspaceSlug,
   );
 }
 
-export function getMeeting(token: string, workspaceSlug: string, meetingId: string): Promise<MeetingDetail> {
-  return request<MeetingDetail>(`/api/v1/meeting/meetings/${meetingId}`, token, workspaceSlug);
+export function getMeeting(
+  token: string,
+  meetingId: string,
+): Promise<MeetingDetail> {
+  return request<MeetingDetail>(`/api/v1/meeting/meetings/${meetingId}`, token);
 }
 
 export function createMeeting(
   token: string,
-  workspaceSlug: string,
   payload: MeetingCreateInput,
 ): Promise<MeetingDetail> {
-  return request<MeetingDetail>(
-    '/api/v1/meeting/meetings',
-    token,
-    workspaceSlug,
-    {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    },
-  );
+  return request<MeetingDetail>('/api/v1/meeting/meetings', token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 export function updateMeeting(
   token: string,
-  workspaceSlug: string,
   meetingId: string,
   payload: MeetingUpdateInput,
 ): Promise<MeetingDetail> {
   return request<MeetingDetail>(
     `/api/v1/meeting/meetings/${meetingId}`,
     token,
-    workspaceSlug,
     {
       method: 'PATCH',
       body: JSON.stringify(payload),
@@ -236,14 +241,12 @@ export function updateMeeting(
  */
 export function addMeetingAttendees(
   token: string,
-  workspaceSlug: string,
   meetingId: string,
   attendees: MeetingAttendeeInput[],
 ): Promise<MeetingDetail> {
   return request<MeetingDetail>(
     `/api/v1/meeting/meetings/${meetingId}/attendees`,
     token,
-    workspaceSlug,
     {
       method: 'POST',
       body: JSON.stringify({ attendees }),
@@ -257,52 +260,41 @@ export function addMeetingAttendees(
  */
 export function deleteMeetingRecording(
   token: string,
-  workspaceSlug: string,
   meetingId: string,
   recordingId: string,
 ): Promise<MeetingDetail> {
   return request<MeetingDetail>(
     `/api/v1/meeting/meetings/${meetingId}/recordings/${recordingId}`,
     token,
-    workspaceSlug,
     { method: 'DELETE' },
   );
 }
 
 export function ensureMeetingNotes(
   token: string,
-  workspaceSlug: string,
   meetingId: string,
 ): Promise<MeetingDetail> {
   return request<MeetingDetail>(
     `/api/v1/meeting/meetings/${meetingId}/notes/ensure`,
     token,
-    workspaceSlug,
     { method: 'POST' },
   );
 }
 
-export function deleteMeeting(token: string, workspaceSlug: string, meetingId: string): Promise<void> {
-  return request<void>(
-    `/api/v1/meeting/meetings/${meetingId}`,
-    token,
-    workspaceSlug,
-    {
-      method: 'DELETE',
-    },
-  );
+export function deleteMeeting(token: string, meetingId: string): Promise<void> {
+  return request<void>(`/api/v1/meeting/meetings/${meetingId}`, token, {
+    method: 'DELETE',
+  });
 }
 
 export function attachTaskToMeeting(
   token: string,
-  workspaceSlug: string,
   meetingId: string,
   taskId: string,
 ): Promise<MeetingDetail> {
   return request<MeetingDetail>(
     `/api/v1/meeting/meetings/${meetingId}/tasks`,
     token,
-    workspaceSlug,
     {
       method: 'POST',
       body: JSON.stringify({ task_id: taskId }),
@@ -312,28 +304,24 @@ export function attachTaskToMeeting(
 
 export function detachTaskFromMeeting(
   token: string,
-  workspaceSlug: string,
   meetingId: string,
   taskId: string,
 ): Promise<MeetingDetail> {
   return request<MeetingDetail>(
     `/api/v1/meeting/meetings/${meetingId}/tasks/${taskId}`,
     token,
-    workspaceSlug,
     { method: 'DELETE' },
   );
 }
 
 export function attachDocToMeeting(
   token: string,
-  workspaceSlug: string,
   meetingId: string,
   docId: string,
 ): Promise<MeetingDetail> {
   return request<MeetingDetail>(
     `/api/v1/meeting/meetings/${meetingId}/docs`,
     token,
-    workspaceSlug,
     {
       method: 'POST',
       body: JSON.stringify({ doc_id: docId }),
@@ -343,21 +331,18 @@ export function attachDocToMeeting(
 
 export function detachDocFromMeeting(
   token: string,
-  workspaceSlug: string,
   meetingId: string,
   docId: string,
 ): Promise<MeetingDetail> {
   return request<MeetingDetail>(
     `/api/v1/meeting/meetings/${meetingId}/docs/${docId}`,
     token,
-    workspaceSlug,
     { method: 'DELETE' },
   );
 }
 
 export async function uploadMeetingFile(
   token: string,
-  workspaceSlug: string,
   meetingId: string,
   file: File,
 ): Promise<MeetingDetail> {
@@ -366,7 +351,6 @@ export async function uploadMeetingFile(
   return multipartRequest<MeetingDetail>(
     `/api/v1/meeting/meetings/${meetingId}/files`,
     token,
-    workspaceSlug,
     {
       method: 'POST',
       body: formData,
@@ -376,28 +360,28 @@ export async function uploadMeetingFile(
 
 export function deleteMeetingFile(
   token: string,
-  workspaceSlug: string,
   meetingId: string,
   fileId: string,
 ): Promise<MeetingDetail> {
   return request<MeetingDetail>(
     `/api/v1/meeting/meetings/${meetingId}/files/${fileId}`,
     token,
-    workspaceSlug,
     { method: 'DELETE' },
   );
 }
 
 export function initRecordingStaging(
   token: string,
-  workspaceSlug: string,
   meetingId: string,
-  payload: { idempotency_key: string; mime_type: string; linked_task_id?: string | null },
+  payload: {
+    idempotency_key: string;
+    mime_type: string;
+    linked_task_id?: string | null;
+  },
 ): Promise<RecordingStagingItem> {
   return request<RecordingStagingItem>(
     `/api/v1/meeting/meetings/${meetingId}/recordings/staging`,
     token,
-    workspaceSlug,
     {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -407,7 +391,6 @@ export function initRecordingStaging(
 
 export async function uploadRecordingChunk(
   token: string,
-  workspaceSlug: string,
   meetingId: string,
   stagingId: string,
   seq: number,
@@ -419,7 +402,6 @@ export async function uploadRecordingChunk(
   return multipartRequest<RecordingChunkAck>(
     `/api/v1/meeting/meetings/${meetingId}/recordings/staging/${stagingId}/chunks/${seq}`,
     token,
-    workspaceSlug,
     {
       method: 'PUT',
       headers: {
@@ -432,7 +414,6 @@ export async function uploadRecordingChunk(
 
 export function completeRecordingStaging(
   token: string,
-  workspaceSlug: string,
   meetingId: string,
   stagingId: string,
   payload: { duration_sec_estimate?: number | null },
@@ -440,7 +421,6 @@ export function completeRecordingStaging(
   return request<MeetingDetail>(
     `/api/v1/meeting/meetings/${meetingId}/recordings/staging/${stagingId}/complete`,
     token,
-    workspaceSlug,
     {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -450,26 +430,22 @@ export function completeRecordingStaging(
 
 export function listRecordingStaging(
   token: string,
-  workspaceSlug: string,
   meetingId: string,
 ): Promise<RecordingStagingItem[]> {
   return request<RecordingStagingItem[]>(
     `/api/v1/meeting/meetings/${meetingId}/recordings/staging`,
     token,
-    workspaceSlug,
   );
 }
 
 export function discardRecordingStaging(
   token: string,
-  workspaceSlug: string,
   meetingId: string,
   stagingId: string,
 ): Promise<void> {
   return request<void>(
     `/api/v1/meeting/meetings/${meetingId}/recordings/staging/${stagingId}`,
     token,
-    workspaceSlug,
     {
       method: 'DELETE',
     },
@@ -478,13 +454,13 @@ export function discardRecordingStaging(
 
 export async function importMeetingRecording(
   token: string,
-  workspaceSlug: string,
   meetingId: string,
   file: Blob | File,
   linkedTaskId?: string | null,
 ): Promise<MeetingDetail> {
   const formData = new FormData();
-  const filename = file instanceof File ? file.name : 'recovered-recording.webm';
+  const filename =
+    file instanceof File ? file.name : 'recovered-recording.webm';
   formData.append('file', file, filename);
   if (linkedTaskId) {
     formData.append('linked_task_id', linkedTaskId);
@@ -492,7 +468,6 @@ export async function importMeetingRecording(
   return multipartRequest<MeetingDetail>(
     `/api/v1/meeting/meetings/${meetingId}/recordings/import`,
     token,
-    workspaceSlug,
     {
       method: 'POST',
       body: formData,
@@ -502,14 +477,12 @@ export async function importMeetingRecording(
 
 export function getRecordingPlaybackUrl(
   token: string,
-  workspaceSlug: string,
   meetingId: string,
   recordingId: string,
 ): Promise<RecordingPlaybackResponse> {
   return request<RecordingPlaybackResponse>(
     `/api/v1/meeting/meetings/${meetingId}/recordings/${recordingId}/playback`,
     token,
-    workspaceSlug,
   );
 }
 
@@ -522,21 +495,22 @@ export async function fetchRecordingPlaybackBlobUrl(
     cache: 'no-store',
   });
   if (!response.ok) {
-    throw new MeetingApiError(response.status, `Request failed with ${response.status}.`);
+    throw new MeetingApiError(
+      response.status,
+      `Request failed with ${response.status}.`,
+    );
   }
   return URL.createObjectURL(await response.blob());
 }
 
 export function retryMeetingRecording(
   token: string,
-  workspaceSlug: string,
   meetingId: string,
   recordingId: string,
 ): Promise<MeetingDetail> {
   return request<MeetingDetail>(
     `/api/v1/meeting/meetings/${meetingId}/recordings/${recordingId}/retry`,
     token,
-    workspaceSlug,
     {
       method: 'POST',
     },
@@ -545,7 +519,6 @@ export function retryMeetingRecording(
 
 export function listMeetingUsers(
   token: string,
-  workspaceSlug: string,
   options: { q?: string; limit?: number } = {},
 ): Promise<MeetingUser[]> {
   const params = new URLSearchParams();
@@ -555,13 +528,11 @@ export function listMeetingUsers(
   return request<MeetingUser[]>(
     `/api/v1/meeting/users${query ? `?${query}` : ''}`,
     token,
-    workspaceSlug,
   );
 }
 
 export function getMeetingAvailability(
   token: string,
-  workspaceSlug: string,
   options: { userIds: string[]; from: string; to: string },
 ): Promise<MeetingAvailabilityResponse> {
   const params = new URLSearchParams();
@@ -573,6 +544,5 @@ export function getMeetingAvailability(
   return request<MeetingAvailabilityResponse>(
     `/api/v1/meeting/availability?${params.toString()}`,
     token,
-    workspaceSlug,
   );
 }

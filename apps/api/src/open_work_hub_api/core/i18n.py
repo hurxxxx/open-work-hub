@@ -7,8 +7,8 @@ from fastapi import HTTPException
 from open_work_hub_api.core.i18n_catalog import (
     DEFAULT_LOCALE,
     ERROR_CODE_HEADER,
-    MESSAGES,
     MESSAGE_PARAM_VALUE_TRANSLATIONS,
+    MESSAGES,
     PARAM_VALUE_TRANSLATIONS,
     SUPPORTED_LOCALES,
     LocalizedApiMessage,

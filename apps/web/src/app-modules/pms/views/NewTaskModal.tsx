@@ -1,18 +1,18 @@
-import { useEffect, useReducer, useRef, useState } from 'react';
+import { DateInput } from '@/src/components/date/DateInput';
+import { useAuth } from '@/src/platform/auth/auth-provider';
+import { useMediaUpload } from '@/src/platform/media/use-media-upload';
+import { BlockEditor, Button, Dialog, InlineNotice } from '@open-work-hub/ui';
 import {
+  Bell,
   ChevronDown,
   FileText,
   LayoutTemplate,
   Paperclip,
-  Bell,
   Search,
   X,
 } from 'lucide-react';
-import { Dialog, Button, BlockEditor, InlineNotice } from '@open-work-hub/ui';
+import { useEffect, useReducer, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { DateInput } from '@/src/components/date/DateInput';
-import { useAuth } from '@/src/platform/auth/auth-provider';
-import { useMediaUpload } from '@/src/platform/media/use-media-upload';
 import {
   createTaskListTask,
   listSpaceMembers,
@@ -31,7 +31,7 @@ import { TaskPickerModal, type TaskPickerModalCopy } from './TaskPickerModal';
 const PARENT_TASK_PICKER_COPY: TaskPickerModalCopy = {
   titleKey: 'pms.parentTaskPicker.title',
   descriptionKey: 'pms.parentTaskPicker.description',
-  workspaceLabelKey: 'pms.taskPicker.pmsWorkspace',
+  appLabelKey: 'pms.taskPicker.pmsWorkspace',
   noAccessActionKey: 'pms.parentTaskPicker.action',
   loadListsErrorKey: 'pms.taskPicker.errors.loadListsFailed',
   loadTasksErrorKey: 'pms.parentTaskPicker.errors.loadTasksFailed',
@@ -50,7 +50,6 @@ export const NewTaskModal = ({
   onClose,
   onCreated,
   onTaskListIdChange,
-  onWorkspaceSlugChange,
   overlayClassName,
   parentPickerContentClassName,
   parentPickerOverlayClassName,
@@ -59,8 +58,6 @@ export const NewTaskModal = ({
   taskListLoading = false,
   taskListOptions,
   taskListStatuses,
-  workspaceOptions,
-  workspaceSlug,
 }: {
   canCreate?: boolean;
   contentClassName?: string;
@@ -69,7 +66,6 @@ export const NewTaskModal = ({
   onClose: () => void;
   onCreated?: (task: PmsTask) => void;
   onTaskListIdChange?: (taskListId: string) => void;
-  onWorkspaceSlugChange?: (workspaceSlug: string) => void;
   overlayClassName?: string;
   parentPickerContentClassName?: string;
   parentPickerOverlayClassName?: string;
@@ -78,8 +74,6 @@ export const NewTaskModal = ({
   taskListLoading?: boolean;
   taskListOptions?: readonly { id: string; label: string }[];
   taskListStatuses?: PmsTaskListStatus[];
-  workspaceOptions?: readonly { label: string; slug: string }[];
-  workspaceSlug?: string | null;
 }) => {
   const { t } = useTranslation('apps');
   const { token, user } = useAuth();
@@ -162,7 +156,7 @@ export const NewTaskModal = ({
       };
     }
 
-    listSpaceMembers(token, taskListSpaceId, workspaceSlug)
+    listSpaceMembers(token, taskListSpaceId)
       .then((response) => {
         if (cancelled) {
           return;
@@ -186,14 +180,14 @@ export const NewTaskModal = ({
     return () => {
       cancelled = true;
     };
-  }, [taskListSpaceId, token, user?.id, workspaceSlug]);
+  }, [taskListSpaceId, token, user?.id]);
 
   // Load templates when menu opens
   const openTemplateMenu = async () => {
     if (!token || !taskListId) return;
     dispatch({ type: 'open-template-menu' });
     try {
-      const res = await listTaskTemplates(token, taskListId, workspaceSlug);
+      const res = await listTaskTemplates(token, taskListId);
       dispatch({
         type: 'templates-loaded',
         templates: res.items,
@@ -235,7 +229,6 @@ export const NewTaskModal = ({
         buildNewTaskCreatePayload(newTaskState, taskListStatuses, {
           assignToUserId: user?.id ?? null,
         }),
-        workspaceSlug,
       );
       onCreated?.(createdTask);
       onClose();
@@ -342,26 +335,6 @@ export const NewTaskModal = ({
       >
         <div className="space-y-6 text-app-ink">
           {error ? <InlineNotice tone="danger">{error}</InlineNotice> : null}
-
-          {workspaceOptions?.length ? (
-            <label className="app-text-caption flex flex-col gap-1 text-app-ink/60">
-              <span>{t('common:labels.workspace')}</span>
-              <select
-                className="app-field-input-sm"
-                disabled={submitting}
-                value={workspaceSlug ?? ''}
-                onChange={(event) =>
-                  onWorkspaceSlugChange?.(event.target.value)
-                }
-              >
-                {workspaceOptions.map((option) => (
-                  <option key={option.slug} value={option.slug}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
 
           {taskListOptions !== undefined ? (
             <div className="app-text-caption flex flex-col gap-1 text-app-ink/60">
@@ -563,7 +536,6 @@ export const NewTaskModal = ({
             dispatch({ type: 'parent-id', value: task.id });
           }}
           overlayClassName={parentPickerOverlayClassName}
-          workspaceSlug={workspaceSlug}
         />
       ) : null}
     </>

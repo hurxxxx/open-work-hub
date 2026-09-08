@@ -16,7 +16,6 @@ from open_work_hub_api.domains.pms.models import Notification
 
 from .models import CommunityComment, CommunityPost
 
-
 DEFAULT_CHANNEL_KEY = "suggestions"
 
 
@@ -75,7 +74,6 @@ def create_comment_notification(
         source_type="community_post",
         source_id=post.id,
         origin_app_id="community",
-        origin_workspace_id=None,
         action_url=action_url,
     )
     db.add(notification)
@@ -153,8 +151,6 @@ def _community_post_url(post: CommunityPost) -> str:
         InternalAppLocation(
             route_id="community.post",
             path_params={"postId": post.id},
-            query_params={
-                "channel": channel_key if channel_key != DEFAULT_CHANNEL_KEY else None
-            },
+            query_params={"channel": channel_key if channel_key != DEFAULT_CHANNEL_KEY else None},
         )
     )

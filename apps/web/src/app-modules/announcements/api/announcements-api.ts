@@ -1,11 +1,10 @@
 import { apiFetchJsonWithMappedError } from '@/src/platform/api/client';
-import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
-export type AnnouncementScope = 'workspace' | 'company';
+export type AnnouncementScope = 'company';
 
 export interface Announcement {
   id: string;
-  workspaceId: string;
+
   authorId: string;
   authorName: string;
   scope: AnnouncementScope;
@@ -46,11 +45,10 @@ export class AnnouncementApiError extends Error {
 async function request<T>(
   path: string,
   token: string,
-  workspaceSlug: string,
   init: RequestInit = {},
 ): Promise<T> {
   return apiFetchJsonWithMappedError<T>(
-    rewriteWorkspaceApiPath(path, workspaceSlug),
+    path,
     token,
     init,
     (error) =>
@@ -63,7 +61,6 @@ async function request<T>(
 
 export function listAnnouncements(
   token: string,
-  workspaceSlug: string,
   options: { scope?: AnnouncementScope; limit?: number } = {},
 ): Promise<AnnouncementsResponse> {
   const params = new URLSearchParams();
@@ -73,16 +70,14 @@ export function listAnnouncements(
   return request<AnnouncementsResponse>(
     `/api/v1/announcements${query ? `?${query}` : ''}`,
     token,
-    workspaceSlug,
   );
 }
 
 export function createAnnouncement(
   token: string,
-  workspaceSlug: string,
   payload: AnnouncementCreateInput,
 ): Promise<Announcement> {
-  return request<Announcement>('/api/v1/announcements', token, workspaceSlug, {
+  return request<Announcement>('/api/v1/announcements', token, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -90,14 +85,12 @@ export function createAnnouncement(
 
 export function updateAnnouncement(
   token: string,
-  workspaceSlug: string,
   announcementId: string,
   payload: AnnouncementUpdateInput,
 ): Promise<Announcement> {
   return request<Announcement>(
     `/api/v1/announcements/${announcementId}`,
     token,
-    workspaceSlug,
     {
       method: 'PATCH',
       body: JSON.stringify(payload),
@@ -107,13 +100,9 @@ export function updateAnnouncement(
 
 export function deleteAnnouncement(
   token: string,
-  workspaceSlug: string,
   announcementId: string,
 ): Promise<void> {
-  return request<void>(
-    `/api/v1/announcements/${announcementId}`,
-    token,
-    workspaceSlug,
-    { method: 'DELETE' },
-  );
+  return request<void>(`/api/v1/announcements/${announcementId}`, token, {
+    method: 'DELETE',
+  });
 }

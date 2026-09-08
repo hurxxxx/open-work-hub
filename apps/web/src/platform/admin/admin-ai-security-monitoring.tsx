@@ -1,11 +1,17 @@
-import React from 'react';
 import type { TFunction } from 'i18next';
 import { Search } from 'lucide-react';
+import React from 'react';
 
-import { Button, type ChartSeries, Dialog, InlineNotice } from '@open-work-hub/ui';
+import {
+  Button,
+  type ChartSeries,
+  Dialog,
+  InlineNotice,
+} from '@open-work-hub/ui';
 
 import { formatDateTime } from '@/src/platform/time/time-utils';
 
+import { AI_SECURITY_DETECTED_VALUE_PAGE_SIZE } from './admin-ai-security-model';
 import type {
   AiSecurityDetectedValueGroup,
   AiSecurityDetectedValueStat,
@@ -14,7 +20,6 @@ import type {
 } from './admin-api';
 import { AuditLogPager } from './admin-audit-section';
 import { ADMIN_CHART_COLORS } from './admin-chart-colors';
-import { AI_SECURITY_DETECTED_VALUE_PAGE_SIZE } from './admin-ai-security-model';
 import { BodyCell, EmptyRow, HeadCell } from './admin-shared';
 import { formatUsageNumber, formatUsageTrendDate } from './admin-usage-format';
 
@@ -772,8 +777,7 @@ export function AiSecurityMonitoringUserTable({
                       {item.full_name}
                     </div>
                     <div className="truncate text-app-ink/55">{item.email}</div>
-                    <div className="truncate text-app-ink/55">
-                    </div>
+                    <div className="truncate text-app-ink/55"></div>
                   </div>
                 </BodyCell>
                 <BodyCell className="text-right" dense>

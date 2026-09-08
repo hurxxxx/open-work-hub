@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
-import { Bot, Check, Copy, Pencil, RotateCcw, User, X } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 import { Tooltip } from '@open-work-hub/ui';
+import { Bot, Check, Copy, Pencil, RotateCcw, User, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { MarkdownContent } from '@/src/components/artifacts/MarkdownContent';
-import type { ChatbotArtifactRenderer } from '../chatbot-experience';
 import type { ArtifactBuffer } from '../../api/agent-events';
+import type { ChatbotArtifactRenderer } from '../chatbot-experience';
 
 import { ArtifactCard } from './ArtifactCard';
 import { ThinkingPanel } from './ThinkingPanel';

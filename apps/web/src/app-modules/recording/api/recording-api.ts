@@ -3,7 +3,6 @@ import {
   jsonHeaders,
 } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
-import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
 export type Recording = ApiSchema<'RecordingListItem'>;
 export type RecordingDetail = ApiSchema<'RecordingDetailOut'>;
@@ -38,11 +37,10 @@ export class RecordingApiError extends Error {
 async function request<T>(
   path: string,
   token: string,
-  workspaceSlug: string,
   init: RequestInit = {},
 ): Promise<T> {
   return apiFetchJsonWithMappedError<T>(
-    rewriteWorkspaceApiPath(path, workspaceSlug),
+    path,
     token,
     init,
     (error) => new RecordingApiError(error.status, error.message),
@@ -51,7 +49,6 @@ async function request<T>(
 
 export function listRecordings(
   token: string,
-  workspaceSlug: string,
   options: {
     view?: RecordingViewFilter;
     from?: string;
@@ -74,45 +71,36 @@ export function listRecordings(
   return request<RecordingListResponse>(
     `/api/v1/recording/recordings${query ? `?${query}` : ''}`,
     token,
-    workspaceSlug,
   );
 }
 
 export function deleteRecording(
   token: string,
-  workspaceSlug: string,
   recordingId: string,
 ): Promise<void> {
-  return request<void>(
-    `/api/v1/recording/recordings/${recordingId}`,
-    token,
-    workspaceSlug,
-    { method: 'DELETE' },
-  );
+  return request<void>(`/api/v1/recording/recordings/${recordingId}`, token, {
+    method: 'DELETE',
+  });
 }
 
 export function getRecording(
   token: string,
-  workspaceSlug: string,
   recordingId: string,
 ): Promise<RecordingDetail> {
   return request<RecordingDetail>(
     `/api/v1/recording/recordings/${recordingId}`,
     token,
-    workspaceSlug,
   );
 }
 
 export function updateRecording(
   token: string,
-  workspaceSlug: string,
   recordingId: string,
   payload: { title?: string | null },
 ): Promise<RecordingDetail> {
   return request<RecordingDetail>(
     `/api/v1/recording/recordings/${recordingId}`,
     token,
-    workspaceSlug,
     {
       method: 'PATCH',
       body: JSON.stringify(payload),
@@ -122,20 +110,17 @@ export function updateRecording(
 
 export function retryRecording(
   token: string,
-  workspaceSlug: string,
   recordingId: string,
 ): Promise<RecordingDetail> {
   return request<RecordingDetail>(
     `/api/v1/recording/recordings/${recordingId}/retry`,
     token,
-    workspaceSlug,
     { method: 'POST' },
   );
 }
 
 export function attachRecordingTarget(
   token: string,
-  workspaceSlug: string,
   recordingId: string,
   payload: {
     target_app: string;
@@ -148,7 +133,6 @@ export function attachRecordingTarget(
   return request<RecordingDetail>(
     `/api/v1/recording/recordings/${recordingId}/targets`,
     token,
-    workspaceSlug,
     {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -158,34 +142,29 @@ export function attachRecordingTarget(
 
 export function detachRecordingTarget(
   token: string,
-  workspaceSlug: string,
   recordingId: string,
   targetId: string,
 ): Promise<RecordingDetail> {
   return request<RecordingDetail>(
     `/api/v1/recording/recordings/${recordingId}/targets/${targetId}`,
     token,
-    workspaceSlug,
     { method: 'DELETE' },
   );
 }
 
 export function publishRecordingToDocs(
   token: string,
-  workspaceSlug: string,
   recordingId: string,
 ): Promise<RecordingPublication> {
   return request<RecordingPublication>(
     `/api/v1/recording/recordings/${recordingId}/publications/docs`,
     token,
-    workspaceSlug,
     { method: 'POST' },
   );
 }
 
 export function initRecordingUpload(
   token: string,
-  workspaceSlug: string,
   payload: {
     idempotency_key: string;
     mime_type: string;
@@ -199,7 +178,6 @@ export function initRecordingUpload(
   return request<RecordingUpload>(
     '/api/v1/recording/recordings/staging',
     token,
-    workspaceSlug,
     {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -231,15 +209,11 @@ function readTusOffset(response: Response): number {
 
 async function tusFetch(
   token: string,
-  workspaceSlug: string,
   stagingId: string,
   init: RequestInit,
 ): Promise<Response> {
   const response = await fetch(
-    rewriteWorkspaceApiPath(
-      `/api/v1/recording/recordings/staging/${stagingId}/tus`,
-      workspaceSlug,
-    ),
+    `/api/v1/recording/recordings/staging/${stagingId}/tus`,
     {
       ...init,
       headers: {
@@ -263,10 +237,9 @@ async function tusFetch(
 
 export async function headRecordingTusUpload(
   token: string,
-  workspaceSlug: string,
   stagingId: string,
 ): Promise<number> {
-  const response = await tusFetch(token, workspaceSlug, stagingId, {
+  const response = await tusFetch(token, stagingId, {
     method: 'HEAD',
   });
   return readTusOffset(response);
@@ -274,7 +247,6 @@ export async function headRecordingTusUpload(
 
 export async function uploadRecordingTusChunk(
   token: string,
-  workspaceSlug: string,
   stagingId: string,
   offset: number,
   blob: Blob,
@@ -287,7 +259,7 @@ export async function uploadRecordingTusChunk(
   if (chunkSha256) {
     headers['Upload-Checksum'] = `sha256 ${hexToBase64(chunkSha256)}`;
   }
-  const response = await tusFetch(token, workspaceSlug, stagingId, {
+  const response = await tusFetch(token, stagingId, {
     method: 'PATCH',
     headers,
     body: blob,
@@ -297,7 +269,6 @@ export async function uploadRecordingTusChunk(
 
 export function completeRecordingUpload(
   token: string,
-  workspaceSlug: string,
   stagingId: string,
   payload: {
     title?: string | null;
@@ -308,7 +279,6 @@ export function completeRecordingUpload(
   return request<RecordingDetail>(
     `/api/v1/recording/recordings/staging/${stagingId}/complete`,
     token,
-    workspaceSlug,
     {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -318,7 +288,6 @@ export function completeRecordingUpload(
 
 export function listRecordingUploads(
   token: string,
-  workspaceSlug: string,
   options: {
     initial_target_app?: string;
     initial_target_type?: string;
@@ -336,26 +305,22 @@ export function listRecordingUploads(
   return request<RecordingUpload[]>(
     `/api/v1/recording/recordings/staging${query ? `?${query}` : ''}`,
     token,
-    workspaceSlug,
   );
 }
 
 export function discardRecordingUpload(
   token: string,
-  workspaceSlug: string,
   stagingId: string,
 ): Promise<void> {
   return request<void>(
     `/api/v1/recording/recordings/staging/${stagingId}`,
     token,
-    workspaceSlug,
     { method: 'DELETE' },
   );
 }
 
 export async function importRecording(
   token: string,
-  workspaceSlug: string,
   file: Blob | File,
   options: {
     title?: string | null;
@@ -401,7 +366,6 @@ export async function importRecording(
   return request<RecordingDetail>(
     '/api/v1/recording/recordings/import',
     token,
-    workspaceSlug,
     {
       method: 'POST',
       body: formData,
@@ -411,13 +375,11 @@ export async function importRecording(
 
 export function getRecordingPlaybackUrl(
   token: string,
-  workspaceSlug: string,
   recordingId: string,
 ): Promise<RecordingPlaybackResponse> {
   return request<RecordingPlaybackResponse>(
     `/api/v1/recording/recordings/${recordingId}/playback`,
     token,
-    workspaceSlug,
   );
 }
 

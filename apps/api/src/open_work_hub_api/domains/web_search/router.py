@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import replace
 import json
 import logging
+from dataclasses import replace
 
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
@@ -10,19 +10,18 @@ from sse_starlette.sse import EventSourceResponse
 
 from open_work_hub_api.core.db import get_db_session
 from open_work_hub_api.core.i18n import localized_http_exception
-from open_work_hub_api.domains.auth.dependencies import require_current_user, require_current_workspace
-from open_work_hub_api.domains.auth.models import User, Workspace
-from open_work_hub_api.domains.auth.workspace_app_gate import require_workspace_app_enabled
+from open_work_hub_api.domains.auth.app_gate import require_app_access
+from open_work_hub_api.domains.auth.dependencies import require_current_user
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.conversations import app_persistence
 from open_work_hub_api.domains.conversations.app_scope_adapters import (
     WEB_SEARCH_SCOPE_REF,
 )
 from open_work_hub_api.domains.web_search import service
 from open_work_hub_api.domains.web_search.app_catalog import (
-    WEB_SEARCH_WORKSPACE_APP,
+    WEB_SEARCH_APP,
 )
 from open_work_hub_api.domains.web_search.schemas import WebSearchAskRequest
-
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +34,7 @@ def build_web_search_router(
     conversation_scope_ref: str,
     tag: str,
 ) -> APIRouter:
-    app_enabled = require_workspace_app_enabled(
+    app_enabled = require_app_access(
         app_id,
         error_code="web_search.app_disabled",
     )
@@ -50,7 +49,6 @@ def build_web_search_router(
         payload: WebSearchAskRequest,
         db: Session = Depends(get_db_session),
         current_user: User = Depends(require_current_user),
-        current_workspace: Workspace = Depends(require_current_workspace),
     ) -> EventSourceResponse:
         if not payload.question.strip():
             raise localized_http_exception(
@@ -65,7 +63,6 @@ def build_web_search_router(
                 conversation_scope_ref=conversation_scope_ref,
                 db=db,
                 current_user=current_user,
-                current_workspace=current_workspace,
             ),
             ping=25,
         )
@@ -81,7 +78,6 @@ async def _ask_stream_publisher(
     conversation_scope_ref: str,
     db: Session,
     current_user: User,
-    current_workspace: Workspace,
 ):
     conversation = None
     question = payload.question.strip()
@@ -91,7 +87,6 @@ async def _ask_stream_publisher(
             question=question,
             max_uses=payload.max_uses,
             profile_id=profile_id,
-            workspace_id=current_workspace.id,
             app_id=app_id,
             actor_user_id=current_user.id,
             principal_id=current_user.id,
@@ -106,7 +101,6 @@ async def _ask_stream_publisher(
         )
         conversation = app_persistence.append_user_and_attach(
             db,
-            workspace=current_workspace,
             user=current_user,
             conversation_id=payload.conversation_id,
             scope_ref=conversation_scope_ref,
@@ -289,7 +283,7 @@ def _append_web_search_error_turn(
 
 router = build_web_search_router(
     prefix="/web-search",
-    app_id=WEB_SEARCH_WORKSPACE_APP.app_id,
+    app_id=WEB_SEARCH_APP.app_id,
     profile_id="general",
     conversation_scope_ref=WEB_SEARCH_SCOPE_REF,
     tag="web-search",

@@ -43,7 +43,7 @@ function createClient(): FileSearchControllerClient {
     download: vi.fn().mockResolvedValue({ url: '/download/file-1' }),
     search: vi
       .fn<FileSearchControllerClient['search']>()
-      .mockImplementation((_token, _workspace, payload) =>
+      .mockImplementation((_token, payload) =>
         Promise.resolve(response(payload.page, payload.page === 1)),
       ),
   };
@@ -65,7 +65,6 @@ function renderController(
       searchParams: new URLSearchParams(searchParams),
       setSearchParams,
       token: 'token-1',
-      workspaceSlug: 'hq',
     }),
   );
   return { ...rendered, client, logout, openDownload, setSearchParams };
@@ -84,7 +83,6 @@ describe('useFileSearchController', () => {
     await waitFor(() => expect(client.search).toHaveBeenCalledTimes(1));
     expect(client.search).toHaveBeenLastCalledWith(
       'token-1',
-      'hq',
       {
         page: 1,
         page_size: 20,
@@ -103,7 +101,6 @@ describe('useFileSearchController', () => {
     await waitFor(() => expect(client.search).toHaveBeenCalledTimes(2));
     expect(client.search).toHaveBeenLastCalledWith(
       'token-1',
-      'hq',
       expect.objectContaining({ page: 2 }),
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
@@ -120,7 +117,7 @@ describe('useFileSearchController', () => {
     >();
     const client = createClient();
     vi.mocked(client.search).mockImplementation(
-      (_token, _workspace, payload, options) =>
+      (_token, payload, options) =>
         new Promise((resolve) => {
           pending.set(payload.query, { resolve, signal: options?.signal });
         }),
@@ -162,7 +159,7 @@ describe('useFileSearchController', () => {
     act(() => result.current.actions.download('file-1'));
 
     await waitFor(() =>
-      expect(client.download).toHaveBeenCalledWith('token-1', 'hq', 'file-1'),
+      expect(client.download).toHaveBeenCalledWith('token-1', 'file-1'),
     );
     await waitFor(() =>
       expect(openDownload).toHaveBeenCalledWith('/download/file-1', 'token-1'),
@@ -180,7 +177,6 @@ describe('useFileSearchController', () => {
     await waitFor(() => expect(client.search).toHaveBeenCalledTimes(1));
     expect(client.search).toHaveBeenCalledWith(
       'token-1',
-      'hq',
       {
         page: 3,
         page_size: 20,
@@ -192,17 +188,14 @@ describe('useFileSearchController', () => {
     expect(setSearchParams).not.toHaveBeenCalled();
   });
 
-  it('does not expose results from the previous workspace during navigation', async () => {
+  it('does not expose results from the previous account during navigation', async () => {
     const client = createClient();
-    vi.mocked(client.search).mockImplementation(
-      (_token, workspaceSlug, payload) =>
-        Promise.resolve(
-          response(payload.page, false, `${workspaceSlug}:result`),
-        ),
+    vi.mocked(client.search).mockImplementation((token, payload) =>
+      Promise.resolve(response(payload.page, false, `${token}:result`)),
     );
     const setSearchParams = vi.fn<FileSearchParamsSetter>();
     const rendered = renderHook(
-      ({ searchParams, workspaceSlug }) =>
+      ({ searchParams, token }) =>
         useFileSearchController({
           client,
           logout: vi.fn(),
@@ -210,26 +203,25 @@ describe('useFileSearchController', () => {
           openDownload: vi.fn(),
           searchParams: new URLSearchParams(searchParams),
           setSearchParams,
-          token: 'token-1',
-          workspaceSlug,
+          token,
         }),
       {
         initialProps: {
           searchParams: 'view=search&q=roadmap',
-          workspaceSlug: 'workspace-a',
+          token: 'account-a',
         },
       },
     );
 
     await waitFor(() =>
       expect(rendered.result.current.state.response?.query).toBe(
-        'workspace-a:result',
+        'account-a:result',
       ),
     );
 
     rendered.rerender({
       searchParams: 'view=search',
-      workspaceSlug: 'workspace-b',
+      token: 'account-b',
     });
 
     expect(rendered.result.current.state.response).toBeNull();

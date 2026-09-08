@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 interface NoAccessNoticeProps {
   /** User-facing workspace label, usually already localized by the caller. */
-  workspaceLabel: string;
+  appLabel: string;
   /** User-facing action phrase, usually already localized by the caller. */
   action: string;
   /** Optional override for the second-line help text. */
@@ -20,7 +20,7 @@ interface NoAccessNoticeProps {
  * upstream so the API call that would 403 is never even fired.
  */
 export function NoAccessNotice({
-  workspaceLabel,
+  appLabel,
   action,
   helpText,
 }: NoAccessNoticeProps) {
@@ -32,10 +32,10 @@ export function NoAccessNotice({
     >
       <Lock size={22} className="text-app-ink/40" />
       <p className="app-text-body text-app-ink">
-        {t('accessNotice.blockedAction', { workspace: workspaceLabel, action })}
+        {t('accessNotice.blockedAction', { app: appLabel, action })}
       </p>
       <p className="app-text-caption text-app-ink/60 dark:text-app-ink/70">
-        {helpText ?? t('accessNotice.requestHelp', { workspace: workspaceLabel })}
+        {helpText ?? t('accessNotice.requestHelp', { app: appLabel })}
       </p>
     </div>
   );

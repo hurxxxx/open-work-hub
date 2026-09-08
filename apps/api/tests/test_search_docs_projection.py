@@ -6,7 +6,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.db import Base
-from open_work_hub_api.domains.auth.models import Team, User, Workspace
+from open_work_hub_api.domains.auth.models import User
+from open_work_hub_api.domains.pms.space_models import Team
 from open_work_hub_api.domains.docs.models import (
     DocMeetingAccess,
     DocsCollection,
@@ -15,6 +16,7 @@ from open_work_hub_api.domains.docs.models import (
     NativeDocLinkShare,
     NativeDocPage,
     NativeDocUserShare,
+    NativeDocGroupShare,
 )
 from open_work_hub_api.domains.meeting.models import Meeting
 from open_work_hub_api.domains.pms.models import Folder, TaskList
@@ -29,7 +31,6 @@ def _session() -> Session:
     Base.metadata.create_all(
         engine,
         tables=[
-            Workspace.__table__,
             User.__table__,
             Team.__table__,
             Folder.__table__,
@@ -40,6 +41,7 @@ def _session() -> Session:
             NativeDocPage.__table__,
             NativeDocTarget.__table__,
             NativeDocUserShare.__table__,
+            NativeDocGroupShare.__table__,
             NativeDocLinkShare.__table__,
             Meeting.__table__,
             DocMeetingAccess.__table__,
@@ -48,16 +50,7 @@ def _session() -> Session:
     return Session(engine)
 
 
-def _add_workspace_user(session: Session, *, workspace_active: bool = True) -> None:
-    session.add(
-        Workspace(
-            id="ws-1",
-            key="delivery-hub",
-            name="Delivery Hub",
-            description="",
-            active=workspace_active,
-        )
-    )
+def _add_user(session: Session) -> None:
     session.add(
         User(
             id="user-1",
@@ -75,7 +68,6 @@ def _add_native_doc(session: Session, *, trashed_at: datetime | None = None) -> 
     session.add(
         NativeDoc(
             id="doc-1",
-            workspace_id="ws-1",
             owner_id="user-1",
             title="Budget Review",
             source_app="docs",
@@ -142,7 +134,7 @@ def _add_native_doc(session: Session, *, trashed_at: datetime | None = None) -> 
 def test_docs_search_projection_preserves_document_shape_through_dispatcher() -> None:
     session = _session()
     try:
-        _add_workspace_user(session)
+        _add_user(session)
         _add_native_doc(session)
         session.commit()
 
@@ -153,7 +145,7 @@ def test_docs_search_projection_preserves_document_shape_through_dispatcher() ->
 
         assert direct is not None
         assert dispatched is not None
-        assert dispatched["workspace_id"] == "ws-1"
+        assert "workspace_id" not in dispatched
         assert dispatched["entity_type"] == "doc"
         assert dispatched["entity_id"] == "doc-1"
         assert dispatched["title"] == "Budget Review"
@@ -173,9 +165,7 @@ def test_docs_search_projection_preserves_document_shape_through_dispatcher() ->
         ]
         assert dispatched["target_keys"] == ["pms:space:team-1", "space:team-1"]
         assert dispatched["shared_user_ids"] == ["user-1"]
-        assert dispatched["deep_link"] == (
-            "/apps/docs/workspaces/delivery-hub/documents/doc-1?page=page-1"
-        )
+        assert dispatched["deep_link"] == ("/apps/docs/documents/doc-1?page=page-1")
         assert dispatched["metadata"] == {"source_kind": "manual", "source_ref": "source-1"}
         assert dispatched["doc_pages"] == [
             {"id": "page-1", "title": "First Page", "text": "budget risk"},
@@ -186,12 +176,10 @@ def test_docs_search_projection_preserves_document_shape_through_dispatcher() ->
         session.close()
 
 
-def test_docs_search_projection_returns_none_for_missing_trashed_or_inactive_workspace_doc() -> (
-    None
-):
+def test_docs_search_projection_returns_none_for_missing_or_trashed_doc() -> None:
     session = _session()
     try:
-        _add_workspace_user(session)
+        _add_user(session)
         session.commit()
         assert load_docs_search_document(session, "missing-doc") is None
 
@@ -200,12 +188,3 @@ def test_docs_search_projection_returns_none_for_missing_trashed_or_inactive_wor
         assert load_docs_search_document(session, "doc-1") is None
     finally:
         session.close()
-
-    inactive_session = _session()
-    try:
-        _add_workspace_user(inactive_session, workspace_active=False)
-        _add_native_doc(inactive_session)
-        inactive_session.commit()
-        assert load_docs_search_document(inactive_session, "doc-1") is None
-    finally:
-        inactive_session.close()

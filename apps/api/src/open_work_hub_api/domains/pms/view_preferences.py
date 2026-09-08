@@ -2,47 +2,36 @@ from __future__ import annotations
 
 from typing import Literal, cast
 
-from fastapi import status
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.i18n import localized_http_exception
-from open_work_hub_api.domains.auth.access import resolve_workspace_role
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.app_access import can_use_app
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.pms.models import PmsViewPreference, utcnow_naive
-
 
 TaskListGroupBy = Literal["none", "status", "assignee"]
 DEFAULT_TASK_LIST_GROUP_BY: TaskListGroupBy = "status"
 
 
-def _ensure_workspace_member(
-    db: Session,
-    *,
-    user: User,
-    workspace: Workspace,
-) -> None:
-    if resolve_workspace_role(db, user, workspace.id) is not None:
-        return
-    raise localized_http_exception(
-        status_code=status.HTTP_403_FORBIDDEN,
-        code="workspace.membership_required",
-        workspace=workspace.key,
-    )
+def _ensure_app_access(db: Session, *, user: User) -> None:
+    if not can_use_app(db, user_id=user.id, app_id="pms"):
+        raise localized_http_exception(status_code=403, code="platform.app_disabled")
 
 
 def get_task_list_group_by(
     db: Session,
     *,
     user: User,
-    workspace: Workspace,
 ) -> TaskListGroupBy:
-    _ensure_workspace_member(db, user=user, workspace=workspace)
+    _ensure_app_access(
+        db,
+        user=user,
+    )
     preference = db.scalar(
         select(PmsViewPreference).where(
-            PmsViewPreference.workspace_id == workspace.id,
             PmsViewPreference.user_id == user.id,
         )
     )
@@ -55,13 +44,14 @@ def update_task_list_group_by(
     db: Session,
     *,
     user: User,
-    workspace: Workspace,
     group_by: TaskListGroupBy,
 ) -> TaskListGroupBy:
-    _ensure_workspace_member(db, user=user, workspace=workspace)
+    _ensure_app_access(
+        db,
+        user=user,
+    )
     timestamp = utcnow_naive()
     values = {
-        "workspace_id": workspace.id,
         "user_id": user.id,
         "task_list_group_by": group_by,
         "created_at": timestamp,
@@ -72,7 +62,7 @@ def update_task_list_group_by(
         statement = postgresql_insert(PmsViewPreference).values(**values)
         db.execute(
             statement.on_conflict_do_update(
-                index_elements=["workspace_id", "user_id"],
+                index_elements=["user_id"],
                 set_={
                     "task_list_group_by": group_by,
                     "updated_at": timestamp,
@@ -83,7 +73,7 @@ def update_task_list_group_by(
         statement = sqlite_insert(PmsViewPreference).values(**values)
         db.execute(
             statement.on_conflict_do_update(
-                index_elements=["workspace_id", "user_id"],
+                index_elements=["user_id"],
                 set_={
                     "task_list_group_by": group_by,
                     "updated_at": timestamp,
@@ -91,7 +81,7 @@ def update_task_list_group_by(
             )
         )
     else:
-        preference = db.get(PmsViewPreference, (workspace.id, user.id))
+        preference = db.get(PmsViewPreference, user.id)
         if preference is None:
             db.add(PmsViewPreference(**values))
         else:

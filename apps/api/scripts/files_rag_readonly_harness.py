@@ -6,7 +6,7 @@ aggregate statistics and SHA-256 identifiers; source names and bodies are
 never serialized.
 
 Dry-run inventory is the only connected mode today.  ``--execute-ingest`` is
-reserved behind explicit workspace/corpus arguments so a future Adapter cannot
+reserved behind an explicit corpus argument so a future adapter cannot
 accidentally turn an inventory command into an ingest.
 """
 
@@ -956,7 +956,6 @@ def _build_parser() -> argparse.ArgumentParser:
         help="inventory only (the default; accepted for explicit runbooks)",
     )
     mode.add_argument("--execute-ingest", action="store_true")
-    parser.add_argument("--workspace-slug")
     parser.add_argument("--corpus-id")
     return parser
 
@@ -965,10 +964,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     try:
         if args.execute_ingest:
-            if not args.workspace_slug or not args.corpus_id:
+            if not args.corpus_id:
                 raise HarnessContractError("ingest_scope_required")
             raise HarnessContractError("ingest_adapter_not_connected")
-        if args.workspace_slug or args.corpus_id:
+        if args.corpus_id:
             raise HarnessContractError("ingest_flag_required")
         if args.manifest_out is not None:
             _assert_output_outside_source(args.source, args.manifest_out)

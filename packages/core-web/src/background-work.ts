@@ -34,12 +34,12 @@ export interface CoreBackgroundWorkRuntimeSource {
   requiredNavItemId?: string;
   list: (context: {
     token: string;
-    workspaceSlug: string;
+
     t: CoreBackgroundWorkTranslator;
   }) => Promise<CoreBackgroundWorkItem[]>;
   cancel?: (context: {
     token: string;
-    workspaceSlug: string;
+
     item: CoreBackgroundWorkItem;
   }) => Promise<void>;
 }
@@ -120,7 +120,7 @@ export function selectActiveCoreBackgroundWorkItems(
     );
 }
 
-export function filterCoreBackgroundWorkSourcesForWorkspace(
+export function filterCoreBackgroundWorkSourcesForApps(
   sources: readonly CoreBackgroundWorkRuntimeSource[],
   {
     enabledAppIds,

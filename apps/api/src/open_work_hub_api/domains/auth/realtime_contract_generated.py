@@ -4,4 +4,4 @@ from typing import Final
 
 AUTH_ACCESS_CHANGED: Final = "auth.access.changed"
 AUTH_ACCESS_CHANGED_REASON_APP_AVAILABILITY: Final = "app_availability"
-AUTH_ACCESS_CHANGED_REASON_WORKSPACE_MEMBERSHIP: Final = "workspace_membership"
+AUTH_ACCESS_CHANGED_REASON_PRINCIPAL: Final = "principal"

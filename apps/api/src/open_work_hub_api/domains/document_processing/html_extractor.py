@@ -1,21 +1,20 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from html.parser import HTMLParser
-from io import BytesIO
 import codecs
 import re
 import time
+from dataclasses import dataclass, field
+from html.parser import HTMLParser
+from io import BytesIO
 from typing import BinaryIO
 
 from .contracts import (
+    _MAX_EXTRACT_SECONDS,
+    _MAX_EXTRACTED_CHARS,
     DocumentExtractBundle,
     EvidenceBlock,
     UnsupportedDocumentType,
-    _MAX_EXTRACT_SECONDS,
-    _MAX_EXTRACTED_CHARS,
 )
-
 
 _HTML_READ_CHUNK_BYTES = 64 * 1024
 _HTML_SIGNATURE_BYTES = 8192
@@ -23,17 +22,17 @@ _MAX_HTML_BLOCKS = 20_000
 _MAX_HTML_NESTING = 256
 _MAX_HTML_TABLE_CELLS = 100_000
 _HTML_SIGNATURE_RE = re.compile(
-    br"<(?:!doctype\s+html\b|html\b|head\b|body\b|title\b|meta\b|h[1-6]\b|"
-    br"table\b|article\b|section\b|main\b|div\b|p\b)",
+    rb"<(?:!doctype\s+html\b|html\b|head\b|body\b|title\b|meta\b|h[1-6]\b|"
+    rb"table\b|article\b|section\b|main\b|div\b|p\b)",
     re.IGNORECASE,
 )
 _HTML_META_CHARSET_RE = re.compile(
-    br"<meta\b[^>]{0,2048}?\bcharset\s*=\s*[\"']?\s*([a-zA-Z0-9._:+-]+)",
+    rb"<meta\b[^>]{0,2048}?\bcharset\s*=\s*[\"']?\s*([a-zA-Z0-9._:+-]+)",
     re.IGNORECASE,
 )
 _HTML_META_CONTENT_RE = re.compile(
-    br"<meta\b[^>]{0,2048}?\bcontent\s*=\s*[\"'][^\"']{0,2048}?"
-    br"charset\s*=\s*([a-zA-Z0-9._:+-]+)",
+    rb"<meta\b[^>]{0,2048}?\bcontent\s*=\s*[\"'][^\"']{0,2048}?"
+    rb"charset\s*=\s*([a-zA-Z0-9._:+-]+)",
     re.IGNORECASE,
 )
 _ACTIVE_OR_NONVISIBLE_TAGS = frozenset(

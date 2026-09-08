@@ -1,12 +1,4 @@
-import {
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from 'react';
+import { WhiteboardGroupSharing } from './WhiteboardGroupSharing';
 import {
   CaptureUpdateAction,
   Excalidraw,
@@ -18,14 +10,14 @@ import {
   serializeAsJSON,
   THEME,
 } from '@excalidraw/excalidraw';
+import '@excalidraw/excalidraw/index.css';
 import type {
   ExcalidrawImperativeAPI,
   ExcalidrawInitialDataState,
   ExcalidrawProps,
   LibraryItems,
 } from '@excalidraw/excalidraw/types';
-import '@excalidraw/excalidraw/index.css';
-import type * as Y from 'yjs';
+import { Button, Dialog, DropdownMenu } from '@open-work-hub/ui';
 import {
   ArchiveRestore,
   Download,
@@ -42,8 +34,18 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { Button, Dialog, DropdownMenu } from '@open-work-hub/ui';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
 import { useTranslation } from 'react-i18next';
+import type * as Y from 'yjs';
+import { updateWhiteboardCompanySharing } from '../api/whiteboard-api';
 
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/platform/auth/auth-provider';
@@ -51,12 +53,11 @@ import { downloadBlobAsFile } from '@/src/platform/browser/browser-download';
 import {
   deleteWhiteboard,
   deleteWhiteboardLinkShare,
-  deleteWhiteboardTarget,
   deleteWhiteboardUserShare,
-  getWhiteboardCollabSession,
-  getWhiteboard,
-  getWhiteboardSharing,
   getSharedWhiteboard,
+  getWhiteboard,
+  getWhiteboardCollabSession,
+  getWhiteboardSharing,
   listWhiteboardShareableUsers,
   normalizeWhiteboardScene,
   permanentlyDeleteWhiteboard,
@@ -64,7 +65,6 @@ import {
   recordWhiteboardView,
   restoreWhiteboard,
   toggleWhiteboardFavorite,
-  updateWhiteboardTarget,
   updateSharedWhiteboard,
   updateWhiteboard,
   upsertWhiteboardLinkShare,
@@ -80,6 +80,24 @@ import awesomeIconsLibrary from '../libraries/awesome-icons.excalidrawlib.json';
 import drwnioLibrary from '../libraries/drwnio.excalidrawlib.json';
 import softwareArchitectureLibrary from '../libraries/software-architecture.excalidrawlib.json';
 import systemDesignLibrary from '../libraries/system-design.excalidrawlib.json';
+import { useWhiteboardScenePersistence } from './useWhiteboardScenePersistence';
+import {
+  createWhiteboardCollabDocumentState,
+  createWhiteboardCollabProvider,
+  WHITEBOARD_LOCAL_COLLAB_ORIGIN,
+  WHITEBOARD_REMOTE_APPLY_GUARD_MS,
+  type WhiteboardCollabProvider,
+} from './whiteboard-collab-runtime';
+import {
+  buildWhiteboardCollaborators,
+  createWhiteboardAwarenessUser,
+  normalizeWhiteboardSelectedElementIds,
+  resolveWhiteboardCollabStatus,
+  resolveWhiteboardConnectionCloseStatus,
+  resolveWhiteboardProviderStatus,
+  type ActiveWhiteboardCollabStatus,
+  type WhiteboardCollabStatusSnapshot,
+} from './whiteboard-collab-runtime-model';
 import {
   buildCollabSceneFromMaps,
   elementId,
@@ -94,25 +112,8 @@ import {
   safeFilename,
   saveLabel,
 } from './whiteboard-editor-utils';
-import {
-  WHITEBOARD_LOCAL_COLLAB_ORIGIN,
-  WHITEBOARD_REMOTE_APPLY_GUARD_MS,
-  createWhiteboardCollabDocumentState,
-  createWhiteboardCollabProvider,
-  type WhiteboardCollabProvider,
-} from './whiteboard-collab-runtime';
-import {
-  buildWhiteboardCollaborators,
-  createWhiteboardAwarenessUser,
-  normalizeWhiteboardSelectedElementIds,
-  resolveWhiteboardCollabStatus,
-  resolveWhiteboardConnectionCloseStatus,
-  resolveWhiteboardProviderStatus,
-  type ActiveWhiteboardCollabStatus,
-  type WhiteboardCollabStatusSnapshot,
-} from './whiteboard-collab-runtime-model';
 import { buildWhiteboardSharePresenter } from './whiteboard-share-model';
-import { useWhiteboardScenePersistence } from './useWhiteboardScenePersistence';
+import { WhiteboardAccessBoundary } from './WhiteboardAccessBoundary';
 import { buildWhiteboardVisibilityMenuItems } from './WhiteboardViewParts';
 
 type ExcalidrawOnChange = NonNullable<ExcalidrawProps['onChange']>;
@@ -145,7 +146,7 @@ const WHITEBOARD_LIBRARY_ITEMS: LibraryItems = [
 
 export interface WhiteboardEditorSurfaceProps {
   boardId: string;
-  workspaceSlug?: string | null;
+
   className?: string;
   showArchive?: boolean;
   showDetach?: boolean;
@@ -187,7 +188,7 @@ function markElementDeleted(
 
 type WhiteboardShareDialogProps = {
   board: WhiteboardDetail;
-  workspaceSlug?: string | null;
+
   open: boolean;
   onClose: () => void;
 };
@@ -198,7 +199,6 @@ function WhiteboardShareDialog(props: WhiteboardShareDialogProps) {
 
 function useWhiteboardShareDialogElement({
   board,
-  workspaceSlug,
   open,
   onClose,
 }: WhiteboardShareDialogProps): ReactNode {
@@ -218,8 +218,8 @@ function useWhiteboardShareDialogElement({
     setError(null);
     try {
       const [sharingResponse, usersResponse] = await Promise.all([
-        getWhiteboardSharing(token, board.id, workspaceSlug),
-        listWhiteboardShareableUsers(token, query, workspaceSlug),
+        getWhiteboardSharing(token, board.id),
+        listWhiteboardShareableUsers(token, query),
       ]);
       setSharing(sharingResponse);
       setUsers(usersResponse);
@@ -230,7 +230,7 @@ function useWhiteboardShareDialogElement({
     } finally {
       setBusy(false);
     }
-  }, [board.id, open, query, token, workspaceSlug, t]);
+  }, [board.id, open, query, token, t]);
 
   useEffect(() => {
     void load();
@@ -277,6 +277,15 @@ function useWhiteboardShareDialogElement({
       }
     >
       <div className="space-y-5 text-app-ink">
+        {token ? (
+          <WhiteboardGroupSharing
+            key={board.id}
+            token={token}
+            resourceId={board.id}
+            canManage={board.can_share}
+            ownershipKind={board.ownership_kind}
+          />
+        ) : null}
         {error ? (
           <div className="rounded-md border border-rose-500/30 bg-app-danger/10 px-3 py-2 text-sm text-rose-500">
             {error}
@@ -295,9 +304,7 @@ function useWhiteboardShareDialogElement({
                 disabled={busy}
                 onClick={() => {
                   if (!token) return;
-                  void run(() =>
-                    deleteWhiteboardLinkShare(token, board.id, workspaceSlug),
-                  );
+                  void run(() => deleteWhiteboardLinkShare(token, board.id));
                 }}
               >
                 {t('docs.share.disable')}
@@ -310,12 +317,9 @@ function useWhiteboardShareDialogElement({
                 onClick={() => {
                   if (!token) return;
                   void run(() =>
-                    upsertWhiteboardLinkShare(
-                      token,
-                      board.id,
-                      { access_level: 'read' },
-                      workspaceSlug,
-                    ),
+                    upsertWhiteboardLinkShare(token, board.id, {
+                      access_level: 'read',
+                    }),
                   );
                 }}
               >
@@ -338,12 +342,9 @@ function useWhiteboardShareDialogElement({
                 onChange={(event) => {
                   if (!token) return;
                   void run(() =>
-                    upsertWhiteboardLinkShare(
-                      token,
-                      board.id,
-                      { access_level: event.target.value as 'read' | 'edit' },
-                      workspaceSlug,
-                    ),
+                    upsertWhiteboardLinkShare(token, board.id, {
+                      access_level: event.target.value as 'read' | 'edit',
+                    }),
                   );
                 }}
                 className="app-field-input-sm w-auto"
@@ -351,6 +352,23 @@ function useWhiteboardShareDialogElement({
                 <option value="read">{t('docs.share.access.read')}</option>
                 <option value="edit">{t('docs.share.access.edit')}</option>
               </select>
+              <Button
+                variant="secondary"
+                size="dense"
+                disabled={busy}
+                onClick={() => {
+                  const linkShare = sharing?.link_share;
+                  if (!token || !linkShare) return;
+                  void run(() =>
+                    upsertWhiteboardLinkShare(token, board.id, {
+                      access_level: linkShare.access_level,
+                      regenerate_token: true,
+                    }),
+                  );
+                }}
+              >
+                {t('docs.share.regenerate')}
+              </Button>
               <Button
                 variant="secondary"
                 size="dense"
@@ -417,7 +435,6 @@ function useWhiteboardShareDialogElement({
                                     board.id,
                                     user.id,
                                     event.target.value as 'read' | 'edit',
-                                    workspaceSlug,
                                   ),
                                 );
                               }}
@@ -441,7 +458,6 @@ function useWhiteboardShareDialogElement({
                                     token,
                                     board.id,
                                     user.id,
-                                    workspaceSlug,
                                   ),
                                 );
                               }}
@@ -462,7 +478,6 @@ function useWhiteboardShareDialogElement({
                                   board.id,
                                   user.id,
                                   'read',
-                                  workspaceSlug,
                                 ),
                               );
                             }}
@@ -484,12 +499,50 @@ function useWhiteboardShareDialogElement({
 }
 
 export function WhiteboardEditorSurface(props: WhiteboardEditorSurfaceProps) {
-  return <>{useWhiteboardEditorSurfaceElement(props)}</>;
+  return (
+    <WhiteboardAccessBoundary
+      key={`${props.boardId}:${props.shareToken ?? ''}`}
+      boardId={props.boardId}
+      shareToken={props.shareToken ?? null}
+    >
+      {(isCurrent) => (
+        <WhiteboardEditorSession {...props} isCurrent={isCurrent} />
+      )}
+    </WhiteboardAccessBoundary>
+  );
+}
+
+function WhiteboardEditorSession({
+  isCurrent,
+  onBoardLoaded,
+  onBoardUpdated,
+  ...props
+}: WhiteboardEditorSurfaceProps & { isCurrent: () => boolean }) {
+  const notifyLoaded = useCallback(
+    (board: WhiteboardDetail) => {
+      if (isCurrent()) onBoardLoaded?.(board);
+    },
+    [isCurrent, onBoardLoaded],
+  );
+  const notifyUpdated = useCallback(
+    (board: WhiteboardDetail) => {
+      if (isCurrent()) onBoardUpdated?.(board);
+    },
+    [isCurrent, onBoardUpdated],
+  );
+  return (
+    <>
+      {useWhiteboardEditorSurfaceElement({
+        ...props,
+        onBoardLoaded: notifyLoaded,
+        onBoardUpdated: notifyUpdated,
+      })}
+    </>
+  );
 }
 
 function useWhiteboardEditorSurfaceElement({
   boardId,
-  workspaceSlug,
   className,
   showArchive = true,
   showDetach = false,
@@ -502,7 +555,7 @@ function useWhiteboardEditorSurfaceElement({
   onClose,
   onDetach,
 }: WhiteboardEditorSurfaceProps): ReactNode {
-  const { token, user } = useAuth();
+  const { token } = useAuth();
   const { t } = useTranslation('apps');
   const [activeBoard, setActiveBoard] = useState<WhiteboardDetail | null>(null);
   const [titleDraft, setTitleDraft] = useState('');
@@ -514,9 +567,6 @@ function useWhiteboardEditorSurfaceElement({
     string | null
   >(null);
   const [shareOpen, setShareOpen] = useState(false);
-  const currentWorkspaceId =
-    user?.workspaces.find((workspace) => workspace.slug === workspaceSlug)
-      ?.id ?? null;
   const excalidrawTheme = useSyncExternalStore(
     subscribeExcalidrawTheme,
     readExcalidrawTheme,
@@ -528,6 +578,7 @@ function useWhiteboardEditorSurfaceElement({
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
   const activeBoardRef = useRef<WhiteboardDetail | null>(null);
   const activeBoardIdRef = useRef<string | null>(null);
+  const loadRequestRef = useRef(0);
   const collabDocRef = useRef<Y.Doc | null>(null);
   const collabProviderRef = useRef<WhiteboardCollabProvider | null>(null);
   const collabElementsMapRef = useRef<Y.Map<unknown> | null>(null);
@@ -547,7 +598,9 @@ function useWhiteboardEditorSurfaceElement({
     editableBoardId && collabRequestedBoardId === editableBoardId
       ? editableBoardId
       : null;
-  const canEditCanvas = Boolean(activeBoard?.can_edit && collabBoardId);
+  const canEditCanvas = Boolean(
+    activeBoard?.can_edit && (shareToken || collabBoardId),
+  );
   const collabStatus = resolveWhiteboardCollabStatus({
     boardId: collabBoardId,
     snapshot: collabStatusSnapshot,
@@ -611,7 +664,6 @@ function useWhiteboardEditorSurfaceElement({
     shareToken,
     token,
     translate: t,
-    workspaceSlug,
   });
 
   useEffect(
@@ -634,12 +686,14 @@ function useWhiteboardEditorSurfaceElement({
 
   const loadBoard = useCallback(async () => {
     if (!token) return;
+    const requestId = ++loadRequestRef.current;
     setLoading(true);
     setError(null);
     try {
       const board = shareToken
         ? await getSharedWhiteboard(token, shareToken)
-        : await getWhiteboard(token, boardId, workspaceSlug);
+        : await getWhiteboard(token, boardId);
+      if (loadRequestRef.current !== requestId) return;
       const normalized = {
         ...board,
         scene: normalizeWhiteboardScene(board.scene),
@@ -654,28 +708,24 @@ function useWhiteboardEditorSurfaceElement({
       if (shareToken) {
         void recordSharedWhiteboardView(token, shareToken);
       } else {
-        void recordWhiteboardView(token, boardId, workspaceSlug);
+        void recordWhiteboardView(token, boardId);
       }
     } catch (err) {
+      if (loadRequestRef.current !== requestId) return;
       setError(err instanceof Error ? err.message : t('whiteboard.loadFailed'));
       setActiveBoard(null);
       setGridModeEnabled(false);
       setSelectedElementsCount(0);
     } finally {
-      setLoading(false);
+      if (loadRequestRef.current === requestId) setLoading(false);
     }
-  }, [
-    boardId,
-    onBoardLoaded,
-    resetLoadedScene,
-    shareToken,
-    token,
-    workspaceSlug,
-    t,
-  ]);
+  }, [boardId, onBoardLoaded, resetLoadedScene, shareToken, token, t]);
 
   useEffect(() => {
     void loadBoard();
+    return () => {
+      loadRequestRef.current += 1;
+    };
   }, [loadBoard]);
 
   const applySceneToEditor = useCallback(
@@ -821,7 +871,7 @@ function useWhiteboardEditorSurfaceElement({
     const whiteboardId = collabBoardId;
     const seedScene = normalizeWhiteboardScene(activeBoardRef.current?.scene);
 
-    void getWhiteboardCollabSession(token, whiteboardId, workspaceSlug)
+    void getWhiteboardCollabSession(token, whiteboardId)
       .then((session) => {
         if (cancelled) return;
         if (!session.can_edit || session.realtime_status !== 'enabled') {
@@ -998,7 +1048,6 @@ function useWhiteboardEditorSurfaceElement({
     t,
     token,
     updateCollabStatus,
-    workspaceSlug,
   ]);
 
   const saveTitle = useCallback(async (): Promise<boolean> => {
@@ -1008,12 +1057,7 @@ function useWhiteboardEditorSurfaceElement({
     try {
       const updated = shareToken
         ? await updateSharedWhiteboard(token, shareToken, { title: nextTitle })
-        : await updateWhiteboard(
-            token,
-            activeBoard.id,
-            { title: nextTitle },
-            workspaceSlug,
-          );
+        : await updateWhiteboard(token, activeBoard.id, { title: nextTitle });
       setActiveBoard((current) =>
         current ? { ...current, ...updated } : updated,
       );
@@ -1026,27 +1070,19 @@ function useWhiteboardEditorSurfaceElement({
       setTitleDraft(activeBoard.title);
       return false;
     }
-  }, [
-    activeBoard,
-    onBoardUpdated,
-    shareToken,
-    titleDraft,
-    token,
-    workspaceSlug,
-    t,
-  ]);
+  }, [activeBoard, onBoardUpdated, shareToken, titleDraft, token, t]);
 
   const handleArchive = useCallback(async () => {
     if (!token || !activeBoard || !activeBoard.can_manage) return;
     try {
-      await deleteWhiteboard(token, activeBoard.id, workspaceSlug);
+      await deleteWhiteboard(token, activeBoard.id);
       onArchived?.(activeBoard.id);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : t('whiteboard.archiveFailed'),
       );
     }
-  }, [activeBoard, onArchived, token, workspaceSlug, t]);
+  }, [activeBoard, onArchived, token, t]);
 
   const handlePermanentDelete = useCallback(async () => {
     if (
@@ -1063,14 +1099,14 @@ function useWhiteboardEditorSurfaceElement({
     )
       return;
     try {
-      await permanentlyDeleteWhiteboard(token, activeBoard.id, workspaceSlug);
+      await permanentlyDeleteWhiteboard(token, activeBoard.id);
       onDeleted?.(activeBoard.id);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : t('whiteboard.deleteFailed'),
       );
     }
-  }, [activeBoard, onDeleted, token, workspaceSlug, t]);
+  }, [activeBoard, onDeleted, token, t]);
 
   const handleRestore = useCallback(async () => {
     if (
@@ -1081,11 +1117,7 @@ function useWhiteboardEditorSurfaceElement({
     )
       return;
     try {
-      const restored = await restoreWhiteboard(
-        token,
-        activeBoard.id,
-        workspaceSlug,
-      );
+      const restored = await restoreWhiteboard(token, activeBoard.id);
       const normalized = {
         ...restored,
         scene: normalizeWhiteboardScene(restored.scene),
@@ -1098,16 +1130,12 @@ function useWhiteboardEditorSurfaceElement({
         err instanceof Error ? err.message : t('whiteboard.restoreFailed'),
       );
     }
-  }, [activeBoard, onBoardUpdated, onRestored, token, workspaceSlug, t]);
+  }, [activeBoard, onBoardUpdated, onRestored, token, t]);
 
   const handleFavorite = useCallback(async () => {
     if (!token || !activeBoard || shareToken) return;
     try {
-      const response = await toggleWhiteboardFavorite(
-        token,
-        activeBoard.id,
-        workspaceSlug,
-      );
+      const response = await toggleWhiteboardFavorite(token, activeBoard.id);
       setActiveBoard((current) =>
         current ? { ...current, is_favorite: response.is_favorite } : current,
       );
@@ -1117,34 +1145,25 @@ function useWhiteboardEditorSurfaceElement({
         err instanceof Error ? err.message : t('whiteboard.favoriteFailed'),
       );
     }
-  }, [activeBoard, onBoardUpdated, shareToken, token, workspaceSlug, t]);
+  }, [activeBoard, onBoardUpdated, shareToken, token, t]);
 
   const handleVisibilityChange = useCallback(
     async (visibility: WhiteboardVisibility) => {
       if (!token || !activeBoard || shareToken || !activeBoard.can_manage)
         return;
-      if ((visibility === 'personal') === activeBoard.is_private) return;
+      if ((visibility === 'company') === activeBoard.company_visible) return;
+      if (
+        visibility === 'company' &&
+        !window.confirm(t('shell:contentPublication.confirm'))
+      )
+        return;
       try {
-        const updated =
-          visibility === 'personal'
-            ? await deleteWhiteboardTarget(token, activeBoard.id, workspaceSlug)
-            : currentWorkspaceId
-              ? await updateWhiteboardTarget(
-                  token,
-                  activeBoard.id,
-                  {
-                    app: 'whiteboard',
-                    type: 'workspace_sidebar',
-                    id: currentWorkspaceId,
-                    sort_order: 0,
-                  },
-                  workspaceSlug,
-                )
-              : null;
-        if (!updated) {
-          setError(t('whiteboard.workspaceMissing'));
-          return;
-        }
+        const updated = await updateWhiteboardCompanySharing(
+          token,
+          activeBoard.id,
+          visibility === 'company',
+          true,
+        );
         const normalized = {
           ...updated,
           scene: normalizeWhiteboardScene(updated.scene),
@@ -1159,15 +1178,7 @@ function useWhiteboardEditorSurfaceElement({
         );
       }
     },
-    [
-      activeBoard,
-      currentWorkspaceId,
-      onBoardUpdated,
-      shareToken,
-      t,
-      token,
-      workspaceSlug,
-    ],
+    [activeBoard, onBoardUpdated, shareToken, t, token],
   );
 
   const currentApi = () => {
@@ -1326,9 +1337,8 @@ function useWhiteboardEditorSurfaceElement({
 
   const label = saveLabel(saveStatus, t);
   const liveLabel = collabLabel(collabStatus, t);
-  const activeBoardVisibility: WhiteboardVisibility = activeBoard?.is_private
-    ? 'personal'
-    : 'workspace';
+  const activeBoardVisibility: WhiteboardVisibility =
+    activeBoard?.company_visible ? 'company' : 'personal';
 
   return (
     <div
@@ -1650,7 +1660,6 @@ function useWhiteboardEditorSurfaceElement({
           {shareOpen ? (
             <WhiteboardShareDialog
               board={activeBoard}
-              workspaceSlug={workspaceSlug}
               open={shareOpen}
               onClose={() => setShareOpen(false)}
             />

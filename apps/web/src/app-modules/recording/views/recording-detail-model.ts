@@ -99,28 +99,22 @@ export function groupRecordingTargets(
   return groups;
 }
 
-export function recordingTargetHref(
-  workspaceSlug: string,
-  target: RecordingTarget,
-): string | null {
+export function recordingTargetHref(target: RecordingTarget): string | null {
   if (target.target_app === 'meeting') {
     return buildAppHref({
       routeId: 'meeting.detail',
-      workspaceSlug,
       pathParams: { meetingId: target.target_id },
     });
   }
   if (target.target_app === 'pms') {
     return buildAppHref({
       routeId: 'pms.root',
-      workspaceSlug,
       queryParams: { task: target.target_id },
     });
   }
   if (target.target_app === 'docs') {
     return buildAppHref({
       routeId: 'docs.document',
-      workspaceSlug,
       pathParams: { docId: target.target_id },
     });
   }

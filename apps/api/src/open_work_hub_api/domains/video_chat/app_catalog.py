@@ -1,13 +1,12 @@
-from open_work_hub_api.core.workspace_app_registry import (
-    WorkspaceNavRegistration,
-    workspace_app_registration,
+from open_work_hub_api.core.app_registry import (
+    AppNavRegistration,
+    app_registration,
 )
 
-
-VIDEO_CHAT_WORKSPACE_APP = workspace_app_registration(
+VIDEO_CHAT_APP = app_registration(
     "video-chat",
     nav_items=(
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="video-chat-room",
             title="화상채팅",
             category="Meetings",

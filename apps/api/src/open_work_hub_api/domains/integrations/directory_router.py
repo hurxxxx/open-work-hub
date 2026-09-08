@@ -17,7 +17,6 @@ from open_work_hub_api.domains.integrations.platform_api_keys import (
 )
 from open_work_hub_api.domains.organization.models import OrganizationUnit
 
-
 router = APIRouter(prefix="/integrations/directory", tags=["directory-integrations"])
 require_organization_read = require_platform_api_scope("organization:read")
 require_people_read = require_platform_api_scope("people:read")

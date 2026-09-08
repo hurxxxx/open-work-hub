@@ -1,2 +1,3 @@
-"""Workspace announcements domain."""
+"""Company announcements domain."""
+
 from __future__ import annotations

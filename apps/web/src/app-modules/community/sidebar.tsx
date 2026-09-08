@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
 import { Hash, Settings } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link, useLocation } from 'react-router-dom';
 
 import type { AppSidebarConfig } from '@/src/app/shell/sidebar-types';
 import { cn } from '@/src/lib/utils';
@@ -12,8 +12,8 @@ import {
   listCommunityChannels,
   type CommunityChannel,
 } from './api/community-api';
-import { buildCommunityListUrl } from './community-url';
 import { DEFAULT_COMMUNITY_CHANNEL_KEY } from './community-constants';
+import { buildCommunityListUrl } from './community-url';
 
 function CommunitySidebarChannels({ onNavigate }: { onNavigate?: () => void }) {
   const { t } = useTranslation('apps');

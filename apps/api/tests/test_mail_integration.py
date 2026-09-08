@@ -611,13 +611,16 @@ def test_mail_account_sync_and_message_access(
         assert message is not None
         assert message.is_read is True
 
-    duplicate_response = client.post(
+    duplicate_response = client.post("/api/v1/mail/accounts", headers=headers, json=_payload())
+    assert duplicate_response.status_code == 409, duplicate_response.text
+    assert duplicate_response.json()["code"] == "mail.account_duplicate"
+    second_response = client.post(
         "/api/v1/mail/accounts",
         headers=headers,
-        json=_payload(),
+        json={**_payload(), "email_address": "archive@example.test"},
     )
-    assert duplicate_response.status_code == 201, duplicate_response.text
-    duplicate_account_id = duplicate_response.json()["id"]
+    assert second_response.status_code == 201, second_response.text
+    duplicate_account_id = second_response.json()["id"]
     assert duplicate_account_id != account_payload["id"]
 
     delete_response = client.delete(
@@ -866,3 +869,103 @@ def test_mail_ai_reply_draft_and_manual_send(
         row = db.get(MailDraft, draft["id"])
         assert row is not None
         assert row.sent_message_id == "<sent-message@example.test>"
+
+
+def test_mail_account_uniqueness_is_per_owner_and_reconnect_is_allowed(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = FakeMailClient()
+    monkeypatch.setattr(mail_service, "_mail_client", lambda: fake)
+    owner = dev_login(client, "administrator")
+    other = dev_login(client, "delivery-hub-member")
+    owner_headers = auth_headers(owner["token"])
+    first = client.post("/api/v1/mail/accounts", headers=owner_headers, json=_payload())
+    assert first.status_code == 201, first.text
+    foreign = client.post(
+        "/api/v1/mail/accounts", headers=auth_headers(other["token"]), json=_payload()
+    )
+    assert foreign.status_code == 201, foreign.text
+    assert first.json()["id"] != foreign.json()["id"]
+    assert (
+        client.delete(
+            f"/api/v1/mail/accounts/{foreign.json()['id']}", headers=owner_headers
+        ).status_code
+        == 404
+    )
+    deleted = client.delete(f"/api/v1/mail/accounts/{first.json()['id']}", headers=owner_headers)
+    assert deleted.status_code == 204
+    reconnected = client.post("/api/v1/mail/accounts", headers=owner_headers, json=_payload())
+    assert reconnected.status_code == 201, reconnected.text
+    assert reconnected.json()["id"] != first.json()["id"]
+
+
+def test_duplicate_mail_create_and_email_update_fail_before_provider_io(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(mail_service, "_mail_client", lambda: FakeMailClient())
+    headers = auth_headers(dev_login(client)["token"])
+    first = client.post("/api/v1/mail/accounts", headers=headers, json=_payload())
+    second = client.post(
+        "/api/v1/mail/accounts",
+        headers=headers,
+        json={**_payload(), "email_address": "archive@example.test"},
+    )
+    assert first.status_code == second.status_code == 201
+    monkeypatch.setattr(
+        mail_service,
+        "_mail_client",
+        lambda: pytest.fail("Duplicate account must be rejected before provider I/O"),
+    )
+    duplicate = client.post(
+        "/api/v1/mail/accounts",
+        headers=headers,
+        json={**_payload(), "email_address": "ADMIN@example.test"},
+    )
+    changed = client.patch(
+        f"/api/v1/mail/accounts/{second.json()['id']}", headers=headers, json=_payload()
+    )
+    for response in (duplicate, changed):
+        assert response.status_code == 409, response.text
+        assert response.json()["code"] == "mail.account_duplicate"
+    listing = client.get("/api/v1/mail/accounts", headers=headers)
+    assert listing.status_code == 200
+    assert {row["email_address"] for row in listing.json()} == {
+        "admin@example.test",
+        "archive@example.test",
+    }
+
+
+def test_mail_account_unique_constraint_race_returns_conflict_without_partial_audit(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from sqlalchemy import func, select
+    from open_work_hub_api.domains.auth.models import AuditLog
+
+    monkeypatch.setattr(mail_service, "_mail_client", lambda: FakeMailClient())
+    headers = auth_headers(dev_login(client)["token"])
+    first = client.post("/api/v1/mail/accounts", headers=headers, json=_payload())
+    assert first.status_code == 201, first.text
+    with get_session_factory()() as db:
+        before = db.scalar(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(AuditLog.action == "mail.account.create")
+        )
+    # A concurrent writer can commit after preflight; the real database constraint remains authoritative.
+    monkeypatch.setattr(mail_service, "_ensure_email_available", lambda *_args, **_kwargs: None)
+    raced = client.post("/api/v1/mail/accounts", headers=headers, json=_payload())
+    assert raced.status_code == 409, raced.text
+    assert raced.json()["code"] == "mail.account_duplicate"
+    with get_session_factory()() as db:
+        assert db.scalar(select(func.count()).select_from(MailAccount)) == 1
+        assert (
+            db.scalar(
+                select(func.count())
+                .select_from(AuditLog)
+                .where(AuditLog.action == "mail.account.create")
+            )
+            == before
+        )

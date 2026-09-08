@@ -11,7 +11,6 @@ from typing import Literal, Protocol
 
 from open_work_hub_api.core.settings import WORKSPACE_ROOT
 
-
 logger = logging.getLogger(__name__)
 
 CODEC_SCRIPT = WORKSPACE_ROOT / "scripts" / "blocknote-collab-codec.mjs"
@@ -21,21 +20,17 @@ CodecPayload = dict[str, object]
 
 
 class CodecRunner(Protocol):
-    def run(self, mode: CodecMode, payload: CodecPayload) -> CodecPayload:
-        ...
+    def run(self, mode: CodecMode, payload: CodecPayload) -> CodecPayload: ...
 
 
 class CodecCommand(Protocol):
-    def run(self, mode: CodecMode, payload_json: str) -> "CodecProcessResult":
-        ...
+    def run(self, mode: CodecMode, payload_json: str) -> "CodecProcessResult": ...
 
 
 class YjsStateCodec(Protocol):
-    def encode(self, yjs_state: bytes) -> str:
-        ...
+    def encode(self, yjs_state: bytes) -> str: ...
 
-    def decode(self, yjs_state: str) -> bytes:
-        ...
+    def decode(self, yjs_state: str) -> bytes: ...
 
 
 @dataclass(frozen=True)
@@ -106,9 +101,7 @@ class Base64YjsStateCodec:
         try:
             return base64.b64decode(yjs_state.encode("ascii"), validate=True)
         except (UnicodeEncodeError, binascii.Error) as exc:
-            raise RuntimeError(
-                "BlockNote collaboration codec returned invalid yjs state."
-            ) from exc
+            raise RuntimeError("BlockNote collaboration codec returned invalid yjs state.") from exc
 
 
 @dataclass(frozen=True)

@@ -287,7 +287,6 @@ describe('SpaceTasksView', () => {
       expect(mocks.listAllPmsTaskLists).toHaveBeenCalledWith(
         'token',
         'space-1',
-        'hq',
       );
       expect(
         mocks.listTaskListStatuses.mock.calls.map((call) => call[1]),
@@ -350,7 +349,6 @@ describe('SpaceTasksView', () => {
             },
           ],
         },
-        'hq',
       ),
     );
     expect(mocks.reorderTaskListTasks).toHaveBeenCalledTimes(1);
@@ -425,7 +423,6 @@ describe('SpaceTasksView', () => {
           activeTab="list"
           spaceId="space-2"
           spaceName="Space Two"
-          workspaceSlug="hq"
         />
       </MemoryRouter>,
     );
@@ -442,7 +439,6 @@ function renderSpaceTasksView(activeTab: PmsTaskListToolTab) {
         activeTab={activeTab}
         spaceId="space-1"
         spaceName="Space One"
-        workspaceSlug="hq"
       />
     </MemoryRouter>,
   );

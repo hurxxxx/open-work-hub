@@ -15,8 +15,8 @@ from open_work_hub_api.domains.rag.providers.local_document_rendering import (
 )
 from open_work_hub_api.domains.rag.providers.rerank_text import build_rerank_document_text
 
-
 logger = logging.getLogger(__name__)
+
 
 class LocalSentenceTransformerEmbeddingClient:
     provider_name = "local-sentence-transformers"
@@ -339,6 +339,7 @@ class DoclingOcrClient:
                     ocr_langs=self._ocr_langs,
                 )
             return self._ocr_converter
+
 
 def _load_sentence_transformer_class():
     try:

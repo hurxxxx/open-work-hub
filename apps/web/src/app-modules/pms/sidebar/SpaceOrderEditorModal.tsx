@@ -1,6 +1,5 @@
-import { useMemo, useState, type ReactNode } from 'react';
-import { Dialog } from '@open-work-hub/ui/primitives/dialog';
 import { Button } from '@open-work-hub/ui/primitives/button';
+import { Dialog } from '@open-work-hub/ui/primitives/dialog';
 import {
   ArrowDown,
   ArrowUp,
@@ -8,6 +7,7 @@ import {
   FolderOpen,
   List as ListIcon,
 } from 'lucide-react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { DocsHubItem } from '@/src/app-modules/docs/public-api';

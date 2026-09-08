@@ -1,9 +1,13 @@
-import { useMemo, useState } from 'react';
 import { CalendarDays, Loader2 } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { MeetingUser } from '../../api/meeting-api';
 
+import {
+  DEFAULT_TIME_ZONE,
+  normalizeTimeZone,
+} from '@/src/platform/time/time-utils';
 import { MeetingAvailabilityModal } from './MeetingAvailabilityModal';
 import {
   buildAvailabilityConflicts,
@@ -12,13 +16,8 @@ import {
   selectMeetingAvailabilityPanelDisplayState,
   useMeetingAvailabilityQuery,
 } from './meetingAvailability';
-import {
-  DEFAULT_TIME_ZONE,
-  normalizeTimeZone,
-} from '@/src/platform/time/time-utils';
 
 interface MeetingAvailabilityPanelProps {
-  workspaceSlug: string;
   attendeeUsers: MeetingUser[];
   meetingStart: Date | null;
   meetingEnd: Date | null;
@@ -26,7 +25,6 @@ interface MeetingAvailabilityPanelProps {
 }
 
 export function MeetingAvailabilityPanel({
-  workspaceSlug,
   attendeeUsers,
   meetingStart,
   meetingEnd,
@@ -45,7 +43,6 @@ export function MeetingAvailabilityPanel({
     [attendeeUsers, meetingEnd, meetingStart],
   );
   const { items, loading, error } = useMeetingAvailabilityQuery({
-    workspaceSlug,
     userIds: panelQuery.attendeeIds,
     rangeStart: panelQuery.rangeStart,
     rangeEnd: panelQuery.rangeEnd,
@@ -162,7 +159,6 @@ export function MeetingAvailabilityPanel({
         key={`${modalOpen ? 'open' : 'closed'}-${meetingStart?.getTime() ?? 'none'}`}
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
-        workspaceSlug={workspaceSlug}
         attendeeUsers={attendeeUsers}
         meetingStart={meetingStart}
         meetingEnd={meetingEnd}

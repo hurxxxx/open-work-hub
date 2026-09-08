@@ -8,9 +8,7 @@ from .schemas import (
     CalendarEventMetadata,
     CalendarEventOut,
     CalendarSourceType,
-    CalendarWorkspaceRef,
 )
-
 
 # Hex color tokens duplicated from the frontend ``CALENDAR_SOURCE_COLORS`` map.
 # Backend is the single source of truth for the wire format; the frontend uses
@@ -24,7 +22,9 @@ SOURCE_COLORS: dict[CalendarSourceType, str] = {
 }
 
 
-def project_meeting_calendar_event(meeting, *, workspace: CalendarWorkspaceRef) -> CalendarEventOut:
+def project_meeting_calendar_event(
+    meeting,
+) -> CalendarEventOut:
     return CalendarEventOut(
         id=f"meeting-{meeting.id}",
         title=meeting.title,
@@ -34,7 +34,6 @@ def project_meeting_calendar_event(meeting, *, workspace: CalendarWorkspaceRef) 
         source_type="meeting",
         source_id=meeting.id,
         color=SOURCE_COLORS["meeting"],
-        workspace=workspace,
         metadata=CalendarEventMetadata(
             meeting_id=meeting.id,
             attendee_count=len(meeting.attendees),
@@ -47,7 +46,6 @@ def project_pms_task_calendar_events(
     *,
     include_due: bool,
     include_block: bool,
-    workspace: CalendarWorkspaceRef,
 ) -> list[CalendarEventOut]:
     has_block = task.start_date is not None and task.due_date is not None
     is_block = include_block and has_block
@@ -73,7 +71,6 @@ def project_pms_task_calendar_events(
                 source_type="pms_block",
                 source_id=task.id,
                 color=SOURCE_COLORS["pms_block"],
-                workspace=workspace,
                 metadata=meta,
             )
         ]
@@ -88,7 +85,6 @@ def project_pms_task_calendar_events(
                 source_type="pms_due",
                 source_id=task.id,
                 color=SOURCE_COLORS["pms_due"],
-                workspace=workspace,
                 metadata=meta,
             )
         ]
@@ -113,7 +109,6 @@ def project_planner_calendar_event(event) -> CalendarEventOut:
         source_type="planner_event",
         source_id=event.id,
         color=SOURCE_COLORS["planner_event"],
-        workspace=None,
         metadata=CalendarEventMetadata(
             planner_event_id=event.id,
             owner_id=event.owner_id,

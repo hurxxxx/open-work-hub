@@ -73,9 +73,7 @@ class ParsedArtifactEnd:
     artifact_id: str
 
 
-ArtifactParseEvent = (
-    ParsedText | ParsedArtifactStart | ParsedArtifactBody | ParsedArtifactEnd
-)
+ArtifactParseEvent = ParsedText | ParsedArtifactStart | ParsedArtifactBody | ParsedArtifactEnd
 
 _HTML_TITLE_RE = re.compile(r"<title[^>]*>([\s\S]*?)</title>", re.IGNORECASE)
 
@@ -142,9 +140,7 @@ class ArtifactStreamParser:
         if self._buffer:
             if self._state is _State.OUTSIDE:
                 self._emit_text(events, self._buffer)
-            elif self._state in {_State.INSIDE, _State.HTML_FENCE} and (
-                self._current_artifact_id
-            ):
+            elif self._state in {_State.INSIDE, _State.HTML_FENCE} and (self._current_artifact_id):
                 self._emit_body(events, self._buffer)
             self._buffer = ""
 
@@ -180,9 +176,7 @@ class ArtifactStreamParser:
         if not text:
             return
         events.append(ParsedText(text))
-        self._outside_line_prefix = advance_line_prefix(
-            self._outside_line_prefix, text
-        )
+        self._outside_line_prefix = advance_line_prefix(self._outside_line_prefix, text)
         if not track_inline_code or self._in_fence:
             return
         for ch in text:
@@ -233,7 +227,7 @@ class ArtifactStreamParser:
             if partial == len(self._buffer):
                 # Entire buffer is a pending partial fence. Wait.
                 return False
-            emit = self._buffer[: -partial]
+            emit = self._buffer[:-partial]
             self._emit_text(events, emit)
             self._buffer = self._buffer[-partial:]
             return False  # Hold the trailing ticks until more arrives.
@@ -294,8 +288,7 @@ class ArtifactStreamParser:
             or self._inline_code_open
             or is_indented_code_prefix(self._outside_line_prefix)
             or (
-                "title" not in attrs
-                and looks_like_inline_example_prefix(self._outside_line_prefix)
+                "title" not in attrs and looks_like_inline_example_prefix(self._outside_line_prefix)
             )
         ):
             self._emit_text(events, open_tag)
@@ -337,7 +330,7 @@ class ArtifactStreamParser:
                 self._emit_text(events, self._buffer)
                 self._buffer = ""
                 return True
-            self._emit_text(events, self._buffer[: -partial])
+            self._emit_text(events, self._buffer[:-partial])
             self._buffer = self._buffer[-partial:]
             return False
 
@@ -606,9 +599,7 @@ class ArtifactStreamParser:
         return classify_artifact_tag_candidate(self._buffer, ARTIFACT_CLOSE_PREFIX)
 
 
-def iter_feed(
-    parser: ArtifactStreamParser, chunks: Iterable[str]
-) -> list[ArtifactParseEvent]:
+def iter_feed(parser: ArtifactStreamParser, chunks: Iterable[str]) -> list[ArtifactParseEvent]:
     """Convenience helper for tests — feed a list of chunks and flush."""
     events: list[ArtifactParseEvent] = []
     for chunk in chunks:

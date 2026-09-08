@@ -27,9 +27,7 @@ from open_work_hub_api.domains.retrieval.runtime_binding import (
     resolve_partitioned_files_query_runtime,
 )
 from open_work_hub_api.domains.search.backend_contracts import KeywordSearchQuery
-from open_work_hub_api.domains.search.backend_factory import (
-    build_partitioned_keyword_search_client,
-)
+from open_work_hub_api.domains.search.backend_factory import build_partitioned_keyword_search_client
 from open_work_hub_api.domains.search.index_gateway import (
     RETRIEVAL_PARTITIONED_INDEX_SCHEMA_VERSION,
     keyword_search_index_alias,
@@ -440,7 +438,7 @@ def test_partitioned_keyword_client_is_bound_to_the_v3_physical_index() -> None:
 
     assert client.index_name == physical_index
     with pytest.raises(OpenSearchError, match="require retrieval_partition_ids"):
-        client.search(KeywordSearchQuery(workspace_id="workspace-1"))
+        client.search(KeywordSearchQuery())
 
 
 def test_partitioned_rag_query_service_is_bound_to_one_physical_collection() -> None:
@@ -460,7 +458,6 @@ def test_partitioned_rag_query_service_is_bound_to_one_physical_collection() -> 
         query_service.query(
             RagQueryRequest(
                 collection="other-collection",
-                workspace_id="workspace-1",
                 retrieval_partition_ids=["partition-1"],
                 query="test",
                 source_kinds=["files"],
@@ -472,7 +469,6 @@ def test_partitioned_rag_query_service_is_bound_to_one_physical_collection() -> 
         query_service.query(
             RagQueryRequest(
                 collection=collection,
-                workspace_id="workspace-1",
                 query="test",
                 source_kinds=["files"],
                 top_k=1,
@@ -497,7 +493,6 @@ def test_partitioned_rag_projection_service_is_bound_to_one_physical_collection(
         service.delete_projection(
             collection="other-collection",
             retrieval_partition_id="partition-1",
-            workspace_id="workspace-1",
             resource_type="file_manager_file",
             resource_id="file-1",
         )

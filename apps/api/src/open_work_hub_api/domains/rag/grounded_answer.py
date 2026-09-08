@@ -9,7 +9,11 @@ from open_work_hub_api.domains.ai.gateway import (
     LlmWorkloadContext,
     execute_llm,
 )
-from open_work_hub_api.domains.rag.contracts import RagGroundedAnswer, RagGroundedCitation, RagQueryHit
+from open_work_hub_api.domains.rag.contracts import (
+    RagGroundedAnswer,
+    RagGroundedCitation,
+    RagQueryHit,
+)
 from open_work_hub_api.domains.rag.grounded_answer_assembly import (
     DEFAULT_GROUNDED_ANSWER_ASSEMBLER,
     GroundedAnswerAssembler,
@@ -26,7 +30,6 @@ class LlmGroundedAnswerSynthesizer:
         self,
         *,
         db: Session,
-        workspace_id: str,
         actor_user_id: str | None,
         principal_kind: str,
         principal_id: str | None,
@@ -36,7 +39,6 @@ class LlmGroundedAnswerSynthesizer:
         assembler: GroundedAnswerAssembler | None = None,
     ) -> None:
         self._db = db
-        self._workspace_id = workspace_id
         self._actor_user_id = actor_user_id
         self._principal_kind = principal_kind
         self._principal_id = principal_id
@@ -59,7 +61,6 @@ class LlmGroundedAnswerSynthesizer:
         completion = execute_llm(
             "rag_grounded_answer",
             LlmWorkloadContext(
-                workspace_id=self._workspace_id,
                 source=self._source,
                 actor_user_id=self._actor_user_id,
                 app_id="rag",

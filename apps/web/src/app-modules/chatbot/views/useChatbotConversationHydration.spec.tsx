@@ -55,7 +55,6 @@ describe('useChatbotConversationHydration', () => {
         skipNextHydrationResetRef: { current: false },
         syncLivePendingApproval: vi.fn(),
         token: 'token-1',
-        workspaceSlug: 'research',
       }),
     );
 

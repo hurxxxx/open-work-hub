@@ -1,12 +1,12 @@
-import { FileIcon } from 'lucide-react';
 import type { TFunction } from 'i18next';
+import { FileIcon } from 'lucide-react';
 
+import { formatDateTime } from '@/src/platform/time/time-utils';
 import type { DocsHubItem } from '../api/docs-api';
 import {
   EMPTY_EXCLUDED_DOC_IDS,
   type DocsHubPickerSelection,
 } from '../api/docs-hub-picker-model';
-import { formatDateTime } from '@/src/platform/time/time-utils';
 import type { DocsHubPickerAdapter } from './DocsHubPickerModal';
 
 type DocsHubItemPickHandler = (doc: DocsHubItem) => Promise<void> | void;
@@ -38,7 +38,7 @@ export function buildMeetingDocsHubPickerAdapter({
 }): DocsHubPickerAdapter {
   return {
     searchMode: 'local',
-    access: 'workspace-membership',
+    access: 'app-admission',
     copy: {
       title: t('meeting.docPicker.title'),
       description: t('meeting.docPicker.description'),
@@ -46,7 +46,7 @@ export function buildMeetingDocsHubPickerAdapter({
       empty: t('meeting.docPicker.empty'),
       loadFailed: t('meeting.docPicker.loadFailed'),
       attachFailed: t('meeting.docPicker.attachFailed'),
-      noAccessWorkspaceLabel: t('meeting.docPicker.docsWorkspace'),
+      noAccessAppLabel: t('meeting.docPicker.docsWorkspace'),
       noAccessAction: t('meeting.docPicker.attachAction'),
     },
     getDocId: getSourceDocId,

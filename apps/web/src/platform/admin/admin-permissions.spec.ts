@@ -17,7 +17,7 @@ describe('admin-permissions', () => {
       'model-monitoring',
       'document-processing',
       'ai-security',
-      'workspaces',
+      'groups',
       'community',
       'usage',
       'audit',
@@ -30,8 +30,8 @@ describe('admin-permissions', () => {
 
   it('denies admin sections and read permission without an allowed role', () => {
     expect(hasAnyAdminReadPermission([])).toBe(false);
-    expect(hasAnyAdminReadPermission(['workspace_admin'])).toBe(false);
-    expect(hasAdminSectionAccess(['workspace_admin'], 'people')).toBe(false);
+    expect(hasAnyAdminReadPermission(['group_admin'])).toBe(false);
+    expect(hasAdminSectionAccess(['group_admin'], 'people')).toBe(false);
   });
 
   it('derives read permission and default route from the same section policy order', () => {

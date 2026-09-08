@@ -5,15 +5,9 @@ from collections.abc import Iterable
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
-from open_work_hub_api.domains.auth.models import (
-    Team,
-    TeamMember,
-    User,
-    UserSystemRole,
-    Workspace,
-    WorkspaceUserBinding,
-)
-from open_work_hub_api.domains.auth.roles import SYSTEM_PLATFORM_ADMIN, normalize_system_role
+from open_work_hub_api.domains.auth.app_access import can_use_app
+from open_work_hub_api.domains.auth.models import User, UserSystemRole
+from open_work_hub_api.domains.auth.roles import SYSTEM_PLATFORM_ADMIN
 from open_work_hub_api.domains.files.models import (
     FileManagerCorpus,
     FileManagerFile,
@@ -23,15 +17,16 @@ from open_work_hub_api.domains.files.models import (
 
 
 def is_current_platform_admin(db: Session, user_id: str) -> bool:
-    """Return a current-state platform-admin decision, never a stale policy hint."""
-
     user = _load_current_active_user(db, user_id)
-    if user is None:
-        return False
-    if user.is_admin:
-        return True
-    roles = db.scalars(select(UserSystemRole.role).where(UserSystemRole.user_id == user_id)).all()
-    return any(normalize_system_role(role) == SYSTEM_PLATFORM_ADMIN for role in roles)
+    return (
+        user is not None
+        and db.scalar(
+            select(UserSystemRole.id).where(
+                UserSystemRole.user_id == user_id, UserSystemRole.role == SYSTEM_PLATFORM_ADMIN
+            )
+        )
+        is not None
+    )
 
 
 def authorize_explicit_file_ids(
@@ -39,28 +34,36 @@ def authorize_explicit_file_ids(
     *,
     file_ids: Iterable[str],
     user_id: str,
-    workspace_id: str | None,
 ) -> set[str]:
     """Authorize explicit-grant files from current source-owned database state.
 
     Missing metadata, unresolved ACLs, and resolved-but-empty ACLs all fail closed.
-    Workspace roles are deliberately absent: workspace admins receive no implicit
-    bypass. Platform admins retain an explicit operational bypass.
+    Platform admins may read existing company records; personal files have no override.
     """
 
     normalized_ids = tuple(dict.fromkeys(str(value) for value in file_ids if value))
     if not normalized_ids:
         return set()
     user = _load_current_active_user(db, user_id)
-    if user is None:
+    if user is None or not can_use_app(db, user_id=user_id, app_id="files"):
         return set()
     if is_current_platform_admin(db, user_id):
-        return set(normalized_ids)
+        return set(
+            db.scalars(
+                select(FileManagerFile.id)
+                .join(FileManagerCorpus, FileManagerCorpus.id == FileManagerFile.corpus_id)
+                .where(
+                    FileManagerFile.id.in_(normalized_ids),
+                    FileManagerFile.deleted_at.is_(None),
+                    FileManagerCorpus.access_scope_kind == "company",
+                    FileManagerCorpus.authorization_mode == "explicit_grants",
+                )
+            )
+        )
 
     grant_conditions = _current_grant_conditions(
         db,
         user=user,
-        workspace_id=workspace_id,
     )
     if not grant_conditions:
         return set()
@@ -85,22 +88,13 @@ def has_any_explicit_file_access(
     db: Session,
     *,
     user_id: str,
-    workspace_id: str | None,
 ) -> bool:
     """Check whether at least one live, in-scope explicit-grant file is readable."""
 
     user = _load_current_active_user(db, user_id)
-    if user is None:
+    if user is None or not can_use_app(db, user_id=user_id, app_id="files"):
         return False
     scope_condition = FileManagerCorpus.access_scope_kind == "company"
-    if workspace_id is not None:
-        scope_condition = or_(
-            scope_condition,
-            and_(
-                FileManagerCorpus.access_scope_kind == "workspace",
-                FileManagerCorpus.managed_workspace_id == workspace_id,
-            ),
-        )
     base = (
         select(FileManagerFile.id)
         .join(FileManagerCorpus, FileManagerCorpus.id == FileManagerFile.corpus_id)
@@ -119,7 +113,6 @@ def has_any_explicit_file_access(
     grant_conditions = _current_grant_conditions(
         db,
         user=user,
-        workspace_id=workspace_id,
     )
     if not grant_conditions:
         return False
@@ -141,61 +134,30 @@ def has_any_explicit_file_access(
     return db.scalar(statement) is not None
 
 
-def _current_grant_conditions(
-    db: Session,
-    *,
-    user: User,
-    workspace_id: str | None,
-) -> list[object]:
-    conditions: list[object] = [
-        FileManagerFileAccessGrant.grant_type == "company",
+def _current_grant_conditions(db: Session, *, user: User) -> list[object]:
+    from open_work_hub_api.domains.groups.service import user_group_ids_query
+    from open_work_hub_api.domains.pms.access import accessible_space_ids_query
+
+    return [
+        and_(
+            FileManagerFileAccessGrant.grant_type == "company",
+            FileManagerFileAccessGrant.target_id.is_(None),
+        ),
         and_(
             FileManagerFileAccessGrant.grant_type == "user",
             FileManagerFileAccessGrant.target_id == user.id,
         ),
+        and_(
+            FileManagerFileAccessGrant.grant_type == "group",
+            FileManagerFileAccessGrant.target_id.in_(user_group_ids_query(user.id)),
+        ),
+        and_(
+            FileManagerFileAccessGrant.grant_type == "team",
+            FileManagerFileAccessGrant.target_id.in_(
+                accessible_space_ids_query(db, user_id=user.id)
+            ),
+        ),
     ]
-
-    if workspace_id is not None:
-        workspace_is_current = db.scalar(
-            select(Workspace.id).where(
-                Workspace.id == workspace_id,
-                Workspace.active.is_(True),
-            )
-        )
-        binding_exists = db.scalar(
-            select(WorkspaceUserBinding.id).where(
-                WorkspaceUserBinding.workspace_id == workspace_id,
-                WorkspaceUserBinding.user_id == user.id,
-            )
-        )
-        if workspace_is_current is not None and binding_exists is not None:
-            conditions.append(
-                and_(
-                    FileManagerFileAccessGrant.grant_type == "workspace",
-                    FileManagerFileAccessGrant.target_id == workspace_id,
-                )
-            )
-
-    team_statement = (
-        select(Team.id)
-        .join(TeamMember, TeamMember.team_id == Team.id)
-        .where(
-            TeamMember.user_id == user.id,
-            Team.active.is_(True),
-            Team.trashed_at.is_(None),
-        )
-    )
-    if workspace_id is not None:
-        team_statement = team_statement.where(Team.workspace_id == workspace_id)
-    team_ids = tuple(db.scalars(team_statement).all())
-    if team_ids:
-        conditions.append(
-            and_(
-                FileManagerFileAccessGrant.grant_type == "team",
-                FileManagerFileAccessGrant.target_id.in_(team_ids),
-            )
-        )
-    return conditions
 
 
 def _load_current_active_user(db: Session, user_id: str) -> User | None:

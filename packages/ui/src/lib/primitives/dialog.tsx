@@ -1,5 +1,5 @@
 import * as DialogPrimitive from '@radix-ui/react-dialog';
-import type { ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 
 import { Button } from './button';
 import { cn } from '../utils/cn';
@@ -73,6 +73,22 @@ export function Dialog({
   layer = 'default',
   overlayClassName,
 }: DialogProps) {
+  const returnFocusRef = useRef<HTMLElement | null>(null);
+  // Callers control this dialog from buttons outside Radix's Trigger tree.
+  // Capture that control through Radix's autofocus lifecycle so cancellation
+  // restores it without replacing Radix's focus trap or dismissal behavior.
+  const handleOpenAutoFocus = () => {
+    const activeElement = document.activeElement;
+    returnFocusRef.current =
+      activeElement instanceof HTMLElement ? activeElement : null;
+  };
+  const handleCloseAutoFocus = (event: Event) => {
+    const target = returnFocusRef.current;
+    returnFocusRef.current = null;
+    if (!target?.isConnected) return;
+    event.preventDefault();
+    target.focus();
+  };
   const handleOutsideInteraction = (event: Event) => {
     if (shouldPreventOutsideInteraction(event, dismissOnInteractOutside)) {
       event.preventDefault();
@@ -100,6 +116,8 @@ export function Dialog({
             contentClassName,
           )}
           data-layer={layer}
+          onOpenAutoFocus={handleOpenAutoFocus}
+          onCloseAutoFocus={handleCloseAutoFocus}
           onFocusOutside={handleOutsideInteraction}
           onPointerDownOutside={handleOutsideInteraction}
           onInteractOutside={handleOutsideInteraction}

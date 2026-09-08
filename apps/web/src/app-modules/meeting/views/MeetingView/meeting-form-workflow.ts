@@ -45,7 +45,7 @@ export interface MeetingFormApiAdapter {
 export interface MeetingCreateFormWorkflowOptions {
   isOpen: boolean;
   onCreated: (meetingId: string) => void;
-  workspaceSlug: string;
+
   initialRange?: MeetingInitialRange | null;
   api?: MeetingFormApiAdapter;
 }
@@ -54,7 +54,7 @@ export interface MeetingEditFormWorkflowOptions {
   isOpen: boolean;
   meeting: MeetingDetail;
   onSaved: (updated: MeetingDetail) => void;
-  workspaceSlug: string;
+
   api?: MeetingFormApiAdapter;
 }
 
@@ -82,7 +82,6 @@ function createSubmissionMessages(
 export function useMeetingCreateFormWorkflow({
   isOpen,
   onCreated,
-  workspaceSlug,
   initialRange,
   api = meetingFormApiAdapter,
 }: MeetingCreateFormWorkflowOptions) {
@@ -105,12 +104,14 @@ export function useMeetingCreateFormWorkflow({
     isOpen,
     query: state.userQuery,
     token,
-    workspaceSlug,
     searchUsers: api.listMeetingUsers,
-    onIdle: () => dispatch({ type: 'patch', patch: { users: [], usersLoading: false } }),
+    onIdle: () =>
+      dispatch({ type: 'patch', patch: { users: [], usersLoading: false } }),
     onStarted: () => dispatch({ type: 'patch', patch: { usersLoading: true } }),
-    onLoaded: (users) => dispatch({ type: 'patch', patch: { users, usersLoading: false } }),
-    onFailed: () => dispatch({ type: 'patch', patch: { users: [], usersLoading: false } }),
+    onLoaded: (users) =>
+      dispatch({ type: 'patch', patch: { users, usersLoading: false } }),
+    onFailed: () =>
+      dispatch({ type: 'patch', patch: { users: [], usersLoading: false } }),
   });
 
   const projection = useMemo(
@@ -123,13 +124,15 @@ export function useMeetingCreateFormWorkflow({
   }
 
   function addAttendee(attendee: MeetingUser) {
-    patch(addCreateAttendeeToForm(
-      {
-        attendees: state.attendees,
-        pickedAttendeeUsers: state.pickedAttendeeUsers,
-      },
-      attendee,
-    ));
+    patch(
+      addCreateAttendeeToForm(
+        {
+          attendees: state.attendees,
+          pickedAttendeeUsers: state.pickedAttendeeUsers,
+        },
+        attendee,
+      ),
+    );
   }
 
   function removeAttendee(userId: string) {
@@ -153,7 +156,6 @@ export function useMeetingCreateFormWorkflow({
     try {
       const result = await submitMeetingCreateForm({
         token,
-        workspaceSlug,
         state,
         ports: api,
         messages: createSubmissionMessages(t),
@@ -191,7 +193,9 @@ export function useMeetingCreateFormWorkflow({
       removeAttendee,
       addFiles,
       removePickedFile: (index: number) =>
-        patch({ pickedFiles: removePickedFileAtIndex(state.pickedFiles, index) }),
+        patch({
+          pickedFiles: removePickedFileAtIndex(state.pickedFiles, index),
+        }),
       removePickedTask: (taskId: string) =>
         patch({ pickedTasks: removePickedItem(state.pickedTasks, taskId) }),
       removePickedDoc: (docId: string) =>
@@ -212,7 +216,6 @@ export function useMeetingEditFormWorkflow({
   isOpen,
   meeting,
   onSaved,
-  workspaceSlug,
   api = meetingFormApiAdapter,
 }: MeetingEditFormWorkflowOptions) {
   const { t } = useTranslation('apps');
@@ -233,12 +236,14 @@ export function useMeetingEditFormWorkflow({
     isOpen,
     query: state.userQuery,
     token,
-    workspaceSlug,
     searchUsers: api.listMeetingUsers,
-    onIdle: () => dispatch({ type: 'patch', patch: { users: [], usersLoading: false } }),
+    onIdle: () =>
+      dispatch({ type: 'patch', patch: { users: [], usersLoading: false } }),
     onStarted: () => dispatch({ type: 'patch', patch: { usersLoading: true } }),
-    onLoaded: (users) => dispatch({ type: 'patch', patch: { users, usersLoading: false } }),
-    onFailed: () => dispatch({ type: 'patch', patch: { users: [], usersLoading: false } }),
+    onLoaded: (users) =>
+      dispatch({ type: 'patch', patch: { users, usersLoading: false } }),
+    onFailed: () =>
+      dispatch({ type: 'patch', patch: { users: [], usersLoading: false } }),
   });
 
   const projection = useMemo(
@@ -251,10 +256,12 @@ export function useMeetingEditFormWorkflow({
   }
 
   function addAttendee(attendee: MeetingUser) {
-    patch(addEditAttendeeToForm(
-      { attendees: state.attendees, knownUsers: state.knownUsers },
-      attendee,
-    ));
+    patch(
+      addEditAttendeeToForm(
+        { attendees: state.attendees, knownUsers: state.knownUsers },
+        attendee,
+      ),
+    );
   }
 
   function removeAttendee(userId: string) {
@@ -273,7 +280,6 @@ export function useMeetingEditFormWorkflow({
     try {
       const result = await submitMeetingEditForm({
         token,
-        workspaceSlug,
         meetingId: meeting.id,
         state,
         ports: api,

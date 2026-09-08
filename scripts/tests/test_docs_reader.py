@@ -93,6 +93,19 @@ class DocsReaderTest(unittest.TestCase):
         self.assertEqual(commands[-1][-4:], ['rm', '-rf', '--', '/tmp/owh-doc-media.ABC12345'])
         self.assertIn('--config-dir', commands[1][-1])
 
+    def test_company_docs_routes_and_queries_have_no_global_container(self):
+        page_id = 'abcdefab-1234-1234-1234-123456789012'
+        self.assertEqual(reader.parse_target(f'/apps/docs/{MEDIA_ID}?page={page_id}'), {'doc_id': MEDIA_ID, 'page_id': page_id})
+        with self.assertRaises(ValueError):
+            reader.parse_target(f'/w/general/docs/{MEDIA_ID}')
+        self.assertEqual(reader.parse_target(MEDIA_ID), {'doc_id': MEDIA_ID})
+        for query in [reader.read_query(MEDIA_ID, page_id), reader.updates_query(MEDIA_ID, '2026-09-08', 5)]:
+            self.assertNotIn('workspace', query)
+            self.assertIn('d.owner_id', query)
+            self.assertIn('d.ownership_kind', query)
+            self.assertIn('d.trashed_at is null', query)
+            self.assertIn('p.trashed_at is null', query)
+
     def test_help_is_service_and_env_free(self):
         with patch.object(reader, 'env_file_values', side_effect=AssertionError('must not read env')), patch.object(reader, 'run', side_effect=AssertionError('must not query')):
             parser = reader.build_parser()

@@ -5,12 +5,8 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from open_work_hub_api.core.i18n import localized_http_exception
-from open_work_hub_api.domains.auth.access import (
-    is_platform_admin_user,
-    resolve_workspace_role,
-)
-from open_work_hub_api.domains.auth.models import User, Workspace
-from open_work_hub_api.domains.auth.roles import workspace_role_allows
+from open_work_hub_api.domains.auth.access import is_platform_admin_user
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.auth.security import new_id
 
 from .models import Announcement
@@ -29,12 +25,9 @@ MAX_LIST_LIMIT = 100
 def _project(announcement: Announcement) -> AnnouncementOut:
     return AnnouncementOut(
         id=announcement.id,
-        workspace_id=announcement.workspace_id,
         author_id=announcement.author_id,
         author_name=(
-            announcement.author.full_name
-            if announcement.author
-            else announcement.author_id
+            announcement.author.full_name if announcement.author else announcement.author_id
         ),
         scope=announcement.scope,  # type: ignore[arg-type]
         title=announcement.title,
@@ -48,7 +41,6 @@ def _project(announcement: Announcement) -> AnnouncementOut:
 def _load(
     db: Session,
     *,
-    workspace: Workspace,
     announcement_id: str,
 ) -> Announcement:
     announcement = db.scalar(
@@ -56,7 +48,6 @@ def _load(
         .where(
             Announcement.id == announcement_id,
             or_(
-                Announcement.workspace_id == workspace.id,
                 Announcement.scope == "company",
             ),
         )
@@ -70,36 +61,15 @@ def _load(
     return announcement
 
 
-def _ensure_can_write(
-    db: Session,
-    *,
-    user: User,
-    workspace: Workspace,
-    scope: str,
-) -> None:
-    """Workspace announcements need a workspace admin; company-wide notices
-    need a platform admin."""
-    if scope == "company":
-        if is_platform_admin_user(user, db):
-            return
-        raise localized_http_exception(
-            status_code=status.HTTP_403_FORBIDDEN,
-            code="announcements.company_admin_required",
-        )
-    role = resolve_workspace_role(db, user, workspace.id)
-    if workspace_role_allows(role, "admin"):
-        return
-    raise localized_http_exception(
-        status_code=status.HTTP_403_FORBIDDEN,
-        code="announcements.admin_required",
-    )
+def _ensure_can_write(db: Session, *, user: User, scope: str) -> None:
+    if scope != "company" or not is_platform_admin_user(user, db):
+        raise localized_http_exception(status_code=403, code="announcements.company_admin_required")
 
 
 def list_announcements(
     db: Session,
     *,
-    workspace: Workspace,
-    scope: AnnouncementScope = "workspace",
+    scope: AnnouncementScope = "company",
     limit: int = DEFAULT_LIST_LIMIT,
 ) -> AnnouncementsResponse:
     bounded = max(1, min(limit, MAX_LIST_LIMIT))
@@ -113,10 +83,8 @@ def list_announcements(
         )
         .limit(bounded)
     )
-    # Workspace notices are scoped to the current workspace; company notices
-    # are global and visible from every workspace.
-    if scope == "workspace":
-        query = query.where(Announcement.workspace_id == workspace.id)
+    if scope == "company":
+        query = query.where()
     rows = db.scalars(query).all()
     return AnnouncementsResponse(items=[_project(row) for row in rows])
 
@@ -124,23 +92,20 @@ def list_announcements(
 def get_announcement(
     db: Session,
     *,
-    workspace: Workspace,
     announcement_id: str,
 ) -> AnnouncementOut:
-    return _project(_load(db, workspace=workspace, announcement_id=announcement_id))
+    return _project(_load(db, announcement_id=announcement_id))
 
 
 def create_announcement(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     payload: AnnouncementCreateRequest,
 ) -> AnnouncementOut:
-    _ensure_can_write(db, user=user, workspace=workspace, scope=payload.scope)
+    _ensure_can_write(db, user=user, scope=payload.scope)
     announcement = Announcement(
         id=new_id(),
-        workspace_id=workspace.id,
         author_id=user.id,
         scope=payload.scope,
         title=payload.title.strip(),
@@ -149,19 +114,18 @@ def create_announcement(
     )
     db.add(announcement)
     db.commit()
-    return _project(_load(db, workspace=workspace, announcement_id=announcement.id))
+    return _project(_load(db, announcement_id=announcement.id))
 
 
 def update_announcement(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     announcement_id: str,
     payload: AnnouncementUpdateRequest,
 ) -> AnnouncementOut:
-    announcement = _load(db, workspace=workspace, announcement_id=announcement_id)
-    _ensure_can_write(db, user=user, workspace=workspace, scope=announcement.scope)
+    announcement = _load(db, announcement_id=announcement_id)
+    _ensure_can_write(db, user=user, scope=announcement.scope)
     if payload.title is not None:
         announcement.title = payload.title.strip()
     if payload.body is not None:
@@ -169,17 +133,16 @@ def update_announcement(
     if payload.is_pinned is not None:
         announcement.is_pinned = payload.is_pinned
     db.commit()
-    return _project(_load(db, workspace=workspace, announcement_id=announcement.id))
+    return _project(_load(db, announcement_id=announcement.id))
 
 
 def delete_announcement(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     announcement_id: str,
 ) -> None:
-    announcement = _load(db, workspace=workspace, announcement_id=announcement_id)
-    _ensure_can_write(db, user=user, workspace=workspace, scope=announcement.scope)
+    announcement = _load(db, announcement_id=announcement_id)
+    _ensure_can_write(db, user=user, scope=announcement.scope)
     db.delete(announcement)
     db.commit()

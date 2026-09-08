@@ -1,4 +1,5 @@
 import { formatRelativeTime } from '@/src/platform/time/time-utils';
+import type { Globe } from 'lucide-react';
 import {
   resolveDocsContentFormat,
   type DocsContentFormat,
@@ -7,7 +8,6 @@ import {
   type DocsPageItem,
   type DocsPrimaryTarget,
 } from '../api/docs-api';
-import type { Globe } from 'lucide-react';
 
 const DOCS_VIEW_VALUES = [
   'all',
@@ -69,10 +69,7 @@ export interface LocationOption {
   disabledReason?: string;
 }
 
-export type DocsCreateLocationValue =
-  | 'workspace'
-  | 'private'
-  | `space:${string}`;
+export type DocsCreateLocationValue = 'company' | 'private' | `space:${string}`;
 
 export interface DocsCreatePrimaryTarget {
   app: string;
@@ -500,20 +497,13 @@ export function resolveDocsRefreshSelection({
 export function resolveDefaultDocsCreateLocation(
   activeCategory: DocsViewCategory,
 ): DocsCreateLocationValue {
-  if (activeCategory === 'private') return 'private';
-  return 'workspace';
+  return 'private';
 }
 
 export function resolveDocsCreatePrimaryTarget(
   locationValue: string,
-  currentWorkspaceId: string | null | undefined,
 ): DocsCreatePrimaryTarget | null {
   if (locationValue === 'private') return null;
-  if (locationValue === 'workspace') {
-    return currentWorkspaceId
-      ? { app: 'docs', type: 'workspace_sidebar', id: currentWorkspaceId }
-      : null;
-  }
   if (locationValue.startsWith('space:')) {
     const spaceId = locationValue.slice('space:'.length);
     return spaceId ? { app: 'pms', type: 'space', id: spaceId } : null;
@@ -522,15 +512,9 @@ export function resolveDocsCreatePrimaryTarget(
 }
 
 export function resolveDocsCreateLocationValue(
-  target:
-    | Pick<DocsPrimaryTarget, 'app' | 'type' | 'id'>
-    | null
-    | undefined,
+  target: Pick<DocsPrimaryTarget, 'app' | 'type' | 'id'> | null | undefined,
 ): DocsCreateLocationValue {
   if (!target) return 'private';
-  if (target.app === 'docs' && target.type === 'workspace_sidebar') {
-    return 'workspace';
-  }
   if (target.app === 'pms' && target.type === 'space') {
     return `space:${target.id}`;
   }

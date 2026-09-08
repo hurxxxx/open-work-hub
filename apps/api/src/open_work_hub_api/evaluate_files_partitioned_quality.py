@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Sequence
 import hashlib
 import logging
 import os
-from pathlib import Path
 import stat
 import sys
 import tempfile
+from collections.abc import Sequence
+from pathlib import Path
 
 from open_work_hub_api.core.db import get_session_factory
 from open_work_hub_api.core.settings import get_settings
@@ -22,7 +22,6 @@ from open_work_hub_api.domains.retrieval.files_quality_evaluator import (
     FilesQualityEvaluationError,
     evaluate_files_partitioned_quality,
 )
-
 
 _MAX_QUALITY_CORPUS_BYTES = 16 * 1024 * 1024
 

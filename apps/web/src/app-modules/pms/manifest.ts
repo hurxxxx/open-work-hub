@@ -1,3 +1,4 @@
+import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
 import {
   Calendar,
   CheckCircle2,
@@ -5,7 +6,6 @@ import {
   Inbox,
   User,
 } from 'lucide-react';
-import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
 
 import type { AppModuleManifest } from '@/src/app/shell/navigation-types';
 
@@ -15,7 +15,6 @@ export const pmsManifest: AppModuleManifest = {
     owner: 'pms-platform',
     permissions: [],
     apiDomain: 'pms',
-    workspaceApiPrefixes: ['/api/v1/pms'],
     aiCapabilities: [
       'pms.search_tasks',
       'pms.get_task',
@@ -71,7 +70,7 @@ export const pmsManifest: AppModuleManifest = {
       pathSuffix: '/today',
     },
   ],
-  workspaceRoutePaths: [
+  appRoutePaths: [
     getAppRoutePattern('pms.root'),
     getAppRoutePattern('pms.assigned'),
     getAppRoutePattern('pms.today'),

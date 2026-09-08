@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 from open_work_hub_api.domains.planner.models import PlannerEvent
 from open_work_hub_api.domains.rag.contracts import RagProjection
 
-
 PLANNER_EVENT_SOURCE_KIND = "planner_event"
 
 
@@ -20,4 +19,4 @@ def load_planner_event_projection(
 
 def build_planner_event_projection(event: PlannerEvent) -> RagProjection:
     del event
-    raise ValueError("Personal planner events are not workspace RAG resources")
+    raise ValueError("Personal planner events are not company RAG resources")

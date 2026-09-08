@@ -5,7 +5,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-
 HermesRunStatus = Literal[
     "pending",
     "dispatching",
@@ -102,11 +101,7 @@ class HermesRunCreate(BaseModel):
         if value is None:
             return None
         return list(
-            dict.fromkeys(
-                app_id.strip().lower()
-                for app_id in value
-                if app_id and app_id.strip()
-            )
+            dict.fromkeys(app_id.strip().lower() for app_id in value if app_id and app_id.strip())
         )
 
 

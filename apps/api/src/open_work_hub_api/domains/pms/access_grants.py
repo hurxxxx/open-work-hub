@@ -8,8 +8,8 @@ from sqlalchemy.orm import Session
 from open_work_hub_api.domains.auth.security import new_id
 from open_work_hub_api.domains.pms.models import TaskUserAccess
 from open_work_hub_api.domains.pms.rag_sync import (
-    enqueue_task_rag_sync_by_id,
     enqueue_meeting_task_visibility_recompute,
+    enqueue_task_rag_sync_by_id,
 )
 from open_work_hub_api.domains.rag.contracts import RagSyncOperation
 

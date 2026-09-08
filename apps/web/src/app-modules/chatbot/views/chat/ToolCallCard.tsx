@@ -1,4 +1,3 @@
-import { useMemo, useState } from 'react';
 import {
   Briefcase,
   Calendar,
@@ -7,6 +6,7 @@ import {
   type LucideIcon,
   Wrench,
 } from 'lucide-react';
+import { useMemo, useState } from 'react';
 
 import type { ToolCallBuffer } from '../../api/agent-events';
 import {

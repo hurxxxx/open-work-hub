@@ -1,1 +1,1 @@
-"""Workspace-scoped, user-private Hermes terminal integration."""
+"""Company-admitted, user-private Hermes terminal integration."""

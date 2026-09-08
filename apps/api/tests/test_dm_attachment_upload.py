@@ -69,7 +69,9 @@ def test_read_dm_attachment_upload_rejects_oversized_content_length(
         asyncio.run(
             attachment_upload.read_dm_attachment_upload(
                 reader,
-                content_length=str(3 + attachment_upload.DM_ATTACHMENT_MULTIPART_OVERHEAD_BYTES + 1),
+                content_length=str(
+                    3 + attachment_upload.DM_ATTACHMENT_MULTIPART_OVERHEAD_BYTES + 1
+                ),
             )
         )
 

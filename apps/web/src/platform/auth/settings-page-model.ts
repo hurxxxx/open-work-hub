@@ -1,8 +1,8 @@
+import { normalizeLocale } from '@/src/platform/i18n';
 import {
   normalizeDateFormatPreference,
   normalizeTimeZone,
 } from '@/src/platform/time/time-utils';
-import { normalizeLocale } from '@/src/platform/i18n';
 
 import type {
   AuthSessionItem,

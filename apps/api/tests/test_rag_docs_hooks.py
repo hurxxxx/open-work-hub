@@ -12,13 +12,9 @@ from open_work_hub_api.domains.docs import rag_sync as docs_rag_sync
 from open_work_hub_api.domains.docs.models import NativeDoc
 from open_work_hub_api.domains.rag.contracts import RagSyncOperation
 from open_work_hub_api.domains.rag.models import RagSyncJob, RagVisibilityRecomputeJob
-from open_work_hub_api.domains.retrieval.models import (
-    RetrievalPartition,
-    RetrievalProjectionEvent,
-)
+from open_work_hub_api.domains.retrieval.models import RetrievalPartition, RetrievalProjectionEvent
 from open_work_hub_api.domains.retrieval.partitioning import (
     RetrievalPartitionConflict,
-    RetrievalPartitionUnbound,
 )
 from open_work_hub_api.domains.retrieval.projection_fencing import ProjectionEventRef
 from open_work_hub_api.domains.source_access import SourceAclPolicy
@@ -65,7 +61,6 @@ def test_native_doc_sync_records_one_event_shared_by_search_and_rag(monkeypatch)
         desired_state="deleted",
         content_checksum=None,
         visibility_checksum=None,
-        diagnostic_workspace_id="ws-1",
     )
     recorded: list[dict] = []
     search_deliveries: list[dict] = []
@@ -94,7 +89,9 @@ def test_native_doc_sync_records_one_event_shared_by_search_and_rag(monkeypatch)
 
     docs_rag_sync.enqueue_native_doc_rag_sync(
         object(),
-        doc=SimpleNamespace(id="doc-1", workspace_id="ws-1"),
+        doc=SimpleNamespace(
+            id="doc-1",
+        ),
         operation=RagSyncOperation.DELETE,
     )
 
@@ -105,7 +102,6 @@ def test_native_doc_sync_records_one_event_shared_by_search_and_rag(monkeypatch)
             "retrieval_partition_id": projection_event.retrieval_partition_id,
             "change_kind": "delete",
             "desired_state": "deleted",
-            "diagnostic_workspace_id": "ws-1",
         }
     ]
     assert search_deliveries[0]["projection_event"] is projection_event
@@ -113,14 +109,13 @@ def test_native_doc_sync_records_one_event_shared_by_search_and_rag(monkeypatch)
 
 
 def test_native_doc_scope_changes_keep_partition_and_advance_one_event_stream(client) -> None:
-    from test_meeting import _auth_headers, _bootstrap_admin_session, _first_workspace_slug
+    from test_meeting import _auth_headers, _bootstrap_admin_session
 
     admin = _bootstrap_admin_session(client)
     admin_token = admin["token"]
-    workspace_slug = _first_workspace_slug(client, admin_token)
 
     create_response = client.post(
-        f"/api/v1/workspaces/{workspace_slug}/docs/items",
+        "/api/v1/docs/items",
         headers=_auth_headers(admin_token),
         json={"title": "Stable partition doc", "rag_scope": "official"},
     )
@@ -135,13 +130,11 @@ def test_native_doc_scope_changes_keep_partition_and_advance_one_event_stream(cl
         partition = db.get(RetrievalPartition, initial_partition_id)
         assert partition is not None
         assert partition.source_namespace == "docs"
-        assert partition.managed_workspace_id == doc.workspace_id
-        assert partition.candidate_scope_kind == "workspace"
-        assert partition.candidate_workspace_id == doc.workspace_id
+        assert partition.candidate_scope_kind == "company"
         assert partition.candidate_user_id is None
 
     personal_response = client.patch(
-        f"/api/v1/workspaces/{workspace_slug}/docs/items/{created['id']}",
+        f"/api/v1/docs/items/{created['id']}",
         headers=_auth_headers(admin_token),
         json={"rag_scope": "personal"},
     )
@@ -153,16 +146,15 @@ def test_native_doc_scope_changes_keep_partition_and_advance_one_event_stream(cl
         user = db.get(User, admin["user"]["id"])
         assert doc is not None
         assert user is not None
-        policy = SourceAclPolicy.for_workspace_id(
+        policy = SourceAclPolicy.for_user(
             db,
-            workspace_id=doc.workspace_id,
             user=user,
         )
         assert policy.can_read_resource(NATIVE_DOC_RESOURCE_TYPE, doc.id) is True
         assert policy.can_read_rag_resource(NATIVE_DOC_RESOURCE_TYPE, doc.id) is False
 
     official_response = client.patch(
-        f"/api/v1/workspaces/{workspace_slug}/docs/items/{created['id']}",
+        f"/api/v1/docs/items/{created['id']}",
         headers=_auth_headers(admin_token),
         json={"rag_scope": "official"},
     )
@@ -175,9 +167,8 @@ def test_native_doc_scope_changes_keep_partition_and_advance_one_event_stream(cl
         assert doc is not None
         assert user is not None
         assert doc.retrieval_partition_id == initial_partition_id
-        policy = SourceAclPolicy.for_workspace_id(
+        policy = SourceAclPolicy.for_user(
             db,
-            workspace_id=doc.workspace_id,
             user=user,
         )
         assert policy.can_read_rag_resource(NATIVE_DOC_RESOURCE_TYPE, doc.id) is True
@@ -199,13 +190,14 @@ def test_native_doc_scope_changes_keep_partition_and_advance_one_event_stream(cl
     assert {event.retrieval_partition_id for event in events} == {initial_partition_id}
 
 
-def test_new_native_docs_use_workspace_partition_for_every_rag_scope(monkeypatch) -> None:
+def test_new_native_docs_use_company_candidates_for_every_rag_scope(monkeypatch) -> None:
     requested: list[dict] = []
     monkeypatch.setattr(
         docs_partitioning,
         "ensure_default_partition",
-        lambda *_args, **kwargs: requested.append(kwargs)
-        or SimpleNamespace(id="11111111-1111-1111-1111-111111111111"),
+        lambda *_args, **kwargs: (
+            requested.append(kwargs) or SimpleNamespace(id="11111111-1111-1111-1111-111111111111")
+        ),
     )
 
     class _Session:
@@ -218,7 +210,6 @@ def test_new_native_docs_use_workspace_partition_for_every_rag_scope(monkeypatch
     docs = [
         SimpleNamespace(
             id=f"doc-{rag_scope}",
-            workspace_id="ws-1",
             owner_id="user-1",
             rag_scope=rag_scope,
             retrieval_partition_id=None,
@@ -227,32 +218,31 @@ def test_new_native_docs_use_workspace_partition_for_every_rag_scope(monkeypatch
     ]
     db = _Session()
 
-    partition_ids = [
-        docs_partitioning.ensure_native_doc_partition(db, doc=doc) for doc in docs
-    ]
+    partition_ids = [docs_partitioning.ensure_native_doc_partition(db, doc=doc) for doc in docs]
 
     assert partition_ids == ["11111111-1111-1111-1111-111111111111"] * 3
     assert [doc.retrieval_partition_id for doc in docs] == partition_ids
     assert db.added == docs
-    assert requested == [
-        {
-            "source_namespace": "docs",
-            "candidate_scope_kind": "workspace",
-            "workspace_id": "ws-1",
-        }
-    ] * 3
+    assert (
+        requested
+        == [
+            {
+                "source_namespace": "docs",
+                "candidate_scope_kind": "company",
+            }
+        ]
+        * 3
+    )
 
 
 @pytest.mark.parametrize(
     ("partition", "error_type"),
     [
-        (None, RetrievalPartitionUnbound),
+        (None, RetrievalPartitionConflict),
         (
             SimpleNamespace(
                 source_namespace="files",
-                managed_workspace_id="ws-1",
-                candidate_scope_kind="workspace",
-                candidate_workspace_id="ws-1",
+                candidate_scope_kind="company",
                 candidate_user_id=None,
                 state="active",
                 is_default_ingest=True,
@@ -262,9 +252,7 @@ def test_new_native_docs_use_workspace_partition_for_every_rag_scope(monkeypatch
         (
             SimpleNamespace(
                 source_namespace="docs",
-                managed_workspace_id=None,
                 candidate_scope_kind="personal",
-                candidate_workspace_id=None,
                 candidate_user_id="user-1",
                 state="active",
                 is_default_ingest=True,
@@ -274,10 +262,8 @@ def test_new_native_docs_use_workspace_partition_for_every_rag_scope(monkeypatch
         (
             SimpleNamespace(
                 source_namespace="docs",
-                managed_workspace_id="ws-2",
-                candidate_scope_kind="workspace",
-                candidate_workspace_id="ws-2",
-                candidate_user_id=None,
+                candidate_scope_kind="company",
+                candidate_user_id="invalid-company-owner",
                 state="active",
                 is_default_ingest=True,
             ),
@@ -286,9 +272,7 @@ def test_new_native_docs_use_workspace_partition_for_every_rag_scope(monkeypatch
         (
             SimpleNamespace(
                 source_namespace="docs",
-                managed_workspace_id="ws-1",
-                candidate_scope_kind="workspace",
-                candidate_workspace_id="ws-1",
+                candidate_scope_kind="company",
                 candidate_user_id=None,
                 state="retired",
                 is_default_ingest=True,
@@ -298,9 +282,7 @@ def test_new_native_docs_use_workspace_partition_for_every_rag_scope(monkeypatch
         (
             SimpleNamespace(
                 source_namespace="docs",
-                managed_workspace_id="ws-1",
-                candidate_scope_kind="workspace",
-                candidate_workspace_id="ws-1",
+                candidate_scope_kind="company",
                 candidate_user_id=None,
                 state="active",
                 is_default_ingest=False,
@@ -312,7 +294,7 @@ def test_new_native_docs_use_workspace_partition_for_every_rag_scope(monkeypatch
         "missing",
         "wrong-namespace",
         "personal",
-        "wrong-workspace",
+        "company-with-personal-owner",
         "retired",
         "non-default",
     ),
@@ -342,7 +324,6 @@ def test_existing_native_doc_partition_must_be_valid_or_fail_closed(
     db = _Session()
     doc = SimpleNamespace(
         id="doc-existing",
-        workspace_id="ws-1",
         owner_id="user-1",
         rag_scope="official",
         retrieval_partition_id="11111111-1111-1111-1111-111111111111",
@@ -361,25 +342,17 @@ def test_meeting_doc_acl_changes_enqueue_rag_visibility_recompute_jobs(
 ) -> None:
     from datetime import UTC, datetime, timedelta
 
-    from test_meeting import (
-        _auth_headers,
-        _bootstrap_admin_session,
-        _create_user_with_workspaces,
-        _first_workspace_slug,
-        _login,
-    )
+    from test_meeting import _auth_headers, _bootstrap_admin_session, _create_company_user, _login
 
     _enable_docs_rag(monkeypatch)
     admin = _bootstrap_admin_session(client)
     admin_token = admin["token"]
-    workspace_slug = _first_workspace_slug(client, admin_token)
 
-    attendee = _create_user_with_workspaces(
+    attendee = _create_company_user(
         client,
         admin_token,
         email="meeting-rag-reader@open-work-hub.local",
         full_name="Meeting Rag Reader",
-        workspace_keys=[workspace_slug],
     )
     attendee_token = _login(
         client,
@@ -388,7 +361,7 @@ def test_meeting_doc_acl_changes_enqueue_rag_visibility_recompute_jobs(
     )
 
     create_doc = client.post(
-        f"/api/v1/workspaces/{workspace_slug}/docs/items",
+        "/api/v1/docs/items",
         headers=_auth_headers(admin_token),
         json={"title": "Meeting RAG Reference"},
     )
@@ -401,7 +374,7 @@ def test_meeting_doc_acl_changes_enqueue_rag_visibility_recompute_jobs(
 
     start_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(days=30)
     create_meeting = client.post(
-        f"/api/v1/workspaces/{workspace_slug}/meeting/meetings",
+        "/api/v1/meeting/meetings",
         headers=_auth_headers(admin_token),
         json={
             "title": "Sprint planning",
@@ -429,13 +402,13 @@ def test_meeting_doc_acl_changes_enqueue_rag_visibility_recompute_jobs(
     ] == []
 
     doc_lookup = client.get(
-        f"/api/v1/workspaces/{workspace_slug}/docs/items/{doc['id']}",
+        f"/api/v1/docs/items/{doc['id']}",
         headers=_auth_headers(attendee_token),
     )
     assert doc_lookup.status_code == 200
 
     detach_response = client.delete(
-        f"/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting['id']}/docs/{doc_id}",
+        f"/api/v1/meeting/meetings/{meeting['id']}/docs/{doc_id}",
         headers=_auth_headers(admin_token),
     )
     assert detach_response.status_code == 200, detach_response.text

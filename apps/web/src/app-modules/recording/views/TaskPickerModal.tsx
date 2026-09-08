@@ -1,7 +1,7 @@
 import {
   TaskPickerModal as PmsTaskPickerModal,
-  type TaskPickerModalCopy,
   type TaskPickerModalProps as PmsTaskPickerModalProps,
+  type TaskPickerModalCopy,
 } from '@/src/app-modules/pms/public-api';
 
 export type TaskPickerModalProps = Omit<PmsTaskPickerModalProps, 'copy'>;
@@ -9,7 +9,7 @@ export type TaskPickerModalProps = Omit<PmsTaskPickerModalProps, 'copy'>;
 const RECORDING_TASK_PICKER_COPY: TaskPickerModalCopy = {
   titleKey: 'recording.detail.taskPicker.title',
   descriptionKey: 'recording.detail.taskPicker.description',
-  workspaceLabelKey: 'recording.title',
+  appLabelKey: 'recording.title',
   noAccessActionKey: 'recording.detail.addTask',
   loadListsErrorKey: 'recording.errors.attachFailed',
   loadTasksErrorKey: 'recording.errors.attachFailed',

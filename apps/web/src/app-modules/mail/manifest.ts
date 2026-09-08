@@ -1,3 +1,4 @@
+import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
 import {
   FilePenLine,
   Inbox,
@@ -6,7 +7,6 @@ import {
   Settings,
   Star,
 } from 'lucide-react';
-import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
 
 import type { AppModuleManifest } from '@/src/app/shell/navigation-types';
 
@@ -27,7 +27,7 @@ export const mailManifest: AppModuleManifest = {
       'apps/web/src/app-modules/mail/api/mail-api.spec.ts',
       'apps/web/src/app-modules/mail/routes.spec.ts',
       'apps/web/src/app-modules/mail/views/mail-view-model.spec.ts',
-      'apps/web/src/app-modules/mail/views/mail-workspace-workflow.spec.ts',
+      'apps/web/src/app-modules/mail/views/mail-view-workflow.spec.ts',
       'apps/web/src/app-modules/mail/views/useMailViewController.spec.ts',
       'apps/api/tests/test_mail_integration.py',
       'apps/api/tests/test_mail_personal_scope.py',
@@ -76,6 +76,6 @@ export const mailManifest: AppModuleManifest = {
       pathSuffix: '?view=settings',
     },
   ],
-  workspaceRoutePaths: [],
+  appRoutePaths: [],
   globalRoutePaths: [getAppRoutePattern('mail.root')],
 };

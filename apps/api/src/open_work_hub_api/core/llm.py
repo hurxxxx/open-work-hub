@@ -3,7 +3,7 @@
 Public surface:
 
 - ``LlmTaskContext`` — identity of an LLM request (source / actor_user_id /
-  workspace_id / task_kind). Mandatory input to ``choose_pool`` and
+  user_id / task_kind). Mandatory input to ``choose_pool`` and
   ``complete_chat``.
 - ``PolicyDecision`` — legacy-compatible execution metadata. Registered
   workloads always record the immutable administrator-selected route here;
@@ -57,7 +57,6 @@ from open_work_hub_api.core.llm_provider_registry import (
 )
 from open_work_hub_api.core.settings import Settings, get_settings
 from open_work_hub_api.domains.ai.registry import RegisteredLlmTask, get_ai_capability_registry
-
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +123,6 @@ class LlmPoolConfig:
 @dataclass(frozen=True)
 class LlmTaskContext:
     source: str
-    workspace_id: str
     task_kind: str
     app_id: str
     workload_id: str | None = None
@@ -941,7 +939,6 @@ def complete_chat(
             actor_user_id=context.actor_user_id,
             principal_kind=context.principal_kind,
             principal_id=context.principal_id,
-            workspace_id=context.workspace_id,
             task_kind=context.task_kind,
             workload_id=context.workload_id,
             app_id=context.app_id,
@@ -996,7 +993,6 @@ def complete_chat(
             actor_user_id=context.actor_user_id,
             principal_kind=context.principal_kind,
             principal_id=context.principal_id,
-            workspace_id=context.workspace_id,
             task_kind=context.task_kind,
             workload_id=context.workload_id,
             app_id=context.app_id,
@@ -1032,7 +1028,6 @@ def complete_chat(
             actor_user_id=context.actor_user_id,
             principal_kind=context.principal_kind,
             principal_id=context.principal_id,
-            workspace_id=context.workspace_id,
             task_kind=context.task_kind,
             workload_id=context.workload_id,
             app_id=context.app_id,
@@ -1063,7 +1058,6 @@ def complete_chat(
             actor_user_id=context.actor_user_id,
             principal_kind=context.principal_kind,
             principal_id=context.principal_id,
-            workspace_id=context.workspace_id,
             task_kind=context.task_kind,
             workload_id=context.workload_id,
             app_id=context.app_id,
@@ -1096,7 +1090,6 @@ def complete_chat(
         actor_user_id=context.actor_user_id,
         principal_kind=context.principal_kind,
         principal_id=context.principal_id,
-        workspace_id=context.workspace_id,
         task_kind=context.task_kind,
         workload_id=context.workload_id,
         app_id=context.app_id,
@@ -1469,7 +1462,6 @@ async def complete_chat_stream(
             actor_user_id=context.actor_user_id,
             principal_kind=context.principal_kind,
             principal_id=context.principal_id,
-            workspace_id=context.workspace_id,
             task_kind=context.task_kind,
             workload_id=context.workload_id,
             app_id=context.app_id,
@@ -1545,7 +1537,6 @@ async def complete_chat_stream(
             actor_user_id=context.actor_user_id,
             principal_kind=context.principal_kind,
             principal_id=context.principal_id,
-            workspace_id=context.workspace_id,
             task_kind=context.task_kind,
             workload_id=context.workload_id,
             app_id=context.app_id,

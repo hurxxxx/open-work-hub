@@ -1,6 +1,6 @@
+import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
-import type { LucideIcon } from 'lucide-react';
 
 import type { AuthUser } from '@/src/platform/auth/auth-api';
 import type { AppModuleId, NavItem } from './navigation-types';
@@ -8,8 +8,8 @@ import type { AppModuleId, NavItem } from './navigation-types';
 export interface AppSidebarActionContext {
   activeAppId?: AppModuleId;
   currentPathname: string;
-  currentWorkspaceSlug: string | null;
-  enabledWorkspaceAppIds: readonly string[];
+
+  enabledShellAppIds: readonly string[];
   navigate: NavigateFunction;
   user: AuthUser | null;
 }
@@ -25,7 +25,7 @@ export interface AppSidebarCreateAction {
 export interface AppSidebarRenderContext extends AppSidebarActionContext {
   activeAppId: AppModuleId;
   activeNavItemId: string;
-  canReadWorkspace: boolean;
+  canReadApp: boolean;
   filteredItems: NavItem[];
   isCategoryExpanded: (category: string) => boolean;
   onNavigate?: () => void;
@@ -38,7 +38,7 @@ export interface AppSidebarConfig {
   ) => AppSidebarCreateAction[];
   extendCategories?: (
     categories: string[],
-    context: { canReadWorkspace: boolean },
+    context: { canReadApp: boolean },
   ) => string[];
   beforeCategories?: (context: AppSidebarRenderContext) => ReactNode;
   afterCategories?: (context: AppSidebarRenderContext) => ReactNode;

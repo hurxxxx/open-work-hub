@@ -10,7 +10,7 @@ Under 2,700 chars. Link logs; explain N/A.
 - App/owner/route/execution/resource scope and runtime availability; data/RBAC: <!-- open-work-hub:field:contract-boundaries --> REPLACE_ME
 - API/UI/i18n/a11y; file/network: <!-- open-work-hub:field:contract-interfaces --> REPLACE_ME
 - AI/data/caps; worker; migration/compat: <!-- open-work-hub:field:contract-runtime --> REPLACE_ME
-- Search (`none - reason` or `workspace - evidence`): <!-- open-work-hub:field:workspace-keyword-search --> REPLACE_ME
+- Search (`none - reason` or `company - evidence`): <!-- open-work-hub:field:company-keyword-search --> REPLACE_ME
 
 - [ ] <!-- open-work-hub:check:scaffold --> Scaffold/Core ready.
 - [ ] <!-- open-work-hub:check:app-owned-surface --> App-only; no guard bypass.
@@ -24,7 +24,7 @@ Under 2,700 chars. Link logs; explain N/A.
 - [ ] <!-- open-work-hub:check:ai --> Registered workload/common interface/caps/budget/audit/data/approval; no direct provider call, or N/A.
 - [ ] <!-- open-work-hub:check:worker --> Worker import/queue/retry/Linux.
 - [ ] <!-- open-work-hub:check:compatibility --> Data/routes/workflows compatible.
-- [ ] <!-- open-work-hub:check:workspace-keyword-search --> Registry/ACL/index evidence, or `none` reason.
+- [ ] <!-- open-work-hub:check:company-keyword-search --> Registry/ACL/index evidence, or `none` reason.
 
 Evidence or N/A reasons: <!-- open-work-hub:field:safety-evidence --> REPLACE_ME
 

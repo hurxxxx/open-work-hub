@@ -34,6 +34,8 @@ function user(overrides: Partial<AuthUser> = {}): AuthUser {
     time_zone: 'Asia/Seoul',
     date_format: 'korean',
     system_roles: [],
+    group_ids: [],
+    managed_organization_unit_ids: [],
     workspaces: [],
     workspace_roles: [],
     must_change_password: false,
@@ -44,12 +46,13 @@ function user(overrides: Partial<AuthUser> = {}): AuthUser {
 }
 
 describe('admin people rows model', () => {
-  it('derives table rows with labels and workspace names', () => {
+  it('derives table rows with labels and effective group count', () => {
     const model = buildAdminPeopleRows({
       users: [
         user({
           display_name: 'Ada',
           system_roles: ['platform_admin'],
+          group_ids: ['group-1'],
           workspaces: [
             {
               id: 'workspace-1',
@@ -72,11 +75,10 @@ describe('admin people rows model', () => {
       name: 'Ada',
       loginId: 'ada',
       email: 'ada@example.test',
-      workspaceNames: 'HQ',
+      groupCount: '1',
       role: 'admin',
       roleLabel: 'Admin',
       statusLabel: 'status:active',
-      appsLabel: 'Admin',
       lastActiveLabel: '2026-05-29T00:00:00Z',
       createdLabel: '2026-01-01T00:00:00Z',
     });
@@ -141,6 +143,7 @@ describe('admin people rows model', () => {
             unit_type: 'department',
             active: true,
           },
+          group_ids: ['group-1'],
           workspaces: [
             {
               id: 'workspace-1',
@@ -162,12 +165,11 @@ describe('admin people rows model', () => {
       'E-1001',
       'Researcher',
       'Research',
-      'HQ',
+      '1',
       'Member',
       'status:active',
       '-',
       '2026-01-01T00:00:00Z',
-      '-',
     ]);
     expect(
       encodeAdminPeopleCsv({
@@ -178,12 +180,11 @@ describe('admin people rows model', () => {
           'Employee code',
           'Job title',
           'Organization',
-          'Workspaces',
+          'Groups',
           'Role',
           'Status',
           'Last Active',
           'Created',
-          'Apps',
         ],
         rows,
       }),

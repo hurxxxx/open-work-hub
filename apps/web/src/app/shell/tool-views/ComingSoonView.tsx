@@ -1,5 +1,5 @@
-import { LazyMotion, domAnimation, m } from 'motion/react';
 import { Construction } from 'lucide-react';
+import { LazyMotion, domAnimation, m } from 'motion/react';
 import { useTranslation } from 'react-i18next';
 
 import type { NavItem } from '@/src/app/shell/navigation-types';

@@ -19,9 +19,8 @@ from open_work_hub_api.domains.ai.tool_result_projection import (
     serialize_tool_result_for_llm,
 )
 from open_work_hub_api.domains.ai.tool_service import ToolRequiresApproval, execute_tool
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.auth.security import new_id
-
 
 ToolCallStatus = Literal["ok", "error", "blocked", "rejected"]
 
@@ -59,7 +58,6 @@ class ToolCallExecution:
 def execute_tool_call(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     tool_name: str,
@@ -75,7 +73,6 @@ def execute_tool_call(
     try:
         response = execute_tool(
             db,
-            workspace=workspace,
             principal=principal,
             user=user,
             tool_name=tool_name,
@@ -116,6 +113,7 @@ def execute_tool_call(
         status="rejected" if is_rejected_tool_response(response) else "ok",
         response=response,
     )
+
 
 __all__ = [
     "ToolCallExecution",

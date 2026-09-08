@@ -54,14 +54,12 @@ export type ListConversationsPage = (
     cursor?: string | null;
     scopeRef?: string;
     scopeResourceId?: string;
-    workspaceSlug?: string | null;
   },
 ) => Promise<ConversationListResponse>;
 
 export interface ConversationListScopeFilter {
   scopeRef?: string;
   scopeResourceId?: string;
-  workspaceSlug?: string | null;
 }
 
 export function groupConversationsByDate(
@@ -145,7 +143,6 @@ export async function listConversationsWindow(
       cursor,
       scopeRef: scope.scopeRef,
       scopeResourceId: scope.scopeResourceId,
-      workspaceSlug: scope.workspaceSlug,
     });
     items.push(...response.items);
     cursor = response.nextCursor ?? null;

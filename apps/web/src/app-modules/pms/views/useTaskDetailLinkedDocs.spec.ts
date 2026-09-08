@@ -34,8 +34,7 @@ describe('task detail linked docs helpers', () => {
       resolveTaskDetailDocPath({
         docId: 'doc-1',
         user: null,
-        workspaceSlug: 'team space',
       }),
-    ).toBe('/apps/docs/workspaces/team%20space/documents/doc-1');
+    ).toBe('/apps/docs/documents/doc-1');
   });
 });

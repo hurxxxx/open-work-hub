@@ -1,9 +1,5 @@
 import { projectPickerItems } from '@/src/platform/pickers/picker-model';
-import type {
-  PmsTask,
-  PmsTaskList,
-  TaskFilterParams,
-} from '../api/pms-api';
+import type { PmsTask, PmsTaskList, TaskFilterParams } from '../api/pms-api';
 
 export const TASK_PICKER_RESULT_LIMIT = 50;
 export const EMPTY_EXCLUDED_TASK_IDS: string[] = [];

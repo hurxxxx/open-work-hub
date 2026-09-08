@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import cast
-from typing import Protocol
+from typing import Protocol, cast
 
+from open_work_hub_api.domains.rag.provider_registry import (
+    RagProviderDescriptor,
+    RagProviderRegistry,
+)
 from open_work_hub_api.domains.rag.providers import (
     DoclingOcrClient,
     FakeEmbeddingClient,
@@ -24,7 +27,6 @@ from open_work_hub_api.domains.rag.providers.base import (
     VectorIndexClient,
 )
 from open_work_hub_api.domains.rag.providers.fake import FakeRerankClient, FakeVectorIndexClient
-from open_work_hub_api.domains.rag.provider_registry import RagProviderDescriptor, RagProviderRegistry
 
 
 class RagRuntimeSettings(Protocol):

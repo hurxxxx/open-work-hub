@@ -1,5 +1,4 @@
 import {
-  buildAppEntryHref,
   buildAppHref,
   matchAppRoute,
 } from '@open-work-hub/contracts/app-routes';
@@ -26,9 +25,7 @@ export type PmsTaskListToolTab =
   | 'gantt'
   | 'table';
 
-export type PmsToolPathOptions = {
-  workspaceSlug?: string | null;
-};
+export type PmsToolPathOptions = Record<string, never>;
 
 const PMS_CREATE_TASK_PARAM = 'create';
 const PMS_CREATE_TASK_TITLE_PARAM = 'title';
@@ -41,7 +38,7 @@ export type PmsCreateTaskRequest = {
   title: string;
 };
 
-function resolvePmsWorkspaceViewRoute(
+function matchPmsAppRoute(
   pathname: string | null | undefined,
   requestedTab?: string | null,
 ): PmsViewRoute | null {
@@ -95,88 +92,67 @@ export function buildPmsTaskListToolPath({
   taskId,
   taskListId,
   tab = 'list',
-  workspaceSlug,
 }: {
   settings?: boolean;
   taskId?: string | null;
   taskListId: string;
   tab?: PmsTaskListToolTab;
-} & PmsToolPathOptions): string {
+}): string {
   const params = new URLSearchParams();
   if (tab !== 'list') params.set('tab', tab);
   if (settings) params.set('settings', '1');
   if (taskId) params.set('task', taskId);
-  return workspaceSlug
-    ? buildAppHref({
-        routeId: 'pms.list',
-        workspaceSlug,
-        pathParams: { taskListId },
-        queryParams: Object.fromEntries(params),
-      })
-    : buildAppEntryHref('pms');
+  return buildAppHref({
+    routeId: 'pms.list',
+    pathParams: { taskListId },
+    queryParams: Object.fromEntries(params),
+  });
 }
 
 export function buildPmsSpaceToolPath(
   spaceId: string,
   options: PmsToolPathOptions = {},
 ): string {
-  return options.workspaceSlug
-    ? buildAppHref({
-        routeId: 'pms.space',
-        workspaceSlug: options.workspaceSlug,
-        pathParams: { spaceId },
-      })
-    : buildAppEntryHref('pms');
+  return buildAppHref({
+    routeId: 'pms.space',
+    pathParams: { spaceId },
+  });
 }
 
-export function buildPmsSpaceTaskToolPath(
-  args: {
-    spaceId: string;
-    tab: PmsTaskListToolTab;
-  } & PmsToolPathOptions,
-): string {
+export function buildPmsSpaceTaskToolPath(args: {
+  spaceId: string;
+  tab: PmsTaskListToolTab;
+}): string {
   const params = new URLSearchParams({ tab: args.tab });
-  return args.workspaceSlug
-    ? buildAppHref({
-        routeId: 'pms.space',
-        workspaceSlug: args.workspaceSlug,
-        pathParams: { spaceId: args.spaceId },
-        queryParams: Object.fromEntries(params),
-      })
-    : buildAppEntryHref('pms');
+  return buildAppHref({
+    routeId: 'pms.space',
+    pathParams: { spaceId: args.spaceId },
+    queryParams: Object.fromEntries(params),
+  });
 }
 
-export function buildPmsSpaceDocsToolPath(
-  args: {
-    docId?: string | null;
-    spaceId: string;
-  } & PmsToolPathOptions,
-): string {
-  if (!args.workspaceSlug) return buildAppEntryHref('pms');
+export function buildPmsSpaceDocsToolPath(args: {
+  docId?: string | null;
+  spaceId: string;
+}): string {
   return args.docId
     ? buildAppHref({
         routeId: 'pms.space-doc',
-        workspaceSlug: args.workspaceSlug,
         pathParams: { spaceId: args.spaceId, docId: args.docId },
       })
     : buildAppHref({
         routeId: 'pms.space-docs',
-        workspaceSlug: args.workspaceSlug,
         pathParams: { spaceId: args.spaceId },
       });
 }
 
-export function buildPmsSpaceWhiteboardsToolPath(
-  args: {
-    spaceId: string;
-    whiteboardId?: string | null;
-  } & PmsToolPathOptions,
-): string {
-  if (!args.workspaceSlug) return buildAppEntryHref('pms');
+export function buildPmsSpaceWhiteboardsToolPath(args: {
+  spaceId: string;
+  whiteboardId?: string | null;
+}): string {
   return args.whiteboardId
     ? buildAppHref({
         routeId: 'pms.space-whiteboard',
-        workspaceSlug: args.workspaceSlug,
         pathParams: {
           spaceId: args.spaceId,
           whiteboardId: args.whiteboardId,
@@ -184,7 +160,6 @@ export function buildPmsSpaceWhiteboardsToolPath(
       })
     : buildAppHref({
         routeId: 'pms.space-whiteboards',
-        workspaceSlug: args.workspaceSlug,
         pathParams: { spaceId: args.spaceId },
       });
 }
@@ -246,12 +221,9 @@ export function resolvePmsViewRoute({
   requestedTab?: string | null;
   routePathname?: string | null;
 }): PmsViewRoute {
-  const workspaceRoute = resolvePmsWorkspaceViewRoute(
-    routePathname,
-    requestedTab,
-  );
-  if (workspaceRoute) {
-    return workspaceRoute;
+  const appRoute = matchPmsAppRoute(routePathname, requestedTab);
+  if (appRoute) {
+    return appRoute;
   }
 
   if (createTaskRequested || isNewTaskModalOpen) {

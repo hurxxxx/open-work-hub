@@ -3,21 +3,21 @@ import { Home } from 'lucide-react';
 
 import type { AppBarItem } from '@/src/app/shell/navigation-types';
 import type {
-  WorkspaceBootstrapAppBarCategory,
-  WorkspaceBootstrapApp,
-} from '@/src/platform/workspaces/workspaces-api';
+  BootstrapAppBarCategory,
+  BootstrapApp,
+} from '@/src/platform/apps/apps-api';
 import {
   INITIAL_APP_BAR_STATE,
   appBarReducer,
   buildAppBarItemsProjection,
   buildNotificationIssueHref,
   buildVisibleAppBarItems,
-  buildWorkspaceSearchHref,
+  buildSearchHref,
   resolvePinnedAppIds,
   type AppBarTranslator,
 } from './app-bar-model';
 
-function app(overrides: Partial<WorkspaceBootstrapApp>): WorkspaceBootstrapApp {
+function app(overrides: Partial<BootstrapApp>): BootstrapApp {
   return {
     app_id: 'home',
     title: 'HOME',
@@ -41,7 +41,7 @@ const LAUNCHER_POLICY = {
   pinnedByDefaultAppIds: ['pms', 'docs', 'whiteboard'],
 } as const;
 
-const APP_BAR_CATEGORIES: WorkspaceBootstrapAppBarCategory[] = [
+const APP_BAR_CATEGORIES: BootstrapAppBarCategory[] = [
   {
     id: 'category-assistants',
     key: 'assistants',
@@ -137,7 +137,7 @@ describe('app-bar model', () => {
         app({
           app_id: 'unknown-app',
           title: 'Unknown',
-        } as Partial<WorkspaceBootstrapApp>),
+        } as Partial<BootstrapApp>),
       ],
       APP_BAR_CATEGORIES,
       translate,
@@ -325,7 +325,7 @@ describe('app-bar model', () => {
   });
 
   it('keeps personal tools visible but removes them from pinned preferences', () => {
-    const personalToolsCategory: WorkspaceBootstrapAppBarCategory = {
+    const personalToolsCategory: BootstrapAppBarCategory = {
       id: 'personal-tools',
       key: 'personal-tools',
       title: 'Personal tools',
@@ -395,9 +395,7 @@ describe('app-bar model', () => {
   });
 
   it('builds workspace search hrefs', () => {
-    expect(buildWorkspaceSearchHref('project docs')).toBe(
-      '/apps/retrieval-search/workspaces/project%20docs',
-    );
-    expect(buildWorkspaceSearchHref(null)).toBe('/apps/retrieval-search');
+    expect(buildSearchHref('project docs')).toBe('/apps/retrieval-search');
+    expect(buildSearchHref(null)).toBe('/apps/retrieval-search');
   });
 });

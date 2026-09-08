@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
-from email.utils import parsedate_to_datetime
 import json
 import math
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from threading import Lock
 from time import monotonic
 from typing import Any
@@ -13,7 +13,11 @@ import httpx
 from open_work_hub_api.domains.rag.contracts import RagProviderHealth, RagVectorSearchHit
 from open_work_hub_api.domains.rag.providers.operation import (
     ProviderCircuitBreaker,
+)
+from open_work_hub_api.domains.rag.providers.operation import (
     sanitize_untrusted_text as _sanitize_untrusted_text,
+)
+from open_work_hub_api.domains.rag.providers.operation import (
     xml_escape as _xml_escape,
 )
 from open_work_hub_api.domains.rag.providers.rerank_text import build_rerank_document_text

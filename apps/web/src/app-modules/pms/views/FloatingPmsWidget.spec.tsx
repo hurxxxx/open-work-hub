@@ -16,7 +16,13 @@ import {
 } from './FloatingPmsWidget';
 import { dispatchPmsTaskListChanged } from './pms-events';
 
-const authState = vi.hoisted(() => ({ token: null as string | null }));
+const authState = vi.hoisted(() => ({
+  token: null as string | null,
+  admitted: true,
+}));
+vi.mock('@/src/platform/apps/app-bootstrap-context', () => ({
+  useAppAdmission: () => authState.admitted,
+}));
 const pmsApiMocks = vi.hoisted(() => ({
   listAllPmsTaskLists: vi.fn(),
   listPersonalPmsAssignedTasks: vi.fn(),
@@ -36,28 +42,7 @@ vi.mock('../api/pms-api', async (importOriginal) => {
 vi.mock('./NewTaskModal', () => ({
   NewTaskModal: (props: Record<string, unknown>) => {
     newTaskModalSpy(props);
-    const options = props.workspaceOptions as Array<{
-      label: string;
-      slug: string;
-    }>;
-    const onWorkspaceSlugChange = props.onWorkspaceSlugChange as (
-      workspaceSlug: string,
-    ) => void;
-    return (
-      <div aria-label="new-task-modal" role="dialog">
-        <select
-          aria-label="new-task-workspace"
-          onChange={(event) => onWorkspaceSlugChange(event.target.value)}
-          value={props.workspaceSlug as string}
-        >
-          {options.map((option) => (
-            <option key={option.slug} value={option.slug}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </div>
-    );
+    return <div aria-label="new-task-modal" role="dialog" />;
   },
 }));
 
@@ -74,6 +59,7 @@ function AssignedSummaryProbe() {
 describe('FloatingPmsWidget', () => {
   beforeEach(async () => {
     authState.token = null;
+    authState.admitted = true;
     newTaskModalSpy.mockClear();
     pmsApiMocks.listAllPmsTaskLists.mockReset();
     pmsApiMocks.listPersonalPmsAssignedTasks.mockReset();
@@ -82,73 +68,51 @@ describe('FloatingPmsWidget', () => {
     await i18n.changeLanguage('ko-KR');
   });
 
-  it('moves workspace selection into the new-task modal', async () => {
+  it('loads app-owned task lists directly and opens the selected list', async () => {
     authState.token = 'token-1';
     pmsApiMocks.listPersonalPmsAssignedTasks.mockResolvedValue({
       items: [],
+      total: 0,
       page: 1,
       page_size: 100,
-      total: 0,
-      workspaces: [
-        { id: 'workspace-alpha', name: 'Alpha', slug: 'alpha' },
-        { id: 'workspace-beta', name: 'Beta', slug: 'beta' },
+    });
+    pmsApiMocks.listAllPmsTaskLists.mockResolvedValue({
+      items: [
+        {
+          id: 'list-alpha',
+          name: 'Backlog',
+          role: 'member',
+          team_id: 'space-alpha',
+          team_name: 'Alpha',
+          folder_name: null,
+        },
       ],
     });
-    pmsApiMocks.listAllPmsTaskLists.mockImplementation(
-      (_token: string, _teamId: undefined, workspaceSlug: string) =>
-        Promise.resolve({
-          items: [
-            {
-              folder_name: null,
-              id: `list-${workspaceSlug}`,
-              name: 'Backlog',
-              role: 'member',
-              team_id: `space-${workspaceSlug}`,
-              team_name: workspaceSlug === 'alpha' ? 'Alpha' : 'Beta',
-            },
-          ],
-        }),
-    );
-
     render(
-      <MemoryRouter initialEntries={['/apps/home/workspaces/alpha']}>
-        <FloatingPmsWidget workspaceSlug="alpha" />
+      <MemoryRouter>
+        <FloatingPmsWidget />
       </MemoryRouter>,
     );
-
-    await waitFor(() => {
+    await waitFor(() =>
       expect(
-        (
-          screen.getByRole('button', {
-            name: '새 태스크',
-          }) as HTMLButtonElement
-        ).disabled,
-      ).toBe(false);
-    });
-    expect(screen.queryByRole('combobox')).toBeNull();
-
+        (screen.getByRole('button', { name: '새 태스크' }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false),
+    );
     fireEvent.click(screen.getByRole('button', { name: '새 태스크' }));
-    const workspaceSelect = await screen.findByRole('combobox', {
-      name: 'new-task-workspace',
-    });
-    fireEvent.change(workspaceSelect, { target: { value: 'beta' } });
-
-    expect(
-      screen.getByRole('dialog', { name: 'new-task-modal' }),
-    ).not.toBeNull();
-    await waitFor(() => {
-      expect(pmsApiMocks.listAllPmsTaskLists).toHaveBeenCalledWith(
-        'token-1',
-        undefined,
-        'beta',
-      );
+    await screen.findByRole('dialog', { name: 'new-task-modal' });
+    await waitFor(() =>
       expect(newTaskModalSpy).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          taskListId: 'list-beta',
-          workspaceSlug: 'beta',
-        }),
-      );
-    });
+        expect.objectContaining({ taskListId: 'list-alpha' }),
+      ),
+    );
+    expect(pmsApiMocks.listAllPmsTaskLists).toHaveBeenCalledWith(
+      'token-1',
+      undefined,
+    );
+    expect(newTaskModalSpy.mock.lastCall?.[0]).not.toHaveProperty(
+      'workspaceOptions',
+    );
   });
 
   it('marks a create-task open request as consumed after opening the modal', async () => {
@@ -217,7 +181,7 @@ describe('FloatingPmsWidget', () => {
 
     render(
       <MemoryRouter>
-        <FloatingPmsWidget workspaceSlug="alpha" />
+        <FloatingPmsWidget />
       </MemoryRouter>,
     );
 
@@ -274,10 +238,10 @@ describe('FloatingPmsWidget', () => {
     });
   });
 
-  it('opens the full PMS app for the current workspace', () => {
+  it('opens the full PMS app at the canonical route', () => {
     render(
-      <MemoryRouter initialEntries={['/apps/home/workspaces/team-alpha']}>
-        <FloatingPmsWidget workspaceSlug="team alpha" />
+      <MemoryRouter initialEntries={['/apps/home']}>
+        <FloatingPmsWidget />
         <LocationProbe />
       </MemoryRouter>,
     );
@@ -285,14 +249,15 @@ describe('FloatingPmsWidget', () => {
     fireEvent.click(screen.getByRole('button', { name: 'PMS' }));
 
     expect(screen.getByLabelText('current-location').textContent).toBe(
-      '/apps/pms/workspaces/team%20alpha',
+      '/apps/pms',
     );
   });
 
-  it('disables the PMS shortcut until the workspace is available', () => {
+  it('disables the PMS shortcut when app admission is denied', () => {
+    authState.admitted = false;
     render(
       <MemoryRouter>
-        <FloatingPmsWidget workspaceSlug={null} />
+        <FloatingPmsWidget />
       </MemoryRouter>,
     );
 

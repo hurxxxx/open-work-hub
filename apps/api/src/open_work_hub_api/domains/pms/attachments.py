@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
-from io import BytesIO
 from datetime import datetime
+from io import BytesIO
 from typing import Literal, Protocol
 from urllib.parse import quote
 
@@ -14,9 +14,10 @@ from sqlalchemy.orm import Session, selectinload
 from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.core.settings import get_settings
 from open_work_hub_api.core.storage import get_minio_client
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.app_gate import can_use_app
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.auth.security import new_id
-from open_work_hub_api.domains.auth.workspace_app_gate import is_app_enabled_for_user_context
+from open_work_hub_api.domains.content_access.contracts import ContentStream
 from open_work_hub_api.domains.content_access.grants import (
     ContentGrantClaims,
     ContentGrantIssuer,
@@ -24,16 +25,13 @@ from open_work_hub_api.domains.content_access.grants import (
     build_content_grant_url,
     object_identity,
 )
-from open_work_hub_api.domains.content_access.contracts import ContentStream
 from open_work_hub_api.domains.pms.access import (
     _ensure_list_editor,
     _ensure_task_writable,
 )
 from open_work_hub_api.domains.pms.models import Attachment, Task, TaskActivityLog
 from open_work_hub_api.domains.pms.projections import task_reference
-from open_work_hub_api.domains.pms.source_access import resolve_pms_task_workspace_id
 from open_work_hub_api.domains.source_access import can_read_pms_task
-
 
 MAX_TASK_ATTACHMENT_UPLOAD_SIZE = 50 * 1024 * 1024
 DEFAULT_TASK_ATTACHMENT_FILENAME = "unnamed"
@@ -122,7 +120,6 @@ def task_attachment_object_store() -> TaskAttachmentObjectStore:
 def upload_task_attachment(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     task_id: str,
     upload: TaskAttachmentUpload,
@@ -180,7 +177,6 @@ def upload_task_attachment(
 def delete_task_attachment(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     attachment_id: str,
     store: TaskAttachmentObjectStore | None = None,
@@ -253,16 +249,14 @@ def build_task_attachment_download_url(
     now: float | None = None,
     expires_seconds: int = TASK_ATTACHMENT_CONTENT_URL_EXPIRES_SECONDS,
 ) -> str:
-    workspace_id = resolve_pms_task_workspace_id(db, task_id=attachment.task_id)
-    if workspace_id is None or content_grant_issuer.user_id != user.id:
-        raise ValueError("PMS attachment grants require matching workspace/user context")
+    if content_grant_issuer.user_id != user.id:
+        raise ValueError("PMS attachment grants require matching user context")
     return build_content_grant_url(
         resource_kind="pms.attachment",
         resource_id=attachment.id,
         owner_app_id="pms",
         issuer=content_grant_issuer,
-        execution_context_kind="workspace",
-        execution_workspace_id=workspace_id,
+        execution_context_kind="company",
         route_id=None,
         source_type="pms_task",
         source_id=attachment.task_id,
@@ -288,11 +282,9 @@ def open_task_attachment_content_grant(
     attachment = db.scalar(select(Attachment).where(Attachment.id == claims.resource_id))
     if attachment is None:
         raise InvalidContentGrant("resource")
-    workspace_id = resolve_pms_task_workspace_id(db, task_id=attachment.task_id)
     if (
         claims.owner_app_id != "pms"
-        or claims.execution_context_kind != "workspace"
-        or claims.execution_workspace_id != workspace_id
+        or claims.execution_context_kind != "company"
         or claims.source_type != "pms_task"
         or claims.source_id != attachment.task_id
         or claims.object_identity
@@ -302,15 +294,13 @@ def open_task_attachment_content_grant(
             attachment.storage_key,
             attachment.size_bytes,
         )
-        or claims.resource_version
-        != attachment.created_at.isoformat(timespec="microseconds")
+        or claims.resource_version != attachment.created_at.isoformat(timespec="microseconds")
     ):
         raise InvalidContentGrant("binding")
-    if not is_app_enabled_for_user_context(
+    if not can_use_app(
         db,
         app_id="pms",
         user_id=claims.issuer_user_id,
-        workspace_id=workspace_id,
     ):
         raise InvalidContentGrant("app")
     user = db.get(User, claims.issuer_user_id)
@@ -335,9 +325,7 @@ def open_task_attachment_content_grant(
         media_type=attachment.content_type or DEFAULT_TASK_ATTACHMENT_CONTENT_TYPE,
         headers={
             "Cache-Control": "private, no-store",
-            "Content-Disposition": (
-                f"{claims.disposition}; filename*=UTF-8''{encoded_filename}"
-            ),
+            "Content-Disposition": (f"{claims.disposition}; filename*=UTF-8''{encoded_filename}"),
             "X-Content-Type-Options": "nosniff",
         },
     )

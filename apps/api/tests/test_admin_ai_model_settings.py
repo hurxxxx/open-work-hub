@@ -17,7 +17,7 @@ from open_work_hub_api.domains.ai.model_settings_service import (
     get_ai_model_provider_default_model_key,
     resolve_ai_model_workload_route,
 )
-from tests.dev_accounts import auth_headers, dev_login
+from dev_accounts import auth_headers, dev_login
 
 
 def _admin_headers(client: TestClient) -> dict[str, str]:
@@ -44,9 +44,7 @@ def test_registered_plugin_provider_is_projected_and_persisted_without_core_edit
         assert snapshot.status_code == 200, snapshot.text
         payload = snapshot.json()
         plugin = next(
-            item
-            for item in payload["providers"]
-            if item["provider_id"] == "compatible-plugin"
+            item for item in payload["providers"] if item["provider_id"] == "compatible-plugin"
         )
         assert plugin["display_name"] == "Compatible Plugin"
         assert plugin["route_mode"] == "external"
@@ -98,9 +96,7 @@ def test_admin_ai_model_settings_projects_registry_and_default_catalog(
     )
     assert all(item["endpoint_url"] for item in payload["providers"])
     assert all(item["endpoint_source"] in {"default", "custom"} for item in payload["providers"])
-    local_provider = next(
-        item for item in payload["providers"] if item["provider_id"] == "local"
-    )
+    local_provider = next(item for item in payload["providers"] if item["provider_id"] == "local")
     assert local_provider["route_mode"] == "local"
     assert local_provider["credential_kind"] == "none"
     assert all(item["provider_id"] != "anthropic" for item in payload["models"])
@@ -178,10 +174,13 @@ def test_ai_model_provider_default_model_key_resolves_enabled_catalog_entry(
     assert response.status_code == 200, response.text
 
     with get_session_factory()() as db:
-        assert get_ai_model_provider_default_model_key(
-            db,
-            provider_id="local",
-        ) == selected_model["model_key"]
+        assert (
+            get_ai_model_provider_default_model_key(
+                db,
+                provider_id="local",
+            )
+            == selected_model["model_key"]
+        )
 
 
 def test_admin_ai_model_settings_provider_catalog_and_route_lifecycle(
@@ -301,14 +300,13 @@ def test_admin_ai_model_settings_external_route_and_secret_redaction(
     )
     assert model_response.status_code == 201, model_response.text
     sonnet = next(
-        item for item in model_response.json()["models"]
+        item
+        for item in model_response.json()["models"]
         if item["provider_id"] == "anthropic"
         and item["model_key"] == "administrator-selected-model"
     )
     anthropic = next(
-        item
-        for item in model_response.json()["providers"]
-        if item["provider_id"] == "anthropic"
+        item for item in model_response.json()["providers"] if item["provider_id"] == "anthropic"
     )
 
     provider_response = client.put(
@@ -468,7 +466,10 @@ def test_admin_ai_model_settings_rejects_private_external_endpoint(
     )
 
     assert response.status_code == 422
-    assert response.headers["X-Open-Work-Hub-Error-Code"] == "admin.ai_model_endpoint_public_https_required"
+    assert (
+        response.headers["X-Open-Work-Hub-Error-Code"]
+        == "admin.ai_model_endpoint_public_https_required"
+    )
 
 
 def test_admin_ai_model_discovery_requires_key_then_creates_unapproved_models(
@@ -489,7 +490,9 @@ def test_admin_ai_model_discovery_requires_key_then_creates_unapproved_models(
         json={"expected_registry_digest": digest},
     )
     assert missing_key.status_code == 422
-    assert missing_key.headers["X-Open-Work-Hub-Error-Code"] == "admin.ai_model_provider_key_required"
+    assert (
+        missing_key.headers["X-Open-Work-Hub-Error-Code"] == "admin.ai_model_provider_key_required"
+    )
 
     configured = client.put(
         "/api/v1/admin/ai-model-settings/providers/anthropic",
@@ -611,10 +614,7 @@ def test_admin_ai_model_discovery_requires_key_then_creates_unapproved_models(
         json={"expected_registry_digest": digest},
     )
     assert missing_from_inventory.status_code == 200, missing_from_inventory.text
-    assert all(
-        item["id"] != model["id"]
-        for item in missing_from_inventory.json()["models"]
-    )
+    assert all(item["id"] != model["id"] for item in missing_from_inventory.json()["models"])
     chatbot = next(
         item
         for item in missing_from_inventory.json()["workloads"]

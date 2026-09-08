@@ -9,7 +9,8 @@ from sqlalchemy import select
 from dev_accounts import auth_headers, dev_login
 
 from open_work_hub_api.core.db import get_session_factory
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
+from open_work_hub_api.domains.auth.app_access_models import AppAccessPolicy
 from open_work_hub_api.domains.files import chat_retrieval
 from open_work_hub_api.domains.files import service as files_service
 from open_work_hub_api.domains.files.models import FileManagerFile
@@ -33,7 +34,6 @@ def test_file_chat_evidence_raises_existing_unavailable_error_for_closed_runtime
     with pytest.raises(FileSearchUnavailable, match="active_pair_missing"):
         chat_retrieval.query_file_chat_evidence(
             object(),  # type: ignore[arg-type]
-            workspace=SimpleNamespace(),
             user=SimpleNamespace(),
             query="제동 제어 기준",
         )
@@ -68,7 +68,6 @@ def test_file_chat_evidence_uses_files_only_natural_language_hybrid_contract(
 
     result = chat_retrieval.query_file_chat_evidence(
         object(),  # type: ignore[arg-type]
-        workspace=SimpleNamespace(id="workspace-1", key="workspace"),
         user=SimpleNamespace(id="user-1"),
         query="접근 권한 관리 기준은 무엇인가요?",
         limit=3,
@@ -138,7 +137,6 @@ def test_file_chat_evidence_fails_closed_for_low_confidence_rerank(
 
     result = chat_retrieval.query_file_chat_evidence(
         object(),  # type: ignore[arg-type]
-        workspace=SimpleNamespace(id="workspace-1", key="workspace"),
         user=SimpleNamespace(id="user-1"),
         query="대한민국의 수도는 어디야?",
     )
@@ -223,17 +221,16 @@ def test_file_chat_evidence_hydrates_source_metadata_and_bounds_context(
     in_memory_object_storage: None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    uploaded = _upload_workspace_file(
+    uploaded = _upload_company_file(
         client,
         corpus_name="Chat evidence hydration",
         filename="source-fresh-policy.pdf",
     )
 
     with get_session_factory()() as db:
-        workspace = db.scalar(select(Workspace).where(Workspace.key == "administrator"))
         user = db.scalar(select(User).where(User.login_id == "administrator"))
         file = db.get(FileManagerFile, uploaded["id"])
-        assert workspace is not None and user is not None and file is not None
+        assert user is not None and file is not None
         file.filename = "renamed-source-fresh-policy.pdf"
         db.commit()
 
@@ -258,7 +255,6 @@ def test_file_chat_evidence_hydrates_source_metadata_and_bounds_context(
 
         result = chat_retrieval.query_file_chat_evidence(
             db,
-            workspace=workspace,
             user=user,
             query="근거를 알려줘",
         )
@@ -278,24 +274,27 @@ def test_file_chat_evidence_hydrates_source_metadata_and_bounds_context(
     )
 
 
-def test_file_chat_evidence_filters_stale_cross_workspace_candidate_with_source_acl(
+def test_file_chat_evidence_filters_candidate_after_app_admission_revoke(
     client: TestClient,
     in_memory_object_storage: None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    uploaded = _upload_workspace_file(
+    uploaded = _upload_company_file(
         client,
-        corpus_name="Workspace-only chat evidence",
+        corpus_name="Company chat evidence",
         filename="workspace-secret.txt",
     )
     dev_login(client, "delivery-hub-member")
 
     with get_session_factory()() as db:
-        workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
         user = db.scalar(
             select(User).where(User.email == "delivery-hub-member@open-work-hub.local")
         )
-        assert workspace is not None and user is not None
+        assert user is not None
+        policy = db.get(AppAccessPolicy, "files")
+        assert policy is not None
+        policy.audience = "selected"
+        db.commit()
         _stub_retrieval(
             monkeypatch,
             hits=[
@@ -309,7 +308,6 @@ def test_file_chat_evidence_filters_stale_cross_workspace_candidate_with_source_
 
         result = chat_retrieval.query_file_chat_evidence(
             db,
-            workspace=workspace,
             user=user,
             query="secret",
         )
@@ -322,7 +320,7 @@ def test_file_chat_evidence_rechecks_acl_after_hydration(
     in_memory_object_storage: None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    uploaded = _upload_workspace_file(
+    uploaded = _upload_company_file(
         client,
         corpus_name="Concurrent chat evidence revoke",
         filename="revoked-evidence.txt",
@@ -344,12 +342,10 @@ def test_file_chat_evidence_rechecks_acl_after_hydration(
         nonlocal revoke_triggered
         sources = original_loader(db, file_ids)
         with get_session_factory().begin() as revoke_db:
-            workspace = revoke_db.scalar(select(Workspace).where(Workspace.key == "administrator"))
             user = revoke_db.scalar(select(User).where(User.login_id == "administrator"))
-            assert workspace is not None and user is not None
+            assert user is not None
             files_service.delete_file(
                 revoke_db,
-                workspace=workspace,
                 user=user,
                 file_id=uploaded["id"],
             )
@@ -363,12 +359,10 @@ def test_file_chat_evidence_rechecks_acl_after_hydration(
     )
 
     with get_session_factory()() as db:
-        workspace = db.scalar(select(Workspace).where(Workspace.key == "administrator"))
         user = db.scalar(select(User).where(User.login_id == "administrator"))
-        assert workspace is not None and user is not None
+        assert user is not None
         result = chat_retrieval.query_file_chat_evidence(
             db,
-            workspace=workspace,
             user=user,
             query="revoked evidence",
         )
@@ -377,7 +371,7 @@ def test_file_chat_evidence_rechecks_acl_after_hydration(
     assert result.items == ()
 
 
-def _upload_workspace_file(
+def _upload_company_file(
     client: TestClient,
     *,
     corpus_name: str,
@@ -386,16 +380,20 @@ def _upload_workspace_file(
     session = dev_login(client, "administrator")
     headers = auth_headers(session["token"])
     corpus_response = client.post(
-        "/api/v1/workspaces/administrator/files/corpora",
+        "/api/v1/files/corpora",
         headers=headers,
         json={"name": corpus_name},
     )
     assert corpus_response.status_code == 201, corpus_response.text
     corpus = corpus_response.json()
     upload_response = client.post(
-        "/api/v1/workspaces/administrator/files/upload",
+        "/api/v1/files/upload",
         headers=headers,
-        data={"visibility": "workspace", "corpus_id": corpus["id"]},
+        data={
+            "visibility": "company",
+            "company_admin_read_acknowledged": True,
+            "corpus_id": corpus["id"],
+        },
         files={"file": (filename, b"source", "text/plain")},
     )
     assert upload_response.status_code == 201, upload_response.text

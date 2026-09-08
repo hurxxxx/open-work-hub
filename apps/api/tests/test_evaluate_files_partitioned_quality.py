@@ -10,7 +10,9 @@ from types import SimpleNamespace
 import pytest
 
 from open_work_hub_api import evaluate_files_partitioned_quality as quality_cli
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
+from open_work_hub_api.domains.retrieval import files_quality_judgments as quality_judgments
+
 from open_work_hub_api.domains.retrieval.contracts import (
     RetrievalHit,
     RetrievalProfile,
@@ -32,9 +34,17 @@ from open_work_hub_api.domains.retrieval.files_quality_evaluator import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _allow_admitted_evaluation_user(monkeypatch):
+    def admitted(_db, *, user_id, app_id):
+        assert user_id == "user-sensitive" and app_id == "files"
+        return True
+
+    monkeypatch.setattr(quality_judgments, "can_use_app", admitted)
+
+
 class _Session:
     def __init__(self, active_file_ids: set[str] | None = None) -> None:
-        self.workspace = SimpleNamespace(id="workspace-sensitive", active=True)
         self.user = SimpleNamespace(
             id="user-sensitive",
             status="active",
@@ -52,8 +62,6 @@ class _Session:
         return None
 
     def get(self, model, identity):
-        if model is Workspace and identity == self.workspace.id:
-            return self.workspace
         if model is User and identity == self.user.id:
             return self.user
         return None
@@ -65,7 +73,6 @@ class _Session:
 class _JudgmentPolicy:
     def __init__(self, allowed_ids: set[str] | None = None) -> None:
         self.allowed_ids = {"file-sensitive"} if allowed_ids is None else allowed_ids
-        self.workspace_role = "member"
         self.rag_modes: list[bool] = []
 
     def authorize_many_resources(self, resources, *, rag: bool = False):
@@ -91,7 +98,6 @@ def _corpus_bytes() -> bytes:
             "cases": [
                 {
                     "query_id": f"query-{index}",
-                    "workspace_id": "workspace-sensitive",
                     "user_id": "user-sensitive",
                     "query": f"sensitive query body {index}",
                     "relevant_resource_ids": ["file-sensitive"],
@@ -389,13 +395,13 @@ def test_evaluator_rejects_non_files_judgments_before_backend_access() -> None:
         )
 
 
-def test_evaluator_rejects_nonmember_principal_before_backend_access() -> None:
+def test_evaluator_rejects_nonadmitted_principal_before_backend_access(monkeypatch) -> None:
     class UntouchedBackends:
         def inspect_pair(self, _spec):
             raise AssertionError("backend must remain untouched")
 
     policy = _JudgmentPolicy()
-    policy.workspace_role = None
+    monkeypatch.setattr(quality_judgments, "can_use_app", lambda *_args, **_kwargs: False)
     with pytest.raises(FilesQualityEvaluationError, match="evaluation_context_unavailable"):
         evaluate_files_partitioned_quality(
             corpus_bytes=_corpus_bytes(),

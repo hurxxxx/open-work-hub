@@ -3,12 +3,12 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from sqlalchemy import (
+    JSON,
     DateTime,
     Float,
     ForeignKey,
     Index,
     Integer,
-    JSON,
     String,
     Text,
     UniqueConstraint,
@@ -18,7 +18,6 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from open_work_hub_api.core.db import Base
-
 
 JSONB_COMPAT = JSONB(astext_type=Text()).with_variant(JSON(), "sqlite")
 
@@ -33,13 +32,10 @@ class Meeting(Base):
         Index("ix_meetings_organizer_created", "organizer_id", "created_at"),
         Index("ix_meetings_notes_doc_id", "notes_doc_id"),
         Index("ix_meetings_notes_page_id", "notes_page_id"),
-        Index("ix_meetings_workspace_start", "workspace_id", "start_at"),
+        Index("ix_meetings_start", "start_at"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id"), index=True, nullable=False
-    )
     retrieval_partition_id: Mapped[str | None] = mapped_column(
         ForeignKey("retrieval_partitions.id", ondelete="RESTRICT"),
         nullable=True,
@@ -231,8 +227,7 @@ class MeetingInsight(Base):
             "status",
         ),
         Index(
-            "ix_meeting_insights_workspace_status",
-            "workspace_id",
+            "ix_meeting_insights_status",
             "status",
         ),
     )
@@ -247,11 +242,6 @@ class MeetingInsight(Base):
         ForeignKey("meeting_recordings.id", ondelete="SET NULL"),
         index=True,
         nullable=True,
-    )
-    workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id"),
-        index=True,
-        nullable=False,
     )
     insight_type: Mapped[str] = mapped_column(String(24), nullable=False)
     payload_json: Mapped[dict] = mapped_column(JSONB_COMPAT, nullable=False)

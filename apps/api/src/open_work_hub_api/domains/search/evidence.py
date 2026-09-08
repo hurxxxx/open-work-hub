@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.settings import get_settings
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.rag.access_filter import build_user_rag_post_filter
 from open_work_hub_api.domains.rag.contracts import (
     RagAnswerMode,
@@ -32,7 +32,6 @@ from open_work_hub_api.domains.search.backend_factory import build_keyword_searc
 from open_work_hub_api.domains.search.resource_mapping import maybe_resource_type_for_search_entity
 from open_work_hub_api.domains.search.schemas import SearchEntityType
 from open_work_hub_api.domains.source_access import SourceAclPolicy
-
 
 EVIDENCE_METHOD_STRUCTURED = "structured"
 EVIDENCE_METHOD_KEYWORD = "keyword"
@@ -121,7 +120,6 @@ class SemanticEvidenceHit:
     source_kind: str
     resource_type: str
     resource_id: str
-    workspace_id: str
     title: str | None
     owner_label: str | None
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -285,7 +283,6 @@ def dedupe_query_terms(*values: str | None) -> str:
 def search_keyword_evidence_rows(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     query: str,
     entity_types: list[SearchEntityType | str],
@@ -295,7 +292,6 @@ def search_keyword_evidence_rows(
 ) -> list[dict[str, Any]]:
     return search_keyword_evidence_page(
         db,
-        workspace=workspace,
         user=user,
         query=query,
         entity_types=entity_types,
@@ -308,7 +304,6 @@ def search_keyword_evidence_rows(
 def search_keyword_evidence_page(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     query: str,
     entity_types: list[SearchEntityType | str],
@@ -324,9 +319,8 @@ def search_keyword_evidence_page(
             )
     except KeywordSearchBackendError as error:
         raise KeywordEvidenceSearchError(str(error)) from error
-    policy = SourceAclPolicy.for_workspace(db, workspace=workspace, user=user)
+    policy = SourceAclPolicy.for_user(db, user=user)
     keyword_query = KeywordSearchQuery(
-        workspace_id=workspace.id,
         text=query,
         entity_types=tuple(str(entity_type) for entity_type in entity_types),
         acl_filter=policy.build_keyword_acl_filter(),
@@ -381,7 +375,6 @@ def search_keyword_evidence_page(
 def search_semantic_evidence_hits(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     query: str,
     source_kinds: list[str],
@@ -395,7 +388,6 @@ def search_semantic_evidence_hits(
     source_kind_set = set(source_kinds)
     request = RagQueryRequest(
         collection=resolve_default_collection_name(settings),
-        workspace_id=workspace.id,
         query=query,
         answer_mode=RagAnswerMode.SEARCH_ONLY,
         source_kinds=source_kinds,
@@ -405,8 +397,6 @@ def search_semantic_evidence_hits(
 
     def post_filter(hit: RagVectorSearchHit) -> bool:
         if not user_post_filter(hit):
-            return False
-        if hit.projection.workspace_id != workspace.id:
             return False
         metadata = {**dict(hit.projection.metadata or {}), **dict(hit.metadata or {})}
         if dataset_id and metadata.get("dataset_id") != dataset_id:
@@ -426,7 +416,6 @@ def search_semantic_evidence_hits(
             source_kind=hit.source_kind,
             resource_type=hit.resource_type,
             resource_id=hit.resource_id,
-            workspace_id=hit.workspace_id,
             title=hit.title,
             owner_label=hit.owner_label,
             metadata=dict(hit.metadata),
@@ -438,7 +427,6 @@ def search_semantic_evidence_hits(
 
 def rerank_evidence_candidates(
     *,
-    workspace: Workspace,
     question: str,
     candidates: list[EvidenceCandidate],
     max_sources: int,
@@ -477,15 +465,13 @@ def rerank_evidence_candidates(
             }
         hit_map = {candidate.source_id: candidate for candidate in limited_candidates}
         rerank_hits = [
-            _candidate_to_rag_hit(workspace=workspace, candidate=candidate)
-            for candidate in limited_candidates
+            _candidate_to_rag_hit(candidate=candidate) for candidate in limited_candidates
         ]
         started = time.perf_counter()
         reranked = providers.rerank.rerank(query=question, hits=rerank_hits)
         record_rerank_latency(
             provider_name=getattr(providers.rerank, "provider_name", settings.rag_rerank_provider),
             latency_ms=int((time.perf_counter() - started) * 1000),
-            workspace_id=workspace.id,
             source_kind=source_kind,
         )
     except Exception as error:  # noqa: BLE001 - fallback order is still usable.
@@ -564,7 +550,6 @@ def _keyword_search_client() -> KeywordSearchClient:
 
 def _candidate_to_rag_hit(
     *,
-    workspace: Workspace,
     candidate: EvidenceCandidate,
 ) -> RagVectorSearchHit:
     return RagVectorSearchHit(
@@ -581,7 +566,6 @@ def _candidate_to_rag_hit(
             "semantic_score": candidate.scores.semantic,
         },
         projection=RagProjection(
-            workspace_id=workspace.id,
             resource_type=candidate.resource_type,
             resource_id=candidate.resource_id,
             source_kind=candidate.source_kind,

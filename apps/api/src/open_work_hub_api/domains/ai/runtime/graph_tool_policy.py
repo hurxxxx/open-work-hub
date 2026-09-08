@@ -36,7 +36,7 @@ def graph_node_tool_specs(
     if not tools_enabled:
         return []
     capability_registry = registry or get_ai_capability_registry()
-    allowed_app_id = workspace_app_id_for_graph_agent(agent_id)
+    allowed_app_id = owner_app_id_for_graph_agent(agent_id)
     allowed_tool_names = tool_names_for_graph_agent(agent_id)
     selected: list[AgentToolSpec] = []
     for spec in tool_specs:
@@ -47,17 +47,17 @@ def graph_node_tool_specs(
         if allowed_tool_names and tool_name not in allowed_tool_names:
             continue
         if allowed_app_id is not None:
-            if descriptor is None or descriptor.workspace_app_id != allowed_app_id:
+            if descriptor is None or descriptor.owner_app_id != allowed_app_id:
                 continue
         selected.append(spec)
     return selected
 
 
-def workspace_app_id_for_graph_agent(agent_id: str) -> str | None:
+def owner_app_id_for_graph_agent(agent_id: str) -> str | None:
     definition = _agent_definition(agent_id)
-    if definition is None or len(definition.workspace_app_ids) != 1:
+    if definition is None or len(definition.owner_app_ids) != 1:
         return None
-    return next(iter(definition.workspace_app_ids))
+    return next(iter(definition.owner_app_ids))
 
 
 def tool_names_for_graph_agent(agent_id: str) -> set[str]:
@@ -75,5 +75,5 @@ __all__ = [
     "graph_node_tool_specs",
     "read_only_tool_specs",
     "tool_names_for_graph_agent",
-    "workspace_app_id_for_graph_agent",
+    "owner_app_id_for_graph_agent",
 ]

@@ -1,9 +1,7 @@
 import type { AppShellNavResolver } from '@/src/app/shell/navigation-types';
 
 const ADMIN_SECTION_ALIASES: Record<string, string> = {
-  apps: 'apps/platform',
-  teams: 'workspaces',
-  users: 'people',
+  apps: 'apps/access',
 };
 
 export const settingsShellNavResolver: AppShellNavResolver = ({

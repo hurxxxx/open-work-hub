@@ -17,12 +17,14 @@ describe('diagrams hub model', () => {
   });
 
   it('builds explicit workspace paths and unresolved app entries', () => {
-    expect(itemPath({ itemId: 'diagram 1', workspaceSlug: 'research' })).toBe(
-      '/apps/diagrams/workspaces/research/diagrams/diagram%201',
+    expect(itemPath({ itemId: 'diagram 1' })).toBe(
+      '/apps/diagrams/diagrams/diagram%201',
     );
-    expect(itemPath({ itemId: 'diagram-1' })).toBe('/apps/diagrams');
-    expect(rootPath('research', new URLSearchParams('view=mine'))).toBe(
-      '/apps/diagrams/workspaces/research?view=mine',
+    expect(itemPath({ itemId: 'diagram-1' })).toBe(
+      '/apps/diagrams/diagrams/diagram-1',
+    );
+    expect(rootPath(new URLSearchParams('view=mine'))).toBe(
+      '/apps/diagrams?view=mine',
     );
   });
 
@@ -41,7 +43,6 @@ describe('diagrams hub model', () => {
   it('upserts and removes items in reducer state', () => {
     const item = {
       id: 'diagram-1',
-      workspace_id: 'workspace-1',
       title: 'Diagram',
       visibility: 'personal',
       version: 1,

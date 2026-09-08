@@ -21,7 +21,6 @@ interface UseMeetingUserSearchArgs extends MeetingUserSearchHandlers {
   query: string;
   searchUsers?: typeof listMeetingUsers;
   token: string | null | undefined;
-  workspaceSlug: string;
 }
 
 export function useMeetingUserSearch({
@@ -34,15 +33,14 @@ export function useMeetingUserSearch({
   query,
   searchUsers = listMeetingUsers,
   token,
-  workspaceSlug,
 }: UseMeetingUserSearchArgs) {
   const loadUsers = useCallback(
     ({
       query: trimmedQuery,
       token: sessionToken,
     }: RemoteUserSearchLoadContext) =>
-      searchUsers(sessionToken, workspaceSlug, { q: trimmedQuery, limit: 30 }),
-    [searchUsers, workspaceSlug],
+      searchUsers(sessionToken, { q: trimmedQuery, limit: 30 }),
+    [searchUsers],
   );
 
   useRemoteUserSearchSession<MeetingUser>({

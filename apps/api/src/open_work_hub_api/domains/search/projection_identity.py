@@ -13,15 +13,12 @@ class SearchProjectionIdentityError(RuntimeError):
 def ensure_search_document_identity(
     document: dict[str, Any],
     *,
-    workspace_id: str,
     allowed_entity_types: Collection[str],
     expected_entity_id: str | None = None,
     context: str,
 ) -> None:
     entity_id = str(document.get("entity_id") or "")
     mismatches: list[str] = []
-    if str(document.get("workspace_id") or "") != workspace_id:
-        mismatches.append("workspace_id")
     if str(document.get("entity_type") or "") not in allowed_entity_types:
         mismatches.append("entity_type")
     if not entity_id or (expected_entity_id is not None and entity_id != expected_entity_id):
@@ -51,7 +48,9 @@ def ensure_search_document_acl_shape(
     visibility = document.get("visibility")
     if "visibility" in document and visibility is not None and not isinstance(visibility, str):
         invalid_fields.append("visibility")
-    for field in sorted(required_fields - {"owner_user_id", "visibility"}):
+    if "ownership_kind" in document and document["ownership_kind"] not in {"personal", "company"}:
+        invalid_fields.append("ownership_kind")
+    for field in sorted(required_fields - {"owner_user_id", "visibility", "ownership_kind"}):
         if field not in document:
             continue
         value = document[field]

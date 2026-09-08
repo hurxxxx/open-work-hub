@@ -2,11 +2,10 @@ from typing import Any
 
 from open_work_hub_api.core.i18n import LocalizedApiMessage, translate_message
 
-
 LOCALIZED_VALIDATION_ERROR_TYPES = frozenset(
     {
-        "admin.invalid_workspace_role",
-        "ai.unknown_workspace_app",
+        "admin.invalid_system_role",
+        "ai.unknown_app",
         "auth.invalid_locale",
         "auth.invalid_time_zone",
         "auth.invalid_date_format",
@@ -116,9 +115,7 @@ def _validation_message_for_error(error: dict[str, Any]) -> LocalizedApiMessage:
         params = error.get("ctx") if isinstance(error.get("ctx"), dict) else {}
         return LocalizedApiMessage(code=error_type, params=dict(params))
     code = (
-        GENERIC_VALIDATION_ERROR_TYPES.get(error_type)
-        if isinstance(error_type, str)
-        else None
+        GENERIC_VALIDATION_ERROR_TYPES.get(error_type) if isinstance(error_type, str) else None
     ) or "validation.value_invalid"
     return LocalizedApiMessage(code=code, params=_generic_validation_params(error))
 

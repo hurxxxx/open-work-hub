@@ -8,16 +8,18 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from open_work_hub_api.core.i18n import localized_http_exception
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.auth.security import new_id
+from open_work_hub_api.domains.content_access.ownership import record_ownership_transition
 from open_work_hub_api.domains.whiteboard.access import (
     WhiteboardAccess,
-    ensure_whiteboard_workspace_access,
+    ensure_whiteboard_app_access,
     load_accessible_whiteboards,
     load_whiteboard_for_user_or_404,
-    primary_target as _primary_target,
     resolve_whiteboard_access,
-    workspace_for_whiteboard as _workspace_for_whiteboard,
+)
+from open_work_hub_api.domains.whiteboard.access import (
+    primary_target as _primary_target,
 )
 from open_work_hub_api.domains.whiteboard.models import (
     Whiteboard,
@@ -27,13 +29,14 @@ from open_work_hub_api.domains.whiteboard.models import (
 )
 from open_work_hub_api.domains.whiteboard.registry import (
     TargetRef,
-    target_write_allowed,
     describe_source,
     resolve_target_label,
+    target_write_allowed,
 )
 
 
 class WhiteboardTargetUpdatePayload(Protocol):
+    company_admin_read_acknowledged: bool
     app: str
     type: str
     id: str
@@ -55,6 +58,8 @@ WhiteboardHubView = Literal["all", "mine", "recent", "favorites", "archived"]
 
 
 class WhiteboardHubItem(BaseModel):
+    ownership_kind: Literal["personal", "company"]
+    company_visible: bool
     id: str
     source_app: str
     source_type: Literal["whiteboard"] = "whiteboard"
@@ -134,7 +139,7 @@ def build_whiteboard_hub_response(
     current_user: User,
     query: WhiteboardHubQuery,
 ) -> WhiteboardHubResponse:
-    ensure_whiteboard_workspace_access(db, current_user)
+    ensure_whiteboard_app_access(db, current_user)
     pref_map = _get_pref_map(db, current_user.id)
     whiteboards = [
         _serialize_whiteboard_item(
@@ -142,6 +147,7 @@ def build_whiteboard_hub_response(
             whiteboard,
             resolve_whiteboard_access(db, whiteboard, current_user),
             pref_map.get(whiteboard.id),
+            user=current_user,
         )
         for whiteboard in load_accessible_whiteboards(db, current_user)
     ]
@@ -216,8 +222,9 @@ def _serialize_whiteboard_item(
     whiteboard: Whiteboard,
     access: WhiteboardAccess,
     pref: WhiteboardUserItemPref | None,
+    *,
+    user: User,
 ) -> WhiteboardHubItem:
-    workspace = _workspace_for_whiteboard(db, whiteboard)
     primary_target = _primary_target(whiteboard)
     targets = sorted(
         whiteboard.targets,
@@ -231,16 +238,17 @@ def _serialize_whiteboard_item(
     )
     location_label = resolve_target_label(
         db=db,
-        workspace=workspace,
+        user=user,
         target=primary_target,
     )
     source_badge, source_deeplink = describe_source(
-        workspace=workspace,
         whiteboard=whiteboard,
         primary_target=primary_target,
     )
     return WhiteboardHubItem(
         id=whiteboard.id,
+        ownership_kind=whiteboard.ownership_kind,
+        company_visible=whiteboard.company_visible,
         source_app=whiteboard.source_app,
         source_id=whiteboard.id,
         source_kind=whiteboard.source_kind,
@@ -259,7 +267,7 @@ def _serialize_whiteboard_item(
         updated_at=whiteboard.updated_at,
         trashed_at=whiteboard.trashed_at,
         is_favorite=bool(pref and pref.is_favorite),
-        is_private=primary_target is None,
+        is_private=primary_target is None and not whiteboard.company_visible,
         last_viewed_at=pref.last_viewed_at if pref else None,
         can_view=access.can_view,
         can_edit=access.can_edit,
@@ -273,8 +281,10 @@ def _serialize_whiteboard_detail(
     whiteboard: Whiteboard,
     access: WhiteboardAccess,
     pref: WhiteboardUserItemPref | None,
+    *,
+    user: User,
 ) -> WhiteboardDetail:
-    item = _serialize_whiteboard_item(db, whiteboard, access, pref)
+    item = _serialize_whiteboard_item(db, whiteboard, access, pref, user=user)
     return WhiteboardDetail(
         **item.model_dump(),
         scene=whiteboard.scene or empty_scene(),
@@ -298,6 +308,7 @@ def _lookup_item(
         context.whiteboard,
         context.access,
         _get_pref_map(db, current_user.id).get(context.whiteboard.id),
+        user=current_user,
     )
 
 
@@ -384,21 +395,28 @@ def _upsert_primary_target(
     whiteboard: Whiteboard,
     payload: WhiteboardTargetUpdatePayload,
     current_user: User,
-) -> WhiteboardTarget:
-    workspace = _workspace_for_whiteboard(db, whiteboard)
+) -> set[str]:
+    _publish_for_target(
+        db,
+        whiteboard=whiteboard,
+        current_user=current_user,
+        company_admin_read_acknowledged=payload.company_admin_read_acknowledged,
+    )
     ref = TargetRef(app=payload.app, type=payload.type, id=payload.id)
     if not target_write_allowed(
         db=db,
         user=current_user,
-        workspace=workspace,
         ref=ref,
     ):
         raise localized_http_exception(
             status_code=403,
             code="whiteboard.target_edit_access_required",
         )
+    changed_board_ids = {whiteboard.id}
     if _is_singleton_context(ref):
-        _delete_context_slot(db, ref=ref, except_whiteboard_id=whiteboard.id)
+        changed_board_ids.update(
+            _delete_context_slot(db, ref=ref, except_whiteboard_id=whiteboard.id)
+        )
 
     for target in whiteboard.targets:
         target.is_primary = False
@@ -432,7 +450,7 @@ def _upsert_primary_target(
         existing.sort_order = payload.sort_order
         db.add(existing)
     db.flush()
-    return existing
+    return changed_board_ids
 
 
 def _delete_primary_target(db: Session, whiteboard: Whiteboard) -> None:
@@ -450,11 +468,10 @@ def _is_singleton_context(ref: TargetRef) -> bool:
 def _require_context_write(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     ref: TargetRef,
 ) -> None:
-    if not target_write_allowed(db=db, user=user, workspace=workspace, ref=ref):
+    if not target_write_allowed(db=db, user=user, ref=ref):
         raise localized_http_exception(
             status_code=403,
             code="whiteboard.target_edit_access_required",
@@ -479,7 +496,7 @@ def _delete_context_slot(
     *,
     ref: TargetRef,
     except_whiteboard_id: str | None = None,
-) -> None:
+) -> set[str]:
     targets = list(
         db.scalars(
             select(WhiteboardTarget).where(
@@ -489,14 +506,15 @@ def _delete_context_slot(
             )
         )
     )
-    deleted = False
+    changed_board_ids: set[str] = set()
     for target in targets:
         if except_whiteboard_id is not None and target.whiteboard_id == except_whiteboard_id:
             continue
         db.delete(target)
-        deleted = True
-    if deleted:
+        changed_board_ids.add(target.whiteboard_id)
+    if changed_board_ids:
         db.flush()
+    return changed_board_ids
 
 
 def _attach_context_slot(
@@ -506,7 +524,15 @@ def _attach_context_slot(
     ref: TargetRef,
     current_user: User,
     is_primary: bool,
+    company_admin_read_acknowledged: bool = False,
 ) -> WhiteboardTarget:
+    _require_context_write(db, user=current_user, ref=ref)
+    _publish_for_target(
+        db,
+        whiteboard=whiteboard,
+        current_user=current_user,
+        company_admin_read_acknowledged=company_admin_read_acknowledged,
+    )
     existing = next(
         (
             target
@@ -540,3 +566,25 @@ def _attach_context_slot(
 
 class ResolveWhiteboardSharedLinkResponse(BaseModel):
     item: WhiteboardHubItem
+
+
+def _publish_for_target(
+    db: Session,
+    *,
+    whiteboard: Whiteboard,
+    current_user: User,
+    company_admin_read_acknowledged: bool,
+) -> None:
+    db.scalar(select(Whiteboard).where(Whiteboard.id == whiteboard.id).with_for_update())
+    if not resolve_whiteboard_access(db, whiteboard, current_user).can_share:
+        raise localized_http_exception(status_code=403, code="whiteboard.share_access_required")
+    record_ownership_transition(
+        db,
+        actor_user_id=current_user.id,
+        resource_kind="whiteboard",
+        resource_id=whiteboard.id,
+        current_kind=whiteboard.ownership_kind,
+        next_kind="company",
+        company_admin_read_acknowledged=company_admin_read_acknowledged,
+    )
+    whiteboard.ownership_kind = "company"

@@ -41,11 +41,9 @@ function approvalTone(
 export function HermesTerminalActivityPanel({
   session,
   token,
-  workspaceSlug,
 }: {
   session: HermesTerminalSession;
   token: string;
-  workspaceSlug: string;
 }) {
   const { t } = useTranslation('apps');
   const feedback = useFeedback();
@@ -76,8 +74,8 @@ export function HermesTerminalActivityPanel({
         setApprovalsLoading(true);
       }
       const request = Promise.allSettled([
-        listHermesTerminalFiles(token, workspaceSlug, session.id, path),
-        listHermesTerminalApprovals(token, workspaceSlug, session.id),
+        listHermesTerminalFiles(token, session.id, path),
+        listHermesTerminalApprovals(token, session.id),
       ])
         .then(([filesResult, approvalsResult]) => {
           if (requestId !== requestIdRef.current) return;
@@ -110,7 +108,7 @@ export function HermesTerminalActivityPanel({
       loadRequestRef.current = { key: requestKey, promise: request };
       return request;
     },
-    [feedback, path, session.id, t, token, workspaceSlug],
+    [feedback, path, session.id, t, token],
   );
 
   useEffect(() => {
@@ -171,7 +169,6 @@ export function HermesTerminalActivityPanel({
       try {
         const response = await downloadHermesTerminalFile(
           token,
-          workspaceSlug,
           session.id,
           entry.relative_path,
         );
@@ -186,7 +183,7 @@ export function HermesTerminalActivityPanel({
         setDownloadingPath(null);
       }
     },
-    [feedback, session.id, t, token, workspaceSlug],
+    [feedback, session.id, t, token],
   );
 
   const decide = useCallback(
@@ -194,13 +191,9 @@ export function HermesTerminalActivityPanel({
       if (approval.status !== 'pending') return;
       setDecidingId(approval.id);
       try {
-        await decideHermesTerminalApproval(
-          token,
-          workspaceSlug,
-          session.id,
-          approval.id,
-          { decision },
-        );
+        await decideHermesTerminalApproval(token, session.id, approval.id, {
+          decision,
+        });
         feedback.success(
           t(
             decision === 'approve'
@@ -215,7 +208,7 @@ export function HermesTerminalActivityPanel({
         setDecidingId(null);
       }
     },
-    [feedback, load, session.id, t, token, workspaceSlug],
+    [feedback, load, session.id, t, token],
   );
 
   return (

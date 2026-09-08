@@ -132,22 +132,12 @@ export function aiSecuritySubjectSummary(
   item: {
     user_id?: string | null;
     user_name?: string | null;
-    workspace_name?: string | null;
   },
 ): string {
   const userName = item.user_name || item.user_id || '';
-  return [
-    userName
-      ? t('admin.console.aiSecurity.rules.scopeParts.user', {
-          name: userName,
-        })
-      : t('admin.console.aiSecurity.rules.scopeParts.allUsers'),
-    item.workspace_name
-      ? t('admin.console.aiSecurity.rules.scopeParts.workspace', {
-          name: item.workspace_name,
-        })
-      : t('admin.console.aiSecurity.rules.scopeParts.allWorkspaces'),
-  ].join(' / ');
+  return userName
+    ? t('admin.console.aiSecurity.rules.scopeParts.user', { name: userName })
+    : t('admin.console.aiSecurity.rules.scopeParts.allUsers');
 }
 
 export function aiSecurityRequestSummary(
@@ -195,7 +185,6 @@ export function emptyAiSecurityRuleDraft(): AiSecurityRulePayload {
     description: '',
     enabled: true,
     user_id: null,
-    workspace_id: null,
     app_id: null,
     task_kind: null,
     task_kinds: [],
@@ -214,7 +203,6 @@ export function aiSecurityRuleDraftFromRule(
     description: rule.description,
     enabled: rule.enabled,
     user_id: rule.user_id ?? null,
-    workspace_id: rule.workspace_id ?? null,
     app_id: rule.app_id ?? null,
     task_kind: rule.task_kind ?? null,
     task_kinds: aiSecurityTaskKindsFromScope(rule),
@@ -256,7 +244,6 @@ export function emptyAiSecurityExceptionDraft(): AiSecurityExternalTransferExcep
     description: '',
     enabled: true,
     user_id: null,
-    workspace_id: null,
     app_id: null,
     task_kind: null,
     task_kinds: [],
@@ -276,7 +263,6 @@ export function aiSecurityExceptionDraftFromException(
     description: exception.description,
     enabled: exception.enabled,
     user_id: exception.user_id ?? null,
-    workspace_id: exception.workspace_id ?? null,
     app_id: exception.app_id ?? null,
     task_kind: exception.task_kind ?? null,
     task_kinds: aiSecurityTaskKindsFromScope(exception),

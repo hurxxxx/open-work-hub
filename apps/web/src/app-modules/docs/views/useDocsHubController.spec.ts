@@ -52,7 +52,6 @@ describe('useDocsHubController', () => {
     const { result } = renderHook(() =>
       useDocsHubController({
         token: 'token-1',
-        workspaceSlug: 'hq',
         listEnabled: true,
         activeCategory: 'mine',
         activeSourceApp: 'meeting',
@@ -64,19 +63,15 @@ describe('useDocsHubController', () => {
 
     await waitFor(() => expect(result.current.state.docs).toHaveLength(1));
 
-    expect(testClient.listDocsHub).toHaveBeenCalledWith(
-      'token-1',
-      {
-        view: 'mine',
-        q: undefined,
-        sort_by: 'updated_at',
-        sort_dir: 'desc',
-        source_app: 'meeting',
-        source_kind: 'minutes',
-        space_id: 'space-1',
-      },
-      'hq',
-    );
+    expect(testClient.listDocsHub).toHaveBeenCalledWith('token-1', {
+      view: 'mine',
+      q: undefined,
+      sort_by: 'updated_at',
+      sort_dir: 'desc',
+      source_app: 'meeting',
+      source_kind: 'minutes',
+      space_id: 'space-1',
+    });
     expect(result.current.state.total).toBe(1);
     expect(result.current.state.loadingList).toBe(false);
   });
@@ -86,7 +81,6 @@ describe('useDocsHubController', () => {
     const { result } = renderHook(() =>
       useDocsHubController({
         token: 'token-1',
-        workspaceSlug: 'hq',
         listEnabled: true,
         activeCategory: 'all',
         client: testClient,
@@ -105,7 +99,6 @@ describe('useDocsHubController', () => {
       expect(testClient.listDocsHub).toHaveBeenCalledWith(
         'token-1',
         expect.objectContaining({ q: 'roadmap' }),
-        'hq',
       );
     });
   });
@@ -115,7 +108,6 @@ describe('useDocsHubController', () => {
     renderHook(() =>
       useDocsHubController({
         token: 'token-1',
-        workspaceSlug: 'hq',
         listEnabled: false,
         activeCategory: 'all',
         client: testClient,
@@ -132,7 +124,6 @@ describe('useDocsHubController', () => {
     const { result } = renderHook(() =>
       useDocsHubController({
         token: 'token-1',
-        workspaceSlug: 'hq',
         listEnabled: true,
         activeCategory: 'all',
         client: testClient,

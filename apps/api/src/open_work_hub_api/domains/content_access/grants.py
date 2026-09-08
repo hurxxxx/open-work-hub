@@ -12,8 +12,7 @@ from typing import Any, Literal
 from open_work_hub_api.core.app_contracts_generated import APP_ROUTE_BY_ID
 from open_work_hub_api.core.settings import get_settings
 
-
-ExecutionContextKind = Literal["personal", "company", "workspace"]
+ExecutionContextKind = Literal["personal", "company"]
 Disposition = Literal["attachment", "inline"]
 CONTENT_GRANT_MAX_TTL_SECONDS = 15 * 60
 
@@ -42,7 +41,6 @@ class ContentGrantClaims:
     issuer_user_id: str
     issuer_session_id: str
     execution_context_kind: ExecutionContextKind
-    execution_workspace_id: str | None
     route_id: str | None
     source_type: str
     source_id: str
@@ -60,7 +58,6 @@ def build_content_grant_url(
     owner_app_id: str,
     issuer: ContentGrantIssuer,
     execution_context_kind: ExecutionContextKind,
-    execution_workspace_id: str | None,
     route_id: str | None,
     source_type: str,
     source_id: str,
@@ -71,8 +68,6 @@ def build_content_grant_url(
     now: float | None = None,
     extra: dict[str, Any] | None = None,
 ) -> str:
-    if execution_context_kind == "workspace" and not execution_workspace_id:
-        raise ValueError("workspace content grants require a workspace id")
     issued_at = int(time.time() if now is None else now)
     if expires_seconds <= 0 or expires_seconds > CONTENT_GRANT_MAX_TTL_SECONDS:
         raise ValueError("content grant TTL is outside the allowed boundary")
@@ -83,7 +78,6 @@ def build_content_grant_url(
         issuer_user_id=issuer.user_id,
         issuer_session_id=issuer.session_id,
         execution_context_kind=execution_context_kind,
-        execution_workspace_id=execution_workspace_id,
         route_id=route_id,
         source_type=source_type,
         source_id=source_id,
@@ -102,7 +96,6 @@ def build_content_grant_url(
         issuer_user_id=issuer.user_id,
         issuer_session_id=issuer.session_id,
         execution_context_kind=execution_context_kind,
-        execution_workspace_id=execution_workspace_id,
         route_id=route_id,
         source_type=source_type,
         source_id=source_id,
@@ -121,7 +114,7 @@ def decode_content_grant(token: str, *, now: float | None = None) -> ContentGran
     try:
         encoded_payload, encoded_signature = token.split(".", 1)
         expected = hmac.new(
-            get_settings().minio_secret_key.encode("utf-8"),
+            get_settings().content_grant_signing_key.encode("utf-8"),
             encoded_payload.encode("ascii"),
             hashlib.sha256,
         ).digest()
@@ -153,7 +146,6 @@ def decode_content_grant(token: str, *, now: float | None = None) -> ContentGran
             issuer_user_id=claims.issuer_user_id,
             issuer_session_id=claims.issuer_session_id,
             execution_context_kind=claims.execution_context_kind,
-            execution_workspace_id=claims.execution_workspace_id,
             route_id=claims.route_id,
             source_type=claims.source_type,
             source_id=claims.source_id,
@@ -175,7 +167,6 @@ def _validate_content_grant_fields(
     issuer_user_id: object,
     issuer_session_id: object,
     execution_context_kind: object,
-    execution_workspace_id: object,
     route_id: object,
     source_type: object,
     source_id: object,
@@ -197,18 +188,10 @@ def _validate_content_grant_fields(
     )
     if any(not isinstance(value, str) or not value.strip() for value in required_strings):
         raise ValueError("content grant string claims must be non-empty")
-    if execution_context_kind not in {"personal", "company", "workspace"}:
+    if execution_context_kind not in {"personal", "company"}:
         raise ValueError("invalid execution context")
     if disposition not in {"attachment", "inline"}:
         raise ValueError("invalid content disposition")
-    if execution_workspace_id is not None and (
-        not isinstance(execution_workspace_id, str) or not execution_workspace_id.strip()
-    ):
-        raise ValueError("invalid execution workspace")
-    if execution_context_kind == "workspace" and execution_workspace_id is None:
-        raise ValueError("workspace content grants require a workspace id")
-    if execution_context_kind != "workspace" and execution_workspace_id is not None:
-        raise ValueError("non-workspace content grants cannot carry a workspace id")
     if route_id is not None:
         if not isinstance(route_id, str) or not route_id.strip():
             raise ValueError("invalid route id")
@@ -247,7 +230,7 @@ def _encode(claims: ContentGrantClaims) -> str:
     ).encode("utf-8")
     encoded_payload = _base64url_encode(payload)
     signature = hmac.new(
-        get_settings().minio_secret_key.encode("utf-8"),
+        get_settings().content_grant_signing_key.encode("utf-8"),
         encoded_payload.encode("ascii"),
         hashlib.sha256,
     ).digest()

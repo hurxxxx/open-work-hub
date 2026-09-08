@@ -72,8 +72,8 @@ class FakePoolClient:
         return self
 
 
-def _workspace_ai_path(workspace_slug: str, suffix: str) -> str:
-    return f"/api/v1/workspaces/{workspace_slug}/chatbot{suffix}"
+def _ai_path(suffix: str) -> str:
+    return f"/api/v1/chatbot{suffix}"
 
 
 def _seeded_dev_login(client: TestClient, account_key: str) -> dict:
@@ -156,7 +156,6 @@ def test_ai_chat_caller_provider_does_not_override_local_workload_route(
     monkeypatch,
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    workspace_slug = auth["user"]["workspaces"][0]["slug"]
     pool_client = FakePoolClient(
         ["local/current-moe-test-model"],
         content="local response",
@@ -164,7 +163,7 @@ def test_ai_chat_caller_provider_does_not_override_local_workload_route(
     _install_pool_clients(monkeypatch, local=pool_client)
 
     response = client.post(
-        _workspace_ai_path(workspace_slug, "/chat"),
+        _ai_path("/chat"),
         headers=_auth_headers(auth["token"]),
         json={
             "backend_mode": "local",
@@ -184,7 +183,6 @@ def test_ai_chat_caller_model_does_not_override_local_workload_model(
     monkeypatch,
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    workspace_slug = auth["user"]["workspaces"][0]["slug"]
     pool_client = FakePoolClient(
         ["local/current-moe-test-model"],
         content="configured model response",
@@ -193,7 +191,7 @@ def test_ai_chat_caller_model_does_not_override_local_workload_model(
     before = len(_llm_audit_rows())
 
     response = client.post(
-        _workspace_ai_path(workspace_slug, "/chat"),
+        _ai_path("/chat"),
         headers=_auth_headers(auth["token"]),
         json={
             "backend_mode": "local",
@@ -213,7 +211,6 @@ def test_ai_chat_auto_backend_still_uses_registered_local_workload_route(
     monkeypatch,
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    workspace_slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
     pool_client = FakePoolClient(
         ["local/current-moe-test-model"],
@@ -223,7 +220,7 @@ def test_ai_chat_auto_backend_still_uses_registered_local_workload_route(
     before = len(_llm_audit_rows())
 
     response = client.post(
-        _workspace_ai_path(workspace_slug, "/chat"),
+        _ai_path("/chat"),
         headers=_auth_headers(auth["token"]),
         json={
             "backend_mode": "auto",
@@ -243,7 +240,6 @@ def test_ai_chat_caller_local_mode_cannot_override_external_workload_route(
     monkeypatch,
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    workspace_slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "external")
     _configure_external_llm(monkeypatch)
 
@@ -258,7 +254,7 @@ def test_ai_chat_caller_local_mode_cannot_override_external_workload_route(
     _install_pool_clients(monkeypatch, local=local_client, external=external_client)
 
     response = client.post(
-        _workspace_ai_path(workspace_slug, "/chat"),
+        _ai_path("/chat"),
         headers=_auth_headers(auth["token"]),
         json={
             "backend_mode": "local",
@@ -290,7 +286,6 @@ def test_ai_chat_tool_command_uses_registered_business_tool(
     monkeypatch,
 ) -> None:
     auth = _seeded_dev_login(client, "delivery-hub-admin")
-    workspace_slug = "delivery-hub"
 
     def _unexpected_pool_call(config):  # type: ignore[no-untyped-def]
         raise AssertionError(f"LLM pool should not be called for /tool commands: {config.pool}")
@@ -298,7 +293,7 @@ def test_ai_chat_tool_command_uses_registered_business_tool(
     monkeypatch.setattr(llm_core, "_new_pool_client", _unexpected_pool_call)
 
     response = client.post(
-        _workspace_ai_path(workspace_slug, "/chat"),
+        _ai_path("/chat"),
         headers=_auth_headers(auth["token"]),
         json={
             "messages": [
@@ -322,7 +317,6 @@ def test_ai_chat_business_context_question_reaches_llm(
     monkeypatch,
 ) -> None:
     auth = _seeded_dev_login(client, "delivery-hub-admin")
-    workspace_slug = "delivery-hub"
     _set_policy("chatbot", "local_only")
 
     pool_client = FakePoolClient(
@@ -332,7 +326,7 @@ def test_ai_chat_business_context_question_reaches_llm(
     _install_pool_clients(monkeypatch, local=pool_client)
 
     response = client.post(
-        _workspace_ai_path(workspace_slug, "/chat"),
+        _ai_path("/chat"),
         headers=_auth_headers(auth["token"]),
         json={
             "messages": [
@@ -357,16 +351,14 @@ def test_ai_chat_tool_command_scoped_conversation_skips_scope_prompt_lookup(
     monkeypatch,
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    workspace_slug = auth["user"]["workspaces"][0]["slug"]
     meeting = _create_meeting(
         client,
         auth["token"],
-        workspace_slug=workspace_slug,
         title="Scoped AI chat meeting",
     )
 
     conversation_response = client.post(
-        _workspace_ai_path(workspace_slug, "/conversations"),
+        _ai_path("/conversations"),
         headers=_auth_headers(auth["token"]),
         json={
             "title": "",
@@ -391,7 +383,7 @@ def test_ai_chat_tool_command_scoped_conversation_skips_scope_prompt_lookup(
     monkeypatch.setattr(llm_core, "_new_pool_client", _unexpected_pool_call)
 
     response = client.post(
-        _workspace_ai_path(workspace_slug, "/chat"),
+        _ai_path("/chat"),
         headers=_auth_headers(auth["token"]),
         json={
             "conversationId": conversation_id,
@@ -415,7 +407,6 @@ def test_ai_chat_external_workload_is_not_silently_rerouted_by_payload(
     monkeypatch,
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    workspace_slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "external")
     _configure_external_llm(monkeypatch)
 
@@ -430,7 +421,7 @@ def test_ai_chat_external_workload_is_not_silently_rerouted_by_payload(
     _install_pool_clients(monkeypatch, local=local_client, external=external_client)
 
     response = client.post(
-        _workspace_ai_path(workspace_slug, "/chat"),
+        _ai_path("/chat"),
         headers=_auth_headers(auth["token"]),
         json={
             "backend_mode": "auto",
@@ -463,7 +454,6 @@ def test_ai_chat_external_provider_error_does_not_fallback_to_local(
     monkeypatch,
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    workspace_slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "external")
     _configure_external_llm(monkeypatch)
 
@@ -478,7 +468,7 @@ def test_ai_chat_external_provider_error_does_not_fallback_to_local(
     _install_pool_clients(monkeypatch, local=local_client, external=external_client)
 
     response = client.post(
-        _workspace_ai_path(workspace_slug, "/chat"),
+        _ai_path("/chat"),
         headers=_auth_headers(auth["token"]),
         json={
             "backend_mode": "auto",
@@ -501,7 +491,6 @@ def test_readyz_uses_configured_readiness_while_ai_health_stays_live(
     monkeypatch,
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    workspace_slug = auth["user"]["workspaces"][0]["slug"]
     _configure_external_llm(monkeypatch)
 
     def fake_pool_client(config: llm_core.LlmPoolConfig) -> FakePoolClient:
@@ -533,7 +522,7 @@ def test_readyz_uses_configured_readiness_while_ai_health_stays_live(
     _set_policy("chatbot", "external")
     monkeypatch.setattr(llm_core, "_new_pool_client", fake_pool_client)
     health_response = client.get(
-        _workspace_ai_path(workspace_slug, "/health"),
+        _ai_path("/health"),
         headers={**_auth_headers(auth["token"]), "x-open-work-hub-locale": "en-US"},
     )
     assert health_response.status_code == 200, health_response.text

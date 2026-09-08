@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 import math
 import re
 import time
-
+from collections.abc import Callable
 
 _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 

@@ -55,7 +55,7 @@ def _add_job(
     engine,
     *,
     job_id: str = "cleanup-job-1",
-    storage_key: str = "files/workspace/private-object.txt",
+    storage_key: str = "files/recording-fixture/private-object.txt",
     attempts: int = 1,
     next_retry_at: datetime | None = None,
 ) -> None:
@@ -87,7 +87,7 @@ def test_cleanup_failure_is_durably_retried_then_succeeds(
 ) -> None:
     tasks = _load_tasks(monkeypatch)
     engine = _engine()
-    storage_key = "files/workspace/do-not-log-this-key.txt"
+    storage_key = "files/recording-fixture/do-not-log-this-key.txt"
     _add_job(engine, storage_key=storage_key)
     client = _FakeMinioClient(failures=[RuntimeError(f"failed to delete {storage_key}")])
     _configure_task_dependencies(monkeypatch, tasks, engine=engine, client=client)

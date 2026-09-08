@@ -1,4 +1,7 @@
-import { formatDateTime, normalizeTimeZone } from '@/src/platform/time/time-utils';
+import {
+  formatDateTime,
+  normalizeTimeZone,
+} from '@/src/platform/time/time-utils';
 
 export function formatDmMessageTime(
   value: string,

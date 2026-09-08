@@ -2,26 +2,26 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 import json
-from pathlib import Path
 import shutil
 import tempfile
 import time
-from typing import Any
 import uuid
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
 
 from open_work_hub_api.domains.ai.agent_runtime import (
     AgentRuntimeRequest,
     AgentRuntimeResult,
     register_agent_runtime_adapter,
 )
+from open_work_hub_api.domains.ai.audit import log_llm_call
 from open_work_hub_api.domains.ai.gateway import (
     LlmWorkloadContext,
     build_llm_workload_request,
     resolve_gateway_execution,
 )
-from open_work_hub_api.domains.ai.audit import log_llm_call
 from open_work_hub_api.domains.ai.security_detected_values import serialize_detected_values
 from open_work_hub_api.domains.bento import (
     BENTO_CODEX_RUNTIME_ADAPTER_ID,
@@ -33,7 +33,6 @@ from open_work_hub_api.domains.bento.generation import (
     generate_bento_document_json,
     revise_bento_document_json,
 )
-
 
 _CODEX_SDK_API_KEY_ENV = "OPENAI" + "_API_KEY"
 _CODEX_SDK_BASE_URL_ENV = "OPENAI" + "_BASE_URL"
@@ -57,7 +56,6 @@ class FixedBentoPipelineAdapter:
         if payload["kind"] == "create":
             document_json, _document = generate_bento_document_json(
                 payload["db"],
-                workspace_id=request.workspace_id,
                 actor_user_id=request.actor_user_id,
                 prompt=str(payload["prompt"]),
                 slide_count=int(payload["slide_count"]),
@@ -66,7 +64,6 @@ class FixedBentoPipelineAdapter:
         else:
             document_json, _document = revise_bento_document_json(
                 payload["db"],
-                workspace_id=request.workspace_id,
                 actor_user_id=request.actor_user_id,
                 prompt=str(payload["prompt"]),
                 current_document_json=str(payload["current_document_json"]),
@@ -149,7 +146,7 @@ class CodexSdkBentoAdapter:
                 env=sdk_env,
                 config_overrides=(
                     'web_search="live"',
-                    'sandbox_workspace_write.network_access=false',
+                    "sandbox_workspace_write.network_access=false",
                     'shell_environment_policy.inherit="none"',
                 ),
             )
@@ -182,7 +179,9 @@ class CodexSdkBentoAdapter:
                         request.progress("bento.ai.reviewing", 72)
                     elif event.method == "turn/completed":
                         turn_payload = getattr(event.payload, "turn", None)
-                        status_value = str(getattr(getattr(turn_payload, "status", None), "value", ""))
+                        status_value = str(
+                            getattr(getattr(turn_payload, "status", None), "value", "")
+                        )
                     elif event.method == "thread/tokenUsage/updated":
                         token_usage = getattr(event.payload, "token_usage", None)
                         if token_usage is not None:
@@ -202,7 +201,9 @@ class CodexSdkBentoAdapter:
                 expected_slide_count=(
                     int(payload["slide_count"])
                     if payload["kind"] == "create"
-                    else len(preserved.get("slides", [])) if preserved is not None else None
+                    else len(preserved.get("slides", []))
+                    if preserved is not None
+                    else None
                 ),
                 document_id=(
                     str(preserved.get("docId"))
@@ -237,9 +238,7 @@ class CodexSdkBentoAdapter:
         error: Exception,
     ) -> None:
         payload = request.input_payload
-        gateway_execution = (
-            payload.get("_gateway_execution") if isinstance(payload, dict) else None
-        )
+        gateway_execution = payload.get("_gateway_execution") if isinstance(payload, dict) else None
         if gateway_execution is None:
             return
         _audit_codex_run(
@@ -264,7 +263,6 @@ def _apply_external_gateway_policy(request: AgentRuntimeRequest) -> tuple[str, s
         request.workload_id,
         LlmWorkloadContext(
             source="worker.bento.agent",
-            workspace_id=request.workspace_id,
             actor_user_id=request.actor_user_id,
             principal_id=request.actor_user_id,
             app_id="bento",
@@ -278,9 +276,7 @@ def _apply_external_gateway_policy(request: AgentRuntimeRequest) -> tuple[str, s
         payload["_gateway_execution"] = execution
     masked_prompt = str(execution.messages[0].get("content") or "")
     masked_current = (
-        str(execution.messages[1].get("content") or "")
-        if len(execution.messages) > 1
-        else None
+        str(execution.messages[1].get("content") or "") if len(execution.messages) > 1 else None
     )
     return masked_prompt, masked_current, execution
 
@@ -313,7 +309,6 @@ def _audit_codex_run(
         actor_user_id=request.actor_user_id,
         principal_kind="user",
         principal_id=request.actor_user_id,
-        workspace_id=request.workspace_id,
         task_kind=decision.task_kind,
         workload_id=decision.workload_id,
         app_id="bento",
@@ -341,9 +336,7 @@ def _audit_codex_run(
         external_transfer_exception_id=decision.external_transfer_exception_id,
         external_transfer_exception_name=decision.external_transfer_exception_name,
         external_transfer_exception_reason=decision.external_transfer_exception_reason,
-        external_transfer_exception_blockers=list(
-            decision.external_transfer_exception_blockers
-        ),
+        external_transfer_exception_blockers=list(decision.external_transfer_exception_blockers),
         ai_security_pipeline_exemption_id=decision.ai_security_pipeline_exemption_id,
         ai_security_pipeline_exemption_name=decision.ai_security_pipeline_exemption_name,
         ai_security_pipeline_exemption_reason=decision.ai_security_pipeline_exemption_reason,

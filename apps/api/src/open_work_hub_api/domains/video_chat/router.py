@@ -6,14 +6,11 @@ from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.db import get_db_session
-from open_work_hub_api.domains.auth.dependencies import (
-    require_current_user,
-    require_current_workspace,
-)
-from open_work_hub_api.domains.auth.models import User, Workspace
-from open_work_hub_api.domains.auth.workspace_app_gate import require_workspace_app_enabled
+from open_work_hub_api.domains.auth.app_gate import require_app_access
+from open_work_hub_api.domains.auth.dependencies import require_current_user
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.video_chat import service
-from open_work_hub_api.domains.video_chat.app_catalog import VIDEO_CHAT_WORKSPACE_APP
+from open_work_hub_api.domains.video_chat.app_catalog import VIDEO_CHAT_APP
 from open_work_hub_api.domains.video_chat.schemas import (
     VideoChatJoinTokenResponse,
     VideoChatSessionCreateRequest,
@@ -21,10 +18,9 @@ from open_work_hub_api.domains.video_chat.schemas import (
     VideoChatSessionOut,
 )
 
-
-require_video_chat_app_enabled = require_workspace_app_enabled(
-    VIDEO_CHAT_WORKSPACE_APP.app_id,
-    error_code="workspace.app_disabled",
+require_video_chat_app_enabled = require_app_access(
+    VIDEO_CHAT_APP.app_id,
+    error_code="app.access_required",
 )
 
 router = APIRouter(
@@ -39,11 +35,9 @@ def list_sessions(
     status_filter: Literal["open", "ended"] | None = Query(default=None, alias="status"),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> VideoChatSessionListResponse:
     return service.list_sessions(
         db,
-        workspace=workspace,
         user=current_user,
         status_filter=status_filter,
     )
@@ -58,11 +52,9 @@ def create_session(
     payload: VideoChatSessionCreateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> VideoChatSessionOut:
     return service.create_session(
         db,
-        workspace=workspace,
         user=current_user,
         payload=payload,
     )
@@ -73,11 +65,9 @@ def get_session(
     session_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> VideoChatSessionOut:
     return service.get_session(
         db,
-        workspace=workspace,
         user=current_user,
         session_id=session_id,
     )
@@ -89,11 +79,9 @@ def create_join_token(
     session_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> VideoChatJoinTokenResponse:
     return service.create_join_token(
         db,
-        workspace=workspace,
         user=current_user,
         session_id=session_id,
         request_host=request.url.hostname,
@@ -105,11 +93,9 @@ def end_session(
     session_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> VideoChatSessionOut:
     return service.end_session(
         db,
-        workspace=workspace,
         user=current_user,
         session_id=session_id,
     )
@@ -120,11 +106,9 @@ def start_recording(
     session_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> VideoChatSessionOut:
     return service.start_recording(
         db,
-        workspace=workspace,
         user=current_user,
         session_id=session_id,
     )
@@ -135,11 +119,9 @@ def stop_recording(
     session_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> VideoChatSessionOut:
     return service.stop_recording(
         db,
-        workspace=workspace,
         user=current_user,
         session_id=session_id,
     )
@@ -150,11 +132,9 @@ def start_captions(
     session_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> VideoChatSessionOut:
     return service.start_captions(
         db,
-        workspace=workspace,
         user=current_user,
         session_id=session_id,
     )
@@ -165,11 +145,9 @@ def stop_captions(
     session_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> VideoChatSessionOut:
     return service.stop_captions(
         db,
-        workspace=workspace,
         user=current_user,
         session_id=session_id,
     )

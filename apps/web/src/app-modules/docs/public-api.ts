@@ -9,18 +9,18 @@ import type {
 export * from './api/docs-api';
 export * from './api/docs-hub-picker-model';
 export * from './api/docs-page-reorder';
+export {
+  buildMeetingDocsHubPickerAdapter,
+  buildPmsTaskDocsHubPickerAdapter,
+  EMPTY_DOCS_HUB_PICKER_EXCLUDED_DOC_IDS,
+  pickDocsHubSelectionItem,
+  resolveDocsHubPickerExcludeDocIds,
+} from './views/docs-hub-picker-adapters';
 export type {
   DocsHubPickerAdapter,
   DocsHubPickerCopy,
   DocsHubPickerModalProps,
 } from './views/DocsHubPickerModal';
-export {
-  EMPTY_DOCS_HUB_PICKER_EXCLUDED_DOC_IDS,
-  buildMeetingDocsHubPickerAdapter,
-  buildPmsTaskDocsHubPickerAdapter,
-  pickDocsHubSelectionItem,
-  resolveDocsHubPickerExcludeDocIds,
-} from './views/docs-hub-picker-adapters';
 export type {
   DocsEmbeddedViewerProps,
   DocsViewerModalProps,

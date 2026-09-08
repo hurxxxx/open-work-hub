@@ -1,14 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
 import { ArrowDown, Bot, Loader2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 
 import { MarkdownContent } from '@/src/components/artifacts/MarkdownContent';
 
-import { ArtifactCard } from './ArtifactCard';
-import { AiRunProgress, type AiRunProgressValue } from './AiRunProgress';
-import { MessageBubble, type ChatTurn } from './MessageBubble';
-import { ThinkingPanel } from './ThinkingPanel';
 import type { ArtifactBuffer, ChatStreamStatus } from '../../api/agent-events';
 import type { ChatbotArtifactRenderer } from '../chatbot-experience';
+import { AiRunProgress, type AiRunProgressValue } from './AiRunProgress';
+import { ArtifactCard } from './ArtifactCard';
+import { MessageBubble, type ChatTurn } from './MessageBubble';
+import { ThinkingPanel } from './ThinkingPanel';
 
 export interface LiveAssistant {
   content: string;

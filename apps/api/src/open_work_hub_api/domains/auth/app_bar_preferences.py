@@ -3,13 +3,12 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from open_work_hub_api.domains.auth.workspace_apps import (
-    WORKSPACE_APP_BAR_FIXED_APP_IDS,
-    WORKSPACE_APP_BAR_PERSONAL_TOOLS_APP_IDS,
-    WORKSPACE_APP_BAR_PINNED_BY_DEFAULT_APP_IDS,
-    WORKSPACE_APP_IDS,
+from open_work_hub_api.domains.auth.app_catalog import (
+    APP_BAR_FIXED_APP_IDS,
+    APP_BAR_PERSONAL_TOOLS_APP_IDS,
+    APP_BAR_PINNED_BY_DEFAULT_APP_IDS,
+    APP_IDS,
 )
-
 
 MAX_APP_BAR_PINNED_APP_IDS = 8
 
@@ -19,7 +18,7 @@ def normalize_app_bar_pinned_app_ids(
     *,
     reject_unknown: bool = False,
 ) -> list[str]:
-    known_app_ids = set(WORKSPACE_APP_IDS)
+    known_app_ids = set(APP_IDS)
     normalized_items: list[str] = []
     for item in value:
         if not isinstance(item, str):
@@ -35,9 +34,9 @@ def normalize_app_bar_pinned_app_ids(
 
     normalized: list[str] = []
     for app_id in normalized_items:
-        if app_id in WORKSPACE_APP_BAR_FIXED_APP_IDS:
+        if app_id in APP_BAR_FIXED_APP_IDS:
             continue
-        if app_id in WORKSPACE_APP_BAR_PERSONAL_TOOLS_APP_IDS:
+        if app_id in APP_BAR_PERSONAL_TOOLS_APP_IDS:
             continue
         if app_id not in normalized:
             normalized.append(app_id)
@@ -48,10 +47,10 @@ def normalize_app_bar_pinned_app_ids(
 
 def serialize_app_bar_layout(value: Any) -> dict[str, list[str]]:
     if not isinstance(value, dict):
-        return {"pinned_app_ids": list(WORKSPACE_APP_BAR_PINNED_BY_DEFAULT_APP_IDS)}
+        return {"pinned_app_ids": list(APP_BAR_PINNED_BY_DEFAULT_APP_IDS)}
 
     pinned_app_ids = value.get("pinned_app_ids")
     if not isinstance(pinned_app_ids, list):
-        return {"pinned_app_ids": list(WORKSPACE_APP_BAR_PINNED_BY_DEFAULT_APP_IDS)}
+        return {"pinned_app_ids": list(APP_BAR_PINNED_BY_DEFAULT_APP_IDS)}
 
     return {"pinned_app_ids": normalize_app_bar_pinned_app_ids(pinned_app_ids)}

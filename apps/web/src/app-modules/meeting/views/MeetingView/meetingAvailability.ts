@@ -3,17 +3,17 @@ import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
+  DEFAULT_TIME_ZONE,
+  formatDateOnly,
+  formatDateTime,
+} from '@/src/platform/time/time-utils';
+import {
   getMeetingAvailability,
   parseServerDateTime,
   type MeetingAvailabilityBlock,
   type MeetingAvailabilityItem,
   type MeetingUser,
 } from '../../api/meeting-api';
-import {
-  DEFAULT_TIME_ZONE,
-  formatDateOnly,
-  formatDateTime,
-} from '@/src/platform/time/time-utils';
 
 interface AvailabilityBlockLabels {
   busy: string;
@@ -316,7 +316,6 @@ export function buildAvailabilityConflicts(
 }
 
 export function useMeetingAvailabilityQuery(options: {
-  workspaceSlug: string;
   userIds: string[];
   rangeStart: Date | null;
   rangeEnd: Date | null;
@@ -324,13 +323,7 @@ export function useMeetingAvailabilityQuery(options: {
 }) {
   const { token } = useAuth();
   const { t } = useTranslation('apps');
-  const {
-    workspaceSlug,
-    userIds,
-    rangeStart,
-    rangeEnd,
-    enabled = true,
-  } = options;
+  const { userIds, rangeStart, rangeEnd, enabled = true } = options;
   const [{ items, loading, error }, dispatch] = useReducer(
     meetingAvailabilityQueryReducer,
     INITIAL_MEETING_AVAILABILITY_QUERY_STATE,
@@ -352,7 +345,6 @@ export function useMeetingAvailabilityQuery(options: {
     if (
       !enabled ||
       !token ||
-      !workspaceSlug ||
       uniqueUserIds.length === 0 ||
       rangeStartMs === null ||
       rangeEndMs === null
@@ -364,7 +356,7 @@ export function useMeetingAvailabilityQuery(options: {
     }
 
     dispatch({ type: 'loading' });
-    getMeetingAvailability(token, workspaceSlug, {
+    getMeetingAvailability(token, {
       userIds: uniqueUserIds,
       from: new Date(rangeStartMs).toISOString(),
       to: new Date(rangeEndMs).toISOString(),
@@ -384,16 +376,7 @@ export function useMeetingAvailabilityQuery(options: {
     return () => {
       cancelled = true;
     };
-  }, [
-    enabled,
-    token,
-    workspaceSlug,
-    uniqueUserIds,
-    userIdsKey,
-    rangeStartMs,
-    rangeEndMs,
-    t,
-  ]);
+  }, [enabled, token, uniqueUserIds, userIdsKey, rangeStartMs, rangeEndMs, t]);
 
   return {
     items,

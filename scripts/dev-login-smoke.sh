@@ -65,16 +65,12 @@ try:
         raise RuntimeError("Authenticated user does not match the seeded login ID")
     if "platform_admin" not in user.get("system_roles", []):
         raise RuntimeError("Seeded user does not have the platform-admin role")
-    workspace_roles = {
-        item.get("slug"): item.get("role")
-        for item in user.get("workspaces", [])
-        if isinstance(item, dict)
-    }
-    for workspace_slug in ("administrator", "general"):
-        if workspace_roles.get(workspace_slug) != "admin":
-            raise RuntimeError(
-                f"Seeded user is not an admin of the {workspace_slug} workspace"
-            )
+    bootstrap = request_json("/api/v1/apps/bootstrap", token=token)
+    if not isinstance(bootstrap.get("apps"), list):
+        raise RuntimeError("Company app bootstrap is missing its app list")
+    if any(key in user for key in ("workspaces", "default_workspace_id")):
+        raise RuntimeError("Authenticated company user exposes obsolete workspace state")
+
 except HTTPError as exc:
     detail = exc.read().decode("utf-8", errors="replace")
     raise SystemExit(f"Login smoke failed: HTTP {exc.code}: {detail}") from exc

@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 from open_work_hub_api.domains.ai.runtime.models import AgentInvocation, AgentRun, AgentTraceEvent
 from open_work_hub_api.domains.auth.models import utcnow_naive
 
-
 TERMINAL_RUN_STATUSES = ("completed", "failed", "cancelled", "abandoned")
 
 

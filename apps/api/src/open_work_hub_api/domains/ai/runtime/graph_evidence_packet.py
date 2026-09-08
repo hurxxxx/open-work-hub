@@ -21,7 +21,6 @@ from open_work_hub_api.domains.ai.runtime.graph_projection_values import (
 )
 from open_work_hub_api.domains.ai.runtime.summary_fields import summary_string
 
-
 if TYPE_CHECKING:
     from open_work_hub_api.domains.ai.runtime.graph_node_output import GraphNodeOutput
 
@@ -62,9 +61,7 @@ class _GraphEvidencePacketProjection:
         external_planner_execution_summary: dict[str, Any] | None,
         external_search_execution_summary: dict[str, Any] | None,
     ) -> _GraphEvidencePacketProjection:
-        failed_outputs = tuple(
-            output for output in node_outputs if output.status == "failed"
-        )
+        failed_outputs = tuple(output for output in node_outputs if output.status == "failed")
         completed_outputs = tuple(
             output
             for output in node_outputs
@@ -102,14 +99,10 @@ class _GraphEvidencePacketProjection:
             verifier_status=verifier_status,
             ready_for_grounded_write=bool(node_items)
             and (
-                verifier_status == "completed"
-                if requires_verifier
-                else verifier_status != "failed"
+                verifier_status == "completed" if requires_verifier else verifier_status != "failed"
             ),
             failed_node_count=len(failed_outputs),
-            tool_result_count=sum(
-                len(output.tool_results) for output in completed_outputs
-            ),
+            tool_result_count=sum(len(output.tool_results) for output in completed_outputs),
             gaps=tuple(_evidence_gaps(node_outputs, verifier_status=verifier_status)),
         )
 
@@ -195,8 +188,7 @@ def candidate_requires_graph_verifier(
     candidate_summary: dict[str, Any] | None,
 ) -> bool:
     return bool(
-        isinstance(candidate_summary, dict)
-        and candidate_summary.get("requires_verifier") is True
+        isinstance(candidate_summary, dict) and candidate_summary.get("requires_verifier") is True
     )
 
 
@@ -217,9 +209,7 @@ def _build_evidence_query_plan(
         rerank_top_k=min(len(items), 8),
         final_evidence_token_budget=2048,
         external_search_used=external_search.used,
-        external_search_provider=(
-            external_search.provider if external_search.used else None
-        ),
+        external_search_provider=(external_search.provider if external_search.used else None),
         sanitized_query_ref=external_search.sanitized_query_ref,
     )
 
@@ -363,9 +353,7 @@ def _authority_class_for_source_kind(source_kind: str) -> str:
 def _extract_query_keywords(messages: list[dict[str, Any]]) -> list[str]:
     text = graph_latest_user_text(messages)
     tokens = [
-        token.strip(" \t\n\r.,!?;:()[]{}'\"`")
-        for token in re.split(r"\s+", text)
-        if token.strip()
+        token.strip(" \t\n\r.,!?;:()[]{}'\"`") for token in re.split(r"\s+", text) if token.strip()
     ]
     selected: list[str] = []
     for token in tokens:

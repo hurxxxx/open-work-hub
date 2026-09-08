@@ -1,18 +1,17 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
 import hashlib
 import ipaddress
 import json
 import socket
+from dataclasses import asdict, dataclass, field
 from typing import Any, Literal
 from urllib.parse import urlsplit
 
+from pydantic import SecretStr
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-
-from pydantic import SecretStr
 
 from open_work_hub_api.core.llm_pool_config_registry import resolve_llm_pool_config_values
 from open_work_hub_api.core.llm_provider_registry import (
@@ -21,6 +20,9 @@ from open_work_hub_api.core.llm_provider_registry import (
     llm_provider_ids,
 )
 from open_work_hub_api.core.settings import Settings, get_settings
+from open_work_hub_api.domains.ai.agent_runtime import (
+    get_agent_runtime_adapter_descriptor,
+)
 from open_work_hub_api.domains.ai.model_credentials import (
     AiModelCredentialError,
     decrypt_api_key,
@@ -48,9 +50,6 @@ from open_work_hub_api.domains.ai.model_settings_schemas import (
     AiModelRouteOverrideUpdateRequest,
     AiModelSettingsResponse,
     AiModelWorkloadResponse,
-)
-from open_work_hub_api.domains.ai.agent_runtime import (
-    get_agent_runtime_adapter_descriptor,
 )
 from open_work_hub_api.domains.ai.registry import (
     RegisteredLlmWorkload,
@@ -271,9 +270,7 @@ def resolve_ai_model_workload_route(
         use_database_provider and provider_config and provider_config.endpoint_url
     )
     database_parts = used_database_model or used_database_endpoint or used_database_secret
-    legacy_parts = route == "local" and (
-        not used_database_model or not used_database_endpoint
-    )
+    legacy_parts = route == "local" and (not used_database_model or not used_database_endpoint)
     config_source: Literal["database", "legacy_env", "database_with_legacy_env"]
     if database_parts and legacy_parts:
         config_source = "database_with_legacy_env"
@@ -345,11 +342,7 @@ def get_ai_model_settings_snapshot(db: Session) -> AiModelSettingsResponse:
     ]
     # Discovery rows absent from the provider's current inventory are retained
     # for audit/history, but are not part of the selectable admin catalog.
-    models = [
-        _serialize_model(row)
-        for row in model_rows
-        if row.discovery_status == "active"
-    ]
+    models = [_serialize_model(row) for row in model_rows if row.discovery_status == "active"]
     workloads = [
         _serialize_workload(
             db,
@@ -622,10 +615,7 @@ def discover_ai_model_provider_catalog(
             row.updated_at = now
 
     for row in rows:
-        if (
-            row.model_key not in discovered_keys
-            and row.discovery_status != "stale"
-        ):
+        if row.model_key not in discovered_keys and row.discovery_status != "stale":
             row.discovery_status = "stale"
             row.version += 1
             row.updated_by = actor_user_id
@@ -747,9 +737,7 @@ def upsert_ai_model_route_override(
                 model_ids_json=dict(payload.model_ids),
                 local_max_output_tokens=payload.local_max_output_tokens,
                 external_max_output_tokens=payload.external_max_output_tokens,
-                runtime_adapter_id=(
-                    payload.runtime_adapter_id or workload.default_runtime_adapter
-                ),
+                runtime_adapter_id=(payload.runtime_adapter_id or workload.default_runtime_adapter),
                 version=1,
                 updated_by=actor_user_id,
             )
@@ -775,9 +763,7 @@ def upsert_ai_model_route_override(
             model_ids_json=dict(payload.model_ids),
             local_max_output_tokens=payload.local_max_output_tokens,
             external_max_output_tokens=payload.external_max_output_tokens,
-            runtime_adapter_id=(
-                payload.runtime_adapter_id or workload.default_runtime_adapter
-            ),
+            runtime_adapter_id=(payload.runtime_adapter_id or workload.default_runtime_adapter),
             version=row.version + 1,
             updated_by=actor_user_id,
             updated_at=utcnow_naive(),
@@ -832,9 +818,7 @@ def _serialize_provider(
     )
     stored_endpoint_url = (row.endpoint_url or "").strip() if row is not None else ""
     default_endpoint_url = (
-        pool_values.base_url.strip()
-        if pool_values is not None
-        else descriptor.default_endpoint_url
+        pool_values.base_url.strip() if pool_values is not None else descriptor.default_endpoint_url
     )
     return AiModelProviderResponse(
         provider_id=provider_id,
@@ -937,10 +921,7 @@ def _serialize_workload(
                 allowed_providers=list(runtime_descriptor.allowed_providers),
             )
             for adapter_id in descriptor.allowed_runtime_adapters
-            if (
-                runtime_descriptor := get_agent_runtime_adapter_descriptor(adapter_id)
-            )
-            is not None
+            if (runtime_descriptor := get_agent_runtime_adapter_descriptor(adapter_id)) is not None
         ],
         default_route=descriptor.default_route,
         effective_route=(
@@ -1079,10 +1060,7 @@ def _runtime_provider_id(
     enabled = tuple(
         provider_id
         for provider_id in allowed
-        if (
-            (row := db.get(AiModelProviderConfig, provider_id)) is not None
-            and row.enabled
-        )
+        if ((row := db.get(AiModelProviderConfig, provider_id)) is not None and row.enabled)
     )
     if len(enabled) == 1:
         return enabled[0]
@@ -1299,8 +1277,7 @@ def _require_runtime_route_compatibility(
             context={"workload_id": workload.workload_id},
         )
     if route not in descriptor.allowed_routes or (
-        descriptor.allowed_providers
-        and (provider_id or "") not in descriptor.allowed_providers
+        descriptor.allowed_providers and (provider_id or "") not in descriptor.allowed_providers
     ):
         raise AiModelSettingsError(
             status_code=status_code,

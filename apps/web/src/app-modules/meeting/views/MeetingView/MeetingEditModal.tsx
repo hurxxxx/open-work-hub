@@ -11,7 +11,6 @@ interface MeetingEditModalProps {
   meeting: MeetingDetail;
   onClose: () => void;
   onSaved: (updated: MeetingDetail) => void;
-  workspaceSlug: string;
 }
 
 export function MeetingEditModal({
@@ -19,13 +18,11 @@ export function MeetingEditModal({
   meeting,
   onClose,
   onSaved,
-  workspaceSlug,
 }: MeetingEditModalProps) {
   const { state, projection, t, user, actions } = useMeetingEditFormWorkflow({
     isOpen,
     meeting,
     onSaved,
-    workspaceSlug,
   });
   const {
     agenda,
@@ -112,7 +109,6 @@ export function MeetingEditModal({
             usersLoading,
           }}
           timeZone={user?.time_zone}
-          workspaceSlug={workspaceSlug}
         />
       </div>
     </FormDialog>

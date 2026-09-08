@@ -1,7 +1,7 @@
 import { i18n } from '@/src/platform/i18n';
 import {
-  HermesAgentApiError,
   HERMES_APPROVAL_TTL_MS,
+  HermesAgentApiError,
   createHermesSession,
   deleteHermesSession,
   encodeHermesApprovalReference,
@@ -107,7 +107,6 @@ export async function listConversations(
     cursor?: string | null;
     scopeRef?: string;
     scopeResourceId?: string;
-    workspaceSlug?: string | null;
   } = {},
 ): Promise<ConversationListResponse> {
   const limit = params.limit ?? 50;
@@ -119,7 +118,6 @@ export async function listConversations(
       offset,
       scopeRef: params.scopeRef,
       scopeResourceId: params.scopeResourceId,
-      workspaceSlug: params.workspaceSlug,
     });
     return {
       items: response.data.map(sessionToSummary),
@@ -133,16 +131,15 @@ export async function listConversations(
 export async function getConversation(
   token: string,
   conversationId: string,
-  options: { workspaceSlug?: string | null } = {},
+  options: Record<string, never> = {},
 ): Promise<ConversationDetail> {
   try {
     const [session, messages, runs] = await Promise.all([
-      getHermesSession(token, conversationId, options.workspaceSlug),
-      getHermesSessionMessages(token, conversationId, options.workspaceSlug),
+      getHermesSession(token, conversationId),
+      getHermesSessionMessages(token, conversationId),
       listHermesRuns(token, {
         sessionId: conversationId,
         limit: 1,
-        workspaceSlug: options.workspaceSlug,
       }),
     ]);
     return {
@@ -163,19 +160,14 @@ export async function createConversation(
     title?: string;
     scopeRef?: string;
     scopeResourceId?: string;
-    workspaceSlug?: string | null;
   } = {},
 ): Promise<ConversationDetail> {
   try {
-    const session = await createHermesSession(
-      token,
-      {
-        title: init.title || null,
-        scope_ref: init.scopeRef || null,
-        scope_resource_id: init.scopeResourceId || null,
-      },
-      init.workspaceSlug,
-    );
+    const session = await createHermesSession(token, {
+      title: init.title || null,
+      scope_ref: init.scopeRef || null,
+      scope_resource_id: init.scopeResourceId || null,
+    });
     return {
       ...sessionToSummary(session),
       turns: [],
@@ -190,15 +182,10 @@ export async function renameConversation(
   token: string,
   conversationId: string,
   title: string,
-  options: { workspaceSlug?: string | null } = {},
+  options: Record<string, never> = {},
 ): Promise<ConversationDetail> {
   try {
-    const session = await updateHermesSession(
-      token,
-      conversationId,
-      { title },
-      options.workspaceSlug,
-    );
+    const session = await updateHermesSession(token, conversationId, { title });
     const detail = await getConversation(token, conversationId, options);
     return { ...detail, ...sessionToSummary(session) };
   } catch (error) {
@@ -209,10 +196,10 @@ export async function renameConversation(
 export async function deleteConversation(
   token: string,
   conversationId: string,
-  options: { workspaceSlug?: string | null } = {},
+  options: Record<string, never> = {},
 ): Promise<void> {
   try {
-    await deleteHermesSession(token, conversationId, options.workspaceSlug);
+    await deleteHermesSession(token, conversationId);
   } catch (error) {
     return mapError(error);
   }
@@ -254,7 +241,9 @@ function messageToTurn(
     forcedLocal: false,
     piiHits: [],
     toolCalls:
-      role === 'assistant' ? mapStoredToolCalls(message.tool_calls, timestamp) : [],
+      role === 'assistant'
+        ? mapStoredToolCalls(message.tool_calls, timestamp)
+        : [],
     pendingApprovals: [],
     artifacts: [],
     createdAt: timestamp,
@@ -272,7 +261,9 @@ function stringValue(value: unknown): string {
 
 function timestampToIso(value: unknown): string {
   if (typeof value === 'number' && Number.isFinite(value)) {
-    return new Date(value < 10_000_000_000 ? value * 1000 : value).toISOString();
+    return new Date(
+      value < 10_000_000_000 ? value * 1000 : value,
+    ).toISOString();
   }
   if (typeof value === 'string') {
     const parsed = Date.parse(value);
@@ -321,7 +312,9 @@ function runToPendingApproval(
       ? sequenceValue
       : 0;
   const timestamp =
-    typeof payload.timestamp === 'number' ? payload.timestamp * 1000 : Date.now();
+    typeof payload.timestamp === 'number'
+      ? payload.timestamp * 1000
+      : Date.now();
   return {
     approvalId: encodeHermesApprovalReference({
       runId: run.id,

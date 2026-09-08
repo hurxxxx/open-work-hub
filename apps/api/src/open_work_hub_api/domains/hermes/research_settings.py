@@ -14,7 +14,6 @@ from open_work_hub_api.domains.hermes.research_sources import (
     ResearchSourceId,
 )
 
-
 _SOURCE_COLUMNS: dict[ResearchSourceId, str] = {
     "semantic_scholar": "semantic_scholar_enabled",
     "arxiv": "arxiv_enabled",
@@ -88,9 +87,7 @@ def update_research_source(
     if row is None:
         row = HermesResearchSourceSettings(
             id=1,
-            semantic_scholar_enabled=DEFAULT_RESEARCH_SOURCE_POLICY[
-                "semantic_scholar"
-            ],
+            semantic_scholar_enabled=DEFAULT_RESEARCH_SOURCE_POLICY["semantic_scholar"],
             arxiv_enabled=DEFAULT_RESEARCH_SOURCE_POLICY["arxiv"],
             openalex_enabled=DEFAULT_RESEARCH_SOURCE_POLICY["openalex"],
             crossref_enabled=DEFAULT_RESEARCH_SOURCE_POLICY["crossref"],

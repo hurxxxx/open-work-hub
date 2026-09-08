@@ -100,7 +100,7 @@ def serialize_folder_item(
         visibility=folder.visibility,
         owner_id=folder.owner_id,
         owner_name=_owner_name(folder),
-        can_manage=is_admin or folder.owner_id == user.id,
+        can_manage=folder.owner_id == user.id,
         created_at=folder.created_at,
         updated_at=folder.updated_at,
     )
@@ -123,7 +123,7 @@ def serialize_file_item(
         visibility=file.visibility,
         owner_id=file.owner_id,
         owner_name=_owner_name(file),
-        can_delete=is_admin or file.owner_id == user.id,
+        can_delete=file.owner_id == user.id,
         rag_status=rag_state.status,
         rag_updated_at=rag_state.updated_at,
         created_at=file.created_at,

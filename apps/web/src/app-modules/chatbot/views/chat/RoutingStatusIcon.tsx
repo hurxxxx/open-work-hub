@@ -1,6 +1,6 @@
+import { Tooltip } from '@open-work-hub/ui';
 import { Shield, ShieldAlert } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Tooltip } from '@open-work-hub/ui';
 import type { AiBackendMode, LlmHealthResponse } from '../../api/chatbot-api';
 
 interface RoutingStatusIconProps {

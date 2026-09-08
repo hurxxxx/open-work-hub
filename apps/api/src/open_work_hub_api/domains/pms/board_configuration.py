@@ -8,7 +8,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from open_work_hub_api.core.i18n import localized_http_exception
-from open_work_hub_api.domains.auth.models import Team, User
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.pms.access import (
     _ensure_list_editor,
     _ensure_list_manager,
@@ -20,10 +20,11 @@ from open_work_hub_api.domains.pms.access import (
 from open_work_hub_api.domains.pms.models import CustomFieldValue, Task, TaskList
 from open_work_hub_api.domains.pms.rag_sync import enqueue_task_list_task_recompute
 from open_work_hub_api.domains.pms.service import (
-    delete_loaded_tasks,
     _serialize_task_list,
     _validate_folder_membership,
+    delete_loaded_tasks,
 )
+from open_work_hub_api.domains.pms.space_models import Team
 
 
 @dataclass(frozen=True)

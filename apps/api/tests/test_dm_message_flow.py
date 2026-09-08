@@ -78,7 +78,9 @@ def test_compose_dm_message_requires_body_or_attachments() -> None:
     with pytest.raises(HTTPException) as excinfo:
         message_flow.compose_dm_message(
             _FakeDb([]),
-            conversation=_conversation(participants=[_participant(sender), _participant(recipient)]),
+            conversation=_conversation(
+                participants=[_participant(sender), _participant(recipient)]
+            ),
             sender=sender,
             body="  ",
             attachment_ids=[],
@@ -197,7 +199,9 @@ def test_compose_dm_message_requires_an_active_recipient() -> None:
 
 def test_message_attachments_to_link_rejects_missing_or_foreign_attachment() -> None:
     sender = _user("sender")
-    conversation = _conversation(participants=[_participant(sender), _participant(_user("recipient"))])
+    conversation = _conversation(
+        participants=[_participant(sender), _participant(_user("recipient"))]
+    )
 
     with pytest.raises(HTTPException) as missing_exc:
         message_flow.message_attachments_to_link(
@@ -220,7 +224,9 @@ def test_message_attachments_to_link_rejects_missing_or_foreign_attachment() -> 
 
 def test_message_attachments_to_link_rejects_already_sent_attachment() -> None:
     sender = _user("sender")
-    conversation = _conversation(participants=[_participant(sender), _participant(_user("recipient"))])
+    conversation = _conversation(
+        participants=[_participant(sender), _participant(_user("recipient"))]
+    )
 
     with pytest.raises(HTTPException) as excinfo:
         message_flow.message_attachments_to_link(

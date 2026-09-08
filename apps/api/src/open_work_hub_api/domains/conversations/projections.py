@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from open_work_hub_api.domains.conversations.default_scope_adapters import is_supported_conversation_scope_ref
+from open_work_hub_api.domains.conversations.default_scope_adapters import (
+    is_supported_conversation_scope_ref,
+)
 from open_work_hub_api.domains.conversations.schemas import (
     ArtifactOut,
     ConversationDetail,
@@ -71,7 +73,11 @@ def conversation_detail_from_row(
 
 
 def _supported_scope(row: Any) -> tuple[str | None, str | None]:
-    scope_ref = row.scope_ref if row.scope_ref and is_supported_conversation_scope_ref(row.scope_ref) else None
+    scope_ref = (
+        row.scope_ref
+        if row.scope_ref and is_supported_conversation_scope_ref(row.scope_ref)
+        else None
+    )
     scope_resource_id = row.scope_resource_id if scope_ref is not None else None
     return scope_ref, scope_resource_id
 

@@ -18,7 +18,7 @@ def test_diagrams_create_update_archive_restore_and_preview(client: TestClient) 
     token = session["token"]
 
     create_response = client.post(
-        "/api/v1/workspaces/delivery-hub/diagrams/items",
+        "/api/v1/diagrams/items",
         headers=_auth_headers(token),
         json={
             "title": "Launch Flow",
@@ -36,7 +36,7 @@ def test_diagrams_create_update_archive_restore_and_preview(client: TestClient) 
     assert created["can_manage"] is True
 
     preview_response = client.get(
-        f"/api/v1/workspaces/delivery-hub/diagrams/items/{created['id']}/preview.png",
+        f"/api/v1/diagrams/items/{created['id']}/preview.png",
         headers=_auth_headers(token),
     )
     assert preview_response.status_code == 200, preview_response.text
@@ -44,7 +44,7 @@ def test_diagrams_create_update_archive_restore_and_preview(client: TestClient) 
     assert preview_response.content.startswith(b"\x89PNG")
 
     stale_update_response = client.patch(
-        f"/api/v1/workspaces/delivery-hub/diagrams/items/{created['id']}",
+        f"/api/v1/diagrams/items/{created['id']}",
         headers=_auth_headers(token),
         json={"version": created["version"] + 1, "title": "Stale"},
     )
@@ -52,7 +52,7 @@ def test_diagrams_create_update_archive_restore_and_preview(client: TestClient) 
     assert stale_update_response.json()["code"] == "diagrams.version_conflict"
 
     update_response = client.patch(
-        f"/api/v1/workspaces/delivery-hub/diagrams/items/{created['id']}",
+        f"/api/v1/diagrams/items/{created['id']}",
         headers=_auth_headers(token),
         json={
             "version": created["version"],
@@ -67,17 +67,21 @@ def test_diagrams_create_update_archive_restore_and_preview(client: TestClient) 
     assert "page-2" in updated["xml"]
 
     visibility_response = client.patch(
-        f"/api/v1/workspaces/delivery-hub/diagrams/items/{created['id']}",
+        f"/api/v1/diagrams/items/{created['id']}",
         headers=_auth_headers(token),
-        json={"version": updated["version"], "visibility": "workspace"},
+        json={
+            "version": updated["version"],
+            "visibility": "company",
+            "company_admin_read_acknowledged": True,
+        },
     )
     assert visibility_response.status_code == 200, visibility_response.text
-    visible_to_workspace = visibility_response.json()
-    assert visible_to_workspace["visibility"] == "workspace"
-    assert visible_to_workspace["version"] == 3
+    visible_to_company = visibility_response.json()
+    assert visible_to_company["visibility"] == "company"
+    assert visible_to_company["version"] == 3
 
     mine_response = client.get(
-        "/api/v1/workspaces/delivery-hub/diagrams/hub",
+        "/api/v1/diagrams/hub",
         headers=_auth_headers(token),
         params={"view": "mine"},
     )
@@ -85,13 +89,13 @@ def test_diagrams_create_update_archive_restore_and_preview(client: TestClient) 
     assert [item["id"] for item in mine_response.json()["items"]] == [created["id"]]
 
     archive_response = client.delete(
-        f"/api/v1/workspaces/delivery-hub/diagrams/items/{created['id']}",
+        f"/api/v1/diagrams/items/{created['id']}",
         headers=_auth_headers(token),
     )
     assert archive_response.status_code == 204
 
     archived_response = client.get(
-        "/api/v1/workspaces/delivery-hub/diagrams/hub",
+        "/api/v1/diagrams/hub",
         headers=_auth_headers(token),
         params={"view": "archived"},
     )
@@ -99,18 +103,25 @@ def test_diagrams_create_update_archive_restore_and_preview(client: TestClient) 
     assert [item["id"] for item in archived_response.json()["items"]] == [created["id"]]
 
     restore_response = client.post(
-        f"/api/v1/workspaces/delivery-hub/diagrams/items/{created['id']}/restore",
+        f"/api/v1/diagrams/items/{created['id']}/restore",
         headers=_auth_headers(token),
     )
     assert restore_response.status_code == 200, restore_response.text
     assert restore_response.json()["archived_at"] is None
 
 
-def test_diagrams_requires_workspace_membership(client: TestClient) -> None:
+def test_diagrams_requires_current_app_admission(client: TestClient) -> None:
     session = dev_login(client, "delivery-hub-member")
 
+    from open_work_hub_api.core.db import get_session_factory
+    from open_work_hub_api.domains.auth.app_access_models import AppAccessPolicy
+
+    with get_session_factory()() as db:
+        db.get(AppAccessPolicy, "diagrams").audience = "selected"
+        db.commit()
+
     response = client.get(
-        "/api/v1/workspaces/general/diagrams/hub",
+        "/api/v1/diagrams/hub",
         headers=_auth_headers(session["token"]),
     )
 
@@ -125,7 +136,7 @@ def test_diagrams_visibility_limits_personal_items_to_owner(
     member = dev_login(client, "delivery-hub-member")
 
     personal_response = client.post(
-        "/api/v1/workspaces/delivery-hub/diagrams/items",
+        "/api/v1/diagrams/items",
         headers=_auth_headers(owner["token"]),
         json={"title": "Private Flow"},
     )
@@ -133,42 +144,45 @@ def test_diagrams_visibility_limits_personal_items_to_owner(
     personal = personal_response.json()
     assert personal["visibility"] == "personal"
 
-    workspace_response = client.post(
-        "/api/v1/workspaces/delivery-hub/diagrams/items",
+    company_response = client.post(
+        "/api/v1/diagrams/items",
         headers=_auth_headers(owner["token"]),
-        json={"title": "Shared Flow", "visibility": "workspace"},
+        json={
+            "title": "Shared Flow",
+            "visibility": "company",
+            "company_admin_read_acknowledged": True,
+        },
     )
-    assert workspace_response.status_code == 201, workspace_response.text
-    workspace_item = workspace_response.json()
-    assert workspace_item["visibility"] == "workspace"
+    assert company_response.status_code == 201, company_response.text
+    company_item = company_response.json()
+    assert company_item["visibility"] == "company"
 
     member_hub_response = client.get(
-        "/api/v1/workspaces/delivery-hub/diagrams/hub",
+        "/api/v1/diagrams/hub",
         headers=_auth_headers(member["token"]),
     )
     assert member_hub_response.status_code == 200, member_hub_response.text
     member_ids = [item["id"] for item in member_hub_response.json()["items"]]
-    assert workspace_item["id"] in member_ids
+    assert company_item["id"] in member_ids
     assert personal["id"] not in member_ids
 
     member_private_response = client.get(
-        f"/api/v1/workspaces/delivery-hub/diagrams/items/{personal['id']}",
+        f"/api/v1/diagrams/items/{personal['id']}",
         headers=_auth_headers(member["token"]),
     )
     assert member_private_response.status_code == 404
 
     member_public_update_response = client.patch(
-        f"/api/v1/workspaces/delivery-hub/diagrams/items/{workspace_item['id']}",
+        f"/api/v1/diagrams/items/{company_item['id']}",
         headers=_auth_headers(member["token"]),
-        json={"version": workspace_item["version"], "title": "Shared Flow Updated"},
+        json={"version": company_item["version"], "title": "Shared Flow Updated"},
     )
-    assert member_public_update_response.status_code == 200, member_public_update_response.text
-    assert member_public_update_response.json()["title"] == "Shared Flow Updated"
+    assert member_public_update_response.status_code == 403, member_public_update_response.text
 
     member_visibility_response = client.patch(
-        f"/api/v1/workspaces/delivery-hub/diagrams/items/{workspace_item['id']}",
+        f"/api/v1/diagrams/items/{company_item['id']}",
         headers=_auth_headers(member["token"]),
-        json={"version": member_public_update_response.json()["version"], "visibility": "personal"},
+        json={"version": company_item["version"], "visibility": "personal"},
     )
     assert member_visibility_response.status_code == 403
 

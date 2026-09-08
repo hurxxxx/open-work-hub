@@ -5,7 +5,6 @@ from typing import Protocol
 
 from fastapi.responses import Response
 
-
 STATIC_WEBSOCKET_POLICY_VIOLATION_CLOSE_CODE = 1008
 FRONTEND_HTML_CACHE_CONTROL = "no-cache, max-age=0, must-revalidate"
 FRONTEND_IMMUTABLE_ASSET_CACHE_CONTROL = "public, max-age=31536000, immutable"

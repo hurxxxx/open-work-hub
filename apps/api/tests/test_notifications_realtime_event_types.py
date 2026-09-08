@@ -34,12 +34,8 @@ def test_is_notification_realtime_event_type_accepts_only_shared_event_names() -
     for event_type in realtime_event_types.NOTIFICATION_REALTIME_EVENT_TYPE_VALUES:
         assert realtime_event_types.is_notification_realtime_event_type(event_type)
 
-    assert not realtime_event_types.is_notification_realtime_event_type(
-        "notification.deleted"
-    )
-    assert not realtime_event_types.is_notification_realtime_event_type(
-        "notification.read "
-    )
+    assert not realtime_event_types.is_notification_realtime_event_type("notification.deleted")
+    assert not realtime_event_types.is_notification_realtime_event_type("notification.read ")
     assert not realtime_event_types.is_notification_realtime_event_type("")
     assert not realtime_event_types.is_notification_realtime_event_type(None)
     assert not realtime_event_types.is_notification_realtime_event_type(1)

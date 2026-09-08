@@ -8,7 +8,6 @@ import sys
 
 from open_work_hub_api.core.settings import Settings
 
-
 logger = logging.getLogger(__name__)
 
 

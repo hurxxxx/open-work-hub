@@ -4,7 +4,6 @@ import {
 } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
 import { i18n } from '@/src/platform/i18n';
-import { resolveWorkspaceAgentApiPath } from './workspace-chatbot-api-path';
 
 export type HermesAgentStatus = ApiSchema<'HermesAgentStatusResponse'>;
 export type HermesSession = ApiSchema<'HermesSessionResponse'>;
@@ -101,11 +100,10 @@ async function request<T>(
   path: string,
   token: string,
   init: RequestInit = {},
-  workspaceSlug?: string | null,
 ): Promise<T> {
   try {
     return await apiFetchJsonWithMappedError<T>(
-      resolveWorkspaceAgentApiPath(path, workspaceSlug),
+      path,
       token,
       init,
       (error) =>
@@ -127,9 +125,8 @@ async function request<T>(
 
 export function getHermesAgentStatus(
   token: string,
-  workspaceSlug?: string | null,
 ): Promise<HermesAgentStatus> {
-  return request('/api/v1/agent/status', token, undefined, workspaceSlug);
+  return request('/api/v1/agent/status', token, undefined);
 }
 
 export function listHermesSessions(
@@ -139,7 +136,6 @@ export function listHermesSessions(
     offset?: number;
     scopeRef?: string;
     scopeResourceId?: string;
-    workspaceSlug?: string | null;
   } = {},
 ): Promise<HermesSessionList> {
   const search = new URLSearchParams();
@@ -154,7 +150,6 @@ export function listHermesSessions(
     `/api/v1/agent/sessions${query ? `?${query}` : ''}`,
     token,
     undefined,
-    params.workspaceSlug,
   );
 }
 
@@ -166,26 +161,21 @@ export function createHermesSession(
     scope_ref?: string | null;
     scope_resource_id?: string | null;
   },
-  workspaceSlug?: string | null,
 ): Promise<HermesSession> {
-  return request(
-    '/api/v1/agent/sessions',
-    token,
-    { method: 'POST', body: JSON.stringify(body) },
-    workspaceSlug,
-  );
+  return request('/api/v1/agent/sessions', token, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
 }
 
 export function getHermesSession(
   token: string,
   sessionId: string,
-  workspaceSlug?: string | null,
 ): Promise<HermesSession> {
   return request(
     `/api/v1/agent/sessions/${encodeURIComponent(sessionId)}`,
     token,
     undefined,
-    workspaceSlug,
   );
 }
 
@@ -193,39 +183,33 @@ export function updateHermesSession(
   token: string,
   sessionId: string,
   body: { title?: string; pinned?: boolean; archived?: boolean },
-  workspaceSlug?: string | null,
 ): Promise<HermesSession> {
   return request(
     `/api/v1/agent/sessions/${encodeURIComponent(sessionId)}`,
     token,
     { method: 'PATCH', body: JSON.stringify(body) },
-    workspaceSlug,
   );
 }
 
 export function deleteHermesSession(
   token: string,
   sessionId: string,
-  workspaceSlug?: string | null,
 ): Promise<void> {
   return request(
     `/api/v1/agent/sessions/${encodeURIComponent(sessionId)}`,
     token,
     { method: 'DELETE' },
-    workspaceSlug,
   );
 }
 
 export function getHermesSessionMessages(
   token: string,
   sessionId: string,
-  workspaceSlug?: string | null,
 ): Promise<HermesSessionMessages> {
   return request(
     `/api/v1/agent/sessions/${encodeURIComponent(sessionId)}/messages?limit=500&offset=0`,
     token,
     undefined,
-    workspaceSlug,
   );
 }
 
@@ -238,7 +222,6 @@ export function createHermesRun(
     conversation_history?: Record<string, unknown>[];
     allowed_app_ids?: string[] | null;
   },
-  workspaceSlug?: string | null,
   idempotencyKey?: string,
 ): Promise<HermesRun> {
   return request(
@@ -251,20 +234,14 @@ export function createHermesRun(
         ? { 'Idempotency-Key': idempotencyKey }
         : undefined,
     },
-    workspaceSlug,
   );
 }
 
-export function getHermesRun(
-  token: string,
-  runId: string,
-  workspaceSlug?: string | null,
-): Promise<HermesRun> {
+export function getHermesRun(token: string, runId: string): Promise<HermesRun> {
   return request(
     `/api/v1/agent/runs/${encodeURIComponent(runId)}`,
     token,
     undefined,
-    workspaceSlug,
   );
 }
 
@@ -275,7 +252,6 @@ export function listHermesRuns(
     offset?: number;
     sessionId?: string;
     status?: string;
-    workspaceSlug?: string | null;
   } = {},
 ): Promise<HermesRunList> {
   const search = new URLSearchParams();
@@ -288,7 +264,6 @@ export function listHermesRuns(
     `/api/v1/agent/runs${query ? `?${query}` : ''}`,
     token,
     undefined,
-    params.workspaceSlug,
   );
 }
 
@@ -298,14 +273,10 @@ export async function streamHermesRunEvents(
   options: {
     afterSequence?: number;
     signal: AbortSignal;
-    workspaceSlug?: string | null;
   },
 ): Promise<Response> {
   const response = await fetch(
-    resolveWorkspaceAgentApiPath(
-      `/api/v1/agent/runs/${encodeURIComponent(runId)}/events`,
-      options.workspaceSlug,
-    ),
+    `/api/v1/agent/runs/${encodeURIComponent(runId)}/events`,
     {
       cache: 'no-store',
       headers: {
@@ -339,13 +310,11 @@ export async function streamHermesRunEvents(
 export function stopHermesRun(
   token: string,
   runId: string,
-  workspaceSlug?: string | null,
 ): Promise<HermesRun> {
   return request(
     `/api/v1/agent/runs/${encodeURIComponent(runId)}/stop`,
     token,
     { method: 'POST', body: '{}' },
-    workspaceSlug,
   );
 }
 
@@ -354,7 +323,6 @@ export function resolveHermesApproval(
   runId: string,
   requestId: string,
   choice: 'once' | 'deny',
-  workspaceSlug?: string | null,
 ): Promise<HermesRun> {
   return request(
     `/api/v1/agent/runs/${encodeURIComponent(runId)}/approval`,
@@ -363,15 +331,11 @@ export function resolveHermesApproval(
       method: 'POST',
       body: JSON.stringify({ request_id: requestId, choice }),
     },
-    workspaceSlug,
   );
 }
 
-export function listHermesJobs(
-  token: string,
-  workspaceSlug?: string | null,
-): Promise<HermesJobList> {
-  return request('/api/v1/agent/jobs', token, undefined, workspaceSlug);
+export function listHermesJobs(token: string): Promise<HermesJobList> {
+  return request('/api/v1/agent/jobs', token, undefined);
 }
 
 export function createHermesJob(
@@ -383,39 +347,27 @@ export function createHermesJob(
     skills?: string[];
     repeat?: number | null;
   },
-  workspaceSlug?: string | null,
 ): Promise<HermesJob> {
-  return request(
-    '/api/v1/agent/jobs',
-    token,
-    { method: 'POST', body: JSON.stringify(body) },
-    workspaceSlug,
-  );
+  return request('/api/v1/agent/jobs', token, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
 }
 
 export function runHermesJobAction(
   token: string,
   jobId: string,
   action: 'pause' | 'resume' | 'run',
-  workspaceSlug?: string | null,
 ): Promise<HermesJob> {
   return request(
     `/api/v1/agent/jobs/${encodeURIComponent(jobId)}/${action}`,
     token,
     { method: 'POST', body: '{}' },
-    workspaceSlug,
   );
 }
 
-export function deleteHermesJob(
-  token: string,
-  jobId: string,
-  workspaceSlug?: string | null,
-): Promise<void> {
-  return request(
-    `/api/v1/agent/jobs/${encodeURIComponent(jobId)}`,
-    token,
-    { method: 'DELETE' },
-    workspaceSlug,
-  );
+export function deleteHermesJob(token: string, jobId: string): Promise<void> {
+  return request(`/api/v1/agent/jobs/${encodeURIComponent(jobId)}`, token, {
+    method: 'DELETE',
+  });
 }

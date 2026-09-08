@@ -78,7 +78,7 @@ def test_manager_graph_validator_enforces_write_agent_risk_floor() -> None:
     assert "writer.template" in (result.error or "")
 
 
-def test_agent_definition_resolver_never_widens_beyond_workspace_entitlements() -> None:
+def test_agent_definition_resolver_never_widens_beyond_current_app_entitlements() -> None:
     resolved = AgentDefinitionResolver().resolve(
         enabled_app_ids=["chatbot", "meeting"],
         allowed_app_ids=["meeting", "pms"],

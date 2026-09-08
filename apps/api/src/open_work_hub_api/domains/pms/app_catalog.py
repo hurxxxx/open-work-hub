@@ -1,34 +1,33 @@
-from open_work_hub_api.core.workspace_app_registry import (
-    WorkspaceNavRegistration,
-    workspace_app_registration,
+from open_work_hub_api.core.app_registry import (
+    AppNavRegistration,
+    app_registration,
 )
 
-
-PMS_WORKSPACE_APP = workspace_app_registration(
+PMS_APP = app_registration(
     "pms",
     backend_domain="pms",
     nav_items=(
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="pms-inbox",
             title="Inbox",
             category="Personal",
             icon_key="inbox",
         ),
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="pms-tasks",
             title="My Tasks",
             category="Personal",
             icon_key="check-circle-2",
             path_suffix="/assigned",
         ),
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="pms-tasks-assigned",
             title="Assigned to me",
             category="Personal",
             icon_key="user",
             path_suffix="/assigned",
         ),
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="pms-tasks-today",
             title="Today & Overdue",
             category="Personal",

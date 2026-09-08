@@ -19,7 +19,6 @@ from .schemas import (
 )
 from .service import create_todo, delete_todo, get_memo, list_todos, save_memo, update_todo
 
-
 router = APIRouter(prefix="/personal-widgets", tags=["personal-widgets"])
 
 

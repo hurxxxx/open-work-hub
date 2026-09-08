@@ -1,6 +1,6 @@
 import type { NavItem } from '@/src/app/shell/navigation-types';
+import { resolveNavItemHref } from '@/src/platform/apps/app-links';
 import type { AuthUser } from '@/src/platform/auth/auth-api';
-import { resolveNavItemHref } from '@/src/platform/workspaces/workspace-utils';
 
 const PERSONAL_CATEGORY = 'Personal';
 const PMS_TASKS_ROOT_ID = 'pms-tasks';
@@ -27,12 +27,11 @@ export type ProjectedPersonalSidebarItem =
 
 export function projectPersonalSidebarItems({
   activeNavItemId,
-  currentWorkspaceSlug,
   filteredItems,
   user,
 }: {
   activeNavItemId: string;
-  currentWorkspaceSlug: string | null;
+
   filteredItems: readonly NavItem[];
   user: AuthUser | null;
 }): ProjectedPersonalSidebarItem[] {
@@ -57,7 +56,6 @@ export function projectPersonalSidebarItems({
           children: taskChildren.map((child) =>
             projectPmsTasksChild({
               activeNavItemId,
-              currentWorkspaceSlug,
               item: child,
               user,
             }),
@@ -74,7 +72,7 @@ export function projectPersonalSidebarItems({
       {
         kind: 'link',
         item,
-        href: resolveNavItemHref(item, currentWorkspaceSlug, user),
+        href: resolveNavItemHref(item),
         isActive: activeNavItemId === item.id,
         isComingSoon: Boolean(item.comingSoon),
       },
@@ -88,19 +86,18 @@ function isPmsTasksChild(item: NavItem): boolean {
 
 function projectPmsTasksChild({
   activeNavItemId,
-  currentWorkspaceSlug,
   item,
   user,
 }: {
   activeNavItemId: string;
-  currentWorkspaceSlug: string | null;
+
   item: NavItem;
   user: AuthUser | null;
 }): ProjectedPersonalSidebarLink {
   return {
     kind: 'link',
     item,
-    href: resolveNavItemHref(item, currentWorkspaceSlug, user),
+    href: resolveNavItemHref(item),
     isActive: activeNavItemId === item.id,
     isComingSoon: Boolean(item.comingSoon),
   };

@@ -6,7 +6,10 @@ from types import SimpleNamespace
 from fastapi import HTTPException
 import pytest
 
+from open_work_hub_api.domains.content_access.grants import ContentGrantIssuer
 from open_work_hub_api.domains.dm import attachment_records
+
+
 from open_work_hub_api.domains.dm.models import DmMessageAttachment
 
 
@@ -158,7 +161,7 @@ def test_require_attachment_access_loads_attachment_and_checks_conversation(
 
     def require_user_conversation(db, *, current_user, conversation_id):  # noqa: ANN001
         checked.append((current_user.id, conversation_id))
-        return SimpleNamespace(id=conversation_id)
+        return SimpleNamespace(id=conversation_id, participants=[])
 
     monkeypatch.setattr(
         attachment_records.conversation_queries,
@@ -185,7 +188,7 @@ def test_require_attachment_access_rejects_missing_attachment(
 
     def require_user_conversation(db, *, current_user, conversation_id):  # noqa: ANN001
         checked.append((current_user.id, conversation_id))
-        return SimpleNamespace(id=conversation_id)
+        return SimpleNamespace(id=conversation_id, participants=[])
 
     monkeypatch.setattr(
         attachment_records.conversation_queries,
@@ -238,7 +241,9 @@ def test_attachment_preview_url_rejects_non_previewable_attachment(
     monkeypatch.setattr(
         attachment_records.conversation_queries,
         "require_user_conversation",
-        lambda db, *, current_user, conversation_id: SimpleNamespace(id=conversation_id),
+        lambda db, *, current_user, conversation_id: SimpleNamespace(
+            id=conversation_id, participants=[]
+        ),
     )
 
     with pytest.raises(HTTPException) as excinfo:
@@ -246,6 +251,7 @@ def test_attachment_preview_url_rejects_non_previewable_attachment(
             db,
             current_user=_user("user-1"),
             attachment_id="attachment-1",
+            issuer=ContentGrantIssuer(user_id="user-1", session_id="session-1"),
         )
 
     assert excinfo.value.status_code == 415
@@ -259,7 +265,7 @@ def _patch_attachment_dependencies(
 
     def require_user_conversation(db, *, current_user, conversation_id):  # noqa: ANN001
         checked.append((current_user.id, conversation_id))
-        return SimpleNamespace(id=conversation_id)
+        return SimpleNamespace(id=conversation_id, participants=[])
 
     monkeypatch.setattr(
         attachment_records.conversation_queries,
@@ -318,6 +324,9 @@ class _FakeDb:
 
     def rollback(self) -> None:
         self.rollback_count += 1
+
+    def scalar(self, query):
+        return "user-1"
 
     def get(self, model, key: str):  # noqa: ANN001
         assert model is DmMessageAttachment

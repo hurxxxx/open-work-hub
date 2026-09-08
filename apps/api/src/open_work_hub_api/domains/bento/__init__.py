@@ -1,4 +1,4 @@
-"""Workspace-managed bento/slides documents and AI workload registration."""
+"""User-owned bento/slides documents and AI workload registration."""
 
 from __future__ import annotations
 

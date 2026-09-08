@@ -18,14 +18,11 @@ from open_work_hub_api.core.settings import (
     HERMES_PROVIDER,
     HERMES_RELEASE,
 )
-from open_work_hub_api.domains.auth.dependencies import (
-    require_current_user,
-    require_current_workspace,
+from open_work_hub_api.domains.auth.app_gate import (
+    can_use_app,
 )
-from open_work_hub_api.domains.auth.models import User, Workspace
-from open_work_hub_api.domains.auth.workspace_app_gate import (
-    is_app_enabled_for_user_context,
-)
+from open_work_hub_api.domains.auth.dependencies import require_current_user
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.hermes.client import HermesClientError
 from open_work_hub_api.domains.hermes.models import (
     HermesJobBinding,
@@ -44,6 +41,7 @@ from open_work_hub_api.domains.hermes.repository import (
     register_session,
     utcnow_naive,
 )
+from open_work_hub_api.domains.hermes.research_settings import get_research_settings
 from open_work_hub_api.domains.hermes.schemas import (
     HermesAgentStatusResponse,
     HermesApprovalDecision,
@@ -66,8 +64,6 @@ from open_work_hub_api.domains.hermes.service import (
     ensure_profile_binding,
     runtime_client,
 )
-from open_work_hub_api.domains.hermes.research_settings import get_research_settings
-
 
 router = APIRouter(prefix="/agent", tags=["hermes-agent"])
 
@@ -137,11 +133,10 @@ def _job_response(binding: HermesJobBinding, row: dict) -> HermesJobResponse:
 async def _profile_for_request(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
 ):
     try:
-        return await ensure_profile_binding(db, workspace=workspace, user=user)
+        return await ensure_profile_binding(db, user=user)
     except (HermesIntegrationDisabledError, HermesClientError) as error:
         _raise_integration_error(error)
 
@@ -149,10 +144,9 @@ async def _profile_for_request(
 async def _job_profile_for_request(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
 ) -> tuple[HermesProfileBinding, str]:
-    binding = await _profile_for_request(db, workspace=workspace, user=user)
+    binding = await _profile_for_request(db, user=user)
     try:
         research_settings = get_research_settings(db)
         return binding, await ensure_job_profile(
@@ -168,11 +162,9 @@ async def _job_profile_for_request(
 async def get_agent_status(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> HermesAgentStatusResponse:
     binding = await _profile_for_request(
         db,
-        workspace=current_workspace,
         user=current_user,
     )
     client = runtime_client()
@@ -202,9 +194,8 @@ async def list_sessions(
     scope_resource_id: str | None = Query(default=None, max_length=256),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> HermesSessionListResponse:
-    profile = await _profile_for_request(db, workspace=current_workspace, user=current_user)
+    profile = await _profile_for_request(db, user=current_user)
     try:
         payload = await runtime_client().list_sessions(
             profile.profile_name,
@@ -247,9 +238,8 @@ async def create_session(
     body: HermesSessionCreate,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> HermesSessionResponse:
-    profile = await _profile_for_request(db, workspace=current_workspace, user=current_user)
+    profile = await _profile_for_request(db, user=current_user)
     hermes_session_id = f"owh_{uuid4().hex}"
     try:
         payload = await runtime_client().create_session(
@@ -279,17 +269,15 @@ async def get_session(
     session_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> HermesSessionResponse:
     session = get_owned_session(
         db,
         session_id=session_id,
-        workspace_id=current_workspace.id,
         user_id=current_user.id,
     )
     if session is None:
         raise HTTPException(status_code=404, detail={"code": "hermes.session_not_found"})
-    profile = await _profile_for_request(db, workspace=current_workspace, user=current_user)
+    profile = await _profile_for_request(db, user=current_user)
     try:
         payload = await runtime_client().get_session(
             profile.profile_name,
@@ -306,18 +294,16 @@ async def update_session(
     body: HermesSessionUpdate,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> HermesSessionResponse:
     session = get_owned_session(
         db,
         session_id=session_id,
-        workspace_id=current_workspace.id,
         user_id=current_user.id,
     )
     if session is None:
         raise HTTPException(status_code=404, detail={"code": "hermes.session_not_found"})
     changes = body.model_dump(exclude_none=True)
-    profile = await _profile_for_request(db, workspace=current_workspace, user=current_user)
+    profile = await _profile_for_request(db, user=current_user)
     try:
         payload = await runtime_client().update_session(
             profile.profile_name,
@@ -340,17 +326,15 @@ async def delete_session(
     session_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> Response:
     session = get_owned_session(
         db,
         session_id=session_id,
-        workspace_id=current_workspace.id,
         user_id=current_user.id,
     )
     if session is None:
         raise HTTPException(status_code=404, detail={"code": "hermes.session_not_found"})
-    profile = await _profile_for_request(db, workspace=current_workspace, user=current_user)
+    profile = await _profile_for_request(db, user=current_user)
     try:
         await runtime_client().delete_session(profile.profile_name, session.hermes_session_id)
     except HermesClientError as error:
@@ -372,17 +356,15 @@ async def get_session_messages(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> HermesSessionMessagesResponse:
     session = get_owned_session(
         db,
         session_id=session_id,
-        workspace_id=current_workspace.id,
         user_id=current_user.id,
     )
     if session is None:
         raise HTTPException(status_code=404, detail={"code": "hermes.session_not_found"})
-    profile = await _profile_for_request(db, workspace=current_workspace, user=current_user)
+    profile = await _profile_for_request(db, user=current_user)
     try:
         payload = await runtime_client().session_messages(
             profile.profile_name,
@@ -415,13 +397,11 @@ async def create_run(
     ),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> HermesRunResponse:
-    profile = await _profile_for_request(db, workspace=current_workspace, user=current_user)
+    profile = await _profile_for_request(db, user=current_user)
     session = get_owned_session(
         db,
         session_id=session_id,
-        workspace_id=current_workspace.id,
         user_id=current_user.id,
     )
     if session is None:
@@ -480,10 +460,8 @@ def list_runs(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> HermesRunListResponse:
     predicates = [
-        HermesRunProjection.workspace_id == current_workspace.id,
         HermesRunProjection.user_id == current_user.id,
     ]
     if run_status:
@@ -492,7 +470,6 @@ def list_runs(
         owned_session = get_owned_session(
             db,
             session_id=session_id,
-            workspace_id=current_workspace.id,
             user_id=current_user.id,
         )
         if owned_session is None:
@@ -521,11 +498,9 @@ def get_run(
     run_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> HermesRunResponse:
     run = HermesRunRepository(db).get_owned(
         run_id,
-        workspace_id=current_workspace.id,
         user_id=current_user.id,
     )
     if run is None:
@@ -536,7 +511,6 @@ def get_run(
 async def _event_stream(
     *,
     run_id: str,
-    workspace_id: str,
     user_id: str,
     after_sequence: int,
 ) -> AsyncIterator[str]:
@@ -548,7 +522,6 @@ async def _event_stream(
             repository = HermesRunRepository(db)
             run = repository.get_owned(
                 run_id,
-                workspace_id=workspace_id,
                 user_id=user_id,
             )
             if run is None:
@@ -557,11 +530,10 @@ async def _event_stream(
             access_ticks += 1
             if access_ticks >= 20:
                 access_ticks = 0
-                if not is_app_enabled_for_user_context(
+                if not can_use_app(
                     db,
                     app_id="chatbot",
                     user_id=user_id,
-                    workspace_id=workspace_id,
                 ):
                     yield 'event: error\ndata: {"code":"hermes.access_revoked"}\n\n'
                     return
@@ -590,11 +562,9 @@ def stream_run_events(
     last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> StreamingResponse:
     run = HermesRunRepository(db).get_owned(
         run_id,
-        workspace_id=current_workspace.id,
         user_id=current_user.id,
     )
     if run is None:
@@ -606,7 +576,6 @@ def stream_run_events(
     return StreamingResponse(
         _event_stream(
             run_id=run.id,
-            workspace_id=current_workspace.id,
             user_id=current_user.id,
             after_sequence=after_sequence,
         ),
@@ -620,12 +589,10 @@ async def stop_run(
     run_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> HermesRunResponse:
     repository = HermesRunRepository(db)
     run = repository.get_owned(
         run_id,
-        workspace_id=current_workspace.id,
         user_id=current_user.id,
         for_update=True,
     )
@@ -662,7 +629,7 @@ async def stop_run(
         },
     )
     db.commit()
-    profile = await _profile_for_request(db, workspace=current_workspace, user=current_user)
+    profile = await _profile_for_request(db, user=current_user)
     try:
         payload = await runtime_client().stop_run(profile.profile_name, hermes_run_id)
     except HermesClientError as error:
@@ -682,17 +649,15 @@ async def steer_run(
     body: HermesSteerRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> HermesRunResponse:
     repository = HermesRunRepository(db)
     run = repository.get_owned(
         run_id,
-        workspace_id=current_workspace.id,
         user_id=current_user.id,
     )
     if run is None or not run.hermes_run_id:
         raise HTTPException(status_code=404, detail={"code": "hermes.run_not_found"})
-    profile = await _profile_for_request(db, workspace=current_workspace, user=current_user)
+    profile = await _profile_for_request(db, user=current_user)
     try:
         payload = await runtime_client().steer_run(
             profile.profile_name,
@@ -713,17 +678,15 @@ async def resolve_approval(
     body: HermesApprovalDecision,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> HermesRunResponse:
     repository = HermesRunRepository(db)
     run = repository.get_owned(
         run_id,
-        workspace_id=current_workspace.id,
         user_id=current_user.id,
     )
     if run is None or not run.hermes_run_id:
         raise HTTPException(status_code=404, detail={"code": "hermes.run_not_found"})
-    profile = await _profile_for_request(db, workspace=current_workspace, user=current_user)
+    profile = await _profile_for_request(db, user=current_user)
     approval = db.scalar(
         select(HermesToolApproval)
         .where(
@@ -798,11 +761,9 @@ async def resolve_approval(
 async def list_jobs(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> HermesJobListResponse:
     profile, automation_profile = await _job_profile_for_request(
         db,
-        workspace=current_workspace,
         user=current_user,
     )
     try:
@@ -824,7 +785,6 @@ async def list_jobs(
             binding = HermesJobBinding(
                 id=str(uuid4()),
                 profile_binding_id=profile.id,
-                workspace_id=current_workspace.id,
                 user_id=current_user.id,
                 hermes_job_id=_job_id(row),
                 name=str(row.get("name") or "Scheduled agent job"),
@@ -842,11 +802,9 @@ async def create_job(
     body: HermesJobCreate,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> HermesJobResponse:
     profile, automation_profile = await _job_profile_for_request(
         db,
-        workspace=current_workspace,
         user=current_user,
     )
     job_payload = {
@@ -869,7 +827,6 @@ async def create_job(
     binding = HermesJobBinding(
         id=str(uuid4()),
         profile_binding_id=profile.id,
-        workspace_id=current_workspace.id,
         user_id=current_user.id,
         hermes_job_id=hermes_job_id,
         name=body.name,
@@ -885,13 +842,11 @@ def _owned_job(
     db: Session,
     *,
     job_id: str,
-    workspace_id: str,
     user_id: str,
 ) -> HermesJobBinding:
     binding = db.scalar(
         select(HermesJobBinding).where(
             HermesJobBinding.id == job_id,
-            HermesJobBinding.workspace_id == workspace_id,
             HermesJobBinding.user_id == user_id,
             HermesJobBinding.status != "deleted",
         )
@@ -907,19 +862,16 @@ async def run_job_action(
     action: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> HermesJobResponse:
     if action not in {"pause", "resume", "run"}:
         raise HTTPException(status_code=404, detail={"code": "hermes.job_action_not_found"})
     binding = _owned_job(
         db,
         job_id=job_id,
-        workspace_id=current_workspace.id,
         user_id=current_user.id,
     )
     _profile, automation_profile = await _job_profile_for_request(
         db,
-        workspace=current_workspace,
         user=current_user,
     )
     try:
@@ -946,17 +898,14 @@ async def delete_job(
     job_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> Response:
     binding = _owned_job(
         db,
         job_id=job_id,
-        workspace_id=current_workspace.id,
         user_id=current_user.id,
     )
     _profile, automation_profile = await _job_profile_for_request(
         db,
-        workspace=current_workspace,
         user=current_user,
     )
     try:

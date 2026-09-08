@@ -1,5 +1,5 @@
-import { Activity, Calendar } from 'lucide-react';
 import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
+import { Activity, Calendar } from 'lucide-react';
 
 import type { AppModuleManifest } from '@/src/app/shell/navigation-types';
 
@@ -47,6 +47,6 @@ export const plannerManifest: AppModuleManifest = {
       pathSuffix: '?view=timeline',
     },
   ],
-  workspaceRoutePaths: [],
+  appRoutePaths: [],
   globalRoutePaths: [getAppRoutePattern('planner.root')],
 };

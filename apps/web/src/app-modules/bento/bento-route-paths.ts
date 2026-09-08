@@ -1,16 +1,12 @@
 import { buildAppHref } from '@open-work-hub/contracts/app-routes';
 
-export function buildBentoHubPath(workspaceSlug: string): string {
-  return buildAppHref({ routeId: 'bento.root', workspaceSlug });
+export function buildBentoHubPath(): string {
+  return buildAppHref({ routeId: 'bento.root' });
 }
 
-export function buildBentoPresentationPath(
-  workspaceSlug: string,
-  documentId: string,
-): string {
+export function buildBentoPresentationPath(documentId: string): string {
   return buildAppHref({
     routeId: 'bento.presentation',
-    workspaceSlug,
     pathParams: { documentId },
   });
 }

@@ -1,6 +1,5 @@
 import { apiFetchJsonWithMappedError } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
-import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
 export class DocsApiError extends Error {
   constructor(
@@ -15,9 +14,8 @@ async function request<T>(
   path: string,
   token: string,
   init: RequestInit = {},
-  workspaceSlug?: string | null,
 ): Promise<T> {
-  const resolvedPath = resolveDocsPath(path, workspaceSlug);
+  const resolvedPath = resolveDocsPath(path);
   return apiFetchJsonWithMappedError<T>(
     resolvedPath,
     token,
@@ -34,14 +32,14 @@ function withShareToken(path: string, shareToken?: string | null): string {
   return `${path}${separator}share_token=${encodeURIComponent(shareToken)}`;
 }
 
-function resolveDocsPath(path: string, workspaceSlug?: string | null): string {
+function resolveDocsPath(path: string): string {
   if (
     path.startsWith('/api/v1/docs/shared-links/') ||
     path.includes('share_token=')
   ) {
     return path;
   }
-  return rewriteWorkspaceApiPath(path, workspaceSlug);
+  return path;
 }
 
 export type DocsShareSummary = ApiSchema<'DocsShareSummary'>;
@@ -90,9 +88,7 @@ export function getDocsItemPrimaryTargetId(
   return target.id;
 }
 
-export function getDocsItemPrimaryTargetSortOrder(
-  item: DocsHubItem,
-): number {
+export function getDocsItemPrimaryTargetSortOrder(item: DocsHubItem): number {
   return item.primary_target?.sort_order ?? 0;
 }
 
@@ -215,7 +211,6 @@ export function listDocsHub(
     doc_type?: DocsDocType;
     space_id?: string;
   } = {},
-  workspaceSlug?: string | null,
 ): Promise<DocsHubResponse> {
   const qs = new URLSearchParams();
   if (params.view) qs.set('view', params.view);
@@ -228,18 +223,15 @@ export function listDocsHub(
   if (params.source_kind) qs.set('source_kind', params.source_kind);
   if (params.doc_type) qs.set('doc_type', params.doc_type);
   if (params.space_id) qs.set('space_id', params.space_id);
-  return request<DocsHubResponse>(
-    `/api/v1/docs/hub?${qs}`,
-    token,
-    {},
-    workspaceSlug,
-  );
+  return request<DocsHubResponse>(`/api/v1/docs/hub?${qs}`, token, {});
 }
 
 export function createNativeDoc(
   token: string,
   payload: {
     title: string;
+    company_visible?: boolean;
+    company_admin_read_acknowledged?: boolean;
     first_page_title?: string;
     source_app?: string;
     source_kind?: string;
@@ -249,49 +241,40 @@ export function createNativeDoc(
     content_format?: DocsContentFormat;
     first_page_content_text?: string | null;
     primary_target?: {
+      company_admin_read_acknowledged?: boolean;
       app: string;
       type: string;
       id: string;
       sort_order?: number;
     } | null;
   },
-  workspaceSlug?: string | null,
 ): Promise<DocsHubItem> {
-  return request<DocsHubItem>(
-    '/api/v1/docs/items',
-    token,
-    {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    },
-    workspaceSlug,
-  );
+  return request<DocsHubItem>('/api/v1/docs/items', token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 export function getDocsItem(
   token: string,
   itemId: string,
   shareToken?: string | null,
-  workspaceSlug?: string | null,
 ): Promise<DocsHubItem> {
   return request<DocsHubItem>(
     withShareToken(`/api/v1/docs/items/${itemId}`, shareToken),
     token,
     {},
-    workspaceSlug,
   );
 }
 
 export function listDocPmsTasks(
   token: string,
   itemId: string,
-  workspaceSlug?: string | null,
 ): Promise<RelatedPmsTasksResponse> {
   return request<RelatedPmsTasksResponse>(
     `/api/v1/docs/items/${itemId}/pms-tasks`,
     token,
     {},
-    workspaceSlug,
   );
 }
 
@@ -299,7 +282,6 @@ export function attachDocPmsTask(
   token: string,
   itemId: string,
   taskId: string,
-  workspaceSlug?: string | null,
 ): Promise<RelatedPmsTasksResponse> {
   return request<RelatedPmsTasksResponse>(
     `/api/v1/docs/items/${itemId}/pms-tasks`,
@@ -308,7 +290,6 @@ export function attachDocPmsTask(
       method: 'POST',
       body: JSON.stringify({ task_id: taskId }),
     },
-    workspaceSlug,
   );
 }
 
@@ -316,13 +297,11 @@ export function detachDocPmsTask(
   token: string,
   itemId: string,
   taskId: string,
-  workspaceSlug?: string | null,
 ): Promise<RelatedPmsTasksResponse> {
   return request<RelatedPmsTasksResponse>(
     `/api/v1/docs/items/${itemId}/pms-tasks/${taskId}`,
     token,
     { method: 'DELETE' },
-    workspaceSlug,
   );
 }
 
@@ -334,7 +313,6 @@ export function updateDocsItem(
     doc_type?: DocsDocType;
   },
   shareToken?: string | null,
-  workspaceSlug?: string | null,
 ): Promise<DocsHubItem> {
   return request<DocsHubItem>(
     withShareToken(`/api/v1/docs/items/${itemId}`, shareToken),
@@ -343,7 +321,6 @@ export function updateDocsItem(
       method: 'PATCH',
       body: JSON.stringify(payload),
     },
-    workspaceSlug,
   );
 }
 
@@ -351,7 +328,6 @@ export function deleteDocsItem(
   token: string,
   itemId: string,
   shareToken?: string | null,
-  workspaceSlug?: string | null,
 ): Promise<void> {
   return request<void>(
     withShareToken(`/api/v1/docs/items/${itemId}`, shareToken),
@@ -359,7 +335,6 @@ export function deleteDocsItem(
     {
       method: 'DELETE',
     },
-    workspaceSlug,
   );
 }
 
@@ -367,7 +342,6 @@ export function duplicateDocsItem(
   token: string,
   itemId: string,
   shareToken?: string | null,
-  workspaceSlug?: string | null,
 ): Promise<DocsHubItem> {
   return request<DocsHubItem>(
     withShareToken(`/api/v1/docs/items/${itemId}/duplicate`, shareToken),
@@ -375,7 +349,6 @@ export function duplicateDocsItem(
     {
       method: 'POST',
     },
-    workspaceSlug,
   );
 }
 
@@ -383,13 +356,11 @@ export function listDocPages(
   token: string,
   itemId: string,
   shareToken?: string | null,
-  workspaceSlug?: string | null,
 ): Promise<DocsPageListResponse> {
   return request<DocsPageListResponse>(
     withShareToken(`/api/v1/docs/items/${itemId}/pages`, shareToken),
     token,
     {},
-    workspaceSlug,
   );
 }
 
@@ -405,7 +376,6 @@ export function createDocPage(
     sort_order?: number | null;
   },
   shareToken?: string | null,
-  workspaceSlug?: string | null,
 ): Promise<DocsPageItem> {
   return request<DocsPageItem>(
     withShareToken(`/api/v1/docs/items/${itemId}/pages`, shareToken),
@@ -414,7 +384,6 @@ export function createDocPage(
       method: 'POST',
       body: JSON.stringify(payload),
     },
-    workspaceSlug,
   );
 }
 
@@ -429,7 +398,6 @@ export function updateDocPage(
     sort_order?: number | null;
   },
   shareToken?: string | null,
-  workspaceSlug?: string | null,
 ): Promise<DocsPageItem> {
   return request<DocsPageItem>(
     withShareToken(`/api/v1/docs/pages/${pageId}`, shareToken),
@@ -438,7 +406,6 @@ export function updateDocPage(
       method: 'PATCH',
       body: JSON.stringify(payload),
     },
-    workspaceSlug,
   );
 }
 
@@ -453,47 +420,36 @@ export function updateDocTarget(
   token: string,
   itemId: string,
   payload: {
+    company_admin_read_acknowledged?: boolean;
     app: string;
     type: string;
     id: string;
     sort_order?: number;
   },
-  workspaceSlug?: string | null,
 ): Promise<DocsHubItem> {
-  return request<DocsHubItem>(
-    `/api/v1/docs/items/${itemId}/target`,
-    token,
-    {
-      method: 'PUT',
-      body: JSON.stringify(payload),
-    },
-    workspaceSlug,
-  );
+  return request<DocsHubItem>(`/api/v1/docs/items/${itemId}/target`, token, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
 }
 
 export function deleteDocTarget(
   token: string,
   itemId: string,
-  workspaceSlug?: string | null,
 ): Promise<DocsHubItem> {
-  return request<DocsHubItem>(
-    `/api/v1/docs/items/${itemId}/target`,
-    token,
-    { method: 'DELETE' },
-    workspaceSlug,
-  );
+  return request<DocsHubItem>(`/api/v1/docs/items/${itemId}/target`, token, {
+    method: 'DELETE',
+  });
 }
 
 export function getDocsCollabSession(
   token: string,
   pageRef: string,
-  workspaceSlug?: string | null,
 ): Promise<DocsCollabSession> {
   return request<DocsCollabSession>(
     `/api/v1/docs/collab/pages/${encodeURIComponent(pageRef)}/session`,
     token,
     {},
-    workspaceSlug,
   );
 }
 
@@ -504,7 +460,6 @@ export function saveDocsCollabSnapshot(
     content_blocks?: Record<string, unknown>[] | null;
     yjs_state?: string | null;
   },
-  workspaceSlug?: string | null,
   init?: RequestInit,
 ): Promise<DocsCollabSnapshotResponse> {
   return request<DocsCollabSnapshotResponse>(
@@ -515,7 +470,6 @@ export function saveDocsCollabSnapshot(
       body: JSON.stringify(payload),
       ...(init ?? {}),
     },
-    workspaceSlug,
   );
 }
 
@@ -523,7 +477,6 @@ export function deleteDocPage(
   token: string,
   pageId: string,
   shareToken?: string | null,
-  workspaceSlug?: string | null,
 ): Promise<void> {
   return request<void>(
     withShareToken(`/api/v1/docs/pages/${pageId}`, shareToken),
@@ -531,14 +484,12 @@ export function deleteDocPage(
     {
       method: 'DELETE',
     },
-    workspaceSlug,
   );
 }
 
 export function toggleDocFavorite(
   token: string,
   itemId: string,
-  workspaceSlug?: string | null,
 ): Promise<{ is_favorite: boolean }> {
   return request<{ is_favorite: boolean }>(
     `/api/v1/docs/items/${itemId}/favorite`,
@@ -546,7 +497,6 @@ export function toggleDocFavorite(
     {
       method: 'PATCH',
     },
-    workspaceSlug,
   );
 }
 
@@ -555,7 +505,6 @@ export function recordDocView(
   itemId: string,
   pageId?: string | null,
   shareToken?: string | null,
-  workspaceSlug?: string | null,
 ): Promise<void> {
   return request<void>(
     withShareToken(`/api/v1/docs/items/${itemId}/view`, shareToken),
@@ -564,59 +513,44 @@ export function recordDocView(
       method: 'POST',
       body: JSON.stringify({ page_id: pageId ?? null }),
     },
-    workspaceSlug,
   );
 }
 
-export function listFavoriteDocs(
-  token: string,
-  workspaceSlug?: string | null,
-): Promise<FavoriteDocItem[]> {
-  return request<FavoriteDocItem[]>(
-    '/api/v1/docs/favorites',
-    token,
-    {},
-    workspaceSlug,
-  );
+export function listFavoriteDocs(token: string): Promise<FavoriteDocItem[]> {
+  return request<FavoriteDocItem[]>('/api/v1/docs/favorites', token, {});
 }
 
 export function listRecentPages(
   token: string,
   limit = 10,
-  workspaceSlug?: string | null,
 ): Promise<RecentPageItem[]> {
   return request<RecentPageItem[]>(
     `/api/v1/docs/recent-pages?limit=${limit}`,
     token,
     {},
-    workspaceSlug,
   );
 }
 
 export function listShareableUsers(
   token: string,
   q?: string,
-  workspaceSlug?: string | null,
 ): Promise<ShareableUserItem[]> {
   const suffix = q ? `?q=${encodeURIComponent(q)}` : '';
   return request<ShareableUserItem[]>(
     `/api/v1/docs/shareable-users${suffix}`,
     token,
     {},
-    workspaceSlug,
   );
 }
 
 export function getDocSharing(
   token: string,
   itemId: string,
-  workspaceSlug?: string | null,
 ): Promise<NativeDocSharingResponse> {
   return request<NativeDocSharingResponse>(
     `/api/v1/docs/items/${itemId}/sharing`,
     token,
     {},
-    workspaceSlug,
   );
 }
 
@@ -625,7 +559,6 @@ export function upsertDocUserShare(
   itemId: string,
   userId: string,
   accessLevel: 'read' | 'edit',
-  workspaceSlug?: string | null,
 ): Promise<NativeDocSharingResponse> {
   return request<NativeDocSharingResponse>(
     `/api/v1/docs/items/${itemId}/sharing/users/${userId}`,
@@ -634,7 +567,6 @@ export function upsertDocUserShare(
       method: 'PUT',
       body: JSON.stringify({ access_level: accessLevel }),
     },
-    workspaceSlug,
   );
 }
 
@@ -642,7 +574,6 @@ export function deleteDocUserShare(
   token: string,
   itemId: string,
   userId: string,
-  workspaceSlug?: string | null,
 ): Promise<NativeDocSharingResponse> {
   return request<NativeDocSharingResponse>(
     `/api/v1/docs/items/${itemId}/sharing/users/${userId}`,
@@ -650,7 +581,6 @@ export function deleteDocUserShare(
     {
       method: 'DELETE',
     },
-    workspaceSlug,
   );
 }
 
@@ -662,7 +592,6 @@ export function upsertDocLinkShare(
     active: boolean;
     regenerate_token?: boolean;
   },
-  workspaceSlug?: string | null,
 ): Promise<NativeDocSharingResponse> {
   return request<NativeDocSharingResponse>(
     `/api/v1/docs/items/${itemId}/sharing/link`,
@@ -671,14 +600,12 @@ export function upsertDocLinkShare(
       method: 'PUT',
       body: JSON.stringify(payload),
     },
-    workspaceSlug,
   );
 }
 
 export function deleteDocLinkShare(
   token: string,
   itemId: string,
-  workspaceSlug?: string | null,
 ): Promise<NativeDocSharingResponse> {
   return request<NativeDocSharingResponse>(
     `/api/v1/docs/items/${itemId}/sharing/link`,
@@ -686,7 +613,6 @@ export function deleteDocLinkShare(
     {
       method: 'DELETE',
     },
-    workspaceSlug,
   );
 }
 
@@ -698,4 +624,20 @@ export function resolveSharedLink(
     `/api/v1/docs/shared-links/${shareToken}`,
     token,
   );
+}
+
+export async function updateDocsCompanySharing(
+  token: string,
+  itemId: string,
+  enabled: boolean,
+  acknowledged: boolean,
+): Promise<DocsHubItem> {
+  await request<void>(`/api/v1/docs/items/${itemId}/sharing/company`, token, {
+    method: 'PUT',
+    body: JSON.stringify({
+      enabled,
+      company_admin_read_acknowledged: acknowledged,
+    }),
+  });
+  return getDocsItem(token, itemId);
 }

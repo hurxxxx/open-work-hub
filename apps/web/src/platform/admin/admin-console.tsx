@@ -1,32 +1,24 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { InlineNotice } from '@open-work-hub/ui';
-
-import {
-  listAdminUsers,
-  listAuditLogs,
-  listTeams,
-  listWorkspaces,
-} from './admin-api';
+import { Link } from 'react-router-dom';
 import { AiSecuritySection } from './admin-ai-security-section';
 import { AppsSection, type AdminAppsPage } from './admin-apps-section';
 import { AuditSection } from './admin-audit-section';
 import { CommunitySection } from './admin-community-section';
 import { AdminDocumentProcessingSection } from './admin-document-processing-section';
+import { GroupsSection } from './admin-groups-section';
 import { AdminHermesToolsSection } from './admin-hermes-tools-section';
 import { AdminLlmManagementSection } from './admin-llm-management-section';
 import { AdminModelRuntimeStatusSection } from './admin-model-runtime-status-section';
 import { AdminOrganizationSection } from './admin-organization-section';
-import { AdminPlatformApiKeysSection } from './admin-platform-api-keys-section';
 import { PeopleSection } from './admin-people-section';
-import { SurfaceCard, getErrorMessage, isAdminUser } from './admin-shared';
 import {
   hasAnyAdminReadPermission,
   type AdminSection,
 } from './admin-permissions';
+import { AdminPlatformApiKeysSection } from './admin-platform-api-keys-section';
 import { UsageSection } from './admin-usage-section';
-import { WorkspacesSection } from './admin-workspaces-section';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { AccessDeniedView } from '@/src/platform/auth/settings-pages';
@@ -75,9 +67,9 @@ const sectionMeta: Record<
     titleKey: 'admin.console.sections.aiSecurity.title',
     descriptionKey: 'admin.console.sections.aiSecurity.description',
   },
-  workspaces: {
-    titleKey: 'admin.console.sections.workspaces.title',
-    descriptionKey: 'admin.console.sections.workspaces.description',
+  groups: {
+    titleKey: 'shell:companyGroups.title',
+    descriptionKey: 'shell:companyGroups.policy',
   },
   community: {
     titleKey: 'admin.console.sections.community.title',
@@ -140,149 +132,27 @@ function SettingsShell({
   );
 }
 
-function GeneralSection({ token }: { token: string }) {
-  const { t } = useTranslation('apps');
-  const auth = useAuth();
-  const [summary, setSummary] = useState({
-    userCount: null as number | null,
-    adminCount: null as number | null,
-    workspaceCount: null as number | null,
-    teamCount: null as number | null,
-    auditCount: null as number | null,
-  });
-  const [error, setError] = useState<string | null>(null);
-  const canReadUsers = auth.hasPermission('user.read');
-  const canReadWorkspaces = auth.hasPermission('workspace.read');
-  const canReadTeams = auth.hasPermission('team.read');
-  const canReadAudit = auth.hasPermission('audit.read');
-
-  function formatCount(value: number | null) {
-    return value ?? t('admin.console.general.restricted');
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      try {
-        const [users, workspaces, teams, audits] = await Promise.all([
-          canReadUsers
-            ? listAdminUsers(token, { page_size: 100 })
-            : Promise.resolve(null),
-          canReadWorkspaces ? listWorkspaces(token) : Promise.resolve(null),
-          canReadTeams ? listTeams(token) : Promise.resolve(null),
-          canReadAudit ? listAuditLogs(token) : Promise.resolve(null),
-        ]);
-        if (cancelled) {
-          return;
-        }
-        setSummary({
-          userCount: users?.total ?? null,
-          adminCount:
-            users?.items.filter((item) => isAdminUser(item)).length ?? null,
-          workspaceCount: workspaces?.length ?? null,
-          teamCount: teams?.length ?? null,
-          auditCount: audits?.total ?? null,
-        });
-      } catch (caughtError) {
-        if (!cancelled) {
-          setError(
-            getErrorMessage(
-              caughtError,
-              t('admin.console.general.summaryLoadFailed'),
-            ),
-          );
-        }
-      }
-    }
-
-    void load();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [canReadAudit, canReadTeams, canReadUsers, canReadWorkspaces, t, token]);
-
+function GeneralSection() {
+  const { t } = useTranslation('shell');
   return (
-    <div className="space-y-6">
-      {error ? <InlineNotice tone="danger">{error}</InlineNotice> : null}
-
-      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        <SurfaceCard
-          title={t('admin.console.general.operatingModelTitle')}
-          description={t('admin.console.general.operatingModelDescription')}
-        >
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-xl border border-app-border bg-app-surface-sidebar p-4">
-              <div className="app-text-title-md text-app-ink">
-                {t('admin.console.general.identityTitle')}
-              </div>
-              <div className="app-text-body mt-3 space-y-2 text-app-ink/55">
-                <div>
-                  {t('admin.console.general.userCount', {
-                    count: formatCount(summary.userCount),
-                    suffix:
-                      summary.userCount !== null
-                        ? t('admin.console.units.count')
-                        : '',
-                  })}
-                </div>
-                <div>
-                  {t('admin.console.general.adminCount', {
-                    count: formatCount(summary.adminCount),
-                    suffix:
-                      summary.adminCount !== null
-                        ? t('admin.console.units.people')
-                        : '',
-                  })}
-                </div>
-              </div>
-            </div>
-            <div className="rounded-xl border border-app-border bg-app-surface-sidebar p-4">
-              <div className="app-text-title-md text-app-ink">
-                {t('admin.console.general.workModelTitle')}
-              </div>
-              <div className="app-text-body mt-3 space-y-2 text-app-ink/55">
-                <div>
-                  {t('admin.console.general.workspaceCount', {
-                    count: formatCount(summary.workspaceCount),
-                    suffix:
-                      summary.workspaceCount !== null
-                        ? t('admin.console.units.count')
-                        : '',
-                  })}
-                </div>
-                <div>
-                  {t('admin.console.general.teamCount', {
-                    count: formatCount(summary.teamCount),
-                    suffix:
-                      summary.teamCount !== null
-                        ? t('admin.console.units.count')
-                        : '',
-                  })}
-                </div>
-              </div>
-            </div>
-          </div>
-        </SurfaceCard>
-
-        <SurfaceCard
-          title={t('admin.console.general.notesTitle')}
-          description={t('admin.console.general.notesDescription')}
-        >
-          <div className="app-text-body space-y-3 text-app-ink/55">
-            <div className="rounded-xl border border-app-border bg-app-surface-sidebar p-4">
-              {t('admin.console.general.noteProfile')}
-            </div>
-            <div className="rounded-xl border border-app-border bg-app-surface-sidebar p-4">
-              {t('admin.console.general.noteNavigation')}
-            </div>
-            <div className="rounded-xl border border-app-border bg-app-surface-sidebar p-4">
-              {t('admin.console.general.noteAudit')}
-            </div>
-          </div>
-        </SurfaceCard>
-      </div>
+    <div className="space-y-4">
+      <p className="app-text-body text-app-ink/70">
+        {t('companyAccess.platformRule')}
+      </p>
+      <nav className="flex flex-wrap gap-4">
+        <Link to="/admin/people" className="text-app-accent">
+          {t('companyAccess.users')}
+        </Link>
+        <Link to="/admin/organization" className="text-app-accent">
+          {t('companyGroups.organization')}
+        </Link>
+        <Link to="/admin/groups" className="text-app-accent">
+          {t('companyGroups.title')}
+        </Link>
+        <Link to="/admin/apps/access" className="text-app-accent">
+          {t('companyAccess.title')}
+        </Link>
+      </nav>
     </div>
   );
 }
@@ -315,7 +185,7 @@ export function AdminConsoleView({
 
   switch (section) {
     case 'general':
-      content = <GeneralSection token={token} />;
+      content = <GeneralSection />;
       break;
     case 'people':
       content = <PeopleSection token={token} />;
@@ -327,7 +197,7 @@ export function AdminConsoleView({
       content = <AdminPlatformApiKeysSection token={token} />;
       break;
     case 'apps':
-      content = <AppsSection page={appsPage ?? 'platform'} token={token} />;
+      content = <AppsSection page={appsPage ?? 'access'} token={token} />;
       break;
     case 'llm':
       content = <AdminLlmManagementSection token={token} />;
@@ -344,8 +214,8 @@ export function AdminConsoleView({
     case 'ai-security':
       content = <AiSecuritySection token={token} />;
       break;
-    case 'workspaces':
-      content = <WorkspacesSection token={token} />;
+    case 'groups':
+      content = <GroupsSection token={token} />;
       break;
     case 'community':
       content = <CommunitySection token={token} />;

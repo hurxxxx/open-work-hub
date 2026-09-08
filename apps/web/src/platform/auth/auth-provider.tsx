@@ -2,22 +2,29 @@ import type { ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
+  clearMatomoUser,
+  identifyMatomoUser,
+} from '@/src/platform/analytics/matomo';
+import { i18n, syncLocale } from '@/src/platform/i18n';
+import {
+  syncDateFormatPreference,
+  syncTimeZonePreference,
+} from '@/src/platform/time/time-utils';
+import {
+  AuthApiError,
   changePassword as changePasswordRequest,
   developmentAccountLogin as developmentAccountLoginRequest,
   developmentAdminLogin as developmentAdminLoginRequest,
   getBootstrapStatus,
   getCurrentUser,
-  hasAdminConsoleAccess,
   hasAnySystemRole,
-  hasWorkspaceMembership,
-  login as loginRequest,
   listSessions as listSessionsRequest,
+  login as loginRequest,
   logout as logoutRequest,
   revokeSession as revokeSessionRequest,
   setupFirstUser as setupFirstUserRequest,
   signup as signupRequest,
   updatePreferences as updatePreferencesRequest,
-  AuthApiError,
   type AuthSessionResponse,
   type AuthUser,
   type ChangePasswordPayload,
@@ -27,6 +34,7 @@ import {
   type UpdatePreferencesPayload,
 } from './auth-api';
 import { AuthContext } from './auth-context';
+import { resolveMatomoUserIdentity } from './auth-matomo';
 import {
   initialAuthState,
   projectRefreshSession,
@@ -39,20 +47,10 @@ import {
   persistAuthToken,
   readStoredAuthToken,
 } from './auth-storage';
-import { resolveMatomoUserIdentity } from './auth-matomo';
 import {
   syncDesktopLoginSession,
   syncDesktopLogoutSession,
 } from './desktop-session-sync';
-import { i18n, syncLocale } from '@/src/platform/i18n';
-import {
-  syncDateFormatPreference,
-  syncTimeZonePreference,
-} from '@/src/platform/time/time-utils';
-import {
-  clearMatomoUser,
-  identifyMatomoUser,
-} from '@/src/platform/analytics/matomo';
 
 export { useAuth } from './auth-context';
 export { AuthLoadingScreen } from './auth-loading-screen';
@@ -63,13 +61,8 @@ const PERMISSION_ROLE_MAP: Record<string, string[]> = {
   'admin.access': ['platform_admin'],
   'user.read': ['platform_admin'],
   'user.write': ['platform_admin'],
-  'workspace.read': ['platform_admin'],
-  'workspace.write': ['platform_admin'],
-  'team.read': ['platform_admin'],
-  'team.write': ['platform_admin'],
   'audit.read': ['platform_admin'],
   'session.revoke': ['platform_admin'],
-  'user.impersonate': ['platform_admin'],
 };
 
 function errorMessage(caughtError: unknown, fallback: string): string {
@@ -419,16 +412,6 @@ function useAuthProviderElement(children: ReactNode) {
     [state.user],
   );
 
-  const hasFeature = useCallback(
-    (featureCode: string, workspaceSlug?: string | null) => {
-      if (featureCode === 'nav.admin') {
-        return hasAdminConsoleAccess(state.user);
-      }
-      return hasWorkspaceMembership(state.user, workspaceSlug);
-    },
-    [state.user],
-  );
-
   const value = useMemo(
     () => ({
       ...state,
@@ -446,7 +429,6 @@ function useAuthProviderElement(children: ReactNode) {
       listSessions,
       revokeSession,
       hasPermission,
-      hasFeature,
     }),
     [
       state,
@@ -464,7 +446,6 @@ function useAuthProviderElement(children: ReactNode) {
       listSessions,
       revokeSession,
       hasPermission,
-      hasFeature,
     ],
   );
 

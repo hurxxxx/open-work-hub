@@ -2,10 +2,10 @@ import {
   buildDmConversationListItemProjection,
   dmConversationDisplayName,
   dmConversationPreviewText,
+  dmUserDisplayName,
   dmInitials as projectDmInitials,
   dmMessagePreviewText as projectDmMessagePreviewText,
   dmUnreadBadge as projectDmUnreadBadge,
-  dmUserDisplayName,
 } from '@open-work-hub/contracts/dm';
 
 import type { DmMessage, DmThread, DmUser } from '../api/dm-api';

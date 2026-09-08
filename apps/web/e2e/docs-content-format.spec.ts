@@ -1,9 +1,15 @@
-import { expect, test, type Page } from '@playwright/test';
+import {
+  expect,
+  test,
+  type Page,
+  type Route,
+  type WebSocketRoute,
+} from '@playwright/test';
 
 import {
   stubConversationsApi,
   stubShellBackend,
-  stubWorkspaceAppDataBackend,
+  stubAppDataBackend,
 } from './helpers';
 
 type DocsFormat = 'block' | 'html';
@@ -21,7 +27,7 @@ function docsItem(id: string, title: string, contentFormat: DocsHubFormat) {
     content_format: contentFormat,
     collection: null,
     primary_container: null,
-    location_label: 'Workspace Docs',
+    location_label: 'Company Docs',
     is_private: false,
     is_favorite: false,
     can_manage: true,
@@ -102,7 +108,7 @@ async function stubDocsContentFormatBackend(page: Page) {
     ],
   };
 
-  await page.route('**/api/v1/workspaces/*/docs/hub**', (route) =>
+  await page.route('**/api/v1/docs/hub**', (route) =>
     route.fulfill({
       json: {
         items: Object.values(docsById),
@@ -112,25 +118,25 @@ async function stubDocsContentFormatBackend(page: Page) {
       },
     }),
   );
-  await page.route('**/api/v1/workspaces/*/docs/collections**', (route) =>
+  await page.route('**/api/v1/docs/collections**', (route) =>
     route.fulfill({ json: { items: [], total: 0 } }),
   );
-  await page.route('**/api/v1/workspaces/*/docs/favorites**', (route) =>
+  await page.route('**/api/v1/docs/favorites**', (route) =>
     route.fulfill({ json: [] }),
   );
   await page.route('**/api/v1/docs/favorites**', (route) =>
     route.fulfill({ json: [] }),
   );
-  await page.route('**/api/v1/workspaces/*/docs/recent-pages**', (route) =>
+  await page.route('**/api/v1/docs/recent-pages**', (route) =>
     route.fulfill({ json: [] }),
   );
   await page.route('**/api/v1/docs/recent-pages**', (route) =>
     route.fulfill({ json: [] }),
   );
-  await page.route('**/api/v1/workspaces/*/docs/shareable-users**', (route) =>
+  await page.route('**/api/v1/docs/shareable-users**', (route) =>
     route.fulfill({ json: [] }),
   );
-  await page.route('**/api/v1/workspaces/*/docs/items/*/pages', (route) => {
+  await page.route('**/api/v1/docs/items/*/pages', (route) => {
     const docId =
       route
         .request()
@@ -140,10 +146,10 @@ async function stubDocsContentFormatBackend(page: Page) {
       json: { items: pagesByDocId[docId as keyof typeof pagesByDocId] ?? [] },
     });
   });
-  await page.route('**/api/v1/workspaces/*/docs/items/*/view', (route) =>
+  await page.route('**/api/v1/docs/items/*/view', (route) =>
     route.fulfill({ json: {} }),
   );
-  await page.route('**/api/v1/workspaces/*/docs/items/*', (route) => {
+  await page.route('**/api/v1/docs/items/*', (route) => {
     const docId =
       route
         .request()
@@ -154,7 +160,7 @@ async function stubDocsContentFormatBackend(page: Page) {
       ? route.fulfill({ json: doc })
       : route.fulfill({ status: 404, json: { detail: 'Not found' } });
   });
-  await page.route('**/api/v1/workspaces/*/docs/pages/*', (route) => {
+  await page.route('**/api/v1/docs/pages/*', (route) => {
     const pageId =
       route
         .request()
@@ -173,21 +179,76 @@ async function stubDocsContentFormatBackend(page: Page) {
       ? route.fulfill({ json: pageItem })
       : route.fulfill({ status: 404, json: { detail: 'Not found' } });
   });
-  await page.route('**/api/v1/workspaces/*/docs/views', (route) =>
+  await page.route('**/api/v1/docs/views', (route) =>
     route.fulfill({ json: {} }),
   );
 }
 
 test.describe('Docs content formats', () => {
   test.beforeEach(async ({ page }) => {
-    await stubWorkspaceAppDataBackend(page);
+    await stubAppDataBackend(page);
     await stubShellBackend(page);
     await stubConversationsApi(page);
     await stubDocsContentFormatBackend(page);
   });
 
+  test('keeps sharing actions reachable and returns focus on desktop and mobile', async ({
+    page,
+  }) => {
+    await page.route('**/api/v1/docs/items/doc-block/sharing', (route) =>
+      route.fulfill({
+        json: {
+          doc_id: 'doc-block',
+          owner_id: 'user-e2e',
+          users: [],
+          link_share: null,
+        },
+      }),
+    );
+    await page.route('**/api/v1/docs/items/doc-block/sharing/groups', (route) =>
+      route.fulfill({ json: [] }),
+    );
+    await page.route('**/api/v1/docs/items/doc-block/sharing/link', (route) =>
+      route.fulfill({
+        json: {
+          doc_id: 'doc-block',
+          owner_id: 'user-e2e',
+          users: [],
+          link_share: {
+            active: true,
+            access_level: 'read',
+            token: 'test-link',
+            share_path: '/apps/docs/shared/test-link',
+          },
+        },
+      }),
+    );
+    for (const viewport of [
+      { width: 1280, height: 720 },
+      { width: 390, height: 844 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await page.goto('/apps/docs/documents/doc-block');
+      const share = page.getByRole('button', { name: '공유', exact: true });
+      await share.click();
+      const dialog = page.getByRole('dialog', { name: '문서 공유' });
+      await expect(dialog).toBeVisible();
+      await dialog
+        .getByRole('button', { name: '링크 활성화', exact: true })
+        .click();
+      await expect(
+        dialog.getByRole('button', { name: '비활성화', exact: true }),
+      ).toBeVisible();
+      const bounds = await dialog.boundingBox();
+      expect(bounds?.height).toBeLessThanOrEqual(viewport.height);
+      await page.keyboard.press('Escape');
+      await expect(dialog).toHaveCount(0);
+      await expect(share).toBeFocused();
+    }
+  });
+
   test('shows the document format in the docs list', async ({ page }) => {
-    await page.goto('/apps/docs/workspaces/hq');
+    await page.goto('/apps/docs');
 
     await expect(
       page.getByRole('row', { name: /Block Format Doc/ }),
@@ -200,10 +261,128 @@ test.describe('Docs content formats', () => {
     ).toContainText('혼합');
   });
 
+  test('refreshes Docs authority and never restores a late page response after revocation', async ({
+    page,
+  }) => {
+    let socket: WebSocketRoute | undefined;
+    await page.routeWebSocket('**/api/v1/realtime/ws', (nextSocket) => {
+      socket = nextSocket;
+      nextSocket.onMessage((message) => {
+        if (
+          typeof message === 'string' &&
+          JSON.parse(message).type === 'auth'
+        ) {
+          nextSocket.send(JSON.stringify({ type: 'realtime.auth.ok' }));
+        }
+      });
+    });
+    let canEdit = true;
+    let denied = false;
+    let pageRequests = 0;
+    let deferNextPages = false;
+    const staleResponse: { route: Route | null } = { route: null };
+    await page.route('**/api/v1/docs/items/doc-block', (route) =>
+      denied
+        ? route.fulfill({ status: 403, json: { detail: 'Access revoked' } })
+        : route.fulfill({
+            json: {
+              ...docsById['doc-block'],
+              can_edit: canEdit,
+              can_manage: canEdit,
+              can_share: canEdit,
+            },
+          }),
+    );
+    await page.route('**/api/v1/docs/items/doc-block/pages', (route) => {
+      pageRequests += 1;
+      if (deferNextPages) {
+        deferNextPages = false;
+        staleResponse.route = route;
+        return;
+      }
+      return denied
+        ? route.fulfill({ status: 403, json: { detail: 'Access revoked' } })
+        : route.fulfill({
+            json: {
+              items: [{ ...pageForDoc('doc-block'), can_edit: canEdit }],
+            },
+          });
+    });
+    const send = (type: string) =>
+      socket?.send(JSON.stringify({ type, data: { doc_id: 'doc-block' } }));
+    await page.goto('/apps/docs/documents/doc-block');
+    await expect(
+      page.getByRole('textbox', { name: '제목', exact: true }),
+    ).toBeVisible();
+    await expect.poll(() => pageRequests).toBeGreaterThanOrEqual(2);
+
+    canEdit = false;
+    send('docs.access.changed');
+    await expect(
+      page.getByRole('textbox', { name: '제목', exact: true }),
+    ).toHaveCount(0);
+    await expect(page.getByText('Block body', { exact: true })).toBeVisible();
+    await expect.poll(() => pageRequests).toBeGreaterThanOrEqual(4);
+
+    deferNextPages = true;
+    send('docs.pages.changed');
+    await expect.poll(() => staleResponse.route !== null).toBe(true);
+    denied = true;
+    send('docs.access.changed');
+    await expect(page.getByText('Block body', { exact: true })).toHaveCount(0);
+    await expect(
+      page.getByText('문서를 찾을 수 없습니다', { exact: true }),
+    ).toBeVisible();
+    if (!staleResponse.route)
+      throw new Error('Expected a pending page response.');
+    await staleResponse.route.fulfill({
+      json: { items: [pageForDoc('doc-block')] },
+    });
+    await expect(page.getByText('Block body', { exact: true })).toHaveCount(0);
+    await expect(
+      page.getByRole('textbox', { name: '제목', exact: true }),
+    ).toHaveCount(0);
+  });
+
+  test('clears previously rendered Docs pages when an ordinary content refresh is denied', async ({
+    page,
+  }) => {
+    let socket: WebSocketRoute | undefined;
+    await page.routeWebSocket('**/api/v1/realtime/ws', (nextSocket) => {
+      socket = nextSocket;
+      nextSocket.onMessage((message) => {
+        if (typeof message === 'string' && JSON.parse(message).type === 'auth')
+          nextSocket.send(JSON.stringify({ type: 'realtime.auth.ok' }));
+      });
+    });
+    let denied = false;
+    let pageRequests = 0;
+    await page.route('**/api/v1/docs/items/doc-block/pages', (route) => {
+      pageRequests += 1;
+      return denied
+        ? route.fulfill({ status: 404, json: { detail: 'Not found' } })
+        : route.fulfill({ json: { items: [pageForDoc('doc-block')] } });
+    });
+    await page.goto('/apps/docs/documents/doc-block');
+    await expect(page.getByText('Block body', { exact: true })).toBeVisible();
+    await expect.poll(() => pageRequests).toBeGreaterThanOrEqual(2);
+    denied = true;
+    socket?.send(
+      JSON.stringify({
+        type: 'docs.pages.changed',
+        data: { doc_id: 'doc-block' },
+      }),
+    );
+    await expect(page.getByText('Block body', { exact: true })).toHaveCount(0);
+    await expect(
+      page.getByText('문서를 찾을 수 없습니다', { exact: true }),
+    ).toBeVisible();
+  });
+
   test('offers only block and HTML document formats when creating a doc', async ({
     page,
   }) => {
-    await page.goto('/apps/docs/workspaces/hq?create=1');
+    await page.goto('/apps/docs?create=1');
 
     const dialog = page.getByRole('heading', { name: '새 문서' }).locator('..');
 
@@ -220,7 +399,7 @@ test.describe('Docs content formats', () => {
     page,
   }) => {
     let collabRequested = false;
-    await page.route('**/api/v1/workspaces/*/docs/collab/**', (route) => {
+    await page.route('**/api/v1/docs/collab/**', (route) => {
       collabRequested = true;
       return route.fulfill({
         status: 500,
@@ -228,7 +407,7 @@ test.describe('Docs content formats', () => {
       });
     });
 
-    await page.goto('/apps/docs/workspaces/hq/documents/doc-block');
+    await page.goto('/apps/docs/documents/doc-block');
 
     await expect(
       page.getByRole('button', { name: '마크다운 내보내기' }),
@@ -254,7 +433,7 @@ test.describe('Docs content formats', () => {
         return originalCreateObjectURL(object);
       };
     });
-    await page.goto('/apps/docs/workspaces/hq/documents/doc-block');
+    await page.goto('/apps/docs/documents/doc-block');
 
     const downloadPromise = page.waitForEvent('download');
     await page.getByRole('button', { name: '마크다운 내보내기' }).click();
@@ -300,7 +479,7 @@ test.describe('Docs content formats', () => {
     page,
   }) => {
     await page.setViewportSize({ width: 1920, height: 1080 });
-    await page.goto('/apps/docs/workspaces/hq/documents/doc-html');
+    await page.goto('/apps/docs/documents/doc-html');
 
     const contentCanvasBox = await page
       .getByTestId('docs-content-canvas')
@@ -330,7 +509,7 @@ test.describe('Docs content formats', () => {
     page,
   }) => {
     await page.setViewportSize({ width: 1920, height: 1080 });
-    await page.goto('/apps/docs/workspaces/hq/documents/doc-block');
+    await page.goto('/apps/docs/documents/doc-block');
 
     await page.getByRole('button', { name: '전체 보기' }).click();
     const dialog = page.getByRole('dialog', { name: '전체 화면 읽기' });
@@ -395,7 +574,7 @@ test.describe('Docs content formats', () => {
 
   test('zooms HTML documents in fullscreen read mode', async ({ page }) => {
     await page.setViewportSize({ width: 1920, height: 1080 });
-    await page.goto('/apps/docs/workspaces/hq/documents/doc-html');
+    await page.goto('/apps/docs/documents/doc-html');
 
     await page.getByRole('button', { name: '전체 보기' }).click();
     const dialog = page.getByRole('dialog', { name: '전체 화면 읽기' });

@@ -7,9 +7,9 @@ messages.
 ## Contract
 
 - Global APIs are `/api/v1/notifications`, `/unread-count`, `/{notification_id}/read`, and
-  `/read-all`. They require the current user but no global workspace context.
-- Every row belongs to one recipient and carries `origin_app_id`, optional
-  `origin_workspace_id`, `source_type`, `source_id`, and a generated canonical `action_url` when an
+  `/read-all`. They require the current user and source-specific company app admission.
+- Every row belongs to one recipient and carries `origin_app_id`,
+  `source_type`, `source_id`, and a generated canonical `action_url` when an
   action exists.
 - Listing, total, unread count, single-read, and read-all recheck current owning-app availability and
   source ACL. Revoked, deleted, disabled, or inaccessible sources are omitted; direct access returns
@@ -25,9 +25,9 @@ messages.
 
 ## Registered Sources
 
-| Origin app | Source type | Context | Final authorization |
-| --- | --- | --- | --- |
-| `pms` | `pms_task` | workspace | PMS task source ACL |
+| Origin app  | Source type      | Context | Final authorization                         |
+| ----------- | ---------------- | ------- | ------------------------------------------- |
+| `pms`       | `pms_task`       | company | PMS task source ACL                         |
 | `community` | `community_post` | company | active channel, secret/admin content policy |
 
 Adding a source requires producer tests, a batched visibility branch or source adapter, app-disable

@@ -41,7 +41,6 @@ describe('plannerEventToCalendarEvent', () => {
       sourceType: 'planner_event',
       sourceId: 'event-1',
       color: CALENDAR_SOURCE_COLORS.planner_event,
-      workspace: null,
       metadata: {
         plannerEventId: 'event-1',
         ownerId: 'user-1',

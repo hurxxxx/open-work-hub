@@ -14,7 +14,7 @@ interface PendingContentTextSave {
 export interface DocsPageContentSaveControllerOptions {
   token: string | null | undefined;
   shareToken?: string | null;
-  workspaceSlug?: string | null;
+
   debounceMs?: number;
   flushOnUnmount?: boolean;
   savePage: (
@@ -22,7 +22,6 @@ export interface DocsPageContentSaveControllerOptions {
     pageId: string,
     payload: DocsPageContentSavePayload,
     shareToken?: string | null,
-    workspaceSlug?: string | null,
   ) => Promise<DocsPageItem>;
   onSavedPage: (page: DocsPageItem) => void;
 }
@@ -30,7 +29,6 @@ export interface DocsPageContentSaveControllerOptions {
 export function useDocsPageContentSaveController({
   token,
   shareToken,
-  workspaceSlug,
   debounceMs = 800,
   flushOnUnmount = false,
   savePage,
@@ -39,7 +37,6 @@ export function useDocsPageContentSaveController({
   const latestConfigRef = useRef({
     token,
     shareToken,
-    workspaceSlug,
     savePage,
     onSavedPage,
   });
@@ -49,7 +46,6 @@ export function useDocsPageContentSaveController({
   latestConfigRef.current = {
     token,
     shareToken,
-    workspaceSlug,
     savePage,
     onSavedPage,
   };
@@ -74,7 +70,6 @@ export function useDocsPageContentSaveController({
         pending.pageId,
         { content_text: pending.contentText },
         config.shareToken,
-        config.workspaceSlug,
       );
       config.onSavedPage(updated);
     } catch {
@@ -95,7 +90,6 @@ export function useDocsPageContentSaveController({
             pageId,
             { content_blocks: blocks },
             config.shareToken,
-            config.workspaceSlug,
           );
           config.onSavedPage(updated);
         } catch {
@@ -125,9 +119,12 @@ export function useDocsPageContentSaveController({
 
   useEffect(
     () => () => {
-      if (!flushOnUnmount) return;
       clearSaveTimer();
-      void flushTextSave();
+      if (flushOnUnmount) {
+        void flushTextSave();
+      } else {
+        pendingContentTextSaveRef.current = null;
+      }
     },
     [clearSaveTimer, flushOnUnmount, flushTextSave],
   );

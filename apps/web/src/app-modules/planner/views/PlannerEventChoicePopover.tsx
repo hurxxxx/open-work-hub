@@ -1,5 +1,5 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { CalendarRange, Users } from 'lucide-react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   resolvePlannerEventChoicePopoverPlacement,
@@ -21,25 +21,32 @@ export function PlannerEventChoicePopover({
 }: PlannerEventChoicePopoverProps) {
   const { t } = useTranslation('apps');
   const panelRef = useRef<HTMLDialogElement | null>(null);
-  const [position, setPosition] = useState<PlannerEventChoicePopoverPlacement | null>(null);
+  const [position, setPosition] =
+    useState<PlannerEventChoicePopoverPlacement | null>(null);
   const anchorX = anchor?.x ?? null;
   const anchorY = anchor?.y ?? null;
 
   useLayoutEffect(() => {
-    setPosition(resolvePlannerEventChoicePopoverPlacement({
-      anchor: anchorX !== null && anchorY !== null
-        ? { x: anchorX, y: anchorY }
-        : null,
-      viewport: {
-        width: window.innerWidth,
-        height: window.innerHeight,
-      },
-    }));
+    setPosition(
+      resolvePlannerEventChoicePopoverPlacement({
+        anchor:
+          anchorX !== null && anchorY !== null
+            ? { x: anchorX, y: anchorY }
+            : null,
+        viewport: {
+          width: window.innerWidth,
+          height: window.innerHeight,
+        },
+      }),
+    );
   }, [anchorX, anchorY]);
 
   useEffect(() => {
     function onMouseDown(event: MouseEvent) {
-      if (panelRef.current && !panelRef.current.contains(event.target as Node)) {
+      if (
+        panelRef.current &&
+        !panelRef.current.contains(event.target as Node)
+      ) {
         onDismiss();
       }
     }
@@ -69,7 +76,9 @@ export function PlannerEventChoicePopover({
       }}
       className="z-50 m-0 max-w-none rounded-lg border border-app-border bg-app-surface py-1 shadow-xl"
     >
-      <div className="app-text-overline px-3 pt-1.5 pb-1 text-app-ink/45">{t('planner.create')}</div>
+      <div className="app-text-overline px-3 pt-1.5 pb-1 text-app-ink/45">
+        {t('planner.create')}
+      </div>
       <button
         type="button"
         onClick={onPickEvent}

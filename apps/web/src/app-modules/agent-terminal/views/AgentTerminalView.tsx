@@ -16,7 +16,6 @@ import {
   SquareTerminal,
   Trash2,
 } from 'lucide-react';
-import { Group, Panel, Separator } from 'react-resizable-panels';
 import {
   useCallback,
   useEffect,
@@ -25,6 +24,7 @@ import {
   useSyncExternalStore,
 } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Group, Panel, Separator } from 'react-resizable-panels';
 
 import { hasAnySystemRole } from '@/src/platform/auth/auth-api';
 import { useAuth } from '@/src/platform/auth/auth-provider';
@@ -220,13 +220,12 @@ export function AgentTerminalView() {
 
   const selectedSession =
     sessions.find((session) => session.id === selectedSessionId) ?? null;
+  const selectedSessionIsActive = Boolean(
+    selectedSession && isAgentTerminalSessionActive(selectedSession),
+  );
   useEffect(() => {
-    setConnectionState(
-      selectedSession && isAgentTerminalSessionActive(selectedSession)
-        ? 'connecting'
-        : 'ended',
-    );
-  }, [selectedSession?.id, selectedSession?.status]);
+    setConnectionState(selectedSessionIsActive ? 'connecting' : 'ended');
+  }, [selectedSessionId, selectedSessionIsActive]);
   useEffect(() => {
     setGitPanelOpen(false);
   }, [gitPanelDocked, selectedSessionId]);

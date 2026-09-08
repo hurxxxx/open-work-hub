@@ -3,19 +3,19 @@ import { Check, Loader2, ShieldAlert, X } from 'lucide-react';
 import { useEffect, useMemo, useReducer } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { getAiApprovalStatus } from '../../api/chatbot-api';
+import { useAuth } from '@/src/platform/auth/auth-provider';
+import {
+  formatDateTime,
+  normalizeTimeZone,
+} from '@/src/platform/time/time-utils';
 import type { PendingApproval } from '../../api/agent-events';
+import { getAiApprovalStatus } from '../../api/chatbot-api';
 import {
   INITIAL_APPROVAL_MODAL_STATE,
   approvalModalReducer,
   approvalToolLabelKey,
   formatApprovalArgumentsJson,
 } from './approval-modal-model';
-import { useAuth } from '@/src/platform/auth/auth-provider';
-import {
-  formatDateTime,
-  normalizeTimeZone,
-} from '@/src/platform/time/time-utils';
 
 export interface ApprovalModalProps {
   approval: PendingApproval;

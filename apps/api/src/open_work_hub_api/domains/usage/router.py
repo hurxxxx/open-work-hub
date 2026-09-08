@@ -23,7 +23,6 @@ class UsageEventRequest(BaseModel):
 
     app_id: str = Field(..., min_length=1, max_length=64)
     event_type: str = Field(..., min_length=1, max_length=64)
-    workspace_id: str | None = Field(default=None, max_length=36)
     content_kind: str | None = Field(default=None, max_length=64)
     content_id: str | None = Field(default=None, max_length=512)
     content_title: str | None = Field(default=None, max_length=300)
@@ -54,7 +53,6 @@ def create_usage_event(
         record_usage_event(
             db,
             actor_user_id=current_user.id,
-            workspace_id=payload.workspace_id,
             app_id=payload.app_id,
             event_type=payload.event_type,
             content_kind=payload.content_kind,

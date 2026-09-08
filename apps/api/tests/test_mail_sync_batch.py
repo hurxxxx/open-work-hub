@@ -6,8 +6,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.db import Base
-from open_work_hub_api.domains.auth.models import User, Workspace
-from open_work_hub_api.domains.mail.clients import FetchedAttachment, FetchedMessage, MailboxSyncBatch
+from open_work_hub_api.domains.auth.models import User
+from open_work_hub_api.domains.mail.clients import (
+    FetchedAttachment,
+    FetchedMessage,
+    MailboxSyncBatch,
+)
 from open_work_hub_api.domains.mail.models import (
     MailAccount,
     MailAttachment,
@@ -23,7 +27,6 @@ def _session() -> Session:
     Base.metadata.create_all(
         engine,
         tables=[
-            Workspace.__table__,
             User.__table__,
             MailAccount.__table__,
             MailMailbox.__table__,
@@ -43,15 +46,6 @@ def _user() -> User:
         full_name="User One",
         password_hash="hash",
         status="active",
-    )
-
-
-def _workspace() -> Workspace:
-    return Workspace(
-        id="workspace-1",
-        key="workspace",
-        name="Workspace",
-        description="",
     )
 
 
@@ -141,9 +135,7 @@ def test_cursor_for_mailbox_sync_repairs_pop3_uidls_to_fetched_messages() -> Non
     try:
         account = _account(protocol="pop3")
         mailbox = _mailbox()
-        session.add_all(
-            [_workspace(), _user(), account, mailbox, _message(provider_uid="uid-synced")]
-        )
+        session.add_all([_user(), account, mailbox, _message(provider_uid="uid-synced")])
         session.commit()
 
         cursor = cursor_for_mailbox_sync(
@@ -165,7 +157,6 @@ def test_apply_sync_batch_updates_legacy_message_and_preserves_local_flags() -> 
         mailbox = _mailbox()
         session.add_all(
             [
-                _workspace(),
                 _user(),
                 account,
                 mailbox,
@@ -228,7 +219,6 @@ def test_apply_sync_batch_marks_remote_deletes_and_purges_body_and_attachments()
         mailbox = _mailbox()
         session.add_all(
             [
-                _workspace(),
                 _user(),
                 account,
                 mailbox,

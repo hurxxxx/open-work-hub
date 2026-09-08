@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Literal, TypeAlias, TypeGuard
 
-
 NOTIFICATION_SNAPSHOT = "notification.snapshot"
 NOTIFICATION_CREATED = "notification.created"
 NOTIFICATION_READ = "notification.read"

@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.app_routes import InternalAppLocation, build_app_href
 from open_work_hub_api.core.i18n import localized_http_exception
-from open_work_hub_api.domains.auth.access import resolve_workspace_role
 from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.auth.security import new_id
 from open_work_hub_api.domains.whiteboard.access import (
@@ -69,14 +68,13 @@ def upsert_whiteboard_user_share(
             status_code=status.HTTP_409_CONFLICT,
             code="whiteboard.owner_already_has_full_access",
         )
-    target_user = db.scalar(select(User).where(User.id == user_id, User.status == "active"))
+    target_user = db.scalar(
+        select(User).where(
+            User.id == user_id, User.status == "active", User.login_blocked.is_(False)
+        )
+    )
     if target_user is None:
         raise localized_http_exception(status_code=404, code="auth.user_not_found")
-    if resolve_workspace_role(db, target_user, whiteboard.workspace_id) is None:
-        raise localized_http_exception(
-            status_code=status.HTTP_409_CONFLICT,
-            code="whiteboard.shared_users_workspace_required",
-        )
     share = next((item for item in whiteboard.user_shares if item.user_id == user_id), None)
     if share is None:
         share = WhiteboardUserShare(

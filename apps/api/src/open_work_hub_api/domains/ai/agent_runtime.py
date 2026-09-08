@@ -18,7 +18,6 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class AgentRuntimeRequest:
     run_id: str
-    workspace_id: str
     actor_user_id: str
     workload_id: str
     route: "ResolvedLlmWorkloadRoute"

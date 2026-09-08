@@ -1,8 +1,8 @@
-import type { PlannerEvent } from '../api/planner-api';
 import {
   CALENDAR_SOURCE_COLORS,
   type CalendarEvent,
 } from '@/src/platform/calendar/calendar-types';
+import type { PlannerEvent } from '../api/planner-api';
 
 const PLANNER_CALENDAR_EVENT_PREFIX = 'planner-event-';
 
@@ -22,7 +22,6 @@ export function plannerEventToCalendarEvent(
     sourceType: 'planner_event',
     sourceId: event.id,
     color: CALENDAR_SOURCE_COLORS.planner_event,
-    workspace: null,
     metadata: {
       plannerEventId: event.id,
       ownerId: event.ownerId,

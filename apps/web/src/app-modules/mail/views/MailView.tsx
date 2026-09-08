@@ -3,8 +3,8 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 
-import { InlineNotice } from '@open-work-hub/ui/feedback/inline-notice';
 import { useFeedback } from '@open-work-hub/ui';
+import { InlineNotice } from '@open-work-hub/ui/feedback/inline-notice';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { normalizeTimeZone } from '@/src/platform/time/time-utils';

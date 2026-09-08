@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
 import json
 import logging
+from datetime import timedelta
 from uuid import uuid4
 
 from sqlalchemy import select, update
@@ -18,8 +18,8 @@ from open_work_hub_api.domains.ai.model_settings_service import (
     AiModelSettingsError,
     resolve_ai_model_workload_route,
 )
-from open_work_hub_api.domains.ai_graph.execution_registry import register_ai_graph_executor
 from open_work_hub_api.domains.ai_graph.execution_policy import enforce_graph_run_app_policy
+from open_work_hub_api.domains.ai_graph.execution_registry import register_ai_graph_executor
 from open_work_hub_api.domains.ai_graph.repository import (
     AiGraphExecutionLeaseLostError,
     AiGraphRunInputRepository,
@@ -39,7 +39,6 @@ from open_work_hub_api.domains.bento.models import (
     BentoAiJobInput,
     BentoDocument,
 )
-
 
 BENTO_AGENT_GRAPH_ID = "bento.agent"
 BENTO_AGENT_GRAPH_VERSION = "1"
@@ -82,15 +81,11 @@ def execute_bento_agent_job(run_id: str) -> str:
         job.updated_at = utcnow_naive()
         db.commit()
 
-        workload_id = (
-            BENTO_GENERATE_WORKLOAD_ID if job.kind == "create" else BENTO_EDIT_WORKLOAD_ID
-        )
+        workload_id = BENTO_GENERATE_WORKLOAD_ID if job.kind == "create" else BENTO_EDIT_WORKLOAD_ID
 
         def cancelled() -> bool:
             return (
-                db.scalar(
-                    select(BentoAiJob.cancel_requested_at).where(BentoAiJob.id == run_id)
-                )
+                db.scalar(select(BentoAiJob.cancel_requested_at).where(BentoAiJob.id == run_id))
                 is not None
             )
 
@@ -126,7 +121,6 @@ def execute_bento_agent_job(run_id: str) -> str:
             result = adapter.run(
                 AgentRuntimeRequest(
                     run_id=run_id,
-                    workspace_id=job.workspace_id,
                     actor_user_id=job.requested_by_id,
                     workload_id=workload_id,
                     route=route,
@@ -158,7 +152,6 @@ def execute_bento_agent_job(run_id: str) -> str:
             if job.kind == "create":
                 document = BentoDocument(
                     id=str(uuid4()),
-                    workspace_id=job.workspace_id,
                     owner_id=job.requested_by_id,
                     title=title,
                     visibility=job.visibility,
@@ -176,7 +169,6 @@ def execute_bento_agent_job(run_id: str) -> str:
                     update(BentoDocument)
                     .where(
                         BentoDocument.id == job.target_document_id,
-                        BentoDocument.workspace_id == job.workspace_id,
                         BentoDocument.version == job.base_version,
                         BentoDocument.archived_at.is_(None),
                     )
@@ -267,9 +259,7 @@ def _finish_failed_or_cancelled(
             run_id,
             "cancelled" if cancelled else "failed",
             stage="bento.ai.cancelled" if cancelled else "bento.ai.failed",
-            status_message_key=(
-                "bento.ai.cancelled" if cancelled else "bento.ai.failed"
-            ),
+            status_message_key=("bento.ai.cancelled" if cancelled else "bento.ai.failed"),
             error_code=error_code,
             claim_token=claim_token,
         )

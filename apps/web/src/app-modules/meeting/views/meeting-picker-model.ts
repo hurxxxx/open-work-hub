@@ -51,7 +51,9 @@ export function meetingPickerReducer(
   }
 }
 
-export function sortMeetingsForPicker(items: MeetingListItem[]): MeetingListItem[] {
+export function sortMeetingsForPicker(
+  items: MeetingListItem[],
+): MeetingListItem[] {
   return items
     .slice()
     .sort((left, right) => (left.start_at < right.start_at ? 1 : -1));
@@ -65,7 +67,11 @@ export function filterMeetingsForPicker(
     limit?: number;
   },
 ): MeetingListItem[] {
-  const { excludeMeetingIds, query, limit = MEETING_PICKER_RESULT_LIMIT } = options;
+  const {
+    excludeMeetingIds,
+    query,
+    limit = MEETING_PICKER_RESULT_LIMIT,
+  } = options;
   return projectPickerItems({
     items,
     excludeIds: excludeMeetingIds,

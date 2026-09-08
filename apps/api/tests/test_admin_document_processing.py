@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from open_work_hub_api.domains.admin import document_processing_projection
-from tests.dev_accounts import auth_headers, dev_login
+from dev_accounts import auth_headers, dev_login
 
 
 def _admin_headers(client: TestClient) -> dict[str, str]:

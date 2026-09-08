@@ -253,15 +253,11 @@ def _require_matching_files_validation_evidence(
 ) -> None:
     opensearch_details = opensearch.validation_details
     qdrant_details = qdrant.validation_details
-    if not isinstance(opensearch_details, Mapping) or not isinstance(
-        qdrant_details, Mapping
-    ):
+    if not isinstance(opensearch_details, Mapping) or not isinstance(qdrant_details, Mapping):
         raise PartitionedRetrievalRuntimeUnavailable(reason="validation_evidence_invalid")
     if dict(opensearch_details) != dict(qdrant_details):
         raise PartitionedRetrievalRuntimeUnavailable(reason="validation_evidence_mismatch")
-    if opensearch_details.get("included_resource_types") != [
-        FILE_MANAGER_FILE_RESOURCE_TYPE
-    ]:
+    if opensearch_details.get("included_resource_types") != [FILE_MANAGER_FILE_RESOURCE_TYPE]:
         raise PartitionedRetrievalRuntimeUnavailable(reason="validation_scope_mismatch")
 
 

@@ -12,7 +12,6 @@ from open_work_hub_api.domains.ai.runtime.routing_metadata import (
 @dataclass(frozen=True)
 class RuntimeShadowContext:
     agent_run_id: str
-    workspace_id: str
     conversation_id: str
     requested_by_user_id: str
     runtime_metadata: dict[str, Any]
@@ -28,7 +27,6 @@ class RuntimeShadowContext:
 def build_runtime_shadow_context(
     *,
     agent_run_id: str,
-    workspace_id: str,
     conversation_id: str,
     requested_by_user_id: str,
     runtime_metadata: dict[str, Any],
@@ -37,7 +35,6 @@ def build_runtime_shadow_context(
 ) -> RuntimeShadowContext:
     return RuntimeShadowContext(
         agent_run_id=agent_run_id,
-        workspace_id=workspace_id,
         conversation_id=conversation_id,
         requested_by_user_id=requested_by_user_id,
         runtime_metadata=runtime_metadata,

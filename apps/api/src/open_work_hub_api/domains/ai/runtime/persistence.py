@@ -7,6 +7,10 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.settings import get_settings
+from open_work_hub_api.domains.ai.runtime.graph_schedule_summary import (
+    graph_schedule_is_planned,
+    ordered_graph_schedule_steps,
+)
 from open_work_hub_api.domains.ai.runtime.metrics import (
     record_shadow_write_failure,
     record_trace_event,
@@ -14,10 +18,6 @@ from open_work_hub_api.domains.ai.runtime.metrics import (
 )
 from open_work_hub_api.domains.ai.runtime.models import AgentInvocation, AgentRun, AgentTraceEvent
 from open_work_hub_api.domains.ai.runtime.retention import scrub_completed_runtime_records
-from open_work_hub_api.domains.ai.runtime.graph_schedule_summary import (
-    graph_schedule_is_planned,
-    ordered_graph_schedule_steps,
-)
 from open_work_hub_api.domains.ai.runtime.runtime_shadow_projection import (
     RuntimeShadowContext,
     build_runtime_shadow_context,
@@ -43,7 +43,6 @@ from open_work_hub_api.domains.ai.runtime.trace_projection import (
 from open_work_hub_api.domains.auth.models import utcnow_naive
 from open_work_hub_api.domains.auth.security import new_id
 
-
 logger = logging.getLogger(__name__)
 
 SINGLE_LOOP_FALLBACK_AGENT_ID = "single_loop.fallback"
@@ -55,7 +54,6 @@ def append_trace_event(
     db: Session,
     *,
     agent_run_id: str,
-    workspace_id: str,
     conversation_id: str,
     event_type: str,
     payload: dict[str, Any] | None = None,
@@ -74,7 +72,6 @@ def append_trace_event(
         id=new_id(),
         agent_run_id=agent_run_id,
         agent_invocation_id=agent_invocation_id,
-        workspace_id=workspace_id,
         conversation_id=conversation_id,
         run_seq=run_seq,
         invocation_seq=invocation_seq,
@@ -94,7 +91,6 @@ def append_graph_candidate_trace_events(
     db: Session,
     *,
     agent_run_id: str,
-    workspace_id: str,
     conversation_id: str,
     runtime_metadata: dict[str, Any],
 ) -> None:
@@ -102,7 +98,6 @@ def append_graph_candidate_trace_events(
         append_trace_event(
             db,
             agent_run_id=agent_run_id,
-            workspace_id=workspace_id,
             conversation_id=conversation_id,
             event_type=event_type,
             payload=payload,
@@ -113,7 +108,6 @@ def append_graph_schedule_trace_events(
     db: Session,
     *,
     agent_run_id: str,
-    workspace_id: str,
     conversation_id: str,
     runtime_metadata: dict[str, Any],
     graph_invocations_by_seq: dict[int, AgentInvocation] | None = None,
@@ -126,7 +120,6 @@ def append_graph_schedule_trace_events(
         append_trace_event(
             db,
             agent_run_id=agent_run_id,
-            workspace_id=workspace_id,
             conversation_id=conversation_id,
             event_type="graph_schedule_failed",
             payload={"graph_schedule_summary": schedule_summary},
@@ -136,7 +129,6 @@ def append_graph_schedule_trace_events(
     append_trace_event(
         db,
         agent_run_id=agent_run_id,
-        workspace_id=workspace_id,
         conversation_id=conversation_id,
         event_type="graph_schedule_planned",
         payload={"graph_schedule_summary": schedule_summary},
@@ -148,7 +140,6 @@ def append_graph_schedule_trace_events(
             db,
             agent_run_id=agent_run_id,
             agent_invocation_id=graph_invocation.id if graph_invocation else None,
-            workspace_id=workspace_id,
             conversation_id=conversation_id,
             invocation_seq=invocation_seq,
             event_type="graph_node_planned",
@@ -160,7 +151,6 @@ def append_graph_execution_trace_events(
     db: Session,
     *,
     agent_run_id: str,
-    workspace_id: str,
     conversation_id: str,
     runtime_metadata: dict[str, Any],
 ) -> None:
@@ -170,7 +160,6 @@ def append_graph_execution_trace_events(
     append_trace_event(
         db,
         agent_run_id=agent_run_id,
-        workspace_id=workspace_id,
         conversation_id=conversation_id,
         event_type="graph_execution_gate_evaluated",
         payload=graph_execution_gate_payload(runtime_metadata),
@@ -181,7 +170,6 @@ def persist_graph_schedule_invocation_skeletons(
     db: Session,
     *,
     agent_run_id: str,
-    workspace_id: str,
     conversation_id: str,
     runtime_metadata: dict[str, Any],
     status: str = "pending",
@@ -200,7 +188,6 @@ def persist_graph_schedule_invocation_skeletons(
         invocation = AgentInvocation(
             id=new_id(),
             agent_run_id=agent_run_id,
-            workspace_id=workspace_id,
             conversation_id=conversation_id,
             invocation_seq=invocation_seq,
             agent_id=agent_id,
@@ -232,7 +219,6 @@ def _create_runtime_shadow_run(
     runtime_metadata = context.runtime_metadata
     runtime_run = AgentRun(
         id=context.agent_run_id,
-        workspace_id=context.workspace_id,
         conversation_id=context.conversation_id,
         requested_by_user_id=context.requested_by_user_id,
         status=context.status,
@@ -267,7 +253,6 @@ def _create_runtime_shadow_invocation(
     invocation = AgentInvocation(
         id=new_id(),
         agent_run_id=runtime_run.id,
-        workspace_id=context.workspace_id,
         conversation_id=context.conversation_id,
         invocation_seq=_next_invocation_seq(db, runtime_run.id),
         agent_id=agent_id,
@@ -289,14 +274,12 @@ def _append_common_graph_shadow_trace_events(
     append_graph_candidate_trace_events(
         db,
         agent_run_id=runtime_run.id,
-        workspace_id=context.workspace_id,
         conversation_id=context.conversation_id,
         runtime_metadata=context.runtime_metadata,
     )
     append_graph_schedule_trace_events(
         db,
         agent_run_id=runtime_run.id,
-        workspace_id=context.workspace_id,
         conversation_id=context.conversation_id,
         runtime_metadata=context.runtime_metadata,
         graph_invocations_by_seq=graph_invocations_by_seq,
@@ -304,7 +287,6 @@ def _append_common_graph_shadow_trace_events(
     append_graph_execution_trace_events(
         db,
         agent_run_id=runtime_run.id,
-        workspace_id=context.workspace_id,
         conversation_id=context.conversation_id,
         runtime_metadata=context.runtime_metadata,
     )
@@ -355,7 +337,6 @@ def _append_invocation_started_trace_event(
         db,
         agent_run_id=runtime_run.id,
         agent_invocation_id=invocation.id,
-        workspace_id=context.workspace_id,
         conversation_id=context.conversation_id,
         invocation_seq=(invocation.invocation_seq if invocation_seq is None else invocation_seq),
         event_type=event_type,
@@ -382,7 +363,6 @@ def _append_terminal_invocation_trace_event(
         db,
         agent_run_id=runtime_run.id,
         agent_invocation_id=invocation.id,
-        workspace_id=context.workspace_id,
         conversation_id=context.conversation_id,
         invocation_seq=(invocation.invocation_seq if invocation_seq is None else invocation_seq),
         event_type=f"{event_type_prefix}_{event_suffix}",
@@ -404,7 +384,6 @@ def _append_terminal_run_trace_event(
     append_trace_event(
         db,
         agent_run_id=runtime_run.id,
-        workspace_id=context.workspace_id,
         conversation_id=context.conversation_id,
         event_type=f"run_{context.terminal_event}",
         payload=terminal_run_payload(
@@ -448,7 +427,6 @@ def persist_single_loop_fallback_runtime_shadow(
     db: Session,
     *,
     agent_run_id: str,
-    workspace_id: str,
     conversation_id: str,
     requested_by_user_id: str,
     runtime_metadata: dict[str, Any],
@@ -461,7 +439,6 @@ def persist_single_loop_fallback_runtime_shadow(
         _persist_single_loop_fallback_runtime_shadow(
             db,
             agent_run_id=agent_run_id,
-            workspace_id=workspace_id,
             conversation_id=conversation_id,
             requested_by_user_id=requested_by_user_id,
             runtime_metadata=runtime_metadata,
@@ -477,7 +454,6 @@ def persist_single_loop_fallback_runtime_shadow(
             extra={
                 "agent_run_id": agent_run_id,
                 "conversation_id": conversation_id,
-                "workspace_id": workspace_id,
                 "operation": "persist_single_loop_fallback_runtime_shadow",
             },
         )
@@ -487,7 +463,6 @@ def persist_graph_execution_runtime_shadow(
     db: Session,
     *,
     agent_run_id: str,
-    workspace_id: str,
     conversation_id: str,
     requested_by_user_id: str,
     runtime_metadata: dict[str, Any],
@@ -500,7 +475,6 @@ def persist_graph_execution_runtime_shadow(
         _persist_graph_execution_runtime_shadow(
             db,
             agent_run_id=agent_run_id,
-            workspace_id=workspace_id,
             conversation_id=conversation_id,
             requested_by_user_id=requested_by_user_id,
             runtime_metadata=runtime_metadata,
@@ -516,7 +490,6 @@ def persist_graph_execution_runtime_shadow(
             extra={
                 "agent_run_id": agent_run_id,
                 "conversation_id": conversation_id,
-                "workspace_id": workspace_id,
                 "operation": "persist_graph_execution_runtime_shadow",
             },
         )
@@ -526,7 +499,6 @@ def _persist_single_loop_fallback_runtime_shadow(
     db: Session,
     *,
     agent_run_id: str,
-    workspace_id: str,
     conversation_id: str,
     requested_by_user_id: str,
     runtime_metadata: dict[str, Any],
@@ -535,7 +507,6 @@ def _persist_single_loop_fallback_runtime_shadow(
 ) -> None:
     context = build_runtime_shadow_context(
         agent_run_id=agent_run_id,
-        workspace_id=workspace_id,
         conversation_id=conversation_id,
         requested_by_user_id=requested_by_user_id,
         runtime_metadata=runtime_metadata,
@@ -550,7 +521,6 @@ def _persist_single_loop_fallback_runtime_shadow(
     graph_invocations_by_seq = persist_graph_schedule_invocation_skeletons(
         db,
         agent_run_id=runtime_run.id,
-        workspace_id=context.workspace_id,
         conversation_id=context.conversation_id,
         runtime_metadata=context.runtime_metadata,
         status="abandoned",
@@ -569,7 +539,6 @@ def _persist_single_loop_fallback_runtime_shadow(
     append_trace_event(
         db,
         agent_run_id=runtime_run.id,
-        workspace_id=context.workspace_id,
         conversation_id=context.conversation_id,
         event_type="run_created",
         payload=single_loop_run_created_payload(
@@ -595,7 +564,6 @@ def _persist_graph_execution_runtime_shadow(
     db: Session,
     *,
     agent_run_id: str,
-    workspace_id: str,
     conversation_id: str,
     requested_by_user_id: str,
     runtime_metadata: dict[str, Any],
@@ -604,7 +572,6 @@ def _persist_graph_execution_runtime_shadow(
 ) -> None:
     context = build_runtime_shadow_context(
         agent_run_id=agent_run_id,
-        workspace_id=workspace_id,
         conversation_id=conversation_id,
         requested_by_user_id=requested_by_user_id,
         runtime_metadata=runtime_metadata,
@@ -619,7 +586,6 @@ def _persist_graph_execution_runtime_shadow(
     graph_invocations_by_seq = persist_graph_schedule_invocation_skeletons(
         db,
         agent_run_id=runtime_run.id,
-        workspace_id=context.workspace_id,
         conversation_id=context.conversation_id,
         runtime_metadata=context.runtime_metadata,
         status=context.status,
@@ -646,7 +612,6 @@ def _persist_graph_execution_runtime_shadow(
     append_trace_event(
         db,
         agent_run_id=runtime_run.id,
-        workspace_id=context.workspace_id,
         conversation_id=context.conversation_id,
         event_type="run_created",
         payload=graph_execution_run_created_payload(

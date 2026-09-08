@@ -4,7 +4,6 @@ from typing import Literal
 
 from open_work_hub_api.domains.ai.events import AgentEventEnvelope, EnvelopeEncoder, make_envelope
 
-
 ToolStreamResultStatus = Literal["ok", "error", "rejected"]
 
 

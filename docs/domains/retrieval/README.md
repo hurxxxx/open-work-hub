@@ -4,8 +4,8 @@ Caller-facing multi-backend search layer combining keyword search and RAG.
 
 Surfaces:
 
-- `POST /api/v1/workspaces/{workspace_slug}/retrieval/query`
-- `GET /api/v1/workspaces/{workspace_slug}/retrieval/sources`
+- `POST /api/v1/retrieval/query`
+- `GET /api/v1/retrieval/sources`
 - AI tools `retrieval.search`, `retrieval.list_sources`
 
 Contract:
@@ -21,9 +21,9 @@ Contract:
 `generic_rag` and `keyword` are retrieval backend channels, not app or resource identities. Active
 RAG resource adapters are listed in the [RAG Source Matrix](../rag/source-matrix.md).
 
-## Specialized Workspace Keyword Search
+## Company Keyword Search
 
-`POST /api/v1/workspaces/{workspace_slug}/search/query` is the non-grounded keyword/facet surface
+`POST /api/v1/search/query` is the non-grounded keyword/facet surface
 used by the shell. It composes app-owned `SearchEntityAdapter` projections, preserves backend order
 after ACL filtering, and returns the keyword-search response contract. It is not a legacy RAG alias
 and does not imply that every keyword entity participates in `generic_rag`.

@@ -7,7 +7,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from open_work_hub_api.domains.ai.boundary_safety import assert_external_manager_payload_safe
 
-
 LocalAgentResultStatus = Literal["completed", "blocked", "failed"]
 
 

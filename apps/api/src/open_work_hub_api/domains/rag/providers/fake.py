@@ -9,7 +9,6 @@ from open_work_hub_api.domains.rag.contracts import (
     RagDeleteRequest,
     RagProjection,
     RagProviderHealth,
-    RagScopeKind,
     RagUpsertRequest,
     RagVectorRecord,
     RagVectorSearchHit,
@@ -205,16 +204,6 @@ class FakeVectorIndexClient:
             else:
                 if projection.scope_kind != request.scope_kind:
                     continue
-                if (
-                    request.scope_kind == RagScopeKind.WORKSPACE
-                    and projection.workspace_id != request.workspace_id
-                ):
-                    continue
-                if (
-                    request.scope_kind == RagScopeKind.COMPANY
-                    and "company_public" not in projection.visibility_refs
-                ):
-                    continue
             if request.source_kinds and projection.source_kind not in request.source_kinds:
                 continue
             if not _matches_metadata_filter(projection, request.metadata_filter):
@@ -249,24 +238,16 @@ class FakeVectorIndexClient:
         return None if record is None else record.projection
 
 
-def _matches_delete_envelope(
-    projection: RagProjection,
-    request: RagDeleteRequest,
-) -> bool:
+def _matches_delete_envelope(projection: RagProjection, request: RagDeleteRequest) -> bool:
     if request.retrieval_partition_id is not None:
         return projection.retrieval_partition_id == request.retrieval_partition_id
-    return projection.scope_kind == request.scope_kind and (
-        request.scope_kind == RagScopeKind.COMPANY
-        or projection.workspace_id == request.workspace_id
-    )
+    return projection.scope_kind == request.scope_kind
 
 
 def _matches_metadata_filter(projection: RagProjection, metadata_filter: dict[str, object]) -> bool:
     if not metadata_filter:
         return True
     for key, value in metadata_filter.items():
-        if key == "workspace_id" and projection.workspace_id != value:
-            return False
         if key == "scope_kind" and projection.scope_kind != value:
             return False
         if key == "resource_type" and projection.resource_type != value:
@@ -278,7 +259,6 @@ def _matches_metadata_filter(projection: RagProjection, metadata_filter: dict[st
         if key == "visibility_refs_contains" and value not in projection.visibility_refs:
             return False
         if key in {
-            "workspace_id",
             "scope_kind",
             "resource_type",
             "resource_id",

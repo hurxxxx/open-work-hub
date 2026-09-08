@@ -21,12 +21,12 @@ import {
   APP_LAUNCHER_GLOBAL_PATHS,
   APP_MODULE_MANIFESTS,
   APP_TOOL_VIEW_ROUTES,
-  APP_WORKSPACE_ROUTES,
-  WORKSPACE_AI_TOOL_APP_IDS,
+  APP_ROUTES,
+  AI_TOOL_APP_IDS,
   assertAppModuleStaticRouteContract,
   createAppModuleRegistry,
   getAppModuleGlobalRoutes,
-  getAppModuleWorkspaceRoutes,
+  getAppModuleAppRoutes,
   getToolViewRoute,
   type AppModuleRegistration,
 } from './app-registry';
@@ -36,9 +36,8 @@ import {
   staticAdminRedirectRoutes,
   staticAdminSectionRoutes,
   staticAppGlobalRoutes,
-  staticWorkspaceSettingsRoute,
-  workspaceRouteDefinitions,
-} from './workspace-route-definitions';
+  appRouteDefinitions,
+} from './app-route-definitions';
 import type { AppModuleManifest } from './navigation-types';
 
 function manifestWithoutRoutes(manifest: AppModuleManifest): AppModuleManifest {
@@ -46,13 +45,13 @@ function manifestWithoutRoutes(manifest: AppModuleManifest): AppModuleManifest {
     ...manifest,
     globalRoutePaths: [],
     staticGlobalRoutePaths: [],
-    staticWorkspaceRoutePaths: [],
-    workspaceRoutePaths: [],
+    staticAppRoutePaths: [],
+    appRoutePaths: [],
   };
 }
 
-function isWorkspaceRoutePathForApp(routePath: string, appId: string): boolean {
-  const prefix = `/apps/${appId}/workspaces/:workspaceSlug`;
+function isAppRoutePathForApp(routePath: string, appId: string): boolean {
+  const prefix = `/apps/${appId}`;
   return routePath === prefix || routePath.startsWith(`${prefix}/`);
 }
 
@@ -92,37 +91,33 @@ describe('app module registry', () => {
     );
   });
 
-  it('keeps platform workspace settings outside executable app routes', () => {
-    expect(settingsManifest.workspaceRoutePaths).toEqual([]);
-    expect(settingsManifest.staticWorkspaceRoutePaths).toEqual([
-      staticWorkspaceSettingsRoute.path,
-    ]);
+  it('keeps platform administration outside executable app routes', () => {
+    expect(settingsManifest.appRoutePaths).toEqual([]);
+    expect(settingsManifest.staticAppRoutePaths ?? []).toEqual([]);
     expect(settingsManifest.staticGlobalRoutePaths).toEqual([
       staticAdminLandingRoute.path,
       ...staticAdminRedirectRoutes.map((route) => route.path),
       ...staticAdminSectionRoutes.map((route) => route.path),
     ]);
-    expect(getAppModuleWorkspaceRoutes('settings')).toEqual([]);
+    expect(getAppModuleAppRoutes('settings')).toEqual([]);
   });
 
-  it('derives canonical workspace routes from each leaf app', () => {
-    expect(workspaceRouteDefinitions).toEqual(APP_WORKSPACE_ROUTES);
-    expect(
-      getAppModuleWorkspaceRoutes('docs').map((route) => route.path),
-    ).toContain('/apps/docs/workspaces/:workspaceSlug/documents/:docId');
-    expect(
-      getAppModuleWorkspaceRoutes('bento').map((route) => route.path),
-    ).toContain(
-      '/apps/bento/workspaces/:workspaceSlug/presentations/:documentId',
+  it('derives canonical app routes from each leaf app', () => {
+    expect(appRouteDefinitions).toEqual(APP_ROUTES);
+    expect(getAppModuleAppRoutes('docs').map((route) => route.path)).toContain(
+      '/apps/docs/documents/:docId',
     );
-    expect(
-      getAppModuleWorkspaceRoutes('pms').map((route) => route.path),
-    ).toContain('/apps/pms/workspaces/:workspaceSlug/lists/:taskListId');
+    expect(getAppModuleAppRoutes('bento').map((route) => route.path)).toContain(
+      '/apps/bento/presentations/:documentId',
+    );
+    expect(getAppModuleAppRoutes('pms').map((route) => route.path)).toContain(
+      '/apps/pms/lists/:taskListId',
+    );
 
-    for (const route of workspaceRouteDefinitions) {
+    for (const route of appRouteDefinitions) {
       const routeAppId = route.appId;
       expect(route.appId).toBe(routeAppId);
-      expect(isWorkspaceRoutePathForApp(route.path, routeAppId)).toBe(true);
+      expect(isAppRoutePathForApp(route.path, routeAppId)).toBe(true);
     }
   });
 
@@ -147,7 +142,7 @@ describe('app module registry', () => {
         routeId,
       ]),
     );
-    for (const route of [...APP_WORKSPACE_ROUTES, ...APP_GLOBAL_ROUTES]) {
+    for (const route of [...APP_ROUTES, ...APP_GLOBAL_ROUTES]) {
       const routeId = routeIdByPattern.get(route.path) as
         | AppRouteId
         | undefined;
@@ -158,9 +153,7 @@ describe('app module registry', () => {
       );
     }
     expect(
-      [...APP_WORKSPACE_ROUTES, ...APP_GLOBAL_ROUTES]
-        .map((route) => route.path)
-        .sort(),
+      [...APP_ROUTES, ...APP_GLOBAL_ROUTES].map((route) => route.path).sort(),
     ).toEqual(
       [...APP_ROUTE_BY_ID.keys()]
         .map((routeId) => getAppRoutePattern(routeId))
@@ -171,7 +164,7 @@ describe('app module registry', () => {
   it('has no generic tool route ownership or aggregate AI tool app ids', () => {
     expect(APP_TOOL_VIEW_ROUTES).toEqual([]);
     expect(getToolViewRoute({ item: null, toolId: 'search' })).toBeNull();
-    expect([...WORKSPACE_AI_TOOL_APP_IDS]).toEqual([]);
+    expect([...AI_TOOL_APP_IDS]).toEqual([]);
   });
 
   it('keeps leaf ownership for background work and launcher policy', () => {
@@ -185,12 +178,9 @@ describe('app module registry', () => {
       ]),
     );
     expect([...APP_FEATURE_GUIDE_TOOL_IDS]).toEqual([]);
-    expect([...APP_LAUNCHER_GLOBAL_PATHS]).toEqual([
-      ['agent-terminal', '/apps/agent-terminal'],
-      ['mail', '/apps/mail'],
-      ['community', '/apps/community'],
-      ['planner', '/apps/planner'],
-    ]);
+    expect([...APP_LAUNCHER_GLOBAL_PATHS]).toEqual(
+      APP_CONTRACTS.map((app) => [app.app_id, app.route_base]),
+    );
     expect(APP_BAR_FIXED_APP_IDS).toEqual(['home']);
     expect(APP_BAR_PINNED_BY_DEFAULT_APP_IDS).toEqual([
       'pms',
@@ -199,10 +189,10 @@ describe('app module registry', () => {
     ]);
   });
 
-  it('rejects static and workspace routes that violate manifest ownership', () => {
+  it('rejects static and app routes that violate manifest ownership', () => {
     expect(() =>
       assertAppModuleStaticRouteContract('settings', {
-        workspaceRoutes: [staticWorkspaceSettingsRoute],
+        appRoutes: [{ path: '/admin/unknown', element: null }],
         globalRoutes: [{ path: '/admin/missing', element: null }],
       }),
     ).toThrow(/not declared in manifest settings/);
@@ -215,11 +205,11 @@ describe('app module registry', () => {
 
     const wrongOwner: AppModuleRegistration = {
       manifest: home,
-      workspaceRoutes: [
+      appRoutes: [
         {
           appId: 'chatbot',
           element: null,
-          path: '/apps/home/workspaces/:workspaceSlug',
+          path: '/apps/home',
         },
       ],
     };
@@ -229,11 +219,11 @@ describe('app module registry', () => {
 
     const missingPath: AppModuleRegistration = {
       manifest: home,
-      workspaceRoutes: [
+      appRoutes: [
         {
           appId: 'home',
           element: null,
-          path: '/apps/home/workspaces/:workspaceSlug/missing',
+          path: '/apps/home/missing',
         },
       ],
     };

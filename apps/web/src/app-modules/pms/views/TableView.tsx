@@ -1,25 +1,24 @@
+import { DateInput } from '@/src/components/date/DateInput';
+import { Badge, Button } from '@open-work-hub/ui';
 import {
-  MessageSquare,
-  Flag,
-  Eye,
   CheckSquare,
   CornerDownRight,
+  Eye,
+  Flag,
   GitBranch,
+  MessageSquare,
 } from 'lucide-react';
-import { Badge, Button } from '@open-work-hub/ui';
 import { useTranslation } from 'react-i18next';
-import { DateInput } from '@/src/components/date/DateInput';
-import type { PmsTask, PmsTaskListStatus } from '../api/pms-api';
-import type { PmsTaskListMember } from '../api/pms-api';
-import {
-  getStatusTone,
-  PRIORITY_COLOR,
-  formatDate,
-} from './pms-constants';
+import type {
+  PmsTask,
+  PmsTaskListMember,
+  PmsTaskListStatus,
+} from '../api/pms-api';
+import { formatDate, getStatusTone, PRIORITY_COLOR } from './pms-constants';
 import { StatusIconGlyph } from './StatusIcon';
-import { TaskCard } from './TaskCard';
-import { TaskAssigneeStack } from './TaskAssigneeStack';
 import { buildTaskTablePresentationModel } from './task-list-presentation-model';
+import { TaskAssigneeStack } from './TaskAssigneeStack';
+import { TaskCard } from './TaskCard';
 
 export const TableView = ({
   tasks,

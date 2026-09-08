@@ -48,10 +48,10 @@ vi.mock('@/src/platform/browser/browser-download', async (importOriginal) => {
 
 function renderSources(content: string) {
   render(
-    <MemoryRouter initialEntries={['/apps/files/workspaces/hq/chat']}>
+    <MemoryRouter initialEntries={['/apps/files/chat']}>
       <Routes>
         <Route
-          path="/apps/files/workspaces/:workspaceSlug/chat"
+          path="/apps/files/chat"
           element={<FilesRagSourcesArtifact content={content} />}
         />
       </Routes>
@@ -103,11 +103,7 @@ describe('FilesRagSourcesArtifact', () => {
     );
 
     await waitFor(() => {
-      expect(getFileDownloadUrl).toHaveBeenCalledWith(
-        'token-1',
-        'hq',
-        'file-1',
-      );
+      expect(getFileDownloadUrl).toHaveBeenCalledWith('token-1', 'file-1');
       expect(downloadAuthenticatedContent).toHaveBeenCalledWith(
         'token-1',
         '/fresh-download/file-1',

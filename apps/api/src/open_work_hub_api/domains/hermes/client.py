@@ -16,7 +16,6 @@ from open_work_hub_api.domains.hermes.research_sources import (
     academic_research_environment_hint,
 )
 
-
 _OPENROUTER_METADATA_HEADERS = {"X-OpenRouter-Metadata": "enabled"}
 
 
@@ -29,14 +28,10 @@ def fixed_model_runtime_policy(
         "model": {
             "default_headers": dict(_OPENROUTER_METADATA_HEADERS),
         },
-        "fallback_providers": [
-            {"provider": HERMES_PROVIDER, "model": HERMES_FALLBACK_MODEL}
-        ],
+        "fallback_providers": [{"provider": HERMES_PROVIDER, "model": HERMES_FALLBACK_MODEL}],
         "agent": {
             "api_max_retries": 1,
-            "environment_hint": academic_research_environment_hint(
-                research_sources
-            ),
+            "environment_hint": academic_research_environment_hint(research_sources),
         },
         "compression": {
             "enabled": True,

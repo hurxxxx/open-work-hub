@@ -1,7 +1,4 @@
-import {
-  buildAppEntryHref,
-  buildAppHref,
-} from '@open-work-hub/contracts/app-routes';
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
 import type {
   createWhiteboard,
   listWhiteboardHub,
@@ -235,43 +232,35 @@ export function buildWhiteboardHubListParams(options: {
 export function buildWhiteboardCreatePayload(options: {
   title: string;
   targetFilter: WhiteboardTargetFilter | null;
-  currentWorkspaceId: string | null | undefined;
   itemCount: number;
   visibility?: WhiteboardVisibility;
+  companyAdminReadAcknowledged?: boolean;
 }): WhiteboardCreatePayload {
-  const visibility =
-    options.visibility ?? (options.targetFilter ? 'workspace' : 'personal');
-  let primaryTarget: WhiteboardCreatePayload['primary_target'] = null;
-  if (visibility === 'workspace') {
-    primaryTarget = options.targetFilter
-      ? { ...options.targetFilter, sort_order: options.itemCount }
-      : options.currentWorkspaceId
-        ? {
-            app: 'whiteboard',
-            type: 'workspace_sidebar',
-            id: options.currentWorkspaceId,
-            sort_order: 0,
-          }
-        : null;
-  }
-
+  const primaryTarget = options.targetFilter
+    ? {
+        ...options.targetFilter,
+        sort_order: options.itemCount,
+        company_admin_read_acknowledged:
+          options.companyAdminReadAcknowledged ?? false,
+      }
+    : null;
   return {
     title: options.title,
     source_app: primaryTarget?.app === 'pms' ? 'pms' : 'whiteboard',
     source_kind: 'manual',
     primary_target: primaryTarget,
+    company_visible: options.visibility === 'company' && !primaryTarget,
+    company_admin_read_acknowledged:
+      options.companyAdminReadAcknowledged ?? false,
   };
 }
 
 export function buildWhiteboardHubItemPath(options: {
   itemId: string;
   searchParams: URLSearchParams;
-  workspaceSlug?: string | null;
 }): string {
-  if (!options.workspaceSlug) return buildAppEntryHref('whiteboard');
   return buildAppHref({
     routeId: 'whiteboard.board',
-    workspaceSlug: options.workspaceSlug,
     pathParams: { whiteboardId: options.itemId },
     queryParams: Object.fromEntries(options.searchParams),
   });
@@ -279,12 +268,9 @@ export function buildWhiteboardHubItemPath(options: {
 
 export function buildWhiteboardHubRootPath(options: {
   searchParams: URLSearchParams;
-  workspaceSlug?: string | null;
 }): string {
-  if (!options.workspaceSlug) return buildAppEntryHref('whiteboard');
   return buildAppHref({
     routeId: 'whiteboard.root',
-    workspaceSlug: options.workspaceSlug,
     queryParams: Object.fromEntries(options.searchParams),
   });
 }

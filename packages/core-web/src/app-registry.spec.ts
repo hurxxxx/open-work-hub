@@ -8,7 +8,7 @@ import {
   type CoreNavItem,
   type CoreStaticRouteDefinition,
   type CoreToolViewRouteDefinition,
-  type CoreWorkspaceRouteDefinition,
+  type CoreAppRouteDefinition,
 } from './app-registry';
 
 type TestAppId = 'research' | 'settings';
@@ -30,7 +30,7 @@ interface TestStaticRoute extends CoreStaticRouteDefinition<TestAppId> {
   component: string;
 }
 
-interface TestWorkspaceRoute extends CoreWorkspaceRouteDefinition<TestAppId> {
+interface TestAppRoute extends CoreAppRouteDefinition<TestAppId> {
   component: string;
 }
 
@@ -54,7 +54,7 @@ function createTestRegistry() {
     TestManifest,
     TestAppBarItem,
     TestStaticRoute,
-    TestWorkspaceRoute,
+    TestAppRoute,
     TestToolViewRoute,
     TestBackgroundWorkSource,
     TestSidebarConfig,
@@ -71,10 +71,8 @@ function createTestRegistry() {
           { appId: 'research', id: 'research-home', label: 'Research Home' },
         ],
         staticGlobalRoutePaths: ['/research/static'],
-        staticWorkspaceRoutePaths: [
-          '/apps/research/workspaces/:workspaceSlug/static',
-        ],
-        workspaceRoutePaths: ['/apps/research/workspaces/:workspaceSlug'],
+        staticAppRoutePaths: ['/apps/research/static'],
+        appRoutePaths: ['/apps/research'],
       },
       backgroundWorkSources: [
         {
@@ -96,11 +94,11 @@ function createTestRegistry() {
           toolIds: ['research-home'],
         },
       ],
-      workspaceRoutes: [
+      appRoutes: [
         {
           appId: 'research',
           component: 'ResearchWorkspace',
-          path: '/apps/research/workspaces/:workspaceSlug',
+          path: '/apps/research',
         },
       ],
     },
@@ -116,7 +114,7 @@ function createTestRegistry() {
             label: 'Profile',
           },
         ],
-        workspaceRoutePaths: [],
+        appRoutePaths: [],
       },
     },
   ]);
@@ -160,11 +158,11 @@ describe('createCoreAppModuleRegistryApi', () => {
         path: '/research',
       },
     ]);
-    expect(registry.getAppModuleWorkspaceRoutes('research')).toEqual([
+    expect(registry.getAppModuleAppRoutes('research')).toEqual([
       {
         appId: 'research',
         component: 'ResearchWorkspace',
-        path: '/apps/research/workspaces/:workspaceSlug',
+        path: '/apps/research',
       },
     ]);
     expect(
@@ -184,17 +182,13 @@ describe('createCoreAppModuleRegistryApi', () => {
     expect(() =>
       registry.assertAppModuleStaticRouteContract('research', {
         globalRoutes: [{ path: '/research/static' }],
-        workspaceRoutes: [
-          { path: '/apps/research/workspaces/:workspaceSlug/static' },
-        ],
+        appRoutes: [{ path: '/apps/research/static' }],
       }),
     ).not.toThrow();
     expect(() =>
       registry.assertAppModuleStaticRouteContract('research', {
         globalRoutes: [{ path: '/research/missing' }],
-        workspaceRoutes: [
-          { path: '/apps/research/workspaces/:workspaceSlug/static' },
-        ],
+        appRoutes: [{ path: '/apps/research/static' }],
       }),
     ).toThrow(
       'Static global route path /research/missing is not declared in manifest research',
@@ -209,7 +203,7 @@ describe('createCoreAppModuleRegistryApi', () => {
         TestManifest,
         TestAppBarItem,
         TestStaticRoute,
-        TestWorkspaceRoute,
+        TestAppRoute,
         TestToolViewRoute,
         TestBackgroundWorkSource,
         TestSidebarConfig,
@@ -222,19 +216,19 @@ describe('createCoreAppModuleRegistryApi', () => {
             contract: {},
             label: 'Research',
             navItems: [],
-            workspaceRoutePaths: [],
+            appRoutePaths: [],
           },
-          workspaceRoutes: [
+          appRoutes: [
             {
               appId: 'research',
               component: 'ResearchWorkspace',
-              path: '/apps/research/workspaces/:workspaceSlug',
+              path: '/apps/research',
             },
           ],
         },
       ]),
     ).toThrow(
-      'Workspace route path /apps/research/workspaces/:workspaceSlug is not declared in manifest research',
+      'App route path /apps/research is not declared in manifest research',
     );
   });
 
@@ -252,7 +246,7 @@ describe('createCoreAppModuleRegistryApi', () => {
         TestManifest,
         TestAppBarItem,
         TestStaticRoute,
-        TestWorkspaceRoute,
+        TestAppRoute,
         TestToolViewRoute,
         TestBackgroundWorkSource,
         TestSidebarConfig,
@@ -266,7 +260,7 @@ describe('createCoreAppModuleRegistryApi', () => {
             contract: {},
             label: 'Research',
             navItems: [],
-            workspaceRoutePaths: [],
+            appRoutePaths: [],
           },
         },
       ]),

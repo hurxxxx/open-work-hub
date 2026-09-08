@@ -1,5 +1,5 @@
-import { MessageSquare } from 'lucide-react';
 import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
+import { MessageSquare } from 'lucide-react';
 
 import type { AppModuleManifest } from '@/src/app/shell/navigation-types';
 
@@ -9,11 +9,9 @@ export const chatbotManifest: AppModuleManifest = {
     owner: 'ai-platform',
     permissions: [],
     apiDomain: 'ai',
-    workspaceApiPrefixes: ['/api/v1/chatbot'],
     aiCapabilities: [],
     writeAuditActions: [],
     appLocalTests: [
-      'apps/web/src/app-modules/chatbot/api/workspace-chatbot-api-path.spec.ts',
       'apps/web/src/app-modules/chatbot/api/sse-parser.spec.ts',
       'apps/web/src/app-modules/chatbot/api/chat-stream-state.spec.ts',
       'apps/web/src/app-modules/chatbot/api/useChatStream.spec.tsx',
@@ -22,5 +20,5 @@ export const chatbotManifest: AppModuleManifest = {
   },
   defaultActiveNavItemId: '',
   navItems: [],
-  workspaceRoutePaths: [getAppRoutePattern('chatbot.root')],
+  appRoutePaths: [getAppRoutePattern('chatbot.root')],
 };

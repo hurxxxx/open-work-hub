@@ -8,18 +8,21 @@ def messages(schema: dict) -> list[str]:
 
 
 def test_openapi_contract_rules_accept_valid_minimal_schema() -> None:
-    assert messages(
-        {
-            "paths": {
-                "/healthz": {
-                    "get": {
-                        "operationId": "system_healthz_get",
+    assert (
+        messages(
+            {
+                "paths": {
+                    "/healthz": {
+                        "get": {
+                            "operationId": "system_healthz_get",
+                        }
                     }
-                }
-            },
-            "components": {"schemas": {"ErrorResponse": {}}},
-        }
-    ) == []
+                },
+                "components": {"schemas": {"ErrorResponse": {}}},
+            }
+        )
+        == []
+    )
 
 
 def test_openapi_contract_rules_report_operation_id_shape_problems() -> None:

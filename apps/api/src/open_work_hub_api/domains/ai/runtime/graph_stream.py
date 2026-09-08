@@ -27,7 +27,7 @@ from open_work_hub_api.domains.ai.runtime.routing import RuntimeRoutingDecision
 from open_work_hub_api.domains.ai.runtime.routing_metadata import runtime_routing_stream_kwargs
 from open_work_hub_api.domains.ai.runtime.tool_calling import stream_tool_calling_enabled
 from open_work_hub_api.domains.ai.tool_contracts import AgentToolSpec
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.conversations.models import Conversation
 
 
@@ -48,7 +48,6 @@ async def run_graph_execution_adapter_stream(
     context: LlmTaskContext,
     execution: ResolvedLlmExecution,
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     messages: list[dict[str, Any]],
@@ -68,7 +67,6 @@ async def run_graph_execution_adapter_stream(
             context=context,
             execution=execution,
             db=db,
-            workspace=workspace,
             principal=principal,
             user=user,
             messages=messages,
@@ -90,7 +88,6 @@ async def run_graph_execution_adapter_stream(
         context=context,
         execution=execution,
         db=db,
-        workspace=workspace,
         principal=principal,
         user=user,
         messages=messages,
@@ -113,7 +110,6 @@ async def _run_graph_instructed_single_loop_stream(
     context: LlmTaskContext,
     execution: ResolvedLlmExecution,
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     messages: list[dict[str, Any]],
@@ -141,7 +137,6 @@ async def _run_graph_instructed_single_loop_stream(
         context=context,
         execution=execution,
         db=db,
-        workspace=workspace,
         principal=principal,
         user=user,
         messages=messages,

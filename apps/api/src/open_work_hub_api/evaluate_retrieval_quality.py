@@ -7,12 +7,20 @@ from sqlalchemy import select
 
 from open_work_hub_api.core.db import get_session_factory
 from open_work_hub_api.core.settings import get_settings
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.files.models import FileManagerFile
 from open_work_hub_api.domains.files.rag_projection import load_file_rag_projection
 from open_work_hub_api.domains.files.search_projection import (
-    load_workspace_file_search_documents,
+    load_file_search_documents,
 )
+from open_work_hub_api.domains.rag.contracts import RagVectorSearchMode
+from open_work_hub_api.domains.rag.query_service import RagQueryService
+from open_work_hub_api.domains.rag.runtime import (
+    get_provider_bundle,
+    get_rag_service,
+    resolve_default_collection_name,
+)
+from open_work_hub_api.domains.rag.service import RagService
 from open_work_hub_api.domains.retrieval.application import query_retrieval
 from open_work_hub_api.domains.retrieval.contracts import (
     RetrievalAnswerMode,
@@ -29,18 +37,10 @@ from open_work_hub_api.domains.retrieval.evaluation import (
     evaluate_retrieval_cases,
     retrieval_quality_corpus_sha256,
 )
-from open_work_hub_api.domains.rag.contracts import RagVectorSearchMode
-from open_work_hub_api.domains.rag.query_service import RagQueryService
-from open_work_hub_api.domains.rag.runtime import (
-    get_provider_bundle,
-    get_rag_service,
-    resolve_default_collection_name,
-)
-from open_work_hub_api.domains.rag.service import RagService
 from open_work_hub_api.domains.search.backend_factory import build_keyword_search_client
 from open_work_hub_api.domains.search.index_gateway import search_index_document_id
 from open_work_hub_api.domains.search.opensearch import OpenSearchKeywordClient
-from open_work_hub_api.domains.search.projections import all_workspace_search_documents
+from open_work_hub_api.domains.search.projections import all_search_documents
 
 
 def main() -> None:
@@ -157,51 +157,39 @@ def _prepare_staged_files(
     rag_service: RagService,
     rag_collection: str,
 ) -> None:
-    workspace_ids = sorted({case.workspace_id for case in corpus.cases})
     with get_session_factory()() as db:
-        workspaces = list(
+        file_ids = list(
             db.scalars(
-                select(Workspace).where(Workspace.active.is_(True)).order_by(Workspace.id.asc())
+                select(FileManagerFile.id)
+                .where(
+                    FileManagerFile.deleted_at.is_(None),
+                )
+                .order_by(FileManagerFile.created_at.asc(), FileManagerFile.id.asc())
             )
         )
-        missing = sorted(set(workspace_ids) - {workspace.id for workspace in workspaces})
-        if missing:
-            raise SystemExit(f"Evaluation workspaces not found: {', '.join(missing)}")
-
-        for workspace in workspaces:
-            file_ids = list(
-                db.scalars(
-                    select(FileManagerFile.id)
-                    .where(
-                        FileManagerFile.workspace_id == workspace.id,
-                        FileManagerFile.deleted_at.is_(None),
-                    )
-                    .order_by(FileManagerFile.created_at.asc(), FileManagerFile.id.asc())
-                )
-            )
-            for file_id in file_ids:
-                projection = load_file_rag_projection(
-                    db,
-                    file_id=file_id,
-                    rag_service=rag_service,
-                )
-                if projection is not None:
-                    rag_service.sync_projection(projection, collection=rag_collection)
-                db.commit()
-
-            active_documents = all_workspace_search_documents(db, workspace=workspace)
-            staged_file_documents = load_workspace_file_search_documents(
+        for file_id in file_ids:
+            projection = load_file_rag_projection(
                 db,
-                workspace=workspace,
+                file_id=file_id,
+                rag_service=rag_service,
             )
-            documents_by_id = {
-                search_index_document_id(document): document
-                for document in (*active_documents, *staged_file_documents)
-            }
-            staging_client.rebuild_workspace(
-                workspace_id=workspace.id,
-                documents=list(documents_by_id.values()),
-            )
+            if projection is not None:
+                rag_service.sync_projection(projection, collection=rag_collection)
+            db.commit()
+
+        active_documents = all_search_documents(
+            db,
+        )
+        staged_file_documents = load_file_search_documents(
+            db,
+        )
+        documents_by_id = {
+            search_index_document_id(document): document
+            for document in (*active_documents, *staged_file_documents)
+        }
+        staging_client.rebuild_company_index(
+            documents=list(documents_by_id.values()),
+        )
 
 
 def _evaluate_strategy(
@@ -215,15 +203,11 @@ def _evaluate_strategy(
     cases: list[RetrievalEvaluationCase] = []
     with get_session_factory()() as db:
         for case in corpus.cases:
-            workspace = db.get(Workspace, case.workspace_id)
             user = db.get(User, case.user_id)
-            if workspace is None or not workspace.active:
-                raise SystemExit(f"Evaluation workspace not found: {case.workspace_id}")
             if user is None:
                 raise SystemExit(f"Evaluation user not found: {case.user_id}")
             response = query_retrieval(
                 db,
-                workspace=workspace,
                 user=user,
                 request=_retrieval_request(case=case, strategy=strategy),
                 source="cli.retrieval_quality_evaluation",

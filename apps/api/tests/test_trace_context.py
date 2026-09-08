@@ -35,9 +35,7 @@ def test_start_span_with_trace_context_preserves_mapping_baggage() -> None:
     assert format(parent.trace_id, "032x") == "4bf92f3577b34da6a3ce929d0e0e4736"
     assert baggage.get_baggage("tenant") is None
     assert trace_context is not None
-    assert trace_context["traceparent"].startswith(
-        "00-4bf92f3577b34da6a3ce929d0e0e4736-"
-    )
+    assert trace_context["traceparent"].startswith("00-4bf92f3577b34da6a3ce929d0e0e4736-")
     assert trace_context["baggage"] == {
         "tenant": "delivery hub",
         "locale": "ko-KR",

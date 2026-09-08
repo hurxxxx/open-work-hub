@@ -89,7 +89,6 @@ export function buildMockCalendarEvents(): CalendarEvent[] {
       sourceType: 'meeting',
       sourceId: 'mock-meeting-1',
       color: CALENDAR_SOURCE_COLORS.meeting,
-      workspace: null,
       metadata: { meetingId: 'mock-meeting-1', attendeeCount: 5 },
     },
     {
@@ -101,7 +100,6 @@ export function buildMockCalendarEvents(): CalendarEvent[] {
       sourceType: 'meeting',
       sourceId: 'mock-meeting-2',
       color: CALENDAR_SOURCE_COLORS.meeting,
-      workspace: null,
       metadata: { meetingId: 'mock-meeting-2', attendeeCount: 3 },
     },
     {
@@ -113,7 +111,6 @@ export function buildMockCalendarEvents(): CalendarEvent[] {
       sourceType: 'pms_due',
       sourceId: 'mock-task-12',
       color: CALENDAR_SOURCE_COLORS.pms_due,
-      workspace: null,
       metadata: {
         taskListKey: 'INDUSTRIAL',
         taskNumber: 12,
@@ -129,7 +126,6 @@ export function buildMockCalendarEvents(): CalendarEvent[] {
       sourceType: 'pms_block',
       sourceId: 'mock-task-15',
       color: CALENDAR_SOURCE_COLORS.pms_block,
-      workspace: null,
       metadata: { taskListKey: 'INDUSTRIAL', taskNumber: 15, status: 'todo' },
     },
     {
@@ -141,7 +137,6 @@ export function buildMockCalendarEvents(): CalendarEvent[] {
       sourceType: 'meeting',
       sourceId: 'mock-meeting-3',
       color: CALENDAR_SOURCE_COLORS.meeting,
-      workspace: null,
       metadata: { meetingId: 'mock-meeting-3', attendeeCount: 2 },
     },
   ];

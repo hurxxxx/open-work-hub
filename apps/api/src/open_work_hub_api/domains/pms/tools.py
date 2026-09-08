@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session
 from open_work_hub_api.core.principal import CallerPrincipal
 from open_work_hub_api.core.settings import get_settings
 from open_work_hub_api.domains.ai.registry import AiCapabilityRegistry
-from open_work_hub_api.domains.auth.models import User, Workspace
-from open_work_hub_api.domains.pms.app_catalog import PMS_WORKSPACE_APP
+from open_work_hub_api.domains.auth.models import User
+from open_work_hub_api.domains.pms.app_catalog import PMS_APP
 from open_work_hub_api.domains.pms.approval_preview import (
     build_add_comment_preview,
     build_create_task_preview,
@@ -99,14 +99,12 @@ def _pms_service():
 
 def _search_tasks(
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     arguments: Mapping[str, Any],
 ) -> dict[str, Any]:
     result = _pms_service().search_tasks(
         db,
-        workspace=workspace,
         principal=principal,
         user=user,
         q=str(arguments.get("q", "")),
@@ -126,14 +124,12 @@ def _search_tasks(
 
 def _get_task(
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     arguments: Mapping[str, Any],
 ) -> dict[str, Any]:
     return _pms_service().get_task_detail_for_ai(
         db,
-        workspace=workspace,
         principal=principal,
         user=user,
         task_id=str(arguments["task_id"]),
@@ -142,7 +138,6 @@ def _get_task(
 
 def _list_spaces(
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     arguments: Mapping[str, Any],
@@ -150,7 +145,6 @@ def _list_spaces(
     return {
         "items": _pms_service().list_spaces(
             db,
-            workspace=workspace,
             principal=principal,
             user=user,
         )
@@ -159,7 +153,6 @@ def _list_spaces(
 
 def _list_task_lists(
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     arguments: Mapping[str, Any],
@@ -167,7 +160,6 @@ def _list_task_lists(
     sort_dir = str(arguments.get("sort_dir", "desc"))
     return _pms_service().list_task_lists(
         db,
-        workspace=workspace,
         principal=principal,
         user=user,
         page=int(arguments.get("page", 1)),
@@ -182,7 +174,6 @@ def _list_task_lists(
 
 def _create_task(
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     arguments: Mapping[str, Any],
@@ -191,7 +182,6 @@ def _create_task(
 ) -> dict[str, Any]:
     return _pms_service().create_task(
         db,
-        workspace=workspace,
         principal=principal,
         user=user,
         list_id=str(arguments["list_id"]),
@@ -206,7 +196,6 @@ def _create_task(
 
 def _update_task(
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     arguments: Mapping[str, Any],
@@ -225,7 +214,6 @@ def _update_task(
             provided_fields.add(service_field_name)
     return _pms_service().update_task(
         db,
-        workspace=workspace,
         principal=principal,
         user=user,
         task_id=str(arguments["task_id"]),
@@ -241,7 +229,6 @@ def _update_task(
 
 def _add_comment(
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     arguments: Mapping[str, Any],
@@ -250,7 +237,6 @@ def _add_comment(
 ) -> dict[str, Any]:
     return _pms_service().add_task_comment(
         db,
-        workspace=workspace,
         principal=principal,
         user=user,
         task_id=str(arguments["task_id"]),
@@ -261,7 +247,6 @@ def _add_comment(
 
 def _delete_task(
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     arguments: Mapping[str, Any],
@@ -270,7 +255,6 @@ def _delete_task(
 ) -> dict[str, Any]:
     return _pms_service().delete_task(
         db,
-        workspace=workspace,
         principal=principal,
         user=user,
         task_id=str(arguments["task_id"]),
@@ -285,7 +269,7 @@ def _string_list_or_none(value: Any) -> list[str] | None:
 
 
 def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
-    app_enabled_predicate_id = f"{PMS_WORKSPACE_APP.app_id}.enabled"
+    app_enabled_predicate_id = f"{PMS_APP.app_id}.enabled"
     registry.register_preview_builder(
         preview_builder_id="pms.task_create_preview",
         builder=build_create_task_preview,
@@ -304,28 +288,28 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
     )
     registry.register_tool(
         name="pms.search_tasks",
-        description="Search tasks in the current workspace.",
+        description="Search tasks in the current user.",
         owner_domain="pms",
         handler=_search_tasks,
         args_model=SearchTasksArgs,
     )
     registry.register_tool(
         name="pms.get_task",
-        description="Load one task in the current workspace.",
+        description="Load one task in the current user.",
         owner_domain="pms",
         handler=_get_task,
         args_model=GetTaskArgs,
     )
     registry.register_tool(
         name="pms.list_spaces",
-        description="List PMS spaces in the current workspace.",
+        description="List PMS spaces in the current user.",
         owner_domain="pms",
         handler=_list_spaces,
         args_model=ListSpacesArgs,
     )
     registry.register_tool(
         name="pms.list_task_lists",
-        description="List PMS task lists in the current workspace.",
+        description="List PMS task lists in the current user.",
         owner_domain="pms",
         handler=_list_task_lists,
         args_model=ListTaskListsArgs,
@@ -336,7 +320,7 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
 
     registry.register_tool(
         name="pms.create_task",
-        description="Create a PMS task in the current workspace.",
+        description="Create a PMS task in the current user.",
         owner_domain="pms",
         handler=_create_task,
         args_model=PmsCreateTaskAiInput,
@@ -348,7 +332,7 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
     )
     registry.register_tool(
         name="pms.update_task",
-        description="Update one PMS task in the current workspace.",
+        description="Update one PMS task in the current user.",
         owner_domain="pms",
         handler=_update_task,
         args_model=PmsUpdateTaskAiInput,
@@ -360,7 +344,7 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
     )
     registry.register_tool(
         name="pms.add_comment",
-        description="Add a comment to one PMS task in the current workspace.",
+        description="Add a comment to one PMS task in the current user.",
         owner_domain="pms",
         handler=_add_comment,
         args_model=PmsAddCommentAiInput,
@@ -372,7 +356,7 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
     )
     registry.register_tool(
         name="pms.delete_task",
-        description="Delete one PMS task in the current workspace.",
+        description="Delete one PMS task in the current user.",
         owner_domain="pms",
         handler=_delete_task,
         args_model=PmsDeleteTaskAiInput,

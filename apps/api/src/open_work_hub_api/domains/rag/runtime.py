@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-from functools import lru_cache
 import logging
 import re
+from functools import lru_cache
 
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.settings import get_settings
 from open_work_hub_api.domains.rag.contracts import RagProviderHealth, RagVectorSearchMode
+from open_work_hub_api.domains.rag.default_source_adapters import (
+    resolve_rag_resource_types_for_source_kinds,
+)
 from open_work_hub_api.domains.rag.provider_factory import (
     RagProviderFactory,
     RagRuntimeSettings,
@@ -19,13 +22,12 @@ from open_work_hub_api.domains.rag.providers.base import (
     RagProviderConfigurationError,
 )
 from open_work_hub_api.domains.rag.providers.qdrant import QdrantVectorIndexClient
-from open_work_hub_api.domains.rag.query_service import RagGroundedAnswerSynthesizer, RagQueryService
+from open_work_hub_api.domains.rag.query_service import (
+    RagGroundedAnswerSynthesizer,
+    RagQueryService,
+)
 from open_work_hub_api.domains.rag.queue_health import get_rag_queue_health
 from open_work_hub_api.domains.rag.service import RagService
-from open_work_hub_api.domains.rag.default_source_adapters import (
-    resolve_rag_resource_types_for_source_kinds,
-)
-
 
 logger = logging.getLogger(__name__)
 _RETRIEVAL_CANDIDATE_TIMEOUT_MS = 5_000
@@ -218,7 +220,9 @@ def resolve_default_collection_name(settings: RagRuntimeSettings) -> str:
 def resolve_partitioned_rag_collection_alias(settings: RagRuntimeSettings) -> str:
     """Return the dedicated alias for partition-aware retrieval collections."""
 
-    return f"{resolve_default_collection_name(settings)}-v{PARTITIONED_RAG_GENERATION_SCHEMA_VERSION}"
+    return (
+        f"{resolve_default_collection_name(settings)}-v{PARTITIONED_RAG_GENERATION_SCHEMA_VERSION}"
+    )
 
 
 def resolve_partitioned_rag_collection_name(

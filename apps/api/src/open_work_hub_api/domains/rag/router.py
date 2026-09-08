@@ -8,12 +8,8 @@ from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.db import get_db_session
 from open_work_hub_api.core.i18n import localized_http_exception
-from open_work_hub_api.domains.auth.dependencies import (
-    require_current_user,
-    require_current_workspace,
-    require_workspace_membership,
-)
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.dependencies import require_admin_context, require_current_user
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.rag import application as rag_application
 from open_work_hub_api.domains.rag.contracts import RagAnswerMode, RagQueryResponse
 from open_work_hub_api.domains.rag.filters import RagQueryFilters
@@ -58,16 +54,14 @@ router = APIRouter(prefix="/rag", tags=["rag"])
 
 
 @router.post("/query", response_model=RagQueryResponse)
-def query_workspace_rag(
+def query_rag(
     payload: RagQueryRestRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> RagQueryResponse:
     try:
-        return retrieval_application.query_workspace_rag_response(
+        return retrieval_application.query_rag_response(
             db,
-            workspace=current_workspace,
             user=current_user,
             query=payload.query,
             answer_mode=RagAnswerMode(payload.answer_mode),
@@ -93,16 +87,14 @@ def query_workspace_rag(
 
 
 @router.get("/sources", response_model=RagSourceListResponse)
-def list_workspace_rag_sources(
+def list_rag_sources(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> RagSourceListResponse:
     try:
         return RagSourceListResponse(
-            sources=retrieval_application.list_workspace_rag_sources_response(
+            sources=retrieval_application.list_rag_sources_response(
                 db,
-                workspace=current_workspace,
                 user=current_user,
             )
         )
@@ -123,15 +115,13 @@ def list_workspace_rag_sources(
 
 
 @router.post("/reindex", response_model=RagReindexResponse)
-def reindex_workspace_rag(
-    _=Depends(require_workspace_membership("admin")),
+def reindex_rag(
+    _=Depends(require_admin_context),
     db: Session = Depends(get_db_session),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> RagReindexResponse:
     try:
-        response = rag_application.enqueue_workspace_rag_reindex(
+        response = rag_application.enqueue_rag_reindex(
             db,
-            workspace=current_workspace,
         )
     except rag_application.RagAccessDeniedError as error:
         code, params = rag_application.rag_error_payload(error, default_code="rag.access_denied")

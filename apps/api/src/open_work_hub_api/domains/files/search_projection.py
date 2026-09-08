@@ -7,8 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload, undefer
 
 from open_work_hub_api.core.app_routes import InternalAppLocation, build_app_href
-from open_work_hub_api.domains.auth.models import Workspace
-from open_work_hub_api.domains.files.app_catalog import FILES_WORKSPACE_APP
+from open_work_hub_api.domains.files.app_catalog import FILES_APP
 from open_work_hub_api.domains.files.external_projection import (
     external_source_date_markers,
     external_source_keywords,
@@ -57,21 +56,11 @@ def load_file_search_document(db: Session, file_id: str) -> dict[str, Any] | Non
     )
     if file is None:
         return None
-    workspace = db.scalar(
-        select(Workspace).where(
-            Workspace.id == file.workspace_id,
-            Workspace.active.is_(True),
-        )
-    )
-    if workspace is None:
-        return None
-    return build_file_search_document(workspace=workspace, file=file)
+    return build_file_search_document(file=file)
 
 
-def load_workspace_file_search_documents(
+def load_file_search_documents(
     db: Session,
-    *,
-    workspace: Workspace,
 ) -> list[dict[str, Any]]:
     files = db.scalars(
         select(FileManagerFile)
@@ -82,13 +71,12 @@ def load_workspace_file_search_documents(
             undefer(FileManagerFile.extraction_metadata),
         )
         .where(
-            FileManagerFile.workspace_id == workspace.id,
             FileManagerFile.deleted_at.is_(None),
             FileManagerFile.extraction_status == "ready",
         )
         .order_by(FileManagerFile.created_at.asc(), FileManagerFile.id.asc())
     ).all()
-    return [build_file_search_document(workspace=workspace, file=file) for file in files]
+    return [build_file_search_document(file=file) for file in files]
 
 
 def load_file_search_document_for_entity(
@@ -104,7 +92,6 @@ def load_file_search_document_for_entity(
 
 def build_file_search_document(
     *,
-    workspace: Workspace,
     file: FileManagerFile,
 ) -> dict[str, Any]:
     body = file.extraction_text or ""
@@ -112,7 +99,6 @@ def build_file_search_document(
         file.owner.display_name or file.owner.full_name if file.owner is not None else None
     )
     return build_search_document(
-        workspace_id=workspace.id,
         entity_type=SearchEntityType.FILE,
         entity_id=file.id,
         title=external_source_title(file),
@@ -138,7 +124,7 @@ def build_file_search_document(
         shared_user_ids=[],
         granted_user_ids=[],
         date_markers=external_source_date_markers(file),
-        deep_link=_file_deep_link(workspace=workspace, file=file),
+        deep_link=_file_deep_link(file=file),
         metadata={
             "resource_type": FILE_MANAGER_FILE_RESOURCE_TYPE,
             "resource_id": file.id,
@@ -154,14 +140,13 @@ def build_file_search_document(
     )
 
 
-def _file_deep_link(*, workspace: Workspace, file: FileManagerFile) -> str:
+def _file_deep_link(*, file: FileManagerFile) -> str:
     query = {"file": file.id}
     if file.folder_id:
         query["folder"] = file.folder_id
     return build_app_href(
         InternalAppLocation(
             route_id="files.root",
-            workspace_slug=workspace.key,
             query_params=query,
         )
     )
@@ -171,7 +156,6 @@ def hydrate_file_search_rows_from_source(
     db: Session,
     *,
     rows: Sequence[dict[str, Any]],
-    execution_workspace: Workspace,
 ) -> list[dict[str, Any]]:
     """Replace Files response-routing/ACL hints with current source metadata.
 
@@ -216,19 +200,12 @@ def hydrate_file_search_rows_from_source(
         if file is None:
             continue
         corpus = file.corpus
-        managed_workspace_id = (
-            corpus.managed_workspace_id if corpus is not None else file.workspace_id
-        )
-        access_scope_kind = corpus.access_scope_kind if corpus is not None else "workspace"
-        if access_scope_kind != "company" and managed_workspace_id != execution_workspace.id:
-            continue
+        access_scope_kind = corpus.access_scope_kind if corpus is not None else "company"
 
         fresh = dict(row)
-        fresh["workspace_id"] = execution_workspace.id
         fresh["retrieval_partition_id"] = file.retrieval_partition_id
         fresh["visibility"] = access_scope_kind if corpus is not None else file.visibility
         fresh["deep_link"] = _file_deep_link(
-            workspace=execution_workspace,
             file=file,
         )
         fresh["title"] = external_source_title(file)
@@ -250,7 +227,6 @@ def hydrate_file_search_rows_from_source(
                 "source_kind": FILES_RAG_SOURCE_KIND,
                 "corpus_id": file.corpus_id,
                 "access_scope_kind": access_scope_kind,
-                "managed_workspace_id": managed_workspace_id,
                 "folder_id": file.folder_id,
                 "content_type": file.content_type,
                 "size_bytes": file.size_bytes,
@@ -261,13 +237,13 @@ def hydrate_file_search_rows_from_source(
     return hydrated
 
 
-FILES_WORKSPACE_KEYWORD_SEARCH_ADAPTER = SearchEntityAdapter(
-    owner_app=FILES_WORKSPACE_APP,
+FILES_KEYWORD_SEARCH_ADAPTER = SearchEntityAdapter(
+    owner_app=FILES_APP,
     entity_type=SearchEntityType.FILE.value,
     resource_type=FILE_MANAGER_FILE_RESOURCE_TYPE,
     label="파일",
     label_key="ai.search.entityFile",
-    workspace_loader=load_workspace_file_search_documents,
+    company_loader=load_file_search_documents,
     document_loader=load_file_search_document_for_entity,
     partition_adapter_id=FILES_RETRIEVAL_PARTITION_ADAPTER_ID,
     active=FILES_RETRIEVAL_ACTIVE,
@@ -284,10 +260,10 @@ FILES_WORKSPACE_KEYWORD_SEARCH_ADAPTER = SearchEntityAdapter(
 
 
 __all__ = [
-    "FILES_WORKSPACE_KEYWORD_SEARCH_ADAPTER",
+    "FILES_KEYWORD_SEARCH_ADAPTER",
     "build_file_search_document",
     "hydrate_file_search_rows_from_source",
     "load_file_search_document",
     "load_file_search_document_for_entity",
-    "load_workspace_file_search_documents",
+    "load_file_search_documents",
 ]

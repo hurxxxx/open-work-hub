@@ -8,22 +8,22 @@ from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.core.principal import CallerPrincipal
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.auth.security import new_id
+from open_work_hub_api.domains.docs import service as docs_service
 from open_work_hub_api.domains.docs.access_context import (
     PAGE_SOURCE_NATIVE_DOC,
     NativePageContext,
-    bind_workspace_context,
     load_native_doc_for_access,
     load_native_page,
     native_doc_from_item_or_404,
     native_page_context_from_page_or_404,
     normalize_page_id,
+    require_actor,
     require_user_write_principal,
     resolve_native_doc_access,
     validate_native_parent,
 )
-from open_work_hub_api.domains.docs import service as docs_service
 from open_work_hub_api.domains.docs.collab import (
     block_content_equal,
     delete_collab_document,
@@ -91,15 +91,13 @@ def create_native_page(
     *,
     user: User,
     command: CreateNativePageCommand,
-    workspace: Workspace | None = None,
     principal: CallerPrincipal | None = None,
     share_token: str | None = None,
 ) -> PageMutationResult:
-    if workspace is not None and principal is not None:
+    if principal is not None:
         require_user_write_principal(principal)
-        bind_workspace_context(
+        require_actor(
             db,
-            workspace=workspace,
             principal=principal,
             user=user,
         )
@@ -175,7 +173,6 @@ def create_native_page(
 def create_native_page_from_markdown(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     hub_id: str,
@@ -187,7 +184,6 @@ def create_native_page_from_markdown(
     content_blocks = docs_service._markdown_to_blocks(content_markdown)
     result = create_native_page(
         db,
-        workspace=workspace,
         principal=principal,
         user=user,
         command=CreateNativePageCommand(
@@ -238,7 +234,10 @@ def update_native_page(
     if command.content_blocks_present:
         if page.content_format != "block":
             raise localized_http_exception(status_code=400, code="docs.content_format_mismatch")
-        if not block_content_equal(page.content_blocks, command.content_blocks) or page.content_text is not None:
+        if (
+            not block_content_equal(page.content_blocks, command.content_blocks)
+            or page.content_text is not None
+        ):
             page.content_blocks = command.content_blocks
             page.content_text = None
             sync_embedded_media(

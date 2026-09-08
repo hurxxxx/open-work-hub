@@ -1,10 +1,15 @@
-import { useMemo, useState } from 'react';
 import { Dialog } from '@open-work-hub/ui';
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { MeetingUser } from '../../api/meeting-api';
 
+import {
+  getAvailabilityBlockPositionPct,
+  getAvailabilityBlockTone,
+  getCurrentMeetingPositionPct,
+} from './meeting-availability-modal-model';
 import {
   AVAILABILITY_NAME_COLUMN_PX,
   addLocalDays,
@@ -14,16 +19,11 @@ import {
   startOfAvailabilityWeek,
   useMeetingAvailabilityQuery,
 } from './meetingAvailability';
-import {
-  getAvailabilityBlockPositionPct,
-  getAvailabilityBlockTone,
-  getCurrentMeetingPositionPct,
-} from './meeting-availability-modal-model';
 
 interface MeetingAvailabilityModalProps {
   isOpen: boolean;
   onClose: () => void;
-  workspaceSlug: string;
+
   attendeeUsers: MeetingUser[];
   meetingStart: Date | null;
   meetingEnd: Date | null;
@@ -37,7 +37,6 @@ const EVENT_BLOCK_HEIGHT_PX = 72;
 export function MeetingAvailabilityModal({
   isOpen,
   onClose,
-  workspaceSlug,
   attendeeUsers,
   meetingStart,
   meetingEnd,
@@ -58,7 +57,6 @@ export function MeetingAvailabilityModal({
     : null;
   const weekEnd = weekStart ? addLocalDays(weekStart, 7) : null;
   const { items, loading, error } = useMeetingAvailabilityQuery({
-    workspaceSlug,
     userIds: attendeeIds,
     rangeStart: weekStart,
     rangeEnd: weekEnd,

@@ -8,7 +8,6 @@ from fastapi.responses import JSONResponse
 from starlette.datastructures import Headers
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-
 CLIENT_BUILD_FILE_NAME = ".open-work-hub-build-id"
 CLIENT_BUILD_HEADER = "X-Open-Work-Hub-Web-Build"
 CLIENT_RELOAD_REQUIRED_HEADER = "X-Open-Work-Hub-Reload-Required"
@@ -105,8 +104,7 @@ class ClientBuildGuardMiddleware:
 
         supplied = _websocket_build_id(scope)
         should_reject = supplied != expected and (
-            supplied is not None
-            or _origin_matches_host(headers.get("origin"), headers.get("host"))
+            supplied is not None or _origin_matches_host(headers.get("origin"), headers.get("host"))
         )
         if should_reject:
             accept_message: Message = {"type": "websocket.accept"}

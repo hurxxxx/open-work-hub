@@ -25,11 +25,7 @@ export type WhiteboardPreviewAction =
   | { type: 'previewFailed'; sourceKey: string };
 
 export interface WhiteboardPreviewLoader {
-  load(
-    token: string,
-    item: WhiteboardHubItem,
-    workspaceSlug?: string | null,
-  ): Promise<string | null>;
+  load(token: string, item: WhiteboardHubItem): Promise<string | null>;
 }
 
 export interface CreateWhiteboardPreviewLoaderOptions {
@@ -126,7 +122,7 @@ export function createWhiteboardPreviewLoader(
   const cacheKey = options.cacheKey ?? getWhiteboardPreviewSourceKey;
 
   return {
-    load(token, item, workspaceSlug) {
+    load(token, item) {
       const key = cacheKey(item);
       if (previewCache.has(key)) {
         return Promise.resolve(previewCache.get(key) ?? null);
@@ -136,7 +132,7 @@ export function createWhiteboardPreviewLoader(
       if (existing) return existing;
 
       const promise = options
-        .fetchWhiteboard(token, item.id, workspaceSlug)
+        .fetchWhiteboard(token, item.id)
         .then((detail) => options.renderScenePreview(detail.scene))
         .then((url) => {
           previewCache.set(key, url);

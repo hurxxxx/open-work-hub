@@ -3,6 +3,7 @@ export type PersonalWidgetId = 'todo' | 'memo';
 
 export interface PersonalWidgetPreferences {
   activeWidget: PersonalWidgetId;
+  activeDockPanelId?: string;
   mode: PersonalWidgetMode;
 }
 
@@ -32,6 +33,10 @@ export function parsePersonalWidgetPreferences(
   try {
     const parsed = JSON.parse(rawValue) as Partial<PersonalWidgetPreferences>;
     return {
+      ...(typeof parsed.activeDockPanelId === 'string' &&
+      parsed.activeDockPanelId
+        ? { activeDockPanelId: parsed.activeDockPanelId }
+        : {}),
       activeWidget: isPersonalWidgetId(parsed.activeWidget)
         ? parsed.activeWidget
         : 'todo',

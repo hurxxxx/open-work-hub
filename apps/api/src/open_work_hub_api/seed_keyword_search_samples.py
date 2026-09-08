@@ -6,21 +6,17 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.db import get_session_factory
-from open_work_hub_api.domains.auth.access import (
-    ensure_dev_login_seed_data,
-    ensure_workspace_default_pms_space,
-)
-from open_work_hub_api.domains.auth.models import Team, User, Workspace
+from open_work_hub_api.domains.auth.access import ensure_dev_login_seed_data
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.auth.security import new_id
-from open_work_hub_api.domains.docs.models import NativeDoc, NativeDocTarget, NativeDocPage
+from open_work_hub_api.domains.docs.models import NativeDoc, NativeDocPage, NativeDocTarget
 from open_work_hub_api.domains.meeting.models import Meeting, MeetingAttendee, MeetingRecording
 from open_work_hub_api.domains.planner.models import PlannerEvent
 from open_work_hub_api.domains.pms.models import Task, TaskComment, TaskList
+from open_work_hub_api.domains.pms.space_models import Team
 from open_work_hub_api.domains.retrieval.partitioning import assign_default_partition
-from open_work_hub_api.domains.search.service import refresh_workspace_keyword_index
+from open_work_hub_api.domains.search.service import refresh_keyword_index
 
-
-WORKSPACE_KEY = "general"
 ADMIN_EMAIL = "admin@open-work-hub.local"
 SAMPLE_TASK_LIST_KEY = "SEARCH"
 SAMPLE_PREFIX = "[검색검증]"
@@ -43,31 +39,41 @@ TOPICS = [
 def main() -> None:
     with get_session_factory()() as db:
         ensure_dev_login_seed_data(db)
-        workspace = _one(db, select(Workspace).where(Workspace.key == WORKSPACE_KEY))
         admin = _one(db, select(User).where(User.email == ADMIN_EMAIL))
-        task_list = _get_or_create_sample_task_list(db, workspace, admin)
+        task_list = _get_or_create_sample_task_list(db, admin)
 
-        _clear_previous_samples(db, workspace)
+        _clear_previous_samples(
+            db,
+        )
         created = {
-            "docs": _seed_docs(db, workspace, admin, task_list),
-            "meetings": _seed_meetings(db, workspace, admin, admin),
-            "tasks": _seed_tasks(db, workspace, task_list, admin, admin),
-            "events": _seed_events(db, workspace, admin),
+            "docs": _seed_docs(db, admin, task_list),
+            "meetings": _seed_meetings(db, admin, admin),
+            "tasks": _seed_tasks(db, task_list, admin, admin),
+            "events": _seed_events(db, admin),
         }
         db.flush()
-        refresh_workspace_keyword_index(db, workspace=workspace)
+        refresh_keyword_index(
+            db,
+        )
         db.commit()
 
     print(
         "Seeded keyword search samples: "
         + ", ".join(f"{kind}={count}" for kind, count in created.items())
     )
-    print(f"Workspace: {WORKSPACE_KEY}")
     print("Suggested queries: 예산 리스크, 고객 이탈, 납기 지연, 배터리 발열, 런칭 체크리스트")
 
 
-def _get_or_create_sample_task_list(db: Session, workspace: Workspace, admin: User) -> TaskList:
-    team = ensure_workspace_default_pms_space(db, workspace)
+def _get_or_create_sample_task_list(db: Session, admin: User) -> TaskList:
+    from open_work_hub_api.domains.pms.space_models import Team, TeamMember
+
+    team = db.scalar(select(Team).where(Team.key == "search-samples"))
+    if team is None:
+        team = Team(id=new_id(), key="search-samples", name="Search Samples", active=True)
+        db.add(team)
+        db.flush()
+        db.add(TeamMember(id=new_id(), team_id=team.id, user_id=admin.id, role="owner"))
+        db.flush()
     task_list = db.scalar(
         select(TaskList).where(
             TaskList.team_id == team.id,
@@ -90,10 +96,11 @@ def _get_or_create_sample_task_list(db: Session, workspace: Workspace, admin: Us
     return task_list
 
 
-def _clear_previous_samples(db: Session, workspace: Workspace) -> None:
+def _clear_previous_samples(
+    db: Session,
+) -> None:
     for doc in db.scalars(
         select(NativeDoc).where(
-            NativeDoc.workspace_id == workspace.id,
             NativeDoc.source_ref.like(f"{SOURCE_REF_PREFIX}:%"),
         )
     ).all():
@@ -101,7 +108,6 @@ def _clear_previous_samples(db: Session, workspace: Workspace) -> None:
 
     for meeting in db.scalars(
         select(Meeting).where(
-            Meeting.workspace_id == workspace.id,
             Meeting.title.like(f"{SAMPLE_PREFIX}%"),
         )
     ).all():
@@ -110,9 +116,7 @@ def _clear_previous_samples(db: Session, workspace: Workspace) -> None:
     list_ids = [
         item.id
         for item in db.scalars(
-            select(TaskList)
-            .join(Team, TaskList.team_id == Team.id)
-            .where(Team.workspace_id == workspace.id)
+            select(TaskList).join(Team, TaskList.team_id == Team.id).where()
         ).all()
     ]
     if list_ids:
@@ -126,7 +130,6 @@ def _clear_previous_samples(db: Session, workspace: Workspace) -> None:
 
     for event in db.scalars(
         select(PlannerEvent).where(
-            PlannerEvent.workspace_id == workspace.id,
             PlannerEvent.title.like(f"{SAMPLE_PREFIX}%"),
         )
     ).all():
@@ -134,13 +137,12 @@ def _clear_previous_samples(db: Session, workspace: Workspace) -> None:
     db.flush()
 
 
-def _seed_docs(db: Session, workspace: Workspace, owner: User, task_list: TaskList) -> int:
+def _seed_docs(db: Session, owner: User, task_list: TaskList) -> int:
     for index in range(36):
         topic, sentence = TOPICS[index % len(TOPICS)]
         title = f"{SAMPLE_PREFIX} {topic} 운영 문서 {index + 1:02d}"
         doc = NativeDoc(
             id=new_id(),
-            workspace_id=workspace.id,
             owner_id=owner.id,
             title=title,
             source_app="docs",
@@ -152,8 +154,7 @@ def _seed_docs(db: Session, workspace: Workspace, owner: User, task_list: TaskLi
             db,
             target=doc,
             source_namespace="docs",
-            candidate_scope_kind="workspace",
-            workspace_id=workspace.id,
+            candidate_scope_kind="company",
         )
         db.add(doc)
         db.add(
@@ -191,14 +192,13 @@ def _seed_docs(db: Session, workspace: Workspace, owner: User, task_list: TaskLi
     return 36
 
 
-def _seed_meetings(db: Session, workspace: Workspace, organizer: User, attendee: User) -> int:
+def _seed_meetings(db: Session, organizer: User, attendee: User) -> int:
     now = datetime.now(UTC).replace(tzinfo=None)
     for index in range(24):
         topic, sentence = TOPICS[index % len(TOPICS)]
         start_at = now + timedelta(days=index - 4, hours=9 + (index % 5))
         meeting = Meeting(
             id=new_id(),
-            workspace_id=workspace.id,
             organizer_id=organizer.id if index % 2 == 0 else attendee.id,
             title=f"{SAMPLE_PREFIX} {topic} 주간 싱크 {index + 1:02d}",
             agenda=f"{topic} 진행 상황, 리스크, 담당자 후속 조치를 점검합니다.",
@@ -210,8 +210,7 @@ def _seed_meetings(db: Session, workspace: Workspace, organizer: User, attendee:
             db,
             target=meeting,
             source_namespace="meeting",
-            candidate_scope_kind="workspace",
-            workspace_id=workspace.id,
+            candidate_scope_kind="company",
         )
         db.add(meeting)
         db.flush()
@@ -249,7 +248,6 @@ def _seed_meetings(db: Session, workspace: Workspace, organizer: User, attendee:
 
 def _seed_tasks(
     db: Session,
-    workspace: Workspace,
     task_list: TaskList,
     reporter: User,
     assignee: User,
@@ -285,8 +283,7 @@ def _seed_tasks(
             db,
             target=task,
             source_namespace="pms",
-            candidate_scope_kind="workspace",
-            workspace_id=workspace.id,
+            candidate_scope_kind="company",
         )
         db.add(task)
         db.flush()
@@ -302,14 +299,13 @@ def _seed_tasks(
     return 48
 
 
-def _seed_events(db: Session, workspace: Workspace, owner: User) -> int:
+def _seed_events(db: Session, owner: User) -> int:
     now = datetime.now(UTC).replace(tzinfo=None)
     for index in range(30):
         topic, sentence = TOPICS[index % len(TOPICS)]
         start_at = now + timedelta(days=index - 3, hours=10 + (index % 4))
         event = PlannerEvent(
             id=new_id(),
-            workspace_id=workspace.id,
             owner_id=owner.id,
             title=f"{SAMPLE_PREFIX} {topic} 일정 {index + 1:02d}",
             description=f"{sentence} 캘린더 검색에서 start_date와 visibility facet을 확인합니다.",

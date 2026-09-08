@@ -12,6 +12,8 @@ from open_work_hub_api.domains.auth.models import User, utcnow_naive
 from open_work_hub_api.domains.dm import (
     conversation_lifecycle,
     conversation_queries,
+)
+from open_work_hub_api.domains.dm import (
     participants as participant_rules,
 )
 from open_work_hub_api.domains.dm.models import DmConversation
@@ -247,7 +249,9 @@ class DmConversationMembership:
         self._db.commit()
 
     def _direct_conversation(self, direct_key: str) -> DmConversation | None:
-        return self._db.scalar(select(DmConversation).where(DmConversation.direct_key == direct_key))
+        return self._db.scalar(
+            select(DmConversation).where(DmConversation.direct_key == direct_key)
+        )
 
     def _restore_direct_conversation(
         self,

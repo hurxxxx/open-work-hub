@@ -53,8 +53,9 @@ describe('dm message content', () => {
       ].join(' '),
     );
 
-    expect(content.segments.filter((segment) => segment.kind === 'link'))
-      .toHaveLength(5);
+    expect(
+      content.segments.filter((segment) => segment.kind === 'link'),
+    ).toHaveLength(5);
     expect(content.previews.map((preview) => preview.host)).toEqual([
       'one.example',
       'two.example',
@@ -64,9 +65,7 @@ describe('dm message content', () => {
 
   it('keeps messages without links as plain text', () => {
     expect(buildDmMessageContent('plain ftp://example.test message')).toEqual({
-      segments: [
-        { kind: 'text', text: 'plain ftp://example.test message' },
-      ],
+      segments: [{ kind: 'text', text: 'plain ftp://example.test message' }],
       previews: [],
     });
   });

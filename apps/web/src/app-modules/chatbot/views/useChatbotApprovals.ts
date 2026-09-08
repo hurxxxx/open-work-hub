@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import type { PendingApproval } from '../api/agent-events';
 import {
   AiApiError,
   abandonAiApproval,
   resolveAiApproval,
 } from '../api/chatbot-api';
-import type { PendingApproval } from '../api/agent-events';
 import type { UseChatStreamApi } from '../api/useChatStream';
 import {
   applyPendingApprovalDecision,
@@ -34,7 +34,6 @@ export function useChatbotApprovals({
   setApprovalError,
   token,
   upsertPendingApproval,
-  workspaceSlug,
 }: {
   allowedAppIds: string[] | null;
   currentConversationId: string | null;
@@ -52,7 +51,6 @@ export function useChatbotApprovals({
   ) => void;
   token: string | null;
   upsertPendingApproval: UseChatStreamApi['upsertPendingApproval'];
-  workspaceSlug?: string | null;
 }) {
   const { t } = useTranslation(['apps', 'auth']);
   const autoResumeAttemptedApprovalsRef = useRef<Set<string>>(new Set());
@@ -168,7 +166,7 @@ export function useChatbotApprovals({
             decision,
             reason,
           }),
-          { workspaceSlug },
+          {},
         );
         const resolvedApproval = applyPendingApprovalDecision({
           approval,
@@ -195,7 +193,6 @@ export function useChatbotApprovals({
       t,
       token,
       upsertPendingApproval,
-      workspaceSlug,
     ],
   );
 
@@ -208,12 +205,7 @@ export function useChatbotApprovals({
       setApprovalAction({ approvalId: approval.approval_id, kind: 'abandon' });
       setApprovalError(null);
       try {
-        await abandonAiApproval(
-          token,
-          approval.approval_id,
-          {},
-          { workspaceSlug },
-        );
+        await abandonAiApproval(token, approval.approval_id, {}, {});
         upsertPendingApproval(cancelPendingApproval(approval));
       } catch (error) {
         handleApprovalActionError(error, t('apps:ai.view.cancelRequestFailed'));
@@ -229,7 +221,6 @@ export function useChatbotApprovals({
       t,
       token,
       upsertPendingApproval,
-      workspaceSlug,
     ],
   );
 

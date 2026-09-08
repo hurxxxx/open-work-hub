@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Mapping
 from datetime import UTC, datetime
-import hashlib
 from typing import Any
 
 from sqlalchemy import select
@@ -79,7 +79,6 @@ def _dedupe_key(
     actor_user_id: str,
     app_id: str,
     event_type: str,
-    workspace_id: str | None,
     content_kind: str | None,
     content_id: str | None,
     route_path: str | None,
@@ -89,7 +88,6 @@ def _dedupe_key(
     raw = "|".join(
         [
             actor_user_id,
-            workspace_id or "",
             app_id,
             event_type,
             content_kind or "",
@@ -108,7 +106,6 @@ def record_usage_event(
     actor_user_id: str,
     app_id: str,
     event_type: str,
-    workspace_id: str | None = None,
     content_kind: str | None = None,
     content_id: str | None = None,
     content_title: str | None = None,
@@ -130,7 +127,6 @@ def record_usage_event(
     normalized_source = _limit(source, 120)
     dedupe_key = _dedupe_key(
         actor_user_id=actor_user_id,
-        workspace_id=_limit(workspace_id, 36),
         app_id=normalized_app_id,
         event_type=event_type,
         content_kind=_limit(content_kind, 64),
@@ -146,9 +142,7 @@ def record_usage_event(
             if content_title and not pending.content_title:
                 pending.content_title = _limit(content_title, 300)
             return pending
-    existing = db.scalar(
-        select(UsageEvent).where(UsageEvent.dedupe_key == dedupe_key).limit(1)
-    )
+    existing = db.scalar(select(UsageEvent).where(UsageEvent.dedupe_key == dedupe_key).limit(1))
     if existing is not None:
         existing.count += 1
         existing.last_occurred_at = event_time
@@ -159,7 +153,6 @@ def record_usage_event(
     event = UsageEvent(
         id=new_id(),
         actor_user_id=actor_user_id,
-        workspace_id=_limit(workspace_id, 36),
         app_id=normalized_app_id,
         event_type=event_type,
         content_kind=_limit(content_kind, 64),

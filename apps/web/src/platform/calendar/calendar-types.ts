@@ -18,12 +18,6 @@ export type CalendarSourceType =
   | 'pms_block'
   | 'planner_event';
 
-export interface CalendarWorkspaceRef {
-  id: string;
-  slug: string;
-  name: string;
-}
-
 export interface CalendarEventMetadata {
   meetingId?: string | null;
   attendeeCount?: number | null;
@@ -51,7 +45,6 @@ export interface CalendarEvent {
   sourceType: CalendarSourceType;
   sourceId: string;
   color: string;
-  workspace: CalendarWorkspaceRef | null;
   metadata: CalendarEventMetadata;
 }
 

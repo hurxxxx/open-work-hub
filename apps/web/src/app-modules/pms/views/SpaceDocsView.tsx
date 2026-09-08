@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
 import { FileText } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 
 import {
   DocsEmbeddedViewer,
@@ -9,63 +9,42 @@ import {
   type DocsHubItem,
 } from '@/src/app-modules/docs/public-api';
 import { useAuth } from '@/src/platform/auth/auth-provider';
+import { buildPmsSpaceDocsToolPath } from './pms-view-route';
 import {
   PmsCenteredLoadingState,
   PmsCenteredStateBlock,
 } from './PmsCenteredStateBlock';
-import { buildPmsSpaceDocsToolPath } from './pms-view-route';
 import { PmsSpaceToolTabs } from './PmsSpaceToolTabs';
 
 export const SpaceDocsView = ({
   spaceId,
   spaceName,
   docId,
-  workspaceSlug: workspaceSlugProp,
 }: {
   spaceId: string;
   spaceName?: string | null;
   docId?: string | null;
-  workspaceSlug?: string | null;
 }) => {
-  const { workspaceSlug: routeWorkspaceSlug } = useParams();
-  const workspaceSlug = workspaceSlugProp ?? routeWorkspaceSlug ?? null;
-
   if (docId) {
     return (
       <div className="flex h-full min-w-0 flex-col bg-app-bg">
         <div className="border-b border-app-border bg-app-bg px-4 pt-3 lg:px-5">
-          <PmsSpaceToolTabs
-            activeTab="docs"
-            spaceId={spaceId}
-            workspaceSlug={workspaceSlug}
-          />
+          <PmsSpaceToolTabs activeTab="docs" spaceId={spaceId} />
         </div>
-        <DocsEmbeddedViewer
-          itemId={docId}
-          workspaceSlug={workspaceSlug}
-          className="min-h-0 flex-1"
-        />
+        <DocsEmbeddedViewer itemId={docId} className="min-h-0 flex-1" />
       </div>
     );
   }
 
-  return (
-    <SpaceDocsIndex
-      spaceId={spaceId}
-      spaceName={spaceName}
-      workspaceSlug={workspaceSlug}
-    />
-  );
+  return <SpaceDocsIndex spaceId={spaceId} spaceName={spaceName} />;
 };
 
 function SpaceDocsIndex({
   spaceId,
   spaceName,
-  workspaceSlug,
 }: {
   spaceId: string;
   spaceName?: string | null;
-  workspaceSlug: string | null;
 }) {
   const { t } = useTranslation('apps');
   const navigate = useNavigate();
@@ -85,17 +64,13 @@ function SpaceDocsIndex({
 
     setLoading(true);
     setError(null);
-    listDocsHub(
-      token,
-      {
-        view: 'all',
-        space_id: spaceId,
-        page_size: 200,
-        sort_by: 'target_sort_order',
-        sort_dir: 'asc',
-      },
-      workspaceSlug,
-    )
+    listDocsHub(token, {
+      view: 'all',
+      space_id: spaceId,
+      page_size: 200,
+      sort_by: 'target_sort_order',
+      sort_dir: 'asc',
+    })
       .then((response) => {
         if (cancelled) return;
         setDocs(response.items);
@@ -114,7 +89,7 @@ function SpaceDocsIndex({
     return () => {
       cancelled = true;
     };
-  }, [spaceId, t, token, workspaceSlug]);
+  }, [spaceId, t, token]);
 
   const title = spaceName
     ? `${spaceName} · ${t('pms.spaceOverview.docs')}`
@@ -129,12 +104,7 @@ function SpaceDocsIndex({
             {t('docs.documentCount', { count: docs.length })}
           </p>
         </div>
-        <PmsSpaceToolTabs
-          activeTab="docs"
-          className="mt-3"
-          spaceId={spaceId}
-          workspaceSlug={workspaceSlug}
-        />
+        <PmsSpaceToolTabs activeTab="docs" className="mt-3" spaceId={spaceId} />
       </header>
 
       {loading ? (
@@ -159,7 +129,6 @@ function SpaceDocsIndex({
                     buildPmsSpaceDocsToolPath({
                       docId: doc.id,
                       spaceId,
-                      workspaceSlug,
                     }),
                   )
                 }

@@ -15,9 +15,7 @@ from open_work_hub_api.domains.ai.runtime.external_egress import (
     evaluate_external_egress,
     normalize_external_provider,
 )
-from open_work_hub_api.domains.ai.runtime.external_planner import (
-    ExternalPlannerExecutionResult,
-)
+from open_work_hub_api.domains.ai.runtime.external_planner import ExternalPlannerExecutionResult
 from open_work_hub_api.domains.ai.runtime.external_search import ExternalSearchExecutionResult
 from open_work_hub_api.domains.ai.runtime.routing import RuntimeRoutingDecision
 

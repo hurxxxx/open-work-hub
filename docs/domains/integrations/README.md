@@ -2,7 +2,7 @@
 
 이 도메인은 회사 내부 또는 승인된 외부 시스템이 Open Work Hub의 제한된 company-level
 projection을 읽는 경계를 소유한다. 현재 제공하는 기능은 조직·임직원 디렉터리의 읽기 전용
-연계이며 사용자 세션, 관리자 API, workspace API를 대신하는 범용 서비스 계정이 아니다.
+연계이며 사용자 세션, 관리자 API, 앱 API를 대신하는 범용 서비스 계정이 아니다.
 
 핵심 결정과 보안 근거는
 [ADR 0010](../../../adr/0010-platform-api-key-directory-integration.md)에 기록한다.

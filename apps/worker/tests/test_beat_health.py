@@ -42,6 +42,7 @@ def test_failed_publish_does_not_refresh_heartbeat(heartbeat, monkeypatch) -> No
 
     with Celery("beat-health-failure-test", broker="memory://") as app:
         with app.producer_pool.acquire(block=True) as producer:
+
             def fail(*_args, **_kwargs):
                 raise ConnectionError("broker unavailable")
 

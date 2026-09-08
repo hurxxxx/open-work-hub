@@ -30,7 +30,7 @@ function attachment(id: string): DmMessageAttachment {
     id,
     filename: `${id}.png`,
     is_image: true,
-    preview_url: `/api/v1/dm/attachments/${id}/preview`,
+
     size_bytes: 1024,
   } as DmMessageAttachment;
 }
@@ -59,7 +59,11 @@ describe('dm composer attachment model', () => {
       'local-1',
       attachment('attachment-1'),
     );
-    const failed = markPendingAttachmentFailed(ready, 'local-1', 'Upload failed');
+    const failed = markPendingAttachmentFailed(
+      ready,
+      'local-1',
+      'Upload failed',
+    );
 
     expect(initial).toMatchObject({
       localId: 'local-1',
@@ -126,7 +130,10 @@ describe('dm composer attachment model', () => {
     ).toEqual(['local-2']);
     expect(
       dmComposerAttachmentReducer(state, { type: 'clearPending' }),
-    ).toMatchObject({ pendingAttachments: [], attachmentActionId: 'attachment-1' });
+    ).toMatchObject({
+      pendingAttachments: [],
+      attachmentActionId: 'attachment-1',
+    });
     expect(dmComposerAttachmentReducer(state, { type: 'reset' })).toEqual(
       DM_COMPOSER_ATTACHMENT_INITIAL_STATE,
     );
@@ -155,8 +162,12 @@ describe('dm composer attachment model', () => {
 
     expect(isImageFile(image)).toBe(true);
     expect(isImageFile(pdf)).toBe(false);
-    expect(dataTransferHasFiles({ types: ['Files'] } as DataTransfer)).toBe(true);
-    expect(dataTransferHasFiles({ types: ['text/plain'] } as DataTransfer)).toBe(false);
+    expect(dataTransferHasFiles({ types: ['Files'] } as DataTransfer)).toBe(
+      true,
+    );
+    expect(
+      dataTransferHasFiles({ types: ['text/plain'] } as DataTransfer),
+    ).toBe(false);
     expect(
       filesFromClipboardData({
         files: [] as unknown as FileList,

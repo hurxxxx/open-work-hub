@@ -1,13 +1,9 @@
 import { settingsManifest } from './manifest';
 import { settingsShellNavResolver } from './shell-nav';
 
-export { settingsManifest };
-export {
-  adminRedirectRoutes,
-  adminSectionRoutes,
-  workspaceSettingsRoute,
-} from './routes';
+export { adminRedirectRoutes, adminSectionRoutes } from './routes';
 export { settingsShellNavResolver } from './shell-nav';
+export { settingsManifest };
 
 export const settingsModule = {
   manifest: settingsManifest,

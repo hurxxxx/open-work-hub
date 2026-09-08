@@ -10,7 +10,8 @@ export const CLIENT_BUILD_WEBSOCKET_QUERY_PARAM = '__open_work_hub_build';
 export const CLIENT_BUILD_WEBSOCKET_CLOSE_CODE = 4409;
 
 export const WEB_BUILD_ID =
-  (import.meta.env.VITE_OPEN_WORK_HUB_BUILD_ID as string | undefined)?.trim() ?? '';
+  (import.meta.env.VITE_OPEN_WORK_HUB_BUILD_ID as string | undefined)?.trim() ??
+  '';
 
 interface ClientBuildFetchRuntime extends StaleAssetReloadRuntime {
   fetch: typeof fetch;
@@ -51,7 +52,9 @@ function mergedRequestHeaders(
   init: RequestInit | undefined,
   buildId: string,
 ): Headers {
-  const headers = new Headers(input instanceof Request ? input.headers : undefined);
+  const headers = new Headers(
+    input instanceof Request ? input.headers : undefined,
+  );
   new Headers(init?.headers).forEach((value, key) => headers.set(key, value));
   headers.set(CLIENT_BUILD_HEADER, buildId);
   return headers;

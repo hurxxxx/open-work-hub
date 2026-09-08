@@ -41,6 +41,13 @@ class OrganizationUnit(Base):
         index=True,
     )
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
+    head_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey(
+            "users.id", ondelete="SET NULL", use_alter=True, name="fk_organization_unit_head_user"
+        ),
+        nullable=True,
+        index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=utcnow_naive,
@@ -61,4 +68,5 @@ class OrganizationUnit(Base):
     users: Mapped[list["User"]] = relationship(
         "User",
         back_populates="primary_organization_unit",
+        foreign_keys="User.primary_organization_unit_id",
     )

@@ -6,7 +6,6 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
-
 AttendeeRole = Literal["required", "optional"]
 AttendeeResponse = Literal["pending", "accepted", "declined", "tentative"]
 MeetingStatus = Literal["scheduled", "in_progress", "completed", "cancelled"]
@@ -227,7 +226,6 @@ class ActiveRecordingLockOut(BaseModel):
 
 class MeetingDetail(BaseModel):
     id: str
-    workspace_id: str
     organizer_id: str
     organizer_name: str
     notes_doc_id: str | None

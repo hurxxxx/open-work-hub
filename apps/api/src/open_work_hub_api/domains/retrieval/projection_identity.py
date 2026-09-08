@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from uuid import UUID, uuid5
 
-
 RETRIEVAL_PROJECTION_UUID_NAMESPACE = UUID("f644b350-f797-5bc6-b048-b19d25fe2ce8")
 _IDENTITY_VERSION = "open-work-hub-retrieval-v1"
 

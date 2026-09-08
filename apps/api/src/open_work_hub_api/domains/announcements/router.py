@@ -4,11 +4,8 @@ from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.db import get_db_session
-from open_work_hub_api.domains.auth.dependencies import (
-    require_current_user,
-    require_current_workspace,
-)
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.dependencies import require_current_user
+from open_work_hub_api.domains.auth.models import User
 
 from .schemas import (
     AnnouncementCreateRequest,
@@ -30,12 +27,11 @@ router = APIRouter(prefix="/announcements", tags=["announcements"])
 
 @router.get("", response_model=AnnouncementsResponse)
 def list_announcements_route(
-    scope: AnnouncementScope = Query(default="workspace"),
+    scope: AnnouncementScope = Query(default="company"),
     limit: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db_session),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> AnnouncementsResponse:
-    return list_announcements(db, workspace=workspace, scope=scope, limit=limit)
+    return list_announcements(db, scope=scope, limit=limit)
 
 
 @router.post(
@@ -47,11 +43,9 @@ def create_announcement_route(
     payload: AnnouncementCreateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> AnnouncementOut:
     return create_announcement(
         db,
-        workspace=workspace,
         user=current_user,
         payload=payload,
     )
@@ -61,9 +55,8 @@ def create_announcement_route(
 def get_announcement_route(
     announcement_id: str,
     db: Session = Depends(get_db_session),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> AnnouncementOut:
-    return get_announcement(db, workspace=workspace, announcement_id=announcement_id)
+    return get_announcement(db, announcement_id=announcement_id)
 
 
 @router.patch("/{announcement_id}", response_model=AnnouncementOut)
@@ -72,11 +65,9 @@ def update_announcement_route(
     payload: AnnouncementUpdateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> AnnouncementOut:
     return update_announcement(
         db,
-        workspace=workspace,
         user=current_user,
         announcement_id=announcement_id,
         payload=payload,
@@ -88,11 +79,9 @@ def delete_announcement_route(
     announcement_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> Response:
     delete_announcement(
         db,
-        workspace=workspace,
         user=current_user,
         announcement_id=announcement_id,
     )

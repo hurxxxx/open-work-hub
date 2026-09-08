@@ -32,14 +32,22 @@ export function MessageDetail({
 }) {
   const { t } = useTranslation('apps');
   if (!detail) {
-    return <section className="min-h-0 overflow-auto p-6 text-app-ink/50">{t('mail.selectMessage')}</section>;
+    return (
+      <section className="min-h-0 overflow-auto p-6 text-app-ink/50">
+        {t('mail.selectMessage')}
+      </section>
+    );
   }
   return (
     <section className="min-h-0 overflow-auto p-5">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <h2 className="app-text-title-md">{detail.subject || t('mail.noSubject')}</h2>
-          <p className="mt-1 app-text-body text-app-ink/60">{detail.from_text}</p>
+          <h2 className="app-text-title-md">
+            {detail.subject || t('mail.noSubject')}
+          </h2>
+          <p className="mt-1 app-text-body text-app-ink/60">
+            {detail.from_text}
+          </p>
           <p className="app-text-caption text-app-ink/45">
             {formatMailDate(detail.received_at, locale, timeZone)}
           </p>
@@ -58,7 +66,9 @@ export function MessageDetail({
       </div>
       {summary ? (
         <div className="mt-4 rounded-md border border-app-border bg-app-surface p-3">
-          <p className="app-text-caption mb-1 text-app-ink/50">{t('mail.summary')}</p>
+          <p className="app-text-caption mb-1 text-app-ink/50">
+            {t('mail.summary')}
+          </p>
           <p className="whitespace-pre-wrap app-text-body">{summary}</p>
         </div>
       ) : null}

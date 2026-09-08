@@ -3,7 +3,7 @@ export type FileManagerSelection = {
   folderIds: Set<string>;
 };
 
-export type FileManagerFolderVisibility = 'private' | 'workspace';
+export type FileManagerFolderVisibility = 'private' | 'company';
 
 type VisibleItemIds = {
   files: readonly { id: string }[];
@@ -88,11 +88,14 @@ export function summarizeFileManagerSelection<
   const selectedFiles = visibleItems.files.filter((file) =>
     selection.fileIds.has(file.id),
   );
-  const visibleItemCount = visibleItems.folders.length + visibleItems.files.length;
+  const visibleItemCount =
+    visibleItems.folders.length + visibleItems.files.length;
   return {
     allVisibleSelected:
       visibleItemCount > 0 &&
-      visibleItems.folders.every((folder) => selection.folderIds.has(folder.id)) &&
+      visibleItems.folders.every((folder) =>
+        selection.folderIds.has(folder.id),
+      ) &&
       visibleItems.files.every((file) => selection.fileIds.has(file.id)),
     selectedCount: selection.fileIds.size + selection.folderIds.size,
     selectedFiles,
@@ -214,7 +217,9 @@ export function planFileManagerBulkDownload<TFile extends { id: string }>(
 
   if (selection.fileIds.size === 1 && selection.folderIds.size === 0) {
     const selectedFileId = Array.from(selection.fileIds)[0];
-    const selectedFile = visibleFiles.find((file) => file.id === selectedFileId);
+    const selectedFile = visibleFiles.find(
+      (file) => file.id === selectedFileId,
+    );
     return selectedFile
       ? { kind: 'single-file', file: selectedFile }
       : { kind: 'none' };

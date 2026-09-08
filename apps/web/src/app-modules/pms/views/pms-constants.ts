@@ -1,15 +1,24 @@
 /** PMS status/priority display constants shared across views. */
 
-import type { PmsTaskListStatus } from '../api/pms-api';
 import {
   formatDateOnly,
   formatDateTime,
   parseDateOnlyParts,
 } from '@/src/platform/time/time-utils';
+import type { PmsTaskListStatus } from '../api/pms-api';
 
-const TASK_STATUSES = ['todo', 'in_progress', 'review', 'done', 'complete'] as const;
+const TASK_STATUSES = [
+  'todo',
+  'in_progress',
+  'review',
+  'done',
+  'complete',
+] as const;
 
-const STATUS_TONE: Record<string, 'neutral' | 'accent' | 'success' | 'warning' | 'danger'> = {
+const STATUS_TONE: Record<
+  string,
+  'neutral' | 'accent' | 'success' | 'warning' | 'danger'
+> = {
   todo: 'neutral',
   in_progress: 'accent',
   review: 'accent',
@@ -18,7 +27,10 @@ const STATUS_TONE: Record<string, 'neutral' | 'accent' | 'success' | 'warning' |
   complete: 'success',
 };
 
-const CATEGORY_TONE: Record<string, 'neutral' | 'accent' | 'success' | 'warning' | 'danger'> = {
+const CATEGORY_TONE: Record<
+  string,
+  'neutral' | 'accent' | 'success' | 'warning' | 'danger'
+> = {
   not_started: 'neutral',
   active: 'accent',
   done: 'success',
@@ -47,7 +59,9 @@ export function getStatusTone(
 }
 
 /** Get ordered status slugs from task list statuses, falling back to defaults */
-export function getStatusSlugs(taskListStatuses?: PmsTaskListStatus[]): string[] {
+export function getStatusSlugs(
+  taskListStatuses?: PmsTaskListStatus[],
+): string[] {
   if (taskListStatuses && taskListStatuses.length > 0) {
     return taskListStatuses.map((status) => status.slug);
   }
@@ -55,16 +69,25 @@ export function getStatusSlugs(taskListStatuses?: PmsTaskListStatus[]): string[]
 }
 
 /** Get status display name */
-export function getStatusLabel(slug: string, taskListStatuses?: PmsTaskListStatus[]): string {
+export function getStatusLabel(
+  slug: string,
+  taskListStatuses?: PmsTaskListStatus[],
+): string {
   const status = findTaskListStatus(slug, taskListStatuses);
   return status?.name ?? formatFallbackStatusLabel(slug);
 }
 
 /** Pick the default status for newly created tasks without reintroducing backlog. */
-export function getDefaultTaskStatus(taskListStatuses?: PmsTaskListStatus[]): string {
+export function getDefaultTaskStatus(
+  taskListStatuses?: PmsTaskListStatus[],
+): string {
   const slugs = getStatusSlugs(taskListStatuses);
   if (slugs.includes('todo')) return 'todo';
-  return taskListStatuses?.find((status) => status.category === 'active')?.slug ?? slugs[0] ?? 'todo';
+  return (
+    taskListStatuses?.find((status) => status.category === 'active')?.slug ??
+    slugs[0] ??
+    'todo'
+  );
 }
 
 export const PRIORITY_COLOR: Record<string, string> = {

@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from dev_accounts import create_workspace_user_session
+from dev_accounts import create_company_user_session
 
 
 def _headers(token: str) -> dict[str, str]:
@@ -10,29 +10,26 @@ def _headers(token: str) -> dict[str, str]:
 def _session(
     client: TestClient,
     *,
-    workspace_key: str,
     login_id: str,
     email: str,
 ) -> dict:
-    return create_workspace_user_session(
+    return create_company_user_session(
         client,
-        workspace_key=workspace_key,
         login_id=login_id,
         email=email,
         full_name=login_id.replace("-", " ").title(),
     )
 
 
-def test_pms_view_preference_defaults_and_persists_per_user_and_workspace(
+def test_pms_view_preference_is_per_user_and_shared_across_sessions(
     client: TestClient,
 ) -> None:
     first = _session(
         client,
-        workspace_key="pref-workspace-a",
         login_id="pref-user-a",
         email="pref-user-a@open-work-hub.local",
     )
-    path = "/api/v1/workspaces/pref-workspace-a/pms/view-preferences"
+    path = "/api/v1/pms/view-preferences"
 
     default_response = client.get(path, headers=_headers(first["token"]))
     assert default_response.status_code == 200, default_response.text
@@ -61,7 +58,6 @@ def test_pms_view_preference_defaults_and_persists_per_user_and_workspace(
 
     second = _session(
         client,
-        workspace_key="pref-workspace-a",
         login_id="pref-user-b",
         email="pref-user-b@open-work-hub.local",
     )
@@ -69,18 +65,17 @@ def test_pms_view_preference_defaults_and_persists_per_user_and_workspace(
     assert second_response.status_code == 200, second_response.text
     assert second_response.json() == {"task_list_group_by": "status"}
 
-    same_user_other_workspace = _session(
+    same_user_next_session = _session(
         client,
-        workspace_key="pref-workspace-b",
         login_id="pref-user-a",
         email="pref-user-a@open-work-hub.local",
     )
-    other_workspace_response = client.get(
-        "/api/v1/workspaces/pref-workspace-b/pms/view-preferences",
-        headers=_headers(same_user_other_workspace["token"]),
+    next_session_response = client.get(
+        "/api/v1/pms/view-preferences",
+        headers=_headers(same_user_next_session["token"]),
     )
-    assert other_workspace_response.status_code == 200, other_workspace_response.text
-    assert other_workspace_response.json() == {"task_list_group_by": "status"}
+    assert next_session_response.status_code == 200, next_session_response.text
+    assert next_session_response.json() == {"task_list_group_by": "none"}
 
 
 def test_pms_view_preference_rejects_invalid_or_inaccessible_requests(
@@ -88,11 +83,10 @@ def test_pms_view_preference_rejects_invalid_or_inaccessible_requests(
 ) -> None:
     session = _session(
         client,
-        workspace_key="pref-guard-workspace",
         login_id="pref-guard-user",
         email="pref-guard-user@open-work-hub.local",
     )
-    path = "/api/v1/workspaces/pref-guard-workspace/pms/view-preferences"
+    path = "/api/v1/pms/view-preferences"
 
     invalid_response = client.patch(
         path,
@@ -104,9 +98,15 @@ def test_pms_view_preference_rejects_invalid_or_inaccessible_requests(
     unauthenticated_response = client.get(path)
     assert unauthenticated_response.status_code == 401
 
-    cross_workspace_response = client.get(
-        "/api/v1/workspaces/administrator/pms/view-preferences",
+    from open_work_hub_api.core.db import get_session_factory
+    from open_work_hub_api.domains.auth.app_access_models import AppAccessPolicy
+
+    with get_session_factory()() as db:
+        db.get(AppAccessPolicy, "pms").audience = "selected"
+        db.commit()
+    denied_response = client.get(
+        "/api/v1/pms/view-preferences",
         headers=_headers(session["token"]),
     )
-    assert cross_workspace_response.status_code == 403
-    assert cross_workspace_response.json()["code"] == "workspace.membership_required"
+    assert denied_response.status_code == 403
+    assert denied_response.json()["code"] == "app.access_required"

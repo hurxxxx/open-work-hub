@@ -1,4 +1,3 @@
-from open_work_hub_api.core.workspace_app_registry import workspace_app_registration
+from open_work_hub_api.core.app_registry import app_registration
 
-
-COMMUNITY_WORKSPACE_APP = workspace_app_registration("community")
+COMMUNITY_APP = app_registration("community")

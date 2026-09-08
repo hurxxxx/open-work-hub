@@ -39,10 +39,15 @@ def test_production_rejects_minimal_runtime_settings(
     overrides: dict[str, bool],
     expected_message: str,
 ) -> None:
+    settings_overrides = {
+        "seed_dev_login_account": False,
+        "object_storage_required": True,
+        **overrides,
+    }
     with pytest.raises(ValidationError, match=expected_message):
         Settings(
             _env_file=None,
             postgres_dsn=POSTGRES_DSN,
             environment="production",
-            **overrides,
+            **settings_overrides,
         )

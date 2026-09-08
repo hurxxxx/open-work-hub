@@ -19,13 +19,12 @@ export interface DocsHubControllerClient {
       source_kind?: string;
       space_id?: string;
     },
-    workspaceSlug?: string | null,
   ): Promise<DocsHubResponse>;
 }
 
 export interface DocsHubControllerOptions {
   token?: string | null;
-  workspaceSlug?: string | null;
+
   listEnabled: boolean;
   activeCategory: DocsViewCategory;
   activeSourceApp?: string;
@@ -63,7 +62,6 @@ export const docsHubControllerClient: DocsHubControllerClient = {
 
 export function useDocsHubController({
   token,
-  workspaceSlug,
   listEnabled,
   activeCategory,
   activeSourceApp,
@@ -84,19 +82,15 @@ export function useDocsHubController({
     if (!token) return;
     setLoadingList(true);
     try {
-      const response = await client.listDocsHub(
-        token,
-        {
-          view: activeCategory,
-          q: searchQuery || undefined,
-          sort_by: sortBy,
-          sort_dir: sortDir,
-          source_app: activeSourceApp,
-          source_kind: activeSourceKind,
-          space_id: activeSpaceId,
-        },
-        workspaceSlug,
-      );
+      const response = await client.listDocsHub(token, {
+        view: activeCategory,
+        q: searchQuery || undefined,
+        sort_by: sortBy,
+        sort_dir: sortDir,
+        source_app: activeSourceApp,
+        source_kind: activeSourceKind,
+        space_id: activeSpaceId,
+      });
       setDocs(response.items);
       setTotal(response.total);
     } catch {
@@ -115,7 +109,6 @@ export function useDocsHubController({
     sortBy,
     sortDir,
     token,
-    workspaceSlug,
   ]);
 
   useEffect(() => {

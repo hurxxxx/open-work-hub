@@ -1,3 +1,4 @@
+import { Badge } from '@open-work-hub/ui';
 import {
   CheckSquare,
   ChevronDown,
@@ -7,7 +8,6 @@ import {
   GitBranch,
   MessageSquare,
 } from 'lucide-react';
-import { Badge } from '@open-work-hub/ui';
 
 import type {
   PmsTask,

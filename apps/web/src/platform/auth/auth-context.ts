@@ -1,9 +1,9 @@
-import { createContext, use } from 'react';
 import { i18n } from '@/src/platform/i18n';
+import { createContext, use } from 'react';
 
 import type {
-  AuthSessionResponse,
   AuthSessionItem,
+  AuthSessionResponse,
   AuthUser,
   ChangePasswordPayload,
   DevLoginAccount,
@@ -40,7 +40,6 @@ export interface AuthContextValue {
   listSessions: () => Promise<AuthSessionItem[]>;
   revokeSession: (sessionId: string) => Promise<void>;
   hasPermission: (permission: string) => boolean;
-  hasFeature: (featureCode: string, workspaceSlug?: string | null) => boolean;
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null);

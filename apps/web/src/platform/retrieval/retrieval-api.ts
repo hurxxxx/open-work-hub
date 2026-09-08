@@ -1,6 +1,5 @@
 import { apiFetchJsonWithMappedError } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
-import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
 export type RetrievalQueryPayload = Partial<
   Omit<ApiSchema<'RetrievalQueryRequest'>, 'query'>
@@ -25,14 +24,13 @@ export class RetrievalApiError extends Error {
   }
 }
 
-export async function queryWorkspaceRetrieval(
+export async function queryRetrieval(
   payload: RetrievalQueryPayload,
   token: string,
-  workspaceSlug?: string | null,
   options?: { signal?: AbortSignal },
 ): Promise<RetrievalQueryResponse> {
   return apiFetchJsonWithMappedError<RetrievalQueryResponse>(
-    rewriteWorkspaceApiPath('/api/v1/retrieval/query', workspaceSlug),
+    '/api/v1/retrieval/query',
     token,
     {
       method: 'POST',
@@ -56,13 +54,12 @@ export async function queryWorkspaceRetrieval(
   );
 }
 
-export async function listWorkspaceRetrievalSources(
+export async function listRetrievalSources(
   token: string,
-  workspaceSlug?: string | null,
   options?: { signal?: AbortSignal },
 ): Promise<RetrievalSourceListResponse> {
   return apiFetchJsonWithMappedError<RetrievalSourceListResponse>(
-    rewriteWorkspaceApiPath('/api/v1/retrieval/sources', workspaceSlug),
+    '/api/v1/retrieval/sources',
     token,
     {
       method: 'GET',

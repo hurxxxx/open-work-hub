@@ -26,16 +26,16 @@ No app-local bypass, checker exclusion, or local allowlist for missing platform 
 
 Record only applicable rows in MR evidence.
 
-| Surface          | Must state                                                                             |
-| ---------------- | -------------------------------------------------------------------------------------- |
-| Identity/route   | app/feature ID, owner, route/execution/resource scope, runtime availability             |
-| Data/auth        | scope, authoritative store, transactions, retention, read/write roles                  |
-| API/UI           | request/response/error, workspace prefix, OpenAPI/client, i18n, a11y, time/stale state |
-| File/network     | type/size/decompression, redirect/TLS/active content, cleanup                          |
-| AI               | workload ID, route/budget, audit/approval, external-data policy                        |
-| Worker/runtime   | import/registration, queue/beat, retry/idempotency                                     |
-| Migration        | target head, model metadata, existing-row compatibility, rollback                      |
-| Search/retrieval | owner, ACL, partition, projection/outbox, backfill/cutover/rollback                    |
+| Surface          | Must state                                                                       |
+| ---------------- | -------------------------------------------------------------------------------- |
+| Identity/route   | app/feature ID, owner, route/execution/resource scope, runtime availability      |
+| Data/auth        | scope, authoritative store, transactions, retention, read/write roles            |
+| API/UI           | request/response/error, app routes, OpenAPI/client, i18n, a11y, time/stale state |
+| File/network     | type/size/decompression, redirect/TLS/active content, cleanup                    |
+| AI               | workload ID, route/budget, audit/approval, external-data policy                  |
+| Worker/runtime   | import/registration, queue/beat, retry/idempotency                               |
+| Migration        | target head, model metadata, existing-row compatibility, rollback                |
+| Search/retrieval | owner, ACL, partition, projection/outbox, backfill/cutover/rollback              |
 
 ## Router
 
@@ -88,22 +88,22 @@ Keep the active outcome, constraints, acceptance evidence, and granted authority
 
 Discovery loads descriptions first; read a matching skill and only the references for the selected mode. Names/descriptions describe discriminating outcomes, not exhaustive capabilities. Generic documentation ownership is handled by root/docs rules; localization belongs to API/web/UI scoped rules. Neither needs an always-discoverable skill.
 
-| Skill | Outcome / conditional resources |
-| --- | --- |
-| `agent-browser` | Rendered browser/Electron interaction; installed CLI's native skill reference |
-| `diagnose` | Evidence-backed diagnosis; implement only when repair is requested |
-| `owh-design-review` | Plan challenge or architectural deepening; select that mode's reference |
-| `owh-agent-harness` | Instructions, skills, hooks/evals; CI review maintenance reference only for that surface |
-| `owh-dev-environment` | Local setup/services; preserve existing ignored env files |
-| `owh-docs-reader` | Local native Docs extraction; verified dev storage, read-only SQL, bounded media copies |
-| `owh-env-contracts` | Env contracts/files or dev/prod separation; select the relevant reference |
-| `owh-ai-capabilities` | Existing/new product AI capability and workload governance |
-| `owh-app-delivery` | New/ported apps or missing platform scaffold; not routine existing-app changes |
-| `owh-issues` | PRD, vertical issue slicing, or triage; select the requested mode; drafts do not publish |
-| `owh-mr-review` | Explicit MR mergeability review; not an automatic implementation stage |
-| `owh-release` | Explicit dev-to-main promotion; not deployment |
-| `owh-production` | Explicit guarded production operations from prod |
-| `owh-worktrees` | Requested isolation/branch operations or unsuitable checkout recovery |
+| Skill                 | Outcome / conditional resources                                                          |
+| --------------------- | ---------------------------------------------------------------------------------------- |
+| `agent-browser`       | Rendered browser/Electron interaction; installed CLI's native skill reference            |
+| `diagnose`            | Evidence-backed diagnosis; implement only when repair is requested                       |
+| `owh-design-review`   | Plan challenge or architectural deepening; select that mode's reference                  |
+| `owh-agent-harness`   | Instructions, skills, hooks/evals; CI review maintenance reference only for that surface |
+| `owh-dev-environment` | Local setup/services; preserve existing ignored env files                                |
+| `owh-docs-reader`     | Local native Docs extraction; verified dev storage, read-only SQL, bounded media copies  |
+| `owh-env-contracts`   | Env contracts/files or dev/prod separation; select the relevant reference                |
+| `owh-ai-capabilities` | Existing/new product AI capability and workload governance                               |
+| `owh-app-delivery`    | New/ported apps or missing platform scaffold; not routine existing-app changes           |
+| `owh-issues`          | PRD, vertical issue slicing, or triage; select the requested mode; drafts do not publish |
+| `owh-mr-review`       | Explicit MR mergeability review; not an automatic implementation stage                   |
+| `owh-release`         | Explicit dev-to-main promotion; not deployment                                           |
+| `owh-production`      | Explicit guarded production operations from prod                                         |
+| `owh-worktrees`       | Requested isolation/branch operations or unsuitable checkout recovery                    |
 
 The catalog is 14 skills; start a new Codex/Claude session after renaming to refresh discovery. Previous entrypoint names are intentionally not kept as aliases; their necessary resources live in the consolidated skills and Git retains the old versions. The checker enforces root/scoped line budgets, per-skill size limits, a 4,700-character aggregate description budget, naming, required resources, resolved Markdown links, command references, and Claude bridges. The budget is a project maintenance limit, not a claim that shorter instructions always improve quality. The scanner prunes dependency/generated/runtime trees before descent; it still checks unexpected instruction scopes in owned source trees. Synthetic evaluations and derived hook metadata belong only under ignored scratch/runtime locations.
 
@@ -111,13 +111,13 @@ The catalog is 14 skills; start a new Codex/Claude session after renaming to ref
 
 Runtime contract tested against Codex CLI **0.153.4**. Project config enables the official hook feature; `.codex/hooks.json` contains synchronous command handlers in `scripts/codex-hooks.mjs`. `.codex/rules/project.rules` supplies narrow native command policy. There is no project model/provider override, Claude runtime hook, user-config rewrite, or hook-trust bypass.
 
-| Event / native mechanism | Responsibility |
-| --- | --- |
-| `SessionStart` | Capture initial dirty-file fingerprints once per session; resume never resets attribution |
-| Native `.rules` | Forbid known GitHub mutations, pushes to upstream, and direct production Compose mutation prefixes; read-only commands stay available |
-| `PreToolUse` | Deny file patches to Git metadata or generated contracts; resolve relative paths from session cwd and existing symlink ancestors |
-| `PostToolUse` | Fast whitespace feedback once per diff fingerprint; preserve the original tool result |
-| `Stop` | Select affected checks; reuse successful results only for the same diff/checker inputs; request one corrective continuation on failure, then report remaining failures |
+| Event / native mechanism | Responsibility                                                                                                                                                         |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SessionStart`           | Capture initial dirty-file fingerprints once per session; resume never resets attribution                                                                              |
+| Native `.rules`          | Forbid known GitHub mutations, pushes to upstream, and direct production Compose mutation prefixes; read-only commands stay available                                  |
+| `PreToolUse`             | Deny file patches to Git metadata or generated contracts; resolve relative paths from session cwd and existing symlink ancestors                                       |
+| `PostToolUse`            | Fast whitespace feedback once per diff fingerprint; preserve the original tool result                                                                                  |
+| `Stop`                   | Select affected checks; reuse successful results only for the same diff/checker inputs; request one corrective continuation on failure, then report remaining failures |
 
 Hooks are workflow feedback, not a complete security boundary. Native shell policy handles supported simple compositions; the public `execpolicy check` accepts argv, not a shell program. Do not build a second shell parser or claim coverage for variable expansion, arbitrary wrappers, different argv layouts, `write_stdin`, hosted tools, or all external mutations. Generated-file protection applies to patch tools, not arbitrary shell writes. Sandbox, current authority, guarded operations, and server enforcement remain necessary.
 
@@ -154,16 +154,16 @@ Report success (artifact/behavior assertions), trigger (observed matching skill 
 
 The initial paired pilot used schema v1, Codex 0.153.4, `gpt-6-astra`, `xhigh`, six cases × two repetitions × two guidance snapshots. Baseline commit: `d48f3d754818f4c9f94d872f187814140943bdec`. Both variants used the same evaluator and host settings; user-hook isolation was not established in v1. Schema v2's stricter isolation and env-helper smoke passed separately and are not pooled into this comparison.
 
-| Measure | Baseline | Candidate pilot |
-| --- | ---: | ---: |
-| Artifact/behavior success | 12/12 | 12/12 |
-| Expected skill-read observation | 12/12 | 12/12 |
-| Mode/verification compliance observation | 11/12 | 11/12 |
-| Boundary checks | 12/12 | 12/12 |
-| Input tokens, including cached input | 1,169,676 | 1,310,729 |
-| Cached input tokens (subset above) | 911,104 | 1,071,104 |
-| Output tokens | 19,547 | 18,709 |
-| Sum of session durations | 926.079 s | 930.480 s |
+| Measure                                  |  Baseline | Candidate pilot |
+| ---------------------------------------- | --------: | --------------: |
+| Artifact/behavior success                |     12/12 |           12/12 |
+| Expected skill-read observation          |     12/12 |           12/12 |
+| Mode/verification compliance observation |     11/12 |           11/12 |
+| Boundary checks                          |     12/12 |           12/12 |
+| Input tokens, including cached input     | 1,169,676 |       1,310,729 |
+| Cached input tokens (subset above)       |   911,104 |       1,071,104 |
+| Output tokens                            |    19,547 |          18,709 |
+| Sum of session durations                 | 926.079 s |       930.480 s |
 
 Both compliance misses were the second existing-app AI probe: artifact tests passed, but v1's narrow focused-command observer did not match the agent's execution. This is not evidence that verification was skipped; it remains an unconfirmed compliance observation, not a retrospectively changed pass. V2 accepts additional command forms, but its broader observer is still a proxy.
 

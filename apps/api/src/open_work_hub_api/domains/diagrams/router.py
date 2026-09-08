@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime
 from typing import Literal
-import uuid
 
 from fastapi import APIRouter, Depends, Query, Response, status
 from minio.error import S3Error
@@ -12,17 +12,11 @@ from sqlalchemy.orm import Session, selectinload
 
 from open_work_hub_api.core.db import get_db_session
 from open_work_hub_api.core.i18n import localized_http_exception
-from open_work_hub_api.domains.auth.access import (
-    resolve_workspace_role,
-    workspace_role_allows,
-)
-from open_work_hub_api.domains.auth.dependencies import (
-    require_current_user,
-    require_current_workspace,
-)
-from open_work_hub_api.domains.auth.models import User, Workspace
-from open_work_hub_api.domains.auth.workspace_app_gate import require_workspace_app_enabled
-from open_work_hub_api.domains.diagrams.app_catalog import DIAGRAMS_WORKSPACE_APP
+from open_work_hub_api.domains.auth.app_gate import require_app_access
+from open_work_hub_api.domains.auth.dependencies import require_current_user
+from open_work_hub_api.domains.auth.models import User
+from open_work_hub_api.domains.content_access.ownership import record_ownership_transition
+from open_work_hub_api.domains.diagrams.app_catalog import DIAGRAMS_APP
 from open_work_hub_api.domains.diagrams.models import Diagram
 from open_work_hub_api.domains.diagrams.storage import (
     DIAGRAM_PNG_CONTENT_TYPE,
@@ -37,10 +31,9 @@ from open_work_hub_api.domains.diagrams.storage import (
     remove_diagram_object,
 )
 
-
-require_diagrams_app_enabled = require_workspace_app_enabled(
-    DIAGRAMS_WORKSPACE_APP.app_id,
-    error_code="workspace.app_disabled",
+require_diagrams_app_enabled = require_app_access(
+    DIAGRAMS_APP.app_id,
+    error_code="app.access_required",
 )
 
 router = APIRouter(
@@ -52,9 +45,9 @@ router = APIRouter(
 DiagramHubView = Literal["all", "mine", "archived"]
 DiagramSortBy = Literal["updated_at", "created_at", "title"]
 DiagramSortDir = Literal["asc", "desc"]
-DiagramVisibility = Literal["personal", "workspace"]
+DiagramVisibility = Literal["personal", "company"]
 DIAGRAM_VISIBILITY_PERSONAL = "personal"
-DIAGRAM_VISIBILITY_WORKSPACE = "workspace"
+DIAGRAM_VISIBILITY_COMPANY = "company"
 
 EMPTY_DIAGRAM_XML = (
     '<mxfile host="Open Work Hub">'
@@ -75,6 +68,7 @@ def _utcnow() -> datetime:
 
 class CreateDiagramRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
+    company_admin_read_acknowledged: bool = False
     visibility: DiagramVisibility = DIAGRAM_VISIBILITY_PERSONAL
     xml: str = Field(default=EMPTY_DIAGRAM_XML)
     preview_png_data_url: str | None = None
@@ -83,6 +77,7 @@ class CreateDiagramRequest(BaseModel):
 class UpdateDiagramRequest(BaseModel):
     version: int = Field(..., ge=1)
     title: str | None = Field(default=None, min_length=1, max_length=200)
+    company_admin_read_acknowledged: bool = False
     visibility: DiagramVisibility | None = None
     xml: str | None = None
     preview_png_data_url: str | None = None
@@ -90,7 +85,6 @@ class UpdateDiagramRequest(BaseModel):
 
 class DiagramItem(BaseModel):
     id: str
-    workspace_id: str
     title: str
     visibility: DiagramVisibility
     version: int
@@ -121,19 +115,16 @@ def _serialize_diagram_item(
     diagram: Diagram,
     *,
     current_user: User,
-    workspace_role: str | None,
 ) -> DiagramItem:
     can_manage = _can_manage_diagram(
         diagram,
         current_user=current_user,
-        workspace_role=workspace_role,
     )
     preview_url = (
         f"/api/v1/diagrams/items/{diagram.id}/preview.png" if diagram.preview_storage_key else None
     )
     return DiagramItem(
         id=diagram.id,
-        workspace_id=diagram.workspace_id,
         title=diagram.title,
         visibility=diagram.visibility,
         version=diagram.version,
@@ -144,7 +135,7 @@ def _serialize_diagram_item(
         archived_at=diagram.archived_at,
         preview_available=diagram.preview_storage_key is not None,
         preview_url=preview_url,
-        can_edit=True,
+        can_edit=diagram.owner_id == current_user.id,
         can_manage=can_manage,
     )
 
@@ -153,13 +144,11 @@ def _serialize_diagram_detail(
     diagram: Diagram,
     *,
     current_user: User,
-    workspace_role: str | None,
     xml: str,
 ) -> DiagramDetail:
     item = _serialize_diagram_item(
         diagram,
         current_user=current_user,
-        workspace_role=workspace_role,
     )
     return DiagramDetail(**item.model_dump(), xml=xml)
 
@@ -167,28 +156,17 @@ def _serialize_diagram_detail(
 def _diagram_access_clause(current_user: User):
     return or_(
         Diagram.owner_id == current_user.id,
-        Diagram.visibility == DIAGRAM_VISIBILITY_WORKSPACE,
+        Diagram.visibility == DIAGRAM_VISIBILITY_COMPANY,
     )
 
 
-def _can_manage_diagram(
-    diagram: Diagram,
-    *,
-    current_user: User,
-    workspace_role: str | None,
-) -> bool:
-    if diagram.owner_id == current_user.id:
-        return True
-    return diagram.visibility == DIAGRAM_VISIBILITY_WORKSPACE and workspace_role_allows(
-        workspace_role,
-        "admin",
-    )
+def _can_manage_diagram(diagram: Diagram, *, current_user: User) -> bool:
+    return diagram.owner_id == current_user.id
 
 
 def _load_diagram_or_404(
     db: Session,
     *,
-    workspace_id: str,
     diagram_id: str,
     current_user: User,
 ) -> Diagram:
@@ -197,7 +175,6 @@ def _load_diagram_or_404(
         .options(selectinload(Diagram.owner))
         .where(
             Diagram.id == diagram_id,
-            Diagram.workspace_id == workspace_id,
             _diagram_access_clause(current_user),
         )
     )
@@ -257,10 +234,8 @@ def list_diagram_hub(
     page_size: int = Query(default=50, ge=1, le=200),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> DiagramHubResponse:
     clauses = [
-        Diagram.workspace_id == workspace.id,
         _diagram_access_clause(current_user),
     ]
     if view == "archived":
@@ -287,13 +262,11 @@ def list_diagram_hub(
         .offset((page - 1) * page_size)
         .limit(page_size)
     ).all()
-    workspace_role = resolve_workspace_role(db, current_user, workspace.id)
     return DiagramHubResponse(
         items=[
             _serialize_diagram_item(
                 diagram,
                 current_user=current_user,
-                workspace_role=workspace_role,
             )
             for diagram in diagrams
         ],
@@ -309,10 +282,18 @@ def create_diagram_item(
     payload: CreateDiagramRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> DiagramDetail:
     diagram_id = str(uuid.uuid4())
-    source_key = diagram_source_storage_key(workspace_id=workspace.id, diagram_id=diagram_id)
+    record_ownership_transition(
+        db,
+        actor_user_id=current_user.id,
+        resource_kind="diagrams",
+        resource_id=diagram_id,
+        current_kind="personal",
+        next_kind=payload.visibility,
+        company_admin_read_acknowledged=payload.company_admin_read_acknowledged,
+    )
+    source_key = diagram_source_storage_key(diagram_id=diagram_id)
     xml_data = _validate_xml_size(payload.xml)
     _put_object_or_503(
         storage_key=source_key,
@@ -323,7 +304,7 @@ def create_diagram_item(
     preview_key: str | None = None
     preview_data = _preview_payload_from_data_url(payload.preview_png_data_url)
     if preview_data is not None:
-        preview_key = diagram_preview_storage_key(workspace_id=workspace.id, diagram_id=diagram_id)
+        preview_key = diagram_preview_storage_key(diagram_id=diagram_id)
         _put_object_or_503(
             storage_key=preview_key,
             data=preview_data,
@@ -333,7 +314,6 @@ def create_diagram_item(
     now = _utcnow()
     diagram = Diagram(
         id=diagram_id,
-        workspace_id=workspace.id,
         owner_id=current_user.id,
         title=payload.title,
         visibility=payload.visibility,
@@ -348,15 +328,14 @@ def create_diagram_item(
     db.refresh(diagram)
     diagram = _load_diagram_or_404(
         db,
-        workspace_id=workspace.id,
         diagram_id=diagram.id,
         current_user=current_user,
     )
-    workspace_role = resolve_workspace_role(db, current_user, workspace.id)
+    if diagram.owner_id != current_user.id:
+        raise localized_http_exception(status_code=403, code="diagrams.manage_access_required")
     return _serialize_diagram_detail(
         diagram,
         current_user=current_user,
-        workspace_role=workspace_role,
         xml=payload.xml,
     )
 
@@ -366,20 +345,16 @@ def get_diagram_item(
     item_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> DiagramDetail:
     diagram = _load_diagram_or_404(
         db,
-        workspace_id=workspace.id,
         diagram_id=item_id,
         current_user=current_user,
     )
     xml = _read_object_or_503(diagram.source_storage_key).decode("utf-8")
-    workspace_role = resolve_workspace_role(db, current_user, workspace.id)
     return _serialize_diagram_detail(
         diagram,
         current_user=current_user,
-        workspace_role=workspace_role,
         xml=xml,
     )
 
@@ -390,17 +365,25 @@ def update_diagram_item(
     payload: UpdateDiagramRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> DiagramDetail:
     diagram = _load_diagram_or_404(
         db,
-        workspace_id=workspace.id,
         diagram_id=item_id,
         current_user=current_user,
     )
+    if diagram.owner_id != current_user.id:
+        raise localized_http_exception(status_code=403, code="diagrams.manage_access_required")
+    record_ownership_transition(
+        db,
+        actor_user_id=current_user.id,
+        resource_kind="diagrams",
+        resource_id=diagram.id,
+        current_kind=diagram.visibility,
+        next_kind=payload.visibility or diagram.visibility,
+        company_admin_read_acknowledged=payload.company_admin_read_acknowledged,
+    )
     if payload.version != diagram.version:
         raise localized_http_exception(status_code=409, code="diagrams.version_conflict")
-    workspace_role = resolve_workspace_role(db, current_user, workspace.id)
 
     changed = False
     if "title" in payload.model_fields_set and payload.title is not None:
@@ -411,7 +394,6 @@ def update_diagram_item(
         if not _can_manage_diagram(
             diagram,
             current_user=current_user,
-            workspace_role=workspace_role,
         ):
             raise localized_http_exception(
                 status_code=403,
@@ -439,7 +421,6 @@ def update_diagram_item(
         else:
             preview_data = _preview_payload_from_data_url(payload.preview_png_data_url)
             preview_key = diagram.preview_storage_key or diagram_preview_storage_key(
-                workspace_id=workspace.id,
                 diagram_id=diagram.id,
             )
             _put_object_or_503(
@@ -462,7 +443,6 @@ def update_diagram_item(
     return _serialize_diagram_detail(
         diagram,
         current_user=current_user,
-        workspace_role=workspace_role,
         xml=source_xml,
     )
 
@@ -472,19 +452,17 @@ def archive_diagram_item(
     item_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> Response:
     diagram = _load_diagram_or_404(
         db,
-        workspace_id=workspace.id,
         diagram_id=item_id,
         current_user=current_user,
     )
-    workspace_role = resolve_workspace_role(db, current_user, workspace.id)
+    if diagram.owner_id != current_user.id:
+        raise localized_http_exception(status_code=403, code="diagrams.manage_access_required")
     if not _can_manage_diagram(
         diagram,
         current_user=current_user,
-        workspace_role=workspace_role,
     ):
         raise localized_http_exception(status_code=403, code="diagrams.manage_access_required")
     if diagram.archived_at is None:
@@ -501,19 +479,17 @@ def restore_diagram_item(
     item_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> DiagramDetail:
     diagram = _load_diagram_or_404(
         db,
-        workspace_id=workspace.id,
         diagram_id=item_id,
         current_user=current_user,
     )
-    workspace_role = resolve_workspace_role(db, current_user, workspace.id)
+    if diagram.owner_id != current_user.id:
+        raise localized_http_exception(status_code=403, code="diagrams.manage_access_required")
     if not _can_manage_diagram(
         diagram,
         current_user=current_user,
-        workspace_role=workspace_role,
     ):
         raise localized_http_exception(status_code=403, code="diagrams.manage_access_required")
     if diagram.archived_at is not None:
@@ -527,7 +503,6 @@ def restore_diagram_item(
     return _serialize_diagram_detail(
         diagram,
         current_user=current_user,
-        workspace_role=workspace_role,
         xml=xml,
     )
 
@@ -537,11 +512,9 @@ def get_diagram_preview(
     item_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> Response:
     diagram = _load_diagram_or_404(
         db,
-        workspace_id=workspace.id,
         diagram_id=item_id,
         current_user=current_user,
     )

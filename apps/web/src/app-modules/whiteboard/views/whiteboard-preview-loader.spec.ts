@@ -14,7 +14,9 @@ import {
   type CreateWhiteboardPreviewLoaderOptions,
 } from './whiteboard-preview-loader';
 
-function hubItem(overrides: Partial<WhiteboardHubItem> = {}): WhiteboardHubItem {
+function hubItem(
+  overrides: Partial<WhiteboardHubItem> = {},
+): WhiteboardHubItem {
   return {
     id: 'board-1',
     updated_at: '2026-01-01T00:00:00Z',
@@ -29,7 +31,9 @@ function detail(scene: WhiteboardScene): WhiteboardDetail {
   } as WhiteboardDetail;
 }
 
-function scene(elements: unknown[] = [{ id: 'element-1', type: 'rectangle' }]): WhiteboardScene {
+function scene(
+  elements: unknown[] = [{ id: 'element-1', type: 'rectangle' }],
+): WhiteboardScene {
   return {
     elements,
     appState: {},
@@ -39,7 +43,11 @@ function scene(elements: unknown[] = [{ id: 'element-1', type: 'rectangle' }]): 
 
 describe('whiteboard preview loader', () => {
   it('builds source keys from the item id and update timestamp', () => {
-    expect(getWhiteboardPreviewSourceKey(hubItem({ id: 'board-7', updated_at: 'v2' }))).toBe('board-7:v2');
+    expect(
+      getWhiteboardPreviewSourceKey(
+        hubItem({ id: 'board-7', updated_at: 'v2' }),
+      ),
+    ).toBe('board-7:v2');
   });
 
   it('keeps preview state transitions deterministic', () => {
@@ -63,10 +71,26 @@ describe('whiteboard preview loader', () => {
       sourceKey: 'board-1:v1',
     });
 
-    expect(loading).toEqual({ sourceKey: 'board-1:v1', status: 'loading', previewUrl: null });
-    expect(ready).toEqual({ sourceKey: 'board-1:v1', status: 'ready', previewUrl: 'blob:preview' });
-    expect(empty).toEqual({ sourceKey: 'board-1:v1', status: 'empty', previewUrl: null });
-    expect(failed).toEqual({ sourceKey: 'board-1:v1', status: 'error', previewUrl: null });
+    expect(loading).toEqual({
+      sourceKey: 'board-1:v1',
+      status: 'loading',
+      previewUrl: null,
+    });
+    expect(ready).toEqual({
+      sourceKey: 'board-1:v1',
+      status: 'ready',
+      previewUrl: 'blob:preview',
+    });
+    expect(empty).toEqual({
+      sourceKey: 'board-1:v1',
+      status: 'empty',
+      previewUrl: null,
+    });
+    expect(failed).toEqual({
+      sourceKey: 'board-1:v1',
+      status: 'error',
+      previewUrl: null,
+    });
   });
 
   it('resets stale preview state when the source key changes', () => {
@@ -87,16 +111,12 @@ describe('whiteboard preview loader', () => {
   it('shares in-flight loads and caches resolved preview URLs', async () => {
     let fetchCalls = 0;
     let renderCalls = 0;
-    const fetchWhiteboard: CreateWhiteboardPreviewLoaderOptions['fetchWhiteboard'] = async (
-      _token,
-      itemId,
-      workspaceSlug,
-    ) => {
-      fetchCalls += 1;
-      expect(itemId).toBe('board-1');
-      expect(workspaceSlug).toBe('team');
-      return detail(scene());
-    };
+    const fetchWhiteboard: CreateWhiteboardPreviewLoaderOptions['fetchWhiteboard'] =
+      async (_token, itemId) => {
+        fetchCalls += 1;
+        expect(itemId).toBe('board-1');
+        return detail(scene());
+      };
     const loader = createWhiteboardPreviewLoader({
       fetchWhiteboard,
       renderScenePreview: async () => {
@@ -106,11 +126,14 @@ describe('whiteboard preview loader', () => {
     });
     const item = hubItem();
 
-    const first = loader.load('token', item, 'team');
-    const second = loader.load('token', item, 'team');
+    const first = loader.load('token', item);
+    const second = loader.load('token', item);
 
-    await expect(Promise.all([first, second])).resolves.toEqual(['blob:preview', 'blob:preview']);
-    await expect(loader.load('token', item, 'team')).resolves.toBe('blob:preview');
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      'blob:preview',
+      'blob:preview',
+    ]);
+    await expect(loader.load('token', item)).resolves.toBe('blob:preview');
     expect(fetchCalls).toBe(1);
     expect(renderCalls).toBe(1);
   });
@@ -141,7 +164,9 @@ describe('whiteboard preview loader', () => {
       },
     });
 
-    await expect(loader.load('token', hubItem())).rejects.toThrow('preview failed');
+    await expect(loader.load('token', hubItem())).rejects.toThrow(
+      'preview failed',
+    );
     await expect(loader.load('token', hubItem())).resolves.toBe('blob:retry');
     expect(renderCalls).toBe(2);
   });
@@ -149,7 +174,9 @@ describe('whiteboard preview loader', () => {
   it('does not render empty or deleted-only scenes', async () => {
     await expect(renderWhiteboardScenePreview(scene([]))).resolves.toBeNull();
     await expect(
-      renderWhiteboardScenePreview(scene([{ id: 'deleted', type: 'rectangle', isDeleted: true }])),
+      renderWhiteboardScenePreview(
+        scene([{ id: 'deleted', type: 'rectangle', isDeleted: true }]),
+      ),
     ).resolves.toBeNull();
   });
 });

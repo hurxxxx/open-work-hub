@@ -24,26 +24,23 @@ class Diagram(Base):
     __tablename__ = "diagrams"
     __table_args__ = (
         CheckConstraint(
-            "visibility in ('personal', 'workspace')",
+            "visibility in ('personal', 'company')",
             name="ck_diagrams_visibility",
         ),
         UniqueConstraint("source_storage_key", name="uq_diagrams_source_storage_key"),
         UniqueConstraint("preview_storage_key", name="uq_diagrams_preview_storage_key"),
-        Index("ix_diagrams_workspace_id", "workspace_id"),
         Index("ix_diagrams_owner_id", "owner_id"),
         Index("ix_diagrams_archived_at", "archived_at"),
         Index("ix_diagrams_updated_at", "updated_at"),
         Index("ix_diagrams_visibility", "visibility"),
         Index(
-            "ix_diagrams_workspace_archived_updated",
-            "workspace_id",
+            "ix_diagrams_archived_updated",
             "archived_at",
             "updated_at",
         ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), nullable=False)
     owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     visibility: Mapped[str] = mapped_column(String(20), default="personal", nullable=False)
@@ -58,6 +55,4 @@ class Diagram(Base):
         nullable=False,
     )
     archived_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-
-    workspace = relationship("Workspace")
     owner = relationship("User")

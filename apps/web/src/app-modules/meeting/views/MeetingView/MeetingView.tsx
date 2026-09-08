@@ -1,16 +1,16 @@
-import { useCallback, useEffect, useMemo, useReducer } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
-import { Plus, Loader2, Users, Video, FileText } from 'lucide-react';
-import { Button } from '@open-work-hub/ui';
 import { buildAppHref } from '@open-work-hub/contracts/app-routes';
+import { Button } from '@open-work-hub/ui';
+import { FileText, Loader2, Plus, Users, Video } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useReducer } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { normalizeTimeZone } from '@/src/platform/time/time-utils';
 import { listMeetings } from '../../api/meeting-api';
 
-import { MeetingList } from './MeetingList';
 import { MeetingCreateModal } from './MeetingCreateModal';
+import { MeetingList } from './MeetingList';
 import {
   INITIAL_MEETING_LIST_VIEW_STATE,
   MEETING_CREATE_EVENT,
@@ -28,7 +28,7 @@ export function MeetingView() {
   const { token, user } = useAuth();
   const timeZone = normalizeTimeZone(user?.time_zone);
   const navigate = useNavigate();
-  const { workspaceSlug } = useParams();
+
   const [searchParams, setSearchParams] = useSearchParams();
   const [state, dispatch] = useReducer(
     meetingListViewReducer,
@@ -39,10 +39,10 @@ export function MeetingView() {
   const scope = useMemo(() => resolveMeetingScope(activeTab), [activeTab]);
 
   useEffect(() => {
-    if (!token || !workspaceSlug) return;
+    if (!token) return;
     let cancelled = false;
     dispatch({ type: 'load-started' });
-    listMeetings(token, workspaceSlug, { scope })
+    listMeetings(token, { scope })
       .then((response) => {
         if (cancelled) return;
         dispatch({ type: 'load-succeeded', items: response.items });
@@ -57,7 +57,7 @@ export function MeetingView() {
     return () => {
       cancelled = true;
     };
-  }, [scope, t, token, workspaceSlug]);
+  }, [scope, t, token]);
 
   // Listen for the SubSidebar "+" dropdown event so the New Meeting entry
   // there opens this view's create modal directly, mirroring the planner
@@ -79,16 +79,14 @@ export function MeetingView() {
 
   const handleSelect = useCallback(
     (id: string) => {
-      if (!workspaceSlug) return;
       navigate(
         buildAppHref({
           routeId: 'meeting.detail',
-          workspaceSlug,
           pathParams: { meetingId: id },
         }),
       );
     },
-    [navigate, workspaceSlug],
+    [navigate],
   );
 
   const handleTabChange = useCallback(
@@ -102,22 +100,16 @@ export function MeetingView() {
 
   const handleCreated = useCallback(
     (id: string) => {
-      if (!workspaceSlug) return;
       dispatch({ type: 'create-closed' });
       navigate(
         buildAppHref({
           routeId: 'meeting.detail',
-          workspaceSlug,
           pathParams: { meetingId: id },
         }),
       );
     },
-    [navigate, workspaceSlug],
+    [navigate],
   );
-
-  if (!workspaceSlug) {
-    return null;
-  }
 
   return (
     <div className="flex h-full flex-col">
@@ -189,7 +181,6 @@ export function MeetingView() {
         isOpen={state.createOpen}
         onClose={() => dispatch({ type: 'create-closed' })}
         onCreated={handleCreated}
-        workspaceSlug={workspaceSlug}
       />
     </div>
   );

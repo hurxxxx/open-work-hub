@@ -6,6 +6,7 @@ import unicodedata
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.auth.security import new_id
 from open_work_hub_api.domains.organization.models import OrganizationUnit
 
@@ -116,6 +117,20 @@ def serialize_organization_unit(item: OrganizationUnit) -> dict[str, object]:
         "unit_type": item.unit_type,
         "parent_id": item.parent_id,
         "active": item.active,
+        "head_user_id": item.head_user_id,
         "created_at": item.created_at,
         "updated_at": item.updated_at,
     }
+
+
+def ensure_valid_head(db: Session, user_id: str | None) -> None:
+    if (
+        user_id is not None
+        and db.scalar(
+            select(User.id).where(
+                User.id == user_id, User.status == "active", User.login_blocked.is_(False)
+            )
+        )
+        is None
+    ):
+        raise OrganizationDirectoryError("organization.head_inactive")

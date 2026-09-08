@@ -1,10 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import {
-  FAKE_WORKSPACE_USER,
+  FAKE_COMPANY_USER,
   stubConversationsApi,
   stubShellBackend,
-  stubWorkspaceAppDataBackend,
+  stubAppDataBackend,
 } from './helpers';
 
 const LOCALE_STORAGE_KEY = 'open-work-hub:locale';
@@ -13,7 +13,7 @@ async function stubFullShell(
   page: Page,
   onLocalePatch: (locale: string) => void,
 ) {
-  await stubWorkspaceAppDataBackend(page);
+  await stubAppDataBackend(page);
   await stubShellBackend(page, {
     onUpdatePreferences: (payload) => {
       if (typeof payload.locale === 'string') {
@@ -24,11 +24,11 @@ async function stubFullShell(
   await stubConversationsApi(page);
 }
 
-async function stubEnglishWorkspaceShell(page: Page) {
-  await stubWorkspaceAppDataBackend(page);
+async function stubEnglishAppShell(page: Page) {
+  await stubAppDataBackend(page);
   await stubShellBackend(page, {
     user: {
-      ...FAKE_WORKSPACE_USER,
+      ...FAKE_COMPANY_USER,
       locale: 'en-US',
     },
   });
@@ -42,7 +42,7 @@ test.describe('i18n locale smoke', () => {
     const patchedLocales: string[] = [];
     await stubFullShell(page, (locale) => patchedLocales.push(locale));
 
-    await page.goto('/apps/home/workspaces/hq');
+    await page.goto('/apps/home');
     await expect(page.getByRole('button', { name: '내 설정' })).toBeVisible();
     await expect
       .poll(() => page.evaluate(() => document.documentElement.lang))
@@ -104,17 +104,17 @@ test.describe('i18n locale smoke', () => {
     expect(patchedLocales).toContain('ko-KR');
   });
 
-  test('renders representative English copy across workspace apps', async ({
+  test('renders representative English copy across company apps', async ({
     page,
   }) => {
-    await stubEnglishWorkspaceShell(page);
+    await stubEnglishAppShell(page);
 
     const routes: Array<{
       path: string;
       assert: (current: Page) => Promise<void>;
     }> = [
       {
-        path: '/apps/home/workspaces/hq',
+        path: '/apps/home',
         assert: async (current) => {
           await expect(
             current.getByRole('link', { name: 'New Meeting' }),
@@ -122,7 +122,7 @@ test.describe('i18n locale smoke', () => {
         },
       },
       {
-        path: '/apps/chatbot/workspaces/hq',
+        path: '/apps/chatbot',
         assert: async (current) => {
           await expect(
             current.getByRole('heading', { name: 'AI Assistant Chatbot' }),
@@ -130,7 +130,7 @@ test.describe('i18n locale smoke', () => {
         },
       },
       {
-        path: '/apps/pms/workspaces/hq',
+        path: '/apps/pms',
         assert: async (current) => {
           await expect(
             current.getByRole('heading', { name: 'No Spaces Yet' }),
@@ -143,7 +143,7 @@ test.describe('i18n locale smoke', () => {
         },
       },
       {
-        path: '/apps/docs/workspaces/hq',
+        path: '/apps/docs',
         assert: async (current) => {
           await expect(
             current.getByRole('heading', { name: 'No Docs found' }),
@@ -162,7 +162,7 @@ test.describe('i18n locale smoke', () => {
         },
       },
       {
-        path: '/apps/meeting/workspaces/hq',
+        path: '/apps/meeting',
         assert: async (current) => {
           await expect(
             current.getByText('No upcoming meetings.'),
@@ -170,15 +170,15 @@ test.describe('i18n locale smoke', () => {
         },
       },
       {
-        path: '/admin/workspaces/hq/settings',
+        path: '/admin/groups',
         assert: async (current) => {
           await expect(
-            current.getByText('Workspace Settings', { exact: true }).first(),
+            current.getByRole('heading', { name: 'Access denied' }),
           ).toBeVisible();
         },
       },
       {
-        path: '/apps/retrieval-search/workspaces/hq',
+        path: '/apps/retrieval-search',
         assert: async (current) => {
           await expect(
             current.getByRole('heading', { name: 'Retrieval Diagnostics' }),

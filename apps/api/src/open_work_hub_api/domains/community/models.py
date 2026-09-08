@@ -14,9 +14,7 @@ def utcnow_naive() -> datetime:
 
 class CommunityChannel(Base):
     __tablename__ = "community_channels"
-    __table_args__ = (
-        Index("ix_community_channels_position", "position"),
-    )
+    __table_args__ = (Index("ix_community_channels_position", "position"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     key: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
@@ -29,9 +27,7 @@ class CommunityChannel(Base):
     admin_only_content: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     template_title: Mapped[str] = mapped_column(String(240), default="", nullable=False)
     template_body: Mapped[str] = mapped_column(Text, default="", nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utcnow_naive, nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow_naive, onupdate=utcnow_naive, nullable=False
     )
@@ -53,17 +49,13 @@ class CommunityPost(Base):
     channel_id: Mapped[str] = mapped_column(
         ForeignKey("community_channels.id"), index=True, nullable=False
     )
-    author_id: Mapped[str] = mapped_column(
-        ForeignKey("users.id"), index=True, nullable=False
-    )
+    author_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
     is_anonymous: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_secret: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     title: Mapped[str] = mapped_column(String(240), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utcnow_naive, nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow_naive, onupdate=utcnow_naive, nullable=False
     )
@@ -103,9 +95,7 @@ class CommunityPostRead(Base):
 
 class CommunityComment(Base):
     __tablename__ = "community_comments"
-    __table_args__ = (
-        Index("ix_community_comments_post_created", "post_id", "created_at"),
-    )
+    __table_args__ = (Index("ix_community_comments_post_created", "post_id", "created_at"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     post_id: Mapped[str] = mapped_column(
@@ -113,9 +103,7 @@ class CommunityComment(Base):
         index=True,
         nullable=False,
     )
-    author_id: Mapped[str] = mapped_column(
-        ForeignKey("users.id"), index=True, nullable=False
-    )
+    author_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
     parent_comment_id: Mapped[str | None] = mapped_column(
         ForeignKey("community_comments.id", ondelete="CASCADE"),
         index=True,
@@ -124,9 +112,7 @@ class CommunityComment(Base):
     is_anonymous: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utcnow_naive, nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow_naive, onupdate=utcnow_naive, nullable=False
     )

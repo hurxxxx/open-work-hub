@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
-from hashlib import blake2b
 import inspect
 import time
-from typing import Any
 import uuid
+from datetime import UTC, date, datetime
+from hashlib import blake2b
+from typing import Any
 
 from qdrant_client import QdrantClient, models
 
@@ -34,6 +34,8 @@ from open_work_hub_api.domains.rag.providers.openai_compatible import (
 )
 from open_work_hub_api.domains.rag.providers.operation import (
     ProviderCircuitBreaker,
+)
+from open_work_hub_api.domains.rag.providers.operation import (
     ceil_positive_timeout_seconds as _qdrant_timeout,
 )
 from open_work_hub_api.domains.retrieval.projection_identity import canonical_vector_point_id
@@ -42,7 +44,6 @@ _DENSE_VECTOR_NAME = "dense"
 _SPARSE_VECTOR_NAME = "sparse"
 _LEGACY_PAYLOAD_INDEX_FIELDS = {
     "scope_kind": models.PayloadSchemaType.KEYWORD,
-    "workspace_id": models.PayloadSchemaType.KEYWORD,
     "resource_type": models.PayloadSchemaType.KEYWORD,
     "resource_id": models.PayloadSchemaType.KEYWORD,
     "source_kind": models.PayloadSchemaType.KEYWORD,
@@ -57,7 +58,6 @@ _RESERVED_PAYLOAD_FIELDS = {
     "retrieval_partition_id",
     "projection_version",
     "scope_kind",
-    "workspace_id",
     "resource_type",
     "resource_id",
     "source_kind",
@@ -240,7 +240,6 @@ class QdrantVectorIndexClient:
         resource_filter = self._resource_filter(
             retrieval_partition_id=request.retrieval_partition_id,
             scope_kind=request.scope_kind,
-            workspace_id=request.workspace_id,
             resource_type=request.resource_type,
             resource_id=request.resource_id,
         )
@@ -273,7 +272,6 @@ class QdrantVectorIndexClient:
         resource_filter = self._resource_filter(
             retrieval_partition_id=request.retrieval_partition_id,
             scope_kind=request.scope_kind,
-            workspace_id=request.workspace_id,
             resource_type=request.resource_type,
             resource_id=request.resource_id,
         )
@@ -379,7 +377,6 @@ class QdrantVectorIndexClient:
             raise normalized from error
         self._reset_query_failures()
         record_vector_query_latency(
-            workspace_id=request.workspace_id,
             provider_name=self.provider_name,
             latency_ms=int((time.perf_counter() - started) * 1000),
             source_kind=request.source_kinds[0] if len(request.source_kinds) == 1 else None,
@@ -478,20 +475,6 @@ class QdrantVectorIndexClient:
                     match=models.MatchValue(value=request.scope_kind.value),
                 )
             ]
-            if request.scope_kind == RagScopeKind.WORKSPACE:
-                must.append(
-                    models.FieldCondition(
-                        key="workspace_id",
-                        match=models.MatchValue(value=request.workspace_id),
-                    )
-                )
-            else:
-                must.append(
-                    models.FieldCondition(
-                        key="visibility_refs",
-                        match=models.MatchValue(value="company_public"),
-                    )
-                )
         if request.source_kinds:
             must.append(
                 models.FieldCondition(
@@ -511,8 +494,7 @@ class QdrantVectorIndexClient:
         projection = RagProjection(
             retrieval_partition_id=_string_or_none(payload.get("retrieval_partition_id")),
             projection_version=_int_or_none(payload.get("projection_version")),
-            scope_kind=RagScopeKind(str(payload.get("scope_kind") or RagScopeKind.WORKSPACE)),
-            workspace_id=_string_or_none(payload.get("workspace_id")),
+            scope_kind=RagScopeKind(str(payload.get("scope_kind") or RagScopeKind.COMPANY)),
             resource_type=str(payload.get("resource_type") or ""),
             resource_id=str(payload.get("resource_id") or ""),
             source_kind=str(payload.get("source_kind") or ""),
@@ -537,10 +519,9 @@ class QdrantVectorIndexClient:
         self,
         *,
         retrieval_partition_id: str | None = None,
-        workspace_id: str | None,
         resource_type: str,
         resource_id: str,
-        scope_kind: RagScopeKind = RagScopeKind.WORKSPACE,
+        scope_kind: RagScopeKind = RagScopeKind.COMPANY,
     ) -> models.Filter:
         must: list[models.FieldCondition] = [
             models.FieldCondition(
@@ -571,13 +552,6 @@ class QdrantVectorIndexClient:
                     key="scope_kind",
                     match=models.MatchValue(value=scope_kind.value),
                 ),
-            )
-        if not self._partitioned_generation and scope_kind == RagScopeKind.WORKSPACE:
-            must.append(
-                models.FieldCondition(
-                    key="workspace_id",
-                    match=models.MatchValue(value=workspace_id),
-                )
             )
         return models.Filter(must=must)
 
@@ -627,7 +601,6 @@ def qdrant_payload_from_record(
         "text": record.text,
         "summary": record.summary,
         "scope_kind": projection.scope_kind.value,
-        "workspace_id": projection.workspace_id,
         "resource_type": projection.resource_type,
         "resource_id": projection.resource_id,
         "source_kind": projection.source_kind,
@@ -819,7 +792,6 @@ def _stable_sparse_index(token: str) -> int:
 def _point_uuid(
     collection: str,
     scope_kind: RagScopeKind,
-    workspace_id: str | None,
     source_kind: str,
     resource_type: str,
     resource_id: str,
@@ -829,7 +801,6 @@ def _point_uuid(
         (
             collection,
             scope_kind.value,
-            workspace_id or "",
             source_kind,
             resource_type,
             resource_id,
@@ -858,7 +829,6 @@ def _point_id(
     return _point_uuid(
         collection,
         projection.scope_kind,
-        projection.workspace_id,
         projection.source_kind,
         projection.resource_type,
         projection.resource_id,
@@ -894,7 +864,6 @@ def _record_query_failure(
     payload = {
         "provider_name": QdrantVectorIndexClient.provider_name,
         "operation": "vector_query",
-        "workspace_id": request.workspace_id,
         "source_kind": request.source_kinds[0] if len(request.source_kinds) == 1 else None,
         "error_type": error.__class__.__name__,
     }

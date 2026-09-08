@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
 from types import SimpleNamespace
 
 from open_work_hub_api.domains.notifications import visibility
@@ -15,7 +14,6 @@ def _notification(
     return SimpleNamespace(
         id=notification_id,
         origin_app_id="pms",
-        origin_workspace_id="workspace-1",
         source_id=source_id,
         source_type=source_type,
         type="task_updated",
@@ -24,19 +22,12 @@ def _notification(
 
 
 def test_pms_notification_visibility_batches_app_and_source_acl(monkeypatch) -> None:
-    context_calls: list[tuple[str, str | None]] = []
+    admission_calls: list[str] = []
     authorized_resources: list[tuple[str, str]] = []
 
-    def _enabled_contexts(
-        _db,
-        *,
-        user,
-        contexts: Iterable[tuple[str, str | None]],
-    ):
-        del user
-        resolved = list(contexts)
-        context_calls.extend(resolved)
-        return frozenset(resolved)
+    def _allowed_apps(_db, *, user_id):
+        admission_calls.append(user_id)
+        return frozenset({"pms"})
 
     class Policy:
         def authorize_many_resources(self, resources):
@@ -46,12 +37,12 @@ def test_pms_notification_visibility_batches_app_and_source_acl(monkeypatch) -> 
 
     monkeypatch.setattr(
         visibility,
-        "resolve_enabled_app_contexts_for_user",
-        _enabled_contexts,
+        "allowed_app_ids",
+        _allowed_apps,
     )
     monkeypatch.setattr(
         visibility.SourceAclPolicy,
-        "for_workspace_id",
+        "for_user",
         lambda *_args, **_kwargs: Policy(),
     )
     rows = [
@@ -72,7 +63,7 @@ def test_pms_notification_visibility_batches_app_and_source_acl(monkeypatch) -> 
     )
 
     assert [row.id for row in result] == ["notification-1", "notification-3"]
-    assert context_calls == [("pms", "workspace-1")] * 4
+    assert admission_calls == ["user-1"]
     assert authorized_resources == [
         ("pms_task", "task-1"),
         ("pms_task", "task-2"),

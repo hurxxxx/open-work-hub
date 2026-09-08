@@ -1,12 +1,9 @@
-import type { WorkspaceBootstrapNavItem } from '@/src/platform/workspaces/workspaces-api';
+import type { BootstrapNavItem } from '@/src/platform/apps/apps-api';
 
-export {
-  getEnabledWorkspaceAppIds,
-  isWorkspaceAppEnabled,
-} from '@/src/platform/workspaces/workspace-app-access';
+export { getEnabledAppIds, isAppEnabled } from '@/src/platform/apps/app-access';
 
-export function isWorkspaceNavItemEnabled(
-  nav: readonly Pick<WorkspaceBootstrapNavItem, 'id'>[] | null | undefined,
+export function isNavItemEnabled(
+  nav: readonly Pick<BootstrapNavItem, 'id'>[] | null | undefined,
   itemId: string,
 ): boolean {
   return (nav ?? []).some((item) => item.id === itemId);

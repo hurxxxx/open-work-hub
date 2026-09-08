@@ -1,24 +1,24 @@
 import { pmsManifest } from './manifest';
-import { pmsWorkspaceRoutes } from './routes';
-import { pmsSidebarConfig } from './sidebar/config';
+import { pmsAppRoutes } from './routes';
 import { pmsShellNavResolver } from './shell-nav';
+import { pmsSidebarConfig } from './sidebar/config';
 
-export { pmsManifest };
 export { getPmsHelpGuideSrc, pmsHelpGuideRegistration } from './help-guide';
-export { pmsToolElement, pmsWorkspaceRoutes } from './routes';
-export { pmsSidebarConfig } from './sidebar/config';
+export { pmsAppRoutes, pmsToolElement } from './routes';
 export { pmsShellNavResolver } from './shell-nav';
+export { pmsSidebarConfig } from './sidebar/config';
 export { PmsSidebarSpaces } from './sidebar/PmsSidebarSpaces';
 export {
   FloatingPmsWidget,
-  type FloatingPmsWidgetOpenRequest,
   useFloatingPmsAssignedCount,
   useFloatingPmsAssignedSummary,
+  type FloatingPmsWidgetOpenRequest,
 } from './views/FloatingPmsWidget';
+export { pmsManifest };
 
 export const pmsModule = {
   manifest: pmsManifest,
   shellNavResolver: pmsShellNavResolver,
   sidebarConfig: pmsSidebarConfig,
-  workspaceRoutes: pmsWorkspaceRoutes,
+  appRoutes: pmsAppRoutes,
 } as const;

@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from open_work_hub_api.domains.ai.runtime.routing import RuntimeRoutingDecision
@@ -92,9 +91,7 @@ def runtime_routing_done_meta(
         "graph_fallback_reason": runtime_routing.graph_fallback_reason,
         "graph_used": runtime_routing.graph_used,
         "graph_validation_status": runtime_routing.graph_validation_status,
-        "graph_validation_fallback_reason": (
-            runtime_routing.graph_validation_fallback_reason
-        ),
+        "graph_validation_fallback_reason": (runtime_routing.graph_validation_fallback_reason),
         "graph_registry_agent_count": runtime_routing.graph_registry_agent_count,
         "graph_write_agent_count": runtime_routing.graph_write_agent_count,
         "graph_candidate_summary": runtime_routing.graph_candidate_summary,
@@ -102,19 +99,11 @@ def runtime_routing_done_meta(
         "external_egress_summary": runtime_routing.external_egress_summary,
         "external_planner_summary": runtime_routing.external_planner_summary,
         "external_search_summary": runtime_routing.external_search_summary,
-        "external_planner_execution_summary": (
-            runtime_routing.external_planner_execution_summary
-        ),
-        "external_search_execution_summary": (
-            runtime_routing.external_search_execution_summary
-        ),
+        "external_planner_execution_summary": (runtime_routing.external_planner_execution_summary),
+        "external_search_execution_summary": (runtime_routing.external_search_execution_summary),
         "graph_execution_status": runtime_routing.graph_execution_status,
-        "graph_execution_fallback_reason": (
-            runtime_routing.graph_execution_fallback_reason
-        ),
-        "graph_execution_fallback_policy": (
-            runtime_routing.graph_execution_fallback_policy
-        ),
+        "graph_execution_fallback_reason": (runtime_routing.graph_execution_fallback_reason),
+        "graph_execution_fallback_policy": (runtime_routing.graph_execution_fallback_policy),
         "graph_execution_adapter": runtime_routing.graph_execution_adapter,
         "graph_node_execution_summary": None,
     }

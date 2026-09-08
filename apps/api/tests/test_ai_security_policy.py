@@ -159,11 +159,8 @@ def test_admin_ai_security_policy_crud_simulation_and_audit_payload(
 ) -> None:
     admin = _bootstrap_admin_session(client)
     headers = _auth_headers(admin["token"])
-    workspaces_response = client.get("/api/v1/admin/workspaces", headers=headers)
-    assert workspaces_response.status_code == 200, workspaces_response.text
-    workspace_id = workspaces_response.json()[0]["id"]
-    term = f"Falcon-{new_id()}"
 
+    term = f"Falcon-{new_id()}"
     summary_response = client.get("/api/v1/admin/ai-security/summary", headers=headers)
     assert summary_response.status_code == 200, summary_response.text
     summary = summary_response.json()
@@ -216,10 +213,9 @@ def test_admin_ai_security_policy_crud_simulation_and_audit_payload(
         "/api/v1/admin/ai-security/rules",
         headers=headers,
         json={
-            "name": "Workspace web search deny",
-            "description": "deny external search in this workspace",
+            "name": "Company web search deny",
+            "description": "deny external search for this company",
             "enabled": True,
-            "workspace_id": workspace_id,
             "task_kind": "web_search",
             "capability": "web_search",
             "provider": "anthropic",
@@ -229,7 +225,7 @@ def test_admin_ai_security_policy_crud_simulation_and_audit_payload(
     )
     assert rule_response.status_code == 201, rule_response.text
     rule = rule_response.json()
-    assert rule["workspace_id"] == workspace_id
+    assert "workspace_id" not in rule
     assert rule["effect"] == "block_external"
     assert rule["task_kinds"] == ["web_search"]
 
@@ -240,7 +236,6 @@ def test_admin_ai_security_policy_crud_simulation_and_audit_payload(
             "name": "Approved internal context export",
             "description": "approved scoped exception",
             "enabled": True,
-            "workspace_id": workspace_id,
             "task_kind": "mail_reply_draft",
             "capability": "llm",
             "allowed_blocker_types": ["internal_context"],
@@ -257,7 +252,6 @@ def test_admin_ai_security_policy_crud_simulation_and_audit_payload(
         "/api/v1/admin/ai-security/simulate",
         headers=headers,
         json={
-            "workspace_id": workspace_id,
             "task_kind": "mail_reply_draft",
             "capability": "llm",
             "content_origin": "internal_context",
@@ -274,7 +268,6 @@ def test_admin_ai_security_policy_crud_simulation_and_audit_payload(
         "/api/v1/admin/ai-security/simulate",
         headers=headers,
         json={
-            "workspace_id": workspace_id,
             "task_kind": "web_search",
             "capability": "web_search",
             "provider": "anthropic",
@@ -291,7 +284,6 @@ def test_admin_ai_security_policy_crud_simulation_and_audit_payload(
         "/api/v1/admin/ai-security/simulate",
         headers=headers,
         json={
-            "workspace_id": "other-workspace",
             "task_kind": "web_search",
             "capability": "web_search",
             "provider": "anthropic",
@@ -912,7 +904,6 @@ def test_external_transfer_exception_allows_soft_blocker(client: TestClient) -> 
         decision = resolve_ai_security_external_transfer_exception(
             db,
             AiSecurityPolicyContext(
-                workspace_id="workspace-1",
                 task_kind="files_grounded_chat",
                 capability="llm",
             ),
@@ -1083,7 +1074,6 @@ def test_external_transfer_exception_allows_approved_pii_internal_url_and_securi
         decision = resolve_ai_security_external_transfer_exception(
             db,
             AiSecurityPolicyContext(
-                workspace_id="workspace-1",
                 task_kind="files_grounded_chat",
                 capability="llm",
             ),
@@ -1122,7 +1112,6 @@ def test_external_transfer_exception_cannot_bypass_absolute_blocker(
         decision = resolve_ai_security_external_transfer_exception(
             db,
             AiSecurityPolicyContext(
-                workspace_id="workspace-1",
                 task_kind="files_grounded_chat",
                 capability="llm",
             ),
@@ -1156,7 +1145,6 @@ def test_gateway_external_transfer_exception_allows_sensitive_identifier(
         execution = resolve_gateway_execution(
             AiGatewayRequest(
                 task_kind="files_grounded_chat",
-                workspace_id="workspace-1",
                 actor_user_id="user-1",
                 source="tests.ai_security",
                 app="files",
@@ -1200,7 +1188,6 @@ def test_gateway_blocks_external_when_global_custom_block_term_matches(
             resolve_gateway_execution(
                 AiGatewayRequest(
                     task_kind="files_grounded_chat",
-                    workspace_id="workspace-1",
                     actor_user_id="user-1",
                     source="tests.ai_security",
                     app="files",
@@ -1231,7 +1218,6 @@ def test_gateway_uses_llm_routing_when_ai_security_enforcement_disabled(
         execution = resolve_gateway_execution(
             AiGatewayRequest(
                 task_kind="files_grounded_chat",
-                workspace_id="workspace-1",
                 actor_user_id="user-1",
                 source="tests.ai_security",
                 app="files",
@@ -1284,7 +1270,6 @@ def test_external_capability_blocks_when_policy_blocks_external(
             execute_external_capability(
                 AiExternalCapabilityRequest(
                     source="tests.ai_security",
-                    workspace_id="workspace-1",
                     actor_user_id="user-1",
                     principal_id="user-1",
                     task_kind="web_search",
@@ -1339,7 +1324,6 @@ def test_external_capability_bypasses_all_ai_security_when_enforcement_disabled(
         result = execute_external_capability(
             AiExternalCapabilityRequest(
                 source="tests.ai_security",
-                workspace_id="workspace-1",
                 actor_user_id="user-1",
                 principal_id="user-1",
                 task_kind="web_search",
@@ -1400,7 +1384,6 @@ def test_external_capability_uses_configured_external_app_mask_action(
         result = execute_external_capability(
             AiExternalCapabilityRequest(
                 source="tests.ai_security",
-                workspace_id="workspace-1",
                 actor_user_id="user-1",
                 principal_id="user-1",
                 task_kind="web_search",
@@ -1463,7 +1446,6 @@ def test_external_capability_mask_action_is_scoped_to_app(
             execute_external_capability(
                 AiExternalCapabilityRequest(
                     source="tests.ai_security",
-                    workspace_id="workspace-1",
                     actor_user_id="user-1",
                     principal_id="user-1",
                     task_kind="web_search",
@@ -1504,7 +1486,6 @@ def test_external_capability_blocks_mixed_external_app_blockers(
             execute_external_capability(
                 AiExternalCapabilityRequest(
                     source="tests.ai_security",
-                    workspace_id="workspace-1",
                     actor_user_id="user-1",
                     principal_id="user-1",
                     task_kind="web_search",
@@ -1554,7 +1535,6 @@ def test_external_capability_hard_blockers_override_external_app_mask(
             execute_external_capability(
                 AiExternalCapabilityRequest(
                     source="tests.ai_security",
-                    workspace_id="workspace-1",
                     actor_user_id="user-1",
                     principal_id="user-1",
                     task_kind="web_search",
@@ -1610,7 +1590,6 @@ def test_external_capability_block_external_overrides_external_app_mask(
             execute_external_capability(
                 AiExternalCapabilityRequest(
                     source="tests.ai_security",
-                    workspace_id="workspace-1",
                     actor_user_id="user-1",
                     principal_id="user-1",
                     task_kind="web_search",
@@ -1664,7 +1643,6 @@ def test_external_capability_exception_allows_internal_context(
         result = execute_external_capability(
             AiExternalCapabilityRequest(
                 source="tests.ai_security",
-                workspace_id="workspace-1",
                 actor_user_id="user-1",
                 principal_id="user-1",
                 task_kind="document_summary",

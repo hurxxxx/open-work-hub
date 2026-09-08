@@ -45,9 +45,8 @@ type ChatbotViewStateFieldAction = {
   };
 }[ChatbotViewStateField];
 
-type ChatbotViewStateSetter<T extends ChatbotViewStateField> = ChatbotViewStateUpdater<
-  ChatbotViewState[T]
->;
+type ChatbotViewStateSetter<T extends ChatbotViewStateField> =
+  ChatbotViewStateUpdater<ChatbotViewState[T]>;
 
 export const INITIAL_CHATBOT_VIEW_STATE: ChatbotViewState = {
   turns: [],

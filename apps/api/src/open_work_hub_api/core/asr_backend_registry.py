@@ -6,7 +6,6 @@ from typing import Any
 
 from open_work_hub_api.core.asr_contracts import ASRBackend
 
-
 ASRBackendBuilder = Callable[[Any], ASRBackend]
 
 

@@ -68,9 +68,7 @@ def test_build_asr_backend_uses_registered_backend_adapter() -> None:
             )
         )
 
-        backend = asr.build_asr_backend(
-            SimpleNamespace(asr_backend="plugin_asr", marker="custom")
-        )
+        backend = asr.build_asr_backend(SimpleNamespace(asr_backend="plugin_asr", marker="custom"))
 
         assert isinstance(backend, PluginASRBackend)
         assert backend.transcribe(None).text == "plugin:custom"

@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import base64
-from dataclasses import dataclass
-from datetime import datetime
 import hashlib
 import hmac
 import re
 import secrets
 import unicodedata
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Annotated
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -23,7 +23,6 @@ from open_work_hub_api.core.settings import get_settings
 from open_work_hub_api.domains.auth.models import utcnow_naive
 from open_work_hub_api.domains.auth.security import new_id
 from open_work_hub_api.domains.integrations.models import PlatformApiKey
-
 
 PLATFORM_API_KEY_TOKEN_PREFIX = "owh_pk_"
 PLATFORM_API_KEY_STATUS_ACTIVE = "active"

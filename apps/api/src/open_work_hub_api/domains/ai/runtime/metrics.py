@@ -1,14 +1,13 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import lru_cache
-import logging
 
 from opentelemetry.metrics import Meter
 
 from open_work_hub_api.core.telemetry import get_meter
-
 
 logger = logging.getLogger(__name__)
 

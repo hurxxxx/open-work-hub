@@ -17,7 +17,11 @@ export function DraftEditor({
 }) {
   const { t } = useTranslation('apps');
   if (!draft) {
-    return <section className="min-h-0 overflow-auto p-6 text-app-ink/50">{t('mail.draft.select')}</section>;
+    return (
+      <section className="min-h-0 overflow-auto p-6 text-app-ink/50">
+        {t('mail.draft.select')}
+      </section>
+    );
   }
   const set = (patch: Partial<MailDraft>) => onChange({ ...draft, ...patch });
   return (
@@ -60,7 +64,9 @@ export function DraftEditor({
       />
       <div className="flex items-center justify-between gap-3">
         <span className="app-text-caption text-app-ink/50">
-          {t(`mail.draft.status.${draft.status}`, { defaultValue: draft.status })}
+          {t(`mail.draft.status.${draft.status}`, {
+            defaultValue: draft.status,
+          })}
         </span>
         <button
           className={actionButtonClassName}

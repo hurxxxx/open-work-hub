@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -9,13 +9,9 @@ from open_work_hub_api.core.principal import CallerPrincipal
 from open_work_hub_api.domains.ai.registry import (
     AiCapabilityDescriptor,
     ApprovalPreview,
-    build_workspace_context,
     get_ai_capability_registry,
 )
 from open_work_hub_api.domains.ai.tool_result_projection import build_rejected_tool_response_payload
-
-if TYPE_CHECKING:
-    from open_work_hub_api.domains.auth.models import Workspace
 
 
 def build_rejected_approval_payload(
@@ -36,7 +32,6 @@ def build_rejected_approval_payload(
 def build_resource_preview(
     *,
     descriptor: AiCapabilityDescriptor | None,
-    workspace: Workspace,
     principal: CallerPrincipal,
     parsed_args: BaseModel | Mapping[str, Any],
 ) -> str | None:
@@ -46,7 +41,7 @@ def build_resource_preview(
     builder = registry.resolve_preview_builder(descriptor.preview_builder_id)
     if builder is None:
         return None
-    preview = builder(principal, build_workspace_context(workspace), parsed_args)
+    preview = builder(principal, parsed_args)
     return render_approval_preview(preview)
 
 

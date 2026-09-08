@@ -2,7 +2,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@open-work-hub/ui';
 import { Download } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useParams } from 'react-router-dom';
 
 import { DocumentArtifact } from '@/src/components/artifacts/DocumentArtifact';
 import { useAuth } from '@/src/platform/auth/auth-provider';
@@ -41,14 +40,14 @@ export function AiReportArtifact({
   fallbackSources?: ReactNode;
 }) {
   const { token } = useAuth();
-  const { workspaceSlug } = useParams<{ workspaceSlug: string }>();
+
   const { t } = useTranslation('apps');
   const [state, setState] = useState<ReportArtifactState>(INITIAL_STATE);
   const hasFallbackSources = fallbackSources !== null;
   const knownReport = artifact.kind === 'report' || hasFallbackSources;
 
   useEffect(() => {
-    if (!token || !workspaceSlug || artifact.status === 'open') {
+    if (!token || artifact.status === 'open') {
       setState({ ...INITIAL_STATE, detailSettled: true });
       return;
     }
@@ -58,7 +57,6 @@ export function AiReportArtifact({
       artifactId: artifact.id,
       signal: controller.signal,
       token,
-      workspaceSlug,
     })
       .then(async (detail) => {
         if (controller.signal.aborted) return;
@@ -81,7 +79,6 @@ export function AiReportArtifact({
             artifactId: artifact.id,
             signal: controller.signal,
             token,
-            workspaceSlug,
           });
           if (controller.signal.aborted) return;
           setState({
@@ -111,14 +108,7 @@ export function AiReportArtifact({
         });
       });
     return () => controller.abort();
-  }, [
-    artifact.id,
-    artifact.status,
-    hasFallbackSources,
-    knownReport,
-    token,
-    workspaceSlug,
-  ]);
+  }, [artifact.id, artifact.status, hasFallbackSources, knownReport, token]);
 
   const isReport = state.detail?.kind === 'report' || knownReport;
   const reportContent = state.detail?.contentMarkdown || artifact.content;

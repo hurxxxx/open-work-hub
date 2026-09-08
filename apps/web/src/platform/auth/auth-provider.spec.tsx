@@ -46,6 +46,8 @@ function user(overrides: Partial<AuthUser> = {}): AuthUser {
     must_change_password: false,
     status: 'active',
     system_roles: [],
+    group_ids: [],
+    managed_organization_unit_ids: [],
     theme_preference: 'system',
     time_zone: 'Asia/Seoul',
     workspaces: [],

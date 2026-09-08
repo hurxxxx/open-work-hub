@@ -162,7 +162,6 @@ def test_codex_adapter_runs_sdk_in_isolated_workspace(
     result = CodexSdkBentoAdapter().run(
         AgentRuntimeRequest(
             run_id="run-test",
-            workspace_id="workspace-test",
             actor_user_id="user-test",
             workload_id="bento.generate_presentation",
             route=route,

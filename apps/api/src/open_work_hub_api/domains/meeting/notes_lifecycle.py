@@ -12,7 +12,6 @@ from open_work_hub_api.domains.docs.models import NativeDoc, NativeDocPage
 from open_work_hub_api.domains.docs.service import create_native_doc_for_user
 from open_work_hub_api.domains.meeting.models import Meeting
 
-
 NotesLifecycleAction = Literal["create_assets", "create_page", "reuse"]
 
 
@@ -71,15 +70,12 @@ def grant_notes_doc_to_attendee(
     )
 
 
-def load_active_native_doc(
-    db: Session, *, workspace_id: str, doc_id: str | None
-) -> NativeDoc | None:
+def load_active_native_doc(db: Session, *, doc_id: str | None) -> NativeDoc | None:
     if not doc_id:
         return None
     return db.scalar(
         select(NativeDoc).where(
             NativeDoc.id == doc_id,
-            NativeDoc.workspace_id == workspace_id,
             NativeDoc.trashed_at.is_(None),
         )
     )
@@ -109,11 +105,11 @@ def create_meeting_notes_assets(
 ) -> tuple[NativeDoc, NativeDocPage]:
     return create_native_doc_for_user(
         db,
-        workspace_id=meeting.workspace_id,
         owner_id=meeting.organizer_id,
         title=meeting_notes_doc_title(meeting),
         first_page_title=meeting_notes_page_title(),
         content_blocks=[],
+        ownership_kind="company",
         source_app="meeting",
         source_kind="meeting_notes",
         source_ref=meeting.id,
@@ -151,9 +147,7 @@ def ensure_meeting_notes_state(
     db.execute(select(Meeting.id).where(Meeting.id == meeting.id).with_for_update())
     db.refresh(meeting, attribute_names=["notes_doc_id", "notes_page_id"])
 
-    doc = load_active_native_doc(
-        db, workspace_id=meeting.workspace_id, doc_id=meeting.notes_doc_id
-    )
+    doc = load_active_native_doc(db, doc_id=meeting.notes_doc_id)
     page: NativeDocPage | None = None
     action = resolve_notes_lifecycle_action(
         has_active_doc=doc is not None,

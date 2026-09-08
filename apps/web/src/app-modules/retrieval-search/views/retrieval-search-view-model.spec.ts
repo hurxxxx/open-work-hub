@@ -40,12 +40,9 @@ describe('retrieval-search-view-model', () => {
       selectedSources: ['keyword'],
       strategy: 'hybrid',
       topK: 8,
-      workspaceSlug: 'delivery-hub',
     });
 
-    expect(params.toString()).toBe(
-      'workspace=delivery-hub&q=roadmap&source=keyword',
-    );
+    expect(params.toString()).toBe('q=roadmap&source=keyword');
   });
 
   it('toggles source selection deterministically', () => {

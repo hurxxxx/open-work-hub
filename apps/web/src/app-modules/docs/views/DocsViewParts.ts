@@ -1,6 +1,3 @@
-export { DocsContentFormatBadge } from './DocsContentFormatBadge';
-export { DocsPageTreeNode } from './DocsPageTreeNode';
-export { LocationPicker } from './LocationPicker';
 export {
   CATEGORY_LABEL_KEYS,
   CATEGORY_MAP,
@@ -10,18 +7,18 @@ export {
   applyUpdatedDocsPage,
   buildDocsPagesById,
   bumpDocsContentEditorVersion,
+  collectDocsParentPageIds,
   countDocsPageChildren,
-  docsPageExists,
   docsAuthorInitials,
+  docsPageExists,
   isDocsTextUploadTooLarge,
   isDocsViewCategory,
-  collectDocsParentPageIds,
   removeDocsPageSubtree,
   resolveDefaultDocsCreateLocation,
   resolveDocsCreateLocationValue,
+  resolveDocsCreatePrimaryTarget,
   resolveDocsPageAuthorName,
   resolveDocsPageSelection,
-  resolveDocsCreatePrimaryTarget,
   resolveDocsRefreshSelection,
   sharingLabel,
   summarizeDocsPageCollection,
@@ -34,3 +31,6 @@ export {
   type DocsViewCategory,
   type LocationOption,
 } from './docs-view-model';
+export { DocsContentFormatBadge } from './DocsContentFormatBadge';
+export { DocsPageTreeNode } from './DocsPageTreeNode';
+export { LocationPicker } from './LocationPicker';

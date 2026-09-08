@@ -4,9 +4,9 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     Boolean,
-    JSON,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -22,7 +22,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from open_work_hub_api.core.db import Base
 from open_work_hub_api.domains.auth.models import utcnow_naive
-
 
 HERMES_TERMINAL_MODES = ("standard", "yolo")
 HERMES_TERMINAL_SESSION_STATUSES = (
@@ -73,7 +72,6 @@ class HermesTerminalSession(Base):
         ),
         Index(
             "ix_hermes_terminal_sessions_owner_created",
-            "workspace_id",
             "user_id",
             "created_at",
         ),
@@ -90,7 +88,6 @@ class HermesTerminalSession(Base):
         ),
         Index(
             "uq_hermes_terminal_sessions_active_owner",
-            "workspace_id",
             "user_id",
             unique=True,
             postgresql_where=text(
@@ -105,11 +102,6 @@ class HermesTerminalSession(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     profile_binding_id: Mapped[str] = mapped_column(
         ForeignKey("hermes_profile_bindings.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -255,7 +247,6 @@ class HermesTerminalArtifact(Base):
         ),
         Index(
             "ix_hermes_terminal_artifacts_owner_expiry",
-            "workspace_id",
             "user_id",
             "expires_at",
         ),
@@ -264,11 +255,6 @@ class HermesTerminalArtifact(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     session_id: Mapped[str] = mapped_column(
         ForeignKey("hermes_terminal_sessions.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )

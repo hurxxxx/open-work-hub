@@ -6,7 +6,6 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
-
 _LOCALIZED_TOOL_VALIDATION_ERROR_TYPES = frozenset(
     {
         "planner.update_mutable_field_required",
@@ -93,10 +92,7 @@ def localized_tool_validation_error(
         return None
     item = errors[0]
     error_type = item.get("type")
-    if (
-        not isinstance(error_type, str)
-        or error_type not in _LOCALIZED_TOOL_VALIDATION_ERROR_TYPES
-    ):
+    if not isinstance(error_type, str) or error_type not in _LOCALIZED_TOOL_VALIDATION_ERROR_TYPES:
         return None
     params = item.get("ctx") if isinstance(item.get("ctx"), dict) else {}
     return error_type, dict(params)

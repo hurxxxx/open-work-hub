@@ -30,7 +30,6 @@ def _hit(
         source_kind=source_kind,
         resource_type="docs_native_doc",
         resource_id=resource_id,
-        workspace_id="workspace-1",
         title=f"Document {resource_id}",
         excerpt=excerpt,
         score=score,
@@ -172,7 +171,6 @@ def test_identity_is_stable_across_scope_and_source_kind_changes() -> None:
     )
     moved = base.model_copy(
         update={
-            "workspace_id": None,
             "source_kind": "guide",
             "metadata": {"scope_kind": "company"},
         }
@@ -476,7 +474,6 @@ def test_grounding_keeps_collision_safe_citation_source_and_fused_provenance(
 
     result = grounding.ground_ranked_hits(
         db=object(),
-        workspace=SimpleNamespace(id="workspace-1"),
         user=SimpleNamespace(id="user-1"),
         query="question",
         hits=hits,

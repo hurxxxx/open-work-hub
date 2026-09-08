@@ -10,13 +10,11 @@ import { PmsSidebarSpaces } from './PmsSidebarSpaces';
 
 function renderPersonalCategory({
   activeNavItemId,
-  currentWorkspaceSlug,
   filteredItems,
   user,
 }: AppSidebarRenderContext) {
   const personalItems = projectPersonalSidebarItems({
     activeNavItemId,
-    currentWorkspaceSlug,
     filteredItems,
     user,
   });
@@ -92,8 +90,8 @@ function renderPersonalCategory({
 }
 
 export const pmsSidebarConfig: AppSidebarConfig = {
-  extendCategories: (categories, { canReadWorkspace }) => {
-    if (!canReadWorkspace) {
+  extendCategories: (categories, { canReadApp }) => {
+    if (!canReadApp) {
       return categories;
     }
 
@@ -107,7 +105,6 @@ export const pmsSidebarConfig: AppSidebarConfig = {
       return (
         <PmsSidebarSpaces
           activeNavItemId={context.activeNavItemId}
-          currentWorkspaceSlug={context.currentWorkspaceSlug}
           isExpanded={context.isCategoryExpanded('Spaces')}
           onToggle={() => context.toggleCategory('Spaces')}
         />

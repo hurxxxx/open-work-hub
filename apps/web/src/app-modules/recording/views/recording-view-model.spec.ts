@@ -34,7 +34,6 @@ function target(overrides: Partial<RecordingTarget> = {}): RecordingTarget {
 function recording(overrides: Partial<Recording> = {}): Recording {
   return {
     id: 'recording-1',
-    workspace_id: 'workspace-1',
     owner_id: 'user-1',
     title: 'Daily Standup',
     started_at: '2026-05-30T09:00:00Z',

@@ -31,9 +31,7 @@ export function normalizeUsageRoutePath(pathname: string): string {
   }
   const normalized = segments.map((segment, index) => {
     const decoded = safeDecodePathSegment(segment);
-    if (index === 3 && segments[0] === 'apps' && segments[2] === 'workspaces') {
-      return ':workspace';
-    }
+
     if (index === 1 && segments[0] === 'admin') {
       return normalizePathSegment(decoded);
     }

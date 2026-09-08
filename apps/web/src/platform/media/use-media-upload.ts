@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo } from 'react';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { i18n } from '@/src/platform/i18n';
-import { linkMedia, uploadMedia, resolveMediaUrls } from './media-api';
+import { useCallback, useEffect, useMemo } from 'react';
+import { linkMedia, resolveMediaUrls, uploadMedia } from './media-api';
 import { createMediaUrlResolutionSession } from './media-url-resolution-session';
 
 export type MediaResourceType = 'task' | 'docs_native_page';
@@ -14,11 +14,15 @@ export interface MediaLinkTarget {
 export function useMediaUpload() {
   const { token } = useAuth();
   const urlResolutionSession = useMemo(
-    () => createMediaUrlResolutionSession({ resolveMediaUrls }),
+    () =>
+      token ? createMediaUrlResolutionSession({ resolveMediaUrls }) : null,
     [token],
   );
 
-  useEffect(() => () => urlResolutionSession.dispose(), [urlResolutionSession]);
+  useEffect(
+    () => () => urlResolutionSession?.dispose(),
+    [urlResolutionSession],
+  );
 
   const uploadFile = useCallback(
     async (file: File): Promise<string> => {
@@ -50,7 +54,7 @@ export function useMediaUpload() {
 
   const resolveFileUrl = useCallback(
     (url: string): Promise<string> => {
-      if (!token) return Promise.resolve(url);
+      if (!token || !urlResolutionSession) return Promise.resolve(url);
       return urlResolutionSession.resolveFileUrl({ token, url });
     },
     [token, urlResolutionSession],

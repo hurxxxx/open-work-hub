@@ -1,20 +1,19 @@
-from open_work_hub_api.core.workspace_app_registry import (
-    WorkspaceNavRegistration,
-    workspace_app_registration,
+from open_work_hub_api.core.app_registry import (
+    AppNavRegistration,
+    app_registration,
 )
 
-
-FILES_WORKSPACE_APP = workspace_app_registration(
+FILES_APP = app_registration(
     "files",
     backend_domain="files",
     nav_items=(
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="files-all",
             title="All Files",
             category="Drive",
             icon_key="folder-open",
         ),
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="files-search",
             title="Search",
             category="Drive",

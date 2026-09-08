@@ -6,14 +6,12 @@ from sqlalchemy.orm import Session
 from open_work_hub_api.core.db import get_db_session
 from open_work_hub_api.domains.auth.dependencies import require_current_user
 from open_work_hub_api.domains.auth.models import User
-from open_work_hub_api.domains.notifications import read_service
-from open_work_hub_api.domains.notifications import service
+from open_work_hub_api.domains.notifications import read_service, service
 from open_work_hub_api.domains.notifications.schemas import (
     GlobalNotificationItem,
     GlobalNotificationListResponse,
     GlobalUnreadCountResponse,
 )
-
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 

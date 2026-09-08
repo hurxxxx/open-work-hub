@@ -4,41 +4,39 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Path, Query, Request, Response, UploadFile, status
-from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.db import get_db_session
-from open_work_hub_api.core.i18n import localized_http_exception
-from open_work_hub_api.domains.auth.access import load_active_workspace_by_key, resolve_workspace_role
 from open_work_hub_api.domains.auth.dependencies import require_current_user
 from open_work_hub_api.domains.auth.models import User
-from open_work_hub_api.domains.dm import attachment_application
-from open_work_hub_api.domains.dm import conversation_application
-from open_work_hub_api.domains.dm import message_application
-from open_work_hub_api.domains.dm import realtime_events
-from open_work_hub_api.domains.dm import user_directory
-from open_work_hub_api.domains.dm.attachment_links import DmAttachmentDisposition
+from open_work_hub_api.domains.content_access.dependencies import require_content_grant_issuer
+from open_work_hub_api.domains.content_access.grants import ContentGrantIssuer
+from open_work_hub_api.domains.dm import (
+    attachment_application,
+    conversation_application,
+    message_application,
+    realtime_events,
+    user_directory,
+)
+from open_work_hub_api.domains.dm.request_normalization import (
+    DM_ROUTE_ID_ALLOWED_PATTERN,
+    DM_ROUTE_ID_MAX_LENGTH,
+)
 from open_work_hub_api.domains.dm.schemas import (
     DmAddParticipantsRequest,
     DmAttachmentUrlResponse,
-    DmMessageAttachmentItem,
     DmConversationItem,
     DmConversationListResponse,
     DmCreateConversationRequest,
+    DmMessageAttachmentItem,
     DmMessageItem,
     DmMessageListResponse,
     DmSendMessageRequest,
     DmUpdateConversationRequest,
     DmUserItem,
 )
-from open_work_hub_api.domains.dm.request_normalization import (
-    DM_ROUTE_ID_ALLOWED_PATTERN,
-    DM_ROUTE_ID_MAX_LENGTH,
-)
-
 
 router = APIRouter(prefix="/dm", tags=["dm"])
-public_router = APIRouter(prefix="/dm", tags=["dm"])
 DmRouteIdPath = Annotated[
     str,
     Path(
@@ -58,25 +56,9 @@ def search_dm_users(
     include_current: bool = Query(default=False),
     q: str = Query(default=""),
     limit: int = Query(default=30, ge=1, le=100),
-    workspace_key: str | None = Query(default=None),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> list[DmUserItem]:
-    workspace_id = None
-    if workspace_key is not None:
-        workspace = load_active_workspace_by_key(db, workspace_key)
-        if workspace is None:
-            raise localized_http_exception(
-                status_code=status.HTTP_404_NOT_FOUND,
-                code="workspace.not_found",
-            )
-        if resolve_workspace_role(db, current_user, workspace.id) is None:
-            raise localized_http_exception(
-                status_code=status.HTTP_403_FORBIDDEN,
-                code="workspace.membership_required",
-                workspace=workspace.key,
-            )
-        workspace_id = workspace.id
 
     return user_directory.search_users(
         db,
@@ -84,7 +66,6 @@ def search_dm_users(
         include_current=include_current,
         q=q,
         limit=limit,
-        workspace_id=workspace_id,
     )
 
 
@@ -242,11 +223,13 @@ def get_dm_attachment_download_url(
     attachment_id: DmRouteIdPath,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> DmAttachmentUrlResponse:
     return attachment_application.get_dm_attachment_download_url(
         db,
         current_user=current_user,
         attachment_id=attachment_id,
+        issuer=issuer,
     )
 
 
@@ -255,33 +238,13 @@ def get_dm_attachment_preview_url(
     attachment_id: DmRouteIdPath,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> DmAttachmentUrlResponse:
     return attachment_application.get_dm_attachment_preview_url(
         db,
         current_user=current_user,
         attachment_id=attachment_id,
-    )
-
-
-@public_router.get("/attachments/{attachment_id}/content")
-def proxy_dm_attachment_content(
-    attachment_id: DmRouteIdPath,
-    expires: int = Query(..., ge=1),
-    signature: str = Query(..., min_length=1),
-    disposition: DmAttachmentDisposition = "attachment",
-    db: Session = Depends(get_db_session),
-) -> StreamingResponse:
-    content = attachment_application.open_dm_attachment_content(
-        db,
-        attachment_id=attachment_id,
-        expires=expires,
-        signature=signature,
-        disposition=disposition,
-    )
-    return StreamingResponse(
-        content.body,
-        media_type=content.media_type,
-        headers=content.headers,
+        issuer=issuer,
     )
 
 

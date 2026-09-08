@@ -1,3 +1,4 @@
+export { i18n, syncLocale } from './i18n';
 export {
   DEFAULT_LOCALE,
   LOCALE_OPTIONS,
@@ -9,4 +10,3 @@ export {
   readStoredLocale,
   type AppLocale,
 } from './locales';
-export { i18n, syncLocale } from './i18n';

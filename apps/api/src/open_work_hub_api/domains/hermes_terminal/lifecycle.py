@@ -34,7 +34,6 @@ from open_work_hub_api.domains.hermes_terminal.storage import (
     remove_object,
 )
 
-
 HERMES_TERMINAL_FINAL_STATUSES = frozenset({"exited", "terminated", "failed"})
 HERMES_TERMINAL_ARCHIVE_FAILURE = "hermes_terminal.archive_failed"
 _ARCHIVE_CLAIM_LEASE = timedelta(minutes=15)
@@ -42,7 +41,6 @@ _ARCHIVE_CLAIM_LEASE = timedelta(minutes=15)
 
 def _persist_archive_objects(
     *,
-    workspace_id: str,
     user_id: str,
     session_id: str,
     profile_archive: bytes,
@@ -62,7 +60,6 @@ def _persist_archive_objects(
         max_total_bytes=workspace_archive_max_bytes,
     )
     profile_key = profile_storage_key(
-        workspace_id=workspace_id,
         user_id=user_id,
         session_id=session_id,
         attempt_id=attempt_id,
@@ -77,7 +74,6 @@ def _persist_archive_objects(
         put_object(key=profile_key, data=profile_archive, content_type="application/gzip")
         for relative_path, data, media_type, digest in scan.items:
             object_key = artifact_storage_key(
-                workspace_id=workspace_id,
                 user_id=user_id,
                 session_id=session_id,
                 attempt_id=attempt_id,
@@ -156,7 +152,6 @@ async def finalize_terminal_session(
             row.failure_code = failure_code[:160]
         db.add(row)
         db.commit()
-        workspace_id = row.workspace_id
         user_id = row.user_id
         profile_binding_id = row.profile_binding_id
 
@@ -181,7 +176,6 @@ async def finalize_terminal_session(
             uploaded_keys,
         ) = await asyncio.to_thread(
             _persist_archive_objects,
-            workspace_id=workspace_id,
             user_id=user_id,
             session_id=session_id,
             profile_archive=profile_archive,
@@ -228,7 +222,6 @@ async def finalize_terminal_session(
                     artifact = HermesTerminalArtifact(
                         id=str(uuid4()),
                         session_id=session_id,
-                        workspace_id=workspace_id,
                         user_id=user_id,
                         relative_path=relative_path,
                         display_name=PurePosixPath(relative_path).name,

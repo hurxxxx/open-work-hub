@@ -5,15 +5,15 @@ from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 import pytest
-from sqlalchemy import event, select
+from sqlalchemy import delete, event, select
 
 from dev_accounts import auth_headers, content_headers, dev_login
 
 from open_work_hub_api.core.db import get_engine, get_session_factory
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import CompanyAppControl, User
+from open_work_hub_api.domains.auth.app_access_models import AppAccessPolicy, AppUserGrant
 from open_work_hub_api.domains.files import service as files_service
 from open_work_hub_api.domains.files.models import (
-    FileManagerCorpus,
     FileManagerFile,
     FileManagerFileSourceMetadata,
 )
@@ -23,10 +23,7 @@ from open_work_hub_api.domains.files.router import require_file_search_runtime
 from open_work_hub_api.domains.files.search import FileSearchRuntime
 from open_work_hub_api.domains.files.search_projection import build_file_search_document
 from open_work_hub_api.domains.rag.contracts import RagChunk, RagProjection, RagScopeKind
-from open_work_hub_api.domains.rag.providers.fake import (
-    FakeEmbeddingClient,
-    FakeVectorIndexClient,
-)
+from open_work_hub_api.domains.rag.providers.fake import FakeEmbeddingClient, FakeVectorIndexClient
 from open_work_hub_api.domains.rag.query_service import RagQueryService
 from open_work_hub_api.domains.rag.service import RagService
 from open_work_hub_api.domains.source_access.resource_types import FILE_MANAGER_FILE_RESOURCE_TYPE
@@ -40,7 +37,7 @@ from open_work_hub_api.domains.retrieval.runtime_binding import (
 )
 
 
-_FILES_SEARCH_PATH = "/api/v1/workspaces/administrator/files/search"
+_FILES_SEARCH_PATH = "/api/v1/files/search"
 
 
 class _KeywordBackend:
@@ -267,13 +264,12 @@ def test_file_search_metadata_filters_use_indexes_and_authoritative_source_state
 
     file = FileManagerFile(
         id="file-filtered",
-        workspace_id="workspace-1",
         owner_id="user-1",
         filename="report.pdf",
         content_type="application/pdf",
         size_bytes=10,
         storage_key="files/file-filtered/report.pdf",
-        visibility="workspace",
+        visibility="company",
     )
     file.source_metadata = FileManagerFileSourceMetadata(
         file_id=file.id,
@@ -415,16 +411,20 @@ def test_keyword_file_search_returns_ranked_source_fresh_snippet(
     session = dev_login(client, "administrator")
     headers = auth_headers(session["token"])
     corpus_response = client.post(
-        "/api/v1/workspaces/administrator/files/corpora",
+        "/api/v1/files/corpora",
         headers=headers,
         json={"name": "File search corpus"},
     )
     assert corpus_response.status_code == 201, corpus_response.text
     corpus = corpus_response.json()
     upload_response = client.post(
-        "/api/v1/workspaces/administrator/files/upload",
+        "/api/v1/files/upload",
         headers=headers,
-        data={"visibility": "workspace", "corpus_id": corpus["id"]},
+        data={
+            "visibility": "company",
+            "company_admin_read_acknowledged": True,
+            "corpus_id": corpus["id"],
+        },
         files={"file": ("access-control.txt", b"source", "text/plain")},
     )
     assert upload_response.status_code == 201, upload_response.text
@@ -435,8 +435,7 @@ def test_keyword_file_search_returns_ranked_source_fresh_snippet(
     extraction_text = " ".join([*prefix, "접근제어", *suffix])
     with get_session_factory()() as db:
         file = db.get(FileManagerFile, uploaded["id"])
-        workspace = db.scalar(select(Workspace).where(Workspace.key == "administrator"))
-        assert file is not None and workspace is not None
+        assert file is not None
         file.extraction_status = "ready"
         file.extraction_content_checksum = "a" * 64
         file.extraction_text = extraction_text
@@ -445,7 +444,7 @@ def test_keyword_file_search_returns_ranked_source_fresh_snippet(
         file.updated_at = datetime.now(UTC).replace(tzinfo=None)
         db.commit()
         db.refresh(file)
-        document = build_file_search_document(workspace=workspace, file=file)
+        document = build_file_search_document(file=file)
         document["retrieval_partition_id"] = str(file.retrieval_partition_id)
         document["projection_version"] = 1
 
@@ -502,16 +501,20 @@ def test_keyword_file_search_drops_a_file_deleted_after_page_source_load(
     session = dev_login(client, "administrator")
     headers = auth_headers(session["token"])
     corpus_response = client.post(
-        "/api/v1/workspaces/administrator/files/corpora",
+        "/api/v1/files/corpora",
         headers=headers,
         json={"name": "Concurrent delete search corpus"},
     )
     assert corpus_response.status_code == 201, corpus_response.text
     corpus = corpus_response.json()
     upload_response = client.post(
-        "/api/v1/workspaces/administrator/files/upload",
+        "/api/v1/files/upload",
         headers=headers,
-        data={"visibility": "workspace", "corpus_id": corpus["id"]},
+        data={
+            "visibility": "company",
+            "company_admin_read_acknowledged": True,
+            "corpus_id": corpus["id"],
+        },
         files={"file": ("revoked-result.txt", b"source", "text/plain")},
     )
     assert upload_response.status_code == 201, upload_response.text
@@ -520,8 +523,7 @@ def test_keyword_file_search_drops_a_file_deleted_after_page_source_load(
 
     with get_session_factory()() as db:
         file = db.get(FileManagerFile, uploaded["id"])
-        workspace = db.scalar(select(Workspace).where(Workspace.key == "administrator"))
-        assert file is not None and workspace is not None
+        assert file is not None
         file.extraction_status = "ready"
         file.extraction_content_checksum = "d" * 64
         file.extraction_text = secret_text
@@ -529,7 +531,7 @@ def test_keyword_file_search_drops_a_file_deleted_after_page_source_load(
         file.extraction_metadata = {"parser": "plain_text"}
         db.commit()
         db.refresh(file)
-        document = build_file_search_document(workspace=workspace, file=file)
+        document = build_file_search_document(file=file)
         document["retrieval_partition_id"] = str(file.retrieval_partition_id)
         document["projection_version"] = 1
 
@@ -555,11 +557,9 @@ def test_keyword_file_search_drops_a_file_deleted_after_page_source_load(
         delete_triggered = True
         with get_session_factory().begin() as revoke_db:
             user = revoke_db.scalar(select(User).where(User.login_id == "administrator"))
-            workspace = revoke_db.scalar(select(Workspace).where(Workspace.key == "administrator"))
-            assert user is not None and workspace is not None
+            assert user is not None
             files_service.delete_file(
                 revoke_db,
-                workspace=workspace,
                 user=user,
                 file_id=uploaded["id"],
             )
@@ -588,7 +588,7 @@ def test_keyword_file_search_refills_page_after_concurrent_revoke_and_recomputes
     session = dev_login(client, "administrator")
     headers = auth_headers(session["token"])
     corpus_response = client.post(
-        "/api/v1/workspaces/administrator/files/corpora",
+        "/api/v1/files/corpora",
         headers=headers,
         json={"name": "Concurrent revoke refill corpus"},
     )
@@ -599,9 +599,13 @@ def test_keyword_file_search_refills_page_after_concurrent_revoke_and_recomputes
     uploaded_ids: list[str] = []
     for index, score in enumerate((30.0, 20.0, 10.0)):
         upload_response = client.post(
-            "/api/v1/workspaces/administrator/files/upload",
+            "/api/v1/files/upload",
             headers=headers,
-            data={"visibility": "workspace", "corpus_id": corpus["id"]},
+            data={
+                "visibility": "company",
+                "company_admin_read_acknowledged": True,
+                "corpus_id": corpus["id"],
+            },
             files={
                 "file": (
                     f"concurrent-refill-{index}.txt",
@@ -615,8 +619,7 @@ def test_keyword_file_search_refills_page_after_concurrent_revoke_and_recomputes
         uploaded_ids.append(uploaded["id"])
         with get_session_factory()() as db:
             file = db.get(FileManagerFile, uploaded["id"])
-            workspace = db.scalar(select(Workspace).where(Workspace.key == "administrator"))
-            assert file is not None and workspace is not None
+            assert file is not None
             file.extraction_status = "ready"
             file.extraction_content_checksum = str(index + 1) * 64
             file.extraction_text = f"access control evidence {index}"
@@ -624,7 +627,7 @@ def test_keyword_file_search_refills_page_after_concurrent_revoke_and_recomputes
             file.extraction_metadata = {"parser": "plain_text"}
             db.commit()
             db.refresh(file)
-            document = build_file_search_document(workspace=workspace, file=file)
+            document = build_file_search_document(file=file)
             document["retrieval_partition_id"] = str(file.retrieval_partition_id)
             document["projection_version"] = 1
         documents.append((document, score))
@@ -651,11 +654,9 @@ def test_keyword_file_search_refills_page_after_concurrent_revoke_and_recomputes
         delete_triggered = True
         with get_session_factory().begin() as revoke_db:
             user = revoke_db.scalar(select(User).where(User.login_id == "administrator"))
-            workspace = revoke_db.scalar(select(Workspace).where(Workspace.key == "administrator"))
-            assert user is not None and workspace is not None
+            assert user is not None
             files_service.delete_file(
                 revoke_db,
-                workspace=workspace,
                 user=user,
                 file_id=uploaded_ids[0],
             )
@@ -691,7 +692,7 @@ def test_keyword_file_search_recomputes_has_more_after_off_page_revoke(
     session = dev_login(client, "administrator")
     headers = auth_headers(session["token"])
     corpus_response = client.post(
-        "/api/v1/workspaces/administrator/files/corpora",
+        "/api/v1/files/corpora",
         headers=headers,
         json={"name": "Concurrent off-page revoke corpus"},
     )
@@ -702,9 +703,13 @@ def test_keyword_file_search_recomputes_has_more_after_off_page_revoke(
     uploaded_ids: list[str] = []
     for index, score in enumerate((30.0, 20.0, 10.0)):
         upload_response = client.post(
-            "/api/v1/workspaces/administrator/files/upload",
+            "/api/v1/files/upload",
             headers=headers,
-            data={"visibility": "workspace", "corpus_id": corpus["id"]},
+            data={
+                "visibility": "company",
+                "company_admin_read_acknowledged": True,
+                "corpus_id": corpus["id"],
+            },
             files={
                 "file": (
                     f"concurrent-off-page-{index}.txt",
@@ -718,8 +723,7 @@ def test_keyword_file_search_recomputes_has_more_after_off_page_revoke(
         uploaded_ids.append(uploaded["id"])
         with get_session_factory()() as db:
             file = db.get(FileManagerFile, uploaded["id"])
-            workspace = db.scalar(select(Workspace).where(Workspace.key == "administrator"))
-            assert file is not None and workspace is not None
+            assert file is not None
             file.extraction_status = "ready"
             file.extraction_content_checksum = str(index + 4) * 64
             file.extraction_text = f"access control evidence {index}"
@@ -727,7 +731,7 @@ def test_keyword_file_search_recomputes_has_more_after_off_page_revoke(
             file.extraction_metadata = {"parser": "plain_text"}
             db.commit()
             db.refresh(file)
-            document = build_file_search_document(workspace=workspace, file=file)
+            document = build_file_search_document(file=file)
             document["retrieval_partition_id"] = str(file.retrieval_partition_id)
             document["projection_version"] = 1
         documents.append((document, score))
@@ -754,11 +758,9 @@ def test_keyword_file_search_recomputes_has_more_after_off_page_revoke(
         delete_triggered = True
         with get_session_factory().begin() as revoke_db:
             user = revoke_db.scalar(select(User).where(User.login_id == "administrator"))
-            workspace = revoke_db.scalar(select(Workspace).where(Workspace.key == "administrator"))
-            assert user is not None and workspace is not None
+            assert user is not None
             files_service.delete_file(
                 revoke_db,
-                workspace=workspace,
                 user=user,
                 file_id=uploaded_ids[2],
             )
@@ -791,29 +793,29 @@ def test_keyword_file_search_recomputes_has_more_after_off_page_revoke(
     assert payload["has_more"] is False
 
 
-def test_keyword_file_search_drops_a_file_moved_after_page_source_load(
+def test_keyword_file_search_drops_hits_when_app_is_disabled_after_page_source_load(
     client: TestClient,
     in_memory_object_storage: None,
 ) -> None:
     session = dev_login(client, "administrator")
     headers = auth_headers(session["token"])
     dev_login(client, "delivery-hub-admin")
-    with get_session_factory()() as db:
-        target_workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
-        assert target_workspace is not None
-        target_workspace_id = target_workspace.id
 
     corpus_response = client.post(
-        "/api/v1/workspaces/administrator/files/corpora",
+        "/api/v1/files/corpora",
         headers=headers,
         json={"name": "Concurrent transfer search corpus"},
     )
     assert corpus_response.status_code == 201, corpus_response.text
     corpus = corpus_response.json()
     upload_response = client.post(
-        "/api/v1/workspaces/administrator/files/upload",
+        "/api/v1/files/upload",
         headers=headers,
-        data={"visibility": "workspace", "corpus_id": corpus["id"]},
+        data={
+            "visibility": "company",
+            "company_admin_read_acknowledged": True,
+            "corpus_id": corpus["id"],
+        },
         files={"file": ("moved-result.txt", b"source", "text/plain")},
     )
     assert upload_response.status_code == 201, upload_response.text
@@ -822,8 +824,7 @@ def test_keyword_file_search_drops_a_file_moved_after_page_source_load(
 
     with get_session_factory()() as db:
         file = db.get(FileManagerFile, uploaded["id"])
-        workspace = db.scalar(select(Workspace).where(Workspace.key == "administrator"))
-        assert file is not None and workspace is not None
+        assert file is not None
         file.extraction_status = "ready"
         file.extraction_content_checksum = "e" * 64
         file.extraction_text = secret_text
@@ -831,7 +832,7 @@ def test_keyword_file_search_drops_a_file_moved_after_page_source_load(
         file.extraction_metadata = {"parser": "plain_text"}
         db.commit()
         db.refresh(file)
-        document = build_file_search_document(workspace=workspace, file=file)
+        document = build_file_search_document(file=file)
         document["retrieval_partition_id"] = str(file.retrieval_partition_id)
         document["projection_version"] = 1
 
@@ -841,9 +842,9 @@ def test_keyword_file_search_drops_a_file_moved_after_page_source_load(
         rag_query_service=None,
         rag_collection=None,
     )
-    transfer_triggered = False
+    revoke_triggered = False
 
-    def transfer_before_extraction_query(
+    def revoke_before_extraction_query(
         _connection,
         _cursor,
         statement: str,
@@ -851,25 +852,16 @@ def test_keyword_file_search_drops_a_file_moved_after_page_source_load(
         _context,
         _executemany,
     ) -> None:
-        nonlocal transfer_triggered
-        if transfer_triggered or "file_manager_files.extraction_text" not in statement:
+        nonlocal revoke_triggered
+        if revoke_triggered or "file_manager_files.extraction_text" not in statement:
             return
-        transfer_triggered = True
+        revoke_triggered = True
         with get_session_factory().begin() as revoke_db:
-            actor = revoke_db.scalar(select(User).where(User.login_id == "administrator"))
-            source_corpus = revoke_db.get(FileManagerCorpus, corpus["id"])
-            assert actor is not None and source_corpus is not None
-            files_service.transition_file_corpus(
-                revoke_db,
-                corpus_id=source_corpus.id,
-                actor=actor,
-                expected_metadata_version=source_corpus.metadata_version,
-                access_scope_kind="workspace",
-                target_workspace_id=target_workspace_id,
-                reason="Exercise final search ACL revalidation",
-            )
+            control = revoke_db.get(CompanyAppControl, "files")
+            assert control is not None
+            control.enabled = False
 
-    event.listen(get_engine(), "before_cursor_execute", transfer_before_extraction_query)
+    event.listen(get_engine(), "before_cursor_execute", revoke_before_extraction_query)
     try:
         response = client.post(
             _FILES_SEARCH_PATH,
@@ -877,10 +869,10 @@ def test_keyword_file_search_drops_a_file_moved_after_page_source_load(
             json={"query": "access control", "strategy": "keyword"},
         )
     finally:
-        event.remove(get_engine(), "before_cursor_execute", transfer_before_extraction_query)
+        event.remove(get_engine(), "before_cursor_execute", revoke_before_extraction_query)
         client.app.dependency_overrides.pop(require_file_search_runtime, None)
 
-    assert transfer_triggered is True
+    assert revoke_triggered is True
     assert response.status_code == 200, response.text
     assert response.json()["hits"] == []
     assert secret_text not in response.text
@@ -893,7 +885,7 @@ def test_keyword_file_search_pages_over_a_bounded_deterministic_ranking(
     session = dev_login(client, "administrator")
     headers = auth_headers(session["token"])
     corpus_response = client.post(
-        "/api/v1/workspaces/administrator/files/corpora",
+        "/api/v1/files/corpora",
         headers=headers,
         json={"name": "Paged file search corpus"},
     )
@@ -905,9 +897,13 @@ def test_keyword_file_search_pages_over_a_bounded_deterministic_ranking(
     expected_scores: dict[str, float] = {}
     for index, score in enumerate(scores):
         upload_response = client.post(
-            "/api/v1/workspaces/administrator/files/upload",
+            "/api/v1/files/upload",
             headers=headers,
-            data={"visibility": "workspace", "corpus_id": corpus["id"]},
+            data={
+                "visibility": "company",
+                "company_admin_read_acknowledged": True,
+                "corpus_id": corpus["id"],
+            },
             files={
                 "file": (
                     f"paged-{index}.txt",
@@ -920,8 +916,7 @@ def test_keyword_file_search_pages_over_a_bounded_deterministic_ranking(
         uploaded = upload_response.json()
         with get_session_factory()() as db:
             file = db.get(FileManagerFile, uploaded["id"])
-            workspace = db.scalar(select(Workspace).where(Workspace.key == "administrator"))
-            assert file is not None and workspace is not None
+            assert file is not None
             file.extraction_status = "ready"
             file.extraction_content_checksum = str(index) * 64
             file.extraction_text = f"common evidence {index}"
@@ -929,7 +924,7 @@ def test_keyword_file_search_pages_over_a_bounded_deterministic_ranking(
             file.extraction_metadata = {"parser": "plain_text"}
             db.commit()
             db.refresh(file)
-            document = build_file_search_document(workspace=workspace, file=file)
+            document = build_file_search_document(file=file)
             document["retrieval_partition_id"] = str(file.retrieval_partition_id)
             document["projection_version"] = 1
         documents.append((document, score))
@@ -984,7 +979,7 @@ def test_file_search_has_more_matches_final_authorized_window_for_each_strategy(
     session = dev_login(client, "administrator")
     headers = auth_headers(session["token"])
     corpus_response = client.post(
-        "/api/v1/workspaces/administrator/files/corpora",
+        "/api/v1/files/corpora",
         headers=headers,
         json={"name": f"Paged {strategy} search corpus"},
     )
@@ -997,9 +992,13 @@ def test_file_search_has_more_matches_final_authorized_window_for_each_strategy(
     for index, score in enumerate((30.0, 20.0, 10.0)):
         content = f"common semantic access evidence {index}"
         upload_response = client.post(
-            "/api/v1/workspaces/administrator/files/upload",
+            "/api/v1/files/upload",
             headers=headers,
-            data={"visibility": "workspace", "corpus_id": corpus["id"]},
+            data={
+                "visibility": "company",
+                "company_admin_read_acknowledged": True,
+                "corpus_id": corpus["id"],
+            },
             files={
                 "file": (
                     f"paged-{strategy}-{index}.txt",
@@ -1013,8 +1012,7 @@ def test_file_search_has_more_matches_final_authorized_window_for_each_strategy(
         uploaded_ids.add(uploaded["id"])
         with get_session_factory()() as db:
             file = db.get(FileManagerFile, uploaded["id"])
-            workspace = db.scalar(select(Workspace).where(Workspace.key == "administrator"))
-            assert file is not None and workspace is not None
+            assert file is not None
             file.extraction_status = "ready"
             file.extraction_content_checksum = str(index + 4) * 64
             file.extraction_text = content
@@ -1022,22 +1020,21 @@ def test_file_search_has_more_matches_final_authorized_window_for_each_strategy(
             file.extraction_metadata = {"parser": "plain_text"}
             db.commit()
             db.refresh(file)
-            document = build_file_search_document(workspace=workspace, file=file)
+            document = build_file_search_document(file=file)
             document["retrieval_partition_id"] = str(file.retrieval_partition_id)
             document["projection_version"] = 1
             projections.append(
                 RagProjection(
                     retrieval_partition_id=str(file.retrieval_partition_id),
                     projection_version=1,
-                    scope_kind=RagScopeKind.WORKSPACE,
-                    workspace_id=workspace.id,
+                    scope_kind=RagScopeKind.COMPANY,
                     resource_type=FILE_MANAGER_FILE_RESOURCE_TYPE,
                     resource_id=file.id,
                     source_kind="files",
                     title=file.filename,
                     summary=content,
                     text_content=content,
-                    visibility_refs=[f"workspace:{workspace.id}"],
+                    visibility_refs=["company_public"],
                     metadata={"filename": file.filename, "content_modality": "text"},
                     chunks=[
                         RagChunk(
@@ -1119,7 +1116,7 @@ def test_external_authored_range_reaches_fake_semantic_and_hybrid_backends(
     session = dev_login(client, "administrator")
     headers = auth_headers(session["token"])
     corpus_response = client.post(
-        "/api/v1/workspaces/administrator/files/corpora",
+        "/api/v1/files/corpora",
         headers=headers,
         json={"name": f"External date filter {strategy}"},
     )
@@ -1127,9 +1124,13 @@ def test_external_authored_range_reaches_fake_semantic_and_hybrid_backends(
     corpus = corpus_response.json()
     content = "thermal source filter evidence"
     upload_response = client.post(
-        "/api/v1/workspaces/administrator/files/upload",
+        "/api/v1/files/upload",
         headers=headers,
-        data={"visibility": "workspace", "corpus_id": corpus["id"]},
+        data={
+            "visibility": "company",
+            "company_admin_read_acknowledged": True,
+            "corpus_id": corpus["id"],
+        },
         files={"file": ("external-report.txt", content.encode(), "text/plain")},
     )
     assert upload_response.status_code == 201, upload_response.text
@@ -1137,8 +1138,7 @@ def test_external_authored_range_reaches_fake_semantic_and_hybrid_backends(
 
     with get_session_factory()() as db:
         file = db.get(FileManagerFile, uploaded["id"])
-        workspace = db.scalar(select(Workspace).where(Workspace.key == "administrator"))
-        assert file is not None and workspace is not None
+        assert file is not None
         file.extraction_status = "ready"
         file.extraction_content_checksum = "a" * 64
         file.extraction_text = content
@@ -1164,21 +1164,20 @@ def test_external_authored_range_reaches_fake_semantic_and_hybrid_backends(
         )
         db.commit()
         db.refresh(file)
-        document = build_file_search_document(workspace=workspace, file=file)
+        document = build_file_search_document(file=file)
         document["retrieval_partition_id"] = str(file.retrieval_partition_id)
         document["projection_version"] = 1
         projection = RagProjection(
             retrieval_partition_id=str(file.retrieval_partition_id),
             projection_version=1,
-            scope_kind=RagScopeKind.WORKSPACE,
-            workspace_id=workspace.id,
+            scope_kind=RagScopeKind.COMPANY,
             resource_type=FILE_MANAGER_FILE_RESOURCE_TYPE,
             resource_id=file.id,
             source_kind="files",
             title="External thermal report",
             summary=content,
             text_content=content,
-            visibility_refs=[f"workspace:{workspace.id}"],
+            visibility_refs=["company_public"],
             metadata={
                 "filename": file.filename,
                 "content_modality": "text",
@@ -1246,23 +1245,27 @@ def test_external_authored_range_reaches_fake_semantic_and_hybrid_backends(
     assert vector_backend.result_counts == [1, 0]
 
 
-def test_hybrid_file_search_tracks_company_scope_round_trip_without_reindexing(
+def test_hybrid_file_search_rechecks_user_admission_without_reindexing(
     client: TestClient,
     in_memory_object_storage: None,
 ) -> None:
     session = dev_login(client, "administrator")
     headers = auth_headers(session["token"])
     corpus_response = client.post(
-        "/api/v1/workspaces/administrator/files/corpora",
+        "/api/v1/files/corpora",
         headers=headers,
         json={"name": "Company knowledge corpus"},
     )
     assert corpus_response.status_code == 201, corpus_response.text
     corpus = corpus_response.json()
     upload_response = client.post(
-        "/api/v1/workspaces/administrator/files/upload",
+        "/api/v1/files/upload",
         headers=headers,
-        data={"visibility": "workspace", "corpus_id": corpus["id"]},
+        data={
+            "visibility": "company",
+            "company_admin_read_acknowledged": True,
+            "corpus_id": corpus["id"],
+        },
         files={
             "file": (
                 "thermal-controller.txt",
@@ -1276,8 +1279,7 @@ def test_hybrid_file_search_tracks_company_scope_round_trip_without_reindexing(
 
     with get_session_factory()() as db:
         file = db.get(FileManagerFile, uploaded["id"])
-        workspace = db.scalar(select(Workspace).where(Workspace.key == "administrator"))
-        assert file is not None and workspace is not None
+        assert file is not None
         file.extraction_status = "ready"
         file.extraction_content_checksum = "b" * 64
         file.extraction_text = "서비스 장애 진단 사양"
@@ -1285,22 +1287,21 @@ def test_hybrid_file_search_tracks_company_scope_round_trip_without_reindexing(
         file.extraction_metadata = {"parser": "plain_text"}
         db.commit()
         db.refresh(file)
-        document = build_file_search_document(workspace=workspace, file=file)
+        document = build_file_search_document(file=file)
         document["retrieval_partition_id"] = str(file.retrieval_partition_id)
         document["projection_version"] = 1
 
         projection = RagProjection(
             retrieval_partition_id=str(file.retrieval_partition_id),
             projection_version=1,
-            scope_kind=RagScopeKind.WORKSPACE,
-            workspace_id=workspace.id,
+            scope_kind=RagScopeKind.COMPANY,
             resource_type=FILE_MANAGER_FILE_RESOURCE_TYPE,
             resource_id=file.id,
             source_kind="files",
             title=file.filename,
             summary="서비스 장애 진단 사양",
             text_content="서비스 장애 진단 사양",
-            visibility_refs=[f"workspace:{workspace.id}"],
+            visibility_refs=["company_public"],
             metadata={"filename": file.filename, "content_modality": "text"},
             chunks=[
                 RagChunk(
@@ -1327,19 +1328,9 @@ def test_hybrid_file_search_tracks_company_scope_round_trip_without_reindexing(
         query_timeout_ms=5_000,
     )
 
-    transition_response = client.post(
-        f"/api/v1/workspaces/administrator/files/corpora/{corpus['id']}/transition",
-        headers=headers,
-        json={
-            "expected_metadata_version": corpus["metadata_version"],
-            "access_scope_kind": "company",
-            "reason": "Validate company search without reindexing",
-        },
-    )
-    assert transition_response.status_code == 200, transition_response.text
-    company_corpus = transition_response.json()
-    other_workspace_session = dev_login(client, "delivery-hub-member")
-    other_headers = auth_headers(other_workspace_session["token"])
+    observer_session = dev_login(client, "delivery-hub-member")
+    other_headers = auth_headers(observer_session["token"])
+    _set_files_user_admission([observer_session["user"]["id"]])
 
     keyword_backend = _KeywordBackend(document)
     client.app.dependency_overrides[require_file_search_runtime] = lambda: FileSearchRuntime(
@@ -1349,7 +1340,7 @@ def test_hybrid_file_search_tracks_company_scope_round_trip_without_reindexing(
     )
     try:
         company_response = client.post(
-            "/api/v1/workspaces/delivery-hub/files/search",
+            "/api/v1/files/search",
             headers=other_headers,
             json={
                 "query": "열관리 제어기",
@@ -1358,19 +1349,9 @@ def test_hybrid_file_search_tracks_company_scope_round_trip_without_reindexing(
                 "page_size": 10,
             },
         )
-        retract_response = client.post(
-            f"/api/v1/workspaces/administrator/files/corpora/{corpus['id']}/transition",
-            headers=headers,
-            json={
-                "expected_metadata_version": company_corpus["metadata_version"],
-                "access_scope_kind": "workspace",
-                "target_workspace_id": corpus["managed_workspace_id"],
-                "reason": "Validate workspace search after company retraction",
-            },
-        )
-        assert retract_response.status_code == 200, retract_response.text
+        _set_files_user_admission([])
         denied_response = client.post(
-            "/api/v1/workspaces/delivery-hub/files/search",
+            "/api/v1/files/search",
             headers=other_headers,
             json={"query": "열관리 제어기", "strategy": "hybrid"},
         )
@@ -1391,8 +1372,8 @@ def test_hybrid_file_search_tracks_company_scope_round_trip_without_reindexing(
     company_payload = company_response.json()
     assert len(company_payload["hits"]) == 1
     assert company_payload["hits"][0]["file_id"] == uploaded["id"]
-    assert denied_response.status_code == 200, denied_response.text
-    assert denied_response.json()["hits"] == []
+    assert denied_response.status_code == 403, denied_response.text
+    assert denied_response.json()["code"] == "files.app_disabled"
     assert response.status_code == 200, response.text
     payload = response.json()
     assert len(payload["hits"]) == 1
@@ -1406,7 +1387,7 @@ def test_hybrid_file_search_tracks_company_scope_round_trip_without_reindexing(
     assert {"bm25", "dense_vector", "rrf"} <= set(payload["hits"][0]["methods"])
 
 
-def test_workspace_transfer_reuses_projections_and_switches_search_and_download_acl(
+def test_company_user_grant_changes_reuse_projections_and_revoke_download_capabilities(
     client: TestClient,
     in_memory_object_storage: None,
 ) -> None:
@@ -1414,23 +1395,23 @@ def test_workspace_transfer_reuses_projections_and_switches_search_and_download_
     source_headers = auth_headers(source_session["token"])
     target_session = dev_login(client, "delivery-hub-member")
     target_headers = auth_headers(target_session["token"])
-    with get_session_factory()() as db:
-        target_workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
-        assert target_workspace is not None
-        target_workspace_id = target_workspace.id
 
     corpus_response = client.post(
-        "/api/v1/workspaces/administrator/files/corpora",
+        "/api/v1/files/corpora",
         headers=source_headers,
-        json={"name": "Workspace transfer search corpus"},
+        json={"name": "Company user admission search corpus"},
     )
     assert corpus_response.status_code == 201, corpus_response.text
     corpus = corpus_response.json()
     content = "통합 서비스의 장애 복구 진단 기준"
     upload_response = client.post(
-        "/api/v1/workspaces/administrator/files/upload",
+        "/api/v1/files/upload",
         headers=source_headers,
-        data={"visibility": "workspace", "corpus_id": corpus["id"]},
+        data={
+            "visibility": "company",
+            "company_admin_read_acknowledged": True,
+            "corpus_id": corpus["id"],
+        },
         files={"file": ("controller-transfer.txt", content.encode(), "text/plain")},
     )
     assert upload_response.status_code == 201, upload_response.text
@@ -1438,9 +1419,7 @@ def test_workspace_transfer_reuses_projections_and_switches_search_and_download_
 
     with get_session_factory()() as db:
         file = db.get(FileManagerFile, uploaded["id"])
-        source_workspace = db.scalar(select(Workspace).where(Workspace.key == "administrator"))
-        assert file is not None and source_workspace is not None
-        source_workspace_id = source_workspace.id
+        assert file is not None
         stable_partition_id = str(file.retrieval_partition_id)
         file.extraction_status = "ready"
         file.extraction_content_checksum = "c" * 64
@@ -1450,7 +1429,6 @@ def test_workspace_transfer_reuses_projections_and_switches_search_and_download_
         db.commit()
         db.refresh(file)
         stale_keyword_document = build_file_search_document(
-            workspace=source_workspace,
             file=file,
         )
         stale_keyword_document["retrieval_partition_id"] = stable_partition_id
@@ -1458,15 +1436,14 @@ def test_workspace_transfer_reuses_projections_and_switches_search_and_download_
         stale_vector_projection = RagProjection(
             retrieval_partition_id=stable_partition_id,
             projection_version=1,
-            scope_kind=RagScopeKind.WORKSPACE,
-            workspace_id=source_workspace_id,
+            scope_kind=RagScopeKind.COMPANY,
             resource_type=FILE_MANAGER_FILE_RESOURCE_TYPE,
             resource_id=file.id,
             source_kind="files",
             title=file.filename,
             summary=content,
             text_content=content,
-            visibility_refs=[f"workspace:{source_workspace_id}"],
+            visibility_refs=["company_public"],
             metadata={"filename": file.filename, "content_modality": "text"},
             chunks=[
                 RagChunk(
@@ -1480,7 +1457,7 @@ def test_workspace_transfer_reuses_projections_and_switches_search_and_download_
 
     vector_backend = _RecordingVectorBackend()
     embedding_backend = FakeEmbeddingClient(dimensions=32)
-    rag_collection = "files-workspace-transfer"
+    rag_collection = "files-user-admission"
     RagService(
         vector_index=vector_backend,
         embedding_client=embedding_backend,
@@ -1494,19 +1471,12 @@ def test_workspace_transfer_reuses_projections_and_switches_search_and_download_
     )
     keyword_backend = _KeywordBackend(stale_keyword_document)
 
-    transfer_response = client.post(
-        f"/api/v1/workspaces/administrator/files/corpora/{corpus['id']}/transition",
-        headers=source_headers,
-        json={
-            "expected_metadata_version": corpus["metadata_version"],
-            "access_scope_kind": "workspace",
-            "target_workspace_id": target_workspace_id,
-            "reason": "Validate source-fresh search and download ACL after workspace transfer",
-        },
+    _set_files_user_admission([])
+    denied_before_grant = client.get(
+        f"/api/v1/files/{uploaded['id']}/download", headers=target_headers
     )
-    assert transfer_response.status_code == 200, transfer_response.text
-    transferred = transfer_response.json()
-    assert transferred["retrieval_partition_id"] == stable_partition_id
+    assert denied_before_grant.status_code == 403, denied_before_grant.text
+    _set_files_user_admission([target_session["user"]["id"]])
 
     client.app.dependency_overrides[require_file_search_runtime] = lambda: FileSearchRuntime(
         keyword_client=keyword_backend,
@@ -1520,7 +1490,7 @@ def test_workspace_transfer_reuses_projections_and_switches_search_and_download_
             json={"query": "절전 복귀", "strategy": "hybrid"},
         )
         target_search = client.post(
-            "/api/v1/workspaces/delivery-hub/files/search",
+            "/api/v1/files/search",
             headers=target_headers,
             json={"query": "절전 복귀", "strategy": "hybrid"},
         )
@@ -1528,18 +1498,18 @@ def test_workspace_transfer_reuses_projections_and_switches_search_and_download_
         client.app.dependency_overrides.pop(require_file_search_runtime, None)
 
     assert source_search.status_code == 200, source_search.text
-    assert source_search.json()["hits"] == []
+    assert [hit["file_id"] for hit in source_search.json()["hits"]] == [uploaded["id"]]
     assert target_search.status_code == 200, target_search.text
     assert [hit["file_id"] for hit in target_search.json()["hits"]] == [uploaded["id"]]
     assert {"bm25", "dense_vector", "rrf"} <= set(target_search.json()["hits"][0]["methods"])
 
     source_download = client.get(
-        f"/api/v1/workspaces/administrator/files/{uploaded['id']}/download",
+        f"/api/v1/files/{uploaded['id']}/download",
         headers=source_headers,
     )
-    assert source_download.status_code in {403, 404}, source_download.text
+    assert source_download.status_code == 200, source_download.text
     target_download = client.get(
-        f"/api/v1/workspaces/delivery-hub/files/{uploaded['id']}/download",
+        f"/api/v1/files/{uploaded['id']}/download",
         headers=target_headers,
     )
     assert target_download.status_code == 200, target_download.text
@@ -1551,16 +1521,34 @@ def test_workspace_transfer_reuses_projections_and_switches_search_and_download_
     assert content_response.status_code == 200
     assert content_response.content == content.encode()
 
+    _set_files_user_admission([])
+    denied_content = client.get(
+        content_url, headers=content_headers(target_session["token"], content_url)
+    )
+    assert denied_content.status_code == 403, denied_content.text
+    denied_download = client.get(f"/api/v1/files/{uploaded['id']}/download", headers=target_headers)
+    assert denied_download.status_code == 403, denied_download.text
+
     with get_session_factory()() as db:
         moved_file = db.get(FileManagerFile, uploaded["id"])
         assert moved_file is not None
-        assert moved_file.workspace_id == target_workspace_id
+        assert moved_file.corpus_id == corpus["id"]
+        assert moved_file.visibility == "company"
         assert str(moved_file.retrieval_partition_id) == stable_partition_id
     stored_projection = vector_backend.snapshot_projection(
         collection=rag_collection,
         chunk_id=f"{uploaded['id']}:text:0",
     )
     assert stored_projection is not None
-    assert stored_projection.workspace_id == source_workspace_id
+    assert stored_projection.scope_kind == RagScopeKind.COMPANY
     assert stored_projection.retrieval_partition_id == stable_partition_id
-    assert stale_keyword_document["workspace_id"] == source_workspace_id
+    assert "workspace_id" not in stale_keyword_document
+
+
+def _set_files_user_admission(user_ids: list[str]) -> None:
+    with get_session_factory().begin() as db:
+        policy = db.get(AppAccessPolicy, "files")
+        assert policy is not None
+        policy.audience = "selected"
+        db.execute(delete(AppUserGrant).where(AppUserGrant.app_id == "files"))
+        db.add_all(AppUserGrant(app_id="files", user_id=user_id) for user_id in user_ids)

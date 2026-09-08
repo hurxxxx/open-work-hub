@@ -4,14 +4,14 @@
 or resource identities. This first table is an executable mirror of the Retrieval source catalog;
 keep the identifier values exact.
 
-| Source        | Scope     | Backend        | Active |
-| ------------- | --------- | -------------- | ------ |
-| `generic_rag` | workspace | qdrant         | true   |
-| `keyword`     | workspace | keyword_search | true   |
+| Source        | Scope   | Backend        | Active |
+| ------------- | ------- | -------------- | ------ |
+| `generic_rag` | company | qdrant         | true   |
+| `keyword`     | company | keyword_search | true   |
 
 RAG projection and query participation is resource-owned:
 
-| App     | Resource type       | Registered projection/ACL | Default RAG query and workspace reindex                            | Listed source kinds               |
+| App     | Resource type       | Registered projection/ACL | Default RAG query and company reindex                              | Listed source kinds               |
 | ------- | ------------------- | ------------------------- | ------------------------------------------------------------------ | --------------------------------- |
 | Docs    | `docs_native_doc`   | yes                       | yes                                                                | visible official native-doc kinds |
 | Files   | `file_manager_file` | yes                       | only while the Files operator gate and active generation pair pass | `files` while active              |

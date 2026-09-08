@@ -22,18 +22,18 @@ class RetrievalSourceCatalogItem:
 _SOURCE_CATALOG: tuple[RetrievalSourceCatalogItem, ...] = (
     RetrievalSourceCatalogItem(
         source="generic_rag",
-        label="Workspace RAG",
-        scope="workspace",
+        label="Company RAG",
+        scope="company",
         backend="qdrant",
-        description="Official workspace RAG over registered source adapters.",
+        description="Official company RAG over registered source adapters.",
         required_app_ids=("docs",),
     ),
     RetrievalSourceCatalogItem(
         source="keyword",
-        label="Workspace keyword search",
-        scope="workspace",
+        label="Company keyword search",
+        scope="company",
         backend="keyword_search",
-        description="BM25/full-text style keyword search over workspace projections.",
+        description="BM25/full-text style keyword search over company projections.",
     ),
 )
 

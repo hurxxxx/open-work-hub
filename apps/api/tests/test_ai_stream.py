@@ -1,4 +1,4 @@
-"""Route-level tests for workspace-scoped AI chat stream endpoints."""
+"""Route-level tests for admitted company users and personal AI chat streams."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 import uvicorn
 
 from open_work_hub_api.core import llm as llm_core
-from open_work_hub_api.core.db import get_engine
+from open_work_hub_api.core.db import get_engine, get_session_factory
 from open_work_hub_api.core.llm_adapters import StreamChunk
 from open_work_hub_api.core.settings import get_settings
 from open_work_hub_api.domains.ai.model_credentials import encrypt_api_key
@@ -32,7 +32,7 @@ from open_work_hub_api.domains.ai.registry import get_ai_capability_registry
 from open_work_hub_api.domains.ai import agent as ai_agent
 from open_work_hub_api.domains.ai import approvals as ai_approvals
 from open_work_hub_api.domains.ai import router as ai_router
-from open_work_hub_api.domains.auth.models import AuditLog, User, Workspace
+from open_work_hub_api.domains.auth.models import AuditLog, User
 from open_work_hub_api.domains.conversations.scope_registry import (
     ConversationScopeArtifact,
     ConversationScopeTurnContext,
@@ -40,7 +40,7 @@ from open_work_hub_api.domains.conversations.scope_registry import (
 from test_meeting import (
     _auth_headers,
     _bootstrap_admin_session,
-    _create_user_with_workspaces,
+    _create_company_user,
     _dev_login,
     _login,
 )
@@ -277,12 +277,12 @@ class _SequencedAsyncPoolClient:
         return self
 
 
-def _workspace_ai_path(slug: str, suffix: str) -> str:
-    return f"/api/v1/workspaces/{slug}/chatbot{suffix}"
+def _ai_path(suffix: str) -> str:
+    return f"/api/v1/chatbot{suffix}"
 
 
 def _legacy_ai_path(suffix: str) -> str:
-    return f"/api/v1/chatbot{suffix}"
+    return f"/api/v1/workspaces/retired/chatbot{suffix}"
 
 
 def _seeded_dev_login(client: TestClient, account_key: str) -> dict:
@@ -442,7 +442,6 @@ def test_chat_sync_injects_open_work_hub_identity_prompt_for_plain_business_chat
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
     captured_messages: list[dict[str, Any]] = []
 
@@ -487,7 +486,7 @@ def test_chat_sync_injects_open_work_hub_identity_prompt_for_plain_business_chat
     monkeypatch.setattr(ai_router, "complete_gateway_chat", _fake_complete_gateway_chat)
 
     response = client.post(
-        _workspace_ai_path(slug, "/chat"),
+        _ai_path("/chat"),
         headers=_auth_headers(auth["token"]),
         json={
             "backend_mode": "local",
@@ -503,7 +502,6 @@ def test_chat_stream_injects_open_work_hub_identity_prompt_for_plain_business_ch
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
     captured_messages: list[dict[str, Any]] = []
 
@@ -520,7 +518,7 @@ def test_chat_stream_injects_open_work_hub_identity_prompt_for_plain_business_ch
 
     status_code, events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -623,7 +621,6 @@ async def test_chat_stream_disconnect_marks_audit_cancelled(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
 
     pool_client = _FakeAsyncPoolClient(
@@ -637,7 +634,7 @@ async def test_chat_stream_disconnect_marks_audit_cancelled(
     before = len(_llm_audit_rows())
     await _close_stream_after_first_event(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={"messages": [{"role": "user", "content": "hi"}]},
     )
@@ -659,7 +656,6 @@ async def test_chat_stream_disconnect_after_done_keeps_persisted_turn_completed(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
 
     async def fake_complete_gateway_chat_stream(*args: Any, **kwargs: Any):
@@ -675,7 +671,7 @@ async def test_chat_stream_disconnect_after_done_keeps_persisted_turn_completed(
 
     events = await _close_stream_after_event_type(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         event_type="done",
         headers=_auth_headers(auth["token"]),
         json_body={
@@ -691,7 +687,7 @@ async def test_chat_stream_disconnect_after_done_keeps_persisted_turn_completed(
     detail: dict[str, Any] | None = None
     for _ in range(20):
         response = client.get(
-            f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
+            f"/api/v1/chatbot/conversations/{conversation_id}",
             headers=_auth_headers(auth["token"]),
         )
         detail = response.json()
@@ -711,7 +707,6 @@ def test_chat_stream_caller_provider_does_not_override_local_workload_route(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
     pool_client = _FakeAsyncPoolClient(
         [_delta(content="local response"), _delta(finish_reason="stop")]
@@ -724,7 +719,7 @@ def test_chat_stream_caller_provider_does_not_override_local_workload_route(
     before = len(_llm_audit_rows())
     status_code, events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -743,7 +738,6 @@ def test_chat_stream_caller_model_does_not_override_local_workload_model(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
     pool_client = _FakeAsyncPoolClient(
         [_delta(content="local response"), _delta(finish_reason="stop")]
@@ -757,7 +751,7 @@ def test_chat_stream_caller_model_does_not_override_local_workload_model(
 
     status_code, events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -777,7 +771,6 @@ def test_chat_stream_caller_provider_does_not_override_external_workload_provide
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "external")
     _configure_database_external_provider(
         provider_id="openai",
@@ -798,7 +791,7 @@ def test_chat_stream_caller_provider_does_not_override_external_workload_provide
 
     status_code, events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "auto",
@@ -818,7 +811,6 @@ def test_chat_stream_external_tool_incompatibility_blocks_without_local_fallback
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "external")
     _configure_database_external_provider(
         provider_id="anthropic",
@@ -841,7 +833,7 @@ def test_chat_stream_external_tool_incompatibility_blocks_without_local_fallback
 
     status_code, events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "auto",
@@ -859,20 +851,19 @@ def test_chat_stream_external_tool_incompatibility_blocks_without_local_fallback
 
 def test_chat_stream_requires_auth(client: TestClient) -> None:
     response = client.post(
-        _workspace_ai_path("administrator", "/chat/stream"),
+        _ai_path("/chat/stream"),
         json={"messages": [{"role": "user", "content": "hi"}]},
     )
     assert response.status_code in (401, 403)
 
 
-def test_chat_stream_requires_workspace_membership(client: TestClient) -> None:
+def test_chat_stream_requires_current_app_admission(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
-    outsider = _create_user_with_workspaces(
+    outsider = _create_company_user(
         client,
         admin["token"],
         email="stream-outsider@open-work-hub.local",
         full_name="Stream Outsider",
-        workspace_keys=[],
     )
     outsider_token = _login(
         client,
@@ -880,8 +871,14 @@ def test_chat_stream_requires_workspace_membership(client: TestClient) -> None:
         outsider["temporary_password"],
     )
 
+    from open_work_hub_api.domains.auth.app_access_models import AppAccessPolicy
+
+    with get_session_factory()() as db:
+        db.get(AppAccessPolicy, "chatbot").audience = "selected"
+        db.commit()
+
     response = client.post(
-        _workspace_ai_path("administrator", "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(outsider_token),
         json={"messages": [{"role": "user", "content": "hi"}]},
     )
@@ -892,7 +889,6 @@ def test_chat_stream_emits_content_and_reasoning_in_order(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
 
     pool_client = _FakeAsyncPoolClient(
@@ -910,7 +906,7 @@ def test_chat_stream_emits_content_and_reasoning_in_order(
 
     status_code, events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -949,7 +945,6 @@ def test_chat_stream_suppresses_reasoning_when_stream_reasoning_false(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
     pool_client = _FakeAsyncPoolClient(
         [
@@ -963,7 +958,7 @@ def test_chat_stream_suppresses_reasoning_when_stream_reasoning_false(
 
     _, events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "messages": [{"role": "user", "content": "hi"}],
@@ -982,7 +977,6 @@ def test_chat_stream_tool_command_uses_registered_business_tool(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "delivery-hub-admin")
-    slug = "delivery-hub"
 
     def _unexpected_pool_call(pool, external_provider=None):  # type: ignore[no-untyped-def]
         raise AssertionError(f"LLM pool should not be called for /tool commands: {pool}")
@@ -991,7 +985,7 @@ def test_chat_stream_tool_command_uses_registered_business_tool(
 
     status_code, events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "messages": [
@@ -1017,7 +1011,6 @@ def test_chat_stream_agent_loop_uses_registered_business_tools(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "delivery-hub-admin")
-    slug = "delivery-hub"
     _set_policy("chatbot", "local_only")
     _enable_local_tool_calling(monkeypatch)
     pool_client = _FakeAsyncPoolClient(
@@ -1074,7 +1067,7 @@ def test_chat_stream_agent_loop_uses_registered_business_tools(
 
     status_code, events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "messages": [{"role": "user", "content": "이슈 만들어줘"}],
@@ -1102,7 +1095,6 @@ def test_chat_stream_provider_error_emits_error_and_done_and_audits_error(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
     pool_client = _FakeAsyncPoolClient(error=OpenAIError("backend down"))
     monkeypatch.setattr(
@@ -1111,7 +1103,7 @@ def test_chat_stream_provider_error_emits_error_and_done_and_audits_error(
 
     status_code, events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={"messages": [{"role": "user", "content": "hi"}]},
     )
@@ -1127,7 +1119,6 @@ def test_chat_stream_generic_adapter_error_emits_error_contract(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
     pool_client = _FakeAsyncPoolClient(error=RuntimeError("adapter boom"))
     monkeypatch.setattr(
@@ -1136,7 +1127,7 @@ def test_chat_stream_generic_adapter_error_emits_error_contract(
 
     status_code, events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={"messages": [{"role": "user", "content": "hi"}]},
     )
@@ -1152,7 +1143,6 @@ def test_chat_stream_local_only_policy_local_fail_no_external_call(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
 
     local_pool = _FakeAsyncPoolClient(error=OpenAIError("local down"))
@@ -1167,7 +1157,7 @@ def test_chat_stream_local_only_policy_local_fail_no_external_call(
 
     _, events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={"messages": [{"role": "user", "content": "hi"}]},
     )
@@ -1176,11 +1166,10 @@ def test_chat_stream_local_only_policy_local_fail_no_external_call(
     assert _llm_audit_rows()[-1].payload["status"] == "error"
 
 
-def test_chat_stream_mounts_on_workspace_path_and_legacy_path_is_removed(
+def test_chat_stream_uses_app_path_and_retired_container_route_is_removed(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
 
     def build_pool(_pool: str, external_provider: str | None = None) -> _FakeAsyncPoolClient:
@@ -1198,7 +1187,7 @@ def test_chat_stream_mounts_on_workspace_path_and_legacy_path_is_removed(
 
     status_code, events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={"messages": [{"role": "user", "content": "hi"}]},
     )
@@ -1213,7 +1202,6 @@ def test_chat_sync_persists_user_and_assistant_turns_and_returns_conversation_id
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
 
     pool_client = _FakeSyncPoolClient(content="echo: hi")
@@ -1222,7 +1210,7 @@ def test_chat_sync_persists_user_and_assistant_turns_and_returns_conversation_id
     )
 
     response = client.post(
-        _workspace_ai_path(slug, "/chat"),
+        _ai_path("/chat"),
         headers=_auth_headers(auth["token"]),
         json={
             "backend_mode": "local",
@@ -1237,7 +1225,7 @@ def test_chat_sync_persists_user_and_assistant_turns_and_returns_conversation_id
     assert body["content"] == "echo: hi"
 
     detail = client.get(
-        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
+        f"/api/v1/chatbot/conversations/{conversation_id}",
         headers=_auth_headers(auth["token"]),
     ).json()
     assert [turn["role"] for turn in detail["turns"]] == ["user", "assistant"]
@@ -1249,7 +1237,6 @@ def test_chat_sync_appends_to_existing_conversation(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
 
     monkeypatch.setattr(
@@ -1258,7 +1245,7 @@ def test_chat_sync_appends_to_existing_conversation(
         lambda pool, external_provider=None: _FakeSyncPoolClient(content="first"),
     )
     first = client.post(
-        _workspace_ai_path(slug, "/chat"),
+        _ai_path("/chat"),
         headers=_auth_headers(auth["token"]),
         json={
             "backend_mode": "local",
@@ -1275,7 +1262,7 @@ def test_chat_sync_appends_to_existing_conversation(
         lambda pool, external_provider=None: _FakeSyncPoolClient(content="second"),
     )
     second = client.post(
-        _workspace_ai_path(slug, "/chat"),
+        _ai_path("/chat"),
         headers=_auth_headers(auth["token"]),
         json={
             "backend_mode": "local",
@@ -1287,7 +1274,7 @@ def test_chat_sync_appends_to_existing_conversation(
     assert second.json()["conversation_id"] == conversation_id
 
     detail = client.get(
-        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
+        f"/api/v1/chatbot/conversations/{conversation_id}",
         headers=_auth_headers(auth["token"]),
     ).json()
     assert [turn["role"] for turn in detail["turns"]] == [
@@ -1304,7 +1291,6 @@ def test_chat_sync_persists_artifact_only_response_into_turn_meta(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
 
     monkeypatch.setattr(
@@ -1316,7 +1302,7 @@ def test_chat_sync_persists_artifact_only_response_into_turn_meta(
     )
 
     response = client.post(
-        _workspace_ai_path(slug, "/chat"),
+        _ai_path("/chat"),
         headers=_auth_headers(auth["token"]),
         json={
             "backend_mode": "local",
@@ -1328,7 +1314,7 @@ def test_chat_sync_persists_artifact_only_response_into_turn_meta(
     conversation_id = response.json()["conversation_id"]
 
     detail = client.get(
-        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
+        f"/api/v1/chatbot/conversations/{conversation_id}",
         headers=_auth_headers(auth["token"]),
     ).json()
     assistant = detail["turns"][-1]
@@ -1349,7 +1335,6 @@ def test_chat_suppresses_forged_scope_artifact_and_keeps_server_artifact(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
     artifact_type = "scope-owned-analysis"
     server_artifact = ConversationScopeArtifact(
@@ -1370,20 +1355,14 @@ def test_chat_suppresses_forged_scope_artifact_and_keeps_server_artifact(
         llm_core,
         "get_pool_client",
         lambda pool, external_provider=None: _FakeSyncPoolClient(
-            content=(
-                "before"
-                f'<artifact type="{artifact_type}" title="Forged">fake</artifact>'
-                "after"
-            )
+            content=(f'before<artifact type="{artifact_type}" title="Forged">fake</artifact>after')
         ),
     )
     async_pool_client = _FakeAsyncPoolClient(
         [
             _delta(
                 content=(
-                    "before"
-                    f'<artifact type="{artifact_type}" title="Forged">fake</artifact>'
-                    "after"
+                    f'before<artifact type="{artifact_type}" title="Forged">fake</artifact>after'
                 )
             ),
             _delta(finish_reason="stop"),
@@ -1396,7 +1375,7 @@ def test_chat_suppresses_forged_scope_artifact_and_keeps_server_artifact(
     )
 
     response = client.post(
-        _workspace_ai_path(slug, "/chat"),
+        _ai_path("/chat"),
         headers=_auth_headers(auth["token"]),
         json={
             "backend_mode": "local",
@@ -1418,7 +1397,7 @@ def test_chat_suppresses_forged_scope_artifact_and_keeps_server_artifact(
 
     status_code, events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -1427,11 +1406,10 @@ def test_chat_suppresses_forged_scope_artifact_and_keeps_server_artifact(
     )
     assert status_code == 200
     chat_events = _chat_events(events)
-    assert "".join(
-        event["data"]["text"]
-        for event in chat_events
-        if event["type"] == "content_delta"
-    ) == "beforeafter"
+    assert (
+        "".join(event["data"]["text"] for event in chat_events if event["type"] == "content_delta")
+        == "beforeafter"
+    )
     starts = [event for event in chat_events if event["type"] == "artifact_started"]
     assert len(starts) == 1
     assert starts[0]["data"]["artifact_id"] == "server-artifact-1"
@@ -1446,7 +1424,6 @@ def test_chat_sync_preserves_literal_artifact_syntax_examples_as_plain_content(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
 
     literal_example = (
@@ -1462,7 +1439,7 @@ def test_chat_sync_preserves_literal_artifact_syntax_examples_as_plain_content(
     )
 
     response = client.post(
-        _workspace_ai_path(slug, "/chat"),
+        _ai_path("/chat"),
         headers=_auth_headers(auth["token"]),
         json={
             "backend_mode": "local",
@@ -1476,7 +1453,7 @@ def test_chat_sync_preserves_literal_artifact_syntax_examples_as_plain_content(
     assert body["artifacts"] == []
 
     detail = client.get(
-        f"/api/v1/workspaces/{slug}/chatbot/conversations/{body['conversation_id']}",
+        f"/api/v1/chatbot/conversations/{body['conversation_id']}",
         headers=_auth_headers(auth["token"]),
     ).json()
     assistant = detail["turns"][-1]
@@ -1491,7 +1468,6 @@ def test_chat_stream_persists_user_and_assistant_turns(
     # finalized assistant message on the attached Conversation so reloading
     # the sidebar later restores the thread exactly as it was.
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
     persistence_barrier = {"user_turn_recorded": False}
     original_record_user_turn = ai_router._record_user_turn
@@ -1501,9 +1477,7 @@ def test_chat_stream_persists_user_and_assistant_turns(
         original_record_user_turn(**kwargs)
         persistence_barrier["user_turn_recorded"] = True
 
-    def assert_attach_is_durable(
-        event_type: str, *args: Any, **kwargs: Any
-    ) -> Any:
+    def assert_attach_is_durable(event_type: str, *args: Any, **kwargs: Any) -> Any:
         if event_type == "conversation_attached":
             assert persistence_barrier["user_turn_recorded"] is True
         return original_make_envelope(event_type, *args, **kwargs)
@@ -1524,7 +1498,7 @@ def test_chat_stream_persists_user_and_assistant_turns(
 
     status_code, events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -1539,7 +1513,7 @@ def test_chat_stream_persists_user_and_assistant_turns(
 
     # Detail API should now return the user + assistant turn pair.
     detail = client.get(
-        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
+        f"/api/v1/chatbot/conversations/{conversation_id}",
         headers=_auth_headers(auth["token"]),
     ).json()
     assert [t["role"] for t in detail["turns"]] == ["user", "assistant"]
@@ -1550,7 +1524,7 @@ def test_chat_stream_persists_user_and_assistant_turns(
 
     # Listing surfaces the new conversation newest-first.
     listing = client.get(
-        f"/api/v1/workspaces/{slug}/chatbot/conversations",
+        "/api/v1/chatbot/conversations",
         headers=_auth_headers(auth["token"]),
     ).json()
     assert listing["items"][0]["id"] == conversation_id
@@ -1560,7 +1534,6 @@ def test_chat_stream_appends_to_existing_conversation(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
 
     # Start a conversation with a first exchange.
@@ -1570,7 +1543,7 @@ def test_chat_stream_appends_to_existing_conversation(
     )
     _, events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -1590,7 +1563,7 @@ def test_chat_stream_appends_to_existing_conversation(
     )
     _, events2 = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -1602,7 +1575,7 @@ def test_chat_stream_appends_to_existing_conversation(
     assert attached2["data"]["conversation_id"] == conversation_id
 
     detail = client.get(
-        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
+        f"/api/v1/chatbot/conversations/{conversation_id}",
         headers=_auth_headers(auth["token"]),
     ).json()
     assert [t["role"] for t in detail["turns"]] == [
@@ -1621,7 +1594,6 @@ def test_chat_stream_rejects_unknown_conversation_id(
     # A bogus conversation_id must NOT silently create a fresh conversation —
     # surface an SSE error envelope so the client can recover deterministically.
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
 
     def _should_not_be_called(_pool, external_provider=None):
@@ -1631,7 +1603,7 @@ def test_chat_stream_rejects_unknown_conversation_id(
 
     status_code, events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -1656,7 +1628,6 @@ def test_chat_stream_persist_false_skips_conversation_creation(
     # otherwise every request from the current web client would fork a new
     # one-turn conversation until conversation_id is threaded back.
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
 
     pool_client = _FakeAsyncPoolClient([_delta(content="ok", finish_reason="stop")])
@@ -1666,7 +1637,7 @@ def test_chat_stream_persist_false_skips_conversation_creation(
 
     _, events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -1675,7 +1646,7 @@ def test_chat_stream_persist_false_skips_conversation_creation(
     )
     assert not [e for e in events if e["type"] == "conversation_attached"]
     listing = client.get(
-        f"/api/v1/workspaces/{slug}/chatbot/conversations",
+        "/api/v1/chatbot/conversations",
         headers=_auth_headers(auth["token"]),
     ).json()
     assert listing["items"] == []
@@ -1689,7 +1660,6 @@ def test_chat_stream_persists_failure_with_empty_body(
     # the live stream showed (an error bubble). An empty, body-less turn was
     # previously dropped, making the request look unanswered.
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
 
     pool_client = _FakeAsyncPoolClient(error=RuntimeError("boom"))
@@ -1699,7 +1669,7 @@ def test_chat_stream_persists_failure_with_empty_body(
 
     status_code, events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -1713,7 +1683,7 @@ def test_chat_stream_persists_failure_with_empty_body(
     ]
 
     detail = client.get(
-        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
+        f"/api/v1/chatbot/conversations/{conversation_id}",
         headers=_auth_headers(auth["token"]),
     ).json()
     roles = [t["role"] for t in detail["turns"]]
@@ -1735,7 +1705,6 @@ def test_chat_stream_extracts_artifact_markup_into_dedicated_envelopes(
     # content_delta (suffix). The inline markup never reaches the client as
     # plain content.
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
     monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool, provider=None: False)
 
@@ -1757,7 +1726,7 @@ def test_chat_stream_extracts_artifact_markup_into_dedicated_envelopes(
 
     status_code, events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -1796,7 +1765,6 @@ def test_chat_stream_promotes_html_document_fence_to_html_artifact(
     # documents should still route to the side panel instead of flooding
     # the chat bubble with source.
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
     monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool, provider=None: False)
 
@@ -1816,7 +1784,7 @@ def test_chat_stream_promotes_html_document_fence_to_html_artifact(
 
     status_code, events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -1850,7 +1818,7 @@ def test_chat_stream_promotes_html_document_fence_to_html_artifact(
         "conversation_id"
     ]
     detail = client.get(
-        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
+        f"/api/v1/chatbot/conversations/{conversation_id}",
         headers=_auth_headers(auth["token"]),
     ).json()
     assistant = detail["turns"][-1]
@@ -1867,7 +1835,6 @@ def test_chat_stream_persists_artifact_into_turn_meta(
     # The assistant turn row on disk must include the artifact so reload
     # restores the side panel content.
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
     monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool, provider=None: False)
 
@@ -1888,7 +1855,7 @@ def test_chat_stream_persists_artifact_into_turn_meta(
 
     status_code, events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -1902,7 +1869,7 @@ def test_chat_stream_persists_artifact_into_turn_meta(
     ]
 
     detail = client.get(
-        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
+        f"/api/v1/chatbot/conversations/{conversation_id}",
         headers=_auth_headers(auth["token"]),
     ).json()
     assistant = detail["turns"][-1]
@@ -1921,7 +1888,6 @@ def test_chat_stream_code_artifact_language_roundtrips_through_stream_and_persis
     # must surface on the live `artifact_started` envelope AND on the
     # persisted turn so reload picks the right syntax highlighter.
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
     monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool, provider=None: False)
 
@@ -1941,7 +1907,7 @@ def test_chat_stream_code_artifact_language_roundtrips_through_stream_and_persis
 
     status_code, events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -1959,7 +1925,7 @@ def test_chat_stream_code_artifact_language_roundtrips_through_stream_and_persis
         "conversation_id"
     ]
     detail = client.get(
-        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
+        f"/api/v1/chatbot/conversations/{conversation_id}",
         headers=_auth_headers(auth["token"]),
     ).json()
     assistant = detail["turns"][-1]
@@ -1975,7 +1941,6 @@ def test_chat_stream_edit_replaces_turns_from_requested_seq(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
     monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool, provider=None: False)
     pool_client = _SequencedAsyncPoolClient(
@@ -1990,7 +1955,7 @@ def test_chat_stream_edit_replaces_turns_from_requested_seq(
 
     status_code, events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -2003,7 +1968,7 @@ def test_chat_stream_edit_replaces_turns_from_requested_seq(
         "data"
     ]["conversation_id"]
     detail = client.get(
-        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
+        f"/api/v1/chatbot/conversations/{conversation_id}",
         headers=_auth_headers(auth["token"]),
     ).json()
     user_turn_id = detail["turns"][0]["id"]
@@ -2011,7 +1976,7 @@ def test_chat_stream_edit_replaces_turns_from_requested_seq(
 
     status_code, _ = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -2027,7 +1992,7 @@ def test_chat_stream_edit_replaces_turns_from_requested_seq(
     assert status_code == 200
 
     detail = client.get(
-        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
+        f"/api/v1/chatbot/conversations/{conversation_id}",
         headers=_auth_headers(auth["token"]),
     ).json()
     assert detail["title"] == "edited"
@@ -2041,7 +2006,6 @@ def test_chat_stream_rewrite_rejects_optimistic_synthetic_turn_id(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
     monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool, provider=None: False)
     pool_client = _SequencedAsyncPoolClient(
@@ -2056,7 +2020,7 @@ def test_chat_stream_rewrite_rejects_optimistic_synthetic_turn_id(
 
     _, events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -2068,14 +2032,14 @@ def test_chat_stream_rewrite_rejects_optimistic_synthetic_turn_id(
         "data"
     ]["conversation_id"]
     detail = client.get(
-        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
+        f"/api/v1/chatbot/conversations/{conversation_id}",
         headers=_auth_headers(auth["token"]),
     ).json()
     tail_turn = detail["turns"][-1]
 
     _, blocked_events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -2099,7 +2063,6 @@ def test_chat_stream_retry_reuses_trailing_user_turn_without_duplication(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
     monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool, provider=None: False)
     pool_client = _SequencedAsyncPoolClient(
@@ -2114,7 +2077,7 @@ def test_chat_stream_retry_reuses_trailing_user_turn_without_duplication(
 
     status_code, events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -2127,7 +2090,7 @@ def test_chat_stream_retry_reuses_trailing_user_turn_without_duplication(
         "data"
     ]["conversation_id"]
     detail = client.get(
-        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
+        f"/api/v1/chatbot/conversations/{conversation_id}",
         headers=_auth_headers(auth["token"]),
     ).json()
     assistant_turn_id = detail["turns"][1]["id"]
@@ -2135,7 +2098,7 @@ def test_chat_stream_retry_reuses_trailing_user_turn_without_duplication(
 
     status_code, _ = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -2152,7 +2115,7 @@ def test_chat_stream_retry_reuses_trailing_user_turn_without_duplication(
     assert status_code == 200
 
     detail = client.get(
-        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
+        f"/api/v1/chatbot/conversations/{conversation_id}",
         headers=_auth_headers(auth["token"]),
     ).json()
     assert [(turn["seq"], turn["role"], turn["content"]) for turn in detail["turns"]] == [
@@ -2165,7 +2128,6 @@ def test_chat_stream_append_rejects_active_conversation_run_lock(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
     monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool, provider=None: False)
     pool_client = _SequencedAsyncPoolClient(
@@ -2180,7 +2142,7 @@ def test_chat_stream_append_rejects_active_conversation_run_lock(
 
     _, events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -2193,26 +2155,22 @@ def test_chat_stream_append_rejects_active_conversation_run_lock(
     ]["conversation_id"]
 
     with Session(get_engine()) as db:
-        workspace = db.scalar(select(Workspace).where(Workspace.key == slug))
         user = db.get(User, auth["user"]["id"])
-        assert workspace is not None
         assert user is not None
         conversation = ai_router.conversations_service.get_conversation(
             db,
-            workspace=workspace,
             user=user,
             conversation_id=conversation_id,
         )
         ai_approvals.acquire_conversation_run_lock(
             db,
-            workspace=workspace,
             conversation=conversation,
             requested_by_user=user,
         )
 
     _, blocked_events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers={
             **_auth_headers(auth["token"]),
             "Accept-Language": "en-US",
@@ -2247,7 +2205,7 @@ def test_chat_stream_append_rejects_active_conversation_run_lock(
 
     _, retry_events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -2265,7 +2223,6 @@ def test_chat_stream_scope_context_error_releases_conversation_run_lock(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     original_scope_context = ai_router.conversation_scope_turn_context
 
     def fail_scope_context(*_: Any, **__: Any) -> Any:
@@ -2275,7 +2232,7 @@ def test_chat_stream_scope_context_error_releases_conversation_run_lock(
 
     status_code, events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -2316,7 +2273,7 @@ def test_chat_stream_scope_context_error_releases_conversation_run_lock(
 
     _, retry_events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -2336,14 +2293,11 @@ def test_scope_direct_response_bypasses_model_for_sync_and_stream(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     direct_text = "정확 집계를 완료하지 못했습니다."
     monkeypatch.setattr(
         ai_router,
         "conversation_scope_turn_context",
-        lambda *_args, **_kwargs: ConversationScopeTurnContext(
-            direct_response=direct_text
-        ),
+        lambda *_args, **_kwargs: ConversationScopeTurnContext(direct_response=direct_text),
     )
     pool_client = _FakeAsyncPoolClient(
         [_delta(content="model must not run"), _delta(finish_reason="stop")]
@@ -2355,7 +2309,7 @@ def test_scope_direct_response_bypasses_model_for_sync_and_stream(
     )
 
     sync_response = client.post(
-        _workspace_ai_path(slug, "/chat"),
+        _ai_path("/chat"),
         headers=_auth_headers(auth["token"]),
         json={
             "backend_mode": "local",
@@ -2369,7 +2323,7 @@ def test_scope_direct_response_bypasses_model_for_sync_and_stream(
     assert sync_response.json()["chosen_pool"] is None
     sync_conversation_id = sync_response.json()["conversation_id"]
     sync_detail = client.get(
-        f"/api/v1/workspaces/{slug}/chatbot/conversations/{sync_conversation_id}",
+        f"/api/v1/chatbot/conversations/{sync_conversation_id}",
         headers=_auth_headers(auth["token"]),
     ).json()
     sync_assistant = sync_detail["turns"][-1]
@@ -2379,7 +2333,7 @@ def test_scope_direct_response_bypasses_model_for_sync_and_stream(
 
     status_code, events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -2402,12 +2356,10 @@ def test_scope_direct_response_bypasses_model_for_sync_and_stream(
     assert done_meta["canonical_model"] == "scope-direct"
     assert done_meta["provider"] == "server"
     stream_conversation_id = next(
-        event
-        for event in events
-        if event["type"] == "conversation_attached"
+        event for event in events if event["type"] == "conversation_attached"
     )["data"]["conversation_id"]
     stream_detail = client.get(
-        f"/api/v1/workspaces/{slug}/chatbot/conversations/{stream_conversation_id}",
+        f"/api/v1/chatbot/conversations/{stream_conversation_id}",
         headers=_auth_headers(auth["token"]),
     ).json()
     stream_assistant = stream_detail["turns"][-1]
@@ -2421,7 +2373,6 @@ def test_chat_stream_rewrite_rejects_live_pending_approval(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
     monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool, provider=None: False)
     pool_client = _FakeAsyncPoolClient(
@@ -2433,7 +2384,7 @@ def test_chat_stream_rewrite_rejects_live_pending_approval(
 
     status_code, events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -2446,26 +2397,22 @@ def test_chat_stream_rewrite_rejects_live_pending_approval(
         "data"
     ]["conversation_id"]
     detail = client.get(
-        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
+        f"/api/v1/chatbot/conversations/{conversation_id}",
         headers=_auth_headers(auth["token"]),
     ).json()
     user_turn_id = detail["turns"][0]["id"]
     tail_turn = detail["turns"][-1]
 
     with Session(get_engine()) as db:
-        workspace = db.scalar(select(Workspace).where(Workspace.key == slug))
         user = db.get(User, auth["user"]["id"])
-        assert workspace is not None
         assert user is not None
         conversation = ai_router.conversations_service.get_conversation(
             db,
-            workspace=workspace,
             user=user,
             conversation_id=conversation_id,
         )
         snapshot = ai_approvals.persist_snapshot_on_halt(
             db,
-            workspace=workspace,
             conversation=conversation,
             requested_by_user=user,
             messages_json=[{"role": "user", "content": "make a task"}],
@@ -2474,7 +2421,6 @@ def test_chat_stream_rewrite_rejects_live_pending_approval(
         )
         ai_approvals.create_pending_approval(
             db,
-            workspace=workspace,
             conversation=conversation,
             requested_by_user=user,
             agent_run_id=snapshot.id,
@@ -2487,7 +2433,7 @@ def test_chat_stream_rewrite_rejects_live_pending_approval(
 
     status_code, blocked_events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -2511,7 +2457,6 @@ def test_chat_stream_rewrite_requires_target_turn_id(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
     monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool, provider=None: False)
     pool_client = _SequencedAsyncPoolClient(
@@ -2526,7 +2471,7 @@ def test_chat_stream_rewrite_requires_target_turn_id(
 
     _, events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -2540,7 +2485,7 @@ def test_chat_stream_rewrite_requires_target_turn_id(
 
     status_code, blocked_events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers={
             **_auth_headers(auth["token"]),
             "Accept-Language": "en-US",
@@ -2569,7 +2514,6 @@ def test_chat_stream_rewrite_rejects_target_role_mismatch(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
     monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool, provider=None: False)
     pool_client = _SequencedAsyncPoolClient(
@@ -2584,7 +2528,7 @@ def test_chat_stream_rewrite_rejects_target_role_mismatch(
 
     _, events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -2596,7 +2540,7 @@ def test_chat_stream_rewrite_rejects_target_role_mismatch(
         "data"
     ]["conversation_id"]
     detail = client.get(
-        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
+        f"/api/v1/chatbot/conversations/{conversation_id}",
         headers=_auth_headers(auth["token"]),
     ).json()
     assistant_turn_id = detail["turns"][1]["id"]
@@ -2604,7 +2548,7 @@ def test_chat_stream_rewrite_rejects_target_role_mismatch(
 
     _, blocked_events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -2627,7 +2571,6 @@ def test_chat_stream_rewrite_rejects_stale_tail(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
     monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool, provider=None: False)
     pool_client = _SequencedAsyncPoolClient(
@@ -2643,7 +2586,7 @@ def test_chat_stream_rewrite_rejects_stale_tail(
 
     _, events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -2655,7 +2598,7 @@ def test_chat_stream_rewrite_rejects_stale_tail(
         "data"
     ]["conversation_id"]
     stale_detail = client.get(
-        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
+        f"/api/v1/chatbot/conversations/{conversation_id}",
         headers=_auth_headers(auth["token"]),
     ).json()
     stale_user_turn_id = stale_detail["turns"][0]["id"]
@@ -2663,7 +2606,7 @@ def test_chat_stream_rewrite_rejects_stale_tail(
 
     _, _ = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -2679,7 +2622,7 @@ def test_chat_stream_rewrite_rejects_stale_tail(
 
     _, blocked_events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -2704,7 +2647,6 @@ def test_chat_sync_code_artifact_language_roundtrips(
     # Sync `/chat` must also carry the `language` hint on the response's
     # `artifacts` array so clients without SSE see the same metadata.
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
 
     def _fake_complete_gateway_chat(_request, _db):  # type: ignore[no-untyped-def]
@@ -2748,7 +2690,7 @@ def test_chat_sync_code_artifact_language_roundtrips(
     monkeypatch.setattr(ai_router, "complete_gateway_chat", _fake_complete_gateway_chat)
 
     response = client.post(
-        _workspace_ai_path(slug, "/chat"),
+        _ai_path("/chat"),
         headers=_auth_headers(auth["token"]),
         json={
             "backend_mode": "local",
@@ -2769,7 +2711,6 @@ def test_chat_sync_retry_reuses_trailing_user_turn_without_duplication(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
     completions = iter(["bad sync answer", "better sync answer"])
 
@@ -2812,7 +2753,7 @@ def test_chat_sync_retry_reuses_trailing_user_turn_without_duplication(
     monkeypatch.setattr(ai_router, "complete_gateway_chat", _fake_complete_gateway_chat)
 
     first = client.post(
-        _workspace_ai_path(slug, "/chat"),
+        _ai_path("/chat"),
         headers=_auth_headers(auth["token"]),
         json={
             "backend_mode": "local",
@@ -2823,14 +2764,14 @@ def test_chat_sync_retry_reuses_trailing_user_turn_without_duplication(
     assert first.status_code == 200, first.text
     conversation_id = first.json()["conversation_id"]
     detail = client.get(
-        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
+        f"/api/v1/chatbot/conversations/{conversation_id}",
         headers=_auth_headers(auth["token"]),
     ).json()
     assistant_turn_id = detail["turns"][1]["id"]
     tail_turn = detail["turns"][-1]
 
     second = client.post(
-        _workspace_ai_path(slug, "/chat"),
+        _ai_path("/chat"),
         headers=_auth_headers(auth["token"]),
         json={
             "backend_mode": "local",
@@ -2847,7 +2788,7 @@ def test_chat_sync_retry_reuses_trailing_user_turn_without_duplication(
     assert second.status_code == 200, second.text
 
     detail = client.get(
-        f"/api/v1/workspaces/{slug}/chatbot/conversations/{conversation_id}",
+        f"/api/v1/chatbot/conversations/{conversation_id}",
         headers=_auth_headers(auth["token"]),
     ).json()
     assert [(turn["seq"], turn["role"], turn["content"]) for turn in detail["turns"]] == [
@@ -2863,7 +2804,6 @@ def test_chat_stream_synthesizes_completed_for_unclosed_artifact_on_error(
     # the close tag arrives, the stream must still emit
     # artifact_completed so the client's buffer is released.
     auth = _seeded_dev_login(client, "administrator")
-    slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
     monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool, provider=None: False)
 
@@ -2906,7 +2846,7 @@ def test_chat_stream_synthesizes_completed_for_unclosed_artifact_on_error(
 
     status_code, events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -2946,7 +2886,6 @@ def test_chat_stream_business_chat_exposes_registered_context_tool_surface(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "delivery-hub-admin")
-    slug = "delivery-hub"
     _set_policy("chatbot", "local_only")
     _enable_local_tool_calling(monkeypatch)
 
@@ -2957,7 +2896,7 @@ def test_chat_stream_business_chat_exposes_registered_context_tool_surface(
 
     status_code, _events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -2977,7 +2916,6 @@ def test_chat_stream_business_context_question_reaches_llm_call(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "delivery-hub-admin")
-    slug = "delivery-hub"
     _set_policy("chatbot", "local_only")
 
     pool_client = _FakeAsyncPoolClient([_delta(content="ok"), _delta(finish_reason="stop")])
@@ -2987,7 +2925,7 @@ def test_chat_stream_business_context_question_reaches_llm_call(
 
     status_code, _events = _stream_post(
         client,
-        _workspace_ai_path(slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",

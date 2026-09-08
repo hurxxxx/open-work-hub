@@ -1,10 +1,10 @@
-import type { DocsPageItem } from './docs-api';
 import {
   applyOrderedReorder,
   compareOrderedItemsByText,
   sortedOrderedSiblings,
   type OrderedReorderPatch,
 } from '@/src/platform/ordering/ordered-reorder';
+import type { DocsPageItem } from './docs-api';
 
 export type DropZone = 'before' | 'after' | 'inside';
 

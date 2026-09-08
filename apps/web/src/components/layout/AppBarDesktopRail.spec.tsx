@@ -12,6 +12,8 @@ const currentUser = {
   display_name: '허건우',
   full_name: '허건우',
   system_roles: [],
+  group_ids: [],
+  managed_organization_unit_ids: [],
   workspaces: [],
 } as AuthUser;
 
@@ -56,11 +58,11 @@ function railProps(
     appBarItems: [],
     appBarLayoutError: null,
     appBarLayoutSaving: false,
-    canOpenWorkspaceSearch: false,
+    canOpenSearch: false,
     categoryMenuId: null,
-    currentPathname: '/apps/docs/workspaces/general',
+    currentPathname: '/apps/docs',
     currentUser,
-    currentWorkspaceName: 'General',
+    currentCompanyLabel: 'General',
     draftItems: [],
     draftPinnedAppIds: [],
     favoritesOpen: false,
@@ -73,7 +75,7 @@ function railProps(
     onOpenAccount: vi.fn(),
     onOpenEditor: vi.fn(),
     onOpenHelp: vi.fn(),
-    onOpenWorkspaceSearch: vi.fn(),
+    onOpenSearch: vi.fn(),
     onResetDraft: vi.fn(),
     onSaveLayout: vi.fn(),
     onToggleCategoryMenu: vi.fn(),
@@ -87,7 +89,7 @@ function railProps(
     resolveAppLink: (appId) => `/apps/${appId}`,
     t: translate,
     unreadCount: 0,
-    workspaceAppBarCategories: [collaborationCategory],
+    appBarCategories: [collaborationCategory],
     ...overrides,
   };
 }

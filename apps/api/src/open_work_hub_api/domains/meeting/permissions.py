@@ -5,9 +5,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.i18n import localized_http_exception
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.docs.models import NativeDoc
 from open_work_hub_api.domains.meeting.models import Meeting
+from open_work_hub_api.domains.source_access import can_read_meeting
 
 
 def is_organizer(user: User, meeting: Meeting) -> bool:
@@ -21,6 +22,11 @@ def is_participant(user: User, meeting: Meeting) -> bool:
     return any(att.user_id == user.id for att in meeting.attendees)
 
 
+def ensure_meeting_reader(db: Session, user: User, meeting: Meeting) -> None:
+    if not can_read_meeting(db, user=user, meeting_id=meeting.id):
+        raise localized_http_exception(status_code=403, code="meeting.access_required")
+
+
 def ensure_meeting_organizer(db: Session, user: User, meeting: Meeting) -> None:
     if not is_organizer(user, meeting):
         raise localized_http_exception(
@@ -30,10 +36,7 @@ def ensure_meeting_organizer(db: Session, user: User, meeting: Meeting) -> None:
 
 
 def ensure_meeting_participant(db: Session, user: User, meeting: Meeting) -> None:
-    """Allow the action if the caller is the organizer, an attendee, or a
-    platform admin. Used for adding attachments (tasks/docs/files) where any
-    meeting participant should be able to upload prep material before the
-    meeting starts."""
+    """Business mutations require explicit participation, including for administrators."""
     if not is_participant(user, meeting):
         raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -41,11 +44,9 @@ def ensure_meeting_participant(db: Session, user: User, meeting: Meeting) -> Non
         )
 
 
-def ensure_link_remover(
-    db: Session, user: User, meeting: Meeting, added_by_id: str
-) -> None:
+def ensure_link_remover(db: Session, user: User, meeting: Meeting, added_by_id: str) -> None:
     """Allow removing an attachment only if the caller is the organizer,
-    a platform admin, or the original adder. Attendees cannot delete each
+    or the original adder. Attendees cannot delete each
     other's attachments."""
     if meeting.organizer_id == user.id:
         return
@@ -61,8 +62,6 @@ def ensure_doc_attachable(
     db: Session,
     user: User,
     doc_id: str,
-    *,
-    workspace: Workspace,
 ) -> NativeDoc:
     """Meeting attachments keep the existing doc attach authority boundary.
 
@@ -81,11 +80,6 @@ def ensure_doc_attachable(
             code="meeting.document_not_found",
         )
 
-    if doc.workspace_id != workspace.id:
-        raise localized_http_exception(
-            status_code=status.HTTP_403_FORBIDDEN,
-            code="meeting.document_access_required",
-        )
     if doc.owner_id != user.id:
         raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,

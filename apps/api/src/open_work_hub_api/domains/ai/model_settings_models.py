@@ -3,12 +3,12 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
     Integer,
-    JSON,
     String,
     Text,
     UniqueConstraint,
@@ -18,7 +18,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from open_work_hub_api.core.db import Base
 from open_work_hub_api.domains.auth.models import utcnow_naive
-
 
 JSONB_COMPAT = JSONB(astext_type=Text()).with_variant(JSON(), "sqlite")
 

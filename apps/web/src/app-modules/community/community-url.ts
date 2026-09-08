@@ -1,5 +1,5 @@
-import { DEFAULT_COMMUNITY_CHANNEL_KEY } from './community-constants';
 import { buildAppHref } from '@open-work-hub/contracts/app-routes';
+import { DEFAULT_COMMUNITY_CHANNEL_KEY } from './community-constants';
 
 export function buildCommunityListUrl(channelKey?: string | null): string {
   const normalizedChannel = normalizeCommunityChannelKey(channelKey);

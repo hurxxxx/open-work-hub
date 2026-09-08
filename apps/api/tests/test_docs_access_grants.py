@@ -8,7 +8,7 @@ from sqlalchemy import select
 from dev_accounts import dev_login
 
 from open_work_hub_api.core.db import get_session_factory
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.auth.security import new_id
 from open_work_hub_api.domains.docs import access_grants
 from open_work_hub_api.domains.docs.access_grants import (
@@ -102,16 +102,17 @@ def _create_docs_meeting_access_context(
     dev_login(client, "delivery-hub-member")
 
     with get_session_factory()() as db:
-        workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
-        owner = db.scalar(select(User).where(User.email == "delivery-hub-admin@open-work-hub.local"))
-        recipient = db.scalar(select(User).where(User.email == "delivery-hub-member@open-work-hub.local"))
-        assert workspace is not None
+        owner = db.scalar(
+            select(User).where(User.email == "delivery-hub-admin@open-work-hub.local")
+        )
+        recipient = db.scalar(
+            select(User).where(User.email == "delivery-hub-member@open-work-hub.local")
+        )
         assert owner is not None
         assert recipient is not None
 
         meeting = Meeting(
             id=new_id(),
-            workspace_id=workspace.id,
             organizer_id=owner.id,
             title="Docs access grant refactor",
             agenda="",
@@ -121,7 +122,6 @@ def _create_docs_meeting_access_context(
         docs = [
             NativeDoc(
                 id=new_id(),
-                workspace_id=workspace.id,
                 owner_id=owner.id,
                 title=f"Grant doc {index}",
                 source_kind="grant_refactor",
@@ -143,7 +143,6 @@ def _create_docs_meeting_access_context(
         if include_revoked:
             revoked_doc = NativeDoc(
                 id=new_id(),
-                workspace_id=workspace.id,
                 owner_id=owner.id,
                 title="Revoked grant doc",
                 source_kind="grant_refactor",

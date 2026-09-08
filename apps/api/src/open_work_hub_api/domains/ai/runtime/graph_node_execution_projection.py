@@ -10,7 +10,6 @@ from open_work_hub_api.domains.ai.runtime.graph_evidence_packet import (
 from open_work_hub_api.domains.ai.runtime.graph_node_output import GraphNodeOutput
 from open_work_hub_api.domains.ai.runtime.graph_projection_values import trim_graph_text
 
-
 GraphNodeSummary = dict[str, Any]
 
 
@@ -112,9 +111,7 @@ def _graph_execution_summary(
 
 
 def _planned_agent_ids(planned_steps: list[dict[str, Any]]) -> list[str]:
-    return [
-        step["agent_id"] for step in planned_steps if isinstance(step.get("agent_id"), str)
-    ]
+    return [step["agent_id"] for step in planned_steps if isinstance(step.get("agent_id"), str)]
 
 
 def _node_summary(output: GraphNodeOutput) -> GraphNodeSummary:
@@ -153,8 +150,7 @@ def _failed_node_count(nodes: list[GraphNodeSummary]) -> int:
 
 def _requires_verifier(candidate_summary: dict[str, Any] | None) -> bool:
     return bool(
-        isinstance(candidate_summary, dict)
-        and candidate_summary.get("requires_verifier") is True
+        isinstance(candidate_summary, dict) and candidate_summary.get("requires_verifier") is True
     )
 
 

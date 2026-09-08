@@ -16,8 +16,7 @@ class Announcement(Base):
     __tablename__ = "announcements"
     __table_args__ = (
         Index(
-            "ix_announcements_workspace_pinned_created",
-            "workspace_id",
+            "ix_announcements_pinned_created",
             "is_pinned",
             "created_at",
         ),
@@ -30,25 +29,13 @@ class Announcement(Base):
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id"), index=True, nullable=False
-    )
-    author_id: Mapped[str] = mapped_column(
-        ForeignKey("users.id"), index=True, nullable=False
-    )
-    # "workspace": visible only within the owning workspace.
-    # "company": company-wide notice, visible across all workspaces.
-    scope: Mapped[str] = mapped_column(
-        String(24), default="workspace", index=True, nullable=False
-    )
+    author_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
+    # Company notices are visible to users admitted to the announcements app.
+    scope: Mapped[str] = mapped_column(String(24), default="company", index=True, nullable=False)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     body: Mapped[str] = mapped_column(Text, default="", nullable=False)
-    is_pinned: Mapped[bool] = mapped_column(
-        Boolean, default=False, index=True, nullable=False
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utcnow_naive, nullable=False
-    )
+    is_pinned: Mapped[bool] = mapped_column(Boolean, default=False, index=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow_naive, onupdate=utcnow_naive, nullable=False
     )

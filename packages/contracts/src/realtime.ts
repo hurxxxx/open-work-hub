@@ -34,14 +34,19 @@ function createRealtimeTopicDescriptor<const TTopic extends string>(
 }
 
 const DOCS_PAGES_REALTIME = createRealtimeTopicDescriptor('docs.pages');
+const WHITEBOARD_ACCESS_REALTIME =
+  createRealtimeTopicDescriptor('whiteboard.access');
 
 export const REALTIME_TOPICS = {
   docsPages: DOCS_PAGES_REALTIME.topic,
+  whiteboardAccess: WHITEBOARD_ACCESS_REALTIME.topic,
 } as const;
 
 export const REALTIME_TOPIC_EVENT_TYPES = {
   docsPagesChanged: DOCS_PAGES_REALTIME.eventType('changed'),
   docsPagesSnapshot: DOCS_PAGES_REALTIME.eventType('snapshot'),
+  docsAccessChanged: 'docs.access.changed',
+  whiteboardAccessChanged: WHITEBOARD_ACCESS_REALTIME.eventType('changed'),
 } as const;
 
 export type RealtimeClientEventType =
@@ -60,26 +65,22 @@ export type DocsPagesRealtimeSubscriptionMessage = {
   type: typeof REALTIME_CLIENT_EVENT_TYPES.subscribe;
   topic: typeof REALTIME_TOPICS.docsPages;
   key: string;
-  workspace_slug?: string | null;
   share_token?: string | null;
 };
 
 export type DocsPagesRealtimeSubscriptionInput = {
   key: string;
-  workspaceSlug?: string | null;
   shareToken?: string | null;
 };
 
 export function createDocsPagesRealtimeSubscriptionMessage({
   key,
-  workspaceSlug = null,
   shareToken = null,
 }: DocsPagesRealtimeSubscriptionInput): DocsPagesRealtimeSubscriptionMessage {
   return {
     type: REALTIME_CLIENT_EVENT_TYPES.subscribe,
     topic: DOCS_PAGES_REALTIME.topic,
     key,
-    workspace_slug: workspaceSlug,
     share_token: shareToken,
   };
 }
@@ -94,7 +95,53 @@ export function isDocsPagesRealtimeSubscriptionMessage(
   return (
     record.type === REALTIME_CLIENT_EVENT_TYPES.subscribe &&
     record.topic === DOCS_PAGES_REALTIME.topic &&
-    DOCS_PAGES_REALTIME.isKey(record.key)
+    DOCS_PAGES_REALTIME.isKey(record.key) &&
+    isOptionalShareToken(record.share_token)
+  );
+}
+
+export type WhiteboardAccessRealtimeSubscriptionMessage = {
+  type: typeof REALTIME_CLIENT_EVENT_TYPES.subscribe;
+  topic: typeof REALTIME_TOPICS.whiteboardAccess;
+  key: string;
+  share_token?: string | null;
+};
+
+export type WhiteboardAccessRealtimeSubscriptionInput = {
+  key: string;
+  shareToken?: string | null;
+};
+
+export function createWhiteboardAccessRealtimeSubscriptionMessage({
+  key,
+  shareToken = null,
+}: WhiteboardAccessRealtimeSubscriptionInput): WhiteboardAccessRealtimeSubscriptionMessage {
+  return {
+    type: REALTIME_CLIENT_EVENT_TYPES.subscribe,
+    topic: WHITEBOARD_ACCESS_REALTIME.topic,
+    key,
+    share_token: shareToken,
+  };
+}
+
+export function isWhiteboardAccessRealtimeSubscriptionMessage(
+  value: unknown,
+): value is WhiteboardAccessRealtimeSubscriptionMessage {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.type === REALTIME_CLIENT_EVENT_TYPES.subscribe &&
+    record.topic === WHITEBOARD_ACCESS_REALTIME.topic &&
+    WHITEBOARD_ACCESS_REALTIME.isKey(record.key) &&
+    isOptionalShareToken(record.share_token)
+  );
+}
+
+function isOptionalShareToken(value: unknown): boolean {
+  return (
+    value === undefined ||
+    value === null ||
+    (typeof value === 'string' && value.length > 0)
   );
 }
 

@@ -1,15 +1,12 @@
 import { useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 
-import { consumePostLogoutHomeRedirect } from './auth-storage';
 import { useAuth as useAuthContext } from './auth-context';
 import { AuthLoadingScreen } from './auth-loading-screen';
+import { consumePostLogoutHomeRedirect } from './auth-storage';
 import { LoginScreen } from './login-screen';
 
-function sanitizeRedirectTarget(
-  state: unknown,
-  fallback = '/',
-): string {
+function sanitizeRedirectTarget(state: unknown, fallback = '/'): string {
   if (
     state &&
     typeof state === 'object' &&
@@ -27,7 +24,9 @@ function sanitizeRedirectTarget(
 export function LoginRoute() {
   const auth = useAuthContext();
   const location = useLocation();
-  const [redirectToHomeAfterLogout] = useState(() => consumePostLogoutHomeRedirect());
+  const [redirectToHomeAfterLogout] = useState(() =>
+    consumePostLogoutHomeRedirect(),
+  );
 
   if (auth.status === 'bootstrapping') {
     return <AuthLoadingScreen />;
@@ -37,7 +36,11 @@ export function LoginRoute() {
     return (
       <Navigate
         replace
-        to={redirectToHomeAfterLogout ? '/' : sanitizeRedirectTarget(location.state)}
+        to={
+          redirectToHomeAfterLogout
+            ? '/'
+            : sanitizeRedirectTarget(location.state)
+        }
       />
     );
   }

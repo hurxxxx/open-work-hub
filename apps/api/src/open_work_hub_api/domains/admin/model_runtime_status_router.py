@@ -14,7 +14,6 @@ from open_work_hub_api.domains.admin.model_runtime_status_service import (
 from open_work_hub_api.domains.auth.access import is_platform_admin_user
 from open_work_hub_api.domains.auth.dependencies import AuthContext, require_permission
 
-
 router = APIRouter(prefix="/admin/model-runtime-status", tags=["admin"])
 
 

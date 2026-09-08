@@ -16,7 +16,7 @@ description: Use when explicitly inspecting, deploying, restarting, or rolling b
 - Never run dev commands from prod checkout.
 - Do not bypass `scripts/prod-app.sh` with direct app Compose commands; its source, env, migration, revision, smoke, and restoration gates are part of the deploy contract.
 - Never print `.env`; use env skill if env changes are scoped.
-- App rollback restores the previous image only. It does not reverse migrations.
+- Default app rollback restores the previous image only; it never reverses migrations. Incompatible database/config cutovers require the explicit immutable-image and protected env pair in the [release owner's rollback contract](../../../docs/domains/release/README.md#incompatible-database-and-configuration-cutovers).
 
 ## Preflight
 

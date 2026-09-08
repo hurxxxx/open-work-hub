@@ -74,7 +74,6 @@ export function useChatbotConversationHydration({
   skipNextHydrationResetRef,
   syncLivePendingApproval,
   token,
-  workspaceSlug,
 }: {
   abortHydrateRef: MutableRefObject<AbortController | null>;
   authStatus: AuthSessionStatus;
@@ -98,7 +97,6 @@ export function useChatbotConversationHydration({
     livePendingApproval: LivePendingApprovalInput,
   ) => void;
   token: string | null;
-  workspaceSlug: string | undefined;
 }) {
   const { t } = useTranslation('apps');
 
@@ -169,7 +167,7 @@ export function useChatbotConversationHydration({
     patchViewState(
       buildConversationResetPatch({ isLoadingConversation: true }),
     );
-    getConversation(token, routeConversationId, { workspaceSlug })
+    getConversation(token, routeConversationId, {})
       .then((detail: ConversationDetail) => {
         if (controller.signal.aborted) {
           return;
@@ -246,6 +244,5 @@ export function useChatbotConversationHydration({
     syncLivePendingApproval,
     t,
     token,
-    workspaceSlug,
   ]);
 }

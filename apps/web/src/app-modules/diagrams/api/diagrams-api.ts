@@ -3,16 +3,15 @@ import {
   apiFetchJson,
   jsonHeaders,
 } from '@/src/platform/api/client';
-import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
 export type DiagramHubView = 'all' | 'mine' | 'archived';
 export type DiagramSortBy = 'updated_at' | 'created_at' | 'title';
 export type DiagramSortDir = 'asc' | 'desc';
-export type DiagramVisibility = 'personal' | 'workspace';
+export type DiagramVisibility = 'personal' | 'company';
 
 export interface DiagramItem {
   id: string;
-  workspace_id: string;
+
   title: string;
   visibility: DiagramVisibility;
   version: number;
@@ -63,14 +62,9 @@ async function request<T>(
   path: string,
   token: string,
   init: RequestInit = {},
-  workspaceSlug?: string | null,
 ): Promise<T> {
   try {
-    return await apiFetchJson<T>(
-      rewriteWorkspaceApiPath(path, workspaceSlug),
-      token,
-      init,
-    );
+    return await apiFetchJson<T>(path, token, init);
   } catch (error) {
     if (error instanceof ApiRequestError) {
       throw new DiagramsApiError(error.status, error.message);
@@ -94,13 +88,11 @@ function withQuery(path: string, params: DiagramHubParams): string {
 export function listDiagramsHub(
   token: string,
   params: DiagramHubParams = {},
-  workspaceSlug?: string | null,
 ): Promise<DiagramHubResponse> {
   return request<DiagramHubResponse>(
     withQuery(`${API_BASE}/hub`, params),
     token,
     {},
-    workspaceSlug,
   );
 }
 
@@ -108,33 +100,26 @@ export function createDiagram(
   token: string,
   payload: {
     title: string;
+    company_admin_read_acknowledged?: boolean;
     visibility?: DiagramVisibility;
     xml?: string;
     preview_png_data_url?: string | null;
   },
-  workspaceSlug?: string | null,
 ): Promise<DiagramDetail> {
-  return request<DiagramDetail>(
-    `${API_BASE}/items`,
-    token,
-    {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    },
-    workspaceSlug,
-  );
+  return request<DiagramDetail>(`${API_BASE}/items`, token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 export function getDiagram(
   token: string,
   itemId: string,
-  workspaceSlug?: string | null,
 ): Promise<DiagramDetail> {
   return request<DiagramDetail>(
     `${API_BASE}/items/${encodeURIComponent(itemId)}`,
     token,
     {},
-    workspaceSlug,
   );
 }
 
@@ -144,11 +129,11 @@ export function updateDiagram(
   payload: {
     version: number;
     title?: string;
+    company_admin_read_acknowledged?: boolean;
     visibility?: DiagramVisibility;
     xml?: string;
     preview_png_data_url?: string | null;
   },
-  workspaceSlug?: string | null,
 ): Promise<DiagramDetail> {
   return request<DiagramDetail>(
     `${API_BASE}/items/${encodeURIComponent(itemId)}`,
@@ -157,49 +142,37 @@ export function updateDiagram(
       method: 'PATCH',
       body: JSON.stringify(payload),
     },
-    workspaceSlug,
   );
 }
 
-export function archiveDiagram(
-  token: string,
-  itemId: string,
-  workspaceSlug?: string | null,
-): Promise<void> {
+export function archiveDiagram(token: string, itemId: string): Promise<void> {
   return request<void>(
     `${API_BASE}/items/${encodeURIComponent(itemId)}`,
     token,
     { method: 'DELETE' },
-    workspaceSlug,
   );
 }
 
 export function restoreDiagram(
   token: string,
   itemId: string,
-  workspaceSlug?: string | null,
 ): Promise<DiagramDetail> {
   return request<DiagramDetail>(
     `${API_BASE}/items/${encodeURIComponent(itemId)}/restore`,
     token,
     { method: 'POST' },
-    workspaceSlug,
   );
 }
 
 export async function fetchDiagramPreviewUrl(
   token: string,
   item: DiagramItem,
-  workspaceSlug?: string | null,
 ): Promise<string | null> {
   if (!item.preview_url) return null;
-  const response = await fetch(
-    rewriteWorkspaceApiPath(item.preview_url, workspaceSlug),
-    {
-      headers: jsonHeaders(token),
-      cache: 'no-store',
-    },
-  );
+  const response = await fetch(item.preview_url, {
+    headers: jsonHeaders(token),
+    cache: 'no-store',
+  });
   if (response.status === 404) return null;
   if (!response.ok) {
     throw new DiagramsApiError(

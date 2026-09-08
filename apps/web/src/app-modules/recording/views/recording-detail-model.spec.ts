@@ -29,7 +29,6 @@ function target(overrides: Partial<RecordingTarget> = {}): RecordingTarget {
 function recording(overrides: Partial<Recording> = {}): Recording {
   return {
     id: 'recording-1',
-    workspace_id: 'workspace-1',
     owner_id: 'user-1',
     title: 'Daily Standup',
     started_at: '2026-05-30T09:00:00Z',
@@ -142,31 +141,29 @@ describe('recording detail model', () => {
   });
 
   it('builds hrefs for known target apps', () => {
-    expect(recordingTargetHref('team space', target())).toBe(
-      '/apps/meeting/workspaces/team%20space/meetings/meeting-1',
+    expect(recordingTargetHref(target())).toBe(
+      '/apps/meeting/meetings/meeting-1',
     );
     expect(
       recordingTargetHref(
-        'hq',
         target({
           target_app: 'pms',
           target_type: 'task',
           target_id: 'task 42',
         }),
       ),
-    ).toBe('/apps/pms/workspaces/hq?task=task+42');
+    ).toBe('/apps/pms?task=task+42');
     expect(
       recordingTargetHref(
-        'hq',
         target({
           target_app: 'docs',
           target_type: 'document',
           target_id: 'doc-1',
         }),
       ),
-    ).toBe('/apps/docs/workspaces/hq/documents/doc-1');
+    ).toBe('/apps/docs/documents/doc-1');
     expect(
-      recordingTargetHref('hq', target({ target_app: 'unknown-app' })),
+      recordingTargetHref(target({ target_app: 'unknown-app' })),
     ).toBeNull();
   });
 });

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 
-
 DM_ROUTE_ID_MAX_LENGTH = 36
 DM_ROUTE_ID_ALLOWED_PATTERN = r"^[A-Za-z0-9_-]+$"
 DM_ROUTE_ID_PATTERN = re.compile(DM_ROUTE_ID_ALLOWED_PATTERN)

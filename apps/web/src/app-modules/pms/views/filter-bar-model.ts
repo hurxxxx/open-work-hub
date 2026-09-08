@@ -139,7 +139,11 @@ export function buildTaskFilterPills({
   const pills: TaskFilterPill[] = [];
   if (params.status && params.status.length > 0) {
     const statusLabels = params.status
-      .map((status) => statusOptions.find((option) => option.value === status)?.label ?? status)
+      .map(
+        (status) =>
+          statusOptions.find((option) => option.value === status)?.label ??
+          status,
+      )
       .join(', ');
     pills.push({
       label: translate('pms.filter.pillStatus', { value: statusLabels }),
@@ -156,8 +160,8 @@ export function buildTaskFilterPills({
   }
   if (params.assignee_id) {
     const name =
-      members.find((member) => member.user_id === params.assignee_id)?.full_name ??
-      translate('common:feedback.unknown');
+      members.find((member) => member.user_id === params.assignee_id)
+        ?.full_name ?? translate('common:feedback.unknown');
     pills.push({
       label: translate('pms.filter.pillAssignee', { value: name }),
       clearParams: { ...params, assignee_id: undefined },
@@ -174,8 +178,8 @@ export function buildTaskFilterPills({
   }
   if (params.milestone_id) {
     const name =
-      milestones.find((milestone) => milestone.id === params.milestone_id)?.title ??
-      translate('common:feedback.unknown');
+      milestones.find((milestone) => milestone.id === params.milestone_id)
+        ?.title ?? translate('common:feedback.unknown');
     pills.push({
       label: translate('pms.filter.pillMilestone', { value: name }),
       clearParams: { ...params, milestone_id: undefined },

@@ -6,11 +6,14 @@ from open_work_hub_api.domains.meeting import file_storage
 
 
 def test_attachment_storage_key_preserves_existing_layout() -> None:
-    assert file_storage.attachment_storage_key(
-        meeting_id="meeting-1",
-        attachment_id="attachment-1",
-        filename="notes.txt",
-    ) == "meeting/meeting-1/attachment-1/notes.txt"
+    assert (
+        file_storage.attachment_storage_key(
+            meeting_id="meeting-1",
+            attachment_id="attachment-1",
+            filename="notes.txt",
+        )
+        == "meeting/meeting-1/attachment-1/notes.txt"
+    )
 
 
 def test_put_attachment_object_writes_to_configured_bucket(monkeypatch) -> None:
@@ -24,7 +27,9 @@ def test_put_attachment_object_writes_to_configured_bucket(monkeypatch) -> None:
             captured["length"] = length
             captured["content_type"] = content_type
 
-    monkeypatch.setattr(file_storage, "get_settings", lambda: SimpleNamespace(minio_bucket="bucket-1"))
+    monkeypatch.setattr(
+        file_storage, "get_settings", lambda: SimpleNamespace(minio_bucket="bucket-1")
+    )
     monkeypatch.setattr(file_storage, "get_minio_client", lambda: FakeClient())
 
     file_storage.put_attachment_object(
@@ -72,7 +77,9 @@ def test_remove_and_open_attachment_object_delegate_to_minio(monkeypatch) -> Non
             captured["opened"] = (bucket, key)
             return fake_object
 
-    monkeypatch.setattr(file_storage, "get_settings", lambda: SimpleNamespace(minio_bucket="bucket-1"))
+    monkeypatch.setattr(
+        file_storage, "get_settings", lambda: SimpleNamespace(minio_bucket="bucket-1")
+    )
     monkeypatch.setattr(file_storage, "get_minio_client", lambda: FakeClient())
 
     file_storage.remove_attachment_object("meeting/meeting-1/attachment-1/notes.txt")

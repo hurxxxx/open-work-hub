@@ -32,9 +32,7 @@ describe('useChatStream', () => {
       );
     });
 
-    const rendered = renderHook(() =>
-      useChatStream('token-1', 'workspace-1', 'user-1:docs'),
-    );
+    const rendered = renderHook(() => useChatStream('token-1', 'user-1:docs'));
     let sendPromise: Promise<void> | null = null;
 
     act(() => {
@@ -52,9 +50,7 @@ describe('useChatStream', () => {
     rendered.unmount();
     expect(capturedSignal?.aborted).toBe(false);
 
-    const resumed = renderHook(() =>
-      useChatStream('token-1', 'workspace-1', 'user-1:docs'),
-    );
+    const resumed = renderHook(() => useChatStream('token-1', 'user-1:docs'));
     expect(resumed.result.current.state.status).toBe('streaming');
     expect(resumed.result.current.state.streamOpened).toBe(true);
     expect(resumed.result.current.state.pendingUserContent).toBe('hi');
@@ -82,10 +78,10 @@ describe('useChatStream', () => {
     });
 
     const firstRequest = renderHook(() =>
-      useChatStream('token-1', 'workspace-1', 'user-1:docs-isolated'),
+      useChatStream('token-1', 'user-1:docs-isolated'),
     );
     const generalChat = renderHook(() =>
-      useChatStream('token-1', 'workspace-1', 'user-1:chatbot'),
+      useChatStream('token-1', 'user-1:chatbot'),
     );
 
     act(() => {
@@ -118,7 +114,7 @@ describe('useChatStream', () => {
     );
 
     const rendered = renderHook(() =>
-      useChatStream('token-1', 'workspace-1', 'eof-without-terminal'),
+      useChatStream('token-1', 'eof-without-terminal'),
     );
 
     await act(async () => {
@@ -137,7 +133,7 @@ describe('useChatStream', () => {
     );
 
     const rendered = renderHook(() =>
-      useChatStream('token-1', 'workspace-1', 'durable-no-sync-fallback', {
+      useChatStream('token-1', 'durable-no-sync-fallback', {
         disableSyncFallback: true,
       }),
     );
@@ -168,7 +164,7 @@ describe('useChatStream', () => {
     );
 
     const rendered = renderHook(() =>
-      useChatStream('token-1', 'workspace-1', 'resume-eof-without-terminal'),
+      useChatStream('token-1', 'resume-eof-without-terminal'),
     );
 
     await act(async () => {

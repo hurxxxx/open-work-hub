@@ -4,13 +4,13 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
     Integer,
-    JSON,
     String,
     Text,
     text,
@@ -20,7 +20,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from open_work_hub_api.core.db import Base
 from open_work_hub_api.domains.auth.models import utcnow_naive
-
 
 JSONB_COMPAT = JSONB(astext_type=Text()).with_variant(JSON(), "sqlite")
 
@@ -76,8 +75,7 @@ class AgentRun(Base):
             "created_at",
         ),
         Index(
-            "ix_ai_agent_runs_workspace_status_created",
-            "workspace_id",
+            "ix_ai_agent_runs_status_created",
             "status",
             "created_at",
         ),
@@ -90,11 +88,6 @@ class AgentRun(Base):
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id"),
-        nullable=False,
-        index=True,
-    )
     conversation_id: Mapped[str] = mapped_column(
         ForeignKey("conversations.id", ondelete="CASCADE"),
         nullable=False,
@@ -170,8 +163,7 @@ class AgentInvocation(Base):
             "invocation_seq",
         ),
         Index(
-            "ix_ai_agent_invocations_workspace_status_created",
-            "workspace_id",
+            "ix_ai_agent_invocations_status_created",
             "status",
             "created_at",
         ),
@@ -180,11 +172,6 @@ class AgentInvocation(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     agent_run_id: Mapped[str] = mapped_column(
         ForeignKey("ai_agent_runs.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id"),
         nullable=False,
         index=True,
     )
@@ -238,8 +225,7 @@ class AgentTraceEvent(Base):
             "event_seq",
         ),
         Index(
-            "ix_ai_agent_trace_events_workspace_created",
-            "workspace_id",
+            "ix_ai_agent_trace_events_created",
             "created_at",
         ),
     )
@@ -253,11 +239,6 @@ class AgentTraceEvent(Base):
     agent_invocation_id: Mapped[str | None] = mapped_column(
         ForeignKey("ai_agent_invocations.id", ondelete="SET NULL"),
         nullable=True,
-        index=True,
-    )
-    workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id"),
-        nullable=False,
         index=True,
     )
     conversation_id: Mapped[str] = mapped_column(

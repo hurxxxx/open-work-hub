@@ -1,4 +1,5 @@
-import type { ComponentType } from 'react';
+import { cn } from '@/src/lib/utils';
+import { Tooltip } from '@open-work-hub/ui';
 import {
   CheckCircle2,
   Circle,
@@ -6,8 +7,7 @@ import {
   CircleSlash,
   XCircle,
 } from 'lucide-react';
-import { Tooltip } from '@open-work-hub/ui';
-import { cn } from '@/src/lib/utils';
+import type { ComponentType } from 'react';
 import type { PmsTaskListStatus } from '../api/pms-api';
 
 type StatusVisual = {

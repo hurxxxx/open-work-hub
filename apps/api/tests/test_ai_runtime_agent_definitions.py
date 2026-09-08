@@ -5,6 +5,8 @@ from open_work_hub_api.domains.ai.runtime.agent_definitions import (
     AgentDefinitionResolver,
     resolve_agent_definitions,
 )
+
+
 def test_plugin_app_entitlements_can_resolve_registered_agent_definitions() -> None:
     resolver = AgentDefinitionResolver(
         definitions=[
@@ -12,13 +14,13 @@ def test_plugin_app_entitlements_can_resolve_registered_agent_definitions() -> N
             AgentDefinition(
                 agent_id="domain.plugin",
                 purpose="Visible plugin-app domain.",
-                workspace_app_ids=frozenset({"plugin.app"}),
+                owner_app_ids=frozenset({"plugin.app"}),
                 domains=frozenset({"plugin"}),
             ),
             AgentDefinition(
                 agent_id="domain.pms",
                 purpose="Visible known-app domain.",
-                workspace_app_ids=frozenset({"pms"}),
+                owner_app_ids=frozenset({"pms"}),
                 domains=frozenset({"pms"}),
             ),
         ]
@@ -103,14 +105,14 @@ def test_write_agent_ids_derive_only_from_visible_definitions() -> None:
             AgentDefinition(
                 agent_id="writer.pms",
                 purpose="Visible scoped writer.",
-                workspace_app_ids=frozenset({"pms"}),
+                owner_app_ids=frozenset({"pms"}),
                 domains=frozenset({"pms"}),
                 write_capable=True,
             ),
             AgentDefinition(
                 agent_id="writer.docs",
                 purpose="Hidden scoped writer.",
-                workspace_app_ids=frozenset({"docs"}),
+                owner_app_ids=frozenset({"docs"}),
                 domains=frozenset({"docs"}),
                 write_capable=True,
             ),

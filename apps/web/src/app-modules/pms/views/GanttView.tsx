@@ -1,3 +1,22 @@
+import { cn } from '@/src/lib/utils';
+import {
+  Button,
+  RangeSlider,
+  RangeSliderRange,
+  RangeSliderThumb,
+  RangeSliderTrack,
+} from '@open-work-hub/ui';
+import {
+  CalendarDays,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  CornerDownRight,
+  GitBranch,
+  Palette,
+} from 'lucide-react';
 import {
   useEffect,
   useMemo,
@@ -6,26 +25,7 @@ import {
   type ComponentRef,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
-import {
-  ChevronLeft,
-  ChevronRight,
-  CalendarDays,
-  ChevronDown,
-  ChevronsLeft,
-  ChevronsRight,
-  CornerDownRight,
-  GitBranch,
-  Palette,
-} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import {
-  Button,
-  RangeSlider,
-  RangeSliderRange,
-  RangeSliderThumb,
-  RangeSliderTrack,
-} from '@open-work-hub/ui';
-import { cn } from '@/src/lib/utils';
 import type { PmsTask, PmsTaskListStatus } from '../api/pms-api';
 import {
   addGanttDays,
@@ -41,8 +41,8 @@ import {
   type GanttScheduleOverride,
 } from './gantt-view-model';
 import { getStatusLabel } from './pms-constants';
-import { StatusIconGlyph } from './StatusIcon';
 import { buildTaskHierarchy, sortTasksByHierarchy } from './pms-task-hierarchy';
+import { StatusIconGlyph } from './StatusIcon';
 
 const DAY_WIDTH = 40;
 const MIN_DAY_WIDTH = 14;

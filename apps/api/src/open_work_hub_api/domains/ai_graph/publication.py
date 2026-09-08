@@ -9,10 +9,12 @@ from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.settings import get_settings
 from open_work_hub_api.core.worker_task_publisher import create_fail_fast_celery_publisher
-from open_work_hub_api.domains.ai_graph.repository import AiGraphDispatchRepository
 from open_work_hub_api.domains.ai_graph.execution_policy import enforce_graph_run_app_policy
 from open_work_hub_api.domains.ai_graph.models import AiGraphRun
-from open_work_hub_api.domains.ai_graph.repository import AiGraphRunInputRepository
+from open_work_hub_api.domains.ai_graph.repository import (
+    AiGraphDispatchRepository,
+    AiGraphRunInputRepository,
+)
 
 
 @lru_cache(maxsize=1)

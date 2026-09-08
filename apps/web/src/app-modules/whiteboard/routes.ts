@@ -1,12 +1,12 @@
-import { createElement, lazy } from 'react';
 import {
   getAppRouteChrome,
   getAppRoutePattern,
 } from '@open-work-hub/contracts/app-routes';
+import { createElement, lazy } from 'react';
 
 import { lazyRoute } from '@/src/app/shell/lazy-route';
 import type { StaticRouteDefinition } from '@/src/app/shell/navigation-types';
-import type { WorkspaceRouteDefinition } from '@/src/app/shell/route-types';
+import type { AppRouteDefinition } from '@/src/app/shell/route-types';
 
 const WhiteboardView = lazy(() =>
   import('./views/WhiteboardView').then((module) => ({
@@ -16,7 +16,7 @@ const WhiteboardView = lazy(() =>
 
 export const whiteboardToolElement = lazyRoute(createElement(WhiteboardView));
 
-export const whiteboardWorkspaceRoutes: WorkspaceRouteDefinition[] = [
+export const whiteboardAppRoutes: AppRouteDefinition[] = [
   {
     appId: 'whiteboard',
     chrome: getAppRouteChrome('whiteboard.root'),

@@ -6,7 +6,7 @@ import type {
 } from '@/src/app/shell/sidebar-types';
 
 export const plannerSidebarConfig: AppSidebarConfig = {
-  createActions: ({ enabledWorkspaceAppIds }) => {
+  createActions: ({ enabledShellAppIds }) => {
     const actions: AppSidebarCreateAction[] = [
       {
         id: 'planner-create-event',
@@ -19,7 +19,7 @@ export const plannerSidebarConfig: AppSidebarConfig = {
       },
     ];
 
-    if (enabledWorkspaceAppIds.includes('meeting')) {
+    if (enabledShellAppIds.includes('meeting')) {
       actions.push({
         id: 'planner-create-meeting',
         label: 'planner-create-meeting',

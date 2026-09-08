@@ -24,7 +24,6 @@ from open_work_hub_api.domains.ai.runtime.runtime_shadow_projection import (
 from open_work_hub_api.domains.auth.models import utcnow_naive
 from open_work_hub_api.domains.auth.security import new_id
 
-
 logger = logging.getLogger(__name__)
 
 SNAPSHOT_SCOPE_META_KEY = "scope"
@@ -49,7 +48,6 @@ def safe_runtime_shadow_write(
             extra={
                 "agent_run_id": snapshot.id,
                 "conversation_id": snapshot.conversation_id,
-                "workspace_id": snapshot.workspace_id,
                 "operation": operation_name,
             },
         )
@@ -73,7 +71,6 @@ def persist_runtime_shadow_on_halt(
     )
     runtime_run = AgentRun(
         id=snapshot.id,
-        workspace_id=snapshot.workspace_id,
         conversation_id=snapshot.conversation_id,
         requested_by_user_id=snapshot.requested_by_user_id,
         legacy_snapshot_id=snapshot.id,
@@ -89,7 +86,6 @@ def persist_runtime_shadow_on_halt(
     graph_invocations_by_seq = persist_graph_schedule_invocation_skeletons(
         db,
         agent_run_id=runtime_run.id,
-        workspace_id=snapshot.workspace_id,
         conversation_id=snapshot.conversation_id,
         runtime_metadata=model_meta,
     )
@@ -105,7 +101,6 @@ def persist_runtime_shadow_on_halt(
         invocation = AgentInvocation(
             id=new_id(),
             agent_run_id=runtime_run.id,
-            workspace_id=snapshot.workspace_id,
             conversation_id=snapshot.conversation_id,
             invocation_seq=_next_runtime_invocation_seq(db, runtime_run.id),
             agent_id="approval.proposal_preview",
@@ -122,7 +117,6 @@ def persist_runtime_shadow_on_halt(
     append_trace_event(
         db,
         agent_run_id=runtime_run.id,
-        workspace_id=snapshot.workspace_id,
         conversation_id=snapshot.conversation_id,
         event_type="run_created",
         payload={
@@ -133,14 +127,12 @@ def persist_runtime_shadow_on_halt(
     append_graph_candidate_trace_events(
         db,
         agent_run_id=runtime_run.id,
-        workspace_id=snapshot.workspace_id,
         conversation_id=snapshot.conversation_id,
         runtime_metadata=model_meta,
     )
     append_graph_schedule_trace_events(
         db,
         agent_run_id=runtime_run.id,
-        workspace_id=snapshot.workspace_id,
         conversation_id=snapshot.conversation_id,
         runtime_metadata=model_meta,
         graph_invocations_by_seq=graph_invocations_by_seq,
@@ -148,7 +140,6 @@ def persist_runtime_shadow_on_halt(
     append_graph_execution_trace_events(
         db,
         agent_run_id=runtime_run.id,
-        workspace_id=snapshot.workspace_id,
         conversation_id=snapshot.conversation_id,
         runtime_metadata=model_meta,
     )
@@ -156,7 +147,6 @@ def persist_runtime_shadow_on_halt(
         db,
         agent_run_id=runtime_run.id,
         agent_invocation_id=invocation.id,
-        workspace_id=snapshot.workspace_id,
         conversation_id=snapshot.conversation_id,
         invocation_seq=invocation.invocation_seq,
         event_type="invocation_started",
@@ -166,7 +156,6 @@ def persist_runtime_shadow_on_halt(
         db,
         agent_run_id=runtime_run.id,
         agent_invocation_id=invocation.id,
-        workspace_id=snapshot.workspace_id,
         conversation_id=snapshot.conversation_id,
         invocation_seq=invocation.invocation_seq,
         event_type="approval_required",
@@ -202,7 +191,6 @@ def mark_runtime_shadow_completed(
     append_trace_event(
         db,
         agent_run_id=snapshot.id,
-        workspace_id=snapshot.workspace_id,
         conversation_id=snapshot.conversation_id,
         event_type="run_completed",
         payload={"legacy_snapshot_id": snapshot.id},
@@ -233,7 +221,6 @@ def mark_runtime_shadow_abandoned(
     append_trace_event(
         db,
         agent_run_id=snapshot.id,
-        workspace_id=snapshot.workspace_id,
         conversation_id=snapshot.conversation_id,
         event_type="run_abandoned",
         payload={"legacy_snapshot_id": snapshot.id, "cause": cause},
@@ -269,7 +256,6 @@ def mark_runtime_shadow_awaiting_approval(
         db,
         agent_run_id=snapshot.id,
         agent_invocation_id=invocation.id if invocation is not None else None,
-        workspace_id=snapshot.workspace_id,
         conversation_id=snapshot.conversation_id,
         invocation_seq=invocation.invocation_seq if invocation is not None else 0,
         event_type="approval_resume_rewound",
@@ -303,7 +289,6 @@ def mark_runtime_shadow_resumed(
     invocation = AgentInvocation(
         id=new_id(),
         agent_run_id=snapshot.id,
-        workspace_id=snapshot.workspace_id,
         conversation_id=snapshot.conversation_id,
         invocation_seq=_next_runtime_invocation_seq(db, snapshot.id),
         agent_id="approval.proposal_preview",
@@ -317,7 +302,6 @@ def mark_runtime_shadow_resumed(
         db,
         agent_run_id=snapshot.id,
         agent_invocation_id=invocation.id,
-        workspace_id=snapshot.workspace_id,
         conversation_id=snapshot.conversation_id,
         invocation_seq=invocation.invocation_seq,
         event_type="approval_resumed",

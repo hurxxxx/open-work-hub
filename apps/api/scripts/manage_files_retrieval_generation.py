@@ -257,7 +257,7 @@ def _parser() -> argparse.ArgumentParser:
         "--scope-coverage",
         action="append",
         required=True,
-        choices=("company", "workspace", "personal"),
+        choices=("company", "personal"),
         help="Repeat for every access scope represented by the judged corpus.",
     )
     attest.add_argument(

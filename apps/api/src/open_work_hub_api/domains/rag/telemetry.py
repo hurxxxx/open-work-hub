@@ -5,7 +5,6 @@ from collections.abc import Mapping
 
 def rag_span_attributes(
     *,
-    workspace_id: str | None = None,
     resource_type: str | None = None,
     resource_id: str | None = None,
     source_kind: str | None = None,
@@ -20,7 +19,6 @@ def rag_span_attributes(
     attributes: dict[str, str | int | float | bool] = {}
 
     for key, value in (
-        ("workspace_id", workspace_id),
         ("resource_type", resource_type),
         ("resource_id", resource_id),
         ("source_kind", source_kind),

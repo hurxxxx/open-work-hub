@@ -318,7 +318,7 @@ def test_comment_on_my_community_post_creates_source_owned_notification_only(
     assert notification["source_type"] == "community_post"
     assert notification["source_id"] == post["id"]
     assert notification["origin_app_id"] == "community"
-    assert notification["origin_workspace_id"] is None
+    assert "origin_workspace_id" not in notification
     assert notification["action_url"] == f"/apps/community/posts/{post['id']}"
     assert notification["is_read"] is False
     assert "댓글 알림 테스트" in notification["body"]
@@ -471,7 +471,7 @@ def test_resolve_secret_post_media_accepts_post_password(
 ) -> None:
     monkeypatch.setattr(
         media_content_access,
-        "is_company_app_enabled_for_user_context",
+        "media_owner_app_enabled",
         lambda *_args, **_kwargs: True,
     )
     author = _make_user(db, "author")
@@ -1259,7 +1259,7 @@ def test_admin_only_channel_masks_content_and_media_for_regular_viewers(
 ) -> None:
     monkeypatch.setattr(
         media_content_access,
-        "is_company_app_enabled_for_user_context",
+        "media_owner_app_enabled",
         lambda *_args, **_kwargs: True,
     )
     monkeypatch.setattr(

@@ -1,11 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import type { TFunction } from 'i18next';
-import { useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
-import { ExternalLink, Loader2, Square } from 'lucide-react';
 import { useFeedback } from '@open-work-hub/ui';
+import type { TFunction } from 'i18next';
+import { ExternalLink, Loader2, Square } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
+import type {
+  BackgroundWorkItem,
+  BackgroundWorkSource,
+  BackgroundWorkStatus,
+  BackgroundWorkToastEvent,
+} from './background-work-session';
 import {
   addCancellingBackgroundWorkKey,
   backgroundWorkItemKey,
@@ -14,12 +20,6 @@ import {
   removeCancellingBackgroundWorkKey,
   resolveBackgroundWorkCadence,
   selectActiveBackgroundWorkItems,
-} from './background-work-session';
-import type {
-  BackgroundWorkItem,
-  BackgroundWorkSource,
-  BackgroundWorkStatus,
-  BackgroundWorkToastEvent,
 } from './background-work-session';
 
 export type { BackgroundWorkItem, BackgroundWorkSource, BackgroundWorkStatus };
@@ -37,39 +37,48 @@ function publishBackgroundWorkToast(
   if (event.type === 'completed') {
     toast.success(
       t('shell:backgroundWork.completedTitle'),
-      t('shell:backgroundWork.completedDescription', { title: event.item.title }),
+      t('shell:backgroundWork.completedDescription', {
+        title: event.item.title,
+      }),
     );
   } else if (event.type === 'failed') {
     toast.error(
       t('shell:backgroundWork.failedTitle'),
       event.item.description ||
-        t('shell:backgroundWork.failedDescription', { title: event.item.title }),
+        t('shell:backgroundWork.failedDescription', {
+          title: event.item.title,
+        }),
     );
   } else {
     toast.info(
       t('shell:backgroundWork.cancelledTitle'),
-      t('shell:backgroundWork.cancelledDescription', { title: event.item.title }),
+      t('shell:backgroundWork.cancelledDescription', {
+        title: event.item.title,
+      }),
     );
   }
 }
 
 export function BackgroundWorkProvider({
   sources,
-  workspaceSlug,
 }: {
   sources: readonly BackgroundWorkSource[];
-  workspaceSlug: string | null;
 }) {
   const { token } = useAuth();
   const { t } = useTranslation(['shell', 'apps']);
   const toast = useFeedback();
   const navigate = useNavigate();
   const [items, setItems] = useState<BackgroundWorkItem[]>([]);
-  const [cancellingKeys, setCancellingKeys] = useState<Set<string>>(() => new Set());
-  const previousStatuses =
-    useRef<Map<string, BackgroundWorkStatus> | null>(null);
-  const previousItemsBySource =
-    useRef<Map<string, BackgroundWorkItem[]> | null>(null);
+  const [cancellingKeys, setCancellingKeys] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const previousStatuses = useRef<Map<string, BackgroundWorkStatus> | null>(
+    null,
+  );
+  const previousItemsBySource = useRef<Map<
+    string,
+    BackgroundWorkItem[]
+  > | null>(null);
   if (previousStatuses.current === null) {
     previousStatuses.current = new Map();
   }
@@ -80,11 +89,14 @@ export function BackgroundWorkProvider({
     () => new Map(sources.map((source) => [source.id, source])),
     [sources],
   );
-  const cadence = useMemo(() => resolveBackgroundWorkCadence(sources), [sources]);
-  const canSync = Boolean(token && workspaceSlug && sources.length > 0);
+  const cadence = useMemo(
+    () => resolveBackgroundWorkCadence(sources),
+    [sources],
+  );
+  const canSync = Boolean(token && sources.length > 0);
 
   useEffect(() => {
-    if (!token || !workspaceSlug || sources.length === 0) {
+    if (!token || sources.length === 0) {
       previousStatuses.current?.clear();
       previousItemsBySource.current?.clear();
       setItems([]);
@@ -94,7 +106,6 @@ export function BackgroundWorkProvider({
     let active = true;
     let timeoutId: number | null = null;
     const activeToken = token;
-    const activeWorkspaceSlug = workspaceSlug;
 
     function scheduleNext(delayMs: number) {
       if (!active) return;
@@ -108,7 +119,6 @@ export function BackgroundWorkProvider({
         sources.map((source) =>
           source.list({
             token: activeToken,
-            workspaceSlug: activeWorkspaceSlug,
             t,
           }),
         ),
@@ -141,19 +151,23 @@ export function BackgroundWorkProvider({
         window.clearTimeout(timeoutId);
       }
     };
-  }, [cadence, sources, t, toast, token, workspaceSlug]);
+  }, [cadence, sources, t, toast, token]);
 
   const activeItems = canSync ? selectActiveBackgroundWorkItems(items) : [];
 
   async function cancelItem(item: BackgroundWorkItem) {
-    if (!token || !workspaceSlug) return;
+    if (!token) return;
     const source = sourceById.get(item.sourceId);
     if (!source?.cancel) return;
-    setCancellingKeys((current) => addCancellingBackgroundWorkKey(current, item));
+    setCancellingKeys((current) =>
+      addCancellingBackgroundWorkKey(current, item),
+    );
     try {
-      await source.cancel({ token, workspaceSlug, item });
+      await source.cancel({ token, item });
     } finally {
-      setCancellingKeys((current) => removeCancellingBackgroundWorkKey(current, item));
+      setCancellingKeys((current) =>
+        removeCancellingBackgroundWorkKey(current, item),
+      );
     }
   }
 
@@ -177,8 +191,14 @@ export function BackgroundWorkProvider({
           const key = backgroundWorkItemKey(item);
           const cancelling = cancellingKeys.has(key);
           return (
-            <div key={key} className="flex items-start gap-2 border-b border-app-border p-3 last:border-b-0">
-              <Loader2 size={15} className="mt-0.5 shrink-0 animate-spin text-app-accent" />
+            <div
+              key={key}
+              className="flex items-start gap-2 border-b border-app-border p-3 last:border-b-0"
+            >
+              <Loader2
+                size={15}
+                className="mt-0.5 shrink-0 animate-spin text-app-accent"
+              />
               <button
                 type="button"
                 onClick={() => {
@@ -191,7 +211,8 @@ export function BackgroundWorkProvider({
                   {item.title}
                 </p>
                 <p className="app-text-caption mt-0.5 truncate text-app-ink/55">
-                  {item.description || t(`shell:backgroundWork.status.${item.status}`)}
+                  {item.description ||
+                    t(`shell:backgroundWork.status.${item.status}`)}
                 </p>
               </button>
               {item.href ? (

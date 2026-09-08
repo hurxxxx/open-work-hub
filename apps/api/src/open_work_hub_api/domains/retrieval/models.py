@@ -5,6 +5,7 @@ from enum import StrEnum
 from uuid import uuid4
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     Boolean,
     CheckConstraint,
@@ -13,7 +14,6 @@ from sqlalchemy import (
     Identity,
     Index,
     Integer,
-    JSON,
     String,
     Text,
     UniqueConstraint,
@@ -26,14 +26,12 @@ from sqlalchemy.orm import Mapped, mapped_column, validates
 from open_work_hub_api.core.db import Base
 from open_work_hub_api.domains.auth.models import utcnow_naive
 
-
 JSONB_COMPAT = JSONB(astext_type=Text()).with_variant(JSON(), "sqlite")
 BIGINT_IDENTITY_COMPAT = BigInteger().with_variant(Integer(), "sqlite")
 
 
 class RetrievalPartitionCandidateScope(StrEnum):
     COMPANY = "company"
-    WORKSPACE = "workspace"
     PERSONAL = "personal"
 
 
@@ -84,7 +82,7 @@ class RetrievalPartition(Base):
     __tablename__ = "retrieval_partitions"
     __table_args__ = (
         CheckConstraint(
-            "candidate_scope_kind IN ('company','workspace','personal')",
+            "candidate_scope_kind IN ('company','personal')",
             name="ck_retrieval_partitions_candidate_scope_kind",
         ),
         CheckConstraint(
@@ -96,12 +94,8 @@ class RetrievalPartition(Base):
             name="ck_retrieval_partitions_metadata_version",
         ),
         CheckConstraint(
-            "(candidate_scope_kind = 'company' "
-            "AND candidate_workspace_id IS NULL AND candidate_user_id IS NULL) "
-            "OR (candidate_scope_kind = 'workspace' "
-            "AND candidate_workspace_id IS NOT NULL AND candidate_user_id IS NULL) "
-            "OR (candidate_scope_kind = 'personal' "
-            "AND candidate_workspace_id IS NULL AND candidate_user_id IS NOT NULL)",
+            "(candidate_scope_kind = 'company' AND candidate_user_id IS NULL) "
+            "OR (candidate_scope_kind = 'personal' AND candidate_user_id IS NOT NULL)",
             name="ck_retrieval_partitions_candidate_target",
         ),
         CheckConstraint(
@@ -114,9 +108,8 @@ class RetrievalPartition(Base):
             "state",
         ),
         Index(
-            "ix_retrieval_partitions_candidate_workspace",
+            "ix_retrieval_partitions_candidate",
             "candidate_scope_kind",
-            "candidate_workspace_id",
             "state",
         ),
         Index(
@@ -126,32 +119,15 @@ class RetrievalPartition(Base):
             "state",
         ),
         Index(
-            "uq_retrieval_partitions_default_managed_workspace",
-            "source_namespace",
-            "managed_workspace_id",
-            unique=True,
-            postgresql_where=text(
-                "is_default_ingest IS TRUE AND state <> 'retired' "
-                "AND managed_workspace_id IS NOT NULL AND candidate_user_id IS NULL"
-            ),
-            sqlite_where=text(
-                "is_default_ingest = 1 AND state <> 'retired' "
-                "AND managed_workspace_id IS NOT NULL AND candidate_user_id IS NULL"
-            ),
-        ),
-        Index(
             "uq_retrieval_partitions_default_company",
             "source_namespace",
             unique=True,
             postgresql_where=text(
                 "is_default_ingest IS TRUE AND state <> 'retired' "
-                "AND managed_workspace_id IS NULL "
                 "AND candidate_scope_kind = 'company'"
             ),
             sqlite_where=text(
-                "is_default_ingest = 1 AND state <> 'retired' "
-                "AND managed_workspace_id IS NULL "
-                "AND candidate_scope_kind = 'company'"
+                "is_default_ingest = 1 AND state <> 'retired' AND candidate_scope_kind = 'company'"
             ),
         ),
         Index(
@@ -176,19 +152,9 @@ class RetrievalPartition(Base):
         default=lambda: str(uuid4()),
     )
     source_namespace: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
-    managed_workspace_id: Mapped[str | None] = mapped_column(
-        ForeignKey("workspaces.id", ondelete="RESTRICT"),
-        nullable=True,
-        index=True,
-    )
     candidate_scope_kind: Mapped[str] = mapped_column(
         String(16),
         nullable=False,
-        index=True,
-    )
-    candidate_workspace_id: Mapped[str | None] = mapped_column(
-        ForeignKey("workspaces.id", ondelete="RESTRICT"),
-        nullable=True,
         index=True,
     )
     candidate_user_id: Mapped[str | None] = mapped_column(
@@ -263,10 +229,6 @@ class RetrievalProjectionHead(Base):
     desired_state: Mapped[str] = mapped_column(String(16), nullable=False)
     content_checksum: Mapped[str | None] = mapped_column(String(128), nullable=True)
     visibility_checksum: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    diagnostic_workspace_id: Mapped[str | None] = mapped_column(
-        ForeignKey("workspaces.id", ondelete="RESTRICT"),
-        nullable=True,
-    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
@@ -319,10 +281,6 @@ class RetrievalProjectionEvent(Base):
     desired_state: Mapped[str] = mapped_column(String(16), nullable=False)
     content_checksum: Mapped[str | None] = mapped_column(String(128), nullable=True)
     visibility_checksum: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    diagnostic_workspace_id: Mapped[str | None] = mapped_column(
-        ForeignKey("workspaces.id", ondelete="RESTRICT"),
-        nullable=True,
-    )
     trace_context: Mapped[dict | None] = mapped_column(JSONB_COMPAT, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime,

@@ -7,13 +7,14 @@ from typing import Any
 
 from open_work_hub_api.domains.retrieval.projection_identity import canonical_search_document_id
 
-
 _KEYWORD_ACL_QUERY_FIELDS = (
     "owner_user_id",
     "visibility",
     "team_ids",
     "participant_user_ids",
     "shared_user_ids",
+    "shared_group_ids",
+    "ownership_kind",
     "granted_user_ids",
     "target_keys",
 )
@@ -129,7 +130,6 @@ def keyword_index_definition() -> dict[str, Any]:
             },
             "dynamic": "false",
             "properties": {
-                "workspace_id": {"type": "keyword"},
                 "dataset_id": {"type": "keyword"},
                 "entity_type": {"type": "keyword"},
                 "entity_id": {"type": "keyword"},
@@ -229,13 +229,12 @@ def keyword_existing_index_mapping_properties() -> dict[str, Any]:
     }
 
 
-def search_index_document_key(*, workspace_id: str, entity_type: str, entity_id: str) -> str:
-    return f"{workspace_id}:{entity_type}:{entity_id}"
+def search_index_document_key(*, entity_type: str, entity_id: str) -> str:
+    return f"{entity_type}:{entity_id}"
 
 
 def search_index_document_id(document: Mapping[str, Any]) -> str:
     return search_index_document_key(
-        workspace_id=str(document["workspace_id"]),
         entity_type=str(document["entity_type"]),
         entity_id=str(document["entity_id"]),
     )

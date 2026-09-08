@@ -20,7 +20,6 @@ from open_work_hub_api.core.realtime_relay import (
     realtime_channel_name,
 )
 
-
 logger = logging.getLogger(__name__)
 
 

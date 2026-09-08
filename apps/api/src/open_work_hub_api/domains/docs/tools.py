@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.principal import CallerPrincipal
 from open_work_hub_api.domains.ai.registry import AiCapabilityRegistry
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 
 
 class _ToolArgsModel(BaseModel):
@@ -47,7 +47,6 @@ def _docs_service():
 
 def _list_hub(
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     arguments: Mapping[str, Any],
@@ -66,7 +65,6 @@ def _list_hub(
 
 def _get_item(
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     arguments: Mapping[str, Any],
@@ -81,7 +79,6 @@ def _get_item(
 
 def _list_pages(
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     arguments: Mapping[str, Any],
@@ -96,7 +93,6 @@ def _list_pages(
 
 def _read_page(
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     arguments: Mapping[str, Any],
@@ -112,28 +108,28 @@ def _read_page(
 def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
     registry.register_tool(
         name="docs.list_hub",
-        description="List visible docs for the current workspace.",
+        description="List visible docs for the current user.",
         owner_domain="docs",
         handler=_list_hub,
         args_model=ListHubArgs,
     )
     registry.register_tool(
         name="docs.get_item",
-        description="Load one docs item in the current workspace.",
+        description="Load one docs item in the current user.",
         owner_domain="docs",
         handler=_get_item,
         args_model=GetItemArgs,
     )
     registry.register_tool(
         name="docs.list_pages",
-        description="List pages for a docs item in the current workspace.",
+        description="List pages for a docs item in the current user.",
         owner_domain="docs",
         handler=_list_pages,
         args_model=ListPagesArgs,
     )
     registry.register_tool(
         name="docs.read_page",
-        description="Read one docs page in the current workspace.",
+        description="Read one docs page in the current user.",
         owner_domain="docs",
         handler=_read_page,
         args_model=ReadPageArgs,

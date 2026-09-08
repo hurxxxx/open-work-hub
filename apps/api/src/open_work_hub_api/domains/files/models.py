@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     Boolean,
     CheckConstraint,
@@ -10,7 +11,6 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
-    JSON,
     String,
     Text,
     UniqueConstraint,
@@ -22,7 +22,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from open_work_hub_api.core.db import Base
 from open_work_hub_api.domains.auth.models import utcnow_naive
 
-
 JSONB_COMPAT = JSONB(astext_type=Text()).with_variant(JSON(), "sqlite")
 
 
@@ -30,7 +29,7 @@ class FileManagerCorpus(Base):
     __tablename__ = "file_manager_corpora"
     __table_args__ = (
         CheckConstraint(
-            "access_scope_kind IN ('workspace','company')",
+            "access_scope_kind IN ('company')",
             name="ck_file_manager_corpora_access_scope_kind",
         ),
         CheckConstraint(
@@ -50,23 +49,17 @@ class FileManagerCorpus(Base):
             name="uq_file_manager_corpora_retrieval_partition_id",
         ),
         Index(
-            "ix_file_manager_corpora_workspace_scope",
-            "managed_workspace_id",
+            "ix_file_manager_corpora_scope",
             "access_scope_kind",
         ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    managed_workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id", ondelete="RESTRICT"),
-        nullable=False,
-        index=True,
-    )
     access_scope_kind: Mapped[str] = mapped_column(
         String(16),
-        default="workspace",
-        server_default=text("'workspace'"),
+        default="company",
+        server_default=text("'company'"),
         nullable=False,
         index=True,
     )
@@ -113,8 +106,6 @@ class FileManagerCorpus(Base):
         onupdate=utcnow_naive,
         nullable=False,
     )
-
-    managed_workspace = relationship("Workspace", foreign_keys=[managed_workspace_id])
     created_by = relationship("User", foreign_keys=[created_by_id])
     folders: Mapped[list["FileManagerFolder"]] = relationship(back_populates="corpus")
     files: Mapped[list["FileManagerFile"]] = relationship(back_populates="corpus")
@@ -126,72 +117,19 @@ class FileManagerCorpus(Base):
     )
 
 
-class FileManagerCorpusTransitionAudit(Base):
-    __tablename__ = "file_manager_corpus_transition_audits"
-    __table_args__ = (
-        CheckConstraint(
-            "from_access_scope_kind IN ('workspace','company')",
-            name="ck_file_manager_corpus_transition_audits_from_scope",
-        ),
-        CheckConstraint(
-            "to_access_scope_kind IN ('workspace','company')",
-            name="ck_file_manager_corpus_transition_audits_to_scope",
-        ),
-        CheckConstraint(
-            "from_metadata_version >= 1 AND to_metadata_version > from_metadata_version",
-            name="ck_file_manager_corpus_transition_audits_versions",
-        ),
-        Index(
-            "ix_file_corpus_transition_audits_corpus_created",
-            "corpus_id",
-            "created_at",
-        ),
-    )
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    corpus_id: Mapped[str] = mapped_column(
-        ForeignKey("file_manager_corpora.id", ondelete="RESTRICT"),
-        nullable=False,
-        index=True,
-    )
-    actor_id: Mapped[str] = mapped_column(
-        ForeignKey("users.id", ondelete="RESTRICT"),
-        nullable=False,
-        index=True,
-    )
-    reason: Mapped[str] = mapped_column(Text, nullable=False)
-    request_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
-    from_access_scope_kind: Mapped[str] = mapped_column(String(16), nullable=False)
-    to_access_scope_kind: Mapped[str] = mapped_column(String(16), nullable=False)
-    from_managed_workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
-    to_managed_workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
-    from_metadata_version: Mapped[int] = mapped_column(Integer, nullable=False)
-    to_metadata_version: Mapped[int] = mapped_column(Integer, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
-
-
 class FileManagerFolder(Base):
     __tablename__ = "file_manager_folders"
     __table_args__ = (
         CheckConstraint(
-            "visibility IN ('private','workspace')",
+            "visibility IN ('private','company')",
             name="ck_file_manager_folders_visibility",
         ),
-        Index("ix_file_manager_folders_workspace_parent", "workspace_id", "parent_id"),
-        Index("ix_file_manager_folders_workspace_owner", "workspace_id", "owner_id"),
-        Index("ix_file_manager_folders_workspace_visibility", "workspace_id", "visibility"),
+        Index("ix_file_manager_folders_parent", "parent_id"),
+        Index("ix_file_manager_folders_owner", "owner_id"),
+        Index("ix_file_manager_folders_visibility", "visibility"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id"), nullable=False, index=True
-    )
     retrieval_partition_id: Mapped[str | None] = mapped_column(
         ForeignKey("retrieval_partitions.id", ondelete="RESTRICT"),
         nullable=True,
@@ -215,8 +153,6 @@ class FileManagerFolder(Base):
         nullable=False,
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
-
-    workspace = relationship("Workspace")
     owner = relationship("User")
     corpus: Mapped["FileManagerCorpus | None"] = relationship(back_populates="folders")
     parent: Mapped["FileManagerFolder | None"] = relationship(
@@ -230,22 +166,19 @@ class FileManagerFile(Base):
     __tablename__ = "file_manager_files"
     __table_args__ = (
         CheckConstraint(
-            "visibility IN ('private','workspace')",
+            "visibility IN ('private','company')",
             name="ck_file_manager_files_visibility",
         ),
         CheckConstraint(
             "extraction_status IN ('pending','ready','unsupported','failed')",
             name="ck_file_manager_files_extraction_status",
         ),
-        Index("ix_file_manager_files_workspace_folder", "workspace_id", "folder_id"),
-        Index("ix_file_manager_files_workspace_owner", "workspace_id", "owner_id"),
-        Index("ix_file_manager_files_workspace_visibility", "workspace_id", "visibility"),
+        Index("ix_file_manager_files_folder", "folder_id"),
+        Index("ix_file_manager_files_owner", "owner_id"),
+        Index("ix_file_manager_files_visibility", "visibility"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id"), nullable=False, index=True
-    )
     retrieval_partition_id: Mapped[str | None] = mapped_column(
         ForeignKey("retrieval_partitions.id", ondelete="RESTRICT"),
         nullable=True,
@@ -287,8 +220,6 @@ class FileManagerFile(Base):
         nullable=False,
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
-
-    workspace = relationship("Workspace")
     folder = relationship("FileManagerFolder")
     owner = relationship("User")
     corpus: Mapped["FileManagerCorpus | None"] = relationship(back_populates="files")
@@ -376,7 +307,7 @@ class FileManagerFileAccessGrant(Base):
     __tablename__ = "file_manager_file_access_grants"
     __table_args__ = (
         CheckConstraint(
-            "grant_type IN ('company','workspace','user','team')",
+            "grant_type IN ('company','group','user','team')",
             name="ck_file_manager_file_access_grants_type",
         ),
         CheckConstraint(
@@ -462,23 +393,13 @@ class FileManagerBulkIngestRun(Base):
             name="uq_file_manager_bulk_ingest_runs_root_folder",
         ),
         UniqueConstraint(
-            "workspace_id",
+            "created_by_id",
             "idempotency_key_sha256",
-            name="uq_file_manager_bulk_ingest_runs_workspace_idempotency",
-        ),
-        Index(
-            "ix_file_manager_bulk_ingest_runs_workspace_status",
-            "workspace_id",
-            "status",
+            name="uq_file_manager_bulk_ingest_runs_idempotency",
         ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id", ondelete="RESTRICT"),
-        nullable=False,
-        index=True,
-    )
     corpus_id: Mapped[str] = mapped_column(
         ForeignKey("file_manager_corpora.id", ondelete="RESTRICT"),
         nullable=False,
@@ -516,8 +437,6 @@ class FileManagerBulkIngestRun(Base):
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     purged_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-
-    workspace = relationship("Workspace")
     corpus: Mapped[FileManagerCorpus] = relationship(back_populates="bulk_ingest_runs")
     root_folder: Mapped[FileManagerFolder] = relationship(foreign_keys=[root_folder_id])
     created_by = relationship("User")

@@ -38,7 +38,6 @@ function session(
 ): RecordingSessionState {
   return {
     stagingId: 'staging-1',
-    workspaceSlug: 'hq',
     scopeKey: 'hq:recording:unlinked',
     idempotencyKey: 'idem-1',
     mimeType: 'audio/webm',
@@ -107,14 +106,8 @@ function createStore(
     async getSession() {
       return store.session;
     },
-    async listIncompleteSessions(options: {
-      workspaceSlug: string;
-      scopeKey?: string | null;
-    }) {
+    async listIncompleteSessions(options: { scopeKey?: string | null }) {
       if (!store.session || store.session.completedAt != null) {
-        return [];
-      }
-      if (store.session.workspaceSlug !== options.workspaceSlug) {
         return [];
       }
       if (options.scopeKey && store.session.scopeKey !== options.scopeKey) {

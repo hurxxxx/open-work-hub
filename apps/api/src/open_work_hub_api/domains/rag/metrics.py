@@ -92,7 +92,6 @@ class RagMetrics:
         instrument: Any,
         value: int,
         *,
-        workspace_id: str | None = None,
         resource_type: str | None = None,
         resource_id: str | None = None,
         source_kind: str | None = None,
@@ -106,7 +105,6 @@ class RagMetrics:
         instrument.record(
             value,
             attributes=rag_span_attributes(
-                workspace_id=workspace_id,
                 resource_type=resource_type,
                 resource_id=resource_id,
                 source_kind=source_kind,
@@ -123,7 +121,6 @@ class RagMetrics:
         self,
         instrument: Any,
         *,
-        workspace_id: str | None = None,
         resource_type: str | None = None,
         resource_id: str | None = None,
         source_kind: str | None = None,
@@ -137,7 +134,6 @@ class RagMetrics:
         instrument.add(
             1,
             attributes=rag_span_attributes(
-                workspace_id=workspace_id,
                 resource_type=resource_type,
                 resource_id=resource_id,
                 source_kind=source_kind,
@@ -154,14 +150,12 @@ class RagMetrics:
         self,
         *,
         depth: int,
-        workspace_id: str | None = None,
         job_lane: str | None = None,
         job_kind: str,
     ) -> None:
         self._record_histogram(
             self._sync_queue_depth,
             max(depth, 0),
-            workspace_id=workspace_id,
             job_lane=job_lane,
             extra={"job_kind": job_kind},
         )
@@ -198,7 +192,6 @@ class RagMetrics:
     def record_query_latency(
         self,
         *,
-        workspace_id: str | None,
         answer_mode: str,
         latency_ms: int,
         source_kind: str | None = None,
@@ -206,7 +199,6 @@ class RagMetrics:
         self._record_histogram(
             self._query_latency_ms,
             latency_ms,
-            workspace_id=workspace_id,
             source_kind=source_kind,
             operation="query",
             extra={"answer_mode": answer_mode},
@@ -215,7 +207,6 @@ class RagMetrics:
     def record_ingest_latency(
         self,
         *,
-        workspace_id: str | None,
         resource_type: str,
         source_kind: str,
         provider_name: str | None,
@@ -224,7 +215,6 @@ class RagMetrics:
         self._record_histogram(
             self._ingest_latency_ms,
             latency_ms,
-            workspace_id=workspace_id,
             resource_type=resource_type,
             source_kind=source_kind,
             operation="ingest",
@@ -235,7 +225,6 @@ class RagMetrics:
         self,
         *,
         lag_ms: int,
-        workspace_id: str | None = None,
         resource_type: str | None = None,
         resource_id: str | None = None,
         scope_type: str | None = None,
@@ -247,7 +236,6 @@ class RagMetrics:
         self._record_histogram(
             self._sync_job_lag_ms,
             lag_ms,
-            workspace_id=workspace_id,
             resource_type=resource_type,
             resource_id=resource_id,
             scope_type=scope_type,
@@ -260,7 +248,6 @@ class RagMetrics:
     def record_vector_query_latency(
         self,
         *,
-        workspace_id: str | None,
         provider_name: str | None,
         latency_ms: int,
         source_kind: str | None = None,
@@ -268,7 +255,6 @@ class RagMetrics:
         self._record_histogram(
             self._vector_query_latency_ms,
             latency_ms,
-            workspace_id=workspace_id,
             source_kind=source_kind,
             operation="vector_query",
             provider_name=provider_name,
@@ -280,14 +266,12 @@ class RagMetrics:
         provider_name: str | None,
         operation: str,
         latency_ms: int,
-        workspace_id: str | None = None,
         resource_type: str | None = None,
         source_kind: str | None = None,
     ) -> None:
         self._record_histogram(
             self._embedding_latency_ms,
             latency_ms,
-            workspace_id=workspace_id,
             resource_type=resource_type,
             source_kind=source_kind,
             operation=operation,
@@ -299,14 +283,12 @@ class RagMetrics:
         *,
         provider_name: str | None,
         latency_ms: int,
-        workspace_id: str | None = None,
         resource_type: str | None = None,
         source_kind: str | None = None,
     ) -> None:
         self._record_histogram(
             self._ocr_latency_ms,
             latency_ms,
-            workspace_id=workspace_id,
             resource_type=resource_type,
             source_kind=source_kind,
             operation="ocr",
@@ -318,13 +300,11 @@ class RagMetrics:
         *,
         provider_name: str | None,
         latency_ms: int,
-        workspace_id: str | None = None,
         source_kind: str | None = None,
     ) -> None:
         self._record_histogram(
             self._rerank_latency_ms,
             latency_ms,
-            workspace_id=workspace_id,
             source_kind=source_kind,
             operation="rerank",
             provider_name=provider_name,
@@ -335,13 +315,11 @@ class RagMetrics:
         *,
         provider_name: str | None,
         latency_ms: int,
-        workspace_id: str | None = None,
         source_kind: str | None = None,
     ) -> None:
         self._record_histogram(
             self._grounded_answer_latency_ms,
             latency_ms,
-            workspace_id=workspace_id,
             source_kind=source_kind,
             operation="grounded_answer",
             provider_name=provider_name,
@@ -351,7 +329,6 @@ class RagMetrics:
         self,
         *,
         status: str,
-        workspace_id: str | None = None,
         resource_type: str | None = None,
         resource_id: str | None = None,
         scope_type: str | None = None,
@@ -362,7 +339,6 @@ class RagMetrics:
     ) -> None:
         self._add_counter(
             self._sync_jobs_total,
-            workspace_id=workspace_id,
             resource_type=resource_type,
             resource_id=resource_id,
             scope_type=scope_type,
@@ -377,14 +353,12 @@ class RagMetrics:
         *,
         provider_name: str | None,
         operation: str,
-        workspace_id: str | None = None,
         resource_type: str | None = None,
         source_kind: str | None = None,
         error_type: str | None = None,
     ) -> None:
         self._add_counter(
             self._provider_errors_total,
-            workspace_id=workspace_id,
             resource_type=resource_type,
             source_kind=source_kind,
             operation=operation,
@@ -397,14 +371,12 @@ class RagMetrics:
         *,
         provider_name: str | None,
         operation: str,
-        workspace_id: str | None = None,
         resource_type: str | None = None,
         source_kind: str | None = None,
         error_type: str | None = None,
     ) -> None:
         self._add_counter(
             self._provider_timeouts_total,
-            workspace_id=workspace_id,
             resource_type=resource_type,
             source_kind=source_kind,
             operation=operation,
@@ -429,13 +401,11 @@ def reset_default_rag_metrics() -> None:
 def record_sync_queue_depth(
     *,
     depth: int,
-    workspace_id: str | None = None,
     job_lane: str | None = None,
     job_kind: str,
 ) -> None:
     _default_rag_metrics().record_sync_queue_depth(
         depth=depth,
-        workspace_id=workspace_id,
         job_lane=job_lane,
         job_kind=job_kind,
     )
@@ -460,13 +430,11 @@ def record_sync_queue_health(
 
 def record_query_latency(
     *,
-    workspace_id: str | None,
     answer_mode: str,
     latency_ms: int,
     source_kind: str | None = None,
 ) -> None:
     _default_rag_metrics().record_query_latency(
-        workspace_id=workspace_id,
         answer_mode=answer_mode,
         latency_ms=latency_ms,
         source_kind=source_kind,
@@ -475,14 +443,12 @@ def record_query_latency(
 
 def record_ingest_latency(
     *,
-    workspace_id: str | None,
     resource_type: str,
     source_kind: str,
     provider_name: str | None,
     latency_ms: int,
 ) -> None:
     _default_rag_metrics().record_ingest_latency(
-        workspace_id=workspace_id,
         resource_type=resource_type,
         source_kind=source_kind,
         provider_name=provider_name,
@@ -493,7 +459,6 @@ def record_ingest_latency(
 def record_sync_job_lag(
     *,
     lag_ms: int,
-    workspace_id: str | None = None,
     resource_type: str | None = None,
     resource_id: str | None = None,
     scope_type: str | None = None,
@@ -504,7 +469,6 @@ def record_sync_job_lag(
 ) -> None:
     _default_rag_metrics().record_sync_job_lag(
         lag_ms=lag_ms,
-        workspace_id=workspace_id,
         resource_type=resource_type,
         resource_id=resource_id,
         scope_type=scope_type,
@@ -517,13 +481,11 @@ def record_sync_job_lag(
 
 def record_vector_query_latency(
     *,
-    workspace_id: str | None,
     provider_name: str | None,
     latency_ms: int,
     source_kind: str | None = None,
 ) -> None:
     _default_rag_metrics().record_vector_query_latency(
-        workspace_id=workspace_id,
         provider_name=provider_name,
         latency_ms=latency_ms,
         source_kind=source_kind,
@@ -535,7 +497,6 @@ def record_embedding_latency(
     provider_name: str | None,
     operation: str,
     latency_ms: int,
-    workspace_id: str | None = None,
     resource_type: str | None = None,
     source_kind: str | None = None,
 ) -> None:
@@ -543,7 +504,6 @@ def record_embedding_latency(
         provider_name=provider_name,
         operation=operation,
         latency_ms=latency_ms,
-        workspace_id=workspace_id,
         resource_type=resource_type,
         source_kind=source_kind,
     )
@@ -553,14 +513,12 @@ def record_ocr_latency(
     *,
     provider_name: str | None,
     latency_ms: int,
-    workspace_id: str | None = None,
     resource_type: str | None = None,
     source_kind: str | None = None,
 ) -> None:
     _default_rag_metrics().record_ocr_latency(
         provider_name=provider_name,
         latency_ms=latency_ms,
-        workspace_id=workspace_id,
         resource_type=resource_type,
         source_kind=source_kind,
     )
@@ -570,13 +528,11 @@ def record_rerank_latency(
     *,
     provider_name: str | None,
     latency_ms: int,
-    workspace_id: str | None = None,
     source_kind: str | None = None,
 ) -> None:
     _default_rag_metrics().record_rerank_latency(
         provider_name=provider_name,
         latency_ms=latency_ms,
-        workspace_id=workspace_id,
         source_kind=source_kind,
     )
 
@@ -585,13 +541,11 @@ def record_grounded_answer_latency(
     *,
     provider_name: str | None,
     latency_ms: int,
-    workspace_id: str | None = None,
     source_kind: str | None = None,
 ) -> None:
     _default_rag_metrics().record_grounded_answer_latency(
         provider_name=provider_name,
         latency_ms=latency_ms,
-        workspace_id=workspace_id,
         source_kind=source_kind,
     )
 
@@ -599,7 +553,6 @@ def record_grounded_answer_latency(
 def record_sync_job_result(
     *,
     status: str,
-    workspace_id: str | None = None,
     resource_type: str | None = None,
     resource_id: str | None = None,
     scope_type: str | None = None,
@@ -610,7 +563,6 @@ def record_sync_job_result(
 ) -> None:
     _default_rag_metrics().record_sync_job_result(
         status=status,
-        workspace_id=workspace_id,
         resource_type=resource_type,
         resource_id=resource_id,
         scope_type=scope_type,
@@ -625,7 +577,6 @@ def record_provider_error(
     *,
     provider_name: str | None,
     operation: str,
-    workspace_id: str | None = None,
     resource_type: str | None = None,
     source_kind: str | None = None,
     error_type: str | None = None,
@@ -633,7 +584,6 @@ def record_provider_error(
     _default_rag_metrics().record_provider_error(
         provider_name=provider_name,
         operation=operation,
-        workspace_id=workspace_id,
         resource_type=resource_type,
         source_kind=source_kind,
         error_type=error_type,
@@ -644,7 +594,6 @@ def record_provider_timeout(
     *,
     provider_name: str | None,
     operation: str,
-    workspace_id: str | None = None,
     resource_type: str | None = None,
     source_kind: str | None = None,
     error_type: str | None = None,
@@ -652,7 +601,6 @@ def record_provider_timeout(
     _default_rag_metrics().record_provider_timeout(
         provider_name=provider_name,
         operation=operation,
-        workspace_id=workspace_id,
         resource_type=resource_type,
         source_kind=source_kind,
         error_type=error_type,

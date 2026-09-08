@@ -4,21 +4,7 @@ import {
   formatDateLabel,
   type SelectedSubject,
   type SubjectSelectionState,
-  WORKSPACE_ROLE_RANK,
 } from './admin-shared-model';
-
-export interface UserWorkspaceChip {
-  id: string;
-  name: string;
-  role: string;
-  elevated: boolean;
-}
-
-export interface UserWorkspaceChipModel {
-  visible: UserWorkspaceChip[];
-  hiddenCount: number;
-  hiddenTitle: string;
-}
 
 export interface PeopleDirectoryGridState {
   users: AuthUser[];
@@ -63,7 +49,6 @@ export interface PeopleDirectoryUserRow {
   disabled: boolean;
   subject: SelectedSubject;
   statusKind: PeopleDirectoryUserStatusKind;
-  workspaceChips: UserWorkspaceChipModel;
   lastLoginLabel: string;
 }
 
@@ -75,32 +60,6 @@ export const INITIAL_PEOPLE_DIRECTORY_GRID_STATE: PeopleDirectoryGridState = {
   debouncedSearch: '',
   loading: false,
 };
-
-export function buildUserWorkspaceChipModel(
-  workspaces: Pick<AuthUser, 'workspaces'>['workspaces'],
-  locale: string,
-): UserWorkspaceChipModel {
-  const sorted = Array.from(workspaces).sort((a, b) => {
-    const rankDiff =
-      (WORKSPACE_ROLE_RANK[a.role] ?? 99) - (WORKSPACE_ROLE_RANK[b.role] ?? 99);
-    if (rankDiff !== 0) return rankDiff;
-    return a.name.localeCompare(b.name, locale);
-  });
-  const visible = sorted.slice(0, 3).map((workspace) => ({
-    id: workspace.id,
-    name: workspace.name,
-    role: workspace.role,
-    elevated: workspace.role === 'admin',
-  }));
-  const hidden = sorted.slice(3);
-  return {
-    visible,
-    hiddenCount: hidden.length,
-    hiddenTitle: hidden
-      .map((workspace) => `${workspace.name} (${workspace.role})`)
-      .join(', '),
-  };
-}
 
 export function peopleDirectoryGridReducer(
   state: PeopleDirectoryGridState,
@@ -200,7 +159,6 @@ export function buildPeopleDirectoryUserRow({
         : user.status === 'suspended'
           ? 'suspended'
           : 'active',
-    workspaceChips: buildUserWorkspaceChipModel(user.workspaces, locale),
     lastLoginLabel: formatDateLabel(user.last_login_at, locale, timeZone),
   };
 }

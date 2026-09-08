@@ -9,14 +9,13 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from open_work_hub_api.core.telemetry import current_trace_id
 from open_work_hub_api.core.db import get_session_factory
+from open_work_hub_api.core.telemetry import current_trace_id
+from open_work_hub_api.domains.ai.interactions import record_ai_interaction
 from open_work_hub_api.domains.ai.security_detected_values import (
     record_ai_security_detected_values,
 )
 from open_work_hub_api.domains.auth.access import record_audit_log
-from open_work_hub_api.domains.ai.interactions import record_ai_interaction
-
 
 ACTION_LLM_CALL = "llm_call"
 ACTION_AI_EXTERNAL_CALL = "ai_external_call"
@@ -35,7 +34,6 @@ def log_llm_call(
     actor_user_id: str | None,
     principal_kind: str,
     principal_id: str | None,
-    workspace_id: str,
     task_kind: str,
     app_id: str,
     policy: str | None,
@@ -94,7 +92,6 @@ def log_llm_call(
                 actor_user_id=actor_user_id,
                 principal_kind=principal_kind,
                 principal_id=principal_id,
-                workspace_id=workspace_id,
             ),
             "task_kind": task_kind,
             "workload_id": workload_id,
@@ -165,7 +162,6 @@ def log_ai_external_call(
     actor_user_id: str | None,
     principal_kind: str,
     principal_id: str | None,
-    workspace_id: str,
     task_kind: str,
     capability: str,
     provider: str | None,
@@ -214,7 +210,6 @@ def log_ai_external_call(
                 actor_user_id=actor_user_id,
                 principal_kind=principal_kind,
                 principal_id=principal_id,
-                workspace_id=workspace_id,
             ),
             "task_kind": task_kind,
             "app_id": app_id,
@@ -280,7 +275,6 @@ def log_llm_tool_call(
     actor_user_id: str | None,
     principal_kind: str,
     principal_id: str | None,
-    workspace_id: str,
     tool_name: str,
     args_summary: str,
     status: str,
@@ -299,7 +293,6 @@ def log_llm_tool_call(
                 actor_user_id=actor_user_id,
                 principal_kind=principal_kind,
                 principal_id=principal_id,
-                workspace_id=workspace_id,
             ),
             "tool_name": tool_name,
             "args_summary": args_summary,
@@ -331,7 +324,6 @@ def log_llm_tool_call(
 def log_llm_tool_approval_resolved(
     *,
     actor_user_id: str | None,
-    workspace_id: str,
     approval_id: str,
     tool_name: str,
     decision: str,
@@ -339,7 +331,6 @@ def log_llm_tool_approval_resolved(
     elapsed_since_request_ms: int,
 ) -> None:
     payload: dict[str, Any] = {
-        "workspace_id": workspace_id,
         "approval_id": approval_id,
         "tool_name": tool_name,
         "decision": decision,
@@ -366,14 +357,12 @@ def _identity_payload(
     actor_user_id: str | None,
     principal_kind: str,
     principal_id: str | None,
-    workspace_id: str,
 ) -> dict[str, Any]:
     return {
         "source": source,
         "actor_user_id": actor_user_id,
         "principal_kind": principal_kind,
         "principal_id": principal_id,
-        "workspace_id": workspace_id,
     }
 
 
@@ -478,7 +467,6 @@ def _maybe_record_ai_interaction(
             db,
             action=action,
             source=str(payload.get("source") or ""),
-            workspace_id=payload.get("workspace_id"),
             actor_user_id=payload.get("actor_user_id"),
             principal_kind=payload.get("principal_kind"),
             principal_id=payload.get("principal_id"),
@@ -533,7 +521,6 @@ def _maybe_record_ai_interaction(
             db,
             action=action,
             source=str(payload.get("source") or ""),
-            workspace_id=payload.get("workspace_id"),
             actor_user_id=payload.get("actor_user_id"),
             principal_kind=payload.get("principal_kind"),
             principal_id=payload.get("principal_id"),

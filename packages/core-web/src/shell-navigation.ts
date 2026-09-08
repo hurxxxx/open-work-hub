@@ -10,7 +10,7 @@ export interface CoreShellNavigationManifest<TAppId extends string = string> {
   };
   globalRoutePaths?: readonly string[];
   staticGlobalRoutePaths?: readonly string[];
-  workspaceRoutePaths: readonly string[];
+  appRoutePaths: readonly string[];
 }
 
 export function getCoreShellPathname(path: string): string {
@@ -69,7 +69,7 @@ export function resolveCoreManifestNavItemId<
   return fallbackNavItemId;
 }
 
-export function resolveCoreWorkspaceRouteAppId<
+export function resolveCoreAppRouteAppId<
   TAppId extends string,
   TManifest extends CoreShellNavigationManifest<TAppId>,
 >({
@@ -82,12 +82,12 @@ export function resolveCoreWorkspaceRouteAppId<
   const candidates: Array<{ appId: TAppId; prefixLength: number }> = [];
   for (const manifest of manifests) {
     const appId = manifest.appBarItem.id;
-    for (const routePath of manifest.workspaceRoutePaths) {
-      const prefix = workspaceRouteAppPrefix(routePath);
+    for (const routePath of manifest.appRoutePaths) {
+      const prefix = appRouteAppPrefix(routePath);
       if (!prefix) {
         continue;
       }
-      if (getCoreWorkspaceAppRelativePath(pathname, prefix) !== null) {
+      if (getCoreAppRelativePath(pathname, prefix) !== null) {
         candidates.push({ appId, prefixLength: prefix.length });
       }
     }
@@ -122,13 +122,13 @@ export function resolveCoreGlobalRouteAppId<
   return null;
 }
 
-export function getCoreWorkspaceAppRelativePath(
+export function getCoreAppRelativePath(
   pathname: string,
   appId: string,
 ): string | null {
-  const match = new RegExp(
-    `^/apps/${escapeRegExp(appId)}/workspaces/[^/]+(?=$|/)`,
-  ).exec(pathname);
+  const match = new RegExp(`^/apps/${escapeRegExp(appId)}(?=$|/)`).exec(
+    pathname,
+  );
   if (!match) {
     return null;
   }
@@ -161,8 +161,8 @@ export function coreRoutePathMatchesPathname(
   );
 }
 
-function workspaceRouteAppPrefix(routePath: string): string | null {
-  const match = /^\/apps\/([^/:]+)\/workspaces\/:workspaceSlug/.exec(routePath);
+function appRouteAppPrefix(routePath: string): string | null {
+  const match = /^\/apps\/([^/:]+)(?=$|\/)/.exec(routePath);
   return match?.[1] ?? null;
 }
 
@@ -202,14 +202,14 @@ function manifestPathSuffixMatches({
     const queryStart = suffix.indexOf('?');
     if (queryStart >= 0) {
       return (
-        workspaceAppPathSuffixMatches({
+        appPathSuffixMatches({
           appId,
           pathname,
           suffix: suffix.slice(0, queryStart),
         }) && querySuffixMatches(path, suffix.slice(queryStart))
       );
     }
-    return workspaceAppPathSuffixMatches({ appId, pathname, suffix });
+    return appPathSuffixMatches({ appId, pathname, suffix });
   }
   return false;
 }
@@ -228,7 +228,7 @@ function querySuffixMatches(path: string, suffix: string): boolean {
   return true;
 }
 
-function workspaceAppPathSuffixMatches({
+function appPathSuffixMatches({
   appId,
   pathname,
   suffix,
@@ -237,7 +237,7 @@ function workspaceAppPathSuffixMatches({
   pathname: string;
   suffix: string;
 }): boolean {
-  const appRelativePath = getCoreWorkspaceAppRelativePath(pathname, appId);
+  const appRelativePath = getCoreAppRelativePath(pathname, appId);
   if (appRelativePath === null) {
     return false;
   }

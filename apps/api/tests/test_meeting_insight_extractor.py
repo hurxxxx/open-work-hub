@@ -10,7 +10,7 @@ from sqlalchemy import select
 
 from open_work_hub_api.core.db import get_session_factory
 from open_work_hub_api.domains.auth.access import load_user_graph
-from open_work_hub_api.domains.auth.models import AuditLog, Workspace
+from open_work_hub_api.domains.auth.models import AuditLog
 from open_work_hub_api.domains.auth.security import new_id
 from open_work_hub_api.domains.meeting import insights as meeting_insights
 from open_work_hub_api.domains.meeting.models import (
@@ -33,14 +33,11 @@ def _create_meeting_and_recording(
 ) -> tuple[dict, str]:
     session = _dev_login(client, "delivery-hub-admin")
     with get_session_factory()() as db:
-        workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
         user = load_user_graph(db, session["user"]["id"])
-        assert workspace is not None
         assert user is not None
 
         meeting = Meeting(
             id=new_id(),
-            workspace_id=workspace.id,
             organizer_id=user.id,
             title="Insight Source Meeting",
             agenda="AI insight extraction",
@@ -207,13 +204,10 @@ def test_extract_and_persist_meeting_insights_refresh_supersedes_existing_drafts
     with get_session_factory()() as db:
         recording = db.get(MeetingRecording, recording_id)
         assert recording is not None
-        workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
-        assert workspace is not None
         old_insight = MeetingInsight(
             id=new_id(),
             meeting_id=recording.meeting_id,
             recording_id=recording.id,
-            workspace_id=workspace.id,
             insight_type="action",
             payload_json={"title": "기존 액션"},
             confidence=0.2,
@@ -276,13 +270,10 @@ def test_extract_and_persist_meeting_insights_refresh_with_empty_items_keeps_exi
     with get_session_factory()() as db:
         recording = db.get(MeetingRecording, recording_id)
         assert recording is not None
-        workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
-        assert workspace is not None
         old_insight = MeetingInsight(
             id=new_id(),
             meeting_id=recording.meeting_id,
             recording_id=recording.id,
-            workspace_id=workspace.id,
             insight_type="action",
             payload_json={"title": "기존 액션"},
             confidence=0.2,
@@ -339,13 +330,10 @@ def test_extract_and_persist_meeting_insights_reuses_existing_recording_insights
     with get_session_factory()() as db:
         recording = db.get(MeetingRecording, recording_id)
         assert recording is not None
-        workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
-        assert workspace is not None
         accepted_insight = MeetingInsight(
             id=new_id(),
             meeting_id=recording.meeting_id,
             recording_id=recording.id,
-            workspace_id=workspace.id,
             insight_type="decision",
             payload_json={"statement": "기존 결정사항"},
             confidence=0.5,

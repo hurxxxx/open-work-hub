@@ -1,10 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
-from typing import Callable
-from typing import Protocol
-from typing import TypeVar
+from typing import Any, Callable, Protocol, TypeVar
 
 from open_work_hub_api.domains.ai.runtime.external_capability import (
     failed_external_execution_result,
@@ -22,7 +19,6 @@ from open_work_hub_api.domains.ai.runtime.external_search import (
     MockExternalSearchAdapter,
     build_external_search_trace_identity,
 )
-
 
 AdapterT = TypeVar("AdapterT")
 ResultT = TypeVar("ResultT")

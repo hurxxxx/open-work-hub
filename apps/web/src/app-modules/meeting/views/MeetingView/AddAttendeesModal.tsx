@@ -3,9 +3,9 @@
 // MeetingEditModal which is organizer-only and edits everything.
 //
 // Backed by POST /meeting/meetings/{id}/attendees which is participant-permissioned.
-import { useEffect, useMemo, useReducer } from 'react';
 import { InlineNotice } from '@open-work-hub/ui';
 import { UserPlus } from 'lucide-react';
+import { useEffect, useMemo, useReducer } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { FormDialog, FormFieldRow } from '@/src/components/form/FormDialog';
@@ -23,7 +23,7 @@ import { useMeetingUserSearch } from './useMeetingUserSearch';
 interface AddAttendeesModalProps {
   isOpen: boolean;
   meeting: MeetingDetail;
-  workspaceSlug: string;
+
   onClose: () => void;
   onAdded: (updated: MeetingDetail) => void;
 }
@@ -116,7 +116,6 @@ function addAttendeesModalReducer(
 export function AddAttendeesModal({
   isOpen,
   meeting,
-  workspaceSlug,
   onClose,
   onAdded,
 }: AddAttendeesModalProps) {
@@ -147,7 +146,6 @@ export function AddAttendeesModal({
     isOpen,
     query,
     token,
-    workspaceSlug,
     onIdle: () => dispatch({ type: 'searchIdle' }),
     onStarted: () => dispatch({ type: 'searchStarted' }),
     onLoaded: (results) => dispatch({ type: 'searchLoaded', results }),
@@ -199,12 +197,7 @@ export function AddAttendeesModal({
     if (!token || pending.length === 0) return;
     dispatch({ type: 'saveStarted' });
     try {
-      const updated = await addMeetingAttendees(
-        token,
-        workspaceSlug,
-        meeting.id,
-        pending,
-      );
+      const updated = await addMeetingAttendees(token, meeting.id, pending);
       onAdded(updated);
     } catch (err) {
       dispatch({

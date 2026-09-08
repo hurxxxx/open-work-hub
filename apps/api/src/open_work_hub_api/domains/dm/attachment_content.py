@@ -1,172 +1,79 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
-from dataclasses import dataclass
 from urllib.parse import quote
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.i18n import localized_http_exception
-from open_work_hub_api.domains.dm import attachment_links, attachment_policy, attachment_storage
+from open_work_hub_api.domains.auth.models import User
+from open_work_hub_api.domains.content_access.contracts import ContentStream
+from open_work_hub_api.domains.content_access.grants import ContentGrantClaims, InvalidContentGrant
+from open_work_hub_api.domains.dm import (
+    attachment_links,
+    attachment_policy,
+    attachment_records,
+    attachment_storage,
+)
 from open_work_hub_api.domains.dm.attachment_links import DmAttachmentDisposition
-from open_work_hub_api.domains.dm.models import DmMessageAttachment
-
 
 DM_ATTACHMENT_PROXY_CHUNK_SIZE = 1024 * 1024
-DM_ATTACHMENT_CONTENT_CACHE_CONTROL = "private, max-age=300"
+DM_ATTACHMENT_CONTENT_CACHE_CONTROL = "private, no-store"
 
 
-@dataclass(frozen=True)
-class DmAttachmentContent:
-    body: Iterable[bytes]
-    media_type: str
-    headers: dict[str, str]
-
-
-@dataclass(frozen=True)
-class DmAttachmentContentRequest:
-    attachment: DmMessageAttachment
-    expires: int
-    signature: str
-    disposition: DmAttachmentDisposition
-
-
-@dataclass(frozen=True)
-class DmAttachmentContentAccessPolicy:
-    chunk_size: int = DM_ATTACHMENT_PROXY_CHUNK_SIZE
-
-    def validate_request(self, request: DmAttachmentContentRequest) -> None:
-        if (
-            request.disposition == "inline"
-            and not attachment_policy.is_previewable_image_content_type(
-                request.attachment.content_type
-            )
-        ):
-            raise localized_http_exception(
-                status_code=415,
-                code="dm.attachment_preview_unsupported",
-            )
-        if not attachment_links.validate_dm_attachment_content_signature(
-            request.attachment,
-            expires=request.expires,
-            disposition=request.disposition,
-            signature=request.signature,
-        ):
-            raise localized_http_exception(
-                status_code=403,
-                code="dm.attachment_proxy_url_invalid",
-            )
-
-    def open_stream(self, attachment: DmMessageAttachment) -> Iterable[bytes]:
-        try:
-            return attachment_storage.dm_attachment_storage().open_stream(
-                storage_key=attachment.storage_key,
-                chunk_size=self.chunk_size,
-            )
-        except Exception as exc:
-            raise localized_http_exception(
-                status_code=502,
-                code="dm.attachment_download_failed",
-            ) from exc
-
-
-@dataclass(frozen=True)
-class DmAttachmentContentResponseBuilder:
-    cache_control: str = DM_ATTACHMENT_CONTENT_CACHE_CONTROL
-
-    def build(
-        self,
-        *,
-        attachment: DmMessageAttachment,
-        body: Iterable[bytes],
-        disposition: DmAttachmentDisposition,
-    ) -> DmAttachmentContent:
-        return DmAttachmentContent(
-            body=body,
-            media_type=(
-                attachment.content_type or attachment_policy.DEFAULT_ATTACHMENT_CONTENT_TYPE
-            ),
-            headers=self.headers(
-                filename=attachment.filename,
-                disposition=disposition,
-            ),
+def open_dm_attachment_content_grant(db: Session, *, claims: ContentGrantClaims) -> ContentStream:
+    if (
+        claims.resource_kind != "dm.attachment"
+        or claims.owner_app_id != "dm"
+        or claims.execution_context_kind != "personal"
+        or claims.source_type != "dm_conversation"
+    ):
+        raise InvalidContentGrant("binding")
+    user = db.get(User, claims.issuer_user_id)
+    if user is None:
+        raise InvalidContentGrant("principal")
+    try:
+        attachment = attachment_records.require_attachment_access(
+            db,
+            current_user=user,
+            attachment_id=claims.resource_id,
         )
-
-    def headers(
-        self,
-        *,
-        filename: str,
-        disposition: DmAttachmentDisposition,
-    ) -> dict[str, str]:
-        encoded_filename = quote(filename or "attachment", safe="")
-        return {
-            "Cache-Control": self.cache_control,
-            "Content-Disposition": f"{disposition}; filename*=UTF-8''{encoded_filename}",
-            "X-Content-Type-Options": "nosniff",
-        }
-
-
-def _dm_attachment_content_access_policy() -> DmAttachmentContentAccessPolicy:
-    return DmAttachmentContentAccessPolicy(chunk_size=DM_ATTACHMENT_PROXY_CHUNK_SIZE)
-
-
-def _dm_attachment_content_response_builder() -> DmAttachmentContentResponseBuilder:
-    return DmAttachmentContentResponseBuilder(
-        cache_control=DM_ATTACHMENT_CONTENT_CACHE_CONTROL,
-    )
-
-
-def open_dm_attachment_content(
-    db: Session,
-    *,
-    attachment_id: str,
-    expires: int,
-    signature: str,
-    disposition: DmAttachmentDisposition,
-) -> DmAttachmentContent:
-    attachment = db.get(DmMessageAttachment, attachment_id)
-    if attachment is None:
-        raise localized_http_exception(status_code=404, code="dm.attachment_not_found")
-
-    request = DmAttachmentContentRequest(
-        attachment=attachment,
-        expires=expires,
-        signature=signature,
-        disposition=disposition,
-    )
-    policy = _dm_attachment_content_access_policy()
-    policy.validate_request(request)
-    body = policy.open_stream(attachment)
-    return _dm_attachment_content_response_builder().build(
-        attachment=attachment,
+    except HTTPException as error:
+        raise InvalidContentGrant("source_acl") from error
+    if (
+        claims.source_id != attachment.conversation_id
+        or claims.object_identity != attachment_links.dm_attachment_object_identity(attachment)
+        or claims.resource_version != attachment_links.dm_attachment_version(attachment)
+    ):
+        raise InvalidContentGrant("binding")
+    if claims.disposition == "inline" and not attachment_policy.is_previewable_image_content_type(
+        attachment.content_type
+    ):
+        raise InvalidContentGrant("disposition")
+    try:
+        body = attachment_storage.dm_attachment_storage().open_stream(
+            storage_key=attachment.storage_key,
+            chunk_size=DM_ATTACHMENT_PROXY_CHUNK_SIZE,
+        )
+    except Exception as error:
+        raise localized_http_exception(
+            status_code=502, code="dm.attachment_download_failed"
+        ) from error
+    return ContentStream(
         body=body,
-        disposition=disposition,
-    )
-
-
-def validate_dm_attachment_content_request(
-    attachment: DmMessageAttachment,
-    *,
-    expires: int,
-    signature: str,
-    disposition: DmAttachmentDisposition,
-) -> None:
-    _dm_attachment_content_access_policy().validate_request(
-        DmAttachmentContentRequest(
-            attachment=attachment,
-            expires=expires,
-            signature=signature,
-            disposition=disposition,
-        )
+        media_type=attachment.content_type or attachment_policy.DEFAULT_ATTACHMENT_CONTENT_TYPE,
+        headers=dm_attachment_content_headers(
+            filename=attachment.filename, disposition=claims.disposition
+        ),
     )
 
 
 def dm_attachment_content_headers(
-    *,
-    filename: str,
-    disposition: DmAttachmentDisposition,
+    *, filename: str, disposition: DmAttachmentDisposition
 ) -> dict[str, str]:
-    return _dm_attachment_content_response_builder().headers(
-        filename=filename,
-        disposition=disposition,
-    )
+    encoded_filename = quote(filename or "attachment", safe="")
+    return {
+        "Cache-Control": DM_ATTACHMENT_CONTENT_CACHE_CONTROL,
+        "Content-Disposition": f"{disposition}; filename*=UTF-8''{encoded_filename}",
+        "X-Content-Type-Options": "nosniff",
+    }

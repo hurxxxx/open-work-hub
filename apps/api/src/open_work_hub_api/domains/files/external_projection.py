@@ -7,7 +7,6 @@ from typing import Any
 from open_work_hub_api.domains.files.models import FileManagerFile
 from open_work_hub_api.domains.files.retrieval_contract import FILES_RAG_SOURCE_KIND
 
-
 EXTERNAL_SOURCE_TARGET_APP = "files"
 EXTERNAL_SOURCE_TARGET_TYPES = {
     "origin_source_kind": "file_origin_source",

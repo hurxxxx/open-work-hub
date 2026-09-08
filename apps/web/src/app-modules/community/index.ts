@@ -8,5 +8,5 @@ export const communityModule = {
   globalRoutes: communityGlobalRoutes,
   manifest: communityManifest,
   sidebarConfig: communitySidebarConfig,
-  workspaceRoutes: [],
+  appRoutes: [],
 } as const;

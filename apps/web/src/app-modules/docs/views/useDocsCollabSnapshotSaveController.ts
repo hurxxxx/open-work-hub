@@ -19,7 +19,7 @@ interface FlushSnapshotSaveOptions {
 
 export interface DocsCollabSnapshotSaveControllerOptions {
   token: string | null | undefined;
-  workspaceSlug?: string | null;
+
   debounceMs?: number;
   flushOnUnmount?: boolean;
   saveSnapshot: SaveDocsCollabSnapshot;
@@ -28,7 +28,6 @@ export interface DocsCollabSnapshotSaveControllerOptions {
 
 export function useDocsCollabSnapshotSaveController({
   token,
-  workspaceSlug,
   debounceMs = 250,
   flushOnUnmount = true,
   saveSnapshot,
@@ -36,7 +35,6 @@ export function useDocsCollabSnapshotSaveController({
 }: DocsCollabSnapshotSaveControllerOptions) {
   const latestConfigRef = useRef({
     token,
-    workspaceSlug,
     saveSnapshot,
     onSavedSnapshot,
   });
@@ -45,7 +43,6 @@ export function useDocsCollabSnapshotSaveController({
 
   latestConfigRef.current = {
     token,
-    workspaceSlug,
     saveSnapshot,
     onSavedSnapshot,
   };
@@ -57,37 +54,38 @@ export function useDocsCollabSnapshotSaveController({
     }
   }, []);
 
-  const flushSnapshotSave = useCallback(async (options: FlushSnapshotSaveOptions = {}) => {
-    const pending = pendingSnapshotRef.current;
-    if (!pending) return;
-    const config = latestConfigRef.current;
-    if (!config.token) return;
-    clearSaveTimer();
-    pendingSnapshotRef.current = null;
-    try {
-      const snapshotPayload = {
-        content_blocks: pending.contentBlocks,
-        ...(pending.yjsState ? { yjs_state: pending.yjsState } : {}),
-      };
-      const snapshot = options.keepalive
-        ? await config.saveSnapshot(
-            config.token,
-            pending.pageRef,
-            snapshotPayload,
-            config.workspaceSlug,
-            { keepalive: true },
-          )
-        : await config.saveSnapshot(
-            config.token,
-            pending.pageRef,
-            snapshotPayload,
-            config.workspaceSlug,
-          );
-      config.onSavedSnapshot?.(snapshot);
-    } catch {
-      // Collaboration remains live; the next edit or server-side flush can retry.
-    }
-  }, [clearSaveTimer]);
+  const flushSnapshotSave = useCallback(
+    async (options: FlushSnapshotSaveOptions = {}) => {
+      const pending = pendingSnapshotRef.current;
+      if (!pending) return;
+      const config = latestConfigRef.current;
+      if (!config.token) return;
+      clearSaveTimer();
+      pendingSnapshotRef.current = null;
+      try {
+        const snapshotPayload = {
+          content_blocks: pending.contentBlocks,
+          ...(pending.yjsState ? { yjs_state: pending.yjsState } : {}),
+        };
+        const snapshot = options.keepalive
+          ? await config.saveSnapshot(
+              config.token,
+              pending.pageRef,
+              snapshotPayload,
+              { keepalive: true },
+            )
+          : await config.saveSnapshot(
+              config.token,
+              pending.pageRef,
+              snapshotPayload,
+            );
+        config.onSavedSnapshot?.(snapshot);
+      } catch {
+        // Collaboration remains live; the next edit or server-side flush can retry.
+      }
+    },
+    [clearSaveTimer],
+  );
 
   const queueSnapshotSave = useCallback(
     (
@@ -105,33 +103,30 @@ export function useDocsCollabSnapshotSaveController({
     [clearSaveTimer, debounceMs, flushSnapshotSave],
   );
 
-  useEffect(
-    () => {
-      if (!flushOnUnmount) return undefined;
+  useEffect(() => {
+    if (!flushOnUnmount) return undefined;
 
-      const flushBeforePageLeaves = () => {
+    const flushBeforePageLeaves = () => {
+      void flushSnapshotSave({ keepalive: true });
+    };
+    const flushWhenHidden = () => {
+      if (document.visibilityState === 'hidden') {
         void flushSnapshotSave({ keepalive: true });
-      };
-      const flushWhenHidden = () => {
-        if (document.visibilityState === 'hidden') {
-          void flushSnapshotSave({ keepalive: true });
-        }
-      };
+      }
+    };
 
-      window.addEventListener('beforeunload', flushBeforePageLeaves);
-      window.addEventListener('pagehide', flushBeforePageLeaves);
-      document.addEventListener('visibilitychange', flushWhenHidden);
+    window.addEventListener('beforeunload', flushBeforePageLeaves);
+    window.addEventListener('pagehide', flushBeforePageLeaves);
+    document.addEventListener('visibilitychange', flushWhenHidden);
 
-      return () => {
-        window.removeEventListener('beforeunload', flushBeforePageLeaves);
-        window.removeEventListener('pagehide', flushBeforePageLeaves);
-        document.removeEventListener('visibilitychange', flushWhenHidden);
-        clearSaveTimer();
-        void flushSnapshotSave();
-      };
-    },
-    [clearSaveTimer, flushOnUnmount, flushSnapshotSave],
-  );
+    return () => {
+      window.removeEventListener('beforeunload', flushBeforePageLeaves);
+      window.removeEventListener('pagehide', flushBeforePageLeaves);
+      document.removeEventListener('visibilitychange', flushWhenHidden);
+      clearSaveTimer();
+      void flushSnapshotSave();
+    };
+  }, [clearSaveTimer, flushOnUnmount, flushSnapshotSave]);
 
   return {
     flushSnapshotSave,

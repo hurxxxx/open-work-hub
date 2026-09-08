@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from functools import lru_cache
-import logging
 from typing import Protocol
 
 from celery import Celery
@@ -11,12 +11,11 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.settings import get_settings
-from open_work_hub_api.core.worker_task_publisher import create_fail_fast_celery_publisher
 from open_work_hub_api.core.worker_queue_contract import MAIL_SYNC_QUEUE, MAIL_SYNC_TASK_NAME
+from open_work_hub_api.core.worker_task_publisher import create_fail_fast_celery_publisher
 from open_work_hub_api.domains.auth.models import utcnow_naive
 from open_work_hub_api.domains.auth.security import new_id
 from open_work_hub_api.domains.mail.models import MailAccount, MailMailbox, MailSyncJob
-
 
 logger = logging.getLogger(__name__)
 PENDING_MAIL_SYNC_PUBLISHES_KEY = "mail_sync_publish_after_commit"

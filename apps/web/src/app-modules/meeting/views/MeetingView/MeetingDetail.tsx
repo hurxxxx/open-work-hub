@@ -1,12 +1,5 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useReducer,
-  useRef,
-  useState,
-} from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
+import { Button, Dialog, InlineNotice, useConfirm } from '@open-work-hub/ui';
 import {
   CheckSquare,
   Download,
@@ -22,15 +15,17 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { Button, Dialog, InlineNotice, useConfirm } from '@open-work-hub/ui';
-import { buildAppHref } from '@open-work-hub/contracts/app-routes';
-import { useTranslation } from 'react-i18next';
-
-import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
-  downloadAuthenticatedContent,
-  openAuthenticatedContent,
-} from '@/src/platform/browser/browser-download';
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from 'react';
+import { useTranslation } from 'react-i18next';
+import { Link, useNavigate } from 'react-router-dom';
+
 import {
   LinkedRecordingList,
   RecordingRecoveryBanner,
@@ -43,6 +38,11 @@ import {
   type RecordingRecoveryAction,
   type RecordingTargetRef,
 } from '@/src/app-modules/recording/public-api';
+import { useAuth } from '@/src/platform/auth/auth-provider';
+import {
+  downloadAuthenticatedContent,
+  openAuthenticatedContent,
+} from '@/src/platform/browser/browser-download';
 import {
   formatDateTime,
   normalizeTimeZone,
@@ -53,10 +53,10 @@ import {
   attachTaskToMeeting,
   deleteMeeting,
   deleteMeetingFile,
+  deleteMeetingRecording,
   detachDocFromMeeting,
   detachTaskFromMeeting,
   getMeeting,
-  deleteMeetingRecording,
   retryMeetingRecording,
   uploadMeetingFile,
   type MeetingDetail as MeetingDetailType,
@@ -68,22 +68,6 @@ import {
   canRemoveAttachment,
 } from '../../api/meeting-permissions';
 
-import { AddAttendeesModal } from './AddAttendeesModal';
-import { MeetingEditModal } from './MeetingEditModal';
-import { MeetingInsightSection } from './MeetingInsightSection';
-import { Section, EmptyRow } from './MeetingSection';
-import { TaskPickerModal } from './TaskPickerModal';
-import { DocPickerModal } from './DocPickerModal';
-import { RecordingControls } from './RecordingControls';
-import { RecordingProgressRail } from './RecordingProgressRail';
-import {
-  activeRecordingLockForOtherUser,
-  formatMeetingFileSize,
-  formatMeetingRange,
-  transcriptStatusKey,
-} from './meeting-detail-model';
-import { openMeetingInsightInChat } from './openMeetingInsightInChat';
-import { useRecordingPoll } from './useRecordingPoll';
 import {
   WhiteboardEditorSurface,
   WhiteboardPickerModal,
@@ -93,9 +77,24 @@ import {
   type WhiteboardDetail,
   type WhiteboardHubItem,
 } from '@/src/app-modules/whiteboard/public-api';
+import { AddAttendeesModal } from './AddAttendeesModal';
+import { DocPickerModal } from './DocPickerModal';
+import { MeetingEditModal } from './MeetingEditModal';
+import { MeetingInsightSection } from './MeetingInsightSection';
+import { EmptyRow, Section } from './MeetingSection';
+import { RecordingControls } from './RecordingControls';
+import { RecordingProgressRail } from './RecordingProgressRail';
+import { TaskPickerModal } from './TaskPickerModal';
+import {
+  activeRecordingLockForOtherUser,
+  formatMeetingFileSize,
+  formatMeetingRange,
+  transcriptStatusKey,
+} from './meeting-detail-model';
+import { openMeetingInsightInChat } from './openMeetingInsightInChat';
+import { useRecordingPoll } from './useRecordingPoll';
 
 interface MeetingDetailProps {
-  workspaceSlug: string;
   meetingId: string;
   onClose?: () => void;
   onChanged: () => void;
@@ -149,7 +148,6 @@ function meetingDataReducer(
 }
 
 function useMeetingDetailElement({
-  workspaceSlug,
   meetingId,
   onClose,
   onChanged,
@@ -189,7 +187,7 @@ function useMeetingDetailElement({
     if (!token) return;
     setError(null);
     try {
-      const detail = await getMeeting(token, workspaceSlug, meetingId);
+      const detail = await getMeeting(token, meetingId);
       setMeeting(detail);
     } catch (err) {
       setError(
@@ -197,7 +195,7 @@ function useMeetingDetailElement({
       );
       setMeeting(null);
     }
-  }, [meetingId, setError, setMeeting, t, token, workspaceSlug]);
+  }, [meetingId, setError, setMeeting, t, token]);
 
   useEffect(() => {
     refresh();
@@ -208,12 +206,10 @@ function useMeetingDetailElement({
     [meetingId],
   );
   const recovery = useRecordingRecovery({
-    workspaceSlug,
     token,
     initialTarget: recordingTarget,
   });
   const recorder = useResilientRecorder({
-    workspaceSlug,
     token,
     initialTarget: recordingTarget,
     source: 'live_recording',
@@ -242,7 +238,6 @@ function useMeetingDetailElement({
 
   useRecordingPoll(
     token,
-    workspaceSlug,
     meetingId,
     meeting,
     (updated) => {
@@ -294,12 +289,7 @@ function useMeetingDetailElement({
 
   async function handleAttachTask(task: { id: string }) {
     if (!token) return;
-    const updated = await attachTaskToMeeting(
-      token,
-      workspaceSlug,
-      meetingId,
-      task.id,
-    );
+    const updated = await attachTaskToMeeting(token, meetingId, task.id);
     setMeeting(updated);
     onChanged();
   }
@@ -308,12 +298,7 @@ function useMeetingDetailElement({
     if (!token) return;
     setBusy(true);
     try {
-      const updated = await detachTaskFromMeeting(
-        token,
-        workspaceSlug,
-        meetingId,
-        taskId,
-      );
+      const updated = await detachTaskFromMeeting(token, meetingId, taskId);
       setMeeting(updated);
       onChanged();
     } catch (err) {
@@ -329,12 +314,7 @@ function useMeetingDetailElement({
 
   async function handleAttachDoc(doc: { source_id: string }) {
     if (!token) return;
-    const updated = await attachDocToMeeting(
-      token,
-      workspaceSlug,
-      meetingId,
-      doc.source_id,
-    );
+    const updated = await attachDocToMeeting(token, meetingId, doc.source_id);
     setMeeting(updated);
     onChanged();
   }
@@ -343,12 +323,7 @@ function useMeetingDetailElement({
     if (!token) return;
     setBusy(true);
     try {
-      const updated = await detachDocFromMeeting(
-        token,
-        workspaceSlug,
-        meetingId,
-        docId,
-      );
+      const updated = await detachDocFromMeeting(token, meetingId, docId);
       setMeeting(updated);
       onChanged();
     } catch (err) {
@@ -367,16 +342,12 @@ function useMeetingDetailElement({
     setBusy(true);
     setError(null);
     try {
-      const board = await createWhiteboardContextSlot(
-        token,
-        {
-          ...meetingWhiteboardContext,
-          title: t('meeting.detail.whiteboardDefaultTitle', {
-            title: meeting.title,
-          }),
-        },
-        workspaceSlug,
-      );
+      const board = await createWhiteboardContextSlot(token, {
+        ...meetingWhiteboardContext,
+        title: t('meeting.detail.whiteboardDefaultTitle', {
+          title: meeting.title,
+        }),
+      });
       updateWhiteboardLinkFromBoard(board);
       setWhiteboardEditorBoardId(board.id);
       setWhiteboardEditorOpen(true);
@@ -395,14 +366,10 @@ function useMeetingDetailElement({
 
   async function handleAttachWhiteboard(item: WhiteboardHubItem) {
     if (!token) return;
-    const board = await attachWhiteboardContextSlot(
-      token,
-      {
-        ...meetingWhiteboardContext,
-        whiteboard_id: item.id,
-      },
-      workspaceSlug,
-    );
+    const board = await attachWhiteboardContextSlot(token, {
+      ...meetingWhiteboardContext,
+      whiteboard_id: item.id,
+    });
     updateWhiteboardLinkFromBoard(board);
     setWhiteboardEditorBoardId(board.id);
     setWhiteboardEditorOpen(true);
@@ -415,11 +382,7 @@ function useMeetingDetailElement({
     setBusy(true);
     setError(null);
     try {
-      await detachWhiteboardContextSlot(
-        token,
-        meetingWhiteboardContext,
-        workspaceSlug,
-      );
+      await detachWhiteboardContextSlot(token, meetingWhiteboardContext);
       setMeeting((current) =>
         current ? { ...current, whiteboard_link: null } : current,
       );
@@ -446,12 +409,7 @@ function useMeetingDetailElement({
     setUploading(true);
     setError(null);
     try {
-      const updated = await uploadMeetingFile(
-        token,
-        workspaceSlug,
-        meetingId,
-        file,
-      );
+      const updated = await uploadMeetingFile(token, meetingId, file);
       setMeeting(updated);
       onChanged();
     } catch (err) {
@@ -470,12 +428,7 @@ function useMeetingDetailElement({
     setBusy(true);
     setError(null);
     try {
-      const updated = await deleteMeetingFile(
-        token,
-        workspaceSlug,
-        meetingId,
-        fileId,
-      );
+      const updated = await deleteMeetingFile(token, meetingId, fileId);
       setMeeting(updated);
       onChanged();
     } catch (err) {
@@ -537,7 +490,7 @@ function useMeetingDetailElement({
     if (!ok) return;
     setBusy(true);
     try {
-      await deleteMeeting(token, workspaceSlug, meetingId);
+      await deleteMeeting(token, meetingId);
       onDeleted();
     } catch (err) {
       setError(
@@ -556,7 +509,6 @@ function useMeetingDetailElement({
     try {
       const updated = await retryMeetingRecording(
         token,
-        workspaceSlug,
         meetingId,
         recordingId,
       );
@@ -588,7 +540,6 @@ function useMeetingDetailElement({
     try {
       const updated = await deleteMeetingRecording(
         token,
-        workspaceSlug,
         meetingId,
         recordingId,
       );
@@ -710,7 +661,6 @@ function useMeetingDetailElement({
                       <Link
                         to={buildAppHref({
                           routeId: 'pms.root',
-                          workspaceSlug,
                           queryParams: { task: link.task_id },
                         })}
                         className="hover:text-app-accent hover:underline"
@@ -761,7 +711,6 @@ function useMeetingDetailElement({
                     <Link
                       to={buildAppHref({
                         routeId: 'docs.document',
-                        workspaceSlug,
                         pathParams: { docId: link.doc_id },
                       })}
                       className="hover:text-app-accent hover:underline"
@@ -1065,7 +1014,6 @@ function useMeetingDetailElement({
           ) : (
             <div className="mt-3">
               <LinkedRecordingList
-                workspaceSlug={workspaceSlug}
                 emptyText={t('meeting.detail.noRecordings')}
                 disabled={busy}
                 onRetry={handleRetryRecording}
@@ -1101,7 +1049,6 @@ function useMeetingDetailElement({
                       subtitle: `${formatMeetingFileSize(recording.file_size)} · ${recording.mime_type}`,
                       detailHref: buildAppHref({
                         routeId: 'recording.detail',
-                        workspaceSlug,
                         pathParams: { recordingId: recording.id },
                       }),
                       statusLine: `${t('meeting.recordingStatus.audioSaved')} · ${t(transcriptStatusKey(recording))}`,
@@ -1141,7 +1088,6 @@ function useMeetingDetailElement({
         {meeting.recordings.length > 0 ? (
           <MeetingInsightSection
             meeting={meeting}
-            workspaceSlug={workspaceSlug}
             token={token}
             timeZone={timeZone}
             onOpenInChat={async (insight) => {
@@ -1151,7 +1097,6 @@ function useMeetingDetailElement({
               await openMeetingInsightInChat({
                 navigate,
                 token,
-                workspaceSlug,
                 meeting,
                 insight,
               });
@@ -1223,14 +1168,12 @@ function useMeetingDetailElement({
         onClose={() => setTaskPickerOpen(false)}
         onPick={handleAttachTask}
         excludeTaskIds={meeting.task_links.map((link) => link.task_id)}
-        workspaceSlug={workspaceSlug}
       />
       <DocPickerModal
         isOpen={docPickerOpen}
         onClose={() => setDocPickerOpen(false)}
         onPick={handleAttachDoc}
         excludeDocIds={meeting.doc_links.map((link) => link.doc_id)}
-        workspaceSlug={workspaceSlug}
       />
       <WhiteboardPickerModal
         isOpen={whiteboardPickerOpen}
@@ -1239,7 +1182,6 @@ function useMeetingDetailElement({
         excludeWhiteboardIds={
           meeting.whiteboard_link ? [meeting.whiteboard_link.whiteboard_id] : []
         }
-        workspaceSlug={workspaceSlug}
       />
       <Dialog
         closeLabel={t('common:actions.close')}
@@ -1265,7 +1207,6 @@ function useMeetingDetailElement({
             <WhiteboardEditorSurface
               key={activeWhiteboardId}
               boardId={activeWhiteboardId}
-              workspaceSlug={workspaceSlug}
               showArchive={false}
               showDetach={canAttach}
               onDetach={handleDetachWhiteboard}
@@ -1285,12 +1226,10 @@ function useMeetingDetailElement({
           setEditOpen(false);
           onChanged();
         }}
-        workspaceSlug={workspaceSlug}
       />
       <AddAttendeesModal
         isOpen={addAttendeesOpen}
         meeting={meeting}
-        workspaceSlug={workspaceSlug}
         onClose={() => setAddAttendeesOpen(false)}
         onAdded={(updated) => {
           setMeeting(updated);

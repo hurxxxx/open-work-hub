@@ -1,12 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useReducer,
-  useRef,
-  useState,
-} from 'react';
-import { useTranslation } from 'react-i18next';
+import { DropdownMenu, type DropdownItem } from '@open-work-hub/ui';
 import {
   Archive,
   ArrowLeft,
@@ -24,8 +16,16 @@ import {
   Users,
   Workflow,
 } from 'lucide-react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { DropdownMenu, type DropdownItem } from '@open-work-hub/ui';
 
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/platform/auth/auth-provider';
@@ -46,13 +46,6 @@ import {
   type DiagramVisibility,
 } from '../api/diagrams-api';
 import {
-  buildDrawioExportMessage,
-  buildDrawioLoadMessage,
-  currentDrawioEmbedConfig,
-  isDrawioMessageOriginAllowed,
-  parseDrawioEmbedMessage,
-} from './drawio-embed-protocol';
-import {
   DIAGRAM_HUB_PAGE_SIZE,
   INITIAL_HUB_STATE,
   VIEW_LABEL_KEYS,
@@ -64,6 +57,13 @@ import {
   writeStoredDiagramLayoutMode,
   type DiagramLayoutMode,
 } from './diagrams-hub-model';
+import {
+  buildDrawioExportMessage,
+  buildDrawioLoadMessage,
+  currentDrawioEmbedConfig,
+  isDrawioMessageOriginAllowed,
+  parseDrawioEmbedMessage,
+} from './drawio-embed-protocol';
 
 const EMPTY_DIAGRAM_XML =
   '<mxfile host="Open Work Hub"><diagram id="page-1" name="Page-1"><mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0"><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram></mxfile>';
@@ -93,7 +93,7 @@ export function DiagramsView() {
 function DiagramsHub() {
   const { t } = useTranslation(['apps', 'shell']);
   const { token, user } = useAuth();
-  const { workspaceSlug } = useParams();
+
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
@@ -110,7 +110,7 @@ function DiagramsHub() {
     [state.items],
   );
   const workspaceItems = useMemo(
-    () => state.items.filter((item) => item.visibility === 'workspace'),
+    () => state.items.filter((item) => item.visibility === 'company'),
     [state.items],
   );
 
@@ -118,17 +118,13 @@ function DiagramsHub() {
     if (!token) return;
     dispatch({ type: 'started' });
     try {
-      const response = await listDiagramsHub(
-        token,
-        {
-          view,
-          q: query,
-          sort_by: view === 'all' ? 'updated_at' : 'created_at',
-          sort_dir: 'desc',
-          page_size: DIAGRAM_HUB_PAGE_SIZE,
-        },
-        workspaceSlug,
-      );
+      const response = await listDiagramsHub(token, {
+        view,
+        q: query,
+        sort_by: view === 'all' ? 'updated_at' : 'created_at',
+        sort_dir: 'desc',
+        page_size: DIAGRAM_HUB_PAGE_SIZE,
+      });
       dispatch({ type: 'loaded', items: response.items });
     } catch (error) {
       dispatch({
@@ -139,7 +135,7 @@ function DiagramsHub() {
             : t('apps:diagrams.loadFailed'),
       });
     }
-  }, [query, t, token, view, workspaceSlug]);
+  }, [query, t, token, view]);
 
   useEffect(() => {
     void load();
@@ -152,18 +148,20 @@ function DiagramsHub() {
   const handleCreate = useCallback(
     async (visibility: DiagramVisibility) => {
       if (!token) return;
+      if (
+        visibility === 'company' &&
+        !window.confirm(t('shell:contentPublication.confirm'))
+      )
+        return;
       try {
-        const created = await createDiagram(
-          token,
-          {
-            title: t('apps:diagrams.untitled'),
-            visibility,
-            xml: EMPTY_DIAGRAM_XML,
-          },
-          workspaceSlug,
-        );
+        const created = await createDiagram(token, {
+          title: t('apps:diagrams.untitled'),
+          visibility,
+          company_admin_read_acknowledged: visibility === 'company',
+          xml: EMPTY_DIAGRAM_XML,
+        });
         dispatch({ type: 'upsert', item: created });
-        navigate(itemPath({ itemId: created.id, workspaceSlug }));
+        navigate(itemPath({ itemId: created.id }));
       } catch (error) {
         dispatch({
           type: 'setError',
@@ -174,22 +172,23 @@ function DiagramsHub() {
         });
       }
     },
-    [navigate, t, token, workspaceSlug],
+    [navigate, t, token],
   );
 
   const handleVisibilityChange = useCallback(
     async (item: DiagramItem, visibility: DiagramVisibility) => {
       if (!token || item.visibility === visibility) return;
+      if (
+        visibility === 'company' &&
+        !window.confirm(t('shell:contentPublication.confirm'))
+      )
+        return;
       try {
-        const updated = await updateDiagram(
-          token,
-          item.id,
-          {
-            version: item.version,
-            visibility,
-          },
-          workspaceSlug,
-        );
+        const updated = await updateDiagram(token, item.id, {
+          version: item.version,
+          visibility,
+          company_admin_read_acknowledged: visibility === 'company',
+        });
         dispatch({ type: 'upsert', item: updated });
       } catch (error) {
         dispatch({
@@ -201,7 +200,7 @@ function DiagramsHub() {
         });
       }
     },
-    [t, token, workspaceSlug],
+    [t, token],
   );
 
   useEffect(() => {
@@ -285,24 +284,22 @@ function DiagramsHub() {
               visibility="personal"
               items={personalItems}
               token={token}
-              workspaceSlug={workspaceSlug}
               timeZone={timeZone}
               archived={isArchived}
               layoutMode={layoutMode}
               onCreate={handleCreate}
-              onOpen={(itemId) => navigate(itemPath({ itemId, workspaceSlug }))}
+              onOpen={(itemId) => navigate(itemPath({ itemId }))}
               onVisibilityChange={handleVisibilityChange}
             />
             <DiagramSection
-              visibility="workspace"
+              visibility="company"
               items={workspaceItems}
               token={token}
-              workspaceSlug={workspaceSlug}
               timeZone={timeZone}
               archived={isArchived}
               layoutMode={layoutMode}
               onCreate={handleCreate}
-              onOpen={(itemId) => navigate(itemPath({ itemId, workspaceSlug }))}
+              onOpen={(itemId) => navigate(itemPath({ itemId }))}
               onVisibilityChange={handleVisibilityChange}
             />
           </div>
@@ -316,7 +313,6 @@ function DiagramSection({
   visibility,
   items,
   token,
-  workspaceSlug,
   timeZone,
   archived,
   layoutMode,
@@ -327,7 +323,7 @@ function DiagramSection({
   visibility: DiagramVisibility;
   items: DiagramItem[];
   token: string | null;
-  workspaceSlug?: string;
+
   timeZone: string;
   archived: boolean;
   layoutMode: DiagramLayoutMode;
@@ -339,18 +335,18 @@ function DiagramSection({
   ) => void;
 }) {
   const { t } = useTranslation('apps');
-  const SectionIcon = visibility === 'workspace' ? Users : Lock;
+  const SectionIcon = visibility === 'company' ? Users : Lock;
   const titleKey =
-    visibility === 'workspace'
+    visibility === 'company'
       ? 'diagrams.workspaceSectionTitle'
       : 'diagrams.personalSectionTitle';
   const emptyKey = archived
     ? 'diagrams.archiveEmpty'
-    : visibility === 'workspace'
+    : visibility === 'company'
       ? 'diagrams.workspaceSectionEmpty'
       : 'diagrams.personalSectionEmpty';
   const createKey =
-    visibility === 'workspace'
+    visibility === 'company'
       ? 'diagrams.createWorkspace'
       : 'diagrams.createPersonal';
 
@@ -362,9 +358,7 @@ function DiagramSection({
             size={18}
             className={cn(
               'shrink-0',
-              visibility === 'workspace'
-                ? 'text-app-success'
-                : 'text-app-ink/55',
+              visibility === 'company' ? 'text-app-success' : 'text-app-ink/55',
             )}
           />
           <h2 className="app-text-title-md truncate text-app-ink">
@@ -393,7 +387,6 @@ function DiagramSection({
                 key={`${item.id}:${item.updated_at}`}
                 item={item}
                 token={token}
-                workspaceSlug={workspaceSlug}
                 timeZone={timeZone}
                 onOpen={() => onOpen(item.id)}
                 onVisibilityChange={onVisibilityChange}
@@ -434,7 +427,7 @@ function buildDiagramVisibilityMenuItems({
       disabled: true,
       label: t('diagrams.visibilityCurrent', {
         visibility: t(
-          currentVisibility === 'workspace'
+          currentVisibility === 'company'
             ? 'diagrams.visibilityWorkspace'
             : 'diagrams.visibilityPersonal',
         ),
@@ -453,15 +446,15 @@ function buildDiagramVisibilityMenuItems({
       onSelect: () => onChange('personal'),
     },
     {
-      id: 'workspace',
-      disabled: !canManage || currentVisibility === 'workspace',
+      id: 'company',
+      disabled: !canManage || currentVisibility === 'company',
       label: (
         <span className="inline-flex items-center gap-2">
           <Users size={14} />
           {t('diagrams.changeToWorkspace')}
         </span>
       ),
-      onSelect: () => onChange('workspace'),
+      onSelect: () => onChange('company'),
     },
     {
       id: 'manage-required',
@@ -475,14 +468,13 @@ function buildDiagramVisibilityMenuItems({
 function DiagramCard({
   item,
   token,
-  workspaceSlug,
   timeZone,
   onOpen,
   onVisibilityChange,
 }: {
   item: DiagramItem;
   token: string | null;
-  workspaceSlug?: string;
+
   timeZone: string;
   onOpen: () => void;
   onVisibilityChange: (
@@ -501,7 +493,7 @@ function DiagramCard({
     let active = true;
     let objectUrl: string | null = null;
     setPreviewStatus('loading');
-    fetchDiagramPreviewUrl(token, item, workspaceSlug)
+    fetchDiagramPreviewUrl(token, item)
       .then((url) => {
         if (!active) {
           if (url) URL.revokeObjectURL(url);
@@ -518,7 +510,7 @@ function DiagramCard({
       active = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [item, token, workspaceSlug]);
+  }, [item, token]);
 
   return (
     <article
@@ -595,14 +587,14 @@ function DiagramCard({
           {item.created_by_name || t('diagrams.unknown')}
         </p>
         <div className="mt-3 inline-flex max-w-full items-center gap-1.5 rounded-md border border-app-border px-2 py-1 text-xs text-app-ink/55">
-          {item.visibility === 'workspace' ? (
+          {item.visibility === 'company' ? (
             <Users size={13} className="shrink-0 text-app-success" />
           ) : (
             <Lock size={13} className="shrink-0 text-app-ink/45" />
           )}
           <span className="truncate">
             {t(
-              item.visibility === 'workspace'
+              item.visibility === 'company'
                 ? 'diagrams.visibilityWorkspace'
                 : 'diagrams.visibilityPersonal',
             )}
@@ -697,14 +689,14 @@ function DiagramListTable({
                 </td>
                 <td className="px-5 py-4">
                   <span className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-app-border px-2 py-1 text-xs text-app-ink/55">
-                    {item.visibility === 'workspace' ? (
+                    {item.visibility === 'company' ? (
                       <Users size={13} className="shrink-0 text-app-success" />
                     ) : (
                       <Lock size={13} className="shrink-0 text-app-ink/45" />
                     )}
                     <span className="truncate">
                       {t(
-                        item.visibility === 'workspace'
+                        item.visibility === 'company'
                           ? 'diagrams.visibilityWorkspace'
                           : 'diagrams.visibilityPersonal',
                       )}
@@ -749,7 +741,7 @@ function DiagramListTable({
 function DiagramEditor() {
   const { t } = useTranslation(['apps', 'common']);
   const { token } = useAuth();
-  const { workspaceSlug, diagramId } = useParams();
+  const { diagramId } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -786,8 +778,8 @@ function DiagramEditor() {
   );
 
   const goBack = useCallback(() => {
-    navigate(rootPath(workspaceSlug, searchParams));
-  }, [navigate, searchParams, workspaceSlug]);
+    navigate(rootPath(searchParams));
+  }, [navigate, searchParams]);
 
   useEffect(() => {
     if (!token || !diagramId) return undefined;
@@ -799,7 +791,7 @@ function DiagramEditor() {
     setTitleDraft('');
     setSaveStatus('idle');
     setError(null);
-    getDiagram(token, diagramId, workspaceSlug)
+    getDiagram(token, diagramId)
       .then((loaded) => {
         if (!active) return;
         applyDetail(loaded);
@@ -811,7 +803,7 @@ function DiagramEditor() {
     return () => {
       active = false;
     };
-  }, [applyDetail, diagramId, t, token, workspaceSlug]);
+  }, [applyDetail, diagramId, t, token]);
 
   useEffect(() => {
     if (!drawioReady || !detail) return;
@@ -827,16 +819,11 @@ function DiagramEditor() {
       setSaveStatus('saving');
       setError(null);
       try {
-        const updated = await updateDiagram(
-          token,
-          diagramId,
-          {
-            version: currentDetail.version,
-            xml,
-            preview_png_data_url: previewPngDataUrl,
-          },
-          workspaceSlug,
-        );
+        const updated = await updateDiagram(token, diagramId, {
+          version: currentDetail.version,
+          xml,
+          preview_png_data_url: previewPngDataUrl,
+        });
         applyDetail(updated, { syncTitle: false });
         setSaveStatus('saved');
       } catch (caught) {
@@ -848,7 +835,7 @@ function DiagramEditor() {
         );
       }
     },
-    [applyDetail, diagramId, t, token, workspaceSlug],
+    [applyDetail, diagramId, t, token],
   );
 
   useEffect(() => {
@@ -903,15 +890,10 @@ function DiagramEditor() {
     setSaveStatus('saving');
     setError(null);
     try {
-      const updated = await updateDiagram(
-        token,
-        diagramId,
-        {
-          version: currentDetail.version,
-          title: nextTitle,
-        },
-        workspaceSlug,
-      );
+      const updated = await updateDiagram(token, diagramId, {
+        version: currentDetail.version,
+        title: nextTitle,
+      });
       applyDetail(updated);
       setSaveStatus('saved');
       return true;
@@ -924,7 +906,7 @@ function DiagramEditor() {
       );
       return false;
     }
-  }, [applyDetail, diagramId, t, titleDraft, token, workspaceSlug]);
+  }, [applyDetail, diagramId, t, titleDraft, token]);
 
   const handleVisibilityChange = useCallback(
     async (visibility: DiagramVisibility) => {
@@ -937,18 +919,19 @@ function DiagramEditor() {
       ) {
         return;
       }
+      if (
+        visibility === 'company' &&
+        !window.confirm(t('shell:contentPublication.confirm'))
+      )
+        return;
       setSaveStatus('saving');
       setError(null);
       try {
-        const updated = await updateDiagram(
-          token,
-          diagramId,
-          {
-            version: currentDetail.version,
-            visibility,
-          },
-          workspaceSlug,
-        );
+        const updated = await updateDiagram(token, diagramId, {
+          version: currentDetail.version,
+          visibility,
+          company_admin_read_acknowledged: visibility === 'company',
+        });
         applyDetail(updated, { syncTitle: false });
         setSaveStatus('saved');
       } catch (caught) {
@@ -960,13 +943,13 @@ function DiagramEditor() {
         );
       }
     },
-    [applyDetail, diagramId, t, token, workspaceSlug],
+    [applyDetail, diagramId, t, token],
   );
 
   const handleArchive = useCallback(async () => {
     if (!token || !diagramId || !detail) return;
     try {
-      await archiveDiagram(token, diagramId, workspaceSlug);
+      await archiveDiagram(token, diagramId);
       goBack();
     } catch (caught) {
       setError(
@@ -975,12 +958,12 @@ function DiagramEditor() {
           : t('apps:diagrams.archiveFailed'),
       );
     }
-  }, [detail, diagramId, goBack, t, token, workspaceSlug]);
+  }, [detail, diagramId, goBack, t, token]);
 
   const handleRestore = useCallback(async () => {
     if (!token || !diagramId) return;
     try {
-      const restored = await restoreDiagram(token, diagramId, workspaceSlug);
+      const restored = await restoreDiagram(token, diagramId);
       applyDetail(restored);
     } catch (caught) {
       setError(
@@ -989,7 +972,7 @@ function DiagramEditor() {
           : t('apps:diagrams.restoreFailed'),
       );
     }
-  }, [applyDetail, diagramId, t, token, workspaceSlug]);
+  }, [applyDetail, diagramId, t, token]);
 
   return (
     <main className="flex h-full min-h-0 flex-col overflow-hidden bg-app-bg text-app-ink">

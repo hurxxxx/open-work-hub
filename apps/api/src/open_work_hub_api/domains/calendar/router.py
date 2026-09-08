@@ -11,24 +11,15 @@ from open_work_hub_api.domains.auth.dependencies import (
     require_current_user,
 )
 from open_work_hub_api.domains.auth.models import User
-from open_work_hub_api.domains.auth.workspace_app_gate import require_platform_app_enabled
-from open_work_hub_api.domains.planner.app_catalog import PLANNER_WORKSPACE_APP
 
 from .query_policy import CalendarQueryPolicyError, parse_calendar_events_query
 from .schemas import CalendarEventsResponse
 from .service import list_calendar_events
 from .source_catalog import DEFAULT_CALENDAR_SOURCES_PARAM
 
-
-require_planner_app_enabled = require_platform_app_enabled(
-    PLANNER_WORKSPACE_APP.app_id,
-    error_code="platform.app_disabled",
-)
-
 router = APIRouter(
     prefix="/calendar",
     tags=["calendar"],
-    dependencies=[Depends(require_planner_app_enabled)],
 )
 
 

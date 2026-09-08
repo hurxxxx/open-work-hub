@@ -14,7 +14,6 @@ from typing import Mapping
 
 from open_work_hub_api.domains.ai.security_policy import AiSecurityPolicyContext
 
-
 AI_SECURITY_PIPELINE_EXEMPT_REASON = "ai_security_pipeline_exempt"
 
 

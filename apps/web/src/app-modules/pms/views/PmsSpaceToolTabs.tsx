@@ -8,8 +8,8 @@ import {
   Table,
   type LucideIcon,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 
 import { cn } from '@/src/lib/utils';
 import {
@@ -41,24 +41,22 @@ export function PmsSpaceToolTabs({
   activeTab,
   className,
   spaceId,
-  workspaceSlug,
 }: {
   activeTab: PmsSpaceToolTab;
   className?: string;
   spaceId: string;
-  workspaceSlug?: string | null;
 }) {
   const navigate = useNavigate();
   const { t } = useTranslation('apps');
 
   const buildPath = (tab: PmsSpaceToolTab): string => {
     if (tab === 'overview') {
-      return buildPmsSpaceToolPath(spaceId, { workspaceSlug });
+      return buildPmsSpaceToolPath(spaceId, {});
     }
     if (tab === 'docs') {
-      return buildPmsSpaceDocsToolPath({ spaceId, workspaceSlug });
+      return buildPmsSpaceDocsToolPath({ spaceId });
     }
-    return buildPmsSpaceTaskToolPath({ spaceId, tab, workspaceSlug });
+    return buildPmsSpaceTaskToolPath({ spaceId, tab });
   };
 
   return (

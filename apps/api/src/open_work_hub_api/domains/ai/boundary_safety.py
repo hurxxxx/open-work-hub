@@ -1,11 +1,10 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator
 from dataclasses import dataclass
-import re
 
 from open_work_hub_api.core.pii import PII_PATTERNS, scan_pii
-
 
 _BLOCKING_SENSITIVITY_LABELS = frozenset(
     {

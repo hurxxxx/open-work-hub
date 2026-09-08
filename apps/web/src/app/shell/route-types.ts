@@ -1,13 +1,13 @@
 import type { ReactNode } from 'react';
 
+import type { ShellAppId } from '@/src/platform/apps/app-links';
 import type {
   ShellRouteChrome,
   ShellRouteSubSidebar,
 } from './navigation-types';
-import type { WorkspaceAppId } from '@/src/platform/workspaces/workspace-utils';
 
-export interface WorkspaceRouteDefinition {
-  appId: WorkspaceAppId;
+export interface AppRouteDefinition {
+  appId: ShellAppId;
   chrome?: ShellRouteChrome;
   element: ReactNode;
   path: string;

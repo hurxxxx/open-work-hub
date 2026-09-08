@@ -3,8 +3,6 @@ import type { AuthUser } from '@/src/platform/auth/auth-api';
 import {
   PEOPLE_EXPORT_PAGE_SIZE,
   PEOPLE_PAGE_SIZE,
-  formatUserApps,
-  formatUserWorkspaces,
   isAdminUser,
 } from './admin-shared-model';
 
@@ -22,11 +20,10 @@ export interface AdminPeopleRow {
   name: string;
   loginId: string;
   email: string;
-  workspaceNames: string;
+  groupCount: string;
   role: AdminPeopleRole;
   roleLabel: string;
   statusLabel: string;
-  appsLabel: string;
   lastActiveLabel: string;
   createdLabel: string;
 }
@@ -48,7 +45,6 @@ export interface AdminPeopleRowsModel {
 }
 
 export type AdminPeopleExportHeader = readonly [
-  string,
   string,
   string,
   string,
@@ -91,11 +87,10 @@ function buildAdminPeopleRow(
     name: user.display_name || user.full_name,
     loginId: user.login_id,
     email: user.email,
-    workspaceNames: formatUserWorkspaces(user),
+    groupCount: String(user.group_ids.length),
     role,
     roleLabel: format.role[role],
     statusLabel: format.status(user.status),
-    appsLabel: formatUserApps(user),
     lastActiveLabel: format.date(user.last_login_at),
     createdLabel: format.date(user.created_at),
   };
@@ -183,12 +178,11 @@ export function buildAdminPeopleExportRows({
       user.employee_code ?? '',
       user.job_title ?? '',
       primaryOrganizationName(user),
-      row.workspaceNames,
+      row.groupCount,
       row.roleLabel,
       row.statusLabel,
       row.lastActiveLabel,
       row.createdLabel,
-      row.appsLabel,
     ] as const;
   });
 }

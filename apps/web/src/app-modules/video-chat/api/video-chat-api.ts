@@ -1,13 +1,23 @@
 import { apiFetchJsonWithMappedError } from '@/src/platform/api/client';
-import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
 export type VideoChatSessionStatus = 'open' | 'ended';
-export type VideoChatRecordingStatus = 'idle' | 'starting' | 'recording' | 'stopping' | 'failed' | 'saved';
-export type VideoChatCaptionsStatus = 'off' | 'starting' | 'on' | 'stopping' | 'failed';
+export type VideoChatRecordingStatus =
+  | 'idle'
+  | 'starting'
+  | 'recording'
+  | 'stopping'
+  | 'failed'
+  | 'saved';
+export type VideoChatCaptionsStatus =
+  | 'off'
+  | 'starting'
+  | 'on'
+  | 'stopping'
+  | 'failed';
 
 export interface VideoChatSession {
   id: string;
-  workspace_id: string;
+
   meeting_id: string | null;
   room_name: string;
   title: string;
@@ -53,11 +63,10 @@ export class VideoChatApiError extends Error {
 async function request<T>(
   path: string,
   token: string | null | undefined,
-  workspaceSlug: string,
   init: RequestInit = {},
 ): Promise<T> {
   return apiFetchJsonWithMappedError<T>(
-    rewriteWorkspaceApiPath(path, workspaceSlug),
+    path,
     token,
     init,
     (error) => new VideoChatApiError(error.status, error.message),
@@ -66,120 +75,97 @@ async function request<T>(
 
 export function listVideoChatSessions(
   token: string | null | undefined,
-  workspaceSlug: string,
   status?: VideoChatSessionStatus,
 ): Promise<VideoChatSessionListResponse> {
   const query = status ? `?status=${encodeURIComponent(status)}` : '';
   return request<VideoChatSessionListResponse>(
     `/api/v1/video-chat/sessions${query}`,
     token,
-    workspaceSlug,
   );
 }
 
 export function createVideoChatSession(
   token: string | null | undefined,
-  workspaceSlug: string,
   payload: { title?: string | null; meeting_id?: string | null } = {},
 ): Promise<VideoChatSession> {
-  return request<VideoChatSession>(
-    '/api/v1/video-chat/sessions',
-    token,
-    workspaceSlug,
-    {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    },
-  );
+  return request<VideoChatSession>('/api/v1/video-chat/sessions', token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 export function getVideoChatSession(
   token: string | null | undefined,
-  workspaceSlug: string,
   sessionId: string,
 ): Promise<VideoChatSession> {
   return request<VideoChatSession>(
     `/api/v1/video-chat/sessions/${sessionId}`,
     token,
-    workspaceSlug,
   );
 }
 
 export function createVideoChatJoinToken(
   token: string | null | undefined,
-  workspaceSlug: string,
   sessionId: string,
 ): Promise<VideoChatJoinTokenResponse> {
   return request<VideoChatJoinTokenResponse>(
     `/api/v1/video-chat/sessions/${sessionId}/join-token`,
     token,
-    workspaceSlug,
     { method: 'POST' },
   );
 }
 
 export function endVideoChatSession(
   token: string | null | undefined,
-  workspaceSlug: string,
   sessionId: string,
 ): Promise<VideoChatSession> {
   return request<VideoChatSession>(
     `/api/v1/video-chat/sessions/${sessionId}/end`,
     token,
-    workspaceSlug,
     { method: 'POST' },
   );
 }
 
 export function startVideoChatRecording(
   token: string | null | undefined,
-  workspaceSlug: string,
   sessionId: string,
 ): Promise<VideoChatSession> {
   return request<VideoChatSession>(
     `/api/v1/video-chat/sessions/${sessionId}/recording/start`,
     token,
-    workspaceSlug,
     { method: 'POST' },
   );
 }
 
 export function stopVideoChatRecording(
   token: string | null | undefined,
-  workspaceSlug: string,
   sessionId: string,
 ): Promise<VideoChatSession> {
   return request<VideoChatSession>(
     `/api/v1/video-chat/sessions/${sessionId}/recording/stop`,
     token,
-    workspaceSlug,
     { method: 'POST' },
   );
 }
 
 export function startVideoChatCaptions(
   token: string | null | undefined,
-  workspaceSlug: string,
   sessionId: string,
 ): Promise<VideoChatSession> {
   return request<VideoChatSession>(
     `/api/v1/video-chat/sessions/${sessionId}/captions/start`,
     token,
-    workspaceSlug,
     { method: 'POST' },
   );
 }
 
 export function stopVideoChatCaptions(
   token: string | null | undefined,
-  workspaceSlug: string,
   sessionId: string,
 ): Promise<VideoChatSession> {
   return request<VideoChatSession>(
     `/api/v1/video-chat/sessions/${sessionId}/captions/stop`,
     token,
-    workspaceSlug,
     { method: 'POST' },
   );
 }
-

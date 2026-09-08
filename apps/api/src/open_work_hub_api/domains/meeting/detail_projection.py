@@ -111,7 +111,6 @@ def build_meeting_detail(
 ) -> MeetingDetail:
     return MeetingDetail(
         id=meeting.id,
-        workspace_id=meeting.workspace_id,
         organizer_id=meeting.organizer_id,
         organizer_name=meeting.organizer.full_name if meeting.organizer else "",
         notes_doc_id=meeting.notes_doc_id,

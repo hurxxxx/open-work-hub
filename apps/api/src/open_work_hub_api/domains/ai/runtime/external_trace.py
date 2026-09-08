@@ -5,12 +5,12 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from open_work_hub_api.domains.ai.runtime.contracts import RuntimeProfile
-from open_work_hub_api.domains.ai.runtime.external_capability import (
-    failed_external_execution_result,
-)
 from open_work_hub_api.domains.ai.runtime.external_adapters import (
     select_external_planner_execution_adapter,
     select_external_search_execution_adapter,
+)
+from open_work_hub_api.domains.ai.runtime.external_capability import (
+    failed_external_execution_result,
 )
 from open_work_hub_api.domains.ai.runtime.external_egress import ExternalEgressDecision
 from open_work_hub_api.domains.ai.runtime.external_planner import (
@@ -23,8 +23,8 @@ from open_work_hub_api.domains.ai.runtime.external_planner import (
 from open_work_hub_api.domains.ai.runtime.external_search import (
     ExternalSearchExecutionResult,
     ExternalSearchRequest,
-    build_external_search_trace_identity,
     build_external_search_request,
+    build_external_search_trace_identity,
     summarize_external_search_execution,
     summarize_external_search_request,
 )
@@ -205,9 +205,7 @@ def _record_external_execution_summary(
     record_external_execution(
         capability=capability,
         adapter_id=_metric_summary_string(execution_summary.get("adapter_id")),
-        execution_provider=_metric_summary_string(
-            execution_summary.get("execution_provider")
-        ),
+        execution_provider=_metric_summary_string(execution_summary.get("execution_provider")),
         status=_metric_summary_string(execution_summary.get("status")),
         error_class=_metric_optional_summary_string(execution_summary.get("error_class")),
     )

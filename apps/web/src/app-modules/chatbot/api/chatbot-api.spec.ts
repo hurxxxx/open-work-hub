@@ -1,10 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  sendAiChat,
-  streamAiChat,
-  type AiChatRequest,
-} from './chatbot-api';
+import { sendAiChat, streamAiChat, type AiChatRequest } from './chatbot-api';
 import { HermesAgentApiError } from './hermes-agent-api';
 
 const hermesMocks = vi.hoisted(() => ({
@@ -62,7 +58,6 @@ describe('Hermes chat session creation', () => {
         scope_resource_id: null,
         title: null,
       },
-      undefined,
     );
     expect(hermesMocks.createHermesSession).toHaveBeenNthCalledWith(
       2,
@@ -72,7 +67,6 @@ describe('Hermes chat session creation', () => {
         scope_resource_id: null,
         title: null,
       },
-      undefined,
     );
   });
 
@@ -94,8 +88,8 @@ describe('Hermes chat session creation', () => {
     await resultPromise;
 
     expect(hermesMocks.createHermesRun).toHaveBeenCalledTimes(2);
-    const firstKey = hermesMocks.createHermesRun.mock.calls[0]?.[4];
-    const secondKey = hermesMocks.createHermesRun.mock.calls[1]?.[4];
+    const firstKey = hermesMocks.createHermesRun.mock.calls[0]?.[3];
+    const secondKey = hermesMocks.createHermesRun.mock.calls[1]?.[3];
     expect(firstKey).toBeTruthy();
     expect(secondKey).toBe(firstKey);
   });
@@ -191,11 +185,7 @@ describe('Hermes chat session creation', () => {
 
     expect(body).toContain('retained result');
     expect(body).toContain('"finish_reason":"stop"');
-    expect(hermesMocks.getHermesRun).toHaveBeenCalledWith(
-      'token',
-      'run-1',
-      undefined,
-    );
+    expect(hermesMocks.getHermesRun).toHaveBeenCalledWith('token', 'run-1');
     expect(hermesMocks.streamHermesRunEvents).toHaveBeenCalledTimes(1);
   });
 

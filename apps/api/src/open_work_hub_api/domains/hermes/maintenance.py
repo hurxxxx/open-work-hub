@@ -8,8 +8,8 @@ from sqlalchemy import delete, select
 
 from open_work_hub_api.core.db import get_session_factory
 from open_work_hub_api.core.settings import get_settings
-from open_work_hub_api.domains.auth.workspace_app_gate import (
-    is_app_enabled_for_user_context,
+from open_work_hub_api.domains.auth.app_gate import (
+    can_use_app,
 )
 from open_work_hub_api.domains.hermes.client import HermesClientError
 from open_work_hub_api.domains.hermes.models import (
@@ -27,7 +27,6 @@ from open_work_hub_api.domains.hermes.repository import (
     utcnow_naive,
 )
 from open_work_hub_api.domains.hermes.service import job_profile_name, runtime_client
-
 
 _MAINTENANCE_LEASE = timedelta(minutes=3)
 
@@ -229,11 +228,10 @@ def _claim_revoked_runs(*, limit: int) -> list[tuple[str, str, str]]:
         exhausted_window = True
         for run in runs:
             last_examined_id = run.id
-            if is_app_enabled_for_user_context(
+            if can_use_app(
                 db,
                 app_id="chatbot",
                 user_id=run.user_id,
-                workspace_id=run.workspace_id,
             ):
                 continue
             if run.status != "stopping":
@@ -326,11 +324,10 @@ async def _pause_revoked_jobs(*, limit: int) -> tuple[int, int]:
         exhausted_window = True
         for job in jobs:
             last_examined_id = job.id
-            if is_app_enabled_for_user_context(
+            if can_use_app(
                 db,
                 app_id="chatbot",
                 user_id=job.user_id,
-                workspace_id=job.workspace_id,
             ):
                 continue
             job_ids.append(job.id)
@@ -356,11 +353,10 @@ async def _pause_revoked_jobs(*, limit: int) -> tuple[int, int]:
                 )
                 .with_for_update(skip_locked=True)
             )
-            if job is None or is_app_enabled_for_user_context(
+            if job is None or can_use_app(
                 db,
                 app_id="chatbot",
                 user_id=job.user_id,
-                workspace_id=job.workspace_id,
             ):
                 return 0, 0
             profile = db.get(HermesProfileBinding, job.profile_binding_id)

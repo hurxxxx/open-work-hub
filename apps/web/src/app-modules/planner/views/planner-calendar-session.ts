@@ -97,9 +97,10 @@ function buildPlannerEventRangeFromSelection(
   }
   const start = copyDateWithTime(range.start, defaultRange.start);
   const selectedEnd = copyDateWithTime(selectedEndDate, defaultRange.end);
-  const end = selectedEnd > start
-    ? selectedEnd
-    : new Date(start.getTime() + 60 * 60 * 1000);
+  const end =
+    selectedEnd > start
+      ? selectedEnd
+      : new Date(start.getTime() + 60 * 60 * 1000);
   return { start, end, allDay: false };
 }
 
@@ -268,10 +269,9 @@ export function openPlannerEventCreate(
   return {
     ...session,
     plannerEventId: null,
-    plannerEventRange:
-      range
-        ? buildPlannerEventRangeFromSelection(range, now)
-        : buildDefaultPlannerEventRange(session.calendarState.currentDate, now),
+    plannerEventRange: range
+      ? buildPlannerEventRangeFromSelection(range, now)
+      : buildDefaultPlannerEventRange(session.calendarState.currentDate, now),
     plannerEventModalOpen: true,
     createMenuOpen: false,
   };

@@ -48,8 +48,18 @@ describe('dm read receipts', () => {
     for (const input of [
       { token: null, selectedThreadId: 'c1', visible: true, focused: true },
       { token: 'token-1', selectedThreadId: '', visible: true, focused: true },
-      { token: 'token-1', selectedThreadId: 'c1', visible: false, focused: true },
-      { token: 'token-1', selectedThreadId: 'c1', visible: true, focused: false },
+      {
+        token: 'token-1',
+        selectedThreadId: 'c1',
+        visible: false,
+        focused: true,
+      },
+      {
+        token: 'token-1',
+        selectedThreadId: 'c1',
+        visible: true,
+        focused: false,
+      },
     ]) {
       await expect(
         markVisibleDmThreadReadAndApply({

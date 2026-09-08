@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import imaplib
+import poplib
+import re
+import smtplib
+import ssl
 from dataclasses import dataclass, field
 from datetime import datetime
 from email import policy
@@ -7,18 +12,14 @@ from email.message import EmailMessage, Message
 from email.parser import BytesParser
 from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
-import imaplib
-import poplib
-import re
-import smtplib
-import ssl
 from typing import Any, Protocol
 
 from open_work_hub_api.domains.mail.connection_policy import (
     MailConnectionPolicyError as MailConnectionPolicyError,
+)
+from open_work_hub_api.domains.mail.connection_policy import (
     validate_connection_settings as validate_connection_settings,
 )
-
 
 _POP3_MAX_LINE = 1024 * 1024
 _HTML_TEXT_IGNORED_TAGS = {"head", "script", "style", "title", "meta", "link", "noscript"}

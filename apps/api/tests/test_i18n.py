@@ -2,10 +2,7 @@ from open_work_hub_api.core.i18n import LocalizedApiMessage, select_locale, tran
 
 
 def test_select_locale_prefers_explicit_app_locale() -> None:
-    assert (
-        select_locale(explicit_locale="ko-KR", accept_language="en-US,en;q=0.9")
-        == "ko-KR"
-    )
+    assert select_locale(explicit_locale="ko-KR", accept_language="en-US,en;q=0.9") == "ko-KR"
 
 
 def test_select_locale_uses_accept_language_quality() -> None:
@@ -14,13 +11,9 @@ def test_select_locale_uses_accept_language_quality() -> None:
 
 
 def test_translate_message_interpolates_params() -> None:
-    message = LocalizedApiMessage(
-        code="workspace.membership_required",
-        params={"workspace": "hq"},
-    )
-
-    assert translate_message(message, "en-US") == "Workspace membership required: hq"
-    assert translate_message(message, "ko-KR") == "워크스페이스 멤버십이 필요합니다: hq"
+    message = LocalizedApiMessage(code="ai.unknown_app", params={"app_id": "finance"})
+    assert translate_message(message, "en-US") == "Unknown company app: finance"
+    assert translate_message(message, "ko-KR") == "알 수 없는 회사 앱입니다: finance"
 
 
 def test_translate_auth_and_admin_validation_messages() -> None:
@@ -28,7 +21,7 @@ def test_translate_auth_and_admin_validation_messages() -> None:
     locale_message = LocalizedApiMessage(code="auth.invalid_locale")
     time_zone_message = LocalizedApiMessage(code="auth.invalid_time_zone")
     date_format_message = LocalizedApiMessage(code="auth.invalid_date_format")
-    role_message = LocalizedApiMessage(code="admin.invalid_workspace_role")
+    role_message = LocalizedApiMessage(code="admin.invalid_system_role")
 
     assert translate_message(email_message, "en-US") == "A valid email address is required."
     assert translate_message(email_message, "ko-KR") == "올바른 이메일 주소가 필요합니다."
@@ -38,8 +31,8 @@ def test_translate_auth_and_admin_validation_messages() -> None:
     assert translate_message(time_zone_message, "ko-KR") == "time zone이 올바르지 않습니다."
     assert translate_message(date_format_message, "en-US") == "Invalid date format."
     assert translate_message(date_format_message, "ko-KR") == "날짜 형식이 올바르지 않습니다."
-    assert translate_message(role_message, "en-US") == "Invalid workspace role."
-    assert translate_message(role_message, "ko-KR") == "워크스페이스 역할이 올바르지 않습니다."
+    assert translate_message(role_message, "en-US") == "Invalid system role."
+    assert translate_message(role_message, "ko-KR") == "회사 역할이 올바르지 않습니다."
 
 
 def test_translate_generic_validation_messages() -> None:
@@ -85,7 +78,10 @@ def test_translate_domain_message_interpolates_dynamic_values() -> None:
     )
 
     assert translate_message(message, "en-US") == "Cannot delete status: 3 task(s) are using it."
-    assert translate_message(message, "ko-KR") == "상태를 삭제할 수 없습니다. 3개의 태스크가 사용 중입니다."
+    assert (
+        translate_message(message, "ko-KR")
+        == "상태를 삭제할 수 없습니다. 3개의 태스크가 사용 중입니다."
+    )
 
 
 def test_translate_search_backend_message_preserves_dynamic_reason() -> None:
@@ -94,10 +90,7 @@ def test_translate_search_backend_message_preserves_dynamic_reason() -> None:
         params={"reason": "index missing"},
     )
 
-    assert (
-        translate_message(message, "en-US")
-        == "Keyword search is unavailable: index missing"
-    )
+    assert translate_message(message, "en-US") == "Keyword search is unavailable: index missing"
     assert translate_message(message, "ko-KR") == "키워드 검색을 사용할 수 없습니다: index missing"
 
 
@@ -144,7 +137,7 @@ def test_translate_rag_unavailable_message_preserves_dynamic_reason() -> None:
 def test_translate_rag_filter_validation_messages() -> None:
     reserved = LocalizedApiMessage(
         code="rag.metadata_filter_key_reserved",
-        params={"key": "workspace_id"},
+        params={"key": "owner_user_id"},
     )
     invalid = LocalizedApiMessage(
         code="rag.metadata_filter_key_invalid",
@@ -152,14 +145,12 @@ def test_translate_rag_filter_validation_messages() -> None:
     )
 
     assert translate_message(reserved, "en-US") == (
-        "Metadata filter key is reserved: workspace_id"
+        "Metadata filter key is reserved: owner_user_id"
     )
     assert translate_message(reserved, "ko-KR") == (
-        "예약된 메타데이터 필터 key입니다: workspace_id"
+        "예약된 메타데이터 필터 key입니다: owner_user_id"
     )
-    assert translate_message(invalid, "en-US") == (
-        "Invalid metadata filter key: metadata.owner"
-    )
+    assert translate_message(invalid, "en-US") == ("Invalid metadata filter key: metadata.owner")
     assert translate_message(invalid, "ko-KR") == (
         "메타데이터 필터 key가 올바르지 않습니다: metadata.owner"
     )
@@ -184,14 +175,10 @@ def test_translate_meeting_recording_in_progress_message() -> None:
     assert translate_message(message, "ko-KR") == "이미 Admin User 님이 녹음 중입니다."
 
 
-def test_translate_admin_workspace_delete_blockers_preserves_counts() -> None:
-    message = LocalizedApiMessage(
-        code="admin.workspace_contains_content",
-        params={"space_count": 2, "meeting_count": 1, "doc_count": 3},
-    )
-
-    assert "2 space(s), 1 meeting(s), 3 document(s)" in translate_message(message, "en-US")
-    assert "스페이스 2개, 회의 1개, 문서 3개" in translate_message(message, "ko-KR")
+def test_translate_pms_status_delete_blocker_preserves_count() -> None:
+    message = LocalizedApiMessage(code="pms.status_in_use", params={"count": 3})
+    assert "3 task(s)" in translate_message(message, "en-US")
+    assert "3개의 태스크" in translate_message(message, "ko-KR")
 
 
 def test_translate_ai_dynamic_tool_and_status_messages() -> None:
@@ -236,8 +223,8 @@ def test_translate_ai_tool_domain_validation_messages() -> None:
 
 
 def test_translate_ai_router_dynamic_messages() -> None:
-    workspace_app_message = LocalizedApiMessage(
-        code="ai.unknown_workspace_app",
+    company_app_message = LocalizedApiMessage(
+        code="ai.unknown_app",
         params={"app_id": "shadow-app"},
     )
     json_message = LocalizedApiMessage(
@@ -249,11 +236,9 @@ def test_translate_ai_router_dynamic_messages() -> None:
         params={"canonical_model": "local/model"},
     )
 
-    assert translate_message(workspace_app_message, "en-US") == (
-        "Unknown workspace app: shadow-app"
-    )
-    assert translate_message(workspace_app_message, "ko-KR") == (
-        "알 수 없는 워크스페이스 앱입니다: shadow-app"
+    assert translate_message(company_app_message, "en-US") == ("Unknown company app: shadow-app")
+    assert translate_message(company_app_message, "ko-KR") == (
+        "알 수 없는 회사 앱입니다: shadow-app"
     )
     assert translate_message(json_message, "en-US") == (
         "Invalid tool argument JSON: Expecting value"

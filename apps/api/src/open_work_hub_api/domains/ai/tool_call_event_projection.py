@@ -7,14 +7,14 @@ from collections.abc import Iterator, Mapping
 from typing import Any, Protocol
 
 from open_work_hub_api.domains.ai.events import AgentEventEnvelope, EnvelopeEncoder, make_envelope
+from open_work_hub_api.domains.ai.tool_result_projection import (
+    project_rejected_tool_response,
+    tool_result_preview,
+)
 from open_work_hub_api.domains.ai.tool_stream_projection import (
     make_tool_call_frame_events,
     make_tool_result_frame_event,
     preview_tool_event_text,
-)
-from open_work_hub_api.domains.ai.tool_result_projection import (
-    project_rejected_tool_response,
-    tool_result_preview,
 )
 from open_work_hub_api.domains.auth.security import new_id
 

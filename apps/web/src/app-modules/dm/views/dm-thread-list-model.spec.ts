@@ -36,9 +36,9 @@ describe('dm thread list model', () => {
         'u1',
       ),
     ).toBe('Grace');
-    expect(dmThreadDisplayName(conversation({ title: 'Release room' }), 'u1')).toBe(
-      'Release room',
-    );
+    expect(
+      dmThreadDisplayName(conversation({ title: 'Release room' }), 'u1'),
+    ).toBe('Release room');
     expect(
       dmThreadDisplayName(
         conversation({
@@ -58,7 +58,9 @@ describe('dm thread list model', () => {
   });
 
   it('creates localized message and thread previews', () => {
-    expect(dmMessagePreviewText(message({ body: ' hello ' }), t)).toBe(' hello ');
+    expect(dmMessagePreviewText(message({ body: ' hello ' }), t)).toBe(
+      ' hello ',
+    );
     expect(
       dmMessagePreviewText(
         message({
@@ -71,10 +73,7 @@ describe('dm thread list model', () => {
     expect(
       dmMessagePreviewText(
         message({
-          attachments: [
-            attachment({ id: 'a1' }),
-            attachment({ id: 'a2' }),
-          ],
+          attachments: [attachment({ id: 'a1' }), attachment({ id: 'a2' })],
           body: '',
         }),
         t,
@@ -151,8 +150,7 @@ function attachment(
     content_type: 'text/plain',
     size_bytes: 100,
     is_image: false,
-    preview_url: null,
-    download_url: null,
+
     created_at: '2026-05-20T00:00:00.000Z',
     ...overrides,
   };

@@ -44,54 +44,6 @@ type Translate = (key: string, options?: Record<string, unknown>) => string;
 const defaultTranslate: Translate = (key, options) =>
   String(i18n.t(key, options));
 
-const WORKSPACE_ROLE_OPTIONS: {
-  value: string;
-  labelKey: string;
-  descriptionKey: string;
-}[] = [
-  {
-    value: 'admin',
-    labelKey: 'apps:admin.shared.roles.admin.label',
-    descriptionKey: 'apps:admin.shared.roles.admin.description',
-  },
-  {
-    value: 'member',
-    labelKey: 'apps:admin.shared.roles.member.label',
-    descriptionKey: 'apps:admin.shared.roles.member.description',
-  },
-];
-
-const WORKSPACE_ROLE_LABEL_KEYS: Record<string, string> =
-  WORKSPACE_ROLE_OPTIONS.reduce(
-    (acc, option) => {
-      acc[option.value] = option.labelKey;
-      return acc;
-    },
-    {} as Record<string, string>,
-  );
-
-class WorkspaceRoleCatalog {
-  constructor(
-    private readonly options = WORKSPACE_ROLE_OPTIONS,
-    private readonly labelKeys = WORKSPACE_ROLE_LABEL_KEYS,
-  ) {}
-
-  optionsFor(
-    t: Translate,
-  ): { value: string; label: string; description: string }[] {
-    return this.options.map((option) => ({
-      value: option.value,
-      label: t(option.labelKey),
-      description: t(option.descriptionKey),
-    }));
-  }
-
-  label(role: string, t: Translate): string {
-    const key = this.labelKeys[role];
-    return key ? t(key) : role;
-  }
-}
-
 class SubjectSelection {
   constructor(private readonly selection: SubjectSelectionState) {}
 
@@ -122,12 +74,6 @@ class SubjectSelection {
 }
 
 const appLabelCatalog = new AdminAppLabelCatalog();
-const workspaceRoleCatalog = new WorkspaceRoleCatalog();
-
-export const WORKSPACE_ROLE_RANK: Record<string, number> = {
-  admin: 0,
-  member: 1,
-};
 
 export const FORM_FIELD_CLASS =
   'app-text-body w-full rounded-lg border border-app-border bg-app-bg px-3 py-2 text-app-ink outline-none transition-colors focus:border-app-accent';
@@ -152,19 +98,6 @@ export function getErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-export function getWorkspaceRoleOptions(
-  t: Translate = defaultTranslate,
-): { value: string; label: string; description: string }[] {
-  return workspaceRoleCatalog.optionsFor(t);
-}
-
-export function getWorkspaceRoleLabel(
-  role: string,
-  t: Translate = defaultTranslate,
-): string {
-  return workspaceRoleCatalog.label(role, t);
-}
-
 export function formatDateLabel(
   value?: string | null,
   locale = i18n.resolvedLanguage || i18n.language,
@@ -186,12 +119,6 @@ export function isAdminUser(user: Pick<AuthUser, 'system_roles'>): boolean {
 
 export function formatUserApps(user: Pick<AuthUser, 'system_roles'>): string {
   return appLabelCatalog.format(appLabelCatalog.userCodes(user));
-}
-
-export function formatUserWorkspaces(
-  user: Pick<AuthUser, 'workspaces'>,
-): string {
-  return user.workspaces.map((workspace) => workspace.name).join(', ') || '-';
 }
 
 export function formatStatusLabel(

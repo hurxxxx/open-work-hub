@@ -6,7 +6,6 @@ from typing import Any
 from open_work_hub_api.domains.ai.registry import get_ai_capability_registry
 from open_work_hub_api.domains.ai.tool_contracts import AgentToolSpec
 
-
 WRITE_TOOL_REQUIRED_MESSAGE = (
     "요청은 생성/수정/삭제 같은 쓰기 작업으로 보이지만 실제 write tool 실행 결과가 없습니다. "
     "데이터가 변경됐다고 확인할 수 없으므로 완료됐다고 답할 수 없습니다. "

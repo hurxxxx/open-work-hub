@@ -138,11 +138,14 @@
   --ui-motion-fast: 120ms;
   --ui-motion-base: 180ms;
 
-  /* ── Z-index ── */
-  --ui-z-drawer: 40;
-  --ui-z-dialog-elevated: 60;
-  --ui-z-popover: 70;
-  --ui-z-toast: 80;
+  /* Modal surfaces cover shell chrome and floating widgets.
+     Their popovers and feedback must remain above both modal layers. */
+  --ui-z-floating-panel: 75;
+  --ui-z-dock: 80;
+  --ui-z-drawer: 90;
+  --ui-z-dialog-elevated: 100;
+  --ui-z-popover: 110;
+  --ui-z-toast: 120;
 
   /* ── Typography Scale ── */
   --ui-text-h1: 1.375rem;

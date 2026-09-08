@@ -2,14 +2,13 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 import pytest
-from sqlalchemy import select
+from dev_accounts import dev_login, create_company_user_session, auth_headers
+from open_work_hub_api.domains.auth.app_access_models import AppAccessPolicy
 
 from open_work_hub_api.core.db import get_session_factory
 from open_work_hub_api.core.settings import get_settings
 from open_work_hub_api.domains.ai.registry import reset_ai_capability_registry
-from open_work_hub_api.domains.auth.access import ensure_dev_login_seed_data, load_user_graph
-from open_work_hub_api.domains.auth.models import Workspace
-from open_work_hub_api.domains.auth.workspace_apps import get_workspace_app_catalog_item
+from open_work_hub_api.domains.auth.access import load_user_graph
 from open_work_hub_api.domains.docs import service as docs_service
 from open_work_hub_api.domains.rag import application as rag_application
 from open_work_hub_api.domains.rag.default_source_adapters import registered_searchable_rag_app_ids
@@ -27,10 +26,6 @@ from open_work_hub_api.domains.rag.runtime import (
 )
 from open_work_hub_api.domains.rag.service import RagService
 
-DELIVERY_WORKSPACE_KEY = "delivery-hub"
-HQ_WORKSPACE_KEY = "hq"
-TEST_USER_PASSWORD = "supersecret123"
-
 
 @pytest.fixture(autouse=True)
 def _stub_rag_job_publish(monkeypatch) -> None:
@@ -46,101 +41,19 @@ def _stub_rag_job_publish(monkeypatch) -> None:
     monkeypatch.setattr(rag_outbox, "get_celery_client", lambda: _FakeCeleryClient())
 
 
-def _dev_login(client: TestClient, account_key: str) -> dict:
-    with get_session_factory()() as db:
-        ensure_dev_login_seed_data(db)
-    response = client.post("/api/v1/auth/dev-login", json={"account_key": account_key})
-    assert response.status_code == 200, response.text
-    return response.json()
-
-
-def _create_workspace(client: TestClient, admin_token: str, *, key: str, name: str) -> dict:
-    response = client.post(
-        "/api/v1/admin/workspaces",
-        headers=_auth_headers(admin_token),
-        json={"key": key, "name": name},
-    )
-    assert response.status_code == 201, response.text
-    return response.json()
-
-
-def _provision_delivery_workspace(client: TestClient) -> tuple[dict, dict]:
-    session = _dev_login(client, "administrator")
-    workspace = _create_workspace(
-        client,
-        session["token"],
-        key=DELIVERY_WORKSPACE_KEY,
-        name="Delivery Hub",
-    )
-    return session, workspace
-
-
-def _create_user_session(
-    client: TestClient,
-    admin_token: str,
-    *,
-    login_id: str,
-    email: str,
-    full_name: str,
-    workspace_id: str | None = None,
-    role: str = "member",
-) -> dict:
-    create_response = client.post(
-        "/api/v1/admin/users",
-        headers=_auth_headers(admin_token),
-        json={
-            "login_id": login_id,
-            "email": email,
-            "full_name": full_name,
-            "temporary_password": TEST_USER_PASSWORD,
-        },
-    )
-    assert create_response.status_code == 201, create_response.text
-    user = create_response.json()["user"]
-
-    if workspace_id is not None:
-        member_response = client.post(
-            f"/api/v1/admin/workspaces/{workspace_id}/members",
-            headers=_auth_headers(admin_token),
-            json={"subject_id": user["id"], "subject_type": "user", "role": role},
-        )
-        assert member_response.status_code == 201, member_response.text
-
-    login_response = client.post(
-        "/api/v1/auth/login",
-        json={"login_id": login_id, "password": TEST_USER_PASSWORD},
-    )
-    assert login_response.status_code == 200, login_response.text
-    return login_response.json()
+def _create_user_session(client, admin_token, *, login_id, email, full_name, role="member"):
+    return create_company_user_session(client, login_id=login_id, email=email, full_name=full_name)
 
 
 def _auth_headers(token: str) -> dict[str, str]:
-    return {"Authorization": f"Bearer {token}"}
+    return auth_headers(token)
 
 
-def _workspace_ai_path(workspace_slug: str, suffix: str) -> str:
-    return f"/api/v1/workspaces/{workspace_slug}/chatbot{suffix}"
-
-
-def _disable_app(
-    client: TestClient,
-    *,
-    admin_token: str,
-    workspace_id: str,
-    app_id: str,
-) -> None:
-    catalog_item = get_workspace_app_catalog_item(app_id)
-    assert catalog_item is not None
-    if catalog_item.availability_scope == "platform":
-        path = "/api/v1/admin/apps/company-controls"
-        payload = {"items": [{"app_id": app_id, "enabled": False}]}
-    else:
-        path = f"/api/v1/admin/workspaces/{workspace_id}/app-overrides"
-        payload = {"items": [{"app_id": app_id, "enabled": False}]}
+def _disable_app(client, *, admin_token, app_id):
     response = client.patch(
-        path,
-        headers=_auth_headers(admin_token),
-        json=payload,
+        "/api/v1/admin/apps/company-controls",
+        headers=auth_headers(admin_token),
+        json={"items": [{"app_id": app_id, "enabled": False}]},
     )
     assert response.status_code == 200, response.text
 
@@ -153,33 +66,27 @@ def _reset_settings_and_registry() -> None:
     reset_ai_capability_registry()
 
 
-def test_workspace_rag_query_route_filters_out_foreign_workspace_hits(
+def test_rag_query_hides_other_users_personal_docs_even_from_platform_admin(
     client: TestClient,
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("OPEN_WORK_HUB_RAG_ENABLED", "1")
     _reset_settings_and_registry()
-    delivery_session, _delivery_workspace_item = _provision_delivery_workspace(client)
-    _create_workspace(client, delivery_session["token"], key=HQ_WORKSPACE_KEY, name="HQ")
+    delivery_session = dev_login(client, "administrator")
+    other_session = create_company_user_session(
+        client, login_id="other-owner", email="other-owner@example.test", full_name="Other Owner"
+    )
     vector_index = FakeVectorIndexClient()
     embedding_client = FakeEmbeddingClient()
     rerank_client = FakeRerankClient()
 
     with get_session_factory()() as db:
         delivery_owner = load_user_graph(db, delivery_session["user"]["id"])
-        hq_owner = delivery_owner
-        delivery_workspace = db.scalar(
-            select(Workspace).where(Workspace.key == DELIVERY_WORKSPACE_KEY)
-        )
-        hq_workspace = db.scalar(select(Workspace).where(Workspace.key == HQ_WORKSPACE_KEY))
-        assert delivery_owner is not None
-        assert hq_owner is not None
-        assert delivery_workspace is not None
-        assert hq_workspace is not None
+        hq_owner = load_user_graph(db, other_session["user"]["id"])
+        assert delivery_owner is not None and hq_owner is not None
 
         delivery_doc, _ = docs_service.create_native_doc_for_user(
             db,
-            workspace_id=delivery_workspace.id,
             owner_id=delivery_owner.id,
             title="Delivery Hub Phase 5 Note",
             content_blocks=[
@@ -191,7 +98,6 @@ def test_workspace_rag_query_route_filters_out_foreign_workspace_hits(
         )
         hq_doc, _ = docs_service.create_native_doc_for_user(
             db,
-            workspace_id=hq_workspace.id,
             owner_id=hq_owner.id,
             title="HQ Phase 5 Note",
             content_blocks=[
@@ -214,8 +120,6 @@ def test_workspace_rag_query_route_filters_out_foreign_workspace_hits(
             assert projection is not None
             rag_service.sync_projection(projection)
 
-        delivery_workspace_id = delivery_workspace.id
-
     query_service = RagQueryService(
         vector_index=vector_index,
         embedding_client=embedding_client,
@@ -224,7 +128,7 @@ def test_workspace_rag_query_route_filters_out_foreign_workspace_hits(
     monkeypatch.setattr(rag_application, "get_rag_query_service", lambda: query_service)
 
     response = client.post(
-        f"/api/v1/workspaces/{DELIVERY_WORKSPACE_KEY}/rag/query",
+        "/api/v1/rag/query",
         headers=_auth_headers(delivery_session["token"]),
         json={"query": "phase 5 rollout", "answer_mode": "search-only"},
     )
@@ -232,50 +136,46 @@ def test_workspace_rag_query_route_filters_out_foreign_workspace_hits(
     assert response.status_code == 200, response.text
     payload = response.json()
     assert {hit["title"] for hit in payload["hits"]} == {"Delivery Hub Phase 5 Note"}
-    assert {hit["workspace_id"] for hit in payload["hits"]} == {delivery_workspace_id}
+    assert all("workspace_id" not in hit for hit in payload["hits"])
 
 
 @pytest.mark.slow
-def test_workspace_rag_reindex_requires_admin(
+def test_company_rag_reindex_requires_admin(
     client: TestClient,
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("OPEN_WORK_HUB_RAG_ENABLED", "1")
     _reset_settings_and_registry()
-    admin_session, workspace_item = _provision_delivery_workspace(client)
+    admin_session = dev_login(client, "administrator")
     session = _create_user_session(
         client,
         admin_session["token"],
         login_id="deliverymember",
         email="delivery-member@example.test",
         full_name="Delivery Member",
-        workspace_id=workspace_item["id"],
         role="member",
     )
 
     response = client.post(
-        f"/api/v1/workspaces/{DELIVERY_WORKSPACE_KEY}/rag/reindex",
+        "/api/v1/rag/reindex",
         headers=_auth_headers(session["token"]),
     )
 
     assert response.status_code == 403, response.text
 
 
-def test_workspace_rag_reindex_enforces_cooldown(
+def test_company_rag_reindex_enforces_cooldown(
     client: TestClient,
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("OPEN_WORK_HUB_RAG_ENABLED", "1")
     _reset_settings_and_registry()
-    session, _workspace_item = _provision_delivery_workspace(client)
+    session = dev_login(client, "administrator")
     with get_session_factory()() as db:
         owner = load_user_graph(db, session["user"]["id"])
-        workspace = db.scalar(select(Workspace).where(Workspace.key == DELIVERY_WORKSPACE_KEY))
         assert owner is not None
-        assert workspace is not None
         docs_service.create_native_doc_for_user(
             db,
-            workspace_id=workspace.id,
             owner_id=owner.id,
             title="Cooldown source",
             content_blocks=[
@@ -285,11 +185,11 @@ def test_workspace_rag_reindex_enforces_cooldown(
         db.commit()
 
     first = client.post(
-        f"/api/v1/workspaces/{DELIVERY_WORKSPACE_KEY}/rag/reindex",
+        "/api/v1/rag/reindex",
         headers=_auth_headers(session["token"]),
     )
     second = client.post(
-        f"/api/v1/workspaces/{DELIVERY_WORKSPACE_KEY}/rag/reindex",
+        "/api/v1/rag/reindex",
         headers=_auth_headers(session["token"]),
     )
 
@@ -299,75 +199,64 @@ def test_workspace_rag_reindex_enforces_cooldown(
 
 
 @pytest.mark.slow
-def test_workspace_rag_query_validates_payload(
+def test_company_rag_query_validates_payload(
     client: TestClient,
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("OPEN_WORK_HUB_RAG_ENABLED", "1")
     _reset_settings_and_registry()
-    session, _workspace_item = _provision_delivery_workspace(client)
+    session = dev_login(client, "administrator")
 
     blank_query = client.post(
-        f"/api/v1/workspaces/{DELIVERY_WORKSPACE_KEY}/rag/query",
+        "/api/v1/rag/query",
         headers=_auth_headers(session["token"]),
         json={"query": ""},
     )
     assert blank_query.status_code == 422, blank_query.text
 
     invalid_top_k = client.post(
-        f"/api/v1/workspaces/{DELIVERY_WORKSPACE_KEY}/rag/query",
+        "/api/v1/rag/query",
         headers=_auth_headers(session["token"]),
         json={"query": "phase 5", "top_k": 0},
     )
     assert invalid_top_k.status_code == 422, invalid_top_k.text
 
     invalid_metadata = client.post(
-        f"/api/v1/workspaces/{DELIVERY_WORKSPACE_KEY}/rag/query",
+        "/api/v1/rag/query",
         headers={**_auth_headers(session["token"]), "Accept-Language": "ko-KR"},
         json={
             "query": "phase 5",
-            "filters": {"metadata": {"workspace_id": "foreign"}},
+            "filters": {"metadata": {"resource_id": "forged-doc"}},
         },
     )
     assert invalid_metadata.status_code == 422, invalid_metadata.text
     body = invalid_metadata.json()
     assert body["code"] == "rag.metadata_filter_key_reserved"
-    assert body["params"]["key"] == "workspace_id"
-    assert body["detail"] == "예약된 메타데이터 필터 key입니다: workspace_id"
+    assert body["params"]["key"] == "resource_id"
+    assert body["detail"] == "예약된 메타데이터 필터 key입니다: resource_id"
 
 
 @pytest.mark.slow
-def test_workspace_rag_query_rejects_non_member(
-    client: TestClient,
-    monkeypatch,
-) -> None:
+def test_rag_query_rejects_user_without_admitted_sources(client, monkeypatch):
     monkeypatch.setenv("OPEN_WORK_HUB_RAG_ENABLED", "1")
     _reset_settings_and_registry()
-    admin_session, _delivery_workspace_item = _provision_delivery_workspace(client)
-    hq_workspace = _create_workspace(
+    dev_login(client, "administrator")
+    session = create_company_user_session(
         client,
-        admin_session["token"],
-        key=HQ_WORKSPACE_KEY,
-        name="HQ",
+        login_id="unadmitted-reader",
+        email="unadmitted-reader@example.test",
+        full_name="Unadmitted Reader",
     )
-    session = _create_user_session(
-        client,
-        admin_session["token"],
-        login_id="othermember",
-        email="other-member@example.test",
-        full_name="Other Workspace Member",
-        workspace_id=hq_workspace["id"],
-        role="member",
-    )
-
+    with get_session_factory().begin() as db:
+        for app_id in registered_searchable_rag_app_ids():
+            policy = db.get(AppAccessPolicy, app_id)
+            assert policy is not None
+            policy.audience = "selected"
     response = client.post(
-        f"/api/v1/workspaces/{DELIVERY_WORKSPACE_KEY}/rag/query",
-        headers=_auth_headers(session["token"]),
-        json={"query": "phase 5"},
+        "/api/v1/rag/query", headers=auth_headers(session["token"]), json={"query": "phase 5"}
     )
-
     assert response.status_code == 403, response.text
-    assert response.json()["code"] == "workspace.membership_required"
+    assert response.json()["code"] == "rag.access_denied_not_enabled"
 
 
 @pytest.mark.slow
@@ -377,17 +266,16 @@ def test_rag_ai_manifest_hides_tools_when_no_searchable_apps_enabled(
 ) -> None:
     monkeypatch.setenv("OPEN_WORK_HUB_RAG_ENABLED", "1")
     _reset_settings_and_registry()
-    session, workspace_item = _provision_delivery_workspace(client)
+    session = dev_login(client, "administrator")
     for app_id in sorted(registered_searchable_rag_app_ids()):
         _disable_app(
             client,
             admin_token=session["token"],
-            workspace_id=workspace_item["id"],
             app_id=app_id,
         )
 
     manifest_response = client.get(
-        _workspace_ai_path(DELIVERY_WORKSPACE_KEY, "/apps/chatbot/manifest"),
+        "/api/v1/chatbot/apps/chatbot/manifest",
         headers=_auth_headers(session["token"]),
     )
 
@@ -396,7 +284,7 @@ def test_rag_ai_manifest_hides_tools_when_no_searchable_apps_enabled(
     assert "rag.query" not in manifest_tools
 
     query_response = client.post(
-        f"/api/v1/workspaces/{DELIVERY_WORKSPACE_KEY}/rag/query",
+        "/api/v1/rag/query",
         headers=_auth_headers(session["token"]),
         json={"query": "phase 5"},
     )

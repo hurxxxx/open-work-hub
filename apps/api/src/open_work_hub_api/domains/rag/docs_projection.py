@@ -7,8 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from open_work_hub_api.domains.docs.content_text import extract_page_text
-from open_work_hub_api.domains.docs.models import NativeDoc
-from open_work_hub_api.domains.docs.models import NativeDocPage
+from open_work_hub_api.domains.docs.models import NativeDoc, NativeDocPage
 from open_work_hub_api.domains.rag.chunking import (
     DEFAULT_HARD_MAX_CHARS,
     DEFAULT_OVERLAP_CHARS,
@@ -16,15 +15,13 @@ from open_work_hub_api.domains.rag.chunking import (
     build_contextual_index_text,
     split_korean_aware_text_spans,
 )
-from open_work_hub_api.domains.rag.contracts import RagChunk
-from open_work_hub_api.domains.rag.contracts import RagProjection
+from open_work_hub_api.domains.rag.contracts import RagChunk, RagProjection
 from open_work_hub_api.domains.rag.projection_builders import (
     build_projection_chunk,
     build_text_projection,
 )
 from open_work_hub_api.domains.rag.source_registry import RAG_SCOPE_OFFICIAL
 from open_work_hub_api.domains.source_access.resource_types import NATIVE_DOC_RESOURCE_TYPE
-
 
 DOCS_CHUNK_STRATEGY = "docs_structure_v1"
 
@@ -88,7 +85,6 @@ def build_native_doc_projection(doc: NativeDoc) -> RagProjection:
     visibility_refs = _build_visibility_refs(doc)
 
     return build_text_projection(
-        workspace_id=doc.workspace_id,
         resource_type=NATIVE_DOC_RESOURCE_TYPE,
         resource_id=doc.id,
         source_kind=doc.source_kind,
@@ -224,7 +220,6 @@ def _native_doc_chunk(
     page_title = " > ".join(page_path) if page_path else page.title
     section_title = section_path[-1] if section_path else page.title
     return build_projection_chunk(
-        workspace_id=doc.workspace_id,
         resource_type=NATIVE_DOC_RESOURCE_TYPE,
         resource_id=doc.id,
         source_kind=doc.source_kind,
@@ -335,7 +330,6 @@ def _extract_page_text(content_format: str, page: NativeDocPage) -> str:
 
 def _build_visibility_refs(doc: NativeDoc) -> list[str]:
     refs = {
-        f"workspace:{doc.workspace_id}",
         f"owner:{doc.owner_id}",
     }
 

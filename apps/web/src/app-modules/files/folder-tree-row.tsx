@@ -1,22 +1,20 @@
-import { Link } from 'react-router-dom';
 import { Folder } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 import { cn } from '@/src/lib/utils';
-import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
+import { buildAppPath } from '@/src/platform/apps/app-links';
 import type { FolderNode } from './folder-tree-model';
 
 export function FolderTreeRow({
   activeFolderId,
   folder,
   level,
-  workspaceSlug,
 }: {
   activeFolderId: string | null;
   folder: FolderNode;
   level: number;
-  workspaceSlug: string;
 }) {
-  const path = `${buildWorkspaceAppPath(workspaceSlug, 'files')}?folder=${encodeURIComponent(folder.id)}`;
+  const path = `${buildAppPath('files')}?folder=${encodeURIComponent(folder.id)}`;
   return (
     <>
       <Link
@@ -36,7 +34,6 @@ export function FolderTreeRow({
           activeFolderId={activeFolderId}
           folder={child}
           level={level + 1}
-          workspaceSlug={workspaceSlug}
         />
       ))}
     </>

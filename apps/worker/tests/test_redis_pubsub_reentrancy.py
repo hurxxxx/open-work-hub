@@ -42,6 +42,9 @@ def test_result_finalizer_can_unsubscribe_during_pubsub_command() -> None:
         app.close()
     """)
     result = subprocess.run(
-        [sys.executable, "-c", code], capture_output=True, text=True, timeout=5,
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        timeout=5,
     )
     assert result.returncode == 0, result.stderr

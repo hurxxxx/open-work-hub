@@ -192,12 +192,10 @@ function renderReport(
     ...overrides,
   };
   return render(
-    <MemoryRouter
-      initialEntries={['/apps/docs/workspaces/research/documents/assistant']}
-    >
+    <MemoryRouter initialEntries={['/apps/docs/documents/assistant']}>
       <Routes>
         <Route
-          path="/apps/docs/workspaces/:workspaceSlug/documents/assistant"
+          path="/apps/docs/documents/assistant"
           element={<AiReportArtifact artifact={artifact} />}
         />
       </Routes>

@@ -97,7 +97,11 @@ def _initialize_git_repository(root: Path) -> None:
 
 def test_agent_terminal_catalog_is_admin_only_personal_tool() -> None:
     assert AGENT_TERMINAL_APP.app_id == "agent-terminal"
-    assert AGENT_TERMINAL_APP.availability_scope == "platform"
+    from open_work_hub_api.core.app_registry import compile_app_registry
+
+    assert (
+        compile_app_registry([AGENT_TERMINAL_APP]).catalog[0].execution_context_kind == "personal"
+    )
     assert AGENT_TERMINAL_APP.launcher_personal_tools is True
     assert AGENT_TERMINAL_APP.feature_flag == "agent_terminal_enabled"
     assert AGENT_TERMINAL_APP.required_system_roles == ("platform_admin",)
@@ -778,6 +782,10 @@ def test_admin_can_reconnect_to_owned_codex_session_without_transcript_audit(
         replay_message = websocket.receive_json()
         assert replay_message["type"] == "replay"
         output = base64.b64decode(replay_message["data"])
+        while b"ready" not in output:
+            output_message = websocket.receive_json()
+            assert output_message["type"] == "output"
+            output += base64.b64decode(output_message["data"])
         assert b"ready" in output
         websocket.send_json(
             {

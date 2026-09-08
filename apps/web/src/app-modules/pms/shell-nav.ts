@@ -1,5 +1,5 @@
+import { getAppRelativePath } from '@/src/app-shell-navigation-model';
 import type { AppShellNavResolver } from '@/src/app/shell/navigation-types';
-import { getWorkspaceAppRelativePath } from '@/src/app-shell-navigation-model';
 
 function decodePathSegment(value: string): string {
   try {
@@ -10,7 +10,7 @@ function decodePathSegment(value: string): string {
 }
 
 export const pmsShellNavResolver: AppShellNavResolver = ({ pathname }) => {
-  const relativePath = getWorkspaceAppRelativePath(pathname, 'pms');
+  const relativePath = getAppRelativePath(pathname, 'pms');
   if (relativePath === '/assigned' || relativePath?.startsWith('/assigned/')) {
     return 'pms-tasks-assigned';
   }

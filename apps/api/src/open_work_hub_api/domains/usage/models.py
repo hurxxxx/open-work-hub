@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, JSON, String
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from open_work_hub_api.core.db import Base
@@ -19,7 +19,7 @@ class UsageEvent(Base):
         Index("ix_usage_events_type_occurred", "event_type", "occurred_at"),
         Index("ix_usage_events_content_kind_occurred", "content_kind", "occurred_at"),
         Index("ix_usage_events_route_occurred", "route_path", "occurred_at"),
-        Index("ix_usage_events_workspace_occurred", "workspace_id", "occurred_at"),
+        Index("ix_usage_events_occurred", "occurred_at"),
         Index(
             "ix_usage_events_type_kind_occurred_user",
             "event_type",
@@ -31,11 +31,6 @@ class UsageEvent(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     actor_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
-    workspace_id: Mapped[str | None] = mapped_column(
-        ForeignKey("workspaces.id"),
-        nullable=True,
-        index=True,
-    )
     app_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     event_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     content_kind: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
@@ -66,6 +61,7 @@ class UsageExcludedUser(Base):
         nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
+
 
 class UsageTargetUser(Base):
     __tablename__ = "usage_target_users"

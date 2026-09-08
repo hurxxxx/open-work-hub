@@ -1,6 +1,6 @@
 """Chat conversations + turns persistence.
 
-Conversations are **per-user within a workspace** (ChatGPT/Claude-style
+Conversations are **per-user** (ChatGPT/Claude-style
 private history), **auto-titled** from the first user message, and
 **soft-deleted** via ``deleted_at`` — list endpoints filter rows where
 ``deleted_at IS NULL``. Turns are stored verbatim alongside the rendering
@@ -34,23 +34,18 @@ class Conversation(Base):
     __table_args__ = (
         # The "my recent chats" sidebar query is the hot path.
         Index(
-            "ix_conversations_workspace_user_updated",
-            "workspace_id",
+            "ix_conversations_user_updated",
             "user_id",
             "updated_at",
         ),
         Index(
-            "ix_conversations_workspace_scope_resource",
-            "workspace_id",
+            "ix_conversations_scope_resource",
             "scope_ref",
             "scope_resource_id",
         ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id"), index=True, nullable=False
-    )
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
     title: Mapped[str] = mapped_column(String(200), default="", nullable=False)
     scope_ref: Mapped[str | None] = mapped_column(String(64), nullable=True)

@@ -24,8 +24,8 @@
 - Register from `register_ai_capabilities(registry)`.
 - Workload unit = independently configurable function/stage.
 - Call only `execute_llm` or `stream_llm`.
-- Caller supplies constant `workload_id`, app/actor, declared execution context, and input/messages;
-  workspace is present only for workspace execution.
+- Caller supplies constant `workload_id`, app/actor, declared personal/company execution context,
+  and input/messages. No global container ID is attached to company execution.
 - Caller never selects provider, model, pool, endpoint, credential, retry/fallback, or route by user input.
 - Providers and agent runtimes are approved adapters behind the common interface.
 - Output caps default to local 32K and external 64K unless descriptor/admin route is stricter.
@@ -49,7 +49,7 @@ Owners: [AI Domain](../domains/ai/README.md), [ADR 0002](../../adr/0002-mcp-capa
 - Active caller-facing backend channels: Qdrant `generic_rag`, OpenSearch `keyword`; resource
   participation is listed separately in the RAG source matrix.
 - Do not compare raw scores across backends.
-- Workspace keyword search is declared by backend `SearchEntityAdapter`, not frontend flags/app allowlists.
+- Company keyword search is declared by backend `SearchEntityAdapter`, not frontend flags/app allowlists.
 - `retrieval_partition_id` is candidate scope, not ACL.
 - Evidence, summaries, external LLM payloads, and citations pass source-owned final ACL.
 - Projection identity/version/cutover: ADR 0009.
@@ -72,6 +72,6 @@ Owners: [Retrieval](../domains/retrieval/README.md), [RAG](../domains/rag/README
 
 - New AI capability: registry compile, duplicate guard, MCP schema/discovery, direct invoke, hidden-tool blocked tests.
 - New LLM workload: duplicate/budget/adapter/default-route tests and direct-call guard.
-- New workspace API: router registration, server app gate, `pnpm check:api-contract`.
+- New app API: router registration, server app gate, `pnpm check:api-contract`.
 - Docs updates: verify paths, commands, and owner links against current tree.
 - Check selection: [Vibe Harness](vibe-coding-harness.md).

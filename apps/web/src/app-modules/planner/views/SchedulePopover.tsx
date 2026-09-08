@@ -1,18 +1,18 @@
-import { useState } from 'react';
-import { LazyMotion, domAnimation, m } from 'motion/react';
+import { cn } from '@/src/lib/utils';
 import {
-  X,
-  Video,
-  Users,
-  Link as LinkIcon,
-  MapPin,
   AlignLeft,
   Calendar as CalendarIcon,
   Clock,
   Coffee,
+  Link as LinkIcon,
+  MapPin,
+  Users,
+  Video,
+  X,
 } from 'lucide-react';
+import { domAnimation, LazyMotion, m } from 'motion/react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { cn } from '@/src/lib/utils';
 import {
   buildSchedulePopoverDisplay,
   DEFAULT_SCHEDULE_POPOVER_TAB,

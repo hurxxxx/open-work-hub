@@ -5,7 +5,6 @@ import os
 import signal
 import sys
 
-
 _PR_SET_PDEATHSIG = 1
 
 

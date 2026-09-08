@@ -1,11 +1,5 @@
+import { Apple, BadgeCheck, Download, Monitor, Terminal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import {
-  Apple,
-  BadgeCheck,
-  Download,
-  Monitor,
-  Terminal,
-} from 'lucide-react';
 
 import { Button } from '@open-work-hub/ui/primitives/button';
 
@@ -35,7 +29,9 @@ function desktopInstallerIcon(
   return desktopInstallerIconFallbacks[platform] ?? Monitor;
 }
 
-type DesktopInstallerCatalogRow = ReturnType<typeof buildDesktopInstallerRows>[number];
+type DesktopInstallerCatalogRow = ReturnType<
+  typeof buildDesktopInstallerRows
+>[number];
 
 type DesktopInstallerPanelRow = Omit<DesktopInstallerCatalogRow, 'icon'> & {
   Icon: typeof Monitor;
@@ -43,10 +39,12 @@ type DesktopInstallerPanelRow = Omit<DesktopInstallerCatalogRow, 'icon'> & {
 
 export function DesktopInstallerPanel() {
   const { t } = useTranslation('auth');
-  const rows: DesktopInstallerPanelRow[] = buildDesktopInstallerRows().map((row) => ({
-    ...row,
-    Icon: desktopInstallerIcon(row.icon, row.platform),
-  }));
+  const rows: DesktopInstallerPanelRow[] = buildDesktopInstallerRows().map(
+    (row) => ({
+      ...row,
+      Icon: desktopInstallerIcon(row.icon, row.platform),
+    }),
+  );
 
   return (
     <div className="mt-4 rounded-md border border-app-border bg-app-surface-subtle p-4">
@@ -74,7 +72,9 @@ export function DesktopInstallerPanel() {
                 </span>
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="app-text-body font-medium text-app-ink">{platformName}</span>
+                    <span className="app-text-body font-medium text-app-ink">
+                      {platformName}
+                    </span>
                     {item.isCurrent ? (
                       <span className="app-text-caption inline-flex items-center gap-1 rounded-md border border-app-accent/30 bg-app-accent/10 px-2 py-0.5 text-app-accent">
                         <BadgeCheck size={12} />

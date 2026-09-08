@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
 import { Plus } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 export function Section({
   icon,
@@ -24,18 +24,21 @@ export function Section({
         <h3 className="app-text-overline inline-flex items-center gap-1.5 text-app-ink/60 dark:text-app-ink/70">
           <span className="text-app-ink/60 dark:text-app-ink/70">{icon}</span>
           {title}
-          <span className="text-app-ink/40 dark:text-app-ink/50">({count})</span>
+          <span className="text-app-ink/40 dark:text-app-ink/50">
+            ({count})
+          </span>
         </h3>
-        {headerAction ?? (onAdd ? (
-          <button
-            type="button"
-            onClick={onAdd}
-            className="app-text-caption inline-flex items-center gap-1 text-app-accent hover:underline"
-          >
-            <Plus size={12} />
-            {addLabel}
-          </button>
-        ) : null)}
+        {headerAction ??
+          (onAdd ? (
+            <button
+              type="button"
+              onClick={onAdd}
+              className="app-text-caption inline-flex items-center gap-1 text-app-accent hover:underline"
+            >
+              <Plus size={12} />
+              {addLabel}
+            </button>
+          ) : null)}
       </div>
       {children}
     </section>

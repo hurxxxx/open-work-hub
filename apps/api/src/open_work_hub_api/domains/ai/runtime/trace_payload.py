@@ -6,7 +6,6 @@ from typing import Any
 
 from open_work_hub_api.core.settings import get_settings
 
-
 SENSITIVE_PAYLOAD_KEYS = {
     "api_key",
     "args",
@@ -71,9 +70,7 @@ def prepare_trace_payload(
 ) -> tuple[dict[str, Any], bool]:
     raw_payload = payload or {}
     limit = (
-        max_bytes
-        if max_bytes is not None
-        else get_settings().ai_runtime_trace_payload_max_bytes
+        max_bytes if max_bytes is not None else get_settings().ai_runtime_trace_payload_max_bytes
     )
     size_bytes = _payload_size_bytes(raw_payload)
     if size_bytes > limit:

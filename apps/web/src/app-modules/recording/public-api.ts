@@ -1,18 +1,11 @@
 import { createElement, lazy, Suspense } from 'react';
 
-import type { TaskPickerModalProps } from './views/TaskPickerModal';
 import type {
   LinkedRecordingListProps,
   LinkedRecordingsForTargetProps,
 } from './views/LinkedRecordingsList';
+import type { TaskPickerModalProps } from './views/TaskPickerModal';
 
-export type { TaskPickerModalProps } from './views/TaskPickerModal';
-export type {
-  LinkedRecordingListItem,
-  LinkedRecordingListProps,
-  LinkedRecordingsForTargetProps,
-} from './views/LinkedRecordingsList';
-export { RecordingRecoveryBanner } from './recorder/RecordingRecoveryBanner';
 export {
   getRecordingRecoveryAction,
   planRecordingRecoverySession,
@@ -24,14 +17,24 @@ export type {
   RecordingRecoveryContinueSessionInput,
   RecordingRecoveryPlan,
 } from './recorder/recording-recovery-session-plan';
-export { selectRecorderMimeType, useResilientRecorder } from './recorder/useResilientRecorder';
-export { useRecordingRecovery } from './recorder/useRecordingRecovery';
-export type { RecoverySessionItem } from './recorder/useRecordingRecovery';
 export type {
-  RecordingTargetRef,
   RecordingSessionSource,
   RecordingSessionState,
+  RecordingTargetRef,
 } from './recorder/recording-session-db';
+export { RecordingRecoveryBanner } from './recorder/RecordingRecoveryBanner';
+export { useRecordingRecovery } from './recorder/useRecordingRecovery';
+export type { RecoverySessionItem } from './recorder/useRecordingRecovery';
+export {
+  selectRecorderMimeType,
+  useResilientRecorder,
+} from './recorder/useResilientRecorder';
+export type {
+  LinkedRecordingListItem,
+  LinkedRecordingListProps,
+  LinkedRecordingsForTargetProps,
+} from './views/LinkedRecordingsList';
+export type { TaskPickerModalProps } from './views/TaskPickerModal';
 
 const LazyTaskPickerModal = lazy(() =>
   import('./views/TaskPickerModal').then((module) => ({

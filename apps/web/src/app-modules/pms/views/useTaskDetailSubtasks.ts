@@ -1,5 +1,5 @@
-import { useCallback, useState, type SetStateAction } from 'react';
 import type { TFunction } from 'i18next';
+import { useCallback, useState, type SetStateAction } from 'react';
 
 import {
   createTaskListTask,
@@ -47,7 +47,6 @@ export function useTaskDetailSubtasks({
   taskListStatuses,
   token,
   t,
-  workspaceSlug,
 }: {
   canEdit: boolean;
   onUpdate?: () => void | Promise<void>;
@@ -57,7 +56,6 @@ export function useTaskDetailSubtasks({
   taskListStatuses?: PmsTaskListStatus[];
   token: string | null;
   t: TFunction;
-  workspaceSlug: string;
 }) {
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [addingSubtask, setAddingSubtask] = useState(false);
@@ -65,10 +63,10 @@ export function useTaskDetailSubtasks({
 
   const handleUnlinkSubtask = useCallback(
     async (subtaskId: string) => {
-      if (!token || !canEdit || !workspaceSlug) return;
+      if (!token || !canEdit) return;
       setSaveError(null);
       try {
-        await updateTask(token, subtaskId, { parent_id: null }, workspaceSlug);
+        await updateTask(token, subtaskId, { parent_id: null });
         setSubtasks((prev) =>
           prev.filter((subtask) => subtask.id !== subtaskId),
         );
@@ -82,15 +80,15 @@ export function useTaskDetailSubtasks({
         );
       }
     },
-    [canEdit, onUpdate, setSaveError, setSubtasks, t, token, workspaceSlug],
+    [canEdit, onUpdate, setSaveError, setSubtasks, t, token],
   );
 
   const handleArchiveSubtask = useCallback(
     async (subtaskId: string) => {
-      if (!token || !canEdit || !workspaceSlug) return;
+      if (!token || !canEdit) return;
       setSaveError(null);
       try {
-        await updateTask(token, subtaskId, { archived: true }, workspaceSlug);
+        await updateTask(token, subtaskId, { archived: true });
         setSubtasks((prev) =>
           prev.filter((subtask) => subtask.id !== subtaskId),
         );
@@ -105,15 +103,15 @@ export function useTaskDetailSubtasks({
         );
       }
     },
-    [canEdit, onUpdate, setSaveError, setSubtasks, t, token, workspaceSlug],
+    [canEdit, onUpdate, setSaveError, setSubtasks, t, token],
   );
 
   const handleDeleteSubtask = useCallback(
     async (subtaskId: string) => {
-      if (!token || !canEdit || !workspaceSlug) return;
+      if (!token || !canEdit) return;
       setSaveError(null);
       try {
-        await deleteTask(token, subtaskId, workspaceSlug);
+        await deleteTask(token, subtaskId);
         setSubtasks((prev) =>
           prev.filter((subtask) => subtask.id !== subtaskId),
         );
@@ -128,11 +126,11 @@ export function useTaskDetailSubtasks({
         );
       }
     },
-    [canEdit, onUpdate, setSaveError, setSubtasks, t, token, workspaceSlug],
+    [canEdit, onUpdate, setSaveError, setSubtasks, t, token],
   );
 
   const handleAddSubtask = useCallback(async () => {
-    if (!token || !canEdit || !workspaceSlug || !newSubtaskTitle.trim()) return;
+    if (!token || !canEdit || !newSubtaskTitle.trim()) return;
     setAddingSubtask(true);
     setSaveError(null);
     try {
@@ -144,7 +142,6 @@ export function useTaskDetailSubtasks({
           taskListStatuses,
           title: newSubtaskTitle,
         }),
-        workspaceSlug,
       );
       setSubtasks((prev) => [...prev, subtask]);
       setNewSubtaskTitle('');
@@ -169,7 +166,6 @@ export function useTaskDetailSubtasks({
     t,
     taskListStatuses,
     token,
-    workspaceSlug,
   ]);
 
   return {

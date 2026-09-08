@@ -1,14 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  isWorkspaceAppEnabled,
-  isWorkspaceNavItemEnabled,
-} from './rag-ui-access';
+import { isAppEnabled, isNavItemEnabled } from './rag-ui-access';
 
 describe('rag-ui-access', () => {
-  it('checks a single workspace app toggle', () => {
+  it('checks a single app toggle', () => {
     expect(
-      isWorkspaceAppEnabled(
+      isAppEnabled(
         [
           { app_id: 'chatbot', enabled: true },
           { app_id: 'meeting', enabled: false },
@@ -17,7 +14,7 @@ describe('rag-ui-access', () => {
       ),
     ).toBe(true);
     expect(
-      isWorkspaceAppEnabled(
+      isAppEnabled(
         [
           { app_id: 'docs', enabled: true },
           { app_id: 'meeting', enabled: false },
@@ -27,15 +24,13 @@ describe('rag-ui-access', () => {
     ).toBe(false);
   });
 
-  it('checks a single workspace nav item toggle', () => {
+  it('checks a single nav item toggle', () => {
     expect(
-      isWorkspaceNavItemEnabled(
+      isNavItemEnabled(
         [{ id: 'search' }, { id: 'optional-tool' }],
         'optional-tool',
       ),
     ).toBe(true);
-    expect(isWorkspaceNavItemEnabled([{ id: 'search' }], 'optional-tool')).toBe(
-      false,
-    );
+    expect(isNavItemEnabled([{ id: 'search' }], 'optional-tool')).toBe(false);
   });
 });

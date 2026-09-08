@@ -5,7 +5,6 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 VideoChatSessionStatus = Literal["open", "ended"]
 VideoChatRecordingStatus = Literal["idle", "starting", "recording", "stopping", "failed", "saved"]
 VideoChatCaptionsStatus = Literal["off", "starting", "on", "stopping", "failed"]
@@ -20,7 +19,6 @@ class VideoChatSessionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    workspace_id: str
     meeting_id: str | None
     room_name: str
     title: str

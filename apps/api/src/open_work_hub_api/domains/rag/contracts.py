@@ -18,7 +18,6 @@ class RagSyncLane(StrEnum):
 
 
 class RagScopeKind(StrEnum):
-    WORKSPACE = "workspace"
     COMPANY = "company"
 
 
@@ -70,8 +69,7 @@ class RagProjection(BaseModel):
 
     retrieval_partition_id: str | None = None
     projection_version: int | None = Field(default=None, ge=1)
-    scope_kind: RagScopeKind = RagScopeKind.WORKSPACE
-    workspace_id: str | None = None
+    scope_kind: RagScopeKind = RagScopeKind.COMPANY
     resource_type: str
     resource_id: str
     source_kind: str
@@ -128,8 +126,7 @@ class RagDeleteRequest(BaseModel):
 
     collection: str
     retrieval_partition_id: str | None = None
-    scope_kind: RagScopeKind = RagScopeKind.WORKSPACE
-    workspace_id: str | None = None
+    scope_kind: RagScopeKind = RagScopeKind.COMPANY
     resource_type: str
     resource_id: str
     trace_context: RagTraceContext | None = None
@@ -140,8 +137,7 @@ class RagVectorSearchRequest(BaseModel):
 
     collection: str
     query: str
-    scope_kind: RagScopeKind = RagScopeKind.WORKSPACE
-    workspace_id: str | None = None
+    scope_kind: RagScopeKind = RagScopeKind.COMPANY
     query_embedding: list[float] = Field(default_factory=list)
     retrieval_partition_ids: list[str] | None = None
     source_kinds: list[str] = Field(default_factory=list)
@@ -198,8 +194,7 @@ class RagQueryRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     collection: str
-    scope_kind: RagScopeKind = RagScopeKind.WORKSPACE
-    workspace_id: str | None = None
+    scope_kind: RagScopeKind = RagScopeKind.COMPANY
     retrieval_partition_ids: list[str] | None = None
     query: str
     answer_mode: RagAnswerMode = RagAnswerMode.SEARCH_ONLY
@@ -226,11 +221,10 @@ class RagQueryRequest(BaseModel):
 class RagQueryHit(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    scope_kind: RagScopeKind = RagScopeKind.WORKSPACE
+    scope_kind: RagScopeKind = RagScopeKind.COMPANY
     source_kind: str
     resource_type: str
     resource_id: str
-    workspace_id: str | None = None
     title: str | None = None
     summary: str | None = None
     excerpt: str | None = None

@@ -55,7 +55,6 @@ function renderController(availableUsers: PmsUserSummary[] = [user()]) {
       onMembersChanged,
       teamId: 'space-1',
       token: 'token-1',
-      workspaceSlug: 'workspace',
     }),
   );
   return { ...rendered, onError, onMembersChanged };
@@ -65,7 +64,11 @@ describe('useTaskListMembersController', () => {
   it('builds candidate options excluding existing members', () => {
     const { result } = renderController([
       user({ id: 'user-1', full_name: 'User One' }),
-      user({ id: 'user-2', email: 'user-2@example.test', full_name: 'User Two' }),
+      user({
+        id: 'user-2',
+        email: 'user-2@example.test',
+        full_name: 'User Two',
+      }),
     ]);
 
     act(() => {
@@ -82,7 +85,11 @@ describe('useTaskListMembersController', () => {
     const added = member({ user_id: 'user-2', full_name: 'User Two' });
     addSpaceMember.mockResolvedValueOnce(added);
     const { onMembersChanged, result } = renderController([
-      user({ id: 'user-2', email: 'user-2@example.test', full_name: 'User Two' }),
+      user({
+        id: 'user-2',
+        email: 'user-2@example.test',
+        full_name: 'User Two',
+      }),
     ]);
 
     act(() => {
@@ -93,12 +100,10 @@ describe('useTaskListMembersController', () => {
       await result.current.handleAddMember();
     });
 
-    expect(addSpaceMember).toHaveBeenCalledWith(
-      'token-1',
-      'space-1',
-      { role: 'viewer', user_id: 'user-2' },
-      'workspace',
-    );
+    expect(addSpaceMember).toHaveBeenCalledWith('token-1', 'space-1', {
+      role: 'viewer',
+      user_id: 'user-2',
+    });
     expect(result.current.members).toEqual([added]);
     expect(result.current.selectedUserId).toBe(NO_MEMBER_SELECTION);
     expect(result.current.selectedRole).toBe(DEFAULT_SPACE_MEMBER_ROLE);
@@ -124,7 +129,6 @@ describe('useTaskListMembersController', () => {
       'space-1',
       original.user_id,
       'admin',
-      'workspace',
     );
     expect(result.current.members).toEqual([updated]);
 
@@ -136,7 +140,6 @@ describe('useTaskListMembersController', () => {
       'token-1',
       'space-1',
       updated.user_id,
-      'workspace',
     );
     expect(result.current.members).toEqual([]);
     expect(onMembersChanged).toHaveBeenLastCalledWith([]);

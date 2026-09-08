@@ -43,20 +43,17 @@ class OcrOnlyFileExtractionRuntime:
     def ocr_provider_name(self) -> str | None:
         if self._ocr_client is None:
             return None
-        return str(
-            getattr(self._ocr_client, "provider_name", self._ocr_client.__class__.__name__)
-        )
+        return str(getattr(self._ocr_client, "provider_name", self._ocr_client.__class__.__name__))
 
     def extract_text(
         self,
         *,
         content: bytes,
         content_type: str | None = None,
-        workspace_id: str | None = None,
         resource_type: str | None = None,
         source_kind: str | None = None,
     ) -> str:
-        del workspace_id, resource_type, source_kind
+        del resource_type, source_kind
         if self._ocr_client is None:
             raise RagProviderConfigurationError("OCR client is not configured")
         return self._ocr_client.extract_text(content=content, content_type=content_type)
@@ -190,7 +187,6 @@ def _projection_fence_needs_update(
         or str(head.retrieval_partition_id) != str(file.retrieval_partition_id)
         or head.desired_state != desired_state
         or head.content_checksum != expected_checksum
-        or head.diagnostic_workspace_id != file.workspace_id
     )
 
 

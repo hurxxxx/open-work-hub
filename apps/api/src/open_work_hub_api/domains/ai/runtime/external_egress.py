@@ -15,7 +15,6 @@ from open_work_hub_api.domains.ai.runtime.external_egress_sanitizer import (
     build_external_egress_sanitization,
 )
 
-
 ExternalCapability = Literal["planning", "reasoning", "quality_review", "search"]
 ExternalProvider = str
 ExternalEgressReason = Literal[
@@ -28,6 +27,7 @@ ExternalEgressReason = Literal[
     "sensitive_entity_blocked",
     "sanitized_empty",
 ]
+
 
 class ExternalEgressDecision(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)

@@ -10,9 +10,9 @@ import {
   retryRecording,
   updateRecording,
   type RecordingDetail,
+  type RecordingPlaybackResponse,
   type RecordingPublication,
   type RecordingTarget,
-  type RecordingPlaybackResponse,
 } from '../api/recording-api';
 import {
   groupRecordingTargets,
@@ -50,31 +50,20 @@ export type RecordingDetailConfirm = (
 ) => Promise<boolean>;
 
 export interface RecordingDetailClient {
-  getRecording(
-    token: string,
-    workspaceSlug: string,
-    recordingId: string,
-  ): Promise<RecordingDetail>;
+  getRecording(token: string, recordingId: string): Promise<RecordingDetail>;
   updateRecording(
     token: string,
-    workspaceSlug: string,
     recordingId: string,
     payload: { title?: string | null },
   ): Promise<RecordingDetail>;
   getPlaybackUrl(
     token: string,
-    workspaceSlug: string,
     recordingId: string,
   ): Promise<RecordingPlaybackResponse>;
   fetchPlaybackBlobUrl(token: string, playbackUrl: string): Promise<string>;
-  retryRecording(
-    token: string,
-    workspaceSlug: string,
-    recordingId: string,
-  ): Promise<RecordingDetail>;
+  retryRecording(token: string, recordingId: string): Promise<RecordingDetail>;
   attachTarget(
     token: string,
-    workspaceSlug: string,
     recordingId: string,
     payload: {
       target_app: string;
@@ -86,13 +75,11 @@ export interface RecordingDetailClient {
   ): Promise<RecordingDetail>;
   detachTarget(
     token: string,
-    workspaceSlug: string,
     recordingId: string,
     targetId: string,
   ): Promise<RecordingDetail>;
   publishToDocs(
     token: string,
-    workspaceSlug: string,
     recordingId: string,
   ): Promise<RecordingPublication>;
 }
@@ -271,7 +258,7 @@ function errorMessage(error: unknown, fallback: string): string {
 
 export interface UseRecordingDetailControllerOptions {
   token: string | null | undefined;
-  workspaceSlug: string | null | undefined;
+
   recordingId: string | null | undefined;
   messages: RecordingDetailMessages;
   confirm: RecordingDetailConfirm;
@@ -281,7 +268,6 @@ export interface UseRecordingDetailControllerOptions {
 
 export function useRecordingDetailController({
   token,
-  workspaceSlug,
   recordingId,
   messages,
   confirm,
@@ -298,14 +284,10 @@ export function useRecordingDetailController({
 
   const refresh = useCallback(
     async (options: { preserveTitleDraft?: boolean } = {}) => {
-      if (!token || !workspaceSlug || !recordingId) return;
+      if (!token || !recordingId) return;
       dispatch({ type: 'load:start' });
       try {
-        const next = await client.getRecording(
-          token,
-          workspaceSlug,
-          recordingId,
-        );
+        const next = await client.getRecording(token, recordingId);
         savedTitleRef.current = next.title ?? '';
         dispatch({
           type: 'load:success',
@@ -319,7 +301,7 @@ export function useRecordingDetailController({
         });
       }
     },
-    [client, messages.loadFailed, recordingId, token, workspaceSlug],
+    [client, messages.loadFailed, recordingId, token],
   );
 
   useEffect(() => {
@@ -370,17 +352,14 @@ export function useRecordingDetailController({
   }, []);
 
   const saveTitle = useCallback(async () => {
-    if (!token || !workspaceSlug || !state.recording) return;
+    if (!token || !state.recording) return;
     const trimmed = state.titleDraft.trim();
     if (trimmed === savedTitleRef.current.trim()) return;
     dispatch({ type: 'title:save-start' });
     try {
-      const next = await client.updateRecording(
-        token,
-        workspaceSlug,
-        state.recording.id,
-        { title: trimmed || null },
-      );
+      const next = await client.updateRecording(token, state.recording.id, {
+        title: trimmed || null,
+      });
       savedTitleRef.current = next.title ?? '';
       dispatch({ type: 'title:save-success', recording: next });
       browser.setTimeout(() => dispatch({ type: 'title-status:idle' }), 1500);
@@ -397,18 +376,13 @@ export function useRecordingDetailController({
     state.recording,
     state.titleDraft,
     token,
-    workspaceSlug,
   ]);
 
   const play = useCallback(async () => {
-    if (!token || !workspaceSlug || !state.recording) return;
+    if (!token || !state.recording) return;
     dispatch({ type: 'playback:start' });
     try {
-      const playback = await client.getPlaybackUrl(
-        token,
-        workspaceSlug,
-        state.recording.id,
-      );
+      const playback = await client.getPlaybackUrl(token, state.recording.id);
       const nextUrl = await client.fetchPlaybackBlobUrl(token, playback.url);
       if (playbackObjectUrlRef.current) {
         browser.revokeObjectUrl(playbackObjectUrlRef.current);
@@ -423,24 +397,13 @@ export function useRecordingDetailController({
         message: errorMessage(err, messages.playbackFailed),
       });
     }
-  }, [
-    browser,
-    client,
-    messages.playbackFailed,
-    state.recording,
-    token,
-    workspaceSlug,
-  ]);
+  }, [browser, client, messages.playbackFailed, state.recording, token]);
 
   const retry = useCallback(async () => {
-    if (!token || !workspaceSlug || !state.recording) return;
+    if (!token || !state.recording) return;
     dispatch({ type: 'retry:start' });
     try {
-      const next = await client.retryRecording(
-        token,
-        workspaceSlug,
-        state.recording.id,
-      );
+      const next = await client.retryRecording(token, state.recording.id);
       dispatch({ type: 'retry:success', recording: next });
     } catch (err) {
       dispatch({
@@ -448,12 +411,11 @@ export function useRecordingDetailController({
         message: errorMessage(err, messages.retryFailed),
       });
     }
-  }, [client, messages.retryFailed, state.recording, token, workspaceSlug]);
+  }, [client, messages.retryFailed, state.recording, token]);
 
   const publish = useCallback(async () => {
     if (
       !token ||
-      !workspaceSlug ||
       !state.recording ||
       state.busy ||
       publishInFlightRef.current
@@ -463,11 +425,7 @@ export function useRecordingDetailController({
     publishInFlightRef.current = true;
     dispatch({ type: 'publish:start' });
     try {
-      const publication = await client.publishToDocs(
-        token,
-        workspaceSlug,
-        state.recording.id,
-      );
+      const publication = await client.publishToDocs(token, state.recording.id);
       dispatch({ type: 'publish:success', publication });
     } catch (err) {
       dispatch({
@@ -477,14 +435,7 @@ export function useRecordingDetailController({
     } finally {
       publishInFlightRef.current = false;
     }
-  }, [
-    client,
-    messages.publishFailed,
-    state.busy,
-    state.recording,
-    token,
-    workspaceSlug,
-  ]);
+  }, [client, messages.publishFailed, state.busy, state.recording, token]);
 
   const attachTarget = useCallback(
     async (payload: {
@@ -494,11 +445,10 @@ export function useRecordingDetailController({
       is_primary?: boolean;
       sort_order?: number;
     }) => {
-      if (!token || !workspaceSlug || !state.recording) return;
+      if (!token || !state.recording) return;
       try {
         const next = await client.attachTarget(
           token,
-          workspaceSlug,
           state.recording.id,
           payload,
         );
@@ -510,7 +460,7 @@ export function useRecordingDetailController({
         });
       }
     },
-    [client, messages.updateFailed, state.recording, token, workspaceSlug],
+    [client, messages.updateFailed, state.recording, token],
   );
 
   const attachMeeting = useCallback(
@@ -535,7 +485,7 @@ export function useRecordingDetailController({
 
   const detachTarget = useCallback(
     async (target: RecordingTarget) => {
-      if (!token || !workspaceSlug || !state.recording) return;
+      if (!token || !state.recording) return;
       const ok = await confirm({
         title: messages.detachConfirmTitle,
         description: messages.detachConfirmDescription,
@@ -551,7 +501,6 @@ export function useRecordingDetailController({
       try {
         const next = await client.detachTarget(
           token,
-          workspaceSlug,
           state.recording.id,
           target.id,
         );
@@ -573,7 +522,6 @@ export function useRecordingDetailController({
       messages.detachFailed,
       state.recording,
       token,
-      workspaceSlug,
     ],
   );
 

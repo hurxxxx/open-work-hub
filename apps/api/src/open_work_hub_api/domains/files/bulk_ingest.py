@@ -9,9 +9,11 @@ from uuid import NAMESPACE_URL, uuid5
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
-from open_work_hub_api.domains.auth.models import User, Workspace, WorkspaceUserBinding
-from open_work_hub_api.domains.auth.roles import workspace_role_allows
+from open_work_hub_api.domains.auth.app_access import can_use_app
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.files import service as files_service
+from open_work_hub_api.domains.files.external_access import is_current_platform_admin
+from open_work_hub_api.domains.auth.access import record_audit_log
 from open_work_hub_api.domains.files.models import (
     FileManagerBulkIngestEntry,
     FileManagerBulkIngestRun,
@@ -23,7 +25,6 @@ from open_work_hub_api.domains.rag.models import RagSyncJob
 from open_work_hub_api.domains.retrieval.models import RetrievalProjectionHead
 from open_work_hub_api.domains.search.models import SearchIndexJob
 from open_work_hub_api.domains.source_access.resource_types import FILE_MANAGER_FILE_RESOURCE_TYPE
-
 
 RUN_STATES = frozenset(
     {"planned", "ingesting", "paused", "completed", "purging", "purged", "failed"}
@@ -131,7 +132,6 @@ def normalize_source_path(source_path: str) -> str:
 def create_run(
     db: Session,
     *,
-    workspace: Workspace,
     actor: User,
     owner: User | None = None,
     corpus_name: str,
@@ -146,7 +146,10 @@ def create_run(
         source_root_sha256, code="source_root_sha256_invalid"
     )
     idempotency_key_sha256 = _idempotency_key_sha256(idempotency_key)
-    run_id = _stable_id(f"{workspace.id}:{idempotency_key_sha256}")
+    effective_owner = owner or actor
+    _require_run_owner(db, owner=actor)
+    _require_run_owner(db, owner=effective_owner)
+    run_id = _stable_id(f"{actor.id}:{idempotency_key_sha256}")
     existing = db.get(FileManagerBulkIngestRun, run_id)
     if existing is not None:
         _require_manifest_identity(
@@ -156,32 +159,27 @@ def create_run(
         )
         return existing
 
-    effective_owner = owner or actor
-    _require_run_owner(db, workspace=workspace, owner=effective_owner)
     normalized_entries = _normalize_manifest_entries(entries)
     try:
         corpus = files_service.create_file_corpus(
             db,
-            workspace=workspace,
             user=actor,
             name=corpus_name,
         )
     except files_service.FileCorpusAccessDenied as error:
-        raise FilesBulkIngestError("control_plane_actor_workspace_admin_required") from error
+        raise FilesBulkIngestError("control_plane_actor_platform_admin_required") from error
     corpus.operator_managed = True
     root = FileManagerFolder(
         id=_stable_id(f"{run_id}:root"),
-        workspace_id=workspace.id,
         retrieval_partition_id=corpus.retrieval_partition_id,
         corpus_id=corpus.id,
         parent_id=None,
         owner_id=effective_owner.id,
         name=_normalize_name(root_folder_name),
-        visibility="workspace",
+        visibility="company",
     )
     run = FileManagerBulkIngestRun(
         id=run_id,
-        workspace_id=workspace.id,
         corpus_id=corpus.id,
         root_folder_id=root.id,
         created_by_id=actor.id,
@@ -193,6 +191,20 @@ def create_run(
         status="planned",
     )
     db.add_all([corpus, root, run])
+    record_audit_log(
+        db,
+        actor_user_id=actor.id,
+        action="files.bulk_ingest.create",
+        entity_kind="file_manager_bulk_ingest_run",
+        entity_id=run.id,
+        summary="Created company corpus ingestion run",
+        payload={
+            "ownership": "company",
+            "owner_id": effective_owner.id,
+            "corpus_id": corpus.id,
+            "root_folder_id": root.id,
+        },
+    )
     db.flush()
     for entry in normalized_entries:
         path_sha256 = source_path_identity(entry.source_path)
@@ -213,24 +225,11 @@ def create_run(
     return run
 
 
-def _require_run_owner(
-    db: Session,
-    *,
-    workspace: Workspace,
-    owner: User,
-) -> None:
-    role = db.scalar(
-        select(WorkspaceUserBinding.role).where(
-            WorkspaceUserBinding.user_id == owner.id,
-            WorkspaceUserBinding.workspace_id == workspace.id,
-        )
-    )
-    if (
-        owner.status != "active"
-        or owner.login_blocked
-        or not workspace_role_allows(role, "member")
+def _require_run_owner(db: Session, *, owner: User) -> None:
+    if not can_use_app(db, user_id=owner.id, app_id="files") or not is_current_platform_admin(
+        db, owner.id
     ):
-        raise FilesBulkIngestError("run_owner_workspace_member_required")
+        raise FilesBulkIngestError("run_owner_access_required")
 
 
 def start_or_resume_run(
@@ -312,11 +311,7 @@ def ingest_entry(
 
     existing_file = db.get(FileManagerFile, entry.target_file_id)
     if existing_file is not None:
-        if (
-            existing_file.corpus_id != run.corpus_id
-            or existing_file.workspace_id != run.workspace_id
-            or existing_file.deleted_at is not None
-        ):
+        if existing_file.corpus_id != run.corpus_id or existing_file.deleted_at is not None:
             raise FilesBulkIngestError("reserved_file_id_conflict")
         entry.status = "uploaded"
         entry.error_code = None
@@ -336,16 +331,16 @@ def ingest_entry(
     with source_file.open("rb") as content:
         files_service.upload_file(
             db,
-            workspace=_require_workspace(db, run.workspace_id),
             user=actor,
             filename=PurePosixPath(entry.source_path).name,
             content_type=entry.content_type,
             content=content,
             size_bytes=entry.size_bytes,
             folder_id=folder.id,
-            visibility="workspace",
+            visibility="company",
             corpus_id=run.corpus_id,
             operator_ingest_run_id=run.id,
+            company_admin_read_acknowledged=True,
             reserved_file_id=entry.target_file_id,
         )
     entry.status = "uploaded"
@@ -458,7 +453,6 @@ def purge_batch(
             .with_for_update()
         )
     )
-    workspace = _require_workspace(db, run.workspace_id)
     storage_keys: list[str] = []
     for entry in entries:
         file = db.get(FileManagerFile, entry.target_file_id)
@@ -466,7 +460,6 @@ def purge_batch(
             storage_keys.append(
                 files_service.delete_file(
                     db,
-                    workspace=workspace,
                     user=actor,
                     file_id=file.id,
                 )
@@ -496,7 +489,6 @@ def purge_batch(
             storage_keys.extend(
                 files_service.delete_folder(
                     db,
-                    workspace=workspace,
                     user=actor,
                     folder_id=root.id,
                 )
@@ -705,7 +697,6 @@ def _ensure_run_folder_path(
     parent = root
     if relative_parent.as_posix() == ".":
         return parent
-    workspace = _require_workspace(db, run.workspace_id)
     for name in relative_parent.parts:
         folder = db.scalar(
             select(FileManagerFolder).where(
@@ -718,13 +709,13 @@ def _ensure_run_folder_path(
         if folder is None:
             folder = files_service.create_folder(
                 db,
-                workspace=workspace,
                 user=actor,
                 name=name,
                 parent_id=parent.id,
-                visibility="workspace",
+                visibility="company",
                 corpus_id=run.corpus_id,
                 operator_ingest_run_id=run.id,
+                company_admin_read_acknowledged=True,
             )
         parent = folder
     return parent
@@ -747,18 +738,6 @@ def _lock_run(db: Session, run_id: str) -> FileManagerBulkIngestRun:
     if run is None:
         raise FilesBulkIngestError("run_not_found")
     return run
-
-
-def _require_workspace(db: Session, workspace_id: str) -> Workspace:
-    workspace = db.scalar(
-        select(Workspace).where(
-            Workspace.id == workspace_id,
-            Workspace.active.is_(True),
-        )
-    )
-    if workspace is None:
-        raise FilesBulkIngestError("workspace_unavailable")
-    return workspace
 
 
 def _normalize_sha256(value: str, *, code: str) -> str:

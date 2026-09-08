@@ -21,7 +21,7 @@ function makeStorage(initial: Record<string, string> = {}) {
 
 function makeRuntime(
   storage = makeStorage(),
-  href = 'https://app.test/apps/pms/workspaces/hq?tab=board#panel',
+  href = 'https://app.test/apps/pms?tab=board#panel',
 ) {
   const listeners = new Map<string, Listener>();
   return {
@@ -82,7 +82,7 @@ describe('stale asset reload recovery', () => {
 
     expect(runtime.location.replace).toHaveBeenCalledTimes(1);
     expect(runtime.location.replace).toHaveBeenCalledWith(
-      'https://app.test/apps/pms/workspaces/hq?tab=board&__reload=1000#panel',
+      'https://app.test/apps/pms?tab=board&__reload=1000#panel',
     );
     expect(storage.setItem).toHaveBeenCalledWith(
       'open-work-hub:stale-asset-reload-at',
@@ -135,14 +135,14 @@ describe('stale asset reload recovery', () => {
   it('removes only the cache-bust marker after bootstrap', () => {
     const { runtime } = makeRuntime(
       makeStorage(),
-      'https://app.test/apps/pms/workspaces/hq?tab=board&__reload=1000#panel',
+      'https://app.test/apps/pms?tab=board&__reload=1000#panel',
     );
 
     expect(clearStaleAssetReloadMarker(runtime)).toBe(true);
     expect(runtime.history.replaceState).toHaveBeenCalledWith(
       { key: 'router-state' },
       '',
-      '/apps/pms/workspaces/hq?tab=board#panel',
+      '/apps/pms?tab=board#panel',
     );
     expect(runtime.location.replace).not.toHaveBeenCalled();
 

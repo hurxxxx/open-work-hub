@@ -7,7 +7,7 @@ from fastapi import status
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.i18n import localized_http_exception
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.conversations import service as conversations_service
 from open_work_hub_api.domains.conversations.models import Conversation, ConversationTurn
 
@@ -21,7 +21,6 @@ class ConversationAppendResult:
 def get_or_create_app_conversation(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     conversation_id: str | None,
     scope_ref: str,
@@ -30,7 +29,6 @@ def get_or_create_app_conversation(
     if conversation_id:
         conversation = conversations_service.get_conversation(
             db,
-            workspace=workspace,
             user=user,
             conversation_id=conversation_id,
         )
@@ -45,7 +43,6 @@ def get_or_create_app_conversation(
         return conversation
     return conversations_service.create_conversation(
         db,
-        workspace=workspace,
         user=user,
         title="",
         scope_ref=scope_ref,
@@ -107,7 +104,6 @@ def recent_turns_for_prompt(
 def append_user_and_attach(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     conversation_id: str | None,
     scope_ref: str,
@@ -117,7 +113,6 @@ def append_user_and_attach(
 ) -> ConversationAppendResult:
     conversation = get_or_create_app_conversation(
         db,
-        workspace=workspace,
         user=user,
         conversation_id=conversation_id,
         scope_ref=scope_ref,

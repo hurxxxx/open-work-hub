@@ -1,5 +1,3 @@
-import { useEffect, useReducer, useState, type FormEvent } from 'react';
-import { LazyMotion, domAnimation, m } from 'motion/react';
 import {
   ArrowRight,
   AtSign,
@@ -10,10 +8,12 @@ import {
   ShieldCheck,
   User,
 } from 'lucide-react';
+import { domAnimation, LazyMotion, m } from 'motion/react';
+import { useEffect, useReducer, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { InlineNotice } from '@open-work-hub/ui/feedback/inline-notice';
 import { useFeedback } from '@open-work-hub/ui/feedback/feedback-provider';
+import { InlineNotice } from '@open-work-hub/ui/feedback/inline-notice';
 
 import { useAuth } from './auth-context';
 import {
