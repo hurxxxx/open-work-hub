@@ -539,6 +539,10 @@ class Settings(BaseSettings):
         default="http://127.0.0.1:18765",
         validation_alias="OPEN_WORK_HUB_HERMES_TERMINAL_BROKER_BASE_URL",
     )
+    hermes_terminal_resource_namespace: str = Field(
+        default="",
+        validation_alias="OPEN_WORK_HUB_HERMES_TERMINAL_RESOURCE_NAMESPACE",
+    )
     hermes_terminal_mcp_relay_url: str = Field(
         default="http://hermes-terminal-broker:18765/mcp",
         validation_alias="OPEN_WORK_HUB_HERMES_TERMINAL_MCP_RELAY_URL",
@@ -974,6 +978,18 @@ class Settings(BaseSettings):
         self.hermes_terminal_broker_base_url = self.hermes_terminal_broker_base_url.strip().rstrip(
             "/"
         )
+        namespace = self.hermes_terminal_resource_namespace.strip()
+        if not namespace and not is_production_like_environment(self.environment):
+            namespace = "dev"
+        if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,31}", namespace) or (
+            is_production_like_environment(self.environment) and namespace in {"dev", "local"}
+        ):
+            raise ValueError(
+                "OPEN_WORK_HUB_HERMES_TERMINAL_RESOURCE_NAMESPACE must use 1-32 lowercase "
+                "letters, digits, or hyphens, start with a letter or digit, and must not "
+                "use dev/local in preview/production."
+            )
+        self.hermes_terminal_resource_namespace = namespace
         self.hermes_terminal_mcp_relay_url = self.hermes_terminal_mcp_relay_url.strip().rstrip("/")
         terminal_mcp_socket = Path(
             self.hermes_terminal_mcp_socket_path.strip()

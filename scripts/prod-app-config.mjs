@@ -311,6 +311,18 @@ export function assertProductionAppEnv(values) {
     values,
     'OPEN_WORK_HUB_HERMES_MCP_SERVER_URL',
   );
+  const terminalNamespace = (
+    values.get('OPEN_WORK_HUB_HERMES_TERMINAL_RESOURCE_NAMESPACE') ?? ''
+  ).trim();
+  if (
+    !/^[a-z0-9][a-z0-9-]{0,31}$/.test(terminalNamespace) ||
+    terminalNamespace === 'dev' ||
+    terminalNamespace === 'local'
+  ) {
+    throw new Error(
+      'OPEN_WORK_HUB_HERMES_TERMINAL_RESOURCE_NAMESPACE must be an explicit 1-32 character lowercase resource namespace, starting with a letter or digit; dev/local are not allowed in production',
+    );
+  }
   if (
     Number(hermesMcpServerUrl.port) !== appPort ||
     hermesMcpServerUrl.pathname !== '/api/v1/internal/hermes/mcp'

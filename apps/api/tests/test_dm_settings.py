@@ -61,5 +61,6 @@ def test_shared_content_grants_accept_explicit_production_like_signing_key(envir
         postgres_dsn=POSTGRES_DSN,
         environment=environment,
         content_grant_signing_key="unit-test-nondefault-content-signing-key",
+        hermes_terminal_resource_namespace="production-content-grant-test",
     )
     assert settings.content_grant_signing_key == "unit-test-nondefault-content-signing-key"

@@ -256,6 +256,7 @@ function validEnv(overrides = {}) {
       OPEN_WORK_HUB_HERMES_RUNTIME_PORT: '8642',
       OPEN_WORK_HUB_HERMES_TERMINAL_BROKER_BASE_URL: 'http://127.0.0.1:8765',
       OPEN_WORK_HUB_HERMES_TERMINAL_BROKER_PORT: '8765',
+      OPEN_WORK_HUB_HERMES_TERMINAL_RESOURCE_NAMESPACE: 'prod',
       OPEN_WORK_HUB_INFRA_NGINX_PORT: '14200',
       OPEN_WORK_HUB_OPF_ENABLED: 'true',
       OPEN_WORK_HUB_OPF_REQUIRED: 'true',
@@ -515,4 +516,68 @@ test('production runtime checks the fixed terminal broker port before mutation',
   assert.match(releaseScript, /require_terminal_broker_port_available/);
   assert.match(releaseScript, /refusing before build or migration/);
   assert.match(releaseScript, /expected_binding" == "127\.0\.0\.1:\$port"/);
+});
+
+for (const namespace of [
+  undefined,
+  '',
+  ' ',
+  'dev',
+  'local',
+  'Prod',
+  '-prod',
+  'prod/team',
+  'prod_team',
+  'p'.repeat(33),
+]) {
+  test(`production rejects unsafe Hermes resource namespace ${JSON.stringify(namespace)}`, () => {
+    assert.throws(
+      () =>
+        assertProductionAppEnv(
+          validEnv({
+            OPEN_WORK_HUB_HERMES_TERMINAL_RESOURCE_NAMESPACE: namespace,
+          }),
+        ),
+      /OPEN_WORK_HUB_HERMES_TERMINAL_RESOURCE_NAMESPACE/,
+    );
+  });
+}
+
+for (const namespace of ['prod', 'company-prod-20260908', 'p'.repeat(32)]) {
+  test(`production accepts explicit Hermes resource namespace ${namespace}`, () => {
+    assert.doesNotThrow(() =>
+      assertProductionAppEnv(
+        validEnv({
+          OPEN_WORK_HUB_HERMES_TERMINAL_RESOURCE_NAMESPACE: namespace,
+        }),
+      ),
+    );
+  });
+}
+
+test('broker Compose maps the typed namespace and production has no fallback', async () => {
+  for (const [filename, expression] of [
+    [
+      'open-work-hub-dev.infra.yml',
+      '${OPEN_WORK_HUB_HERMES_TERMINAL_RESOURCE_NAMESPACE:-dev}',
+    ],
+    [
+      'open-work-hub-prod.app.yml',
+      '${OPEN_WORK_HUB_HERMES_TERMINAL_RESOURCE_NAMESPACE:?Production Hermes resource namespace is required}',
+    ],
+  ]) {
+    const text = await readFile(
+      new URL(`../ops/compose/${filename}`, import.meta.url),
+      'utf8',
+    );
+    const line = text
+      .split('\n')
+      .find((value) =>
+        value.trim().startsWith('OWH_HERMES_TERMINAL_RESOURCE_NAMESPACE:'),
+      );
+    assert.equal(
+      line?.trim(),
+      `OWH_HERMES_TERMINAL_RESOURCE_NAMESPACE: ${expression}`,
+    );
+  }
 });
