@@ -108,6 +108,7 @@ release_validation:
     access: maintainer
     paths:
       - release-validation-context.md
+      - test-results/
 
 codex_review:
   stage: review

@@ -145,7 +145,7 @@ export function expectedGitlabPipelineConfig() {
         when: 'always',
         expire_in: '14 days',
         access: 'maintainer',
-        paths: ['release-validation-context.md'],
+        paths: ['release-validation-context.md', 'test-results/'],
       },
     },
     codex_review: {
