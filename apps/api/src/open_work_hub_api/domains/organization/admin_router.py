@@ -27,6 +27,7 @@ from open_work_hub_api.domains.organization.service import (
     ensure_valid_head,
     ensure_valid_parent,
     load_organization_unit,
+    lock_organization_hierarchy,
     organization_slug,
     serialize_organization_unit,
 )
@@ -86,6 +87,7 @@ def create_organization_unit(
 ) -> OrganizationUnitResponse:
     slug = organization_slug(payload.slug or payload.name)
     try:
+        lock_organization_hierarchy(db)
         ensure_unique_slug(db, slug)
         ensure_valid_parent(db, organization_unit_id=None, parent_id=payload.parent_id)
         ensure_valid_head(db, payload.head_user_id)
@@ -128,6 +130,7 @@ def update_organization_unit(
     db: Session = Depends(get_db_session),
 ) -> OrganizationUnitResponse:
     try:
+        lock_organization_hierarchy(db)
         item = load_organization_unit(db, organization_unit_id, for_update=True)
         before = _access_snapshot(item)
         if "head_user_id" in payload.model_fields_set:

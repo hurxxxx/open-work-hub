@@ -15,7 +15,7 @@ from open_work_hub_api.domains.rag.query_service import RagQueryService
 from open_work_hub_api.domains.rag.service import RagService
 
 
-def test_workspace_rag_query_wraps_provider_failures_as_unavailable(monkeypatch) -> None:
+def test_company_rag_query_wraps_provider_failures_as_unavailable(monkeypatch) -> None:
     class _FailingQueryService:
         def query(self, request, *, post_filter, grounded_answer_synthesizer=None):
             del request, post_filter, grounded_answer_synthesizer

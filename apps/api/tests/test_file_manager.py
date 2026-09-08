@@ -668,7 +668,7 @@ def test_file_manager_image_preview_uses_inline_same_origin_content_url(
     assert "diagram.png" in content_response.headers["content-disposition"]
 
 
-def test_workspace_shared_file_is_readable_but_not_deletable_by_member(
+def test_company_shared_file_is_readable_but_not_deletable_by_user(
     client: TestClient,
     in_memory_object_storage: None,
 ) -> None:
@@ -768,7 +768,7 @@ def test_folder_visibility_changes_are_rejected(client: TestClient) -> None:
     assert update_response.json()["code"] == "files.visibility_change_not_allowed"
 
 
-def test_private_file_is_hidden_from_workspace_member(
+def test_private_file_is_hidden_from_other_company_user(
     client: TestClient,
     in_memory_object_storage: None,
 ) -> None:
@@ -967,7 +967,7 @@ def test_archive_sanitizes_windows_paths_and_rejects_large_expansions(
     assert limited_response.json()["code"] == "files.archive_limit_exceeded"
 
 
-def test_workspace_member_cannot_write_inside_owner_shared_folder(
+def test_other_company_user_cannot_write_inside_owner_shared_folder(
     client: TestClient,
 ) -> None:
     admin_session = dev_login(client, "administrator")

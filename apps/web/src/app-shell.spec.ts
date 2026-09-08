@@ -1,12 +1,12 @@
+import { createAuthUser } from '../tests/fixtures/company';
 import { describe, expect, it } from 'vitest';
-import type { AuthUser } from './platform/auth/auth-api';
 import { resolveShellState } from './app-shell';
-const user = {
+const user = createAuthUser({
   id: 'member',
   system_roles: [],
   group_ids: [],
   managed_organization_unit_ids: [],
-} as AuthUser;
+});
 const enabled = [
   'home',
   'pms',

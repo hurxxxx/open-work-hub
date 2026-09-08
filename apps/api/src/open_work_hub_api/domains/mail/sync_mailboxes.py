@@ -11,6 +11,7 @@ from open_work_hub_api.domains.mail.clients import (
     MailProtocolClient,
 )
 from open_work_hub_api.domains.mail.models import MailAccount, MailMailbox, MailSyncState
+from open_work_hub_api.domains.mail.sync_policy import require_mail_sync_access
 
 
 def ensure_inbox_mailbox(
@@ -36,7 +37,9 @@ def sync_targets_for_account(
     settings: MailConnectionSettings,
     client: MailProtocolClient,
 ) -> list[tuple[MailMailbox, MailSyncState]]:
+    require_mail_sync_access(db, account_id=account.id)
     mailbox_infos = list_syncable_mailboxes(settings, client)
+    require_mail_sync_access(db, account_id=account.id)
     targets: list[tuple[MailMailbox, MailSyncState]] = []
     for mailbox_info in mailbox_infos:
         mailbox, state = ensure_mailbox(db, account=account, mailbox=mailbox_info)

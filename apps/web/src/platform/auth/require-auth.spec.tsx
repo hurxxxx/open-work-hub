@@ -1,3 +1,4 @@
+import { createAuthUser } from '../../../tests/fixtures/company';
 import {
   act,
   fireEvent,
@@ -9,7 +10,6 @@ import { useEffect } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthContext, type AuthContextValue } from './auth-context';
-import type { AuthUser } from './auth-api';
 import { RequireAuth } from './require-auth';
 const mock = vi.hoisted(() => ({
   t: (key: string) => key,
@@ -23,14 +23,14 @@ vi.mock('@open-work-hub/ui', async (original) => ({
   ...(await original<typeof import('@open-work-hub/ui')>()),
   useFeedback: () => ({ error: mock.error }),
 }));
-const account = {
+const account = createAuthUser({
   id: 'account',
   must_change_password: true,
   time_zone: 'UTC',
   locale: 'en-US',
   date_format: 'iso',
   theme_preference: 'system',
-} as AuthUser;
+});
 function ProtectedContent() {
   useEffect(() => mock.mounted(), []);
   return <p>protected app</p>;

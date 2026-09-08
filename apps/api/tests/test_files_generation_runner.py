@@ -768,7 +768,7 @@ def test_materializer_refreshes_delayed_opensearch_before_runner_reconciliation(
                 filename="delayed-visibility.txt",
                 content_type="text/plain",
                 size_bytes=25,
-                storage_key="files/workspace-1/delayed-visibility.txt",
+                storage_key="files/delayed-visibility/document.txt",
                 visibility="company",
                 extraction_status="ready",
                 extraction_content_checksum=checksum,

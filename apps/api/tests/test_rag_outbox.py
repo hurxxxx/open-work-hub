@@ -131,7 +131,7 @@ def _registered_rag_outbox_adapters():
             load_projection=lambda db, resource_id, rag_service: None,
         )
     )
-    for scope_type in ("workspace_membership", "meeting", "pms_meeting"):
+    for scope_type in ("meeting", "pms_meeting"):
         register_rag_visibility_scope_adapter(
             RagVisibilityScopeAdapter(
                 scope_type=scope_type,
@@ -294,8 +294,8 @@ def test_enqueue_rag_visibility_recompute_job_persists_cursor() -> None:
         with session.begin():
             job = enqueue_rag_visibility_recompute_job(
                 session,
-                scope_type="workspace_membership",
-                scope_id="binding-1",
+                scope_type="meeting",
+                scope_id="meeting-1",
                 cursor={"resource_type": "doc", "offset": 10},
                 trace_context={
                     "traceparent": "00-feedfacefeedfacefeedfacefeedface-beadbeadbeadbead-01"
@@ -306,8 +306,8 @@ def test_enqueue_rag_visibility_recompute_job_persists_cursor() -> None:
             select(RagVisibilityRecomputeJob).where(RagVisibilityRecomputeJob.id == job.id)
         )
         assert stored is not None
-        assert stored.scope_type == "workspace_membership"
-        assert stored.scope_id == "binding-1"
+        assert stored.scope_type == "meeting"
+        assert stored.scope_id == "meeting-1"
         assert stored.cursor == {"resource_type": "doc", "offset": 10}
         assert stored.trace_context == {
             "traceparent": "00-feedfacefeedfacefeedfacefeedface-beadbeadbeadbead-01"
@@ -316,16 +316,19 @@ def test_enqueue_rag_visibility_recompute_job_persists_cursor() -> None:
         session.close()
 
 
-def test_enqueue_rag_visibility_recompute_job_rejects_unregistered_scope_type() -> None:
+@pytest.mark.parametrize("scope_type", ["missing_scope", "workspace_membership"])
+def test_enqueue_rag_visibility_recompute_job_rejects_unregistered_scope_type(
+    scope_type: str,
+) -> None:
     session = _session()
     try:
         with pytest.raises(
             ValueError,
-            match="RAG visibility scope_type is not registered: missing_scope",
+            match=f"RAG visibility scope_type is not registered: {scope_type}",
         ):
             enqueue_rag_visibility_recompute_job(
                 session,
-                scope_type="missing_scope",
+                scope_type=scope_type,
                 scope_id="scope-1",
             )
     finally:
@@ -627,8 +630,8 @@ def test_enqueue_rag_visibility_job_publishes_after_commit(monkeypatch) -> None:
         with session.begin():
             job = enqueue_rag_visibility_recompute_job(
                 session,
-                scope_type="workspace_membership",
-                scope_id="binding-publish",
+                scope_type="meeting",
+                scope_id="meeting-publish",
             )
 
         assert published == [("rag.recompute_visibility", [job.id], "rag_visibility_recompute")]

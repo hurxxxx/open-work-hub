@@ -29,14 +29,12 @@ export function projectMobileNavigationItems({
   const appBarItemById = new Map(
     appBarItems.map((item) => [item.id, item] as const),
   );
-  const workspaceAppById = new Map(
-    apps.map((item) => [item.app_id, item] as const),
-  );
+  const appById = new Map(apps.map((item) => [item.app_id, item] as const));
   const items: MobileNavigationItem[] = [];
   const projectedAppIds = new Set<string>();
 
   for (const fixedAppId of fixedAppIds) {
-    const fixedApp = workspaceAppById.get(fixedAppId);
+    const fixedApp = appById.get(fixedAppId);
     if (!fixedApp?.enabled || fixedApp.coming_soon) {
       continue;
     }
@@ -57,7 +55,7 @@ export function projectMobileNavigationItems({
     (left, right) => left.position - right.position,
   )) {
     const enabledItems = category.items.filter((categoryItem) => {
-      const app = workspaceAppById.get(categoryItem.app_id);
+      const app = appById.get(categoryItem.app_id);
       return Boolean(
         app?.enabled &&
           !app.coming_soon &&
@@ -65,7 +63,7 @@ export function projectMobileNavigationItems({
       );
     });
     for (const categoryItem of enabledItems) {
-      const app = workspaceAppById.get(categoryItem.app_id);
+      const app = appById.get(categoryItem.app_id);
       if (!app) continue;
       projectedAppIds.add(app.app_id);
       items.push({

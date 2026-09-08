@@ -19,10 +19,15 @@ from open_work_hub_api.domains.docs.models import (
     NativeDocGroupShare,
 )
 from open_work_hub_api.domains.meeting.models import Meeting
-from open_work_hub_api.domains.pms.models import Folder, TaskList
+from open_work_hub_api.domains.files.models import (
+    FileManagerCorpus,
+    FileManagerFile,
+    FileManagerFileSourceMetadata,
+)
+from open_work_hub_api.domains.pms.models import Folder, Task, TaskList
 from open_work_hub_api.domains.retrieval.models import RetrievalPartition
 from open_work_hub_api.domains.search.docs_projection import load_docs_search_document
-from open_work_hub_api.domains.search.projections import load_search_document
+from open_work_hub_api.domains.search.projections import all_search_documents, load_search_document
 from open_work_hub_api.domains.search.schemas import SearchEntityType
 
 
@@ -35,6 +40,7 @@ def _session() -> Session:
             Team.__table__,
             Folder.__table__,
             TaskList.__table__,
+            Task.__table__,
             RetrievalPartition.__table__,
             DocsCollection.__table__,
             NativeDoc.__table__,
@@ -45,6 +51,9 @@ def _session() -> Session:
             NativeDocLinkShare.__table__,
             Meeting.__table__,
             DocMeetingAccess.__table__,
+            FileManagerCorpus.__table__,
+            FileManagerFile.__table__,
+            FileManagerFileSourceMetadata.__table__,
         ],
     )
     return Session(engine)
@@ -172,6 +181,28 @@ def test_docs_search_projection_preserves_document_shape_through_dispatcher() ->
             {"id": "page-2", "title": "Second Page", "text": "later content"},
         ]
         assert direct["entity_id"] == dispatched["entity_id"]
+    finally:
+        session.close()
+
+
+def test_company_backfill_loads_real_documents_through_registered_adapters() -> None:
+    session = _session()
+    try:
+        _add_user(session)
+        _add_native_doc(session)
+        session.commit()
+
+        documents = all_search_documents(session)
+
+        assert len(documents) == 1
+        document = documents[0]
+        assert (document["entity_type"], document["entity_id"]) == ("doc", "doc-1")
+        assert document["title"] == "Budget Review"
+        assert document["body"] == "First Page\nbudget risk\nSecond Page\nlater content"
+        assert document["owner_user_id"] == "user-1"
+        assert document["shared_user_ids"] == ["user-1"]
+        assert document["team_ids"] == ["team-1"]
+        assert document["deep_link"] == "/apps/docs/documents/doc-1?page=page-1"
     finally:
         session.close()
 

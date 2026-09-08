@@ -64,8 +64,8 @@ def test_rag_queue_health_reports_stale_and_overdue_lanes(monkeypatch) -> None:
                 ),
                 RagVisibilityRecomputeJob(
                     id="visibility-delayed-retry",
-                    scope_type="workspace_membership",
-                    scope_id="binding-1",
+                    scope_type="meeting",
+                    scope_id="meeting-1",
                     status=RagJobStatus.PENDING.value,
                     attempts=1,
                     next_retry_at=now + timedelta(hours=1),

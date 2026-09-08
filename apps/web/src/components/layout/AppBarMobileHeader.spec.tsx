@@ -1,7 +1,7 @@
+import { createAuthUser } from '../../../tests/fixtures/company';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { AuthUser } from '@/src/platform/auth/auth-api';
 import { AppBarMobileHeader } from './AppBarMobileHeader';
 
 describe('AppBarMobileHeader', () => {
@@ -10,12 +10,10 @@ describe('AppBarMobileHeader', () => {
       <AppBarMobileHeader
         activeAppTitle="Planner"
         canOpenSearch={false}
-        currentUser={
-          {
-            display_name: 'Member',
-            full_name: 'Company Member',
-          } as AuthUser
-        }
+        currentUser={createAuthUser({
+          display_name: 'Member',
+          full_name: 'Company Member',
+        })}
         labels={{
           accountTitle: 'Account',
           mobileMenuTitle: 'App menu',

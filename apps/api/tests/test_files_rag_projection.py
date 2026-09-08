@@ -47,7 +47,7 @@ def _file(**overrides) -> FileManagerFile:
         "filename": "quarterly-plan.pptx",
         "content_type": "application/octet-stream",
         "size_bytes": 100,
-        "storage_key": "files/workspace-1/file-1/quarterly-plan.pptx",
+        "storage_key": "files/file-1/quarterly-plan.pptx",
         "visibility": "company",
     }
     values.update(overrides)

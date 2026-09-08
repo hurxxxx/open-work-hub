@@ -1,3 +1,7 @@
+import {
+  AUTH_REALTIME_EVENT_TYPES,
+  AUTH_ACCESS_CHANGE_REASONS,
+} from '@open-work-hub/contracts/auth';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   REALTIME_CLIENT_EVENT_TYPES,
@@ -259,6 +263,53 @@ describe('createRealtimeRuntime', () => {
       expect(sockets).toHaveLength(1);
     },
   );
+
+  it.each([1008, 4401, 4403])(
+    'invalidates account access once on auth close %s',
+    (code) => {
+      const { runtime, sockets, events } = createHarness();
+      const listener = vi.fn();
+      runtime.addEventListener(
+        AUTH_REALTIME_EVENT_TYPES.accessChanged,
+        listener,
+      );
+      runtime.connect();
+      sockets[0].open();
+      sockets[0].close(code);
+      expect(listener).toHaveBeenCalledExactlyOnceWith({
+        type: AUTH_REALTIME_EVENT_TYPES.accessChanged,
+        data: { reason: AUTH_ACCESS_CHANGE_REASONS.principalAccess },
+      });
+      expect(events).toContainEqual({
+        type: AUTH_REALTIME_EVENT_TYPES.accessChanged,
+        data: { reason: AUTH_ACCESS_CHANGE_REASONS.principalAccess },
+      });
+      vi.advanceTimersByTime(2500);
+      expect(sockets).toHaveLength(1);
+    },
+  );
+  it.each([1006, 1012, 4409])(
+    'does not treat non-auth close %s as revocation',
+    (code) => {
+      const { runtime, sockets, events } = createHarness();
+      runtime.connect();
+      sockets[0].open();
+      sockets[0].close(code);
+      expect(
+        events.some(
+          (event) => event.type === AUTH_REALTIME_EVENT_TYPES.accessChanged,
+        ),
+      ).toBe(false);
+    },
+  );
+  it('ignores policy close after runtime disposal', () => {
+    const { runtime, sockets, events } = createHarness();
+    runtime.connect();
+    sockets[0].open();
+    runtime.dispose();
+    sockets[0].dispatchEvent(Object.assign(new Event('close'), { code: 1008 }));
+    expect(events).toEqual([]);
+  });
 
   it('closes stale sockets after the heartbeat timeout', () => {
     const { runtime, sockets, statuses } = createHarness();

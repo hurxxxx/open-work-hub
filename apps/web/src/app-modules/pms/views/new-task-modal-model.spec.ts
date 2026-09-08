@@ -21,8 +21,9 @@ function taskListStatus(
     name: slug,
     slug,
     category,
-    position: 0,
-  } as PmsTaskListStatus;
+    sort_order: 0,
+    color: '#94a3b8',
+  };
 }
 
 function taskTemplate(
@@ -45,15 +46,19 @@ const taskListStatuses: PmsTaskListStatus[] = [
   taskListStatus('done', 'done'),
 ];
 
-const descriptionBlocks = [
+const descriptionBlocks: BlockContent = [
   {
     id: 'block-1',
     type: 'paragraph',
-    props: {},
+    props: {
+      backgroundColor: 'default',
+      textColor: 'default',
+      textAlignment: 'left',
+    },
     content: [{ type: 'text', text: 'Keep this', styles: {} }],
     children: [],
   },
-] as BlockContent;
+];
 
 describe('new task modal model', () => {
   it('creates the initial draft from the task list default status', () => {

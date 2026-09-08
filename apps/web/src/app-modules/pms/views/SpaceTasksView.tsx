@@ -760,6 +760,11 @@ function useSpaceTasksViewElement({
               onClose={handleClose}
             >
               <TaskDetail
+                spaceId={selectedTaskList?.team_id ?? null}
+                canPublishDoc={taskListRoleAllows(
+                  selectedTaskList?.role,
+                  'admin',
+                )}
                 canEdit={taskListRoleAllows(selectedTaskList?.role, 'member')}
                 members={selectedBundle?.members ?? []}
                 task={selectedIssue}

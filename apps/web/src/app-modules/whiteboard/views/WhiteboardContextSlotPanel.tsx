@@ -1,6 +1,11 @@
-import { Button, InlineNotice } from '@open-work-hub/ui';
+import {
+  Button,
+  InlineNotice,
+  useConfirm,
+  useFeedback,
+} from '@open-work-hub/ui';
 import { Loader2, PencilRuler, Plus, Search } from 'lucide-react';
-import { useCallback, useEffect, useReducer } from 'react';
+import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/src/lib/utils';
@@ -34,7 +39,7 @@ export interface WhiteboardContextSlotPanelProps {
   editorClassName?: string;
 }
 
-export function WhiteboardContextSlotPanel({
+function WhiteboardContextSlotPanelContent({
   context,
   defaultTitle,
   canEditContext,
@@ -43,6 +48,15 @@ export function WhiteboardContextSlotPanel({
 }: WhiteboardContextSlotPanelProps) {
   const { t } = useTranslation('apps');
   const { token } = useAuth();
+  const { confirm, confirmDialog } = useConfirm();
+  const feedback = useFeedback();
+  const active = useRef(false);
+  useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
   const [state, dispatch] = useReducer(
     whiteboardContextSlotPanelReducer,
     INITIAL_WHITEBOARD_CONTEXT_SLOT_PANEL_STATE,
@@ -53,8 +67,10 @@ export function WhiteboardContextSlotPanel({
     dispatch({ type: 'load-started' });
     try {
       const response = await getWhiteboardContextSlot(token, context);
+      if (!active.current) return;
       dispatch({ type: 'load-succeeded', item: response.item });
     } catch (err) {
+      if (!active.current) return;
       dispatch({
         type: 'load-failed',
         error:
@@ -67,45 +83,85 @@ export function WhiteboardContextSlotPanel({
     void loadSlot();
   }, [loadSlot]);
 
+  function confirmPublication() {
+    return confirm({
+      title: t('shell:contentPublication.title'),
+      description: t('shell:contentPublication.confirm'),
+      confirmLabel: t('common:actions.confirm'),
+      cancelLabel: t('common:actions.cancel'),
+    });
+  }
+
   async function handleCreate() {
-    if (!token) return;
+    if (!token || !canEditContext || state.busy) return;
     dispatch({ type: 'create-started' });
     try {
+      const acknowledged = await confirmPublication();
+      if (!active.current) return;
+      if (!acknowledged) {
+        dispatch({ type: 'operation-cancelled' });
+        return;
+      }
       const created = await createWhiteboardContextSlot(
         token,
-        buildWhiteboardContextSlotCreatePayload(context, defaultTitle),
+        buildWhiteboardContextSlotCreatePayload(
+          context,
+          defaultTitle,
+          acknowledged,
+        ),
       );
+      if (!active.current) return;
       dispatch({ type: 'create-succeeded', item: created });
     } catch (err) {
-      dispatch({
-        type: 'create-failed',
-        error:
-          err instanceof Error ? err.message : t('whiteboard.createFailed'),
-      });
+      if (!active.current) return;
+      dispatch({ type: 'operation-cancelled' });
+      feedback.error(
+        err instanceof Error ? err.message : t('whiteboard.createFailed'),
+      );
     }
   }
 
   async function handleAttach(selected: WhiteboardHubItem) {
-    if (!token) return;
-    const attached = await attachWhiteboardContextSlot(
-      token,
-      buildWhiteboardContextSlotAttachPayload(context, selected.id),
-    );
-    dispatch({ type: 'attach-succeeded', item: attached });
+    if (!token || !canEditContext || state.busy) return false;
+    dispatch({ type: 'attach-started' });
+    try {
+      const acknowledged =
+        selected.ownership_kind === 'personal'
+          ? await confirmPublication()
+          : false;
+      if (
+        !active.current ||
+        (selected.ownership_kind === 'personal' && !acknowledged)
+      )
+        return false;
+      const attached = await attachWhiteboardContextSlot(
+        token,
+        buildWhiteboardContextSlotAttachPayload(
+          context,
+          selected.id,
+          acknowledged,
+        ),
+      );
+      if (!active.current) return false;
+      dispatch({ type: 'attach-succeeded', item: attached });
+    } finally {
+      if (active.current) dispatch({ type: 'operation-cancelled' });
+    }
   }
 
   async function handleDetach() {
-    if (!token) return;
+    if (!token || !canEditContext || state.busy) return;
     dispatch({ type: 'detach-started' });
     try {
       await detachWhiteboardContextSlot(token, context);
+      if (!active.current) return;
       dispatch({ type: 'detach-succeeded' });
     } catch (err) {
-      dispatch({
-        type: 'detach-failed',
-        error:
-          err instanceof Error ? err.message : t('whiteboard.detachFailed'),
-      });
+      if (!active.current) return;
+      dispatch({ type: 'operation-cancelled' });
+      feedback.error(
+        err instanceof Error ? err.message : t('whiteboard.detachFailed'),
+      );
     }
   }
 
@@ -116,6 +172,7 @@ export function WhiteboardContextSlotPanel({
         className,
       )}
     >
+      {confirmDialog}
       {state.error ? (
         <InlineNotice
           role="alert"
@@ -188,5 +245,23 @@ export function WhiteboardContextSlotPanel({
         onPick={handleAttach}
       />
     </div>
+  );
+}
+
+export function WhiteboardContextSlotPanel(
+  props: WhiteboardContextSlotPanelProps,
+) {
+  const { token } = useAuth();
+  return (
+    <WhiteboardContextSlotPanelContent
+      key={JSON.stringify([
+        token,
+        props.context.app,
+        props.context.type,
+        props.context.id,
+        props.canEditContext,
+      ])}
+      {...props}
+    />
   );
 }

@@ -75,9 +75,7 @@ describe('meeting form model', () => {
 
     expect(state.startAt).toBe('2026-05-30T11:00');
     expect(state.endAt).toBe('2026-05-30T12:00');
-    expect(state.attendees).toEqual([
-      { user_id: 'user-1', role: 'required' },
-    ]);
+    expect(state.attendees).toEqual([{ user_id: 'user-1', role: 'required' }]);
     expect(state.partialFailures).toEqual([]);
   });
 
@@ -175,11 +173,15 @@ describe('meeting form model', () => {
 
   it('projects create form candidate, visibility, attachment, and submit state', () => {
     const state = {
-      ...createInitialMeetingState(null, 'current', new Date(2026, 4, 30, 10, 0)),
+      ...createInitialMeetingState(
+        null,
+        'current',
+        new Date(2026, 4, 30, 10, 0),
+      ),
       title: '  Planning  ',
       attendees: [
-        { user_id: 'current', role: 'required' },
-        { user_id: 'selected', role: 'required' },
+        { user_id: 'current', role: 'required' as const },
+        { user_id: 'selected', role: 'required' as const },
       ],
       pickedAttendeeUsers: [user('selected', 'Selected User')],
       users: [user('current'), user('selected'), user('candidate')],
@@ -190,8 +192,12 @@ describe('meeting form model', () => {
     const projection = projectMeetingCreateForm(state, 'current');
 
     expect(projection.canSubmit).toBe(true);
-    expect(projection.filteredUsers.map((item) => item.id)).toEqual(['candidate']);
-    expect(projection.visibleAttendees.map((item) => item.user_id)).toEqual(['selected']);
+    expect(projection.filteredUsers.map((item) => item.id)).toEqual([
+      'candidate',
+    ]);
+    expect(projection.visibleAttendees.map((item) => item.user_id)).toEqual([
+      'selected',
+    ]);
     expect(projection.availabilityUsers).toEqual([
       {
         id: 'selected',
@@ -214,9 +220,15 @@ describe('meeting form model', () => {
 
     expect(projection.canSubmit).toBe(false);
     expect(projection.lockedOrganizerIds.has('organizer')).toBe(true);
-    expect(projection.filteredUsers.map((item) => item.id)).toEqual(['candidate']);
-    expect(projection.visibleAttendees.map((item) => item.user_id)).toEqual(['guest']);
-    expect(projection.availabilityUsers.map((item) => item.id)).toEqual(['guest']);
+    expect(projection.filteredUsers.map((item) => item.id)).toEqual([
+      'candidate',
+    ]);
+    expect(projection.visibleAttendees.map((item) => item.user_id)).toEqual([
+      'guest',
+    ]);
+    expect(projection.availabilityUsers.map((item) => item.id)).toEqual([
+      'guest',
+    ]);
   });
 
   it('builds create and update payloads with existing trimming behavior', () => {
@@ -266,16 +278,23 @@ describe('meeting form model', () => {
     const second = fileLike('second.txt', 20, 2);
 
     expect(
-      removeAttendeeFromForm([...attendees], 'organizer', new Set(['organizer'])),
+      removeAttendeeFromForm(
+        [...attendees],
+        'organizer',
+        new Set(['organizer']),
+      ),
     ).toEqual(attendees);
     expect(
       removeAttendeeFromForm([...attendees], 'guest', new Set(['organizer'])),
     ).toEqual([{ user_id: 'organizer', role: 'required' }]);
     expect(
-      summarizeFileUploadResults([first, second], [
-        { file: first, failure: null },
-        { file: second, failure: 'second failed' },
-      ]),
+      summarizeFileUploadResults(
+        [first, second],
+        [
+          { file: first, failure: null },
+          { file: second, failure: 'second failed' },
+        ],
+      ),
     ).toEqual({
       failures: ['second failed'],
       remainingFiles: [second],
@@ -287,8 +306,6 @@ describe('meeting form model', () => {
     expect(formatFileSize(1536)).toBe('1.5 KB');
     expect(formatFileSize(5 * 1024 * 1024)).toBe('5.0 MB');
     expect(isEndAfterStart('2026-05-30T10:00', '2026-05-30T10:01')).toBe(true);
-    expect(isEndAfterStart('2026-05-30T10:00', '2026-05-30T10:00')).toBe(
-      false,
-    );
+    expect(isEndAfterStart('2026-05-30T10:00', '2026-05-30T10:00')).toBe(false);
   });
 });

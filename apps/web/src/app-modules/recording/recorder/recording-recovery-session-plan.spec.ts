@@ -17,7 +17,8 @@ function localSession(
 ): RecordingSessionState {
   return {
     stagingId: 'staging-1',
-    scopeKey: 'hq:recording:unlinked',
+    userId: 'user-1',
+    scopeKey: 'user-1:recording:unlinked',
     idempotencyKey: 'idem-1',
     mimeType: 'audio/webm',
     title: null,

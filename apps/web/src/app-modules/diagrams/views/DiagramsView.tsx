@@ -87,7 +87,12 @@ function formatDiagramDate(
 
 export function DiagramsView() {
   const { diagramId } = useParams();
-  return diagramId ? <DiagramEditor /> : <DiagramsHub />;
+  const { token } = useAuth();
+  return diagramId ? (
+    <DiagramEditor key={`${token}:${diagramId}`} />
+  ) : (
+    <DiagramsHub />
+  );
 }
 
 function DiagramsHub() {
@@ -109,7 +114,7 @@ function DiagramsHub() {
     () => state.items.filter((item) => item.visibility === 'personal'),
     [state.items],
   );
-  const workspaceItems = useMemo(
+  const companyItems = useMemo(
     () => state.items.filter((item) => item.visibility === 'company'),
     [state.items],
   );
@@ -293,7 +298,7 @@ function DiagramsHub() {
             />
             <DiagramSection
               visibility="company"
-              items={workspaceItems}
+              items={companyItems}
               token={token}
               timeZone={timeZone}
               archived={isArchived}
@@ -338,16 +343,16 @@ function DiagramSection({
   const SectionIcon = visibility === 'company' ? Users : Lock;
   const titleKey =
     visibility === 'company'
-      ? 'diagrams.workspaceSectionTitle'
+      ? 'diagrams.companySectionTitle'
       : 'diagrams.personalSectionTitle';
   const emptyKey = archived
     ? 'diagrams.archiveEmpty'
     : visibility === 'company'
-      ? 'diagrams.workspaceSectionEmpty'
+      ? 'diagrams.companySectionEmpty'
       : 'diagrams.personalSectionEmpty';
   const createKey =
     visibility === 'company'
-      ? 'diagrams.createWorkspace'
+      ? 'diagrams.createCompany'
       : 'diagrams.createPersonal';
 
   return (
@@ -428,33 +433,27 @@ function buildDiagramVisibilityMenuItems({
       label: t('diagrams.visibilityCurrent', {
         visibility: t(
           currentVisibility === 'company'
-            ? 'diagrams.visibilityWorkspace'
+            ? 'diagrams.visibilityCompany'
             : 'diagrams.visibilityPersonal',
         ),
       }),
     },
     {
-      id: 'personal',
-      separatorBefore: true,
-      disabled: !canManage || currentVisibility === 'personal',
-      label: (
-        <span className="inline-flex items-center gap-2">
-          <Lock size={14} />
-          {t('diagrams.changeToPersonal')}
-        </span>
-      ),
-      onSelect: () => onChange('personal'),
-    },
-    {
       id: 'company',
+      separatorBefore: true,
       disabled: !canManage || currentVisibility === 'company',
       label: (
         <span className="inline-flex items-center gap-2">
           <Users size={14} />
-          {t('diagrams.changeToWorkspace')}
+          {t('diagrams.changeToCompany')}
         </span>
       ),
       onSelect: () => onChange('company'),
+    },
+    {
+      id: 'ownership-notice',
+      disabled: true,
+      label: t('diagrams.companyOwnershipNotice'),
     },
     {
       id: 'manage-required',
@@ -595,7 +594,7 @@ function DiagramCard({
           <span className="truncate">
             {t(
               item.visibility === 'company'
-                ? 'diagrams.visibilityWorkspace'
+                ? 'diagrams.visibilityCompany'
                 : 'diagrams.visibilityPersonal',
             )}
           </span>
@@ -697,7 +696,7 @@ function DiagramListTable({
                     <span className="truncate">
                       {t(
                         item.visibility === 'company'
-                          ? 'diagrams.visibilityWorkspace'
+                          ? 'diagrams.visibilityCompany'
                           : 'diagrams.visibilityPersonal',
                       )}
                     </span>
@@ -755,7 +754,17 @@ function DiagramEditor() {
     'idle' | 'saving' | 'saved' | 'error'
   >('idle');
   const [error, setError] = useState<string | null>(null);
-  const drawioEmbedConfig = useMemo(() => currentDrawioEmbedConfig(), []);
+  const readOnly = !detail?.can_edit;
+  const drawioEmbedConfig = useMemo(
+    () => currentDrawioEmbedConfig(readOnly),
+    [readOnly],
+  );
+
+  useEffect(() => {
+    setDrawioReady(false);
+    loadedDiagramRef.current = null;
+    pendingXmlRef.current = null;
+  }, [readOnly]);
 
   const applyDetail = useCallback(
     (nextDetail: DiagramDetail, options?: { syncTitle?: boolean }) => {
@@ -785,6 +794,7 @@ function DiagramEditor() {
     if (!token || !diagramId) return undefined;
     let active = true;
     detailRef.current = null;
+    setDrawioReady(false);
     loadedDiagramRef.current = null;
     pendingXmlRef.current = null;
     setDetail(null);
@@ -809,13 +819,13 @@ function DiagramEditor() {
     if (!drawioReady || !detail) return;
     if (loadedDiagramRef.current === detail.id) return;
     loadedDiagramRef.current = detail.id;
-    postToDrawio(buildDrawioLoadMessage(detail.xml));
+    postToDrawio(buildDrawioLoadMessage(detail.xml, !detail.can_edit));
   }, [detail, drawioReady, postToDrawio]);
 
   const persistDiagram = useCallback(
     async (xml: string, previewPngDataUrl: string | null) => {
       const currentDetail = detailRef.current;
-      if (!token || !diagramId || !currentDetail) return;
+      if (!token || !diagramId || !currentDetail?.can_edit) return;
       setSaveStatus('saving');
       setError(null);
       try {
@@ -841,7 +851,7 @@ function DiagramEditor() {
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
       if (
-        typeof window !== 'undefined' &&
+        event.source !== iframeRef.current?.contentWindow ||
         !isDrawioMessageOriginAllowed(event.origin, drawioEmbedConfig.origin)
       ) {
         return;
@@ -853,6 +863,7 @@ function DiagramEditor() {
         setDrawioReady(true);
         return;
       }
+      if (!detailRef.current?.can_edit) return;
       if (
         (message.event === 'save' || message.event === 'autosave') &&
         message.xml
@@ -884,7 +895,7 @@ function DiagramEditor() {
 
   const handleTitleSave = useCallback(async () => {
     const currentDetail = detailRef.current;
-    if (!token || !diagramId || !currentDetail) return true;
+    if (!token || !diagramId || !currentDetail?.can_edit) return true;
     const nextTitle = titleDraft.trim();
     if (!nextTitle || nextTitle === currentDetail.title) return true;
     setSaveStatus('saving');
@@ -989,6 +1000,7 @@ function DiagramEditor() {
         <label className="min-w-0 flex-1">
           <span className="sr-only">{t('apps:diagrams.titleInput')}</span>
           <input
+            readOnly={!detail?.can_edit}
             value={titleDraft}
             onChange={(event) => setTitleDraft(event.target.value)}
             onKeyDown={(event) => {
@@ -1035,7 +1047,7 @@ function DiagramEditor() {
             })}
           />
         ) : null}
-        {detail?.archived_at ? (
+        {detail?.archived_at && detail.can_manage ? (
           <button
             type="button"
             onClick={() => void handleRestore()}
@@ -1070,13 +1082,16 @@ function DiagramEditor() {
             )}
           </div>
         ) : null}
-        <iframe
-          ref={iframeRef}
-          title={t('apps:diagrams.editorTitle')}
-          src={drawioEmbedConfig.src}
-          className="h-full w-full border-0"
-          sandbox="allow-downloads allow-forms allow-modals allow-popups allow-same-origin allow-scripts"
-        />
+        {detail ? (
+          <iframe
+            key={`${detail.id}:${readOnly}`}
+            ref={iframeRef}
+            title={t('apps:diagrams.editorTitle')}
+            src={drawioEmbedConfig.src}
+            className="h-full w-full border-0"
+            sandbox="allow-downloads allow-forms allow-modals allow-popups allow-same-origin allow-scripts"
+          />
+        ) : null}
       </div>
     </main>
   );

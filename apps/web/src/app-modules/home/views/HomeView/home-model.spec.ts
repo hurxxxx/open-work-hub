@@ -11,8 +11,8 @@ import {
   selectTodayMeetings,
   selectTopAssignedTasks,
   selectTopRecentPages,
-  workspaceHomePriorityTone,
-  workspaceHomeReducer,
+  homePriorityTone,
+  homeReducer,
 } from './home-model';
 
 const t = (key: string, options?: Record<string, unknown>) =>
@@ -102,19 +102,19 @@ describe('home-model', () => {
 
   it('caps task and recent page summaries', () => {
     expect(
-      selectTopAssignedTasks([1, 2, 3, 4, 5, 6].map(String).map(task)),
+      selectTopAssignedTasks([1, 2, 3, 4, 5, 6].map((id) => task(String(id)))),
     ).toHaveLength(5);
     expect(
-      selectTopRecentPages([1, 2, 3, 4, 5, 6].map(String).map(page)),
+      selectTopRecentPages([1, 2, 3, 4, 5, 6].map((id) => page(String(id)))),
     ).toHaveLength(5);
   });
 
   it('maps task priorities to summary tones', () => {
-    expect(workspaceHomePriorityTone('critical')).toBe('danger');
-    expect(workspaceHomePriorityTone('high')).toBe('danger');
-    expect(workspaceHomePriorityTone('medium')).toBe('warning');
-    expect(workspaceHomePriorityTone('low')).toBe('muted');
-    expect(workspaceHomePriorityTone(undefined)).toBe('muted');
+    expect(homePriorityTone('critical')).toBe('danger');
+    expect(homePriorityTone('high')).toBe('danger');
+    expect(homePriorityTone('medium')).toBe('warning');
+    expect(homePriorityTone('low')).toBe('muted');
+    expect(homePriorityTone(undefined)).toBe('muted');
   });
 
   it('builds loading, empty, and ready home summary sections', () => {
@@ -269,21 +269,21 @@ describe('home-model', () => {
   });
 
   it('tracks independent loading and failure states', () => {
-    const loadingState = workspaceHomeReducer(INITIAL_HOME_STATE, {
+    const loadingState = homeReducer(INITIAL_HOME_STATE, {
       type: 'load-started',
     });
     expect(loadingState.meetingsLoading).toBe(true);
     expect(loadingState.issuesLoading).toBe(true);
     expect(loadingState.pagesLoading).toBe(true);
 
-    const loadedState = workspaceHomeReducer(loadingState, {
+    const loadedState = homeReducer(loadingState, {
       type: 'meetings-loaded',
       items: [meeting('a', '2026-01-10T00:00:00Z')],
     });
     expect(loadedState.meetings).toHaveLength(1);
     expect(loadedState.meetingsLoading).toBe(false);
 
-    const failedState = workspaceHomeReducer(loadedState, {
+    const failedState = homeReducer(loadedState, {
       type: 'meetings-failed',
     });
     expect(failedState.meetings).toEqual([]);

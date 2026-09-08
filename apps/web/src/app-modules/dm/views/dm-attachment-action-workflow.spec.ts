@@ -1,27 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { DmMessageAttachment } from '../api/dm-api';
+import type { DmAttachmentUrlResponse } from '../api/dm-api';
+import { dmAttachmentFixture as attachment } from '../testing/dm-fixtures';
 import {
   createDmAttachmentActionWorkflow,
   type DmAttachmentActionApi,
   type DmAttachmentBrowserAdapter,
 } from './dm-attachment-action-workflow';
 import type { DmComposerAttachmentAction } from './dm-composer-attachments';
-
-function attachment(
-  overrides: Partial<DmMessageAttachment> = {},
-): DmMessageAttachment {
-  return {
-    content_type: 'image/png',
-
-    filename: 'screen.png',
-    id: 'attachment-1',
-    is_image: true,
-
-    size_bytes: 1024,
-    ...overrides,
-  };
-}
 
 function harness({
   api,
@@ -100,13 +86,13 @@ describe('dm attachment action workflow', () => {
 
   it('discards late grant responses after the account or conversation changes', async () => {
     let current = true;
-    let resolve!: (value: { url: string }) => void;
+    let resolve!: (value: DmAttachmentUrlResponse) => void;
     const context = harness({
       isCurrent: () => current,
       api: {
         getDownloadUrl: vi.fn(
           () =>
-            new Promise((done) => {
+            new Promise<DmAttachmentUrlResponse>((done) => {
               resolve = done;
             }),
         ),

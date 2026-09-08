@@ -7,7 +7,7 @@ describe('PMS task reorder', () => {
     vi.restoreAllMocks();
   });
 
-  it('uses the explicitly selected workspace and one batch request', async () => {
+  it('uses the explicitly selected task list and one batch request', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ items: [] }), {
         headers: { 'Content-Type': 'application/json' },

@@ -1,5 +1,6 @@
 # Release Domain
 
+- First development install and setup recovery: [Development Installation](../../../INSTALL.md).
 - Dev infra: `ops/compose/open-work-hub-dev.infra.yml`.
 - Prod infra: `ops/compose/open-work-hub-prod.infra.yml`.
 - Common entrypoint: `scripts/infra-stack.sh`.

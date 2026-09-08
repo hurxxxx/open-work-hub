@@ -97,7 +97,7 @@ def _legacy_file(
         filename=f"{file_id}.txt",
         content_type="text/plain",
         size_bytes=100,
-        storage_key=f"files/workspace-1/{file_id}.txt",
+        storage_key=f"files/{file_id}/document.txt",
         visibility="company",
         extraction_status="ready" if checksum is not None else "pending",
         extraction_content_checksum=checksum,
@@ -332,7 +332,7 @@ def test_reconciliation_stages_only_latest_file_head_through_captured_watermark(
         db.close()
 
 
-def test_reconciliation_preserves_company_scope_with_workspace_diagnostic_identity() -> None:
+def test_reconciliation_preserves_company_scope_for_visibility_events() -> None:
     db = _session()
     try:
         partition = db.get(RetrievalPartition, _PARTITION_ID)
@@ -367,7 +367,7 @@ def test_reconciliation_preserves_company_scope_with_workspace_diagnostic_identi
         db.close()
 
 
-def test_reconciliation_uses_current_source_workspace_after_no_reindex_move() -> None:
+def test_reconciliation_preserves_current_source_partition_and_projection_version() -> None:
     db = _session()
     try:
         file = _legacy_file(file_id="file-moved", checksum="f" * 64)

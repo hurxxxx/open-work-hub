@@ -5,7 +5,14 @@ import { InlineNotice } from '@open-work-hub/ui/feedback/inline-notice';
 import { usePrompt } from '@open-work-hub/ui/feedback/prompt-dialog';
 import { ChevronDown, ChevronRight, Loader2, Plus } from 'lucide-react';
 import { AnimatePresence, LazyMotion, domAnimation, m } from 'motion/react';
-import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
@@ -247,6 +254,13 @@ function usePmsSidebarSpacesElement({
   const { confirm, confirmDialog } = useConfirm();
   const { prompt, promptDialog } = usePrompt();
   const toast = useFeedback();
+  const publicationGeneration = useRef(0);
+  useEffect(
+    () => () => {
+      publicationGeneration.current += 1;
+    },
+    [token],
+  );
   const canReadTeams = useAppAdmission('pms');
   const canWriteTeams = canReadTeams;
   const canManageSpace = useCallback(
@@ -267,6 +281,17 @@ function usePmsSidebarSpacesElement({
     collapsedSpaces,
     spaceDocsMap,
   } = state;
+  const currentSpaces = useRef(pmsTeams);
+  currentSpaces.current = pmsTeams;
+  const mayPublishInSpace = useCallback(
+    (spaceId: string) =>
+      teamRoleAllows(
+        currentSpaces.current.find((space) => space.id === spaceId)
+          ?.current_user_role,
+        'admin',
+      ),
+    [],
+  );
   const [createTaskListOpen, setCreateTaskListOpen] = useState(false);
   const [createTaskListTeamId, setCreateTaskListTeamId] = useState<
     string | null
@@ -454,7 +479,24 @@ function usePmsSidebarSpacesElement({
     };
   }, [locale]);
 
+  const canCreateTaskList =
+    !createTaskListTeamId ||
+    teamRoleAllows(
+      pmsTeams.find((space) => space.id === createTaskListTeamId)
+        ?.current_user_role,
+      'member',
+    );
+
   const openCreateTaskList = (teamId: string | null) => {
+    if (
+      teamId &&
+      !teamRoleAllows(
+        currentSpaces.current.find((space) => space.id === teamId)
+          ?.current_user_role,
+        'member',
+      )
+    )
+      return;
     setCreateTaskListTeamId(teamId);
     setCreateTaskListFolderId(null);
     setCreateTaskListOpen(true);
@@ -471,7 +513,8 @@ function usePmsSidebarSpacesElement({
 
   const handleCreateDoc = useCallback(
     async (spaceId: string) => {
-      if (!token) return;
+      if (!token || !mayPublishInSpace(spaceId)) return;
+      const generation = publicationGeneration.current;
       const title = await prompt({
         title: t('pms.sidebar.newDocument'),
         placeholder: t('pms.sidebar.documentName'),
@@ -479,8 +522,25 @@ function usePmsSidebarSpacesElement({
         submitLabel: t('common:actions.create'),
         cancelLabel: t('common:actions.cancel'),
       });
-      if (!title) return;
+      if (
+        !title ||
+        generation !== publicationGeneration.current ||
+        !mayPublishInSpace(spaceId)
+      )
+        return;
       try {
+        const acknowledged = await confirm({
+          title: t('shell:contentPublication.title'),
+          description: t('shell:contentPublication.confirm'),
+          confirmLabel: t('common:actions.confirm'),
+          cancelLabel: t('common:actions.cancel'),
+        });
+        if (
+          !acknowledged ||
+          generation !== publicationGeneration.current ||
+          !mayPublishInSpace(spaceId)
+        )
+          return;
         const doc = await createNativeDoc(token, {
           title,
           source_app: 'pms',
@@ -489,8 +549,10 @@ function usePmsSidebarSpacesElement({
             app: 'pms',
             type: 'space',
             id: spaceId,
+            company_admin_read_acknowledged: acknowledged,
           },
         });
+        if (generation !== publicationGeneration.current) return;
         dispatch({
           type: 'setSpaceDocsMap',
           updater: (prev) => {
@@ -508,11 +570,15 @@ function usePmsSidebarSpacesElement({
             spaceId,
           }),
         );
-      } catch {
-        /* ignore */
+      } catch (error) {
+        if (generation === publicationGeneration.current) {
+          toast.error(
+            getErrorMessage(error, t('common:feedback.requestFailedRetry')),
+          );
+        }
       }
     },
-    [locale, navigate, prompt, token, t],
+    [confirm, locale, navigate, prompt, token, t, toast, mayPublishInSpace],
   );
 
   const handleRenameDoc = useCallback(
@@ -615,6 +681,7 @@ function usePmsSidebarSpacesElement({
       const currentLists = listActivePmsTaskListsForSpace(pmsLists, spaceId);
       const currentDocs = spaceDocsMap.get(spaceId) ?? [];
       const changes = buildSpaceOrderChanges({
+        spaceId,
         currentDocs,
         currentLists,
         payload,
@@ -1108,6 +1175,7 @@ function usePmsSidebarSpacesElement({
       {confirmDialog}
       {promptDialog}
       <SpaceOrderEditorModal
+        spaceId={orderEditorSpace?.id ?? ''}
         isOpen={orderEditorSpace !== null}
         onClose={() => setOrderEditorSpace(null)}
         spaceName={orderEditorSpace?.name ?? ''}
@@ -1310,7 +1378,8 @@ function usePmsSidebarSpacesElement({
       </div>
 
       <CreateTaskListModal
-        isOpen={createTaskListOpen}
+        isOpen={createTaskListOpen && canCreateTaskList}
+        canCreate={canCreateTaskList}
         onClose={() => setCreateTaskListOpen(false)}
         teamId={createTaskListTeamId}
         folderId={createTaskListFolderId}

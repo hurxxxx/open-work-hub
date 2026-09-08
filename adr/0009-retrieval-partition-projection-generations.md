@@ -1,16 +1,20 @@
 # ADR 0009: Retrieval Candidate Partitions and Projection Generations
 
-- Status: Accepted
+- Status: Accepted; scope and baseline policy superseded by [ADR 0012](0012-company-app-access-without-workspaces.md)
 - Date: 2026-07-22
+
+Current company policy follows [App Platform](../docs/domains/app-platform/README.md)
+and [Source Access](../docs/domains/source-access/README.md). This ADR retains candidate
+partition, projection, and generation safety contracts.
 
 ## Partitions
 
 - `retrieval_partition_id` is opaque immutable UUID for backend routing/coarse candidate filtering.
 - It is not a resource grant.
 - PostgreSQL `retrieval_partitions` is source namespace, owner, candidate scope, state, metadata version source.
-- Candidate scopes: `company`, `workspace`, `personal`.
+- Candidate scopes: `company`, `personal`.
 - Backend query must include server-resolved non-empty partition predicate.
-- Backend payload partition/workspace/ACL hints are not authority.
+- Backend payload partition/scope/ACL hints are not authority.
 - Source-owned PostgreSQL ACL is final authority.
 - Publication/ownership transition updates source rows and partition directory in one transaction.
 - Final ACL batch statement after candidate generation is the authorization linearization point.
@@ -22,14 +26,15 @@
 - Generic partition transition must not bypass source ACL transaction.
 - Partition binding does not activate inactive sources.
 - Raw REST/MCP query input does not accept partition ID.
-- Files large movable corpus needs source-owned `files_corpus` security cohort and non-default partition before upload.
+- Files corpora use a source-owned `files_corpus` security cohort with a stable company
+  partition before upload; file grants remain source-owned authorization.
 
 ## Physical Identity
 
 - Canonical identity: length-delimited `(resource_type, resource_id)`.
 - OpenSearch document ID derives from canonical identity.
 - Qdrant point UUID derives from canonical `(resource_type, resource_id, chunk_id)`.
-- Workspace/partition never enters physical ID or routing key.
+- Candidate scope/partition never enters physical ID or routing key.
 - Deterministic encoding has fixed test vectors.
 
 ## Projection Ordering
@@ -66,17 +71,20 @@
 - Signed raw-content capability issuance, caller binding, reauthorization, and response handling
   follow [Content Access](../docs/domains/content-access/README.md).
 
-## PostgreSQL Rollout
+## PostgreSQL Schema Changes
 
-- Expand: UUID directory, immutability trigger, nullable binding.
-- Backfill: cursor batches, parent-before-child, orphan quarantine, reconciliation.
-- Validate constraints separately; create needed indexes concurrently.
-- Contract: apply NOT NULL/check/FK after dual-write and null audit.
-- During nullable expand use `retrieval_partition_id IS NULL OR retrieval_partition_id IN (...)` with source ACL.
+- ADR 0012 replaced the previous migration chain with a fresh company baseline. The
+  retired nullable-binding backfill is not an installation or authorization fallback.
+- Future changes to populated tables need staged constraints, bounded cursor backfills,
+  parent-before-child ordering, orphan quarantine, reconciliation, and cutover evidence.
+- An expand/backfill/contract rollout requires dual-write and a null audit before applying
+  required NOT NULL/check/FK constraints. Create needed indexes concurrently when the
+  deployment requires online migration.
 - Empty server scope must not become unfiltered fallback.
 - Do not update large source tables in one Alembic transaction.
 
-## Preserved ADRs
+## Related Decisions
 
-- ADR 0004 caller-facing Retrieval/backends remain.
-- ADR 0007 company/workspace hierarchy and no `company_id` remain.
+- [ADR 0004](0004-retrieval-rag-boundary-policy.md) owns Retrieval/backend separation.
+- [ADR 0012](0012-company-app-access-without-workspaces.md) owns the company boundary
+  and app-owned authorization model.

@@ -25,10 +25,6 @@ vi.mock('@/src/platform/calendar/use-calendar-events', () => ({
   }),
 }));
 
-vi.mock('@/src/platform/apps/apps-api', () => ({
-  getAllEligibleWorkspaces: vi.fn(() => new Promise(() => undefined)),
-}));
-
 vi.mock('@/src/components/calendar/UnifiedCalendar', () => ({
   UnifiedCalendar: () => <div data-testid="unified-calendar" />,
 }));

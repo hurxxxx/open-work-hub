@@ -67,7 +67,7 @@ describe('space members modal model', () => {
   it('derives role options from admin-management permission', () => {
     expect(
       roleOptionConfigForUser(false).map((option) => option.value),
-    ).toEqual(['admin', 'member', 'viewer']);
+    ).toEqual(['member', 'viewer']);
     expect(roleOptionConfigForUser(true).map((option) => option.value)).toEqual(
       ['owner', 'admin', 'member', 'viewer'],
     );

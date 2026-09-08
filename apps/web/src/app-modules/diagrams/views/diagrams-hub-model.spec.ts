@@ -16,7 +16,7 @@ describe('diagrams hub model', () => {
     expect(viewFromSearch('trash')).toBe('all');
   });
 
-  it('builds explicit workspace paths and unresolved app entries', () => {
+  it('builds explicit app paths and unresolved app entries', () => {
     expect(itemPath({ itemId: 'diagram 1' })).toBe(
       '/apps/diagrams/diagrams/diagram%201',
     );

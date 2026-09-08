@@ -19,7 +19,6 @@ function messages(): RetrievalSearchControllerMessages {
     queryRequired: 'query required',
     sessionExpired: 'session expired',
     sourcesLoadFailed: 'sources failed',
-    workspaceMissing: 'workspace missing',
   };
 }
 
@@ -29,7 +28,7 @@ function sourcesResponse(): RetrievalSourceListResponse {
       {
         source: 'keyword',
         label: 'Keyword',
-        scope: 'workspace',
+        scope: 'company',
         backend: 'keyword_search',
         required_app_ids: [],
         active: true,
@@ -38,8 +37,8 @@ function sourcesResponse(): RetrievalSourceListResponse {
       },
       {
         source: 'generic_rag',
-        label: 'Workspace RAG',
-        scope: 'workspace',
+        label: 'Company RAG',
+        scope: 'company',
         backend: 'qdrant',
         required_app_ids: ['docs'],
         active: true,
@@ -94,7 +93,7 @@ function renderController(
   const client = options.client ?? createClient();
   const logout = vi.fn();
   const searchParams = new URLSearchParams(
-    options.searchParams ?? 'workspace=hq',
+    options.searchParams ?? 'source_kinds=native_doc',
   );
   const setSearchParams = vi.fn<RetrievalSearchParamsSetter>();
   const rendered = renderHook(
@@ -113,7 +112,7 @@ function renderController(
 }
 
 describe('useRetrievalSearchController', () => {
-  it('loads source catalog without running a query for workspace-only URLs', async () => {
+  it('loads source catalog without running a query for source-filter-only URLs', async () => {
     const { client, result } = renderController();
 
     await waitFor(() => expect(client.listSources).toHaveBeenCalledTimes(1));

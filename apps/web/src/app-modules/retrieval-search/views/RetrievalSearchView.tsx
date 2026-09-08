@@ -92,7 +92,7 @@ export function RetrievalSearchView() {
             <p className="app-text-caption text-app-ink/55">
               {companyName
                 ? t('ai.retrievalSearch.subtitle', {
-                    workspace: companyName,
+                    company: companyName,
                   })
                 : t('ai.retrievalSearch.subtitleFallback')}
             </p>

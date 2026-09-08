@@ -3,9 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { PmsTaskListMember } from '../api/pms-api';
 import { getTaskCommentBodySegments } from './TaskDetailActivityPanel';
 
-function member(
-  overrides: Partial<PmsTaskListMember> = {},
-): PmsTaskListMember {
+function member(overrides: Partial<PmsTaskListMember> = {}): PmsTaskListMember {
   return {
     user_id: 'user-1',
     email: 'member@example.test',
@@ -48,7 +46,7 @@ describe('TaskDetailActivityPanel comment body rendering', () => {
     ]);
   });
 
-  it('falls back to workspace member display labels for legacy id mentions', () => {
+  it('falls back to space member display labels for legacy id mentions', () => {
     expect(
       getTaskCommentBodySegments('@user-1', null, [
         member({ user_id: '00000000-0000-0000-0000-000000000001' }),

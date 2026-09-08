@@ -258,6 +258,13 @@ function useMeetingDetailElement({
 
   const editable = canEditMeeting(user, meeting);
   const canAttach = canAttachToMeeting(user, meeting);
+  const publicationGeneration = useRef(0);
+  useEffect(
+    () => () => {
+      publicationGeneration.current += 1;
+    },
+    [token, meetingId, canAttach],
+  );
   const canInvite = canInviteAttendees(user, meeting);
   const meetingWhiteboardContext = useMemo(
     () => ({ app: 'meeting', type: 'meeting', id: meetingId }),
@@ -338,16 +345,26 @@ function useMeetingDetailElement({
   }
 
   async function handleCreateWhiteboard() {
-    if (!token || !meeting) return;
+    if (!token || !meeting || !canAttach || busy) return;
+    const generation = publicationGeneration.current;
     setBusy(true);
     setError(null);
     try {
+      const acknowledged = await confirm({
+        title: t('shell:contentPublication.title'),
+        description: t('shell:contentPublication.confirm'),
+        confirmLabel: t('common:actions.confirm'),
+        cancelLabel: t('common:actions.cancel'),
+      });
+      if (!acknowledged || generation !== publicationGeneration.current) return;
       const board = await createWhiteboardContextSlot(token, {
         ...meetingWhiteboardContext,
+        company_admin_read_acknowledged: acknowledged,
         title: t('meeting.detail.whiteboardDefaultTitle', {
           title: meeting.title,
         }),
       });
+      if (generation !== publicationGeneration.current) return;
       updateWhiteboardLinkFromBoard(board);
       setWhiteboardEditorBoardId(board.id);
       setWhiteboardEditorOpen(true);
@@ -365,16 +382,38 @@ function useMeetingDetailElement({
   }
 
   async function handleAttachWhiteboard(item: WhiteboardHubItem) {
-    if (!token) return;
-    const board = await attachWhiteboardContextSlot(token, {
-      ...meetingWhiteboardContext,
-      whiteboard_id: item.id,
-    });
-    updateWhiteboardLinkFromBoard(board);
-    setWhiteboardEditorBoardId(board.id);
-    setWhiteboardEditorOpen(true);
-    onChanged();
-    void refresh();
+    if (!token || !canAttach || busy) return false;
+    const generation = publicationGeneration.current;
+    setBusy(true);
+    try {
+      const acknowledged =
+        item.ownership_kind === 'personal'
+          ? await confirm({
+              title: t('shell:contentPublication.title'),
+              description: t('shell:contentPublication.confirm'),
+              confirmLabel: t('common:actions.confirm'),
+              cancelLabel: t('common:actions.cancel'),
+            })
+          : false;
+      if (
+        generation !== publicationGeneration.current ||
+        (item.ownership_kind === 'personal' && !acknowledged)
+      )
+        return false;
+      const board = await attachWhiteboardContextSlot(token, {
+        ...meetingWhiteboardContext,
+        whiteboard_id: item.id,
+        company_admin_read_acknowledged: acknowledged,
+      });
+      if (generation !== publicationGeneration.current) return false;
+      updateWhiteboardLinkFromBoard(board);
+      setWhiteboardEditorBoardId(board.id);
+      setWhiteboardEditorOpen(true);
+      onChanged();
+      void refresh();
+    } finally {
+      if (generation === publicationGeneration.current) setBusy(false);
+    }
   }
 
   async function handleDetachWhiteboard() {
@@ -745,6 +784,7 @@ function useMeetingDetailElement({
                 <button
                   type="button"
                   onClick={() => setWhiteboardPickerOpen(true)}
+                  disabled={busy}
                   className="app-text-caption inline-flex items-center gap-1 text-app-accent hover:underline"
                 >
                   <Search size={12} />

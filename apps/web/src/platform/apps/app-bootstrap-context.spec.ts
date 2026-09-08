@@ -1,13 +1,15 @@
+import { createBootstrapApp } from '../../../tests/fixtures/company';
+import { createAppsBootstrap } from '../../../tests/fixtures/company';
 import { describe, expect, it } from 'vitest';
 
 import { isBootstrapAppEnabled } from './app-bootstrap-context';
-import type { AppsBootstrapResponse } from './apps-api';
 
-describe('workspace bootstrap context', () => {
+describe('app bootstrap context', () => {
   it('uses apps for access while categories remain presentation-only', () => {
-    const data = {
+    const data = createAppsBootstrap({
       apps: [
         {
+          ...createBootstrapApp('docs'),
           app_id: 'docs',
           enabled: true,
           icon_key: 'file-text',
@@ -16,6 +18,7 @@ describe('workspace bootstrap context', () => {
           title: 'Docs',
         },
         {
+          ...createBootstrapApp('mail'),
           app_id: 'mail',
           enabled: false,
           icon_key: 'mail',
@@ -30,6 +33,8 @@ describe('workspace bootstrap context', () => {
           id: 'team-tools',
           items: [
             {
+              coming_soon: false,
+              position: 0,
               app_id: 'mail',
               enabled: true,
               icon_key: 'mail',
@@ -42,7 +47,7 @@ describe('workspace bootstrap context', () => {
           title: 'Team tools',
         },
       ],
-    } as AppsBootstrapResponse;
+    });
 
     expect(isBootstrapAppEnabled(data, 'docs')).toBe(true);
     expect(isBootstrapAppEnabled(data, 'mail')).toBe(false);

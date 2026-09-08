@@ -34,7 +34,7 @@ def _scope_inputs() -> dict:
             principal_id="user-1",
         ),
         "user": SimpleNamespace(id="user-1", locale="ko-KR"),
-        "scope_resource_id": "workspace",
+        "scope_resource_id": "company",
         "conversation": SimpleNamespace(id="conversation-1"),
     }
 
@@ -57,13 +57,33 @@ def test_files_conversation_scope_is_registered_with_files_experience() -> None:
         ensure_conversation_scope_adapters_registered()
 
 
-def test_files_conversation_scope_rejects_non_workspace_resource() -> None:
+def test_files_conversation_scope_accepts_current_company_resource(monkeypatch) -> None:
+    inputs = _scope_inputs()
+    observed_dbs: list[object] = []
+    monkeypatch.setattr(
+        conversation_scope,
+        "resolve_company_enabled_app_ids",
+        lambda db: observed_dbs.append(db) or frozenset({"files"}),
+    )
+
+    FilesConversationScopeAdapter().validate(
+        db=inputs["db"],
+        principal=inputs["principal"],
+        user=inputs["user"],
+        scope_resource_id=inputs["scope_resource_id"],
+    )
+
+    assert observed_dbs == [inputs["db"]]
+
+
+@pytest.mark.parametrize("resource_id", ["folder-1", "workspace"])
+def test_files_conversation_scope_rejects_unsupported_resource(resource_id: str) -> None:
     with pytest.raises(ValueError, match="unsupported files conversation resource"):
         FilesConversationScopeAdapter().validate(
             db=SimpleNamespace(),
             principal=SimpleNamespace(),
             user=SimpleNamespace(),
-            scope_resource_id="folder-1",
+            scope_resource_id=resource_id,
         )
 
 
@@ -104,7 +124,7 @@ def test_files_first_turn_retries_with_recall_optimized_query_after_no_evidence(
             FileChatEvidenceItem(
                 file_id="file-1",
                 filename="자가 진단_v_1_10.docx",
-                locator="/apps/files/workspaces/workspace?file=file-1",
+                locator="/apps/files?file=file-1",
                 excerpt="권한 설정 오류 상태",
                 methods=("bm25", "dense_vector", "cross_encoder"),
             ),

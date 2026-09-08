@@ -207,7 +207,7 @@ def test_source_managed_corpus_scope_cannot_drift_from_company_scope(db: Session
         db.flush()
 
 
-def test_explicit_acl_denies_workspace_admin_and_allows_platform_admin(
+def test_explicit_acl_denies_ungranted_user_and_allows_platform_admin(
     db: Session,
     lifecycle_spies: SimpleNamespace,
 ) -> None:

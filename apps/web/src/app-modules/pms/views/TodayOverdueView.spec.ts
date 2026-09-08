@@ -16,7 +16,7 @@ describe('loadTodayOverdueTasks', () => {
     vi.clearAllMocks();
   });
 
-  it('loads task lists and assigned due tasks in the requested workspace', async () => {
+  it('loads task lists and assigned due tasks across accessible PMS spaces', async () => {
     const firstTask = { id: 'task-1' };
     const secondTask = { id: 'task-2' };
     const firstList = { id: 'list-1' };

@@ -72,7 +72,7 @@ def register_retrieval_partition_adapter(adapter: RetrievalPartitionAdapter) -> 
         raise ValueError(f"Retrieval partition adapter {adapter_id!r} must claim resource_types")
     if not allowed_candidate_scopes:
         raise ValueError(f"Retrieval partition adapter {adapter_id!r} must allow candidate scopes")
-    unknown_scopes = sorted(set(allowed_candidate_scopes) - {"company", "company", "personal"})
+    unknown_scopes = sorted(set(allowed_candidate_scopes) - {"company", "personal"})
     if unknown_scopes:
         raise ValueError(
             f"Retrieval partition adapter {adapter_id!r} has unsupported candidate "

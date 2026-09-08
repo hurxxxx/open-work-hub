@@ -120,11 +120,30 @@ export function buildDrawioEmbedConfig({
   };
 }
 
-export function currentDrawioEmbedConfig(): DrawioEmbedConfig {
-  return buildDrawioEmbedConfig({
+export function currentDrawioEmbedConfig(readOnly = true): DrawioEmbedConfig {
+  const config = buildDrawioEmbedConfig({
     env: import.meta.env,
     location: window.location,
   });
+  return drawioConfigForAccess(config, readOnly);
+}
+
+export function drawioConfigForAccess(
+  config: DrawioEmbedConfig,
+  readOnly: boolean,
+): DrawioEmbedConfig {
+  if (!readOnly) return config;
+  const url = new URL(config.src, window.location.origin);
+  for (const [key, value] of Object.entries({
+    chrome: '0',
+    lightbox: '1',
+    noSaveBtn: '1',
+    saveAndExit: '0',
+    noExitBtn: '1',
+  }))
+    url.searchParams.set(key, value);
+  url.searchParams.delete('edit');
+  return { ...config, src: url.toString() };
 }
 
 export interface DrawioEmbedMessage {
@@ -167,10 +186,10 @@ export function parseDrawioEmbedMessage(
   };
 }
 
-export function buildDrawioLoadMessage(xml: string): string {
+export function buildDrawioLoadMessage(xml: string, readOnly = true): string {
   return JSON.stringify({
     action: 'load',
-    autosave: 1,
+    autosave: readOnly ? 0 : 1,
     xml,
   });
 }

@@ -26,6 +26,7 @@ export function LocationPicker({
             type="button"
             onClick={() => !isDisabled && onChange(option.value)}
             disabled={isDisabled}
+            aria-pressed={isSelected}
             title={option.disabled ? option.disabledReason : undefined}
             className={cn(
               'flex w-full items-center gap-3 rounded-md border px-3 py-2.5 text-left transition-colors',

@@ -28,12 +28,19 @@ export interface WhiteboardPickerModalProps {
 
   excludeWhiteboardIds?: string[];
   onClose: () => void;
-  onPick: (item: WhiteboardHubItem) => Promise<void> | void;
+  onPick: (item: WhiteboardHubItem) => Promise<void | boolean> | void | boolean;
 }
 
 const EMPTY_EXCLUDED_WHITEBOARD_IDS: string[] = [];
 
-export function WhiteboardPickerModal({
+export function WhiteboardPickerModal(props: WhiteboardPickerModalProps) {
+  const { token } = useAuth();
+  return props.isOpen ? (
+    <WhiteboardPickerSession key={token} {...props} />
+  ) : null;
+}
+
+function WhiteboardPickerSession({
   isOpen,
   excludeWhiteboardIds = EMPTY_EXCLUDED_WHITEBOARD_IDS,
   onClose,

@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import type { DmThread, DmUser } from '../api/dm-api';
+import type { DmThread } from '../api/dm-api';
+import {
+  dmParticipantFixture as participant,
+  dmUserFixture as user,
+} from '../testing/dm-fixtures';
 import {
   canManageDmGroupMembers,
   createDmThreadTextDraftOverride,
@@ -233,27 +237,6 @@ describe('dm group thread model', () => {
     ).toBe('c1');
   });
 });
-
-function user(overrides: Partial<DmUser> = {}): DmUser {
-  return {
-    id: 'u1',
-    email: 'user@example.test',
-    full_name: 'Ada Lovelace',
-    display_name: '',
-    avatar_url: null,
-    ...overrides,
-  };
-}
-
-function participant(
-  participantUser: DmUser,
-  role: DmThread['participants'][number]['role'] = 'member',
-): DmThread['participants'][number] {
-  return {
-    role,
-    user: participantUser,
-  };
-}
 
 function conversation(overrides: Partial<DmThread> = {}): DmThread {
   return {

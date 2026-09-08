@@ -41,8 +41,9 @@ function lock(userId: string): ActiveRecordingLock {
     user_id: userId,
     user_name: 'Recorder',
     started_at: '2026-05-30T00:00:00Z',
-    stale_after_seconds: 300,
-  } as ActiveRecordingLock;
+    staging_id: 'staging-1',
+    last_active_at: '2026-05-30T00:00:00Z',
+  };
 }
 
 describe('meeting detail model', () => {

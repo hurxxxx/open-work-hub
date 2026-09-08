@@ -136,11 +136,12 @@ describe('media URL resolution session', () => {
 
   it('revokes a late object URL and resolves safely after disposal', async () => {
     const tasks: ScheduledTask[] = [];
-    let finishResolution: ((value: Record<string, string>) => void) | null =
-      null;
+    let finishResolution: (value: Record<string, string>) => void = () => {
+      throw new Error('Expected a pending media URL resolution');
+    };
     const resolveMediaUrls = vi.fn<ResolveMediaUrlsAdapter>(
       () =>
-        new Promise((resolve) => {
+        new Promise<Record<string, string>>((resolve) => {
           finishResolution = resolve;
         }),
     );
@@ -161,7 +162,7 @@ describe('media URL resolution session', () => {
     await Promise.resolve();
 
     session.dispose();
-    finishResolution?.({ 'media:image-1': 'blob:late-image' });
+    finishResolution({ 'media:image-1': 'blob:late-image' });
     await flushing;
 
     await expect(pending).resolves.toBe('media:image-1');

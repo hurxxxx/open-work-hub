@@ -1,28 +1,29 @@
+import {
+  createAuthUser,
+  createAppsBootstrap,
+  createBootstrapApp,
+} from '../../../tests/fixtures/company';
 import { describe, expect, it } from 'vitest';
 
-import type { AuthUser } from '@/src/platform/auth/auth-api';
-import type { AppsBootstrapResponse } from '@/src/platform/apps/apps-api';
 import { createAccessProjectionKey } from './access-projection-key';
 
-const user = {
+const user = createAuthUser({
   id: 'user-1',
   system_roles: [],
   group_ids: ['group-1'],
   managed_organization_unit_ids: ['org-1'],
-} as AuthUser;
+});
 
-const apps = {
+const apps = createAppsBootstrap({
   apps: [],
   app_bar_categories: [],
-  global_route_app_ids: ['planner'],
   personal_tool_app_ids: ['planner'],
   principal: {
     kind: 'user',
-    scope: 'personal',
     source: 'test',
     user_id: 'user-1',
   },
-} as AppsBootstrapResponse;
+});
 
 describe('createAccessProjectionKey', () => {
   it('is order-stable but changes for membership, role, app, or identity changes', () => {
@@ -50,9 +51,7 @@ describe('createAccessProjectionKey', () => {
     expect(
       createAccessProjectionKey(user, {
         ...apps,
-        apps: [
-          { app_id: 'mail', enabled: true },
-        ] as AppsBootstrapResponse['apps'],
+        apps: [createBootstrapApp('mail')],
       }),
     ).not.toBe(baseline);
     expect(createAccessProjectionKey({ ...user, id: 'user-2' }, apps)).not.toBe(

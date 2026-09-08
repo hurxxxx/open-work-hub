@@ -181,7 +181,9 @@ export function roleOptionConfigForUser(
 ): RoleOptionConfig[] {
   return canManageAdmins
     ? [OWNER_ROLE_OPTION, ...SPACE_MEMBER_ROLE_OPTIONS]
-    : SPACE_MEMBER_ROLE_OPTIONS;
+    : SPACE_MEMBER_ROLE_OPTIONS.filter(
+        (option) => option.value === 'member' || option.value === 'viewer',
+      );
 }
 
 export function spaceMemberIds(

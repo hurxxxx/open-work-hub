@@ -13,7 +13,7 @@ type FolderAddPopoverProps = {
   anchorRef: React.RefObject<HTMLButtonElement | null>;
   onClose: () => void;
   onCreateList: () => void;
-  onCreateDoc: () => void;
+  onCreateDoc?: () => void;
 };
 
 export function FolderAddPopover({
@@ -52,19 +52,21 @@ export function FolderAddPopover({
           {t('pms.spaceTree.list')}
         </div>
       </button>
-      <button
-        type="button"
-        onClick={() => {
-          onCreateDoc();
-          onClose();
-        }}
-        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors"
-      >
-        <FileText size={14} className="text-app-ink/45" />
-        <div className="app-text-control-sm text-app-ink">
-          {t('pms.spaceTree.doc')}
-        </div>
-      </button>
+      {onCreateDoc ? (
+        <button
+          type="button"
+          onClick={() => {
+            onCreateDoc();
+            onClose();
+          }}
+          className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors"
+        >
+          <FileText size={14} className="text-app-ink/45" />
+          <div className="app-text-control-sm text-app-ink">
+            {t('pms.spaceTree.doc')}
+          </div>
+        </button>
+      ) : null}
     </div>,
     document.body,
   );

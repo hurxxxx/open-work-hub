@@ -38,7 +38,8 @@ function session(
 ): RecordingSessionState {
   return {
     stagingId: 'staging-1',
-    scopeKey: 'hq:recording:unlinked',
+    userId: 'user-1',
+    scopeKey: 'user-1:recording:unlinked',
     idempotencyKey: 'idem-1',
     mimeType: 'audio/webm',
     title: null,
@@ -59,21 +60,23 @@ function session(
   };
 }
 
-function createStore(
-  input: {
-    chunks?: RecordingChunkState[];
-    session?: RecordingSessionState | null;
-  } = {},
-): RecordingRecorderRuntimeStore & {
+type TestRecordingStore = RecordingRecorderRuntimeStore & {
   chunks: RecordingChunkState[];
   session: RecordingSessionState | null;
   updates: Array<Partial<RecordingSessionState>>;
   completed: string[];
   cleared: string[];
-} {
-  const store = {
+};
+
+function createStore(
+  input: {
+    chunks?: RecordingChunkState[];
+    session?: RecordingSessionState | null;
+  } = {},
+): TestRecordingStore {
+  const store: TestRecordingStore = {
     chunks: [...(input.chunks ?? [])],
-    session: input.session ?? session(),
+    session: input.session === undefined ? session() : input.session,
     updates: [] as Array<Partial<RecordingSessionState>>,
     completed: [] as string[],
     cleared: [] as string[],
@@ -264,6 +267,7 @@ describe('RecordingRecorderRuntime', () => {
     });
     expect(store.completed).toEqual(['staging-1']);
     expect(store.cleared).toEqual(['staging-1']);
+    expect(store.session).toBeNull();
     expect(callbacks.onFinalizeStarted).toHaveBeenCalledWith('staging-1');
     expect(callbacks.onUploadSaved).toHaveBeenCalledWith(
       'staging-1',
@@ -273,7 +277,9 @@ describe('RecordingRecorderRuntime', () => {
   });
 
   it('waits for queued chunk writes before preparing finalization', async () => {
-    let resolveDigest: ((value: string) => void) | null = null;
+    let resolveDigest: (value: string) => void = () => {
+      throw new Error('Expected a pending digest request');
+    };
     const environment = createEnvironment({
       digestBlob: () =>
         new Promise<string>((resolve) => {
@@ -294,7 +300,7 @@ describe('RecordingRecorderRuntime', () => {
     await Promise.resolve();
     expect(prepared).toBe(false);
 
-    resolveDigest?.('digest-late');
+    resolveDigest('digest-late');
     await Promise.all([write, prepare]);
 
     expect(prepared).toBe(true);

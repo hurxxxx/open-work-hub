@@ -10,6 +10,7 @@ from open_work_hub_api.domains.mail.service import (
     publish_due_mail_sync_jobs,
     sync_account,
 )
+from open_work_hub_api.domains.mail.sync_policy import MailSyncAccessRevoked
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -67,6 +68,8 @@ def sync_mail_account(self, account_id: str) -> str:
             return "cancelled:disabled"
         result = sync_account(session, account_id=account_id)
         return f"synced:{result.changed_count}"
+    except MailSyncAccessRevoked:
+        return "cancelled:access_revoked"
     finally:
         session.close()
 

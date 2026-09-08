@@ -4,6 +4,7 @@ import {
   buildDrawioEmbedConfig,
   buildDrawioExportMessage,
   buildDrawioLoadMessage,
+  drawioConfigForAccess,
   isDrawioMessageOriginAllowed,
   parseDrawioEmbedMessage,
 } from './drawio-embed-protocol';
@@ -121,7 +122,9 @@ describe('draw.io embed protocol', () => {
   });
 
   it('builds load and export actions', () => {
-    expect(JSON.parse(buildDrawioLoadMessage('<mxfile />'))).toMatchObject({
+    expect(
+      JSON.parse(buildDrawioLoadMessage('<mxfile />', false)),
+    ).toMatchObject({
       action: 'load',
       autosave: 1,
       xml: '<mxfile />',
@@ -132,4 +135,19 @@ describe('draw.io embed protocol', () => {
       xml: '<mxfile />',
     });
   });
+});
+
+it('boots the official readonly viewer without save/exit UI or autosave', () => {
+  const config = {
+    src: 'https://drawio.example/?embed=1&saveAndExit=1&edit=evil',
+    origin: 'https://drawio.example',
+  };
+  const url = new URL(drawioConfigForAccess(config, true).src);
+  expect(url.searchParams.get('chrome')).toBe('0');
+  expect(url.searchParams.get('lightbox')).toBe('1');
+  expect(url.searchParams.get('saveAndExit')).toBe('0');
+  expect(url.searchParams.get('noExitBtn')).toBe('1');
+  expect(url.searchParams.has('edit')).toBe(false);
+  expect(JSON.parse(buildDrawioLoadMessage('<mxfile/>')).autosave).toBe(0);
+  expect(drawioConfigForAccess(config, false)).toEqual(config);
 });

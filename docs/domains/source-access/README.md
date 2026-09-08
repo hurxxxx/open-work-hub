@@ -40,8 +40,8 @@ Notifications and content delivery use separate dispatchers with the same owning
 
 Company policy is owned by [App Platform](../app-platform/README.md) and
 [Organization](../organization/README.md). Retrieval generations remain defined by
-[ADR 0009](../../../adr/0009-retrieval-partition-projection-generations.md), with its former
-workspace requirements superseded by [ADR 0012](../../../adr/0012-company-app-access-without-workspaces.md).
+[ADR 0009](../../../adr/0009-retrieval-partition-projection-generations.md) under the company
+model in [ADR 0012](../../../adr/0012-company-app-access-without-workspaces.md).
 Byte grants are owned by [Content Access](../content-access/README.md), and source-event visibility
 by [Notifications](../notifications/README.md).
 

@@ -476,7 +476,7 @@ export function createCoreAppModuleRegistry<
           `App route ${route.path} belongs to ${route.appId} but is registered with manifest ${appId}`,
         );
       }
-      assertUniqueRoutePath('workspace', route.path, appRoutePaths);
+      assertUniqueRoutePath('app', route.path, appRoutePaths);
       assertDeclaredRoutePath('App', appId, route.path, declaredAppRoutePaths);
       appRoutes.push(route);
       registeredAppRoutePaths.add(route.path);
@@ -662,7 +662,7 @@ export function createCoreAppModuleRegistryApi<
       }
 
       assertStaticRoutePaths(
-        'Static workspace',
+        'Static app',
         appId,
         manifest.staticAppRoutePaths ?? [],
         appRoutes,

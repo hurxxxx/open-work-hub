@@ -39,7 +39,10 @@ user work enforce this restriction on the server.
 
 PMS owners are explicit users; groups may be viewer, member or admin. Parent-row locking serializes
 member/group changes and owner checks. Group membership or organization-head metadata cannot create
-an owner. Each app resolves resource rights from current source state after checking app admission.
+an owner. Creating a folder or list inside an existing space preserves the actor's current role;
+it never materializes group-derived access as a direct membership. Only creation of a new space
+assigns its creator ownership. Each app resolves resource rights from current source state after
+checking app admission.
 
 ## App Admission
 
@@ -67,11 +70,20 @@ Standalone Docs, Whiteboard, Bento, Diagrams and uploaded files begin personal. 
 preserves personal ownership. Publishing to a company or PMS context requires source sharing authority,
 explicit company-admin-read acknowledgment and a same-transaction audit record. Company ownership is
 irreversible; unlinking or revoking an audience does not restore personal ownership.
+The same acknowledgment is required when creating Docs from a PMS sidebar/task description or
+creating/linking a personal Whiteboard from PMS and Meeting. Cancellation sends no publication request
+and keeps a resource picker open. Reordering a PMS space must only change documents managed by the
+actor whose primary target is that exact space; task references and other primary targets are excluded.
 
 Docs/Whiteboard `company_visible` separately grants read access to everyone admitted to that app.
 Project publication alone leaves this flag false. Removing company-wide visibility preserves project,
 user/group grants and company ownership; the UI must not imply that all those grants were removed.
 Company administrators retain read access, while mutations require app-owned resource rights.
+Company publication and the primary project connection are independent controls. Changing the primary
+connection preserves other project targets; removing it does not revoke other sharing grants.
+The personal-only summary requires personal ownership with no user/group, active-link or source-target
+sharing. A stored group grant remains a sharing configuration even while that group is inactive.
+Bento/Diagrams use company ownership for publication and cannot offer a return to personal ownership.
 
 A supplied shared-link token bounds access to that exact active link and its read/edit level, including
 for the owner. Invalid links cannot fall back to stronger owner/group/target rights, and links never
@@ -140,8 +152,11 @@ the event contains `notification: null` and the current count, without the old t
 - `apps/api/src/open_work_hub_api/domains/auth/app_catalog.py` is the explicit composition root.
 - `compile_app_registry()` rejects duplicate identity/routes/nav, invalid ownership, and inconsistent route metadata.
 - Bootstrap, route/API gates, admin controls, AI discovery/execution, search, and background work consume compiled identity plus runtime availability.
-- Executable app-owned user work rechecks availability after claiming the job and before resolving
-  providers or mutating app data. A disabled job pauses or cancels according to that queue's
+- Executable app-owned user work rechecks the current actor's app admission after claiming the job,
+  before resolving providers and again after external I/O before mutating app data. This includes
+  account state and live user/group audience grants, not just the company master switch.
+  Mail sync terminates revoked jobs as cancelled without retrying or applying a fetched response.
+  A disabled job pauses or cancels according to that queue's
   terminal-state contract. Compensating cleanup may remove orphaned/expired storage after
   disablement but must not publish new user-visible app state.
 - Migration-only app ID lists may exist inside Alembic migrations; runtime allowlists outside the registry are forbidden.
@@ -190,3 +205,11 @@ pnpm check:alembic-graph
 pnpm test:alembic-graph
 (cd apps/api && uv run --python 3.12 --group dev python -m pytest tests/test_app_routes.py tests/test_app_availability.py tests/test_apps_launch_catalog.py tests/test_app_registry.py tests/test_company_groups.py tests/test_company_content_boundaries.py -q)
 ```
+
+### Revoked realtime sessions
+
+The server closes a revoked user session before sending another realtime payload. Authorization close
+codes (1008, 4401, 4403) therefore trigger the existing client account-access refresh boundary: protected
+content becomes inert/hidden while current identity is fetched, and denial clears the session. Ordinary
+network failures retain reconnect behavior; a policy close is not an unbounded reconnect trigger.
+Account suspension and login blocking end existing sessions; reactivation requires a fresh login.

@@ -164,7 +164,7 @@ const navItems: NavItem[] = [
 ];
 
 describe('sub-sidebar navigation model', () => {
-  it('projects workspace bootstrap nav items for the active app only', () => {
+  it('projects app bootstrap nav items for the active app only', () => {
     const projection = buildSubSidebarNavigationProjection({
       activeAppId: 'chatbot',
       canReadApp: true,
@@ -172,7 +172,7 @@ describe('sub-sidebar navigation model', () => {
       systemRoles: [],
       translate: t,
       appNavItems: [
-        workspaceNavItem({
+        appNavItem({
           id: 'search',
           app_id: 'chatbot',
           title: 'Search from bootstrap',
@@ -182,7 +182,7 @@ describe('sub-sidebar navigation model', () => {
           link_app_id: 'docs',
           coming_soon: true,
         }),
-        workspaceNavItem({ id: 'home', app_id: 'home' }),
+        appNavItem({ id: 'home', app_id: 'home' }),
       ],
     });
 
@@ -208,7 +208,7 @@ describe('sub-sidebar navigation model', () => {
         navItems,
         systemRoles: [],
         translate: t,
-        appNavItems: [workspaceNavItem({ id: 'missing', app_id: 'chatbot' })],
+        appNavItems: [appNavItem({ id: 'missing', app_id: 'chatbot' })],
       }),
     ).toThrow(
       'App nav item missing for chatbot is missing from the web app registry',
@@ -223,7 +223,7 @@ describe('sub-sidebar navigation model', () => {
       systemRoles: [],
       translate: t,
       appNavItems: [
-        workspaceNavItem({
+        appNavItem({
           id: 'search',
           app_id: 'chatbot',
           path_suffix: null,
@@ -236,7 +236,7 @@ describe('sub-sidebar navigation model', () => {
     expect(projection.filteredItems[0].comingSoon).toBeUndefined();
   });
 
-  it('uses bootstrap order and hides local-only workspace nav items', () => {
+  it('uses bootstrap order and hides local-only app nav items', () => {
     const projection = buildSubSidebarNavigationProjection({
       activeAppId: 'chatbot',
       canReadApp: true,
@@ -244,8 +244,8 @@ describe('sub-sidebar navigation model', () => {
       systemRoles: [],
       translate: t,
       appNavItems: [
-        workspaceNavItem({ id: 'chatbot', app_id: 'chatbot' }),
-        workspaceNavItem({ id: 'search', app_id: 'chatbot' }),
+        appNavItem({ id: 'chatbot', app_id: 'chatbot' }),
+        appNavItem({ id: 'search', app_id: 'chatbot' }),
       ],
     });
 
@@ -273,20 +273,20 @@ describe('sub-sidebar navigation model', () => {
       systemRoles: [],
       translate: t,
       appNavItems: [
-        workspaceNavItem({
+        appNavItem({
           id: 'docs-library',
           app_id: 'docs',
           title: 'Document library from bootstrap',
           category: 'docs',
           path_suffix: '/library',
         }),
-        workspaceNavItem({
+        appNavItem({
           id: 'docs-assistant',
           app_id: 'chatbot',
           title: 'Other app item',
           category: 'docs',
         }),
-        workspaceNavItem({
+        appNavItem({
           id: 'search',
           app_id: 'chatbot',
         }),
@@ -311,7 +311,7 @@ describe('sub-sidebar navigation model', () => {
       systemRoles: [],
       translate: t,
       appNavItems: [
-        workspaceNavItem({
+        appNavItem({
           id: 'chatbot',
           app_id: 'chatbot',
           coming_soon: false,
@@ -329,7 +329,7 @@ describe('sub-sidebar navigation model', () => {
       navItems,
       systemRoles: ['platform_admin'],
       translate: t,
-      appNavItems: [workspaceNavItem({ id: 'search', app_id: 'settings' })],
+      appNavItems: [appNavItem({ id: 'search', app_id: 'settings' })],
     });
 
     expect(projection.filteredItems.map((item) => item.id)).toEqual([
@@ -392,7 +392,7 @@ describe('sub-sidebar navigation model', () => {
     ]);
   });
 
-  it('uses manifest navigation for global apps without workspace bootstrap nav', () => {
+  it('uses manifest navigation for global apps without app bootstrap nav', () => {
     const projection = buildSubSidebarNavigationProjection({
       activeAppId: 'chatbot',
       canReadApp: false,
@@ -411,7 +411,7 @@ describe('sub-sidebar navigation model', () => {
     expect(projection.categories).toEqual(['Translated tools']);
   });
 
-  it('extends unique categories with workspace read context without mutating inputs', () => {
+  it('extends unique categories with app read context without mutating inputs', () => {
     const localNavItems = navItems.map((item) => ({ ...item }));
     const projection = buildSubSidebarNavigationProjection({
       activeAppId: 'chatbot',
@@ -424,12 +424,12 @@ describe('sub-sidebar navigation model', () => {
       systemRoles: [],
       translate: t,
       appNavItems: [
-        workspaceNavItem({
+        appNavItem({
           id: 'search',
           app_id: 'chatbot',
           category: 'Tools',
         }),
-        workspaceNavItem({
+        appNavItem({
           id: 'search',
           app_id: 'chatbot',
           category: 'Tools',
@@ -442,7 +442,7 @@ describe('sub-sidebar navigation model', () => {
   });
 });
 
-function workspaceNavItem(
+function appNavItem(
   overrides: Partial<BootstrapNavItem> = {},
 ): BootstrapNavItem {
   return {

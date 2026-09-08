@@ -61,13 +61,13 @@ describe('bento embed protocol', () => {
     expect(
       parseBentoBridgeMessage({
         channel: 'open-work-hub:bento',
-        version: 1,
+        version: 2,
         type: 'document-changed',
         documentJson: '{"format":"bento/slides"}',
       }),
     ).toMatchObject({ type: 'document-changed' });
     expect(
-      parseBentoBridgeMessage({ channel: 'wrong', version: 1, type: 'ready' }),
+      parseBentoBridgeMessage({ channel: 'wrong', version: 2, type: 'ready' }),
     ).toBeNull();
   });
 
@@ -75,7 +75,18 @@ describe('bento embed protocol', () => {
     expect(buildBentoLoadMessage('{}')).toMatchObject({
       type: 'load-document',
       documentJson: '{}',
+      readOnly: true,
     });
+    expect(buildBentoLoadMessage('{}', false)).toMatchObject({
+      readOnly: false,
+    });
+    expect(
+      parseBentoBridgeMessage({
+        channel: 'open-work-hub:bento',
+        version: 1,
+        type: 'ready',
+      }),
+    ).toBeNull();
     expect(buildBentoExportMessage()).toMatchObject({
       type: 'export-document',
     });

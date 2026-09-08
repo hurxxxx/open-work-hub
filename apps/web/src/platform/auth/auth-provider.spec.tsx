@@ -1,3 +1,4 @@
+import { createAuthUser } from '../../../tests/fixtures/company';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -33,7 +34,7 @@ vi.mock('@/src/platform/analytics/matomo', () => ({
 }));
 
 function user(overrides: Partial<AuthUser> = {}): AuthUser {
-  return {
+  return createAuthUser({
     app_bar_layout: { pinned_app_ids: [] },
     date_format: 'korean',
     display_name: 'Member',
@@ -50,10 +51,8 @@ function user(overrides: Partial<AuthUser> = {}): AuthUser {
     managed_organization_unit_ids: [],
     theme_preference: 'system',
     time_zone: 'Asia/Seoul',
-    workspaces: [],
-    workspace_roles: [],
     ...overrides,
-  };
+  });
 }
 
 function session(): AuthSessionResponse {
@@ -66,9 +65,7 @@ function AuthHarness() {
     <div>
       <p>{auth.status}</p>
       <p data-testid="access-projection">
-        {auth.user?.locale ?? 'none'}|
-        {auth.user?.workspaces.map((workspace) => workspace.slug).join(',') ??
-          'none'}
+        {auth.user?.locale ?? 'none'}|{auth.user?.group_ids.join(',') ?? 'none'}
       </p>
       <button
         onClick={() =>
@@ -144,49 +141,50 @@ describe('AuthProvider logout', () => {
 });
 
 describe('AuthProvider concurrent account updates', () => {
-  it('does not let an older preference response restore stale workspace access', async () => {
-    let resolvePreferences!: (value: AuthUser) => void;
-    apiMocks.updatePreferences.mockImplementation(
-      () =>
-        new Promise<AuthUser>((resolve) => {
-          resolvePreferences = resolve;
-        }),
-    );
-    apiMocks.getCurrentUser.mockResolvedValue(
-      user({
-        workspaces: [
-          {
-            id: 'workspace-1',
-            name: 'Workspace One',
-            role: 'member',
-            slug: 'workspace-one',
-          },
-        ],
-      }),
-    );
+  it.each([
+    { previous: ['group-revoked'], current: [] },
+    { previous: [], current: ['group-granted'] },
+  ])(
+    'keeps current group access $current when older preferences resolve',
+    async ({ previous, current }) => {
+      let resolvePreferences!: (value: AuthUser) => void;
+      apiMocks.updatePreferences.mockImplementation(
+        () =>
+          new Promise<AuthUser>((resolve) => {
+            resolvePreferences = resolve;
+          }),
+      );
+      apiMocks.login.mockResolvedValue({
+        token: 'login-token',
+        user: user({ group_ids: previous }),
+      });
+      apiMocks.getCurrentUser.mockResolvedValue(user({ group_ids: current }));
 
-    render(
-      <AuthProvider>
-        <AuthHarness />
-      </AuthProvider>,
-    );
-    await screen.findByText('unauthenticated');
-    fireEvent.click(screen.getByRole('button', { name: 'login' }));
-    await screen.findByText('authenticated');
+      render(
+        <AuthProvider>
+          <AuthHarness />
+        </AuthProvider>,
+      );
+      await screen.findByText('unauthenticated');
+      fireEvent.click(screen.getByRole('button', { name: 'login' }));
+      await screen.findByText('authenticated');
 
-    fireEvent.click(screen.getByRole('button', { name: 'update preferences' }));
-    fireEvent.click(screen.getByRole('button', { name: 'refresh access' }));
-    await waitFor(() =>
-      expect(screen.getByTestId('access-projection').textContent).toBe(
-        'ko-KR|workspace-one',
-      ),
-    );
+      fireEvent.click(
+        screen.getByRole('button', { name: 'update preferences' }),
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'refresh access' }));
+      await waitFor(() =>
+        expect(screen.getByTestId('access-projection').textContent).toBe(
+          `ko-KR|${current.join(',')}`,
+        ),
+      );
 
-    resolvePreferences(user({ locale: 'en-US', workspaces: [] }));
-    await waitFor(() =>
-      expect(screen.getByTestId('access-projection').textContent).toBe(
-        'en-US|workspace-one',
-      ),
-    );
-  });
+      resolvePreferences(user({ locale: 'en-US', group_ids: previous }));
+      await waitFor(() =>
+        expect(screen.getByTestId('access-projection').textContent).toBe(
+          `en-US|${current.join(',')}`,
+        ),
+      );
+    },
+  );
 });

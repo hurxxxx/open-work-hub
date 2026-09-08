@@ -98,6 +98,10 @@ class NativeDoc(Base):
         back_populates="doc",
         cascade="all, delete-orphan",
     )
+    group_shares: Mapped[list["NativeDocGroupShare"]] = relationship(
+        back_populates="doc",
+        cascade="all, delete-orphan",
+    )
     link_shares: Mapped[list["NativeDocLinkShare"]] = relationship(
         back_populates="doc",
         cascade="all, delete-orphan",
@@ -398,3 +402,4 @@ class NativeDocGroupShare(Base):
     access_level: Mapped[str] = mapped_column(String(16), nullable=False)
     created_by_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
+    doc: Mapped[NativeDoc] = relationship(back_populates="group_shares")

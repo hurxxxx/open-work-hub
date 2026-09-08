@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { DmMessageAttachment } from '../api/dm-api';
+import { dmAttachmentFixture } from '../testing/dm-fixtures';
 import type { DmComposerAttachmentAction } from './dm-composer-attachments';
 import { uploadDmComposerAttachments } from './dm-composer-attachment-upload';
 
@@ -9,13 +10,7 @@ function file(name = 'screen.png', type = 'image/png'): File {
 }
 
 function attachment(id: string): DmMessageAttachment {
-  return {
-    id,
-    filename: `${id}.png`,
-    is_image: true,
-
-    size_bytes: 1024,
-  } as DmMessageAttachment;
+  return dmAttachmentFixture({ id, filename: `${id}.png` });
 }
 
 describe('dm composer attachment upload', () => {

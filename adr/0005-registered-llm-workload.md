@@ -1,7 +1,11 @@
 # ADR 0005: Registered LLM Workload and Common Execution Interface
 
-- Status: Accepted
+- Status: Accepted; scope policy superseded by [ADR 0012](0012-company-app-access-without-workspaces.md)
 - Date: 2026-07-10
+
+Current admission follows [App Platform](../docs/domains/app-platform/README.md),
+and durable execution follows [AI Execution](../docs/domains/ai/execution.md).
+This ADR retains workload registration and provider-routing decisions.
 
 ## Decision
 
@@ -11,8 +15,8 @@
 - Workload unit = independently configurable execution function/stage.
 - Legacy `task_kind` may remain for budget/audit compatibility; `workload_id` is discovery key.
 - Domain service/worker calls only `execute_llm(...)` or `stream_llm(...)`.
-- Caller passes workload, app, actor, execution context, and input. Workspace is present only for a
-  workspace execution context. Caller never chooses provider/model/pool/endpoint/credential.
+- Caller passes workload, app, actor, personal/company execution context, and input.
+  Caller never chooses provider/model/pool/endpoint/credential.
 - Common execution resolves route/provider/model/output cap once from descriptor plus admin override.
 - External security allow/mask/block/audit never reroutes. Block fails closed.
 - Provider implementations are approved adapters behind the common interface.

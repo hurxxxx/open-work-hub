@@ -35,7 +35,7 @@ def _hit(
         score=score,
         citation=f"/docs/{resource_id}" if source == "keyword" else f"{resource_id}:0",
         methods=methods,
-        metadata={"scope_kind": "workspace"},
+        metadata={"scope_kind": "company"},
     )
 
 
@@ -105,7 +105,7 @@ def test_fused_rerank_receives_keyword_and_vector_evidence() -> None:
         source="generic_rag",
         resource_id="shared",
         score=0.99,
-        excerpt="workspace policy semantic passage",
+        excerpt="company policy semantic passage",
         methods=["semantic", "vector"],
     )
     fused = fuse_ranked_hits({"keyword": [keyword], "generic_rag": [dense]})
@@ -116,7 +116,7 @@ def test_fused_rerank_receives_keyword_and_vector_evidence() -> None:
         def rerank(self, *, query, hits, timeout_seconds):
             del query, timeout_seconds
             assert "SAE J3109 J3174 exact lexical evidence" in hits[0].text
-            assert "workspace policy semantic passage" in hits[0].text
+            assert "company policy semantic passage" in hits[0].text
             return hits
 
     result = rerank_hits(
@@ -439,7 +439,7 @@ def test_grounding_keeps_collision_safe_citation_source_and_fused_provenance(
         ).model_copy(
             update={
                 "metadata": {
-                    "scope_kind": "workspace",
+                    "scope_kind": "company",
                     "retrieval": {"backends": ["keyword", "generic_rag"]},
                 }
             }

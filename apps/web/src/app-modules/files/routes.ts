@@ -26,7 +26,7 @@ const FilesChatView = lazy(() =>
   })),
 );
 
-function FilesWorkspaceView() {
+function FilesAppView() {
   const [searchParams] = useSearchParams();
   const searchSelected = searchParams.get('view') === 'search';
   return lazyRoute(
@@ -47,6 +47,6 @@ export const filesAppRoutes: AppRouteDefinition[] = [
     appId: 'files',
     chrome: getAppRouteChrome('files.root'),
     path: getAppRoutePattern('files.root'),
-    element: createElement(FilesWorkspaceView),
+    element: createElement(FilesAppView),
   },
 ];

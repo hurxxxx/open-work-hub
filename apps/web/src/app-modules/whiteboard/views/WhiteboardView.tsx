@@ -88,11 +88,11 @@ function useWhiteboardViewElement() {
   const isTrashView = view === 'archived';
   const ViewIcon = isTrashView ? Trash2 : PencilRuler;
   const personalItems = useMemo(
-    () => items.filter((item) => item.is_private),
+    () => items.filter((item) => !item.company_visible),
     [items],
   );
   const companyItems = useMemo(
-    () => items.filter((item) => !item.is_private),
+    () => items.filter((item) => item.company_visible),
     [items],
   );
 
@@ -501,16 +501,16 @@ function WhiteboardSection({
   const SectionIcon = visibility === 'company' ? Users : Lock;
   const titleKey =
     visibility === 'company'
-      ? 'whiteboard.workspaceSectionTitle'
+      ? 'whiteboard.companySectionTitle'
       : 'whiteboard.personalSectionTitle';
   const emptyKey = archived
     ? 'whiteboard.trashEmpty'
     : visibility === 'company'
-      ? 'whiteboard.workspaceSectionEmpty'
+      ? 'whiteboard.companySectionEmpty'
       : 'whiteboard.personalSectionEmpty';
   const createKey =
     visibility === 'company'
-      ? 'whiteboard.createWorkspace'
+      ? 'whiteboard.createCompany'
       : 'whiteboard.createPersonal';
 
   return (

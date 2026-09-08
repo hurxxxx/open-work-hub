@@ -20,9 +20,7 @@ describe('useChatStream', () => {
   });
 
   it('keeps an active stream alive while the chat route is unmounted', async () => {
-    let capturedSignal: AbortSignal | null = null;
-    vi.mocked(streamAiChat).mockImplementation(async ({ signal }) => {
-      capturedSignal = signal;
+    vi.mocked(streamAiChat).mockImplementation(async () => {
       return new Response(
         new ReadableStream<Uint8Array>({
           start() {
@@ -45,10 +43,11 @@ describe('useChatStream', () => {
       expect(rendered.result.current.state.streamOpened).toBe(true);
     });
 
-    expect(capturedSignal?.aborted).toBe(false);
+    const { signal: capturedSignal } = vi.mocked(streamAiChat).mock.calls[0][0];
+    expect(capturedSignal.aborted).toBe(false);
 
     rendered.unmount();
-    expect(capturedSignal?.aborted).toBe(false);
+    expect(capturedSignal.aborted).toBe(false);
 
     const resumed = renderHook(() => useChatStream('token-1', 'user-1:docs'));
     expect(resumed.result.current.state.status).toBe('streaming');
@@ -58,7 +57,7 @@ describe('useChatStream', () => {
     act(() => {
       resumed.result.current.abort();
     });
-    expect(capturedSignal?.aborted).toBe(true);
+    expect(capturedSignal.aborted).toBe(true);
     expect(resumed.result.current.state.status).toBe('cancelled');
     await act(async () => {
       await expect(sendPromise).resolves.toBeUndefined();

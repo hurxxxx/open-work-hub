@@ -1,8 +1,10 @@
 import { buildAppHref } from '@open-work-hub/contracts/app-routes';
-import type { BlockContent } from '@open-work-hub/ui';
+import { useConfirm, type BlockContent } from '@open-work-hub/ui';
 import type { TFunction } from 'i18next';
 import {
   useCallback,
+  useEffect,
+  useRef,
   useState,
   type RefObject,
   type SetStateAction,
@@ -47,6 +49,7 @@ export function resolveTaskDetailDocPath({ docId }: { docId: string }): string {
 
 export function useTaskDetailLinkedDocs({
   canEdit,
+  canPublishDoc,
   descriptionBlocksRef,
   issue,
   onUpdate,
@@ -57,6 +60,7 @@ export function useTaskDetailLinkedDocs({
   t,
 }: {
   canEdit: boolean;
+  canPublishDoc: boolean;
   descriptionBlocksRef: RefObject<BlockContent | null>;
   issue: Pick<PmsTask, 'description_blocks' | 'id' | 'title'>;
   onUpdate?: () => void | Promise<void>;
@@ -68,6 +72,15 @@ export function useTaskDetailLinkedDocs({
 }) {
   const [docPickerOpen, setDocPickerOpen] = useState(false);
   const [promotingDescription, setPromotingDescription] = useState(false);
+  const { confirm, confirmDialog } = useConfirm();
+  const publicationGeneration = useRef(0);
+  useEffect(() => {
+    setPromotingDescription(false);
+    setDocPickerOpen(false);
+    return () => {
+      publicationGeneration.current += 1;
+    };
+  }, [token, issue.id, spaceId, canEdit, canPublishDoc]);
 
   const buildDocPath = useCallback(
     (docId: string) => resolveTaskDetailDocPath({ docId }),
@@ -75,11 +88,31 @@ export function useTaskDetailLinkedDocs({
   );
 
   const handlePromoteDescriptionToDoc = useCallback(async () => {
-    if (!token || !canEdit || promotingDescription) return;
+    if (
+      !token ||
+      !canEdit ||
+      (spaceId && !canPublishDoc) ||
+      promotingDescription
+    )
+      return;
+    const generation = publicationGeneration.current;
     setPromotingDescription(true);
     setSaveError(null);
 
     try {
+      const acknowledged = spaceId
+        ? await confirm({
+            title: t('shell:contentPublication.title'),
+            description: t('shell:contentPublication.confirm'),
+            confirmLabel: t('common:actions.confirm'),
+            cancelLabel: t('common:actions.cancel'),
+          })
+        : false;
+      if (
+        generation !== publicationGeneration.current ||
+        (spaceId && !acknowledged)
+      )
+        return;
       const contentBlocks = resolveTaskDetailPromotedDocContent({
         descriptionBlocks: descriptionBlocksRef.current,
         issueDescriptionBlocks: issue.description_blocks,
@@ -97,11 +130,14 @@ export function useTaskDetailLinkedDocs({
               app: 'pms',
               type: 'space',
               id: spaceId,
+              company_admin_read_acknowledged: acknowledged,
             }
           : null,
       });
+      if (generation !== publicationGeneration.current) return;
 
       const pages = await listDocPages(token, doc.id, null);
+      if (generation !== publicationGeneration.current) return;
       const firstPage = pages.items[0];
       if (firstPage) {
         await updateDocPage(
@@ -115,10 +151,13 @@ export function useTaskDetailLinkedDocs({
         );
       }
 
+      if (generation !== publicationGeneration.current) return;
       const response = await attachTaskDoc(token, issue.id, doc.id);
+      if (generation !== publicationGeneration.current) return;
       setLinkedDocs(response.items);
       await notifyTaskDetailUpdated(onUpdate);
     } catch (error) {
+      if (generation !== publicationGeneration.current) return;
       setSaveError(
         getTaskDetailMutationErrorMessage(
           error,
@@ -126,10 +165,13 @@ export function useTaskDetailLinkedDocs({
         ),
       );
     } finally {
-      setPromotingDescription(false);
+      if (generation === publicationGeneration.current)
+        setPromotingDescription(false);
     }
   }, [
     canEdit,
+    canPublishDoc,
+    confirm,
     descriptionBlocksRef,
     issue.description_blocks,
     issue.id,
@@ -146,11 +188,14 @@ export function useTaskDetailLinkedDocs({
   const handleLinkDoc = useCallback(
     async (docId: string) => {
       if (!token || !canEdit) return;
+      const generation = publicationGeneration.current;
       try {
         const response = await attachTaskDoc(token, issue.id, docId);
+        if (generation !== publicationGeneration.current) return;
         setLinkedDocs(response.items);
         await notifyTaskDetailUpdated(onUpdate);
       } catch (error) {
+        if (generation !== publicationGeneration.current) return;
         const message = getTaskDetailMutationErrorMessage(
           error,
           t('pms.taskDetail.errors.linkDocFailed'),
@@ -165,11 +210,14 @@ export function useTaskDetailLinkedDocs({
   const handleUnlinkDoc = useCallback(
     async (docId: string) => {
       if (!token || !canEdit) return;
+      const generation = publicationGeneration.current;
       try {
         const response = await detachTaskDoc(token, issue.id, docId);
+        if (generation !== publicationGeneration.current) return;
         setLinkedDocs(response.items);
         await notifyTaskDetailUpdated(onUpdate);
       } catch (error) {
+        if (generation !== publicationGeneration.current) return;
         setSaveError(
           getTaskDetailMutationErrorMessage(
             error,
@@ -182,6 +230,7 @@ export function useTaskDetailLinkedDocs({
   );
 
   return {
+    confirmDialog,
     buildDocPath,
     docPickerOpen,
     handleLinkDoc,

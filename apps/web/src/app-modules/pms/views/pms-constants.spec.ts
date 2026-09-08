@@ -1,3 +1,4 @@
+import { createPmsStatus } from '../../../../tests/fixtures/pms';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { DATE_FORMAT_STORAGE_KEY } from '@/src/platform/time/time-utils';
@@ -28,12 +29,31 @@ describe('pms-constants', () => {
 
   it('resolves custom status labels, tones, and default status from task-list statuses', () => {
     const statuses = [
-      { slug: 'backlog', name: 'Backlog', category: 'not_started', sort_order: 0 },
-      { slug: 'doing', name: 'Doing', category: 'active', sort_order: 1 },
-      { slug: 'closed_custom', name: 'Closed', category: 'closed', sort_order: 2 },
+      createPmsStatus({
+        slug: 'backlog',
+        name: 'Backlog',
+        category: 'not_started',
+        sort_order: 0,
+      }),
+      createPmsStatus({
+        slug: 'doing',
+        name: 'Doing',
+        category: 'active',
+        sort_order: 1,
+      }),
+      createPmsStatus({
+        slug: 'closed_custom',
+        name: 'Closed',
+        category: 'closed',
+        sort_order: 2,
+      }),
     ];
 
-    expect(getStatusSlugs(statuses)).toEqual(['backlog', 'doing', 'closed_custom']);
+    expect(getStatusSlugs(statuses)).toEqual([
+      'backlog',
+      'doing',
+      'closed_custom',
+    ]);
     expect(getStatusLabel('doing', statuses)).toBe('Doing');
     expect(getStatusTone('doing', statuses)).toBe('accent');
     expect(getStatusTone('closed_custom', statuses)).toBe('success');

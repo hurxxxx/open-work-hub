@@ -1,3 +1,4 @@
+import { createAuthUser } from '../../../tests/fixtures/company';
 import { describe, expect, it } from 'vitest';
 
 import type { AuthUser } from '@/src/platform/auth/auth-api';
@@ -21,7 +22,7 @@ const formatter: AdminPeopleFormatter = {
 };
 
 function user(overrides: Partial<AuthUser> = {}): AuthUser {
-  return {
+  return createAuthUser({
     id: 'user-1',
     login_id: 'ada',
     email: 'ada@example.test',
@@ -36,13 +37,11 @@ function user(overrides: Partial<AuthUser> = {}): AuthUser {
     system_roles: [],
     group_ids: [],
     managed_organization_unit_ids: [],
-    workspaces: [],
-    workspace_roles: [],
     must_change_password: false,
     last_login_at: null,
     created_at: undefined,
     ...overrides,
-  } as AuthUser;
+  });
 }
 
 describe('admin people rows model', () => {
@@ -53,14 +52,6 @@ describe('admin people rows model', () => {
           display_name: 'Ada',
           system_roles: ['platform_admin'],
           group_ids: ['group-1'],
-          workspaces: [
-            {
-              id: 'workspace-1',
-              slug: 'hq',
-              name: 'HQ',
-              role: 'admin',
-            },
-          ],
           last_login_at: '2026-05-29T00:00:00Z',
           created_at: '2026-01-01T00:00:00Z',
         }),
@@ -144,14 +135,6 @@ describe('admin people rows model', () => {
             active: true,
           },
           group_ids: ['group-1'],
-          workspaces: [
-            {
-              id: 'workspace-1',
-              slug: 'hq',
-              name: 'HQ',
-              role: 'member',
-            },
-          ],
           created_at: '2026-01-01T00:00:00Z',
         }),
       ],

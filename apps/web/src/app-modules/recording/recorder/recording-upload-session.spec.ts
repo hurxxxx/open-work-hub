@@ -31,7 +31,8 @@ function session(
 ): RecordingSessionState {
   return {
     stagingId: 'staging-1',
-    scopeKey: 'hq:recording:unlinked',
+    userId: 'user-1',
+    scopeKey: 'user-1:recording:unlinked',
     idempotencyKey: 'idem-1',
     mimeType: 'audio/webm',
     title: null,
@@ -154,7 +155,9 @@ describe('recording upload session', () => {
   });
 
   it('waits for pending chunk writes before deciding a finalize request is ready', async () => {
-    let resolveWrite: (() => void) | null = null;
+    let resolveWrite: () => void = () => {
+      throw new Error('Expected a pending chunk write');
+    };
     const pendingWrite = new Promise<void>((resolve) => {
       resolveWrite = resolve;
     });
@@ -175,7 +178,7 @@ describe('recording upload session', () => {
     await Promise.resolve();
     expect(getPendingChunks).not.toHaveBeenCalled();
 
-    resolveWrite?.();
+    resolveWrite();
     await expect(readiness).resolves.toEqual({
       status: 'ready',
       session: session({ finalizeRequestedAt: 1_700_000_200_000 }),

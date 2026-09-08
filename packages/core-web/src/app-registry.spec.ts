@@ -97,7 +97,7 @@ function createTestRegistry() {
       appRoutes: [
         {
           appId: 'research',
-          component: 'ResearchWorkspace',
+          component: 'ResearchView',
           path: '/apps/research',
         },
       ],
@@ -161,7 +161,7 @@ describe('createCoreAppModuleRegistryApi', () => {
     expect(registry.getAppModuleAppRoutes('research')).toEqual([
       {
         appId: 'research',
-        component: 'ResearchWorkspace',
+        component: 'ResearchView',
         path: '/apps/research',
       },
     ]);
@@ -221,7 +221,7 @@ describe('createCoreAppModuleRegistryApi', () => {
           appRoutes: [
             {
               appId: 'research',
-              component: 'ResearchWorkspace',
+              component: 'ResearchView',
               path: '/apps/research',
             },
           ],

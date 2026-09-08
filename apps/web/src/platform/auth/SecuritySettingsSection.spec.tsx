@@ -1,9 +1,9 @@
+import { createAuthUser } from '../../../tests/fixtures/company';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { SecuritySettingsSection } from './SecuritySettingsSection';
-import type { AuthUser } from './auth-api';
-import type { ProfilePageState } from './settings-page-model';
+import { createInitialProfilePageState } from './settings-page-model';
 
 afterEach(cleanup);
 
@@ -11,12 +11,13 @@ describe('SecuritySettingsSection', () => {
   it('requires the new password to be entered twice', () => {
     const dispatch = vi.fn();
     const state = {
+      ...createInitialProfilePageState(createAuthUser(), 'security'),
       currentPassword: '',
       loadingSessions: false,
       newPassword: '',
       newPasswordConfirm: '',
       sessions: [],
-    } as ProfilePageState;
+    };
 
     render(
       <SecuritySettingsSection
@@ -26,12 +27,10 @@ describe('SecuritySettingsSection', () => {
         onRevoke={vi.fn()}
         state={state}
         t={(key) => key}
-        user={
-          {
-            must_change_password: false,
-            time_zone: 'Asia/Seoul',
-          } as AuthUser
-        }
+        user={createAuthUser({
+          must_change_password: false,
+          time_zone: 'Asia/Seoul',
+        })}
       />,
     );
 

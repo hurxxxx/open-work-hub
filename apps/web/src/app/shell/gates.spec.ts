@@ -1,12 +1,15 @@
+import { createBootstrapApp } from '../../../tests/fixtures/company';
+import { createAppsBootstrap } from '../../../tests/fixtures/company';
 import { describe, expect, it } from 'vitest';
 
 import type { AppsBootstrapResponse } from '@/src/platform/apps/apps-api';
 import { bootstrapEnabledAppIds, featureComingSoonItem } from './gates';
 
 function bootstrapData(): AppsBootstrapResponse {
-  return {
+  return createAppsBootstrap({
     apps: [
       {
+        ...createBootstrapApp('docs'),
         app_id: 'docs',
         coming_soon: true,
         enabled: true,
@@ -16,6 +19,7 @@ function bootstrapData(): AppsBootstrapResponse {
         title: 'Docs from apps',
       },
       {
+        ...createBootstrapApp('mail'),
         app_id: 'mail',
         enabled: false,
         icon_key: 'mail',
@@ -25,16 +29,10 @@ function bootstrapData(): AppsBootstrapResponse {
       },
     ],
     nav: [],
-    workspace: {
-      id: 'workspace-1',
-      name: 'Workspace 1',
-      role: 'member',
-      slug: 'workspace-1',
-    },
-  } as AppsBootstrapResponse;
+  });
 }
 
-describe('workspace feature gates', () => {
+describe('app feature gates', () => {
   it('derives enabled IDs exclusively from bootstrap apps', () => {
     expect(bootstrapEnabledAppIds(bootstrapData())).toEqual(['docs']);
   });

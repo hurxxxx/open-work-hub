@@ -218,7 +218,7 @@ def test_enqueue_search_index_job_persists_resource_job(monkeypatch) -> None:
         session.close()
 
 
-def test_versioned_enqueue_cross_workspace_higher_version_wins_over_late_delete(
+def test_versioned_enqueue_higher_version_wins_over_late_delete(
     monkeypatch,
 ) -> None:
     published: list[tuple[str, list[str], str]] = []
@@ -449,7 +449,7 @@ def test_versioned_enqueue_upgrades_same_target_legacy_pending_job(monkeypatch) 
         session.close()
 
 
-def test_pending_versioned_resource_identity_is_unique_across_workspaces() -> None:
+def test_pending_versioned_resource_identity_is_unique_across_jobs() -> None:
     session = _projection_session()
     try:
         with pytest.raises(IntegrityError):
@@ -1114,7 +1114,7 @@ def test_process_search_index_job_rejects_mismatched_projection_identity(monkeyp
         lambda db, entity_type, entity_id: {
             "entity_type": str(entity_type),
             "entity_id": entity_id,
-            "title": "Wrong workspace",
+            "title": "Mismatched projection identity",
         },
     )
 

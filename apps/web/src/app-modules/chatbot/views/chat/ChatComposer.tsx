@@ -24,9 +24,9 @@ export interface ChatComposerProps {
   onSelectTool?: (item: NavItem) => void;
   /**
    * Candidate list for the `/` slash command menu. Callers should pass a
-   * workspace-scoped list (e.g. merged from appBootstrap.data.nav) so
+   * current app-admitted list (e.g. merged from appBootstrap.data.nav) so
    * disabled/unauthorized tools don't appear. Defaults to the full NAV_ITEMS
-   * AI slice for test/storybook contexts where no workspace is available.
+   * AI slice for test/storybook contexts without app bootstrap.
    */
   toolItems?: NavItem[];
   placeholder?: string;

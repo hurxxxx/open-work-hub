@@ -1,7 +1,10 @@
 # ADR 0002: MCP-First AI Capability Platform Contracts
 
-- Status: Accepted
+- Status: Accepted; scope policy superseded by [ADR 0012](0012-company-app-access-without-workspaces.md)
 - Date: 2026-04-20
+
+Current admission and source authorization follow [App Platform](../docs/domains/app-platform/README.md)
+and [Source Access](../docs/domains/source-access/README.md). This ADR retains the capability contract.
 
 ## Decision
 
@@ -13,8 +16,8 @@
 - Tool handler calls application/domain service, not router code.
 - Every capability has a `discoverability_predicate_id`.
 - Duplicate tool/predicate/preview/handler registration fails fast.
-- Discovery filters by the owning app's current runtime availability, required role/feature gates,
-  workspace context when required, and descriptor discoverability.
+- Discovery filters by the caller's current app admission, required role/feature gates,
+  and descriptor discoverability.
 - Execution repeats app availability and discoverability, then applies domain source ACL/service
   authorization.
 - Hidden in discovery means blocked in execution.

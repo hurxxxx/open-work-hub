@@ -17,11 +17,7 @@ import {
   type PmsTask,
 } from '@/src/app-modules/pms/public-api';
 import { zonedDateKey } from '@/src/platform/time/time-utils';
-import {
-  INITIAL_HOME_STATE,
-  workspaceHomeReducer,
-  type HomeState,
-} from './home-model';
+import { INITIAL_HOME_STATE, homeReducer, type HomeState } from './home-model';
 
 const PLANNER_LOOKAHEAD_DAYS = 31;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -66,10 +62,7 @@ export function useHomeController({
   timeZone,
   token,
 }: HomeControllerOptions): HomeController {
-  const [state, dispatch] = useReducer(
-    workspaceHomeReducer,
-    INITIAL_HOME_STATE,
-  );
+  const [state, dispatch] = useReducer(homeReducer, INITIAL_HOME_STATE);
 
   useEffect(() => {
     if (!token || enabledAppIds === null) return undefined;

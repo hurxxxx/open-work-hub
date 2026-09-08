@@ -24,35 +24,31 @@ export type HermesTerminalApprovalDecision =
 
 const API_ROOT = '/api/v1/hermes-terminal';
 
-function workspacePath(path: string): string {
+function apiPath(path: string): string {
   return `${API_ROOT}${path}`;
 }
 
 export function getHermesTerminalConfig(token: string) {
-  return apiFetchJson<HermesTerminalConfig>(workspacePath('/config'), token);
+  return apiFetchJson<HermesTerminalConfig>(apiPath('/config'), token);
 }
 
 export function listHermesTerminalSessions(token: string) {
-  return apiFetchJson<HermesTerminalSessionList>(
-    workspacePath('/sessions'),
-    token,
-  );
+  return apiFetchJson<HermesTerminalSessionList>(apiPath('/sessions'), token);
 }
 
 export function createHermesTerminalSession(
   token: string,
   payload: HermesTerminalSessionCreate,
 ) {
-  return apiFetchJson<HermesTerminalSession>(
-    workspacePath('/sessions'),
-    token,
-    { method: 'POST', body: JSON.stringify(payload) },
-  );
+  return apiFetchJson<HermesTerminalSession>(apiPath('/sessions'), token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 export function stopHermesTerminalSession(token: string, sessionId: string) {
   return apiFetchJson<HermesTerminalSession>(
-    workspacePath(`/sessions/${encodeURIComponent(sessionId)}/stop`),
+    apiPath(`/sessions/${encodeURIComponent(sessionId)}/stop`),
     token,
     { method: 'POST' },
   );
@@ -65,7 +61,7 @@ export function listHermesTerminalFiles(
 ) {
   const query = new URLSearchParams({ path });
   return apiFetchJson<HermesTerminalFileList>(
-    workspacePath(
+    apiPath(
       `/sessions/${encodeURIComponent(sessionId)}/files?${query.toString()}`,
     ),
     token,
@@ -79,7 +75,7 @@ export function downloadHermesTerminalFile(
 ): Promise<ApiBinaryResponse> {
   const query = new URLSearchParams({ path });
   return apiFetchBinary(
-    workspacePath(
+    apiPath(
       `/sessions/${encodeURIComponent(sessionId)}/files/download?${query.toString()}`,
     ),
     token,
@@ -88,7 +84,7 @@ export function downloadHermesTerminalFile(
 
 export function listHermesTerminalApprovals(token: string, sessionId: string) {
   return apiFetchJson<HermesTerminalApprovalList>(
-    workspacePath(`/sessions/${encodeURIComponent(sessionId)}/approvals`),
+    apiPath(`/sessions/${encodeURIComponent(sessionId)}/approvals`),
     token,
   );
 }
@@ -100,7 +96,7 @@ export function decideHermesTerminalApproval(
   payload: HermesTerminalApprovalDecision,
 ) {
   return apiFetchJson<HermesTerminalApproval>(
-    workspacePath(
+    apiPath(
       `/sessions/${encodeURIComponent(sessionId)}/approvals/${encodeURIComponent(approvalId)}`,
     ),
     token,
@@ -109,7 +105,7 @@ export function decideHermesTerminalApproval(
 }
 
 export function hermesTerminalWebSocketUrl(sessionId: string): string {
-  const path = workspacePath(`/sessions/${encodeURIComponent(sessionId)}/ws`);
+  const path = apiPath(`/sessions/${encodeURIComponent(sessionId)}/ws`);
   const url = new URL(path, window.location.origin);
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
   return url.toString();

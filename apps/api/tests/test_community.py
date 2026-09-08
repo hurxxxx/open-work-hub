@@ -150,7 +150,7 @@ def test_default_channel_and_posts_are_company_scoped(db: Session) -> None:
         channel=channel,
         author=author,
         title="건의합니다",
-        body="첫 워크스페이스 내용",
+        body="첫 회사 게시글 내용",
         is_anonymous=False,
         is_secret=False,
         password=None,

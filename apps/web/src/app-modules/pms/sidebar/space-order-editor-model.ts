@@ -40,10 +40,23 @@ export type SpaceOrderSavePayload = {
   docs: SpaceOrderDraftDoc[];
 };
 
+export function isSpaceOrderDoc(doc: DocsHubItem, spaceId: string): boolean {
+  const target = doc.primary_target;
+  return (
+    doc.ownership_kind === 'company' &&
+    doc.can_manage &&
+    target?.app === 'pms' &&
+    target.type === 'space' &&
+    target.id === spaceId
+  );
+}
+
 export function createSpaceOrderDraft({
+  spaceId,
   lists,
   docs,
 }: {
+  spaceId: string;
   lists: PmsTaskList[];
   docs: DocsHubItem[];
 }): SpaceOrderDraft {
@@ -57,11 +70,13 @@ export function createSpaceOrderDraft({
         sort_order: list.sort_order,
         task_count: list.task_count,
       })),
-    docs: docs.map((doc) => ({
-      id: doc.id,
-      title: doc.title,
-      sort_order: getDocsItemPrimaryTargetSortOrder(doc),
-    })),
+    docs: docs
+      .filter((doc) => isSpaceOrderDoc(doc, spaceId))
+      .map((doc) => ({
+        id: doc.id,
+        title: doc.title,
+        sort_order: getDocsItemPrimaryTargetSortOrder(doc),
+      })),
   };
 }
 

@@ -13,7 +13,7 @@ import {
 } from './pms-view-route';
 
 describe('PMS view route resolver', () => {
-  it('builds PMS workspace paths from route inputs', () => {
+  it('builds PMS app paths from route inputs', () => {
     expect(
       buildPmsTaskListToolPath({
         taskListId: 'list-1',
@@ -54,7 +54,7 @@ describe('PMS view route resolver', () => {
     ).toBe('/apps/pms/spaces/abc-123/whiteboards/def-456');
   });
 
-  it('encodes PMS workspace path segments', () => {
+  it('encodes PMS app path segments', () => {
     expect(
       buildPmsTaskListToolPath({
         taskListId: 'list/1',
@@ -68,7 +68,7 @@ describe('PMS view route resolver', () => {
     ).toBe('/apps/pms/spaces/space%2F1/docs/doc%2F1');
   });
 
-  it('serializes list view query state on workspace paths', () => {
+  it('serializes list view query state on app paths', () => {
     expect(
       buildPmsTaskListToolPath({
         taskListId: 'list-1',

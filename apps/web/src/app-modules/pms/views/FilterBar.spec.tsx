@@ -10,31 +10,35 @@ const statuses = [
     id: 'status-todo',
     category: 'not_started',
     name: '할 일',
-    position: 0,
+    sort_order: 0,
+    color: '#94a3b8',
     slug: 'todo',
   },
   {
     id: 'status-doing',
     category: 'active',
     name: '진행 중',
-    position: 1,
+    sort_order: 1,
+    color: '#94a3b8',
     slug: 'doing',
   },
   {
     id: 'status-done',
     category: 'done',
     name: '완료됨',
-    position: 2,
+    sort_order: 2,
+    color: '#94a3b8',
     slug: 'done',
   },
   {
     id: 'status-closed',
     category: 'closed',
     name: '종료됨',
-    position: 3,
+    sort_order: 3,
+    color: '#94a3b8',
     slug: 'closed',
   },
-] as PmsTaskListStatus[];
+] satisfies PmsTaskListStatus[];
 
 describe('FilterBar', () => {
   beforeEach(async () => {

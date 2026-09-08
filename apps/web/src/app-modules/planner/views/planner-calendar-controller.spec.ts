@@ -30,7 +30,6 @@ function calendarEvent(overrides: Partial<CalendarEvent>): CalendarEvent {
     sourceType: 'planner_event',
     sourceId: 'source-1',
     color: '#14b8a6',
-    workspace: { id: 'workspace-1', slug: 'hq', name: 'HQ' },
     metadata: {},
     ...overrides,
   } as CalendarEvent;

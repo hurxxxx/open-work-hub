@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { normalizeUsageRoutePath, resolveUsageEventAppId } from './usage-route';
 
 describe('normalizeUsageRoutePath', () => {
-  it('groups workspace routes without preserving workspace slugs or ids', () => {
+  it('groups app routes without preserving resource IDs', () => {
     expect(
       normalizeUsageRoutePath(
         '/apps/docs/documents/items/550e8400-e29b-41d4-a716-446655440000',

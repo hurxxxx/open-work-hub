@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { DmMessageAttachment } from '../api/dm-api';
+import { dmAttachmentFixture } from '../testing/dm-fixtures';
 import {
   DM_COMPOSER_ATTACHMENT_INITIAL_STATE,
   applyDmComposerFileDragOver,
@@ -19,6 +20,7 @@ import {
   uploadingDmAttachmentCount,
   uploadingPendingAttachmentCount,
   type PendingAttachment,
+  type DmComposerFileDragOverEvent,
 } from './dm-composer-attachments';
 
 function file(name = 'screen.png', type = 'image/png'): File {
@@ -26,13 +28,7 @@ function file(name = 'screen.png', type = 'image/png'): File {
 }
 
 function attachment(id: string): DmMessageAttachment {
-  return {
-    id,
-    filename: `${id}.png`,
-    is_image: true,
-
-    size_bytes: 1024,
-  } as DmMessageAttachment;
+  return dmAttachmentFixture({ id, filename: `${id}.png` });
 }
 
 function pending(
@@ -162,32 +158,53 @@ describe('dm composer attachment model', () => {
 
     expect(isImageFile(image)).toBe(true);
     expect(isImageFile(pdf)).toBe(false);
-    expect(dataTransferHasFiles({ types: ['Files'] } as DataTransfer)).toBe(
-      true,
-    );
-    expect(
-      dataTransferHasFiles({ types: ['text/plain'] } as DataTransfer),
-    ).toBe(false);
+    expect(dataTransferHasFiles({ types: ['Files'] })).toBe(true);
+    expect(dataTransferHasFiles({ types: ['text/plain'] })).toBe(false);
+    const emptyFiles: FileList = {
+      length: 0,
+      item: () => null,
+      [Symbol.iterator]: () => [].values(),
+    };
+    const stringItem: DataTransferItem = {
+      kind: 'string',
+      type: 'text/plain',
+      getAsFile: () => null,
+      getAsString: vi.fn(),
+      webkitGetAsEntry: () => null,
+    };
+    const fileItem: DataTransferItem = {
+      kind: 'file',
+      type: pdf.type,
+      getAsFile: () => pdf,
+      getAsString: vi.fn(),
+      webkitGetAsEntry: () => null,
+    };
+    const clipboardItems: DataTransferItemList = {
+      0: stringItem,
+      1: fileItem,
+      length: 2,
+      add: () => null,
+      clear: vi.fn(),
+      remove: vi.fn(),
+      [Symbol.iterator]: () => [stringItem, fileItem].values(),
+    };
     expect(
       filesFromClipboardData({
-        files: [] as unknown as FileList,
-        items: [
-          { kind: 'string', getAsFile: () => null },
-          { kind: 'file', getAsFile: () => pdf },
-        ] as unknown as DataTransferItemList,
+        files: emptyFiles,
+        items: clipboardItems,
       }),
     ).toEqual([pdf]);
   });
 
   it('applies file drag-over browser policy only for file transfers', () => {
-    const fileDragEvent = {
+    const fileDragEvent: DmComposerFileDragOverEvent = {
       dataTransfer: {
         dropEffect: 'none',
         types: ['Files'],
       },
       preventDefault: vi.fn(),
     };
-    const textDragEvent = {
+    const textDragEvent: DmComposerFileDragOverEvent = {
       dataTransfer: {
         dropEffect: 'none',
         types: ['text/plain'],

@@ -23,14 +23,14 @@ export interface CoreBackgroundWorkItem {
 }
 
 export interface CoreBackgroundWorkRuntimeSource {
-  /** Owning workspace app. The source is inactive when this app is disabled. */
+  /** Owning app. The source is inactive when this app is disabled. */
   appId: string;
   id: string;
   /** Poll cadence while at least one item is queued or running. */
   pollIntervalMs?: number;
   /** Poll cadence after the initial check when no active item is known. */
   idlePollIntervalMs?: number;
-  /** Required workspace nav item for feature-level enablement. */
+  /** Required app nav item for feature-level enablement. */
   requiredNavItemId?: string;
   list: (context: {
     token: string;

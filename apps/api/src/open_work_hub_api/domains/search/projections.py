@@ -28,7 +28,7 @@ def all_search_documents(
             ensure_search_document_identity(
                 document,
                 allowed_entity_types=adapter.entity_types,
-                context=f"source {adapter.adapter_id}",
+                context=f"source {', '.join(adapter.entity_types)}",
             )
         documents.extend(adapter_documents)
     return documents

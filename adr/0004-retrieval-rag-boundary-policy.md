@@ -1,19 +1,22 @@
 # ADR 0004: Retrieval and RAG Boundary Policy
 
-- Status: Accepted
+- Status: Accepted; route and scope policy superseded by [ADR 0012](0012-company-app-access-without-workspaces.md)
 - Date: 2026-07-08
+
+Current caller surfaces are owned by [Retrieval](../docs/domains/retrieval/README.md);
+current authorization is owned by [Source Access](../docs/domains/source-access/README.md).
 
 ## Decision
 
 - Retrieval is the canonical multi-backend/grounded caller-facing search surface:
-  - `POST /api/v1/workspaces/{workspace_slug}/retrieval/query`
-  - `GET /api/v1/workspaces/{workspace_slug}/retrieval/sources`
+  - `POST /api/v1/retrieval/query`
+  - `GET /api/v1/retrieval/sources`
   - `retrieval.search`
   - `retrieval.list_sources`
 - `/rag/query`, `/rag/sources`, `rag.query`, and `rag.list_sources` remain compatibility wrappers.
 - New code must prefer Retrieval over RAG compatibility surfaces.
-- Workspace shell keyword search remains a specialized non-grounded surface at
-  `POST /api/v1/workspaces/{workspace_slug}/search/query`; it composes app-owned
+- Company shell keyword search remains a specialized non-grounded surface at
+  `POST /api/v1/search/query`; it composes app-owned
   `SearchEntityAdapter` projections and source ACL without becoming a RAG compatibility wrapper.
 - Active RAG sources: Docs native documents; approved Files sources behind activation gate.
 - Meeting, PMS, Planner, and knowledge-source docs are not active RAG sources without explicit ACL/ingestion/source/quality tests.

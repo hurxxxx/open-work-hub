@@ -1,4 +1,8 @@
 import {
+  AUTH_ACCESS_CHANGE_REASONS,
+  AUTH_REALTIME_EVENT_TYPES,
+} from '@open-work-hub/contracts/auth';
+import {
   REALTIME_CLIENT_EVENT_TYPES,
   REALTIME_SERVER_EVENT_TYPES,
   type DocsPagesRealtimeSubscriptionMessage,
@@ -217,6 +221,14 @@ export function createRealtimeRuntime({
       live = false;
       onStatusChange('offline');
       if (POLICY_CLOSE_CODES.has(closeEvent.code)) {
+        // A revoked session is closed before the server can deliver its access
+        // event. Reuse the account refresh boundary to clear protected UI.
+        if ([1008, 4401, 4403].includes(closeEvent.code)) {
+          dispatchEvent({
+            type: AUTH_REALTIME_EVENT_TYPES.accessChanged,
+            data: { reason: AUTH_ACCESS_CHANGE_REASONS.principalAccess },
+          });
+        }
         return;
       }
       scheduleReconnect();

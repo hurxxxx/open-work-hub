@@ -1,6 +1,6 @@
 # ADR Format
 
-Open Work Hub ADRs live in the repository-root `adr/` directory. Use the next available four-digit number and a descriptive slug, for example `0005-workspace-audit-retention.md`.
+Open Work Hub ADRs live in the repository-root `adr/` directory. Use the next available four-digit number and a descriptive slug, for example `0013-audit-retention.md`.
 
 Do not create nested or context-local ADR directories.
 
@@ -36,3 +36,5 @@ All three conditions must hold:
 3. The decision resolves a real trade-off between plausible alternatives.
 
 Before creating one, inspect existing files in `adr/` to avoid duplicating or contradicting an accepted decision.
+When a decision supersedes another, update both documents: mark the retired decision's status,
+identify any still-valid portions, and link to the current decision and narrow owner document.

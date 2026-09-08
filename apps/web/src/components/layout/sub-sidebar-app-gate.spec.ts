@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { resolveAppSidebarConfig } from './sub-sidebar-app-gate';
 
 describe('resolveAppSidebarConfig', () => {
-  it('does not mount workspace app UI before bootstrap enables the app', () => {
+  it('does not mount app UI before bootstrap enables the app', () => {
     const load = vi.fn(() => ({ id: 'pms-sidebar' }));
 
     expect(
@@ -18,7 +18,7 @@ describe('resolveAppSidebarConfig', () => {
     expect(load).not.toHaveBeenCalled();
   });
 
-  it('allows enabled workspace apps and available global apps', () => {
+  it('allows enabled apps and available global apps', () => {
     const load = vi.fn((appId: string) => ({ id: `${appId}-sidebar` }));
 
     expect(

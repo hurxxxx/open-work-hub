@@ -30,15 +30,15 @@ function task(
 
 describe('PMS task selection workflow', () => {
   it('reads, sets, and clears the task URL param without dropping siblings', () => {
-    const params = new URLSearchParams('workspace=acme&task= task-1 ');
+    const params = new URLSearchParams('view=board&task= task-1 ');
 
     expect(getRequestedPmsTaskId(params)).toBe('task-1');
 
     const selected = createPmsTaskSelectionSearchParams(params, 'task-2');
-    expect(selected.toString()).toBe('workspace=acme&task=task-2');
+    expect(selected.toString()).toBe('view=board&task=task-2');
 
     const cleared = createPmsTaskSelectionSearchParams(selected, null);
-    expect(cleared.toString()).toBe('workspace=acme');
+    expect(cleared.toString()).toBe('view=board');
   });
 
   it('finds requested tasks in visible collections before callers load detail', () => {
@@ -58,20 +58,20 @@ describe('PMS task selection workflow', () => {
   it('resolves user select and close transitions with URL patches', () => {
     const selectedTask = task('task-1');
     const selected = resolvePmsTaskSelectedTransition({
-      searchParams: new URLSearchParams('workspace=acme'),
+      searchParams: new URLSearchParams('view=board'),
       task: selectedTask,
     });
 
     expect(selected.selectedTask).toBe(selectedTask);
     expect(selected.detailRequest).toBeNull();
-    expect(selected.searchParams?.toString()).toBe('workspace=acme&task=task-1');
+    expect(selected.searchParams?.toString()).toBe('view=board&task=task-1');
 
     const closed = resolvePmsTaskClosedTransition<PmsTask>({
       searchParams: selected.searchParams ?? new URLSearchParams(),
     });
     expect(closed.selectedTask).toBeNull();
     expect(closed.detailRequest).toBeNull();
-    expect(closed.searchParams?.toString()).toBe('workspace=acme');
+    expect(closed.searchParams?.toString()).toBe('view=board');
   });
 
   it('uses visible requested tasks before asking adapters to load detail', () => {

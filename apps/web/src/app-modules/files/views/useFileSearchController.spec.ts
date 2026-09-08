@@ -16,7 +16,6 @@ function messages(): FileSearchControllerMessages {
     loadFailed: 'load failed',
     queryRequired: 'query required',
     sessionExpired: 'session expired',
-    workspaceMissing: 'workspace missing',
   };
 }
 
