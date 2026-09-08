@@ -13,18 +13,15 @@ Company work platform: users and groups, app access policies, PMS spaces, docs, 
 ## Requirements
 
 - Node.js 22+
-- pnpm 10.33.0
+- pnpm version pinned by `packageManager` in [package.json](./package.json)
 - Python 3.12 + `uv`
 - Docker Compose
 
 ## Dev
 
-```bash
-cp .env.example .env
-pnpm install --frozen-lockfile
-pnpm dev:infra:up
-pnpm dev
-```
+Start with the [Linux development installation guide / 리눅스 개발 환경 설치 가이드](./INSTALL.md).
+It covers setup with Codex or Claude Code, prerequisites, existing env preservation,
+Docker infrastructure, source-based app execution, and verification.
 
 - Web default: `http://127.0.0.1:4200`
 - API default: `http://127.0.0.1:8001`

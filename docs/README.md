@@ -4,6 +4,7 @@ Use the narrowest owner doc. Code and tests are final for implemented behavior.
 
 | Area | Start |
 | --- | --- |
+| Development installation / 개발 환경 설치 | [INSTALL.md](../INSTALL.md) |
 | Agent routing/validation/MR | [agents/domain.md](agents/domain.md) |
 | App-specific owner docs | [apps/README.md](apps/README.md) |
 | App registration/RBAC/bootstrap | [domains/app-platform/README.md](domains/app-platform/README.md) |
